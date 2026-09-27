@@ -1183,7 +1183,7 @@ pub use kuzu::KuzuStore;
 Run: `cargo test --locked --features local-graph --test kuzu_store`
 Expected: PASS (4 tests).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/storage/kuzu.rs src/storage/traits.rs src/storage/mod.rs tests/kuzu_store.rs
@@ -1201,7 +1201,7 @@ git commit -m "feat(storage): Kuzu graph backend with scoped idempotent MERGE an
 - Consumes: `SqliteStore` (`RelationalStore` + `JobQueue` + `DomainTx` with `register_pending`/`confirm_committed`/`reconcile_ledger`), `LanceDbStore`, `KuzuStore`; `LedgerEntry`, `LedgerKey`, `Surface`, `ledger_idempotency_key` (`src/storage/ledger.rs`).
 - Produces: a contract test proving `register_pending → idempotent external write → confirm_committed → reconcile` composes without duplication (A2.6 "来源级幂等写 … 重启重放").
 
-- [ ] **Step 1: Write the failing test `tests/local_ledger.rs`**
+- [x] **Step 1: Write the failing test `tests/local_ledger.rs`**
 
 ```rust
 //! Cross-store ledger round-trip (M4): a pending write is registered on the
@@ -1345,17 +1345,17 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test --locked --features local-storage --test local_ledger`
 Expected: FAIL until Tasks 1–2 exist; if run after them it should pass (this task is a composition test, so its "red" state is "the file does not compile against missing imports" — run it last).
 
-- [ ] **Step 3: Run the full local-storage suite**
+- [x] **Step 3: Run the full local-storage suite**
 
 Run: `cargo test --locked --features local-storage`
 Expected: all `lancedb_store`, `kuzu_store`, `local_ledger` pass; existing unit tests still pass.
 
-- [ ] **Step 4: Format, lint, commit**
+- [x] **Step 4: Format, lint, commit**
 
 ```bash
 cargo fmt --all -- --check
