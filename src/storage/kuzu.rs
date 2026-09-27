@@ -75,7 +75,7 @@ impl KuzuStore {
         T: Send + 'static,
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
     {
-        let _permit = self
+        let permit = self
             .semaphore
             .clone()
             .acquire_owned()
@@ -83,6 +83,9 @@ impl KuzuStore {
             .map_err(|e| StorageError::Backend(e.to_string()))?;
         let db = self.db.clone();
         tokio::task::spawn_blocking(move || {
+            // A cancelled caller cannot cancel spawn_blocking. Keep the permit
+            // until the database operation itself ends, including on panic.
+            let _permit = permit;
             let conn =
                 Connection::new(db.as_ref()).map_err(|e| StorageError::Backend(e.to_string()))?;
             f(&conn)
@@ -313,10 +316,10 @@ impl GraphStore for KuzuStore {
                 )
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
             for row in result {
-                if let Some(KValue::String(s)) = row.first() {
-                    if let Ok(id) = Uuid::parse_str(s) {
-                        entities.push(id.to_string());
-                    }
+                if let Some(KValue::String(s)) = row.first()
+                    && let Ok(id) = Uuid::parse_str(s)
+                {
+                    entities.push(id.to_string());
                 }
             }
             let mut relations = Vec::new();
@@ -333,10 +336,10 @@ impl GraphStore for KuzuStore {
                 )
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
             for row in result {
-                if let Some(KValue::String(s)) = row.first() {
-                    if let Ok(id) = Uuid::parse_str(s) {
-                        relations.push(id.to_string());
-                    }
+                if let Some(KValue::String(s)) = row.first()
+                    && let Ok(id) = Uuid::parse_str(s)
+                {
+                    relations.push(id.to_string());
                 }
             }
             Ok(json!({"entities": entities, "relations": relations}))
@@ -419,5 +422,41 @@ impl Lifecycle for KuzuStore {
 
     async fn shutdown(&self) -> StorageResult<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cancellation_keeps_blocking_operation_serialized() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(KuzuStore::open(dir.path()).await.unwrap());
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let task_store = store.clone();
+        let task = tokio::spawn(async move {
+            task_store
+                .with_conn(move |_| {
+                    started_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    Ok(())
+                })
+                .await
+        });
+        started_rx.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+
+        // The caller has ended, but its native operation is still running.
+        // Capture the assertion before releasing it; never strand the thread.
+        let still_locked = store.semaphore.try_acquire().is_err();
+        release_tx.send(()).unwrap();
+        assert!(
+            still_locked,
+            "cancellation released a running native operation's permit"
+        );
+        store.check().await.unwrap();
     }
 }

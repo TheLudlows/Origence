@@ -10,12 +10,14 @@
 
 ## Scope note (what this plan does NOT do)
 
-This plan delivers the **storage backends + their ledger write contract** — M4 items 1–4 of [pluggable-storage-engine](2026-09-22-pluggable-storage-engine.md). Two things are intentionally deferred:
+This plan delivers the **storage backends + their ledger write contract** — M4 items 1–3 and the write-contract portion of item 4 in [pluggable-storage-engine](2026-09-22-pluggable-storage-engine.md). Two things are intentionally deferred:
 
 - **Retrieval fusion + hit re-verification** (M4 items 5–6): mapping keyword/vector/summary branches back to evidence and re-verifying source/version/tombstone before returning. That is graph-core plan G3's job; it needs the running app switched to local (M5) first.
 - **Shared-owner deletion orchestration** (the *orchestration* that diffs `owned_artifacts()` against the graph and deletes orphans) is graph-core G4. This plan provides the primitives it needs (`list_ids` + `delete_objects`) and a contract test proving idempotent replay; it does not build the cleanup planner.
 
 ## Global Constraints
+
+**2026-09-28 acceptance follow-up:** The source files supersede the initial code sketches below. Vector merge identity now includes source ID/version and generation as well as scope/artifact ID. Input validation checks nonzero/i32-compatible dimensions, embedding length, finite values and the existing profile table dimension before vector writes; search explicitly bypasses ANN indexes. Kuzu's blocking closure owns its semaphore permit until the native operation finishes, even if the async caller is cancelled. Regression coverage includes invalid input, generation/version/profile/scope isolation, reopen/delete replay and cancellation. Actual commands and outcomes are recorded in [VALIDATION](../../VALIDATION.md).
 
 - `rust-version = "1.88"`, `edition = "2024"` (Cargo.toml, verbatim).
 - `lancedb = "=0.23.1"` with `default-features = false`; `kuzu = "=0.11.3"`; `arrow-array`/`arrow-schema` `= "56.2"`; build-dependency `cxx-build = "=1.0.138"` (generator pin that avoids the 117 unresolved-symbol link failure documented in VALIDATION.md).

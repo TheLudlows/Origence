@@ -3,8 +3,8 @@
 //! One LanceDB table per embedding `profile`, named `vec_` + the first 16
 //! bytes of SHA-256(profile). Each profile's vectors share a fixed dimension,
 //! so `nearest_to` can run on a `FixedSizeList`. Writes are idempotent by
-//! `(tenant, workspace, id)` via `merge_insert`; the deterministic artifact id
-//! makes replay target the same row (A2.6).
+//! `(tenant, workspace, source_id, version, id, generation)` via `merge_insert`;
+//! replay targets the same ledger identity without replacing other generations.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -17,6 +17,7 @@ use arrow_array::{
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
+use lancedb::database::CreateTableMode;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -43,6 +44,40 @@ fn table_name(profile: &str) -> String {
 
 fn quote(s: &str) -> String {
     s.replace('\'', "''")
+}
+
+fn validate_vector(dimension: usize, embedding: &[f32]) -> StorageResult<()> {
+    if dimension == 0 || dimension > i32::MAX as usize || embedding.len() != dimension {
+        return Err(StorageError::Conflict(
+            "vector dimension must be positive, fit i32 and match embedding length".into(),
+        ));
+    }
+    if embedding.iter().any(|value| !value.is_finite()) {
+        return Err(StorageError::Conflict(
+            "vector values must be finite".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn check_dimension(table: &lancedb::Table, dimension: usize) -> StorageResult<()> {
+    let schema = table
+        .schema()
+        .await
+        .map_err(|e| StorageError::Backend(e.to_string()))?;
+    match schema
+        .field_with_name("vector")
+        .map(|field| field.data_type())
+    {
+        Ok(DataType::FixedSizeList(item, size))
+            if *size as usize == dimension && item.data_type() == &DataType::Float32 =>
+        {
+            Ok(())
+        }
+        _ => Err(StorageError::Conflict(
+            "embedding profile dimension does not match table".into(),
+        )),
+    }
 }
 
 fn schema_for(dim: usize) -> Arc<Schema> {
@@ -81,20 +116,17 @@ impl LanceDbStore {
     }
 
     async fn ensure_table(&self, name: &str, dim: usize) -> StorageResult<()> {
-        let names = self
+        let table = self
             .db
-            .table_names()
+            .create_empty_table(name, schema_for(dim))
+            .mode(CreateTableMode::exist_ok(|request| request))
             .execute()
             .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        if !names.iter().any(|n| n == name) {
-            self.db
-                .create_empty_table(name, schema_for(dim))
-                .execute()
-                .await
-                .map_err(|e| StorageError::Backend(e.to_string()))?;
-        }
-        Ok(())
+            .map_err(|e| match e {
+                lancedb::Error::Schema { message } => StorageError::Conflict(message),
+                other => StorageError::Backend(other.to_string()),
+            })?;
+        check_dimension(&table, dim).await
     }
 }
 
@@ -114,17 +146,25 @@ impl VectorStore for LanceDbStore {
         }
         let mut groups: HashMap<String, Vec<&VectorEntry>> = HashMap::new();
         for e in &entries {
+            validate_vector(e.dimension, &e.embedding)?;
             groups.entry(e.profile.clone()).or_default().push(e);
         }
-        for (profile, group) in groups {
+        // Validate the whole batch before writing any profile.
+        for group in groups.values() {
             let dim = group[0].dimension;
             if group.iter().any(|e| e.dimension != dim) {
                 return Err(StorageError::Conflict(
                     "mixed dimensions within one profile batch".into(),
                 ));
             }
+        }
+        for (profile, group) in &groups {
+            self.ensure_table(&table_name(profile), group[0].dimension)
+                .await?;
+        }
+        for (profile, group) in groups {
+            let dim = group[0].dimension;
             let name = table_name(&profile);
-            self.ensure_table(&name, dim).await?;
             let table = self
                 .db
                 .open_table(&name)
@@ -166,7 +206,14 @@ impl VectorStore for LanceDbStore {
             )
             .map_err(|e| StorageError::Backend(e.to_string()))?;
             let reader = RecordBatchIterator::new(vec![Ok(batch)], schema.clone());
-            let mut merge = table.merge_insert(&["tenant", "workspace", "id"]);
+            let mut merge = table.merge_insert(&[
+                "tenant",
+                "workspace",
+                "source_id",
+                "version",
+                "id",
+                "generation",
+            ]);
             merge.when_matched_update_all(None);
             merge.when_not_matched_insert_all();
             merge
@@ -178,6 +225,10 @@ impl VectorStore for LanceDbStore {
     }
 
     async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
+        validate_vector(query.dimension, &query.embedding)?;
+        if query.limit == 0 {
+            return Ok(Vec::new());
+        }
         let name = table_name(&query.profile);
         let names = self
             .db
@@ -200,10 +251,12 @@ impl VectorStore for LanceDbStore {
             quote(&query.scope.workspace_id.to_string()),
             query.generation
         );
+        check_dimension(&table, query.dimension).await?;
         let stream = table
             .query()
             .nearest_to(query.embedding.as_slice())
             .map_err(|e| StorageError::Backend(e.to_string()))?
+            .bypass_vector_index()
             .only_if(filter)
             .limit(query.limit)
             .execute()
@@ -291,7 +344,12 @@ impl Lifecycle for LanceDbStore {
     }
 
     async fn check(&self) -> StorageResult<()> {
-        Ok(())
+        self.db
+            .table_names()
+            .execute()
+            .await
+            .map(|_| ())
+            .map_err(|e| StorageError::Backend(e.to_string()))
     }
 
     async fn shutdown(&self) -> StorageResult<()> {

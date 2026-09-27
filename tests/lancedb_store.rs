@@ -4,7 +4,7 @@
 
 use opencontext::storage::lancedb::LanceDbStore;
 use opencontext::storage::{
-    Lifecycle, Scope, SourceVersion, VectorEntry, VectorQuery, VectorStore,
+    Lifecycle, Scope, SourceVersion, StorageError, VectorEntry, VectorQuery, VectorStore,
 };
 use uuid::Uuid;
 
@@ -121,4 +121,167 @@ async fn lifecycle_is_idempotent() {
     store.initialize().await.unwrap();
     store.check().await.unwrap();
     store.shutdown().await.unwrap();
+}
+
+fn entry() -> VectorEntry {
+    VectorEntry {
+        id: Uuid::new_v4(),
+        embedding: vec![1.0, 0.0],
+        profile: "p:v1".into(),
+        dimension: 2,
+        generation: 1,
+        source: src(),
+    }
+}
+
+fn query(scope: Scope, entry: &VectorEntry) -> VectorQuery {
+    VectorQuery {
+        scope,
+        profile: entry.profile.clone(),
+        dimension: entry.dimension,
+        generation: entry.generation,
+        embedding: entry.embedding.clone(),
+        limit: 10,
+    }
+}
+
+#[tokio::test]
+async fn invalid_vectors_are_rejected_before_writing() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = LanceDbStore::open(dir.path()).await.unwrap();
+    let scope = make_scope();
+    let valid = entry();
+    for (dimension, embedding) in [
+        (0, vec![]),
+        (3, vec![1.0, 0.0]),
+        (2, vec![f32::NAN, 0.0]),
+        (2, vec![f32::INFINITY, 0.0]),
+        (usize::MAX, vec![1.0]),
+    ] {
+        let invalid = VectorEntry {
+            dimension,
+            embedding,
+            profile: "invalid".into(),
+            ..valid.clone()
+        };
+        assert!(matches!(
+            store
+                .upsert(scope, vec![valid.clone(), invalid.clone()])
+                .await,
+            Err(StorageError::Conflict(_))
+        ));
+        assert!(store.search(query(scope, &valid)).await.unwrap().is_empty());
+        assert!(matches!(
+            store.search(query(scope, &invalid)).await,
+            Err(StorageError::Conflict(_))
+        ));
+    }
+}
+
+#[tokio::test]
+async fn profile_dimension_is_checked_on_write_and_search() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = LanceDbStore::open(dir.path()).await.unwrap();
+    let scope = make_scope();
+    let valid = entry();
+    store.upsert(scope, vec![valid.clone()]).await.unwrap();
+    let wrong = VectorEntry {
+        dimension: 3,
+        embedding: vec![1.0, 0.0, 0.0],
+        ..valid.clone()
+    };
+    assert!(matches!(
+        store.upsert(scope, vec![wrong.clone()]).await,
+        Err(StorageError::Conflict(_))
+    ));
+    assert!(matches!(
+        store.search(query(scope, &wrong)).await,
+        Err(StorageError::Conflict(_))
+    ));
+    let mut mismatch = query(scope, &valid);
+    mismatch.dimension = 3;
+    assert!(matches!(
+        store.search(mismatch).await,
+        Err(StorageError::Conflict(_))
+    ));
+    let mut zero = query(scope, &valid);
+    zero.limit = 0;
+    assert!(store.search(zero).await.unwrap().is_empty());
+    assert_eq!(store.search(query(scope, &valid)).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn replay_preserves_generation_source_version_profile_and_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = LanceDbStore::open(dir.path()).await.unwrap();
+    let scope = make_scope();
+    let a = entry();
+    let newer = VectorEntry {
+        generation: 2,
+        ..a.clone()
+    };
+    let version = VectorEntry {
+        source: SourceVersion {
+            version: 2,
+            ..a.source
+        },
+        ..a.clone()
+    };
+    let profile = VectorEntry {
+        profile: "other".into(),
+        ..a.clone()
+    };
+    let other_tenant = Scope {
+        tenant_id: Uuid::new_v4(),
+        ..scope
+    };
+    let other_workspace = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    for _ in 0..2 {
+        store
+            .upsert(
+                scope,
+                vec![a.clone(), newer.clone(), version.clone(), profile.clone()],
+            )
+            .await
+            .unwrap();
+        store.upsert(other_tenant, vec![a.clone()]).await.unwrap();
+        store
+            .upsert(other_workspace, vec![a.clone()])
+            .await
+            .unwrap();
+    }
+    drop(store);
+    let store = LanceDbStore::open(dir.path()).await.unwrap();
+    assert_eq!(store.search(query(scope, &a)).await.unwrap().len(), 2);
+    assert_eq!(store.search(query(scope, &newer)).await.unwrap().len(), 1);
+    assert_eq!(store.search(query(scope, &profile)).await.unwrap().len(), 1);
+    for _ in 0..2 {
+        store.delete_source(scope, a.source).await.unwrap();
+    }
+    let remaining = store.search(query(scope, &a)).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].source, version.source);
+    assert!(store.search(query(scope, &newer)).await.unwrap().is_empty());
+    assert!(
+        store
+            .search(query(scope, &profile))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        store.search(query(other_tenant, &a)).await.unwrap().len(),
+        1
+    );
+    assert_eq!(
+        store
+            .search(query(other_workspace, &a))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }

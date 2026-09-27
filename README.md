@@ -104,6 +104,9 @@ MCP 客户端启动 `opencontext mcp`，通过环境传入运行角色 `DATABASE
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
+# 本地存储适配器（需 C++/CMake/Ninja/protoc；尚未切换应用运行后端）：
+cargo test --locked --features local-storage -j 1
+cargo clippy --locked --all-targets --features local-storage -j 1 -- -D warnings
 # 需独立测试数据库，先 runtime-setup（自动初始化），再设置：
 # TEST_ADMIN_DATABASE_URL / TEST_DATABASE_URL=oc_runtime 测试连接
 cargo test --locked --test initialization -- --ignored
@@ -124,15 +127,15 @@ cargo test --locked --test processes -- --ignored
 
 ## 演进路线
 
-[平台设计 spec](docs/superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) 按 P0/P1/P2 分期演进。当前代码处于首版基线，下列能力**尚未实现**，README 其余章节描述的是当前已构建系统：
+[平台设计 spec](docs/superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) 按 P0/P1/P2 分期演进。应用仍运行 PG 基线，本地存储层已推进到 M4 适配器；以下区分已实现能力和待集成部分：
 
 | spec 阶段 | 目标能力 | 当前状态 |
 | --- | --- | --- |
 | **P0** | 普通文本入库、稳定分块、keyword/vector 检索、自动发布、溯源+撤回、作业重试、workspace/tenant 隔离；知识图谱（实体/关系抽取、图存储、图混合检索、来源级联删除） | 文本/PDF 入库、检索、溯源撤回、重试、隔离**已实现**；但发布仍走**候选审核门**（非 spec 的自动发布），知识图谱基础写入/检索**已实现**，删除与可见性待完善 |
-| **P0** | 可插拔存储引擎（`GraphStore`/`VectorStore`/`BlobStore` trait + 能力声明 + 账本对账）、对象存储抽象 | **接口尚未实现**；目标本地固定 SQLite/LanceDB/Kuzu，PG/pgvector 仅保留未来接口扩展能力；当前代码为 PG 直连 + 本地 Files |
+| **P0** | 可插拔存储引擎（`GraphStore`/`VectorStore`/`BlobStore` trait + 能力声明 + 账本对账）、对象存储抽象 | 接口、SQLite/队列/本地文件、跨库账本及 LanceDB/Kuzu 适配器**已实现**；本地检索融合、可见性复核、共享 owner 清理与应用装配待完成。CLI/API/Worker/MCP 仍使用 PG 基线 |
 | **P1** | 会话记忆、指导、反馈、经验蒸馏、阶段化 improve | **未实现** |
 | **P2** | GraphCompletion、个性化、OIDC、配额计费、Neo4j/Qdrant 生产适配、ANN/重排 | **未实现** |
 
-存储与自动初始化以 [整体设计 A2：存储与初始化](docs/superpowers/specs/2026-09-22-memory-knowledge-platform-design.md#storage-design) 为准。本次只实现取消版本化升级后的自动初始化，SQLite/LanceDB/Kuzu 后端尚未实现。
+存储与自动初始化以 [整体设计 A2：存储与初始化](docs/superpowers/specs/2026-09-22-memory-knowledge-platform-design.md#storage-design) 为准。`local-vector` / `local-graph` / `local-storage` 特性分别启用 LanceDB、Kuzu 或两者；默认特性为空，启用特性不会自动切换 CLI 的后端。本地固定 SQLite/LanceDB/Kuzu 的应用交付属于 M5，详见 [M4 适配器计划](docs/superpowers/plans/2026-09-27-local-vector-graph.md) 和 [验证记录](docs/VALIDATION.md)。
 
 对应执行计划见 [auto-publish](docs/superpowers/plans/2026-09-22-auto-publish.md)、[knowledge-graph-core](docs/superpowers/plans/2026-09-22-knowledge-graph-core.md)、[pluggable-storage-engine](docs/superpowers/plans/2026-09-22-pluggable-storage-engine.md)。spec 自述上线前须验证图谱收益、实体合并、蒸馏条件保持等假设；这些尚未验证。

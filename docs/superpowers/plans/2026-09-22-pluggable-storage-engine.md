@@ -1,12 +1,12 @@
 # 本地存储与可扩展接口实施计划
 
-修订：2026-09-23。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。
+修订：2026-09-28。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。
 
 ## 目标与范围
 
 交付 SQLite（关系与队列）+ LanceDB（向量）+ Kuzu（图）+ 本地文件的闭环；各存储面通过领域接口访问，保留未来扩展 PostgreSQL/pgvector 的能力。本地交付不依赖 PG 服务、不提供 PG 配置开关、不实现历史库升级或数据搬运。
 
-已完成版本化升级机制清除、PG 基线自动初始化及 Windows/Rust 1.88 的独立 M0 探针。真实 PG 初始化/生命周期回归仍未执行；本地生产后端及接口未实现。以下按实际结果勾选，M1–M5 尚未开始。
+已完成版本化升级机制清除、PG 基线自动初始化及 Windows/Rust 1.88 的独立 M0 探针。M1 接口、M2/M3 存储层和 M4 LanceDB/Kuzu 适配器已实现；M2/M3 的应用集成缺口、M4 检索/共享清理、M5 本地装配仍待完成。真实 PG 初始化/生命周期回归本轮未执行。以下按交付范围勾选，带有后续说明的条目不代表完整端到端验收。
 
 现有自动发布、图谱计划与本计划共享里程碑，不各自建立数据库连接或另一套存储接口。先完成本地基础，再执行独立产品阶段的自动发布；P1/P2 不阻塞本地存储交付。
 
@@ -79,14 +79,16 @@
 
 拟新增：src/storage/lancedb.rs、src/storage/kuzu.rs；修改 retrieval.rs、graph.rs、worker.rs、tests/storage_contract.rs。图业务细节见 [图谱计划](2026-09-22-knowledge-graph-core.md)，不重复实现同一适配器。
 
-- [ ] 按 M0 验证方案实现两个后端的自动初始化与进程访问，不重新假设双进程安全。
-- [ ] LanceDB 写入/检索按 scope、profile、dimension、generation 过滤，声明真实的 ANN/精确查询能力。
-- [ ] Kuzu 保存带 scope 的实体/关系和必要来源投影；SQLite owner/版本状态作为最终可见性权威。
-- [ ] 接入 M3 账本，完成来源级幂等写与删除、共享 owner 保留、重启重放。
+- [x] 按 M0 验证方案实现两个后端的自动初始化与进程访问，不重新假设双进程安全。Kuzu 由一个实例持有，经串行阻塞执行器访问；宿主装配属 M5。
+- [x] LanceDB 写入/检索按 scope、profile、dimension、generation 过滤，声明真实的 ANN/精确查询能力。显式绕过向量索引；校验声明维度、向量长度和 profile 表维度；幂等键保留来源版本与 generation。
+- [x] Kuzu 保存带 scope 的实体/关系和必要来源投影；SQLite owner/版本状态作为最终可见性权威。投影删除不提供共享 owner 语义。
+- [ ] 接入 M3 账本，完成来源级幂等写与删除、共享 owner 保留、重启重放。已交付 pending→外部幂等写→committed 的组合测试及按来源/ID 删除原语；共享 owner 清理编排、崩溃重放和启动恢复尚待 G4/M5。
 - [ ] keyword/vector/summary 分支映射回原文证据并融合；图扩展返回可追溯证据，resolve 统一计算预算。
 - [ ] 每条图/向量命中返回前复核有效来源、发布版本和资产墓碑；验证撤回后立即不可检索。
 
 完成标准：真实后端跑通导入→加工→检索→撤回→清理，跨 scope 无泄漏且共享证据不误删。
+
+适配器交付记录见 [M4 存储切片](2026-09-27-local-vector-graph.md)。该切片的勾选不代表上述 M4 全部完成；G3/G4 的检索及清理集成需要与 M5 宿主装配共同验收。
 
 ## M5：装配与本地交付
 

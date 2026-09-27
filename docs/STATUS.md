@@ -1,10 +1,17 @@
 # 实现状态与后续工作
 
-存储后续方向以 [整体设计 A2：存储与初始化](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md#storage-design) 为准：本地固定 SQLite/LanceDB/Kuzu，PostgreSQL/pgvector 仅保留未来接口扩展能力。本地存储已推进到 M3：M1 接口契约、SQLite 关系库/自轮询队列/BlobStore 与单 Worker OS 文件锁已实现并通过测试；LanceDB/Kuzu 后端尚未实现（跨库账本/溯源/对账已在 M3 交付），应用仍未切换到本地后端。当前 PG 连接自动初始化新库，无版本化升级机制。
+更新：2026-09-28。存储后续方向以 [整体设计 A2：存储与初始化](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md#storage-design) 为准：本地固定 SQLite/LanceDB/Kuzu，PostgreSQL/pgvector 仅保留未来接口扩展能力。本地存储已推进到 **M4 适配器阶段**：接口契约、SQLite 关系库/自轮询队列/BlobStore、单 Worker OS 文件锁、跨库账本及 LanceDB/Kuzu 适配器已实现。应用仍未切换到本地后端；当前 PG 连接自动初始化新库，无版本化升级机制。
 
-M0 独立探针已在 Windows x64/MSVC、Rust 1.88.0 完成直接使用三个 Rust 库的构建和 14 项检查。Kuzu 的写宿主拒绝其他进程打开，因此本地目标采用 API/Worker 同进程共享引擎；应用装配尚未实现。M1 接口与事务契约、M2 SQLite 核心、M3 跨库账本与对账（owner 溯源、pending/committed 状态机、重启对账）已交付，下一阶段是 M4 LanceDB/Kuzu 与检索，详见 [可插拔存储计划](superpowers/plans/2026-09-22-pluggable-storage-engine.md) 与 [验证记录](VALIDATION.md)。
+M0 独立探针已在 Windows x64/MSVC、Rust 1.88.0 完成直接使用三个 Rust 库的构建和 14 项检查。Kuzu 的写宿主拒绝其他进程打开，因此本地目标采用 API/Worker 同进程共享引擎；应用装配尚未实现。M4 已提供真实后端及账本幂等写组合测试，尚未完成整个 M4 的导入→检索→撤回→清理验收。详见 [可插拔存储计划](superpowers/plans/2026-09-22-pluggable-storage-engine.md)、[M4 适配器计划](superpowers/plans/2026-09-27-local-vector-graph.md) 与 [验证记录](VALIDATION.md)。
 
 首版基于此前 ContextDB V3.1 业务设计，以 Rust 取代早期 Python 组件建议。应用代码复用 Axum、SQLx、Apalis、pgvector、rmcp、pulldown-cmark、pdf-extract 和 Jieba；没有引入 mem0 或 Skill。
+
+## 本地存储后续顺序
+
+1. 补齐 M2 的 SQLite IMMEDIATE 写事务与中文预分词查询契约。
+2. M5 装配本地宿主：统一初始化、启动对账、同进程 API/Worker、CLI/MCP 转发和独占访问；接入任务取消/generation/权限复核。
+3. 按图谱 G3/G4 完成 M4 剩余项：证据融合、命中可见性复核、共享 owner 清理规划和崩溃重放集成测试。`KuzuStore::delete_source` 仅按图中来源投影删除，不能替代 SQLite owner 驱动的共享对象清理。
+4. 完成本地 CLI/HTTP/MCP 生命周期验收后再调整默认构建、部署和启动文档；自动发布作为随后独立产品阶段推进。
 
 ## 已实现
 

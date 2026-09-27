@@ -1,5 +1,29 @@
 # 验证记录
 
+## 2026-09-27–28：M4 本地适配器验收修复
+
+环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖，使用真实临时 SQLite/LanceDB/Kuzu 数据文件，无外部模型调用。此轮验证的是存储适配器，CLI/API/Worker/MCP 仍运行 PG 基线。
+
+| 检查 | 实测结果 |
+| --- | --- |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo clippy --locked --offline --all-targets -j 4 -- -D warnings` | 通过 |
+| `cargo clippy --locked --offline --all-targets --features local-storage -j 16 -- -D warnings` | 通过；修正 Kuzu 两处嵌套条件风格告警，逻辑不变 |
+| `cargo test --locked --offline -j 1` | **48 通过，3 ignored**；默认构建不启用 LanceDB/Kuzu |
+| `cargo test --locked --offline --features local-storage -j 1` | **60 通过，3 ignored**；含 LanceDB 6、Kuzu 4、跨库账本组合 1，以及 Kuzu 取消回归单元测试 1 |
+| `git diff --check`、更新文档的本地链接检查 | 通过；历史未跟踪的 target 报告不在链接检查范围 |
+
+本轮新增回归覆盖：
+
+- LanceDB 拒绝零/溢出维度、声明维度与向量长度不符、NaN/Infinity；批次中非法输入不会先写入其他 profile 的向量。
+- profile 已有表的维度冲突及查询声明维度不符返回 `StorageError::Conflict`；`limit=0` 返回空结果。查询显式绕过 ANN 索引，与精确检索能力声明一致。
+- 幂等键包含 scope、来源 ID/版本、产物 ID 和 generation；同产物的不同 generation、来源版本、profile、tenant/workspace 可并存。重开数据库后仍可读取，重复删除只清除指定 scope/来源版本。
+- Kuzu 异步调用取消后，尚未结束的原生阻塞操作仍持有串行许可，后续操作不会提前进入；结束后正常释放许可。
+
+构建排障：初次默认并行度运行本地全套测试，MSVC 链接报 `LNK1102`（内存不足），并出现页面文件不足引起的 metadata 映射失败；改用 `-j 1`。首轮回归还发现 LanceDB 的 schema 错误需映射为统一的 `Conflict`，已补齐。以上失败不计入通过结果。
+
+未覆盖：PG 的三个 ignored 集成测试、应用级本地宿主/检索融合/命中可见性复核、共享 owner 清理编排、真实崩溃注入与重启恢复、最低 Rust 版本、Linux/macOS/release、容器及远端 CI。既有账本组合测试验证 pending→幂等外部写→committed→对账，不等同于完整故障恢复验收。
+
 ## 2026-09-23：M0 本地 Rust 库探针（Windows 通过）
 
 隔离工程位于 [tools/storage-probe](../tools/storage-probe/README.md)，直接依赖 SQLx 0.8.6、LanceDB 0.23.1（Lance 1.0.1、Arrow 56.2.1）、Kuzu 0.11.3。Windows x64/MSVC、Rust 1.88.0 完整可执行文件构建和 **14 项真实文件/子进程检查通过**。主应用尚未接入这些库；探针通过不代表生产后端已经交付。
