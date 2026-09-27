@@ -155,3 +155,33 @@ async fn lifecycle_is_idempotent() {
     store.check().await.unwrap();
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn partial_graph_schema_is_rejected_without_repair() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let db = kuzu::Database::new(
+            dir.path().join("kuzu.db"),
+            kuzu::SystemConfig::default()
+                .buffer_pool_size(64 * 1024 * 1024)
+                .max_num_threads(2),
+        )
+        .unwrap();
+        let conn = kuzu::Connection::new(&db).unwrap();
+        conn.query("CREATE NODE TABLE Entity(uid STRING,PRIMARY KEY(uid))")
+            .unwrap();
+    }
+    assert!(KuzuStore::open(dir.path()).await.is_err());
+    let db = kuzu::Database::new(
+        dir.path().join("kuzu.db"),
+        kuzu::SystemConfig::default()
+            .buffer_pool_size(64 * 1024 * 1024)
+            .max_num_threads(2),
+    )
+    .unwrap();
+    let conn = kuzu::Connection::new(&db).unwrap();
+    assert_eq!(
+        conn.query("CALL show_tables() RETURN *").unwrap().count(),
+        1
+    );
+}

@@ -1,12 +1,21 @@
+#[cfg(feature = "local-storage")]
 pub mod api;
-pub mod db;
 pub mod error;
 pub mod graph;
+#[cfg(feature = "local-storage")]
 pub mod mcp;
 pub mod models;
 pub mod parsing;
+#[cfg(feature = "local-storage")]
 pub mod retrieval;
+#[cfg(feature = "local-storage")]
 pub mod service;
 pub mod storage;
 pub mod types;
+#[cfg(feature = "local-storage")]
 pub mod worker;
+
+#[cfg(feature = "local-storage")]
+pub mod client;
+#[cfg(feature = "local-storage")]
+pub mod host;

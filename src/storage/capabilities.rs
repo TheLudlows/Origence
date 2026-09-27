@@ -32,6 +32,8 @@ pub struct Capabilities {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorQuery {
     pub scope: Scope,
+    /// Optional relationally visible candidates, filtered before top-k.
+    pub artifact_ids: Option<Vec<Uuid>>,
     pub profile: String,
     pub dimension: usize,
     pub generation: i64,

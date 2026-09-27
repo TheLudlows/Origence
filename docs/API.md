@@ -1,5 +1,7 @@
 # HTTP API v1
 
+适用 M5 本地宿主 SQLite/LanceDB/Kuzu。参见 [文档索引](README.md) 和 [运维说明](OPERATIONS.md)。
+
 所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。修改接口还需 1–200 个 ASCII 字符的 `Idempotency-Key`；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 
 ## 角色
@@ -18,7 +20,7 @@
 | 方法和路径 | 请求 / 结果 |
 | --- | --- |
 | `GET /health/live` | 进程存活，无鉴权 |
-| `GET /health/ready` | 数据库可达及 jobs 表可访问；不是外部模型健康检查 |
+| `GET /health/ready` | 单 Worker 正在运行且本地存储检查通过；不是外部模型健康检查 |
 | `POST /v1/memories` | `{fact_key,content,publish_if_authorized:false}` → candidate/asset/source/job 标识 |
 | `POST /v1/captures` | `{content}` → source/job，抽取固定生成候选 |
 | `GET /v1/candidates` | 最多 100 条待审核候选，含 revision 和 current_version |
@@ -26,7 +28,7 @@
 | `POST /v1/candidates/{id}/review` | `{decision:"approve"或"reject",expected_revision,expected_version:null或整数,reason}` |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
 | `POST /v1/files?name=...&format=...` | 原始二进制请求体，非 multipart；返回 file_id；文件名仅作元数据 |
-| `GET /v1/files/{id}` | 校验 hash 后返回 attachment/octet-stream，存储路径由 UUID 生成 |
+| `GET /v1/files/{id}` | 校验 hash 后返回 attachment/octet-stream，存储路径由 scope 和内容 hash 生成 |
 | `GET /v1/assets/{id}?version=N` | 已发布当前/历史版本，含 content/hash/title/source/restored_from |
 | `POST /v1/assets/{id}/restore` | `{target_version,expected_version,reason}` → 恢复 job；完成后新增版本 |
 | `DELETE /v1/assets/{id}` | 永久逻辑墓碑，阻断包括历史版本在内的读取 |
@@ -39,6 +41,16 @@
 | `POST /v1/resolve` | `{query,budget_tokens:2000,mode:"keyword",allow_partial:false}` → rendered_context 和 sources |
 
 知识更新只在异步发布成功后改变当前版本及标题。文件和正文必须二选一；PDF 必须使用 file_id。每个历史版本保留自己的标题。恢复内容和标题，同时新增 `restored_from`，不会覆盖历史版本或跳过来源状态检查。
+
+## 身份与密钥管理
+
+| 方法和路径 | 语义 |
+| --- | --- |
+| `GET /v1/whoami` | 返回已认证 key 的 id、tenant_id、workspace_id、role |
+| `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须等于当前 token 所属 workspace，返回 `{key_id,token}` |
+| `DELETE /admin/keys/{id}` | admin 撤销同 workspace 的 key，允许撤销自身；后续调用拒绝 |
+
+`/admin/keys` 同样要求 Bearer token，但不使用业务幂等缓存，避免保存明文 token。发行结果只返回一次，重复 POST 会创建不同 key；若响应丢失，需要离线管理核对数据库中的 key ID 并撤销多余凭据。离线 workspace/key 管理通过 `--offline` 和操作系统目录权限授权，宿主运行时拒绝打开。
 
 ## 审核例子
 
@@ -55,13 +67,15 @@
 
 ## 任务与读取可见性
 
-`pending → processing → completed/failed/superseded`；取消为 `cancelled`。`completed + outcome=candidates_created` 不等于正式发布；只有 `completed + outcome=published` 表示该次版本及索引已原子提交。之后仍可能被更新、删除或来源撤回。
+`pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。`completed + outcome=candidates_created` 不等于正式发布；只有 `completed + outcome=published` 表示该次版本及索引已原子提交。之后仍可能被更新、删除或来源撤回。
 
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
 
-同一 workspace 内的短写事务通过事务级 advisory lock 串行化；模型/文件解析在写事务外运行。提交重新验证权限、墓碑、来源、预期版本、generation 和 run_token。队列只传 scope/job ID/generation，正文从受 RLS 保护的业务表读取。
+所有业务写事务以 SQLite `BEGIN IMMEDIATE` 开始，原子提交业务、幂等、审计和入队。模型/文件/原生索引 IO 在关系事务外执行。最终提交再次校验权限、墓碑、来源、预期版本、generation 和 run_token；密钥撤销与写事务串行化。SQLite 无 RLS，scope 由适配器显式绑定。
 
-数据库故障会交由 Apalis 重试；如果队列耗尽重试且业务任务仍停在 processing，恢复数据库后可 cancel 再 retry，旧 generation 被隔离。尚无自动故障巡检控制面。
+发布计划和 pending 账本先落 SQLite，向量/图写入后，版本、owner、ready 索引及 committed 账本与任务完成一起提交。外部产物不等于已发布证据。短暂存储错误进入 `retry_wait`，最多尝试 5 次；模型/输入失败需显式重试。独占宿主重启时恢复 processing 并提升 run_token，先对账清理再接收请求。
+
+cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原始事件、版本、候选和文件仍保留，不等于原文物理擦除。
 
 ## 检索
 
@@ -70,6 +84,10 @@
 向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐、ANN 或 reranker。
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
+
+关键词使用 Jieba 预分词字段的精确词项匹配（查询词项全部出现），限定当前 scope。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。SQLite owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
+
+只有知识 ingest 在配置抽取模型时生成摘要和图；短事实 publish 与 restore 不自动生成图。启用的加工步骤失败时整个任务失败，不宣称部分图已就绪。查询 embedding 失败可按 allow_partial 降级；存储错误不会通过降级绕过权限或来源验证。
 
 ## 错误
 

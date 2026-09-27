@@ -226,7 +226,7 @@ impl VectorStore for LanceDbStore {
 
     async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
         validate_vector(query.dimension, &query.embedding)?;
-        if query.limit == 0 {
+        if query.limit == 0 || query.artifact_ids.as_ref().is_some_and(Vec::is_empty) {
             return Ok(Vec::new());
         }
         let name = table_name(&query.profile);
@@ -245,12 +245,20 @@ impl VectorStore for LanceDbStore {
             .execute()
             .await
             .map_err(|e| StorageError::Backend(e.to_string()))?;
-        let filter = format!(
+        let mut filter = format!(
             "tenant='{}' AND workspace='{}' AND generation={}",
             quote(&query.scope.tenant_id.to_string()),
             quote(&query.scope.workspace_id.to_string()),
             query.generation
         );
+        if let Some(ids) = &query.artifact_ids {
+            let ids = ids
+                .iter()
+                .map(|id| format!("'{id}'"))
+                .collect::<Vec<_>>()
+                .join(",");
+            filter.push_str(&format!(" AND id IN ({ids})"));
+        }
         check_dimension(&table, query.dimension).await?;
         let stream = table
             .query()
@@ -333,6 +341,41 @@ impl VectorStore for LanceDbStore {
                 .delete(&filter)
                 .await
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let names = self
+            .db
+            .table_names()
+            .execute()
+            .await
+            .map_err(|e| StorageError::Backend(e.to_string()))?;
+        for name in names {
+            let table = self
+                .db
+                .open_table(&name)
+                .execute()
+                .await
+                .map_err(|e| StorageError::Backend(e.to_string()))?;
+            for batch in ids.chunks(100) {
+                let values = batch
+                    .iter()
+                    .map(|id| format!("'{id}'"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                table
+                    .delete(&format!(
+                        "tenant='{}' AND workspace='{}' AND id IN ({values})",
+                        scope.tenant_id, scope.workspace_id
+                    ))
+                    .await
+                    .map_err(|e| StorageError::Backend(e.to_string()))?;
+            }
         }
         Ok(())
     }

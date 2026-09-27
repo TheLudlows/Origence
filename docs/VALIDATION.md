@@ -1,5 +1,40 @@
 # 验证记录
 
+## 2026-09-28：M5 本地宿主验收
+
+环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖。默认启用 local-storage，测试使用真实临时 SQLite/LanceDB/Kuzu 与本地文件；模型为本机 HTTP stub，无外部付费调用。当前部署和 API 契约见 [文档索引](README.md)，实现映射见 [M5](superpowers/plans/2026-09-28-local-host-delivery.md)。
+
+| 检查 | 实测结果 |
+| --- | --- |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo clippy --offline --locked --all-targets -j 16 -- -D warnings` | 通过 |
+| `cargo build --offline --locked --lib -j 16` | 通过；并行构建原生库，后续测试串行链接 |
+| `cargo test --offline --locked -j 1 --no-fail-fast` | **68 通过，0 失败，0 ignored**；8 项单元 + 60 项集成，集成执行约 20.54 秒，非性能基准 |
+| `cargo check --offline --locked --no-default-features --lib -j 4` | 通过；基础接口构建无需启用原生后端 |
+| `cargo test --offline --locked --test local local_app -j 1` | 最终调整共享 SQLite 关闭顺序后，4 项应用定向回归全部通过（约 23.48 秒） |
+| CLI `--help` | 本地 serve、workspace/key 管理、search/get/resolve、MCP 和显式 offline；无 DATABASE_URL/runtime-setup/独立 worker 命令 |
+| 运行依赖核对 | Apalis 已从依赖图移除；正常运行依赖未启用 sqlx-postgres；不需要 PG 服务 |
+| `docker compose config --quiet` | 通过；Docker CLI 提示本机用户配置不可读，但配置校验退出码为 0 |
+| 构建脚本 PowerShell 语法检查 | 通过；实际构建采用上列手动命令，不把脚本语法检查等同于跨机器安装验收 |
+| 文档本地链接、`git diff --check` | 通过；20 份 Markdown 文档的本地链接无断链 |
+
+本轮新增/补强的验收：
+
+- 自动创建空库、重复/并发 SQLite 初始化；缺领域列或部分 Kuzu 表结构拒绝启动且不静默补建。Kuzu 新库 DDL 在单事务创建。
+- IMMEDIATE 写事务与撤销串行化；旧授权不能开启新事务；候选撤回/作业取消严格限定事务 scope。
+- HTTP/CLI/MCP 共享单宿主；离线命令与第二宿主受 OS 锁限制；宿主不可达不回退；MCP 每次调用重新授权并拒绝已撤销 key。
+- 候选审核、授权首次发布、知识版本、追加恢复、源撤回、幂等、中文关键词和 reader/writer 角色限制；原始 PDF 上传、子进程解析、字节下载校验。
+- keyword/vector/hybrid、摘要原文证据、图一跳与共享 owner、HTTP/MCP 图引用及统一预算。向量先过滤关系库可见候选再 top-k，旧/隐藏产物不能挤占结果。
+- 模型处理中取消→新 generation 重试、撤销创建者和删除资产，迟到结果不能发布；强杀真实宿主后重启立即恢复 processing，只发布一个版本。
+- 在真实存储构造“图已写、SQLite 仅 pending、版本未发布”的边界，重开清理并重放已保存计划；检查一次发布。暂停 Worker 后撤回来源，残留原生图/向量不能映射为有效证据，随后清理收敛。
+- graceful host shutdown 等待 Worker 停止；原生后端关闭钩子先于共享 SQLite 队列/关系连接池关闭。
+
+构建与修复记录：首次环境未在 PATH 中找到 Ninja，补齐 VS CMake/Ninja 与 vendored protoc 后通过。移除 PG 特性导致原生依赖缓存重建；单线程原生编译中止后改为 `cargo build --lib -j 16`，测试维持 `-j 1` 避免并发链接内存压力。初次静态检查发现一处嵌套条件风格问题，新增发布计划字段时发现函数参数误替换，均已修正后重新验证；这些中间失败不计入通过结果。
+
+未验证：Linux/macOS/release、当前 Linux 容器镜像构建和运行、远端 CI、主应用最低 Rust 1.88、在线备份、断电恢复、长期压力/规模与真实模型语义效果。`docker info` 因本机 Docker daemon 未运行而失败，不能复用旧 PG 镜像成功记录证明本地镜像可运行。保存计划边界注入与真实进程强退是两类不同测试，不宣称覆盖所有崩溃指令点。
+
+以下各节保留历史记录，描述当时环境与限制，不代表当前运行架构或本轮验收范围。
+
 ## 2026-09-27–28：M4 本地适配器验收修复
 
 环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖，使用真实临时 SQLite/LanceDB/Kuzu 数据文件，无外部模型调用。此轮验证的是存储适配器，CLI/API/Worker/MCP 仍运行 PG 基线。
@@ -43,7 +78,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/storage-probe/build.ps
 python tools/storage-probe/verify.py --binary target/storage-probe-msrv/debug/opencontext-storage-probe.exe
 ```
 
-完整报告：[report.json](../target/storage-probe/runs/run-69exqwqr/report.json)。报告和临时数据库留在本地、不纳入 Git，脚本可重建结果。之前也在 Rust 1.96.0 以 `--no-default-features --features sqlite,vector` 构建并通过 SQLite 4 项、LanceDB 3 项检查；不将其描述为三个库在 1.96.0 上的完整构建通过。
+完整报告：`target/storage-probe/runs/run-69exqwqr/report.json`（历史本地输出，不作为仓库链接）。报告和临时数据库留在本地、不纳入 Git，脚本可重建结果。之前也在 Rust 1.96.0 以 `--no-default-features --features sqlite,vector` 构建并通过 SQLite 4 项、LanceDB 3 项检查；不将其描述为三个库在 1.96.0 上的完整构建通过。
 
 本轮固定的构建条件：
 

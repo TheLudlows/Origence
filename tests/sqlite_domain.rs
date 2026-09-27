@@ -340,3 +340,53 @@ async fn fact_slots_are_scoped() {
     }
     assert_ne!(asset_a, asset_b);
 }
+
+#[tokio::test]
+async fn withdrawal_and_cancellation_only_touch_transaction_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("scope.db"))
+        .await
+        .unwrap();
+    let a = provision(&store, "a").await;
+    let b = provision(&store, "b").await;
+    let mut tx = store.begin(b.auth.clone()).await.unwrap();
+    tx.check_permission(Permission::Write).await.unwrap();
+    let source = tx
+        .create_event("structured", "evidence", None)
+        .await
+        .unwrap();
+    let (asset, _) = tx.slot("fact").await.unwrap();
+    let candidate = tx
+        .insert_candidate(asset, "fact", "evidence", source, false, None)
+        .await
+        .unwrap();
+    let job = Uuid::new_v4();
+    tx.enqueue(WorkItem {
+        job_id: job,
+        kind: "publish".into(),
+        payload: json!({}),
+        asset: Some(asset),
+        source: Some(source),
+    })
+    .await
+    .unwrap();
+    tx.retract_event(source).await.unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = store.begin(a.auth).await.unwrap();
+    tx.check_permission(Permission::Delete).await.unwrap();
+    tx.withdraw_affected_candidates().await.unwrap();
+    tx.cancel_affected_jobs().await.unwrap();
+    tx.commit().await.unwrap();
+    let c: String = sqlx::query_scalar("SELECT state FROM oc_candidates WHERE id=?")
+        .bind(candidate)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(c, "candidate");
+    let mut tx = store.begin(b.auth).await.unwrap();
+    assert_eq!(tx.job_view(job).await.unwrap()["state"], "pending");
+    tx.withdraw_affected_candidates().await.unwrap();
+    tx.cancel_affected_jobs().await.unwrap();
+    assert_eq!(tx.job_view(job).await.unwrap()["state"], "cancelled");
+    tx.commit().await.unwrap();
+}

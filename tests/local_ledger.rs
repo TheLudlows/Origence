@@ -116,6 +116,7 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
     // Step 5: no duplication from the replayed writes.
     let hits = vector
         .search(VectorQuery {
+            artifact_ids: None,
             scope,
             profile: "p:v1".into(),
             dimension: 2,

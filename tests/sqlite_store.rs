@@ -175,15 +175,26 @@ async fn rollback_discards_writes() {
 }
 
 #[tokio::test]
-async fn permission_rechecked_at_commit() {
+async fn permission_revocation_serializes_with_writes() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let p = provision(&store, "acme").await;
-
     let mut tx = store.begin(p.auth.clone()).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
-    store.revoke_key(p.key.key_id).await.unwrap();
-    assert!(matches!(tx.commit().await, Err(StorageError::Forbidden)));
+    // The IMMEDIATE transaction linearizes publication before a competing revoke.
+    let revoke = store.revoke_key(p.key.key_id);
+    tokio::pin!(revoke);
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut revoke)
+            .await
+            .is_err()
+    );
+    tx.commit().await.unwrap();
+    revoke.await.unwrap();
+    assert!(matches!(
+        store.begin(p.auth).await,
+        Err(StorageError::Forbidden)
+    ));
 }
 
 #[tokio::test]

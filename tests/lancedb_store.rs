@@ -41,6 +41,7 @@ async fn upsert_is_idempotent_and_search_is_scoped() {
     store.upsert(scope, vec![entry.clone()]).await.unwrap();
 
     let query = VectorQuery {
+        artifact_ids: None,
         scope,
         profile: "test:dim2:v1".into(),
         dimension: 2,
@@ -57,6 +58,7 @@ async fn upsert_is_idempotent_and_search_is_scoped() {
     let other = make_scope();
     let hits = store
         .search(VectorQuery {
+            artifact_ids: None,
             scope: other,
             profile: "test:dim2:v1".into(),
             dimension: 2,
@@ -101,6 +103,7 @@ async fn delete_source_removes_only_that_source() {
 
     let hits = store
         .search(VectorQuery {
+            artifact_ids: None,
             scope,
             profile: "p:v1".into(),
             dimension: 2,
@@ -136,6 +139,7 @@ fn entry() -> VectorEntry {
 
 fn query(scope: Scope, entry: &VectorEntry) -> VectorQuery {
     VectorQuery {
+        artifact_ids: None,
         scope,
         profile: entry.profile.clone(),
         dimension: entry.dimension,
@@ -284,4 +288,26 @@ async fn replay_preserves_generation_source_version_profile_and_scope() {
             .len(),
         1
     );
+}
+
+#[tokio::test]
+async fn relational_candidates_filter_before_top_k() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = LanceDbStore::open(dir.path()).await.unwrap();
+    let scope = make_scope();
+    let hidden = entry();
+    let mut visible = entry();
+    visible.embedding = vec![0.0, 1.0];
+    store
+        .upsert(scope, vec![hidden.clone(), visible.clone()])
+        .await
+        .unwrap();
+    let mut q = query(scope, &hidden);
+    q.limit = 1;
+    q.artifact_ids = Some(vec![visible.id]);
+    let hits = store.search(q.clone()).await.unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, visible.id);
+    q.artifact_ids = Some(vec![]);
+    assert!(store.search(q).await.unwrap().is_empty());
 }

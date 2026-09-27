@@ -1,5 +1,4 @@
 use crate::{
-    db,
     error::{AppError, Result},
     service::Service,
     types::*,
@@ -23,6 +22,9 @@ pub fn router(service: Service) -> Router {
             get(|| async { Json(json!({"status":"ok"})) }),
         )
         .route("/health/ready", get(ready))
+        .route("/v1/whoami", get(whoami))
+        .route("/admin/keys", post(issue_key))
+        .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/v1/memories", post(memory))
         .route("/v1/captures", post(capture))
         .route("/v1/knowledge", post(knowledge))
@@ -56,10 +58,7 @@ async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
     s.auth(token(h)?).await
 }
 async fn ready(State(s): State<Service>) -> impl IntoResponse {
-    let result = sqlx::query("SELECT 1 FROM oc.jobs LIMIT 0")
-        .execute(&s.pool)
-        .await;
-    if result.is_ok() {
+    if s.ready().await {
         (StatusCode::OK, Json(json!({"status":"ready"})))
     } else {
         (
@@ -216,14 +215,30 @@ async fn file(
     ))
 }
 
-pub async fn serve(s: Service, bind: &str) -> anyhow::Result<()> {
-    db::check_runtime(&s.pool).await?;
-    let listener = tokio::net::TcpListener::bind(bind).await?;
-    tracing::info!(address = bind, "HTTP API listening");
-    axum::serve(listener, router(s))
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
-    Ok(())
+async fn whoami(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
+    Ok(Json(json!(auth(&s, &h).await?)))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeyInput {
+    workspace_id: Uuid,
+    role: String,
+}
+async fn issue_key(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(input): Json<KeyInput>,
+) -> Result<Json<Value>> {
+    let a = auth(&s, &h).await?;
+    if input.workspace_id != a.workspace_id {
+        return Err(AppError::Forbidden);
+    }
+    Ok(Json(s.issue_key(&a, &input.role).await?))
+}
+async fn revoke_key(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.revoke_key(&auth(&s, &h).await?, id).await?))
 }

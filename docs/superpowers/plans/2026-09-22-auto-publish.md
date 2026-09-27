@@ -1,5 +1,7 @@
 # 自动发布（Cognee 模式）实施计划
 
+> 文档定位（2026-09-28）：后续产品阶段，尚未实施。M5 保留候选审核和授权首次发布语义；实施时复用本地宿主与 SQLite 事务，不能照旧 PG 草稿执行。参见 [M5](2026-09-28-local-host-delivery.md)。
+
 修订：2026-09-23。产品契约见 [整体设计 A1](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储与事务使用同文档 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)。
 
 ## 目标、范围与前置条件

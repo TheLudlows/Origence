@@ -35,6 +35,24 @@ pub struct KuzuStore {
 }
 
 impl KuzuStore {
+    /// Scoped graph identities for hybrid recall. Descriptions are deliberately
+    /// omitted: a shared node's latest projection is not provenance authority.
+    pub async fn snapshot(&self, scope: Scope) -> StorageResult<Value> {
+        self.with_conn(move |conn| {
+            let params=||vec![("tenant",KValue::String(scope.tenant_id.to_string())),("workspace",KValue::String(scope.workspace_id.to_string()))];
+            let mut stmt=conn.prepare("MATCH (n:Entity) WHERE n.tenant=$tenant AND n.workspace=$workspace RETURN n.id,n.name").map_err(|e|StorageError::Backend(e.to_string()))?;
+            let rows=conn.execute(&mut stmt,params()).map_err(|e|StorageError::Backend(e.to_string()))?;
+            let mut entities=Vec::new();
+            for row in rows { if let [KValue::String(id),KValue::String(name)] = row.as_slice() {entities.push(json!({"id":id,"name":name.trim().to_lowercase()}));} }
+            let mut stmt=conn.prepare("MATCH (a:Entity)-[r:Relation]->(b:Entity) WHERE r.tenant=$tenant AND r.workspace=$workspace RETURN r.id,a.id,b.id,a.name,r.predicate,b.name").map_err(|e|StorageError::Backend(e.to_string()))?;
+            let rows=conn.execute(&mut stmt,params()).map_err(|e|StorageError::Backend(e.to_string()))?;
+            let mut relations=Vec::new();
+            for row in rows { if let [KValue::String(id),KValue::String(source),KValue::String(target),KValue::String(a),KValue::String(predicate),KValue::String(b)] = row.as_slice() {relations.push(json!({"id":id,"source_id":source,"target_id":target,"fact_text":format!("{} {} {}",a.trim().to_lowercase(),predicate.trim().to_lowercase(),b.trim().to_lowercase())}));} }
+            entities.sort_by(|a,b|a["id"].as_str().cmp(&b["id"].as_str()));
+            relations.sort_by(|a,b|a["id"].as_str().cmp(&b["id"].as_str()));
+            Ok(json!({"entities":entities,"relations":relations}))
+        }).await
+    }
     /// Open the store at `dir`, creating `dir/kuzu.db`. Kuzu's write host
     /// excludes any second process from opening the file (A2.4), so this is
     /// the single owner for the process.
@@ -400,20 +418,39 @@ impl GraphStore for KuzuStore {
 impl Lifecycle for KuzuStore {
     async fn initialize(&self) -> StorageResult<()> {
         self.with_conn(|conn| {
-            conn.query(ENTITY_DDL)
+            let mut tables = conn
+                .query("CALL show_tables() RETURN *")
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
-            conn.query(RELATION_DDL)
-                .map_err(|e| StorageError::Backend(e.to_string()))?;
+            let empty = tables.next().is_none();
+            drop(tables);
+            if empty {
+                conn.query("BEGIN TRANSACTION")
+                    .map_err(|e| StorageError::Backend(e.to_string()))?;
+                let created = conn
+                    .query(ENTITY_DDL)
+                    .and_then(|_| conn.query(RELATION_DDL));
+                match created {
+                    Ok(_) => {
+                        conn.query("COMMIT")
+                            .map_err(|e| StorageError::Backend(e.to_string()))?;
+                    }
+                    Err(error) => {
+                        let _ = conn.query("ROLLBACK");
+                        return Err(StorageError::Backend(error.to_string()));
+                    }
+                }
+            }
             Ok(())
         })
-        .await
+        .await?;
+        self.check().await
     }
 
     async fn check(&self) -> StorageResult<()> {
         self.with_conn(|conn| {
-            conn.prepare("MATCH (n:Entity) RETURN n.uid LIMIT 1")
+            conn.prepare("MATCH (n:Entity) RETURN n.uid,n.id,n.tenant,n.workspace,n.source_id,n.version,n.name,n.entity_type,n.description LIMIT 1")
                 .map_err(|e| StorageError::Unavailable(format!("entity table missing: {e}")))?;
-            conn.prepare("MATCH ()-[r:Relation]->() RETURN r.id LIMIT 1")
+            conn.prepare("MATCH ()-[r:Relation]->() RETURN r.id,r.tenant,r.workspace,r.source_id,r.version,r.predicate LIMIT 1")
                 .map_err(|e| StorageError::Unavailable(format!("relation table missing: {e}")))?;
             Ok(())
         })

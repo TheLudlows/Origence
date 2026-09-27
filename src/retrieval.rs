@@ -1,17 +1,13 @@
 use crate::{
-    db,
     error::{AppError, Result},
     parsing,
-    service::Service,
+    service::{Service, decode, scope},
+    storage::{DomainTx, Permission, VectorQuery, VectorStore},
     types::*,
 };
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
-
-const SELECT: &str = "SELECT a.id asset_id,v.version,c.id chunk_id,a.kind,v.title,c.content,c.locator,v.source_event_id";
-const FROM: &str = " FROM oc.chunks c JOIN oc.assets a ON a.id=c.asset_id AND a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.current_version=c.version JOIN oc.versions v ON v.asset_id=c.asset_id AND v.version=c.version AND v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id JOIN oc.events e ON e.id=v.source_event_id AND e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id WHERE NOT a.deleted AND e.state='active'";
-
 impl Service {
     pub async fn search(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
         if input.query.trim().is_empty()
@@ -22,13 +18,10 @@ impl Service {
         {
             return Err(AppError::Invalid("query, mode or limit invalid".into()));
         }
-        db::authorized(&self.pool, a, "read", false)
-            .await?
-            .rollback()
-            .await?;
+        self.read(a, Permission::Read).await?.rollback().await?;
         let mut warnings = Vec::new();
         let mut effective = input.mode.clone();
-        let vector = if input.mode != "keyword" {
+        let embedding = if effective != "keyword" {
             match self.models.embed(&input.query).await {
                 Ok(v) => Some(v),
                 Err(_) if input.allow_partial => {
@@ -41,77 +34,182 @@ impl Service {
         } else {
             None
         };
-        let mut tx = db::authorized(&self.pool, a, "read", false).await?;
-        let mut branches: Vec<Vec<SearchHit>> = Vec::new();
-        if effective != "vector" {
-            let query = parsing::lexical(&input.query);
-            let sql = format!(
-                "{SELECT},ts_rank_cd(c.search_vector,plainto_tsquery('simple',$1))::float8 score {FROM} AND c.search_vector @@ plainto_tsquery('simple',$1) ORDER BY score DESC,c.id LIMIT 100"
-            );
-            branches.push(sqlx::query_as(&sql).bind(query).fetch_all(&mut *tx).await?);
-        }
-        if let Some(vector) = vector {
-            // Exact scoped vector scan: no global ANN candidates or mixed model profiles.
-            let sql = format!(
-                "{SELECT},(1-(c.embedding <=> $1))::float8 score {FROM} AND c.embedding_profile=$2 AND c.embedding IS NOT NULL ORDER BY c.embedding <=> $1,c.id LIMIT 100"
-            );
-            branches.push(
-                sqlx::query_as(&sql)
-                    .bind(vector)
-                    .bind(&self.models.profile)
-                    .fetch_all(&mut *tx)
-                    .await?,
-            );
-        }
-        // Summary recall: a third RRF branch in hybrid mode, mapping summary hits back to their source chunk.
-        if effective == "hybrid" {
-            let summaries = crate::graph::search_summaries(&mut tx, &input.query, 20).await?;
-            let chunk_ids: Vec<Uuid> = summaries
-                .iter()
-                .filter_map(|s| s["chunk_id"].as_str())
-                .filter_map(|x| Uuid::parse_str(x).ok())
-                .collect();
-            if !chunk_ids.is_empty() {
-                let sql = format!(
-                    "{SELECT},0.0::float8 score {FROM} AND c.id=ANY($1) ORDER BY c.id LIMIT 100"
-                );
-                branches.push(
-                    sqlx::query_as(&sql)
-                        .bind(&chunk_ids)
-                        .fetch_all(&mut *tx)
+        let profile = self.models.profile.as_deref().unwrap_or("");
+        let mut native_hits = Vec::new();
+        if let Some(vector) = embedding {
+            let mut tx = self.read(a, Permission::Read).await?;
+            let generations = tx.vector_generations(profile, vector.len()).await?;
+            let mut eligible = Vec::new();
+            for generation in generations {
+                eligible.push((
+                    generation,
+                    tx.vector_candidates(profile, vector.len(), generation)
                         .await?,
-                );
+                ));
+            }
+            tx.commit().await?;
+            for (generation, ids) in eligible {
+                for batch in ids.chunks(512) {
+                    for hit in self
+                        .engine
+                        .vector()
+                        .search(VectorQuery {
+                            scope: scope(a),
+                            artifact_ids: Some(batch.to_vec()),
+                            profile: profile.into(),
+                            dimension: vector.len(),
+                            generation,
+                            embedding: vector.clone(),
+                            limit: 100,
+                        })
+                        .await?
+                    {
+                        native_hits.push((generation, hit));
+                    }
+                }
             }
         }
-        let mut hits = fuse(branches, effective == "hybrid");
-        // Final visibility check after all branches; revocation and deletion never rely on cached authorization.
-        let valid: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT c.id {FROM} AND c.id=ANY($1)"))
-            .bind(hits.iter().map(|h| h.chunk_id).collect::<Vec<_>>())
-            .fetch_all(&mut *tx)
-            .await?;
-        hits.retain(|h| valid.contains(&h.chunk_id));
-        hits.truncate(input.limit);
-        // Graph recall (entities + 1-hop relations) is a hybrid-only side band; it is reported
-        // alongside hits but does not enter the chunk RRF ranking.
-        let (graph_entities, graph_relations) = if effective == "hybrid" {
-            let entities = crate::graph::search_entities(&mut tx, &input.query, 20).await?;
-            let ids: Vec<Uuid> = entities
-                .iter()
-                .filter_map(|e| e["id"].as_str())
-                .filter_map(|s| Uuid::parse_str(s).ok())
-                .collect();
-            let relations = crate::graph::relations_of(&mut tx, &ids).await?;
-            (entities, relations)
+        let graph = if effective == "hybrid" {
+            Some(self.engine.graph().snapshot(scope(a)).await?)
         } else {
-            (Vec::new(), Vec::new())
+            None
         };
+        let terms = parsing::lexical(&input.query);
+        // Native candidates become evidence only inside a fresh scoped snapshot.
+        let mut tx = self.read(a, Permission::Read).await?;
+        let mut branches = Vec::new();
+        if effective != "vector" {
+            branches.push(tx.keyword_hits(&terms, false).await?);
+        }
+        let mut vectors = Vec::new();
+        for (generation, native) in native_hits {
+            if let Some(mut hit) = tx
+                .vector_hit(native.id, native.source, profile, generation)
+                .await?
+            {
+                hit.score = native.score as f64;
+                vectors.push(hit);
+            }
+        }
+        vectors.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then(a.chunk_id.cmp(&b.chunk_id))
+        });
+        if effective != "keyword" {
+            branches.push(vectors);
+        }
+        let (mut entities, mut relations) = (Vec::new(), Vec::new());
+        if let Some(graph) = graph {
+            branches.push(tx.keyword_hits(&terms, true).await?);
+            let all_entities: Vec<Value> = decode(graph["entities"].clone())?;
+            let all_relations: Vec<Value> = decode(graph["relations"].clone())?;
+            let mut ids: HashSet<Uuid> = all_entities
+                .iter()
+                .filter(|e| {
+                    terms
+                        .split_whitespace()
+                        .any(|term| e["name"].as_str().unwrap_or("").contains(term))
+                })
+                .take(20)
+                .map(|e| decode(e["id"].clone()))
+                .collect::<Result<_>>()?;
+            let seeds = ids.clone();
+            let mut edges = Vec::new();
+            for edge in all_relations {
+                let from: Uuid = decode(edge["source_id"].clone())?;
+                let to: Uuid = decode(edge["target_id"].clone())?;
+                if seeds.contains(&from) || seeds.contains(&to) {
+                    ids.insert(from);
+                    ids.insert(to);
+                    edges.push(edge);
+                }
+            }
+            let mut evidence_hits = Vec::new();
+            for mut entity in all_entities {
+                let id: Uuid = decode(entity["id"].clone())?;
+                if !ids.contains(&id) {
+                    continue;
+                }
+                let evidence = tx.graph_evidence(id).await?;
+                if !evidence.is_empty() {
+                    for e in &evidence {
+                        if let Some(h) = tx.visible_hit(decode(e["chunk_id"].clone())?).await? {
+                            evidence_hits.push(h);
+                        }
+                    }
+                    entity["evidence"] = json!(evidence);
+                    entities.push(entity);
+                }
+                if entities.len() >= 20 {
+                    break;
+                }
+            }
+            let visible: HashSet<Uuid> = entities
+                .iter()
+                .map(|e| decode(e["id"].clone()))
+                .collect::<Result<_>>()?;
+            for mut edge in edges {
+                if !visible.contains(&decode(edge["source_id"].clone())?)
+                    || !visible.contains(&decode(edge["target_id"].clone())?)
+                {
+                    continue;
+                }
+                let evidence = tx.graph_evidence(decode(edge["id"].clone())?).await?;
+                if !evidence.is_empty() {
+                    edge["evidence"] = json!(evidence);
+                    relations.push(edge);
+                }
+                if relations.len() >= 20 {
+                    break;
+                }
+            }
+            evidence_hits.sort_by_key(|h| h.chunk_id);
+            evidence_hits.dedup_by_key(|h| h.chunk_id);
+            branches.push(evidence_hits);
+        }
+        let mut hits = fuse(branches, effective == "hybrid");
+        hits.truncate(input.limit);
         tx.commit().await?;
-        db::authorized(&self.pool, a, "read", false)
-            .await?
-            .rollback()
-            .await?;
+        let mut verify = self.read(a, Permission::Read).await?;
+        let mut current = Vec::new();
+        for h in hits {
+            if let Some(mut live) = verify.visible_hit(h.chunk_id).await? {
+                live.score = h.score;
+                current.push(live);
+            }
+        }
+        let hits = current;
+        let mut live_entities = Vec::new();
+        for mut e in entities {
+            let evidence = verify.graph_evidence(decode(e["id"].clone())?).await?;
+            if !evidence.is_empty() {
+                e["evidence"] = json!(evidence);
+                live_entities.push(e);
+            }
+        }
+        let entities = live_entities;
+        let ids: HashSet<Uuid> = entities
+            .iter()
+            .map(|e| decode(e["id"].clone()))
+            .collect::<Result<_>>()?;
+        let mut live_relations = Vec::new();
+        for mut r in relations {
+            if !ids.contains(&decode(r["source_id"].clone())?)
+                || !ids.contains(&decode(r["target_id"].clone())?)
+            {
+                continue;
+            }
+            let evidence = verify.graph_evidence(decode(r["id"].clone())?).await?;
+            if !evidence.is_empty() {
+                r["evidence"] = json!(evidence);
+                live_relations.push(r);
+            }
+        }
+        let relations = live_relations;
+        verify.commit().await?;
         Ok(
-            json!({"hits":hits,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"scoped-exact-rrf60-v1","graph":{"entities":graph_entities,"relations":graph_relations}}),
+            json!({"hits":hits,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","graph":{"entities":entities,"relations":relations}}),
         )
     }
     pub async fn resolve(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {

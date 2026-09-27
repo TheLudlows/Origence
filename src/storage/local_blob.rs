@@ -32,7 +32,7 @@ impl LocalBlobStore {
 
     /// Derive the on-disk path for a key, rejecting any key that would escape
     /// the base directory (absolute paths, `..`, prefixes).
-    fn resolve(&self, key: &BlobKey) -> StorageResult<PathBuf> {
+    pub fn path_for(&self, key: &BlobKey) -> StorageResult<PathBuf> {
         let scope_dir =
             PathBuf::from(key.scope.tenant_id.to_string()).join(key.scope.workspace_id.to_string());
         let rel = Path::new(&key.root).join(&key.path);
@@ -47,7 +47,7 @@ impl LocalBlobStore {
 
 impl BlobStore for LocalBlobStore {
     async fn put(&self, key: &BlobKey, data: Vec<u8>) -> StorageResult<()> {
-        let path = self.resolve(key)?;
+        let path = self.path_for(key)?;
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -56,7 +56,7 @@ impl BlobStore for LocalBlobStore {
     }
 
     async fn get(&self, key: &BlobKey) -> StorageResult<Vec<u8>> {
-        let path = self.resolve(key)?;
+        let path = self.path_for(key)?;
         tokio::fs::read(&path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 StorageError::NotFound
@@ -67,7 +67,7 @@ impl BlobStore for LocalBlobStore {
     }
 
     async fn delete(&self, key: &BlobKey) -> StorageResult<()> {
-        let path = self.resolve(key)?;
+        let path = self.path_for(key)?;
         match tokio::fs::remove_file(&path).await {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

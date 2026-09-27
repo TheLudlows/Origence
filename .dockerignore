@@ -3,5 +3,5 @@
 !Cargo.lock
 !src/
 !src/**
-!deploy/
-!deploy/**
+!tests/
+!tests/**

@@ -99,7 +99,7 @@ impl Models {
         );
         let profile = embedding_model
             .as_ref()
-            .map(|m| format!("{}:{m}:{dimension}:v1", crate::db::hash(&base)));
+            .map(|m| format!("{}:{m}:{dimension}:v1", crate::storage::hash(&base)));
         Ok(Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(45))
@@ -148,7 +148,7 @@ impl Models {
         serde_json::from_slice(&bytes)
             .map_err(|_| AppError::Unavailable("invalid model JSON".into()))
     }
-    pub async fn embed(&self, text: &str) -> Result<pgvector::Vector> {
+    pub async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let model = self
             .embedding_model
             .as_ref()
@@ -169,7 +169,7 @@ impl Models {
                 "invalid embedding dimension or values".into(),
             ));
         }
-        Ok(values.into())
+        Ok(values)
     }
     pub async fn extract(&self, text: &str) -> Result<Vec<MemoryInput>> {
         let model = self.extraction_model.as_ref().ok_or_else(|| {

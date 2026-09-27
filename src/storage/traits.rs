@@ -12,9 +12,9 @@
 //! tx.record_source(source_version).await?;
 //! tx.enqueue(work_item).await?;                             // same transaction
 //! tx.audit("memory.create", target, detail).await?;
-//! // ... any model / file IO happens here, OUTSIDE the transaction ...
 //! tx.finish_command(response).await?;
 //! tx.commit().await?;                                       // re-checks permission
+//! // The worker performs model / file IO only after this transaction ends.
 //! ```
 //!
 //! Any failure before `commit` rolls the whole transaction back; external IO
@@ -441,6 +441,9 @@ pub trait VectorStore {
 
     /// Scoped nearest-neighbour search.
     async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>>;
+
+    /// Delete orphan artifacts without deleting other assets sharing a source.
+    async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()>;
 
     /// Remove every vector originating from a source version.
     async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()>;

@@ -1,5 +1,7 @@
 # 云上 Agent 记忆与知识库服务的 Serverless 架构
 
+> 文档定位（2026-09-28）：历史 serverless 方案备查。当前交付已转为单宿主 SQLite/LanceDB/Kuzu，启动方式见 [项目 README](../README.md)，目标架构见 [文档索引](README.md)。
+
 ## 1. 核心结论
 
 一个“知识库”是逻辑概念，不应直接等同于“一套向量索引加一个图数据库”。

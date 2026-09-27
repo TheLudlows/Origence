@@ -26,6 +26,8 @@ use sqlx::Transaction;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 use uuid::Uuid;
 
+mod app;
+
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::ledger::{
@@ -39,35 +41,69 @@ use crate::storage::traits::{
 /// The complete schema for a new database, executed only when absent (A2.3).
 const SCHEMA: &str = include_str!("sqlite-schema.sql");
 
-/// Tables every compatible database must contain (A5).
-const REQUIRED_TABLES: &[&str] = &[
-    "oc_workspaces",
-    "oc_api_keys",
-    "oc_files",
-    "oc_events",
-    "oc_assets",
-    "oc_versions",
-    "oc_candidates",
-    "oc_reviews",
-    "oc_jobs",
-    "oc_chunks",
-    "oc_summaries",
-    "oc_commands",
-    "oc_audit",
-    "oc_artifact_owners",
-    "oc_index_entries",
-    "oc_artifact_ledger",
-];
-
-/// Columns the self-polled queue depends on; a missing one means the structure
-/// is incompatible, not merely outdated (A2.5).
-const REQUIRED_JOB_COLUMNS: &[&str] = &[
-    "state",
-    "generation",
-    "run_token",
-    "cancel_requested",
-    "attempt",
-    "next_retry_at",
+/// Complete column projections required by the fixed local schema.
+const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
+    ("oc_workspaces", "tenant_id,id,name,created_at"),
+    (
+        "oc_api_keys",
+        "id,tenant_id,workspace_id,token_hash,role,revoked,created_at",
+    ),
+    (
+        "oc_files",
+        "tenant_id,workspace_id,id,name,media_type,hash,size,deleted,created_by,created_at",
+    ),
+    (
+        "oc_events",
+        "tenant_id,workspace_id,id,content,kind,file_id,state,created_by,created_at",
+    ),
+    (
+        "oc_assets",
+        "tenant_id,workspace_id,id,kind,title,fact_key,current_version,deleted,created_at",
+    ),
+    (
+        "oc_versions",
+        "tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,restored_from,review_id,title,created_by,created_at",
+    ),
+    (
+        "oc_candidates",
+        "tenant_id,workspace_id,id,asset_id,source_event_id,fact_key,content,revision,expected_version,state,created_at",
+    ),
+    (
+        "oc_reviews",
+        "tenant_id,workspace_id,id,candidate_id,revision,decision,expected_version,reviewer,reason,created_at",
+    ),
+    (
+        "oc_jobs",
+        "tenant_id,workspace_id,id,created_by,operation,payload,state,run_token,generation,attempt,next_retry_at,asset_id,source_event_id,cancel_requested,outcome,result,error_code,created_at,updated_at",
+    ),
+    (
+        "oc_chunks",
+        "tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms",
+    ),
+    (
+        "oc_summaries",
+        "tenant_id,workspace_id,id,chunk_id,text,model_revision,search_terms",
+    ),
+    (
+        "oc_commands",
+        "tenant_id,workspace_id,principal_id,operation,key,request_hash,response,created_at",
+    ),
+    (
+        "oc_audit",
+        "tenant_id,workspace_id,id,actor,action,target,details,created_at",
+    ),
+    (
+        "oc_artifact_owners",
+        "tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at",
+    ),
+    (
+        "oc_index_entries",
+        "tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at",
+    ),
+    (
+        "oc_artifact_ledger",
+        "tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,attempt,last_error,next_retry_at,created_at,updated_at",
+    ),
 ];
 
 /// The local relational store backed by a single SQLite database file.
@@ -82,10 +118,21 @@ pub struct SqliteStore {
 impl SqliteStore {
     /// Open the store at `path`, creating the schema when the file is new.
     pub async fn open(path: impl AsRef<Path>) -> StorageResult<Self> {
-        let path = path.as_ref().to_path_buf();
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
+        let requested = path.as_ref();
+        let parent = requested
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        tokio::fs::create_dir_all(parent).await?;
+        let path = if requested.exists() {
+            tokio::fs::canonicalize(requested).await?
+        } else {
+            tokio::fs::canonicalize(parent).await?.join(
+                requested
+                    .file_name()
+                    .ok_or_else(|| StorageError::Conflict("database filename required".into()))?,
+            )
+        };
         // Take the single-writer lock before touching the database: a second
         // process that opens the same path fails fast here instead of racing
         // the running worker (A2.5). Reentrant within this process.
@@ -209,33 +256,13 @@ async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
 }
 
 async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
-    for table in REQUIRED_TABLES {
-        let present: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
-        )
-        .bind(table)
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(sqlite_err)?;
-        if !present {
-            return Err(StorageError::Unavailable(format!(
-                "incompatible SQLite schema: missing table {table}"
-            )));
-        }
-    }
-    for column in REQUIRED_JOB_COLUMNS {
-        let present: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('oc_jobs') WHERE name=?)",
-        )
-        .bind(column)
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(sqlite_err)?;
-        if !present {
-            return Err(StorageError::Unavailable(format!(
-                "incompatible SQLite schema: missing column oc_jobs.{column}"
-            )));
-        }
+    for (table, columns) in REQUIRED_PROJECTIONS {
+        sqlx::query(&format!("SELECT {columns} FROM {table} LIMIT 0"))
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| {
+                StorageError::Unavailable(format!("incompatible SQLite schema in {table}: {e}"))
+            })?;
     }
     Ok(())
 }
@@ -366,7 +393,6 @@ fn candidate_json(
 /// underlying transaction, so `commit`/`rollback` make them atomic (A2.2).
 pub struct SqliteTx {
     tx: Transaction<'static, sqlx::Sqlite>,
-    pool: SqlitePool,
     scope: Scope,
     principal_id: Uuid,
     required: Vec<Permission>,
@@ -374,13 +400,15 @@ pub struct SqliteTx {
 }
 
 impl SqliteTx {
-    /// The principal's role as of right now, read on a fresh connection so a
-    /// revoke committed mid-transaction is observed (A2.2 commit re-check).
-    async fn live_role(&self) -> StorageResult<String> {
+    /// The role in this transaction. IMMEDIATE writes serialize with revoke;
+    /// model/native IO must precede a fresh authorized write transaction.
+    async fn live_role(&mut self) -> StorageResult<String> {
         let role: Option<String> =
-            sqlx::query_scalar("SELECT role FROM oc_api_keys WHERE id = ? AND NOT revoked")
+            sqlx::query_scalar("SELECT role FROM oc_api_keys WHERE id = ? AND tenant_id = ? AND workspace_id = ? AND NOT revoked")
                 .bind(self.principal_id)
-                .fetch_optional(&self.pool)
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .fetch_optional(&mut *self.tx)
                 .await
                 .map_err(sqlite_err)?;
         role.ok_or(StorageError::Forbidden)
@@ -846,10 +874,12 @@ impl DomainTx for SqliteTx {
     async fn withdraw_affected_candidates(&mut self) -> StorageResult<()> {
         sqlx::query(
             "UPDATE oc_candidates SET state = 'withdrawn', revision = revision + 1 \
-             WHERE state IN ('candidate', 'approved') \
+             WHERE tenant_id = ? AND workspace_id = ? AND state IN ('candidate', 'approved') \
                AND (EXISTS(SELECT 1 FROM oc_assets a WHERE a.id = oc_candidates.asset_id AND a.tenant_id = oc_candidates.tenant_id AND a.workspace_id = oc_candidates.workspace_id AND a.deleted) \
                  OR EXISTS(SELECT 1 FROM oc_events e WHERE e.id = oc_candidates.source_event_id AND e.tenant_id = oc_candidates.tenant_id AND e.workspace_id = oc_candidates.workspace_id AND e.state = 'retracted'))",
         )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
         .execute(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
@@ -859,11 +889,13 @@ impl DomainTx for SqliteTx {
     async fn cancel_affected_jobs(&mut self) -> StorageResult<()> {
         sqlx::query(
             "UPDATE oc_jobs SET state = 'cancelled', cancel_requested = 1, run_token = run_token + 1, updated_at = ? \
-             WHERE operation <> 'cleanup' AND state IN ('pending', 'processing', 'failed', 'retry_wait') \
+             WHERE tenant_id = ? AND workspace_id = ? AND operation <> 'cleanup' AND state IN ('pending', 'processing', 'failed', 'retry_wait') \
                AND (EXISTS(SELECT 1 FROM oc_assets a WHERE a.id = oc_jobs.asset_id AND a.tenant_id = oc_jobs.tenant_id AND a.workspace_id = oc_jobs.workspace_id AND a.deleted) \
                  OR EXISTS(SELECT 1 FROM oc_events e WHERE e.id = oc_jobs.source_event_id AND e.tenant_id = oc_jobs.tenant_id AND e.workspace_id = oc_jobs.workspace_id AND e.state = 'retracted'))",
         )
         .bind(now_ms())
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
         .execute(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
@@ -896,7 +928,7 @@ impl DomainTx for SqliteTx {
     async fn set_job_action(&mut self, id: Uuid, action: &str) -> StorageResult<i64> {
         sqlx::query_scalar(
             "UPDATE oc_jobs SET state = ?, generation = generation + 1, run_token = run_token + 1, \
-                    cancel_requested = ?, error_code = NULL, updated_at = ? \
+                    cancel_requested = ?, error_code = NULL, next_retry_at = NULL, attempt = 0, updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ? RETURNING generation",
         )
         .bind(if action == "cancel" {
@@ -1157,7 +1189,7 @@ impl DomainTx for SqliteTx {
     }
 
     async fn asset_current_version(&mut self, asset: Uuid) -> StorageResult<Option<i32>> {
-        sqlx::query_scalar(
+        sqlx::query_scalar::<_, Option<i32>>(
             "SELECT current_version FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -1166,6 +1198,7 @@ impl DomainTx for SqliteTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)
+        .map(Option::flatten)
     }
 
     async fn insert_version(
@@ -1576,7 +1609,7 @@ impl DomainTx for SqliteTx {
         Ok(())
     }
 
-    async fn commit(self) -> StorageResult<()> {
+    async fn commit(mut self) -> StorageResult<()> {
         if !self.required.is_empty() {
             let role = self.live_role().await?;
             for permission in &self.required {
@@ -1597,24 +1630,7 @@ impl RelationalStore for SqliteStore {
     type Tx = SqliteTx;
 
     async fn begin(&self, authorized: AuthorizedScope) -> StorageResult<Self::Tx> {
-        let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
-        // Reject a revoked or unknown principal before handing out a
-        // transaction; the commit re-check re-verifies against a fresh read.
-        let role: Option<String> =
-            sqlx::query_scalar("SELECT role FROM oc_api_keys WHERE id = ? AND NOT revoked")
-                .bind(authorized.principal_id)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(sqlite_err)?;
-        role.ok_or(StorageError::Forbidden)?;
-        Ok(SqliteTx {
-            tx,
-            pool: self.pool.clone(),
-            scope: authorized.scope,
-            principal_id: authorized.principal_id,
-            required: Vec::new(),
-            command: None,
-        })
+        self.begin_scoped(authorized, true).await
     }
 
     async fn authenticate(&self, token: &str) -> StorageResult<AuthorizedScope> {
@@ -1728,7 +1744,11 @@ impl RelationalStore for SqliteStore {
 
 impl JobQueue for SqliteStore {
     async fn claim_next(&self) -> StorageResult<Option<ClaimedJob>> {
-        let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(sqlite_err)?;
         let now = now_ms();
         // Requeue processing jobs abandoned by a crashed worker (A2.5).
         sqlx::query(
@@ -1828,7 +1848,7 @@ impl JobQueue for SqliteStore {
         let result = sqlx::query(
             "UPDATE oc_jobs SET state = ?, outcome = ?, attempt = COALESCE(?, attempt), \
              next_retry_at = ?, updated_at = ? \
-             WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND generation = ? AND run_token = ?",
+             WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND generation = ? AND run_token = ? AND state = 'processing'",
         )
         .bind(state)
         .bind(outcome)

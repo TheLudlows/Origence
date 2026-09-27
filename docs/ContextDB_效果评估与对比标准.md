@@ -1,8 +1,10 @@
 # ContextDB 效果评估与对比标准
 
+> 文档定位（2026-09-28）：评估方法与验收目标，不代表已取得效果分数；当前本地正确性测试见 [VALIDATION](VALIDATION.md)，样例见 [evals](../evals/README.md)。
+
 日期：2026-09-20 · 适用范围：企业与团队 Agent、workspace 归属、Memory + Knowledge
 
-本方案配套 [V3.1 详细设计](ContextDB_详细架构设计_V3.1.md)。本文给出评测协议和验收建议，尚未运行本项目与任何竞品的对比实验，不含实测排名。
+本方案配套 [平台目标设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md)。本文给出评测协议和验收建议，尚未运行本项目与任何竞品的对比实验，不含实测排名。
 
 ## 1. 评估要回答什么
 

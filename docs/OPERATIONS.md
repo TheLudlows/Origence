@@ -1,0 +1,52 @@
+# 本地运维说明
+
+适用：M5 固定 SQLite/LanceDB/Kuzu 运行栈。当前范围与实测平台见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
+
+## 目录与进程
+
+`OC_DATA_DIR` 默认 `.data`，统一包含：
+
+| 路径 | 内容 |
+| --- | --- |
+| `context.db`、SQLite WAL/SHM | 权限、事件、版本、候选、幂等、任务、owner、索引元数据、账本、审计 |
+| `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
+| `vectors/` | 按模型 profile 分表的 LanceDB 向量 |
+| `graph/kuzu.db` | Kuzu 数据库及其关联文件 |
+| `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
+
+实际锁文件命名和 Kuzu 路径以配置及启动实现为准。不要直接修改任一库的业务记录；向量和图不是来源状态的权威。数据目录只授予宿主 OS 身份访问权限，API key 不能保护已经取得本地文件访问权的用户。
+
+`opencontext serve`（兼容别名 `api`）运行 HTTP 和单 Worker，Ctrl+C 请求优雅停止：HTTP 停止接收，Worker 完成当前任务后关闭存储。进程强退后 OS 自动释放锁；下次启动提升未完成作业的 run_token 并重放。不要删除锁文件来绕过正在运行的宿主。
+
+`/health/live` 表示进程存活；`/health/ready` 要求 Worker 正在运行且存储检查通过。模型服务不计入 ready，单个模型失败体现在任务状态。启动对账或存储检查失败时不开放业务服务。
+
+## 初始化与凭据
+
+先执行 `opencontext --offline workspace-create NAME`，保存返回的 token，再启动宿主。在线 `key-create`/`key-revoke` 通过 `/admin/keys` 限定在 token 所属 workspace 内；需 admin。离线管理依赖操作系统授权，不要求 API token，必须独占数据目录。
+
+程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。配置列表见 [项目 README](../README.md)。
+
+## 失败与恢复
+
+| 现象 | 处理 |
+| --- | --- |
+| 锁被占用 | 使用 HTTP CLI/MCP；确需离线管理时先正常停止宿主 |
+| 模型/解析失败 | 修正配置或输入；有效来源的 failed/cancelled 作业可显式 retry |
+| 短暂存储错误 | 作业进入 retry_wait，最多 5 次；错误持久化，耗尽后 failed |
+| Worker 或宿主退出 | 修复存储错误后重启；processing 在独占启动时恢复，无需等待租约超时 |
+| 取消/删除发生在模型处理中 | 迟到提交复核 generation/权限/来源，不能覆盖或复活；外部孤儿由串行清理移除 |
+| 原生写完成、SQLite 发布未提交 | 保存的发布计划和账本用于重放；启动先清除无 owner 产物，再幂等写入并发布 |
+| cleanup 失败 | 读取仍被墓碑阻断；修复存储后重试失败的 cleanup，或重启触发全范围对账 |
+| schema 不兼容 | 停止并保留现场，不自动 ALTER；使用匹配版本或新目录，不覆盖旧数据 |
+
+已受理任务的 embedding profile 与 Worker 配置必须一致；改模型不会自动重建已有向量。强退发生在发布计划保存前，模型调用可能重复。发布保证幂等，不保证外部供应商计费恰好一次。
+
+## 备份与旧基线
+
+1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、向量、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。
+3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
+
+不要在运行中分别复制各个数据库或只备份 `context.db`；目前没有在线跨库快照协议。本轮测试验证进程强退恢复，未完成完整备份演练或断电测试。删除保留原始内容，备份也仍包含这些内容。
+
+PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/db.rs`、PG 初始化/授权 SQL、Apalis 依赖及 PG 专用测试；新本地进程套件替代其核心应用验收。没有 PG 数据自动迁移功能，不应将 PG 数据目录当作 `OC_DATA_DIR`。

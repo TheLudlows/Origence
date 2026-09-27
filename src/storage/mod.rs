@@ -10,9 +10,9 @@
 //! scheduler.
 //!
 //! # Shutdown order
-//! [`StorageEngine::shutdown`] releases backends in dependency order: the queue
-//! stops claiming before vector/graph are closed, and the relational store
-//! (authority for visibility) is released last.
+//! The host stops and joins the worker before [`StorageEngine::shutdown`].
+//! Native stores close before the queue/relational authority; SQLite backs
+//! both queue and relational roles, so shutting down either closes its pool.
 //!
 //! # Transaction boundary
 //! [`RelationalStore::begin`] returns a [`DomainTx`] that carries its scope and
@@ -33,6 +33,32 @@ pub mod scope;
 pub mod sqlite;
 pub mod traits;
 
+pub fn hash(bytes: impl AsRef<[u8]>) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes.as_ref()))
+}
+
+#[cfg(feature = "local-storage")]
+pub type LocalEngine = StorageEngine<
+    std::sync::Arc<sqlite::SqliteStore>,
+    std::sync::Arc<sqlite::SqliteStore>,
+    LanceDbStore,
+    KuzuStore,
+    local_blob::LocalBlobStore,
+>;
+
+impl<T: Lifecycle> Lifecycle for std::sync::Arc<T> {
+    async fn initialize(&self) -> StorageResult<()> {
+        self.as_ref().initialize().await
+    }
+    async fn check(&self) -> StorageResult<()> {
+        self.as_ref().check().await
+    }
+    async fn shutdown(&self) -> StorageResult<()> {
+        self.as_ref().shutdown().await
+    }
+}
+
 pub use capabilities::{BlobKey, Capabilities, Embedding, VectorEntry, VectorHit, VectorQuery};
 pub use error::{StorageError, StorageResult};
 #[cfg(feature = "local-graph")]
@@ -41,6 +67,7 @@ pub use kuzu::KuzuStore;
 pub use lancedb::LanceDbStore;
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
 pub use scope::{AuthorizedScope, Permission, Scope, SourceVersion};
+pub use sqlite::SqliteStore;
 pub use traits::{
     BlobStore, ClaimedJob, DomainTx, GraphStore, IssuedKey, JobFinish, JobQueue, Lifecycle,
     RelationalStore, VectorStore, WorkItem,
@@ -113,13 +140,13 @@ where
         Ok(())
     }
 
-    /// Release backends in reverse dependency order: stop claiming, close
-    /// vector/graph, release the relational authority last.
+    /// After the host has stopped claiming, close native stores before the
+    /// queue and relational authority (which may share one physical pool).
     pub async fn shutdown(&self) -> StorageResult<()> {
-        self.queue.shutdown().await?;
         self.vector.shutdown().await?;
         self.graph.shutdown().await?;
         self.blobs.shutdown().await?;
+        self.queue.shutdown().await?;
         self.relational.shutdown().await?;
         Ok(())
     }

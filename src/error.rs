@@ -7,6 +7,21 @@ use serde_json::json;
 
 pub type Result<T> = std::result::Result<T, AppError>;
 
+impl From<crate::storage::StorageError> for AppError {
+    fn from(error: crate::storage::StorageError) -> Self {
+        use crate::storage::StorageError as S;
+        match error {
+            S::NotFound => Self::NotFound,
+            S::Forbidden | S::ScopeRequired => Self::Forbidden,
+            S::Conflict(message) => Self::Conflict(message),
+            S::Unavailable(_) | S::NotInitialized => {
+                Self::Unavailable("local storage unavailable".into())
+            }
+            error => Self::Internal(anyhow::Error::new(error)),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("{0}")]

@@ -1,5 +1,7 @@
 # 本地存储 M0 验证
 
+> 文档定位（2026-09-28）：M0 独立探针，保留 Rust 1.88 可行性证据；M5 应用已完成本地装配，日常构建使用 [tools/build.ps1](../build.ps1)，当前验收见 [VALIDATION](../../docs/VALIDATION.md)。
+
 隔离的 Rust 工程，直接调用 `sqlx`、`lancedb`、`kuzu`，不连接数据库服务、不进入应用运行路径。候选版本与完整依赖分别固定在 Cargo.toml 和 Cargo.lock；这些版本尚不等于应用已支持的后端。
 
 Kuzu 0.11.3 固定 `cxx = 1.0.138`，但其 `cxx-build` 范围过宽。本工程同时约束生成器为 1.0.138：1.0.202 生成的 `cxxbridge1$202$...` 符号与旧运行库不匹配，已在 Windows 最终链接阶段复现失败。不能只用 `cargo check` 判断此组合可发布。

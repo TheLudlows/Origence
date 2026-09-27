@@ -13,7 +13,8 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ContextMcp {
-    service: Service,
+    service: Option<Service>,
+    client: Option<crate::client::HostClient>,
     token: String,
     tool_router: ToolRouter<Self>,
 }
@@ -26,7 +27,8 @@ struct GetInput {
 impl ContextMcp {
     pub fn new(service: Service, token: String) -> Self {
         Self {
-            service,
+            service: Some(service),
+            client: None,
             token,
             tool_router: Self::tool_router(),
         }
@@ -38,8 +40,21 @@ impl ContextMcp {
         &self,
         Parameters(input): Parameters<SearchInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
-        let auth = self.service.auth(&self.token).await.map_err(mcp_error)?;
-        result(self.service.search(&auth, input).await)
+        if let Some(client) = &self.client {
+            return result(
+                client
+                    .call(
+                        reqwest::Method::POST,
+                        "/v1/search",
+                        Some(&serde_json::json!(input)),
+                        None,
+                    )
+                    .await,
+            );
+        }
+        let service = self.service.as_ref().expect("local MCP service");
+        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        result(service.search(&auth, input).await)
     }
     #[tool(
         description = "Assemble cited context within a conservative UTF-8 byte budget; not a model-specific exact token count."
@@ -48,8 +63,21 @@ impl ContextMcp {
         &self,
         Parameters(input): Parameters<ResolveInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
-        let auth = self.service.auth(&self.token).await.map_err(mcp_error)?;
-        result(self.service.resolve(&auth, input).await)
+        if let Some(client) = &self.client {
+            return result(
+                client
+                    .call(
+                        reqwest::Method::POST,
+                        "/v1/resolve",
+                        Some(&serde_json::json!(input)),
+                        None,
+                    )
+                    .await,
+            );
+        }
+        let service = self.service.as_ref().expect("local MCP service");
+        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        result(service.resolve(&auth, input).await)
     }
     #[tool(
         description = "Read a published asset or historical version if the asset and source remain valid."
@@ -58,10 +86,23 @@ impl ContextMcp {
         &self,
         Parameters(input): Parameters<GetInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
-        let auth = self.service.auth(&self.token).await.map_err(mcp_error)?;
+        if let Some(client) = &self.client {
+            let id = Uuid::parse_str(&input.asset_id)
+                .map_err(|_| ErrorData::invalid_params("asset_id must be a UUID", None))?;
+            let path = format!(
+                "/v1/assets/{id}{}",
+                input
+                    .version
+                    .map(|v| format!("?version={v}"))
+                    .unwrap_or_default()
+            );
+            return result(client.call(reqwest::Method::GET, &path, None, None).await);
+        }
+        let service = self.service.as_ref().expect("local MCP service");
+        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
         let id = Uuid::parse_str(&input.asset_id)
             .map_err(|_| ErrorData::invalid_params("asset_id must be a UUID", None))?;
-        result(self.service.get(&auth, id, input.version).await)
+        result(service.get(&auth, id, input.version).await)
     }
 }
 fn mcp_error(e: crate::error::AppError) -> ErrorData {
@@ -87,5 +128,22 @@ pub async fn run(service: Service, token: String) -> anyhow::Result<()> {
         .await?
         .waiting()
         .await?;
+    Ok(())
+}
+
+pub async fn run_remote(client: crate::client::HostClient) -> anyhow::Result<()> {
+    client
+        .call(reqwest::Method::GET, "/v1/whoami", None, None)
+        .await?;
+    ContextMcp {
+        service: None,
+        client: Some(client),
+        token: String::new(),
+        tool_router: ContextMcp::tool_router(),
+    }
+    .serve(rmcp::transport::stdio())
+    .await?
+    .waiting()
+    .await?;
     Ok(())
 }

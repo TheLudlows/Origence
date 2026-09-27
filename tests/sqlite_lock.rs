@@ -26,7 +26,11 @@ async fn lock_is_exclusive_across_processes() {
     // Spawn a helper that opens the store and signals once it holds the lock.
     let exe = std::env::current_exe().unwrap();
     let mut child = std::process::Command::new(exe)
-        .args(["--exact", "lock_helper_holds_store", "--nocapture"])
+        .args([
+            "--exact",
+            "sqlite_lock::lock_helper_holds_store",
+            "--nocapture",
+        ])
         .env("OC_LOCK_HELPER_PATH", &path)
         .env("OC_LOCK_HELPER_READY", &ready)
         .spawn()
