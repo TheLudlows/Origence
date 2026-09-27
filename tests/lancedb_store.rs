@@ -92,7 +92,10 @@ async fn delete_source_removes_only_that_source() {
         generation: 1,
         source: src_b,
     };
-    store.upsert(scope, vec![a.clone(), b.clone()]).await.unwrap();
+    store
+        .upsert(scope, vec![a.clone(), b.clone()])
+        .await
+        .unwrap();
 
     store.delete_source(scope, src_a).await.unwrap();
 

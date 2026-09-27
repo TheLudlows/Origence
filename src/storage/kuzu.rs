@@ -83,8 +83,8 @@ impl KuzuStore {
             .map_err(|e| StorageError::Backend(e.to_string()))?;
         let db = self.db.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = Connection::new(db.as_ref())
-                .map_err(|e| StorageError::Backend(e.to_string()))?;
+            let conn =
+                Connection::new(db.as_ref()).map_err(|e| StorageError::Backend(e.to_string()))?;
             f(&conn)
         })
         .await
@@ -214,7 +214,12 @@ impl GraphStore for KuzuStore {
         .await
     }
 
-    async fn traverse(&self, scope: Scope, from: Uuid, max_hops: usize) -> StorageResult<Vec<Uuid>> {
+    async fn traverse(
+        &self,
+        scope: Scope,
+        from: Uuid,
+        max_hops: usize,
+    ) -> StorageResult<Vec<Uuid>> {
         let hops = max_hops.min(self.max_hops);
         if hops == 0 {
             return Ok(Vec::new());

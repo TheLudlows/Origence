@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arrow_array::{
-    types::Float32Type, Array, FixedSizeListArray, Float32Array, Int32Array, Int64Array,
-    RecordBatch, RecordBatchIterator, StringArray,
+    Array, FixedSizeListArray, Float32Array, Int32Array, Int64Array, RecordBatch,
+    RecordBatchIterator, StringArray, types::Float32Type,
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
@@ -55,7 +55,10 @@ fn schema_for(dim: usize) -> Arc<Schema> {
         Field::new("generation", DataType::Int64, false),
         Field::new(
             "vector",
-            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), dim as i32),
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                dim as i32,
+            ),
             true,
         ),
     ]))
@@ -129,17 +132,16 @@ impl VectorStore for LanceDbStore {
                 .await
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
             let schema = schema_for(dim);
-            let tenants: Vec<String> = group
-                .iter()
-                .map(|_| scope.tenant_id.to_string())
-                .collect();
+            let tenants: Vec<String> = group.iter().map(|_| scope.tenant_id.to_string()).collect();
             let workspaces: Vec<String> = group
                 .iter()
                 .map(|_| scope.workspace_id.to_string())
                 .collect();
             let ids: Vec<String> = group.iter().map(|e| e.id.to_string()).collect();
-            let source_ids: Vec<String> =
-                group.iter().map(|e| e.source.source_id.to_string()).collect();
+            let source_ids: Vec<String> = group
+                .iter()
+                .map(|e| e.source.source_id.to_string())
+                .collect();
             let versions: Vec<i32> = group.iter().map(|e| e.source.version).collect();
             let generations: Vec<i64> = group.iter().map(|e| e.generation).collect();
             let vectors: Vec<Option<Vec<Option<f32>>>> = group
@@ -155,10 +157,11 @@ impl VectorStore for LanceDbStore {
                     Arc::new(StringArray::from(source_ids)),
                     Arc::new(Int32Array::from(versions)),
                     Arc::new(Int64Array::from(generations)),
-                    Arc::new(FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-                        vectors,
-                        dim as i32,
-                    )),
+                    Arc::new(
+                        FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+                            vectors, dim as i32,
+                        ),
+                    ),
                 ],
             )
             .map_err(|e| StorageError::Backend(e.to_string()))?;

@@ -23,11 +23,11 @@
 
 pub mod capabilities;
 pub mod error;
-pub mod ledger;
-#[cfg(feature = "local-vector")]
-pub mod lancedb;
 #[cfg(feature = "local-graph")]
 pub mod kuzu;
+#[cfg(feature = "local-vector")]
+pub mod lancedb;
+pub mod ledger;
 pub mod local_blob;
 pub mod scope;
 pub mod sqlite;
@@ -35,16 +35,16 @@ pub mod traits;
 
 pub use capabilities::{BlobKey, Capabilities, Embedding, VectorEntry, VectorHit, VectorQuery};
 pub use error::{StorageError, StorageResult};
+#[cfg(feature = "local-graph")]
+pub use kuzu::KuzuStore;
+#[cfg(feature = "local-vector")]
+pub use lancedb::LanceDbStore;
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
 pub use scope::{AuthorizedScope, Permission, Scope, SourceVersion};
 pub use traits::{
     BlobStore, ClaimedJob, DomainTx, GraphStore, IssuedKey, JobFinish, JobQueue, Lifecycle,
     RelationalStore, VectorStore, WorkItem,
 };
-#[cfg(feature = "local-vector")]
-pub use lancedb::LanceDbStore;
-#[cfg(feature = "local-graph")]
-pub use kuzu::KuzuStore;
 
 /// Assembles the four stores behind one interface. Owned by the local host;
 /// API and Worker share it in-process (A2.4).

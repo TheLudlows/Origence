@@ -78,7 +78,13 @@ async fn upsert_is_idempotent_and_traverse_is_scoped() {
     let other = make_scope();
     let empty = store.list_ids(other).await.unwrap();
     assert_eq!(empty["entities"].as_array().unwrap().len(), 0);
-    assert!(store.traverse(other, entity_id("Alice"), 1).await.unwrap().is_empty());
+    assert!(
+        store
+            .traverse(other, entity_id("Alice"), 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
