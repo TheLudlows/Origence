@@ -39,7 +39,7 @@ This plan delivers the **storage backends + their ledger write contract** — M4
 - Consumes: `VectorEntry`, `VectorQuery`, `VectorHit`, `Capabilities` (existing, `src/storage/capabilities.rs`); `Scope`, `SourceVersion` (`scope.rs`); `StorageError` (`error.rs`).
 - Produces: `LanceDbStore::open(dir) -> StorageResult<Self>`; implements `VectorStore` + `Lifecycle`. Trait signature change: `async fn upsert(&self, scope: Scope, entries: Vec<VectorEntry>) -> StorageResult<()>`.
 
-- [ ] **Step 1: Add dependencies and features to `Cargo.toml`**
+- [x] **Step 1: Add dependencies and features to `Cargo.toml`**
 
 Add these optional deps (append to `[dependencies]`):
 
@@ -67,7 +67,7 @@ local-graph = ["dep:kuzu", "dep:cxx-build"]
 local-storage = ["local-vector", "local-graph"]
 ```
 
-- [ ] **Step 2: Change the `VectorStore::upsert` signature in `src/storage/traits.rs`**
+- [x] **Step 2: Change the `VectorStore::upsert` signature in `src/storage/traits.rs`**
 
 Replace:
 
@@ -85,7 +85,7 @@ with:
 
 (`Scope` is already imported in `traits.rs`.)
 
-- [ ] **Step 3: Write the failing test `tests/lancedb_store.rs`**
+- [x] **Step 3: Write the failing test `tests/lancedb_store.rs`**
 
 ```rust
 //! LanceDB vector adapter tests (M4): idempotent upsert, scoped exact search,
@@ -211,12 +211,12 @@ async fn lifecycle_is_idempotent() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it fails**
+- [x] **Step 4: Run test to verify it fails**
 
 Run: `cargo test --locked --features local-vector --test lancedb_store`
 Expected: FAIL — `unresolved import opencontext::storage::lancedb` (module does not exist yet).
 
-- [ ] **Step 5: Create `src/storage/lancedb.rs`**
+- [x] **Step 5: Create `src/storage/lancedb.rs`**
 
 ```rust
 //! LanceDB vector backend (M4).
@@ -383,10 +383,10 @@ impl VectorStore for LanceDbStore {
             )
             .map_err(|e| StorageError::Backend(e.to_string()))?;
             let reader = RecordBatchIterator::new(vec![Ok(batch)], schema.clone());
-            table
-                .merge_insert(&["tenant", "workspace", "id"])
-                .when_matched_update_all(None)
-                .when_not_matched_insert_all()
+            let mut merge = table.merge_insert(&["tenant", "workspace", "id"]);
+            merge.when_matched_update_all(None);
+            merge.when_not_matched_insert_all();
+            merge
                 .execute(Box::new(reader))
                 .await
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
@@ -517,7 +517,7 @@ impl Lifecycle for LanceDbStore {
 }
 ```
 
-- [ ] **Step 6: Register the module in `src/storage/mod.rs`**
+- [x] **Step 6: Register the module in `src/storage/mod.rs`**
 
 After the existing `pub mod ledger;` line, add:
 
@@ -530,12 +530,12 @@ pub mod kuzu;
 
 (Task 2 adds the `kuzu` module; the `#[cfg]` reference is harmless until then.)
 
-- [ ] **Step 7: Run test to verify it passes**
+- [x] **Step 7: Run test to verify it passes**
 
 Run: `cargo test --locked --features local-vector --test lancedb_store`
 Expected: PASS (3 tests).
 
-- [ ] **Step 8: Run the no-feature build to confirm the PG baseline is untouched**
+- [x] **Step 8: Run the no-feature build to confirm the PG baseline is untouched**
 
 Run: `cargo check --locked` and `cargo test --locked`
 Expected: unchanged, no new failures; `lancedb.rs`/`kuzu.rs` are not compiled.

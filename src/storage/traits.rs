@@ -436,8 +436,8 @@ pub trait VectorStore {
     /// Declared capabilities (A2.7).
     fn capabilities(&self) -> Capabilities;
 
-    /// Idempotently write entries for a scope/profile/generation.
-    async fn upsert(&self, entries: Vec<VectorEntry>) -> StorageResult<()>;
+    /// Idempotently write entries for `scope` / profile / generation (A2.2).
+    async fn upsert(&self, scope: Scope, entries: Vec<VectorEntry>) -> StorageResult<()>;
 
     /// Scoped nearest-neighbour search.
     async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>>;

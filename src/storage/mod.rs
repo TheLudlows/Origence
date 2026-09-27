@@ -24,6 +24,10 @@
 pub mod capabilities;
 pub mod error;
 pub mod ledger;
+#[cfg(feature = "local-vector")]
+pub mod lancedb;
+#[cfg(feature = "local-graph")]
+pub mod kuzu;
 pub mod local_blob;
 pub mod scope;
 pub mod sqlite;
