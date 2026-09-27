@@ -41,6 +41,10 @@ pub use traits::{
     BlobStore, ClaimedJob, DomainTx, GraphStore, IssuedKey, JobFinish, JobQueue, Lifecycle,
     RelationalStore, VectorStore, WorkItem,
 };
+#[cfg(feature = "local-vector")]
+pub use lancedb::LanceDbStore;
+#[cfg(feature = "local-graph")]
+pub use kuzu::KuzuStore;
 
 /// Assembles the four stores behind one interface. Owned by the local host;
 /// API and Worker share it in-process (A2.4).

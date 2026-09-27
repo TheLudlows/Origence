@@ -474,6 +474,21 @@ pub trait GraphStore {
 
     /// Remove graph objects that originate solely from a source version.
     async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()>;
+
+    /// Return every entity/relation id currently stored for `scope`, as
+    /// `{"entities": [..], "relations": [..]}`. graph-core G4 diffs this
+    /// against `owned_artifacts()` to find orphans (A2.6).
+    async fn list_ids(&self, scope: Scope) -> StorageResult<Value>;
+
+    /// Delete the given entity/relation ids (already diffed to orphans by the
+    /// caller). This — not `delete_source` — is the authoritative shared-source
+    /// delete; shared objects are retained until their last owner is gone (A2.4).
+    async fn delete_objects(
+        &self,
+        scope: Scope,
+        entities: Vec<Uuid>,
+        relations: Vec<Uuid>,
+    ) -> StorageResult<()>;
 }
 
 /// Raw file storage. Keys are [`BlobKey`]s constrained by scope + root, never

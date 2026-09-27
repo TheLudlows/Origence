@@ -540,7 +540,7 @@ Expected: PASS (3 tests).
 Run: `cargo check --locked` and `cargo test --locked`
 Expected: unchanged, no new failures; `lancedb.rs`/`kuzu.rs` are not compiled.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock src/storage/traits.rs src/storage/lancedb.rs src/storage/mod.rs tests/lancedb_store.rs
@@ -560,7 +560,7 @@ git commit -m "feat(storage): LanceDB vector backend with scoped idempotent upse
 - Consumes: `GraphStore`, `Lifecycle` (traits); `Entity`, `Relation` (`crate::types`); `entity_id`/`relation_id` (`crate::graph`, pure deterministic hashing); `Capabilities`, `Scope`, `SourceVersion`, `StorageError`.
 - Produces: `KuzuStore::open(dir) -> StorageResult<Self>`; implements `GraphStore` + `Lifecycle`. `capabilities().max_hops = 3`, `shared_source_delete = false`.
 
-- [ ] **Step 1: Write the failing test `tests/kuzu_store.rs`**
+- [x] **Step 1: Write the failing test `tests/kuzu_store.rs`**
 
 ```rust
 //! Kuzu graph adapter tests (M4): idempotent MERGE upsert, scoped traversal,
@@ -716,12 +716,12 @@ async fn lifecycle_is_idempotent() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test --locked --features local-graph --test kuzu_store`
 Expected: FAIL — `unresolved import opencontext::storage::kuzu` (and, if `list_ids`/`delete_objects` are not yet on the trait, the compile errors for those calls, resolved in Task 3).
 
-- [ ] **Step 3: Create `src/storage/kuzu.rs`**
+- [x] **Step 3: Create `src/storage/kuzu.rs`**
 
 ```rust
 //! Kuzu graph backend (M4).
@@ -1144,7 +1144,7 @@ impl Lifecycle for KuzuStore {
 }
 ```
 
-- [ ] **Step 4: Add the `list_ids`/`delete_objects` methods to the `GraphStore` trait in `src/storage/traits.rs`**
+- [x] **Step 4: Add the `list_ids`/`delete_objects` methods to the `GraphStore` trait in `src/storage/traits.rs`**
 
 Insert after the existing `delete_source` method inside `pub trait GraphStore`:
 
@@ -1167,7 +1167,7 @@ Insert after the existing `delete_source` method inside `pub trait GraphStore`:
 
 (`Value` is `serde_json::Value`, already imported in `traits.rs`.)
 
-- [ ] **Step 5: Re-export `KuzuStore` in `src/storage/mod.rs`**
+- [x] **Step 5: Re-export `KuzuStore` in `src/storage/mod.rs`**
 
 Update the `pub use` block to add (alongside the existing trait re-exports):
 
@@ -1178,7 +1178,7 @@ pub use lancedb::LanceDbStore;
 pub use kuzu::KuzuStore;
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `cargo test --locked --features local-graph --test kuzu_store`
 Expected: PASS (4 tests).
