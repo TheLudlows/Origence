@@ -61,7 +61,7 @@ pub struct IssuedKey {
 /// operations only — every object read or written below binds the transaction's
 /// tenant/workspace, and no SQL, pool or vendor type leaks through (A2.2). The
 /// concrete operation set mirrors the A5 objects: events, memory/knowledge
-/// assets, candidates, reviews, versions, chunks, summaries, files and jobs.
+/// assets, versions, chunks, summaries, files and jobs.
 ///
 /// `commit`/`rollback` consume the transaction so it cannot be used after
 /// settlement.
@@ -112,18 +112,6 @@ pub trait DomainTx {
     /// returning its id and current version (`None` on first creation).
     async fn slot(&mut self, fact_key: &str) -> StorageResult<(Uuid, Option<i32>)>;
 
-    /// Insert a candidate for `asset` originating from `source`, returning its
-    /// id. `approved` selects the initial state (`approved` vs `candidate`).
-    async fn insert_candidate(
-        &mut self,
-        asset: Uuid,
-        fact_key: &str,
-        content: &str,
-        source: Uuid,
-        approved: bool,
-        expected_version: Option<i32>,
-    ) -> StorageResult<Uuid>;
-
     /// Insert a new `knowledge` asset with `title`, returning its id.
     async fn insert_knowledge_asset(&mut self, title: &str) -> StorageResult<Uuid>;
 
@@ -147,22 +135,6 @@ pub trait DomainTx {
     /// Whether a non-deleted file with `id` is still visible.
     async fn file_visible(&mut self, id: Uuid) -> StorageResult<bool>;
 
-    // -- review ---------------------------------------------------------------
-
-    /// A candidate joined with its asset/source state, or [`StorageError::NotFound`].
-    async fn candidate_for_review(&mut self, id: Uuid) -> StorageResult<Value>;
-
-    /// Record a review and move the candidate to `approved`/`rejected`.
-    async fn apply_review(
-        &mut self,
-        review: Uuid,
-        candidate: Uuid,
-        revision: i32,
-        decision: &str,
-        expected_version: Option<i32>,
-        reason: &str,
-    ) -> StorageResult<()>;
-
     // -- restore --------------------------------------------------------------
 
     /// The source event, title and current version of `asset` at `version`,
@@ -179,9 +151,6 @@ pub trait DomainTx {
 
     /// Soft-delete a file and retract its events; returns rows affected.
     async fn delete_file(&mut self, id: Uuid) -> StorageResult<u64>;
-
-    /// Withdraw candidates whose asset/source is now deleted or retracted.
-    async fn withdraw_affected_candidates(&mut self) -> StorageResult<()>;
 
     /// Cancel jobs whose asset/source is now deleted or retracted.
     async fn cancel_affected_jobs(&mut self) -> StorageResult<()>;
@@ -205,12 +174,6 @@ pub trait DomainTx {
     ) -> StorageResult<()>;
 
     // -- API read views -------------------------------------------------------
-
-    /// A candidate plus its asset `current_version`, or [`StorageError::NotFound`].
-    async fn candidate_view(&mut self, id: Uuid) -> StorageResult<Value>;
-
-    /// Up to 100 open candidates as an `{"items": [...], "limit": 100}` value.
-    async fn candidates_view(&mut self) -> StorageResult<Value>;
 
     /// A published asset version, or [`StorageError::NotFound`].
     async fn asset_view(&mut self, id: Uuid, version: Option<i32>) -> StorageResult<Value>;

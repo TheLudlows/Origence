@@ -651,7 +651,7 @@ fn post_route() -> axum::routing::MethodRouter<Arc<AtomicBool>> {
 }
 
 #[tokio::test]
-async fn local_transactions_versions_review_retraction_and_idempotency() {
+async fn local_transactions_versions_retraction_and_idempotency() {
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
     let scope = Scope {

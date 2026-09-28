@@ -62,15 +62,7 @@ const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
     ),
     (
         "oc_versions",
-        "tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,restored_from,review_id,title,created_by,created_at",
-    ),
-    (
-        "oc_candidates",
-        "tenant_id,workspace_id,id,asset_id,source_event_id,fact_key,content,revision,expected_version,state,created_at",
-    ),
-    (
-        "oc_reviews",
-        "tenant_id,workspace_id,id,candidate_id,revision,decision,expected_version,reviewer,reason,created_at",
+        "tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,restored_from,title,created_by,created_at",
     ),
     (
         "oc_jobs",
@@ -349,46 +341,6 @@ struct PendingCommand {
     hash: String,
 }
 
-/// Build the API-facing candidate JSON (candidate columns + `current_version`).
-fn candidate_json(
-    (
-        id,
-        asset_id,
-        source_event_id,
-        fact_key,
-        content,
-        revision,
-        expected_version,
-        state,
-        created_at,
-        current_version,
-    ): (
-        Uuid,
-        Option<Uuid>,
-        Uuid,
-        String,
-        String,
-        i32,
-        Option<i32>,
-        String,
-        i64,
-        Option<i32>,
-    ),
-) -> Value {
-    json!({
-        "id": id,
-        "asset_id": asset_id,
-        "source_event_id": source_event_id,
-        "fact_key": fact_key,
-        "content": content,
-        "revision": revision,
-        "expected_version": expected_version,
-        "state": state,
-        "created_at": created_at,
-        "current_version": current_version,
-    })
-}
-
 /// A scoped transaction over one SQLite connection. Writes execute inside the
 /// underlying transaction, so `commit`/`rollback` make them atomic (A2.2).
 pub struct SqliteTx {
@@ -597,36 +549,6 @@ impl DomainTx for SqliteTx {
         Ok((id, None))
     }
 
-    async fn insert_candidate(
-        &mut self,
-        asset: Uuid,
-        fact_key: &str,
-        content: &str,
-        source: Uuid,
-        approved: bool,
-        expected_version: Option<i32>,
-    ) -> StorageResult<Uuid> {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "INSERT INTO oc_candidates(tenant_id, workspace_id, id, asset_id, source_event_id, fact_key, content, revision, expected_version, state, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(id)
-        .bind(asset)
-        .bind(source)
-        .bind(fact_key)
-        .bind(content)
-        .bind(expected_version)
-        .bind(if approved { "approved" } else { "candidate" })
-        .bind(now_ms())
-        .execute(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        Ok(id)
-    }
-
     async fn insert_knowledge_asset(&mut self, title: &str) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
         sqlx::query(
@@ -697,104 +619,6 @@ impl DomainTx for SqliteTx {
 
     async fn file_visible(&mut self, id: Uuid) -> StorageResult<bool> {
         self.file_exists(id).await
-    }
-
-    async fn candidate_for_review(&mut self, id: Uuid) -> StorageResult<Value> {
-        let row: Option<(
-            Uuid,
-            Uuid,
-            Uuid,
-            String,
-            String,
-            i32,
-            Option<i32>,
-            String,
-            Option<i32>,
-            bool,
-            String,
-        )> = sqlx::query_as(
-            "SELECT c.id, c.asset_id, c.source_event_id, c.fact_key, c.content, c.revision, \
-                    c.expected_version, c.state, a.current_version, a.deleted, e.state \
-             FROM oc_candidates c \
-             JOIN oc_assets a ON a.id = c.asset_id AND a.tenant_id = c.tenant_id AND a.workspace_id = c.workspace_id \
-             JOIN oc_events e ON e.id = c.source_event_id AND e.tenant_id = c.tenant_id AND e.workspace_id = c.workspace_id \
-             WHERE c.id = ? AND c.tenant_id = ? AND c.workspace_id = ?",
-        )
-        .bind(id)
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let Some((
-            candidate_id,
-            asset_id,
-            source_event_id,
-            fact_key,
-            content,
-            revision,
-            expected_version,
-            state,
-            current_version,
-            deleted,
-            source_state,
-        )) = row
-        else {
-            return Err(StorageError::NotFound);
-        };
-        Ok(json!({
-            "id": candidate_id,
-            "asset_id": asset_id,
-            "source_event_id": source_event_id,
-            "fact_key": fact_key,
-            "content": content,
-            "revision": revision,
-            "expected_version": expected_version,
-            "state": state,
-            "current_version": current_version,
-            "deleted": deleted,
-            "source_state": source_state,
-        }))
-    }
-
-    async fn apply_review(
-        &mut self,
-        review: Uuid,
-        candidate: Uuid,
-        revision: i32,
-        decision: &str,
-        expected_version: Option<i32>,
-        reason: &str,
-    ) -> StorageResult<()> {
-        sqlx::query(
-            "INSERT INTO oc_reviews(tenant_id, workspace_id, id, candidate_id, revision, decision, expected_version, reviewer, reason, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(review)
-        .bind(candidate)
-        .bind(revision)
-        .bind(decision)
-        .bind(expected_version)
-        .bind(self.principal_id)
-        .bind(reason)
-        .bind(now_ms())
-        .execute(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        sqlx::query(
-            "UPDATE oc_candidates SET state = ?, expected_version = ? WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
-        )
-        .bind(if decision == "approve" { "approved" } else { "rejected" })
-        .bind(expected_version)
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(candidate)
-        .execute(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        Ok(())
     }
 
     async fn restore_source(&mut self, asset: Uuid, version: i32) -> StorageResult<Value> {
@@ -869,21 +693,6 @@ impl DomainTx for SqliteTx {
         .await
         .map_err(sqlite_err)?;
         Ok(count)
-    }
-
-    async fn withdraw_affected_candidates(&mut self) -> StorageResult<()> {
-        sqlx::query(
-            "UPDATE oc_candidates SET state = 'withdrawn', revision = revision + 1 \
-             WHERE tenant_id = ? AND workspace_id = ? AND state IN ('candidate', 'approved') \
-               AND (EXISTS(SELECT 1 FROM oc_assets a WHERE a.id = oc_candidates.asset_id AND a.tenant_id = oc_candidates.tenant_id AND a.workspace_id = oc_candidates.workspace_id AND a.deleted) \
-                 OR EXISTS(SELECT 1 FROM oc_events e WHERE e.id = oc_candidates.source_event_id AND e.tenant_id = oc_candidates.tenant_id AND e.workspace_id = oc_candidates.workspace_id AND e.state = 'retracted'))",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .execute(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        Ok(())
     }
 
     async fn cancel_affected_jobs(&mut self) -> StorageResult<()> {
@@ -984,68 +793,6 @@ impl DomainTx for SqliteTx {
             }
         }
         Ok(())
-    }
-
-    async fn candidate_view(&mut self, id: Uuid) -> StorageResult<Value> {
-        let row: Option<(
-            Uuid,
-            Option<Uuid>,
-            Uuid,
-            String,
-            String,
-            i32,
-            Option<i32>,
-            String,
-            i64,
-            Option<i32>,
-        )> = sqlx::query_as(
-            "SELECT c.id, c.asset_id, c.source_event_id, c.fact_key, c.content, c.revision, \
-                    c.expected_version, c.state, c.created_at, a.current_version \
-             FROM oc_candidates c \
-             JOIN oc_assets a ON a.id = c.asset_id AND a.tenant_id = c.tenant_id AND a.workspace_id = c.workspace_id \
-             JOIN oc_events e ON e.id = c.source_event_id AND e.tenant_id = c.tenant_id AND e.workspace_id = c.workspace_id \
-             WHERE c.id = ? AND c.tenant_id = ? AND c.workspace_id = ? AND NOT a.deleted AND e.state = 'active'",
-        )
-        .bind(id)
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let Some(row) = row else {
-            return Err(StorageError::NotFound);
-        };
-        Ok(candidate_json(row))
-    }
-
-    async fn candidates_view(&mut self) -> StorageResult<Value> {
-        let rows: Vec<(
-            Uuid,
-            Option<Uuid>,
-            Uuid,
-            String,
-            String,
-            i32,
-            Option<i32>,
-            String,
-            i64,
-            Option<i32>,
-        )> = sqlx::query_as(
-            "SELECT c.id, c.asset_id, c.source_event_id, c.fact_key, c.content, c.revision, \
-                    c.expected_version, c.state, c.created_at, a.current_version \
-             FROM oc_candidates c \
-             JOIN oc_assets a ON a.id = c.asset_id AND a.tenant_id = c.tenant_id AND a.workspace_id = c.workspace_id \
-             JOIN oc_events e ON e.id = c.source_event_id AND e.tenant_id = c.tenant_id AND e.workspace_id = c.workspace_id \
-             WHERE c.state = 'candidate' AND c.tenant_id = ? AND c.workspace_id = ? AND NOT a.deleted AND e.state = 'active' \
-             ORDER BY c.created_at, c.id LIMIT 100",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let items: Vec<Value> = rows.into_iter().map(candidate_json).collect();
-        Ok(json!({ "items": items, "limit": 100 }))
     }
 
     async fn asset_view(&mut self, id: Uuid, version: Option<i32>) -> StorageResult<Value> {
@@ -1212,8 +959,8 @@ impl DomainTx for SqliteTx {
         title: Option<&str>,
     ) -> StorageResult<()> {
         sqlx::query(
-            "INSERT INTO oc_versions(tenant_id, workspace_id, asset_id, version, content, content_hash, source_event_id, restored_from, review_id, title, created_by, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, COALESCE(?, (SELECT title FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ?)), ?, ?)",
+            "INSERT INTO oc_versions(tenant_id, workspace_id, asset_id, version, content, content_hash, source_event_id, restored_from, title, created_by, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT title FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ?)), ?, ?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)

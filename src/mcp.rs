@@ -34,7 +34,7 @@ impl ContextMcp {
         }
     }
     #[tool(
-        description = "Search published workspace memory and knowledge with source citations. Unreviewed candidates are excluded."
+        description = "Search published workspace memory and knowledge with source citations. Only currently published versions with valid sources are returned."
     )]
     async fn context_search(
         &self,

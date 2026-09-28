@@ -1,6 +1,6 @@
 //! SQLite domain-operation tests (M2): the A5 objects behind [`DomainTx`] —
-//! events, memory/knowledge assets, candidates, reviews, versions, chunks,
-//! summaries, files and jobs — against a real database file in a temp dir.
+//! events, memory/knowledge assets, versions, chunks, summaries, files and jobs
+//! — against a real database file in a temp dir.
 
 use opencontext::storage::{
     AuthorizedScope, DomainTx, IssuedKey, Permission, RelationalStore, Scope, StorageError,
@@ -29,7 +29,7 @@ async fn provision(store: &SqliteStore, name: &str) -> Provisioned {
     Provisioned { auth }
 }
 
-/// memory → candidate → version → chunk/summary → published asset, all in one
+/// memory → version → chunk/summary → published asset, all in one
 /// transaction, then read back through the views.
 #[tokio::test]
 async fn memory_lifecycle_publishes_an_asset() {
@@ -46,10 +46,6 @@ async fn memory_lifecycle_publishes_an_asset() {
         source = tx.create_event("structured", content, None).await.unwrap();
         let (a, version) = tx.slot("fact.release").await.unwrap();
         assert!(version.is_none());
-        let candidate = tx
-            .insert_candidate(a, "fact.release", content, source, true, None)
-            .await
-            .unwrap();
         tx.insert_version(a, 1, content, "hash-1", source, None, None)
             .await
             .unwrap();
@@ -70,7 +66,6 @@ async fn memory_lifecycle_publishes_an_asset() {
             .unwrap();
         tx.update_asset_version(a, 1, None).await.unwrap();
         asset = a;
-        let _ = candidate;
         tx.commit().await.unwrap();
     }
 
@@ -80,52 +75,6 @@ async fn memory_lifecycle_publishes_an_asset() {
     assert_eq!(view["content"], content);
     assert_eq!(view["version"], 1);
     assert_eq!(view["source_event_id"], source.to_string());
-    tx.rollback().await.unwrap();
-}
-
-/// Review validates the candidate against its asset/source, then records a
-/// review and moves the candidate state.
-#[tokio::test]
-async fn review_approves_a_candidate() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let p = provision(&store, "acme").await;
-
-    let source;
-    let candidate;
-    {
-        let mut tx = store.begin(p.auth.clone()).await.unwrap();
-        tx.check_permission(Permission::Write).await.unwrap();
-        source = tx
-            .create_event("structured", "content", None)
-            .await
-            .unwrap();
-        let (asset, _) = tx.slot("fact.x").await.unwrap();
-        candidate = tx
-            .insert_candidate(asset, "fact.x", "content", source, false, None)
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-    }
-
-    let review = Uuid::new_v4();
-    {
-        let mut tx = store.begin(p.auth.clone()).await.unwrap();
-        tx.check_permission(Permission::Review).await.unwrap();
-        let row = tx.candidate_for_review(candidate).await.unwrap();
-        assert_eq!(row["state"], "candidate");
-        assert_eq!(row["source_state"], "active");
-        assert_eq!(row["deleted"], false);
-        tx.apply_review(review, candidate, 1, "approve", None, "looks good")
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-    }
-
-    let mut tx = store.begin(p.auth.clone()).await.unwrap();
-    tx.check_permission(Permission::Review).await.unwrap();
-    let view = tx.candidate_view(candidate).await.unwrap();
-    assert_eq!(view["state"], "approved");
     tx.rollback().await.unwrap();
 }
 
@@ -283,40 +232,6 @@ async fn valid_targets_rejects_deleted_or_retracted() {
     tx.rollback().await.unwrap();
 }
 
-/// candidates_view returns only open candidates across a workspace.
-#[tokio::test]
-async fn candidates_view_lists_open_candidates() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let p = provision(&store, "acme").await;
-
-    let source;
-    let open;
-    {
-        let mut tx = store.begin(p.auth.clone()).await.unwrap();
-        tx.check_permission(Permission::Write).await.unwrap();
-        source = tx
-            .create_event("structured", "content", None)
-            .await
-            .unwrap();
-        let (asset, _) = tx.slot("fact.c").await.unwrap();
-        open = tx
-            .insert_candidate(asset, "fact.c", "content", source, false, None)
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-    }
-
-    let mut tx = store.begin(p.auth.clone()).await.unwrap();
-    tx.check_permission(Permission::Review).await.unwrap();
-    let view = tx.candidates_view().await.unwrap();
-    let items = view["items"].as_array().unwrap();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["id"], open.to_string());
-    assert_eq!(items[0]["state"], "candidate");
-    tx.rollback().await.unwrap();
-}
-
 /// Fact slots are scoped: the same key resolves to different assets per tenant.
 #[tokio::test]
 async fn fact_slots_are_scoped() {
@@ -342,7 +257,7 @@ async fn fact_slots_are_scoped() {
 }
 
 #[tokio::test]
-async fn withdrawal_and_cancellation_only_touch_transaction_scope() {
+async fn cancellation_only_touches_transaction_scope() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("scope.db"))
         .await
@@ -356,10 +271,6 @@ async fn withdrawal_and_cancellation_only_touch_transaction_scope() {
         .await
         .unwrap();
     let (asset, _) = tx.slot("fact").await.unwrap();
-    let candidate = tx
-        .insert_candidate(asset, "fact", "evidence", source, false, None)
-        .await
-        .unwrap();
     let job = Uuid::new_v4();
     tx.enqueue(WorkItem {
         job_id: job,
@@ -374,18 +285,10 @@ async fn withdrawal_and_cancellation_only_touch_transaction_scope() {
     tx.commit().await.unwrap();
     let mut tx = store.begin(a.auth).await.unwrap();
     tx.check_permission(Permission::Delete).await.unwrap();
-    tx.withdraw_affected_candidates().await.unwrap();
     tx.cancel_affected_jobs().await.unwrap();
     tx.commit().await.unwrap();
-    let c: String = sqlx::query_scalar("SELECT state FROM oc_candidates WHERE id=?")
-        .bind(candidate)
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
-    assert_eq!(c, "candidate");
     let mut tx = store.begin(b.auth).await.unwrap();
     assert_eq!(tx.job_view(job).await.unwrap()["state"], "pending");
-    tx.withdraw_affected_candidates().await.unwrap();
     tx.cancel_affected_jobs().await.unwrap();
     assert_eq!(tx.job_view(job).await.unwrap()["state"], "cancelled");
     tx.commit().await.unwrap();

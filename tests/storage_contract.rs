@@ -184,19 +184,6 @@ impl DomainTx for MemTx {
             "in-memory double has no domain rows".into(),
         ))
     }
-    async fn insert_candidate(
-        &mut self,
-        _asset: Uuid,
-        _fact_key: &str,
-        _content: &str,
-        _source: Uuid,
-        _approved: bool,
-        _expected_version: Option<i32>,
-    ) -> StorageResult<Uuid> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
     async fn insert_knowledge_asset(&mut self, _title: &str) -> StorageResult<Uuid> {
         Err(StorageError::Unavailable(
             "in-memory double has no domain rows".into(),
@@ -228,24 +215,6 @@ impl DomainTx for MemTx {
             "in-memory double has no domain rows".into(),
         ))
     }
-    async fn candidate_for_review(&mut self, _id: Uuid) -> StorageResult<Value> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
-    async fn apply_review(
-        &mut self,
-        _review: Uuid,
-        _candidate: Uuid,
-        _revision: i32,
-        _decision: &str,
-        _expected_version: Option<i32>,
-        _reason: &str,
-    ) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
     async fn restore_source(&mut self, _asset: Uuid, _version: i32) -> StorageResult<Value> {
         Err(StorageError::Unavailable(
             "in-memory double has no domain rows".into(),
@@ -262,11 +231,6 @@ impl DomainTx for MemTx {
         ))
     }
     async fn delete_file(&mut self, _id: Uuid) -> StorageResult<u64> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
-    async fn withdraw_affected_candidates(&mut self) -> StorageResult<()> {
         Err(StorageError::Unavailable(
             "in-memory double has no domain rows".into(),
         ))
@@ -291,16 +255,6 @@ impl DomainTx for MemTx {
         _asset: Option<Uuid>,
         _source: Option<Uuid>,
     ) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
-    async fn candidate_view(&mut self, _id: Uuid) -> StorageResult<Value> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
-    async fn candidates_view(&mut self) -> StorageResult<Value> {
         Err(StorageError::Unavailable(
             "in-memory double has no domain rows".into(),
         ))

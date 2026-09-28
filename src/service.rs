@@ -197,62 +197,6 @@ impl Service {
             .await?;
         Self::finish(tx, json!({"source_event_id":source,"job_id":job})).await
     }
-    pub async fn review(
-        &self,
-        a: &AuthContext,
-        key: &str,
-        id: Uuid,
-        input: ReviewInput,
-    ) -> Result<Value> {
-        if !["approve", "reject"].contains(&input.decision.as_str())
-            || input.reason.trim().is_empty()
-            || input.reason.len() > 2000
-        {
-            return Err(AppError::Invalid("decision/reason invalid".into()));
-        }
-        let (mut tx, cached) = self
-            .command(
-                a,
-                Permission::Review,
-                &format!("review/{id}"),
-                key,
-                &json!(input),
-            )
-            .await?;
-        if let Some(v) = cached {
-            return Ok(v);
-        }
-        let row = tx.candidate_for_review(id).await?;
-        if row["state"] != "candidate"
-            || row["revision"] != input.expected_revision
-            || row["deleted"] == true
-            || row["source_state"] != "active"
-            || row["current_version"] != json!(input.expected_version)
-        {
-            return Err(AppError::Conflict(
-                "candidate revision, asset version or source changed".into(),
-            ));
-        }
-        let review = Uuid::new_v4();
-        let asset = decode(row["asset_id"].clone())?;
-        let source = decode(row["source_event_id"].clone())?;
-        tx.apply_review(
-            review,
-            id,
-            input.expected_revision,
-            &input.decision,
-            input.expected_version,
-            &input.reason,
-        )
-        .await?;
-        let job = if input.decision == "approve" {
-            Some(Self::enqueue(&mut tx,"publish",json!({"candidate_id":id,"review_id":review,"expected_version":input.expected_version,"format":"text","embedding_profile":self.models.profile}),Some(asset),Some(source)).await?)
-        } else {
-            None
-        };
-        tx.audit("memory.review",id,json!({"review_id":review,"decision":input.decision,"content_hash":hash(row["content"].as_str().unwrap_or(""))})).await?;
-        Self::finish(tx,json!({"review_id":review,"candidate_id":id,"job_id":job,"state":if job.is_some(){"approved"}else{"rejected"}})).await
-    }
     pub async fn knowledge(
         &self,
         a: &AuthContext,
@@ -360,18 +304,6 @@ impl Service {
         )
         .await
     }
-    pub async fn candidate_get(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
-        let mut tx = self.read(a, Permission::Review).await?;
-        let v = tx.candidate_view(id).await?;
-        tx.commit().await?;
-        Ok(v)
-    }
-    pub async fn candidates(&self, a: &AuthContext) -> Result<Value> {
-        let mut tx = self.read(a, Permission::Review).await?;
-        let v = tx.candidates_view().await?;
-        tx.commit().await?;
-        Ok(v)
-    }
     pub async fn get(&self, a: &AuthContext, id: Uuid, version: Option<i32>) -> Result<Value> {
         let mut tx = self.read(a, Permission::Read).await?;
         let v = tx.asset_view(id, version).await?;
@@ -460,7 +392,6 @@ impl Service {
         if changed == 0 {
             return Err(AppError::NotFound);
         }
-        tx.withdraw_affected_candidates().await?;
         tx.cancel_affected_jobs().await?;
         let job = Self::enqueue(
             &mut tx,

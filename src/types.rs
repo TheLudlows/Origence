@@ -59,15 +59,6 @@ fn text_format() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReviewInput {
-    pub decision: String,
-    pub expected_revision: i32,
-    pub expected_version: Option<i32>,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct RestoreInput {
     pub target_version: i32,
     pub expected_version: i32,

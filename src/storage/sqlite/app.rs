@@ -148,20 +148,6 @@ impl SqliteTx {
         sqlx::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
-    pub async fn attach_review(
-        &mut self,
-        asset: Uuid,
-        version: i32,
-        review: Option<Uuid>,
-    ) -> StorageResult<()> {
-        sqlx::query("UPDATE oc_versions SET review_id=? WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?")
-            .bind(review).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(version).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        Ok(())
-    }
-    pub async fn mark_candidate_published(&mut self, id: Uuid) -> StorageResult<()> {
-        sqlx::query("UPDATE oc_candidates SET state='published' WHERE tenant_id=? AND workspace_id=? AND id=? AND state='approved'").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        Ok(())
-    }
     pub async fn index_ready(
         &mut self,
         chunk: Uuid,

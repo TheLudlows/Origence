@@ -30,9 +30,6 @@ pub fn router(service: Service) -> Router {
         .route("/v1/knowledge", post(knowledge))
         .route("/v1/search", post(search))
         .route("/v1/resolve", post(resolve))
-        .route("/v1/candidates", get(candidates))
-        .route("/v1/candidates/{id}", get(candidate))
-        .route("/v1/candidates/{id}/review", post(review))
         .route("/v1/assets/{id}", get(asset).delete(delete_asset))
         .route("/v1/assets/{id}/restore", post(restore))
         .route("/v1/events/{id}", axum::routing::delete(delete_event))
@@ -101,24 +98,6 @@ async fn resolve(
     Json(i): Json<ResolveInput>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.resolve(&auth(&s, &h).await?, i).await?))
-}
-async fn candidates(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
-    Ok(Json(s.candidates(&auth(&s, &h).await?).await?))
-}
-async fn candidate(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Value>> {
-    Ok(Json(s.candidate_get(&auth(&s, &h).await?, id).await?))
-}
-async fn review(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-    Json(i): Json<ReviewInput>,
-) -> Result<Json<Value>> {
-    Ok(Json(s.review(&auth(&s, &h).await?, key(&h)?, id, i).await?))
 }
 #[derive(Deserialize)]
 struct Version {

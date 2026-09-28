@@ -47,3 +47,27 @@ async fn missing_domain_column_is_rejected_without_repair() -> anyhow::Result<()
     assert!(SqliteStore::open(&path).await.is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn fresh_schema_has_no_review_tables_or_column() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let store = SqliteStore::open(dir.path().join("oc.db")).await?;
+    let tables: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('oc_candidates','oc_reviews')",
+    )
+    .fetch_one(store.pool())
+    .await?;
+    assert_eq!(tables, 0);
+    assert!(
+        sqlx::query("SELECT review_id FROM oc_versions LIMIT 0")
+            .execute(store.pool())
+            .await
+            .is_err()
+    );
+    // Legacy databases keep extra tables; the projection check tolerates them.
+    sqlx::query("CREATE TABLE oc_candidates(x)")
+        .execute(store.pool())
+        .await?;
+    store.check().await?;
+    Ok(())
+}

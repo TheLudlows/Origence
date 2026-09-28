@@ -63,32 +63,11 @@ WHERE kind = 'memory';
 CREATE TABLE oc_versions (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, asset_id BLOB NOT NULL,
     version INTEGER NOT NULL CHECK (version > 0), content TEXT NOT NULL, content_hash TEXT NOT NULL,
-    source_event_id BLOB NOT NULL, restored_from INTEGER, review_id BLOB, title TEXT NOT NULL,
+    source_event_id BLOB NOT NULL, restored_from INTEGER, title TEXT NOT NULL,
     created_by BLOB NOT NULL, created_at INTEGER NOT NULL,
     PRIMARY KEY (tenant_id, workspace_id, asset_id, version),
     FOREIGN KEY (tenant_id, workspace_id, asset_id) REFERENCES oc_assets(tenant_id, workspace_id, id),
     FOREIGN KEY (tenant_id, workspace_id, source_event_id) REFERENCES oc_events(tenant_id, workspace_id, id)
-);
-
-CREATE TABLE oc_candidates (
-    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
-    asset_id BLOB, source_event_id BLOB NOT NULL, fact_key TEXT NOT NULL,
-    content TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
-    expected_version INTEGER, state TEXT NOT NULL DEFAULT 'candidate'
-      CHECK (state IN ('candidate','approved','rejected','withdrawn','published')),
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (tenant_id, workspace_id, id),
-    FOREIGN KEY (tenant_id, workspace_id, asset_id) REFERENCES oc_assets(tenant_id, workspace_id, id),
-    FOREIGN KEY (tenant_id, workspace_id, source_event_id) REFERENCES oc_events(tenant_id, workspace_id, id)
-);
-
-CREATE TABLE oc_reviews (
-    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
-    candidate_id BLOB NOT NULL, revision INTEGER NOT NULL, decision TEXT NOT NULL,
-    expected_version INTEGER, reviewer BLOB NOT NULL, reason TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (tenant_id, workspace_id, id),
-    FOREIGN KEY (tenant_id, workspace_id, candidate_id) REFERENCES oc_candidates(tenant_id, workspace_id, id)
 );
 
 CREATE TABLE oc_jobs (

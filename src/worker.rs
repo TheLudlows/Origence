@@ -483,12 +483,6 @@ async fn publish_prepared(
             claim.payload["title"].as_str(),
         )
         .await?;
-        tx.attach_review(
-            memory.asset,
-            memory.version,
-            decode(claim.payload["review_id"].clone())?,
-        )
-        .await?;
         for (ordinal, c) in memory.chunks.iter().enumerate() {
             tx.insert_chunk(
                 c.id,
@@ -541,10 +535,6 @@ async fn publish_prepared(
             .await?;
         }
         tx.confirm_committed(entry.key).await?;
-    }
-    if let Some(id) = claim.payload["candidate_id"].as_str() {
-        tx.mark_candidate_published(Uuid::parse_str(id).map_err(anyhow::Error::from)?)
-            .await?;
     }
     for memory in &publication.memories {
         tx.audit(
