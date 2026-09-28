@@ -2,7 +2,7 @@
 
 Rust 实现的团队 Agent 记忆与知识服务。M5 将默认运行栈固定为 **SQLite + LanceDB + Kuzu + 本地文件**：一个宿主进程运行 HTTP API 和单 Worker，CLI/MCP 默认通过 HTTP 访问宿主。无需 PostgreSQL、pgvector 或独立队列服务。
 
-数据按 tenant/workspace 隔离；结构化记忆可由 reviewer/admin 授权首次发布，自动抽取只生成候选。检索只返回当前已发布、资产未删除且来源仍有效的证据。自动发布、会话记忆、企业 SaaS 仍属于后续阶段。
+数据按 tenant/workspace 隔离；writer 的结构化记忆与 capture 抽取结果直接进入发布任务，提交时重新核验身份、权限、来源与预期版本；检索只返回当前已发布、资产未删除且来源仍有效的证据。会话记忆、企业 SaaS 仍属于后续阶段。
 
 ## 快速启动
 
@@ -44,7 +44,7 @@ opencontext resolve '发布审批' --budget-tokens 2000
 opencontext get ASSET_UUID
 ```
 
-创建响应只代表受理；任务达到 `completed` 且 `outcome=published` 后才表示发布完成。writer 的输入和模型抽取结果仍需审核；已有事实的修改不会隐式覆盖。恢复追加新版本，删除资产不可恢复，撤回来源使所有引用该来源的版本不可读。完整契约见 [API](docs/API.md)。
+创建响应只代表受理；任务达到 `completed` 且 `outcome=published` 后才表示发布完成。已有事实的修改通过 expected_version 乐观校验追加版本，冲突时任务 superseded 且旧值保留。恢复追加新版本，删除资产不可恢复，撤回来源使所有引用该来源的版本不可读。完整契约见 [API](docs/API.md)。
 
 ## MCP
 
@@ -63,7 +63,7 @@ opencontext get ASSET_UUID
 | `OC_ENABLE_MODELS` | `false`；默认不调用外部模型 |
 | `OC_MODEL_BASE_URL` / `OC_MODEL_API_KEY` | OpenAI 兼容模型服务地址和凭据 |
 | `OC_EMBEDDING_MODEL` / `OC_EMBEDDING_DIMENSION` | 可选向量模型及维度 1–4096 |
-| `OC_EXTRACTION_MODEL` | 可选候选抽取、知识摘要和实体关系抽取模型 |
+| `OC_EXTRACTION_MODEL` | 可选记忆抽取、知识摘要和实体关系抽取模型 |
 
 模型根地址通常以 `/v1` 结尾，远程要求 HTTPS；禁用重定向，单次调用超时 45 秒，响应上限 8 MB。启用模型意味着内容发送至该服务，并可能产生费用。关闭模型仍可发布结构化记忆和知识并执行关键词检索；capture 在未配置抽取模型时明确失败。
 
@@ -108,7 +108,7 @@ cargo test --locked -j 1 --no-fail-fast
 - 图谱共享对象以 SQLite owner 为权威；返回规范化实体名、关系及当前来源证据，不将最后一次模型描述当作共享事实。
 - `budget_tokens` 使用 UTF-8 字节数的保守上界，整块保留或丢弃；不是模型精确 tokenizer。
 - 文本上限 1 MB，文件 10 MiB，PDF 最多 200 页、解析超时 30 秒，无 OCR；PDF 子进程不是 OS 安全沙箱。
-- 删除立即阻断读取，后台清理派生索引。原文件、事件、版本、候选及审计暂保留；无 retention、原文物理擦除或文件孤儿自动回收。
+- 删除立即阻断读取，后台清理派生索引。原文件、事件、版本及审计暂保留；无 retention、原文物理擦除或文件孤儿自动回收。
 - 单宿主、单 Worker；无多节点共享写、OIDC、文档 ACL、配额、分页游标或生产 SLO 承诺。
 
 [文档索引](docs/README.md) 区分当前运行契约、里程碑、未来设计和历史调研；[状态](docs/STATUS.md)、[验收](docs/VALIDATION.md) 和 [M5 记录](docs/superpowers/plans/2026-09-28-local-host-delivery.md) 说明交付范围。Cognee 调研固定到 1.6.0 源码，未集成 Cognee，也未运行竞品效果对比。

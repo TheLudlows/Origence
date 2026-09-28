@@ -1,6 +1,6 @@
 # 记忆 + 知识库平台（Cognee 同类）详细设计
 
-> 实现对照（2026-09-28）：M5 已将默认宿主装配为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；仍保留候选审核语义。本文的自动发布、P1/P2 是目标设计，不能作为已实现能力。现状见 [STATUS](../../STATUS.md)，验收见 [VALIDATION](../../VALIDATION.md)。
+> 实现对照（2026-09-29）：M5 已将默认宿主装配为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；自动发布（A1）已于 2026-09-29 实施：记忆/capture 直接发布，候选/审核门移除。P1/P2 仍是目标设计，不能作为已实现能力。现状见 [STATUS](../../STATUS.md)，验收见 [VALIDATION](../../VALIDATION.md)。
 
 初稿日期：2026-09-22；整合修订：2026-09-23
 定位：团队 Agent 的记忆与知识库平台，先交付本地存储版本，保留后续服务化能力，Rust 实现，对标 Cognee（调研基线 v1.6.0，固定 commit `663a2dc15d04bc0d7ec2733a2dd604b7ed1b8c8e`）。

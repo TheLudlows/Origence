@@ -1,5 +1,26 @@
 # 验证记录
 
+## 2026-09-29：自动发布验收
+
+环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖。本轮为 A1 治理语义变更（自动发布），存储与运行栈沿用 M5 本地宿主：默认启用 local-storage，测试使用真实临时 SQLite/LanceDB/Kuzu 与本地文件，模型为本机 HTTP stub，无外部付费调用。行为契约见 [API](API.md)，实施映射见 [自动发布实施计划](superpowers/plans/2026-09-28-auto-publish-implementation.md)。
+
+| 检查 | 实测结果 |
+| --- | --- |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo clippy --locked --all-targets -j 1 -- -D warnings` | 通过 |
+| `cargo test --locked -j 1 --no-fail-fast` | **67 通过，0 失败，0 ignored**；8 项单元 + 59 项集成（sqlite_domain 删 2 项候选审核用例、initialization 增 1 项新库结构检查，较 M5 基线 68 少 1），集成执行约 21.03 秒，非性能基准 |
+| `cargo check --locked --no-default-features --lib -j 4` | 通过；基础接口构建无需启用原生后端 |
+
+本轮新增/调整的验收覆盖：
+
+- writer 直接发布：writer 提交结构化记忆后 publish 任务直达 `outcome=published`，无候选/审核中转；reader 不能读取任务，提交按 Write 权限复核。
+- accept 期 expected_version 冲突检测：受理时 fact_key 已有当前版本则响应 `conflict:true`，expected_version 记录受理时版本供 Worker 提交前复核。
+- extract 多事实发布与 fact_key 去重：一次 capture 抽取的多条事实按 fact_key 定位资产槽逐条独立发布，同批重复 fact_key 去重；空抽取以 `result.memories:[]` 完成。
+- 保存计划重放：外部写完成后保存的多记忆发布计划可重放，不产生重复版本。
+- 候选面删除后旧库兼容：新库无 `oc_candidates`/`oc_reviews` 与 `oc_versions.review_id`；遗留多余表的旧库仍通过结构检查。
+
+未验证：竞态导致的 `superseded` 任务与已删除路由 `/v1/candidates` 的 404 无专门断言；其余沿用既有清单（Linux/macOS/release、容器镜像构建和运行、远端 CI、主应用最低 Rust 1.88、在线备份、断电恢复、长期压力/规模与真实模型语义效果）。
+
 ## 2026-09-28：M5 本地宿主验收
 
 环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖。默认启用 local-storage，测试使用真实临时 SQLite/LanceDB/Kuzu 与本地文件；模型为本机 HTTP stub，无外部付费调用。当前部署和 API 契约见 [文档索引](README.md)，实现映射见 [M5](superpowers/plans/2026-09-28-local-host-delivery.md)。

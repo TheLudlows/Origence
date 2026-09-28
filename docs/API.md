@@ -9,11 +9,11 @@
 | 角色 | 权限 |
 | --- | --- |
 | reader | 已发布内容 get/search/resolve |
-| writer | reader + 上传/原文件下载/知识入库/结构化候选/capture/任务查询；取消、重试自己任务 |
-| reviewer | writer + 候选查看和审核/记忆直接发布/版本恢复/操作其他主体任务 |
+| writer | reader + 上传/原文件下载/知识入库/结构化记忆发布/capture/任务查询；取消、重试自己任务 |
+| reviewer | writer + 版本恢复/操作其他主体任务 |
 | admin | reviewer + 资产删除/来源撤回/文件删除/失败清理任务重试 |
 
-原始文件、任务和候选可能涉及未审核数据，reader 不能读取。知识入库由 writer 授权发布，记忆直接发布需 reviewer/admin。
+原始文件和任务可能涉及未发布数据，reader 不能读取。记忆与 capture 由 writer 授权直接发布，发布任务提交时重新核验权限与来源。
 
 ## 接口
 
@@ -21,11 +21,8 @@
 | --- | --- |
 | `GET /health/live` | 进程存活，无鉴权 |
 | `GET /health/ready` | 单 Worker 正在运行且本地存储检查通过；不是外部模型健康检查 |
-| `POST /v1/memories` | `{fact_key,content,publish_if_authorized:false}` → candidate/asset/source/job 标识 |
-| `POST /v1/captures` | `{content}` → source/job，抽取固定生成候选 |
-| `GET /v1/candidates` | 最多 100 条待审核候选，含 revision 和 current_version |
-| `GET /v1/candidates/{id}` | 候选详情；来源撤回或资产删除后不可读 |
-| `POST /v1/candidates/{id}/review` | `{decision:"approve"或"reject",expected_revision,expected_version:null或整数,reason}` |
+| `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ asset/source/job 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
+| `POST /v1/captures` | `{content}` → source/job；抽取结果逐条直接发布，结果见任务 `result.memories` |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
 | `POST /v1/files?name=...&format=...` | 原始二进制请求体，非 multipart；返回 file_id；文件名仅作元数据 |
 | `GET /v1/files/{id}` | 校验 hash 后返回 attachment/octet-stream，存储路径由 scope 和内容 hash 生成 |
@@ -52,22 +49,13 @@
 
 `/admin/keys` 同样要求 Bearer token，但不使用业务幂等缓存，避免保存明文 token。发行结果只返回一次，重复 POST 会创建不同 key；若响应丢失，需要离线管理核对数据库中的 key ID 并撤销多余凭据。离线 workspace/key 管理通过 `--offline` 和操作系统目录权限授权，宿主运行时拒绝打开。
 
-## 审核例子
+## 版本冲突
 
-```json
-{
-  "decision": "approve",
-  "expected_revision": 1,
-  "expected_version": 2,
-  "reason": "项目负责人确认新发布规则"
-}
-```
-
-审核时当前版本不匹配即 409；审核后到 Worker 提交期间发生变更，任务变为 superseded，不能覆盖新版本。此时重新读取现状并提交新的候选。候选本身与审核记录保留。
+memory 的更新按 `expected_version` 乐观校验：受理时记录资产当前版本，Worker 提交前复核；期间发生其他发布则任务变为 `superseded`，旧值保留，不发生覆盖。此时重新读取现状并再次提交。发布计划与账本保证重放不产生重复版本。
 
 ## 任务与读取可见性
 
-`pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。`completed + outcome=candidates_created` 不等于正式发布；只有 `completed + outcome=published` 表示该次版本及索引已原子提交。之后仍可能被更新、删除或来源撤回。
+`pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 asset/version。之后仍可能被更新、删除或来源撤回。
 
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
 

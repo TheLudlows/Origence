@@ -8,7 +8,7 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db`、SQLite WAL/SHM | 权限、事件、版本、候选、幂等、任务、owner、索引元数据、账本、审计 |
+| `context.db`、SQLite WAL/SHM | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
 | `vectors/` | 按模型 profile 分表的 LanceDB 向量 |
 | `graph/kuzu.db` | Kuzu 数据库及其关联文件 |
