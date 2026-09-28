@@ -730,6 +730,34 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     )
     .await;
     assert_eq!(recall["hits"][0]["asset_id"], claim["asset_id"]);
+    // Zero extracted memories still completes with an empty published list.
+    let empty = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures",
+        json!({"content":"EMPTY-EXTRACT"}),
+    )
+    .await;
+    let none = job(&http, &base, token, id(&empty, "job_id"), "completed").await;
+    assert_eq!(none["outcome"], "published");
+    assert_eq!(none["result"]["memories"], json!([]));
+```
+
+测试文件顶部的 stub `extract` handler（`async fn extract`，第 40-48 行）加一个空抽取触发分支（完整替换）：
+
+```rust
+async fn extract(Json(v): Json<Value>) -> Json<Value> {
+    let prompt = v["messages"][0]["content"].as_str().unwrap();
+    let content = if prompt.contains("Summarize") {
+        "Atlas summary evidence".to_string()
+    } else if prompt.contains("EMPTY-EXTRACT") {
+        json!({"memories":[],"entities":[],"relations":[]}).to_string()
+    } else {
+        json!({"memories":[{"fact_key":"model.claim","content":"Model proposal requires review","publish_if_authorized":true}],"entities":[{"name":"Atlas","entity_type":"service","description":"payments"},{"name":"Team","entity_type":"team","description":"owner"}],"relations":[{"source":"Atlas","predicate":"owned_by","target":"Team"}]}).to_string()
+    };
+    Json(json!({"choices":[{"message":{"content":content}}]}))
+}
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -771,6 +799,16 @@ Expected: FAIL（`extracted["outcome"]` 是 `"candidates_created"`）。
 
 ```rust
     if claim.kind == "extract" {
+        // A saved plan replays without re-calling the extraction model.
+        if let Some(saved) = claim
+            .payload
+            .get("publication")
+            .filter(|p| p["generation"] == claim.generation)
+        {
+            let p: Publication = decode(saved.clone())?;
+            tx.commit().await?;
+            return publish_prepared(service, claim, p).await;
+        }
         let text = tx
             .event_content(claim.source.ok_or(AppError::NotFound)?, true)
             .await?
@@ -814,13 +852,17 @@ Expected: FAIL（`extracted["outcome"]` 是 `"candidates_created"`）。
                 .collect::<Vec<_>>()
         );
     } else {
+        let first = publication
+            .memories
+            .first()
+            .ok_or(AppError::Conflict("publication without memories".into()))?;
         result["asset_id"] = json!(first.asset);
         result["version"] = json!(first.version);
     }
     tx.settle_completed(claim.job_id, "published", &result).await?;
 ```
 
-（`first` 仍由前面的 `.ok_or(...)` 取得；空抽取时 `prepare` 对空 drafts 返回 Conflict 的旧规则改为允许空集——`prepare` 开头检查改为 `drafts.iter().any(|d| d.chunks.is_empty())` 时报错，`drafts.is_empty()` 不再报错，空集直接产出零记忆计划、无外部写、settle `memories:[]`。）
+（同时删除 Task 1 在 capabilities 计算之前加入的 `let first = publication.memories.first().ok_or(AppError::Conflict("publication without memories".into()))?;` 一行——`first` 移入 else 分支内取得，空抽取才能以 `memories:[]` 完成而非报 Conflict。另改 `prepare` 开头检查：`drafts.iter().any(|d| d.chunks.is_empty())` 时报 Conflict，`drafts.is_empty()` 不再报错——空集直接产出零记忆计划、无外部写、settle `memories:[]`。）
 
 - [ ] **Step 4: 运行确认通过**
 
