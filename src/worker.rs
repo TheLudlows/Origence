@@ -141,44 +141,46 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
     let a = auth(claim);
     let mut tx = service.read(&a, permission(claim)).await?;
     guard(&mut tx, claim).await?;
-    if claim.kind == "extract" {
-        let text = tx
-            .event_content(claim.source.ok_or(AppError::NotFound)?, true)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        tx.commit().await?;
-        let candidates = service.models.extract(&text).await?;
-        let mut tx = service.write(&a, Permission::Write).await?;
-        guard(&mut tx, claim).await?;
-        let mut ids = Vec::new();
-        for c in candidates {
-            let (asset, version) = tx.slot(&c.fact_key).await?;
-            ids.push(
-                tx.insert_candidate(
-                    asset,
-                    &c.fact_key,
-                    &c.content,
-                    claim.source.unwrap(),
-                    false,
-                    version,
-                )
-                .await?,
-            );
-        }
-        tx.settle_completed(
-            claim.job_id,
-            "candidates_created",
-            &json!({"candidate_ids":ids}),
-        )
-        .await?;
-        tx.commit().await?;
-        return Ok(());
-    }
     let profile: Option<String> = decode(claim.payload["embedding_profile"].clone())?;
     if profile.is_some() && profile != service.models.profile {
         return Err(AppError::Unavailable(
             "worker embedding profile differs from accepted job".into(),
         ));
+    }
+    if claim.kind == "extract" {
+        // A saved plan replays without re-calling the extraction model.
+        if let Some(saved) = claim
+            .payload
+            .get("publication")
+            .filter(|p| p["generation"] == claim.generation)
+        {
+            let p: Publication = decode(saved.clone())?;
+            tx.commit().await?;
+            return publish_prepared(service, claim, p).await;
+        }
+        let text = tx
+            .event_content(claim.source.ok_or(AppError::NotFound)?, true)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        tx.commit().await?;
+        let memories = service.models.extract(&text).await?;
+        // Slot every fact under a short write tx; versions are re-verified at
+        // commit, so a race only supersedes the job without overwriting.
+        let mut tx = service.write(&a, Permission::Write).await?;
+        guard(&mut tx, claim).await?;
+        let mut drafts = Vec::new();
+        for m in &memories {
+            let (asset, expected) = tx.slot(&m.fact_key).await?;
+            drafts.push(DraftMemory {
+                asset,
+                fact_key: Some(m.fact_key.clone()),
+                expected_version: expected,
+                chunks: parsing::chunks(&m.content, "text")?,
+            });
+        }
+        tx.commit().await?;
+        let publication = prepare(service, claim, profile, drafts).await?;
+        return publish_prepared(service, claim, publication).await;
     }
     let saved = claim
         .payload
@@ -259,7 +261,7 @@ async fn prepare(
     profile: Option<String>,
     drafts: Vec<DraftMemory>,
 ) -> Result<Publication> {
-    if drafts.is_empty() || drafts.iter().any(|d| d.chunks.is_empty()) {
+    if drafts.iter().any(|d| d.chunks.is_empty()) {
         return Err(AppError::Conflict("no source chunks available".into()));
     }
     let mut memories = Vec::new();
@@ -546,10 +548,6 @@ async fn publish_prepared(
         )
         .await?;
     }
-    let first = publication
-        .memories
-        .first()
-        .ok_or(AppError::Conflict("publication without memories".into()))?;
     let mut capabilities = vec!["keyword"];
     if publication.profile.is_some() {
         capabilities.push("vector");
@@ -564,7 +562,29 @@ async fn publish_prepared(
     if publication.graph.is_some() {
         capabilities.push("graph");
     }
-    tx.settle_completed(claim.job_id,"published",&json!({"asset_id":first.asset,"version":first.version,"readiness":"ready","index_capabilities":capabilities})).await?;
+    let mut result = json!({"readiness":"ready","index_capabilities":capabilities});
+    if claim.kind == "extract" {
+        result["memories"] = json!(
+            publication
+                .memories
+                .iter()
+                .map(|m| json!({
+                    "asset_id": m.asset,
+                    "fact_key": m.fact_key,
+                    "version": m.version,
+                }))
+                .collect::<Vec<_>>()
+        );
+    } else {
+        let first = publication
+            .memories
+            .first()
+            .ok_or(AppError::Conflict("publication without memories".into()))?;
+        result["asset_id"] = json!(first.asset);
+        result["version"] = json!(first.version);
+    }
+    tx.settle_completed(claim.job_id, "published", &result)
+        .await?;
     tx.commit().await?;
     Ok(())
 }

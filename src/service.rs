@@ -185,7 +185,14 @@ impl Service {
             return Ok(v);
         }
         let source = tx.create_event("capture", &input.content, None).await?;
-        let job = Self::enqueue(&mut tx, "extract", json!({}), None, Some(source)).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            "extract",
+            json!({"embedding_profile":self.models.profile}),
+            None,
+            Some(source),
+        )
+        .await?;
         tx.audit("memory.capture", source, json!({"job_id":job}))
             .await?;
         Self::finish(tx, json!({"source_event_id":source,"job_id":job})).await

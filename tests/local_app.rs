@@ -38,9 +38,15 @@ async fn embed(State(slow): State<Arc<AtomicBool>>, Json(_): Json<Value>) -> Jso
     Json(json!({"data":[{"embedding":[1.0,0.5,0.25]}]}))
 }
 async fn extract(Json(v): Json<Value>) -> Json<Value> {
-    let prompt = v["messages"][0]["content"].as_str().unwrap();
+    let prompt = format!(
+        "{}{}",
+        v["messages"][0]["content"].as_str().unwrap_or(""),
+        v["messages"][1]["content"].as_str().unwrap_or("")
+    );
     let content = if prompt.contains("Summarize") {
         "Atlas summary evidence".to_string()
+    } else if prompt.contains("EMPTY-EXTRACT") {
+        json!({"memories":[],"entities":[],"relations":[]}).to_string()
     } else {
         json!({"memories":[{"fact_key":"model.claim","content":"Model proposal requires review","publish_if_authorized":true}],"entities":[{"name":"Atlas","entity_type":"service","description":"payments"},{"name":"Team","entity_type":"team","description":"owner"}],"relations":[{"source":"Atlas","predicate":"owned_by","target":"Team"}]}).to_string()
     };
@@ -264,7 +270,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .await
         .unwrap();
     assert!(!blocked.status.success());
-    // The provider cannot authorize publication through its own response.
+    // Extraction publishes under the capture creator's own write authority.
     let capture = post(
         &http,
         &base,
@@ -274,22 +280,31 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     )
     .await;
     let extracted = job(&http, &base, token, id(&capture, "job_id"), "completed").await;
-    assert_eq!(extracted["outcome"], "candidates_created");
-    let candidate = request(
+    assert_eq!(extracted["outcome"], "published");
+    let claim = &extracted["result"]["memories"][0];
+    assert_eq!(claim["fact_key"], "model.claim");
+    assert_eq!(claim["version"], 1);
+    let recall = post(
         &http,
         &base,
         token,
-        reqwest::Method::GET,
-        &format!(
-            "/v1/candidates/{}",
-            extracted["result"]["candidate_ids"][0].as_str().unwrap()
-        ),
-        Value::Null,
+        "/v1/search",
+        json!({"query":"proposal","mode":"keyword"}),
     )
     .await;
-    assert_eq!(candidate["state"], "candidate");
-    let reviewed=post(&http,&base,token,&format!("/v1/candidates/{}/review",candidate["id"].as_str().unwrap()),json!({"decision":"approve","expected_revision":candidate["revision"],"expected_version":null,"reason":"verified"})).await;
-    job(&http, &base, token, id(&reviewed, "job_id"), "completed").await;
+    assert_eq!(recall["hits"][0]["asset_id"], claim["asset_id"]);
+    // Zero extracted memories still completes with an empty published list.
+    let empty = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures",
+        json!({"content":"EMPTY-EXTRACT"}),
+    )
+    .await;
+    let none = job(&http, &base, token, id(&empty, "job_id"), "completed").await;
+    assert_eq!(none["outcome"], "published");
+    assert_eq!(none["result"]["memories"], json!([]));
     // Two sources own the same graph objects; deleting one must preserve the other.
     let mut docs = Vec::new();
     for n in 0..2 {
