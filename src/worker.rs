@@ -169,7 +169,13 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         let mut tx = service.write(&a, Permission::Write).await?;
         guard(&mut tx, claim).await?;
         let mut drafts = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         for m in &memories {
+            // One memory per fact key per extraction; slot is SELECT-then-INSERT,
+            // so a duplicate would collide with itself at the version recheck.
+            if !seen.insert(m.fact_key.clone()) {
+                continue;
+            }
             let (asset, expected) = tx.slot(&m.fact_key).await?;
             drafts.push(DraftMemory {
                 asset,

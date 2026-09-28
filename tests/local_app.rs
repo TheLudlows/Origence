@@ -48,7 +48,11 @@ async fn extract(Json(v): Json<Value>) -> Json<Value> {
     } else if prompt.contains("EMPTY-EXTRACT") {
         json!({"memories":[],"entities":[],"relations":[]}).to_string()
     } else {
-        json!({"memories":[{"fact_key":"model.claim","content":"Model proposal requires review","publish_if_authorized":true}],"entities":[{"name":"Atlas","entity_type":"service","description":"payments"},{"name":"Team","entity_type":"team","description":"owner"}],"relations":[{"source":"Atlas","predicate":"owned_by","target":"Team"}]}).to_string()
+        json!({"memories":[
+            {"fact_key":"model.claim","content":"Model proposal requires review","publish_if_authorized":true},
+            {"fact_key":"model.second","content":"Second extracted fact","publish_if_authorized":true},
+            {"fact_key":"model.claim","content":"Duplicate claim ignored","publish_if_authorized":true}
+        ],"entities":[{"name":"Atlas","entity_type":"service","description":"payments"},{"name":"Team","entity_type":"team","description":"owner"}],"relations":[{"source":"Atlas","predicate":"owned_by","target":"Team"}]}).to_string()
     };
     Json(json!({"choices":[{"message":{"content":content}}]}))
 }
@@ -293,6 +297,11 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     )
     .await;
     assert_eq!(recall["hits"][0]["asset_id"], claim["asset_id"]);
+    let second = &extracted["result"]["memories"][1];
+    assert_eq!(second["fact_key"], "model.second");
+    assert_eq!(second["version"], 1);
+    // A duplicate fact_key in one extraction drops instead of breaking the job.
+    assert_eq!(extracted["result"]["memories"].as_array().unwrap().len(), 2);
     // Zero extracted memories still completes with an empty published list.
     let empty = post(
         &http,
