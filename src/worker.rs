@@ -53,7 +53,7 @@ fn auth(claim: &ClaimedJob) -> AuthContext {
     }
 }
 fn permission(claim: &ClaimedJob) -> Permission {
-    if matches!(claim.kind.as_str(), "publish" | "restore") {
+    if claim.kind == "restore" {
         Permission::Publish
     } else {
         Permission::Write
@@ -75,16 +75,6 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
             return Err(AppError::Conflict(
                 "publication superseded by another version".into(),
             ));
-        }
-    }
-    if claim.kind == "publish" {
-        let candidate = tx
-            .candidate_for_review(decode(claim.payload["candidate_id"].clone())?)
-            .await?;
-        if candidate["state"] != "approved"
-            || candidate["expected_version"] != claim.payload["expected_version"]
-        {
-            return Err(AppError::Conflict("candidate is no longer approved".into()));
         }
     }
     Ok(())
@@ -203,13 +193,11 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         let asset = claim.asset.ok_or(AppError::NotFound)?;
         let chunks = match claim.kind.as_str() {
             "publish" => {
-                let candidate = tx
-                    .candidate_for_review(decode(claim.payload["candidate_id"].clone())?)
-                    .await?;
-                let chunks = parsing::chunks(
-                    candidate["content"].as_str().ok_or(AppError::NotFound)?,
-                    "text",
-                )?;
+                let text = tx
+                    .event_content(claim.source.ok_or(AppError::NotFound)?, true)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                let chunks = parsing::chunks(&text, "text")?;
                 tx.commit().await?;
                 chunks
             }

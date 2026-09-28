@@ -656,13 +656,18 @@ async fn local_transactions_versions_review_retraction_and_idempotency() {
         )
         .await
         .unwrap();
-    assert!(proposal["job_id"].is_null());
+    assert!(proposal["job_id"].is_string());
+    assert_eq!(proposal["state"], "accepted");
     let reader_key = store.issue_key(scope, "reader").await.unwrap();
     let reader = s.auth(&reader_key.token).await.unwrap();
-    assert!(
-        s.candidate_get(&reader, id(&proposal, "candidate_id"))
+    // Job state can expose unpublished input, so it stays behind write permission.
+    assert!(s.job(&reader, id(&proposal, "job_id")).await.is_err());
+    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert_eq!(
+        s.get(&writer, id(&proposal, "asset_id"), None)
             .await
-            .is_err()
+            .unwrap()["version"],
+        1
     );
     let chinese = s
         .knowledge(
@@ -719,30 +724,9 @@ async fn local_transactions_versions_review_retraction_and_idempotency() {
         )
         .await
         .unwrap();
-    assert!(update["job_id"].is_null());
-    let c = s
-        .candidate_get(&a, id(&update, "candidate_id"))
-        .await
-        .unwrap();
-    let review = s
-        .review(
-            &a,
-            "review",
-            id(&update, "candidate_id"),
-            ReviewInput {
-                decision: "approve".into(),
-                expected_revision: c["revision"].as_i64().unwrap() as i32,
-                expected_version: Some(1),
-                reason: "verified".into(),
-            },
-        )
-        .await
-        .unwrap();
+    assert!(update["job_id"].is_string());
+    assert_eq!(update["conflict"], true);
     assert!(opencontext::worker::process_next(&s).await.unwrap());
-    assert_eq!(
-        s.job(&a, id(&review, "job_id")).await.unwrap()["state"],
-        "completed"
-    );
     assert_eq!(
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2

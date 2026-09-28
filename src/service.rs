@@ -156,39 +156,25 @@ impl Service {
         }
         let source = tx.create_event("structured", &input.content, None).await?;
         let (asset, version) = tx.slot(&input.fact_key).await?;
-        let publish = input.publish_if_authorized
-            && version.is_none()
-            && match tx.check_permission(Permission::Publish).await {
-                Ok(()) => true,
-                Err(StorageError::Forbidden) => false,
-                Err(e) => return Err(e.into()),
-            };
-        let candidate = tx
-            .insert_candidate(
-                asset,
-                &input.fact_key,
-                &input.content,
-                source,
-                publish,
-                version,
-            )
-            .await?;
-        let job = if publish {
-            Some(Self::enqueue(&mut tx,"publish",json!({"candidate_id":candidate,"expected_version":version,"format":"text","embedding_profile":self.models.profile}),Some(asset),Some(source)).await?)
-        } else {
-            None
-        };
-        tx.audit(
-            if publish {
-                "memory.direct_authorized"
-            } else {
-                "memory.candidate"
-            },
-            candidate,
-            json!({"content_hash":hash(&input.content),"expected_version":version}),
+        let job = Self::enqueue(
+            &mut tx,
+            "publish",
+            json!({"expected_version":version,"format":"text","embedding_profile":self.models.profile}),
+            Some(asset),
+            Some(source),
         )
         .await?;
-        Self::finish(tx,json!({"asset_id":asset,"candidate_id":candidate,"source_event_id":source,"state":if publish{"approved"}else{"candidate"},"job_id":job,"conflict":version.is_some()})).await
+        tx.audit(
+            "memory.direct_published",
+            asset,
+            json!({"content_hash":hash(&input.content),"expected_version":version,"job_id":job}),
+        )
+        .await?;
+        Self::finish(
+            tx,
+            json!({"asset_id":asset,"source_event_id":source,"job_id":job,"state":"accepted","conflict":version.is_some()}),
+        )
+        .await
     }
     pub async fn capture(&self, a: &AuthContext, key: &str, input: CaptureInput) -> Result<Value> {
         parsing::validate_text(&input.content)?;
