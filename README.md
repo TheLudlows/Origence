@@ -37,7 +37,7 @@ curl.exe http://127.0.0.1:8080/health/ready
 curl -sS http://127.0.0.1:8080/v1/memories \
   -H "Authorization: Bearer $OC_API_KEY" \
   -H 'Idempotency-Key: release-rule-1' -H 'Content-Type: application/json' \
-  -d '{"fact_key":"release.policy","content":"生产发布必须经过审批","publish_if_authorized":true}'
+  -d '{"fact_key":"release.policy","content":"生产发布必须经过审批"}'
 curl -sS http://127.0.0.1:8080/v1/jobs/JOB_UUID -H "Authorization: Bearer $OC_API_KEY"
 opencontext search '发布审批'
 opencontext resolve '发布审批' --budget-tokens 2000

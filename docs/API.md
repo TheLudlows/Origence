@@ -63,7 +63,7 @@ memory 的更新按 `expected_version` 乐观校验：受理时记录资产当�
 
 发布计划和 pending 账本先落 SQLite，向量/图写入后，版本、owner、ready 索引及 committed 账本与任务完成一起提交。外部产物不等于已发布证据。短暂存储错误进入 `retry_wait`，最多尝试 5 次；模型/输入失败需显式重试。独占宿主重启时恢复 processing 并提升 run_token，先对账清理再接收请求。
 
-cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原始事件、版本、候选和文件仍保留，不等于原文物理擦除。
+cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原始事件、版本和文件仍保留，不等于原文物理擦除。
 
 ## 检索
 

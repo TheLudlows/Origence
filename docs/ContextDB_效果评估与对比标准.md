@@ -1,5 +1,7 @@
 # ContextDB 效果评估与对比标准
 
+> 自 2026-09-29 起自动发布（A1）已实施——候选/审核门已移除，writer 记忆与 capture 抽取经 expected_version 乐观并发直接发布；本文中基于候选确认治理的指标、防线（G2/G3）与用例配额（候选/确认/冲突）已随之失效，待按直接发布语义修订评测标准（参见设计文档 §12 与自动发布实施计划）。
+
 > 文档定位（2026-09-28）：评估方法与验收目标，不代表已取得效果分数；当前本地正确性测试见 [VALIDATION](VALIDATION.md)，样例见 [evals](../evals/README.md)。
 
 日期：2026-09-20 · 适用范围：企业与团队 Agent、workspace 归属、Memory + Knowledge

@@ -8,7 +8,7 @@
 
 去掉候选→审核→发布人工门，使结构化 memory 和 capture 抽取结果直接发布，同时保留 scope、来源、审计、幂等、版本冲突、删除和恢复约束。
 
-本计划在 [本地存储主计划](2026-09-22-pluggable-storage-engine.md) M5 完成后执行。当前候选/审核功能仍存在，本轮文档整合不修改它。禁止照抄旧 PG SQL 或依赖 Apalis/RLS；调用本地版的领域事务和 JobQueue，不重新定义存储接口。
+本计划在 [本地存储主计划](2026-09-22-pluggable-storage-engine.md) M5 完成后执行。候选/审核门已于 2026-09-29 随自动发布实施移除（见 [实施计划](2026-09-28-auto-publish-implementation.md)）。禁止照抄旧 PG SQL 或依赖 Apalis/RLS；调用本地版的领域事务和 JobQueue，不重新定义存储接口。
 
 ## P1：权限、状态与新库定义
 

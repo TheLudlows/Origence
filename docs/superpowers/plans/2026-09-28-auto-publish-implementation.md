@@ -40,7 +40,7 @@
   - `prepare(service, claim, profile, drafts: Vec<DraftMemory>) -> Result<Publication>`（version 由 `expected_version.unwrap_or(0) + 1` 计算）
   - 保存计划 JSON 新形状：`{"generation","profile","summary_model"?,"graph"?,"memories":[{"asset","fact_key","expected_version","version","chunks":[...]}]}`
 
-- [ ] **Step 1: 替换 worker.rs 的计划结构体**
+- [x] **Step 1: 替换 worker.rs 的计划结构体**
 
 把现有 `PublishedChunk` 之后的 `Publication` 定义替换为（`PublishedChunk` 本身不变）：
 
@@ -74,7 +74,7 @@ struct DraftMemory {
 }
 ```
 
-- [ ] **Step 2: 重写 `prepare`（含多记忆 chunk ID 去碰撞）**
+- [x] **Step 2: 重写 `prepare`（含多记忆 chunk ID 去碰撞）**
 
 替换整个 `prepare` 函数。chunk ID 必须包含记忆下标，否则 extract 多事实时不同资产的同序 chunk 会得到相同确定性 ID：
 
@@ -142,7 +142,7 @@ async fn prepare(
 }
 ```
 
-- [ ] **Step 3: 重写 `ledger`（逐记忆 source version；图产物挂在首条记忆）**
+- [x] **Step 3: 重写 `ledger`（逐记忆 source version；图产物挂在首条记忆）**
 
 ```rust
 fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
@@ -214,7 +214,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
 }
 ```
 
-- [ ] **Step 4: 重写 `process_claim` 的非 extract 路径（构造单条 DraftMemory）**
+- [x] **Step 4: 重写 `process_claim` 的非 extract 路径（构造单条 DraftMemory）**
 
 `extract` 与 `cleanup` 分支保持原样；profile 校验、saved-plan 分支及之后的 fresh-plan 构造替换为：
 
@@ -304,7 +304,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
 
 注意：原 `ingest` 分支末尾的 `return publish_prepared(...)` 移除，统一落到函数尾部；原 fresh-plan 末尾的单独 `tx.commit()` 已并入各分支（ingest 分支在文件 IO 前提交，publish/restore 在读完后提交）。
 
-- [ ] **Step 5: 重写 `publish_prepared`（逐记忆提交复核、插入、审计）**
+- [x] **Step 5: 重写 `publish_prepared`（逐记忆提交复核、插入、审计）**
 
 ```rust
 async fn publish_prepared(
@@ -484,7 +484,7 @@ async fn publish_prepared(
 
 （`mark_candidate_published`/`attach_review`/candidate 读取在 Task 4 移除；`hash` 已在 worker 作用域。）
 
-- [ ] **Step 6: 更新 `saved_publication_recovers_after_external_graph_write` 的手工计划 JSON**
+- [x] **Step 6: 更新 `saved_publication_recovers_after_external_graph_write` 的手工计划 JSON**
 
 `tests/local_app.rs:859` 的 `save_publication` 调用替换为：
 
@@ -492,7 +492,7 @@ async fn publish_prepared(
     tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"profile":null,"memories":[{"asset":claim.asset,"fact_key":null,"expected_version":null,"version":1,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":""}]}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
 ```
 
-- [ ] **Step 7: 全量验证**
+- [x] **Step 7: 全量验证**
 
 ```sh
 cargo fmt --all
@@ -501,7 +501,7 @@ cargo test --locked -j 1 --no-fail-fast
 ```
 Expected: 与基线相同——68 项全过、0 失败（行为未变）。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```sh
 git add src/worker.rs tests/local_app.rs
@@ -528,7 +528,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
   - 审计动作 `memory.direct_published`（受理时落库，target=asset）。
   - Worker `permission(claim)`：仅 `restore` → `Permission::Publish`，其余（publish/extract/ingest）→ `Permission::Write`。
 
-- [ ] **Step 1: 先改测试表达新契约**
+- [x] **Step 1: 先改测试表达新契约**
 
 `tests/local_app.rs` 中 `local_transactions_versions_review_retraction_and_idempotency`：
 
@@ -587,14 +587,14 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 （`first` 之后的 restore/retract/搜索段保持不变。）
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```sh
 cargo test --locked -j 1 --test local local_app::local_transactions
 ```
 Expected: FAIL（`proposal["job_id"].is_string()` 断言失败——旧流程 writer 无 Publish 权限时 `job_id` 为 null）。
 
-- [ ] **Step 3: 实现 `service.rs::memory`**
+- [x] **Step 3: 实现 `service.rs::memory`**
 
 替换整个 `memory` 方法：
 
@@ -637,7 +637,7 @@ Expected: FAIL（`proposal["job_id"].is_string()` 断言失败——旧流程 wr
     }
 ```
 
-- [ ] **Step 4: 实现 worker 侧变更**
+- [x] **Step 4: 实现 worker 侧变更**
 
 (a) `permission` 函数替换为：
 
@@ -667,14 +667,14 @@ fn permission(claim: &ClaimedJob) -> Permission {
             }
 ```
 
-- [ ] **Step 5: 运行确认通过**
+- [x] **Step 5: 运行确认通过**
 
 ```sh
 cargo test --locked -j 1 --test local local_app
 ```
 Expected: PASS（3 项 app 测试全过；test 1 的 review 流程仍经事件正文发布，行为不变）。
 
-- [ ] **Step 6: fmt/clippy + 提交**
+- [x] **Step 6: fmt/clippy + 提交**
 
 ```sh
 cargo fmt --all
@@ -702,7 +702,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
   - `extract` 完成结果：`outcome="published"`，`result={"memories":[{"asset_id":UUID,"fact_key":string,"version":int}],"readiness":"ready","index_capabilities":[...]}`；空抽取返回 `memories:[]` 且任务成功。
   - 其余单资产任务（publish/restore/ingest）结果保持 `{"asset_id","version","readiness","index_capabilities"}`。
 
-- [ ] **Step 1: 先改测试**
+- [x] **Step 1: 先改测试**
 
 `tests/local_app.rs:267-292` 替换为：
 
@@ -773,14 +773,14 @@ async fn extract(Json(v): Json<Value>) -> Json<Value> {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```sh
 cargo test --locked -j 1 --test local local_app::local_host_api
 ```
 Expected: FAIL（`extracted["outcome"]` 是 `"candidates_created"`）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 (a) `service.rs::capture` 的 enqueue 行改为：
 
@@ -883,7 +883,7 @@ Expected: FAIL（`extracted["outcome"]` 是 `"candidates_created"`）。
 
 （同时删除 Task 1 在 capabilities 计算之前加入的 `let first = publication.memories.first().ok_or(AppError::Conflict("publication without memories".into()))?;` 一行——`first` 移入 else 分支内取得，空抽取才能以 `memories:[]` 完成而非报 Conflict。另改 `prepare` 开头检查：`drafts.iter().any(|d| d.chunks.is_empty())` 时报 Conflict，`drafts.is_empty()` 不再报错——空集直接产出零记忆计划、无外部写、settle `memories:[]`。）
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 ```sh
 cargo test --locked -j 1 --test local local_app
@@ -891,7 +891,7 @@ cargo test --locked -j 1 --test local saved_publication
 ```
 Expected: PASS。
 
-- [ ] **Step 5: fmt/clippy + 提交**
+- [x] **Step 5: fmt/clippy + 提交**
 
 ```sh
 cargo fmt --all
@@ -916,7 +916,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 2/3 后已无生产代码依赖候选方法。
 - Produces: `DomainTx` 删除 `insert_candidate`、`candidate_for_review`、`apply_review`、`withdraw_affected_candidates`、`candidate_view`、`candidates_view`；`SqliteTx` 删除 `attach_review`、`mark_candidate_published`；`Service` 删除 `review`、`candidate_get`、`candidates`；`types.rs` 删除 `ReviewInput`；API 删除 3 条候选路由。schema `oc_versions` 无 `review_id`。
 
-- [ ] **Step 1: schema 与结构检查**
+- [x] **Step 1: schema 与结构检查**
 
 (a) `src/storage/sqlite-schema.sql`：删除 `CREATE TABLE oc_candidates (...)` 与 `CREATE TABLE oc_reviews (...)` 两个整块；`oc_versions` 定义中删除 `review_id BLOB, `（一行内字段），即：
 
@@ -934,7 +934,7 @@ CREATE TABLE oc_versions (
 
 (b) `src/storage/sqlite.rs` 的 `REQUIRED_PROJECTIONS`：删除 `("oc_candidates", ...)` 与 `("oc_reviews", ...)` 两项；`oc_versions` 投影改为 `"tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,restored_from,title,created_by,created_at"`。
 
-- [ ] **Step 2: 适配器删除候选实现**
+- [x] **Step 2: 适配器删除候选实现**
 
 (a) `sqlite.rs`：删除 `candidate_json` 函数、`insert_candidate`、`candidate_for_review`、`apply_review`、`withdraw_affected_candidates`、`candidate_view`、`candidates_view` 的 `impl DomainTx for SqliteTx` 实现。
 
@@ -951,13 +951,13 @@ CREATE TABLE oc_versions (
 
 (c) `src/storage/sqlite/app.rs`：删除 `attach_review` 与 `mark_candidate_published` 两个方法。
 
-- [ ] **Step 3: trait 与契约 double**
+- [x] **Step 3: trait 与契约 double**
 
 (a) `src/storage/traits.rs`：从 `DomainTx` 删除 Step Interfaces 列出的 6 个方法及其文档注释；模块与 `DomainTx` 文档注释中的 "candidates, reviews" 改为不含候选（例如 "events, memory/knowledge assets, versions, chunks, summaries, files and jobs"）。
 
 (b) `tests/storage_contract.rs`：删除内存 double 中 `insert_candidate`、`candidate_for_review`、`apply_review`、`withdraw_affected_candidates`、`candidate_view`、`candidates_view` 六个 impl 块。
 
-- [ ] **Step 4: 业务层删除 review 流**
+- [x] **Step 4: 业务层删除 review 流**
 
 (a) `src/service.rs`：删除 `review`、`candidate_get`、`candidates` 三个方法；`delete` 方法中删除 `tx.withdraw_affected_candidates().await?;` 一行。
 
@@ -971,7 +971,7 @@ CREATE TABLE oc_versions (
 
 (f) `src/mcp.rs:37`：`context_search` 描述改为 `"Search published workspace memory and knowledge with source citations. Only currently published versions with valid sources are returned."`
 
-- [ ] **Step 5: 测试更新**
+- [x] **Step 5: 测试更新**
 
 (a) `tests/sqlite_domain.rs`：
 - 头部注释改为 `//! events, memory/knowledge assets, versions, chunks, summaries, files and jobs`。
@@ -1049,7 +1049,7 @@ async fn fresh_schema_has_no_review_tables_or_column() -> anyhow::Result<()> {
 
 (c) `tests/local_app.rs`：测试 2 更名为 `local_transactions_versions_retraction_and_idempotency`，头部注释（如有）同步去掉 review 字样。
 
-- [ ] **Step 6: 全量验证**
+- [x] **Step 6: 全量验证**
 
 ```sh
 cargo fmt --all
@@ -1058,7 +1058,7 @@ cargo test --locked -j 1 --no-fail-fast
 ```
 Expected: PASS（数量较基线少：sqlite_domain 删 2 测试、initialization 增 1 测试）。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add -A
@@ -1078,7 +1078,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 2–4 的最终行为契约（memory 响应、extract 结果、角色矩阵、schema）。
 - Produces: 文档与实际行为一致；VALIDATION 记录本轮实测命令与结果。
 
-- [ ] **Step 1: README.md**
+- [x] **Step 1: README.md**
 
 (a) 第 5 段改为：`数据按 tenant/workspace 隔离；writer 的结构化记忆与 capture 抽取结果直接进入发布任务，提交时重新核验身份、权限、来源与预期版本；检索只返回当前已发布、资产未删除且来源仍有效的证据。会话记忆、企业 SaaS 仍属于后续阶段。`
 
@@ -1088,7 +1088,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 (d) 当前边界第 111 行：`原文件、事件、版本、候选及审计暂保留` → `原文件、事件、版本及审计暂保留`。
 
-- [ ] **Step 2: docs/API.md**
+- [x] **Step 2: docs/API.md**
 
 (a) 角色表：
 - writer 行：`reader + 上传/原文件下载/知识入库/结构化记忆发布/capture/任务查询；取消、重试自己任务`
@@ -1110,7 +1110,7 @@ memory 的更新按 `expected_version` 乐观校验：受理时记录资产当�
 
 (d) 「任务与读取可见性」中 `completed + outcome=candidates_created` 一句删除，改为：`只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 asset/version。`
 
-- [ ] **Step 3: docs/STATUS.md**
+- [x] **Step 3: docs/STATUS.md**
 
 (a) 已交付列表中「记忆候选、审核、授权首次发布、知识入库…」一条改为：`writer 结构化记忆与 capture 抽取直接发布（A1 自动发布）：无候选/审核表，expected_version 乐观并发，账本化多事实发布；知识入库、不可变版本、历史标题、追加恢复、文件上传和文本 PDF 解析。`
 
@@ -1118,7 +1118,7 @@ memory 的更新按 `expected_version` 乐观校验：受理时记录资产当�
 
 (c) 文首更新说明补一句：`2026-09-28 已实施自动发布（A1），候选/审核门移除，详见 [自动发布计划](superpowers/plans/2026-09-22-auto-publish.md) 与 [验收](VALIDATION.md)。`
 
-- [ ] **Step 4: 其余文档**
+- [x] **Step 4: 其余文档**
 
 (a) `docs/README.md:23`：`M5 保留候选审核语义；自动发布、会话记忆、经验蒸馏、多租户 SaaS 不属于此次已完成范围。` → `自动发布已实施：候选/审核门已移除，writer 记忆与抽取直接发布。会话记忆、经验蒸馏、多租户 SaaS 不属于已完成范围。`
 
@@ -1128,7 +1128,7 @@ memory 的更新按 `expected_version` 乐观校验：受理时记录资产当�
 
 (d) `docs/superpowers/specs/2026-09-22-memory-knowledge-platform-design.md` 头部「实现对照」注记：把 `仍保留候选审核语义。本文的自动发布、P1/P2 是目标设计` 改为 `自动发布（A1）已于 2026-09-28 实施：记忆/capture 直接发布，候选/审核门移除。P1/P2 仍是目标设计`。
 
-- [ ] **Step 5: 全量质量门并记录 VALIDATION**
+- [x] **Step 5: 全量质量门并记录 VALIDATION**
 
 ```sh
 cargo fmt --all -- --check
@@ -1139,7 +1139,7 @@ cargo check --locked --no-default-features --lib -j 4
 
 在 `docs/VALIDATION.md` 顶部新增 `## 2026-09-28：自动发布验收` 一节，记录：环境行、上表四项命令的实际结果（通过数/失败数/忽略数）、本轮新增覆盖（writer 直接发布、accept 期 expected_version 冲突检测（响应 `conflict:true`）、extract 多事实发布与 fact_key 去重、保存计划重放、候选面删除后旧库兼容）；竞态导致的 `superseded` 与已删除路由 `/v1/candidates` 的 404 无专门断言，记入「未验证」清单。「未验证」在既有清单基础上补充。实际数字以运行为准，不得预先填写。
 
-- [ ] **Step 6: 文档链接与提交**
+- [x] **Step 6: 文档链接与提交**
 
 检查所有编辑文档的本地相对链接可解析（无工具，逐个目检），然后：
 

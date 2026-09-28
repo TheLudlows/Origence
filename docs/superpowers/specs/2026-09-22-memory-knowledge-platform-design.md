@@ -340,7 +340,7 @@ EvidenceBundle {
 
 本地适配器直接调用 Rust 三方库：SQLite 使用 SQLx，向量使用 `lancedb` crate，图使用 `kuzu` crate。数据库引擎嵌入应用，不另行部署数据库服务。Kuzu 的 Rust 绑定会链接其原生 C++ 库；编译这些依赖所需的 C++ 工具链、CMake、protoc 等属于构建环境，不是用户需要启动的数据库服务。库版本及具体构建条件由 M0 实测后固定。
 
-截至 2026-09-28，M5 已将 SQLite/LanceDB/Kuzu 和存储接口接入默认应用，移除活动树中的 PG/Apalis 运行依赖。业务保留候选审核；自动发布、会话记忆及服务化仍属于后续阶段。实际平台和检查结果见 [VALIDATION](../../VALIDATION.md)。
+截至 2026-09-29，M5 已将 SQLite/LanceDB/Kuzu 和存储接口接入默认应用，移除活动树中的 PG/Apalis 运行依赖。自动发布（A1）已实施：候选/审核门已移除，writer 记忆与 capture 抽取直接发布；会话记忆及服务化仍属于后续阶段。实际平台和检查结果见 [VALIDATION](../../VALIDATION.md)。
 
 独立 M0 探针已在 Windows x64/MSVC、Rust 1.88.0 完成三个库的可执行文件构建与 14 项检查，见 [验证记录](../../VALIDATION.md)。这证明基础库组合及本地访问方式可行，不代表应用已经完成本地接入。
 
