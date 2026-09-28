@@ -1137,7 +1137,7 @@ cargo test --locked -j 1 --no-fail-fast
 cargo check --locked --no-default-features --lib -j 4
 ```
 
-在 `docs/VALIDATION.md` 顶部新增 `## 2026-09-28：自动发布验收` 一节，记录：环境行、上表四项命令的实际结果（通过数/失败数/忽略数）、本轮新增覆盖（writer 直接发布、expected_version 冲突 superseded、extract 多事实发布与重放、候选面删除后旧库兼容、`/v1/candidates` 404）、以及「未验证」沿用既有清单。实际数字以运行为准，不得预先填写。
+在 `docs/VALIDATION.md` 顶部新增 `## 2026-09-28：自动发布验收` 一节，记录：环境行、上表四项命令的实际结果（通过数/失败数/忽略数）、本轮新增覆盖（writer 直接发布、accept 期 expected_version 冲突检测（响应 `conflict:true`）、extract 多事实发布与 fact_key 去重、保存计划重放、候选面删除后旧库兼容）；竞态导致的 `superseded` 与已删除路由 `/v1/candidates` 的 404 无专门断言，记入「未验证」清单。「未验证」在既有清单基础上补充。实际数字以运行为准，不得预先填写。
 
 - [ ] **Step 6: 文档链接与提交**
 
