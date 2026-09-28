@@ -856,7 +856,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
         .unwrap();
     let mut tx = s.engine.relational().begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
-    tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"version":1,"profile":null,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":""}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
+    tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"profile":null,"memories":[{"asset":claim.asset,"fact_key":null,"expected_version":null,"version":1,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":""}]}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
     tx.register_pending(LedgerEntry {
         key: ledger_key,
         artifact_type: "entity".into(),

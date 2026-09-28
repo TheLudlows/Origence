@@ -18,14 +18,31 @@ struct PublishedChunk {
     summary: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
+struct PublishedMemory {
+    asset: Uuid,
+    #[serde(default)]
+    fact_key: Option<String>,
+    #[serde(default)]
+    expected_version: Option<i32>,
+    version: i32,
+    chunks: Vec<PublishedChunk>,
+}
+#[derive(Clone, Serialize, Deserialize)]
 struct Publication {
     generation: i64,
-    version: i32,
     profile: Option<String>,
     #[serde(default)]
     summary_model: Option<String>,
-    chunks: Vec<PublishedChunk>,
     graph: Option<GraphExtraction>,
+    memories: Vec<PublishedMemory>,
+}
+/// One asset's pending publication built before model IO, version still to be
+/// verified against the live asset at commit time.
+struct DraftMemory {
+    asset: Uuid,
+    fact_key: Option<String>,
+    expected_version: Option<i32>,
+    chunks: Vec<Chunk>,
 }
 fn auth(claim: &ClaimedJob) -> AuthContext {
     AuthContext {
@@ -182,28 +199,30 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         tx.commit().await?;
         p
     } else {
-        let current = tx
-            .asset_current_version(claim.asset.ok_or(AppError::NotFound)?)
-            .await?;
+        let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
+        let asset = claim.asset.ok_or(AppError::NotFound)?;
         let chunks = match claim.kind.as_str() {
             "publish" => {
                 let candidate = tx
                     .candidate_for_review(decode(claim.payload["candidate_id"].clone())?)
                     .await?;
-                parsing::chunks(
+                let chunks = parsing::chunks(
                     candidate["content"].as_str().ok_or(AppError::NotFound)?,
                     "text",
-                )?
+                )?;
+                tx.commit().await?;
+                chunks
             }
-            "restore" => tx
-                .chunks_for_version(
-                    claim.asset.unwrap(),
-                    decode(claim.payload["target_version"].clone())?,
-                )
-                .await?
-                .into_iter()
-                .map(|(content, locator)| Chunk { content, locator })
-                .collect(),
+            "restore" => {
+                let chunks = tx
+                    .chunks_for_version(asset, decode(claim.payload["target_version"].clone())?)
+                    .await?
+                    .into_iter()
+                    .map(|(content, locator)| Chunk { content, locator })
+                    .collect();
+                tx.commit().await?;
+                chunks
+            }
             "ingest" => {
                 let file = tx
                     .event_file(claim.source.ok_or(AppError::NotFound)?)
@@ -213,7 +232,7 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                     .unwrap_or("text")
                     .to_string();
                 tx.commit().await?;
-                let chunks = if let Some(id) = file["file_id"].as_str() {
+                if let Some(id) = file["file_id"].as_str() {
                     if file["media_type"] != format {
                         return Err(AppError::Invalid(
                             "file format does not match ingest request".into(),
@@ -227,59 +246,73 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                     parsing::parse_file(&service.engine.blobs().path_for(&key)?, &format).await?
                 } else {
                     parsing::chunks(file["content"].as_str().unwrap_or(""), &format)?
-                };
-                return publish_prepared(
-                    service,
-                    claim,
-                    prepare(service, claim, current, profile, chunks).await?,
-                )
-                .await;
+                }
             }
             _ => return Err(AppError::Invalid("unknown job operation".into())),
         };
-        tx.commit().await?;
-        prepare(service, claim, current, profile, chunks).await?
+        prepare(
+            service,
+            claim,
+            profile,
+            vec![DraftMemory {
+                asset,
+                fact_key: None,
+                expected_version: expected,
+                chunks,
+            }],
+        )
+        .await?
     };
     publish_prepared(service, claim, publication).await
 }
 async fn prepare(
     service: &Service,
     claim: &ClaimedJob,
-    current: Option<i32>,
     profile: Option<String>,
-    chunks: Vec<Chunk>,
+    drafts: Vec<DraftMemory>,
 ) -> Result<Publication> {
-    if chunks.is_empty() {
+    if drafts.is_empty() || drafts.iter().any(|d| d.chunks.is_empty()) {
         return Err(AppError::Conflict("no source chunks available".into()));
     }
-    let text = chunks
-        .iter()
-        .map(|c| c.content.as_str())
-        .collect::<Vec<_>>()
-        .join("");
-    let mut out = Vec::new();
-    for (ordinal, chunk) in chunks.into_iter().enumerate() {
-        let embedding = if profile.is_some() {
-            Some(service.models.embed(&chunk.content).await?)
-        } else {
-            None
-        };
-        let summary = if claim.kind == "ingest" && service.models.extraction_enabled() {
-            service.models.summarize(&chunk.content).await?
-        } else {
-            String::new()
-        };
-        let id = graph::entity_id(&format!(
-            "chunk:{}:{}:{}",
-            claim.job_id, claim.generation, ordinal
-        ));
-        out.push(PublishedChunk {
-            id,
-            chunk,
-            embedding,
-            summary,
+    let mut memories = Vec::new();
+    for (memory_index, draft) in drafts.into_iter().enumerate() {
+        let mut out = Vec::new();
+        for (ordinal, chunk) in draft.chunks.into_iter().enumerate() {
+            let embedding = if profile.is_some() {
+                Some(service.models.embed(&chunk.content).await?)
+            } else {
+                None
+            };
+            let summary = if claim.kind == "ingest" && service.models.extraction_enabled() {
+                service.models.summarize(&chunk.content).await?
+            } else {
+                String::new()
+            };
+            let id = graph::entity_id(&format!(
+                "chunk:{}:{}:{}:{}",
+                claim.job_id, claim.generation, memory_index, ordinal
+            ));
+            out.push(PublishedChunk {
+                id,
+                chunk,
+                embedding,
+                summary,
+            });
+        }
+        memories.push(PublishedMemory {
+            asset: draft.asset,
+            fact_key: draft.fact_key,
+            expected_version: draft.expected_version,
+            version: draft.expected_version.unwrap_or(0) + 1,
+            chunks: out,
         });
     }
+    let text = memories
+        .iter()
+        .flat_map(|m| m.chunks.iter())
+        .map(|c| c.chunk.content.as_str())
+        .collect::<Vec<_>>()
+        .join("");
     let graph = if claim.kind == "ingest" && service.models.extraction_enabled() {
         Some(service.models.extract_graph(&text).await?)
     } else {
@@ -287,20 +320,21 @@ async fn prepare(
     };
     Ok(Publication {
         generation: claim.generation,
-        version: current.unwrap_or(0) + 1,
         profile,
         summary_model: service.models.summary_model().map(str::to_owned),
-        chunks: out,
         graph,
+        memories,
     })
 }
 fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
-    let mut items = Vec::new();
-    let source = SourceVersion {
-        source_id: claim.source.unwrap(),
-        version: publication.version,
-    };
-    let mut push = |artifact_id, artifact_type: &str, surface| {
+    fn push(
+        items: &mut Vec<LedgerEntry>,
+        claim: &ClaimedJob,
+        source: SourceVersion,
+        artifact_id: Uuid,
+        artifact_type: &str,
+        surface: Surface,
+    ) {
         let key = LedgerKey {
             scope: claim.scope,
             source,
@@ -313,18 +347,47 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
             artifact_type: artifact_type.into(),
             idempotency_key: ledger_idempotency_key(&key),
         });
-    };
-    for chunk in &publication.chunks {
-        if chunk.embedding.is_some() {
-            push(chunk.id, "chunk", Surface::Vector);
+    }
+    let mut items = Vec::new();
+    for memory in &publication.memories {
+        let source = SourceVersion {
+            source_id: claim.source.unwrap(),
+            version: memory.version,
+        };
+        for chunk in &memory.chunks {
+            if chunk.embedding.is_some() {
+                push(
+                    &mut items,
+                    claim,
+                    source,
+                    chunk.id,
+                    "chunk",
+                    Surface::Vector,
+                );
+            }
         }
     }
-    if let Some(g) = &publication.graph {
+    // Only knowledge ingest produces a graph, and ingest is single-memory.
+    if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
+        let source = SourceVersion {
+            source_id: claim.source.unwrap(),
+            version: first.version,
+        };
         for e in &g.entities {
-            push(graph::entity_id(&e.name), "entity", Surface::Graph);
+            push(
+                &mut items,
+                claim,
+                source,
+                graph::entity_id(&e.name),
+                "entity",
+                Surface::Graph,
+            );
         }
         for r in &g.relations {
             push(
+                &mut items,
+                claim,
+                source,
                 graph::relation_id(
                     graph::entity_id(&r.source),
                     &r.predicate,
@@ -343,10 +406,6 @@ async fn publish_prepared(
     publication: Publication,
 ) -> Result<()> {
     let a = auth(claim);
-    let source = SourceVersion {
-        source_id: claim.source.ok_or(AppError::NotFound)?,
-        version: publication.version,
-    };
     let entries = ledger(claim, &publication);
     let mut tx = service.write(&a, permission(claim)).await?;
     guard(&mut tx, claim).await?;
@@ -357,22 +416,31 @@ async fn publish_prepared(
         tx.resume_pending(entry.key).await?;
     }
     tx.commit().await?;
-    let vectors = publication
-        .chunks
-        .iter()
-        .filter_map(|c| {
-            c.embedding.as_ref().map(|embedding| VectorEntry {
-                id: c.id,
-                embedding: embedding.clone(),
-                profile: publication.profile.clone().unwrap_or_default(),
-                dimension: embedding.len(),
-                generation: claim.generation,
-                source,
-            })
-        })
-        .collect();
+    let mut vectors = Vec::new();
+    for memory in &publication.memories {
+        let source = SourceVersion {
+            source_id: claim.source.ok_or(AppError::NotFound)?,
+            version: memory.version,
+        };
+        for c in &memory.chunks {
+            if let Some(embedding) = &c.embedding {
+                vectors.push(VectorEntry {
+                    id: c.id,
+                    embedding: embedding.clone(),
+                    profile: publication.profile.clone().unwrap_or_default(),
+                    dimension: embedding.len(),
+                    generation: claim.generation,
+                    source,
+                });
+            }
+        }
+    }
     service.engine.vector().upsert(claim.scope, vectors).await?;
-    if let Some(g) = &publication.graph {
+    if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
+        let source = SourceVersion {
+            source_id: claim.source.ok_or(AppError::NotFound)?,
+            version: first.version,
+        };
         service
             .engine
             .graph()
@@ -386,94 +454,129 @@ async fn publish_prepared(
     }
     let mut tx = service.write(&a, permission(claim)).await?;
     guard(&mut tx, claim).await?;
-    let asset = claim.asset.ok_or(AppError::NotFound)?;
-    let content = publication
-        .chunks
-        .iter()
-        .map(|c| c.chunk.content.as_str())
-        .collect::<Vec<_>>()
-        .join("");
-    tx.insert_version(
-        asset,
-        publication.version,
-        &content,
-        &hash(content.as_bytes()),
-        source.source_id,
-        decode(
-            claim
-                .payload
-                .get("target_version")
-                .cloned()
-                .unwrap_or(Value::Null),
-        )?,
-        claim.payload["title"].as_str(),
-    )
-    .await?;
-    tx.attach_review(
-        asset,
-        publication.version,
-        decode(claim.payload["review_id"].clone())?,
-    )
-    .await?;
-    for (ordinal, c) in publication.chunks.iter().enumerate() {
-        tx.insert_chunk(
-            c.id,
-            asset,
-            publication.version,
-            ordinal as i32,
-            &c.chunk.content,
-            &c.chunk.locator,
-            &parsing::lexical(&c.chunk.content),
+    for memory in &publication.memories {
+        let current = tx.asset_current_version(memory.asset).await?;
+        if current != memory.expected_version {
+            return Err(AppError::Conflict(
+                "publication superseded by another version".into(),
+            ));
+        }
+        let source = SourceVersion {
+            source_id: claim.source.ok_or(AppError::NotFound)?,
+            version: memory.version,
+        };
+        let content = memory
+            .chunks
+            .iter()
+            .map(|c| c.chunk.content.as_str())
+            .collect::<Vec<_>>()
+            .join("");
+        tx.insert_version(
+            memory.asset,
+            memory.version,
+            &content,
+            &hash(content.as_bytes()),
+            source.source_id,
+            decode(
+                claim
+                    .payload
+                    .get("target_version")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            )?,
+            claim.payload["title"].as_str(),
         )
         .await?;
-        tx.register_owner(source, "chunk", c.id, Some(c.id)).await?;
-        if !c.summary.is_empty() {
-            let id = graph::entity_id(&format!("summary:{}", c.id));
-            tx.insert_summary(
-                id,
+        tx.attach_review(
+            memory.asset,
+            memory.version,
+            decode(claim.payload["review_id"].clone())?,
+        )
+        .await?;
+        for (ordinal, c) in memory.chunks.iter().enumerate() {
+            tx.insert_chunk(
                 c.id,
-                &c.summary,
-                publication.summary_model.as_deref().unwrap_or(""),
-                &parsing::lexical(&c.summary),
+                memory.asset,
+                memory.version,
+                ordinal as i32,
+                &c.chunk.content,
+                &c.chunk.locator,
+                &parsing::lexical(&c.chunk.content),
             )
             .await?;
-            tx.register_owner(source, "summary", id, Some(c.id)).await?;
+            tx.register_owner(source, "chunk", c.id, Some(c.id)).await?;
+            if !c.summary.is_empty() {
+                let id = graph::entity_id(&format!("summary:{}", c.id));
+                tx.insert_summary(
+                    id,
+                    c.id,
+                    &c.summary,
+                    publication.summary_model.as_deref().unwrap_or(""),
+                    &parsing::lexical(&c.summary),
+                )
+                .await?;
+                tx.register_owner(source, "summary", id, Some(c.id)).await?;
+            }
+            if let Some(e) = &c.embedding {
+                tx.index_ready(
+                    c.id,
+                    publication.profile.as_deref().unwrap_or(""),
+                    e.len(),
+                    claim.generation,
+                )
+                .await?;
+            }
         }
-        if let Some(e) = &c.embedding {
-            tx.index_ready(
-                c.id,
-                publication.profile.as_deref().unwrap_or(""),
-                e.len(),
-                claim.generation,
-            )
-            .await?;
-        }
+        tx.update_asset_version(
+            memory.asset,
+            memory.version,
+            claim.payload["title"].as_str(),
+        )
+        .await?;
     }
     for entry in entries {
         if entry.key.surface == Surface::Graph {
-            tx.register_owner(source, &entry.artifact_type, entry.key.artifact_id, None)
-                .await?;
+            tx.register_owner(
+                entry.key.source,
+                &entry.artifact_type,
+                entry.key.artifact_id,
+                None,
+            )
+            .await?;
         }
         tx.confirm_committed(entry.key).await?;
     }
-    tx.update_asset_version(asset, publication.version, claim.payload["title"].as_str())
-        .await?;
     if let Some(id) = claim.payload["candidate_id"].as_str() {
         tx.mark_candidate_published(Uuid::parse_str(id).map_err(anyhow::Error::from)?)
             .await?;
     }
-    tx.audit("asset.published",asset,json!({"version":publication.version,"source_event_id":source.source_id,"job_id":claim.job_id})).await?;
+    for memory in &publication.memories {
+        tx.audit(
+            "asset.published",
+            memory.asset,
+            json!({"version":memory.version,"source_event_id":claim.source,"job_id":claim.job_id}),
+        )
+        .await?;
+    }
+    let first = publication
+        .memories
+        .first()
+        .ok_or(AppError::Conflict("publication without memories".into()))?;
     let mut capabilities = vec!["keyword"];
     if publication.profile.is_some() {
         capabilities.push("vector");
     }
-    if publication.chunks.iter().any(|c| !c.summary.is_empty()) {
+    if publication
+        .memories
+        .iter()
+        .any(|m| m.chunks.iter().any(|c| !c.summary.is_empty()))
+    {
         capabilities.push("summary");
     }
     if publication.graph.is_some() {
         capabilities.push("graph");
     }
-    tx.settle_completed(claim.job_id,"published",&json!({"asset_id":asset,"version":publication.version,"readiness":"ready","index_capabilities":capabilities})).await?;
+    tx.settle_completed(claim.job_id,"published",&json!({"asset_id":first.asset,"version":first.version,"readiness":"ready","index_capabilities":capabilities})).await?;
     tx.commit().await?;
     Ok(())
 }
