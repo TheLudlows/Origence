@@ -967,7 +967,7 @@ CREATE TABLE oc_versions (
 
 (d) `src/worker.rs`：`publish_prepared` 中删除 `tx.attach_review(...)` 块与 `if let Some(id) = claim.payload["candidate_id"]... mark_candidate_published` 块。
 
-(e) `src/models.rs::extract`：删除 `item.publish_if_authorized = false;` 一行（字段已无语义）。
+(e) `src/models.rs::extract`：删除 `item.publish_if_authorized = false;` 一行（字段已无语义）；`extraction model is not configured` 错误消息中 `submit structured candidates instead` 改为 `submit structured memories instead`（候选路径已移除，回退是 /v1/memories 直接发布）。
 
 (f) `src/mcp.rs:37`：`context_search` 描述改为 `"Search published workspace memory and knowledge with source citations. Only currently published versions with valid sources are returned."`
 
