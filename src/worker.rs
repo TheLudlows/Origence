@@ -174,6 +174,11 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             // One memory per fact key per extraction; slot is SELECT-then-INSERT,
             // so a duplicate would collide with itself at the version recheck.
             if !seen.insert(m.fact_key.clone()) {
+                tracing::warn!(
+                    job_id=%claim.job_id,
+                    fact_key=%m.fact_key,
+                    "duplicate extracted fact_key dropped"
+                );
                 continue;
             }
             let (asset, expected) = tx.slot(&m.fact_key).await?;
@@ -322,7 +327,13 @@ async fn prepare(
         memories,
     })
 }
-fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
+fn source_for(claim: &ClaimedJob, version: i32) -> Result<SourceVersion> {
+    Ok(SourceVersion {
+        source_id: claim.source.ok_or(AppError::NotFound)?,
+        version,
+    })
+}
+fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEntry>> {
     fn push(
         items: &mut Vec<LedgerEntry>,
         claim: &ClaimedJob,
@@ -346,10 +357,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
     }
     let mut items = Vec::new();
     for memory in &publication.memories {
-        let source = SourceVersion {
-            source_id: claim.source.unwrap(),
-            version: memory.version,
-        };
+        let source = source_for(claim, memory.version)?;
         for chunk in &memory.chunks {
             if chunk.embedding.is_some() {
                 push(
@@ -365,10 +373,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
     }
     // Only knowledge ingest produces a graph, and ingest is single-memory.
     if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
-        let source = SourceVersion {
-            source_id: claim.source.unwrap(),
-            version: first.version,
-        };
+        let source = source_for(claim, first.version)?;
         for e in &g.entities {
             push(
                 &mut items,
@@ -394,7 +399,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Vec<LedgerEntry> {
             );
         }
     }
-    items
+    Ok(items)
 }
 async fn publish_prepared(
     service: &Service,
@@ -402,7 +407,7 @@ async fn publish_prepared(
     publication: Publication,
 ) -> Result<()> {
     let a = auth(claim);
-    let entries = ledger(claim, &publication);
+    let entries = ledger(claim, &publication)?;
     let mut tx = service.write(&a, permission(claim)).await?;
     guard(&mut tx, claim).await?;
     tx.save_publication(claim.job_id, &json!(publication))
@@ -414,10 +419,7 @@ async fn publish_prepared(
     tx.commit().await?;
     let mut vectors = Vec::new();
     for memory in &publication.memories {
-        let source = SourceVersion {
-            source_id: claim.source.ok_or(AppError::NotFound)?,
-            version: memory.version,
-        };
+        let source = source_for(claim, memory.version)?;
         for c in &memory.chunks {
             if let Some(embedding) = &c.embedding {
                 vectors.push(VectorEntry {
@@ -433,10 +435,7 @@ async fn publish_prepared(
     }
     service.engine.vector().upsert(claim.scope, vectors).await?;
     if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
-        let source = SourceVersion {
-            source_id: claim.source.ok_or(AppError::NotFound)?,
-            version: first.version,
-        };
+        let source = source_for(claim, first.version)?;
         service
             .engine
             .graph()
@@ -457,10 +456,7 @@ async fn publish_prepared(
                 "publication superseded by another version".into(),
             ));
         }
-        let source = SourceVersion {
-            source_id: claim.source.ok_or(AppError::NotFound)?,
-            version: memory.version,
-        };
+        let source = source_for(claim, memory.version)?;
         let content = memory
             .chunks
             .iter()
