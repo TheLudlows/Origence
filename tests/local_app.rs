@@ -285,6 +285,11 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     .await;
     let extracted = job(&http, &base, token, id(&capture, "job_id"), "completed").await;
     assert_eq!(extracted["outcome"], "published");
+    assert_eq!(extracted["result"]["readiness"], "ready");
+    assert_eq!(
+        extracted["result"]["index_capabilities"],
+        json!(["keyword", "vector"])
+    );
     let claim = &extracted["result"]["memories"][0];
     assert_eq!(claim["fact_key"], "model.claim");
     assert_eq!(claim["version"], 1);
@@ -314,6 +319,27 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let none = job(&http, &base, token, id(&empty, "job_id"), "completed").await;
     assert_eq!(none["outcome"], "published");
     assert_eq!(none["result"]["memories"], json!([]));
+    // The removed candidate-review surface no longer resolves.
+    for (method, path) in [
+        (reqwest::Method::GET, "/v1/candidates"),
+        (
+            reqwest::Method::GET,
+            "/v1/candidates/00000000-0000-0000-0000-000000000000",
+        ),
+        (
+            reqwest::Method::POST,
+            "/v1/candidates/00000000-0000-0000-0000-000000000000/review",
+        ),
+    ] {
+        let r = http
+            .request(method, format!("{base}{path}"))
+            .bearer_auth(token)
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), reqwest::StatusCode::NOT_FOUND);
+    }
     // Two sources own the same graph objects; deleting one must preserve the other.
     let mut docs = Vec::new();
     for n in 0..2 {
@@ -729,6 +755,8 @@ async fn local_transactions_versions_retraction_and_idempotency() {
     };
     let first = s.memory(&a, "once", input.clone()).await.unwrap();
     assert_eq!(first, s.memory(&a, "once", input.clone()).await.unwrap());
+    assert_eq!(first["conflict"], false);
+    assert!(first["source_event_id"].is_string());
     let mut different = input.clone();
     different.content = "different".into();
     assert!(s.memory(&a, "once", different).await.is_err());
@@ -799,6 +827,74 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .await
         .unwrap();
     assert_eq!(result["hits"], json!([]));
+    s.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn racing_expected_versions_supersede_the_loser() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let store = s.engine.relational();
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "local")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "writer").await.unwrap();
+    let a = s.auth(&key.token).await.unwrap();
+    let input = MemoryInput {
+        fact_key: "racer".into(),
+        content: "Race base".into(),
+        publish_if_authorized: true,
+    };
+    let base = s.memory(&a, "base", input.clone()).await.unwrap();
+    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert_eq!(
+        s.get(&a, id(&base, "asset_id"), None).await.unwrap()["version"],
+        1
+    );
+    // Both updates accept against the same current version; the first commit
+    // passes the recheck, the loser settles superseded without a new version.
+    let left = s
+        .memory(
+            &a,
+            "left",
+            MemoryInput {
+                content: "Race left".into(),
+                ..input.clone()
+            },
+        )
+        .await
+        .unwrap();
+    let right = s
+        .memory(
+            &a,
+            "right",
+            MemoryInput {
+                content: "Race right".into(),
+                ..input.clone()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(left["conflict"], true);
+    assert_eq!(right["conflict"], true);
+    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    let left_state = s.job(&a, id(&left, "job_id")).await.unwrap()["state"].clone();
+    let right_state = s.job(&a, id(&right, "job_id")).await.unwrap()["state"].clone();
+    // Queue order between same-instant jobs is not guaranteed; assert the
+    // outcome pair, not which one won.
+    let states = [left_state, right_state];
+    assert!(states.contains(&json!("completed")));
+    assert!(states.contains(&json!("superseded")));
+    assert_eq!(
+        s.get(&a, id(&base, "asset_id"), None).await.unwrap()["version"],
+        2
+    );
     s.engine.shutdown().await.unwrap();
 }
 
