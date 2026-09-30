@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
@@ -128,7 +128,11 @@ impl SqliteStore {
         // Take the single-writer lock before touching the database: a second
         // process that opens the same path fails fast here instead of racing
         // the running worker (A2.5). Reentrant within this process.
-        let lock = acquire_lock(&path)?;
+        let (lock, opening) = acquire_lock(&path)?;
+        // Same-process opens serialize end to end: the OS lock only rejects
+        // other processes, so a reopen would otherwise race the first open's
+        // WAL transition and schema transaction (SQLITE_BUSY under load).
+        let _serialized = opening.lock().await;
         let options = SqliteConnectOptions::new()
             .filename(&path)
             .create_if_missing(true)
@@ -170,12 +174,16 @@ fn lock_path(path: &Path) -> PathBuf {
 /// One in-process holder of the OS lock and its open-store count. The OS lock
 /// lives on the single `file` handle; in-process reopens bump `refs` without
 /// re-taking the OS lock, so the API and Worker (one process) share one holder
-/// while a second process is still rejected (A2.5).
+/// while a second process is still rejected (A2.5). `opening` serializes
+/// same-process opens end to end so a reopen cannot race the first open's
+/// connect and initialize (SQLITE_BUSY under load).
 struct HeldLock {
     /// Owned solely to hold the OS lock until the last in-process store drops.
     #[allow(dead_code)]
     file: File,
     refs: usize,
+    /// Held across connect + initialize for every in-process open of this path.
+    opening: Arc<tokio::sync::Mutex<()>>,
 }
 
 /// Locks held by this process, keyed by lock-file path.
@@ -183,22 +191,31 @@ static PROCESS_LOCKS: LazyLock<Mutex<HashMap<PathBuf, HeldLock>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Take the single-writer lock for `path`, returning a guard that releases it
-/// on drop. Reentrant within this process (A2.5).
-fn acquire_lock(path: &Path) -> StorageResult<LockGuard> {
+/// on drop plus the per-path mutex that serializes in-process opens. Reentrant
+/// within this process (A2.5).
+fn acquire_lock(path: &Path) -> StorageResult<(LockGuard, Arc<tokio::sync::Mutex<()>>)> {
     let key = lock_path(path);
     let mut locks = PROCESS_LOCKS
         .lock()
         .expect("process lock registry poisoned");
     if let Some(held) = locks.get_mut(&key) {
         held.refs += 1;
-        return Ok(LockGuard(key));
+        return Ok((LockGuard(key), held.opening.clone()));
     }
     let file = File::create(&key)?;
     file.try_lock_exclusive().map_err(|e| {
         StorageError::Conflict(format!("store lock is held by another process: {e}"))
     })?;
-    locks.insert(key.clone(), HeldLock { file, refs: 1 });
-    Ok(LockGuard(key))
+    let opening = Arc::new(tokio::sync::Mutex::new(()));
+    locks.insert(
+        key.clone(),
+        HeldLock {
+            file,
+            refs: 1,
+            opening: opening.clone(),
+        },
+    );
+    Ok((LockGuard(key), opening))
 }
 
 /// Release one in-process reference; the last one drops the OS-locked file.
