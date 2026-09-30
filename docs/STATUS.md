@@ -1,6 +1,6 @@
 # 实现状态与后续工作
 
-更新：2026-09-29。M5 本地宿主已经接入 SQLite/LanceDB/Kuzu/本地 Blob，默认构建不依赖 PG/Apalis。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。2026-09-29 已实施自动发布（A1），候选/审核门移除，详见 [自动发布计划](superpowers/plans/2026-09-22-auto-publish.md) 与 [验收](VALIDATION.md)。
+更新：2026-09-30。M5 本地宿主已经接入 SQLite/LanceDB/Kuzu/本地 Blob，默认构建不依赖 PG/Apalis。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。2026-09-29 已实施自动发布（A1），候选/审核门移除，详见 [自动发布计划](superpowers/plans/2026-09-22-auto-publish.md) 与 [验收](VALIDATION.md)。2026-09-30 同进程并发打开串行化并补强验收覆盖，见 [验收](VALIDATION.md)。
 
 ## 已交付
 

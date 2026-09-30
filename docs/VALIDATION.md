@@ -1,5 +1,27 @@
 # 验证记录
 
+## 2026-09-30：并行初始化串行化与覆盖补强
+
+环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖。本轮修复测试套件默认并行执行下 `initialization::sqlite_concurrent_initialization_is_serialized` 稳定失败（SQLite `code: 5 database is locked`，当日 4/4 复现、隔离执行通过）的问题：同进程并发 `SqliteStore::open` 现按路径经异步互斥串行完成连接与初始化（跨进程仍由 OS 文件锁拒绝）；同时补齐 2026-09-29 声明的未验证断言与遗留代码 Minor。实施映射见 [并行初始化串行化计划](superpowers/plans/2026-09-30-parallel-open-serialization-and-coverage.md)。
+
+| 检查 | 实测结果 |
+| --- | --- |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo clippy --locked --all-targets -j 1 -- -D warnings` | 通过 |
+| `cargo test --locked -j 1 --no-fail-fast` | **68 通过，0 失败，0 ignored**；8 项单元 + 60 项集成（新增竞态 superseded 用例 1 项），集成执行约 20.86 秒，非性能基准 |
+| 并行回归 | 修复后 `cargo test --locked -j 1 --test local`（默认并行 test 线程）连续 5 次全绿；修复前同命令当日 4/4 失败于并发初始化用例 |
+| `cargo check --locked --no-default-features --lib -j 4` | 通过 |
+
+本轮新增/调整的验收覆盖：
+
+- 同进程并发打开同一数据库：两个并发 `SqliteStore::open` 串行完成连接与初始化，默认并行套件下不再出现 `database is locked`；跨进程打开仍被 OS 锁拒绝。
+- accept 响应字段：首次受理 `conflict:false` 与 `source_event_id` 存在性显式断言。
+- extract 任务结果：`readiness:"ready"` 与 `index_capabilities`（keyword/vector）显式断言。
+- 已删除路由：`GET /v1/candidates`、`GET /v1/candidates/{id}`、`POST /v1/candidates/{id}/review` 断言 404。
+- 竞态 superseded：同一 expected_version 的两个发布任务，先提交者发布、后提交者在提交复核处 superseded，不产生第三个版本。
+
+未验证：沿用既有清单（Linux/macOS/release、容器镜像构建和运行、远端 CI、主应用最低 Rust 1.88、在线备份、断电恢复、长期压力/规模与真实模型语义效果）。
+
 ## 2026-09-29：自动发布验收
 
 环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖。本轮为 A1 治理语义变更（自动发布），存储与运行栈沿用 M5 本地宿主：默认启用 local-storage，测试使用真实临时 SQLite/LanceDB/Kuzu 与本地文件，模型为本机 HTTP stub，无外部付费调用。行为契约见 [API](API.md)，实施映射见 [自动发布实施计划](superpowers/plans/2026-09-28-auto-publish-implementation.md)。
@@ -19,7 +41,7 @@
 - 保存计划重放：外部写完成后保存的多记忆发布计划可重放，不产生重复版本。
 - 候选面删除后旧库兼容：新库无 `oc_candidates`/`oc_reviews` 与 `oc_versions.review_id`；遗留多余表的旧库仍通过结构检查。
 
-未验证：竞态导致的 `superseded` 任务与已删除路由 `/v1/candidates` 的 404 无专门断言；其余沿用既有清单（Linux/macOS/release、容器镜像构建和运行、远端 CI、主应用最低 Rust 1.88、在线备份、断电恢复、长期压力/规模与真实模型语义效果）。
+未验证：其余沿用既有清单（Linux/macOS/release、容器镜像构建和运行、远端 CI、主应用最低 Rust 1.88、在线备份、断电恢复、长期压力/规模与真实模型语义效果）。竞态 superseded 与已删除路由 404 的断言已于 2026-09-30 补齐，见上方 2026-09-30 节。
 
 ## 2026-09-28：M5 本地宿主验收
 

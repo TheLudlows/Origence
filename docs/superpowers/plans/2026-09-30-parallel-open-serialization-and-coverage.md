@@ -42,13 +42,13 @@
 - Consumes: 现有 `PROCESS_LOCKS`/`HeldLock`/`LockGuard`（A2.5）；`SqliteStore::open` 对外签名不变。
 - Produces: `fn acquire_lock(path: &Path) -> StorageResult<(LockGuard, Arc<tokio::sync::Mutex<()>>)>`（本文件私有，仅 `open` 一个调用点）；`HeldLock` 新增字段 `opening: Arc<tokio::sync::Mutex<()>>`。
 
-- [ ] **Step 1: 复现确认（RED）**
+- [x] **Step 1: 复现确认（RED）**
 
 Run: `cargo test --locked -j 1 --test local 2>&1 | grep -E "test result|FAILED"`
 
 Expected: `test initialization::sqlite_concurrent_initialization_is_serialized ... FAILED`、`test result: FAILED. 58 passed; 1 failed`。若本次意外全绿，最多重跑 3 次；仍绿则记录在案继续（修复依据为当日 4/4 失败记录与设计分析），但 Step 4 的 5 连绿判定不变。
 
-- [ ] **Step 2: 实现串行化（4 处编辑）**
+- [x] **Step 2: 实现串行化（4 处编辑）**
 
 编辑 1 —— `src/storage/sqlite.rs:18` 导入 `Arc`：
 
@@ -175,19 +175,19 @@ fn acquire_lock(path: &Path) -> StorageResult<(LockGuard, Arc<tokio::sync::Mutex
 
 死锁与引用计数推演（实现者自查）：等待方在 `acquire_lock` 内先递增 `refs` 再等待 `opening`，故持有条目在等待期间不会被 `release_lock` 移除；`_serialized` 守卫在 `open` 返回时释放（store 仅持有 `LockGuard`），使用期并发不受影响；`open` 中途失败时两个守卫都随作用域释放，无残留状态。
 
-- [ ] **Step 3: 隔离运行该测试**
+- [x] **Step 3: 隔离运行该测试**
 
 Run: `cargo test --locked -j 1 --test local initialization::sqlite_concurrent_initialization_is_serialized -- --exact`
 
 Expected: `test result: ok. 1 passed`（注意 `--exact` 必须带完整测试名，见 auto-publish 台账的 flake 命令勘误）。
 
-- [ ] **Step 4: 默认并行全量回归 5 连跑**
+- [x] **Step 4: 默认并行全量回归 5 连跑**
 
 Run（连续 5 次）: `cargo test --locked -j 1 --test local 2>&1 | grep -E "test result|FAILED"`
 
 Expected: 每次均 `test result: ok. 59 passed; 0 failed`。任何一次失败即修复不完整，停下重新分析（不得继续后续 Task）。
 
-- [ ] **Step 5: 三重门槛**
+- [x] **Step 5: 三重门槛**
 
 ```sh
 cargo fmt --all -- --check
@@ -197,7 +197,7 @@ cargo test --locked -j 1 --no-fail-fast
 
 Expected: 全部通过；总数 67（8 单元 + 59 集成）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/storage/sqlite.rs
@@ -227,7 +227,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: `ClaimedJob.source: Option<Uuid>`、`SourceVersion { source_id, version }`、`AppError::NotFound`、`Result`（均在 worker.rs 现有作用域）。
 - Produces: `fn source_for(claim: &ClaimedJob, version: i32) -> Result<SourceVersion>`（worker.rs 私有）；`fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEntry>>`。
 
-- [ ] **Step 1: 去重处补 tracing（176-178 行）**
+- [x] **Step 1: 去重处补 tracing（176-178 行）**
 
 ```rust
             if !seen.insert(m.fact_key.clone()) {
@@ -248,7 +248,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
             }
 ```
 
-- [ ] **Step 2: 新增 source_for 并改 ledger 签名**
+- [x] **Step 2: 新增 source_for 并改 ledger 签名**
 
 在 `prepare` 结束（324 行 `}`）与 `fn ledger`（325 行）之间插入：
 
@@ -319,7 +319,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
 }
 ```
 
-- [ ] **Step 3: publish_prepared 调用点**
+- [x] **Step 3: publish_prepared 调用点**
 
 405 行：
 
@@ -382,7 +382,7 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
 
 完成后全文件 grep 确认：`claim.source.unwrap()` 0 处；`source_for(claim` 5 处（ledger 2 + publish_prepared 3）；`SourceVersion {` 字面构造仅剩 `source_for` 内 1 处。
 
-- [ ] **Step 4: 三重门槛**
+- [x] **Step 4: 三重门槛**
 
 ```sh
 cargo fmt --all -- --check
@@ -392,7 +392,7 @@ cargo test --locked -j 1 --no-fail-fast
 
 Expected: 全部通过，67/67（8 单元 + 59 集成）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/worker.rs
@@ -422,7 +422,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: 既有辅助 `id(v,k)`（local_app.rs:18）、`job()` HTTP 轮询（:83）、service 方法 `s.memory/s.job/s.get`、`opencontext::worker::process_next`、accept 响应形状 `{"asset_id","source_event_id","job_id","state":"accepted","conflict"}`（service.rs:175）、job 状态映射 `AppError::Conflict → "superseded"`（worker.rs:113）。
 - Produces: 新测试 `async fn racing_expected_versions_supersede_the_loser()`；无新辅助函数。
 
-- [ ] **Step 1: lifecycle 测试 accept 字段断言**
+- [x] **Step 1: lifecycle 测试 accept 字段断言**
 
 `tests/local_app.rs:730-731` 现状：
 
@@ -438,7 +438,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     assert!(first["source_event_id"].is_string());
 ```
 
-- [ ] **Step 2: host 测试 extract 结果字段断言**
+- [x] **Step 2: host 测试 extract 结果字段断言**
 
 `tests/local_app.rs:286-287` 现状：
 
@@ -457,7 +457,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     );
 ```
 
-- [ ] **Step 3: 已删除路由 404 断言**
+- [x] **Step 3: 已删除路由 404 断言**
 
 `tests/local_app.rs:316`（`assert_eq!(none["result"]["memories"], json!([]));`）与 317 行注释（`// Two sources own the same graph objects...`）之间插入：
 
@@ -487,7 +487,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 （不使用 `request` 辅助——它断言成功状态；此处直接用 `http` 客户端断言 404。）
 
-- [ ] **Step 4: 新增确定性竞态 superseded 测试**
+- [x] **Step 4: 新增确定性竞态 superseded 测试**
 
 在 `local_transactions_versions_retraction_and_idempotency` 结束（803 行 `}`）与 `#[tokio::test]`（805 行）之间插入：
 
@@ -565,7 +565,7 @@ async fn racing_expected_versions_supersede_the_loser() {
 }
 ```
 
-- [ ] **Step 5: 运行新断言**
+- [x] **Step 5: 运行新断言**
 
 Run: `cargo test --locked -j 1 --test local racing_expected_versions_supersede_the_loser -- --exact`
 
@@ -575,7 +575,7 @@ Run: `cargo test --locked -j 1 --test local local_app -- --nocapture 2>&1 | grep
 
 Expected: 4 个 local_app 测试全过（含新用例）。
 
-- [ ] **Step 6: 三重门槛**
+- [x] **Step 6: 三重门槛**
 
 ```sh
 cargo fmt --all -- --check
@@ -585,7 +585,7 @@ cargo test --locked -j 1 --no-fail-fast
 
 Expected: 全部通过；**68 通过**（8 单元 + 60 集成）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add tests/local_app.rs
@@ -611,7 +611,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 1-3 的实测结果（并行 5 连绿、套件 68、各断言）、本会话 2026-09-30 的 4/4 失败记录。
 - Produces: VALIDATION 新节 `## 2026-09-30：并行初始化串行化与覆盖补强`。
 
-- [ ] **Step 1: VALIDATION 新节**
+- [x] **Step 1: VALIDATION 新节**
 
 在 `# 验证记录`（1 行）与 `## 2026-09-29：自动发布验收`（3 行）之间插入（`__秒__` 处填 Task 3 Step 6 输出中的实测集成耗时，保留"非性能基准"措辞）：
 
@@ -640,7 +640,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ```
 
-- [ ] **Step 2: 修订 2026-09-29 节未验证行**
+- [x] **Step 2: 修订 2026-09-29 节未验证行**
 
 `docs/VALIDATION.md:22` 现状：
 
@@ -654,7 +654,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 未验证：其余沿用既有清单（Linux/macOS/release、容器镜像构建和运行、远端 CI、主应用最低 Rust 1.88、在线备份、断电恢复、长期压力/规模与真实模型语义效果）。竞态 superseded 与已删除路由 404 的断言已于 2026-09-30 补齐，见上方 2026-09-30 节。
 ```
 
-- [ ] **Step 3: STATUS 更新戳**
+- [x] **Step 3: STATUS 更新戳**
 
 `docs/STATUS.md:3` 的「2026-09-29 已实施自动发布（A1）……与 [验收](VALIDATION.md)。」句后追加：
 
@@ -664,7 +664,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 并将行首「更新：2026-09-29。」改为「更新：2026-09-30。」。
 
-- [ ] **Step 4: 台账收尾（progress.md）**
+- [x] **Step 4: 台账收尾（progress.md）**
 
 `.superpowers/sdd/progress.md:13`：
 
@@ -685,7 +685,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - 2026-09-30 fix wave (branch fix/parallel-open-serialization-and-coverage, plan docs/superpowers/plans/2026-09-30-parallel-open-serialization-and-coverage.md): (1) same-process concurrent SqliteStore::open serialized via per-path async mutex — parallel full-suite runs failed 4/4 on initialization::sqlite_concurrent_initialization_is_serialized (database is locked), 5x green after fix; (2) worker source_for helper removes both claim.source.unwrap() panic paths + dedup drop now traced; (3) coverage: conflict:false, source_event_id, extract readiness/index_capabilities, removed-routes 404, deterministic race-superseded (suite 67→68); (4) docs: VALIDATION 2026-09-30 section, 2026-09-29 未验证 line amended, STATUS stamp, M3-era scratch files archived to .superpowers/sdd/archive/. Carried Minors NOT fixed by policy: old-format saved-plan decode across upgrade (dev-stage accepted), legacy oc_candidates residue for pre-upgrade queued jobs (A2.3 no-migration).
 ```
 
-- [ ] **Step 5: 归档 M3 遗留文件**
+- [x] **Step 5: 归档 M3 遗留文件**
 
 ```sh
 mkdir -p .superpowers/sdd/archive
@@ -694,7 +694,7 @@ mv .superpowers/sdd/task-6-brief.md .superpowers/sdd/task-6-report.md .superpowe
 
 （三者均为 M3 时代的未跟踪本地文件，历史事实已由 git 跟踪的计划/STATUS/VALIDATION 记录。）
 
-- [ ] **Step 6: 文档链接与门槛**
+- [x] **Step 6: 文档链接与门槛**
 
 ```sh
 cargo fmt --all -- --check
@@ -707,7 +707,7 @@ git diff --check
 
 Expected: 全部通过；68/68。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add docs/VALIDATION.md docs/STATUS.md
