@@ -226,3 +226,5 @@ SQLite 新增源事件 scope/撤回可见性、文件删除阻断、三类 norma
 ## 调用方版本前置条件（2026-10-08）
 
 新增 3 项无原生单元用例：省略/null 不改变规范幂等 payload；0/正数对未发布与当前版本的匹配/冲突；负数在受理前拒绝。原生 HTTP 覆盖两个入口的过期/0/负数拒绝、capture 0 创建与 1 更新、当前已到 v2 后原幂等请求仍重放原结果，后续读取仍为 v2。Python adapter 5 项本地通过，Rust fmt、编译与新增/原生用例待 CI；PR #9 完整验收仍需完成。
+
+PR #9 轻量验收补记：[CI run 37775517348](https://github.com/TheLudlows/openContext/actions/runs/37775517348) 在 `9a42540` 通过 fmt、24 项 lib 和 58 项无原生集成；原生 retrieval/HTTP 与平台验收仍未完成。该证据不覆盖本轮新增版本前置条件测试。
