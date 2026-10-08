@@ -36,5 +36,5 @@ P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 impr
 
 ## 2026-10-08 后续实现与构建修复
 
-- 首个 I1 切片：主体/属性/条件及 scope 的确定性身份编码，附 8 项 Rust 测试；编码的 8 项测试与 Rust 1.88 检查已通过上一轮 CI。新增持久化/API 切片含 4 项 SQLite 测试及 release/container 身份发布烟测，本轮执行结果待 CI。
+- 首个 I1 切片：主体/属性/条件及 scope 的确定性身份编码，附 8 项 Rust 测试；编码的 8 项测试与 Rust 1.88 检查已通过上一轮 CI。新增持久化/API 切片含 4 项 SQLite 测试及 release/container 身份发布烟测，身份编码 8 项和 SQLite 4 项测试、fmt 已在远端 CI 通过；release/container 发布烟测仍待原生构建。
 - 容器实际构建发现 Lance 缺失 `google/protobuf/empty.proto`；Docker 与 Linux CI 已补 `libprotobuf-dev` 和 protoc 导入预检。修复后运行仍待验收，详见 VALIDATION。

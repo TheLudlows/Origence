@@ -195,4 +195,4 @@ RLS 未设置 scope 时默认拒绝、跨 workspace 写入失败、跨 workspace
 
 ## 结构化身份持久化/API 切片（2026-10-08）
 
-上一轮身份编码 8 项测试与 MSRV 检查已通过。新增 `sqlite_identity` 的复用/发布读取/跨 scope 主体条件隔离、墓碑、旧槽碰撞、无隐式迁移测试；轻量 CI 无需原生后端即可执行。release/container 烟测新增真实身份发布、同身份版本 2 和条件隔离。本轮测试尚待 CI，不将代码已提交计为通过。旧库缺表时新入口 503；旧接口继续可用，显式升级和 capture 身份匹配仍待实现。
+上一轮身份编码 8 项测试与 MSRV 检查已通过。新增 `sqlite_identity` 的复用/发布读取/跨 scope 主体条件隔离、墓碑、旧槽碰撞、无隐式迁移测试；轻量 CI 无需原生后端即可执行。release/container 烟测新增真实身份发布、同身份版本 2 和条件隔离。[CI run 37759685825](https://github.com/TheLudlows/openContext/actions/runs/37759685825) 在 `3b9afa5ecbf08b816a3c7dc3f355874c79227a2e` 通过 fmt、8 项身份编码、4 项 SQLite 身份测试与 5 项 Python adapter 测试。默认原生后端编译、完整 HTTP 发布烟测、容器和平台验收仍在运行，不将轻量测试等同于完整运行验收。旧库缺表时新入口 503；旧接口继续可用，显式升级和 capture 身份匹配仍待实现。
