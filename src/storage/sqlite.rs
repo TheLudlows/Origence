@@ -1095,7 +1095,9 @@ impl DomainTx for SqliteTx {
         let Some((event_id, kind, content, file_id, created_at)) = row else {
             return Err(StorageError::NotFound);
         };
-        Ok(json!({"event_id":event_id,"kind":kind,"content":content,"file_id":file_id,"created_at":created_at}))
+        Ok(
+            json!({"event_id":event_id,"kind":kind,"content":content,"file_id":file_id,"created_at":created_at}),
+        )
     }
 
     async fn job_view(&mut self, id: Uuid) -> StorageResult<Value> {

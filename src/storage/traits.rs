@@ -191,7 +191,9 @@ pub trait DomainTx {
 
     /// A live source event in this scope. Requires application writer access.
     async fn event_view(&mut self, _id: Uuid) -> StorageResult<Value> {
-        Err(StorageError::Unavailable("source event views unavailable".into()))
+        Err(StorageError::Unavailable(
+            "source event views unavailable".into(),
+        ))
     }
 
     /// A job's public state, or [`StorageError::NotFound`].
