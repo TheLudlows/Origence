@@ -221,4 +221,4 @@ SQLite 新增源事件 scope/撤回可见性、文件删除阻断、三类 norma
 
 ## 精确身份过滤（2026-10-08）
 
-新增 SearchInput/ResolveInput 默认兼容、MCP Schema 属性与未知 scope 字段拒绝测试；身份匹配覆盖无过滤、旧未识别、主体差异、条件差异、知识类型排除。原生 HTTP 验证相同关键词 production/staging 在 limit=1 下分别命中，并验证 hybrid resolve 不携带其他身份或图对象。Python 5 项本地通过，新增 Rust/HTTP 用例待 CI；PR #8 的格式/编译/上下文预算验收仍需完成。
+新增 SearchInput/ResolveInput 默认兼容、MCP Schema 属性与未知 scope 字段拒绝测试；身份匹配覆盖无过滤、旧未识别、主体差异、条件差异、知识类型排除。原生 HTTP 验证相同关键词 production/staging 在 limit=1 下分别命中，并验证 hybrid resolve 不携带其他身份或图对象。Python 5 项本地通过，新增 Rust/HTTP 用例待 CI；PR #8 的轻量 CI run 37773799817 在 `94d45ea` 已通过 fmt、23 项 lib、58 项无原生集成与 Python 5 项；原生 retrieval 编译、上下文预算/HTTP 与平台验收仍待完成。

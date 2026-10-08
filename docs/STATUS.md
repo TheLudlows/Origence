@@ -64,4 +64,4 @@ PR #7 已合入 main（`ec06ffa`）。本轮 search hits 与 resolve 引用/文�
 
 ## 精确身份检索过滤（2026-10-08）
 
-PR #8 已合入 main（`29a89cd`），其 Rust/原生验收仍未完成。本轮 search/resolve 新增可选完整 memory_identity：过滤在 limit 之前，精确匹配主体/属性/条件，保留 scope 和最终来源治理；启用时只取显式身份记忆，不携带知识/图扩展。新增默认请求/Schema 与精确匹配反例测试，原生 HTTP 覆盖 production/staging 同词 limit=1 隔离与 hybrid resolve 过滤；Python 5 项本地通过，Rust 结果待 CI。自动身份推断、未归一化状态、冲突识别与 P1 会话仍未实现。
+PR #8 已合入 main（`29a89cd`）；CI run 37773799817 已通过 fmt、23 项 lib、58 项无原生集成与 Python 5 项，原生 retrieval/HTTP 和平台验收仍未完成。本轮 search/resolve 新增可选完整 memory_identity：过滤在 limit 之前，精确匹配主体/属性/条件，保留 scope 和最终来源治理；启用时只取显式身份记忆，不携带知识/图扩展。新增默认请求/Schema 与精确匹配反例测试，原生 HTTP 覆盖 production/staging 同词 limit=1 隔离与 hybrid resolve 过滤；Python 5 项本地通过，Rust 结果待 CI。自动身份推断、未归一化状态、冲突识别与 P1 会话仍未实现。
