@@ -50,7 +50,8 @@ async fn extract(Json(v): Json<Value>) -> Json<Value> {
         if source == "CAPTURECONFLICT" {
             json!({"memories":[{"quote":"CAPTURE","byte_start":0,"byte_end":7},{"quote":"CONFLICT","byte_start":7,"byte_end":15}]}).to_string()
         } else {
-            json!({"memories":[{"quote":source,"byte_start":0,"byte_end":source.len()}]}).to_string()
+            json!({"memories":[{"quote":source,"byte_start":0,"byte_end":source.len()}]})
+                .to_string()
         }
     } else if prompt.contains("Summarize") {
         "Atlas summary evidence".to_string()

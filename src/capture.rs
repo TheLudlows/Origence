@@ -52,9 +52,11 @@ pub fn parse_identified_extraction(source: &str, value: Value) -> Result<Option<
 }
 
 pub fn evidence_chunks(source: &str, statement: Chunk) -> Result<Vec<Chunk>> {
-    let start = statement.locator["byte_start"].as_u64()
+    let start = statement.locator["byte_start"]
+        .as_u64()
         .ok_or_else(|| AppError::Invalid("missing source offset".into()))? as usize;
-    let end = statement.locator["byte_end"].as_u64()
+    let end = statement.locator["byte_end"]
+        .as_u64()
         .ok_or_else(|| AppError::Invalid("missing source offset".into()))? as usize;
     if source.get(start..end) != Some(statement.content.as_str()) {
         return Err(AppError::Invalid("invalid statement source span".into()));
@@ -137,7 +139,12 @@ mod tests {
         let quote = "审批".repeat(2000);
         let source = format!("前言\n{quote}");
         let start = source.find(&quote).unwrap();
-        let statement = parse_identified_extraction(&source, json!({"memories":[{"quote":quote,"byte_start":start,"byte_end":source.len()}]})).unwrap().unwrap();
+        let statement = parse_identified_extraction(
+            &source,
+            json!({"memories":[{"quote":quote,"byte_start":start,"byte_end":source.len()}]}),
+        )
+        .unwrap()
+        .unwrap();
         let chunks = evidence_chunks(&source, statement).unwrap();
         assert!(chunks.len() > 1);
         for chunk in chunks {
@@ -147,5 +154,4 @@ mod tests {
             assert_eq!(chunk.locator["line_start"], 2);
         }
     }
-
 }
