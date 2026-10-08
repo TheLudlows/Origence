@@ -6,6 +6,11 @@ concurrency:
   group: local-storage-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  evaluation-adapter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s evals -p 'test_*.py' -v
   windows:
     runs-on: windows-latest
     timeout-minutes: 120
@@ -56,6 +61,15 @@ jobs:
         run: |
           cargo build --release --locked -j 1
           python3 tools/smoke.py --binary target/release/opencontext
+      - name: Keyword retrieval seed evaluation (no model calls)
+        run: python3 evals/run.py --binary target/release/opencontext --commit "${{ github.sha }}" --output target/evals/keyword-run
+      - name: Preserve synthetic retrieval evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-${{ matrix.os }}
+          path: target/evals/keyword-run/
+          if-no-files-found: ignore
   msrv:
     runs-on: ubuntu-24.04
     timeout-minutes: 180

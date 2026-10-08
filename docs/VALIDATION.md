@@ -9,6 +9,8 @@
 - 新增 native（Linux/macOS）、msrv（1.88 默认后端 all-targets check）和 container 作业；release/container 通过 `tools/smoke.py` 使用隔离数据、关闭模型，检查 ready、未认证拒绝、记忆发布和关键词检索。MSRV check 不替代该版本的运行测试。
 - 本轮编辑环境没有 cargo、rustc、Docker 或原生构建工具，未在此环境执行 Rust 编译、全套测试或镜像运行。新增 CI 结果需单独记录，仍为待验收。
 
+本轮后续追加：`python -m unittest discover -s evals -p 'test_*.py' -v` 实测 5 项通过，覆盖文档去重、多来源 Recall/nDCG、无答案口径、失败请求计零与凭据不写报告。HTTP fixture 不是 Rust 运行或语义质量验证。已加入 native release 后的真实关键词评估与公开合成结果工件。
+
 后续计划见 [验收与评估批次](superpowers/plans/2026-10-08-validation-and-evaluation.md)。下文历史记录中的“远端 CI 未验证”描述当时记录状态，当前 Windows 证据以上述链接为准。
 
 

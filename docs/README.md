@@ -13,6 +13,7 @@
 | M5 交付与验收映射 | [本地宿主交付](superpowers/plans/2026-09-28-local-host-delivery.md) |
 | 已实施的自动发布（writer 记忆与抽取直接发布） | [自动发布](superpowers/plans/2026-09-22-auto-publish.md) |
 | M0–M5 存储路线 | [可插拔存储计划](superpowers/plans/2026-09-22-pluggable-storage-engine.md) |
+| P1 记忆身份与上下文前置设计 | [身份/匹配/冲突契约](superpowers/specs/2026-10-08-memory-identity-and-context.md) |
 | 目标架构与 P0/P1/P2 | [平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) |
 | 图谱设计与验收来源 | [图谱计划](superpowers/plans/2026-09-22-knowledge-graph-core.md) |
 | 已完成的底层设计记录 | [M3 账本](superpowers/plans/2026-09-24-cross-store-ledger.md)、[M4 适配器](superpowers/plans/2026-09-27-local-vector-graph.md) |

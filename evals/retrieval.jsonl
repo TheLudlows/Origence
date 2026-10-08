@@ -1,0 +1,24 @@
+{"id": "retrieval-01", "category": "exact", "query": "发布审批", "relevant_source_ids": ["release-policy", "negative"]}
+{"id": "retrieval-02", "category": "exact", "query": "全量备份", "relevant_source_ids": ["backup"]}
+{"id": "retrieval-03", "category": "exact", "query": "备份保留", "relevant_source_ids": ["backup"]}
+{"id": "retrieval-04", "category": "exact", "query": "恢复演练", "relevant_source_ids": ["backup"]}
+{"id": "retrieval-05", "category": "exact", "query": "故障响应", "relevant_source_ids": ["incident"]}
+{"id": "retrieval-06", "category": "entity", "query": "Atlas负责人", "relevant_source_ids": ["atlas-owner"]}
+{"id": "retrieval-07", "category": "entity", "query": "Boreal负责人", "relevant_source_ids": ["boreal-owner"]}
+{"id": "retrieval-08", "category": "entity", "query": "Atlas数据库", "relevant_source_ids": ["atlas-owner"]}
+{"id": "retrieval-09", "category": "entity", "query": "Boreal数据库", "relevant_source_ids": ["boreal-owner"]}
+{"id": "retrieval-10", "category": "scope", "query": "Atlas测试环境", "relevant_source_ids": ["atlas-test"]}
+{"id": "retrieval-11", "category": "exact", "query": "审计日志", "relevant_source_ids": ["audit"]}
+{"id": "retrieval-12", "category": "exact", "query": "容量告警", "relevant_source_ids": ["quota"]}
+{"id": "retrieval-13", "category": "exact", "query": "缓存故障", "relevant_source_ids": ["cache"]}
+{"id": "retrieval-14", "category": "identifier", "query": "INC2026XYZ", "relevant_source_ids": ["runbook"]}
+{"id": "retrieval-15", "category": "paraphrase", "query": "线上部署需要批准吗", "relevant_source_ids": ["release-policy", "negative"]}
+{"id": "retrieval-16", "category": "paraphrase", "query": "出了问题怎么退回旧版", "relevant_source_ids": ["rollback"]}
+{"id": "retrieval-17", "category": "paraphrase", "query": "备份多久清理", "relevant_source_ids": ["backup"]}
+{"id": "retrieval-18", "category": "paraphrase", "query": "谁可以看安全记录", "relevant_source_ids": ["audit"]}
+{"id": "retrieval-19", "category": "multi-source", "query": "Atlas和Boreal分别由谁负责", "relevant_source_ids": ["atlas-owner", "boreal-owner"]}
+{"id": "retrieval-20", "category": "paraphrase", "query": "发布失败后通知谁", "relevant_source_ids": ["rollback"]}
+{"id": "retrieval-21", "category": "negation", "query": "取消生产审批是否已生效", "relevant_source_ids": ["negative", "release-policy"]}
+{"id": "retrieval-22", "category": "negation", "query": "缓存是否权威存储", "relevant_source_ids": ["cache"]}
+{"id": "retrieval-23", "category": "no-answer", "query": "ZXQ不存在项目负责人", "relevant_source_ids": []}
+{"id": "retrieval-24", "category": "no-answer", "query": "Quantum项目加密密钥", "relevant_source_ids": []}
