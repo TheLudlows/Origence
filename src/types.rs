@@ -38,6 +38,13 @@ pub struct MemoryInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct IdentifiedMemoryInput {
+    pub identity: crate::memory_identity::MemoryIdentity,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CaptureInput {
     pub content: String,
 }

@@ -21,7 +21,7 @@
 
 P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估沿用 300 用例目标。本轮新增隔离 HTTP 检索评估器、12 文档/24 查询的合成种子和指标/adapter 测试；真实宿主结果仍待 CI，不能把样本或 fixture 通过当作完整质量结果。
 
-[记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 明确主体、属性、条件与来源关联，已新增独立 `MemoryIdentity` 类型与 v1 编码模块，尚未实现新 API/存储字段或接入现有写入。接下来按该设计推进语义身份和 P1 会话闭环，不以新增后端替代产品能力。
+[记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 明确主体、属性、条件与来源关联，已实现 `MemoryIdentity` v1 编码、SQLite 身份绑定与显式 HTTP 写入入口；同身份复用资产并沿用发布任务/版本治理，capture 语义匹配和旧库显式升级仍未实现。接下来按该设计推进语义身份和 P1 会话闭环，不以新增后端替代产品能力。
 
 ## 接下来
 
@@ -36,5 +36,5 @@ P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 impr
 
 ## 2026-10-08 后续实现与构建修复
 
-- 首个 I1 切片：主体/属性/条件及 scope 的确定性身份编码，附 8 项 Rust 测试；持久化、抽取匹配与 API 仍未接入，执行结果待 CI。
+- 首个 I1 切片：主体/属性/条件及 scope 的确定性身份编码，附 8 项 Rust 测试；编码的 8 项测试与 Rust 1.88 检查已通过上一轮 CI。新增持久化/API 切片含 4 项 SQLite 测试及 release/container 身份发布烟测，本轮执行结果待 CI。
 - 容器实际构建发现 Lance 缺失 `google/protobuf/empty.proto`；Docker 与 Linux CI 已补 `libprotobuf-dev` 和 protoc 导入预检。修复后运行仍待验收，详见 VALIDATION。

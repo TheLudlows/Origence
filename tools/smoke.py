@@ -101,22 +101,43 @@ def main():
                 else:
                     raise RuntimeError("unauthenticated request was accepted")
                 accepted = request("/v1/memories", {"fact_key": "smoke.policy", "content": "SMOKEPOLICY requires approval"})
-                deadline = time.monotonic() + 120
-                while True:
-                    job = request("/v1/jobs/" + accepted["job_id"])
-                    if job["state"] == "completed":
-                        if job["outcome"] != "published":
-                            raise RuntimeError("job completed without publication")
-                        break
-                    if job["state"] in ("failed", "cancelled", "superseded"):
-                        raise RuntimeError("publication failed")
-                    if time.monotonic() >= deadline:
-                        raise RuntimeError("publication timed out")
-                    time.sleep(0.2)
+                def published(accepted):
+                    deadline = time.monotonic() + 120
+                    while True:
+                        job = request("/v1/jobs/" + accepted["job_id"])
+                        if job["state"] == "completed":
+                            if job["outcome"] != "published":
+                                raise RuntimeError("job completed without publication")
+                            return
+                        if job["state"] in ("failed", "cancelled", "superseded"):
+                            raise RuntimeError("publication failed")
+                        if time.monotonic() >= deadline:
+                            raise RuntimeError("publication timed out")
+                        time.sleep(0.2)
+
+                published(accepted)
+                identity = {"subject": {"kind": "service", "stable_id": "billing"},
+                            "predicate": "release.approval", "context": {"environment": "production"}}
+                body = {"identity": identity, "content": "IDENTITYPOLICY requires approval"}
+                first = request("/v1/memories/identified", body)
+                published(first)
+                body["content"] = "IDENTITYPOLICY requires two approvals"
+                second = request("/v1/memories/identified", body)
+                if first["asset_id"] != second["asset_id"]:
+                    raise RuntimeError("same identity created another asset")
+                published(second)
+                view = request("/v1/assets/" + first["asset_id"])
+                if view["version"] != 2 or view["identity"] != identity or view["content"] != body["content"]:
+                    raise RuntimeError("identity version was not published correctly")
+                identity["context"]["environment"] = "staging"
+                third = request("/v1/memories/identified", body)
+                if third["asset_id"] == first["asset_id"]:
+                    raise RuntimeError("different environments share an asset")
+                published(third)
                 hits = request("/v1/search", {"query": "SMOKEPOLICY", "mode": "keyword"})["hits"]
                 if not any(hit["asset_id"] == accepted["asset_id"] for hit in hits):
                     raise RuntimeError("published memory was not retrieved")
-                print("PASS: readiness, authentication, memory publication and keyword retrieval")
+                print("PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval")
             finally:
                 if process is not None:
                     process.terminate()

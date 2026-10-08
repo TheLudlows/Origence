@@ -71,4 +71,10 @@ P2 保留业务时间与 GraphCompletion。存储接口的厂商解耦仍是欠�
 
 八项 Rust 单元测试覆盖主体/属性/环境、tenant/workspace、条件排序、大小写/Unicode、无效字段、超限、版本化 key 与固定编码向量。当前编辑环境无 Rust，测试尚待 CI；不能将已编写测试标成通过。
 
-该 key 尚未用于现有 fact_key 槽。I1 的持久化唯一约束、兼容入口和授权 API 仍待交付；不允许将当前 codec 存在解释为已修复线上跨主体覆盖问题。接入前需处理旧 fact_key 与新身份命名空间碰撞，并保留原始身份字段供审计/匹配，而非只保存哈希。
+首个 codec 切片已通过 8 项 Rust 测试。后续持久化/API 范围见下节；capture 的既有 fact_key 语义不因该切片自动改变。
+
+## I1 持久化与显式写入切片
+
+新增 SQLite `oc_memory_identities` 保存 scope、v1 key、资产和完整身份 JSON；scope/key 与 scope/asset 双唯一约束、复合资产外键防止身份绑定漂移。`POST /v1/memories/identified` 在授权短写事务中绑定身份、写来源/审计/幂等响应并入队，Worker 沿用 expected_version 和原有发布治理。已绑定资产拒绝旧 slot 写入；与已有 legacy fact_key 碰撞返回冲突。资产读取在可见性核验后返回身份。
+
+新表只随新建库创建；旧库无表时旧接口仍可用，新入口 503，不在启动时迁移。显式升级尚待下一切片。CLI/MCP、capture 抽取匹配暂未接入。新增 SQLite 契约测试与 release/container 发布烟测，验收结果以 VALIDATION 为准。

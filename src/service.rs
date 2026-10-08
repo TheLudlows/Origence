@@ -176,6 +176,46 @@ impl Service {
         )
         .await
     }
+    pub async fn identified_memory(
+        &self,
+        a: &AuthContext,
+        key: &str,
+        input: IdentifiedMemoryInput,
+    ) -> Result<Value> {
+        parsing::validate_text(&input.content)?;
+        input
+            .identity
+            .validate()
+            .map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
+        let (mut tx, cached) = self
+            .command(a, Permission::Write, "identified_memory", key, &json!(input))
+            .await?;
+        if let Some(value) = cached {
+            return Ok(value);
+        }
+        let (asset, version) = tx.identity_slot(&input.identity).await?;
+        let source = tx.create_event("identified", &input.content, None).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            "publish",
+            json!({"expected_version":version,"format":"text","embedding_profile":self.models.profile}),
+            Some(asset),
+            Some(source),
+        )
+        .await?;
+        tx.audit(
+            "memory.identified_accepted",
+            asset,
+            json!({"content_hash":hash(&input.content),"expected_version":version,"job_id":job}),
+        )
+        .await?;
+        Self::finish(
+            tx,
+            json!({"asset_id":asset,"source_event_id":source,"job_id":job,"state":"accepted","conflict":version.is_some()}),
+        )
+        .await
+    }
+
     pub async fn capture(&self, a: &AuthContext, key: &str, input: CaptureInput) -> Result<Value> {
         parsing::validate_text(&input.content)?;
         let (mut tx, cached) = self

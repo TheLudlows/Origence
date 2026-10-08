@@ -26,6 +26,7 @@ pub fn router(service: Service) -> Router {
         .route("/admin/keys", post(issue_key))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/v1/memories", post(memory))
+        .route("/v1/memories/identified", post(identified_memory))
         .route("/v1/captures", post(capture))
         .route("/v1/knowledge", post(knowledge))
         .route("/v1/search", post(search))
@@ -70,6 +71,16 @@ async fn memory(
     Json(i): Json<MemoryInput>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.memory(&auth(&s, &h).await?, key(&h)?, i).await?))
+}
+async fn identified_memory(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(i): Json<IdentifiedMemoryInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.identified_memory(&auth(&s, &h).await?, key(&h)?, i)
+            .await?,
+    ))
 }
 async fn capture(
     State(s): State<Service>,
