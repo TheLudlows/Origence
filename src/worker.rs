@@ -165,7 +165,7 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         tx.commit().await?;
         if let Some(value) = claim.payload.get("identity") {
             let identity: crate::memory_identity::MemoryIdentity = decode(value.clone())?;
-            let chunk = service.models.extract_identified(&text, &identity).await?;
+            let chunks = service.models.extract_identified(&text, &identity).await?;
             let mut tx = service.write(&a, Permission::Write).await?;
             guard(&mut tx, claim).await?;
             let asset = claim.asset.ok_or(AppError::NotFound)?;
@@ -175,15 +175,16 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 ));
             }
             let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
-            let drafts = chunk
-                .into_iter()
-                .map(|chunk| DraftMemory {
+            let drafts = if chunks.is_empty() {
+                Vec::new()
+            } else {
+                vec![DraftMemory {
                     asset,
                     fact_key: None,
                     expected_version: expected,
-                    chunks: vec![chunk],
-                })
-                .collect();
+                    chunks,
+                }]
+            };
             tx.commit().await?;
             let publication = prepare(service, claim, profile, drafts).await?;
             return publish_prepared(service, claim, publication).await;

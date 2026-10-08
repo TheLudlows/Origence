@@ -175,7 +175,7 @@ impl Models {
         &self,
         text: &str,
         identity: &crate::memory_identity::MemoryIdentity,
-    ) -> Result<Option<crate::types::Chunk>> {
+    ) -> Result<Vec<crate::types::Chunk>> {
         let model = self
             .extraction_model
             .as_ref()
@@ -194,7 +194,10 @@ impl Models {
             })?;
         let value = serde_json::from_str(content)
             .map_err(|_| AppError::Unavailable("invalid identified extraction JSON".into()))?;
-        crate::capture::parse_identified_extraction(text, value)
+        match crate::capture::parse_identified_extraction(text, value)? {
+            Some(statement) => crate::capture::evidence_chunks(text, statement),
+            None => Ok(Vec::new()),
+        }
     }
 
     pub async fn extract(&self, text: &str) -> Result<Vec<MemoryInput>> {

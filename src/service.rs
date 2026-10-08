@@ -233,11 +233,6 @@ impl Service {
             .identity
             .validate()
             .map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
-        if !self.models.extraction_enabled() {
-            return Err(AppError::Unavailable(
-                "extraction model is not configured".into(),
-            ));
-        }
         let (mut tx, cached) = self
             .command(
                 a,
@@ -249,6 +244,11 @@ impl Service {
             .await?;
         if let Some(value) = cached {
             return Ok(value);
+        }
+        if !self.models.extraction_enabled() {
+            return Err(AppError::Unavailable(
+                "extraction model is not configured".into(),
+            ));
         }
         let (asset, version) = tx.identity_slot(&input.identity).await?;
         let source = tx
