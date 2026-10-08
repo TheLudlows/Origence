@@ -2,9 +2,9 @@
 pub mod api;
 pub mod error;
 pub mod graph;
-pub mod memory_identity;
 #[cfg(feature = "local-storage")]
 pub mod mcp;
+pub mod memory_identity;
 pub mod models;
 pub mod parsing;
 #[cfg(feature = "local-storage")]
