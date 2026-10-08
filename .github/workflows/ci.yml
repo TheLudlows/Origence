@@ -6,6 +6,20 @@ concurrency:
   group: local-storage-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  memory-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+      - run: cargo test --locked --no-default-features --lib memory_identity -j 2
   evaluation-adapter:
     runs-on: ubuntu-24.04
     steps:
@@ -50,7 +64,9 @@ jobs:
           components: rustfmt, clippy
       - name: Linux native build tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev
+          protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
       - name: macOS native build tools
         if: runner.os == 'macOS'
         run: brew install cmake ninja protobuf
@@ -83,7 +99,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
-      - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler
+      - run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev
+          protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
+      - name: Memory identity domain tests without native backends
+        run: cargo test --locked --no-default-features --lib memory_identity -j 1
       - name: Declared MSRV with default native backends
         run: cargo check --locked --all-targets -j 1
   container:

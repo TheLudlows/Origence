@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-10-08：容器构建失败与身份模块验收入口
+
+[PR 运行 37751884631](https://github.com/TheLudlows/openContext/actions/runs/37751884631) 的 container job `113227369753` 在 Docker release 编译阶段实际失败：`lance-encoding v1.0.1` 调用 protoc 时找不到 `google/protobuf/empty.proto`，因此尚未进入镜像 smoke。已读取失败日志。
+
+修复：Docker build 阶段与 Linux native/MSRV 作业显式安装 `libprotobuf-dev`，并在 Rust 编译前让 protoc 导入该 well-known type 生成 descriptor。Debian 包文件清单确认该包提供 `/usr/include/google/protobuf/empty.proto`：[官方文件清单](https://packages.debian.org/bookworm/amd64/libprotobuf-dev/filelist)。此修复不修改运行镜像依赖；修复后镜像构建/运行尚待 CI。
+
+新增记忆身份独立模块及 8 项 Rust 单元测试；专用 CI 以默认关闭原生后端的 lib 测试检查身份模块，MSRV 作业也运行这组测试后再检查默认后端。默认应用的完整 Windows/native 验收继续保留。编辑环境没有 Rust/Docker，本轮不宣称新 Rust 测试或镜像已通过。
+
 ## 2026-10-08：远端 Windows CI 核验与后续验收入口
 
 本轮通过 GitHub Actions API 核验已有运行，不重新执行或改写 2026-09-30 的本地测试记录：

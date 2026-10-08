@@ -4,6 +4,7 @@ pub mod error;
 pub mod graph;
 #[cfg(feature = "local-storage")]
 pub mod mcp;
+pub mod memory_identity;
 pub mod models;
 pub mod parsing;
 #[cfg(feature = "local-storage")]
