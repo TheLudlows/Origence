@@ -408,6 +408,12 @@ impl Service {
         tx.commit().await?;
         Ok(v)
     }
+    pub async fn source_event(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
+        let mut tx = self.read(a, Permission::Write).await?;
+        let value = tx.event_view(id).await?;
+        tx.commit().await?;
+        Ok(value)
+    }
     pub async fn job(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
         let mut tx = self.read(a, Permission::Write).await?;
         let v = tx.job_view(id).await?;

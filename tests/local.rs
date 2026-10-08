@@ -7,6 +7,7 @@ mod local_app;
 mod local_blob;
 mod local_ledger;
 mod sqlite_domain;
+mod sqlite_evidence;
 mod sqlite_identity;
 mod sqlite_identity_upgrade;
 mod sqlite_ledger;

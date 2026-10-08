@@ -34,7 +34,7 @@ pub fn router(service: Service) -> Router {
         .route("/v1/resolve", post(resolve))
         .route("/v1/assets/{id}", get(asset).delete(delete_asset))
         .route("/v1/assets/{id}/restore", post(restore))
-        .route("/v1/events/{id}", axum::routing::delete(delete_event))
+        .route("/v1/events/{id}", get(source_event).delete(delete_event))
         .route("/v1/jobs/{id}", get(job))
         .route("/v1/jobs/{id}/{action}", post(job_action))
         .route("/v1/files", post(upload))
@@ -152,6 +152,13 @@ async fn delete_asset(
         s.delete(&auth(&s, &h).await?, key(&h)?, id, "asset")
             .await?,
     ))
+}
+async fn source_event(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.source_event(&auth(&s, &h).await?, id).await?))
 }
 async fn delete_event(
     State(s): State<Service>,

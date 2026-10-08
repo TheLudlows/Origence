@@ -189,6 +189,13 @@ pub trait DomainTx {
     /// A published asset version, or [`StorageError::NotFound`].
     async fn asset_view(&mut self, id: Uuid, version: Option<i32>) -> StorageResult<Value>;
 
+    /// A live source event in this scope. Requires application writer access.
+    async fn event_view(&mut self, _id: Uuid) -> StorageResult<Value> {
+        Err(StorageError::Unavailable(
+            "source event views unavailable".into(),
+        ))
+    }
+
     /// A job's public state, or [`StorageError::NotFound`].
     async fn job_view(&mut self, id: Uuid) -> StorageResult<Value>;
 

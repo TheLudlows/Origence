@@ -370,6 +370,66 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     )
     .await;
     assert_eq!(unchanged["version"], 2);
+    assert_eq!(unchanged["normalization_status"], "explicit_identity");
+    let source_path = format!(
+        "/v1/events/{}",
+        ambiguous["source_event_id"].as_str().unwrap()
+    );
+    let source = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::GET,
+        &source_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(source["content"], "CAPTURECONFLICT");
+    assert_eq!(
+        http.get(format!("{base}{source_path}"))
+            .bearer_auth(other["token"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    let reader = post(
+        &http,
+        &base,
+        token,
+        "/admin/keys",
+        json!({"workspace_id":bootstrap["workspace_id"],"role":"reader"}),
+    )
+    .await;
+    assert_eq!(
+        http.get(format!("{base}{source_path}"))
+            .bearer_auth(reader["token"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::DELETE,
+        &source_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        http.get(format!("{base}{source_path}"))
+            .bearer_auth(token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+
     let mut other_identity = identity.clone();
     other_identity["context"]["environment"] = json!("staging");
     let other = post(
