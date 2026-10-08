@@ -1,4 +1,4 @@
-//! Deterministic P1 identity codec. Not yet wired into HTTP or asset slotting.
+//! Deterministic P1 identity codec for explicit HTTP writes and SQLite asset slots.
 //! A key identifies scope + business subject + predicate + explicit conditions.
 //! It does not authorize access or establish semantic equivalence.
 

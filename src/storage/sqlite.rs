@@ -273,7 +273,25 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
                 StorageError::Unavailable(format!("incompatible SQLite schema in {table}: {e}"))
             })?;
     }
+    // This optional feature is created only as part of a fresh schema. M5/A1
+    // databases keep working without it; existing malformed tables fail closed.
+    if identity_table_present(conn).await? {
+        sqlx::query("SELECT tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at FROM oc_memory_identities LIMIT 0")
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| StorageError::Unavailable(format!("incompatible memory identity schema: {e}")))?;
+    }
     Ok(())
+}
+
+async fn identity_table_present(conn: &mut SqliteConnection) -> StorageResult<bool> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_memory_identities')",
+    )
+    .fetch_one(conn)
+    .await
+    .map_err(sqlite_err)?;
+    Ok(exists)
 }
 
 impl Lifecycle for SqliteStore {
@@ -369,6 +387,30 @@ pub struct SqliteTx {
 }
 
 impl SqliteTx {
+    async fn identity_for_asset(
+        &mut self,
+        asset: Uuid,
+    ) -> StorageResult<Option<crate::memory_identity::MemoryIdentity>> {
+        if !identity_table_present(&mut self.tx).await? {
+            return Ok(None);
+        }
+        let value: Option<String> = sqlx::query_scalar(
+            "SELECT identity_json FROM oc_memory_identities WHERE tenant_id = ? AND workspace_id = ? AND asset_id = ?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(asset)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        value
+            .map(|value| {
+                serde_json::from_str(&value)
+                    .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))
+            })
+            .transpose()
+    }
+
     /// The role in this transaction. IMMEDIATE writes serialize with revoke;
     /// model/native IO must precede a fresh authorized write transaction.
     async fn live_role(&mut self) -> StorageResult<String> {
@@ -542,6 +584,11 @@ impl DomainTx for SqliteTx {
         .await
         .map_err(sqlite_err)?;
         if let Some((id, version, deleted)) = existing {
+            if self.identity_for_asset(id).await?.is_some() {
+                return Err(StorageError::Conflict(
+                    "structured memory identity requires the identified memory endpoint".into(),
+                ));
+            }
             if deleted {
                 return Err(StorageError::Conflict(
                     "fact slot was deleted; use a new fact key".to_string(),
@@ -564,6 +611,86 @@ impl DomainTx for SqliteTx {
         .await
         .map_err(sqlite_err)?;
         Ok((id, None))
+    }
+
+    async fn identity_slot(
+        &mut self,
+        identity: &crate::memory_identity::MemoryIdentity,
+    ) -> StorageResult<(Uuid, Option<i32>)> {
+        if !identity_table_present(&mut self.tx).await? {
+            return Err(StorageError::Unavailable(
+                "memory identity storage unavailable".into(),
+            ));
+        }
+        let key = identity
+            .key(self.scope)
+            .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
+        let existing: Option<(Uuid, Option<i32>, bool)> = sqlx::query_as(
+            "SELECT a.id,a.current_version,a.deleted FROM oc_memory_identities i \
+             JOIN oc_assets a ON a.tenant_id=i.tenant_id AND a.workspace_id=i.workspace_id AND a.id=i.asset_id \
+             WHERE i.tenant_id=? AND i.workspace_id=? AND i.identity_key=? AND a.kind='memory'",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(&key)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        if let Some((asset, version, deleted)) = existing {
+            if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
+                return Err(StorageError::Conflict(
+                    "memory identity binding mismatch".into(),
+                ));
+            }
+            if deleted {
+                return Err(StorageError::Conflict(
+                    "memory identity asset was deleted".into(),
+                ));
+            }
+            return Ok((asset, version));
+        }
+        let collision: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?)",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(&key)
+        .fetch_one(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        if collision {
+            return Err(StorageError::Conflict(
+                "memory identity conflicts with a legacy fact slot".into(),
+            ));
+        }
+        let asset = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at) VALUES (?,?,?,'memory',?,?,?)",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(asset)
+        .bind(&identity.predicate)
+        .bind(&key)
+        .bind(now_ms())
+        .execute(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let encoded = serde_json::to_string(identity)
+            .map_err(|_| StorageError::Unavailable("memory identity encoding failed".into()))?;
+        sqlx::query(
+            "INSERT INTO oc_memory_identities(tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at) VALUES (?,?,?,?,?,?)",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(&key)
+        .bind(asset)
+        .bind(encoded)
+        .bind(now_ms())
+        .execute(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        Ok((asset, None))
     }
 
     async fn insert_knowledge_asset(&mut self, title: &str) -> StorageResult<Uuid> {
@@ -832,6 +959,7 @@ impl DomainTx for SqliteTx {
         else {
             return Err(StorageError::NotFound);
         };
+        let identity = self.identity_for_asset(asset_id).await?;
         Ok(json!({
             "asset_id": asset_id,
             "kind": kind,
@@ -841,6 +969,7 @@ impl DomainTx for SqliteTx {
             "source_event_id": source_event_id,
             "restored_from": restored_from,
             "content_hash": content_hash,
+            "identity": identity,
         }))
     }
 

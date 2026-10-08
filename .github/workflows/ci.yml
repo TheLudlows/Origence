@@ -20,6 +20,7 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
       - run: cargo test --locked --no-default-features --lib memory_identity -j 2
+      - run: cargo test --locked --no-default-features --test local sqlite_identity -j 2
   evaluation-adapter:
     runs-on: ubuntu-24.04
     steps:

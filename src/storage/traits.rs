@@ -33,7 +33,7 @@ use uuid::Uuid;
 use crate::storage::ledger::{LedgerEntry, LedgerKey};
 use crate::storage::{
     capabilities::{BlobKey, Capabilities, VectorEntry, VectorHit, VectorQuery},
-    error::StorageResult,
+    error::{StorageError, StorageResult},
     scope::{AuthorizedScope, Permission, Scope, SourceVersion},
 };
 use crate::types::{Entity, Relation};
@@ -111,6 +111,17 @@ pub trait DomainTx {
     /// Get-or-create the memory asset bound to `fact_key` (the fact slot),
     /// returning its id and current version (`None` on first creation).
     async fn slot(&mut self, fact_key: &str) -> StorageResult<(Uuid, Option<i32>)>;
+
+    /// Bind a validated business identity to a memory asset. Unsupported backends
+    /// must fail explicitly; legacy fact_key assets must never be reinterpreted.
+    async fn identity_slot(
+        &mut self,
+        _identity: &crate::memory_identity::MemoryIdentity,
+    ) -> StorageResult<(Uuid, Option<i32>)> {
+        Err(StorageError::Unavailable(
+            "memory identity storage unavailable".into(),
+        ))
+    }
 
     /// Insert a new `knowledge` asset with `title`, returning its id.
     async fn insert_knowledge_asset(&mut self, title: &str) -> StorageResult<Uuid>;
