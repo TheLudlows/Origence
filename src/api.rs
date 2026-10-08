@@ -27,6 +27,7 @@ pub fn router(service: Service) -> Router {
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/v1/memories", post(memory))
         .route("/v1/memories/identified", post(identified_memory))
+        .route("/v1/memories/lookup", post(lookup_memory))
         .route("/v1/captures", post(capture))
         .route("/v1/captures/identified", post(identified_capture))
         .route("/v1/knowledge", post(knowledge))
@@ -82,6 +83,13 @@ async fn identified_memory(
         s.identified_memory(&auth(&s, &h).await?, key(&h)?, i)
             .await?,
     ))
+}
+async fn lookup_memory(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(identity): Json<crate::memory_identity::MemoryIdentity>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.lookup_memory(&auth(&s, &h).await?, identity).await?))
 }
 async fn identified_capture(
     State(s): State<Service>,

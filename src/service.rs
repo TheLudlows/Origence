@@ -408,6 +408,19 @@ impl Service {
         tx.commit().await?;
         Ok(v)
     }
+    pub async fn lookup_memory(
+        &self,
+        a: &AuthContext,
+        identity: crate::memory_identity::MemoryIdentity,
+    ) -> Result<Value> {
+        identity
+            .validate()
+            .map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
+        let mut tx = self.read(a, Permission::Read).await?;
+        let value = tx.identity_view(&identity).await?;
+        tx.commit().await?;
+        Ok(value)
+    }
     pub async fn source_event(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
         let mut tx = self.read(a, Permission::Write).await?;
         let value = tx.event_view(id).await?;

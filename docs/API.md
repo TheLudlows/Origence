@@ -23,6 +23,7 @@
 | `GET /health/ready` | 单 Worker 正在运行且本地存储检查通过；不是外部模型健康检查 |
 | `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ asset/source/job 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → asset/source/job；同 scope 下相同身份复用资产；`conflict` 表示已有版本 |
+| `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与资产 GET 相同的当前已发布视图；不需要 Idempotency-Key，不创建资产 |
 | `POST /v1/captures` | `{content}` → source/job；抽取结果逐条直接发布，结果见任务 `result.memories` |
 | `POST /v1/captures/identified` | `{identity,content}` → asset/source/job；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
@@ -95,6 +96,8 @@ resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`�
 subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定标识，不是 API key 主体。身份包含鉴权 scope、主体、predicate 和排序后的 context，不包含内容或版本。未知字段拒绝，predicate 采用小写 ASCII 命名；条件值按原样比较，不做别名或语义归一化。相同身份追加版本；不同主体、条件或 workspace 分开。并发写入沿用 expected_version 乐观冲突检查，最终状态以 job 为准。
 
 资产读取增加 `identity` 字段；旧记忆/知识为 null。身份绑定资产且不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的资产，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
+
+`POST /v1/memories/lookup` 用完整身份精确定位当前记忆，请求体就是上述示例的 `identity` 对象，不含 content。scope 从 key 获取；不接受主体别名或语义近似匹配。未命中、尚无发布版本、资产已删除或当前来源已撤回均为 404，不回退旧版本，也不分配占位资产、来源或任务。缺失身份表仍返回 503。返回的 `version` 是读取时的当前版本，不保证随后异步写入一定成功；更新结果仍以任务的并发版本检查为准。reader 只能读取当前发布内容，不能借此读取原始 capture 输入。
 
 新建库包含 `oc_memory_identities` 表。旧库可以继续使用既有接口；缺失身份表时新入口返回 503。启动不会自动升级旧库；可停宿主后执行 `--offline memory-identity-upgrade` 显式安装身份表，详见 [运维说明](OPERATIONS.md#显式启用记忆身份)。capture、CLI/MCP 仍使用既有写入模型。
 
