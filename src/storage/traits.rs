@@ -33,7 +33,7 @@ use uuid::Uuid;
 use crate::storage::ledger::{LedgerEntry, LedgerKey};
 use crate::storage::{
     capabilities::{BlobKey, Capabilities, VectorEntry, VectorHit, VectorQuery},
-    error::StorageResult,
+    error::{StorageError, StorageResult},
     scope::{AuthorizedScope, Permission, Scope, SourceVersion},
 };
 use crate::types::{Entity, Relation};

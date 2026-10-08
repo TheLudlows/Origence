@@ -69,7 +69,7 @@ P2 保留业务时间与 GraphCompletion。存储接口的厂商解耦仍是欠�
 
 本切片不自动纠正大小写、Unicode 或空白；拒绝空值、边界空白、控制字符、超限字段与非法属性名。属性名语法校验不等于已实现属性目录。scope 必须由应用鉴权取得；codec 自身不提供认证或 scope 授权。
 
-八项 Rust 单元测试覆盖主体/属性/环境、tenant/workspace、条件排序、大小写/Unicode、无效字段、超限、版本化 key 与固定编码向量。当前编辑环境无 Rust，测试尚待 CI；不能将已编写测试标成通过。
+八项 Rust 单元测试覆盖主体/属性/环境、tenant/workspace、条件排序、大小写/Unicode、无效字段、超限、版本化 key 与固定编码向量。该 codec 的 8 项测试已通过上一轮 CI；本轮新增持久化测试与发布烟测另行验收。
 
 首个 codec 切片已通过 8 项 Rust 测试。后续持久化/API 范围见下节；capture 的既有 fact_key 语义不因该切片自动改变。
 
