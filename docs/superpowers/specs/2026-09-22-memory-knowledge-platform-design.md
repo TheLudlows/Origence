@@ -258,7 +258,7 @@ EvidenceBundle {
 
 ## 12. 评测与验收
 
-复用现有 [效果评估与对比标准](../../ContextDB_效果评估与对比标准.md) 的 300 用例和评分工具，但治理门槛按本文 A1 自动发布与 [A2.8 存储验收](#storage-acceptance) 定义；旧的“候选隔离/确认有效性”不再作为自动发布产品的验收条件。
+遵循现有 [效果评估与对比标准](../../ContextDB_效果评估与对比标准.md) 的 300 用例目标，扩充冻结数据集并接入评分工具（300 用例与评分工具尚未完整交付），但治理门槛按本文 A1 自动发布与 [A2.8 存储验收](#storage-acceptance) 定义；旧的“候选隔离/确认有效性”不再作为自动发布产品的验收条件。
 
 上线前必须验证调研 §9 的五条假设，其中与本方案最相关的三条：
 
@@ -271,7 +271,7 @@ EvidenceBundle {
 ## 13. 风险与边界
 
 1. **Rust 的 LLM/图生态弱**：用 reqwest 调 `/chat/completions` + JSON schema 校验，抽取走显式中间结果，不依赖 Python 生态；代价是 prompt/结构化输出/重试要自己写。
-2. **本地后端尚待集成**：M0 已验证 Windows/Rust 1.88 的库构建、基础读写与进程访问边界；正式适配器、队列和账本尚未实现，Linux/macOS 未验证。Kuzu 采用单宿主共享实例，不能恢复为双进程直接打开读写库。
+2. **本地后端验收边界**：M5 已集成正式适配器、队列和账本，并通过 Windows 本地及远端 CI；主应用最低 Rust 1.88、Linux/macOS 和 release 仍待验收。Kuzu 采用单宿主共享实例，不能恢复为双进程直接打开读写库。
 3. **自动发布 vs 治理**：去掉了人工审核门，靠溯源 + 删除级联 + 审计兜底；不承诺「自动抽取即事实正确」，原文证据始终可回查。
 4. **跨存储一致性**：无统一事务，靠产物账本 + 幂等重试 + 对账收敛；不承诺 exactly-once。
 5. **多 Worker 并发**：本地初期以 OS 文件锁限制单 Worker，保证崩溃释放与遗留任务恢复；旧 PG/Apalis 的会话锁仅属于历史实现。
@@ -529,7 +529,7 @@ stage_runs:    (tenant_id, workspace_id, job_id, stage, idempotency_key, waterma
 | 本地文件 | 原始文件正文，SQLite 保存文件归属与生命周期元数据 |
 | SQLite（P1） | session_turns、guidance、learnings、stage_runs；会话向量由 LanceDB 保存 |
 
-P0 记忆仍使用资产槽与版本；候选/审核功能在自动发布阶段移除，届时直接更新新库完整初始化定义，不升级旧库。实体与关系 owner 的逻辑语义统一归属关系库；Kuzu 中必要的冗余投影由账本对账，不以其状态单独判断可见性。
+P0 记忆仍使用资产槽与版本；候选/审核功能已在自动发布阶段移除，并直接更新新库完整初始化定义，不升级旧库。实体与关系 owner 的逻辑语义统一归属关系库；Kuzu 中必要的冗余投影由账本对账，不以其状态单独判断可见性。
 
 SQLite 表使用 oc_ 前缀；UUID 为 16 字节 BLOB，JSON 为 TEXT，布尔和 Unix 毫秒时间为 INTEGER；复合 scope 主键/外键和初始化定义在 `src/storage/sqlite-schema.sql`。SQLite 没有 RLS，所有领域操作显式绑定 scope。历史 PG 的 oc.* schema/jsonb/RLS 不属于当前运行实现。
 

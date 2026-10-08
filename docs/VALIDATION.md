@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-10-08：远端 Windows CI 核验与后续验收入口
+
+本轮通过 GitHub Actions API 核验已有运行，不重新执行或改写 2026-09-30 的本地测试记录：
+
+- [运行 36732894394](https://github.com/TheLudlows/openContext/actions/runs/36732894394)，commit `9d0ddc1550cdfbfbb06ae93cfa8ea8ec81832de1`，2026-09-30，Windows job `109946901559`，conclusion=success。
+- 作业步骤显示工具准备/格式/clippy/本地生命周期测试及 no-default-features 基础接口检查成功；已读取作业日志。此证据只对应该 commit 和 Windows 作业，不证明 Linux/macOS/release、主应用 Rust 1.88 或容器通过。
+- 新增 native（Linux/macOS）、msrv（1.88 默认后端 all-targets check）和 container 作业；release/container 通过 `tools/smoke.py` 使用隔离数据、关闭模型，检查 ready、未认证拒绝、记忆发布和关键词检索。MSRV check 不替代该版本的运行测试。
+- 本轮编辑环境没有 cargo、rustc、Docker 或原生构建工具，未在此环境执行 Rust 编译、全套测试或镜像运行。新增 CI 结果需单独记录，仍为待验收。
+
+后续计划见 [验收与评估批次](superpowers/plans/2026-10-08-validation-and-evaluation.md)。下文历史记录中的“远端 CI 未验证”描述当时记录状态，当前 Windows 证据以上述链接为准。
+
+
 ## 2026-09-30：并行初始化串行化与覆盖补强
 
 环境：Windows x64/MSVC、Rust/Cargo 1.96.0，锁定仓库依赖。本轮修复测试套件默认并行执行下 `initialization::sqlite_concurrent_initialization_is_serialized` 稳定失败（SQLite `code: 5 database is locked`，当日 4/4 复现、隔离执行通过）的问题：同进程并发 `SqliteStore::open` 现按路径经异步互斥串行完成连接与初始化（跨进程仍由 OS 文件锁拒绝）；同时补齐 2026-09-29 声明的未验证断言与遗留代码 Minor。实施映射见 [并行初始化串行化计划](superpowers/plans/2026-09-30-parallel-open-serialization-and-coverage.md)。
