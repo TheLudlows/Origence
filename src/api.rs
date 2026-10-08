@@ -88,7 +88,10 @@ async fn identified_capture(
     h: HeaderMap,
     Json(i): Json<IdentifiedMemoryInput>,
 ) -> Result<Json<Value>> {
-    Ok(Json(s.identified_capture(&auth(&s, &h).await?, key(&h)?, i).await?))
+    Ok(Json(
+        s.identified_capture(&auth(&s, &h).await?, key(&h)?, i)
+            .await?,
+    ))
 }
 async fn capture(
     State(s): State<Service>,

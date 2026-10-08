@@ -229,16 +229,31 @@ impl Service {
         input: IdentifiedMemoryInput,
     ) -> Result<Value> {
         parsing::validate_text(&input.content)?;
-        input.identity.validate().map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
+        input
+            .identity
+            .validate()
+            .map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
         if !self.models.extraction_enabled() {
-            return Err(AppError::Unavailable("extraction model is not configured".into()));
+            return Err(AppError::Unavailable(
+                "extraction model is not configured".into(),
+            ));
         }
-        let (mut tx, cached) = self.command(a, Permission::Write, "identified_capture", key, &json!(input)).await?;
+        let (mut tx, cached) = self
+            .command(
+                a,
+                Permission::Write,
+                "identified_capture",
+                key,
+                &json!(input),
+            )
+            .await?;
         if let Some(value) = cached {
             return Ok(value);
         }
         let (asset, version) = tx.identity_slot(&input.identity).await?;
-        let source = tx.create_event("identified_capture", &input.content, None).await?;
+        let source = tx
+            .create_event("identified_capture", &input.content, None)
+            .await?;
         let job = Self::enqueue(
             &mut tx,
             "extract",
@@ -246,8 +261,17 @@ impl Service {
             Some(asset),
             Some(source),
         ).await?;
-        tx.audit("memory.identified_capture", source, json!({"asset_id":asset,"job_id":job})).await?;
-        Self::finish(tx, json!({"asset_id":asset,"source_event_id":source,"job_id":job})).await
+        tx.audit(
+            "memory.identified_capture",
+            source,
+            json!({"asset_id":asset,"job_id":job}),
+        )
+        .await?;
+        Self::finish(
+            tx,
+            json!({"asset_id":asset,"source_event_id":source,"job_id":job}),
+        )
+        .await
     }
 
     pub async fn capture(&self, a: &AuthContext, key: &str, input: CaptureInput) -> Result<Value> {

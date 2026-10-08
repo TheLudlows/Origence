@@ -170,15 +170,20 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             guard(&mut tx, claim).await?;
             let asset = claim.asset.ok_or(AppError::NotFound)?;
             if tx.identity_slot(&identity).await?.0 != asset {
-                return Err(AppError::Conflict("identified capture asset binding changed".into()));
+                return Err(AppError::Conflict(
+                    "identified capture asset binding changed".into(),
+                ));
             }
             let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
-            let drafts = chunk.into_iter().map(|chunk| DraftMemory {
-                asset,
-                fact_key: None,
-                expected_version: expected,
-                chunks: vec![chunk],
-            }).collect();
+            let drafts = chunk
+                .into_iter()
+                .map(|chunk| DraftMemory {
+                    asset,
+                    fact_key: None,
+                    expected_version: expected,
+                    chunks: vec![chunk],
+                })
+                .collect();
             tx.commit().await?;
             let publication = prepare(service, claim, profile, drafts).await?;
             return publish_prepared(service, claim, publication).await;

@@ -176,7 +176,10 @@ impl Models {
         text: &str,
         identity: &crate::memory_identity::MemoryIdentity,
     ) -> Result<Option<crate::types::Chunk>> {
-        let model = self.extraction_model.as_ref().ok_or_else(|| AppError::Unavailable("extraction model is not configured".into()))?;
+        let model = self
+            .extraction_model
+            .as_ref()
+            .ok_or_else(|| AppError::Unavailable("extraction model is not configured".into()))?;
         let response = self.post("chat/completions", json!({
             "model":model,"temperature":0,"response_format":{"type":"json_object"},
             "messages":[
@@ -184,8 +187,11 @@ impl Models {
                 {"role":"user","content":json!({"identity":identity,"source":text}).to_string()}
             ]
         })).await?;
-        let content = response["choices"][0]["message"]["content"].as_str()
-            .ok_or_else(|| AppError::Unavailable("invalid identified extraction response".into()))?;
+        let content = response["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| {
+                AppError::Unavailable("invalid identified extraction response".into())
+            })?;
         let value = serde_json::from_str(content)
             .map_err(|_| AppError::Unavailable("invalid identified extraction JSON".into()))?;
         crate::capture::parse_identified_extraction(text, value)

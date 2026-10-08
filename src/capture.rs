@@ -1,5 +1,8 @@
 //! Evidence validation for capture into one caller-selected identity.
-use crate::{error::{AppError, Result}, types::Chunk};
+use crate::{
+    error::{AppError, Result},
+    types::Chunk,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -28,11 +31,15 @@ pub fn parse_identified_extraction(source: &str, value: Value) -> Result<Option<
     for span in extraction.memories {
         crate::parsing::validate_text(&span.quote)?;
         if source.get(span.byte_start..span.byte_end) != Some(span.quote.as_str()) {
-            return Err(AppError::Invalid("extracted quote does not match source span".into()));
+            return Err(AppError::Invalid(
+                "extracted quote does not match source span".into(),
+            ));
         }
         if let Some(previous) = &result {
             if previous.content != span.quote {
-                return Err(AppError::Invalid("multiple distinct statements for one memory identity".into()));
+                return Err(AppError::Invalid(
+                    "multiple distinct statements for one memory identity".into(),
+                ));
             }
         } else {
             result = Some(Chunk {
@@ -52,23 +59,42 @@ mod tests {
         let source = "说明：生产发布需要审批。";
         let quote = "生产发布需要审批";
         let start = source.find(quote).unwrap();
-        let chunk = parse_identified_extraction(source, json!({"memories":[{"quote":quote,"byte_start":start,"byte_end":start+quote.len()}]})).unwrap().unwrap();
+        let chunk = parse_identified_extraction(
+            source,
+            json!({"memories":[{"quote":quote,"byte_start":start,"byte_end":start+quote.len()}]}),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(chunk.content, quote);
         assert_eq!(chunk.locator["byte_start"], start);
     }
     #[test]
     fn empty_extraction_has_no_memory() {
-        assert!(parse_identified_extraction("source", json!({"memories":[]})).unwrap().is_none());
+        assert!(
+            parse_identified_extraction("source", json!({"memories":[]}))
+                .unwrap()
+                .is_none()
+        );
     }
     #[test]
     fn repeated_quote_is_one_statement() {
         let span = json!({"quote":"fact","byte_start":0,"byte_end":4});
-        assert!(parse_identified_extraction("fact", json!({"memories":[span,span]})).unwrap().is_some());
+        assert!(
+            parse_identified_extraction("fact", json!({"memories":[span,span]}))
+                .unwrap()
+                .is_some()
+        );
     }
     #[test]
     fn invalid_boundaries_and_fabricated_quotes_are_rejected() {
-        for (start,end,quote) in [(1,3,"中"),(0,99,"中"),(3,0,"中"),(0,3,"假")] {
-            assert!(parse_identified_extraction("中文", json!({"memories":[{"quote":quote,"byte_start":start,"byte_end":end}]})).is_err());
+        for (start, end, quote) in [(1, 3, "中"), (0, 99, "中"), (3, 0, "中"), (0, 3, "假")] {
+            assert!(
+                parse_identified_extraction(
+                    "中文",
+                    json!({"memories":[{"quote":quote,"byte_start":start,"byte_end":end}]})
+                )
+                .is_err()
+            );
         }
     }
     #[test]
@@ -82,7 +108,7 @@ mod tests {
     }
     #[test]
     fn oversized_batch_is_rejected() {
-        let spans = vec![json!({"quote":"fact","byte_start":0,"byte_end":4});21];
-        assert!(parse_identified_extraction("fact",json!({"memories":spans})).is_err());
+        let spans = vec![json!({"quote":"fact","byte_start":0,"byte_end":4}); 21];
+        assert!(parse_identified_extraction("fact", json!({"memories":spans})).is_err());
     }
 }
