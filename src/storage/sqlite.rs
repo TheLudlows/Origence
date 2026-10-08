@@ -711,6 +711,37 @@ impl DomainTx for SqliteTx {
         Ok((id, None))
     }
 
+    async fn identity_view(
+        &mut self,
+        identity: &crate::memory_identity::MemoryIdentity,
+    ) -> StorageResult<Value> {
+        if !identity_table_present(&mut self.tx).await? {
+            return Err(StorageError::Unavailable(
+                "memory identity storage unavailable".into(),
+            ));
+        }
+        let key = identity
+            .key(self.scope)
+            .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
+        let asset: Option<Uuid> = sqlx::query_scalar(
+            "SELECT asset_id FROM oc_memory_identities \
+             WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(key)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let asset = asset.ok_or(StorageError::NotFound)?;
+        if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
+            return Err(StorageError::Unavailable(
+                "memory identity binding mismatch".into(),
+            ));
+        }
+        self.asset_view(asset, None).await
+    }
+
     async fn identity_slot(
         &mut self,
         identity: &crate::memory_identity::MemoryIdentity,

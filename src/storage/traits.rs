@@ -112,6 +112,16 @@ pub trait DomainTx {
     /// returning its id and current version (`None` on first creation).
     async fn slot(&mut self, fact_key: &str) -> StorageResult<(Uuid, Option<i32>)>;
 
+    /// Read the current visible memory for an exact identity, without allocating a slot.
+    async fn identity_view(
+        &mut self,
+        _identity: &crate::memory_identity::MemoryIdentity,
+    ) -> StorageResult<Value> {
+        Err(StorageError::Unavailable(
+            "memory identity storage unavailable".into(),
+        ))
+    }
+
     /// Bind a validated business identity to a memory asset. Unsupported backends
     /// must fail explicitly; legacy fact_key assets must never be reinterpreted.
     async fn identity_slot(

@@ -411,6 +411,27 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
             .status(),
         403
     );
+    let lookup = http
+        .post(format!("{base}/v1/memories/lookup"))
+        .bearer_auth(reader["token"].as_str().unwrap())
+        .json(&identity)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(lookup.status(), 200);
+    let lookup: Value = lookup.json().await.unwrap();
+    assert_eq!(lookup["asset_id"], first["asset_id"]);
+    assert_eq!(lookup["version"], 2);
+    assert_eq!(
+        http.post(format!("{base}/v1/memories/lookup"))
+            .bearer_auth(other["token"].as_str().unwrap())
+            .json(&identity)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
     request(
         &http,
         &base,

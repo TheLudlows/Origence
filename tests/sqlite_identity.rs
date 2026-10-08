@@ -94,6 +94,117 @@ async fn tombstone_blocks_identity_recreation() {
 }
 
 #[tokio::test]
+async fn lookup_is_exact_scoped_and_reads_current_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (auth, scope) = provision(&store).await;
+    let i = identity();
+    let mut tx = store.begin(auth).await.unwrap();
+    let (asset, _) = tx.identity_slot(&i).await.unwrap();
+    let source = tx.create_event("identified", "source", None).await.unwrap();
+    for version in [1, 2] {
+        tx.insert_version(asset, version, "approval", "hash", source, None, None)
+            .await
+            .unwrap();
+        tx.update_asset_version(asset, version, None).await.unwrap();
+    }
+    tx.commit().await.unwrap();
+    let key = store.issue_key(scope, "reader").await.unwrap();
+    let reader = store.authenticate(&key.token).await.unwrap();
+    let mut tx = store.begin(reader).await.unwrap();
+    tx.check_permission(opencontext::storage::Permission::Read)
+        .await
+        .unwrap();
+    let view = tx.identity_view(&i).await.unwrap();
+    assert_eq!(view["asset_id"], asset.to_string());
+    assert_eq!(view["version"], 2);
+    let mut other = i.clone();
+    other.subject.stable_id = "shipping".into();
+    assert!(matches!(
+        tx.identity_view(&other).await,
+        Err(StorageError::NotFound)
+    ));
+    other = i.clone();
+    other.context.insert("environment".into(), "staging".into());
+    assert!(matches!(
+        tx.identity_view(&other).await,
+        Err(StorageError::NotFound)
+    ));
+    tx.commit().await.unwrap();
+    let (other, _) = provision(&store).await;
+    let mut tx = store.begin(other).await.unwrap();
+    assert!(matches!(
+        tx.identity_view(&i).await,
+        Err(StorageError::NotFound)
+    ));
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn missing_lookup_does_not_allocate_a_slot() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oc.db");
+    let store = SqliteStore::open(&path).await.unwrap();
+    let (auth, _) = provision(&store).await;
+    let mut tx = store.begin(auth).await.unwrap();
+    assert!(matches!(
+        tx.identity_view(&identity()).await,
+        Err(StorageError::NotFound)
+    ));
+    tx.commit().await.unwrap();
+    store.shutdown().await.unwrap();
+    let mut conn = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
+        .await
+        .unwrap();
+    for table in ["oc_assets", "oc_memory_identities", "oc_events", "oc_jobs"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "lookup wrote {table}");
+    }
+}
+
+#[tokio::test]
+async fn lookup_hides_unpublished_deleted_and_retracted_memories() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (auth, _) = provision(&store).await;
+    let mut tx = store.begin(auth).await.unwrap();
+    for deleted in [false, true] {
+        let mut i = identity();
+        i.subject.stable_id = format!("service-{deleted}");
+        let (asset, _) = tx.identity_slot(&i).await.unwrap();
+        assert!(matches!(
+            tx.identity_view(&i).await,
+            Err(StorageError::NotFound)
+        ));
+        let source = tx.create_event("identified", "source", None).await.unwrap();
+        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+            .await
+            .unwrap();
+        tx.update_asset_version(asset, 1, None).await.unwrap();
+        let source = tx.create_event("identified", "update", None).await.unwrap();
+        tx.insert_version(asset, 2, "approval", "hash", source, None, None)
+            .await
+            .unwrap();
+        tx.update_asset_version(asset, 2, None).await.unwrap();
+        assert!(tx.identity_view(&i).await.is_ok());
+        if deleted {
+            tx.delete_asset(asset).await.unwrap();
+        } else {
+            tx.retract_event(source).await.unwrap();
+            assert!(tx.asset_view(asset, Some(1)).await.is_ok());
+        }
+        assert!(matches!(
+            tx.identity_view(&i).await,
+            Err(StorageError::NotFound)
+        ));
+    }
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
 async fn legacy_collision_is_not_reinterpreted() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
@@ -131,6 +242,10 @@ async fn old_database_is_not_upgraded_implicitly() {
     tx.slot("legacy.fact").await.unwrap();
     assert!(matches!(
         tx.identity_slot(&identity()).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    assert!(matches!(
+        tx.identity_view(&identity()).await,
         Err(StorageError::Unavailable(_))
     ));
     tx.commit().await.unwrap();

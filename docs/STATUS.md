@@ -53,3 +53,7 @@ PR #4 已合入 main（`51bd534`）。本轮新增调用方明确 identity 的 c
 ## 2026-10-08 身份状态与来源读取
 
 PR #5 已合入 main（`248747b`）。本轮资产读取增加 explicit_identity/legacy_unidentified/not_applicable，明确身份绑定方式而非事实真伪；新增 writer 来源原文 GET，按 scope、来源撤回与文件删除过滤。新增 3 项 SQLite 契约测试及原生 HTTP 权限/撤回断言，执行结果待 CI。此切片没有新增自动身份推断或未归一化资产状态机。
+
+## 精确身份查找推进（2026-10-08）
+
+PR #6 已合入 main（`578957d`），macOS fmt 已通过；新增 SQLite 和原生 HTTP 验收仍未完成。本轮新增 reader 可用的 `POST /v1/memories/lookup`：完整身份精确定位当前发布视图，不命中不创建资产，未发布/墓碑/撤回返回 404，旧库缺表返回 503。新增 3 项 SQLite 只读/隔离/治理用例、旧库查找断言和原生 HTTP reader/跨 scope 断言，Python 5 项本地通过，Rust 结果待 CI。设计文档开头的进度已更新；自动推断、属性目录、未归一化资产状态机与 P1 会话闭环仍待推进。

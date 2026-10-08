@@ -207,4 +207,8 @@ RLS 未设置 scope 时默认拒绝、跨 workspace 写入失败、跨 workspace
 
 ## 身份状态与来源读取（2026-10-08）
 
-SQLite 新增源事件 scope/撤回可见性、文件删除阻断、三类 normalization_status 测试。原生 HTTP 用例新增失败 capture 原文读取、reader 403、跨 scope 404 和撤回后 404，结果待 CI。状态字段不构成语义真值保证，原文 GET 不开放给 reader。
+SQLite 新增源事件 scope/撤回可见性、文件删除阻断、三类 normalization_status 测试。原生 HTTP 用例新增失败 capture 原文读取、reader 403、跨 scope 404 和撤回后 404。PR #6 已合入 `578957d`；[CI run 37770696604](https://github.com/TheLudlows/openContext/actions/runs/37770696604) 的 macOS fmt 在 `bccdad2` 通过，新增 SQLite 与原生 HTTP 验收仍未完成。状态字段不构成语义真值保证，原文 GET 不开放给 reader。
+
+## 精确身份只读查找（2026-10-08）
+
+新增 3 项 SQLite 用例：reader 当前版本读取与主体/条件/scope 隔离；未命中提交后资产/身份/来源/任务表均无新增；未发布、墓碑和撤回不可见。旧库用例增加缺表 503 契约。原生 HTTP 用例增加 reader 无 Idempotency-Key 查找当前版本与跨 scope 404。Python adapter 5 项本地通过，Rust 格式、编译和新增测试待 CI；未验收自动匹配或真实模型质量。
