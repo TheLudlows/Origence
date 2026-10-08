@@ -28,6 +28,7 @@ pub fn router(service: Service) -> Router {
         .route("/v1/memories", post(memory))
         .route("/v1/memories/identified", post(identified_memory))
         .route("/v1/captures", post(capture))
+        .route("/v1/captures/identified", post(identified_capture))
         .route("/v1/knowledge", post(knowledge))
         .route("/v1/search", post(search))
         .route("/v1/resolve", post(resolve))
@@ -79,6 +80,16 @@ async fn identified_memory(
 ) -> Result<Json<Value>> {
     Ok(Json(
         s.identified_memory(&auth(&s, &h).await?, key(&h)?, i)
+            .await?,
+    ))
+}
+async fn identified_capture(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(i): Json<IdentifiedMemoryInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.identified_capture(&auth(&s, &h).await?, key(&h)?, i)
             .await?,
     ))
 }

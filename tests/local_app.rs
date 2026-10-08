@@ -43,7 +43,17 @@ async fn extract(Json(v): Json<Value>) -> Json<Value> {
         v["messages"][0]["content"].as_str().unwrap_or(""),
         v["messages"][1]["content"].as_str().unwrap_or("")
     );
-    let content = if prompt.contains("Summarize") {
+    let content = if prompt.contains("one explicit identity") {
+        let input: Value =
+            serde_json::from_str(v["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let source = input["source"].as_str().unwrap();
+        if source == "CAPTURECONFLICT" {
+            json!({"memories":[{"quote":"CAPTURE","byte_start":0,"byte_end":7},{"quote":"CONFLICT","byte_start":7,"byte_end":15}]}).to_string()
+        } else {
+            json!({"memories":[{"quote":source,"byte_start":0,"byte_end":source.len()}]})
+                .to_string()
+        }
+    } else if prompt.contains("Summarize") {
         "Atlas summary evidence".to_string()
     } else if prompt.contains("EMPTY-EXTRACT") {
         json!({"memories":[],"entities":[],"relations":[]}).to_string()
@@ -307,6 +317,72 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     assert_eq!(second["version"], 1);
     // A duplicate fact_key in one extraction drops instead of breaking the job.
     assert_eq!(extracted["result"]["memories"].as_array().unwrap().len(), 2);
+    let identity = json!({"subject":{"kind":"service","stable_id":"billing"},"predicate":"release.approval","context":{"environment":"production"}});
+    let first = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures/identified",
+        json!({"identity":identity,"content":"生产发布需要审批"}),
+    )
+    .await;
+    let published = job(&http, &base, token, id(&first, "job_id"), "completed").await;
+    assert_eq!(published["result"]["memories"][0]["identity"], identity);
+    let second = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures/identified",
+        json!({"identity":identity,"content":"生产发布需要双人审批"}),
+    )
+    .await;
+    assert_eq!(first["asset_id"], second["asset_id"]);
+    job(&http, &base, token, id(&second, "job_id"), "completed").await;
+    let view = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::GET,
+        &format!("/v1/assets/{}", first["asset_id"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(view["version"], 2);
+    assert_eq!(view["identity"], identity);
+
+    let ambiguous = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures/identified",
+        json!({"identity":identity,"content":"CAPTURECONFLICT"}),
+    )
+    .await;
+    let failed = job(&http, &base, token, id(&ambiguous, "job_id"), "failed").await;
+    assert_eq!(failed["error_code"], "INVALID_ARGUMENT");
+    let unchanged = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::GET,
+        &format!("/v1/assets/{}", first["asset_id"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(unchanged["version"], 2);
+    let mut other_identity = identity.clone();
+    other_identity["context"]["environment"] = json!("staging");
+    let other = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures/identified",
+        json!({"identity":other_identity,"content":"测试发布免审批"}),
+    )
+    .await;
+    assert_ne!(other["asset_id"], first["asset_id"]);
+    job(&http, &base, token, id(&other, "job_id"), "completed").await;
+
     // Zero extracted memories still completes with an empty published list.
     let empty = post(
         &http,

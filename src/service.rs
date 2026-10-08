@@ -222,6 +222,58 @@ impl Service {
         .await
     }
 
+    pub async fn identified_capture(
+        &self,
+        a: &AuthContext,
+        key: &str,
+        input: IdentifiedMemoryInput,
+    ) -> Result<Value> {
+        parsing::validate_text(&input.content)?;
+        input
+            .identity
+            .validate()
+            .map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
+        let (mut tx, cached) = self
+            .command(
+                a,
+                Permission::Write,
+                "identified_capture",
+                key,
+                &json!(input),
+            )
+            .await?;
+        if let Some(value) = cached {
+            return Ok(value);
+        }
+        if !self.models.extraction_enabled() {
+            return Err(AppError::Unavailable(
+                "extraction model is not configured".into(),
+            ));
+        }
+        let (asset, version) = tx.identity_slot(&input.identity).await?;
+        let source = tx
+            .create_event("identified_capture", &input.content, None)
+            .await?;
+        let job = Self::enqueue(
+            &mut tx,
+            "extract",
+            json!({"identity":input.identity,"expected_version":version,"embedding_profile":self.models.profile}),
+            Some(asset),
+            Some(source),
+        ).await?;
+        tx.audit(
+            "memory.identified_capture",
+            source,
+            json!({"asset_id":asset,"job_id":job}),
+        )
+        .await?;
+        Self::finish(
+            tx,
+            json!({"asset_id":asset,"source_event_id":source,"job_id":job}),
+        )
+        .await
+    }
+
     pub async fn capture(&self, a: &AuthContext, key: &str, input: CaptureInput) -> Result<Value> {
         parsing::validate_text(&input.content)?;
         let (mut tx, cached) = self

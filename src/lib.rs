@@ -1,5 +1,6 @@
 #[cfg(feature = "local-storage")]
 pub mod api;
+pub mod capture;
 pub mod error;
 pub mod graph;
 #[cfg(feature = "local-storage")]
