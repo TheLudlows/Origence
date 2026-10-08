@@ -181,6 +181,7 @@ async fn main() -> anyhow::Result<()> {
                     .search(
                         &auth,
                         SearchInput {
+                            memory_identity: None,
                             query,
                             mode,
                             limit,
@@ -199,6 +200,7 @@ async fn main() -> anyhow::Result<()> {
                     .resolve(
                         &auth,
                         ResolveInput {
+                            memory_identity: None,
                             query,
                             mode,
                             budget_tokens,
@@ -230,6 +232,7 @@ async fn main() -> anyhow::Result<()> {
             reqwest::Method::POST,
             "/v1/search".into(),
             Some(json!(SearchInput {
+                memory_identity: None,
                 query,
                 mode,
                 limit,
@@ -245,6 +248,7 @@ async fn main() -> anyhow::Result<()> {
             reqwest::Method::POST,
             "/v1/resolve".into(),
             Some(json!(ResolveInput {
+                memory_identity: None,
                 query,
                 mode,
                 budget_tokens,

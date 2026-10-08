@@ -61,3 +61,7 @@ PR #6 已合入 main（`578957d`），macOS fmt 已通过；新增 SQLite 用例
 ## 检索与上下文身份标注（2026-10-08）
 
 PR #7 已合入 main（`ec06ffa`）。本轮 search hits 与 resolve 引用/文本保留身份绑定方式和完整业务身份；身份在最终授权读事务中按资产读取，同一资产复用元数据。上下文标注计入完整字节预算，不截断引用，策略标识为 identity-provenance-v1。新增向后兼容解码/类型状态测试，扩充预算边界与原生 HTTP 标注断言；本轮 Rust 结果待 CI。此为 I4 的标注切片，不实现冲突检测、类型配额、自动身份匹配或会话闭环。
+
+## 精确身份检索过滤（2026-10-08）
+
+PR #8 已合入 main（`29a89cd`），其 Rust/原生验收仍未完成。本轮 search/resolve 新增可选完整 memory_identity：过滤在 limit 之前，精确匹配主体/属性/条件，保留 scope 和最终来源治理；启用时只取显式身份记忆，不携带知识/图扩展。新增默认请求/Schema 与精确匹配反例测试，原生 HTTP 覆盖 production/staging 同词 limit=1 隔离与 hybrid resolve 过滤；Python 5 项本地通过，Rust 结果待 CI。自动身份推断、未归一化状态、冲突识别与 P1 会话仍未实现。

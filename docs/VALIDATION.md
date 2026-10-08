@@ -218,3 +218,7 @@ SQLite 新增源事件 scope/撤回可见性、文件删除阻断、三类 norma
 [CI run 37771835095](https://github.com/TheLudlows/openContext/actions/runs/37771835095) 在代码 `7cc8723` 通过 fmt、22 项 lib 与 58 项无原生集成，包含 PR #6 的 3 项来源/身份状态与 PR #7 的 3 项精确查找 SQLite 用例。原生 HTTP、平台/release/container 仍在运行，不能由轻量测试替代。
 
 本轮新增旧 SearchHit 解码与三类状态测试；原生 render 用例验证完整身份标注、UTF-8 及恰好/不足一个字节的预算边界；原生 HTTP 用例验证 reader search/resolve 的身份与引用。Python 5 项本地通过，新增 Rust 测试和原生断言待 CI。
+
+## 精确身份过滤（2026-10-08）
+
+新增 SearchInput/ResolveInput 默认兼容、MCP Schema 属性与未知 scope 字段拒绝测试；身份匹配覆盖无过滤、旧未识别、主体差异、条件差异、知识类型排除。原生 HTTP 验证相同关键词 production/staging 在 limit=1 下分别命中，并验证 hybrid resolve 不携带其他身份或图对象。Python 5 项本地通过，新增 Rust/HTTP 用例待 CI；PR #8 的格式/编译/上下文预算验收仍需完成。

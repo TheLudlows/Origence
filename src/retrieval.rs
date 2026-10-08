@@ -10,6 +10,11 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 impl Service {
     pub async fn search(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
+        if let Some(identity) = &input.memory_identity {
+            identity
+                .validate()
+                .map_err(|_| AppError::Invalid("invalid memory identity filter".into()))?;
+        }
         if input.query.trim().is_empty()
             || input.query.len() > 4000
             || input.query.contains('\0')
@@ -69,7 +74,7 @@ impl Service {
                 }
             }
         }
-        let graph = if effective == "hybrid" {
+        let graph = if effective == "hybrid" && input.memory_identity.is_none() {
             Some(self.engine.graph().snapshot(scope(a)).await?)
         } else {
             None
@@ -168,8 +173,7 @@ impl Service {
             evidence_hits.dedup_by_key(|h| h.chunk_id);
             branches.push(evidence_hits);
         }
-        let mut hits = fuse(branches, effective == "hybrid");
-        hits.truncate(input.limit);
+        let hits = fuse(branches, effective == "hybrid");
         tx.commit().await?;
         let mut verify = self.read(a, Permission::Read).await?;
         let mut current = Vec::new();
@@ -186,7 +190,12 @@ impl Service {
                     entry.insert(identity);
                 }
                 live.identity = identities[&live.asset_id].clone();
-                current.push(live);
+                if live.matches_identity(input.memory_identity.as_ref()) {
+                    current.push(live);
+                    if current.len() == input.limit {
+                        break;
+                    }
+                }
             }
         }
         let hits = current;
@@ -227,7 +236,7 @@ impl Service {
             })
             .collect();
         Ok(
-            json!({"hits":hits,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","graph":{"entities":entities,"relations":relations}}),
+            json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","graph":{"entities":entities,"relations":relations}}),
         )
     }
     pub async fn resolve(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {
@@ -238,6 +247,7 @@ impl Service {
             .search(
                 a,
                 SearchInput {
+                    memory_identity: input.memory_identity,
                     query: input.query,
                     limit: 100,
                     mode: input.mode,
@@ -261,7 +271,7 @@ impl Service {
         let mut all_sources = sources;
         all_sources.extend(graph_sources);
         Ok(
-            json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"graph":search["graph"]}),
+            json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","memory_identity":search["memory_identity"],"count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"graph":search["graph"]}),
         )
     }
 }
