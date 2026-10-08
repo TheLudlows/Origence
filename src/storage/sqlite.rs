@@ -21,6 +21,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use fs2::FileExt;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use sqlx::Connection;
 use sqlx::SqliteConnection;
 use sqlx::Transaction;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
@@ -40,6 +41,16 @@ use crate::storage::traits::{
 
 /// The complete schema for a new database, executed only when absent (A2.3).
 const SCHEMA: &str = include_str!("sqlite-schema.sql");
+const IDENTITY_SCHEMA: &str = include_str!("memory-identity-schema.sql");
+
+/// Result of the explicit, offline identity schema upgrade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryIdentityUpgrade {
+    Required,
+    Enabled,
+    AlreadyEnabled,
+}
 
 /// Complete column projections required by the fixed local schema.
 const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
@@ -153,6 +164,55 @@ impl SqliteStore {
         Ok(store)
     }
 
+    /// Enable identity writes in a compatible existing database. Requires an
+    /// exclusive lock, validates before changing anything, and never creates a
+    /// missing database or reinterprets legacy assets. Dry-run only reports.
+    pub async fn upgrade_memory_identity(
+        path: impl AsRef<Path>,
+        dry_run: bool,
+    ) -> StorageResult<MemoryIdentityUpgrade> {
+        let path = tokio::fs::canonicalize(path.as_ref()).await?;
+        if !path.is_file() {
+            return Err(StorageError::Conflict("existing database file required".into()));
+        }
+        let (_lock, opening) = acquire_path_lock(&path, false)?;
+        let _serialized = opening.lock().await;
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(false)
+            .foreign_keys(true)
+            .busy_timeout(Duration::from_secs(5));
+        let mut conn = SqliteConnection::connect_with(&options).await.map_err(sqlite_err)?;
+        let mut tx = conn.begin_with("BEGIN IMMEDIATE").await.map_err(sqlite_err)?;
+        check_conn(&mut tx).await?;
+        let status = if identity_table_present(&mut tx).await? {
+            MemoryIdentityUpgrade::AlreadyEnabled
+        } else {
+            let objects: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'",
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(sqlite_err)?;
+            if objects != 0 {
+                return Err(StorageError::Unavailable("memory identity schema name is occupied".into()));
+            }
+            if dry_run {
+                MemoryIdentityUpgrade::Required
+            } else {
+                sqlx::raw_sql(IDENTITY_SCHEMA)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(sqlite_err)?;
+                check_identity_schema(&mut tx).await?;
+                MemoryIdentityUpgrade::Enabled
+            }
+        };
+        tx.commit().await.map_err(sqlite_err)?;
+        conn.close().await.map_err(sqlite_err)?;
+        Ok(status)
+    }
+
     /// The shared connection pool. Domain operations borrow short-lived
     /// connections; model/file IO never holds one (A2.5).
     pub fn pool(&self) -> &SqlitePool {
@@ -194,11 +254,21 @@ static PROCESS_LOCKS: LazyLock<Mutex<HashMap<PathBuf, HeldLock>>> =
 /// on drop plus the per-path mutex that serializes in-process opens. Reentrant
 /// within this process (A2.5).
 fn acquire_lock(path: &Path) -> StorageResult<(LockGuard, Arc<tokio::sync::Mutex<()>>)> {
+    acquire_path_lock(path, true)
+}
+
+fn acquire_path_lock(
+    path: &Path,
+    reentrant: bool,
+) -> StorageResult<(LockGuard, Arc<tokio::sync::Mutex<()>>)> {
     let key = lock_path(path);
     let mut locks = PROCESS_LOCKS
         .lock()
         .expect("process lock registry poisoned");
     if let Some(held) = locks.get_mut(&key) {
+        if !reentrant {
+            return Err(StorageError::Conflict("store is already open in this process".into()));
+        }
         held.refs += 1;
         return Ok((LockGuard(key), held.opening.clone()));
     }
@@ -255,7 +325,12 @@ async fn schema_present(conn: &mut SqliteConnection) -> StorageResult<bool> {
 }
 
 async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    for stmt in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+    for stmt in SCHEMA
+        .split(';')
+        .chain(IDENTITY_SCHEMA.split(';'))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         sqlx::raw_sql(stmt)
             .execute(&mut *conn)
             .await
@@ -273,13 +348,28 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
                 StorageError::Unavailable(format!("incompatible SQLite schema in {table}: {e}"))
             })?;
     }
-    // This optional feature is created only as part of a fresh schema. M5/A1
-    // databases keep working without it; existing malformed tables fail closed.
+    // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
-        sqlx::query("SELECT tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at FROM oc_memory_identities LIMIT 0")
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| StorageError::Unavailable(format!("incompatible memory identity schema: {e}")))?;
+        check_identity_schema(conn).await?;
+    }
+    Ok(())
+}
+
+async fn check_identity_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
+    let ddl: String = sqlx::query_scalar(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='oc_memory_identities'",
+    )
+    .fetch_one(conn)
+    .await
+    .map_err(sqlite_err)?;
+    let normalize = |sql: &str| {
+        sql.trim_end_matches(';')
+            .split_whitespace()
+            .collect::<String>()
+            .to_ascii_lowercase()
+    };
+    if normalize(&ddl) != normalize(IDENTITY_SCHEMA.trim()) {
+        return Err(StorageError::Unavailable("incompatible memory identity schema".into()));
     }
     Ok(())
 }

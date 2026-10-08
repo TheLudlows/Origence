@@ -21,7 +21,7 @@
 
 P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估沿用 300 用例目标。本轮新增隔离 HTTP 检索评估器、12 文档/24 查询的合成种子和指标/adapter 测试；真实宿主结果仍待 CI，不能把样本或 fixture 通过当作完整质量结果。
 
-[记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 明确主体、属性、条件与来源关联，已实现 `MemoryIdentity` v1 编码、SQLite 身份绑定与显式 HTTP 写入入口；同身份复用资产并沿用发布任务/版本治理，capture 语义匹配和旧库显式升级仍未实现。接下来按该设计推进语义身份和 P1 会话闭环，不以新增后端替代产品能力。
+[记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 明确主体、属性、条件与来源关联，已实现 `MemoryIdentity` v1 编码、SQLite 身份绑定与显式 HTTP 写入入口；同身份复用资产并沿用发布任务/版本治理，已补兼容本地旧库的离线显式身份表升级（dry-run/事务安装/重复执行），本轮测试待 CI；capture 语义匹配仍未实现。接下来按该设计推进语义身份和 P1 会话闭环，不以新增后端替代产品能力。
 
 ## 接下来
 
@@ -38,3 +38,10 @@ P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 impr
 
 - 首个 I1 切片：主体/属性/条件及 scope 的确定性身份编码，附 8 项 Rust 测试；编码的 8 项测试与 Rust 1.88 检查已通过上一轮 CI。新增持久化/API 切片含 4 项 SQLite 测试及 release/container 身份发布烟测，身份编码 8 项和 SQLite 4 项测试、fmt 已在远端 CI 通过；release/container 发布烟测仍待原生构建。
 - 容器实际构建发现 Lance 缺失 `google/protobuf/empty.proto`；Docker 与 Linux CI 已补 `libprotobuf-dev` 和 protoc 导入预检。修复后运行仍待验收，详见 VALIDATION。
+
+## 2026-10-08 显式身份表升级切片
+
+- PR #3 已合入 main（`b52a302`）；身份/SQLite/Python 轻量测试通过，完整跨平台和容器验收仍在运行。
+- 新增 `--offline memory-identity-upgrade [--dry-run]`：只打开已有库、独占锁、验证基础 schema 和身份约束、原子安装同一份 DDL；不推断或转换旧身份，不启动原生引擎。
+- 新增 6 项 SQLite 升级测试、1 项原生构建 CLI 测试，并补跨进程升级锁测试；轻量 CI 扩至完整无原生后端集成套件。本轮执行结果待 CI，CLI 和容器烟测单独验收。
+- 后续重点：capture 的可追溯抽取与精确身份匹配，再进入 P1 会话/反馈闭环；不引入第二后端或多 Worker。

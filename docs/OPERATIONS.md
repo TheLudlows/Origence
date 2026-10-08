@@ -26,6 +26,21 @@
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。配置列表见 [项目 README](../README.md)。
 
+## 显式启用记忆身份
+
+本命令只为兼容当前本地基础 schema、但缺少 `oc_memory_identities` 的既有 SQLite 库安装身份表，不是通用版本迁移或 PG 导入。启动仍不会自动升级。
+
+1. 正常停止宿主及所有离线客户端，按下节备份整个数据目录。
+2. 预检：`opencontext --data-dir DATA_DIR --offline memory-identity-upgrade --dry-run`。
+3. 安装：`opencontext --data-dir DATA_DIR --offline memory-identity-upgrade`。
+4. 重启宿主；旧 get/search 应保持可用，新入口 `/v1/memories/identified` 可以写入。
+
+输出 `{feature:"memory-identity-v1",status,dry_run}`：预检缺表返回 `required`，安装成功 `enabled`，已安装时 `already_enabled`。重复执行不会增加映射或版本。预检不改 schema/业务数据，但仍要求独占锁；它不是在线检查。
+
+升级只在 `BEGIN IMMEDIATE` 事务内创建身份表，基础 schema 检查失败、已有身份表与已知 DDL 不一致（包括缺失唯一约束/外键）、同名视图占用、锁冲突时拒绝，不自动修复。已有身份表只允许当前已知定义，SQL 大小写和空白差异不影响检查。失败不会提交 schema 变更。
+
+命令不要求 API key，也不加载模型、LanceDB/Kuzu 或 Blob；授权依赖数据目录的操作系统访问权限。不存在的 `context.db` 不会被新建。旧资产、fact_key、事件和版本不被转换，已有记忆读取的 identity 仍为 null；新身份写入与旧槽碰撞仍返回 409。此工具仅启用新表，不为旧记忆推断主体或条件。
+
 ## 失败与恢复
 
 | 现象 | 处理 |

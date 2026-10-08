@@ -15,7 +15,7 @@ $env:OC_DATA_DIR = "$PWD/.data"
 ./target/debug/opencontext serve
 ```
 
-`workspace-create` 输出 workspace ID、key ID 和仅展示一次的 admin token；数据库只保存 token 的 SHA-256。首次启动自动创建空库结构；已有库校验必要字段，不执行版本升级或自动修复。第二个宿主或离线命令打开同一数据目录会失败。
+`workspace-create` 输出 workspace ID、key ID 和仅展示一次的 admin token；数据库只保存 token 的 SHA-256。首次启动自动创建空库结构；已有库校验必要字段，不执行启动时版本升级或自动修复；兼容本地旧库可离线显式安装记忆身份表，见 [运维说明](docs/OPERATIONS.md#显式启用记忆身份)。第二个宿主或离线命令打开同一数据目录会失败。
 
 在另一个终端配置 token，通过运行中的宿主管理同 workspace 的凭据：
 

@@ -57,6 +57,11 @@ async fn lock_is_exclusive_across_processes() {
         "expected a lock conflict, got {err:?}"
     );
 
+    assert!(matches!(
+        SqliteStore::upgrade_memory_identity(&path, false).await,
+        Err(StorageError::Conflict(_))
+    ));
+
     // When the holder exits, the OS releases the lock and a fresh open wins.
     let _ = child.kill();
     let _ = child.wait();

@@ -29,8 +29,17 @@
 
 ## 本轮语义前置设计
 
-已新增 [记忆身份与上下文契约](../specs/2026-10-08-memory-identity-and-context.md)：将授权主体与业务主体区分，明确跨主体/环境隔离、精确身份更新、未归一化状态和矛盾证据呈现。I1 的独立身份类型/编码与 8 项 Rust 测试已通过 CI；本轮实现 SQLite 身份唯一绑定和显式 HTTP 写入，新切片的 4 项 SQLite 测试已通过 CI，release/container 发布烟测仍待验收。旧库显式升级、capture 抽取匹配、会话与上下文策略尚未实现，按 I0–I4 切片推进。短记忆不强制建图，图收益以评估决定。
+已新增 [记忆身份与上下文契约](../specs/2026-10-08-memory-identity-and-context.md)：将授权主体与业务主体区分，明确跨主体/环境隔离、精确身份更新、未归一化状态和矛盾证据呈现。I1 的独立身份类型/编码与 8 项 Rust 测试已通过 CI；本轮实现 SQLite 身份唯一绑定和显式 HTTP 写入，新切片的 4 项 SQLite 测试已通过 CI，release/container 发布烟测仍待验收。已实现窄范围的离线显式身份表升级，验收待 CI；capture 抽取匹配、会话与上下文策略尚未实现，按 I0–I4 切片推进。短记忆不强制建图，图收益以评估决定。
 
 ## 后续阶段
 
 按 STATUS 继续检索增强和运维治理：retention、物理擦除、孤儿文件、备份恢复演练。P1 按 A3 推进会话问答/证据与反馈、guidance、阶段化 improve、水位和长期经验入库；P2 保留 GraphCompletion、个性化、valid_from/to/as_of 和企业服务化。未来 PG 适配及本地多 Worker 不属于本批次。
+
+## I1 显式身份表升级执行清单
+
+- [x] 提供独占现有库的 `--offline memory-identity-upgrade` 与 dry-run，不在 startup 初始化中迁移。
+- [x] fresh-data 与升级共用身份 DDL，事务安装并拒绝不兼容基础结构/身份约束。
+- [x] 保留 legacy asset/fact_key/source/version，不做身份推断或回填。
+- [x] 补 SQLite/跨进程锁/CLI 用例，轻量 CI 扩至完整无原生集成套件；同步 API 与运维文档。
+- [ ] 本轮 Rust fmt/编译/集成测试通过。
+- [ ] 默认原生构建 CLI、release 与容器烟测通过。

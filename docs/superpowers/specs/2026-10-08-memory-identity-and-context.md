@@ -77,4 +77,8 @@ P2 保留业务时间与 GraphCompletion。存储接口的厂商解耦仍是欠�
 
 新增 SQLite `oc_memory_identities` 保存 scope、v1 key、资产和完整身份 JSON；scope/key 与 scope/asset 双唯一约束、复合资产外键防止身份绑定漂移。`POST /v1/memories/identified` 在授权短写事务中绑定身份、写来源/审计/幂等响应并入队，Worker 沿用 expected_version 和原有发布治理。已绑定资产拒绝旧 slot 写入；与已有 legacy fact_key 碰撞返回冲突。资产读取在可见性核验后返回身份。
 
-新表只随新建库创建；旧库无表时旧接口仍可用，新入口 503，不在启动时迁移。显式升级尚待下一切片。CLI/MCP、capture 抽取匹配暂未接入。新增 SQLite 契约测试与 release/container 发布烟测，验收结果以 VALIDATION 为准。
+新表只随新建库创建；旧库无表时旧接口仍可用，新入口 503，不在启动时迁移。已新增离线 `memory-identity-upgrade` 定向安装，见下节。CLI/MCP、capture 抽取匹配暂未接入。新增 SQLite 契约测试与 release/container 发布烟测，验收结果以 VALIDATION 为准。
+
+## I1 兼容库的显式安装边界
+
+只支持通过现有本地基础字段检查的库增加缺失身份表，fresh-data 与安装共用 `memory-identity-schema.sql`。必须停止宿主、独占已有库；dry-run 只报告 required/already_enabled，执行后 enabled，重复执行无变化。安装事务不更新任何业务记录；同名非表对象、未知身份 DDL、基础不兼容和锁占用均拒绝。该切片不引入自动升级历史链或 PG 迁移，后续 schema 变化需另行设计。用户可以选择继续使用旧库旧接口而不安装新表。

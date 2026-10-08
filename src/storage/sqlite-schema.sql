@@ -1,4 +1,4 @@
--- Complete schema for a NEW SQLite database. No version history or upgrades (A2.3).
+-- Base schema for a NEW SQLite database; optional identity schema is applied separately (A2.3).
 --
 -- Encodings are fixed here (A5):
 --   UUID        -> BLOB (16 bytes, sqlx `uuid` mapping)
@@ -59,16 +59,6 @@ CREATE TABLE oc_assets (
 );
 CREATE UNIQUE INDEX oc_memory_fact_slot ON oc_assets(tenant_id, workspace_id, fact_key)
 WHERE kind = 'memory';
-
-CREATE TABLE oc_memory_identities (
-    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL,
-    identity_key TEXT NOT NULL, asset_id BLOB NOT NULL,
-    identity_json TEXT NOT NULL, created_at INTEGER NOT NULL,
-    PRIMARY KEY (tenant_id, workspace_id, identity_key),
-    UNIQUE (tenant_id, workspace_id, asset_id),
-    FOREIGN KEY (tenant_id, workspace_id, asset_id)
-        REFERENCES oc_assets(tenant_id, workspace_id, id)
-);
 
 CREATE TABLE oc_versions (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, asset_id BLOB NOT NULL,
