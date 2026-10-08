@@ -72,8 +72,6 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install cmake ninja protobuf
       - run: cargo fmt --all -- --check
-      - name: Lightweight domain and SQLite contracts before native builds
-        run: cargo test --locked --no-default-features --lib --test local -j 2
       - run: cargo clippy --locked --all-targets -j 1 -- -D warnings
       - run: cargo test --locked -j 1 --no-fail-fast
       - name: Release build and no-model HTTP smoke
