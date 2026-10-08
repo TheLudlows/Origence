@@ -173,9 +173,19 @@ impl Service {
         tx.commit().await?;
         let mut verify = self.read(a, Permission::Read).await?;
         let mut current = Vec::new();
+        let mut identities = HashMap::new();
         for h in hits {
             if let Some(mut live) = verify.visible_hit(h.chunk_id).await? {
                 live.score = h.score;
+                if let std::collections::hash_map::Entry::Vacant(entry) =
+                    identities.entry(live.asset_id)
+                {
+                    let asset = verify.asset_view(live.asset_id, None).await?;
+                    let identity: Option<crate::memory_identity::MemoryIdentity> =
+                        decode(asset["identity"].clone())?;
+                    entry.insert(identity);
+                }
+                live.identity = identities[&live.asset_id].clone();
                 current.push(live);
             }
         }
@@ -208,6 +218,14 @@ impl Service {
         }
         let relations = live_relations;
         verify.commit().await?;
+        let hits: Vec<Value> = hits
+            .into_iter()
+            .map(|hit| {
+                let mut value = json!(hit);
+                value["normalization_status"] = json!(hit.normalization_status());
+                value
+            })
+            .collect();
         Ok(
             json!({"hits":hits,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","graph":{"entities":entities,"relations":relations}}),
         )
@@ -243,7 +261,7 @@ impl Service {
         let mut all_sources = sources;
         all_sources.extend(graph_sources);
         Ok(
-            json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"graph":search["graph"]}),
+            json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"graph":search["graph"]}),
         )
     }
 }
@@ -276,12 +294,13 @@ pub fn render(hits: &[SearchHit], budget: usize) -> (String, Vec<Value>) {
     let mut sources = Vec::new();
     for hit in hits {
         let marker = format!("[{}:{}:{}]", hit.asset_id, hit.version, hit.chunk_id);
-        let block = format!("{marker} {}\n{}\n\n", hit.title, hit.content);
+        let identity = json!({"kind":hit.kind,"identity":hit.identity,"normalization_status":hit.normalization_status()});
+        let block = format!("{marker} {}\n{identity}\n{}\n\n", hit.title, hit.content);
         if rendered.len() + block.len() > budget {
             continue;
         }
         rendered.push_str(&block);
-        sources.push(json!({"citation":marker,"asset_id":hit.asset_id,"version":hit.version,"chunk_id":hit.chunk_id,"source_event_id":hit.source_event_id,"locator":hit.locator}));
+        sources.push(json!({"citation":marker,"asset_id":hit.asset_id,"version":hit.version,"chunk_id":hit.chunk_id,"source_event_id":hit.source_event_id,"locator":hit.locator,"kind":hit.kind,"identity":hit.identity,"normalization_status":hit.normalization_status()}));
     }
     (rendered, sources)
 }
@@ -300,11 +319,30 @@ mod tests {
             locator: json!({}),
             source_event_id: Uuid::new_v4(),
             score: 1.0,
+            identity: None,
         };
         for budget in [0, 10, 80, 500] {
             let (text, sources) = render(std::slice::from_ref(&hit), budget);
             assert!(text.len() <= budget);
             assert_eq!(text.is_empty(), sources.is_empty());
         }
+        let mut hit = hit;
+        hit.content = "审批".into();
+        hit.identity = Some(
+            serde_json::from_value(json!({
+            "subject":{"kind":"service","stable_id":"billing"},
+            "predicate":"release.approval","context":{"environment":"production"}
+            }))
+            .unwrap(),
+        );
+        let (text, sources) = render(std::slice::from_ref(&hit), 2000);
+        assert!(text.contains("explicit_identity"));
+        assert!(text.contains("production"));
+        assert_eq!(sources[0]["identity"], json!(hit.identity));
+        assert_eq!(sources[0]["kind"], "memory");
+        let (smaller, sources) = render(std::slice::from_ref(&hit), text.len() - 1);
+        assert!(smaller.is_empty());
+        assert!(sources.is_empty());
+        assert_eq!(render(&[hit], text.len()).0, text);
     }
 }

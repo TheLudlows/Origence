@@ -422,6 +422,44 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let lookup: Value = lookup.json().await.unwrap();
     assert_eq!(lookup["asset_id"], first["asset_id"]);
     assert_eq!(lookup["version"], 2);
+    let recalled = post(
+        &http,
+        &base,
+        reader["token"].as_str().unwrap(),
+        "/v1/search",
+        json!({"query":"生产发布需要双人审批","mode":"keyword"}),
+    )
+    .await;
+    let hit = recalled["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|hit| hit["asset_id"] == first["asset_id"])
+        .unwrap();
+    assert_eq!(hit["identity"], identity);
+    assert_eq!(hit["normalization_status"], "explicit_identity");
+    let context = post(
+        &http,
+        &base,
+        reader["token"].as_str().unwrap(),
+        "/v1/resolve",
+        json!({"query":"生产发布需要双人审批","budget_tokens":3000}),
+    )
+    .await;
+    let cited = context["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|source| source["asset_id"] == first["asset_id"])
+        .unwrap();
+    assert_eq!(cited["identity"], identity);
+    assert_eq!(cited["normalization_status"], "explicit_identity");
+    assert!(
+        context["rendered_context"]
+            .as_str()
+            .unwrap()
+            .contains("explicit_identity")
+    );
     assert_eq!(
         http.post(format!("{base}/v1/memories/lookup"))
             .bearer_auth(other["token"].as_str().unwrap())

@@ -8,6 +8,7 @@ const HIT: &str = "SELECT c.id, c.asset_id,c.version,a.kind,v.title,c.content,c.
 
 fn hit(row: &sqlx::sqlite::SqliteRow, score: f64) -> SearchHit {
     SearchHit {
+        identity: None,
         chunk_id: row.get("id"),
         asset_id: row.get("asset_id"),
         version: row.get("version"),
