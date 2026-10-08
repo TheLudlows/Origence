@@ -163,6 +163,26 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             .await?
             .ok_or(AppError::NotFound)?;
         tx.commit().await?;
+        if let Some(value) = claim.payload.get("identity") {
+            let identity: crate::memory_identity::MemoryIdentity = decode(value.clone())?;
+            let chunk = service.models.extract_identified(&text, &identity).await?;
+            let mut tx = service.write(&a, Permission::Write).await?;
+            guard(&mut tx, claim).await?;
+            let asset = claim.asset.ok_or(AppError::NotFound)?;
+            if tx.identity_slot(&identity).await?.0 != asset {
+                return Err(AppError::Conflict("identified capture asset binding changed".into()));
+            }
+            let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
+            let drafts = chunk.into_iter().map(|chunk| DraftMemory {
+                asset,
+                fact_key: None,
+                expected_version: expected,
+                chunks: vec![chunk],
+            }).collect();
+            tx.commit().await?;
+            let publication = prepare(service, claim, profile, drafts).await?;
+            return publish_prepared(service, claim, publication).await;
+        }
         let memories = service.models.extract(&text).await?;
         // Slot every fact under a short write tx; versions are re-verified at
         // commit, so a race only supersedes the job without overwriting.
@@ -563,6 +583,7 @@ async fn publish_prepared(
                 .map(|m| json!({
                     "asset_id": m.asset,
                     "fact_key": m.fact_key,
+                    "identity": claim.payload.get("identity"),
                     "version": m.version,
                 }))
                 .collect::<Vec<_>>()

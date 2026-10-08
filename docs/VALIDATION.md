@@ -200,3 +200,7 @@ RLS 未设置 scope 时默认拒绝、跨 workspace 写入失败、跨 workspace
 ## 旧库显式身份表升级（2026-10-08）
 
 新增 SQLite 升级用例覆盖：预检不安装、安装与重复幂等、旧资产/来源/版本保留且不创建映射、新身份入口可写；不存在文件不新建；同进程和跨进程锁拒绝；基础列不兼容不修复；身份表缺约束拒绝；同名视图保留。CLI 用例验证 `--offline` 要求、锁冲突、三种状态及不加载原生存储。release/container 烟测增加新库升级预检。[CI run 37765440784](https://github.com/TheLudlows/openContext/actions/runs/37765440784) 在代码提交 `0dd6f4ee1b23616f742461fcc27813ade239bff8` 通过 fmt、8 项身份编码、52 项无原生集成（含 6 项新增升级）和 5 项 Python 测试。原生 CLI、release/container 及跨平台验收仍待执行，不能由轻量测试代替。新库初始化执行完整 SQL 脚本，避免分号注释被误拆成 SQL。
+
+## 单身份 capture（2026-10-08）
+
+新增证据解析测试：UTF-8 原文区间、零结果、重复 quote、伪造/越界区间、单身份不同断言、模型身份/scope 字段注入与批量上限。原生 HTTP 测试增加真实 Worker 的身份 capture、相同身份版本追加与资产身份读取（model stub，仅验收行为）。轻量 CI 扩为全 lib 测试。当前新用例待 CI；没有真实模型语义质量证据。

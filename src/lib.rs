@@ -1,3 +1,4 @@
+pub mod capture;
 #[cfg(feature = "local-storage")]
 pub mod api;
 pub mod error;
