@@ -336,13 +336,8 @@ async fn schema_present(conn: &mut SqliteConnection) -> StorageResult<bool> {
 }
 
 async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    for stmt in SCHEMA
-        .split(';')
-        .chain(IDENTITY_SCHEMA.split(';'))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        sqlx::raw_sql(stmt)
+    for schema in [SCHEMA, IDENTITY_SCHEMA] {
+        sqlx::raw_sql(schema)
             .execute(&mut *conn)
             .await
             .map_err(sqlite_err)?;
