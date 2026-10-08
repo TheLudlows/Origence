@@ -1,6 +1,6 @@
 # 记忆身份与上下文策略：P1 前置设计
 
-日期：2026-10-08。状态：设计契约，尚未实现新字段/API/自动匹配。补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
+日期：2026-10-08。状态：已实现独立身份类型与 v1 编码模块；尚未接入持久化、HTTP API 或自动匹配。补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
 
 ## 当前缺口与范围
 
@@ -62,3 +62,13 @@ P1 策略分别支持近期会话、当前已识别记忆、知识原文、条�
 当前不提供历史库自动升级。新增表/列前必须明确 fresh-data 验收与旧数据兼容边界；不可在启动中静默 ALTER/重解释已有 fact_key，也不可声称现有 M5 数据自动兼容。迁移/导入路径如需支持，应单独设计和验收。
 
 P2 保留业务时间与 GraphCompletion。存储接口的厂商解耦仍是欠账，但第二后端不是 I1–I4 的前置条件；避免把产品推进再次变成后端扩展项目。
+
+## I1 首个代码切片：身份类型与 v1 编码
+
+`src/memory_identity.rs` 提供 `MemorySubject`、`SubjectKind`、`MemoryIdentity`、验证和 `key(scope)`。编码使用固定 JSON tuple（版本、tenant、workspace、主体种类、稳定 ID、属性、排序条件映射）后 SHA-256，前缀为 `memory-identity:v1:`。正文、来源、授权 principal 和 expected_version 不进入身份，允许同一身份后续追加业务版本。
+
+本切片不自动纠正大小写、Unicode 或空白；拒绝空值、边界空白、控制字符、超限字段与非法属性名。属性名语法校验不等于已实现属性目录。scope 必须由应用鉴权取得；codec 自身不提供认证或 scope 授权。
+
+八项 Rust 单元测试覆盖主体/属性/环境、tenant/workspace、条件排序、大小写/Unicode、无效字段、超限、版本化 key 与固定编码向量。当前编辑环境无 Rust，测试尚待 CI；不能将已编写测试标成通过。
+
+该 key 尚未用于现有 fact_key 槽。I1 的持久化唯一约束、兼容入口和授权 API 仍待交付；不允许将当前 codec 存在解释为已修复线上跨主体覆盖问题。接入前需处理旧 fact_key 与新身份命名空间碰撞，并保留原始身份字段供审计/匹配，而非只保存哈希。
