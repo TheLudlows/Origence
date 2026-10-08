@@ -20,7 +20,7 @@
 
 ## 测试映射
 
-- `tests/local_app.rs`：真实 HTTP、CLI、MCP、PDF 子进程；权限、候选审核、版本恢复、中文检索、幂等、共享图来源、取消重试、撤销/删除迟到工作、宿主强退重启、显式离线与无回退、优雅关闭。
+- `tests/local_app.rs`：真实 HTTP、CLI、MCP、PDF 子进程；权限、版本恢复、中文检索、幂等、共享图来源、取消重试、撤销/删除迟到工作、宿主强退重启、显式离线与无回退、优雅关闭。
 - `saved_publication_recovers_after_external_graph_write`：构造真实持久化边界（图已写、SQLite 仅 pending、版本尚未发布），关闭重开后清理并重放；验证只新增一个版本且最后来源撤回后图消失。这是可控边界注入，不冒称逐指令进程崩溃覆盖。
 - `tests/lancedb_store.rs`：scope/profile/dimension/generation/source-version 隔离、输入校验、精确候选过滤在 top-k 前执行、幂等和重开删除。
 - SQLite/账本/owner/锁与 Kuzu 适配器原有套件继续经 `tests/local.rs` 执行；存储测试使用真实临时文件，模型使用本地 stub。
@@ -31,4 +31,4 @@
 
 README、API、STATUS、运维、验收、环境模板、Docker/Compose、CI 和评估入口同步；文档索引明确区分运行契约、未来产品设计、历史代码草稿和固定版本调研。保留原研究事实，不将旧 serverless/PG 方案当作现行部署步骤。
 
-Windows 本地基线是此次交付目标；Linux/macOS/release、镜像运行、远端 CI、最低 Rust 版本、断电恢复、在线备份与长期规模测试需后续独立验收。自动发布、P1 会话/蒸馏、P2 SaaS 和未来 PG 扩展不在 M5 范围内。
+Windows 本地基线是此次交付目标；Linux/macOS/release、镜像运行、远端 CI、最低 Rust 版本、断电恢复、在线备份与长期规模测试需后续独立验收。自动发布不在当日 M5 范围内，随后已于 2026-09-29 完成；候选审核已移除。P1 会话/蒸馏、P2 SaaS 和未来 PG 扩展仍未交付。Windows 远端 CI 后续已通过，见 VALIDATION 的 2026-10-08 核验记录。
