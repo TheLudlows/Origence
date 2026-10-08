@@ -1,4 +1,5 @@
 // One integration executable avoids repeatedly linking the native engines.
+mod identity_upgrade_cli;
 mod initialization;
 mod kuzu_store;
 mod lancedb_store;
@@ -7,6 +8,7 @@ mod local_blob;
 mod local_ledger;
 mod sqlite_domain;
 mod sqlite_identity;
+mod sqlite_identity_upgrade;
 mod sqlite_ledger;
 mod sqlite_lock;
 mod sqlite_owner;

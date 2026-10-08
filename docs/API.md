@@ -94,4 +94,4 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 
 资产读取增加 `identity` 字段；旧记忆/知识为 null。身份绑定资产且不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的资产，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
 
-新建库包含 `oc_memory_identities` 表。旧库可以继续使用既有接口；缺失身份表时新入口返回 503。启动不会自动升级旧库；显式升级工具尚未提供。capture、CLI/MCP 仍使用既有写入模型。
+新建库包含 `oc_memory_identities` 表。旧库可以继续使用既有接口；缺失身份表时新入口返回 503。启动不会自动升级旧库；可停宿主后执行 `--offline memory-identity-upgrade` 显式安装身份表，详见 [运维说明](OPERATIONS.md#显式启用记忆身份)。capture、CLI/MCP 仍使用既有写入模型。

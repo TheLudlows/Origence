@@ -195,4 +195,8 @@ RLS 未设置 scope 时默认拒绝、跨 workspace 写入失败、跨 workspace
 
 ## 结构化身份持久化/API 切片（2026-10-08）
 
-上一轮身份编码 8 项测试与 MSRV 检查已通过。新增 `sqlite_identity` 的复用/发布读取/跨 scope 主体条件隔离、墓碑、旧槽碰撞、无隐式迁移测试；轻量 CI 无需原生后端即可执行。release/container 烟测新增真实身份发布、同身份版本 2 和条件隔离。[CI run 37759685825](https://github.com/TheLudlows/openContext/actions/runs/37759685825) 在 `3b9afa5ecbf08b816a3c7dc3f355874c79227a2e` 通过 fmt、8 项身份编码、4 项 SQLite 身份测试与 5 项 Python adapter 测试。默认原生后端编译、完整 HTTP 发布烟测、容器和平台验收仍在运行，不将轻量测试等同于完整运行验收。旧库缺表时新入口 503；旧接口继续可用，显式升级和 capture 身份匹配仍待实现。
+上一轮身份编码 8 项测试与 MSRV 检查已通过。新增 `sqlite_identity` 的复用/发布读取/跨 scope 主体条件隔离、墓碑、旧槽碰撞、无隐式迁移测试；轻量 CI 无需原生后端即可执行。release/container 烟测新增真实身份发布、同身份版本 2 和条件隔离。[CI run 37759685825](https://github.com/TheLudlows/openContext/actions/runs/37759685825) 在 `3b9afa5ecbf08b816a3c7dc3f355874c79227a2e` 通过 fmt、8 项身份编码、4 项 SQLite 身份测试与 5 项 Python adapter 测试。默认原生后端编译、完整 HTTP 发布烟测、容器和平台验收仍在运行，不将轻量测试等同于完整运行验收。旧库缺表时新入口 503；旧接口继续可用，capture 身份匹配仍待实现；显式升级切片见下节。
+
+## 旧库显式身份表升级（2026-10-08）
+
+新增 SQLite 升级用例覆盖：预检不安装、安装与重复幂等、旧资产/来源/版本保留且不创建映射、新身份入口可写；不存在文件不新建；同进程和跨进程锁拒绝；基础列不兼容不修复；身份表缺约束拒绝；同名视图保留。CLI 用例验证 `--offline` 要求、锁冲突、三种状态及不加载原生存储。release/container 烟测增加新库升级预检。[CI run 37765440784](https://github.com/TheLudlows/openContext/actions/runs/37765440784) 在代码提交 `0dd6f4ee1b23616f742461fcc27813ade239bff8` 通过 fmt、8 项身份编码、52 项无原生集成（含 6 项新增升级）和 5 项 Python 测试。原生 CLI、release/container 及跨平台验收仍待执行，不能由轻量测试代替。新库初始化执行完整 SQL 脚本，避免分号注释被误拆成 SQL。

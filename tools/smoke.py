@@ -43,6 +43,11 @@ def main():
                 if bootstrap.returncode:
                     raise RuntimeError("workspace bootstrap failed")
                 token = json.loads(bootstrap.stdout)["token"]
+                upgrade = subprocess.run(prefix + ["--offline", "memory-identity-upgrade", "--dry-run"],
+                                         env=env, capture_output=True, text=True, timeout=120)
+                if upgrade.returncode or json.loads(upgrade.stdout)["status"] != "already_enabled":
+                    raise RuntimeError("fresh database identity upgrade preflight failed")
+
                 if args.image:
                     subprocess.run(["docker", "run", "-d", "--name", name,
                                     "-p", "127.0.0.1::8080", "-v", volume + ":/data",

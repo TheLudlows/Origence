@@ -7,7 +7,7 @@
 
 本文是基于现有 openContext/ContextDB 代码与 Cognee 调研（[架构分析](../../Cognee_技术架构分析.md)、[技术细节](../../Cognee_技术细节与方案对比.md)）的**转向设计**。相比之前的 ContextDB V3.1，本次改变四件事：技术栈锁定 Rust；治理模型从「候选审核 → 发布」改为 Cognee 式「自动发布」；存储改为可插拔引擎；交付先落地本地存储版本，SaaS 能力后续演进。继承不变的：workspace/tenant 隔离、来源溯源、删除级联、审计、可注入上下文与预算。
 
-> **实施基线：** 本文统一描述产品与存储设计；存储完整契约见 [A2](#storage-design)，执行顺序见 [本地存储实施计划](../plans/2026-09-22-pluggable-storage-engine.md)。本地固定 SQLite/LanceDB/Kuzu，PG/pgvector 仅保留接口扩展能力；不提供版本化数据库升级。产品目标与当前实现状态分别列示。
+> **实施基线：** 本文统一描述产品与存储设计；存储完整契约见 [A2](#storage-design)，执行顺序见 [本地存储实施计划](../plans/2026-09-22-pluggable-storage-engine.md)。本地固定 SQLite/LanceDB/Kuzu，PG/pgvector 仅保留接口扩展能力；不提供自动版本化数据库升级；新增身份表支持离线显式定向安装，见 [运维说明](../../OPERATIONS.md#显式启用记忆身份)。产品目标与当前实现状态分别列示。
 
 > **一级产品目标：** 平台原生支持多个 tenant，以及每个 tenant 下的多个 workspace。tenant/workspace 隔离贯穿认证、scope、资产、来源、任务、文件、图/向量检索、缓存、审计和账本；它不是部署、计费或后续 SaaS 阶段才加入的能力。
 
