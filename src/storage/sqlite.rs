@@ -639,13 +639,13 @@ impl DomainTx for SqliteTx {
         if let Some((asset, version, deleted)) = existing {
             if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
                 return Err(StorageError::Conflict(
-                "memory identity binding mismatch".into(),
-            ));
+                    "memory identity binding mismatch".into(),
+                ));
             }
             if deleted {
                 return Err(StorageError::Conflict(
-                "memory identity asset was deleted".into(),
-            ));
+                    "memory identity asset was deleted".into(),
+                ));
             }
             return Ok((asset, version));
         }

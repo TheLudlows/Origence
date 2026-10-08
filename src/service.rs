@@ -188,7 +188,13 @@ impl Service {
             .validate()
             .map_err(|_| AppError::Invalid("invalid memory identity".into()))?;
         let (mut tx, cached) = self
-            .command(a, Permission::Write, "identified_memory", key, &json!(input))
+            .command(
+                a,
+                Permission::Write,
+                "identified_memory",
+                key,
+                &json!(input),
+            )
             .await?;
         if let Some(value) = cached {
             return Ok(value);
