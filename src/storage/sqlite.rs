@@ -173,7 +173,9 @@ impl SqliteStore {
     ) -> StorageResult<MemoryIdentityUpgrade> {
         let path = tokio::fs::canonicalize(path.as_ref()).await?;
         if !path.is_file() {
-            return Err(StorageError::Conflict("existing database file required".into()));
+            return Err(StorageError::Conflict(
+                "existing database file required".into(),
+            ));
         }
         let (_lock, opening) = acquire_path_lock(&path, false)?;
         let _serialized = opening.lock().await;
@@ -182,8 +184,13 @@ impl SqliteStore {
             .create_if_missing(false)
             .foreign_keys(true)
             .busy_timeout(Duration::from_secs(5));
-        let mut conn = SqliteConnection::connect_with(&options).await.map_err(sqlite_err)?;
-        let mut tx = conn.begin_with("BEGIN IMMEDIATE").await.map_err(sqlite_err)?;
+        let mut conn = SqliteConnection::connect_with(&options)
+            .await
+            .map_err(sqlite_err)?;
+        let mut tx = conn
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(sqlite_err)?;
         check_conn(&mut tx).await?;
         let status = if identity_table_present(&mut tx).await? {
             MemoryIdentityUpgrade::AlreadyEnabled
@@ -195,7 +202,9 @@ impl SqliteStore {
             .await
             .map_err(sqlite_err)?;
             if objects != 0 {
-                return Err(StorageError::Unavailable("memory identity schema name is occupied".into()));
+                return Err(StorageError::Unavailable(
+                    "memory identity schema name is occupied".into(),
+                ));
             }
             if dry_run {
                 MemoryIdentityUpgrade::Required
@@ -267,7 +276,9 @@ fn acquire_path_lock(
         .expect("process lock registry poisoned");
     if let Some(held) = locks.get_mut(&key) {
         if !reentrant {
-            return Err(StorageError::Conflict("store is already open in this process".into()));
+            return Err(StorageError::Conflict(
+                "store is already open in this process".into(),
+            ));
         }
         held.refs += 1;
         return Ok((LockGuard(key), held.opening.clone()));
@@ -369,7 +380,9 @@ async fn check_identity_schema(conn: &mut SqliteConnection) -> StorageResult<()>
             .to_ascii_lowercase()
     };
     if normalize(&ddl) != normalize(IDENTITY_SCHEMA.trim()) {
-        return Err(StorageError::Unavailable("incompatible memory identity schema".into()));
+        return Err(StorageError::Unavailable(
+            "incompatible memory identity schema".into(),
+        ));
     }
     Ok(())
 }

@@ -25,17 +25,34 @@ async fn cli_requires_offline_and_does_not_initialize_native_engines() {
     assert!(!missing.status.success());
     assert!(!path.exists());
     let store = SqliteStore::open(&path).await.unwrap();
-    sqlx::query("DROP TABLE oc_memory_identities").execute(store.pool()).await.unwrap();
-    assert!(!upgrade(dir.path(), &["--offline", "memory-identity-upgrade"]).status.success());
+    sqlx::query("DROP TABLE oc_memory_identities")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    assert!(
+        !upgrade(dir.path(), &["--offline", "memory-identity-upgrade"])
+            .status
+            .success()
+    );
     store.shutdown().await.unwrap();
     drop(store);
     for (args, status) in [
-        (vec!["--offline", "memory-identity-upgrade", "--dry-run"], "required"),
+        (
+            vec!["--offline", "memory-identity-upgrade", "--dry-run"],
+            "required",
+        ),
         (vec!["--offline", "memory-identity-upgrade"], "enabled"),
-        (vec!["--offline", "memory-identity-upgrade"], "already_enabled"),
+        (
+            vec!["--offline", "memory-identity-upgrade"],
+            "already_enabled",
+        ),
     ] {
         let output = upgrade(dir.path(), &args);
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         let report: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(report["status"], status);
     }

@@ -109,10 +109,16 @@ async fn main() -> anyhow::Result<()> {
         return host::serve(service, listener, host::shutdown_signal()).await;
     }
     if let Command::MemoryIdentityUpgrade { dry_run } = &cli.command {
-        anyhow::ensure!(cli.offline, "memory-identity-upgrade requires --offline and a stopped host");
-        let status = SqliteStore::upgrade_memory_identity(cli.data_dir.join("context.db"), *dry_run)
-            .await?;
-        println!("{}", json!({"feature":"memory-identity-v1","status":status,"dry_run":dry_run}));
+        anyhow::ensure!(
+            cli.offline,
+            "memory-identity-upgrade requires --offline and a stopped host"
+        );
+        let status =
+            SqliteStore::upgrade_memory_identity(cli.data_dir.join("context.db"), *dry_run).await?;
+        println!(
+            "{}",
+            json!({"feature":"memory-identity-v1","status":status,"dry_run":dry_run})
+        );
         return Ok(());
     }
     if cli.offline
