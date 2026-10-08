@@ -114,3 +114,9 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 资产 get 增加 normalization_status：记忆有显式身份绑定时为 explicit_identity；旧 fact_key 记忆为 legacy_unidentified；知识资产为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一资产身份。旧记忆不会因该字段被自动归一化。
 
 writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。未归一化资产的独立状态和自动身份归并仍待后续实现。
+
+## 检索与上下文身份标注
+
+search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
+
+resolve 的 chunk 引用增加 kind、identity 与 normalization_status，rendered_context 在每块正文前附相同的 JSON 标注，context_policy 为 identity-provenance-v1。引用、标题、标注和正文全部计入既有 UTF-8 字节预算；整块保留或省略，不截断身份/引用。新增标注可能减少相同预算下的正文数量。图引用保留既有格式。状态表示身份绑定方式，不是事实真值、业务有效期或自动匹配置信度；当前尚未实现冲突识别与类型预算分配。

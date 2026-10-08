@@ -116,6 +116,47 @@ pub struct SearchHit {
     pub locator: Value,
     pub source_event_id: Uuid,
     pub score: f64,
+    #[serde(default)]
+    #[sqlx(skip)]
+    pub identity: Option<crate::memory_identity::MemoryIdentity>,
+}
+
+impl SearchHit {
+    pub fn normalization_status(&self) -> &'static str {
+        if self.kind != "memory" {
+            "not_applicable"
+        } else if self.identity.is_some() {
+            "explicit_identity"
+        } else {
+            "legacy_unidentified"
+        }
+    }
+}
+
+#[cfg(test)]
+mod identity_status_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_hit_decodes_and_identity_status_preserves_type() {
+        let mut hit: SearchHit = serde_json::from_value(serde_json::json!({
+            "asset_id":Uuid::new_v4(),"version":1,"chunk_id":Uuid::new_v4(),
+            "kind":"memory","title":"policy","content":"approval",
+            "locator":{},"source_event_id":Uuid::new_v4(),"score":1.0
+        }))
+        .unwrap();
+        assert_eq!(hit.normalization_status(), "legacy_unidentified");
+        hit.identity = Some(
+            serde_json::from_value(serde_json::json!({
+            "subject":{"kind":"service","stable_id":"billing"},
+            "predicate":"release.approval","context":{"environment":"production"}
+            }))
+            .unwrap(),
+        );
+        assert_eq!(hit.normalization_status(), "explicit_identity");
+        hit.kind = "knowledge".into();
+        assert_eq!(hit.normalization_status(), "not_applicable");
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
