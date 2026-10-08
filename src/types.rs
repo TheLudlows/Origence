@@ -41,6 +41,32 @@ pub struct MemoryInput {
 pub struct IdentifiedMemoryInput {
     pub identity: crate::memory_identity::MemoryIdentity,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_version: Option<i32>,
+}
+
+impl IdentifiedMemoryInput {
+    pub fn validate_version(&self) -> crate::error::Result<()> {
+        if self.expected_version.is_some_and(|version| version < 0) {
+            return Err(crate::error::AppError::Invalid(
+                "expected_version must be >=0".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn check_version(&self, current: Option<i32>) -> crate::error::Result<()> {
+        self.validate_version()?;
+        if self
+            .expected_version
+            .is_some_and(|expected| expected != current.unwrap_or(0))
+        {
+            return Err(crate::error::AppError::Conflict(
+                "expected_version mismatch".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +175,61 @@ impl SearchHit {
 #[cfg(test)]
 mod identity_status_tests {
     use super::*;
+
+    fn identified_input() -> IdentifiedMemoryInput {
+        serde_json::from_value(serde_json::json!({
+            "identity":{"subject":{"kind":"service","stable_id":"billing"},
+            "predicate":"release.approval","context":{}},"content":"approval"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn omitted_version_preserves_legacy_idempotency_payload() {
+        let input = identified_input();
+        assert!(input.check_version(None).is_ok());
+        assert!(input.check_version(Some(7)).is_ok());
+        let value = serde_json::to_value(&input).unwrap();
+        assert!(value.get("expected_version").is_none());
+        let mut explicit_null = value.clone();
+        explicit_null["expected_version"] = Value::Null;
+        let input: IdentifiedMemoryInput = serde_json::from_value(explicit_null).unwrap();
+        assert_eq!(serde_json::to_value(input).unwrap(), value);
+    }
+
+    #[test]
+    fn caller_version_precondition_distinguishes_empty_and_current() {
+        let mut input = identified_input();
+        input.expected_version = Some(0);
+        assert!(input.check_version(None).is_ok());
+        assert!(matches!(
+            input.check_version(Some(1)),
+            Err(crate::error::AppError::Conflict(_))
+        ));
+        input.expected_version = Some(2);
+        assert!(input.check_version(Some(2)).is_ok());
+        for current in [None, Some(1), Some(3)] {
+            assert!(matches!(
+                input.check_version(current),
+                Err(crate::error::AppError::Conflict(_))
+            ));
+        }
+        assert_eq!(serde_json::to_value(input).unwrap()["expected_version"], 2);
+    }
+
+    #[test]
+    fn negative_version_is_invalid_before_acceptance() {
+        let mut input = identified_input();
+        input.expected_version = Some(-1);
+        assert!(matches!(
+            input.validate_version(),
+            Err(crate::error::AppError::Invalid(_))
+        ));
+        assert!(matches!(
+            input.check_version(None),
+            Err(crate::error::AppError::Invalid(_))
+        ));
+    }
 
     #[test]
     fn legacy_hit_decodes_and_identity_status_preserves_type() {

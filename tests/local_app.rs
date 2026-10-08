@@ -318,14 +318,19 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     // A duplicate fact_key in one extraction drops instead of breaking the job.
     assert_eq!(extracted["result"]["memories"].as_array().unwrap().len(), 2);
     let identity = json!({"subject":{"kind":"service","stable_id":"billing"},"predicate":"release.approval","context":{"environment":"production"}});
-    let first = post(
-        &http,
-        &base,
-        token,
-        "/v1/captures/identified",
-        json!({"identity":identity,"content":"生产发布需要审批"}),
-    )
-    .await;
+    let first_key = Uuid::new_v4().to_string();
+    let first_body =
+        json!({"identity":identity,"content":"生产发布需要审批","expected_version":0});
+    let first = http
+        .post(format!("{base}/v1/captures/identified"))
+        .bearer_auth(token)
+        .header("Idempotency-Key", &first_key)
+        .json(&first_body)
+        .send()
+        .await
+        .unwrap();
+    assert!(first.status().is_success());
+    let first: Value = first.json().await.unwrap();
     let published = job(&http, &base, token, id(&first, "job_id"), "completed").await;
     assert_eq!(published["result"]["memories"][0]["identity"], identity);
     let second = post(
@@ -333,7 +338,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         &base,
         token,
         "/v1/captures/identified",
-        json!({"identity":identity,"content":"生产发布需要双人审批"}),
+        json!({"identity":identity,"content":"生产发布需要双人审批","expected_version":1}),
     )
     .await;
     assert_eq!(first["asset_id"], second["asset_id"]);
@@ -349,6 +354,31 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     .await;
     assert_eq!(view["version"], 2);
     assert_eq!(view["identity"], identity);
+    let replay: Value = http
+        .post(format!("{base}/v1/captures/identified"))
+        .bearer_auth(token)
+        .header("Idempotency-Key", &first_key)
+        .json(&first_body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(replay, first);
+    for path in ["/v1/memories/identified", "/v1/captures/identified"] {
+        for (expected, status) in [(0, 409), (1, 409), (-1, 422)] {
+            let rejected = http
+                .post(format!("{base}{path}"))
+                .bearer_auth(token)
+                .header("Idempotency-Key", Uuid::new_v4().to_string())
+                .json(&json!({"identity":identity,"content":"stale","expected_version":expected}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(rejected.status(), status);
+        }
+    }
 
     let ambiguous = post(
         &http,

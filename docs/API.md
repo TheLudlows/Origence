@@ -126,3 +126,9 @@ resolve 的 chunk 引用增加 kind、identity 与 normalization_status，render
 search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,context:{}}`，省略时沿用混合检索。启用后只保留当前 scope 内完整身份精确相同的 memory；排除旧未识别记忆、知识块和图扩展。字段在模型调用前校验，不接受别名/语义近似/部分条件匹配；未知字段拒绝，非法身份 422，未命中为空结果。身份不替代鉴权，结果仍受当前版本、来源和墓碑规则约束。旧库缺身份表不会自动升级，没有显式绑定则不匹配。
 
 过滤在 limit 截断之前、最终可见性复核过程中执行；仍受各检索分支的候选范围限制，不承诺穷尽召回。只定位当前资产且无检索需求时使用 memories/lookup。响应回显 memory_identity；resolve 将过滤条件透传给 search。HTTP/MCP 接受该字段，CLI 仍采用无过滤的默认行为。
+
+## 显式写入的调用方版本前置条件
+
+memories/identified 和 captures/identified 可选 expected_version（非负整数）。0 表示当前尚无已发布版本（可能已有未发布占位资产）；正数必须与受理事务中当前版本相同。不匹配返回 409，事务回滚且不新建来源或任务；负数 422。省略或 null 保持按受理时版本追加的旧行为，不是“必须创建”。
+
+可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
