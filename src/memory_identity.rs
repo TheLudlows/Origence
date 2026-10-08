@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use crate::storage::Scope;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SubjectKind {
     User,
@@ -31,7 +31,7 @@ impl SubjectKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MemorySubject {
     pub kind: SubjectKind,
@@ -39,7 +39,7 @@ pub struct MemorySubject {
     pub stable_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MemoryIdentity {
     pub subject: MemorySubject,

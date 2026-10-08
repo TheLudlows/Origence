@@ -502,6 +502,37 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     assert_ne!(other["asset_id"], first["asset_id"]);
     job(&http, &base, token, id(&other, "job_id"), "completed").await;
 
+    for (filter, asset) in [
+        (&identity, &first["asset_id"]),
+        (&other_identity, &other["asset_id"]),
+    ] {
+        let filtered = post(
+            &http,
+            &base,
+            reader["token"].as_str().unwrap(),
+            "/v1/search",
+            json!({"query":"发布","limit":1,"memory_identity":filter}),
+        )
+        .await;
+        assert_eq!(filtered["hits"].as_array().unwrap().len(), 1);
+        assert_eq!(&filtered["hits"][0]["asset_id"], asset);
+        assert_eq!(&filtered["hits"][0]["identity"], filter);
+    }
+    let filtered_context = post(
+        &http,
+        &base,
+        reader["token"].as_str().unwrap(),
+        "/v1/resolve",
+        json!({"query":"发布","mode":"hybrid","memory_identity":identity,"budget_tokens":3000}),
+    )
+    .await;
+    assert!(!filtered_context["sources"].as_array().unwrap().is_empty());
+    for source in filtered_context["sources"].as_array().unwrap() {
+        assert_eq!(source["identity"], identity);
+    }
+    assert_eq!(filtered_context["graph"]["entities"], json!([]));
+    assert_eq!(filtered_context["graph"]["relations"], json!([]));
+
     // Zero extracted memories still completes with an empty published list.
     let empty = post(
         &http,
@@ -934,6 +965,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .search(
             &a,
             SearchInput {
+                memory_identity: None,
                 query: "发布审批".into(),
                 limit: 10,
                 mode: "keyword".into(),
@@ -1013,6 +1045,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .search(
             &a,
             SearchInput {
+                memory_identity: None,
                 query: "Release".into(),
                 limit: 10,
                 mode: "keyword".into(),

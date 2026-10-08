@@ -75,6 +75,8 @@ pub struct RestoreInput {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SearchInput {
+    #[serde(default)]
+    pub memory_identity: Option<crate::memory_identity::MemoryIdentity>,
     pub query: String,
     #[serde(default = "default_limit")]
     pub limit: usize,
@@ -93,6 +95,8 @@ fn keyword_mode() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResolveInput {
+    #[serde(default)]
+    pub memory_identity: Option<crate::memory_identity::MemoryIdentity>,
     pub query: String,
     #[serde(default = "default_budget")]
     pub budget_tokens: usize,
@@ -122,6 +126,15 @@ pub struct SearchHit {
 }
 
 impl SearchHit {
+    pub fn matches_identity(
+        &self,
+        filter: Option<&crate::memory_identity::MemoryIdentity>,
+    ) -> bool {
+        filter.is_none_or(|identity| {
+            self.kind == "memory" && self.identity.as_ref() == Some(identity)
+        })
+    }
+
     pub fn normalization_status(&self) -> &'static str {
         if self.kind != "memory" {
             "not_applicable"
@@ -146,6 +159,7 @@ mod identity_status_tests {
         }))
         .unwrap();
         assert_eq!(hit.normalization_status(), "legacy_unidentified");
+        assert!(hit.matches_identity(None));
         hit.identity = Some(
             serde_json::from_value(serde_json::json!({
             "subject":{"kind":"service","stable_id":"billing"},
@@ -154,8 +168,41 @@ mod identity_status_tests {
             .unwrap(),
         );
         assert_eq!(hit.normalization_status(), "explicit_identity");
+        let identity = hit.identity.clone().unwrap();
+        assert!(hit.matches_identity(Some(&identity)));
+        let mut different = identity.clone();
+        different.subject.stable_id = "shipping".into();
+        assert!(!hit.matches_identity(Some(&different)));
+        different = identity.clone();
+        different
+            .context
+            .insert("environment".into(), "staging".into());
+        assert!(!hit.matches_identity(Some(&different)));
         hit.kind = "knowledge".into();
         assert_eq!(hit.normalization_status(), "not_applicable");
+        assert!(!hit.matches_identity(Some(&identity)));
+        hit.kind = "memory".into();
+        hit.identity = None;
+        assert!(!hit.matches_identity(Some(&identity)));
+    }
+
+    #[test]
+    fn retrieval_identity_filter_defaults_and_schema_preserve_contract() {
+        let input: SearchInput =
+            serde_json::from_value(serde_json::json!({"query":"policy"})).unwrap();
+        assert!(input.memory_identity.is_none());
+        let input: ResolveInput =
+            serde_json::from_value(serde_json::json!({"query":"policy"})).unwrap();
+        assert!(input.memory_identity.is_none());
+        let schema = serde_json::to_value(schemars::schema_for!(SearchInput)).unwrap();
+        assert!(schema["properties"]["memory_identity"].is_object());
+        assert!(
+            serde_json::from_value::<SearchInput>(serde_json::json!({
+            "query":"policy","memory_identity":{"subject":{"kind":"service","stable_id":"billing"},
+            "predicate":"release.approval","workspace_id":"other"}
+            }))
+            .is_err()
+        );
     }
 }
 
