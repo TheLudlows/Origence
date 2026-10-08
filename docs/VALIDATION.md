@@ -203,4 +203,4 @@ RLS 未设置 scope 时默认拒绝、跨 workspace 写入失败、跨 workspace
 
 ## 单身份 capture（2026-10-08）
 
-新增证据解析测试：UTF-8 原文区间、零结果、重复 quote、伪造/越界区间、单身份不同断言、模型身份/scope 字段注入与批量上限。原生 HTTP 测试增加真实 Worker 的身份 capture、相同身份版本追加与资产身份读取（model stub，仅验收行为）。轻量 CI 扩为全 lib 测试。当前新用例待 CI；没有真实模型语义质量证据。
+新增证据解析测试：UTF-8 原文区间、零结果、重复 quote、伪造/越界区间、单身份不同断言、模型身份/scope 字段注入与批量上限。原生 HTTP 测试增加真实 Worker 的身份 capture、相同身份版本追加与资产身份读取（model stub，仅验收行为）。轻量 CI 扩为全 lib 测试。[CI run 37768221568](https://github.com/TheLudlows/openContext/actions/runs/37768221568) 在代码 `c99baed4044567550af512fae3d2412cd433cc4c` 通过 fmt、22 项 lib（含 8 项新证据解析）、52 项无原生集成和 5 项 Python 测试。原生 HTTP/跨平台/release/container 用例仍待验收；没有真实模型语义质量证据。

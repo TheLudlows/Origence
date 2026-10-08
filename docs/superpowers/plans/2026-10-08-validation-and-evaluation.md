@@ -49,5 +49,6 @@
 - [x] 调用方明确完整 identity 的 capture API，scope 从认证取得。
 - [x] 抽取只返回精确原文片段与 UTF-8 区间，持久化 locator；单身份不同断言拒绝更新。
 - [x] 使用受理时 expected_version，复用来源/幂等/Worker 发布治理，不改变旧 capture。
-- [ ] 新证据解析及原生 HTTP 用例通过 CI。
+- [x] 新证据解析用例通过 CI（run 37768221568：22 项 lib、52 项无原生集成）。
+- [ ] 原生 HTTP/Worker、跨平台/release/container 用例通过 CI。
 - [ ] 自动身份推断、未归一化资产状态、属性目录、别名/语义匹配及真实模型评估。
