@@ -2,6 +2,9 @@ name: Local storage
 on: [push, pull_request]
 permissions:
   contents: read
+concurrency:
+  group: local-storage-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-latest
