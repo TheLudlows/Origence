@@ -656,7 +656,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 - [x] **Step 3: STATUS 更新戳**
 
-`docs/STATUS.md:3` 的「2026-09-29 已实施自动发布（A1）……与 [验收](VALIDATION.md)。」句后追加：
+`docs/STATUS.md:3` 的「2026-09-29 已实施自动发布（A1）……与 `[验收](VALIDATION.md)`。」句后追加：
 
 ```markdown
 2026-09-30 同进程并发打开串行化并补强验收覆盖，见 [验收](VALIDATION.md)。
