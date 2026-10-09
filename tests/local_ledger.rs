@@ -3,15 +3,15 @@
 //! reconcile pass leaves it committed without duplicating (A2.6).
 #![cfg(feature = "local-storage")]
 
-use opencontext::storage::kuzu::KuzuStore;
-use opencontext::storage::lancedb::LanceDbStore;
-use opencontext::storage::ledger::{LedgerEntry, LedgerKey, Surface};
-use opencontext::storage::sqlite::SqliteStore;
-use opencontext::storage::{
+use origence::storage::kuzu::KuzuStore;
+use origence::storage::lancedb::LanceDbStore;
+use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
+use origence::storage::sqlite::SqliteStore;
+use origence::storage::{
     DomainTx, GraphStore, Permission, RelationalStore, Scope, SourceVersion, VectorEntry,
     VectorQuery, VectorStore,
 };
-use opencontext::types::Entity;
+use origence::types::Entity;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -56,7 +56,7 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
     let graph_key = LedgerKey {
         scope,
         source,
-        artifact_id: opencontext::graph::entity_id("Alice"),
+        artifact_id: origence::graph::entity_id("Alice"),
         surface: Surface::Graph,
         generation,
     };
@@ -68,14 +68,14 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
         tx.register_pending(LedgerEntry {
             key: vector_key,
             artifact_type: "chunk".into(),
-            idempotency_key: opencontext::storage::ledger::ledger_idempotency_key(&vector_key),
+            idempotency_key: origence::storage::ledger::ledger_idempotency_key(&vector_key),
         })
         .await
         .unwrap();
         tx.register_pending(LedgerEntry {
             key: graph_key,
             artifact_type: "entity".into(),
-            idempotency_key: opencontext::storage::ledger::ledger_idempotency_key(&graph_key),
+            idempotency_key: origence::storage::ledger::ledger_idempotency_key(&graph_key),
         })
         .await
         .unwrap();

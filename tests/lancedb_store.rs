@@ -2,8 +2,8 @@
 //! and source-tagged delete against a real LanceDB in a temp dir.
 #![cfg(feature = "local-vector")]
 
-use opencontext::storage::lancedb::LanceDbStore;
-use opencontext::storage::{
+use origence::storage::lancedb::LanceDbStore;
+use origence::storage::{
     Lifecycle, Scope, SourceVersion, StorageError, VectorEntry, VectorQuery, VectorStore,
 };
 use uuid::Uuid;

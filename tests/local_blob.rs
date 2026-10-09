@@ -1,7 +1,7 @@
 //! Local blob store tests (M2): scope partitioning, put/get/delete and the
 //! path-escape guard.
 
-use opencontext::storage::{
+use origence::storage::{
     BlobKey, BlobStore, Lifecycle, Scope, StorageError, local_blob::LocalBlobStore,
 };
 use uuid::Uuid;

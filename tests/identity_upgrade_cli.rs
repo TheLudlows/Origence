@@ -1,10 +1,10 @@
 #![cfg(feature = "local-storage")]
-use opencontext::storage::{Lifecycle, sqlite::SqliteStore};
+use origence::storage::{Lifecycle, sqlite::SqliteStore};
 use serde_json::Value;
 use std::process::{Command, Output};
 
 fn upgrade(dir: &std::path::Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_opencontext"))
+    Command::new(env!("CARGO_BIN_EXE_origence"))
         .arg("--data-dir")
         .arg(dir)
         .args(args)

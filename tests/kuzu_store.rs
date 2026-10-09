@@ -2,10 +2,10 @@
 //! source-tagged delete, and delete-by-id primitives against a real Kuzu db.
 #![cfg(feature = "local-graph")]
 
-use opencontext::graph::{entity_id, relation_id};
-use opencontext::storage::kuzu::KuzuStore;
-use opencontext::storage::{GraphStore, Lifecycle, Scope, SourceVersion};
-use opencontext::types::{Entity, Relation};
+use origence::graph::{entity_id, relation_id};
+use origence::storage::kuzu::KuzuStore;
+use origence::storage::{GraphStore, Lifecycle, Scope, SourceVersion};
+use origence::types::{Entity, Relation};
 use uuid::Uuid;
 
 fn make_scope() -> Scope {
