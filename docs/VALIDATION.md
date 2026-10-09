@@ -1,5 +1,7 @@
 # 验证记录
 
+> 2026-10-09 CI 与工具链策略变更：MSRV 1.98，开发/CI/Docker 使用 Rust 1.98.1。PR/分支运行 Debug smoke 与原生测试，主分支运行 Release 和容器构建。以下 1.88/1.96 测试结果保留为历史实测，新版本须独立重新验证。
+
 ## 2026-10-09：PR #11 修复分支验收
 
 验收代码：`8d8d2247c355330be9903fb7e9e3f1d2107e058b`，[PR #11](https://github.com/TheLudlows/openContext/pull/11)，基于 main `73fc51a`。主证据：[run 37871058933](https://github.com/TheLudlows/openContext/actions/runs/37871058933)，event=pull_request；CI checkout 为 PR merge commit `104a1b34df5975681dd4fdbd5fe3410380607cf1`。运行于 2026-10-09 12:03（UTC+8）completed/success，7/7 作业通过，全部日志及两平台评估工件已核验。本节记录修复后的结果，下节保留修复前 main 的观测快照。

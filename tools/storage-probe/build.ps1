@@ -1,6 +1,6 @@
 param(
     [int]$Jobs = 4,
-    [string]$Toolchain = 'stable',
+    [string]$Toolchain = '1.98.1',
     [string]$TargetDirectory = 'target/storage-probe'
 )
 

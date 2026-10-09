@@ -8,7 +8,7 @@ Rust 实现的团队 Agent 记忆与知识服务。M5 将默认运行栈固定�
 
 ## 快速启动
 
-已实测平台为 Windows x64/MSVC、Rust 1.96.0。源码构建需要 Rust、C++ 工具链、CMake、Ninja 和 protoc；原生依赖构建较大，建议预留充足磁盘并限制并行链接。Windows 安装 Visual Studio C++ 工具后可使用脚本自动定位工具：
+项目最低支持 Rust 1.98，开发/CI/Docker 固定使用 Rust 1.98.1；此前 1.88/1.96 验收属于历史记录，新版本须经 CI 验收。源码构建需要 Rust、C++ 工具链、CMake、Ninja 和 protoc；原生依赖构建较大，建议预留充足磁盘并限制并行链接。Windows 安装 Visual Studio C++ 工具后可使用脚本自动定位工具：
 
 ```powershell
 ./tools/build.ps1 -Action Build
@@ -102,7 +102,7 @@ cargo clippy --locked --all-targets -j 1 -- -D warnings
 cargo test --locked -j 1 --no-fail-fast
 ```
 
-默认启用 `local-storage`；业务/进程测试使用临时目录和本地模型模拟服务，无数据库账号或付费模型要求。集成测试统一编入 `tests/local.rs`，减少原生依赖重复链接。`--no-default-features --lib` 仅用于基础接口检查，不是另一套应用后端。
+PR/特性分支执行三平台测试、Debug HTTP smoke 与合成关键词评估；`main` 继续执行 Linux/macOS Release + HTTP smoke、Docker 镜像构建与 HTTP smoke。Cargo 缓存仅在主分支更新，首次运行仍可能很慢。默认启用 `local-storage`；业务/进程测试使用临时目录和本地模型模拟服务，无数据库账号或付费模型要求。集成测试统一编入 `tests/local.rs`，减少原生依赖重复链接。`--no-default-features --lib` 仅用于基础接口检查，不是另一套应用后端。
 
 ## 当前边界与文档
 

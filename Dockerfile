@@ -1,5 +1,5 @@
 # Local native libraries require C++, CMake, Ninja and protoc at build time.
-FROM rust:1.96-bookworm AS build
+FROM rust:1.98.1-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build protobuf-compiler libprotobuf-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN test -f /usr/include/google/protobuf/empty.proto \
