@@ -70,14 +70,15 @@ jobs:
         run: |
           cargo build --locked -j 2
           python3 tools/smoke.py --binary target/debug/origence
+      # Evaluation evidence is run-specific, never part of the Cargo target cache.
       - name: Keyword retrieval seed evaluation (no model calls)
-        run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output target/evals/keyword-run
+        run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Preserve synthetic retrieval evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: retrieval-linux
-          path: target/evals/keyword-run/
+          path: ${{ runner.temp }}/origence-keyword-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: ignore
   windows:
     if: github.ref == 'refs/heads/main'
@@ -126,14 +127,15 @@ jobs:
         run: |
           cargo build --release --locked -j 2
           python3 tools/smoke.py --binary target/release/origence
+      # Use the same run-scoped evidence policy as Linux; retain overwrite protection.
       - name: Keyword retrieval seed evaluation (no model calls)
-        run: python3 evals/run.py --binary target/release/origence --commit "${{ github.sha }}" --output target/evals/keyword-run
+        run: python3 evals/run.py --binary target/release/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Preserve synthetic retrieval evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: retrieval-macos
-          path: target/evals/keyword-run/
+          path: ${{ runner.temp }}/origence-keyword-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: ignore
   container:
     if: github.ref == 'refs/heads/main'
