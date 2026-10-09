@@ -4,7 +4,7 @@
 
 扩充评估时分别记录：检索 Recall@k/来源正确率，未发布产物泄露率/跨 tenant/workspace 泄露率，版本冲突和删除不复活，实际 Agent 引用与任务完成率，p50/p95/p99 和模型成本。正确性门槛不应被平均相关性抵消。
 
-尚未运行 Cognee 或其他 ContextDB 产品对比；“rds contextdb”具体产品身份仍待确认。性能和胜负结论必须附硬件、数据集版本、模型配置、运行命令和原始结果。
+尚未运行 Cognee 或其他记忆/知识平台的产品对比；“rds contextdb”具体产品身份仍待确认。性能和胜负结论必须附硬件、数据集版本、模型配置、运行命令和原始结果。
 
 当前运行基线为 M5 本地宿主，参见 [文档索引](../docs/README.md)。真实 SQLite/LanceDB/Kuzu 与模型 stub 的测试验证行为，不作为检索质量得分。
 
@@ -14,7 +14,7 @@
 
 ```sh
 python3 -m unittest discover -s evals -p 'test_*.py' -v
-python3 evals/run.py --binary target/release/opencontext --mode keyword --k 5 --commit COMMIT --output target/evals/keyword-run
+python3 evals/run.py --binary target/release/origence --mode keyword --k 5 --commit COMMIT --output target/evals/keyword-run
 ```
 
 首批 `corpus.jsonl` 为 12 份合成文档，`retrieval.jsonl` 为 24 个样本，覆盖精确词、同义问法、同名范围干扰、多来源、否定和无答案。它们是可执行种子，不是完整 300 用例，也不是已取得效果结果。旧 `cases.jsonl` 保留生命周期/安全样例，不能直接交给检索 runner。

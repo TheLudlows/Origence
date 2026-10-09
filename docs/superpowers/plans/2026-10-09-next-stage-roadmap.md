@@ -1,4 +1,4 @@
-# openContext 剩余任务与下一阶段实施计划
+# Origence 剩余任务与下一阶段实施计划
 
 > 编写日期：2026-10-09。本文是 **P0 收口 → P1 产品闭环 → P2 服务化** 的执行路线图，不代表事项已验收。目标/架构以 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md) 为准；身份、冲突、上下文契约以 [I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md) 为准；事实进度与 CI 证据分别以 [STATUS](../../STATUS.md)、[VALIDATION](../../VALIDATION.md) 为准。
 
