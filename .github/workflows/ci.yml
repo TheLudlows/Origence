@@ -1,12 +1,16 @@
 name: Local storage
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
 concurrency:
   group: local-storage-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
-  memory-identity:
+  fast-check:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -24,40 +28,14 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo test --locked --no-default-features --lib -j 2
       - run: cargo test --locked --no-default-features --test local -j 2
-  evaluation-adapter:
+      - name: Python evaluation adapter tests
+        run: python3 -m unittest discover -s evals -p 'test_*.py' -v
+  linux-native:
     runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: python3 -m unittest discover -s evals -p 'test_*.py' -v
-  windows:
-    runs-on: windows-latest
-    timeout-minutes: 120
-    env:
-      CARGO_PROFILE_DEV_DEBUG: 0
-      CARGO_PROFILE_TEST_DEBUG: 0
-      CARGO_INCREMENTAL: 0
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.98.1
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Build tools, lint, and all local lifecycle tests
-        shell: pwsh
-        run: ./tools/build.ps1 -Action Validate -Jobs 1
-      - name: Storage contracts without native backends
-        run: cargo check --locked --no-default-features --lib -j 1
-  native:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-14]
-    runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     env:
+      # Override rust-toolchain.toml to test the exact declared MSRV.
+      RUSTUP_TOOLCHAIN: 1.98.0
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
@@ -67,20 +45,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.1
+          toolchain: 1.98.0
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Linux native build tools
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev
           protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
-      - name: macOS native build tools
-        if: runner.os == 'macOS'
-        run: brew install cmake ninja protobuf
-      - run: cargo fmt --all -- --check
+      - name: Confirm minimum Rust 1.98.0
+        run: |
+          rustc --version
+          rustc --version | grep -Fq 'rustc 1.98.0 ('
+      - name: Memory identity on minimum Rust without native features
+        run: cargo test --locked --no-default-features --lib memory_identity -j 1
       - run: cargo clippy --locked --all-targets -j 1 -- -D warnings
       - run: cargo test --locked -j 1 --no-fail-fast
       - name: Release build and no-model HTTP smoke (main)
@@ -105,14 +84,38 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: retrieval-${{ matrix.os }}
+          name: retrieval-linux
           path: target/evals/keyword-run/
           if-no-files-found: ignore
-  msrv:
-    runs-on: ubuntu-24.04
+  windows:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build tools, lint, and all local lifecycle tests
+        shell: pwsh
+        run: ./tools/build.ps1 -Action Validate -Jobs 1
+      - name: Storage contracts without native backends
+        run: cargo check --locked --no-default-features --lib -j 1
+  macos:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-14
     timeout-minutes: 180
     env:
       CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
       CMAKE_GENERATOR: Ninja
       CMAKE_BUILD_PARALLEL_LEVEL: 2
@@ -120,27 +123,34 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.0
-      # Validate the actual 1.98.0 MSRV, not merely the pinned 1.98.1 patch release.
+          toolchain: 1.98.1
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: macOS native build tools
+        run: brew install cmake ninja protobuf
+      - run: cargo clippy --locked --all-targets -j 1 -- -D warnings
+      - run: cargo test --locked -j 1 --no-fail-fast
+      - name: Release build and no-model HTTP smoke
+        run: |
+          cargo build --release --locked -j 1
+          python3 tools/smoke.py --binary target/release/opencontext
+      - name: Keyword retrieval seed evaluation (no model calls)
+        run: python3 evals/run.py --binary target/release/opencontext --commit "${{ github.sha }}" --output target/evals/keyword-run
+      - name: Preserve synthetic retrieval evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev
-          protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
-      - name: Memory identity domain tests without native backends
-        run: cargo test --locked --no-default-features --lib memory_identity -j 1
-      - name: Declared MSRV with default native backends
-        run: cargo check --locked --all-targets -j 1
+          name: retrieval-macos
+          path: target/evals/keyword-run/
+          if-no-files-found: ignore
   container:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config --quiet
-      - name: Container release build (main)
-        if: github.ref == 'refs/heads/main'
+      - name: Container release build
         run: docker build --build-arg BUILD_JOBS=2 -t opencontext:ci .
-      - name: Container no-model HTTP smoke (main)
-        if: github.ref == 'refs/heads/main'
+      - name: Container no-model HTTP smoke
         run: python3 tools/smoke.py --image opencontext:ci
