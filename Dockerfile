@@ -9,6 +9,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY tests ./tests
 ENV CMAKE_GENERATOR=Ninja
+# Bound native C++ compilation while Cargo builds up to three units in CI.
+ENV CMAKE_BUILD_PARALLEL_LEVEL=2
 ARG BUILD_JOBS=1
 RUN cargo build --release --locked -j ${BUILD_JOBS}
 

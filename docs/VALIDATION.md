@@ -1,5 +1,8 @@
 # Origence 验证记录
 
+> 2026-10-09 并行度调整提案（待主干实测）：macOS 的 Clippy、完整测试和 Release Build 从 Cargo `-j 1` 调为 `-j 2`（CMake 仍为 2）；Linux Docker 镜像 CI 的 Cargo `BUILD_JOBS` 从 2 调为 3，构建阶段显式设置 `CMAKE_BUILD_PARALLEL_LEVEL=2` 限制原生编译。保留原生检查、Release/HTTP Smoke 及现有运行条件。macOS/容器 Job 仍只在 main 执行；PR 成功不能替代这两项的实际通过、内存峰值和耗时验证。
+
+
 > 历史 CI 与 PR 证据创建于仓库仍名为 `TheLudlows/openContext` 时；下方保留原始链接以便追溯，当前仓库为 `TheLudlows/Origence`。这些旧链接不表示产品仍使用旧名称。
 
 > 2026-10-09 CI 与工具链策略变更（[PR #12](https://github.com/TheLudlows/openContext/pull/12)）：MSRV 1.98，Linux 原生 CI 使用 Rust 1.98.0，开发/Windows/macOS/Docker 固定 1.98.1。仅 `main` push 和目标 `main` 的 PR 触发；PR 为 2 个 Job（fast-check：无原生特性测试/格式/Python；linux-native：MSRV 身份测试、原生 Clippy/测试、Debug smoke 与评估），main 额外执行 Windows、macOS、Linux/macOS Release 和 Docker 构建/Smoke。以下 1.88/1.96 测试结果保留为历史实测，新版本须独立重新验证。
