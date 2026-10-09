@@ -140,41 +140,6 @@ impl SqliteStore {
 }
 
 impl SqliteTx {
-    /// Restrict retrieval candidates by an exact identity before top-k/ranking.
-    /// This does not allocate a memory slot or reinterpret legacy fact keys.
-    pub async fn identity_candidate_asset(
-        &mut self,
-        identity: &crate::memory_identity::MemoryIdentity,
-    ) -> StorageResult<Option<Uuid>> {
-        if !identity_table_present(&mut self.tx).await? {
-            return Ok(None);
-        }
-        let key = identity
-            .key(self.scope)
-            .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let asset: Option<Uuid> = sqlx::query_scalar(
-            "SELECT i.asset_id FROM oc_memory_identities i
-             JOIN oc_assets a ON a.tenant_id=i.tenant_id
-                 AND a.workspace_id=i.workspace_id AND a.id=i.asset_id
-             WHERE i.tenant_id=? AND i.workspace_id=?
-                 AND i.identity_key=? AND a.kind='memory' AND NOT a.deleted",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(key)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        if let Some(id) = asset {
-            if self.identity_for_asset(id).await?.as_ref() != Some(identity) {
-                return Err(StorageError::Unavailable(
-                    "memory identity binding mismatch".into(),
-                ));
-            }
-        }
-        Ok(asset)
-    }
-
     pub async fn asset_metadata(&mut self, id: Uuid) -> StorageResult<Value> {
         let row: Option<(String, Option<i32>, bool)> = sqlx::query_as("SELECT kind,current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (kind, current_version, deleted) = row.ok_or(StorageError::NotFound)?;
@@ -206,10 +171,9 @@ impl SqliteTx {
         profile: &str,
         dimension: usize,
         generation: i64,
-        asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
-        sqlx::query_scalar(&format!("SELECT c.id {VISIBLE} AND (? IS NULL OR c.asset_id=?) AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"))
-        .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset_filter).bind(asset_filter).bind(profile).bind(dimension as i64).bind(generation).bind(generation).fetch_all(&mut *self.tx).await.map_err(sqlite_err)
+        sqlx::query_scalar(&format!("SELECT c.id {VISIBLE} AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"))
+        .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(profile).bind(dimension as i64).bind(generation).bind(generation).fetch_all(&mut *self.tx).await.map_err(sqlite_err)
     }
     pub async fn vector_hit(
         &mut self,
@@ -235,18 +199,15 @@ impl SqliteTx {
         &mut self,
         terms: &str,
         summaries: bool,
-        asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<SearchHit>> {
         let select = if summaries {
             "SELECT c.id,c.asset_id,c.version,a.kind,v.title,c.content,c.locator,v.source_event_id,(SELECT group_concat(s.search_terms,' ') FROM oc_summaries s WHERE s.tenant_id=c.tenant_id AND s.workspace_id=c.workspace_id AND s.chunk_id=c.id) search_terms"
         } else {
             HIT
         };
-        let rows = sqlx::query(&format!("{select} {VISIBLE} AND (? IS NULL OR c.asset_id=?)"))
+        let rows = sqlx::query(&format!("{select} {VISIBLE}"))
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
-            .bind(asset_filter)
-            .bind(asset_filter)
             .fetch_all(&mut *self.tx)
             .await
             .map_err(sqlite_err)?;

@@ -221,63 +221,6 @@ async fn legacy_collision_is_not_reinterpreted() {
     tx.rollback().await.unwrap();
 }
 
-
-#[tokio::test]
-async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let (auth, scope) = provision(&store).await;
-    let i = identity();
-    let mut tx = store.begin(auth.clone()).await.unwrap();
-    let (target, _) = tx.identity_slot(&i).await.unwrap();
-    let (decoy, _) = tx.slot("legacy-decoy").await.unwrap();
-    let mut records = Vec::new();
-    for asset in [decoy, target] {
-        let source = tx.create_event("memory", "approval", None).await.unwrap();
-        let chunk = Uuid::new_v4();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
-            .await
-            .unwrap();
-        tx.insert_chunk(chunk, asset, 1, 0, "approval", &serde_json::json!({}), "approval")
-            .await
-            .unwrap();
-        tx.update_asset_version(asset, 1, None).await.unwrap();
-        tx.index_ready(chunk, "profile", 3, 1).await.unwrap();
-        records.push((chunk, source));
-    }
-    tx.commit().await.unwrap();
-
-    // Model the authoritative committed vector ledger without starting LanceDB:
-    // vector_candidates must constrain artifact IDs before native search ranks them.
-    for (chunk, source) in &records {
-        sqlx::query(
-            "INSERT INTO oc_artifact_ledger
-             (tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,
-              surface,generation,idempotency_key,state,created_at,updated_at)
-             VALUES(?,?,?,1,'chunk',?,'vector',1,?,'committed',1,1)",
-        )
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(source)
-        .bind(chunk)
-        .bind(chunk.to_string())
-        .execute(store.pool())
-        .await
-        .unwrap();
-    }
-    let mut tx = store.begin(auth).await.unwrap();
-    let target_asset = tx.identity_candidate_asset(&i).await.unwrap();
-    assert_eq!(target_asset, Some(target));
-    let unfiltered = tx.vector_candidates("profile", 3, 1, None).await.unwrap();
-    assert_eq!(unfiltered.len(), 2);
-    let filtered = tx
-        .vector_candidates("profile", 3, 1, target_asset)
-        .await
-        .unwrap();
-    assert_eq!(filtered, vec![records[1].0]);
-    tx.commit().await.unwrap();
-}
-
 #[tokio::test]
 async fn old_database_is_not_upgraded_implicitly() {
     let dir = tempfile::tempdir().unwrap();
@@ -305,8 +248,6 @@ async fn old_database_is_not_upgraded_implicitly() {
         tx.identity_view(&identity()).await,
         Err(StorageError::Unavailable(_))
     ));
-    // Search on a pre-identity local database must not implicitly install tables.
-    assert!(tx.identity_candidate_asset(&identity()).await.unwrap().is_none());
     tx.commit().await.unwrap();
     store.shutdown().await.unwrap();
     let mut conn = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))

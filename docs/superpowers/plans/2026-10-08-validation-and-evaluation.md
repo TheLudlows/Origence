@@ -40,6 +40,8 @@
 
 已新增 [记忆身份与上下文契约](../specs/2026-10-08-memory-identity-and-context.md)，I1 编码/SQLite 唯一绑定/显式写入/离线安装/lookup/调用方版本条件已实现；受限 I2 单身份 capture 与来源读取、I4 标注及精确过滤也已实现。验收代码的无原生与三平台原生 HTTP/Worker、render/预算、CLI 用例，Linux/macOS release/HTTP smoke 及容器 smoke 均通过。自动身份推断、属性目录、未归一化状态、语义冲突、I3 会话与完整 I4 类型策略仍未交付，不能以显式绑定或 quote 校验替代语义质量。短记忆不强制建图，图收益以评估决定。
 
+最新的 S0–S4 交付顺序、P1 Session/Feedback/Improve/Learning 切片及完成标准见 [2026-10-09 剩余任务路线图](2026-10-09-next-stage-roadmap.md)。此文件保留 P0 验收、检索实验与既有历史证据，不用设计清单替代 CI 状态。
+
 ## 后续阶段
 
 CI 证据已收口，后续按 STATUS 的顺序推进：身份候选过滤下推及反例 → 关键词失败用例、人工标注与真实检索基线/组件消融 → I2 必要语义契约与 P1 最小会话闭环。P1 第一版先做会话及实际证据归档、幂等反馈、显式 improve、有来源的经验重新入库，不要求一次实现全部 A3 阶段。ANN/重排/profile/tokenizer 由实测缺陷与规模需求选择。Rust 1.88 完整运行测试、依赖审计、retention、物理擦除、孤儿文件及备份恢复保留独立待办；P2 保留 GraphCompletion、个性化、valid_from/to/as_of 和企业服务化。未来 PG 适配及本地多 Worker 不属于本批次。
