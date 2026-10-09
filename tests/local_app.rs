@@ -1321,7 +1321,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
             .unwrap()
             .is_none()
     );
-    assert!(tx.vector_candidates("test", 2, 1).await.unwrap().is_empty());
+    assert!(tx.vector_candidates("test", 2, 1, None).await.unwrap().is_empty());
     tx.commit().await.unwrap();
     assert!(opencontext::worker::process_next(&s).await.unwrap());
     assert_eq!(
