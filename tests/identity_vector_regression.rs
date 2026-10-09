@@ -112,16 +112,27 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         for version in 1..=last_version {
             // Neither target version contains QUERY: hybrid cannot pass via keyword.
             let content = if is_target {
-                format!("Approval evidence version {version} for {}", scope.workspace_id)
+                format!(
+                    "Approval evidence version {version} for {}",
+                    scope.workspace_id
+                )
             } else {
                 format!("{QUERY} competitor {index}")
             };
             let source_id = tx.create_event("memory", &content, None).await.unwrap();
             let source = SourceVersion { source_id, version };
             let chunk = Uuid::new_v4();
-            tx.insert_version(asset, version, &content, &hash(&content), source_id, None, None)
-                .await
-                .unwrap();
+            tx.insert_version(
+                asset,
+                version,
+                &content,
+                &hash(&content),
+                source_id,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
             tx.insert_chunk(
                 chunk,
                 asset,
@@ -175,7 +186,12 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         }
     }
     tx.commit().await.unwrap();
-    service.engine.vector().upsert(scope, entries).await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert(scope, entries)
+        .await
+        .unwrap();
     let mut tx = store.begin(auth).await.unwrap();
     for key in ledger {
         tx.confirm_committed(key).await.unwrap();
@@ -225,8 +241,14 @@ impl Host {
                 .build()
                 .unwrap(),
         };
-        host.call(Method::GET, "/health/ready", "", Value::Null, StatusCode::OK)
-            .await;
+        host.call(
+            Method::GET,
+            "/health/ready",
+            "",
+            Value::Null,
+            StatusCode::OK,
+        )
+        .await;
         host
     }
 
@@ -313,14 +335,20 @@ async fn exercise(mode: &str) {
         let primary = seed(&service, scope, &profile, DISTRACTORS).await;
         let other_workspace = seed(
             &service,
-            Scope { tenant_id: scope.tenant_id, workspace_id: Uuid::new_v4() },
+            Scope {
+                tenant_id: scope.tenant_id,
+                workspace_id: Uuid::new_v4(),
+            },
             &profile,
             0,
         )
         .await;
         let other_tenant = seed(
             &service,
-            Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() },
+            Scope {
+                tenant_id: Uuid::new_v4(),
+                workspace_id: Uuid::new_v4(),
+            },
             &profile,
             0,
         )
@@ -375,28 +403,53 @@ async fn exercise(mode: &str) {
     let plain = host.search(&primary, mode, None).await;
     assert_eq!(plain["effective_mode"], mode);
     assert_eq!(plain["hits"].as_array().unwrap().len(), 100);
-    assert!(plain["hits"].as_array().unwrap().iter().all(|hit| {
-        hit["asset_id"] != json!(primary.asset)
-    }));
-    let keyword = host.search(&primary, "keyword", Some(primary.identity.clone())).await;
-    assert_eq!(keyword["hits"], json!([]), "hybrid must not pass via keyword");
+    assert!(
+        plain["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|hit| { hit["asset_id"] != json!(primary.asset) })
+    );
+    let keyword = host
+        .search(&primary, "keyword", Some(primary.identity.clone()))
+        .await;
+    assert_eq!(
+        keyword["hits"],
+        json!([]),
+        "hybrid must not pass via keyword"
+    );
     for fixture in [&primary, &other_workspace, &other_tenant] {
-        let result = host.search(fixture, mode, Some(fixture.identity.clone())).await;
+        let result = host
+            .search(fixture, mode, Some(fixture.identity.clone()))
+            .await;
         assert_target(&result, fixture, mode);
         let context = host.resolve(fixture, mode).await;
         assert_eq!(context["effective_mode"], mode);
         assert_eq!(context["sources"].as_array().unwrap().len(), 1);
         assert_eq!(context["sources"][0]["asset_id"], json!(fixture.asset));
         assert_eq!(context["sources"][0]["version"], 2);
-        assert!(context["rendered_context"].as_str().unwrap().contains(&fixture.content));
+        assert!(
+            context["rendered_context"]
+                .as_str()
+                .unwrap()
+                .contains(&fixture.content)
+        );
     }
     assert!(state.calls.load(Ordering::SeqCst) >= 7);
     let mut missing = primary.identity.clone();
     missing.subject.stable_id = "missing".into();
-    assert_eq!(host.search(&primary, mode, Some(missing)).await["hits"], json!([]));
+    assert_eq!(
+        host.search(&primary, mode, Some(missing)).await["hits"],
+        json!([])
+    );
     let mut different_context = primary.identity.clone();
-    different_context.context.insert("environment".into(), "staging".into());
-    assert_eq!(host.search(&primary, mode, Some(different_context)).await["hits"], json!([]));
+    different_context
+        .context
+        .insert("environment".into(), "staging".into());
+    assert_eq!(
+        host.search(&primary, mode, Some(different_context)).await["hits"],
+        json!([])
+    );
 
     state.unavailable.store(true, Ordering::SeqCst);
     host.call(
@@ -407,14 +460,16 @@ async fn exercise(mode: &str) {
         StatusCode::SERVICE_UNAVAILABLE,
     )
     .await;
-    let partial = host.call(
-        Method::POST,
-        "/v1/search",
-        &primary.reader.token,
-        json!({"query": QUERY, "mode": mode, "allow_partial": true,
+    let partial = host
+        .call(
+            Method::POST,
+            "/v1/search",
+            &primary.reader.token,
+            json!({"query": QUERY, "mode": mode, "allow_partial": true,
             "memory_identity": primary.identity}),
-        StatusCode::OK,
-    ).await;
+            StatusCode::OK,
+        )
+        .await;
     assert_eq!(partial["effective_mode"], "keyword");
     assert_eq!(partial["hits"], json!([]));
     assert!(!partial["warnings"].as_array().unwrap().is_empty());
@@ -428,16 +483,25 @@ async fn exercise(mode: &str) {
         StatusCode::OK,
     )
     .await;
-    assert_eq!(host.search(&primary, mode, Some(primary.identity.clone())).await["hits"], json!([]));
+    assert_eq!(
+        host.search(&primary, mode, Some(primary.identity.clone()))
+            .await["hits"],
+        json!([])
+    );
     assert_eq!(host.resolve(&primary, mode).await["sources"], json!([]));
-    let old = host.call(
-        Method::GET,
-        &format!("/v1/assets/{}?version=1", primary.asset),
-        &primary.reader.token,
-        Value::Null,
-        StatusCode::OK,
-    ).await;
-    assert_eq!(old["version"], 1, "a valid old version must not be used as fallback");
+    let old = host
+        .call(
+            Method::GET,
+            &format!("/v1/assets/{}?version=1", primary.asset),
+            &primary.reader.token,
+            Value::Null,
+            StatusCode::OK,
+        )
+        .await;
+    assert_eq!(
+        old["version"], 1,
+        "a valid old version must not be used as fallback"
+    );
     host.call(
         Method::DELETE,
         &format!("/v1/assets/{}", other_workspace.asset),
@@ -446,10 +510,23 @@ async fn exercise(mode: &str) {
         StatusCode::OK,
     )
     .await;
-    assert_eq!(host.search(&other_workspace, mode, Some(other_workspace.identity.clone())).await["hits"], json!([]));
-    assert_eq!(host.resolve(&other_workspace, mode).await["sources"], json!([]));
+    assert_eq!(
+        host.search(
+            &other_workspace,
+            mode,
+            Some(other_workspace.identity.clone())
+        )
+        .await["hits"],
+        json!([])
+    );
+    assert_eq!(
+        host.resolve(&other_workspace, mode).await["sources"],
+        json!([])
+    );
     assert_target(
-        &host.search(&other_tenant, mode, Some(other_tenant.identity.clone())).await,
+        &host
+            .search(&other_tenant, mode, Some(other_tenant.identity.clone()))
+            .await,
         &other_tenant,
         mode,
     );
