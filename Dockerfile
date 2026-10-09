@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --create-home context \
     && mkdir -p /data && chown context:context /data
-COPY --from=build /build/target/release/opencontext /usr/local/bin/opencontext
+COPY --from=build /build/target/release/origence /usr/local/bin/origence
 USER context
 ENV OC_DATA_DIR=/data
 EXPOSE 8080
-ENTRYPOINT ["opencontext"]
+ENTRYPOINT ["origence"]
 CMD ["serve", "--bind", "0.0.0.0:8080"]

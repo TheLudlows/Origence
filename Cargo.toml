@@ -1,9 +1,9 @@
 [package]
-name = "opencontext"
+name = "origence"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
-description = "Workspace-scoped knowledge and governed memory for enterprise agents"
+description = "The Intelligence Foundation for AI Agents."
 publish = false
 autotests = false
 
@@ -55,6 +55,6 @@ name = "local"
 path = "tests/local.rs"
 
 [[bin]]
-name = "opencontext"
+name = "origence"
 path = "src/main.rs"
 required-features = ["local-storage"]

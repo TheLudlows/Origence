@@ -1,4 +1,4 @@
-name: Local storage
+name: Origence CI
 on:
   push:
     branches: [main]
@@ -69,9 +69,9 @@ jobs:
       - name: Debug build and no-model HTTP smoke
         run: |
           cargo build --locked -j 2
-          python3 tools/smoke.py --binary target/debug/opencontext
+          python3 tools/smoke.py --binary target/debug/origence
       - name: Keyword retrieval seed evaluation (no model calls)
-        run: python3 evals/run.py --binary target/debug/opencontext --commit "${{ github.sha }}" --output target/evals/keyword-run
+        run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output target/evals/keyword-run
       - name: Preserve synthetic retrieval evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,9 +125,9 @@ jobs:
       - name: Release build and no-model HTTP smoke
         run: |
           cargo build --release --locked -j 1
-          python3 tools/smoke.py --binary target/release/opencontext
+          python3 tools/smoke.py --binary target/release/origence
       - name: Keyword retrieval seed evaluation (no model calls)
-        run: python3 evals/run.py --binary target/release/opencontext --commit "${{ github.sha }}" --output target/evals/keyword-run
+        run: python3 evals/run.py --binary target/release/origence --commit "${{ github.sha }}" --output target/evals/keyword-run
       - name: Preserve synthetic retrieval evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -143,6 +143,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker compose config --quiet
       - name: Container release build
-        run: docker build --build-arg BUILD_JOBS=2 -t opencontext:ci .
+        run: docker build --build-arg BUILD_JOBS=2 -t origence:ci .
       - name: Container no-model HTTP smoke
-        run: python3 tools/smoke.py --image opencontext:ci
+        run: python3 tools/smoke.py --image origence:ci
