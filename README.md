@@ -4,6 +4,8 @@ Rust 实现的团队 Agent 记忆与知识服务。M5 将默认运行栈固定�
 
 数据按 tenant/workspace 隔离；writer 的结构化记忆与 capture 抽取结果直接进入发布任务，提交时重新核验身份、权限、来源与预期版本；检索只返回当前已发布、资产未删除且来源仍有效的证据。会话记忆、企业 SaaS 仍属于后续阶段。
 
+2026-10-09 核验：PR #10 已合入 main `73fc51a`，显式身份、单身份 capture、lookup、身份标注/过滤与调用方版本前置条件已落地；轻量 CI 的 27 项 lib、58 项无原生集成和 Python 5 项通过。当前代码的原生/平台/release/container 验收尚未全部完成，真实模型效果尚未验证；最新能力与证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
+
 ## 快速启动
 
 已实测平台为 Windows x64/MSVC、Rust 1.96.0。源码构建需要 Rust、C++ 工具链、CMake、Ninja 和 protoc；原生依赖构建较大，建议预留充足磁盘并限制并行链接。Windows 安装 Visual Studio C++ 工具后可使用脚本自动定位工具：
@@ -67,7 +69,7 @@ opencontext get ASSET_UUID
 
 模型根地址通常以 `/v1` 结尾，远程要求 HTTPS；禁用重定向，单次调用超时 45 秒，响应上限 8 MB。启用模型意味着内容发送至该服务，并可能产生费用。关闭模型仍可发布结构化记忆和知识并执行关键词检索；capture 在未配置抽取模型时明确失败。
 
-发布固定接收时的 embedding profile。外部写前保存发布计划和 pending 账本，外部写后重新核验权限、来源、预期版本、取消状态及 generation/run_token，再原子确认版本、owner、索引与任务。启动先对账清理，再恢复未完成任务。已保存计划可重放；保存前的模型调用可能重复，不保证费用恰好一次。
+发布固定接收时的 embedding profile。外部写前保存发布计划和 pending 账本，外部写后重新核验权限、来源、预期版本、取消状态及 generation/run_token，再原子确认版本、owner、索引与任务。启动检查后先回收遗留任务并推进 run_token，再对账清理，完成后才启动 API/Worker。已保存计划可重放；保存前的模型调用可能重复，不保证费用恰好一次。
 
 数据布局、备份、故障恢复与旧 PG 基线处理见 [运维说明](docs/OPERATIONS.md)。
 
@@ -112,3 +114,4 @@ cargo test --locked -j 1 --no-fail-fast
 - 单宿主、单 Worker；无多节点共享写、OIDC、文档 ACL、配额、分页游标或生产 SLO 承诺。
 
 [文档索引](docs/README.md) 区分当前运行契约、里程碑、未来设计和历史调研；[状态](docs/STATUS.md)、[验收](docs/VALIDATION.md) 和 [M5 记录](docs/superpowers/plans/2026-09-28-local-host-delivery.md) 说明交付范围。Cognee 调研固定到 1.6.0 源码，未集成 Cognee，也未运行竞品效果对比。
+

@@ -1,6 +1,8 @@
 # P0 验收补齐与真实评估基线
 
-日期：2026-10-08。依据：[STATUS](../../STATUS.md)、[目标设计](../specs/2026-09-22-memory-knowledge-platform-design.md) §11/§12/A3/A4，以及 [评估协议](../../ContextDB_效果评估与对比标准.md)。不重开已完成 M0–M5/A1，不将 P2 时间语义提前放入 P1。
+日期：2026-10-08；状态更新：2026-10-09。依据：[STATUS](../../STATUS.md)、[目标设计](../specs/2026-09-22-memory-knowledge-platform-design.md) §11/§12/A3/A4，以及 [评估协议](../../ContextDB_效果评估与对比标准.md)。M0–M5/A1 基础已实现，P0 完整验收尚未收口；本计划区分接口/用例已加入、轻量验证和原生运行通过，不将 P2 时间语义提前放入 P1。
+
+当前代码基线 main `73fc51a`，PR #10 已合入。[CI run 37868289334](https://github.com/TheLudlows/openContext/actions/runs/37868289334) 已通过 fmt、27 项 lib、58 项无原生集成和 Python 5 项；其余原生/平台/release/container 结果见 [VALIDATION](../../VALIDATION.md) 最新 job 快照。本轮任务为 CI 与文档收口，候选过滤、评估扩充和 P1 功能仍是后续工作。
 
 ## 批次 A：文档与交付验收
 
@@ -10,7 +12,14 @@
 - [x] 新增 Linux/macOS 默认后端 fmt/clippy/测试、release 构建和无模型 HTTP smoke 作业。
 - [x] 新增 Linux Rust 1.88 默认后端 all-targets check，不关闭原生后端掩盖 MSRV 问题。
 - [x] 新增 Linux Docker 构建、Compose 配置检查和镜像 HTTP smoke 作业。
-- [ ] 读取新增 CI 结果与失败日志，修复具体问题后重新运行；通过前不标平台已支持。
+- [x] 读取 PR #10 历史失败日志，修复 rustfmt 与 readiness ConnectionResetError；修复已合入 main，轻量检查和 native fmt 已通过。
+- [x] 核验当前 main 的 27 项 lib、58 项无原生集成及 Python 5 项日志，将 commit/run/job 与失败修复证据写入 VALIDATION。
+- [x] 读取 macOS 原生失败日志，修复综合测试 `published` 变量遮蔽导致 MCP get 的 asset_id 为 null；保留读取/撤销断言并增加错误响应诊断。
+- [ ] 新修复分支的 fmt/clippy 与完整原生生命周期测试通过；修复提交不能标为验收完成。
+- [x] 统一 STATUS 当前能力表、整体/身份设计、API、README 与存储/M5 记录；将历史状态与最新快照分开，修正应用层厂商解耦的完成边界。
+- [ ] 当前 main Windows、Linux/macOS 默认后端完整检查/测试通过。
+- [ ] 当前 main Linux/macOS release HTTP smoke 与无模型关键词宿主评估通过，并核验输出工件。
+- [ ] 当前 main Rust 1.88 默认后端 all-targets check 与镜像构建/HTTP smoke 通过。
 - [ ] Rust 1.88 完整运行测试；若锁定依赖不兼容，先核对并固定兼容版本或如实调整最低版本，不静默放宽。
 - [ ] 运行 cargo audit 并逐条记录 RustSec 告警；评估 fs2/fs4 的锁生命周期和平台兼容，不先行替换。
 
@@ -29,11 +38,11 @@
 
 ## 本轮语义前置设计
 
-已新增 [记忆身份与上下文契约](../specs/2026-10-08-memory-identity-and-context.md)：将授权主体与业务主体区分，明确跨主体/环境隔离、精确身份更新、未归一化状态和矛盾证据呈现。I1 的独立身份类型/编码与 8 项 Rust 测试已通过 CI；本轮实现 SQLite 身份唯一绑定和显式 HTTP 写入，新切片的 4 项 SQLite 测试已通过 CI，release/container 发布烟测仍待验收。已实现窄范围的离线显式身份表升级，52 项无原生集成测试通过 CI，原生 CLI/烟测仍待验收；capture 抽取匹配、会话与上下文策略尚未实现，按 I0–I4 切片推进。短记忆不强制建图，图收益以评估决定。
+已新增 [记忆身份与上下文契约](../specs/2026-10-08-memory-identity-and-context.md)，I1 编码/SQLite 唯一绑定/显式写入/离线安装/lookup/调用方版本条件已实现；受限 I2 单身份 capture 与来源读取、I4 标注及精确过滤也已实现。当前 main 无原生用例通过，原生 HTTP/Worker、render/预算、CLI/release/container 仍待验收。自动身份推断、属性目录、未归一化状态、语义冲突、I3 会话与完整 I4 类型策略仍未交付，不能以显式绑定或 quote 校验替代语义质量。短记忆不强制建图，图收益以评估决定。
 
 ## 后续阶段
 
-按 STATUS 继续检索增强和运维治理：retention、物理擦除、孤儿文件、备份恢复演练。P1 按 A3 推进会话问答/证据与反馈、guidance、阶段化 improve、水位和长期经验入库；P2 保留 GraphCompletion、个性化、valid_from/to/as_of 和企业服务化。未来 PG 适配及本地多 Worker 不属于本批次。
+按 STATUS 的顺序推进：完成 CI 证据 → 身份候选过滤下推及反例 → 人工标注与真实检索基线/组件消融 → I2 必要语义契约与 P1 最小会话闭环。P1 第一版先做会话及实际证据归档、幂等反馈、显式 improve、有来源的经验重新入库，不要求一次实现全部 A3 阶段。ANN/重排/profile/tokenizer 由实测缺陷与规模需求选择。retention、物理擦除、孤儿文件及备份恢复保留独立待办；P2 保留 GraphCompletion、个性化、valid_from/to/as_of 和企业服务化。未来 PG 适配及本地多 Worker 不属于本批次。
 
 ## I1 显式身份表升级执行清单
 
@@ -75,15 +84,18 @@
 - [x] search 最终授权读取中绑定业务身份，resolve 引用与文本保留类型和身份状态。
 - [x] 全部标注计入既有预算，整块渲染；增加 context_policy 版本标识。
 - [x] 增加解码/类型状态、预算边界和原生 HTTP 标注断言。
-- [ ] 本轮 Rust 与原生 HTTP 验收通过 CI。
+- [x] 当前 main 无原生 lib 测试通过（27 项，run 37868289334）；不覆盖 retrieval.rs 的原生 render 测试。
+- [ ] 原生 render/预算与 HTTP 验收通过 CI。
 - [ ] 冲突识别、类型/任务预算策略、会话与条件化经验仍未交付。
 
 ## I4 精确身份检索范围
 
 - [x] search/resolve 支持完整身份过滤，保持 reader/scoped/current/source 权限边界。
-- [x] 匹配先于 limit，排除旧未识别记忆、知识与图扩展；省略过滤时保持混合检索。
+- [x] 精确身份匹配先于最终响应 limit，排除旧未识别记忆、知识与图扩展；省略过滤时保持混合检索。
+- [ ] 身份限定下推到候选生成，覆盖分支已取 top-100 后目标被排除的反例；当前实现/API 明确保留候选范围限制。
 - [x] 同步 HTTP/MCP Schema 和 CLI 默认值，补默认兼容、身份反例及原生 HTTP 隔离用例。
-- [ ] 新增 Rust 和原生验收通过 CI；PR #8 标注切片完整验收仍待完成。
+- [x] 当前 main 默认请求/Schema/身份匹配等无原生测试通过（run 37868289334）。
+- [ ] 原生 retrieval/HTTP 完整验收通过 CI。
 - [ ] 部分主体条件过滤、冲突策略、类型预算、自动匹配与会话闭环仍未交付。
 
 ## I1/I2 调用方版本前置条件
@@ -91,5 +103,7 @@
 - [x] 显式写入与单身份 capture 接受可选非负 expected_version，在受理事务中比对。
 - [x] 保留 Worker 复核、成功幂等重放与旧请求 payload；0 明确表示尚无已发布版本。
 - [x] 补版本/兼容单元测试和原生 HTTP 拒绝/重放断言，同步文档。
-- [ ] 新增 Rust/HTTP 与 PR #9 过滤验收通过 CI。
+- [x] PR #10 已合入 `73fc51a`，3 项新增版本/兼容 lib 测试随 27 项 lib 通过当前 main CI。
+- [ ] 新增原生 HTTP 与 PR #9 过滤验收通过 CI。
 - [ ] 自动匹配、属性目录、未归一化状态、冲突策略及会话闭环仍未交付。
+

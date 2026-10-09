@@ -1,6 +1,22 @@
 # 实现状态与后续工作
 
-更新：2026-10-08。M5 本地宿主已经接入 SQLite/LanceDB/Kuzu/本地 Blob，默认构建不依赖 PG/Apalis。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。2026-09-29 已实施自动发布（A1），候选/审核门移除，详见 [自动发布计划](superpowers/plans/2026-09-22-auto-publish.md) 与 [验收](VALIDATION.md)。2026-09-30 同进程并发打开串行化并补强验收覆盖，见 [验收](VALIDATION.md)。
+更新：2026-10-09。当前代码基线为 main `73fc51a2671bc3d7895794b1981a5fdc48f7ce9b`（PR #10 已合入）。M5 本地宿主与 A1 自动发布已实现；P0 完整交付验收尚未收口，P1 主闭环及 P2 尚未交付。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。
+
+## 当前能力与验收快照
+
+以下区分代码已实现、运行验收通过与效果已验证；历史切片的“待 CI”描述只表示记录当时状态。
+
+| 范围 | 当前实现 | 已核验证据与剩余边界 |
+| --- | --- | --- |
+| M5 / A1 | SQLite/LanceDB/Kuzu/本地 Blob，单宿主与单 Worker，直接发布 | Windows 历史完整验收通过；当前代码原生/平台/release/container 验收仍在运行 |
+| I1 记忆身份 | v1 编码、唯一绑定、显式写入、离线安装、精确 lookup、调用方版本前置条件 | 当前 main fmt、27 项 lib、58 项无原生集成通过；原生 HTTP/Worker 用例待完成 |
+| I2 抽取匹配 | 调用方完整身份的单身份 capture、原文区间、来源读取与绑定状态 | 无原生解析/SQLite 用例通过；自动推断、属性目录、未归一化状态和语义冲突未实现 |
+| I4 上下文 | 类型/身份标注、完整身份过滤、引用与 UTF-8 字节预算 | 默认请求/身份匹配测试通过；原生 render/HTTP 待完成，冲突/类型预算未实现 |
+| 检索质量 | keyword/vector/hybrid、摘要与一跳图扩展；12 文档/24 查询合成种子 | Python adapter 5 项通过；当前宿主评估作业待完成，无真实模型质量/成本及组件消融结果 |
+| P1 会话到经验 | 目标设计已明确 | session/feedback/guidance/learning/improve 主闭环未实现 |
+| P2 增强与服务化 | 目标设计已明确 | 时间有效期、GraphCompletion、企业身份、配额和生产后端未实现 |
+
+当前 CI：[main run 37868289334](https://github.com/TheLudlows/openContext/actions/runs/37868289334)。macOS fmt/clippy 与 29 项原生 lib 通过，集成 76 通过、1 失败；已定位为综合测试中 `published` 变量遮蔽导致 MCP get 的 asset_id 为 null，本次分支已修复但新 CI 未验收。其余原生作业仍在运行。完整 job/commit 证据与核验时间统一记录在 VALIDATION；当前 main 全量 CI 未通过，不能将轻量测试通过等同于全部平台支持。
 
 ## 已交付
 
@@ -15,26 +31,30 @@
 
 旧 PostgreSQL 运行代码、Apalis SQL 和专用测试从活动树裁剪，历史参考为提交 `72fb5aa`。未提供 PG 到本地库的数据迁移或可选 PG 运行模式；未来可实现存储接口，不能据此宣称已支持。
 
-## 当前推进批次（2026-10-08）
+## 当前推进批次（2026-10-09）
 
-执行与验收清单见 [P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md)。本轮修订历史计划、整体设计及评估样例中的过期表述，核验既有 Windows CI，并新增跨平台、MSRV、release 与容器验收任务。新增任务尚未通过验收，不把配置已加入等同于平台已支持。
+执行与验收清单见 [P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md)。本轮收口 PR #10 合入后的 CI 证据、历史失败及修复记录，并统一状态、目标设计与计划。原生、MSRV 默认后端与容器尚未完成时保留未勾项，不把配置加入或 PR 合入当作验收通过。
 
 P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估沿用 300 用例目标。本轮新增隔离 HTTP 检索评估器、12 文档/24 查询的合成种子和指标/adapter 测试；真实宿主结果仍待 CI，不能把样本或 fixture 通过当作完整质量结果。
 
-[记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 明确主体、属性、条件与来源关联，已实现 `MemoryIdentity` v1 编码、SQLite 身份绑定与显式 HTTP 写入入口；同身份复用资产并沿用发布任务/版本治理，已补兼容本地旧库的离线显式身份表升级（dry-run/事务安装/重复执行），52 项无原生集成测试已通过 CI；原生 CLI/容器烟测待验收，capture 语义匹配仍未实现。接下来按该设计推进语义身份和 P1 会话闭环，不以新增后端替代产品能力。
+[记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 的 I1、受限 I2 与 I4 标注/过滤切片已落入代码，验收范围以上表为准。原文区间与 explicit_identity 只表示可追溯性和绑定方式，不证明语义正确。完整身份过滤在最终响应 limit 前执行，但检索分支已截断候选，仍可能漏召回；图实体仍按名称生成 ID，记忆身份不能替代图谱同名消歧。Service 仍依赖 LocalEngine/SqliteTx，存储接口基础已交付，应用层完整后端解耦尚未完成。
 
 ## 接下来
 
-1. Linux/macOS/release 和容器运行验收、最低 Rust 版本验证；Windows 远端 CI 已核验通过，不能替代其他平台证据。
-2. 冻结真实检索与 Agent 评估集，验证图谱/摘要收益和共享实体合并策略；当前模型 stub 不代表语义质量或性能。
-3. 在线 profile 重建、ANN/重排、精确 tokenizer、检索分页和规模控制。
-4. retention、原文物理擦除、孤儿文件回收、完整备份恢复演练；目前只能停止宿主后整体复制数据目录。
-5. 企业身份、文档 ACL、配额、公平调度、审计查询、指标和多节点架构；不扩展本地多 Worker。
-6. P1 会话记忆/指导/反馈/经验蒸馏及 P2 服务化，按 [目标设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) 推进。
+1. 完成当前 main 原生/平台/release/container CI 与 Rust 1.88 默认后端检查，读取失败日志后修复；同步 VALIDATION/本计划状态。Rust 1.88 完整运行测试和依赖审计仍单列。
+2. 将身份限定下推到检索候选生成，补超过 100 个干扰候选的反例；保留当前 scope/来源/版本边界，不以查找成功代替语义质量验证。
+3. 冻结人工证据标注、数据 hash 与配置，先取得可复现的 keyword/vector/hybrid 基线，再用独立控制验证摘要/图收益；逐步扩至 300 用例，记录误合并、延迟及成本。
+4. 补 I2 必要语义契约：属性单值/多值、更新/补充与歧义状态；推进 P1 最小闭环“会话与实际证据归档 → 幂等反馈 → 显式 improve → 有来源的经验重新入库”。不要求第一版一次实现全部 improve 阶段。
+5. 按质量/规模结果选择 ANN、重排、profile 重建、tokenizer 和分页；运维治理继续保留 retention、物理擦除、孤儿文件和备份恢复演练，不能宣称已完成。
+6. P2 企业身份、文档 ACL、配额、公平调度、审计查询、指标及生产后端按后续设计推进；不扩展本地多 Worker。
 
 当前仍是本地原型交付，不承诺生产 SLO、完整 V3.1 场景或竞品效果排名。依赖安全审计（`cargo audit` 核验 RustSec 告警；fs2 疑似归档/不再维护，单 Worker OS 文件锁依赖它，需评估 fs4 替换）、PDF OS 资源沙箱、断电恢复和长期压测尚未完成。
 
-## 2026-10-08 后续实现与构建修复
+## 历史切片记录
+
+以下保留各轮当时的实现与验收记录；当前状态以上方快照及 VALIDATION 最新核验为准。
+
+### 2026-10-08 后续实现与构建修复
 
 - 首个 I1 切片：主体/属性/条件及 scope 的确定性身份编码，附 8 项 Rust 测试；编码的 8 项测试与 Rust 1.88 检查已通过上一轮 CI。新增持久化/API 切片含 4 项 SQLite 测试及 release/container 身份发布烟测，身份编码 8 项和 SQLite 4 项测试、fmt 已在远端 CI 通过；release/container 发布烟测仍待原生构建。
 - 容器实际构建发现 Lance 缺失 `google/protobuf/empty.proto`；Docker 与 Linux CI 已补 `libprotobuf-dev` 和 protoc 导入预检。修复后运行仍待验收，详见 VALIDATION。
@@ -69,3 +89,4 @@ PR #8 已合入 main（`29a89cd`）；CI run 37773799817 已通过 fmt、23 项 
 ## 调用方版本前置条件（2026-10-08）
 
 PR #9 已合入 main（`7a12ede`）；CI run 37775517348 通过 fmt、24 项 lib 和 58 项无原生集成，原生 retrieval/HTTP 与平台验收仍未完成。本轮显式 memory/capture 写入支持可选 expected_version，在来源/任务写入前的授权事务中比对；0 为尚无发布版本，正数为精确当前版本，Worker 保留受理后复核。省略/null 保持旧行为和幂等 payload，已成功重放优先返回缓存。新增 3 项版本/兼容单元测试，原生 HTTP 增加创建/更新/过期/非法/重放断言；本轮 Rust 待 CI，Python 5 项本地通过。此为并发契约补齐，不是自动语义匹配或事实有效时间。
+

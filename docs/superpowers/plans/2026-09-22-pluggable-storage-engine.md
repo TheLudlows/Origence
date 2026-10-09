@@ -1,6 +1,6 @@
 # 本地存储与可扩展接口实施计划
 
-修订：2026-10-08。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。
+修订：2026-10-09。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。M0–M5 的本地接口与宿主基础已交付；应用层完整厂商解耦仍欠账，当前代码的原生/平台验收见 [VALIDATION](../../VALIDATION.md) 最新快照，不能将历史勾项解释为任意后端可替换或全部平台已通过。
 
 ## 目标与范围
 
@@ -39,7 +39,8 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 
 - [x] 定义 Scope、授权上下文、领域事务、RelationalStore、JobQueue、VectorStore、GraphStore、BlobStore 和 StorageEngine。
 - [x] 明确同宿主引擎实例的所有权、阻塞调用边界及关闭顺序；业务模块共享适配器，不各自打开 Kuzu 数据库文件。
-- [x] 用具体签名说明 begin/commit/rollback、幂等命令、来源/版本登记、enqueue 和 audit；事务对象携带 scope，不暴露 PgPool/SqlitePool 或裸 SQL。
+- [x] Store/DomainTx 定义 begin/commit/rollback、幂等、来源/版本、enqueue 和 audit 的领域签名；事务对象携带 scope，接口不暴露裸 SQL。
+- [ ] 应用层完全使用领域事务而非厂商事务。当前 Service 的 read/write/command 仍返回 SqliteTx，retrieval 使用其扩展方法，完整后端解耦尚未完成；不要求为本地版本先实现第二后端。
 - [x] enqueue 是同一关系事务上的领域操作；JobQueue 消费者负责 claim/ack/retry，禁止另开连接造成业务成功而入队失败。
 - [x] 图/向量操作显式接收 scope、来源版本；向量查询额外指定 profile、dimension、generation。Blob key 受 scope 和根目录约束。
 - [x] 用调用示例覆盖写入提交、任一步失败共同回滚、外部模型 IO 在事务外执行、提交时权限复核。
@@ -99,7 +100,8 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - [x] 本地构建和运行不依赖 PG 服务、DATABASE_URL、PG 角色、pgvector 扩展或 Apalis PG 队列；解除其对本地发布产物的强制依赖。
 - [x] PG 基线代码的归档/裁剪在接入时明确记录，不为保留旧代码增加本地依赖，不新增可选 PG 交付承诺。
 - [x] CLI、HTTP、MCP 和 CI 使用本地后端跑初始化、权限、生命周期、恢复、删除、预算测试；普通测试可用临时目录直接运行。
-- [x] 完成 fmt、clippy、单元及实际本地集成测试，再标记后端“已支持”；将限制与实测结果写入文档。
+- [x] Windows 历史 M5/A1 基线完成 fmt、clippy 与本地集成测试并记录限制；证据只适用于当时 commit/平台。
+- [ ] 当前 main 默认后端完整 Windows/Linux/macOS、release/container 验收收口。轻量 27 项 lib/58 项无原生集成不替代当前原生用例；以 VALIDATION 当前 job 结果判断。
 
 完成标准：干净环境从首次启动到检索和重启恢复可复现；未运行的检查明确标为未验证。
 
@@ -109,3 +111,4 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - 自动发布计划已在 M5 本地基线成立后完成，修改领域治理与新库初始化定义，不重建存储层。
 - P1 会话记忆与 P2 服务化能力按整体设计推进；未来 PG 扩展不属于本地里程碑。
 - 旧 PG 初始化改动未验证部分保留在历史记录；不属于当前本地交付，也不新增 PG 适配器前置阶段。
+
