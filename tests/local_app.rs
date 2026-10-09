@@ -319,8 +319,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     assert_eq!(extracted["result"]["memories"].as_array().unwrap().len(), 2);
     let identity = json!({"subject":{"kind":"service","stable_id":"billing"},"predicate":"release.approval","context":{"environment":"production"}});
     let first_key = Uuid::new_v4().to_string();
-    let first_body =
-        json!({"identity":identity,"content":"生产发布需要审批","expected_version":0});
+    let first_body = json!({"identity":identity,"content":"生产发布需要审批","expected_version":0});
     let first = http
         .post(format!("{base}/v1/captures/identified"))
         .bearer_auth(token)
