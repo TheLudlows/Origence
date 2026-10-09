@@ -4,11 +4,11 @@ Rust 实现的团队 Agent 记忆与知识服务。M5 将默认运行栈固定�
 
 数据按 tenant/workspace 隔离；writer 的结构化记忆与 capture 抽取结果直接进入发布任务，提交时重新核验身份、权限、来源与预期版本；检索只返回当前已发布、资产未删除且来源仍有效的证据。会话记忆、企业 SaaS 仍属于后续阶段。
 
-2026-10-09 核验：验收代码 `8d8d224`（PR #11）修复了 MCP 生命周期测试的变量遮蔽；显式身份、单身份 capture、lookup、身份标注/过滤与调用方版本前置条件已落地。现有 CI 的 7 个作业全部通过，覆盖轻量测试、三平台原生测试、Linux/macOS release 与 HTTP smoke、容器及 Rust 1.88 默认后端 check。两平台无模型合成关键词基线 Recall@5 均为 63.6%，真实模型效果尚未验证；最新能力与证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
+2026-10-09 核验：验收代码 `8d8d224`（PR #11）修复了 MCP 生命周期测试的变量遮蔽；显式身份、单身份 capture、lookup、身份标注/过滤与调用方版本前置条件已落地。旧版 CI 的 7 个作业全部通过，覆盖轻量测试、三平台原生测试、Linux/macOS release 与 HTTP smoke、容器及 Rust 1.88 默认后端 check。两平台无模型合成关键词基线 Recall@5 均为 63.6%，真实模型效果尚未验证；最新能力与证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
 
 ## 快速启动
 
-已实测平台为 Windows x64/MSVC、Rust 1.96.0。源码构建需要 Rust、C++ 工具链、CMake、Ninja 和 protoc；原生依赖构建较大，建议预留充足磁盘并限制并行链接。Windows 安装 Visual Studio C++ 工具后可使用脚本自动定位工具：
+项目最低支持 Rust 1.98；Linux 原生 CI 固定 1.98.0 验证实际 MSRV，开发/Windows/macOS CI/Docker 使用 1.98.1。此前 1.88/1.96 验收属于历史记录，新版本须经 CI 验收。源码构建需要 Rust、C++ 工具链、CMake、Ninja 和 protoc；原生依赖构建较大，建议预留充足磁盘并限制并行链接。Windows 安装 Visual Studio C++ 工具后可使用脚本自动定位工具：
 
 ```powershell
 ./tools/build.ps1 -Action Build
@@ -102,7 +102,7 @@ cargo clippy --locked --all-targets -j 1 -- -D warnings
 cargo test --locked -j 1 --no-fail-fast
 ```
 
-默认启用 `local-storage`；业务/进程测试使用临时目录和本地模型模拟服务，无数据库账号或付费模型要求。集成测试统一编入 `tests/local.rs`，减少原生依赖重复链接。`--no-default-features --lib` 仅用于基础接口检查，不是另一套应用后端。
+CI 仅对 `main` push 和面向 `main` 的 PR 触发，避免 PR 分支 push 重复执行。每个 PR 运行 2 个 Job：`fast-check`（fmt、无原生后端的 lib/集成测试、Python evaluation adapter）和 `linux-native`（Rust 1.98.0 最低版本下身份测试、完整 Clippy/原生集成测试、Debug HTTP smoke、关键词评估）。`main` 额外运行 Windows/macOS 原生测试及 Release/Smoke、Docker Release 镜像/Smoke。Cargo 缓存仅在主分支更新，首次运行仍可能很慢。默认启用 `local-storage`；业务/进程测试使用临时目录和本地模型模拟服务，无数据库账号或付费模型要求。集成测试统一编入 `tests/local.rs`，减少原生依赖重复链接。`--no-default-features --lib` 仅用于基础接口检查，不是另一套应用后端。
 
 ## 当前边界与文档
 
