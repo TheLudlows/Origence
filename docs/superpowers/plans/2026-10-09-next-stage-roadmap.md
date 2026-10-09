@@ -14,29 +14,29 @@
 | 模块 | 已实施 | 剩余关键问题 |
 | --- | --- | --- |
 | M0–M5 / P0 | 单宿主 SQLite+LanceDB+Kuzu+Blob，HTTP/MCP，异步发布、幂等、账本、权限、溯源、撤回、版本 | 大规模/故障验收、依赖审计、生产运维可靠性 |
-| I1 记忆身份 | 明确身份写入/唯一性/精确 lookup、expected_version、离线升级；候选前置限定已实现 | PR #20 补充真实向量定向回归，等待完整 CI 验收 |
+| I1 记忆身份 | 明确身份写入/唯一性/精确 lookup、expected_version、离线升级；候选前置限定已实现 | S0 真实 vector/hybrid 定向回归及主干完整 CI 已验收；语义匹配/冲突仍未实现 |
 | I2 抽取 | 调用方明确 identity 的 capture、精确引用区间校验 | 未归一化状态、属性目录、单值/多值、语义匹配/冲突管理 |
 | 检索 | keyword/vector/hybrid、摘要和图扩展、RRF、证据引用 | 目前仅 12 文档/24 查询无模型合成基线；真实模型/Agent 质量和组件收益未知 |
 | I4 上下文 | 现有 search/resolve、身份标注、引文与字节预算 | 冲突标识、按类型/任务配额、跨 session/学习经验联检未完成 |
 | P1 会话经验 | 目标规格与数据模型草案 | SessionTurn、Feedback、Guidance、Learning、Improve 全链路未实现 |
 | P2 | 架构规划 | OIDC/ACL、配额/计费、服务化、GraphCompletion、有效时间等 |
 
-既有评估：12 文档/24 查询；22 条有答案题中 14 条全部来源命中，8 条返回空，2 条无答案题没有误召回；历史 keyword 文档 Recall@5 63.6%。**只代表合成关键词基线，不证明真正 RAG/Agent 效果**。Rust 1.98 新 CI 需单独完成，历史 Rust 1.88/1.96 的绿灯不能替代。
+既有评估：12 文档/24 查询；22 条有答案题中 14 条全部来源命中，8 条返回空，2 条无答案题没有误召回；keyword 文档 Recall@5 63.6%，S0 主干 Linux/macOS 日志亦保留该合成基线。**只代表合成关键词基线，不证明真正 RAG/Agent 效果**。Rust 1.98 的主干 CI 已单独核验，证据见 VALIDATION；没有复用历史 Rust 1.88/1.96 的绿灯。
 
 ## 3. 交付顺序与任务
 
-### S0（最高优先级）：完整身份候选过滤修复 — 实现已合入，定向回归验收进行中
+### S0：完整身份候选过滤修复 — 已完成正确性验收
 
-**原始问题**：全 scope 的 keyword/native-vector 候选先截断，再按身份过滤时，其他主体可能占满 top-100。PR #13 已将完整身份限定前置到候选生成；PR #15 已修复阻塞 Clippy 的嵌套 if。剩余事项是证明新回归真实通过并归档，而不是重新实现过滤或再次修复同一告警。
+**原始问题**：全 scope 的 keyword/native-vector 候选先截断，再按身份过滤时，其他主体可能占满 top-100。PR #13 已将完整身份限定前置到候选生成；PR #15 已修复阻塞 Clippy 的嵌套 if；PR #20 的两个真实原生回归及包含它们的主干完整 CI 已核验。验收代码 `42db5c21a8ef4788d07209be7110d85e01d7a85f`，[run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) attempt 1，5/5 作业成功。源码/合成 checkout/实际 merge、job 与实际测试计数已归档至 [VALIDATION](../../VALIDATION.md)；归档提交/PR 合并结果由 [Issue #21](https://github.com/TheLudlows/Origence/issues/21) 追溯。
 
 - [x] **源码已实现（PR #13）**：授权 tenant/workspace + 完整 `MemoryIdentity` 定位已有资产；未匹配为空，不创建 slot，不隐式升级旧库。
 - [x] **源码已实现（PR #13）**：keyword 与 vector artifact ID 集合在 top-k/rank 之前限定资产，最终继续复核权限、来源、当前版本、墓碑和身份。
 - [x] **既有测试已提交**：keyword 的 >100 干扰、v1/v2、跨 workspace、缺失身份、撤回与 search/resolve；SQLite vector 候选 ID 与旧库不升级测试。
 - [x] **Clippy 修复已合入（PR #15）**：保留 `-D warnings`，fast-check 新增无原生后端的 Clippy。
-- [x] **新回归代码已提交（PR #20），不等于运行通过**：`tests/identity_vector_regression.rs` 中 `s0_vector_identity_prefilter_real_lancedb` 与 `s0_hybrid_identity_prefilter_real_lancedb`，编入现有 `tests/local.rs`。真实 LanceDB、130 个更高排名干扰、目标关键词必不匹配、实际宿主 HTTP search/resolve、跨 workspace/tenant、当前版本、撤回/墓碑、显式模型降级。
-- [ ] **新增原生回归验收**：两个命名用例必须在实际完整原生套件中成功，不能以 no-default-features 的轻量检查或忽略测试代替。
-- [ ] **主干跨平台验收**：包含新用例的 main commit 对应 fast-check、Linux Native/MSRV、Windows、macOS 和 Docker Smoke 成功；逐项记录实际结果。
-- [ ] **证据归档**：在 VALIDATION 记录源码/合并 SHA、run/job、两个用例与完整套件计数，随后同步 STATUS 和本节完成标记；不把 pending/skipped/cancelled 标为通过。
+- [x] **新回归代码已合入（PR #20）**：`tests/identity_vector_regression.rs` 中 `s0_vector_identity_prefilter_real_lancedb` 与 `s0_hybrid_identity_prefilter_real_lancedb`，编入现有 `tests/local.rs`。真实 LanceDB、130 个更高排名干扰、目标关键词必不匹配、实际宿主 HTTP search/resolve、跨 workspace/tenant、当前版本、撤回/墓碑、显式模型降级。
+- [x] **新增原生回归验收**：三平台原始日志均包含两个精确命名用例 `ok`；完整 local 套件各 `81 passed / 0 failed / 0 ignored / 0 measured / 0 filtered`，实际测试名称集合一致。
+- [x] **主干跨平台验收**：fast-check `113779676713`、Linux Native/MSRV `113779676656`、Windows `113779676444`、macOS `113779676800`、Docker Smoke `113779676764` 在同一 main run attempt 1 全部 completed/success；checkout 均对应验收代码。
+- [x] **证据归档**：VALIDATION 保存完整 provenance、原生 lib/local/bin/doc 分组与轻量/MSRV 实际计数，静态 JSON 保存日志摘录；STATUS 和本节已同步。原始历史证据保留，PR 的三个 skipped 平台不冒充主干通过。
 
 **复现命令**：`cargo test --locked -j 2 --test local identity_vector_regression -- --nocapture`。测试仅使用 loopback 固定向量模型，不调用真实付费模型，不变更全局进程环境。
 
@@ -90,4 +90,4 @@ Rust 1.98 的完整 CI、cargo audit/RustSec、fs2 文件锁生命周期、长�
 
 ## 5. 执行入口
 
-先完成 PR #20 的原生与主干验收并归档；S0 关闭后进入 S1 的评估基线，再按 S2/S3 拆分小 PR。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。
+S0 原生与主干验收已完成并归档。下一阶段为 S1 评估基线，再按 S2/S3 拆分小 PR；本次 Issue #21 不启动这些阶段，S1 及后续清单保持未完成。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。

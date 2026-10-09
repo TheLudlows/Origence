@@ -1,0 +1,592 @@
+{
+  "repository": "TheLudlows/Origence",
+  "issue": 21,
+  "evidence_kind": "reviewed GitHub Actions metadata and decoded original job log excerpts; not a new native execution",
+  "code_commit": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+  "code_tree": "d2145fdb6f1b1b15904a74c683a5272f9a2321e2",
+  "pr20": {
+    "number": 20,
+    "base_sha": "e8ee1ae628bd3f4868f3cf981d385ecd30a0a5cd",
+    "head_sha": "1b9b68f65446c69e0fc030455698d326bc9a7fed",
+    "synthetic_checkout_sha": "8b98c33b56a4ab205746eddc40b88e64bc17e4f8",
+    "merge_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+    "merged_at": "2026-10-09T10:31:12Z",
+    "synthetic_parents": [
+      "e8ee1ae628bd3f4868f3cf981d385ecd30a0a5cd",
+      "1b9b68f65446c69e0fc030455698d326bc9a7fed"
+    ],
+    "all_three_trees_equal": true
+  },
+  "source_blobs": {
+    "tests/identity_vector_regression.rs": "b7858ff04e779c1bcde6e782e67acc3c23a9f95b",
+    "tests/local.rs": "e4ebcbd4269748ddc1b9de769551c2fc8a44c6b8",
+    ".github/workflows/ci.yml": "eb65fd5394b37ad4f1f781a2ff4bad65ececc857"
+  },
+  "run": {
+    "id": 37918105081,
+    "run_attempt": 1,
+    "url": "https://github.com/TheLudlows/Origence/actions/runs/37918105081",
+    "event": "push",
+    "head_branch": "main",
+    "head_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-10-09T10:31:15Z",
+    "updated_at": "2026-10-09T11:46:25Z"
+  },
+  "jobs": [
+    {
+      "name": "windows",
+      "id": 113779676444,
+      "run_id": 37918105081,
+      "run_attempt": 1,
+      "head_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "checkout_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "url": "https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676444",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-09T10:32:55Z",
+      "completed_at": "2026-10-09T11:25:10Z",
+      "checkout_log": [
+        "2026-10-09T10:33:03.4195755Z [command]\"C:\\Program Files\\Git\\bin\\git.exe\" log -1 --format=%H",
+        "2026-10-09T10:33:03.4483328Z 42db5c21a8ef4788d07209be7110d85e01d7a85f"
+      ],
+      "toolchain_log": "2026-10-09T10:33:15.0906597Z   1.98.1-x86_64-pc-windows-msvc installed - rustc 1.98.1 (48a229cea 2026-09-01)",
+      "command_log": [
+        "2026-10-09T10:33:21.0519859Z ##[group]Run ./tools/build.ps1 -Action Validate -Jobs 1"
+      ],
+      "suite_results": [
+        {
+          "passed": 29,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T11:12:10.9494809Z test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s",
+          "suite": "native lib"
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T11:12:10.9979900Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "suite": "native bin"
+        },
+        {
+          "passed": 81,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T11:12:40.8673430Z test result: ok. 81 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.74s",
+          "suite": "native tests/local.rs"
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T11:12:44.8910834Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+          "suite": "doc-tests"
+        }
+      ],
+      "target_tests": [
+        {
+          "name": "identity_vector_regression::s0_vector_identity_prefilter_real_lancedb",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:21.5838745Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok"
+        },
+        {
+          "name": "identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:21.5839712Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok"
+        }
+      ],
+      "existing_regressions": [
+        {
+          "name": "local_app::identity_filter_survives_top_100_distractors_and_stale_versions",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:15.8512066Z test local_app::identity_filter_survives_top_100_distractors_and_stale_versions ... ok"
+        },
+        {
+          "name": "local_app::local_transactions_versions_retraction_and_idempotency",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:18.2777422Z test local_app::local_transactions_versions_retraction_and_idempotency ... ok"
+        },
+        {
+          "name": "local_app::racing_expected_versions_supersede_the_loser",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:18.7434963Z test local_app::racing_expected_versions_supersede_the_loser ... ok"
+        },
+        {
+          "name": "sqlite_identity::old_database_is_not_upgraded_implicitly",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:24.1981966Z test sqlite_identity::old_database_is_not_upgraded_implicitly ... ok"
+        },
+        {
+          "name": "sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:24.4221345Z test sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k ... ok"
+        },
+        {
+          "name": "sqlite_store::permission_revocation_serializes_with_writes",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:26.4665330Z test sqlite_store::permission_revocation_serializes_with_writes ... ok"
+        },
+        {
+          "name": "storage_contract::permission_rechecked_at_commit_blocks_revoked_principal",
+          "result": "ok",
+          "log_line": "2026-10-09T11:12:26.4988689Z test storage_contract::permission_rechecked_at_commit_blocks_revoked_principal ... ok"
+        }
+      ],
+      "python_tests": [],
+      "smoke_log": [],
+      "keyword_seed_metrics": [],
+      "release_build_log": [],
+      "log_end": [
+        "2026-10-09T11:25:07.3712199Z Terminate orphan process: pid (2136) (vctip)",
+        "2026-10-09T11:25:07.4289983Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/"
+      ]
+    },
+    {
+      "name": "linux-native",
+      "id": 113779676656,
+      "run_id": 37918105081,
+      "run_attempt": 1,
+      "head_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "checkout_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "url": "https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676656",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-09T10:32:54Z",
+      "completed_at": "2026-10-09T10:35:05Z",
+      "checkout_log": [
+        "2026-10-09T10:32:57.0041489Z [command]/usr/bin/git log -1 --format=%H",
+        "2026-10-09T10:32:57.0068442Z 42db5c21a8ef4788d07209be7110d85e01d7a85f"
+      ],
+      "toolchain_log": "2026-10-09T10:33:05.3769357Z   1.98.0-x86_64-unknown-linux-gnu installed - rustc 1.98.0 (88d9e12ae 2026-08-18)",
+      "command_log": [
+        "2026-10-09T10:33:56.1571863Z ##[group]Run cargo test --locked --no-default-features --lib memory_identity -j 2",
+        "2026-10-09T10:34:00.0327543Z ##[group]Run cargo clippy --locked --all-targets -j 2 -- -D warnings",
+        "2026-10-09T10:34:07.0258222Z ##[group]Run cargo test --locked -j 2 --no-fail-fast",
+        "2026-10-09T10:35:00.0673823Z ##[group]Run python3 evals/run.py --binary target/debug/origence --commit \"42db5c21a8ef4788d07209be7110d85e01d7a85f\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\""
+      ],
+      "suite_results": [
+        {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 19,
+          "log_line": "2026-10-09T10:34:00.0214507Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s",
+          "suite": "MSRV memory_identity (no native features)"
+        },
+        {
+          "passed": 29,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:34:34.9453340Z test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.04s",
+          "suite": "native lib"
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:34:34.9516228Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "suite": "native bin"
+        },
+        {
+          "passed": 81,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:34:56.4396317Z test result: ok. 81 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.48s",
+          "suite": "native tests/local.rs"
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:34:56.7717681Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "suite": "doc-tests"
+        }
+      ],
+      "target_tests": [
+        {
+          "name": "identity_vector_regression::s0_vector_identity_prefilter_real_lancedb",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:42.5312342Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok"
+        },
+        {
+          "name": "identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:42.7258231Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok"
+        }
+      ],
+      "existing_regressions": [
+        {
+          "name": "local_app::identity_filter_survives_top_100_distractors_and_stale_versions",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:36.9751321Z test local_app::identity_filter_survives_top_100_distractors_and_stale_versions ... ok"
+        },
+        {
+          "name": "local_app::local_transactions_versions_retraction_and_idempotency",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:39.0021966Z test local_app::local_transactions_versions_retraction_and_idempotency ... ok"
+        },
+        {
+          "name": "local_app::racing_expected_versions_supersede_the_loser",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:39.3641044Z test local_app::racing_expected_versions_supersede_the_loser ... ok"
+        },
+        {
+          "name": "sqlite_identity::old_database_is_not_upgraded_implicitly",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:42.2504362Z test sqlite_identity::old_database_is_not_upgraded_implicitly ... ok"
+        },
+        {
+          "name": "sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:42.4401126Z test sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k ... ok"
+        },
+        {
+          "name": "sqlite_store::permission_revocation_serializes_with_writes",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:42.9479177Z test sqlite_store::permission_revocation_serializes_with_writes ... ok"
+        },
+        {
+          "name": "storage_contract::permission_rechecked_at_commit_blocks_revoked_principal",
+          "result": "ok",
+          "log_line": "2026-10-09T10:34:42.9123240Z test storage_contract::permission_rechecked_at_commit_blocks_revoked_principal ... ok"
+        }
+      ],
+      "python_tests": [],
+      "smoke_log": [
+        "2026-10-09T10:35:00.0524664Z PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval"
+      ],
+      "keyword_seed_metrics": [
+        "2026-10-09T10:35:03.0361898Z {\"cases\": 24, \"answerable\": 22, \"unanswerable\": 2, \"errors\": 0, \"document_recall_at_k\": 0.6363636363636364, \"mrr_at_k\": 0.6363636363636364, \"ndcg_at_k\": 0.6363636363636364, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.728012999999919, \"p95\": 4.939151999991509, \"p99\": 5.542300999991312}, \"import_ms\": 2324.072679999944}"
+      ],
+      "release_build_log": [],
+      "log_end": [
+        "2026-10-09T10:35:04.1705582Z Cleaning up orphan processes",
+        "2026-10-09T10:35:04.2257347Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/"
+      ]
+    },
+    {
+      "name": "fast-check",
+      "id": 113779676713,
+      "run_id": 37918105081,
+      "run_attempt": 1,
+      "head_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "checkout_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "url": "https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676713",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-09T10:32:54Z",
+      "completed_at": "2026-10-09T10:33:29Z",
+      "checkout_log": [
+        "2026-10-09T10:32:57.0907376Z [command]/usr/bin/git log -1 --format=%H",
+        "2026-10-09T10:32:57.0935910Z 42db5c21a8ef4788d07209be7110d85e01d7a85f"
+      ],
+      "toolchain_log": "2026-10-09T10:33:05.2016066Z   1.98.1-x86_64-unknown-linux-gnu installed - rustc 1.98.1 (48a229cea 2026-09-01)",
+      "command_log": [
+        "2026-10-09T10:33:11.5076225Z ##[group]Run cargo fmt --all -- --check",
+        "2026-10-09T10:33:11.8208153Z ##[group]Run cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings",
+        "2026-10-09T10:33:15.7540215Z ##[group]Run cargo test --locked --no-default-features --lib -j 2",
+        "2026-10-09T10:33:19.4981260Z ##[group]Run cargo test --locked --no-default-features --test local -j 2"
+      ],
+      "suite_results": [
+        {
+          "passed": 27,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:33:19.4861354Z test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s",
+          "suite": "no-default-features lib"
+        },
+        {
+          "passed": 59,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:33:27.2013238Z test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.33s",
+          "suite": "no-default-features tests/local.rs"
+        }
+      ],
+      "target_tests": [],
+      "existing_regressions": [],
+      "python_tests": [
+        "2026-10-09T10:33:27.7092231Z Ran 5 tests in 0.374s",
+        "2026-10-09T10:33:27.7092434Z OK"
+      ],
+      "smoke_log": [],
+      "keyword_seed_metrics": [],
+      "release_build_log": [],
+      "log_end": [
+        "2026-10-09T10:33:28.0229123Z Cleaning up orphan processes",
+        "2026-10-09T10:33:28.0472516Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/"
+      ]
+    },
+    {
+      "name": "container",
+      "id": 113779676764,
+      "run_id": 37918105081,
+      "run_attempt": 1,
+      "head_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "checkout_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "url": "https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676764",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-09T10:32:55Z",
+      "completed_at": "2026-10-09T11:14:58Z",
+      "checkout_log": [
+        "2026-10-09T10:32:58.4277421Z [command]/usr/bin/git log -1 --format=%H",
+        "2026-10-09T10:32:58.4304959Z 42db5c21a8ef4788d07209be7110d85e01d7a85f"
+      ],
+      "toolchain_log": null,
+      "command_log": [
+        "2026-10-09T10:32:58.4586659Z ##[group]Run docker compose config --quiet",
+        "2026-10-09T10:33:02.2202203Z ##[group]Run docker build --build-arg BUILD_JOBS=3 -t origence:ci .",
+        "2026-10-09T11:14:53.1978828Z ##[group]Run python3 tools/smoke.py --image origence:ci"
+      ],
+      "suite_results": [],
+      "target_tests": [],
+      "existing_regressions": [],
+      "python_tests": [],
+      "smoke_log": [
+        "2026-10-09T11:14:56.2152041Z PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval"
+      ],
+      "keyword_seed_metrics": [],
+      "release_build_log": [
+        "2026-10-09T11:14:51.5271550Z #17 2482.4     Finished `release` profile [optimized] target(s) in 41m 22s"
+      ],
+      "log_end": [
+        "2026-10-09T11:14:56.4711229Z Cleaning up orphan processes",
+        "2026-10-09T11:14:56.5091245Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/"
+      ]
+    },
+    {
+      "name": "macos",
+      "id": 113779676800,
+      "run_id": 37918105081,
+      "run_attempt": 1,
+      "head_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "checkout_sha": "42db5c21a8ef4788d07209be7110d85e01d7a85f",
+      "url": "https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676800",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-09T10:32:59Z",
+      "completed_at": "2026-10-09T11:46:24Z",
+      "checkout_log": [
+        "2026-10-09T10:33:03.7355480Z [command]/opt/homebrew/bin/git log -1 --format=%H",
+        "2026-10-09T10:33:03.7405630Z 42db5c21a8ef4788d07209be7110d85e01d7a85f"
+      ],
+      "toolchain_log": "2026-10-09T10:33:10.7961190Z   1.98.1-aarch64-apple-darwin installed - rustc 1.98.1 (48a229cea 2026-09-01)",
+      "command_log": [
+        "2026-10-09T10:33:16.7650550Z ##[group]Run cargo clippy --locked --all-targets -j 2 -- -D warnings",
+        "2026-10-09T10:48:29.0120390Z ##[group]Run cargo test --locked -j 2 --no-fail-fast",
+        "2026-10-09T11:44:57.1434660Z ##[group]Run python3 evals/run.py --binary target/release/origence --commit \"42db5c21a8ef4788d07209be7110d85e01d7a85f\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\""
+      ],
+      "suite_results": [
+        {
+          "passed": 29,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:54:58.3195560Z test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s",
+          "suite": "native lib"
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:54:58.3371640Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "suite": "native bin"
+        },
+        {
+          "passed": 81,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:55:22.7896090Z test result: ok. 81 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.42s",
+          "suite": "native tests/local.rs"
+        },
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "log_line": "2026-10-09T10:55:24.4793500Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "suite": "doc-tests"
+        }
+      ],
+      "target_tests": [
+        {
+          "name": "identity_vector_regression::s0_vector_identity_prefilter_real_lancedb",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:04.0439320Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok"
+        },
+        {
+          "name": "identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:04.1097800Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok"
+        }
+      ],
+      "existing_regressions": [
+        {
+          "name": "local_app::identity_filter_survives_top_100_distractors_and_stale_versions",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:02.8894470Z test local_app::identity_filter_survives_top_100_distractors_and_stale_versions ... ok"
+        },
+        {
+          "name": "local_app::local_transactions_versions_retraction_and_idempotency",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:04.4312900Z test local_app::local_transactions_versions_retraction_and_idempotency ... ok"
+        },
+        {
+          "name": "local_app::racing_expected_versions_supersede_the_loser",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:04.5151420Z test local_app::racing_expected_versions_supersede_the_loser ... ok"
+        },
+        {
+          "name": "sqlite_identity::old_database_is_not_upgraded_implicitly",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:05.2752030Z test sqlite_identity::old_database_is_not_upgraded_implicitly ... ok"
+        },
+        {
+          "name": "sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:05.3257390Z test sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k ... ok"
+        },
+        {
+          "name": "sqlite_store::permission_revocation_serializes_with_writes",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:06.0088340Z test sqlite_store::permission_revocation_serializes_with_writes ... ok"
+        },
+        {
+          "name": "storage_contract::permission_rechecked_at_commit_blocks_revoked_principal",
+          "result": "ok",
+          "log_line": "2026-10-09T10:55:06.1791170Z test storage_contract::permission_rechecked_at_commit_blocks_revoked_principal ... ok"
+        }
+      ],
+      "python_tests": [],
+      "smoke_log": [
+        "2026-10-09T11:44:57.0869060Z PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval"
+      ],
+      "keyword_seed_metrics": [
+        "2026-10-09T11:45:00.9255150Z {\"cases\": 24, \"answerable\": 22, \"unanswerable\": 2, \"errors\": 0, \"document_recall_at_k\": 0.6363636363636364, \"mrr_at_k\": 0.6363636363636364, \"ndcg_at_k\": 0.6363636363636364, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 2.081333000205632, \"p95\": 4.627499999514839, \"p99\": 5.298165999192861}, \"import_ms\": 2636.77004299916}"
+      ],
+      "release_build_log": [
+        "2026-10-09T11:44:54.3786400Z     Finished `release` profile [optimized] target(s) in 49m 29s"
+      ],
+      "log_end": [
+        "2026-10-09T11:46:22.7313400Z Cleaning up orphan processes",
+        "2026-10-09T11:46:23.0368060Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/"
+      ]
+    }
+  ],
+  "native_integration_test_names_identical_on_all_three_platforms": [
+    "identity_upgrade_cli::cli_requires_offline_and_does_not_initialize_native_engines",
+    "identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb",
+    "identity_vector_regression::s0_vector_identity_prefilter_real_lancedb",
+    "initialization::fresh_schema_has_no_review_tables_or_column",
+    "initialization::missing_domain_column_is_rejected_without_repair",
+    "initialization::sqlite_concurrent_initialization_is_serialized",
+    "initialization::sqlite_initializes_once_and_rejects_incompatible",
+    "kuzu_store::delete_by_id_removes_shared_node_only_when_told",
+    "kuzu_store::lifecycle_is_idempotent",
+    "kuzu_store::partial_graph_schema_is_rejected_without_repair",
+    "kuzu_store::source_tagged_delete_removes_last_writer",
+    "kuzu_store::upsert_is_idempotent_and_traverse_is_scoped",
+    "lancedb_store::delete_source_removes_only_that_source",
+    "lancedb_store::invalid_vectors_are_rejected_before_writing",
+    "lancedb_store::lifecycle_is_idempotent",
+    "lancedb_store::profile_dimension_is_checked_on_write_and_search",
+    "lancedb_store::relational_candidates_filter_before_top_k",
+    "lancedb_store::replay_preserves_generation_source_version_profile_and_scope",
+    "lancedb_store::upsert_is_idempotent_and_search_is_scoped",
+    "local_app::graceful_host_shutdown_stops_worker_and_closes_store",
+    "local_app::identity_filter_survives_top_100_distractors_and_stale_versions",
+    "local_app::local_host_api_cli_mcp_models_and_recovery",
+    "local_app::local_transactions_versions_retraction_and_idempotency",
+    "local_app::racing_expected_versions_supersede_the_loser",
+    "local_app::saved_publication_recovers_after_external_graph_write",
+    "local_blob::check_detects_missing_base",
+    "local_blob::delete_missing_is_idempotent",
+    "local_blob::path_escape_is_rejected",
+    "local_blob::put_get_delete_roundtrip",
+    "local_blob::scope_partitions_paths",
+    "local_ledger::pending_write_confirms_and_reconcile_is_idempotent",
+    "sqlite_domain::cancellation_only_touches_transaction_scope",
+    "sqlite_domain::fact_slots_are_scoped",
+    "sqlite_domain::file_metadata_and_soft_delete",
+    "sqlite_domain::job_action_and_settle",
+    "sqlite_domain::knowledge_asset_and_restore_source",
+    "sqlite_domain::memory_lifecycle_publishes_an_asset",
+    "sqlite_domain::valid_targets_rejects_deleted_or_retracted",
+    "sqlite_evidence::deleted_source_file_blocks_original_event_view",
+    "sqlite_evidence::normalization_status_does_not_claim_semantic_truth",
+    "sqlite_evidence::source_visibility_is_scoped_and_retraction_blocks_reads",
+    "sqlite_identity::legacy_collision_is_not_reinterpreted",
+    "sqlite_identity::lookup_hides_unpublished_deleted_and_retracted_memories",
+    "sqlite_identity::lookup_is_exact_scoped_and_reads_current_version",
+    "sqlite_identity::missing_lookup_does_not_allocate_a_slot",
+    "sqlite_identity::old_database_is_not_upgraded_implicitly",
+    "sqlite_identity::reuse_publish_and_isolate_identity",
+    "sqlite_identity::tombstone_blocks_identity_recreation",
+    "sqlite_identity::vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k",
+    "sqlite_identity_upgrade::conflicting_view_is_not_replaced",
+    "sqlite_identity_upgrade::explicit_upgrade_is_idempotent_and_preserves_legacy_versions",
+    "sqlite_identity_upgrade::identity_constraints_are_checked_without_repair",
+    "sqlite_identity_upgrade::incompatible_base_is_not_repaired",
+    "sqlite_identity_upgrade::missing_database_is_not_created_by_upgrade",
+    "sqlite_identity_upgrade::open_store_blocks_upgrade_in_the_same_process",
+    "sqlite_ledger::confirm_is_a_noop_when_source_is_retracted",
+    "sqlite_ledger::idempotency_key_is_deterministic_and_scoped",
+    "sqlite_ledger::ledger_methods_reject_a_mismatched_scope",
+    "sqlite_ledger::pending_confirms_committed_when_source_is_active",
+    "sqlite_ledger::retryable_then_permanent_orphans",
+    "sqlite_ledger::surface_and_state_encode_to_schema_tokens",
+    "sqlite_lock::lock_helper_holds_store",
+    "sqlite_lock::lock_is_exclusive_across_processes",
+    "sqlite_lock::reopen_in_process_is_reentrant",
+    "sqlite_owner::detaching_a_source_drops_its_sole_artifacts_but_retains_shared",
+    "sqlite_store::abandoned_processing_job_is_recovered",
+    "sqlite_store::cross_tenant_idempotency_is_isolated",
+    "sqlite_store::idempotent_replay_caches_response",
+    "sqlite_store::key_roundtrip_and_revoke",
+    "sqlite_store::permission_revocation_serializes_with_writes",
+    "sqlite_store::retry_wait_defers_claim_until_due",
+    "sqlite_store::rollback_discards_writes",
+    "sqlite_store::transaction_commits_enqueue_audit_and_command",
+    "storage_contract::commit_records_source_audit_and_enqueue",
+    "storage_contract::idempotent_command_caches_replay",
+    "storage_contract::permission_rechecked_at_commit_blocks_revoked_principal",
+    "storage_contract::queue_claim_settle_roundtrip_works",
+    "storage_contract::rollback_discards_enqueue",
+    "storage_contract::tx_carries_scope",
+    "storage_recovery::confirm_is_idempotent_and_republishes_nothing_twice",
+    "storage_recovery::reconcile_orphans_stuck_pending_and_requeues_due_retry_wait"
+  ],
+  "reproduction_command": "cargo test --locked -j 2 --test local identity_vector_regression -- --nocapture",
+  "execution_policy": "Reuse existing successful main native suites; reproduction command is documented, not claimed as a new local run.",
+  "scope": "S0 fixed-vector correctness only. S1 semantic quality, P0 completion, production readiness and branch governance are not accepted by this record."
+}
