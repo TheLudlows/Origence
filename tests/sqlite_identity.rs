@@ -221,7 +221,6 @@ async fn legacy_collision_is_not_reinterpreted() {
     tx.rollback().await.unwrap();
 }
 
-
 #[tokio::test]
 async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k() {
     let dir = tempfile::tempdir().unwrap();
@@ -238,9 +237,17 @@ async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k
         tx.insert_version(asset, 1, "approval", "hash", source, None, None)
             .await
             .unwrap();
-        tx.insert_chunk(chunk, asset, 1, 0, "approval", &serde_json::json!({}), "approval")
-            .await
-            .unwrap();
+        tx.insert_chunk(
+            chunk,
+            asset,
+            1,
+            0,
+            "approval",
+            &serde_json::json!({}),
+            "approval",
+        )
+        .await
+        .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
         tx.index_ready(chunk, "profile", 3, 1).await.unwrap();
         records.push((chunk, source));
@@ -306,7 +313,12 @@ async fn old_database_is_not_upgraded_implicitly() {
         Err(StorageError::Unavailable(_))
     ));
     // Search on a pre-identity local database must not implicitly install tables.
-    assert!(tx.identity_candidate_asset(&identity()).await.unwrap().is_none());
+    assert!(
+        tx.identity_candidate_asset(&identity())
+            .await
+            .unwrap()
+            .is_none()
+    );
     tx.commit().await.unwrap();
     store.shutdown().await.unwrap();
     let mut conn = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
