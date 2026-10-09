@@ -1,4 +1,4 @@
-use opencontext::storage::{
+use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, StorageError,
     sqlite::SqliteStore,
 };

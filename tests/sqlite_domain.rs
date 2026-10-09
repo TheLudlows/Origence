@@ -2,7 +2,7 @@
 //! events, memory/knowledge assets, versions, chunks, summaries, files and jobs
 //! — against a real database file in a temp dir.
 
-use opencontext::storage::{
+use origence::storage::{
     AuthorizedScope, DomainTx, IssuedKey, Permission, RelationalStore, Scope, StorageError,
     WorkItem, sqlite::SqliteStore,
 };
