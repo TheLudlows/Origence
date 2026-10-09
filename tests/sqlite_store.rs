@@ -1,7 +1,7 @@
 //! SQLite adapter tests (M2): privileged ops, scoped transactions, idempotency
 //! and the self-polled queue against a real database file in a temp dir.
 
-use opencontext::storage::{
+use origence::storage::{
     AuthorizedScope, DomainTx, IssuedKey, JobFinish, JobQueue, Permission, RelationalStore, Scope,
     StorageError, WorkItem, sqlite::SqliteStore,
 };

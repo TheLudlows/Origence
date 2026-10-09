@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use opencontext::storage::ledger::{LedgerEntry, LedgerKey};
-use opencontext::storage::{
+use origence::storage::ledger::{LedgerEntry, LedgerKey};
+use origence::storage::{
     AuthorizedScope, ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, Permission,
     RelationalStore, Scope, SourceVersion, StorageError, StorageResult, WorkItem,
 };

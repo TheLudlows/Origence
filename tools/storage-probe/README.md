@@ -24,7 +24,7 @@ python tools/storage-probe/verify.py
 
 ```powershell
 ./tools/storage-probe/build.ps1 -Toolchain 1.98.1 -TargetDirectory target/storage-probe-msrv -Jobs 8
-python tools/storage-probe/verify.py --binary target/storage-probe-msrv/debug/opencontext-storage-probe.exe
+python tools/storage-probe/verify.py --binary target/storage-probe-msrv/debug/origence-storage-probe.exe
 ```
 
 若 Windows 默认执行策略禁止 `.ps1`，可仅对本次构建进程使用 `powershell -NoProfile -ExecutionPolicy Bypass -File tools/storage-probe/build.ps1`，在后面追加上面的工具链参数；不需要修改系统执行策略。

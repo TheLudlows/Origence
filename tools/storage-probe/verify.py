@@ -192,7 +192,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backend", choices=["sqlite", "lancedb", "kuzu"])
     parser.add_argument("--binary", type=Path,
-                        default=ROOT / "target/storage-probe/debug/opencontext-storage-probe.exe")
+                        default=ROOT / "target/storage-probe/debug/origence-storage-probe.exe")
     args = parser.parse_args()
     parent = ROOT / "target/storage-probe/runs"
     parent.mkdir(parents=True, exist_ok=True)
