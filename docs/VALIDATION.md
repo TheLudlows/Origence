@@ -1,6 +1,68 @@
 # Origence 验证记录
 
-## 2026-10-09：S0 vector/hybrid 定向回归（PR #20，验收进行中）
+## 2026-10-09：S0 验收完成（Issue #21，主干原生证据归档）
+
+**S0 正确性验收完成。** 本节重新读取 GitHub 的 commit、PR、run/attempt/job 元数据及五个作业的原始日志，不沿用聊天短 SHA 或历史计数。验收代码是已合入 main 的 `42db5c21a8ef4788d07209be7110d85e01d7a85f`；[main run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081)，event=`push`，branch=`main`，**attempt 1，completed/success，5/5 作业 success**。最后一个作业于 2026-10-09 11:46:23 UTC（19:46:23 UTC+8）完成。
+
+本次仅归档证据、同步文档，不修改生产代码、测试、依赖或 CI；不新增验收脚本，也不将一次性日志核对当作原生回归执行。以下 run 验证上述代码提交，不冒充随后证据归档提交的 CI。后续归档 PR/merge 的实际 SHA 与检查结果以 [Issue #21](https://github.com/TheLudlows/Origence/issues/21) 的完成记录为准。
+
+### 完整源码对应关系
+
+| 对象 | 完整 SHA / 关系 |
+| --- | --- |
+| PR #20 base | `e8ee1ae628bd3f4868f3cf981d385ecd30a0a5cd` |
+| [PR #20](https://github.com/TheLudlows/Origence/pull/20) 最终 head | `1b9b68f65446c69e0fc030455698d326bc9a7fed` |
+| PR #20 CI 合成 checkout | `8b98c33b56a4ab205746eddc40b88e64bc17e4f8`；parents 为上述 base/head |
+| PR #20 实际合入 main | `42db5c21a8ef4788d07209be7110d85e01d7a85f`；parents 也是上述 base/head，2026-10-09 10:31:12 UTC 合入 |
+| 最终 head / 合成 checkout / main 的 tree | 均为 `d2145fdb6f1b1b15904a74c683a5272f9a2321e2`；提交身份不同，但完整文件树相同 |
+| `tests/identity_vector_regression.rs` blob | `b7858ff04e779c1bcde6e782e67acc3c23a9f95b` |
+| `tests/local.rs` blob | `e4ebcbd4269748ddc1b9de769551c2fc8a44c6b8` |
+| `.github/workflows/ci.yml` blob | `eb65fd5394b37ad4f1f781a2ff4bad65ececc857` |
+
+最终 head 的 [PR run 37917562934](https://github.com/TheLudlows/Origence/actions/runs/37917562934) attempt 1 已成功：fast-check job `113777355953`、linux-native job `113777356326`。两者原始 checkout 日志均为 `8b98c33b56a4ab205746eddc40b88e64bc17e4f8`，并非 run 元数据中的 head SHA；Windows/macOS/container 在该 PR run 为 skipped，**不计入主干跨平台验收**。
+
+此前测试文件 `71c56435e9209f8bec6f3dcd2c012df98c5153b4` 对应格式修订阶段，随后 `4fba2a1a6bc0a54d047ef203c8728a47b11d70af` 为 fixture 注册真实 owner，防止正常启动孤儿清理删除无 owner 的 seeded chunk。测试名称未重命名。`1b9b68f65446c69e0fc030455698d326bc9a7fed` 将关键词评估输出移出 Cargo cache，保留拒绝覆盖策略。当前最终 blob 与历史 blob 不混用。
+
+### main attempt 1 的原始运行证据
+
+以下所有 job 的元数据 `head_sha` 和 checkout 步骤 `git log -1 --format=%H` 输出均为 `42db5c21a8ef4788d07209be7110d85e01d7a85f`。未跨 run 或 attempt 拼接结果。
+
+| 作业 / job ID | 实际工具链与执行 | 套件结果（passed / failed / ignored / measured / filtered） |
+| --- | --- | --- |
+| [fast-check / 113779676713](https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676713) | Rust 1.98.1，fmt、无原生 Clippy `-D warnings` | lib `27/0/0/0/0`；local `59/0/0/0/0`；Python `5` 项，OK |
+| [Linux Native/MSRV / 113779676656](https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676656) | rustc 1.98.0 (`88d9e12ae`)，默认原生后端、Clippy `-D warnings`、Debug build/HTTP Smoke | 单独 MSRV identity 筛选套件 `8/0/0/0/19`；完整 lib `29/0/0/0/0`、local `81/0/0/0/0`；bin/doc 各 `0/0/0/0/0` |
+| [Windows / 113779676444](https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676444) | rustc 1.98.1 (`48a229cea`)，MSVC；`build.ps1 -Action Validate -Jobs 1`，fmt/Clippy `-D warnings`；无原生接口 check | lib `29/0/0/0/0`、local `81/0/0/0/0`；bin/doc 各 `0/0/0/0/0` |
+| [macOS / 113779676800](https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676800) | rustc 1.98.1 (`48a229cea`)，aarch64；Cargo `-j 2`、CMake 2，Clippy `-D warnings`、Release build/HTTP Smoke | lib `29/0/0/0/0`、local `81/0/0/0/0`；bin/doc 各 `0/0/0/0/0` |
+| [Docker / 113779676764](https://github.com/TheLudlows/Origence/actions/runs/37918105081/job/113779676764) | `rust:1.98.1-bookworm` build stage；Cargo `BUILD_JOBS=3`、CMake 2；Compose config、Release 镜像与 HTTP Smoke | 日志包含 Release 构建完成及 Smoke `PASS`；不把镜像构建算成原生测试套件 |
+
+MSRV 的 19 filtered 是明确筛选 `memory_identity` 的独立轻量套件；三平台完整原生 local 套件全部为 0 filtered、0 ignored。原生测试本身均在 Debug/Test profile 运行；macOS 的 Release 是另行构建及 Smoke，不能称作 Release 原生测试。
+
+| 三平台 `tests/local.rs` 内的精确命名用例 | Linux UTC | Windows UTC | macOS UTC |
+| --- | --- | --- | --- |
+| `identity_vector_regression::s0_vector_identity_prefilter_real_lancedb` | 10:34:42.5312342，ok | 11:12:21.5838745，ok | 10:55:04.0439320，ok |
+| `identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb` | 10:34:42.7258231，ok | 11:12:21.5839712，ok | 10:55:04.1097800，ok |
+
+逐个平台比对了 local 套件的 **81 个实际 `ok` 测试名称，集合完全相同**。既有 `local_app::identity_filter_survives_top_100_distractors_and_stale_versions`、版本/撤回/幂等、并发 expected_version、旧库不隐式升级、SQLite 向量候选身份下推、撤销权限串行化和提交时权限复核均仍为 `ok`。原始日志中的 checkout、工具链、命名用例、套件计数、Smoke 与作业元数据摘录见 [固定证据快照](evidence/2026-10-09-s0-main-37918105081.json)；该文件是静态归档，不是新测试结果。
+
+### 正确性与质量边界
+
+已重新审阅最终 blob：真实 SQLite/LanceDB、130 个更近的其他身份、未限定原生 top-100 排除目标、物理历史 v1 与当前 v2、实际 `origence serve` 子进程及 HTTP search/resolve 全部保留。目标正文无 `needle`，keyword-only 明确为空；两种模式均不能靠关键词假通过。跨 tenant/workspace、缺失身份/条件、503 与 allow_partial、当前来源撤回不回退 v1、墓碑及其他 scope 仍可读的断言均在同一命名用例内执行。
+
+复现命令：
+
+```sh
+cargo test --locked -j 2 --test local identity_vector_regression -- --nocapture
+```
+
+本次优先复用已成功且完整绑定最终代码的三平台原生套件，没有再执行一次本地定向构建；上述命令是复现入口，不能冒充新的执行记录。loopback 固定向量只证明 S0 正确性，不证明 S1 真实语义召回、整体 P0 完成或生产就绪。
+
+Linux/macOS 同一 run 的关键词种子评估均为 24 cases、22 answerable、2 unanswerable、0 errors，document Recall@5 `0.6363636363636364`，无答案误召回 0，仍仅为合成关键词基线。各自 retrieval artifact 为 `11610027623` / `11613712549`；本节核对日志输出和 artifact 元数据，不声称重新下载核验工件内容。未启动 S1/S2/S3。
+
+领取时 main 的 `protected=false`，继承 rulesets 为空；本任务不修改分支治理设置。正常 PR 检查及合并独立进行，不由 S0 通过宣称 Required Checks 已配置。
+
+## 2026-10-09：S0 vector/hybrid 定向回归（PR #20，历史验收进行中记录）
+
+> 下述为 PR #20 初期的原始观测；当前验收状态以上方完整 main 证据为准。保留当时的失败、待核验状态和 blob，避免用最终成功改写历史。
 
 **状态：测试代码已提交，不能提前声明 S0 已闭环。** [PR #20](https://github.com/TheLudlows/Origence/pull/20) 基于 main `e8ee1ae628bd3f4868f3cf981d385ecd30a0a5cd`。测试初始提交 `90b50fea8cd93f154ab278d8cb7068f04f9cb303`；按 CI 的 Rust 1.98 rustfmt 输出修正为 `f2daf5b48e95d5f115cf7700e47369944cd8c9a3`，测试文件 blob 为 `71c56435e9209f8bec6f3dcd2c012df98c5153b4`。文档提交不改变该测试源码，后续修复须重新记录版本。
 

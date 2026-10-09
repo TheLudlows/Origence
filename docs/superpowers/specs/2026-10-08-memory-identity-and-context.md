@@ -3,13 +3,13 @@
 > **文件定位**：这是 I1–I4 的领域规格（身份、抽取、冲突与上下文边界），不是剩余任务的排期计划。具体实施顺序、未完成任务、每阶段完成标准见 [后续阶段路线图](../plans/2026-10-09-next-stage-roadmap.md)。已验收能力仍以 STATUS/VALIDATION 与实际代码为准。
 
 
-日期：2026-10-08；状态更新：2026-10-09，验收代码 `8d8d224`。已实现身份 v1 编码、SQLite 绑定、显式写入与单身份 capture、来源读取、绑定状态、精确 lookup、search/resolve 身份标注与过滤，以及调用方 expected_version。现有 CI 已 7/7 通过：27 项 lib、58 项无原生集成，三平台原生 HTTP/Worker、render/预算测试，以及 Linux/macOS release/HTTP smoke、关键词宿主评估、容器及 MSRV check；证据见 [VALIDATION](../../VALIDATION.md)。自动推断、属性目录、未归一化状态、语义冲突、I3 会话及完整 I4 类型策略尚未实现。本文补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
+日期：2026-10-08；状态更新：2026-10-09，S0 验收代码 `42db5c21a8ef4788d07209be7110d85e01d7a85f`。已实现身份 v1 编码、SQLite 绑定、显式写入与单身份 capture、来源读取、绑定状态、精确 lookup、search/resolve 身份标注及候选前置过滤，以及调用方 expected_version。主干 run `37918105081` attempt 1 已 5/5 作业通过，三平台各 29 项 lib、81 项原生集成，包含两个真实 vector/hybrid 身份回归；Linux Rust 1.98.0 MSRV、Debug Smoke、macOS Release Smoke、容器及轻量检查均已核验。完整证据及旧 `8d8d224` 的历史验收保留于 [VALIDATION](../../VALIDATION.md)。固定向量仅证明 S0 正确性；自动推断、属性目录、未归一化状态、语义冲突、I3 会话及完整 I4 类型策略尚未实现。本文补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
 
 ## 当前缺口与范围
 
 M5/A1 的旧 memory/capture 入口仍使用 workspace 内 fact_key 定位资产，capture 的 key 由模型生成；同义 key 不会自动合并，不同主体相同 key 仍可能错误更新。新显式身份入口已按完整业务身份隔离更新，expected_version 只防并发覆盖。API key 的 principal 是授权主体，不等于被记忆的用户/项目/Agent。知识与记忆共同检索不等于具备一致的事实身份。
 
-当前单身份 capture 只校验原文 quote/区间，否定、提议、主体归属仍依赖模型；不同 quote 拒绝更新是保守歧义规则，不是通用语义冲突检测。精确身份过滤在检索候选产生后执行，仍受分支截断限制，候选下推属于后续工作。图实体名称 ID 与 MemoryIdentity 是两套身份，图谱同名消歧仍需单独评估。
+当前单身份 capture 只校验原文 quote/区间，否定、提议、主体归属仍依赖模型；不同 quote 拒绝更新是保守歧义规则，不是通用语义冲突检测。精确身份已在授权 tenant/workspace 内定位资产，并在 keyword 排名及原生 vector top-k 前限定候选；最终结果仍复核授权、来源、当前版本、墓碑和身份。S0 的三平台真实回归已证明目标不会被其他身份的 top-100 挤出，语义效果仍属 S1。图实体名称 ID 与 MemoryIdentity 是两套身份，图谱同名消歧仍需单独评估。
 
 本文冻结完整目标与评估反例；已交付接口以 API 文档为准，未交付目标不能标成现有能力。
 
