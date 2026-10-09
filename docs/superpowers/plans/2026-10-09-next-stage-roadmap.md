@@ -14,7 +14,7 @@
 | 模块 | 已实施 | 剩余关键问题 |
 | --- | --- | --- |
 | M0–M5 / P0 | 单宿主 SQLite+LanceDB+Kuzu+Blob，HTTP/MCP，异步发布、幂等、账本、权限、溯源、撤回、版本 | 大规模/故障验收、依赖审计、生产运维可靠性 |
-| I1 记忆身份 | 明确身份写入/唯一性/精确 lookup、expected_version、离线升级 | 完整身份检索需候选前置限定，防止 top-100 漏召回 |
+| I1 记忆身份 | 明确身份写入/唯一性/精确 lookup、expected_version、离线升级；候选前置限定已实现 | PR #20 补充真实向量定向回归，等待完整 CI 验收 |
 | I2 抽取 | 调用方明确 identity 的 capture、精确引用区间校验 | 未归一化状态、属性目录、单值/多值、语义匹配/冲突管理 |
 | 检索 | keyword/vector/hybrid、摘要和图扩展、RRF、证据引用 | 目前仅 12 文档/24 查询无模型合成基线；真实模型/Agent 质量和组件收益未知 |
 | I4 上下文 | 现有 search/resolve、身份标注、引文与字节预算 | 冲突标识、按类型/任务配额、跨 session/学习经验联检未完成 |
@@ -25,16 +25,22 @@
 
 ## 3. 交付顺序与任务
 
-### S0（最高优先级）：完整身份候选过滤修复 — 已合入，待 CI 验收
+### S0（最高优先级）：完整身份候选过滤修复 — 实现已合入，定向回归验收进行中
 
-**问题**：SQLite `keyword_hits()` 全 scope 取候选后截断到 100，`search()` 最终才按 identity 过滤；目标在第 101 名之后可能漏召回，向量候选也须在 native top-k 前限定范围。
+**原始问题**：全 scope 的 keyword/native-vector 候选先截断，再按身份过滤时，其他主体可能占满 top-100。PR #13 已将完整身份限定前置到候选生成；PR #15 已修复阻塞 Clippy 的嵌套 if。剩余事项是证明新回归真实通过并归档，而不是重新实现过滤或再次修复同一告警。
 
-- [x] **源码已实现（PR #13）**：在授权 tenant/workspace 内根据完整 `MemoryIdentity` 定位已有资产；未匹配为空，不创建 slot，旧库不隐式升级。
-- [x] **源码已实现（PR #13）**：keyword 候选和 vector artifact ID 集合在 top-k/rank 之前限制为目标资产，最后仍重新确认权限、来源有效性、版本、墓碑和身份。
-- [x] **测试已提交，未证明通过**：>100 个强相关干扰候选、v1/v2 当前版本、跨 workspace、缺失 identity、撤回来源与 search/resolve 回归。
-- [ ] **验收未完成**：PR #13 原生 Clippy 的 `collapsible_if` 和 main Windows 同一错误需修复；取得 Rust 1.98 fmt/Clippy、完整原生测试、Smoke 与 main 跨平台 CI 的新实测证据后才能标记完成。
+- [x] **源码已实现（PR #13）**：授权 tenant/workspace + 完整 `MemoryIdentity` 定位已有资产；未匹配为空，不创建 slot，不隐式升级旧库。
+- [x] **源码已实现（PR #13）**：keyword 与 vector artifact ID 集合在 top-k/rank 之前限定资产，最终继续复核权限、来源、当前版本、墓碑和身份。
+- [x] **既有测试已提交**：keyword 的 >100 干扰、v1/v2、跨 workspace、缺失身份、撤回与 search/resolve；SQLite vector 候选 ID 与旧库不升级测试。
+- [x] **Clippy 修复已合入（PR #15）**：保留 `-D warnings`，fast-check 新增无原生后端的 Clippy。
+- [x] **新回归代码已提交（PR #20），不等于运行通过**：`tests/identity_vector_regression.rs` 中 `s0_vector_identity_prefilter_real_lancedb` 与 `s0_hybrid_identity_prefilter_real_lancedb`，编入现有 `tests/local.rs`。真实 LanceDB、130 个更高排名干扰、目标关键词必不匹配、实际宿主 HTTP search/resolve、跨 workspace/tenant、当前版本、撤回/墓碑、显式模型降级。
+- [ ] **新增原生回归验收**：两个命名用例必须在实际完整原生套件中成功，不能以 no-default-features 的轻量检查或忽略测试代替。
+- [ ] **主干跨平台验收**：包含新用例的 main commit 对应 fast-check、Linux Native/MSRV、Windows、macOS 和 Docker Smoke 成功；逐项记录实际结果。
+- [ ] **证据归档**：在 VALIDATION 记录源码/合并 SHA、run/job、两个用例与完整套件计数，随后同步 STATUS 和本节完成标记；不把 pending/skipped/cancelled 标为通过。
 
-**验收**：不增大全局 top-k 作为修复；旧无 identity 查询保持兼容；精确身份目标不再被其他主体挤出候选。保留向量模型不可用时原有 allow_partial 行为。
+**复现命令**：`cargo test --locked -j 2 --test local identity_vector_regression -- --nocapture`。测试仅使用 loopback 固定向量模型，不调用真实付费模型，不变更全局进程环境。
+
+**验收**：不增大全局 top-k；旧无 identity 查询保持兼容；精确目标不被其他主体挤出候选；hybrid 不能靠 keyword 支路掩盖向量错误；来源撤回不回退旧版本；模型不可用时遵守 allow_partial。S0 是正确性门槛，不是 S1 语义效果评分。
 
 ### S1：建立检索有效性的实测证据（P0 质量收口）
 
@@ -84,4 +90,4 @@ Rust 1.98 的完整 CI、cargo audit/RustSec、fs2 文件锁生命周期、长�
 
 ## 5. 执行入口
 
-先收口 S0（候选下推源码已合入，但 CI 尚未全绿），之后实施 S1 的评估基线，再按 S2/S3 拆分小 PR。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。
+先完成 PR #20 的原生与主干验收并归档；S0 关闭后进入 S1 的评估基线，再按 S2/S3 拆分小 PR。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。

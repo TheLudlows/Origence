@@ -1,21 +1,61 @@
 # Origence 验证记录
 
-> 2026-10-09 并行度调整提案（待主干实测）：macOS 的 Clippy、完整测试和 Release Build 从 Cargo `-j 1` 调为 `-j 2`（CMake 仍为 2）；Linux Docker 镜像 CI 的 Cargo `BUILD_JOBS` 从 2 调为 3，构建阶段显式设置 `CMAKE_BUILD_PARALLEL_LEVEL=2` 限制原生编译。保留原生检查、Release/HTTP Smoke 及现有运行条件。macOS/容器 Job 仍只在 main 执行；PR 成功不能替代这两项的实际通过、内存峰值和耗时验证。
+## 2026-10-09：S0 vector/hybrid 定向回归（PR #20，验收进行中）
 
+**状态：测试代码已提交，不能提前声明 S0 已闭环。** [PR #20](https://github.com/TheLudlows/Origence/pull/20) 基于 main `e8ee1ae628bd3f4868f3cf981d385ecd30a0a5cd`。测试初始提交 `90b50fea8cd93f154ab278d8cb7068f04f9cb303`；按 CI 的 Rust 1.98 rustfmt 输出修正为 `f2daf5b48e95d5f115cf7700e47369944cd8c9a3`，测试文件 blob 为 `71c56435e9209f8bec6f3dcd2c012df98c5153b4`。文档提交不改变该测试源码，后续修复须重新记录版本。
+
+### 用例与可复现范围
+
+`tests/identity_vector_regression.rs` 通过现有 `tests/local.rs` 编入同一个原生集成可执行程序，无新增独立原生 Job。
+
+- `identity_vector_regression::s0_vector_identity_prefilter_real_lancedb`
+- `identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb`
+
+```sh
+cargo test --locked -j 2 --test local identity_vector_regression -- --nocapture
+```
+
+每个用例使用真实 SQLite、真实 LanceDB、实际 `origence serve` 子进程和 HTTP `/v1/search`、`/v1/resolve`；只把 embedding 模型替换为独立 loopback 固定向量服务，不修改全局环境，不调用付费/外部模型。
+
+| 断言 | 防止的假通过或回归 |
+| --- | --- |
+| 130 个不同身份的更近向量，原生无限定 top-100 确实不含目标 | 先证明存在候选挤出，不能用一个没有干扰的目标测试代替 |
+| 带完整身份时 vector/hybrid 的 search 和 resolve 只返回目标当前 v2 | 检验候选前置限定、原生排名、HTTP 绑定与上下文链路 |
+| 目标正文与关键词不匹配，keyword-only 明确为空 | hybrid 不能靠关键词分支掩盖向量路径问题 |
+| v1 向量物理存在，候选可见性只选当前 v2 | 旧版本不能凭更高向量得分成为当前事实 |
+| 同一身份在不同 workspace、不同 tenant 中各有自己的资产 | 验证业务身份与鉴权 scope 共同限定结果 |
+| 不存在主体、不同环境条件均为空 | 不允许退回其他主体或部分条件匹配 |
+| 模型失败：严格模式 503；allow_partial 显式降级 keyword 并保留身份过滤 | 不静默降级，不泄露其他主体的关键词结果 |
+| 撤回当前来源后 search/resolve 为空，而有效 v1 仍能显式 GET | 不自动回退历史版本 |
+| 资产墓碑后对应 search/resolve 为空，其他 tenant 仍可读 | 删除与范围隔离不回归 |
+
+固定向量仅验证正确性，不提供真实语义模型 Recall、延迟或费用结论，不代替 S1 质量评估。
+
+### 已观测的运行证据
+
+| 修订 / run | 结果与范围 |
+| --- | --- |
+| `90b50fe` / [37914896553](https://github.com/TheLudlows/Origence/actions/runs/37914896553) | 首次 fast-check 在 rustfmt 处失败；已按差异修正，不能记为测试成功 |
+| `f2daf5b` / [37915145655](https://github.com/TheLudlows/Origence/actions/runs/37915145655) | fast-check 已通过；新用例受 local-storage 特性控制，轻量通过并不证明这两个原生用例通过；完整原生结果待核验 |
+| 原 main `e8ee1ae` / [37913212181](https://github.com/TheLudlows/Origence/actions/runs/37913212181) | Linux Native 已成功；不含 PR #20 两个新用例，不得用作本轮最终验收证据 |
+
+**最终关闭条件**：取得包含这两个测试的已合入 main commit；其 fast-check、Linux Native/MSRV、Windows、macOS、Docker Smoke 全部成功；读取三个原生平台的日志，记录两个命名测试为 `ok`、完整套件实际计数、run/job ID、源码与 merge SHA，再同步 STATUS 和路线图。pending/skipped/cancelled 不等于成功，不能推算或复用历史测试计数。仓库分支保护为独立治理配置，不因 S0 测试成功自动完成。
+
+## 2026-10-09：CI 并行度与命名记录
+
+> macOS 的 Clippy、完整测试和 Release Build 从 Cargo `-j 1` 调为 `-j 2`（CMake 仍为 2）；Linux Docker 镜像 CI 的 Cargo `BUILD_JOBS` 从 2 调为 3，构建阶段显式设置 `CMAKE_BUILD_PARALLEL_LEVEL=2`。macOS/容器 Job 只在 main 执行；PR 成功不能替代这两项的实际通过、内存峰值和耗时验证。
 
 > 历史 CI 与 PR 证据创建于仓库仍名为 `TheLudlows/openContext` 时；下方保留原始链接以便追溯，当前仓库为 `TheLudlows/Origence`。这些旧链接不表示产品仍使用旧名称。
 
-> 2026-10-09 CI 与工具链策略变更（[PR #12](https://github.com/TheLudlows/openContext/pull/12)）：MSRV 1.98，Linux 原生 CI 使用 Rust 1.98.0，开发/Windows/macOS/Docker 固定 1.98.1。仅 `main` push 和目标 `main` 的 PR 触发；PR 为 2 个 Job（fast-check：无原生特性测试/格式/Python；linux-native：MSRV 身份测试、原生 Clippy/测试、Debug smoke 与评估），main 额外执行 Windows、macOS、Linux/macOS Release 和 Docker 构建/Smoke。以下 1.88/1.96 测试结果保留为历史实测，新版本须独立重新验证。
-> 2026-10-09 后续 Linux Native 优化（新 PR，待独立 CI 验证）：PR 与 main 的 `linux-native` 统一运行 Dev/Test/Debug Smoke 和 Debug 关键词评估，不再进行 Linux 原生 Release 冷编译；Cargo Clippy/Test/Debug build 的构建并行度从 `-j 1` 调为 `-j 2`，CMake 并行度保持 2，避免 Kuzu/LanceDB 链接峰值内存过高。main 的 Docker Release 镜像构建及 Smoke 仍保留，macOS/Windows 工作流不变。这是构建配置变更，不是实测耗时下降或 CI 通过证明。
+> [PR #12](https://github.com/TheLudlows/openContext/pull/12) 将 MSRV 调整为 1.98：Linux 原生 CI 使用 Rust 1.98.0，开发/Windows/macOS/Docker 固定 1.98.1；PR 为 fast-check 和 linux-native，main 追加 Windows、macOS 和容器验证。PR #14 移除了 Linux Native Release，统一 Dev/Test/Debug Smoke 和 Debug 关键词评估，Cargo 并行度调为 2；macOS 和 Docker 保留 Release。这些配置与历史 Rust 1.88/1.96 的验收证据应分别记录。
 
-
-## 2026-10-09：P0/S0 候选修复与 CI 门禁收口（进行中）
+## 2026-10-09：P0/S0 候选修复与 CI 门禁收口（历史推进记录）
 
 - 主干起点 `99f8926`（PR #13/#14 已合入）。S0 在 SQLite 先按授权 scope 的完整 identity 找已有资产，再对 keyword/vector 候选限域；`tests/local_app.rs` 包含 130 个强相关干扰、当前版本、跨 workspace、撤回及 search/resolve 回归；`tests/sqlite_identity.rs` 包含向量候选前置过滤及旧库不升级反例。
-- [PR #13 的 CI run 37900697049](https://github.com/TheLudlows/openContext/actions/runs/37900697049) 原生 Clippy 因 `src/storage/sqlite/app.rs:168` 的 `clippy::collapsible_if` 失败；合入后的 [main run 37905676866](https://github.com/TheLudlows/openContext/actions/runs/37905676866) Windows Job 复现同一失败，其余未完成作业不能记为成功。这些证据**不支持**宣布 S0 已验收完成。
-- 本轮 P0 只合并嵌套 if 的 Clippy 结构，不改错误类型、授权查询或可见性条件；在 PR `fast-check` 补 `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings`，使这类 Rust 代码风格错误能在原生编译前暴露。Rust 1.98.0 的 full-native Clippy 和 Windows/macOS 检查仍必须执行。
+- [PR #13 的 CI run 37900697049](https://github.com/TheLudlows/openContext/actions/runs/37900697049) 原生 Clippy 因 `src/storage/sqlite/app.rs:168` 的 `clippy::collapsible_if` 失败；合入后的 [main run 37905676866](https://github.com/TheLudlows/openContext/actions/runs/37905676866) Windows Job 复现同一失败，其余未完成作业不能记为成功。这些证据不支持当时宣布 S0 已验收完成。
+- **PR #15 已合入修复**：合并嵌套 if，不改错误类型、授权查询或可见性条件；fast-check 补 `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings`。不能继续把该告警记为尚未修复；新代码运行是否通过应读取对应 CI。
 - [PR #14 的 CI run 37902084305](https://github.com/TheLudlows/openContext/actions/runs/37902084305) 仅证明当时分支上的 Linux `-j 2`、Debug Smoke 和测试通过（约 29 分钟），不证明 PR #13 后合并主干全绿。
-- 本次提交后新 CI 的具体 run、Clippy/test/smoke 与跨平台结果**待核验**；主干是否启用 Required Checks 是独立仓库治理配置，当前 GitHub API 显示 `main` 未受保护。建议设置 `fast-check`、`linux-native` 为合并必需检查；仓库管理员须通过 GitHub Settings → Rules → Rulesets / Branch protection 设置并验证生效。
+- 当时 API 显示 main 未受保护；建议设置 fast-check、linux-native 为合并必需检查。当前仓库设置必须另行读取，不能由历史配置或一次 CI 结果推断。
 
 ## 2026-10-09：PR #11 修复分支验收
 
@@ -64,7 +104,7 @@ Linux release 冷构建用时 87m44s，macOS 为 72m53s；两者 HTTP smoke 随�
 
 ## 历史里程碑
 
-以下为各轮验收摘要；每条的 commit、CI run 与覆盖范围均保留可追溯，详细日志见 GitHub Actions 及对应计划文档。当前状态以上方 PR #11 节及 [STATUS](STATUS.md) 顶部快照为准。
+以下保留各轮验收摘要；每条 commit/run 及覆盖范围均留存，详细日志见 GitHub Actions 与对应计划。当前状态以本文最上方最新 S0 记录和 [STATUS](STATUS.md) 为准，旧证据不能自动套用到新源码。
 
 | 时间 | 范围 | commit / PR | CI run | 结论 |
 | --- | --- | --- | --- | --- |
@@ -91,7 +131,8 @@ Linux release 冷构建用时 87m44s，macOS 为 72m53s；两者 HTTP smoke 随�
 
 - **生命周期套件**：scope 隔离（未设 scope 默认拒绝、跨 workspace 无泄露）、writer/reader 权限、幂等与冲突、版本追加、来源撤回阻断、墓碑阻断排队发布、取消与 generation、文件撤回、无模型 capture 失败、混合检索显式降级、业务与入队共同回滚、UTF-8 区间保真、历史/恢复标题、角色降级不保留旧权限、HTTP 认证与 key 撤销。
 - **进程套件**：真实 HTTP API + 单 Worker、确定性模型 stub、外部模型自报标记不能越权、PDF 子进程解析与页码引用、无效 PDF 失败、第二 Worker 拒绝、强杀后队列恢复且 run_token 增加只发布一个版本、处理中删除不复活、MCP initialize/tools/list/tools/call、同 MCP 进程内 key 撤销后拒绝。
+- **S0 定向回归（PR #20 新增，尚待原生验收）**：真实 LanceDB 的 vector/hybrid top-100 身份过滤、三种 scope 对照、当前/旧版本、撤回/墓碑和显式降级；不与模型质量指标混淆。
 
 ## 持续未验证项
 
-真实付费模型语义质量/费用；主应用 Rust 1.88 完整运行测试（独立探针已通过）；`cargo audit` 与 RustSec 告警（含 fs2/fs4 锁生命周期评估）；断电恢复与在线备份；长期并发/多租户公平性；多 Worker 扩容；向量 generation 在线切换；OS 沙箱隔离；压力/容量/竞品评测；P1 会话主闭环与 P2 增强。完整后续清单见 [STATUS](STATUS.md)。
+真实付费模型语义质量/费用；`cargo audit` 与 RustSec 告警（含 fs2/fs4 锁生命周期评估）；断电恢复与在线备份；长期并发/多租户公平性；多 Worker 扩容；向量 generation 在线切换；OS 沙箱隔离；压力/容量/竞品评测；P1 会话主闭环与 P2 增强。当前 Rust 最低版本为 1.98；旧 Rust 1.88 完整运行测试的未验收历史记录不等于当前仍支持 1.88。完整后续清单见 [STATUS](STATUS.md)。
