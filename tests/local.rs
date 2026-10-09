@@ -1,5 +1,6 @@
 // One integration executable avoids repeatedly linking the native engines.
 mod identity_upgrade_cli;
+mod identity_vector_regression;
 mod initialization;
 mod kuzu_store;
 mod lancedb_store;
