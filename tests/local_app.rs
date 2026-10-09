@@ -948,13 +948,12 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     let admin = store.issue_key(scope, "admin").await.unwrap();
     let reader = store.issue_key(scope, "reader").await.unwrap();
     let reader_auth = service.auth(&reader.token).await.unwrap();
-    let identity: opencontext::memory_identity::MemoryIdentity =
-        serde_json::from_value(json!({
-            "subject": {"kind": "service", "stable_id": "target"},
-            "predicate": "release.approval",
-            "context": {"environment": "production"}
-        }))
-        .unwrap();
+    let identity: opencontext::memory_identity::MemoryIdentity = serde_json::from_value(json!({
+        "subject": {"kind": "service", "stable_id": "target"},
+        "predicate": "release.approval",
+        "context": {"environment": "production"}
+    }))
+    .unwrap();
 
     // 130 stronger keyword matches would previously fill the global top-100.
     let mut tx = store
@@ -988,7 +987,13 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             .await
             .unwrap();
         tx.insert_version(
-            target, version, "approval evidence", "hash", source, None, None,
+            target,
+            version,
+            "approval evidence",
+            "hash",
+            source,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -997,13 +1002,19 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             target,
             version,
             0,
-            if version == 1 { "approval old" } else { "approval current" },
+            if version == 1 {
+                "approval old"
+            } else {
+                "approval current"
+            },
             &json!({}),
             "approval evidence supplemental",
         )
         .await
         .unwrap();
-        tx.update_asset_version(target, version, None).await.unwrap();
+        tx.update_asset_version(target, version, None)
+            .await
+            .unwrap();
         current_source = source;
     }
     tx.commit().await.unwrap();
@@ -1489,7 +1500,12 @@ async fn saved_publication_recovers_after_external_graph_write() {
             .unwrap()
             .is_none()
     );
-    assert!(tx.vector_candidates("test", 2, 1, None).await.unwrap().is_empty());
+    assert!(
+        tx.vector_candidates("test", 2, 1, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.commit().await.unwrap();
     assert!(opencontext::worker::process_next(&s).await.unwrap());
     assert_eq!(
