@@ -4,7 +4,7 @@ Rust 实现的团队 Agent 记忆与知识服务。M5 将默认运行栈固定�
 
 数据按 tenant/workspace 隔离；writer 的结构化记忆与 capture 抽取结果直接进入发布任务，提交时重新核验身份、权限、来源与预期版本；检索只返回当前已发布、资产未删除且来源仍有效的证据。会话记忆、企业 SaaS 仍属于后续阶段。
 
-2026-10-09 核验：验收代码 `8d8d224`（PR #11）修复了 MCP 生命周期测试的变量遮蔽；显式身份、单身份 capture、lookup、身份标注/过滤与调用方版本前置条件已落地。旧版 CI 的 7 个作业全部通过，覆盖轻量测试、三平台原生测试、Linux/macOS release 与 HTTP smoke、容器及 Rust 1.88 默认后端 check。两平台无模型合成关键词基线 Recall@5 均为 63.6%，真实模型效果尚未验证；最新能力与证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
+M5 本地宿主与 A1 自动发布已实现，记忆身份（I1）、受限抽取匹配（I2）与上下文标注/过滤（I4）已落地；会话记忆、企业 SaaS 仍属后续阶段。最新能力与验收证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
 
 ## 快速启动
 
@@ -69,7 +69,7 @@ opencontext get ASSET_UUID
 
 模型根地址通常以 `/v1` 结尾，远程要求 HTTPS；禁用重定向，单次调用超时 45 秒，响应上限 8 MB。启用模型意味着内容发送至该服务，并可能产生费用。关闭模型仍可发布结构化记忆和知识并执行关键词检索；capture 在未配置抽取模型时明确失败。
 
-发布固定接收时的 embedding profile。外部写前保存发布计划和 pending 账本，外部写后重新核验权限、来源、预期版本、取消状态及 generation/run_token，再原子确认版本、owner、索引与任务。启动检查后先回收遗留任务并推进 run_token，再对账清理，完成后才启动 API/Worker。已保存计划可重放；保存前的模型调用可能重复，不保证费用恰好一次。
+发布走跨库账本：外部写前保存计划与 pending 账本，写后重新核验权限/来源/版本/取消状态再原子确认；启动先恢复遗留任务、对账清理后才启动 API/Worker。已保存计划可重放，不保证模型调用费用恰好一次。
 
 数据布局、备份、故障恢复与旧 PG 基线处理见 [运维说明](docs/OPERATIONS.md)。
 
@@ -102,7 +102,7 @@ cargo clippy --locked --all-targets -j 1 -- -D warnings
 cargo test --locked -j 1 --no-fail-fast
 ```
 
-CI 仅对 `main` push 和面向 `main` 的 PR 触发，避免 PR 分支 push 重复执行。每个 PR 运行 2 个 Job：`fast-check`（fmt、无原生后端的 lib/集成测试、Python evaluation adapter）和 `linux-native`（Rust 1.98.0 最低版本下身份测试、完整 Clippy/原生集成测试、Debug HTTP smoke、关键词评估）。`main` 额外运行 Windows/macOS 原生测试及 Release/Smoke、Docker Release 镜像/Smoke。Cargo 缓存仅在主分支更新，首次运行仍可能很慢。默认启用 `local-storage`；业务/进程测试使用临时目录和本地模型模拟服务，无数据库账号或付费模型要求。集成测试统一编入 `tests/local.rs`，减少原生依赖重复链接。`--no-default-features --lib` 仅用于基础接口检查，不是另一套应用后端。
+CI 仅对 `main` push 和面向 `main` 的 PR 触发；PR 跑 `fast-check`（fmt、无原生 lib/集成测试、Python adapter）与 `linux-native`（1.98.0 MSRV 测试、Clippy、原生集成测试、Debug smoke、关键词评估），`main` 追加 Windows/macOS、Release 与 Docker 验证。Cargo 缓存仅在主分支更新，首次运行可能较慢。CI 策略与缓存细节见 [VALIDATION](docs/VALIDATION.md)。默认启用 `local-storage`；业务/进程测试使用临时目录和本地模型模拟服务，无数据库账号或付费模型要求。集成测试统一编入 `tests/local.rs`，减少原生依赖重复链接。`--no-default-features --lib` 仅用于基础接口检查，不是另一套应用后端。
 
 ## 当前边界与文档
 

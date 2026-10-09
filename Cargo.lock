@@ -4569,7 +4569,6 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "axum",
- "chrono",
  "clap",
  "cxx-build",
  "fs2",
@@ -4590,8 +4589,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
- "tower",
- "tower-http",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -6881,9 +6878,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "tracing",
  "url",
- "uuid",
 ]
 
 [[package]]
