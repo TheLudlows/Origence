@@ -330,8 +330,8 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .unwrap();
     assert!(first.status().is_success());
     let first: Value = first.json().await.unwrap();
-    let published = job(&http, &base, token, id(&first, "job_id"), "completed").await;
-    assert_eq!(published["result"]["memories"][0]["identity"], identity);
+    let identity_job = job(&http, &base, token, id(&first, "job_id"), "completed").await;
+    assert_eq!(identity_job["result"]["memories"][0]["identity"], identity);
     let second = post(
         &http,
         &base,
@@ -886,6 +886,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     );
     let get = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context_get","arguments":{"asset_id":published["asset_id"]}}});
     let result = rpc(&mut input, &mut output, get.clone()).await;
+    assert!(result.get("error").is_none(), "{result}");
     assert!(
         result["result"]["content"][0]["text"]
             .as_str()

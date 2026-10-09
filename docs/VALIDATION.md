@@ -1,5 +1,86 @@
 # 验证记录
 
+## 2026-10-09：PR #11 修复分支验收
+
+验收代码：`8d8d2247c355330be9903fb7e9e3f1d2107e058b`，[PR #11](https://github.com/TheLudlows/openContext/pull/11)，基于 main `73fc51a`。主证据：[run 37871058933](https://github.com/TheLudlows/openContext/actions/runs/37871058933)，event=pull_request；CI checkout 为 PR merge commit `104a1b34df5975681dd4fdbd5fe3410380607cf1`。运行于 2026-10-09 12:03（UTC+8）completed/success，7/7 作业通过，全部日志及两平台评估工件已核验。本节记录修复后的结果，下节保留修复前 main 的观测快照。
+
+| 修复分支作业 | job ID | 已核验结果 |
+| --- | --- | --- |
+| memory-identity | 113629105658 | success；已读日志，fmt、27 项 lib、58 项无原生集成通过，0 failed/ignored |
+| evaluation-adapter | 113629105614 | success；已读日志，Python 5 项通过 |
+| windows | 113629105355 | success；已读日志，fmt/clippy、29 项 lib、77 项原生集成及无原生接口检查通过，0 failed/ignored；MCP 生命周期用例通过 |
+| container | 113629105631 | success；已读日志，Compose config、镜像 release 构建和 HTTP smoke 通过；检查 readiness、鉴权、记忆发布、身份版本/隔离与关键词检索 |
+| msrv | 113629105685 | success；已读日志，Rust 1.88 身份 8 项测试及默认原生后端 all-targets check 通过；不含该版本完整运行测试 |
+| native (macos-14) | 113629105633 | success；已读日志，fmt/clippy、29 项 lib、77 项原生集成通过，0 failed/ignored；release 构建、HTTP smoke 与关键词宿主评估通过，工件已核验 |
+| native (ubuntu-24.04) | 113629105543 | success；已读日志，fmt/clippy、29 项 lib、77 项原生集成通过，0 failed/ignored；release 构建、HTTP smoke 与关键词宿主评估通过，工件已核验 |
+
+现有 CI 验收已收口。修复将身份 capture 的任务结果改名为 `identity_job`，避免遮蔽原记忆受理响应；MCP get 保留原资产 ID、正文读取与 key 撤销断言，并增加 JSON-RPC error 诊断。三平台各 29 项 lib、77 项集成通过，MCP 生命周期用例均为 ok。修复前 main 的 Linux/macOS/Windows 都是同一处失败（各 29 项 lib 通过、集成 76 通过/1 失败）；该 main 运行已结束，container/MSRV/轻量作业通过，没有第二种已确认失败。
+
+Linux release 冷构建用时 87m44s，macOS 为 72m53s；两者 HTTP smoke 随后均通过，构建耗时不计入检索延迟。容器镜像 release 构建与同一 HTTP smoke 也通过，核验 readiness、鉴权、记忆发布、身份版本/隔离及关键词检索。
+
+### 无模型关键词合成基线
+
+已下载并核验两个平台工件，均包含 manifest、imports、results.jsonl、summary 四个文件。manifest 的 commit 为 CI checkout `104a1b34df5975681dd4fdbd5fe3410380607cf1`，mode=keyword、k=5、model_calls_enabled=false，模型/维度为空。
+
+| 工件 | ZIP SHA256 |
+| --- | --- |
+| [macOS 11593902620](https://github.com/TheLudlows/openContext/actions/runs/37871058933/artifacts/11593902620) | `2999b88574fccee9a534dccd3ad59d29550c832612338a64b8dcccddc49274b9` |
+| [Linux 11595430170](https://github.com/TheLudlows/openContext/actions/runs/37871058933/artifacts/11595430170) | `49b99a0548588bdfe43dea333796bc001d337792080f6589da2b7b0985caaadd` |
+
+- corpus SHA256：`aa8845d4c55f7206f698acfdd0915594cf7e1e35cddcb9497983abe1ede6937a`。
+- cases SHA256：`38fb6533f788870a9e216ff4dd10489c7d993fe8e1c5a12bfbaf646ea72c9c4a`。
+- 两个平台的两个数据 hash 均与该 checkout 的 `evals/corpus.jsonl` / `evals/retrieval.jsonl` 原始字节相符；各 12 次导入均 completed/published、version=1。逐题 ID、类别、query 与 gold labels 匹配仓库数据；各 24 次请求均成功、effective_mode=keyword。原始命中与导入资产/文档映射、正文 UTF-8 字节区间已核对，独立重算指标与各自 summary 相符。
+
+| 各平台单次运行指标 | macOS | Linux |
+| --- | --- | --- |
+| 可答 / 不可答 | 22 / 2 | 22 / 2 |
+| Document Recall@5 / MRR@5 / nDCG@5 | 均为 0.6363636364（63.6%） | 均为 0.6363636364（63.6%） |
+| 请求错误 / 不可答误召回 | 0 / 0 | 0 / 0 |
+| 请求耗时 p50 / p95 / p99 | 2.00 / 4.36 / 7.10 ms | 1.44 / 2.10 / 2.26 ms |
+| 导入总耗时 | 2641.99 ms | 1456.62 ms |
+
+两平台均为 14 个可答用例完整命中、同一组 8 个返回空结果：retrieval-15–22，含 5 个改写、1 个多来源和 2 个否定问句。当前 keyword 要求查询词集合是单个 chunk 词集合的子集；问句词项与多来源句式的召回应单独改进。本次只有 12 个文档，不能将这些失败归因于 top-100 身份过滤截断；身份候选下推仍需独立反例。
+
+这只是各平台单次顺序运行的合成关键词基线，不是性能压测、真实语义模型或竞品质量结果；不含 Agent 生成、capture 质量和组件消融，不依据这些单次延迟比较平台性能。CI success 表示程序和验收步骤完成，不能替代召回质量达标。后续需固定失败用例，评估 keyword 查询词策略及 vector/hybrid，再扩充人工标注数据。
+
+本轮编辑环境没有 Rust/Docker，运行证据来自 Actions API 和已完成日志。最终验收记录只补 Markdown，不改变已验证的 Rust、测试、工作流、Docker、锁定依赖或评估程序；代码运行证据归属于 `8d8d224`，后续文档提交触发的新 CI 需按其实际状态判断。Rust 1.88 完整运行测试、依赖审计、真实模型/300 用例/消融、断电与备份恢复仍为独立待办。
+
+## 2026-10-09：PR #10 合入基线（09:39 快照）
+
+核验基线：main `73fc51a2671bc3d7895794b1981a5fdc48f7ce9b`，[PR #10](https://github.com/TheLudlows/openContext/pull/10) 已合入。状态观测于 2026-10-09 09:39（UTC+8），以下为当时结果；没有 conclusion 的作业不标通过。本轮编辑环境没有 Rust/Docker，记录来自 GitHub Actions API 和已完成作业日志。本次分支另外修复下述测试变量遮蔽，修复后的 CI 需单独验收，不能复用基线通过数。
+
+主证据：[main run 37868289334](https://github.com/TheLudlows/openContext/actions/runs/37868289334)，event=push；PR head `bcf8f57765f8e29db137ebd77f0f2006f7ef12ec` 的 [run 37868153300](https://github.com/TheLudlows/openContext/actions/runs/37868153300) 作为辅助证据，不替代 main 的结果。
+
+| main 作业 | job ID | 当前实际结果 | 尚未覆盖 |
+| --- | --- | --- | --- |
+| memory-identity | 113620169079 | success；已读日志，fmt、27 项 lib、58 项无原生集成均通过，0 failed/ignored | local-storage 下的 retrieval/Worker/HTTP/CLI 原生用例 |
+| evaluation-adapter | 113620169069 | success；已读日志，Python 5 项通过 | Rust 宿主真实运行及真实模型质量 |
+| native (macos-14) | 113620169057 | failure；fmt/clippy 通过，29 项原生 lib 通过；集成 76 通过、1 失败 | 测试变量修复后的完整集成、release smoke 与关键词宿主评估；原运行后两项被跳过 |
+| native (ubuntu-24.04) | 113620168980 | fmt 已通过，clippy 运行中 | 完整 clippy/测试、release smoke、关键词宿主评估 |
+| windows | 113620168588 | 构建/验证脚本运行中 | 当前代码完整生命周期测试与无原生接口检查 |
+| msrv | 113620168975 | Rust 1.88 身份领域测试已通过，默认后端 all-targets check 运行中 | 默认后端 check 结果；该作业本身不含 Rust 1.88 完整运行测试 |
+| container | 113620169043 | Compose config 通过，Docker 构建运行中 | 当前镜像构建结果与 HTTP smoke |
+
+### 已确认历史失败与修复
+
+[run 37776541957](https://github.com/TheLudlows/openContext/actions/runs/37776541957)，PR head `a5d0cedcc527477d2c9e6e554adc2d5698eef19d`，conclusion=failure。读取 job `113308733015` 和 `113308733188` 日志后确认：
+
+- `tests/local_app.rs` 的 `first_body` 换行不符合 rustfmt，导致多个作业在格式门失败，后续 clippy/测试未执行。提交 `197f6aec8220ecfdfd170ad3b645e2a76b3c1c69` 按格式输出修正；当前 main 的轻量和 native 格式步骤已通过。
+- 该次 Docker 镜像实际构建成功，但 readiness 请求遇到 `ConnectionResetError` 后 smoke 直接失败。提交 `bcf8f57765f8e29db137ebd77f0f2006f7ef12ec` 仅在既有 readiness 等待中增加 `ConnectionError` 重试，保留 120 秒总超时；后续鉴权、发布和检索错误仍会失败。Python 语法检查通过，修复后的真实容器 smoke 仍需等待当前作业结果。
+- 早先 `google/protobuf/empty.proto` 缺失已补 `libprotobuf-dev`；旧运行的镜像构建成功证明修复覆盖了该构建问题，不证明当前镜像 smoke 通过。
+
+### 完成边界与后续核验
+
+当前 main 的 macOS 日志确认 `local_host_api_cli_mcp_models_and_recovery` 在 `tests/local_app.rs:892` 失败，原因是原文字符串读取为 None。身份 capture 切片在同一测试函数中用 `let published = job(...)` 遮蔽前面的记忆受理响应；后续 MCP get 使用 `published["asset_id"]`，而任务资产在 `result.memories` 中，发出的参数实际为 null。该失败发生在新增身份/版本/过滤及撤回断言之后，不是 MCP 正文读取契约改变。
+
+本次将新变量改为 `identity_job`，保留原记忆受理响应给 MCP get 使用，并在读取正文前断言无 JSON-RPC error，后续失败可直接显示响应。未删除或放宽原有读取正文、key 撤销和恢复断言。修复后的 fmt/clippy/原生生命周期测试仍待新 CI；本地仅完成 diff --check 和源码绑定核对，不宣称 Rust 测试通过。
+
+P0 基础实现和 I1/受限 I2 的轻量行为验证成立；当前 main 全量 CI 未通过，PR 合入与成功步骤不能替代全部原生/平台验收。剩余作业应逐项读取结果和失败日志，失败先定位再修复；取消的旧运行不记为通过，也不为取得绿灯盲目重跑已通过项。
+
+取得 release 评估工件后须核验 manifest 的 commit、数据 hash、模型关闭状态、imports、逐题响应和 summary，再报告 12 文档/24 查询的合成种子结果。当前没有真实模型质量、费用、完整 300 用例、组件消融或竞品分数。Rust 1.88 完整运行测试、cargo audit、断电恢复、长期规模及备份恢复仍为独立待办。
+
+以下为历史记录，保留其当时的失败、修复和未验证边界；当前 CI 状态以本节及 [STATUS](STATUS.md) 顶部快照为准。
+
 ## 2026-10-08：容器构建失败与身份模块验收入口
 
 [PR 运行 37751884631](https://github.com/TheLudlows/openContext/actions/runs/37751884631) 的 container job `113227369753` 在 Docker release 编译阶段实际失败：`lance-encoding v1.0.1` 调用 protoc 时找不到 `google/protobuf/empty.proto`，因此尚未进入镜像 smoke。已读取失败日志。
@@ -228,3 +309,4 @@ SQLite 新增源事件 scope/撤回可见性、文件删除阻断、三类 norma
 新增 3 项无原生单元用例：省略/null 不改变规范幂等 payload；0/正数对未发布与当前版本的匹配/冲突；负数在受理前拒绝。原生 HTTP 覆盖两个入口的过期/0/负数拒绝、capture 0 创建与 1 更新、当前已到 v2 后原幂等请求仍重放原结果，后续读取仍为 v2。Python adapter 5 项本地通过，Rust fmt、编译与新增/原生用例待 CI；PR #9 完整验收仍需完成。
 
 PR #9 轻量验收补记：[CI run 37775517348](https://github.com/TheLudlows/openContext/actions/runs/37775517348) 在 `9a42540` 通过 fmt、24 项 lib 和 58 项无原生集成；原生 retrieval/HTTP 与平台验收仍未完成。该证据不覆盖本轮新增版本前置条件测试。
+

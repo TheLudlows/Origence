@@ -99,7 +99,7 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 
 `POST /v1/memories/lookup` 用完整身份精确定位当前记忆，请求体就是上述示例的 `identity` 对象，不含 content。scope 从 key 获取；不接受主体别名或语义近似匹配。未命中、尚无发布版本、资产已删除或当前来源已撤回均为 404，不回退旧版本，也不分配占位资产、来源或任务。缺失身份表仍返回 503。返回的 `version` 是读取时的当前版本，不保证随后异步写入一定成功；更新结果仍以任务的并发版本检查为准。reader 只能读取当前发布内容，不能借此读取原始 capture 输入。
 
-新建库包含 `oc_memory_identities` 表。旧库可以继续使用既有接口；缺失身份表时新入口返回 503。启动不会自动升级旧库；可停宿主后执行 `--offline memory-identity-upgrade` 显式安装身份表，详见 [运维说明](OPERATIONS.md#显式启用记忆身份)。capture、CLI/MCP 仍使用既有写入模型。
+新建库包含 `oc_memory_identities` 表。旧库可以继续使用既有接口；缺失身份表时新入口返回 503。启动不会自动升级旧库；可停宿主后执行 `--offline memory-identity-upgrade` 显式安装身份表，详见 [运维说明](OPERATIONS.md#显式启用记忆身份)。旧 `/v1/captures` 保持 fact_key 模型；显式身份写入/capture 使用 HTTP。MCP 是只读工具，其 search/resolve Schema 已支持 memory_identity；CLI 检索仍默认不带过滤。
 
 ## 单身份 capture
 
@@ -132,3 +132,4 @@ search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,cont
 memories/identified 和 captures/identified 可选 expected_version（非负整数）。0 表示当前尚无已发布版本（可能已有未发布占位资产）；正数必须与受理事务中当前版本相同。不匹配返回 409，事务回滚且不新建来源或任务；负数 422。省略或 null 保持按受理时版本追加的旧行为，不是“必须创建”。
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
+

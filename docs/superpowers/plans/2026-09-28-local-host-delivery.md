@@ -2,6 +2,8 @@
 
 日期：2026-09-28。设计来源：[存储主计划](2026-09-22-pluggable-storage-engine.md)、[整体设计 A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)。当前事实见 [STATUS](../../STATUS.md)，实测结果见 [VALIDATION](../../VALIDATION.md)。
 
+2026-10-09 核验补记：验收代码 `8d8d224`（PR #11）的现有 CI 已 7/7 通过；轻量验证为 27 项 lib、58 项无原生集成和 Python 5 项，三平台各 29 项 lib、77 项原生集成通过。Windows 接口检查、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器镜像/HTTP smoke 及 Rust 1.88 默认后端 check 通过；日志和两平台评估工件已核验，精确 job/commit 证据见 VALIDATION。Service 仍依赖 LocalEngine/SqliteTx；M5 固定装配成立，应用层完全后端解耦尚未交付。
+
 ## 实现
 
 | 范围 | 实现位置与行为 |
@@ -32,3 +34,4 @@
 README、API、STATUS、运维、验收、环境模板、Docker/Compose、CI 和评估入口同步；文档索引明确区分运行契约、未来产品设计、历史代码草稿和固定版本调研。保留原研究事实，不将旧 serverless/PG 方案当作现行部署步骤。
 
 Windows 本地基线是此次交付目标；Linux/macOS/release、镜像运行、远端 CI、最低 Rust 版本、断电恢复、在线备份与长期规模测试需后续独立验收。自动发布不在当日 M5 范围内，随后已于 2026-09-29 完成；候选审核已移除。P1 会话/蒸馏、P2 SaaS 和未来 PG 扩展仍未交付。Windows 远端 CI 后续已通过，见 VALIDATION 的 2026-10-08 核验记录。
+

@@ -1,6 +1,6 @@
 # 记忆 + 知识库平台（Cognee 同类）详细设计
 
-> 实现对照（2026-09-29）：M5 已将默认宿主装配为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；自动发布（A1）已于 2026-09-29 实施：记忆/capture 直接发布，候选/审核门移除。P1/P2 仍是目标设计，不能作为已实现能力。现状见 [STATUS](../../STATUS.md)，验收见 [VALIDATION](../../VALIDATION.md)。
+> 实现对照（2026-10-09，验收代码 `8d8d224`）：M5 默认宿主为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现；现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器和 MSRV check。无模型合成关键词 Recall@5 为 63.6%，真实模型质量未验证；I2 自动语义匹配、I3 会话与完整 I4 上下文策略及 P1/P2 仍属目标设计。能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
 
 初稿日期：2026-09-22；整合修订：2026-09-23
 定位：团队 Agent 的记忆与知识库平台，先交付本地存储版本，保留后续服务化能力，Rust 实现，对标 Cognee（调研基线 v1.6.0，固定 commit `663a2dc15d04bc0d7ec2733a2dd604b7ed1b8c8e`）。
@@ -42,7 +42,7 @@
 
 ---
 
-记忆身份、跨主体更新及上下文冲突策略的 P1 前置契约见 [补充设计](2026-10-08-memory-identity-and-context.md)。这些新增字段/匹配策略尚未实现；当前 API 仍使用 workspace 内 fact_key。
+记忆身份、跨主体更新及上下文冲突策略的 P1 前置契约见 [补充设计](2026-10-08-memory-identity-and-context.md)。当前保留旧 fact_key 接口，同时已提供完整 identity 的显式写入、单身份 capture、lookup 和 search/resolve 过滤。自动身份推断、属性目录、未归一化状态、语义冲突与类型预算仍未实现；expected_version 只约束并发版本，不证明事实真假。
 
 ## 2. 核心概念
 
@@ -64,6 +64,8 @@
 ## 3. 总体架构
 
 模块化单体：本地宿主在同一进程运行 API 与 Worker，共享 `StorageEngine` 和 Kuzu `Database` 实例。M0 已实测 Kuzu 的读写进程会排斥其他进程打开同一文件，进程边界按 A2.4 执行。存储定义了 Store trait，但当前 Service 仍持有具体 LocalEngine 并返回 SqliteTx；已完成接口基础，尚未实现应用层完整后端解耦。领域模块逐步保持独立，未来服务化时再扩展进程边界。
+
+下图描述目标逻辑模块；Session/Improve、Rerank 及限流职责尚未实现，不能将图中的模块名称作为当前运行能力。领域事务与应用层厂商解耦是设计目标，当前实际落地范围以本段和 STATUS 为准。
 
 ```mermaid
 flowchart TB
@@ -169,13 +171,15 @@ api_keys           id, tenant_id, workspace_id, token_hash, role   -- 已有
 
 ### 5.3 记忆写入（remember）
 
-`remember` 组合 `add + cognify` 简化调用；结构化记忆 P0 复用现有「asset 槽」机制（`slot()` 以 `fact_key` 定位/新建 asset，后续输入走版本追加）。独立 `memories` 表（`valid_from/to` 表达时效、时间冲突）属 P2。已有事实的后续输入默认更新而非隐式覆盖，但**不再强制 review**——由冲突检测（同 key 新值）决定覆盖或并存。
+结构化记忆 P0 复用「asset 槽」与不可变版本：旧入口按 workspace 内 fact_key 定位，显式入口按 scope + subject + predicate + context 绑定同一资产。后续输入追加版本，受理时接受可选调用方 expected_version，Worker 最终仍复核受理版本；不再强制 review。当前没有根据语义冲突决定覆盖或并存的通用策略，单值/多值属性和歧义处理属于 I2 待交付范围。valid_from/to 与 as_of 属 P2。
 
 ---
 
 ## 6. 读路径：recall
 
-### 6.1 范围解析（先定范围再谈算法）
+### 6.1 范围解析（目标路由，尚未实现会话范围）
+
+当前 search/resolve 在认证 scope 内检索，可选完整 memory_identity 只保留精确绑定的 memory 并排除知识/图；它不是主体级的混合证据查询。身份过滤在最终响应 limit 前执行，候选分支截断仍可能漏召回。下表的 session/dataset/query_type 路由属于后续目标，不是当前 API 字段。
 
 | 调用条件 | 实际范围 |
 | --- | --- |
@@ -193,7 +197,7 @@ api_keys           id, tenant_id, workspace_id, token_hash, role   -- 已有
 
 ### 6.3 证据契约与预算
 
-内部结果一律定义为 `EvidenceBundle`：
+目标内部结果统一为 `EvidenceBundle`。当前实现使用 SearchHit 与 JSON 响应/引用携带来源、版本、类型和身份，尚未抽成下列完整领域结构：
 
 ```text
 EvidenceBundle {
@@ -243,7 +247,7 @@ EvidenceBundle {
 | 隔离 | 原生多 tenant、多 workspace；认证和所有存储接口强制 scope，RLS 仅适用于 PG | 文档级 ACL、显式跨 workspace 共享 |
 | 身份 | tenant/workspace 归属的 API key（token 只存 hash），默认单 workspace scope | OIDC/SSO、细粒度角色、显式跨 workspace 授权 |
 | 审计 | 现有 `audit_events` | 审计查询 API |
-| 运维 | 限流、输入限制、超时传递 | 配额、公平调度、分页游标、可观测指标 |
+| 运维 | 已实现输入限制与模型调用超时；请求限流尚未实现 | 配额、公平调度、分页游标、可观测指标 |
 | 计费 | 预留 `usage` 埋点字段 | 计费编排 |
 
 ---
@@ -557,3 +561,4 @@ SQLite 表使用 oc_ 前缀；UUID 为 16 字节 BLOB，JSON 为 TEXT，布尔�
 | — | `/v1/candidates*` `/v1/candidates/{id}/review` | **移除**（A1 自动发布） |
 
 所有修改请求带 `Idempotency-Key`；认证用 `Authorization: Bearer <token>`。MCP 保留 `context_search`/`context_get`/`context_resolve` 三个只读工具，`context_search`/`context_resolve` 在 hybrid 模式同样返回图证据。
+

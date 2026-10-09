@@ -1,12 +1,12 @@
 # 本地存储与可扩展接口实施计划
 
-修订：2026-10-08。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。
+修订：2026-10-09。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。M0–M5 的本地接口与宿主基础已交付；验收代码 `8d8d224` 的现有 CI 已 7/7 通过，三平台原生、Linux/macOS release、容器与 MSRV check 证据见 [VALIDATION](../../VALIDATION.md)。应用层完整厂商解耦仍欠账，历史接口勾项不代表任意后端可替换。
 
 ## 目标与范围
 
 交付 SQLite（关系与队列）+ LanceDB（向量）+ Kuzu（图）+ 本地文件的闭环；各存储面通过领域接口访问，保留未来扩展 PostgreSQL/pgvector 的能力。本地交付不依赖 PG 服务、不提供 PG 配置开关、不实现历史库升级或数据搬运。
 
-M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本地交付记录](2026-09-28-local-host-delivery.md)。Windows 基线推进完成，跨平台/release 等未验证项仍保留；自动发布作为独立产品阶段已于 2026-09-29 完成。旧 PG 基线从活动树裁剪，提交 `72fb5aa` 保留历史参考，不要求先开发 PG 适配器。
+M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本地交付记录](2026-09-28-local-host-delivery.md)。Windows/Linux/macOS 的主应用原生测试与 Linux/macOS release/HTTP smoke 已通过；历史独立探针与质量/运维的未验证项仍单列。自动发布作为独立产品阶段已于 2026-09-29 完成。旧 PG 基线从活动树裁剪，提交 `72fb5aa` 保留历史参考，不要求先开发 PG 适配器。
 
 现有自动发布、图谱计划与本计划共享里程碑，不各自建立数据库连接或另一套存储接口。本地基础与独立自动发布阶段均已完成；P1/P2 不阻塞本地存储交付。
 
@@ -29,7 +29,7 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - [x] 真实临时目录验证 scope、同 ID 跨 scope、读写进程竞争及强退。SQLite/LanceDB 可双进程访问；Kuzu 写宿主排斥第二个进程打开（包括只读）。这是存储访问探针，尚非完整 API/Worker 集成测试。
 - [x] 验证 Kuzu 单宿主命令访问、共享实例多线程连接、事务前后快照及强退回滚；整体设计第 3 节和 A2.4 已改为本地同进程 API/Worker。
 - [x] 记录候选依赖、构建修正、命令、14 项实际检查与限制；`cxx-build` 固定为 1.0.138，Kuzu 保留默认特性，LanceDB 关闭默认云端特性。
-- [ ] 扩展至 Linux/macOS/release 的构建与运行验证；对应平台通过前不能宣称支持该平台，Windows 基线可继续 M1。
+- [ ] 将独立 `tools/storage-probe` 的 14 项探针扩至 Linux/macOS/release；本轮验证的是主应用，不将 M5 的三平台结果记为该独立程序已运行。
 
 完成标准：三种后端均有可复现的读写结果与进程访问方案；未解决项不能以“预期支持”标为通过。
 
@@ -39,7 +39,8 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 
 - [x] 定义 Scope、授权上下文、领域事务、RelationalStore、JobQueue、VectorStore、GraphStore、BlobStore 和 StorageEngine。
 - [x] 明确同宿主引擎实例的所有权、阻塞调用边界及关闭顺序；业务模块共享适配器，不各自打开 Kuzu 数据库文件。
-- [x] 用具体签名说明 begin/commit/rollback、幂等命令、来源/版本登记、enqueue 和 audit；事务对象携带 scope，不暴露 PgPool/SqlitePool 或裸 SQL。
+- [x] Store/DomainTx 定义 begin/commit/rollback、幂等、来源/版本、enqueue 和 audit 的领域签名；事务对象携带 scope，接口不暴露裸 SQL。
+- [ ] 应用层完全使用领域事务而非厂商事务。当前 Service 的 read/write/command 仍返回 SqliteTx，retrieval 使用其扩展方法，完整后端解耦尚未完成；不要求为本地版本先实现第二后端。
 - [x] enqueue 是同一关系事务上的领域操作；JobQueue 消费者负责 claim/ack/retry，禁止另开连接造成业务成功而入队失败。
 - [x] 图/向量操作显式接收 scope、来源版本；向量查询额外指定 profile、dimension、generation。Blob key 受 scope 和根目录约束。
 - [x] 用调用示例覆盖写入提交、任一步失败共同回滚、外部模型 IO 在事务外执行、提交时权限复核。
@@ -99,7 +100,8 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - [x] 本地构建和运行不依赖 PG 服务、DATABASE_URL、PG 角色、pgvector 扩展或 Apalis PG 队列；解除其对本地发布产物的强制依赖。
 - [x] PG 基线代码的归档/裁剪在接入时明确记录，不为保留旧代码增加本地依赖，不新增可选 PG 交付承诺。
 - [x] CLI、HTTP、MCP 和 CI 使用本地后端跑初始化、权限、生命周期、恢复、删除、预算测试；普通测试可用临时目录直接运行。
-- [x] 完成 fmt、clippy、单元及实际本地集成测试，再标记后端“已支持”；将限制与实测结果写入文档。
+- [x] Windows 历史 M5/A1 基线完成 fmt、clippy 与本地集成测试并记录限制；证据只适用于当时 commit/平台。
+- [x] 验收代码 `8d8d224` 的 Windows/Linux/macOS 默认后端完整测试、Linux/macOS release/HTTP smoke 和容器验收收口（run 37871058933）；各平台 29 项 lib、77 项原生集成均通过，证据见 VALIDATION。
 
 完成标准：干净环境从首次启动到检索和重启恢复可复现；未运行的检查明确标为未验证。
 
@@ -109,3 +111,4 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - 自动发布计划已在 M5 本地基线成立后完成，修改领域治理与新库初始化定义，不重建存储层。
 - P1 会话记忆与 P2 服务化能力按整体设计推进；未来 PG 扩展不属于本地里程碑。
 - 旧 PG 初始化改动未验证部分保留在历史记录；不属于当前本地交付，也不新增 PG 适配器前置阶段。
+

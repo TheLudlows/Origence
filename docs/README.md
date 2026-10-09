@@ -1,6 +1,6 @@
 # 文档索引
 
-更新：2026-10-08。当前交付为 M5 本地宿主；运行事实以代码、API 和本轮验收记录为准。历史调研中的 PostgreSQL、serverless 描述不代表当前运行能力。
+更新：2026-10-09。当前交付为 M5 本地宿主 + A1 自动发布及 I1/受限 I2/I4 切片；验收代码 `8d8d224` 的现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/宿主评估、容器和 MSRV check。真实模型质量、P1 会话主闭环及 P2 尚未交付。运行事实以代码、API 为准，能力与验收快照见 STATUS 顶部，精确 commit/run/job 证据见 VALIDATION 最新核验。历史记录中的“待 CI”保留当时状态；历史调研中的 PostgreSQL、serverless 描述不代表当前运行能力。
 
 | 目的 | 文档 |
 | --- | --- |
@@ -23,3 +23,4 @@
 | 历史方案备查 | [serverless 方案](agent_memory_knowledgebase_serverless.md) |
 
 计划中的代码草稿用于解释当时设计，不应直接覆盖当前实现。自动发布已实施：候选/审核门已移除，writer 记忆与抽取直接发布。会话记忆、经验蒸馏、多租户 SaaS 不属于已完成范围。
+
