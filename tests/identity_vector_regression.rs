@@ -144,6 +144,10 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
             )
             .await
             .unwrap();
+            // Match publication provenance so startup does not remove valid evidence.
+            tx.register_owner(source, "chunk", chunk, Some(chunk))
+                .await
+                .unwrap();
             tx.update_asset_version(asset, version, None).await.unwrap();
             let key = LedgerKey {
                 scope,
