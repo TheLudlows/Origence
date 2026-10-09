@@ -1,6 +1,6 @@
 //! Provenance owner tests (M3): register, shared owners, detach, ownership.
 
-use opencontext::storage::{
+use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion,
     sqlite::SqliteStore,
 };
@@ -24,7 +24,7 @@ async fn provision(store: &SqliteStore) -> AuthorizedScope {
 async fn begin_write(
     store: &SqliteStore,
     auth: &AuthorizedScope,
-) -> opencontext::storage::sqlite::SqliteTx {
+) -> origence::storage::sqlite::SqliteTx {
     let mut tx = store.begin(auth.clone()).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     tx

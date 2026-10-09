@@ -1,6 +1,6 @@
 #![cfg(feature = "local-storage")]
 use axum::{Json, Router, extract::State};
-use opencontext::{models::Models, service::Service, storage::*, types::*};
+use origence::{models::Models, service::Service, storage::*, types::*};
 use serde_json::{Value, json};
 use std::{
     process::Stdio,
@@ -19,7 +19,7 @@ fn id(v: &Value, k: &str) -> Uuid {
     serde_json::from_value(v[k].clone()).unwrap()
 }
 fn command(dir: &std::path::Path) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_opencontext"));
+    let mut c = Command::new(env!("CARGO_BIN_EXE_origence"));
     c.env("OC_DATA_DIR", dir)
         .env("OC_ENABLE_MODELS", "false")
         .env("RUST_LOG", "error")
@@ -948,7 +948,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     let admin = store.issue_key(scope, "admin").await.unwrap();
     let reader = store.issue_key(scope, "reader").await.unwrap();
     let reader_auth = service.auth(&reader.token).await.unwrap();
-    let identity: opencontext::memory_identity::MemoryIdentity = serde_json::from_value(json!({
+    let identity: origence::memory_identity::MemoryIdentity = serde_json::from_value(json!({
         "subject": {"kind": "service", "stable_id": "target"},
         "predicate": "release.approval",
         "context": {"environment": "production"}
@@ -1147,7 +1147,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
     let reader = s.auth(&reader_key.token).await.unwrap();
     // Job state can expose unpublished input, so it stays behind write permission.
     assert!(s.job(&reader, id(&proposal, "job_id")).await.is_err());
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&writer, id(&proposal, "asset_id"), None)
             .await
@@ -1169,7 +1169,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         )
         .await
         .unwrap();
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     let zh = s
         .search(
             &a,
@@ -1196,7 +1196,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
     let mut different = input.clone();
     different.content = "different".into();
     assert!(s.memory(&a, "once", different).await.is_err());
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         1
@@ -1214,7 +1214,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .unwrap();
     assert!(update["job_id"].is_string());
     assert_eq!(update["conflict"], true);
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
@@ -1232,7 +1232,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         )
         .await
         .unwrap();
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.job(&a, id(&restored, "job_id")).await.unwrap()["result"]["version"],
         3
@@ -1242,7 +1242,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .await
         .unwrap();
     assert!(s.get(&a, id(&first, "asset_id"), None).await.is_err());
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
         "completed"
@@ -1288,7 +1288,7 @@ async fn racing_expected_versions_supersede_the_loser() {
         publish_if_authorized: true,
     };
     let base = s.memory(&a, "base", input.clone()).await.unwrap();
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&a, id(&base, "asset_id"), None).await.unwrap()["version"],
         1
@@ -1319,8 +1319,8 @@ async fn racing_expected_versions_supersede_the_loser() {
         .unwrap();
     assert_eq!(left["conflict"], true);
     assert_eq!(right["conflict"], true);
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     let left_state = s.job(&a, id(&left, "job_id")).await.unwrap()["state"].clone();
     let right_state = s.job(&a, id(&right, "job_id")).await.unwrap()["state"].clone();
     // Queue order between same-instant jobs is not guaranteed; assert the
@@ -1380,7 +1380,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
         entity_type: "service".into(),
         description: "evidence".into(),
     };
-    let entity_id = opencontext::graph::entity_id("Atlas");
+    let entity_id = origence::graph::entity_id("Atlas");
     let chunk_id = Uuid::new_v4();
     let ledger_key = LedgerKey {
         scope,
@@ -1420,8 +1420,8 @@ async fn saved_publication_recovers_after_external_graph_write() {
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([])
     );
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
-    assert!(!opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
+    assert!(!origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&a, id(&accepted, "asset_id"), None).await.unwrap()["version"],
         1
@@ -1507,7 +1507,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
             .is_empty()
     );
     tx.commit().await.unwrap();
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([])
@@ -1523,7 +1523,7 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     let view = s.clone();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let (tx, rx) = tokio::sync::oneshot::channel();
-    let host = tokio::spawn(opencontext::host::serve(s, listener, async {
+    let host = tokio::spawn(origence::host::serve(s, listener, async {
         let _ = rx.await;
     }));
     tokio::time::timeout(Duration::from_secs(10), async {

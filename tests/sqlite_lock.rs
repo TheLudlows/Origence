@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use opencontext::storage::{StorageError, sqlite::SqliteStore};
+use origence::storage::{StorageError, sqlite::SqliteStore};
 
 #[tokio::test]
 async fn reopen_in_process_is_reentrant() {

@@ -1,5 +1,5 @@
 //! Explicit identity feature installation never rewrites legacy business data.
-use opencontext::storage::{
+use origence::storage::{
     DomainTx, Lifecycle, RelationalStore, Scope, StorageError,
     sqlite::{MemoryIdentityUpgrade, SqliteStore},
 };

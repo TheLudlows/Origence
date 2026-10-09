@@ -1,9 +1,9 @@
 //! Ledger type unit tests (M3): surface/state encoding and deterministic keys.
 
-use opencontext::storage::ledger::{
+use origence::storage::ledger::{
     LedgerEntry, LedgerKey, LedgerState, MAX_LEDGER_ATTEMPTS, Surface, ledger_idempotency_key,
 };
-use opencontext::storage::{
+use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion, StorageError,
     sqlite::SqliteStore,
 };
@@ -73,7 +73,7 @@ async fn provision(store: &SqliteStore) -> AuthorizedScope {
 async fn begin_write(
     store: &SqliteStore,
     auth: &AuthorizedScope,
-) -> opencontext::storage::sqlite::SqliteTx {
+) -> origence::storage::sqlite::SqliteTx {
     let mut tx = store.begin(auth.clone()).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     tx

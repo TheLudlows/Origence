@@ -1,5 +1,5 @@
 x-local: &local
-  image: opencontext:local
+  image: origence:local
   build: .
   environment:
     OC_DATA_DIR: /data

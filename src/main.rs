@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use opencontext::{
+use origence::{
     client::HostClient,
     host, mcp,
     models::Models,
@@ -91,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "opencontext=info,sqlx=warn".into()),
+                .unwrap_or_else(|_| "origence=info,sqlx=warn".into()),
         )
         .init();
     let cli = Cli::parse();

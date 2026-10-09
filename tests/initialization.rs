@@ -1,4 +1,4 @@
-use opencontext::storage::{Lifecycle, sqlite::SqliteStore};
+use origence::storage::{Lifecycle, sqlite::SqliteStore};
 
 #[tokio::test]
 async fn sqlite_initializes_once_and_rejects_incompatible() -> anyhow::Result<()> {

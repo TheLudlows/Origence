@@ -1,6 +1,6 @@
 //! Structured identity persistence and legacy compatibility.
-use opencontext::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
-use opencontext::storage::{
+use origence::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
+use origence::storage::{
     AuthorizedScope, DomainTx, Lifecycle, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
 use sqlx::Connection;
@@ -112,7 +112,7 @@ async fn lookup_is_exact_scoped_and_reads_current_version() {
     let key = store.issue_key(scope, "reader").await.unwrap();
     let reader = store.authenticate(&key.token).await.unwrap();
     let mut tx = store.begin(reader).await.unwrap();
-    tx.check_permission(opencontext::storage::Permission::Read)
+    tx.check_permission(origence::storage::Permission::Read)
         .await
         .unwrap();
     let view = tx.identity_view(&i).await.unwrap();

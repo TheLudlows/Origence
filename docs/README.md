@@ -1,4 +1,6 @@
-# 文档索引
+# Origence · 文档索引
+
+Origence（原 openContext）的详细技术资料、实现状态与历史验收记录。
 
 更新：2026-10-09。当前交付为 M5 本地宿主 + A1 自动发布及 I1/受限 I2/I4 切片；真实模型质量、P1 会话主闭环及 P2 尚未交付。运行事实以代码、API 为准，能力与验收快照见 STATUS 顶部，精确 commit/run/job 证据见 VALIDATION 最新核验。历史记录中的“待 CI”保留当时状态；历史调研中的 PostgreSQL、serverless 描述不代表当前运行能力。
 
