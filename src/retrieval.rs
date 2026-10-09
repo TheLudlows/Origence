@@ -23,7 +23,27 @@ impl Service {
         {
             return Err(AppError::Invalid("query, mode or limit invalid".into()));
         }
-        self.read(a, Permission::Read).await?.rollback().await?;
+        // Resolve the scoped identity before branch candidate limits and native top-k.
+        // The final authorized read below still verifies visibility and identity.
+        let mut authorized = self.read(a, Permission::Read).await?;
+        let asset_filter = if let Some(identity) = input.memory_identity.as_ref() {
+            authorized.identity_candidate_asset(identity).await?
+        } else {
+            None
+        };
+        authorized.rollback().await?;
+        if input.memory_identity.is_some() && asset_filter.is_none() {
+            return Ok(json!({
+                "hits": [],
+                "memory_identity": input.memory_identity,
+                "requested_mode": input.mode,
+                "effective_mode": input.mode,
+                "warnings": [],
+                "embedding_profile": self.models.profile,
+                "retrieval_policy": "local-scoped-exact-rrf60-v1",
+                "graph": {"entities": [], "relations": []}
+            }));
+        }
         let mut warnings = Vec::new();
         let mut effective = input.mode.clone();
         let embedding = if effective != "keyword" {
@@ -48,7 +68,7 @@ impl Service {
             for generation in generations {
                 eligible.push((
                     generation,
-                    tx.vector_candidates(profile, vector.len(), generation)
+                    tx.vector_candidates(profile, vector.len(), generation, asset_filter)
                         .await?,
                 ));
             }
@@ -84,7 +104,7 @@ impl Service {
         let mut tx = self.read(a, Permission::Read).await?;
         let mut branches = Vec::new();
         if effective != "vector" {
-            branches.push(tx.keyword_hits(&terms, false).await?);
+            branches.push(tx.keyword_hits(&terms, false, asset_filter).await?);
         }
         let mut vectors = Vec::new();
         for (generation, native) in native_hits {
@@ -106,7 +126,7 @@ impl Service {
         }
         let (mut entities, mut relations) = (Vec::new(), Vec::new());
         if let Some(graph) = graph {
-            branches.push(tx.keyword_hits(&terms, true).await?);
+            branches.push(tx.keyword_hits(&terms, true, asset_filter).await?);
             let all_entities: Vec<Value> = decode(graph["entities"].clone())?;
             let all_relations: Vec<Value> = decode(graph["relations"].clone())?;
             let mut ids: HashSet<Uuid> = all_entities

@@ -8,7 +8,7 @@
 | 接口、权限、任务与可见性 | [API](API.md) |
 | 数据布局、备份和故障恢复 | [OPERATIONS](OPERATIONS.md) |
 | 已交付与待办 | [STATUS](STATUS.md) |
-| 当前推进批次 | [P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md) |
+| 当前及剩余任务计划 | [下一阶段实施路线图 S0–S4](superpowers/plans/2026-10-09-next-stage-roadmap.md)、[P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md) |
 | 实测命令、结果和未验证项 | [VALIDATION](VALIDATION.md) |
 | M5 交付与验收映射 | [本地宿主交付](superpowers/plans/2026-09-28-local-host-delivery.md) |
 | 已实施的自动发布（writer 记忆与抽取直接发布） | [自动发布](superpowers/plans/2026-09-22-auto-publish.md) |
