@@ -120,11 +120,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: macOS native build tools
         run: brew install cmake ninja protobuf
-      - run: cargo clippy --locked --all-targets -j 1 -- -D warnings
-      - run: cargo test --locked -j 1 --no-fail-fast
+      - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
+      - run: cargo test --locked -j 2 --no-fail-fast
       - name: Release build and no-model HTTP smoke
         run: |
-          cargo build --release --locked -j 1
+          cargo build --release --locked -j 2
           python3 tools/smoke.py --binary target/release/origence
       - name: Keyword retrieval seed evaluation (no model calls)
         run: python3 evals/run.py --binary target/release/origence --commit "${{ github.sha }}" --output target/evals/keyword-run
@@ -143,6 +143,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker compose config --quiet
       - name: Container release build
-        run: docker build --build-arg BUILD_JOBS=2 -t origence:ci .
+        run: docker build --build-arg BUILD_JOBS=3 -t origence:ci .
       - name: Container no-model HTTP smoke
         run: python3 tools/smoke.py --image origence:ci
