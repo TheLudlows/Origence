@@ -933,6 +933,174 @@ fn post_route() -> axum::routing::MethodRouter<Arc<AtomicBool>> {
 }
 
 #[tokio::test]
+async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "candidate-filter")
+        .await
+        .unwrap();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let reader_auth = service.auth(&reader.token).await.unwrap();
+    let identity: opencontext::memory_identity::MemoryIdentity =
+        serde_json::from_value(json!({
+            "subject": {"kind": "service", "stable_id": "target"},
+            "predicate": "release.approval",
+            "context": {"environment": "production"}
+        }))
+        .unwrap();
+
+    // 130 stronger keyword matches would previously fill the global top-100.
+    let mut tx = store
+        .begin(store.authenticate(&admin.token).await.unwrap())
+        .await
+        .unwrap();
+    for i in 0..130 {
+        let (asset, _) = tx.slot(&format!("decoy-{i}")).await.unwrap();
+        let source = tx.create_event("memory", "approval", None).await.unwrap();
+        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+            .await
+            .unwrap();
+        tx.insert_chunk(
+            Uuid::new_v4(),
+            asset,
+            1,
+            0,
+            "approval",
+            &json!({}),
+            "approval",
+        )
+        .await
+        .unwrap();
+        tx.update_asset_version(asset, 1, None).await.unwrap();
+    }
+    let (target, _) = tx.identity_slot(&identity).await.unwrap();
+    let mut current_source = Uuid::nil();
+    for version in [1, 2] {
+        let source = tx
+            .create_event("memory", "approval evidence", None)
+            .await
+            .unwrap();
+        tx.insert_version(
+            target, version, "approval evidence", "hash", source, None, None,
+        )
+        .await
+        .unwrap();
+        tx.insert_chunk(
+            Uuid::new_v4(),
+            target,
+            version,
+            0,
+            if version == 1 { "approval old" } else { "approval current" },
+            &json!({}),
+            "approval evidence supplemental",
+        )
+        .await
+        .unwrap();
+        tx.update_asset_version(target, version, None).await.unwrap();
+        current_source = source;
+    }
+    tx.commit().await.unwrap();
+
+    let search = |filter| SearchInput {
+        memory_identity: filter,
+        query: "approval".into(),
+        mode: "keyword".into(),
+        limit: 100,
+        allow_partial: false,
+    };
+    let plain = service.search(&reader_auth, search(None)).await.unwrap();
+    assert_eq!(plain["hits"].as_array().unwrap().len(), 100);
+    assert!(
+        plain["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|hit| hit["asset_id"] != json!(target))
+    );
+    let filtered = service
+        .search(&reader_auth, search(Some(identity.clone())))
+        .await
+        .unwrap();
+    assert_eq!(filtered["hits"].as_array().unwrap().len(), 1);
+    assert_eq!(filtered["hits"][0]["asset_id"], json!(target));
+    assert_eq!(filtered["hits"][0]["version"], 2);
+    assert_eq!(filtered["hits"][0]["content"], "approval current");
+    assert_eq!(filtered["hits"][0]["identity"], json!(identity));
+
+    let context = service
+        .resolve(
+            &reader_auth,
+            ResolveInput {
+                query: "approval".into(),
+                memory_identity: Some(identity.clone()),
+                mode: "keyword".into(),
+                budget_tokens: 3000,
+                allow_partial: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(context["sources"].as_array().unwrap().len(), 1);
+    assert_eq!(context["sources"][0]["asset_id"], json!(target));
+    assert!(
+        context["rendered_context"]
+            .as_str()
+            .unwrap()
+            .contains("approval current")
+    );
+
+    let mut unknown = identity.clone();
+    unknown.subject.stable_id = "unknown".into();
+    assert_eq!(
+        service
+            .search(&reader_auth, search(Some(unknown)))
+            .await
+            .unwrap()["hits"],
+        json!([])
+    );
+
+    let other_scope = Scope {
+        tenant_id: scope.tenant_id,
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(other_scope.tenant_id, other_scope.workspace_id, "other")
+        .await
+        .unwrap();
+    let other_key = store.issue_key(other_scope, "reader").await.unwrap();
+    let other_auth = service.auth(&other_key.token).await.unwrap();
+    assert_eq!(
+        service
+            .search(&other_auth, search(Some(identity.clone())))
+            .await
+            .unwrap()["hits"],
+        json!([])
+    );
+
+    let mut tx = store
+        .begin(store.authenticate(&admin.token).await.unwrap())
+        .await
+        .unwrap();
+    tx.retract_event(current_source).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        service
+            .search(&reader_auth, search(Some(identity)))
+            .await
+            .unwrap()["hits"],
+        json!([])
+    );
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn local_transactions_versions_retraction_and_idempotency() {
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
