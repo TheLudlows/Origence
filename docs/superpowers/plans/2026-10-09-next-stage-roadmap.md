@@ -25,14 +25,14 @@
 
 ## 3. 交付顺序与任务
 
-### S0（最高优先级）：完整身份候选过滤修复 — 本次 PR 范围
+### S0（最高优先级）：完整身份候选过滤修复 — 已合入，待 CI 验收
 
 **问题**：SQLite `keyword_hits()` 全 scope 取候选后截断到 100，`search()` 最终才按 identity 过滤；目标在第 101 名之后可能漏召回，向量候选也须在 native top-k 前限定范围。
 
-- [ ] 在授权 tenant/workspace 内根据完整 `MemoryIdentity` 定位已有资产；未匹配为空，不创建 slot，旧库不隐式升级。
-- [ ] keyword 候选和 vector artifact ID 集合在 top-k/rank 之前限制为目标资产，最后仍重新确认权限、来源有效性、版本、墓碑和身份。
-- [ ] >100 个强相关干扰候选、v1/v2 当前版本、跨 workspace、缺失 identity、撤回来源与 search/resolve 回归。
-- [ ] 合入前核验 Rust 1.98 fmt、Clippy、无原生/原生测试和 PR CI；通过后将相应项改为已完成，补精确 run/commit 记录。
+- [x] **源码已实现（PR #13）**：在授权 tenant/workspace 内根据完整 `MemoryIdentity` 定位已有资产；未匹配为空，不创建 slot，旧库不隐式升级。
+- [x] **源码已实现（PR #13）**：keyword 候选和 vector artifact ID 集合在 top-k/rank 之前限制为目标资产，最后仍重新确认权限、来源有效性、版本、墓碑和身份。
+- [x] **测试已提交，未证明通过**：>100 个强相关干扰候选、v1/v2 当前版本、跨 workspace、缺失 identity、撤回来源与 search/resolve 回归。
+- [ ] **验收未完成**：PR #13 原生 Clippy 的 `collapsible_if` 和 main Windows 同一错误需修复；取得 Rust 1.98 fmt/Clippy、完整原生测试、Smoke 与 main 跨平台 CI 的新实测证据后才能标记完成。
 
 **验收**：不增大全局 top-k 作为修复；旧无 identity 查询保持兼容；精确身份目标不再被其他主体挤出候选。保留向量模型不可用时原有 allow_partial 行为。
 
@@ -84,4 +84,4 @@ Rust 1.98 的完整 CI、cargo audit/RustSec、fs2 文件锁生命周期、长�
 
 ## 5. 执行入口
 
-优先完成 S0（本次身份候选下推修复），之后实施 S1 的评估基线，再按 S2/S3 拆分小 PR。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。
+先收口 S0（候选下推源码已合入，但 CI 尚未全绿），之后实施 S1 的评估基线，再按 S2/S3 拆分小 PR。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。

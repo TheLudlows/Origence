@@ -165,12 +165,12 @@ impl SqliteTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        if let Some(id) = asset {
-            if self.identity_for_asset(id).await?.as_ref() != Some(identity) {
-                return Err(StorageError::Unavailable(
-                    "memory identity binding mismatch".into(),
-                ));
-            }
+        if let Some(id) = asset
+            && self.identity_for_asset(id).await?.as_ref() != Some(identity)
+        {
+            return Err(StorageError::Unavailable(
+                "memory identity binding mismatch".into(),
+            ));
         }
         Ok(asset)
     }

@@ -4,6 +4,14 @@
 > 2026-10-09 后续 Linux Native 优化（新 PR，待独立 CI 验证）：PR 与 main 的 `linux-native` 统一运行 Dev/Test/Debug Smoke 和 Debug 关键词评估，不再进行 Linux 原生 Release 冷编译；Cargo Clippy/Test/Debug build 的构建并行度从 `-j 1` 调为 `-j 2`，CMake 并行度保持 2，避免 Kuzu/LanceDB 链接峰值内存过高。main 的 Docker Release 镜像构建及 Smoke 仍保留，macOS/Windows 工作流不变。这是构建配置变更，不是实测耗时下降或 CI 通过证明。
 
 
+## 2026-10-09：P0/S0 候选修复与 CI 门禁收口（进行中）
+
+- 主干起点 `99f8926`（PR #13/#14 已合入）。S0 在 SQLite 先按授权 scope 的完整 identity 找已有资产，再对 keyword/vector 候选限域；`tests/local_app.rs` 包含 130 个强相关干扰、当前版本、跨 workspace、撤回及 search/resolve 回归；`tests/sqlite_identity.rs` 包含向量候选前置过滤及旧库不升级反例。
+- [PR #13 的 CI run 37900697049](https://github.com/TheLudlows/openContext/actions/runs/37900697049) 原生 Clippy 因 `src/storage/sqlite/app.rs:168` 的 `clippy::collapsible_if` 失败；合入后的 [main run 37905676866](https://github.com/TheLudlows/openContext/actions/runs/37905676866) Windows Job 复现同一失败，其余未完成作业不能记为成功。这些证据**不支持**宣布 S0 已验收完成。
+- 本轮 P0 只合并嵌套 if 的 Clippy 结构，不改错误类型、授权查询或可见性条件；在 PR `fast-check` 补 `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings`，使这类 Rust 代码风格错误能在原生编译前暴露。Rust 1.98.0 的 full-native Clippy 和 Windows/macOS 检查仍必须执行。
+- [PR #14 的 CI run 37902084305](https://github.com/TheLudlows/openContext/actions/runs/37902084305) 仅证明当时分支上的 Linux `-j 2`、Debug Smoke 和测试通过（约 29 分钟），不证明 PR #13 后合并主干全绿。
+- 本次提交后新 CI 的具体 run、Clippy/test/smoke 与跨平台结果**待核验**；主干是否启用 Required Checks 是独立仓库治理配置，当前 GitHub API 显示 `main` 未受保护。建议设置 `fast-check`、`linux-native` 为合并必需检查；仓库管理员须通过 GitHub Settings → Rules → Rulesets / Branch protection 设置并验证生效。
+
 ## 2026-10-09：PR #11 修复分支验收
 
 验收代码：`8d8d2247c355330be9903fb7e9e3f1d2107e058b`，[PR #11](https://github.com/TheLudlows/openContext/pull/11)，基于 main `73fc51a`。主证据：[run 37871058933](https://github.com/TheLudlows/openContext/actions/runs/37871058933)，event=pull_request；CI checkout 为 PR merge commit `104a1b34df5975681dd4fdbd5fe3410380607cf1`。运行于 2026-10-09 12:03（UTC+8）completed/success，7/7 作业通过，全部日志及两平台评估工件已核验。本节记录修复后的结果；修复前 main 的观测快照见下方历史里程碑表。
