@@ -59,27 +59,16 @@ jobs:
           rustc --version
           rustc --version | grep -Fq 'rustc 1.98.0 ('
       - name: Memory identity on minimum Rust without native features
-        run: cargo test --locked --no-default-features --lib memory_identity -j 1
-      - run: cargo clippy --locked --all-targets -j 1 -- -D warnings
-      - run: cargo test --locked -j 1 --no-fail-fast
-      - name: Release build and no-model HTTP smoke (main)
-        if: github.ref == 'refs/heads/main'
+        run: cargo test --locked --no-default-features --lib memory_identity -j 2
+      # Rust and CMake each use two workers; keep link memory pressure bounded.
+      - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
+      - run: cargo test --locked -j 2 --no-fail-fast
+      - name: Debug build and no-model HTTP smoke
         run: |
-          cargo build --release --locked -j 1
-          python3 tools/smoke.py --binary target/release/opencontext
-      - name: Debug build and no-model HTTP smoke (PR / branch)
-        if: github.ref != 'refs/heads/main'
-        run: |
-          cargo build --locked -j 1
+          cargo build --locked -j 2
           python3 tools/smoke.py --binary target/debug/opencontext
       - name: Keyword retrieval seed evaluation (no model calls)
-        run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            BINARY=target/release/opencontext
-          else
-            BINARY=target/debug/opencontext
-          fi
-          python3 evals/run.py --binary "$BINARY" --commit "${{ github.sha }}" --output target/evals/keyword-run
+        run: python3 evals/run.py --binary target/debug/opencontext --commit "${{ github.sha }}" --output target/evals/keyword-run
       - name: Preserve synthetic retrieval evidence
         if: always()
         uses: actions/upload-artifact@v4
