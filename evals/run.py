@@ -1,4 +1,4 @@
-"""Evaluate document-level retrieval through a fresh isolated openContext host.
+"""Evaluate document-level retrieval through a fresh isolated Origence host.
 
 No paid calls by default. This is a retrieval adapter, not an Agent benchmark.
 """

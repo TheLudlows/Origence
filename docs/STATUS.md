@@ -1,4 +1,6 @@
-# 实现状态与后续工作
+# Origence · 实现状态与后续工作
+
+产品名称由 openContext 统一为 **Origence**，Rust 包与 CLI 改为 `origence`；历史 PR、CI 和设计文档保留原名以便追溯。
 
 更新：2026-10-09。当前推进以 main `99f8926` 为起点：PR #13 的完整身份候选下推与 PR #14 的 CI 优化均已合入；S0 源码已实现，但 PR #13 的原生 Clippy 和随后 main 的 Windows Clippy 因 `collapsible_if` 失败，**不能宣称 S0 已经跨平台验收通过**。本轮 P0 修复此告警并把轻量 Clippy 前移到 PR 快速检查，新 CI 结果须独立核验。M5/A1 的此前验收证据见 [VALIDATION](VALIDATION.md)，P1 闭环与 P2 仍未交付。
 

@@ -1,4 +1,4 @@
-# HTTP API v1
+# Origence HTTP API v1
 
 适用 M5 本地宿主 SQLite/LanceDB/Kuzu。参见 [文档索引](README.md) 和 [运维说明](OPERATIONS.md)。
 
