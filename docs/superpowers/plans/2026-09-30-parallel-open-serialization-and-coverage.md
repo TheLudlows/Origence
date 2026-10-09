@@ -419,7 +419,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Test: 即上述文件本身；套件 59 → 60 集成用例（总数 67 → 68）
 
 **Interfaces:**
-- Consumes: 既有辅助 `id(v,k)`（local_app.rs:18）、`job()` HTTP 轮询（:83）、service 方法 `s.memory/s.job/s.get`、`opencontext::worker::process_next`、accept 响应形状 `{"asset_id","source_event_id","job_id","state":"accepted","conflict"}`（service.rs:175）、job 状态映射 `AppError::Conflict → "superseded"`（worker.rs:113）。
+- Consumes: 既有辅助 `id(v,k)`（local_app.rs:18）、`job()` HTTP 轮询（:83）、service 方法 `s.memory/s.job/s.get`、`origence::worker::process_next`、accept 响应形状 `{"asset_id","source_event_id","job_id","state":"accepted","conflict"}`（service.rs:175）、job 状态映射 `AppError::Conflict → "superseded"`（worker.rs:113）。
 - Produces: 新测试 `async fn racing_expected_versions_supersede_the_loser()`；无新辅助函数。
 
 - [x] **Step 1: lifecycle 测试 accept 字段断言**
@@ -513,7 +513,7 @@ async fn racing_expected_versions_supersede_the_loser() {
         publish_if_authorized: true,
     };
     let base = s.memory(&a, "base", input.clone()).await.unwrap();
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&a, id(&base, "asset_id"), None).await.unwrap()["version"],
         1
@@ -544,8 +544,8 @@ async fn racing_expected_versions_supersede_the_loser() {
         .unwrap();
     assert_eq!(left["conflict"], true);
     assert_eq!(right["conflict"], true);
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     let left_state = s.job(&a, id(&left, "job_id")).await.unwrap()["state"].clone();
     let right_state = s
         .job(&a, id(&right, "job_id"))

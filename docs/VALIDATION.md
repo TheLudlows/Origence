@@ -1,4 +1,6 @@
-# 验证记录
+# Origence 验证记录
+
+> 历史 CI 与 PR 证据创建于仓库仍名为 `TheLudlows/openContext` 时；下方保留原始链接以便追溯，当前仓库为 `TheLudlows/Origence`。这些旧链接不表示产品仍使用旧名称。
 
 > 2026-10-09 CI 与工具链策略变更（[PR #12](https://github.com/TheLudlows/openContext/pull/12)）：MSRV 1.98，Linux 原生 CI 使用 Rust 1.98.0，开发/Windows/macOS/Docker 固定 1.98.1。仅 `main` push 和目标 `main` 的 PR 触发；PR 为 2 个 Job（fast-check：无原生特性测试/格式/Python；linux-native：MSRV 身份测试、原生 Clippy/测试、Debug smoke 与评估），main 额外执行 Windows、macOS、Linux/macOS Release 和 Docker 构建/Smoke。以下 1.88/1.96 测试结果保留为历史实测，新版本须独立重新验证。
 > 2026-10-09 后续 Linux Native 优化（新 PR，待独立 CI 验证）：PR 与 main 的 `linux-native` 统一运行 Dev/Test/Debug Smoke 和 Debug 关键词评估，不再进行 Linux 原生 Release 冷编译；Cargo Clippy/Test/Debug build 的构建并行度从 `-j 1` 调为 `-j 2`，CMake 并行度保持 2，避免 Kuzu/LanceDB 链接峰值内存过高。main 的 Docker Release 镜像构建及 Smoke 仍保留，macOS/Windows 工作流不变。这是构建配置变更，不是实测耗时下降或 CI 通过证明。

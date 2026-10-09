@@ -1,11 +1,11 @@
-# 记忆 + 知识库平台（Cognee 同类）详细设计
+# Origence 记忆与知识统一平台详细设计
 
 > 实现对照（2026-10-09，验收代码 `8d8d224`）：M5 默认宿主为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现；现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器和 MSRV check。无模型合成关键词 Recall@5 为 63.6%，真实模型质量未验证；I2 自动语义匹配、I3 会话与完整 I4 上下文策略及 P1/P2 仍属目标设计。能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
 
 初稿日期：2026-09-22；整合修订：2026-09-23
 定位：团队 Agent 的记忆与知识库平台，先交付本地存储版本，保留后续服务化能力，Rust 实现，对标 Cognee（调研基线 v1.6.0，固定 commit `663a2dc15d04bc0d7ec2733a2dd604b7ed1b8c8e`）。
 
-本文是基于现有 openContext/ContextDB 代码与 Cognee 调研（[架构分析](../../Cognee_技术架构分析.md)、[技术细节](../../Cognee_技术细节与方案对比.md)）的**转向设计**。相比之前的 ContextDB V3.1，本次改变四件事：技术栈锁定 Rust；治理模型从「候选审核 → 发布」改为 Cognee 式「自动发布」；存储改为可插拔引擎；交付先落地本地存储版本，SaaS 能力后续演进。继承不变的：workspace/tenant 隔离、来源溯源、删除级联、审计、可注入上下文与预算。
+本文基于 Origence 的早期实现（原 openContext/ContextDB）与 Cognee 调研（[架构分析](../../Cognee_技术架构分析.md)、[技术细节](../../Cognee_技术细节与方案对比.md)）的**转向设计**。相比之前的 ContextDB V3.1，本次改变四件事：技术栈锁定 Rust；治理模型从「候选审核 → 发布」改为 Cognee 式「自动发布」；存储改为可插拔引擎；交付先落地本地存储版本，SaaS 能力后续演进。继承不变的：workspace/tenant 隔离、来源溯源、删除级联、审计、可注入上下文与预算。
 
 > **实施基线：** 本文统一描述产品与存储设计；存储完整契约见 [A2](#storage-design)，执行顺序见 [本地存储实施计划](../plans/2026-09-22-pluggable-storage-engine.md)。本地固定 SQLite/LanceDB/Kuzu，PG/pgvector 仅保留接口扩展能力；不提供自动版本化数据库升级；新增身份表支持离线显式定向安装，见 [运维说明](../../OPERATIONS.md#显式启用记忆身份)。产品目标与当前实现状态分别列示。
 
@@ -34,7 +34,7 @@
 
 | 维度 | Cognee | 本项目 |
 | --- | --- | --- |
-| 语言 | Python | Rust（复用 openContext 基础） |
+| 语言 | Python | Rust（复用 Origence 基础） |
 | 治理 | 自动抽取即入库 | 自动发布，但强制保留来源归属 + 删除级联 + 审计（无人工审核门） |
 | 存储 | 多后端适配（统一引擎有声明但工厂常为空） | 显式 `StorageEngine` trait + 能力声明（capability flags） |
 | 授权 | 用户/数据集/会话范围 | 原生多 tenant、多 workspace；认证、任务和每条检索分支都贯穿 scope，PG 额外使用 RLS |
@@ -264,7 +264,7 @@ EvidenceBundle {
 
 ## 12. 评测与验收
 
-遵循现有 [效果评估与对比标准](../../ContextDB_效果评估与对比标准.md) 的 300 用例目标，扩充冻结数据集并接入评分工具（300 用例与评分工具尚未完整交付），但治理门槛按本文 A1 自动发布与 [A2.8 存储验收](#storage-acceptance) 定义；旧的“候选隔离/确认有效性”不再作为自动发布产品的验收条件。
+遵循现有 [效果评估与对比标准](../../Origence_效果评估与对比标准.md) 的 300 用例目标，扩充冻结数据集并接入评分工具（300 用例与评分工具尚未完整交付），但治理门槛按本文 A1 自动发布与 [A2.8 存储验收](#storage-acceptance) 定义；旧的“候选隔离/确认有效性”不再作为自动发布产品的验收条件。
 
 上线前必须验证调研 §9 的五条假设，其中与本方案最相关的三条：
 
@@ -288,7 +288,7 @@ EvidenceBundle {
 
 | 决策点 | 结论 | 理由 |
 | --- | --- | --- |
-| 技术栈 | Rust | 复用 openContext 已有 API/Worker/RAG/RLS 基础 |
+| 技术栈 | Rust | 复用 Origence 早期 API/Worker/RAG/RLS 基础 |
 | 治理模型 | 自动发布（Cognee 模式） | 去掉人工审核门；保留溯源/删除/审计 |
 | 存储 | 本地 SQLite/LanceDB/Kuzu + 可扩展接口 | PG/pgvector 仅预留扩展，不阻塞本地交付 |
 | 初始化 | 自动创建新库，无版本化升级 | 不修改已有不兼容结构，启动检查失败时明确报错 |

@@ -1,6 +1,6 @@
 # P0 验收补齐与真实评估基线
 
-日期：2026-10-08；状态更新：2026-10-09。依据：[STATUS](../../STATUS.md)、[目标设计](../specs/2026-09-22-memory-knowledge-platform-design.md) §11/§12/A3/A4，以及 [评估协议](../../ContextDB_效果评估与对比标准.md)。M0–M5/A1 基础及现有 CI 已验收；完整质量与运维验收仍需补齐。本计划区分接口/用例已加入、轻量验证和原生运行通过，不将 P2 时间语义提前放入 P1。
+日期：2026-10-08；状态更新：2026-10-09。依据：[STATUS](../../STATUS.md)、[目标设计](../specs/2026-09-22-memory-knowledge-platform-design.md) §11/§12/A3/A4，以及 [评估协议](../../Origence_效果评估与对比标准.md)。M0–M5/A1 基础及现有 CI 已验收；完整质量与运维验收仍需补齐。本计划区分接口/用例已加入、轻量验证和原生运行通过，不将 P2 时间语义提前放入 P1。
 
 当前验收代码 `8d8d224`（PR #11），基于已合入的 PR #10。[CI run 37871058933](https://github.com/TheLudlows/openContext/actions/runs/37871058933) 已 7/7 通过，覆盖轻量、三平台原生生命周期测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器及 Rust 1.88 默认后端 check；全部日志和两平台工件已核验，精确结果见 [VALIDATION](../../VALIDATION.md)。本轮 CI 与文档收口完成，候选过滤、真实质量评估和 P1 功能仍是后续工作。
 

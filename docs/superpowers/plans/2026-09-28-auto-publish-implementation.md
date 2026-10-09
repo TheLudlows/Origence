@@ -555,7 +555,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     let reader = s.auth(&reader_key.token).await.unwrap();
     // Job state can expose unpublished input, so it stays behind write permission.
     assert!(s.job(&reader, id(&proposal, "job_id")).await.is_err());
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&writer, id(&proposal, "asset_id"), None).await.unwrap()["version"],
         1
@@ -578,7 +578,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
         .unwrap();
     assert!(update["job_id"].is_string());
     assert_eq!(update["conflict"], true);
-    assert!(opencontext::worker::process_next(&s).await.unwrap());
+    assert!(origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
