@@ -208,8 +208,30 @@ impl SqliteTx {
         generation: i64,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
-        sqlx::query_scalar(&format!("SELECT c.id {VISIBLE} AND (? IS NULL OR c.asset_id=?) AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"))
-        .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset_filter).bind(asset_filter).bind(profile).bind(dimension as i64).bind(generation).bind(generation).fetch_all(&mut *self.tx).await.map_err(sqlite_err)
+        let asset_clause = if asset_filter.is_some() {
+            " AND c.asset_id=?"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT c.id {VISIBLE}{asset_clause} AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"
+        );
+        let query = sqlx::query_scalar(&sql)
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id);
+        let query = if let Some(asset) = asset_filter {
+            query.bind(asset)
+        } else {
+            query
+        };
+        query
+            .bind(profile)
+            .bind(dimension as i64)
+            .bind(generation)
+            .bind(generation)
+            .fetch_all(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)
     }
     pub async fn vector_hit(
         &mut self,
@@ -242,14 +264,21 @@ impl SqliteTx {
         } else {
             HIT
         };
-        let rows = sqlx::query(&format!("{select} {VISIBLE} AND (? IS NULL OR c.asset_id=?)"))
+        let asset_clause = if asset_filter.is_some() {
+            " AND c.asset_id=?"
+        } else {
+            ""
+        };
+        let sql = format!("{select} {VISIBLE}{asset_clause}");
+        let query = sqlx::query(&sql)
             .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(asset_filter)
-            .bind(asset_filter)
-            .fetch_all(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
+            .bind(self.scope.workspace_id);
+        let query = if let Some(asset) = asset_filter {
+            query.bind(asset)
+        } else {
+            query
+        };
+        let rows = query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
         if words.is_empty() {
             return Ok(Vec::new());
