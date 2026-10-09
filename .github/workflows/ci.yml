@@ -120,7 +120,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.1
+          toolchain: 1.98.0
+      # Validate the actual 1.98.0 MSRV, not merely the pinned 1.98.1 patch release.
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
