@@ -94,7 +94,7 @@ def main():
                     try:
                         request("/health/ready", authenticated=False)
                         break
-                    except (urllib.error.URLError, TimeoutError):
+                    except (urllib.error.URLError, TimeoutError, ConnectionError):
                         if time.monotonic() >= deadline:
                             raise RuntimeError("readiness timed out") from None
                         time.sleep(0.5)

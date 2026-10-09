@@ -182,6 +182,7 @@ impl Service {
         key: &str,
         input: IdentifiedMemoryInput,
     ) -> Result<Value> {
+        input.validate_version()?;
         parsing::validate_text(&input.content)?;
         input
             .identity
@@ -200,6 +201,7 @@ impl Service {
             return Ok(value);
         }
         let (asset, version) = tx.identity_slot(&input.identity).await?;
+        input.check_version(version)?;
         let source = tx.create_event("identified", &input.content, None).await?;
         let job = Self::enqueue(
             &mut tx,
@@ -228,6 +230,7 @@ impl Service {
         key: &str,
         input: IdentifiedMemoryInput,
     ) -> Result<Value> {
+        input.validate_version()?;
         parsing::validate_text(&input.content)?;
         input
             .identity
@@ -251,6 +254,7 @@ impl Service {
             ));
         }
         let (asset, version) = tx.identity_slot(&input.identity).await?;
+        input.check_version(version)?;
         let source = tx
             .create_event("identified_capture", &input.content, None)
             .await?;
