@@ -1,6 +1,6 @@
 # 记忆 + 知识库平台（Cognee 同类）详细设计
 
-> 实现对照（2026-10-09，main `73fc51a`）：M5 默认宿主为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现，I2 自动语义匹配、I3 会话与完整 I4 上下文策略仍未交付。P0 完整验收尚未收口，P1/P2 仍是目标设计；能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
+> 实现对照（2026-10-09，验收代码 `8d8d224`）：M5 默认宿主为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现；现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器和 MSRV check。无模型合成关键词 Recall@5 为 63.6%，真实模型质量未验证；I2 自动语义匹配、I3 会话与完整 I4 上下文策略及 P1/P2 仍属目标设计。能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
 
 初稿日期：2026-09-22；整合修订：2026-09-23
 定位：团队 Agent 的记忆与知识库平台，先交付本地存储版本，保留后续服务化能力，Rust 实现，对标 Cognee（调研基线 v1.6.0，固定 commit `663a2dc15d04bc0d7ec2733a2dd604b7ed1b8c8e`）。

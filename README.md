@@ -4,7 +4,7 @@ Rust 实现的团队 Agent 记忆与知识服务。M5 将默认运行栈固定�
 
 数据按 tenant/workspace 隔离；writer 的结构化记忆与 capture 抽取结果直接进入发布任务，提交时重新核验身份、权限、来源与预期版本；检索只返回当前已发布、资产未删除且来源仍有效的证据。会话记忆、企业 SaaS 仍属于后续阶段。
 
-2026-10-09 核验：PR #10 已合入 main `73fc51a`，显式身份、单身份 capture、lookup、身份标注/过滤与调用方版本前置条件已落地；轻量 CI 的 27 项 lib、58 项无原生集成和 Python 5 项通过。当前代码的原生/平台/release/container 验收尚未全部完成，真实模型效果尚未验证；最新能力与证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
+2026-10-09 核验：验收代码 `8d8d224`（PR #11）修复了 MCP 生命周期测试的变量遮蔽；显式身份、单身份 capture、lookup、身份标注/过滤与调用方版本前置条件已落地。现有 CI 的 7 个作业全部通过，覆盖轻量测试、三平台原生测试、Linux/macOS release 与 HTTP smoke、容器及 Rust 1.88 默认后端 check。两平台无模型合成关键词基线 Recall@5 均为 63.6%，真实模型效果尚未验证；最新能力与证据分别见 [STATUS](docs/STATUS.md) 和 [VALIDATION](docs/VALIDATION.md)。
 
 ## 快速启动
 

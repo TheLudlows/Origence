@@ -1,12 +1,12 @@
 # 本地存储与可扩展接口实施计划
 
-修订：2026-10-09。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。M0–M5 的本地接口与宿主基础已交付；应用层完整厂商解耦仍欠账，当前代码的原生/平台验收见 [VALIDATION](../../VALIDATION.md) 最新快照，不能将历史勾项解释为任意后端可替换或全部平台已通过。
+修订：2026-10-09。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。M0–M5 的本地接口与宿主基础已交付；验收代码 `8d8d224` 的现有 CI 已 7/7 通过，三平台原生、Linux/macOS release、容器与 MSRV check 证据见 [VALIDATION](../../VALIDATION.md)。应用层完整厂商解耦仍欠账，历史接口勾项不代表任意后端可替换。
 
 ## 目标与范围
 
 交付 SQLite（关系与队列）+ LanceDB（向量）+ Kuzu（图）+ 本地文件的闭环；各存储面通过领域接口访问，保留未来扩展 PostgreSQL/pgvector 的能力。本地交付不依赖 PG 服务、不提供 PG 配置开关、不实现历史库升级或数据搬运。
 
-M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本地交付记录](2026-09-28-local-host-delivery.md)。Windows 基线推进完成，跨平台/release 等未验证项仍保留；自动发布作为独立产品阶段已于 2026-09-29 完成。旧 PG 基线从活动树裁剪，提交 `72fb5aa` 保留历史参考，不要求先开发 PG 适配器。
+M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本地交付记录](2026-09-28-local-host-delivery.md)。Windows/Linux/macOS 的主应用原生测试与 Linux/macOS release/HTTP smoke 已通过；历史独立探针与质量/运维的未验证项仍单列。自动发布作为独立产品阶段已于 2026-09-29 完成。旧 PG 基线从活动树裁剪，提交 `72fb5aa` 保留历史参考，不要求先开发 PG 适配器。
 
 现有自动发布、图谱计划与本计划共享里程碑，不各自建立数据库连接或另一套存储接口。本地基础与独立自动发布阶段均已完成；P1/P2 不阻塞本地存储交付。
 
@@ -29,7 +29,7 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - [x] 真实临时目录验证 scope、同 ID 跨 scope、读写进程竞争及强退。SQLite/LanceDB 可双进程访问；Kuzu 写宿主排斥第二个进程打开（包括只读）。这是存储访问探针，尚非完整 API/Worker 集成测试。
 - [x] 验证 Kuzu 单宿主命令访问、共享实例多线程连接、事务前后快照及强退回滚；整体设计第 3 节和 A2.4 已改为本地同进程 API/Worker。
 - [x] 记录候选依赖、构建修正、命令、14 项实际检查与限制；`cxx-build` 固定为 1.0.138，Kuzu 保留默认特性，LanceDB 关闭默认云端特性。
-- [ ] 扩展至 Linux/macOS/release 的构建与运行验证；对应平台通过前不能宣称支持该平台，Windows 基线可继续 M1。
+- [ ] 将独立 `tools/storage-probe` 的 14 项探针扩至 Linux/macOS/release；本轮验证的是主应用，不将 M5 的三平台结果记为该独立程序已运行。
 
 完成标准：三种后端均有可复现的读写结果与进程访问方案；未解决项不能以“预期支持”标为通过。
 
@@ -101,7 +101,7 @@ M0–M5 已接入本地默认运行栈，当前代码与验收映射见 [M5 本�
 - [x] PG 基线代码的归档/裁剪在接入时明确记录，不为保留旧代码增加本地依赖，不新增可选 PG 交付承诺。
 - [x] CLI、HTTP、MCP 和 CI 使用本地后端跑初始化、权限、生命周期、恢复、删除、预算测试；普通测试可用临时目录直接运行。
 - [x] Windows 历史 M5/A1 基线完成 fmt、clippy 与本地集成测试并记录限制；证据只适用于当时 commit/平台。
-- [ ] 当前 main 默认后端完整 Windows/Linux/macOS、release/container 验收收口。轻量 27 项 lib/58 项无原生集成不替代当前原生用例；以 VALIDATION 当前 job 结果判断。
+- [x] 验收代码 `8d8d224` 的 Windows/Linux/macOS 默认后端完整测试、Linux/macOS release/HTTP smoke 和容器验收收口（run 37871058933）；各平台 29 项 lib、77 项原生集成均通过，证据见 VALIDATION。
 
 完成标准：干净环境从首次启动到检索和重启恢复可复现；未运行的检查明确标为未验证。
 

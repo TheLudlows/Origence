@@ -1,6 +1,6 @@
 # 记忆身份与上下文策略：P1 前置设计
 
-日期：2026-10-08；状态更新：2026-10-09，main `73fc51a`。已实现身份 v1 编码、SQLite 绑定、显式写入与单身份 capture、来源读取、绑定状态、精确 lookup、search/resolve 身份标注与过滤，以及调用方 expected_version。当前 27 项 lib 与 58 项无原生集成通过；原生 HTTP/Worker、render/预算和平台完整结果仍待验收，见 [VALIDATION](../../VALIDATION.md)。自动推断、属性目录、未归一化状态、语义冲突、I3 会话及完整 I4 类型策略尚未实现。本文补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
+日期：2026-10-08；状态更新：2026-10-09，验收代码 `8d8d224`。已实现身份 v1 编码、SQLite 绑定、显式写入与单身份 capture、来源读取、绑定状态、精确 lookup、search/resolve 身份标注与过滤，以及调用方 expected_version。现有 CI 已 7/7 通过：27 项 lib、58 项无原生集成，三平台原生 HTTP/Worker、render/预算测试，以及 Linux/macOS release/HTTP smoke、关键词宿主评估、容器及 MSRV check；证据见 [VALIDATION](../../VALIDATION.md)。自动推断、属性目录、未归一化状态、语义冲突、I3 会话及完整 I4 类型策略尚未实现。本文补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
 
 ## 当前缺口与范围
 

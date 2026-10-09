@@ -1,6 +1,6 @@
 # 实现状态与后续工作
 
-更新：2026-10-09。当前代码基线为 main `73fc51a2671bc3d7895794b1981a5fdc48f7ce9b`（PR #10 已合入）。M5 本地宿主与 A1 自动发布已实现；P0 完整交付验收尚未收口，P1 主闭环及 P2 尚未交付。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。
+更新：2026-10-09。当前验收代码为 `8d8d2247c355330be9903fb7e9e3f1d2107e058b`（[PR #11](https://github.com/TheLudlows/openContext/pull/11)，基于已合入的 PR #10）。M5 本地宿主与 A1 自动发布已实现，现有 CI 已 7/7 通过；完整质量与运维验收尚未完成，P1 主闭环及 P2 尚未交付。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。
 
 ## 当前能力与验收快照
 
@@ -8,15 +8,15 @@
 
 | 范围 | 当前实现 | 已核验证据与剩余边界 |
 | --- | --- | --- |
-| M5 / A1 | SQLite/LanceDB/Kuzu/本地 Blob，单宿主与单 Worker，直接发布 | Windows 历史完整验收通过；当前代码原生/平台/release/container 验收仍在运行 |
-| I1 记忆身份 | v1 编码、唯一绑定、显式写入、离线安装、精确 lookup、调用方版本前置条件 | 当前 main fmt、27 项 lib、58 项无原生集成通过；原生 HTTP/Worker 用例待完成 |
-| I2 抽取匹配 | 调用方完整身份的单身份 capture、原文区间、来源读取与绑定状态 | 无原生解析/SQLite 用例通过；自动推断、属性目录、未归一化状态和语义冲突未实现 |
-| I4 上下文 | 类型/身份标注、完整身份过滤、引用与 UTF-8 字节预算 | 默认请求/身份匹配测试通过；原生 render/HTTP 待完成，冲突/类型预算未实现 |
-| 检索质量 | keyword/vector/hybrid、摘要与一跳图扩展；12 文档/24 查询合成种子 | Python adapter 5 项通过；当前宿主评估作业待完成，无真实模型质量/成本及组件消融结果 |
+| M5 / A1 | SQLite/LanceDB/Kuzu/本地 Blob，单宿主与单 Worker，直接发布 | 三平台 fmt/clippy 与全量原生测试、Linux/macOS release/HTTP smoke、容器构建/HTTP smoke 及 Rust 1.88 默认后端 check 通过 |
+| I1 记忆身份 | v1 编码、唯一绑定、显式写入、离线安装、精确 lookup、调用方版本前置条件 | fmt、27 项 lib、58 项无原生集成通过；三平台原生 HTTP/Worker 用例通过 |
+| I2 抽取匹配 | 调用方完整身份的单身份 capture、原文区间、来源读取与绑定状态 | 无原生解析/SQLite 和三平台原生 HTTP 用例通过；自动推断、属性目录、未归一化状态和语义冲突未实现 |
+| I4 上下文 | 类型/身份标注、完整身份过滤、引用与 UTF-8 字节预算 | 默认请求/身份匹配及三平台原生 render/HTTP 通过；冲突/类型预算未实现 |
+| 检索质量 | keyword/vector/hybrid、摘要与一跳图扩展；12 文档/24 查询合成种子 | Python adapter 5 项通过；Linux/macOS 无模型 keyword Recall@5 均为 63.6%，相同 8 个可答问句漏召回，工件已核验；无真实模型质量/成本及组件消融结果 |
 | P1 会话到经验 | 目标设计已明确 | session/feedback/guidance/learning/improve 主闭环未实现 |
 | P2 增强与服务化 | 目标设计已明确 | 时间有效期、GraphCompletion、企业身份、配额和生产后端未实现 |
 
-当前 CI：[main run 37868289334](https://github.com/TheLudlows/openContext/actions/runs/37868289334)。macOS fmt/clippy 与 29 项原生 lib 通过，集成 76 通过、1 失败；已定位为综合测试中 `published` 变量遮蔽导致 MCP get 的 asset_id 为 null，本次分支已修复但新 CI 未验收。其余原生作业仍在运行。完整 job/commit 证据与核验时间统一记录在 VALIDATION；当前 main 全量 CI 未通过，不能将轻量测试通过等同于全部平台支持。
+验收 CI：[PR run 37871058933](https://github.com/TheLudlows/openContext/actions/runs/37871058933)，2026-10-09 12:03（UTC+8）完成，7/7 作业 success。三平台各 29 项原生 lib、77 项集成均通过，Windows 接口检查、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器、Rust 1.88 默认后端 check 和轻量作业通过；已读取全部日志并核验两平台评估工件。此前 main `73fc51a` 的三个平台均因测试中 `published` 变量遮蔽使 MCP get 的 asset_id 为 null 而失败，PR #11 已修复。最终文档补记只修改 Markdown；这些运行证据归属于 `8d8d224`，不把后续文档提交的 CI 直接标为通过。完整 job/commit 证据见 VALIDATION；CI 通过与召回质量分开验收。
 
 ## 已交付
 
@@ -33,22 +33,21 @@
 
 ## 当前推进批次（2026-10-09）
 
-执行与验收清单见 [P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md)。本轮收口 PR #10 合入后的 CI 证据、历史失败及修复记录，并统一状态、目标设计与计划。原生、MSRV 默认后端与容器尚未完成时保留未勾项，不把配置加入或 PR 合入当作验收通过。
+执行与验收清单见 [P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md)。本轮已修复 PR #10 合入后的 MCP 测试失败，收口现有 CI 的完整证据并统一状态、目标设计与计划。Rust 1.88 完整运行测试、依赖审计和质量/运维验收仍保留未勾项。
 
-P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估沿用 300 用例目标。本轮新增隔离 HTTP 检索评估器、12 文档/24 查询的合成种子和指标/adapter 测试；真实宿主结果仍待 CI，不能把样本或 fixture 通过当作完整质量结果。
+P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估沿用 300 用例目标。12 文档/24 查询的无模型关键词宿主基线已在 Linux/macOS 运行并核验，两平台结果一致：22 个可答用例中 14 个完整命中、8 个返回空，2 个不可答无误召回。不能把样本、fixture 或执行成功当作完整质量结果。
 
 [记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 的 I1、受限 I2 与 I4 标注/过滤切片已落入代码，验收范围以上表为准。原文区间与 explicit_identity 只表示可追溯性和绑定方式，不证明语义正确。完整身份过滤在最终响应 limit 前执行，但检索分支已截断候选，仍可能漏召回；图实体仍按名称生成 ID，记忆身份不能替代图谱同名消歧。Service 仍依赖 LocalEngine/SqliteTx，存储接口基础已交付，应用层完整后端解耦尚未完成。
 
 ## 接下来
 
-1. 完成当前 main 原生/平台/release/container CI 与 Rust 1.88 默认后端检查，读取失败日志后修复；同步 VALIDATION/本计划状态。Rust 1.88 完整运行测试和依赖审计仍单列。
-2. 将身份限定下推到检索候选生成，补超过 100 个干扰候选的反例；保留当前 scope/来源/版本边界，不以查找成功代替语义质量验证。
-3. 冻结人工证据标注、数据 hash 与配置，先取得可复现的 keyword/vector/hybrid 基线，再用独立控制验证摘要/图收益；逐步扩至 300 用例，记录误合并、延迟及成本。
-4. 补 I2 必要语义契约：属性单值/多值、更新/补充与歧义状态；推进 P1 最小闭环“会话与实际证据归档 → 幂等反馈 → 显式 improve → 有来源的经验重新入库”。不要求第一版一次实现全部 improve 阶段。
-5. 按质量/规模结果选择 ANN、重排、profile 重建、tokenizer 和分页；运维治理继续保留 retention、物理擦除、孤儿文件和备份恢复演练，不能宣称已完成。
-6. P2 企业身份、文档 ACL、配额、公平调度、审计查询、指标及生产后端按后续设计推进；不扩展本地多 Worker。
+1. 将身份限定下推到检索候选生成，补超过 100 个干扰候选的反例；保留当前 scope/来源/版本边界，不以查找成功代替语义质量验证。
+2. 保留已核验的关键词失败用例，评估全词匹配下的问句与多来源漏召回；冻结人工证据标注、数据 hash 与配置，取得 keyword/vector/hybrid 对照基线，再用独立控制验证摘要/图收益。逐步扩至 300 用例，记录误合并、延迟及成本。
+3. 补 I2 必要语义契约：属性单值/多值、更新/补充与歧义状态；推进 P1 最小闭环“会话与实际证据归档 → 幂等反馈 → 显式 improve → 有来源的经验重新入库”。不要求第一版一次实现全部 improve 阶段。
+4. 按质量/规模结果选择 ANN、重排、profile 重建、tokenizer 和分页；Rust 1.88 完整运行测试、依赖审计，以及 retention、物理擦除、孤儿文件和备份恢复演练仍需单列验收。
+5. P2 企业身份、文档 ACL、配额、公平调度、审计查询、指标及生产后端按后续设计推进；不扩展本地多 Worker。
 
-当前仍是本地原型交付，不承诺生产 SLO、完整 V3.1 场景或竞品效果排名。依赖安全审计（`cargo audit` 核验 RustSec 告警；fs2 疑似归档/不再维护，单 Worker OS 文件锁依赖它，需评估 fs4 替换）、PDF OS 资源沙箱、断电恢复和长期压测尚未完成。
+当前仍是本地原型交付，不承诺生产 SLO、完整 V3.1 场景或竞品效果排名。依赖安全审计（`cargo audit` 核验 RustSec 告警；核验单 Worker OS 文件锁依赖 fs2 的维护状态，评估 fs4 的锁生命周期和平台兼容）、PDF OS 资源沙箱、断电恢复和长期压测尚未完成。
 
 ## 历史切片记录
 

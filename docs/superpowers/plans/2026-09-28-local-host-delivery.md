@@ -2,7 +2,7 @@
 
 日期：2026-09-28。设计来源：[存储主计划](2026-09-22-pluggable-storage-engine.md)、[整体设计 A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)。当前事实见 [STATUS](../../STATUS.md)，实测结果见 [VALIDATION](../../VALIDATION.md)。
 
-2026-10-09 核验补记：PR #10 已合入 main `73fc51a`，最新轻量 CI 已通过 fmt、27 项 lib、58 项无原生集成和 Python 5 项；原生/平台/release/container 作业尚未全部完成。下方测试映射说明代码覆盖位置，不代表所有新增用例已在当前 commit 的原生构建中通过。Service 仍依赖 LocalEngine/SqliteTx；M5 固定装配成立，应用层完全后端解耦尚未交付。
+2026-10-09 核验补记：验收代码 `8d8d224`（PR #11）的现有 CI 已 7/7 通过；轻量验证为 27 项 lib、58 项无原生集成和 Python 5 项，三平台各 29 项 lib、77 项原生集成通过。Windows 接口检查、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器镜像/HTTP smoke 及 Rust 1.88 默认后端 check 通过；日志和两平台评估工件已核验，精确 job/commit 证据见 VALIDATION。Service 仍依赖 LocalEngine/SqliteTx；M5 固定装配成立，应用层完全后端解耦尚未交付。
 
 ## 实现
 
