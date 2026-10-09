@@ -2,7 +2,7 @@
 
 更新：2026-10-09。当前验收代码为 `8d8d2247c355330be9903fb7e9e3f1d2107e058b`（[PR #11](https://github.com/TheLudlows/openContext/pull/11)，基于已合入的 PR #10）。M5 本地宿主与 A1 自动发布已实现，现有 CI 已 7/7 通过；完整质量与运维验收尚未完成，P1 主闭环及 P2 尚未交付。实际检查及平台范围见 [VALIDATION](VALIDATION.md)，使用入口见 [文档索引](README.md)。
 
-最低 Rust 版本现调整为 **1.98**，开发/CI/Docker 统一使用 **1.98.1**。PR/分支验证 Debug 与原生测试，Release/容器镜像验证保留在 `main`；以下 1.88/1.96 验收仅为历史证据，升级后需重新验证。
+最低 Rust 版本现调整为 **1.98**：Linux 原生 CI 以 **1.98.0** 执行完整测试并核验 MSRV，开发/Windows/macOS/Docker 使用 **1.98.1**。CI 只在 `main` push 和目标为 `main` 的 PR 触发；PR 仅运行 `fast-check` 与 `linux-native`，`main` 追加 Windows、macOS、Docker 与 Release 验证。原有 memory-identity、Python evaluation、MSRV 检查分别并入快速检查和 Linux 原生 Job。以下 1.88/1.96 验收仅为历史证据，升级后需重新验证。
 
 ## 当前能力与验收快照
 
