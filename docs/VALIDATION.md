@@ -1,6 +1,6 @@
 # 验证记录
 
-> 2026-10-09 CI 与工具链策略变更：MSRV 1.98，开发/CI/Docker 使用 Rust 1.98.1。PR/分支运行 Debug smoke 与原生测试，主分支运行 Release 和容器构建。以下 1.88/1.96 测试结果保留为历史实测，新版本须独立重新验证。
+> 2026-10-09 CI 与工具链策略变更（[PR #12](https://github.com/TheLudlows/openContext/pull/12)）：MSRV 1.98，Linux 原生 CI 使用 Rust 1.98.0，开发/Windows/macOS/Docker 固定 1.98.1。仅 `main` push 和目标 `main` 的 PR 触发；PR 为 2 个 Job（fast-check：无原生特性测试/格式/Python；linux-native：MSRV 身份测试、原生 Clippy/测试、Debug smoke 与评估），main 额外执行 Windows、macOS、Linux/macOS Release 和 Docker 构建/Smoke。以下 1.88/1.96 测试结果保留为历史实测，新版本须独立重新验证。
 
 ## 2026-10-09：PR #11 修复分支验收
 
