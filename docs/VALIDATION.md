@@ -1,19 +1,71 @@
 # Origence 验证记录
 
+## 2026-10-10 · PDF 解析替换与编码约束
+
+基线 main `4d389f317897d1cc8b47197b225fcf0946811cdf`；实现提交
+`4f8af95599b470cd8be91c77393245583821d21d`。其文件树 `4e44d18ab64e48159f5182ed1cfdc164e6be7c3c`
+与本地最终提交 `ba6e10a8e8e807af1261ba420a14588b5e5ab367` 完全一致。用 `pdf_oxide =0.3.78`
+替换 `lopdf`/`pdf-extract`，关闭默认功能，删除隐藏 `parse-pdf` CLI、
+`current_exe()` 重启和 JSON 进程通信。入口通过 `spawn_blocking` 调用库，
+单次打开、逐页分块；文件大小在实际读取时限制。保留来源页码、UTF-8
+页内区间和整份失败策略，拒绝操作数截断/提前 EOF 的部分提取结果。
+
+本地 Linux 验证环境使用 `CARGO_PROFILE_DEV_DEBUG=0`、
+`CARGO_PROFILE_TEST_DEBUG=0`、`CARGO_INCREMENTAL=0`。无默认后端使用仓库
+声明的 Rust 1.98.0；默认后端复用 Rust 1.98.1 构建缓存，两种工具链的结果
+分别记录，不把后者冒充 1.98.0 原生/MSRV 验收。默认后端构建使用现有
+vendored Protobuf 的 `PROTOC`/`PROTOC_INCLUDE`，没有修改项目构建要求。
+
+| 检查 | 本地实测结果 |
+| --- | --- |
+| Rust 1.98.0 · `cargo fmt --all -- --check`、`git diff --check` | 通过 |
+| Rust 1.98.0 · `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings` | 通过 |
+| Rust 1.98.0 · `cargo test --locked --no-default-features --lib -j 2` | 27 passed，0 failed/ignored |
+| Rust 1.98.0 · `cargo test --locked --no-default-features --test local -j 2` | 81 passed，0 failed/ignored；包含全部 9 项新增解析回归 |
+| Rust 1.98.1 · `cargo clippy --locked --all-targets -j 2 -- -D warnings` | 通过 |
+| Rust 1.98.1 · `cargo test --locked -j 1 --no-fail-fast` | lib 28、local 98 passed，0 failed/ignored；bin/doc 各 0；涵盖真实 vector/hybrid 与完整宿主恢复套件 |
+| Rust 1.98.1 · 最终日志配置后的宿主定向复测 | 1 passed、97 filtered，0 failed/ignored；PDF 原始库诊断不再输出 |
+| Rust 1.98.1 · `cargo build --locked -j 1` 与 HTTP Smoke | 构建通过；Smoke PASS |
+| Python · `python3 -m unittest discover -s evals -p 'test_*.py' -v` | 5 passed |
+
+完整套件在初始实现提交 `a34389b914ba56a252ca8ea06f979c1882ff5829`
+（tree `c0174460bfdae28e67285225337885696990e228`）执行。最终提交仅追加
+宿主关闭原始 pdf_oxide 日志的配置及对应运维说明；解析器、依赖和测试
+未变。对此重新执行最终默认 Clippy、格式检查和 HTTP/CLI/MCP/PDF/恢复
+宿主定向回归，不能把先前完整套件当成最终日志配置的全套重跑。
+
+新增的 9 项库/API 回归覆盖：多页与分块区间、中文 ToUnicode 映射及 UTF-8
+边界、损坏/截断输入、后页没有可用文本时整份失败、200/201 页边界与空
+文档、超过 10 MiB、文档级全文大小、操作数上限后返回的部分文本，以及
+文件 IO/格式/UTF-8 错误分类。无默认后端的测试可由普通测试可执行文件
+直接调用解析库，不依赖应用 CLI。HTTP 宿主套件另外增加两页上传、原始
+Blob 不变、检索页号/parser 标记检查，以及无效 PDF 作业失败且不发布资产。
+
+依赖核对：Cargo 生成锁文件后，旧 `lopdf`/`pdf-extract` 与其专属依赖消失；
+原有仍保留包的版本/checksum 未改变；新增 58、删除 16 个包版本（包含新
+解析器带来的图像/字体/Office IR 等传递依赖，不声称依赖总数减少）。
+源码、测试、构建配置中不再含旧 PDF 实现或 PDF 子进程协议；存储锁测试
+保留其独立的跨进程测试用途。CI/Docker/Windows 配置没有 PDF 专用安装步骤，
+无需添加外部解析器、OCR 模型或 Python 运行时。
+
+首次解析器构建选择 `office_oxide 0.1.13`，其 `DocumentIR` 新增字段与
+pdf_oxide 0.3.78 不兼容；使用 Cargo 将锁文件保持在上游声明的 0.1.9 后
+编译通过。默认后端首次 `-j 2` 构建在第三方 DataFusion 归档遇到零长度
+对象文件，随后改为 `-j 1` 重试并通过；不修改第三方源码或跳过回归。
+
+[AGENTS.md](../AGENTS.md) 新增入口/库职责、进程引入条件、阻塞任务、资源
+限制、取消语义、证据和替换验证要求。旧子进程的 30 秒硬终止能力明确
+移除，线程解析不具备硬时间/内存或崩溃隔离保证，见
+[OPERATIONS](OPERATIONS.md#pdf-解析)。本节是本地证据；新 PR/main CI、
+Windows、macOS 和 Docker 尚未核验，不复用旧图替换或 S0 运行结果。
+
 ## 2026-10-10 · S1 真实模型工程实验与独立消融
-
 应用代码 `77d43a859d9c83c93d3a88d4fb0c7928a10d4f16`，tree `6420a9d8e001d469c890266092731d1531130e11`。真实 CPU BGE-small-zh-v1.5 + Qwen2.5-0.5B-Instruct 在新临时 workspace 发布 36 篇来源，一次投影供六配置共用；300 题含开发 200 / 来源独立留出 100，k=5、B=2000 UTF-8 字节。keyword/vector/hybrid-all Recall@5 分别 0.35%/97.57%/94.79%，1800 次 search、1728 次 resolve 错误均为 0。向量/混合的 12 个无答案问题全部误召回；不把请求成功解释为正确拒答。逐题证据与实际渲染引用、预算、版本、组件关闭及两组分数已独立复算一致。
-
 全部结果、局限、配对消融、失败问句、模型与二进制 hash、离线生成成本、命令和原始响应压缩包见 [S1 报告](../evals/s1/results/local-77d43a8-v2/README.md)。保留原 100 题既有人工标签，新增 200 题为助手编写/原文核对，未独立人工复核；不是完整平台 300 用例或生产代表样本。费用为本地 provider 0 USD、CPU 未定价。生成约束保证格式/端点一致，不证明小模型图事实正确。
-
 [源码 PR CI run 38034197676](https://github.com/TheLudlows/Origence/actions/runs/38034197676) attempt 1：Linux/MSRV `114161140456` 与 fast-check `114161140493` 成功，main-only Windows/macOS/container skipped。实际 checkout `442d962de012e1a301726ae627dc932714a281e8` 的 tree 与上述源代码一致。默认 lib29/local89、no-default lib28/local72、Python9、format、Clippy、build/HTTP smoke 均通过；两个真实 LanceDB 身份过滤回归通过。精确计数/名称见 [静态 CI 证据](evidence/2026-10-10-s1-pr24-ci.json)。本地 Linux/Rust1.98.1 同样完成默认/轻量全套、fmt、双 Clippy、HTTP smoke 与 Python9。S0 固定向量测试只验证行为，S1 分数来自真实 BGE；后续证据归档提交没有重跑模型，其 CI 按实际状态另行核验。
-
 ## 2026-10-10 · SQLite 图替换主干验收完成
-
 PR #23 已合入 main `9c292a99aec658ba924d5b82c1a86f229ad4d115`，tree `4335d460bc96aa8360a9556c47f9ec65016a2c8b`。[main run 38032343493](https://github.com/TheLudlows/Origence/actions/runs/38032343493) attempt 1 的五个作业全部 completed/success。三平台原始日志 checkout 均为该完整 SHA；默认 lib 各 28、local 各 89，0 failed/ignored/filtered，实际 local 测试名称集合一致；均包含全部 13 个 SQLite 图契约及两个真实 LanceDB 身份过滤 HTTP 回归。Linux 以 1.98.0 验证 MSRV，Windows/macOS 为 1.98.1。Clippy、Linux Debug/macOS Release build 和 HTTP smoke、Docker Release 镜像与 smoke 全通过；Windows 执行既有 Validate 与 no-default check。fast-check 为 no-default lib 27/local 72、Python 5。精确 job、checkout、计数和原始日志摘录见 [主干静态证据](evidence/2026-10-10-sqlite-graph-main.json)。
-
 Linux/macOS 的 24 题 keyword 种子 Recall/MRR/nDCG@5 均为 63.6%，错误与无答案误召回均为 0。该主干验收只证明图替换和既有行为，不替代 S1 真实模型质量实验。以下 PR 阶段记录保留其当时的 skipped 状态。
-
 ## 2026-10-10 · SQLite 图替换（PR #23）
 
 基线 main `2b66baaf30c9f4c2dbf3313c99ed5e2a4df41834`。实现提交 `d3222e5ae1e50b955436aace50b53f2a0d981c24`，tree `3e42545bcae14900bebb290bb76d08f87a5692b9`。按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 删除 Kuzu/CXX/CMake 图依赖，接入 SQLite 图；本轮不复用旧 S0 主干 run 作为替换证据。
@@ -240,4 +292,4 @@ Linux release 冷构建用时 87m44s，macOS 为 72m53s；两者 HTTP smoke 随�
 
 ## 持续未验证项
 
-真实付费模型语义质量/费用；`cargo audit` 与 RustSec 告警（含 fs2/fs4 锁生命周期评估）；断电恢复与在线备份；长期并发/多租户公平性；多 Worker 扩容；向量 generation 在线切换；OS 沙箱隔离；压力/容量/竞品评测；P1 会话主闭环与 P2 增强。当前 Rust 最低版本为 1.98；旧 Rust 1.88 完整运行测试的未验收历史记录不等于当前仍支持 1.88。完整后续清单见 [STATUS](STATUS.md)。
+真实付费模型语义质量/费用；`cargo audit` 与 RustSec 告警（含 fs2/fs4 锁生命周期评估）；断电恢复与在线备份；长期并发/多租户公平性；多 Worker 扩容；向量 generation 在线切换；OS 沙箱隔离；压力/容量/竞品评测；P1 会话主闭环与 P2 增强。当前 Rust 最低版本为 1.98.0；旧 Rust 1.88 完整运行测试的未验收历史记录不等于当前仍支持 1.88。完整后续清单见 [STATUS](STATUS.md)。
