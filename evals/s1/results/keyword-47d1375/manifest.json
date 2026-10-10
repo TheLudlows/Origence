@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "commit": "47d1375",
+  "platform": "Windows-11-10.0.22631-SP0",
+  "mode": "keyword",
+  "k": 5,
+  "model_calls_enabled": false,
+  "corpus_sha256": "c47ec11e8f75f7c1b09df30d2ba5902b5b6ce1e729c5709680d997a982e27368",
+  "cases_sha256": "d74289bdd0df9071b00536f0d5c9f27ced669445aa2e364e208b6d70c4092462",
+  "embedding_model": null,
+  "extraction_model": null,
+  "embedding_dimension": null,
+  "model_cost": "no model calls",
+  "scope": "fresh workspace in temporary data directory",
+  "limitations": [
+    "synthetic seed corpus; not the planned 300-case dataset",
+    "document-level evidence only; no claim-level citation scoring",
+    "no Agent generation, capture, lifecycle or component ablation",
+    "single sequential run; no load-test or statistical confidence claim"
+  ]
+}

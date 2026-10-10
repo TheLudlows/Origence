@@ -1,0 +1,24 @@
+{
+  "dataset_id": "origence-s1-retrieval-v1",
+  "created_from_commit": "47d1375",
+  "corpus_documents": 12,
+  "cases": 100,
+  "answerable": 96,
+  "unanswerable": 4,
+  "category_counts": {
+    "exact": 40,
+    "paraphrase": 34,
+    "scope": 5,
+    "negation": 8,
+    "multi-fact": 6,
+    "identifier": 2,
+    "multi-source": 1,
+    "no-answer": 4
+  },
+  "annotation_unit": "source-document version 1 with whole-document locator and verbatim evidence quote",
+  "annotation_scope": "synthetic development set; human-authored labels; not representative or held out",
+  "sha256": {
+    "corpus.jsonl": "c47ec11e8f75f7c1b09df30d2ba5902b5b6ce1e729c5709680d997a982e27368",
+    "cases.jsonl": "d74289bdd0df9071b00536f0d5c9f27ced669445aa2e364e208b6d70c4092462"
+  }
+}

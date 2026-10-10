@@ -1,0 +1,17 @@
+{
+  "cases": 24,
+  "answerable": 22,
+  "unanswerable": 2,
+  "errors": 0,
+  "document_recall_at_k": 0.6363636363636364,
+  "mrr_at_k": 0.6363636363636364,
+  "ndcg_at_k": 0.6363636363636364,
+  "no_answer_false_positives": 0,
+  "no_answer_errors": 0,
+  "successful_request_latency_ms": {
+    "p50": 16.10900000014226,
+    "p95": 32.08059999997204,
+    "p99": 32.327799999620765
+  },
+  "import_ms": 3363.473399999748
+}

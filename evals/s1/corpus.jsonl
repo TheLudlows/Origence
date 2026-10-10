@@ -1,0 +1,12 @@
+{"id":"release-policy","title":"生产发布规则","content":"生产发布必须经过审批。审批由发布负责人执行；测试环境发布不需要生产审批。","source_version":1,"locator":"source-document"}
+{"id":"rollback","title":"回滚手册","content":"发布失败时执行回滚：先停止新版本流量，再恢复旧版本，并通知值班人员。","source_version":1,"locator":"source-document"}
+{"id":"backup","title":"备份规范","content":"数据库每天凌晨两点执行全量备份。备份保留七天，恢复演练每月一次。","source_version":1,"locator":"source-document"}
+{"id":"incident","title":"故障响应","content":"P1故障必须在十五分钟内响应。值班人员先确认影响范围，再通知故障负责人。","source_version":1,"locator":"source-document"}
+{"id":"atlas-owner","title":"Atlas项目","content":"Atlas项目负责人是林青，数据库使用PostgreSQL。生产变更需由林青审批。","source_version":1,"locator":"source-document"}
+{"id":"boreal-owner","title":"Boreal项目","content":"Boreal项目负责人是周明，数据库使用Cassandra。生产变更需由周明审批。","source_version":1,"locator":"source-document"}
+{"id":"atlas-test","title":"Atlas测试规则","content":"Atlas测试环境可以直接部署。该规则只适用于测试环境，不适用于生产环境。","source_version":1,"locator":"source-document"}
+{"id":"audit","title":"审计规范","content":"审计日志保留九十天。访问审计日志需要安全管理员授权。","source_version":1,"locator":"source-document"}
+{"id":"quota","title":"容量规则","content":"存储容量达到百分之八十时告警。达到百分之九十时暂停批量导入。","source_version":1,"locator":"source-document"}
+{"id":"cache","title":"缓存规则","content":"缓存数据保留三十分钟。缓存故障时回源数据库；缓存不作为权威存储。","source_version":1,"locator":"source-document"}
+{"id":"runbook","title":"精确标识","content":"Runbook INC2026XYZ requires on-call approval. Its owner is Morgan.","source_version":1,"locator":"source-document"}
+{"id":"negative","title":"废弃提议","content":"取消生产发布审批只是被否决的提议。当前仍执行生产发布必须审批的规则。","source_version":1,"locator":"source-document"}

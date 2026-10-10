@@ -1,5 +1,13 @@
 # Origence 验证记录
 
+## 2026-10-10：S1 已启动（冻结首版开发数据集）
+
+已新增 `evals/s1/` v1：12 篇合成 source/version 1 文档、100 道人工编写问题（96 道可答、4 道无答案），每道可答题带来源 ID、版本、文档 locator 与原文引句。数据完整性核对确认所有 ID 唯一、来源均存在、金标与 evidence 引句一致且引句逐条出现在来源正文中；SHA-256 记录在 `evals/s1/manifest.json`。本集合仅为开发集，不代表生产样本，也不是调参后的独立留出集。
+
+首轮 keyword@5 已用 Windows 本机构建的 `target/debug/origence.exe` 完成，配置 commit=`47d1375`，结果包保存在 `evals/s1/results/keyword-47d1375/`。100 题中 96 道可答、4 道无答案、0 请求错误；document Recall@5、MRR@5、nDCG@5 均为 `0.0104167`（1/96），仅精确标识 `INC2026XYZ` 命中；无答案误召回为 0。成功请求延迟 p50/p95/p99 为 15.81/32.62/33.66 ms，导入 12 篇文档共 3.10 s。这是小型合成开发集上的本机单轮文档级结果，不能外推生产延迟或整体质量。
+
+为区分运行器故障，同一宿主、同一 commit 另跑原有 24 题种子，得到 22 道可答、2 道无答案、0 错误，Recall/MRR/nDCG 均为 `0.636364`，与历史核验值一致。两套问题分布不同，不能将分数差解释为版本回退。当前 100 题包含大量自然问句及同义问法，极低 keyword 命中表明应在后续 vector/hybrid 对照中检查语义检索收益；不能通过看到结果后删除难题来抬分。vector/hybrid 需要明确 embedding 服务，不能用 S0 固定向量模型充当语义质量结果。
+
 ## 2026-10-09：S0 验收完成（Issue #21，主干原生证据归档）
 
 **S0 正确性验收完成。** 本节重新读取 GitHub 的 commit、PR、run/attempt/job 元数据及五个作业的原始日志，不沿用聊天短 SHA 或历史计数。验收代码是已合入 main 的 `42db5c21a8ef4788d07209be7110d85e01d7a85f`；[main run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081)，event=`push`，branch=`main`，**attempt 1，completed/success，5/5 作业 success**。最后一个作业于 2026-10-09 11:46:23 UTC（19:46:23 UTC+8）完成。

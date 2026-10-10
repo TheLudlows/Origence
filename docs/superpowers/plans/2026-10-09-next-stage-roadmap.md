@@ -44,6 +44,7 @@
 
 ### S1：建立检索有效性的实测证据（P0 质量收口）
 
+- [x] **已启动（2026-10-10）**：冻结 `evals/s1/` v1 开发集，100 道人工编写问题、12 篇合成来源；96 道可答、4 道无答案。每条金标绑定 source/version/locator 和可核对原文引句，manifest 固定 SHA-256。该开发集不是生产代表样本或留出测试集。主机 `47d1375` 的 keyword@5 已实测：Recall/MRR/nDCG 均 1.04%，无请求错误；不得与旧 24 题子集直接比较，vector/hybrid 对照待配置 embedding。
 - [ ] 固定 24 题基线及 8 条失败问句；冻结原始 source/version/locator、标注、数据 hash 和配置。
 - [ ] 先补不少于 100 条人工证据标注题，再按原设计扩展到 300 条；治理安全与质量分开统计。
 - [ ] 在同语料/同预算/同 embedding 条件下测 keyword、vector、hybrid；分别报告文档/证据 Recall@k、Coverage@B、nDCG、无答案误召回、p50/p95/p99、模型调用费用。

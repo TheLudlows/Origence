@@ -1,0 +1,290 @@
+[
+  {
+    "source_id": "release-policy",
+    "asset_id": "550acb94-84ba-4944-a7e0-2b092a135832",
+    "job_id": "fac51b0a-2a1f-492f-9bb9-90b9f01b213f",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "fac51b0a-2a1f-492f-9bb9-90b9f01b213f",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "550acb94-84ba-4944-a7e0-2b092a135832",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608188259
+    },
+    "elapsed_ms": 1372.6587999999538
+  },
+  {
+    "source_id": "rollback",
+    "asset_id": "28e9571f-1ce8-4226-84f9-ccedac3e8d33",
+    "job_id": "0e8e6a29-83cd-4022-8606-92c0dc7ed6a7",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "0e8e6a29-83cd-4022-8606-92c0dc7ed6a7",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "28e9571f-1ce8-4226-84f9-ccedac3e8d33",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608188521
+    },
+    "elapsed_ms": 171.58259999996517
+  },
+  {
+    "source_id": "backup",
+    "asset_id": "8b3d6e3f-68a7-4989-a284-a1c46e3bfe93",
+    "job_id": "b6d95a24-b24a-4d54-97c4-4a9b63925c58",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "b6d95a24-b24a-4d54-97c4-4a9b63925c58",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "8b3d6e3f-68a7-4989-a284-a1c46e3bfe93",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608188659
+    },
+    "elapsed_ms": 159.17010000021037
+  },
+  {
+    "source_id": "incident",
+    "asset_id": "97a72027-1ba1-45c0-ab33-afc655e24d45",
+    "job_id": "82911756-978c-4ccb-8a1b-81cee7468d30",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "82911756-978c-4ccb-8a1b-81cee7468d30",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "97a72027-1ba1-45c0-ab33-afc655e24d45",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608188803
+    },
+    "elapsed_ms": 159.90240000019185
+  },
+  {
+    "source_id": "atlas-owner",
+    "asset_id": "917aeeb5-e908-4ed7-87e8-bca1f9d1d508",
+    "job_id": "b7e48efe-896e-43cd-a124-3e1738fea1be",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "b7e48efe-896e-43cd-a124-3e1738fea1be",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "917aeeb5-e908-4ed7-87e8-bca1f9d1d508",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608188939
+    },
+    "elapsed_ms": 158.57210000012856
+  },
+  {
+    "source_id": "boreal-owner",
+    "asset_id": "f374a8c7-4cb6-4351-9849-249ab4c61176",
+    "job_id": "18c6683b-fed3-46df-ad9d-f0a9d6978c50",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "18c6683b-fed3-46df-ad9d-f0a9d6978c50",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "f374a8c7-4cb6-4351-9849-249ab4c61176",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608189061
+    },
+    "elapsed_ms": 154.40669999998136
+  },
+  {
+    "source_id": "atlas-test",
+    "asset_id": "54686e4b-eadc-4fed-b03e-8971890dd4cc",
+    "job_id": "842e4a1c-f4db-431d-957a-22ab359d530a",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "842e4a1c-f4db-431d-957a-22ab359d530a",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "54686e4b-eadc-4fed-b03e-8971890dd4cc",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608189310
+    },
+    "elapsed_ms": 156.56089999993128
+  },
+  {
+    "source_id": "audit",
+    "asset_id": "83462f64-a91c-4f75-8c33-feb9debefada",
+    "job_id": "c1e1aeae-b0f4-4808-8379-9f7f479968b8",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "c1e1aeae-b0f4-4808-8379-9f7f479968b8",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "83462f64-a91c-4f75-8c33-feb9debefada",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608189447
+    },
+    "elapsed_ms": 157.90179999976317
+  },
+  {
+    "source_id": "quota",
+    "asset_id": "0f7d2c1b-ffc9-4406-a488-946cd1f15620",
+    "job_id": "91c552fe-f4ef-47e0-b98b-8acd1f78f8b2",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "91c552fe-f4ef-47e0-b98b-8acd1f78f8b2",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "0f7d2c1b-ffc9-4406-a488-946cd1f15620",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608189587
+    },
+    "elapsed_ms": 156.82059999971898
+  },
+  {
+    "source_id": "cache",
+    "asset_id": "f5e0b18b-68ac-4dc2-a533-6b532b5e06ce",
+    "job_id": "395288f3-5b01-43c2-b888-dfbed326e092",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "395288f3-5b01-43c2-b888-dfbed326e092",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "f5e0b18b-68ac-4dc2-a533-6b532b5e06ce",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608189708
+    },
+    "elapsed_ms": 157.87860000000364
+  },
+  {
+    "source_id": "runbook",
+    "asset_id": "5d0badf9-e3c1-4216-b6be-84835895b43f",
+    "job_id": "6c55c0f5-a3b0-4472-b040-addeb348baf7",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "6c55c0f5-a3b0-4472-b040-addeb348baf7",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "5d0badf9-e3c1-4216-b6be-84835895b43f",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608189835
+    },
+    "elapsed_ms": 158.7944000002608
+  },
+  {
+    "source_id": "negative",
+    "asset_id": "5e11065b-a992-470e-90b5-cd7e631d8930",
+    "job_id": "d0ca4e70-c731-4e10-95ee-5e66430eca47",
+    "job": {
+      "cancel_requested": false,
+      "error_code": null,
+      "generation": 1,
+      "id": "d0ca4e70-c731-4e10-95ee-5e66430eca47",
+      "operation": "ingest",
+      "outcome": "published",
+      "result": {
+        "asset_id": "5e11065b-a992-470e-90b5-cd7e631d8930",
+        "index_capabilities": [
+          "keyword"
+        ],
+        "readiness": "ready",
+        "version": 1
+      },
+      "state": "completed",
+      "updated_at": 1791608190065
+    },
+    "elapsed_ms": 137.7175000002353
+  }
+]
