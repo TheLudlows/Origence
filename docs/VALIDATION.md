@@ -226,4 +226,4 @@ Linux release 冷构建用时 87m44s，macOS 为 72m53s；两者 HTTP smoke 随�
 
 ## 持续未验证项
 
-真实付费模型语义质量/费用；`cargo audit` 与 RustSec 告警（含 fs2/fs4 锁生命周期评估）；断电恢复与在线备份；长期并发/多租户公平性；多 Worker 扩容；向量 generation 在线切换；OS 沙箱隔离；压力/容量/竞品评测；P1 会话主闭环与 P2 增强。当前 Rust 最低版本为 1.98；旧 Rust 1.88 完整运行测试的未验收历史记录不等于当前仍支持 1.88。完整后续清单见 [STATUS](STATUS.md)。
+真实付费模型语义质量/费用；`cargo audit` 与 RustSec 告警（含 fs2/fs4 锁生命周期评估）；断电恢复与在线备份；长期并发/多租户公平性；多 Worker 扩容；向量 generation 在线切换；OS 沙箱隔离；压力/容量/竞品评测；P1 会话主闭环与 P2 增强。当前 Rust 最低版本为 1.98.0；旧 Rust 1.88 完整运行测试的未验收历史记录不等于当前仍支持 1.88。完整后续清单见 [STATUS](STATUS.md)。

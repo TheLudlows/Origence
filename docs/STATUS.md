@@ -6,7 +6,7 @@
 
 图后端于 2026-10-10 按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 切换为 `SqliteGraphStore`，已删除 Kuzu crate、适配器、旧测试、探针和 `local-graph` feature；CI/Docker/Windows 脚本不再配置 CMake/Ninja。上方 S0 run 属于替换前代码，不能作为本轮替换验收；本轮 [PR #23](https://github.com/TheLudlows/Origence/pull/23) 的 [run 38030946507](https://github.com/TheLudlows/Origence/actions/runs/38030946507) 已完成：fast-check 与 Linux/MSRV 成功，默认 lib 28/local 89、13 项图回归、Clippy/HTTP smoke 全通过；Windows/macOS/Docker 待 main 验收。精确证据见 VALIDATION 最新记录。旧图文件需按 OPERATIONS 在新目录重新发布来源，不自动迁移。
 
-最低 Rust 版本为 **1.98**：Linux 原生 CI 以 **1.98.0** 执行完整测试并核验 MSRV，开发/Windows/macOS/Docker 使用 **1.98.1**。PR 执行 `fast-check` 与 `linux-native`；main 追加 Windows、macOS 和 Docker。Linux Native 统一 Debug，macOS 保留 Release，Docker 保留 Release 镜像/Smoke。以下旧平台测试数字属于历史证据，不代替最新代码验收。
+最低 Rust 版本为 **1.98.0**：所有平台（Linux 原生 CI、开发、Windows/macOS/Docker）统一使用 **1.98.0**，并核验 MSRV。PR 执行 `fast-check` 与 `linux-native`；main 追加 Windows、macOS 和 Docker。Linux Native 统一 Debug，macOS 保留 Release，Docker 保留 Release 镜像/Smoke。以下旧平台测试数字属于历史证据，不代替最新代码验收。
 
 ## 当前能力与验收快照
 
