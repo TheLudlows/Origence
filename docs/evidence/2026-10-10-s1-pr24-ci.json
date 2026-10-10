@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "source_commit": "77d43a859d9c83c93d3a88d4fb0c7928a10d4f16",
+  "source_tree": "6420a9d8e001d469c890266092731d1531130e11",
+  "run_id": 38034197676,
+  "run_attempt": 1,
+  "checkout": "442d962de012e1a301726ae627dc932714a281e8",
+  "checkout_tree": "6420a9d8e001d469c890266092731d1531130e11",
+  "jobs": [
+    {
+      "id": 114161140456,
+      "name": "linux-native",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114161140493,
+      "name": "fast-check",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114161140844,
+      "name": "container",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 114161141008,
+      "name": "macos",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 114161141042,
+      "name": "windows",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "logs": {
+    "114161140456": [
+      "2026-10-10T07:22:27.3865718Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +442d962de012e1a301726ae627dc932714a281e8:refs/remotes/pull/24/merge",
+      "2026-10-10T07:22:27.9395067Z  * [new ref]         442d962de012e1a301726ae627dc932714a281e8 -> pull/24/merge",
+      "2026-10-10T07:22:27.9697678Z 442d962de012e1a301726ae627dc932714a281e8",
+      "2026-10-10T07:23:18.3345628Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s",
+      "2026-10-10T07:23:41.3721388Z test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.88s",
+      "2026-10-10T07:23:41.3746789Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "2026-10-10T07:23:47.7768556Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok",
+      "2026-10-10T07:23:47.9589852Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok",
+      "2026-10-10T07:24:03.1511757Z test local_app::local_host_api_cli_mcp_models_and_recovery ... ok",
+      "2026-10-10T07:24:03.1512831Z test result: ok. 89 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.77s",
+      "2026-10-10T07:24:03.4277112Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "2026-10-10T07:24:06.0739099Z ##[group]Run python3 evals/run.py --binary target/debug/origence --commit \"442d962de012e1a301726ae627dc932714a281e8\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"",
+      "2026-10-10T07:24:06.0741272Z \u001b[36;1mpython3 evals/run.py --binary target/debug/origence --commit \"442d962de012e1a301726ae627dc932714a281e8\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"\u001b[0m",
+      "2026-10-10T07:24:08.7052971Z {\"configuration\": \"keyword\", \"cases\": 24, \"answerable\": 22, \"unanswerable\": 2, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 0.6363636363636364, \"mrr_at_k\": 0.6363636363636364, \"ndcg_at_k\": 0.6363636363636364, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.503669999986414, \"p95\": 4.717733999996199, \"p99\": 5.43779400004496}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 2223.9757990000726, \"model_usage\": null, \"by_category\": {\"entity\": {\"cases\": 4, \"answerable\": 4, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 1.0, \"mrr_at_k\": 1.0, \"ndcg_at_k\": 1.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.6399759999312664, \"p95\": 3.7340569999742, \"p99\": 3.7340569999742}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"exact\": {\"cases\": 8, \"answerable\": 8, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 1.0, \"mrr_at_k\": 1.0, \"ndcg_at_k\": 1.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.7431160000096497, \"p95\": 5.43779400004496, \"p99\": 5.43779400004496}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"identifier\": {\"cases\": 1, \"answerable\": 1, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 1.0, \"mrr_at_k\": 1.0, \"ndcg_at_k\": 1.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.6780499999622407, \"p95\": 3.6780499999622407, \"p99\": 3.6780499999622407}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"multi-source\": {\"cases\": 1, \"answerable\": 1, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 0.0, \"mrr_at_k\": 0.0, \"ndcg_at_k\": 0.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.0214590000241515, \"p95\": 3.0214590000241515, \"p99\": 3.0214590000241515}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"negation\": {\"cases\": 2, \"answerable\": 2, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 0.0, \"mrr_at_k\": 0.0, \"ndcg_at_k\": 0.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 2.940761999980168, \"p95\": 3.163960000051702, \"p99\": 3.163960000051702}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"no-answer\": {\"cases\": 2, \"answerable\": 0, \"unanswerable\": 2, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": null, \"mrr_at_k\": null, \"ndcg_at_k\": null, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.0126949999385033, \"p95\": 3.069076999963727, \"p99\": 3.069076999963727}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"paraphrase\": {\"cases\": 5, \"answerable\": 5, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 0.0, \"mrr_at_k\": 0.0, \"ndcg_at_k\": 0.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.1640969999671142, \"p95\": 3.250764999961575, \"p99\": 3.250764999961575}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}, \"scope\": {\"cases\": 1, \"answerable\": 1, \"unanswerable\": 0, \"errors\": 0, \"resolve_errors\": 0, \"document_recall_at_k\": 1.0, \"mrr_at_k\": 1.0, \"ndcg_at_k\": 1.0, \"evidence_recall_at_k\": null, \"coverage_at_budget\": null, \"fully_covered_at_budget\": null, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.5202749999143634, \"p95\": 3.5202749999143634, \"p99\": 3.5202749999143634}, \"successful_resolve_latency_ms\": {\"p50\": null, \"p95\": null, \"p99\": null}, \"import_ms\": 0}}, \"by_split\": {}}"
+    ],
+    "114161140493": [
+      "2026-10-10T07:22:27.7820774Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +442d962de012e1a301726ae627dc932714a281e8:refs/remotes/pull/24/merge",
+      "2026-10-10T07:22:28.2336272Z  * [new ref]         442d962de012e1a301726ae627dc932714a281e8 -> pull/24/merge",
+      "2026-10-10T07:22:28.2780067Z 442d962de012e1a301726ae627dc932714a281e8",
+      "2026-10-10T07:22:53.2684533Z test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s",
+      "2026-10-10T07:22:58.3495895Z test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s",
+      "2026-10-10T07:22:58.9518529Z Ran 9 tests in 0.493s"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source_commit": "77d43a859d9c83c93d3a88d4fb0c7928a10d4f16",
+  "platform": "Linux / Rust 1.98.1",
+  "results": {
+    "cargo fmt --check": "pass",
+    "cargo test --locked --lib --bins --test local": "lib 29/local 89/bin 0; all passed",
+    "cargo test --locked --no-default-features --lib --bins --test local": "lib 28/local 72/bin 0; all passed",
+    "cargo clippy --locked --all-targets -- -D warnings": "pass",
+    "cargo clippy --locked --no-default-features --all-targets -- -D warnings": "pass",
+    "HTTP smoke": "pass",
+    "Python unittest discovery": "9 passed"
+  },
+  "limits": "native default/no-default execution, no local Docker or new S1 cross-platform run; source PR CI archived separately"
+}

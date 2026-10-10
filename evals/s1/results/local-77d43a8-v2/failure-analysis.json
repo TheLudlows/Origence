@@ -1,0 +1,5780 @@
+{
+  "keyword": [
+    {
+      "id": "s1-001",
+      "split": "development",
+      "category": "exact",
+      "query": "生产发布需要什么审批",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-002",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "上线前谁来批准",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-003",
+      "split": "development",
+      "category": "scope",
+      "query": "测试环境部署也要走生产审批吗",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-004",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "生产变更可以直接发吗",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-005",
+      "split": "development",
+      "category": "exact",
+      "query": "发布负责人负责哪类审批",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-006",
+      "split": "development",
+      "category": "scope",
+      "query": "生产审批规则对测试发布有什么例外",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-007",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "正式环境发布前要先做什么",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-008",
+      "split": "development",
+      "category": "negation",
+      "query": "所有环境发布都必须生产负责人批准吗",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-009",
+      "split": "development",
+      "category": "exact",
+      "query": "发布失败后的回滚步骤是什么",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-010",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "新版本出问题怎么退回去",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-011",
+      "split": "development",
+      "category": "exact",
+      "query": "回滚前要先停什么",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-012",
+      "split": "development",
+      "category": "exact",
+      "query": "停止流量后执行什么操作",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-013",
+      "split": "development",
+      "category": "exact",
+      "query": "回滚完成后通知谁",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-014",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "发布故障时流量和版本怎么处理",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-015",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "失败发布的善后流程",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-016",
+      "split": "development",
+      "category": "exact",
+      "query": "旧版本恢复后还需要做什么",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-017",
+      "split": "development",
+      "category": "exact",
+      "query": "数据库备份频率和时间",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-018",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "全量备份几点跑",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-019",
+      "split": "development",
+      "category": "exact",
+      "query": "备份保留多长时间",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-020",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "多久做一次恢复演练",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-021",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "备份什么时候做、留多久",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-022",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "数据库备份的保留周期和演练周期",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-023",
+      "split": "development",
+      "category": "exact",
+      "query": "每月的恢复演练要求",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-024",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "夜间数据库全备安排在什么时候",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-025",
+      "split": "development",
+      "category": "exact",
+      "query": "P1故障响应时限是多少",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-026",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "一级事故要在多长时间内有人响应",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-027",
+      "split": "development",
+      "category": "exact",
+      "query": "值班人员处理故障的第一步",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-028",
+      "split": "development",
+      "category": "exact",
+      "query": "确认影响范围之后通知谁",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-029",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "发生P1时值班同学应该先做什么再做什么",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-030",
+      "split": "development",
+      "category": "exact",
+      "query": "故障负责人何时收到通知",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-031",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "P1响应要求和排查顺序",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-032",
+      "split": "development",
+      "category": "exact",
+      "query": "值班人员要确认哪方面的范围",
+      "relevant_source_ids": [
+        "incident"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-033",
+      "split": "development",
+      "category": "exact",
+      "query": "Atlas项目负责人是谁",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-034",
+      "split": "development",
+      "category": "exact",
+      "query": "Atlas使用哪种数据库",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-035",
+      "split": "development",
+      "category": "exact",
+      "query": "谁审批Atlas生产变更",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-036",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "林青负责哪个项目的生产变更审批",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-037",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Atlas的技术负责人和存储选型",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-038",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "PostgreSQL对应哪个项目",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-039",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Atlas谁负责，生产变更由谁批准",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-040",
+      "split": "development",
+      "category": "exact",
+      "query": "Atlas生产变更审批人",
+      "relevant_source_ids": [
+        "atlas-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-041",
+      "split": "development",
+      "category": "exact",
+      "query": "Boreal项目由谁负责",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-042",
+      "split": "development",
+      "category": "exact",
+      "query": "Boreal数据库是什么",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-043",
+      "split": "development",
+      "category": "exact",
+      "query": "Boreal生产变更需要谁审批",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-044",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Cassandra是哪个项目选用的数据库",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-045",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "周明负责什么项目",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-046",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Boreal的负责人和数据库选型",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-047",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Boreal发布变更的授权流程",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-048",
+      "split": "development",
+      "category": "exact",
+      "query": "谁是Boreal生产审批人",
+      "relevant_source_ids": [
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-049",
+      "split": "development",
+      "category": "scope",
+      "query": "Atlas测试环境能否直接部署",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-050",
+      "split": "development",
+      "category": "scope",
+      "query": "直接部署的规则适用于生产吗",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-051",
+      "split": "development",
+      "category": "negation",
+      "query": "Atlas测试规则的适用范围",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-052",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Atlas在测试环境发布需要审批吗",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-053",
+      "split": "development",
+      "category": "negation",
+      "query": "测试环境可直发是否意味着生产也可直发",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-054",
+      "split": "development",
+      "category": "exact",
+      "query": "Atlas测试规则明确排除了哪个环境",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-055",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "不走审批的Atlas部署条件是什么",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-056",
+      "split": "development",
+      "category": "scope",
+      "query": "Atlas直接部署规则是否跨环境通用",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-057",
+      "split": "development",
+      "category": "exact",
+      "query": "审计日志保存多少天",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-058",
+      "split": "development",
+      "category": "exact",
+      "query": "谁有权访问审计日志",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-059",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "审计记录的留存周期",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-060",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "读取安全审计信息需要谁批准",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-061",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "审计日志保留多久以及谁能查看",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-062",
+      "split": "development",
+      "category": "exact",
+      "query": "安全管理员授权适用于什么操作",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-063",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "日志过了多久可以清理",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-064",
+      "split": "development",
+      "category": "exact",
+      "query": "审计日志的查看授权方",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-065",
+      "split": "development",
+      "category": "exact",
+      "query": "存储达到多少容量开始告警",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-066",
+      "split": "development",
+      "category": "exact",
+      "query": "什么时候暂停批量导入",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-067",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "容量告警阈值和导入暂停阈值分别是多少",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-068",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "存储空间八成满会发生什么",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-069",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "达到九成容量后的处理措施",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-070",
+      "split": "development",
+      "category": "exact",
+      "query": "批量导入暂停线是多少",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-071",
+      "split": "development",
+      "category": "exact",
+      "query": "80%容量时的动作",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-072",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "磁盘使用九成时系统限制什么",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-073",
+      "split": "development",
+      "category": "exact",
+      "query": "缓存内容保留多久",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-074",
+      "split": "development",
+      "category": "exact",
+      "query": "缓存发生故障时请求去哪里",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-075",
+      "split": "development",
+      "category": "negation",
+      "query": "缓存能不能作为权威数据存储",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-076",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "缓存的有效时长设置",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-077",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "缓存挂掉以后如何读取数据",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-078",
+      "split": "development",
+      "category": "negation",
+      "query": "缓存故障会不会改变数据权威来源",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-079",
+      "split": "development",
+      "category": "exact",
+      "query": "数据库在缓存故障时扮演什么角色",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-080",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "缓存保留策略和故障时的回源策略",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-081",
+      "split": "development",
+      "category": "identifier",
+      "query": "Runbook INC2026XYZ要求谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-082",
+      "split": "development",
+      "category": "exact",
+      "query": "INC2026XYZ的owner是谁",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-084",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "该事故手册的审批要求",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-085",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责INC2026XYZ手册",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-086",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "INC2026XYZ执行操作前找谁审批",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-087",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "INC2026XYZ由谁负责并需要谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-088",
+      "split": "development",
+      "category": "exact",
+      "query": "值班审批对应哪个Runbook编号",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-089",
+      "split": "development",
+      "category": "negation",
+      "query": "取消生产发布审批是否已经成为现行规则",
+      "relevant_source_ids": [
+        "negative",
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-090",
+      "split": "development",
+      "category": "negation",
+      "query": "生产审批取消提议的状态是什么",
+      "relevant_source_ids": [
+        "negative"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-091",
+      "split": "development",
+      "category": "exact",
+      "query": "当前生产发布制度仍然要求什么",
+      "relevant_source_ids": [
+        "negative",
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-092",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "被否决的生产发布变更提案是什么",
+      "relevant_source_ids": [
+        "negative"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-093",
+      "split": "development",
+      "category": "multi-source",
+      "query": "否决提议后生产发布的审批规则是什么",
+      "relevant_source_ids": [
+        "negative",
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-094",
+      "split": "development",
+      "category": "negation",
+      "query": "取消审批这件事是决定还是提议",
+      "relevant_source_ids": [
+        "negative"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-095",
+      "split": "development",
+      "category": "exact",
+      "query": "负面提议否决后还执行什么制度",
+      "relevant_source_ids": [
+        "negative"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-096",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "生产上线到底要不要过审批",
+      "relevant_source_ids": [
+        "negative",
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-dev-cross-source",
+      "split": "development",
+      "category": "multi-source",
+      "query": "Cedar密钥轮换失败和Grove证书过期时各如何处理？",
+      "relevant_source_ids": [
+        "cedar-key",
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "雪松服务 Cedar 换密钥的周期是什么？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-03",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责Cedar生产环境的密钥更换？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Cedar的新密钥生效后旧凭证还能用多久？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Cedar密钥轮换出错时应该怎么处置？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Cedar生产密钥由谁按什么周期轮换？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Cedar凭证切换失败是否立即废除旧密钥？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-08",
+      "split": "development",
+      "category": "scope",
+      "query": "开发负责人能否轮换Cedar生产密钥？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Delta的全量导出在几点开始？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Delta导出任务什么时候跑？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Delta单个导出文件能放多少条数据？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Delta导出结果由谁下载，需要加密吗？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Delta导出中断后如何继续？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Delta每天导出时间和单文件数量限制是什么？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Delta导出失败需要从头扫描全部分片吗？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-delta-export-08",
+      "split": "development",
+      "category": "scope",
+      "query": "普通开发人员能下载Delta明文导出吗？",
+      "relevant_source_ids": [
+        "delta-export"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Ember错误率告警的阈值和持续时间是多少？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Ember短暂出现高错误率会立即报警吗？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Ember告警无人接收多长时间后升级？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-04",
+      "split": "development",
+      "category": "scope",
+      "query": "谁有权限关闭Ember正式环境告警？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Ember维护期间还记录告警吗？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Ember触发告警后先找谁，何时找二线？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-07",
+      "split": "development",
+      "category": "negation",
+      "query": "维护窗口能否把Ember告警事件全部丢弃？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-ember-alert-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Ember生产告警可以由任意工程师关闭吗？",
+      "relevant_source_ids": [
+        "ember-alert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Fjord的失败消息最多重新处理几次？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Fjord消息失败会无限次重试吗？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Fjord的三次重试分别间隔多久？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Fjord死信保存多久？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Fjord消费者怎样避免重复扣款？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Fjord失败消息的次数上限和退避时间是什么？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Fjord重试耗尽后是否立刻删除消息？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-fjord-queue-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Fjord只依赖队列就能保证扣款不重复吗？",
+      "relevant_source_ids": [
+        "fjord-queue"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Grove的TLS证书能用多久？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Grove证书有效期是半年以内多少天？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Grove应在到期前多久由谁续签？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Grove新证书切换前要验证什么？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Grove证书过期后如何处理外部连接？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Grove证书的有效期和提前续签时间是什么？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Grove续签过程中是否先移除旧证书？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-grove-cert-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Grove证书过期可以关闭TLS校验吗？",
+      "relevant_source_ids": [
+        "grove-cert"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Harbor业务数据何时进入归档？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Harbor记录多旧才转冷存储？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Harbor归档保存多久，谁可以读？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Harbor恢复归档的审批和时限是什么？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Harbor法律保全中的记录能删除吗？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Harbor从业务层到归档层的时间及归档年限是什么？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Harbor过保留期的保全记录会直接擦除吗？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-08",
+      "split": "development",
+      "category": "scope",
+      "query": "普通用户能直接读取Harbor归档记录吗？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Iris项目每月预算多少钱？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Iris一个月可以花多少资金？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Iris花到预算多少比例会通知负责人？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Iris预算耗尽后哪些资源操作被暂停？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Iris增加预算由谁批准？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Iris预算金额和预警比例分别是多少？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Iris预算用完后会关停所有现有实例吗？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-iris-budget-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Iris项目负责人能自行批准追加预算吗？",
+      "relevant_source_ids": [
+        "iris-budget"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Juniper多久做一次跨区域容灾演练？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Juniper容灾测试的频率是什么？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Juniper的恢复时间和数据丢失目标是多少？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Juniper演练维护窗口由谁确认？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Juniper容灾演练失败后多久提交报告？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Juniper容灾演练的频率和恢复目标是什么？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Juniper演练是否可以不确认窗口直接切换？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-juniper-dr-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Juniper容灾演练失败是否只写报告而不再验证？",
+      "relevant_source_ids": [
+        "juniper-dr"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Kite上传附件的大小上限是多少？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Kite能接收多大的文件？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Kite支持哪些附件格式？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Kite文件上传后什么时候允许读取？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Kite扫描不通过的文件多久清理？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Kite附件大小和格式有哪些限制？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Kite病毒扫描失败的附件还能从隔离区读取吗？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-kite-upload-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Kite允许上传可执行程序吗？",
+      "relevant_source_ids": [
+        "kite-upload"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Larch生产维护安排在什么时候？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Larch周日维护几点开始几点结束？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Larch窗口外紧急修复由谁批准？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Larch维护前多久通知用户？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Larch维护超过规定时间怎么办？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Larch维护窗口和用户通知提前量是什么？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Larch维护超时可以继续修改直到完成吗？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-larch-maint-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Larch紧急修复可不经审批直接在白天执行吗？",
+      "relevant_source_ids": [
+        "larch-maint"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Maple每租户的写入速率上限是多少？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Maple租户一秒能写多少次？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Maple突发额度能积累多久和多少次？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Maple限流响应包含什么信息？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Maple读请求是否消耗写额度？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Maple写速率和突发请求数量上限分别是多少？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Maple超额后会把之前接受的请求也丢掉吗？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-maple-throttle-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Maple的读写请求共用一个额度池吗？",
+      "relevant_source_ids": [
+        "maple-throttle"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-01",
+      "split": "development",
+      "category": "exact",
+      "query": "Nova删除前需要核验什么？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-02",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "Nova如何确认用户有权删除资源？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-03",
+      "split": "development",
+      "category": "exact",
+      "query": "Nova删除接受后多久不可读和多久物理擦除？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Nova共享资源何时真正擦除？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-05",
+      "split": "development",
+      "category": "exact",
+      "query": "Nova删除审计保留多久，包含正文吗？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-06",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "Nova删除前置检查和读阻断时机是什么？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Nova一条引用删除后会擦除所有共享数据吗？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-nova-delete-08",
+      "split": "development",
+      "category": "scope",
+      "query": "Nova删除审计是否继续保存原文？",
+      "relevant_source_ids": [
+        "nova-delete"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-test-cross-source",
+      "split": "heldout",
+      "category": "multi-source",
+      "query": "Orion报销缺发票和Xenia退货缺订单编号时各走什么流程？",
+      "relevant_source_ids": [
+        "orion-travel",
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Orion员工出门办公前需要获得谁同意？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Orion住宿和交通报销分别有什么要求？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Orion差旅结束后多久申请报销？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Orion费用缺少发票时怎么处理？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Orion出差批准人和住宿金额上限是什么？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Orion报销可以在没有发票时直接付款吗？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-orion-travel-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Orion差旅报销的时限是十个自然日吗？",
+      "relevant_source_ids": [
+        "orion-travel"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Polaris供应商准入由哪个部门发起？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Polaris引入新供应商谁先负责？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Polaris供应商必须通过哪些审核？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Polaris供应商资格何时复审和多久有效？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Polaris审核失败后可以签合同吗？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Polaris供应商准入发起部门和审核项目是什么？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Polaris资格到期后才需要申请复审吗？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-polaris-vendor-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Polaris只通过资质审核就可以准入吗？",
+      "relevant_source_ids": [
+        "polaris-vendor"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Quartz设备借用由谁登记？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Quartz实验室设备要找谁办理借用？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Quartz设备最多借多久，延期何时申请？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Quartz精密仪器操作前要完成什么？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Quartz设备损坏时怎么做？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Quartz设备借用登记人和最长借期是什么？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Quartz发现仪器损坏后能继续完成实验吗？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-quartz-lab-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Quartz精密设备可以未经培训直接操作吗？",
+      "relevant_source_ids": [
+        "quartz-lab"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Raven当天发货的截单时间是什么？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Raven几点后提交订单不能当天发出？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Raven易碎品如何包装？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Raven出库前谁核对什么信息？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Raven收货地址不完整时怎么处理？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Raven截单时间和易碎货物包装要求是什么？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Raven地址缺失能否凭仓库经验直接发货？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-raven-delivery-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Raven发货前只核对数量不看编号可以吗？",
+      "relevant_source_ids": [
+        "raven-delivery"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Sable访客预约由谁发起？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Sable办公室访客需要谁事先登记？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Sable访客如何领取通行证，有效多久？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Sable访客进入研发区需要什么陪同？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Sable临时证件离开时交给谁？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Sable访客预约和领取证件的条件是什么？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Sable临时通行证可以借给同伴使用吗？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-sable-access-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Sable访客持证后能独自进入研发区域吗？",
+      "relevant_source_ids": [
+        "sable-access"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Tango新员工安全培训多久内完成？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Tango入职后最迟什么时候上安全课？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Tango考试及格分和补考期限是什么？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Tango培训完成由哪个部门记录？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Tango未通过安全考核能否操作生产系统？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Tango安全培训完成期限及通过分数是什么？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Tango只参加培训没通过考试也能开通生产权限吗？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-tango-training-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Tango考核未通过需要在七天内做什么？",
+      "relevant_source_ids": [
+        "tango-training"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Umbra会员到期前多久发送提醒？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Umbra年费套餐什么时候提醒续订？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Umbra自动扣款需要什么授权？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Umbra取消自动续费是否立刻失去套餐？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Umbra续费扣款失败多久重试几次？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Umbra提醒时机和自动续费授权要求是什么？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Umbra扣费失败重试时可以再创建一笔订单吗？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-umbra-renew-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Umbra用户未明确同意也可以默认开启自动续费吗？",
+      "relevant_source_ids": [
+        "umbra-renew"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Vega工单根据什么分配支持组？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Vega客服怎样决定由哪个团队处理？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Vega普通和紧急工单首次回复时限是什么？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Vega补交材料后创建时间会改变吗？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Vega工单在何种条件下可以关闭？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Vega工单分派依据和紧急回复时限是什么？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Vega客户补材料后能重置工单创建时间吗？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-vega-ticket-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Vega客服可以未经客户确认立即关闭工单吗？",
+      "relevant_source_ids": [
+        "vega-ticket"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Willow大额采购合同由谁审批？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Willow合同超过五十万元谁来批准？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Willow五十万元及以下合同谁批准？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Willow所有合同签署前要经过什么审查？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Willow合同何时正式生效？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Willow不同金额合同的批准人分别是谁？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Willow财务总监批准后合同是否立即生效？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-willow-contract-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Willow小额合同可以不做法务审查吗？",
+      "relevant_source_ids": [
+        "willow-contract"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Xenia普通未使用商品的退货期限是多少？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Xenia签收后多久可以申请退货？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Xenia定制商品退货有哪些例外？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Xenia验收入库后退款需要多久？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Xenia退货没有订单号怎么处理？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Xenia普通与定制商品的退货条件有什么不同？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Xenia定制商品存在质量问题也不能售后吗？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-xenia-return-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Xenia收到退货包裹后是否不用检查立即退款？",
+      "relevant_source_ids": [
+        "xenia-return"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Yarrow会议室最多提前多久预订？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Yarrow可以预订两周以后的会议室吗？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Yarrow一次预约多长，延期由谁确认？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Yarrow没有签到多久释放房间？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Yarrow取消会议室预订的时限是什么？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Yarrow提前预约和单次使用的上限分别是多少？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Yarrow一直无人签到也会永久保留会议室吗？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-yarrow-booking-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Yarrow开始前不足一小时紧急取消应该找谁？",
+      "relevant_source_ids": [
+        "yarrow-booking"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-01",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Zenith软件许可证如何计数？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-02",
+      "split": "heldout",
+      "category": "paraphrase",
+      "query": "Zenith按注册总人数还是启用账号统计授权？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-03",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Zenith提前多久由谁申请续购？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-04",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Zenith测试与停用账号是否占用授权？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-05",
+      "split": "heldout",
+      "category": "exact",
+      "query": "Zenith到期未续费账号可以做什么？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-06",
+      "split": "heldout",
+      "category": "multi-fact",
+      "query": "Zenith授权计数方式和续购提前量是什么？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-07",
+      "split": "heldout",
+      "category": "negation",
+      "query": "Zenith测试账号完全不消耗许可证吗？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-zenith-license-08",
+      "split": "heldout",
+      "category": "scope",
+      "query": "Zenith授权到期后仍能新增数据记录吗？",
+      "relevant_source_ids": [
+        "zenith-license"
+      ],
+      "ranked_source_ids": [],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    }
+  ],
+  "vector": [
+    {
+      "id": "s1-002",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "上线前谁来批准",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [
+        "polaris-vendor",
+        "orion-travel",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-081",
+      "split": "development",
+      "category": "identifier",
+      "query": "Runbook INC2026XYZ要求谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "willow-contract",
+        "polaris-vendor",
+        "boreal-owner",
+        "atlas-owner",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-084",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "该事故手册的审批要求",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "negative",
+        "incident",
+        "audit",
+        "willow-contract"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-085",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责INC2026XYZ手册",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "willow-contract",
+        "iris-budget",
+        "raven-delivery"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-086",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "INC2026XYZ执行操作前找谁审批",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "polaris-vendor",
+        "larch-maint"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-087",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "INC2026XYZ由谁负责并需要谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "willow-contract",
+        "polaris-vendor",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-088",
+      "split": "development",
+      "category": "exact",
+      "query": "值班审批对应哪个Runbook编号",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "willow-contract",
+        "atlas-owner",
+        "sable-access"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-097",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Quantum项目负责人是谁",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "iris-budget",
+        "willow-contract",
+        "polaris-vendor"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-098",
+      "split": "development",
+      "category": "no-answer",
+      "query": "数据库备份使用哪种加密算法",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "backup",
+        "delta-export",
+        "zenith-license",
+        "cedar-key",
+        "cache"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-099",
+      "split": "development",
+      "category": "no-answer",
+      "query": "ZXQ故障升级电话是什么",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "larch-maint",
+        "delta-export",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-100",
+      "split": "development",
+      "category": "no-answer",
+      "query": "缓存数据的加密密钥由谁轮换",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "cedar-key",
+        "boreal-owner",
+        "atlas-owner",
+        "cache",
+        "nova-delete"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-1",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Cedar服务部署在哪个城市？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "ember-alert",
+        "sable-access",
+        "juniper-dr",
+        "cedar-key",
+        "atlas-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-2",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Iris的项目负责人姓名是什么？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "iris-budget",
+        "willow-contract",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-3",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Kite允许上传的PDF页数上限是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "kite-upload",
+        "grove-cert",
+        "maple-throttle",
+        "delta-export",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-4",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Juniper演练使用哪种数据库产品？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "backup",
+        "juniper-dr",
+        "boreal-owner",
+        "atlas-owner",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-1",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Orion员工总人数是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "iris-budget",
+        "willow-contract",
+        "tango-training",
+        "vega-ticket",
+        "sable-access"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-2",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Polaris采购部门经理是谁？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "willow-contract",
+        "polaris-vendor",
+        "atlas-owner",
+        "boreal-owner",
+        "raven-delivery"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-3",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Yarrow会议室总共多少间？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "yarrow-booking",
+        "iris-budget",
+        "maple-throttle",
+        "willow-contract",
+        "juniper-dr"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-4",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Zenith软件授权单价是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "zenith-license",
+        "iris-budget",
+        "willow-contract",
+        "umbra-renew",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    }
+  ],
+  "hybrid-original": [
+    {
+      "id": "s1-002",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "上线前谁来批准",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [
+        "polaris-vendor",
+        "orion-travel",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-081",
+      "split": "development",
+      "category": "identifier",
+      "query": "Runbook INC2026XYZ要求谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "willow-contract",
+        "polaris-vendor",
+        "boreal-owner",
+        "atlas-owner",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-084",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "该事故手册的审批要求",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "negative",
+        "incident",
+        "audit",
+        "willow-contract"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-085",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责INC2026XYZ手册",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "willow-contract",
+        "iris-budget",
+        "raven-delivery"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-086",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "INC2026XYZ执行操作前找谁审批",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "polaris-vendor",
+        "larch-maint"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-087",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "INC2026XYZ由谁负责并需要谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "willow-contract",
+        "polaris-vendor",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-088",
+      "split": "development",
+      "category": "exact",
+      "query": "值班审批对应哪个Runbook编号",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "willow-contract",
+        "atlas-owner",
+        "sable-access"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-097",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Quantum项目负责人是谁",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "iris-budget",
+        "willow-contract",
+        "polaris-vendor"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-098",
+      "split": "development",
+      "category": "no-answer",
+      "query": "数据库备份使用哪种加密算法",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "backup",
+        "delta-export",
+        "zenith-license",
+        "cedar-key",
+        "cache"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-099",
+      "split": "development",
+      "category": "no-answer",
+      "query": "ZXQ故障升级电话是什么",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "larch-maint",
+        "delta-export",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-100",
+      "split": "development",
+      "category": "no-answer",
+      "query": "缓存数据的加密密钥由谁轮换",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "cedar-key",
+        "boreal-owner",
+        "atlas-owner",
+        "cache",
+        "nova-delete"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-1",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Cedar服务部署在哪个城市？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "ember-alert",
+        "sable-access",
+        "juniper-dr",
+        "cedar-key",
+        "atlas-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-2",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Iris的项目负责人姓名是什么？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "iris-budget",
+        "willow-contract",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-3",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Kite允许上传的PDF页数上限是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "kite-upload",
+        "grove-cert",
+        "maple-throttle",
+        "delta-export",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-4",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Juniper演练使用哪种数据库产品？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "backup",
+        "juniper-dr",
+        "boreal-owner",
+        "atlas-owner",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-1",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Orion员工总人数是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "iris-budget",
+        "willow-contract",
+        "tango-training",
+        "vega-ticket",
+        "sable-access"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-2",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Polaris采购部门经理是谁？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "willow-contract",
+        "polaris-vendor",
+        "atlas-owner",
+        "boreal-owner",
+        "raven-delivery"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-3",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Yarrow会议室总共多少间？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "yarrow-booking",
+        "iris-budget",
+        "maple-throttle",
+        "willow-contract",
+        "juniper-dr"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-4",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Zenith软件授权单价是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "zenith-license",
+        "iris-budget",
+        "willow-contract",
+        "umbra-renew",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    }
+  ],
+  "hybrid-summary": [
+    {
+      "id": "s1-002",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "上线前谁来批准",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [
+        "polaris-vendor",
+        "orion-travel",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-081",
+      "split": "development",
+      "category": "identifier",
+      "query": "Runbook INC2026XYZ要求谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "willow-contract",
+        "polaris-vendor",
+        "boreal-owner",
+        "atlas-owner",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-084",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "该事故手册的审批要求",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "negative",
+        "incident",
+        "audit",
+        "willow-contract"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-085",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责INC2026XYZ手册",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "willow-contract",
+        "iris-budget",
+        "raven-delivery"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-086",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "INC2026XYZ执行操作前找谁审批",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "polaris-vendor",
+        "larch-maint"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-087",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "INC2026XYZ由谁负责并需要谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "willow-contract",
+        "polaris-vendor",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-088",
+      "split": "development",
+      "category": "exact",
+      "query": "值班审批对应哪个Runbook编号",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "willow-contract",
+        "atlas-owner",
+        "sable-access"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-097",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Quantum项目负责人是谁",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "iris-budget",
+        "willow-contract",
+        "polaris-vendor"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-098",
+      "split": "development",
+      "category": "no-answer",
+      "query": "数据库备份使用哪种加密算法",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "backup",
+        "delta-export",
+        "zenith-license",
+        "cedar-key",
+        "cache"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-099",
+      "split": "development",
+      "category": "no-answer",
+      "query": "ZXQ故障升级电话是什么",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "larch-maint",
+        "delta-export",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-100",
+      "split": "development",
+      "category": "no-answer",
+      "query": "缓存数据的加密密钥由谁轮换",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "cedar-key",
+        "boreal-owner",
+        "atlas-owner",
+        "cache",
+        "nova-delete"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-1",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Cedar服务部署在哪个城市？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "ember-alert",
+        "sable-access",
+        "juniper-dr",
+        "cedar-key",
+        "atlas-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-2",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Iris的项目负责人姓名是什么？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "boreal-owner",
+        "atlas-owner",
+        "iris-budget",
+        "willow-contract",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-3",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Kite允许上传的PDF页数上限是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "kite-upload",
+        "grove-cert",
+        "maple-throttle",
+        "delta-export",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-4",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Juniper演练使用哪种数据库产品？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "backup",
+        "juniper-dr",
+        "boreal-owner",
+        "atlas-owner",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-1",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Orion员工总人数是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "iris-budget",
+        "willow-contract",
+        "tango-training",
+        "vega-ticket",
+        "sable-access"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-2",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Polaris采购部门经理是谁？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "willow-contract",
+        "polaris-vendor",
+        "atlas-owner",
+        "boreal-owner",
+        "raven-delivery"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-3",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Yarrow会议室总共多少间？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "yarrow-booking",
+        "iris-budget",
+        "maple-throttle",
+        "willow-contract",
+        "juniper-dr"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-4",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Zenith软件授权单价是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "zenith-license",
+        "iris-budget",
+        "willow-contract",
+        "umbra-renew",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    }
+  ],
+  "hybrid-graph": [
+    {
+      "id": "s1-002",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "上线前谁来批准",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "polaris-vendor",
+        "orion-travel",
+        "willow-contract",
+        "atlas-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-014",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "发布故障时流量和版本怎么处理",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "release-policy",
+        "juniper-dr",
+        "sable-access",
+        "yarrow-booking"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-053",
+      "split": "development",
+      "category": "negation",
+      "query": "测试环境可直发是否意味着生产也可直发",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "negative",
+        "zenith-license",
+        "raven-delivery",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-072",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "磁盘使用九成时系统限制什么",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [
+        "quartz-lab",
+        "juniper-dr",
+        "sable-access",
+        "yarrow-booking",
+        "delta-export"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-076",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "缓存的有效时长设置",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "yarrow-booking",
+        "sable-access",
+        "polaris-vendor",
+        "juniper-dr"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-079",
+      "split": "development",
+      "category": "exact",
+      "query": "数据库在缓存故障时扮演什么角色",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [
+        "atlas-owner",
+        "juniper-dr",
+        "incident",
+        "sable-access",
+        "yarrow-booking"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-080",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "缓存保留策略和故障时的回源策略",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "juniper-dr",
+        "grove-cert",
+        "sable-access",
+        "yarrow-booking"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-084",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "该事故手册的审批要求",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "negative",
+        "release-policy",
+        "incident",
+        "audit",
+        "willow-contract"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-085",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责INC2026XYZ手册",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "quartz-lab",
+        "incident",
+        "juniper-dr",
+        "release-policy",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-086",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "INC2026XYZ执行操作前找谁审批",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "negative",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "polaris-vendor"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-087",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "INC2026XYZ由谁负责并需要谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "incident",
+        "quartz-lab",
+        "juniper-dr",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-097",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Quantum项目负责人是谁",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "quartz-lab",
+        "juniper-dr",
+        "release-policy",
+        "boreal-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-098",
+      "split": "development",
+      "category": "no-answer",
+      "query": "数据库备份使用哪种加密算法",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "quartz-lab",
+        "atlas-owner",
+        "juniper-dr",
+        "backup",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-099",
+      "split": "development",
+      "category": "no-answer",
+      "query": "ZXQ故障升级电话是什么",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "larch-maint",
+        "delta-export",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-100",
+      "split": "development",
+      "category": "no-answer",
+      "query": "缓存数据的加密密钥由谁轮换",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "atlas-owner",
+        "juniper-dr",
+        "cedar-key",
+        "boreal-owner",
+        "cache"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-dev-cross-source",
+      "split": "development",
+      "category": "multi-source",
+      "query": "Cedar密钥轮换失败和Grove证书过期时各如何处理？",
+      "relevant_source_ids": [
+        "cedar-key",
+        "grove-cert"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "sable-access",
+        "juniper-dr",
+        "yarrow-booking",
+        "cedar-key"
+      ],
+      "recall": 1.0,
+      "coverage": 0.5,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-03",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责Cedar生产环境的密钥更换？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "quartz-lab",
+        "incident",
+        "juniper-dr",
+        "negative"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Cedar的新密钥生效后旧凭证还能用多久？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "zenith-license",
+        "quartz-lab",
+        "polaris-vendor",
+        "iris-budget"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-08",
+      "split": "development",
+      "category": "scope",
+      "query": "开发负责人能否轮换Cedar生产密钥？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "quartz-lab",
+        "incident",
+        "negative",
+        "juniper-dr"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Harbor过保留期的保全记录会直接擦除吗？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "tango-training",
+        "polaris-vendor",
+        "xenia-return",
+        "juniper-dr"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-development-no-answer-1",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Cedar服务部署在哪个城市？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "ember-alert",
+        "sable-access",
+        "juniper-dr",
+        "cedar-key",
+        "atlas-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-2",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Iris的项目负责人姓名是什么？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "quartz-lab",
+        "juniper-dr",
+        "release-policy",
+        "boreal-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-3",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Kite允许上传的PDF页数上限是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "kite-upload",
+        "grove-cert",
+        "maple-throttle",
+        "delta-export",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-4",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Juniper演练使用哪种数据库产品？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "juniper-dr",
+        "atlas-owner",
+        "quartz-lab",
+        "backup",
+        "boreal-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-1",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Orion员工总人数是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "sable-access",
+        "orion-travel",
+        "iris-budget",
+        "willow-contract",
+        "tango-training"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-2",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Polaris采购部门经理是谁？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "polaris-vendor",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "raven-delivery"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-3",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Yarrow会议室总共多少间？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "yarrow-booking",
+        "juniper-dr",
+        "grove-cert",
+        "iris-budget",
+        "maple-throttle"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-4",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Zenith软件授权单价是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "zenith-license",
+        "iris-budget",
+        "willow-contract",
+        "umbra-renew",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    }
+  ],
+  "hybrid-all": [
+    {
+      "id": "s1-002",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "上线前谁来批准",
+      "relevant_source_ids": [
+        "release-policy"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "polaris-vendor",
+        "orion-travel",
+        "willow-contract",
+        "atlas-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-014",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "发布故障时流量和版本怎么处理",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "release-policy",
+        "juniper-dr",
+        "sable-access",
+        "yarrow-booking"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-053",
+      "split": "development",
+      "category": "negation",
+      "query": "测试环境可直发是否意味着生产也可直发",
+      "relevant_source_ids": [
+        "atlas-test"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "negative",
+        "zenith-license",
+        "raven-delivery",
+        "orion-travel"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-072",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "磁盘使用九成时系统限制什么",
+      "relevant_source_ids": [
+        "quota"
+      ],
+      "ranked_source_ids": [
+        "quartz-lab",
+        "juniper-dr",
+        "sable-access",
+        "yarrow-booking",
+        "delta-export"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-076",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "缓存的有效时长设置",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "yarrow-booking",
+        "sable-access",
+        "polaris-vendor",
+        "juniper-dr"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-079",
+      "split": "development",
+      "category": "exact",
+      "query": "数据库在缓存故障时扮演什么角色",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [
+        "atlas-owner",
+        "juniper-dr",
+        "incident",
+        "sable-access",
+        "yarrow-booking"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-080",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "缓存保留策略和故障时的回源策略",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [
+        "incident",
+        "juniper-dr",
+        "grove-cert",
+        "sable-access",
+        "yarrow-booking"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-084",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "该事故手册的审批要求",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "negative",
+        "release-policy",
+        "incident",
+        "audit",
+        "willow-contract"
+      ],
+      "recall": 0.0,
+      "coverage": 1.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-085",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责INC2026XYZ手册",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "quartz-lab",
+        "incident",
+        "juniper-dr",
+        "release-policy",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-086",
+      "split": "development",
+      "category": "paraphrase",
+      "query": "INC2026XYZ执行操作前找谁审批",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "negative",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "polaris-vendor"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-087",
+      "split": "development",
+      "category": "multi-fact",
+      "query": "INC2026XYZ由谁负责并需要谁批准",
+      "relevant_source_ids": [
+        "runbook"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "incident",
+        "quartz-lab",
+        "juniper-dr",
+        "boreal-owner"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "s1-097",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Quantum项目负责人是谁",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "quartz-lab",
+        "juniper-dr",
+        "release-policy",
+        "boreal-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-098",
+      "split": "development",
+      "category": "no-answer",
+      "query": "数据库备份使用哪种加密算法",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "quartz-lab",
+        "atlas-owner",
+        "juniper-dr",
+        "backup",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-099",
+      "split": "development",
+      "category": "no-answer",
+      "query": "ZXQ故障升级电话是什么",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "ember-alert",
+        "larch-maint",
+        "delta-export",
+        "quartz-lab"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "s1-100",
+      "split": "development",
+      "category": "no-answer",
+      "query": "缓存数据的加密密钥由谁轮换",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "atlas-owner",
+        "juniper-dr",
+        "cedar-key",
+        "boreal-owner",
+        "cache"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-dev-cross-source",
+      "split": "development",
+      "category": "multi-source",
+      "query": "Cedar密钥轮换失败和Grove证书过期时各如何处理？",
+      "relevant_source_ids": [
+        "cedar-key",
+        "grove-cert"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "sable-access",
+        "juniper-dr",
+        "yarrow-booking",
+        "cedar-key"
+      ],
+      "recall": 1.0,
+      "coverage": 0.5,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-03",
+      "split": "development",
+      "category": "exact",
+      "query": "谁负责Cedar生产环境的密钥更换？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "quartz-lab",
+        "incident",
+        "juniper-dr",
+        "negative"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-04",
+      "split": "development",
+      "category": "scope",
+      "query": "Cedar的新密钥生效后旧凭证还能用多久？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "zenith-license",
+        "quartz-lab",
+        "polaris-vendor",
+        "iris-budget"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-cedar-key-08",
+      "split": "development",
+      "category": "scope",
+      "query": "开发负责人能否轮换Cedar生产密钥？",
+      "relevant_source_ids": [
+        "cedar-key"
+      ],
+      "ranked_source_ids": [
+        "release-policy",
+        "quartz-lab",
+        "incident",
+        "negative",
+        "juniper-dr"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-harbor-archive-07",
+      "split": "development",
+      "category": "negation",
+      "query": "Harbor过保留期的保全记录会直接擦除吗？",
+      "relevant_source_ids": [
+        "harbor-archive"
+      ],
+      "ranked_source_ids": [
+        "grove-cert",
+        "tango-training",
+        "polaris-vendor",
+        "xenia-return",
+        "juniper-dr"
+      ],
+      "recall": 0.0,
+      "coverage": 0.0,
+      "false_positive": null
+    },
+    {
+      "id": "v2-development-no-answer-1",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Cedar服务部署在哪个城市？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "ember-alert",
+        "sable-access",
+        "juniper-dr",
+        "cedar-key",
+        "atlas-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-2",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Iris的项目负责人姓名是什么？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "incident",
+        "quartz-lab",
+        "juniper-dr",
+        "release-policy",
+        "boreal-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-3",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Kite允许上传的PDF页数上限是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "kite-upload",
+        "grove-cert",
+        "maple-throttle",
+        "delta-export",
+        "zenith-license"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-development-no-answer-4",
+      "split": "development",
+      "category": "no-answer",
+      "query": "Juniper演练使用哪种数据库产品？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "juniper-dr",
+        "atlas-owner",
+        "quartz-lab",
+        "backup",
+        "boreal-owner"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-1",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Orion员工总人数是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "sable-access",
+        "orion-travel",
+        "iris-budget",
+        "willow-contract",
+        "tango-training"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-2",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Polaris采购部门经理是谁？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "polaris-vendor",
+        "willow-contract",
+        "atlas-owner",
+        "boreal-owner",
+        "raven-delivery"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-3",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Yarrow会议室总共多少间？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "yarrow-booking",
+        "juniper-dr",
+        "grove-cert",
+        "iris-budget",
+        "maple-throttle"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    },
+    {
+      "id": "v2-heldout-no-answer-4",
+      "split": "heldout",
+      "category": "no-answer",
+      "query": "Zenith软件授权单价是多少？",
+      "relevant_source_ids": [],
+      "ranked_source_ids": [
+        "zenith-license",
+        "iris-budget",
+        "willow-contract",
+        "umbra-renew",
+        "delta-export"
+      ],
+      "recall": null,
+      "coverage": null,
+      "false_positive": true
+    }
+  ]
+}

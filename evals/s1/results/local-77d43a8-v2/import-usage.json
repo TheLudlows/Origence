@@ -1,0 +1,10 @@
+{
+  "embedding_requests": 36,
+  "embedding_input_tokens": 2376,
+  "chat_requests": 72,
+  "chat_cache_hits": 72,
+  "chat_input_tokens": 0,
+  "chat_output_tokens": 0,
+  "embedding_ms": 1456.5619380009593,
+  "chat_ms": 47.47961600497365
+}

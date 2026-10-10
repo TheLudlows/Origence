@@ -1,5 +1,19 @@
 # Origence 验证记录
 
+## 2026-10-10 · S1 真实模型工程实验与独立消融
+
+应用代码 `77d43a859d9c83c93d3a88d4fb0c7928a10d4f16`，tree `6420a9d8e001d469c890266092731d1531130e11`。真实 CPU BGE-small-zh-v1.5 + Qwen2.5-0.5B-Instruct 在新临时 workspace 发布 36 篇来源，一次投影供六配置共用；300 题含开发 200 / 来源独立留出 100，k=5、B=2000 UTF-8 字节。keyword/vector/hybrid-all Recall@5 分别 0.35%/97.57%/94.79%，1800 次 search、1728 次 resolve 错误均为 0。向量/混合的 12 个无答案问题全部误召回；不把请求成功解释为正确拒答。逐题证据与实际渲染引用、预算、版本、组件关闭及两组分数已独立复算一致。
+
+全部结果、局限、配对消融、失败问句、模型与二进制 hash、离线生成成本、命令和原始响应压缩包见 [S1 报告](../evals/s1/results/local-77d43a8-v2/README.md)。保留原 100 题既有人工标签，新增 200 题为助手编写/原文核对，未独立人工复核；不是完整平台 300 用例或生产代表样本。费用为本地 provider 0 USD、CPU 未定价。生成约束保证格式/端点一致，不证明小模型图事实正确。
+
+[源码 PR CI run 38034197676](https://github.com/TheLudlows/Origence/actions/runs/38034197676) attempt 1：Linux/MSRV `114161140456` 与 fast-check `114161140493` 成功，main-only Windows/macOS/container skipped。实际 checkout `442d962de012e1a301726ae627dc932714a281e8` 的 tree 与上述源代码一致。默认 lib29/local89、no-default lib28/local72、Python9、format、Clippy、build/HTTP smoke 均通过；两个真实 LanceDB 身份过滤回归通过。精确计数/名称见 [静态 CI 证据](evidence/2026-10-10-s1-pr24-ci.json)。本地 Linux/Rust1.98.1 同样完成默认/轻量全套、fmt、双 Clippy、HTTP smoke 与 Python9。S0 固定向量测试只验证行为，S1 分数来自真实 BGE；后续证据归档提交没有重跑模型，其 CI 按实际状态另行核验。
+
+## 2026-10-10 · SQLite 图替换主干验收完成
+
+PR #23 已合入 main `9c292a99aec658ba924d5b82c1a86f229ad4d115`，tree `4335d460bc96aa8360a9556c47f9ec65016a2c8b`。[main run 38032343493](https://github.com/TheLudlows/Origence/actions/runs/38032343493) attempt 1 的五个作业全部 completed/success。三平台原始日志 checkout 均为该完整 SHA；默认 lib 各 28、local 各 89，0 failed/ignored/filtered，实际 local 测试名称集合一致；均包含全部 13 个 SQLite 图契约及两个真实 LanceDB 身份过滤 HTTP 回归。Linux 以 1.98.0 验证 MSRV，Windows/macOS 为 1.98.1。Clippy、Linux Debug/macOS Release build 和 HTTP smoke、Docker Release 镜像与 smoke 全通过；Windows 执行既有 Validate 与 no-default check。fast-check 为 no-default lib 27/local 72、Python 5。精确 job、checkout、计数和原始日志摘录见 [主干静态证据](evidence/2026-10-10-sqlite-graph-main.json)。
+
+Linux/macOS 的 24 题 keyword 种子 Recall/MRR/nDCG@5 均为 63.6%，错误与无答案误召回均为 0。该主干验收只证明图替换和既有行为，不替代 S1 真实模型质量实验。以下 PR 阶段记录保留其当时的 skipped 状态。
+
 ## 2026-10-10 · SQLite 图替换（PR #23）
 
 基线 main `2b66baaf30c9f4c2dbf3313c99ed5e2a4df41834`。实现提交 `d3222e5ae1e50b955436aace50b53f2a0d981c24`，tree `3e42545bcae14900bebb290bb76d08f87a5692b9`。按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 删除 Kuzu/CXX/CMake 图依赖，接入 SQLite 图；本轮不复用旧 S0 主干 run 作为替换证据。

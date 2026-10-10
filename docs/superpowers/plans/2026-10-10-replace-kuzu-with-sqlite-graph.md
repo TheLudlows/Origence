@@ -55,6 +55,6 @@ SQLite 图模块不依赖 local-vector/local-storage，可在 no-default-feature
 - [x] 默认完整套件及 no-default lib/local；重点核验 vector/hybrid、共享来源删除、保存图发布恢复与孤儿清理。
 - [x] build、HTTP smoke、固定 keyword 种子评估；keyword 得分不代替真实 hybrid 质量。
 - [x] `probe-protoc` 以 `--locked --no-default-features --features build-tools` 构建。
-- [x] PR 实现提交 `d3222e5` 的 fast-check/Linux/MSRV CI：run `38030946507` 全部实际执行项成功；Windows/macOS/Docker 按现有策略待 main 验收。
+- [x] PR 实现提交 `d3222e5` 的 fast-check/Linux/MSRV CI：run `38030946507` 全部实际执行项成功；后续 main `9c292a9` 的 run `38032343493` 五作业全部成功；三平台默认 lib 28/local 89、13 项图回归与 vector/hybrid 定向回归均通过，精确证据见 VALIDATION。
 
 锁文件仅通过 `cargo update --workspace` 更新，未手工修改。其余构建、检查、测试均使用 `--locked`。

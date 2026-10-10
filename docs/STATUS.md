@@ -4,7 +4,7 @@
 
 更新：2026-10-10。**S0 正确性验收已完成。** 验收代码为主干 `42db5c21a8ef4788d07209be7110d85e01d7a85f`（[PR #20](https://github.com/TheLudlows/Origence/pull/20) 已合入）。[main run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) attempt 1 的五个作业全部 completed/success；三平台原始日志均确认两个真实 LanceDB vector/hybrid HTTP 用例为 `ok`，各 29 项 lib、81 项集成全部通过。PR #13 身份下推及 PR #15 Clippy 修复均已合入。完整源码/checkout/run/job/计数见 [VALIDATION](VALIDATION.md) 和 [Issue #21](https://github.com/TheLudlows/Origence/issues/21)。本次随后归档提交仅修改文档与证据，其 CI 不与上述代码提交混用。
 
-图后端于 2026-10-10 按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 切换为 `SqliteGraphStore`，已删除 Kuzu crate、适配器、旧测试、探针和 `local-graph` feature；CI/Docker/Windows 脚本不再配置 CMake/Ninja。上方 S0 run 属于替换前代码，不能作为本轮替换验收；本轮 [PR #23](https://github.com/TheLudlows/Origence/pull/23) 的 [run 38030946507](https://github.com/TheLudlows/Origence/actions/runs/38030946507) 已完成：fast-check 与 Linux/MSRV 成功，默认 lib 28/local 89、13 项图回归、Clippy/HTTP smoke 全通过；Windows/macOS/Docker 待 main 验收。精确证据见 VALIDATION 最新记录。旧图文件需按 OPERATIONS 在新目录重新发布来源，不自动迁移。
+图后端于 2026-10-10 按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 切换为 `SqliteGraphStore`，已删除 Kuzu crate、适配器、旧测试、探针和 `local-graph` feature；CI/Docker/Windows 脚本不再配置 CMake/Ninja。上方 S0 run 属于替换前代码，不能作为本轮替换验收；本轮 [PR #23](https://github.com/TheLudlows/Origence/pull/23) 的 [run 38030946507](https://github.com/TheLudlows/Origence/actions/runs/38030946507) 已完成：fast-check 与 Linux/MSRV 成功，默认 lib 28/local 89、13 项图回归、Clippy/HTTP smoke 全通过；PR #23 已合入 main `9c292a9`；主干 run `38032343493` 五作业全部成功，三平台默认 lib 28/local 89、13 项图回归与 vector/hybrid 定向回归均已核验。精确证据见 VALIDATION 最新记录。旧图文件需按 OPERATIONS 在新目录重新发布来源，不自动迁移。
 
 最低 Rust 版本为 **1.98**：Linux 原生 CI 以 **1.98.0** 执行完整测试并核验 MSRV，开发/Windows/macOS/Docker 使用 **1.98.1**。PR 执行 `fast-check` 与 `linux-native`；main 追加 Windows、macOS 和 Docker。Linux Native 统一 Debug，macOS 保留 Release，Docker 保留 Release 镜像/Smoke。以下旧平台测试数字属于历史证据，不代替最新代码验收。
 
@@ -14,11 +14,11 @@
 
 | 范围 | 当前实现 | 已核验证据与剩余边界 |
 | --- | --- | --- |
-| M5 / A1 | SQLite/LanceDB/SQLite 图/本地 Blob，单宿主与单 Worker，直接发布 | SQLite 图替换 PR 的 Linux/MSRV、默认 28+89 测试与 Debug smoke 已核验；本轮 Windows/macOS/Docker 待 main，旧 S0 跨平台结果保留为历史证据 |
+| M5 / A1 | SQLite/LanceDB/SQLite 图/本地 Blob，单宿主与单 Worker，直接发布 | SQLite 图替换 main `9c292a9` 的五作业全部成功；三平台默认 28+89 测试、Linux/macOS build/smoke 与 Docker 已核验，旧 S0 跨平台结果保留为历史证据 |
 | I1 记忆身份 | v1 编码、唯一绑定、显式写入、离线安装、精确 lookup、调用方版本前置条件；keyword/vector 候选前置过滤 | PR #20 真实 LanceDB、130 个高排名干扰及 vector/hybrid 服务级回归在三平台均已通过；S0 正确性闭环 |
 | I2 抽取匹配 | 调用方完整身份的单身份 capture、原文区间、来源读取与绑定状态 | 旧版无原生/原生用例有实测记录；自动推断、属性目录、未归一化状态和语义冲突未实现 |
 | I4 上下文 | 类型/身份标注、完整身份过滤、引用与 UTF-8 字节预算 | PR #20 的 vector/hybrid HTTP search/resolve 一致性已在三平台通过；冲突/类型预算未实现 |
-| 检索质量 | keyword/vector/hybrid、摘要与一跳图扩展；12 文档/24 查询合成种子 | 历史 keyword Recall@5 为 63.6%；固定向量的 S0 正确性测试不能当作真实模型召回质量 |
+| 检索质量 | 六配置真实模型对照、摘要/图独立开关；36 篇/300 题及来源独立留出集 | S1 工程检索实验已完成，keyword/vector/hybrid-all Recall@5 为 0.35%/97.57%/94.79%；向量/混合无答案误召回 12/12，新增 200 题独立人工复核未完成；见 [实测报告](../evals/s1/results/local-77d43a8-v2/README.md) |
 | P1 会话到经验 | 目标设计已明确 | session/feedback/guidance/learning/improve 主闭环未实现 |
 | P2 增强与服务化 | 目标设计已明确 | 时间有效期、GraphCompletion、企业身份、配额和生产后端未实现 |
 
@@ -45,14 +45,14 @@ S0 已完成“真实向量定向回归 → 包含这些测试的 main CI → �
 
 最终证据为 [main run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) attempt 1：fast-check `113779676713`、Linux Native/MSRV `113779676656`、Windows `113779676444`、macOS `113779676800`、Docker `113779676764` 全部成功。五个 checkout 均为完整验收代码 SHA。PR head、PR 合成 checkout 与实际 main merge 的 SHA 不同、tree 相同，分别记录在 VALIDATION。原 `e8ee1ae` 不含新用例，历史通过记录仍不能代替此轮证据。
 
-P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估沿用 300 用例目标。现有 12 文档/24 查询只是无模型关键词基线，不能以本轮固定向量回归代替 S1 真实检索实验。
+P1 仍为会话问答、指导、反馈、经验蒸馏、水位与阶段化 improve；时间有效期/as_of 仍属 P2。真实质量评估已补 S1 的 300 题合成检索切片，包含真实本地模型、独立消融与留出集；完整平台用例协议、Agent 与生产验收仍待后续。12 文档/24 查询和固定向量正确性回归保留为独立历史基线。
 
 [记忆身份与上下文前置设计](superpowers/specs/2026-10-08-memory-identity-and-context.md) 的 I1、受限 I2 与 I4 切片已落入代码。原文区间与 explicit_identity 只表示可追溯性和绑定方式，不证明语义正确。图实体仍按名称生成 ID，记忆身份不能替代图谱同名消歧。Service 仍依赖 LocalEngine/SqliteTx，应用层完整后端解耦尚未完成。
 
 ## 接下来
 
 1. **S0 已完成**：完整身份候选下推、真实定向回归、主干完整 CI 和证据归档已闭环；归档提交及正常合并关系由 Issue #21 的完成记录追溯。见 [路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
-2. **S1（已启动，2026-10-10）**：已冻结首版 100 题/12 篇合成语料开发集，包含逐题来源版本、定位和原文证据引句及数据 hash。当前 commit 的 keyword@5 基线已运行：文档 Recall/MRR/nDCG 均为 1.04%，96 道可答题无请求错误、4 道无答案题零误召回；低分反映当前合成自然问法对 keyword 的挑战，尚需 vector/hybrid 对照。此开发集仍需扩展到 300 题并建立独立留出集。
+2. **S1 工程实验与归档完成（2026-10-10）**：固定旧 24 题及八条失败问句，冻结 36 篇/300 题（开发 200、来源独立留出 100），真实 BGE + Qwen 同发布产物六配置对照与摘要/图独立消融完成；原始响应、模型 hash、引用/预算独立审计、延迟和费用已归档。[报告](../evals/s1/results/local-77d43a8-v2/README.md) 与 VALIDATION 记录全部失败。新增 200 题为助手标注，独立人工复核尚待完成；本结果不认证完整平台 300 用例、Agent 任务或生产质量。
 3. **S2/S3**：补单值/多值和歧义契约，推进“会话与实际证据归档 → 幂等反馈 → 显式 improve → 有来源的经验重新入库”。
 4. 依赖安全审计、retention、物理擦除、孤儿文件、断电和备份恢复仍需独立验收；ANN/重排/profile/tokenizer 由实际质量和规模决定。
 5. P2 企业身份、文档 ACL、配额、公平调度、审计查询、指标及生产后端按后续设计推进；不扩展本地多 Worker。

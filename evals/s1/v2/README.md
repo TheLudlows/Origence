@@ -72,3 +72,17 @@ The legacy 24-query/12-document seed is still frozen in `evals/corpus.jsonl` and
 `evals/retrieval.jsonl`; its eight keyword misses are recorded separately with
 the seed result. Its score cannot be compared directly to this different corpus
 and question distribution.
+
+## Model implementation references
+
+- [BGE model card](https://huggingface.co/BAAI/bge-small-zh-v1.5): CLS pooling, normalization and symmetric no-instruction policy.
+- [Qwen model card](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct): local Transformers inference.
+- [LM Format Enforcer](https://github.com/noamgat/lm-format-enforcer): JSON-schema token constraints. Constrained shape and endpoint consistency do not certify factual support.
+
+This 300-question retrieval slice does not replace the full platform protocol's
+memory lifecycle, Agent tasks, governance/fault cases, repeat-run uncertainty or
+production workload evaluation. Those remain separate S2–S4/operations work.
+
+## Executed results
+
+[Local CPU experiment at 77d43a8](../results/local-77d43a8-v2/README.md) retains the six-configuration results, development/held-out breakdown, paired ablation deltas, all failures, independent quotation/budget audit and compressed raw responses with SHA-256. Additional labels still need independent human review.

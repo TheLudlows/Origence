@@ -21,7 +21,7 @@ Origence（原 openContext）的详细技术资料、实现状态与历史验收
 | 图谱设计与验收来源 | [图谱计划](superpowers/plans/2026-09-22-knowledge-graph-core.md) |
 | 已完成的底层设计记录 | [M3 账本](superpowers/plans/2026-09-24-cross-store-ledger.md)、[M4 适配器](superpowers/plans/2026-09-27-local-vector-graph.md) |
 | 底层可行性探针 | [storage-probe](../tools/storage-probe/README.md) |
-| 评估方法及样例 | [效果评估标准](Origence_效果评估与对比标准.md)、[evals](../evals/README.md) |
+| 评估方法及样例 | [效果评估标准](Origence_效果评估与对比标准.md)、[evals](../evals/README.md)、[S1 真实模型结果](../evals/s1/results/local-77d43a8-v2/README.md) |
 | Cognee 固定版本调研 | [架构](Cognee_技术架构分析.md)、[细节比较](Cognee_技术细节与方案对比.md)、[图源和核验材料](assets/cognee/README.md) |
 | 历史方案备查 | [serverless 方案](agent_memory_knowledgebase_serverless.md) |
 
