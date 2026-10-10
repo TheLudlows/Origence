@@ -6,7 +6,7 @@
 
 尚未运行 Cognee 或其他记忆/知识平台的产品对比；“rds contextdb”具体产品身份仍待确认。性能和胜负结论必须附硬件、数据集版本、模型配置、运行命令和原始结果。
 
-当前运行基线为 M5 本地宿主，参见 [文档索引](../docs/README.md)。真实 SQLite/LanceDB/Kuzu 与模型 stub 的测试验证行为，不作为检索质量得分。
+当前运行基线为 M5 本地宿主，参见 [文档索引](../docs/README.md)。真实 SQLite/LanceDB/SQLite 图 与模型 stub 的测试验证行为，不作为检索质量得分。
 
 ## HTTP 检索评估器（2026-10-08）
 

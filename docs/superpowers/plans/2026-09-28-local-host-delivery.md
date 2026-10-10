@@ -1,5 +1,8 @@
 # M5 本地宿主交付与验收
 
+> 2026-10-10：本文保留历史实施与验收记录。当前图后端已替换为 SQLite；旧 Kuzu/原生构建描述不再适用于当前代码。见 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 与 [当前运维说明](../../OPERATIONS.md)。
+
+
 日期：2026-09-28。设计来源：[存储主计划](2026-09-22-pluggable-storage-engine.md)、[整体设计 A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)。当前事实见 [STATUS](../../STATUS.md)，实测结果见 [VALIDATION](../../VALIDATION.md)。
 
 2026-10-09 核验补记：验收代码 `8d8d224`（PR #11）的现有 CI 已 7/7 通过；轻量验证为 27 项 lib、58 项无原生集成和 Python 5 项，三平台各 29 项 lib、77 项原生集成通过。Windows 接口检查、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器镜像/HTTP smoke 及 Rust 1.88 默认后端 check 通过；日志和两平台评估工件已核验，精确 job/commit 证据见 VALIDATION。Service 仍依赖 LocalEngine/SqliteTx；M5 固定装配成立，应用层完全后端解耦尚未交付。

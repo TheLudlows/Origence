@@ -2,7 +2,7 @@
 
 Origence（原 openContext）的详细技术资料、实现状态与历史验收记录。
 
-更新：2026-10-09。当前交付为 M5 本地宿主 + A1 自动发布及 I1/受限 I2/I4 切片；真实模型质量、P1 会话主闭环及 P2 尚未交付。运行事实以代码、API 为准，能力与验收快照见 STATUS 顶部，精确 commit/run/job 证据见 VALIDATION 最新核验。历史记录中的“待 CI”保留当时状态；历史调研中的 PostgreSQL、serverless 描述不代表当前运行能力。
+更新：2026-10-10。当前交付为 M5 本地宿主 + A1 自动发布及 I1/受限 I2/I4 切片；真实模型质量、P1 会话主闭环及 P2 尚未交付。运行事实以代码、API 为准，能力与验收快照见 STATUS 顶部，精确 commit/run/job 证据见 VALIDATION 最新核验。历史记录中的“待 CI”保留当时状态；历史调研中的 PostgreSQL、serverless 描述不代表当前运行能力。
 
 | 目的 | 文档 |
 | --- | --- |
@@ -17,6 +17,7 @@ Origence（原 openContext）的详细技术资料、实现状态与历史验收
 | M0–M5 存储路线 | [可插拔存储计划](superpowers/plans/2026-09-22-pluggable-storage-engine.md) |
 | P1 记忆身份与上下文前置设计 | [身份/匹配/冲突契约](superpowers/specs/2026-10-08-memory-identity-and-context.md) |
 | 目标架构与 P0/P1/P2 | [平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) |
+| 当前 SQLite 图替换 | [替换实施与验收](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) |
 | 图谱设计与验收来源 | [图谱计划](superpowers/plans/2026-09-22-knowledge-graph-core.md) |
 | 已完成的底层设计记录 | [M3 账本](superpowers/plans/2026-09-24-cross-store-ledger.md)、[M4 适配器](superpowers/plans/2026-09-27-local-vector-graph.md) |
 | 底层可行性探针 | [storage-probe](../tools/storage-probe/README.md) |

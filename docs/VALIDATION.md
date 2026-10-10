@@ -1,5 +1,16 @@
 # Origence 验证记录
 
+## 2026-10-10 · SQLite 图替换（本轮独立验证）
+
+基线为 main `2b66baaf30c9f4c2dbf3313c99ed5e2a4df41834`。按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 删除 Kuzu/CXX/CMake 图依赖，接入 SQLite 图。以下只归属于本轮，旧 S0 主干 run 不用于替换验收。
+
+已核验：format、Python 评估适配器 5 项、探针 `probe-protoc` 构建；两个锁文件均无 Kuzu/CMake/CXX 依赖，保留包版本/checksum 未变。13 项真实 SQLite 图契约测试已加入默认及 no-default local 套件。
+
+Rust 默认/no-default Clippy、完整测试、HTTP smoke 与种子评估进行中；PR 的 fast-check/Linux/MSRV 尚待执行。Windows/macOS/Docker 保留 main-only 验收策略，PR 的 skipped 不算通过。首次本地编译在第三方 ttf-parser/arrow-cast 生成零长度对象文件时失败，正在重试；不将依赖解析或代码提交算作测试通过。
+
+旧图文件不自动迁移，切换/重建限制见 OPERATIONS。
+
+
 ## 2026-10-10：S1 已启动（冻结首版开发数据集）
 
 已新增 `evals/s1/` v1：12 篇合成 source/version 1 文档、100 道人工编写问题（96 道可答、4 道无答案），每道可答题带来源 ID、版本、文档 locator 与原文引句。数据完整性核对确认所有 ID 唯一、来源均存在、金标与 evidence 引句一致且引句逐条出现在来源正文中；SHA-256 记录在 `evals/s1/manifest.json`。本集合仅为开发集，不代表生产样本，也不是调参后的独立留出集。

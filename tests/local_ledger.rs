@@ -1,12 +1,12 @@
 //! Cross-store ledger round-trip (M4): a pending write is registered on the
-//! SQLite ledger, applied idempotently to LanceDB/Kuzu, confirmed, and a
+//! SQLite ledger, applied idempotently to LanceDB/SQLite graph, confirmed, and a
 //! reconcile pass leaves it committed without duplicating (A2.6).
 #![cfg(feature = "local-storage")]
 
-use origence::storage::kuzu::KuzuStore;
 use origence::storage::lancedb::LanceDbStore;
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
 use origence::storage::sqlite::SqliteStore;
+use origence::storage::sqlite_graph::SqliteGraphStore;
 use origence::storage::{
     DomainTx, GraphStore, Permission, RelationalStore, Scope, SourceVersion, VectorEntry,
     VectorQuery, VectorStore,
@@ -19,7 +19,9 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let sqlite = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let vector = LanceDbStore::open(dir.path().join("vector")).await.unwrap();
-    let graph = KuzuStore::open(dir.path().join("graph")).await.unwrap();
+    let graph = SqliteGraphStore::open(dir.path().join("graph.db"))
+        .await
+        .unwrap();
 
     let tenant = Uuid::new_v4();
     let workspace = Uuid::new_v4();

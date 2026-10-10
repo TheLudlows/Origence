@@ -2,13 +2,13 @@
 mod identity_upgrade_cli;
 mod identity_vector_regression;
 mod initialization;
-mod kuzu_store;
 mod lancedb_store;
 mod local_app;
 mod local_blob;
 mod local_ledger;
 mod sqlite_domain;
 mod sqlite_evidence;
+mod sqlite_graph_store;
 mod sqlite_identity;
 mod sqlite_identity_upgrade;
 mod sqlite_ledger;

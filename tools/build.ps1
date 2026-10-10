@@ -10,18 +10,11 @@ $buildOldProtoc = $env:PROTOC
 $buildOldToolchain = $env:RUSTUP_TOOLCHAIN
 Push-Location $buildRoot
 try {
-    # Native deps (Kuzu/LanceDB) must build with the MSVC toolchain. Two layers
-    # are pinned, because each is checked by a different layer:
-    #   1. VS dev shell -> cl/ml64/CMake/Ninja + INCLUDE/LIB, so cmake and cc-rs
-    #      find MSVC instead of a mingw g++/gas earlier on PATH.
-    #   2. The MSVC rustc toolchain (`*-pc-windows-msvc`) -> `target.env == "msvc"`,
-    #      which is what cc-rs checks to route `.asm` files to ml64 (psm/stacker).
-    # A gnu rustc with `CC=cl` compiles Kuzu but breaks psm: cc-rs sees a gnu
-    # target (no ml64 routing) yet psm picks `.asm` because the compiler is
-    # msvc-like. Forcing the MSVC toolchain makes both layers agree.
+    # LanceDB and SQLite native dependencies need the MSVC dev shell and
+    # MSVC Rust target so cc-rs routes assembly to ml64 (psm/stacker).
     $buildVswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     $buildVs = & $buildVswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if (-not $buildVs) { throw 'Install Visual Studio C++ build tools (with CMake and Ninja).' }
+    if (-not $buildVs) { throw 'Install Visual Studio C++ build tools.' }
     $buildVsDevShell = Join-Path $buildVs 'Common7\Tools\Launch-VsDevShell.ps1'
     if (-not (Test-Path $buildVsDevShell)) { throw "VS dev shell not found: $buildVsDevShell" }
     & $buildVsDevShell -Arch amd64 -HostArch amd64 | Out-Null
@@ -35,8 +28,6 @@ try {
         throw "MSVC rustc toolchain not installed: $buildMsvcToolchain (run: rustup toolchain install $buildMsvcToolchain)."
     }
     $env:RUSTUP_TOOLCHAIN = $buildMsvcToolchain
-    # Belt and suspenders at the cmake layer: stop a stray mingw g++ on PATH from
-    # being probed even if a future toolchain change reintroduces a gnu host.
     $env:CC = 'cl.exe'
     $env:CXX = 'cl.exe'
     if (-not $env:PROTOC -and -not (Get-Command protoc -ErrorAction SilentlyContinue)) {

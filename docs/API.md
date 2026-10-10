@@ -1,6 +1,6 @@
 # Origence HTTP API v1
 
-适用 M5 本地宿主 SQLite/LanceDB/Kuzu。参见 [文档索引](README.md) 和 [运维说明](OPERATIONS.md)。
+适用 M5 本地宿主 SQLite/LanceDB/SQLite 图。参见 [文档索引](README.md) 和 [运维说明](OPERATIONS.md)。
 
 所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。修改接口还需 1–200 个 ASCII 字符的 `Idempotency-Key`；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 

@@ -1,6 +1,6 @@
-# Local native libraries require C++, CMake, Ninja and protoc at build time.
+# SQLite/LanceDB require a C/C++ compiler and protoc at build time.
 FROM rust:1.98.1-bookworm AS build
-RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build protobuf-compiler libprotobuf-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN test -f /usr/include/google/protobuf/empty.proto \
     && protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
@@ -8,9 +8,7 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY tests ./tests
-ENV CMAKE_GENERATOR=Ninja
-# Bound native C++ compilation while Cargo builds up to three units in CI.
-ENV CMAKE_BUILD_PARALLEL_LEVEL=2
+# Bound Cargo compilation to control memory use.
 ARG BUILD_JOBS=1
 RUN cargo build --release --locked -j ${BUILD_JOBS}
 

@@ -1,6 +1,6 @@
 """Exercise the real Rust libraries with disposable files and child processes.
 
-Usage: python tools/storage-probe/verify.py [--backend sqlite|lancedb|kuzu]
+Usage: python tools/storage-probe/verify.py [--backend sqlite|lancedb]
 Data and the JSON report remain under target/storage-probe/runs for inspection.
 """
 import argparse
@@ -149,48 +149,11 @@ class Probe:
         self.expect(request("get"), [12])
         self.record("wal_reader_writer_contention_and_uncommitted_crash", contention=error)
 
-    def graph(self):
-        for tenant, workspace, value in [("t1", "w1", 101), ("t1", "w2", 102),
-                                          ("t2", "w1", 103)]:
-            self.run(request("put", tenant, workspace, "target", value=value))
-            self.run(request("link", tenant, workspace, target="target"))
-            self.expect(request("neighbors", tenant, workspace), [value])
-        self.run(request("delete", id="target"))
-        self.expect(request("neighbors"), [])
-        self.expect(request("neighbors", "t1", "w2"), [102])
-        self.record("scoped_edges_and_detach_delete")
-
-        with Client(self.args(dict(op="serve"))) as owner:
-            assert owner.receive()["ready"]
-            rw_error = self.run(request("get"), reject=True)
-            ro_error = self.run(request("get", read_only=True), reject=True)
-            assert "lock" in rw_error.lower(), rw_error
-            assert "lock" in ro_error.lower(), ro_error
-            assert owner.send(request("put", id="ipc", value=66))["ok"]
-            assert owner.send(request("get", id="ipc"))["values"] == [66]
-        self.record("single_rw_owner_required_and_json_lines_owner_access",
-                    second_rw=rw_error, second_ro=ro_error)
-        with Client(self.args(dict(op="serve", read_only=True))) as reader:
-            assert reader.receive()["ready"]
-            self.expect(request("get", read_only=True), [11])
-        self.record("two_read_only_processes")
-
-        with Client(self.args(request("hold-write", value=77))) as writer:
-            assert writer.receive()["uncommitted"]
-            writer.kill()
-        self.expect(request("get"), [11])
-        self.run(request("put", value=12))
-        self.expect(request("get"), [12])
-        self.record("uncommitted_transaction_rolled_back_after_process_kill")
-        result = self.run(request("threads", value=13))
-        assert result == {"before": [12], "after": [13]}, result
-        self.expect(request("get"), [13])
-        self.record("shared_database_thread_connections_read_during_write_and_after_commit")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=["sqlite", "lancedb", "kuzu"])
+    parser.add_argument("--backend", choices=["sqlite", "lancedb"])
     parser.add_argument("--binary", type=Path,
                         default=ROOT / "target/storage-probe/debug/origence-storage-probe.exe")
     args = parser.parse_args()
@@ -201,7 +164,7 @@ def main():
                   directory=str(directory))
     print(f"Report/data: {directory}", flush=True)
     try:
-        for backend in ([args.backend] if args.backend else ["sqlite", "lancedb", "kuzu"]):
+        for backend in ([args.backend] if args.backend else ["sqlite", "lancedb"]):
             probe = Probe(args.binary.resolve(), backend, directory)
             # Preserve completed checks even when a subsequent check fails.
             report[backend] = probe.results
@@ -211,8 +174,6 @@ def main():
             probe.acknowledged_crash()
             if backend == "sqlite":
                 probe.sqlite_lock()
-            if backend == "kuzu":
-                probe.graph()
         report["passed"] = True
     except Exception as error:
         report["passed"] = False

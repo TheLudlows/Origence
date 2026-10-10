@@ -1,5 +1,8 @@
 # 本地存储与可扩展接口实施计划
 
+> 2026-10-10：本文保留历史实施与验收记录。当前图后端已替换为 SQLite；旧 Kuzu/原生构建描述不再适用于当前代码。见 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 与 [当前运维说明](../../OPERATIONS.md)。
+
+
 修订：2026-10-09。唯一设计来源是 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，存储契约集中在 [A2](../specs/2026-09-22-memory-knowledge-platform-design.md#storage-design)，数据归属见 A5。M0–M5 的本地接口与宿主基础已交付；验收代码 `8d8d224` 的现有 CI 已 7/7 通过，三平台原生、Linux/macOS release、容器与 MSRV check 证据见 [VALIDATION](../../VALIDATION.md)。应用层完整厂商解耦仍欠账，历史接口勾项不代表任意后端可替换。
 
 ## 目标与范围

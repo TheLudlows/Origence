@@ -3,7 +3,7 @@
 use std::io;
 
 /// Errors the storage layer returns to the domain. Backends map their own
-/// error types (SQLx, LanceDB, Kuzu, `std::io`) into this so the domain never
+/// error types (SQLx, LanceDB, `std::io`) into this so the domain never
 /// depends on a vendor error or a database pool type (A2.2).
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
