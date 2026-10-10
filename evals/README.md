@@ -21,6 +21,6 @@ python3 evals/run.py --binary target/release/origence --mode keyword --k 5 --com
 
 报告包含 manifest、imports、逐题原始响应和 summary；用 source ID → 本次 asset ID 映射评价文档级 Recall@k、MRR@k、二元相关性 nDCG@k。search 请求最多 100 个 chunk，去重后取前 k 个文档；这不是 chunk 级 Recall 或完整无限候选检索。多份必要来源均进入分母；无答案题不进入 Recall 分母。请求失败的可回答题计零分，无答案请求失败单列为错误，不算正确拒答。成功请求延迟单列，同时记录全部请求错误；小样本 p99 不代表生产性能。
 
-vector/hybrid 仅在显式 `--allow-model-calls`、`OC_ENABLE_MODELS=true` 与模型配置齐全时运行；模型可能收费。本轮没有启用真实模型。模型费用目前标 unknown，不当作零；未支持 usage 精确计量。评估控制没有摘要/图独立开关，因此三种检索模式不是完整组件消融。
+vector/hybrid 仅在显式 `--allow-model-calls`、`OC_ENABLE_MODELS=true` 与模型配置齐全时运行；模型可能收费。本轮没有启用真实模型。模型费用目前标 unknown，不当作零；未支持 usage 精确计量。S1 v2 使用独立摘要/图开关，在同一份发布产物上运行六配置矩阵；见 [S1 v2](s1/v2/README.md)。
 
 输出路径须不存在，以免覆盖原始结果；输出可能含授权语料正文，不含 API/模型 key。CI 使用公开合成语料上传结果。真实企业数据的报告需按其授权范围保存，不能复用公开 CI 工件流程。测试 fixture 只验证 adapter 与指标，不能作为 Rust 宿主或语义效果验收。

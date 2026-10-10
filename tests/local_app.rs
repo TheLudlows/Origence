@@ -612,6 +612,51 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     .await;
     assert_eq!(graph["graph"]["entities"].as_array().unwrap().len(), 2);
     assert_eq!(graph["graph"]["relations"].as_array().unwrap().len(), 1);
+    // Toggle summary and graph branches independently on the same published artifacts.
+    // Fixed fixture vectors prove branch wiring, not semantic retrieval quality.
+    for summaries in [false, true] {
+        for graph_enabled in [false, true] {
+            let components = json!({"summaries":summaries,"graph":graph_enabled});
+            let selected = post(
+                &http,
+                &base,
+                token,
+                "/v1/search",
+                json!({"query":"Atlas","mode":"hybrid","components":components}),
+            )
+            .await;
+            assert_eq!(selected["active_components"], components);
+            assert_eq!(
+                selected["graph"]["entities"].as_array().unwrap().is_empty(),
+                !graph_enabled
+            );
+            let context = post(&http, &base, token, "/v1/resolve",
+                json!({"query":"Atlas","mode":"hybrid","components":components,"budget_tokens":3000})).await;
+            assert_eq!(context["active_components"], components);
+            if !graph_enabled {
+                assert!(
+                    context["sources"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .all(|s| s.get("entity_id").is_none() && s.get("relation_id").is_none())
+                );
+            }
+        }
+    }
+    let mut summary_scores = Vec::new();
+    for summaries in [false, true] {
+        let selected = post(&http, &base, token, "/v1/search",
+            json!({"query":"summary","mode":"hybrid","limit":100,"components":{"summaries":summaries,"graph":false}})).await;
+        let hit = selected["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|h| h["asset_id"] == docs[0]["asset_id"])
+            .unwrap();
+        summary_scores.push(hit["score"].as_f64().unwrap());
+    }
+    assert!(summary_scores[1] > summary_scores[0]);
     assert!(
         graph["graph"]["entities"][0]["evidence"]
             .as_array()
@@ -1020,6 +1065,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     tx.commit().await.unwrap();
 
     let search = |filter| SearchInput {
+        components: Default::default(),
         memory_identity: filter,
         query: "approval".into(),
         mode: "keyword".into(),
@@ -1049,6 +1095,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .resolve(
             &reader_auth,
             ResolveInput {
+                components: Default::default(),
                 query: "approval".into(),
                 memory_identity: Some(identity.clone()),
                 mode: "keyword".into(),
@@ -1174,6 +1221,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .search(
             &a,
             SearchInput {
+                components: Default::default(),
                 memory_identity: None,
                 query: "发布审批".into(),
                 limit: 10,
@@ -1254,6 +1302,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .search(
             &a,
             SearchInput {
+                components: Default::default(),
                 memory_identity: None,
                 query: "Release".into(),
                 limit: 10,

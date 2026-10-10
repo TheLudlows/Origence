@@ -181,6 +181,7 @@ async fn main() -> anyhow::Result<()> {
                     .search(
                         &auth,
                         SearchInput {
+                            components: Default::default(),
                             memory_identity: None,
                             query,
                             mode,
@@ -200,6 +201,7 @@ async fn main() -> anyhow::Result<()> {
                     .resolve(
                         &auth,
                         ResolveInput {
+                            components: Default::default(),
                             memory_identity: None,
                             query,
                             mode,
@@ -232,6 +234,7 @@ async fn main() -> anyhow::Result<()> {
             reqwest::Method::POST,
             "/v1/search".into(),
             Some(json!(SearchInput {
+                components: Default::default(),
                 memory_identity: None,
                 query,
                 mode,
@@ -248,6 +251,7 @@ async fn main() -> anyhow::Result<()> {
             reqwest::Method::POST,
             "/v1/resolve".into(),
             Some(json!(ResolveInput {
+                components: Default::default(),
                 memory_identity: None,
                 query,
                 mode,

@@ -100,7 +100,34 @@ pub struct RestoreInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct RetrievalComponents {
+    #[serde(default = "enabled")]
+    pub summaries: bool,
+    #[serde(default = "enabled")]
+    pub graph: bool,
+}
+fn enabled() -> bool {
+    true
+}
+impl Default for RetrievalComponents {
+    fn default() -> Self {
+        Self {
+            summaries: true,
+            graph: true,
+        }
+    }
+}
+impl RetrievalComponents {
+    fn is_default(&self) -> bool {
+        self.summaries && self.graph
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SearchInput {
+    #[serde(default, skip_serializing_if = "RetrievalComponents::is_default")]
+    pub components: RetrievalComponents,
     #[serde(default)]
     pub memory_identity: Option<crate::memory_identity::MemoryIdentity>,
     pub query: String,
@@ -121,6 +148,8 @@ fn keyword_mode() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResolveInput {
+    #[serde(default, skip_serializing_if = "RetrievalComponents::is_default")]
+    pub components: RetrievalComponents,
     #[serde(default)]
     pub memory_identity: Option<crate::memory_identity::MemoryIdentity>,
     pub query: String,
@@ -175,6 +204,31 @@ impl SearchHit {
 #[cfg(test)]
 mod identity_status_tests {
     use super::*;
+
+    #[test]
+    fn retrieval_components_preserve_legacy_defaults_and_allow_independent_ablation() {
+        let old = serde_json::json!({"query":"Atlas"});
+        let input: SearchInput = serde_json::from_value(old).unwrap();
+        assert!(input.components.summaries && input.components.graph);
+        assert!(
+            serde_json::to_value(input)
+                .unwrap()
+                .get("components")
+                .is_none()
+        );
+        let input: ResolveInput = serde_json::from_value(serde_json::json!({
+            "query":"Atlas","components":{"graph":false}
+        }))
+        .unwrap();
+        assert!(input.components.summaries);
+        assert!(!input.components.graph);
+        assert!(
+            serde_json::from_value::<SearchInput>(serde_json::json!({
+                "query":"Atlas","components":{"typo":false}
+            }))
+            .is_err()
+        );
+    }
 
     fn identified_input() -> IdentifiedMemoryInput {
         serde_json::from_value(serde_json::json!({
