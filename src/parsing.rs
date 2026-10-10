@@ -2,11 +2,17 @@ use crate::{
     error::{AppError, Result},
     types::Chunk,
 };
+use pdf_oxide::{
+    PdfDocument,
+    extractors::warnings::{WarningCategory, drain_global_warnings},
+};
 use serde_json::json;
-use std::{path::Path, sync::LazyLock, time::Duration};
+use std::{io::Read, path::Path, sync::LazyLock};
 static JIEBA: LazyLock<jieba_rs::Jieba> = LazyLock::new(jieba_rs::Jieba::new);
 pub const MAX_TEXT: usize = 1_000_000;
 pub const MAX_FILE: usize = 10 * 1024 * 1024;
+const MAX_PDF_PAGES: usize = 200;
+const PDF_PARSER: &str = "pdf-oxide-0.3.78-v1";
 
 pub fn validate_text(text: &str) -> Result<()> {
     if text.trim().is_empty() || text.len() > MAX_TEXT || text.contains('\0') {
@@ -69,35 +75,64 @@ fn split_range(text: &str, start: usize, end: usize, out: &mut Vec<Chunk>) {
     }
 }
 
-pub fn pdf_child(path: &Path) -> anyhow::Result<Vec<Chunk>> {
-    anyhow::ensure!(
-        std::fs::metadata(path)?.len() <= MAX_FILE as u64,
-        "file too large"
-    );
-    let doc = lopdf::Document::load(path)?;
-    let count = doc.get_pages().len();
-    anyhow::ensure!(
-        (1..=200).contains(&count),
-        "PDF page limit exceeded or empty PDF"
-    );
-    drop(doc);
-    let pages = pdf_extract::extract_text_by_pages(path)?;
-    anyhow::ensure!(
-        pages.len() == count,
-        "PDF extraction failed before final page"
-    );
+fn parse_pdf(path: &Path) -> Result<Vec<Chunk>> {
+    // Bound the actual read rather than trusting metadata (the file could grow).
+    let file = std::fs::File::open(path).map_err(anyhow::Error::from)?;
+    let mut bytes = Vec::new();
+    file.take((MAX_FILE + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(anyhow::Error::from)?;
+    if bytes.len() > MAX_FILE {
+        return Err(AppError::Invalid("file too large".into()));
+    }
+    // Free-function diagnostics are thread-local; a previous failed open on a
+    // reused blocking thread must not contaminate this document's diagnostics.
+    drain_global_warnings();
+    let doc = PdfDocument::from_bytes(bytes)
+        .map_err(|_| AppError::Invalid("PDF unsupported or invalid".into()))?;
+    if doc.is_encrypted() {
+        return Err(AppError::Invalid("encrypted PDF is unsupported".into()));
+    }
+    let count = doc
+        .page_count()
+        .map_err(|_| AppError::Invalid("PDF page tree is invalid".into()))?;
+    if !(1..=MAX_PDF_PAGES).contains(&count) {
+        return Err(AppError::Invalid(
+            "PDF page limit exceeded or empty PDF".into(),
+        ));
+    }
     let mut result = Vec::new();
     let mut total = 0;
-    for (page, text) in pages.iter().enumerate() {
-        anyhow::ensure!(
-            text.chars().filter(|c| c.is_alphanumeric()).count() >= 3,
-            "PDF page has no usable text; OCR is unsupported"
-        );
+    for page in 0..count {
+        let text = doc.extract_text(page).map_err(|_| {
+            AppError::Invalid(format!("PDF text extraction failed on page {}", page + 1))
+        })?;
+        if doc.take_structured_warnings().iter().any(|warning| {
+            matches!(
+                warning.category,
+                WarningCategory::OperatorCapExceeded | WarningCategory::EofPremature
+            )
+        }) {
+            return Err(AppError::Invalid(format!(
+                "PDF extraction was incomplete on page {}",
+                page + 1
+            )));
+        }
+        if text.chars().filter(|c| c.is_alphanumeric()).take(3).count() < 3 {
+            return Err(AppError::Invalid(format!(
+                "PDF page {} has no usable text; OCR is unsupported",
+                page + 1
+            )));
+        }
         total += text.len();
-        anyhow::ensure!(total <= MAX_TEXT, "PDF extracted text limit exceeded");
-        for mut chunk in chunks(text, "text")? {
+        if total > MAX_TEXT {
+            return Err(AppError::Invalid(
+                "PDF extracted text limit exceeded".into(),
+            ));
+        }
+        for mut chunk in chunks(&text, "text")? {
             chunk.locator["page"] = json!(page + 1);
-            chunk.locator["parser"] = json!("pdf-extract-0.10-v1");
+            chunk.locator["parser"] = json!(PDF_PARSER);
             result.push(chunk);
         }
     }
@@ -105,25 +140,21 @@ pub fn pdf_child(path: &Path) -> anyhow::Result<Vec<Chunk>> {
 }
 
 pub async fn parse_file(path: &Path, format: &str) -> Result<Vec<Chunk>> {
+    if !["text", "markdown", "pdf"].contains(&format) {
+        return Err(AppError::Invalid("unsupported file format".into()));
+    }
     if format != "pdf" {
         let bytes = tokio::fs::read(path).await.map_err(anyhow::Error::from)?;
         let text = String::from_utf8(bytes)
             .map_err(|_| AppError::Invalid("file must use UTF-8".into()))?;
         return chunks(&text, format);
     }
-    let exe = std::env::current_exe().map_err(anyhow::Error::from)?;
-    let mut command = tokio::process::Command::new(exe);
-    command.arg("parse-pdf").arg(path).kill_on_drop(true);
-    let output = tokio::time::timeout(Duration::from_secs(30), command.output())
+    let path = path.to_owned();
+    // Await the blocking task to completion: dropping/timing out its future
+    // cannot stop synchronous parsing. The durable worker already serializes jobs.
+    tokio::task::spawn_blocking(move || parse_pdf(&path))
         .await
-        .map_err(|_| AppError::Invalid("PDF parser timed out".into()))?
-        .map_err(anyhow::Error::from)?;
-    if !output.status.success() {
-        return Err(AppError::Invalid(
-            "PDF unsupported or failed quality checks".into(),
-        ));
-    }
-    serde_json::from_slice(&output.stdout).map_err(|e| AppError::Internal(e.into()))
+        .map_err(|e| AppError::Internal(e.into()))?
 }
 
 #[cfg(test)]
