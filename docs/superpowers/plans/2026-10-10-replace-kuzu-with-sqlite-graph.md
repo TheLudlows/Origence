@@ -45,16 +45,16 @@ SQLite 图模块不依赖 local-vector/local-storage，可在 no-default-feature
 | initialize/check | 空库在短 IMMEDIATE 事务内创建完整结构；检查已知 DDL、键、级联和索引；残缺结构、同名 view、缺失约束均拒绝，失败不修复 |
 | 写入/恢复 | 对象写入独立提交；不持跨库长事务。启动 cleanup、未发布孤儿回收和保存计划重放仍使用现有账本流程 |
 
-实施前示例只做列投影检查，且会插入缺少端点的关系、带环遍历会返回起点。最终实现按计划契约补齐这些边界，并用外键级联替代多条手工 detach SQL。旧引擎特有的取消后阻塞许可测试随阻塞执行器删除。
+实施前示例只做列投影检查，且会插入缺少端点的关系、带环遍历会返回起点。最终实现按计划契约补齐这些边界，并用外键级联替代多条手工 detach SQL。旧引擎特有的取消后阻塞许可测试随阻塞执行器删除。离线身份升级测试改为确认 `graph.db` 不被创建，避免继续用旧目录作为检查目标。
 
 ## 验证清单
 
 - [x] `tests/sqlite_graph_store.rs` 经 `tests/local.rs` 编入现有集成可执行程序：原五项契约加八项边界回归，无新增原生 Job。
 - [x] 两个锁文件不存在 Kuzu/CMake/CXX 依赖；活动 Rust、测试、探针、构建配置不存在旧符号。
-- [ ] format、默认/no-default Clippy `-D warnings`。
-- [ ] 默认完整套件及 no-default lib/local；重点核验 vector/hybrid、共享来源删除、保存图发布恢复与孤儿清理。
-- [ ] build、HTTP smoke、固定 keyword 种子评估；keyword 得分不代替真实 hybrid 质量。
+- [x] format、默认/no-default Clippy `-D warnings`。
+- [x] 默认完整套件及 no-default lib/local；重点核验 vector/hybrid、共享来源删除、保存图发布恢复与孤儿清理。
+- [x] build、HTTP smoke、固定 keyword 种子评估；keyword 得分不代替真实 hybrid 质量。
 - [x] `probe-protoc` 以 `--locked --no-default-features --features build-tools` 构建。
-- [ ] PR 的 fast-check/Linux/MSRV CI；Windows/macOS/Docker 按现有策略在 main 验收。
+- [x] PR 实现提交 `d3222e5` 的 fast-check/Linux/MSRV CI：run `38030946507` 全部实际执行项成功；Windows/macOS/Docker 按现有策略待 main 验收。
 
 锁文件仅通过 `cargo update --workspace` 更新，未手工修改。其余构建、检查、测试均使用 `--locked`。

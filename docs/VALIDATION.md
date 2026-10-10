@@ -1,14 +1,24 @@
 # Origence 验证记录
 
-## 2026-10-10 · SQLite 图替换（本轮独立验证）
+## 2026-10-10 · SQLite 图替换（PR #23）
 
-基线为 main `2b66baaf30c9f4c2dbf3313c99ed5e2a4df41834`。按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 删除 Kuzu/CXX/CMake 图依赖，接入 SQLite 图。以下只归属于本轮，旧 S0 主干 run 不用于替换验收。
+基线 main `2b66baaf30c9f4c2dbf3313c99ed5e2a4df41834`。实现提交 `d3222e5ae1e50b955436aace50b53f2a0d981c24`，tree `3e42545bcae14900bebb290bb76d08f87a5692b9`。按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 删除 Kuzu/CXX/CMake 图依赖，接入 SQLite 图；本轮不复用旧 S0 主干 run 作为替换证据。
 
-已核验：format、Python 评估适配器 5 项、探针 `probe-protoc` 构建；两个锁文件均无 Kuzu/CMake/CXX 依赖，保留包版本/checksum 未变。13 项真实 SQLite 图契约测试已加入默认及 no-default local 套件。
+[PR #23](https://github.com/TheLudlows/Origence/pull/23) 的 [run 38030946507](https://github.com/TheLudlows/Origence/actions/runs/38030946507) attempt 1 成功。两个实际执行作业均 completed/success；三个 main-only 作业 skipped。实际合成 checkout 为 `70c3e133ab5025c3e6667a3c0a23a574a14e4e02`，Git 数据 API 已核对它与实现提交的 tree 相同。精确测试名称、计数和评估摘要保存于 [静态证据](evidence/2026-10-10-sqlite-graph-pr23.json)。
 
-Rust 默认/no-default Clippy、完整测试、HTTP smoke 与种子评估进行中；PR 的 fast-check/Linux/MSRV 尚待执行。Windows/macOS/Docker 保留 main-only 验收策略，PR 的 skipped 不算通过。首次本地编译在第三方 ttf-parser/arrow-cast 生成零长度对象文件时失败，正在重试；不将依赖解析或代码提交算作测试通过。
+| 作业 | 实测结果 |
+| --- | --- |
+| [fast-check / 114151579844](https://github.com/TheLudlows/Origence/actions/runs/38030946507/job/114151579844) | Rust 1.98.1；format、no-default Clippy `-D warnings`；lib 27、local 72、Python 5 全通过，0 failed/ignored；包含全部 13 个图回归 |
+| [Linux Native / 114151579974](https://github.com/TheLudlows/Origence/actions/runs/38030946507/job/114151579974) | Rust 1.98.0/MSRV；默认 Clippy `-D warnings`、完整 lib 28/local 89、Debug build、HTTP smoke、keyword 种子评估全部通过；bin/doc 各 0；身份子集 8 passed/19 filtered |
+| Windows/macOS/Docker | PR 按既有 main-only 策略 skipped，不能当作本轮跨平台通过 |
 
-旧图文件不自动迁移，切换/重建限制见 OPERATIONS。
+原始 Linux 日志已核验 `s0_vector_identity_prefilter_real_lancedb`、`s0_hybrid_identity_prefilter_real_lancedb`、`saved_publication_recovers_after_external_graph_write`、`pending_write_confirms_and_reconcile_is_idempotent` 为 `ok`。图契约涵盖幂等、scope、三跳/环/起点排除、缺失端点、来源标签、级联删除、并发重放、稳定 snapshot/重开、残缺 schema/外键/view 拒绝。未跳过测试，未放宽 lint。
+
+keyword 固定 12 文档/24 题：22 可答、2 无答案；Recall/MRR/nDCG@5 均 `0.6363636363636364`，请求错误 0、无答案误召回 0，与替换前同种子基线一致。固定向量服务的 vector/hybrid 正确性测试及 keyword 种子不是实际模型质量评测。
+
+本地 Linux/Rust 1.98.1 也已实测 format、默认/no-default Clippy、lib 28/local 89、no-default lib 27/local 72、HTTP smoke、Python 5 与 probe-protoc。首次本地编译在第三方 ttf-parser/arrow-cast 的零长度对象文件处失败，重试通过；CI 独立验证了相同应用代码。最终审查修正了离线身份升级测试中的旧目录断言，改为确认 `graph.db` 不被创建；本地完整 89 项集成套件覆盖该最终断言。后续提交只包含这一测试断言及文档/证据，应用源码不变；其新 CI 不与本次实现 run 混为同一运行。
+
+两个锁文件均由 Cargo 更新：Kuzu/CMake/CXX 依赖消失，保留包版本/checksum 未变。活动 Rust、测试、探针与构建配置不存在旧图引擎符号；历史方案与原始证据仍保留。旧图文件不迁移、已发布账本不自动重建空图，切换限制见 OPERATIONS。
 
 
 ## 2026-10-10：S1 已启动（冻结首版开发数据集）

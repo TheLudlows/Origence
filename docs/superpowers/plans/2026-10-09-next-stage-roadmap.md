@@ -23,7 +23,7 @@
 
 既有评估：12 文档/24 查询；22 条有答案题中 14 条全部来源命中，8 条返回空，2 条无答案题没有误召回；keyword 文档 Recall@5 63.6%，S0 主干 Linux/macOS 日志亦保留该合成基线。**只代表合成关键词基线，不证明真正 RAG/Agent 效果**。Rust 1.98 的主干 CI 已单独核验，证据见 VALIDATION；没有复用历史 Rust 1.88/1.96 的绿灯。
 
-2026-10-10 存储维护：图投影已按 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 替换；不改变 S1/P1 优先级。替换前 S0 CI 仍是历史证据，本轮验证单独归档。
+2026-10-10 存储维护：图投影已按 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 替换；不改变 S1/P1 优先级。替换前 S0 CI 仍是历史证据，本轮验证单独归档：[PR #23](https://github.com/TheLudlows/Origence/pull/23)、run `38030946507` 的 fast-check/Linux/MSRV、默认 28+89 测试及 HTTP smoke 成功；Windows/macOS/Docker 待 main。
 
 ## 3. 交付顺序与任务
 

@@ -4,7 +4,7 @@
 
 更新：2026-10-10。**S0 正确性验收已完成。** 验收代码为主干 `42db5c21a8ef4788d07209be7110d85e01d7a85f`（[PR #20](https://github.com/TheLudlows/Origence/pull/20) 已合入）。[main run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) attempt 1 的五个作业全部 completed/success；三平台原始日志均确认两个真实 LanceDB vector/hybrid HTTP 用例为 `ok`，各 29 项 lib、81 项集成全部通过。PR #13 身份下推及 PR #15 Clippy 修复均已合入。完整源码/checkout/run/job/计数见 [VALIDATION](VALIDATION.md) 和 [Issue #21](https://github.com/TheLudlows/Origence/issues/21)。本次随后归档提交仅修改文档与证据，其 CI 不与上述代码提交混用。
 
-图后端于 2026-10-10 按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 切换为 `SqliteGraphStore`，已删除 Kuzu crate、适配器、旧测试、探针和 `local-graph` feature；CI/Docker/Windows 脚本不再配置 CMake/Ninja。上方 S0 run 属于替换前代码，不能作为本轮替换验收；本轮结果见 VALIDATION 最新记录。旧图文件需按 OPERATIONS 在新目录重新发布来源，不自动迁移。
+图后端于 2026-10-10 按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 切换为 `SqliteGraphStore`，已删除 Kuzu crate、适配器、旧测试、探针和 `local-graph` feature；CI/Docker/Windows 脚本不再配置 CMake/Ninja。上方 S0 run 属于替换前代码，不能作为本轮替换验收；本轮 [PR #23](https://github.com/TheLudlows/Origence/pull/23) 的 [run 38030946507](https://github.com/TheLudlows/Origence/actions/runs/38030946507) 已完成：fast-check 与 Linux/MSRV 成功，默认 lib 28/local 89、13 项图回归、Clippy/HTTP smoke 全通过；Windows/macOS/Docker 待 main 验收。精确证据见 VALIDATION 最新记录。旧图文件需按 OPERATIONS 在新目录重新发布来源，不自动迁移。
 
 最低 Rust 版本为 **1.98**：Linux 原生 CI 以 **1.98.0** 执行完整测试并核验 MSRV，开发/Windows/macOS/Docker 使用 **1.98.1**。PR 执行 `fast-check` 与 `linux-native`；main 追加 Windows、macOS 和 Docker。Linux Native 统一 Debug，macOS 保留 Release，Docker 保留 Release 镜像/Smoke。以下旧平台测试数字属于历史证据，不代替最新代码验收。
 
@@ -14,7 +14,7 @@
 
 | 范围 | 当前实现 | 已核验证据与剩余边界 |
 | --- | --- | --- |
-| M5 / A1 | SQLite/LanceDB/SQLite 图/本地 Blob，单宿主与单 Worker，直接发布 | 验收代码的完整主干 CI、三平台原生回归、MSRV、Debug/Release Smoke 与容器均已核验；不等于生产可靠性验收 |
+| M5 / A1 | SQLite/LanceDB/SQLite 图/本地 Blob，单宿主与单 Worker，直接发布 | SQLite 图替换 PR 的 Linux/MSRV、默认 28+89 测试与 Debug smoke 已核验；本轮 Windows/macOS/Docker 待 main，旧 S0 跨平台结果保留为历史证据 |
 | I1 记忆身份 | v1 编码、唯一绑定、显式写入、离线安装、精确 lookup、调用方版本前置条件；keyword/vector 候选前置过滤 | PR #20 真实 LanceDB、130 个高排名干扰及 vector/hybrid 服务级回归在三平台均已通过；S0 正确性闭环 |
 | I2 抽取匹配 | 调用方完整身份的单身份 capture、原文区间、来源读取与绑定状态 | 旧版无原生/原生用例有实测记录；自动推断、属性目录、未归一化状态和语义冲突未实现 |
 | I4 上下文 | 类型/身份标注、完整身份过滤、引用与 UTF-8 字节预算 | PR #20 的 vector/hybrid HTTP search/resolve 一致性已在三平台通过；冲突/类型预算未实现 |
