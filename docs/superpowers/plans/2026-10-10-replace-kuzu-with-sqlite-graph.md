@@ -6,7 +6,7 @@
 
 按现有图谱设计，用 SQLx/SQLite 的 `SqliteGraphStore` 替换原生图引擎。保持 `GraphStore`、`StorageEngine`、领域调用、确定性对象 ID、账本可见性和 hybrid snapshot JSON 契约。关系库继续持有单宿主 OS 锁，API/Worker 共享引擎；图后端不另设文件锁。
 
-SQLite 依赖原已存在。本次不增加原生图依赖；SQLite/LanceDB 构建仍需要 C/C++ 编译器与 protoc。Rust MSRV 为 1.98，开发工具链 1.98.1。
+SQLite 依赖原已存在。本次不增加原生图依赖；SQLite/LanceDB 构建仍需要 C/C++ 编译器与 protoc。Rust MSRV 为 1.98.0，开发工具链 1.98.0。
 
 新路径为 `OC_DATA_DIR/graph.db`，旧 `graph/kuzu.db` 不再被加载。图数据为可重新发布的派生投影，无旧图文件迁移；已有关系 owner/已提交账本不会自动补回空图。切换须按 [OPERATIONS](../../OPERATIONS.md) 备份并在新目录重新导入/发布来源。
 

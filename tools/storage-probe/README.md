@@ -16,10 +16,10 @@ cargo fetch --manifest-path tools/storage-probe/Cargo.toml --locked --target x86
 python tools/storage-probe/verify.py
 ```
 
-最低 Rust 版本为 1.98，使用 `1.98.1` 工具链验证（原 1.88 测试记录保留为历史证据）：
+最低 Rust 版本为 1.98.0，使用 `1.98.0` 工具链验证（原 1.88 测试记录保留为历史证据）：
 
 ```powershell
-./tools/storage-probe/build.ps1 -Toolchain 1.98.1 -TargetDirectory target/storage-probe-msrv -Jobs 8
+./tools/storage-probe/build.ps1 -Toolchain 1.98.0 -TargetDirectory target/storage-probe-msrv -Jobs 8
 python tools/storage-probe/verify.py --binary target/storage-probe-msrv/debug/origence-storage-probe.exe
 ```
 
@@ -40,4 +40,4 @@ python tools/storage-probe/verify.py --binary target/storage-probe-msrv/debug/or
 
 探针只有最小表结构；重复初始化不等于生产结构完整性检查。LanceDB 的 `put` 是追加，用唯一测试 ID 验证并发，尚未实现业务幂等 upsert。向量测试未创建 ANN 索引；SQLite 的 `search` 只是 scoped 查询，未验证 FTS。没有实现生产 scope 授权、来源有效性检查、跨库账本、队列或 Worker OS 文件锁。这些属于 M1–M4，不能用本探针替代验收。
 
-Rust 1.98、其他 OS 和 release 构建须单独记录实测结果；Cargo 的版本解析成功不能代替最低 Rust 版本编译。
+Rust 1.98.0、其他 OS 和 release 构建须单独记录实测结果；Cargo 的版本解析成功不能代替最低 Rust 版本编译。

@@ -12,7 +12,7 @@ Origence is a Rust-based foundation for agent memory and knowledge. It provides 
 
 ## Quick start
 
-Requires Rust **1.98+** and native build tools (a C/C++ compiler and Protobuf).
+Requires Rust **1.98.0** and native build tools (a C/C++ compiler and Protobuf).
 
 ```sh
 cargo build --locked

@@ -22,7 +22,7 @@ try {
     # Pin the MSVC rustc toolchain so `target.env == "msvc"`. `rustup toolchain
     # list` (no `--installed` flag) lists installed toolchains; match by exact
     # name to avoid the "(default)" suffix tripping a plain -eq.
-    $buildMsvcToolchain = '1.98.1-x86_64-pc-windows-msvc'
+    $buildMsvcToolchain = '1.98.0-x86_64-pc-windows-msvc'
     $buildToolchains = rustup toolchain list 2>$null
     if (-not ($buildToolchains | Where-Object { $_ -match ('(?m)^\s*' + [regex]::Escape($buildMsvcToolchain) + '\b') })) {
         throw "MSVC rustc toolchain not installed: $buildMsvcToolchain (run: rustup toolchain install $buildMsvcToolchain)."
