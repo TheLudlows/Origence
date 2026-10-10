@@ -6,6 +6,7 @@ mod lancedb_store;
 mod local_app;
 mod local_blob;
 mod local_ledger;
+mod pdf_parsing;
 mod sqlite_domain;
 mod sqlite_evidence;
 mod sqlite_graph_store;

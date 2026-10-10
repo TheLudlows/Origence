@@ -170,25 +170,7 @@ async fn rpc(
     serde_json::from_str(&line).unwrap()
 }
 fn pdf() -> Vec<u8> {
-    let stream = "BT /F1 12 Tf 72 720 Td (Release approval evidence) Tj ET";
-    let objects=["<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_owned(),
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
-        format!("<< /Length {} >>\nstream\n{stream}\nendstream",stream.len())];
-    let mut doc = "%PDF-1.4\n".to_string();
-    let mut offsets = Vec::new();
-    for (i, object) in objects.iter().enumerate() {
-        offsets.push(doc.len());
-        doc += &format!("{} 0 obj\n{object}\nendobj\n", i + 1);
-    }
-    let xref = doc.len();
-    doc += "xref\n0 6\n0000000000 65535 f \n";
-    for offset in offsets {
-        doc += &format!("{offset:010} 00000 n \n");
-    }
-    doc += &format!("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
-    doc.into_bytes()
+    super::pdf_parsing::text_pdf(&["Release approval evidence", "Second page provenance"])
 }
 
 #[tokio::test]
@@ -664,7 +646,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     .await;
     assert!(context["count"].as_u64().unwrap() <= 3000);
     assert!(!context["sources"].as_array().unwrap().is_empty());
-    // PDF parsing is a real child process, with upload bytes preserved under local blobs.
+    // The library parser runs inside the host; preserve raw uploads and page provenance.
     let bytes = pdf();
     let response = http
         .post(format!("{base}/v1/files?name=evidence.pdf&format=pdf"))
@@ -699,6 +681,64 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .await
         .unwrap();
     assert_eq!(fetched.as_ref(), bytes.as_slice());
+    for (query, page) in [("approval", 1), ("provenance", 2)] {
+        let results = post(
+            &http,
+            &base,
+            token,
+            "/v1/search",
+            json!({"query":query,"mode":"keyword"}),
+        )
+        .await;
+        let hit = results["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|hit| hit["asset_id"] == document["asset_id"])
+            .expect("PDF evidence must be searchable");
+        assert_eq!(hit["locator"]["page"], page);
+        assert_eq!(hit["locator"]["parser"], "pdf-oxide-0.3.78-v1");
+        assert_eq!(hit["locator"]["byte_start"], 0);
+    }
+    let invalid_file = http
+        .post(format!("{base}/v1/files?name=invalid.pdf&format=pdf"))
+        .bearer_auth(token)
+        .header("Idempotency-Key", "invalid-pdf-upload")
+        .body("%PDF-1.4\ntruncated")
+        .send()
+        .await
+        .unwrap();
+    assert!(invalid_file.status().is_success());
+    let invalid_file: Value = invalid_file.json().await.unwrap();
+    let invalid_document = post(
+        &http,
+        &base,
+        token,
+        "/v1/knowledge",
+        json!({"title":"Invalid PDF","file_id":invalid_file["file_id"],"format":"pdf"}),
+    )
+    .await;
+    let failed = job(
+        &http,
+        &base,
+        token,
+        id(&invalid_document, "job_id"),
+        "failed",
+    )
+    .await;
+    assert_eq!(failed["error_code"], "INVALID_ARGUMENT");
+    assert_eq!(
+        http.get(format!(
+            "{base}/v1/assets/{}",
+            invalid_document["asset_id"].as_str().unwrap()
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        404
+    );
     // Cancel while model IO is in flight, then retry with a new generation.
     slow.store(true, Ordering::SeqCst);
     let pending = post(

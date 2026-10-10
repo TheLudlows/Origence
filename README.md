@@ -26,4 +26,6 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 [API](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/superpowers/plans/2026-10-09-next-stage-roadmap.md)
 
+Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md).
+
 > The CLI is now named `origence`. Existing `OC_*` configuration variables and HTTP endpoints remain unchanged. The graph backend now uses `graph.db`; see [Operations](docs/OPERATIONS.md) for the rebuild boundary.
