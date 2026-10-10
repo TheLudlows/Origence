@@ -1,0 +1,97 @@
+{
+  "dataset_id": "origence-s1-retrieval-v2",
+  "frozen_at_utc": "2026-10-10T07:06:36.673927+00:00",
+  "base_commit": "9c292a99aec658ba924d5b82c1a86f229ad4d115",
+  "corpus_documents": 36,
+  "cases": 300,
+  "development": 200,
+  "heldout": 100,
+  "answerable": 288,
+  "unanswerable": 12,
+  "authorship": {
+    "inherited_v1_manual_labels": 100,
+    "assistant_authored_source_checked": 200,
+    "independent_human_review": "not performed"
+  },
+  "source_partitions": {
+    "inherited_development": [
+      "release-policy",
+      "rollback",
+      "backup",
+      "incident",
+      "atlas-owner",
+      "boreal-owner",
+      "atlas-test",
+      "audit",
+      "quota",
+      "cache",
+      "runbook",
+      "negative"
+    ],
+    "new_development": [
+      "cedar-key",
+      "delta-export",
+      "ember-alert",
+      "fjord-queue",
+      "grove-cert",
+      "harbor-archive",
+      "iris-budget",
+      "juniper-dr",
+      "kite-upload",
+      "larch-maint",
+      "maple-throttle",
+      "nova-delete"
+    ],
+    "heldout": [
+      "orion-travel",
+      "polaris-vendor",
+      "quartz-lab",
+      "raven-delivery",
+      "sable-access",
+      "tango-training",
+      "umbra-renew",
+      "vega-ticket",
+      "willow-contract",
+      "xenia-return",
+      "yarrow-booking",
+      "zenith-license"
+    ]
+  },
+  "protocol": "same 36-document corpus; source-disjoint development/heldout gold; queries frozen before inference; no retrieval tuning; heldout reported separately",
+  "scope": "synthetic operational policies; not a representative production or independently human-reviewed benchmark",
+  "fixed_experiment": {
+    "k": 5,
+    "budget_utf8_bytes": 2000,
+    "embedding": "BAAI/bge-small-zh-v1.5",
+    "embedding_revision": "7999e1d3359715c523056ef9478215996d62a620",
+    "extraction": "Qwen/Qwen2.5-0.5B-Instruct",
+    "extraction_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "configurations": [
+      "keyword",
+      "vector",
+      "hybrid-original",
+      "hybrid-summary",
+      "hybrid-graph",
+      "hybrid-all"
+    ],
+    "extraction_policy": "local two-pass JSON-schema constrained entities/relations; endpoint enums; max8 items per array; greedy float32 CPU; summaries max128 tokens; offline real-model preparation"
+  },
+  "sha256": {
+    "corpus.jsonl": "115e58b9c92ae4ca3f1162eb25bb8940a6687fb3576609b6e44479bdd8fad84e",
+    "heldout.jsonl": "bf7cd681f1861e7b6310633eeb5f726e70b66466c70be2d1a59965e397239f3e",
+    "development.jsonl": "d9d9bfc38674b69e3891baa8581285b6b1fc59ddcb855399b981faf42e1de9ca",
+    "cases.jsonl": "fced7f6e4aef6ecea5ff6553e3739b0bb8e4102c9dfa804dfa6dee5269209d1c"
+  },
+  "category_counts": {
+    "exact": 110,
+    "paraphrase": 58,
+    "scope": 53,
+    "negation": 32,
+    "multi-fact": 30,
+    "identifier": 2,
+    "multi-source": 3,
+    "no-answer": 12
+  },
+  "model_selection": "Unconstrained 0.5B and 1.5B schema-only preflight failed endpoint consistency; 1.5B quantization process exited before startup (cause unconfirmed); quantized 0.5B output lacked source grounding. Use real 0.5B float32 with two-pass schema-constrained generation, selected before retrieval scoring or heldout inference.",
+  "experiment_frozen_at_utc": "2026-10-10T07:19:41.502547+00:00"
+}

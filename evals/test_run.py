@@ -13,6 +13,31 @@ SPEC.loader.exec_module(RUN)
 
 
 class Metrics(unittest.TestCase):
+    def test_quote_coverage_requires_current_cited_original_chunk(self):
+        evidence = [{"source_id":"a","source_version":2,"quote":"原文证据"}]
+        hits = [{"asset_id":"asset","version":2,"chunk_id":"chunk","content":"完整原文证据"}]
+        mapping = {"asset":"a"}
+        context = {"sources":[{"asset_id":"asset","version":2,"chunk_id":"chunk","citation":"[c]"}],
+                   "rendered_context":"[c] 完整原文证据"}
+        self.assertEqual(RUN.evidence_recall(hits, evidence, mapping, 5), 1)
+        self.assertEqual(RUN.context_coverage(context, hits, evidence, mapping), 1)
+        context["sources"][0]["version"] = 1
+        self.assertEqual(RUN.context_coverage(context, hits, evidence, mapping), 0)
+        context["sources"] = [{"entity_id":"e", "evidence":[{"asset_id":"asset","version":2}]}]
+        self.assertEqual(RUN.context_coverage(context, hits, evidence, mapping), 0)
+        self.assertIsNone(RUN.evidence_recall(hits, [], mapping, 5))
+
+    def test_evidence_validation_rejects_untraceable_labels(self):
+        corpus = [{"id":"a","content":"真实原文","source_version":1,"locator":"source-document"}]
+        case = {"relevant_source_ids":["a"],"evidence":[{"source_id":"a","source_version":1,
+                "locator":"source-document","quote":"真实"}]}
+        RUN.validate_evidence(corpus, [case], True)
+        for key, value in [("source_version",2),("quote","编造"),("locator","missing")]:
+            bad = json.loads(json.dumps(case))
+            bad["evidence"][0][key] = value
+            with self.assertRaises(ValueError):
+                RUN.validate_evidence(corpus, [bad], True)
+
     def test_deduplicates_chunks_before_document_cutoff(self):
         result = RUN.score(["a", "a", "b", "c"], ["b", "c"], 2)
         self.assertEqual(result["recall"], .5)
@@ -69,6 +94,13 @@ server.serve_forever()
 
 @unittest.skipIf(os.name == "nt", "fixture executable uses a POSIX shebang; production driver supports Windows")
 class Adapter(unittest.TestCase):
+    def test_model_calls_and_matrix_require_explicit_configuration(self):
+        args = ["python3", str(Path(__file__).with_name("run.py")), "--binary", "unused", "--output", "unused"]
+        for flags in [["--mode","vector"], ["--matrix"]]:
+            result = subprocess.run(args + flags, capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("require --allow-model-calls", result.stderr)
+
     def test_reports_errors_without_counting_them_as_abstentions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

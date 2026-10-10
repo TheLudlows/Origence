@@ -1,0 +1,187 @@
+{
+  "source_commit": "9c292a99aec658ba924d5b82c1a86f229ad4d115",
+  "source_tree": "4335d460bc96aa8360a9556c47f9ec65016a2c8b",
+  "run_id": 38032343493,
+  "run_attempt": 1,
+  "url": "https://github.com/TheLudlows/Origence/actions/runs/38032343493",
+  "jobs": [
+    {
+      "id": 114155754721,
+      "name": "linux-native",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114155754830,
+      "name": "macos",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114155754832,
+      "name": "container",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114155754850,
+      "name": "fast-check",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114155754852,
+      "name": "windows",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "log_evidence": {
+    "114155754721": {
+      "checkout": [
+        "2026-10-10T06:51:01.1723831Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9c292a99aec658ba924d5b82c1a86f229ad4d115:refs/remotes/origin/main",
+        "2026-10-10T06:51:01.7338204Z  * [new ref]         9c292a99aec658ba924d5b82c1a86f229ad4d115 -> origin/main",
+        "2026-10-10T06:51:01.7687424Z 9c292a99aec658ba924d5b82c1a86f229ad4d115",
+        "2026-10-10T06:59:46.0406646Z ##[group]Run python3 evals/run.py --binary target/debug/origence --commit \"9c292a99aec658ba924d5b82c1a86f229ad4d115\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"",
+        "2026-10-10T06:59:46.0407843Z \u001b[36;1mpython3 evals/run.py --binary target/debug/origence --commit \"9c292a99aec658ba924d5b82c1a86f229ad4d115\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"\u001b[0m"
+      ],
+      "test_counts": [
+        "2026-10-10T06:52:39.0765465Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s",
+        "2026-10-10T06:59:24.1876812Z test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s",
+        "2026-10-10T06:59:24.1904162Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-10T06:59:28.8891824Z test sqlite_graph_store::concurrent_relation_replay_remains_idempotent ... ok",
+        "2026-10-10T06:59:28.9032722Z test sqlite_graph_store::delete_by_id_removes_shared_node_only_when_told ... ok",
+        "2026-10-10T06:59:28.9342194Z test sqlite_graph_store::detach_delete_cascades_incoming_outgoing_and_self_edges_only_in_scope ... ok",
+        "2026-10-10T06:59:28.9500731Z test sqlite_graph_store::lifecycle_is_idempotent ... ok",
+        "2026-10-10T06:59:28.9722185Z test sqlite_graph_store::missing_endpoints_do_not_create_relations ... ok",
+        "2026-10-10T06:59:28.9851460Z test sqlite_graph_store::occupied_schema_view_is_rejected_without_creating_tables ... ok",
+        "2026-10-10T06:59:29.0070675Z test sqlite_graph_store::partial_graph_schema_is_rejected_without_repair ... ok",
+        "2026-10-10T06:59:29.0380691Z test sqlite_graph_store::schema_without_keys_or_cascades_is_rejected_without_repair ... ok",
+        "2026-10-10T06:59:29.0644508Z test sqlite_graph_store::snapshot_is_normalized_sorted_scoped_and_persistent ... ok",
+        "2026-10-10T06:59:29.0880740Z test sqlite_graph_store::source_tagged_delete_removes_last_writer ... ok",
+        "2026-10-10T06:59:29.1106270Z test sqlite_graph_store::source_tags_preserve_entity_last_writer_and_relation_first_writer ... ok",
+        "2026-10-10T06:59:29.1490753Z test sqlite_graph_store::traversal_is_directed_bounded_distinct_and_excludes_start ... ok",
+        "2026-10-10T06:59:29.8750930Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok",
+        "2026-10-10T06:59:29.8931686Z test sqlite_graph_store::upsert_is_idempotent_and_traverse_is_scoped ... ok",
+        "2026-10-10T06:59:30.2390407Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok",
+        "2026-10-10T06:59:43.1871669Z test result: ok. 89 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.99s",
+        "2026-10-10T06:59:43.4326192Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-10T06:59:48.9704268Z {\"cases\": 24, \"answerable\": 22, \"unanswerable\": 2, \"errors\": 0, \"document_recall_at_k\": 0.6363636363636364, \"mrr_at_k\": 0.6363636363636364, \"ndcg_at_k\": 0.6363636363636364, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 3.5622810000859317, \"p95\": 3.811919000099806, \"p99\": 5.265478999945117}, \"import_ms\": 2520.421122999892}"
+      ],
+      "rust": [
+        "2026-10-10T06:51:11.0417241Z   1.98.0-x86_64-unknown-linux-gnu installed - rustc 1.98.0 (88d9e12ae 2026-08-18)",
+        "2026-10-10T06:51:11.0741229Z   1.98.0-x86_64-unknown-linux-gnu unchanged - rustc 1.98.0 (88d9e12ae 2026-08-18)",
+        "2026-10-10T06:51:11.2208561Z rustc 1.98.0 (88d9e12ae 2026-08-18)",
+        "2026-10-10T06:51:25.9271326Z \u001b[36;1mrustc --version | grep -Fq 'rustc 1.98.0 ('\u001b[0m",
+        "2026-10-10T06:51:25.9469148Z rustc 1.98.0 (88d9e12ae 2026-08-18)"
+      ]
+    },
+    "114155754852": {
+      "checkout": [
+        "2026-10-10T06:51:05.8513538Z [command]\"C:\\Program Files\\Git\\bin\\git.exe\" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9c292a99aec658ba924d5b82c1a86f229ad4d115:refs/remotes/origin/main",
+        "2026-10-10T06:51:11.1011698Z  * [new ref]         9c292a99aec658ba924d5b82c1a86f229ad4d115 -> origin/main",
+        "2026-10-10T06:51:11.4909987Z 9c292a99aec658ba924d5b82c1a86f229ad4d115"
+      ],
+      "test_counts": [
+        "2026-10-10T07:04:53.1026061Z test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s",
+        "2026-10-10T07:04:53.1183073Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-10T07:05:01.5031775Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok",
+        "2026-10-10T07:05:01.5034818Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok",
+        "2026-10-10T07:05:03.5714924Z test sqlite_graph_store::concurrent_relation_replay_remains_idempotent ... ok",
+        "2026-10-10T07:05:03.5760015Z test sqlite_graph_store::delete_by_id_removes_shared_node_only_when_told ... ok",
+        "2026-10-10T07:05:03.8267870Z test sqlite_graph_store::lifecycle_is_idempotent ... ok",
+        "2026-10-10T07:05:03.8887972Z test sqlite_graph_store::missing_endpoints_do_not_create_relations ... ok",
+        "2026-10-10T07:05:04.0615294Z test sqlite_graph_store::occupied_schema_view_is_rejected_without_creating_tables ... ok",
+        "2026-10-10T07:05:04.1496368Z test sqlite_graph_store::partial_graph_schema_is_rejected_without_repair ... ok",
+        "2026-10-10T07:05:04.4101579Z test sqlite_graph_store::detach_delete_cascades_incoming_outgoing_and_self_edges_only_in_scope ... ok",
+        "2026-10-10T07:05:04.5398427Z test sqlite_graph_store::snapshot_is_normalized_sorted_scoped_and_persistent ... ok",
+        "2026-10-10T07:05:04.6815248Z test sqlite_graph_store::source_tagged_delete_removes_last_writer ... ok",
+        "2026-10-10T07:05:04.8735269Z test sqlite_graph_store::source_tags_preserve_entity_last_writer_and_relation_first_writer ... ok",
+        "2026-10-10T07:05:05.1032256Z test sqlite_graph_store::traversal_is_directed_bounded_distinct_and_excludes_start ... ok",
+        "2026-10-10T07:05:05.1806399Z test sqlite_graph_store::upsert_is_idempotent_and_traverse_is_scoped ... ok",
+        "2026-10-10T07:05:05.2817107Z test sqlite_graph_store::schema_without_keys_or_cascades_is_rejected_without_repair ... ok",
+        "2026-10-10T07:05:20.5159211Z test result: ok. 89 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.37s",
+        "2026-10-10T07:05:21.6229776Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ],
+      "rust": [
+        "2026-10-10T06:51:23.0743499Z   1.98.1-x86_64-pc-windows-msvc installed - rustc 1.98.1 (48a229cea 2026-09-01)",
+        "2026-10-10T06:51:23.2224174Z   1.98.1-x86_64-pc-windows-msvc unchanged - rustc 1.98.1 (48a229cea 2026-09-01)",
+        "2026-10-10T06:51:24.6264374Z rustc 1.98.1 (48a229cea 2026-09-01)"
+      ]
+    },
+    "114155754832": {
+      "checkout": [
+        "2026-10-10T06:51:00.3718796Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9c292a99aec658ba924d5b82c1a86f229ad4d115:refs/remotes/origin/main",
+        "2026-10-10T06:51:01.2838416Z  * [new ref]         9c292a99aec658ba924d5b82c1a86f229ad4d115 -> origin/main",
+        "2026-10-10T06:51:01.3164111Z 9c292a99aec658ba924d5b82c1a86f229ad4d115"
+      ],
+      "test_counts": [],
+      "rust": []
+    },
+    "114155754850": {
+      "checkout": [
+        "2026-10-10T06:51:00.8617761Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9c292a99aec658ba924d5b82c1a86f229ad4d115:refs/remotes/origin/main",
+        "2026-10-10T06:51:01.3887268Z  * [new ref]         9c292a99aec658ba924d5b82c1a86f229ad4d115 -> origin/main",
+        "2026-10-10T06:51:01.4280678Z 9c292a99aec658ba924d5b82c1a86f229ad4d115"
+      ],
+      "test_counts": [
+        "2026-10-10T06:51:24.2884392Z test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s",
+        "2026-10-10T06:51:28.6602427Z test sqlite_graph_store::concurrent_relation_replay_remains_idempotent ... ok",
+        "2026-10-10T06:51:28.6603537Z test sqlite_graph_store::delete_by_id_removes_shared_node_only_when_told ... ok",
+        "2026-10-10T06:51:28.6744745Z test sqlite_graph_store::lifecycle_is_idempotent ... ok",
+        "2026-10-10T06:51:28.6825514Z test sqlite_graph_store::occupied_schema_view_is_rejected_without_creating_tables ... ok",
+        "2026-10-10T06:51:28.6830297Z test sqlite_graph_store::partial_graph_schema_is_rejected_without_repair ... ok",
+        "2026-10-10T06:51:28.6867450Z test sqlite_graph_store::missing_endpoints_do_not_create_relations ... ok",
+        "2026-10-10T06:51:28.6983868Z test sqlite_graph_store::detach_delete_cascades_incoming_outgoing_and_self_edges_only_in_scope ... ok",
+        "2026-10-10T06:51:28.7007143Z test sqlite_graph_store::source_tagged_delete_removes_last_writer ... ok",
+        "2026-10-10T06:51:28.7031702Z test sqlite_graph_store::snapshot_is_normalized_sorted_scoped_and_persistent ... ok",
+        "2026-10-10T06:51:28.7105867Z test sqlite_graph_store::schema_without_keys_or_cascades_is_rejected_without_repair ... ok",
+        "2026-10-10T06:51:28.7221084Z test sqlite_graph_store::source_tags_preserve_entity_last_writer_and_relation_first_writer ... ok",
+        "2026-10-10T06:51:28.7233608Z test sqlite_graph_store::upsert_is_idempotent_and_traverse_is_scoped ... ok",
+        "2026-10-10T06:51:28.7276551Z test sqlite_graph_store::traversal_is_directed_bounded_distinct_and_excludes_start ... ok",
+        "2026-10-10T06:51:29.0250982Z test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s"
+      ],
+      "rust": [
+        "2026-10-10T06:51:09.5969373Z   1.98.1-x86_64-unknown-linux-gnu installed - rustc 1.98.1 (48a229cea 2026-09-01)",
+        "2026-10-10T06:51:09.6345900Z   1.98.1-x86_64-unknown-linux-gnu unchanged - rustc 1.98.1 (48a229cea 2026-09-01)",
+        "2026-10-10T06:51:09.8287237Z rustc 1.98.1 (48a229cea 2026-09-01)"
+      ]
+    },
+    "114155754830": {
+      "checkout": [
+        "2026-10-10T06:51:04.6493260Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9c292a99aec658ba924d5b82c1a86f229ad4d115:refs/remotes/origin/main",
+        "2026-10-10T06:51:05.6151360Z  * [new ref]         9c292a99aec658ba924d5b82c1a86f229ad4d115 -> origin/main",
+        "2026-10-10T06:51:05.6710990Z 9c292a99aec658ba924d5b82c1a86f229ad4d115",
+        "2026-10-10T07:35:20.8156350Z ##[group]Run python3 evals/run.py --binary target/release/origence --commit \"9c292a99aec658ba924d5b82c1a86f229ad4d115\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"",
+        "2026-10-10T07:35:20.8158120Z \u001b[36;1mpython3 evals/run.py --binary target/release/origence --commit \"9c292a99aec658ba924d5b82c1a86f229ad4d115\" --output \"$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"\u001b[0m"
+      ],
+      "test_counts": [
+        "2026-10-10T07:01:29.7558380Z test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s",
+        "2026-10-10T07:01:29.7687970Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-10T07:01:35.5714790Z test identity_vector_regression::s0_vector_identity_prefilter_real_lancedb ... ok",
+        "2026-10-10T07:01:35.6316610Z test identity_vector_regression::s0_hybrid_identity_prefilter_real_lancedb ... ok",
+        "2026-10-10T07:01:36.4275730Z test sqlite_graph_store::concurrent_relation_replay_remains_idempotent ... ok",
+        "2026-10-10T07:01:36.4281420Z test sqlite_graph_store::delete_by_id_removes_shared_node_only_when_told ... ok",
+        "2026-10-10T07:01:36.4577350Z test sqlite_graph_store::detach_delete_cascades_incoming_outgoing_and_self_edges_only_in_scope ... ok",
+        "2026-10-10T07:01:36.4677730Z test sqlite_graph_store::lifecycle_is_idempotent ... ok",
+        "2026-10-10T07:01:36.4785170Z test sqlite_graph_store::missing_endpoints_do_not_create_relations ... ok",
+        "2026-10-10T07:01:36.4978920Z test sqlite_graph_store::occupied_schema_view_is_rejected_without_creating_tables ... ok",
+        "2026-10-10T07:01:36.5080710Z test sqlite_graph_store::partial_graph_schema_is_rejected_without_repair ... ok",
+        "2026-10-10T07:01:36.5180840Z test sqlite_graph_store::schema_without_keys_or_cascades_is_rejected_without_repair ... ok",
+        "2026-10-10T07:01:36.5282520Z test sqlite_graph_store::snapshot_is_normalized_sorted_scoped_and_persistent ... ok",
+        "2026-10-10T07:01:36.5384050Z test sqlite_graph_store::source_tagged_delete_removes_last_writer ... ok",
+        "2026-10-10T07:01:36.5484600Z test sqlite_graph_store::source_tags_preserve_entity_last_writer_and_relation_first_writer ... ok",
+        "2026-10-10T07:01:36.5584520Z test sqlite_graph_store::traversal_is_directed_bounded_distinct_and_excludes_start ... ok",
+        "2026-10-10T07:01:36.5686650Z test sqlite_graph_store::upsert_is_idempotent_and_traverse_is_scoped ... ok",
+        "2026-10-10T07:01:53.5865400Z test result: ok. 89 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.79s",
+        "2026-10-10T07:01:54.7686570Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-10T07:35:24.3309390Z {\"cases\": 24, \"answerable\": 22, \"unanswerable\": 2, \"errors\": 0, \"document_recall_at_k\": 0.6363636363636364, \"mrr_at_k\": 0.6363636363636364, \"ndcg_at_k\": 0.6363636363636364, \"no_answer_false_positives\": 0, \"no_answer_errors\": 0, \"successful_request_latency_ms\": {\"p50\": 0.9366250001221488, \"p95\": 2.693375000035303, \"p99\": 4.211250000025757}, \"import_ms\": 2635.6860400001096}"
+      ],
+      "rust": [
+        "2026-10-10T06:51:12.5852850Z   1.98.1-aarch64-apple-darwin installed - rustc 1.98.1 (48a229cea 2026-09-01)",
+        "2026-10-10T06:51:12.7014470Z   1.98.1-aarch64-apple-darwin unchanged - rustc 1.98.1 (48a229cea 2026-09-01)",
+        "2026-10-10T06:51:13.0367910Z rustc 1.98.1 (48a229cea 2026-09-01)"
+      ]
+    }
+  }
+}

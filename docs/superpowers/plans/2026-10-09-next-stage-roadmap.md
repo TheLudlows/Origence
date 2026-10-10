@@ -23,7 +23,7 @@
 
 既有评估：12 文档/24 查询；22 条有答案题中 14 条全部来源命中，8 条返回空，2 条无答案题没有误召回；keyword 文档 Recall@5 63.6%，S0 主干 Linux/macOS 日志亦保留该合成基线。**只代表合成关键词基线，不证明真正 RAG/Agent 效果**。Rust 1.98 的主干 CI 已单独核验，证据见 VALIDATION；没有复用历史 Rust 1.88/1.96 的绿灯。
 
-2026-10-10 存储维护：图投影已按 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 替换；不改变 S1/P1 优先级。替换前 S0 CI 仍是历史证据，本轮验证单独归档：[PR #23](https://github.com/TheLudlows/Origence/pull/23)、run `38030946507` 的 fast-check/Linux/MSRV、默认 28+89 测试及 HTTP smoke 成功；Windows/macOS/Docker 待 main。
+2026-10-10 存储维护：图投影已按 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 替换；不改变 S1/P1 优先级。替换前 S0 CI 仍是历史证据，本轮验证单独归档：[PR #23](https://github.com/TheLudlows/Origence/pull/23)、run `38030946507` 的 fast-check/Linux/MSRV、默认 28+89 测试及 HTTP smoke 成功；PR #23 已合入，main `9c292a9` 的 run `38032343493` 五作业全部成功，三平台默认 28+89 测试、13 项图回归及 vector/hybrid HTTP 回归均通过。
 
 ## 3. 交付顺序与任务
 
@@ -46,14 +46,16 @@
 
 ### S1：建立检索有效性的实测证据（P0 质量收口）
 
-- [x] **已启动（2026-10-10）**：冻结 `evals/s1/` v1 开发集，100 道人工编写问题、12 篇合成来源；96 道可答、4 道无答案。每条金标绑定 source/version/locator 和可核对原文引句，manifest 固定 SHA-256。该开发集不是生产代表样本或留出测试集。主机 `47d1375` 的 keyword@5 已实测：Recall/MRR/nDCG 均 1.04%，无请求错误；不得与旧 24 题子集直接比较，vector/hybrid 对照待配置 embedding。
-- [ ] 固定 24 题基线及 8 条失败问句；冻结原始 source/version/locator、标注、数据 hash 和配置。
-- [ ] 先补不少于 100 条人工证据标注题，再按原设计扩展到 300 条；治理安全与质量分开统计。
-- [ ] 在同语料/同预算/同 embedding 条件下测 keyword、vector、hybrid；分别报告文档/证据 Recall@k、Coverage@B、nDCG、无答案误召回、p50/p95/p99、模型调用费用。
-- [ ] 新增摘要和图谱的**独立评测开关**，进行纯原文 → +摘要 → +图的消融，不将三种检索模式等同于独立消融。
-- [ ] 用数据决定是否需要 FTS/BM25、中文查询解析、reranker 和 ANN，不预先引入更复杂架构。
+- [x] 固定 24 题 keyword 基线及 retrieval-15 至 retrieval-22 八条失败；source/version/locator、数据 hash 和配置归档。
+- [x] 冻结检索 v2：36 篇合成来源、300 题（开发 200 / 来源独立留出 100）。原 100 题及其既有人工标签不变；新增 200 题由助手编写并逐条核对原文证据。此项完成数据工程，不能据此宣称 300 题均经人工复核。
+- [ ] 新增 200 条标签的独立人工复核；完整平台评估协议与生产代表数据不由本检索切片替代。
+- [x] 同语料/同预算/同 embedding 的 keyword、vector、hybrid 六配置完成；报告文档/证据 Recall@5、Coverage@2000 UTF-8 字节、nDCG、无答案误召回、search/resolve p50/p95/p99、usage 与 provider 费用（CPU 未定价）。
+- [x] 摘要和图谱独立开关：纯原文、+摘要、+图、+摘要+图四组独立消融，所有组复用同一真实模型投影。
+- [x] 根据数据记录查询解析/FTS/BM25、拒答阈值、reranker 与 ANN 的优先级；本轮不提前引入新架构。
 
-**验收**：每次实验保留 manifest、commit、语料 hash、人工标签、原始结果和复现命令，严禁使用 mock embedding 得到的得分宣称模型真实质量。
+**工程交付**：代码 `77d43a8`，六组共 1800 次 search/1728 次 resolve，原始结果、模型 revision/file hash、命令、开发/留出分数与独立指标审计见 [S1 实测报告](../../../evals/s1/results/local-77d43a8-v2/README.md)。PR #24 源码 CI 的两个实际作业成功；图替换 main 五作业证据单独保存。严格标签复核尚未完成，不宣布完整平台质量验收通过。
+
+**验收**：每次实验保留 manifest、commit、语料 hash、标签作者与复核状态、原始结果和复现命令，严禁使用 mock embedding 得到的得分宣称模型真实质量。
 
 ### S2：I2 记忆语义最小契约（P1 前置）
 
@@ -93,4 +95,4 @@ Rust 1.98 的完整 CI、cargo audit/RustSec、fs2 文件锁生命周期、长�
 
 ## 5. 执行入口
 
-S0 原生与主干验收已完成并归档。下一阶段为 S1 评估基线，再按 S2/S3 拆分小 PR；本次 Issue #21 不启动这些阶段，S1 及后续清单保持未完成。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。
+S0 原生与主干验收已完成并归档。S1 工程检索实验现已在 PR #24 交付，新增标签独立人工复核仍待完成；本次没有启动 S2/S3。Issue #21 是历史 S0 记录，不与本轮 S1 证据混用。每次 PR 关联本路线图任务、回归用例、代码 SHA 和 CI 结果，完成后同步 STATUS 与 VALIDATION。

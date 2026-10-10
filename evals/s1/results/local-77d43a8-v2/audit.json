@@ -1,0 +1,44 @@
+{
+  "keyword": {
+    "cases": 300,
+    "answerable": 288,
+    "errors": 0,
+    "independent_metric_recalculation": "all per-case and aggregate values match",
+    "disabled_components": "verified on actual search/resolve responses"
+  },
+  "vector": {
+    "cases": 300,
+    "answerable": 288,
+    "errors": 0,
+    "independent_metric_recalculation": "all per-case and aggregate values match",
+    "disabled_components": "verified on actual search/resolve responses"
+  },
+  "hybrid-original": {
+    "cases": 300,
+    "answerable": 288,
+    "errors": 0,
+    "independent_metric_recalculation": "all per-case and aggregate values match",
+    "disabled_components": "verified on actual search/resolve responses"
+  },
+  "hybrid-summary": {
+    "cases": 300,
+    "answerable": 288,
+    "errors": 0,
+    "independent_metric_recalculation": "all per-case and aggregate values match",
+    "disabled_components": "verified on actual search/resolve responses"
+  },
+  "hybrid-graph": {
+    "cases": 300,
+    "answerable": 288,
+    "errors": 0,
+    "independent_metric_recalculation": "all per-case and aggregate values match",
+    "disabled_components": "verified on actual search/resolve responses"
+  },
+  "hybrid-all": {
+    "cases": 300,
+    "answerable": 288,
+    "errors": 0,
+    "independent_metric_recalculation": "all per-case and aggregate values match",
+    "disabled_components": "verified on actual search/resolve responses"
+  }
+}

@@ -40,6 +40,7 @@ impl Service {
                 "effective_mode": input.mode,
                 "warnings": [],
                 "embedding_profile": self.models.profile,
+                "active_components": {"summaries": false, "graph": false},
                 "retrieval_policy": "local-scoped-exact-rrf60-v1",
                 "graph": {"entities": [], "relations": []}
             }));
@@ -94,7 +95,11 @@ impl Service {
                 }
             }
         }
-        let graph = if effective == "hybrid" && input.memory_identity.is_none() {
+        let summaries_enabled =
+            effective == "hybrid" && input.memory_identity.is_none() && input.components.summaries;
+        let graph_enabled =
+            effective == "hybrid" && input.memory_identity.is_none() && input.components.graph;
+        let graph = if graph_enabled {
             Some(self.engine.graph().snapshot(scope(a)).await?)
         } else {
             None
@@ -125,8 +130,10 @@ impl Service {
             branches.push(vectors);
         }
         let (mut entities, mut relations) = (Vec::new(), Vec::new());
-        if let Some(graph) = graph {
+        if summaries_enabled {
             branches.push(tx.keyword_hits(&terms, true, asset_filter).await?);
+        }
+        if let Some(graph) = graph {
             let all_entities: Vec<Value> = decode(graph["entities"].clone())?;
             let all_relations: Vec<Value> = decode(graph["relations"].clone())?;
             let mut ids: HashSet<Uuid> = all_entities
@@ -256,7 +263,7 @@ impl Service {
             })
             .collect();
         Ok(
-            json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","graph":{"entities":entities,"relations":relations}}),
+            json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}}),
         )
     }
     pub async fn resolve(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {
@@ -267,6 +274,7 @@ impl Service {
             .search(
                 a,
                 SearchInput {
+                    components: input.components,
                     memory_identity: input.memory_identity,
                     query: input.query,
                     limit: 100,
@@ -291,7 +299,7 @@ impl Service {
         let mut all_sources = sources;
         all_sources.extend(graph_sources);
         Ok(
-            json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","memory_identity":search["memory_identity"],"count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"graph":search["graph"]}),
+            json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","memory_identity":search["memory_identity"],"count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"active_components":search["active_components"],"graph":search["graph"]}),
         )
     }
 }

@@ -7,3 +7,6 @@
 /.data/
 .idea/
 docs/.target/
+
+__pycache__/
+*.py[cod]

@@ -1,0 +1,98 @@
+{
+  "hybrid-summary": {
+    "recall": {
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 288,
+      "mean_delta": 0.0
+    },
+    "mrr": {
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 288,
+      "mean_delta": 0.0
+    },
+    "ndcg": {
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 288,
+      "mean_delta": 0.0
+    },
+    "evidence_recall": {
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 288,
+      "mean_delta": 0.0
+    },
+    "coverage": {
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 288,
+      "mean_delta": 0.0
+    }
+  },
+  "hybrid-graph": {
+    "recall": {
+      "improved": 2,
+      "worsened": 10,
+      "unchanged": 276,
+      "mean_delta": -0.027777777777777776
+    },
+    "mrr": {
+      "improved": 21,
+      "worsened": 83,
+      "unchanged": 184,
+      "mean_delta": -0.13680555555555554
+    },
+    "ndcg": {
+      "improved": 21,
+      "worsened": 86,
+      "unchanged": 181,
+      "mean_delta": -0.11030775309879381
+    },
+    "evidence_recall": {
+      "improved": 2,
+      "worsened": 10,
+      "unchanged": 276,
+      "mean_delta": -0.027777777777777776
+    },
+    "coverage": {
+      "improved": 1,
+      "worsened": 10,
+      "unchanged": 277,
+      "mean_delta": -0.029513888888888888
+    }
+  },
+  "hybrid-all": {
+    "recall": {
+      "improved": 2,
+      "worsened": 10,
+      "unchanged": 276,
+      "mean_delta": -0.027777777777777776
+    },
+    "mrr": {
+      "improved": 21,
+      "worsened": 83,
+      "unchanged": 184,
+      "mean_delta": -0.13680555555555554
+    },
+    "ndcg": {
+      "improved": 21,
+      "worsened": 86,
+      "unchanged": 181,
+      "mean_delta": -0.11030775309879381
+    },
+    "evidence_recall": {
+      "improved": 2,
+      "worsened": 10,
+      "unchanged": 276,
+      "mean_delta": -0.027777777777777776
+    },
+    "coverage": {
+      "improved": 1,
+      "worsened": 10,
+      "unchanged": 277,
+      "mean_delta": -0.029513888888888888
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "frozen_inputs_sha256": {
+    "corpus.jsonl": "aa8845d4c55f7206f698acfdd0915594cf7e1e35cddcb9497983abe1ede6937a",
+    "retrieval.jsonl": "38fb6533f788870a9e216ff4dd10489c7d993fe8e1c5a12bfbaf646ea72c9c4a"
+  },
+  "misses": [
+    {
+      "id": "retrieval-15",
+      "query": "线上部署需要批准吗",
+      "relevant_source_ids": [
+        "release-policy",
+        "negative"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-16",
+      "query": "出了问题怎么退回旧版",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-17",
+      "query": "备份多久清理",
+      "relevant_source_ids": [
+        "backup"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-18",
+      "query": "谁可以看安全记录",
+      "relevant_source_ids": [
+        "audit"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-19",
+      "query": "Atlas和Boreal分别由谁负责",
+      "relevant_source_ids": [
+        "atlas-owner",
+        "boreal-owner"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-20",
+      "query": "发布失败后通知谁",
+      "relevant_source_ids": [
+        "rollback"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-21",
+      "query": "取消生产审批是否已生效",
+      "relevant_source_ids": [
+        "negative",
+        "release-policy"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    },
+    {
+      "id": "retrieval-22",
+      "query": "缓存是否权威存储",
+      "relevant_source_ids": [
+        "cache"
+      ],
+      "ranked_source_ids": [],
+      "status": "ok",
+      "recall": 0.0
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "policy": "real model projections prepared offline and cached before import; generation time excluded from import latency",
+  "prompt_sha256": {
+    "SUMMARY_PROMPT": "5926f371e1967576e787ba95c89240c95958a9fac7fd77a8e2834c0f11d6e212",
+    "GRAPH_EXTRACTION_PROMPT": "de5e573afaa6707f5394df83362155353fde48408cb60346a9e8bcc229392856"
+  }
+}
