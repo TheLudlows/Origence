@@ -58,6 +58,22 @@ PDF 二进制偏移。新文档记录 `pdf-oxide-0.3.78-v1`；旧版本内容及
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。配置列表见 [项目 README](../README.md)。
 
+## 本地 embedding 服务
+
+本机已使用 Ollama 的 BGE-M3 提供兼容 OpenAI API 的 embedding，配置为：
+
+```powershell
+$env:OC_ENABLE_MODELS = 'true'
+$env:OC_MODEL_BASE_URL = 'http://127.0.0.1:11434/v1'
+$env:OC_MODEL_API_KEY = 'ollama'
+$env:OC_EMBEDDING_MODEL = 'bge-m3'
+$env:OC_EMBEDDING_DIMENSION = '1024'
+```
+
+`ollama` 是本机服务的占位 key。上述值已在本机持久化为 Windows 用户环境变量；已打开的终端和宿主不会自动刷新，运行当前会话时可执行上述配置后再启动 Origence。Ollama 需保持运行，且已下载 `bge-m3`；接口路径为 `POST /v1/embeddings`。本配置只提供 embedding，不表示已配置抽取或生成模型。
+
+更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。S1 结果和限制见 [VALIDATION](VALIDATION.md)，运行入口见 [评估说明](../evals/README.md)。
+
 ## 显式启用记忆身份
 
 本命令只为兼容当前本地基础 schema、但缺少 `oc_memory_identities` 的既有 SQLite 库安装身份表，不是通用版本迁移或 PG 导入。启动仍不会自动升级。

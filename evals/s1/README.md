@@ -1,6 +1,6 @@
 # S1 retrieval quality baseline (dataset v1)
 
-This is the first frozen, human-authored evaluation slice for S1. It uses the existing 12-document synthetic corpus and 100 manually written questions. It is a development baseline, not a representative production benchmark and not evidence of real-model quality.
+This page documents the S1 v1 dataset inputs and annotation protocol. Current measured results are in the [S1 v2 report](results/local-77d43a8-v2/README.md). These synthetic datasets are development material, not representative production benchmarks.
 
 ## Annotation protocol
 
@@ -17,7 +17,7 @@ This is the first frozen, human-authored evaluation slice for S1. It uses the ex
 - `cases.jsonl`: 100 questions with source-level evidence labels and verbatim evidence quotes.
 - `manifest.json`: SHA-256 hashes and annotation scope.
 
-The runner currently scores document-level evidence. It does not score exact claim support, answer generation, Agent task success, or Evidence Coverage under a shared token budget. The initial set has 12 source documents; the roadmap target remains 300 cases, with an independently held-out test split required before tuning or making quality claims.
+The runner currently scores document-level evidence. It does not score exact claim support, answer generation, Agent task success, or Evidence Coverage under a shared token budget. The v2 study uses 300 cases with an independently held-out split.
 
 ## Reproduce
 
@@ -28,7 +28,3 @@ python3 evals/run.py --binary target/release/origence --corpus evals/s1/corpus.j
 ```
 
 The output directory must not already exist. Retain the manifest, per-question results, imports, and summary together.
-
-## First observation
-
-On commit `47d1375`, the single local Windows keyword@5 run scored document Recall/MRR/nDCG `0.0104` (one of 96 answerable questions retrieved), with zero request errors and zero false positives on four no-answer questions. The old 24-question seed scored `0.6364` on the same host as a runner diagnostic; the case distributions differ, so those scores are not directly comparable. Full artifacts are under `results/keyword-47d1375/`. Treat the new result as a signal that keyword search struggles with these manually authored question forms, not as a production-quality estimate.

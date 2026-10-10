@@ -1,61 +1,17 @@
-# Origence 剩余任务与下一阶段实施计划
+# Origence · 后续实施路线图
 
-> 编写日期：2026-10-09。本文是 **P0 收口 → P1 产品闭环 → P2 服务化** 的执行路线图，不代表事项已验收。目标/架构以 [整体设计](../specs/2026-09-22-memory-knowledge-platform-design.md) 为准；身份、冲突、上下文契约以 [I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md) 为准；事实进度与 CI 证据分别以 [STATUS](../../STATUS.md)、[VALIDATION](../../VALIDATION.md) 为准。
+> 本文只保留当前未完成工作和验收条件。完整架构见[平台设计规格](../specs/2026-09-22-memory-knowledge-platform-design.md)，身份与上下文契约见[I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md)。当前进度见 [STATUS](../../STATUS.md)，实际证据见 [VALIDATION](../../VALIDATION.md)。
 
-## 1. 文档职责与规划缺口
+## 已完成阶段
 
-- **整体设计（spec）**：定义目标、边界、架构、P0/P1/P2 和会话经验模型，不等于实际交付。
-- **2026-10-08-memory-identity-and-context.md（spec）**：定义完整业务身份、属性/条件、capture 归一化、事实冲突、知识/记忆关联、会话上下文策略、I1–I4 验收反例；不是完整排期或任务列表。
-- **2026-10-08-validation-and-evaluation.md（plan）**：P0 验收与评估基础设施的历史实施清单，有不少未勾项目，但缺乏 P1 Session/Feedback/Improve/Learning 的分批实施清单。
-- **本文件（plan）**：衔接以上文档，记录尚未完成的切片、实施顺序、依赖、验收定义和产品取舍。实现情况不可从本文件未勾清单反推为已经通过测试。
+- **S0 身份候选过滤**：完整身份前置限定、真实 LanceDB 回归和跨平台 main CI 已完成，证据见 [VALIDATION](../../VALIDATION.md)。
+- **S1 工程检索实验**：36 篇/300 题、六配置真实模型对照及摘要/图消融已完成；新增 200 题尚待独立人工复核。vector Recall@5 为 97.57%，hybrid-all 为 94.79%，12 道无答案题均被召回。完整结果见 [S1 报告](../../../evals/s1/results/local-77d43a8-v2/README.md)。
 
-## 2. 当前能力与真实缺口
+S1 后续质量门槛：独立复核新增标签，评估拒答策略并扩展完整平台及 Agent 任务验证。开发/留出分数不等于生产质量。
 
-| 模块 | 已实施 | 剩余关键问题 |
-| --- | --- | --- |
-| M0–M5 / P0 | 单宿主 SQLite+LanceDB+SQLite 图+Blob，HTTP/MCP，异步发布、幂等、账本、权限、溯源、撤回、版本 | 大规模/故障验收、依赖审计、生产运维可靠性 |
-| I1 记忆身份 | 明确身份写入/唯一性/精确 lookup、expected_version、离线升级；候选前置限定已实现 | S0 真实 vector/hybrid 定向回归及主干完整 CI 已验收；语义匹配/冲突仍未实现 |
-| I2 抽取 | 调用方明确 identity 的 capture、精确引用区间校验 | 未归一化状态、属性目录、单值/多值、语义匹配/冲突管理 |
-| 检索 | keyword/vector/hybrid、摘要和图扩展、RRF、证据引用 | 目前仅 12 文档/24 查询无模型合成基线；真实模型/Agent 质量和组件收益未知 |
-| I4 上下文 | 现有 search/resolve、身份标注、引文与字节预算 | 冲突标识、按类型/任务配额、跨 session/学习经验联检未完成 |
-| P1 会话经验 | 目标规格与数据模型草案 | SessionTurn、Feedback、Guidance、Learning、Improve 全链路未实现 |
-| P2 | 架构规划 | OIDC/ACL、配额/计费、服务化、GraphCompletion、有效时间等 |
+## 尚未完成工作
 
-既有评估：12 文档/24 查询；22 条有答案题中 14 条全部来源命中，8 条返回空，2 条无答案题没有误召回；keyword 文档 Recall@5 63.6%，S0 主干 Linux/macOS 日志亦保留该合成基线。**只代表合成关键词基线，不证明真正 RAG/Agent 效果**。Rust 1.98 的主干 CI 已单独核验，证据见 VALIDATION；没有复用历史 Rust 1.88/1.96 的绿灯。
-
-2026-10-10 存储维护：图投影已按 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 替换；不改变 S1/P1 优先级。替换前 S0 CI 仍是历史证据，本轮验证单独归档：[PR #23](https://github.com/TheLudlows/Origence/pull/23)、run `38030946507` 的 fast-check/Linux/MSRV、默认 28+89 测试及 HTTP smoke 成功；PR #23 已合入，main `9c292a9` 的 run `38032343493` 五作业全部成功，三平台默认 28+89 测试、13 项图回归及 vector/hybrid HTTP 回归均通过。
-
-## 3. 交付顺序与任务
-
-### S0：完整身份候选过滤修复 — 已完成正确性验收
-
-**原始问题**：全 scope 的 keyword/native-vector 候选先截断，再按身份过滤时，其他主体可能占满 top-100。PR #13 已将完整身份限定前置到候选生成；PR #15 已修复阻塞 Clippy 的嵌套 if；PR #20 的两个真实原生回归及包含它们的主干完整 CI 已核验。验收代码 `42db5c21a8ef4788d07209be7110d85e01d7a85f`，[run 37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) attempt 1，5/5 作业成功。源码/合成 checkout/实际 merge、job 与实际测试计数已归档至 [VALIDATION](../../VALIDATION.md)；归档提交/PR 合并结果由 [Issue #21](https://github.com/TheLudlows/Origence/issues/21) 追溯。
-
-- [x] **源码已实现（PR #13）**：授权 tenant/workspace + 完整 `MemoryIdentity` 定位已有资产；未匹配为空，不创建 slot，不隐式升级旧库。
-- [x] **源码已实现（PR #13）**：keyword 与 vector artifact ID 集合在 top-k/rank 之前限定资产，最终继续复核权限、来源、当前版本、墓碑和身份。
-- [x] **既有测试已提交**：keyword 的 >100 干扰、v1/v2、跨 workspace、缺失身份、撤回与 search/resolve；SQLite vector 候选 ID 与旧库不升级测试。
-- [x] **Clippy 修复已合入（PR #15）**：保留 `-D warnings`，fast-check 新增无原生后端的 Clippy。
-- [x] **新回归代码已合入（PR #20）**：`tests/identity_vector_regression.rs` 中 `s0_vector_identity_prefilter_real_lancedb` 与 `s0_hybrid_identity_prefilter_real_lancedb`，编入现有 `tests/local.rs`。真实 LanceDB、130 个更高排名干扰、目标关键词必不匹配、实际宿主 HTTP search/resolve、跨 workspace/tenant、当前版本、撤回/墓碑、显式模型降级。
-- [x] **新增原生回归验收**：三平台原始日志均包含两个精确命名用例 `ok`；完整 local 套件各 `81 passed / 0 failed / 0 ignored / 0 measured / 0 filtered`，实际测试名称集合一致。
-- [x] **主干跨平台验收**：fast-check `113779676713`、Linux Native/MSRV `113779676656`、Windows `113779676444`、macOS `113779676800`、Docker Smoke `113779676764` 在同一 main run attempt 1 全部 completed/success；checkout 均对应验收代码。
-- [x] **证据归档**：VALIDATION 保存完整 provenance、原生 lib/local/bin/doc 分组与轻量/MSRV 实际计数，静态 JSON 保存日志摘录；STATUS 和本节已同步。原始历史证据保留，PR 的三个 skipped 平台不冒充主干通过。
-
-**复现命令**：`cargo test --locked -j 2 --test local identity_vector_regression -- --nocapture`。测试仅使用 loopback 固定向量模型，不调用真实付费模型，不变更全局进程环境。
-
-**验收**：不增大全局 top-k；旧无 identity 查询保持兼容；精确目标不被其他主体挤出候选；hybrid 不能靠 keyword 支路掩盖向量错误；来源撤回不回退旧版本；模型不可用时遵守 allow_partial。S0 是正确性门槛，不是 S1 语义效果评分。
-
-### S1：建立检索有效性的实测证据（P0 质量收口）
-
-- [x] 固定 24 题 keyword 基线及 retrieval-15 至 retrieval-22 八条失败；source/version/locator、数据 hash 和配置归档。
-- [x] 冻结检索 v2：36 篇合成来源、300 题（开发 200 / 来源独立留出 100）。原 100 题及其既有人工标签不变；新增 200 题由助手编写并逐条核对原文证据。此项完成数据工程，不能据此宣称 300 题均经人工复核。
-- [ ] 新增 200 条标签的独立人工复核；完整平台评估协议与生产代表数据不由本检索切片替代。
-- [x] 同语料/同预算/同 embedding 的 keyword、vector、hybrid 六配置完成；报告文档/证据 Recall@5、Coverage@2000 UTF-8 字节、nDCG、无答案误召回、search/resolve p50/p95/p99、usage 与 provider 费用（CPU 未定价）。
-- [x] 摘要和图谱独立开关：纯原文、+摘要、+图、+摘要+图四组独立消融，所有组复用同一真实模型投影。
-- [x] 根据数据记录查询解析/FTS/BM25、拒答阈值、reranker 与 ANN 的优先级；本轮不提前引入新架构。
-
-**工程交付**：代码 `77d43a8`，六组共 1800 次 search/1728 次 resolve，原始结果、模型 revision/file hash、命令、开发/留出分数与独立指标审计见 [S1 实测报告](../../../evals/s1/results/local-77d43a8-v2/README.md)。PR #24 源码 CI 的两个实际作业成功；图替换 main 五作业证据单独保存。严格标签复核尚未完成，不宣布完整平台质量验收通过。
-
-**验收**：每次实验保留 manifest、commit、语料 hash、标签作者与复核状态、原始结果和复现命令，严禁使用 mock embedding 得到的得分宣称模型真实质量。
+参榜专项见 [Agent Memory Leaderboard 准备计划](../../AGENT_MEMORY_LEADERBOARD.md)：优先完成文本赛道 Add/Search 适配、用户隔离、部署与质量基线。该计划列出待实施任务及验收条件，不以完整 S2–S4 为参榜前置，也不替代下列产品验收。
 
 ### S2：I2 记忆语义最小契约（P1 前置）
 
