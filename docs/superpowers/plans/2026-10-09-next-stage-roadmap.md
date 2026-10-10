@@ -13,7 +13,7 @@
 
 | 模块 | 已实施 | 剩余关键问题 |
 | --- | --- | --- |
-| M0–M5 / P0 | 单宿主 SQLite+LanceDB+Kuzu+Blob，HTTP/MCP，异步发布、幂等、账本、权限、溯源、撤回、版本 | 大规模/故障验收、依赖审计、生产运维可靠性 |
+| M0–M5 / P0 | 单宿主 SQLite+LanceDB+SQLite 图+Blob，HTTP/MCP，异步发布、幂等、账本、权限、溯源、撤回、版本 | 大规模/故障验收、依赖审计、生产运维可靠性 |
 | I1 记忆身份 | 明确身份写入/唯一性/精确 lookup、expected_version、离线升级；候选前置限定已实现 | S0 真实 vector/hybrid 定向回归及主干完整 CI 已验收；语义匹配/冲突仍未实现 |
 | I2 抽取 | 调用方明确 identity 的 capture、精确引用区间校验 | 未归一化状态、属性目录、单值/多值、语义匹配/冲突管理 |
 | 检索 | keyword/vector/hybrid、摘要和图扩展、RRF、证据引用 | 目前仅 12 文档/24 查询无模型合成基线；真实模型/Agent 质量和组件收益未知 |
@@ -22,6 +22,8 @@
 | P2 | 架构规划 | OIDC/ACL、配额/计费、服务化、GraphCompletion、有效时间等 |
 
 既有评估：12 文档/24 查询；22 条有答案题中 14 条全部来源命中，8 条返回空，2 条无答案题没有误召回；keyword 文档 Recall@5 63.6%，S0 主干 Linux/macOS 日志亦保留该合成基线。**只代表合成关键词基线，不证明真正 RAG/Agent 效果**。Rust 1.98 的主干 CI 已单独核验，证据见 VALIDATION；没有复用历史 Rust 1.88/1.96 的绿灯。
+
+2026-10-10 存储维护：图投影已按 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 替换；不改变 S1/P1 优先级。替换前 S0 CI 仍是历史证据，本轮验证单独归档：[PR #23](https://github.com/TheLudlows/Origence/pull/23)、run `38030946507` 的 fast-check/Linux/MSRV、默认 28+89 测试及 HTTP smoke 成功；Windows/macOS/Docker 待 main。
 
 ## 3. 交付顺序与任务
 

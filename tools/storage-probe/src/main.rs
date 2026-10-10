@@ -7,8 +7,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "graph")]
-mod graph;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 #[cfg(feature = "vector")]
@@ -74,8 +72,6 @@ async fn main() -> Result<()> {
         "sqlite" => sqlite::run(path, request).await,
         #[cfg(feature = "vector")]
         "lancedb" => vector::run(path, request).await,
-        #[cfg(feature = "graph")]
-        "kuzu" => graph::run(path, request),
         backend => bail!("backend not compiled: {backend}"),
     }
 }

@@ -42,8 +42,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
-      CMAKE_GENERATOR: Ninja
-      CMAKE_BUILD_PARALLEL_LEVEL: 2
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -55,7 +53,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Linux native build tools
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
           protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
       - name: Confirm minimum Rust 1.98.0
         run: |
@@ -63,7 +61,7 @@ jobs:
           rustc --version | grep -Fq 'rustc 1.98.0 ('
       - name: Memory identity on minimum Rust without native features
         run: cargo test --locked --no-default-features --lib memory_identity -j 2
-      # Rust and CMake each use two workers; keep link memory pressure bounded.
+      # Keep link memory pressure bounded.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Debug build and no-model HTTP smoke
@@ -110,8 +108,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
-      CMAKE_GENERATOR: Ninja
-      CMAKE_BUILD_PARALLEL_LEVEL: 2
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -120,7 +116,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: macOS native build tools
-        run: brew install cmake ninja protobuf
+        run: brew install protobuf
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Release build and no-model HTTP smoke

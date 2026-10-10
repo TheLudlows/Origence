@@ -71,7 +71,7 @@ async fn detaching_a_source_drops_its_sole_artifacts_but_retains_shared() {
     assert_eq!(removed, 2);
 
     // `shared` is still owned (by s2) and stays; `sole` has no owner left and
-    // is gone from the owned set (M4 will diff this against Kuzu to reap it).
+    // is gone from the owned set (M4 will diff this against the graph store to reap it).
     let owned = {
         let mut tx = begin_write(&store, &auth).await;
         tx.owned_artifacts().await.unwrap()

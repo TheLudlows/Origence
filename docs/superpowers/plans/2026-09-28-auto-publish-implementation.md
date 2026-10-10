@@ -1,5 +1,8 @@
 # 自动发布（移除候选审核门）实施计划
 
+> 2026-10-10：本文保留历史实施与验收记录。当前图后端已替换为 SQLite；旧 Kuzu/原生构建描述不再适用于当前代码。见 [SQLite 图替换计划](2026-10-10-replace-kuzu-with-sqlite-graph.md) 与 [当前运维说明](../../OPERATIONS.md)。
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 去掉「候选 → 审核 → 发布」人工门，writer 的结构化 memory 与 capture 抽取结果直接发布；保留 scope、来源、审计、幂等、版本冲突、删除和恢复约束（整体设计 [A1](../specs/2026-09-22-memory-knowledge-platform-design.md)）。

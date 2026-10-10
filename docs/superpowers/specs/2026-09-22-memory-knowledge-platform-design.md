@@ -1,13 +1,13 @@
 # Origence 记忆与知识统一平台详细设计
 
-> 实现对照（2026-10-09，验收代码 `8d8d224`）：M5 默认宿主为 SQLite/LanceDB/Kuzu，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现；现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器和 MSRV check。无模型合成关键词 Recall@5 为 63.6%，真实模型质量未验证；I2 自动语义匹配、I3 会话与完整 I4 上下文策略及 P1/P2 仍属目标设计。能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
+> 实现对照（2026-10-09，验收代码 `8d8d224`）：M5 默认宿主为 SQLite/LanceDB/SQLite 图，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现；现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器和 MSRV check。无模型合成关键词 Recall@5 为 63.6%，真实模型质量未验证；I2 自动语义匹配、I3 会话与完整 I4 上下文策略及 P1/P2 仍属目标设计。能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
 
 初稿日期：2026-09-22；整合修订：2026-09-23
 定位：团队 Agent 的记忆与知识库平台，先交付本地存储版本，保留后续服务化能力，Rust 实现，对标 Cognee（调研基线 v1.6.0，固定 commit `663a2dc15d04bc0d7ec2733a2dd604b7ed1b8c8e`）。
 
 本文基于 Origence 的早期实现（原 openContext/ContextDB）与 Cognee 调研（[架构分析](../../Cognee_技术架构分析.md)、[技术细节](../../Cognee_技术细节与方案对比.md)）的**转向设计**。相比之前的 ContextDB V3.1，本次改变四件事：技术栈锁定 Rust；治理模型从「候选审核 → 发布」改为 Cognee 式「自动发布」；存储改为可插拔引擎；交付先落地本地存储版本，SaaS 能力后续演进。继承不变的：workspace/tenant 隔离、来源溯源、删除级联、审计、可注入上下文与预算。
 
-> **实施基线：** 本文统一描述产品与存储设计；存储完整契约见 [A2](#storage-design)，执行顺序见 [本地存储实施计划](../plans/2026-09-22-pluggable-storage-engine.md)。本地固定 SQLite/LanceDB/Kuzu，PG/pgvector 仅保留接口扩展能力；不提供自动版本化数据库升级；新增身份表支持离线显式定向安装，见 [运维说明](../../OPERATIONS.md#显式启用记忆身份)。产品目标与当前实现状态分别列示。
+> **实施基线：** 本文统一描述产品与存储设计；存储完整契约见 [A2](#storage-design)，执行顺序见 [本地存储实施计划](../plans/2026-09-22-pluggable-storage-engine.md)。本地固定 SQLite/LanceDB/SQLite 图，PG/pgvector 仅保留接口扩展能力；不提供自动版本化数据库升级；新增身份表支持离线显式定向安装，见 [运维说明](../../OPERATIONS.md#显式启用记忆身份)。产品目标与当前实现状态分别列示。
 
 > **一级产品目标：** 平台原生支持多个 tenant，以及每个 tenant 下的多个 workspace。tenant/workspace 隔离贯穿认证、scope、资产、来源、任务、文件、图/向量检索、缓存、审计和账本；它不是部署、计费或后续 SaaS 阶段才加入的能力。
 
@@ -63,7 +63,7 @@
 
 ## 3. 总体架构
 
-模块化单体：本地宿主在同一进程运行 API 与 Worker，共享 `StorageEngine` 和 Kuzu `Database` 实例。M0 已实测 Kuzu 的读写进程会排斥其他进程打开同一文件，进程边界按 A2.4 执行。存储定义了 Store trait，但当前 Service 仍持有具体 LocalEngine 并返回 SqliteTx；已完成接口基础，尚未实现应用层完整后端解耦。领域模块逐步保持独立，未来服务化时再扩展进程边界。
+模块化单体：本地宿主在同一进程运行 API 与 Worker，共享 `StorageEngine`。关系库的独占 OS 锁约束单宿主，图投影使用独立 SQLite 文件，进程边界按 A2.4 执行。存储定义了 Store trait，但当前 Service 仍持有具体 LocalEngine 并返回 SqliteTx；已完成接口基础，尚未实现应用层完整后端解耦。领域模块逐步保持独立，未来服务化时再扩展进程边界。
 
 下图描述目标逻辑模块；Session/Improve、Rerank 及限流职责尚未实现，不能将图中的模块名称作为当前运行能力。领域事务与应用层厂商解耦是设计目标，当前实际落地范围以本段和 STATUS 为准。
 
@@ -81,7 +81,7 @@ flowchart TB
         end
         subgraph Engine[可插拔存储引擎]
             Rel[Relational：SQLite]
-            Graph[Graph：Kuzu]
+            Graph[Graph：SQLite]
             Vec[Vector：LanceDB]
             Blob[Blob：本地文件]
             Queue[JobQueue：SQLite 同事务队列]
@@ -115,7 +115,7 @@ flowchart TB
 
 ### 3.2 存储架构
 
-本地交付固定为 **SQLite（关系与队列）+ LanceDB（向量）+ Kuzu（图）+ 本地文件**。`StorageEngine` 组合五类接口：RelationalStore、JobQueue、VectorStore、GraphStore、BlobStore。领域层使用带 scope 的接口，不直接依赖数据库类型或 SQL。
+本地交付固定为 **SQLite（关系与队列）+ LanceDB（向量）+ SQLite（图）+ 本地文件**。`StorageEngine` 组合五类接口：RelationalStore、JobQueue、VectorStore、GraphStore、BlobStore。领域层使用带 scope 的接口，不直接依赖数据库类型或 SQL。
 
 PostgreSQL/pgvector 仅保留未来扩展能力，不要求先实现 PG 适配器，也不提供本地/PG 双配置。M5 已固定装配本地宿主和存储接口，旧 PG 实现在 Git 提交 `72fb5aa` 保留历史参考。
 
@@ -256,7 +256,7 @@ EvidenceBundle {
 
 | 阶段 | 范围 | 验收必须看什么 |
 | --- | --- | --- |
-| **P0 知识可用且可治理** | SQLite/LanceDB/Kuzu 本地闭环、自动初始化、可扩展接口；普通文本入库、稳定分块、keyword/vector 检索、自动发布、溯源 + 撤回、作业重试、workspace/tenant 隔离；图谱先完成可靠写入和删除 | 原文证据正确；撤回后立即不可检索；共享来源删除正确；重试不产生重复版本；部分存储失败可重试或明确进入 orphan |
+| **P0 知识可用且可治理** | SQLite/LanceDB/SQLite 图 本地闭环、自动初始化、可扩展接口；普通文本入库、稳定分块、keyword/vector 检索、自动发布、溯源 + 撤回、作业重试、workspace/tenant 隔离；图谱先完成可靠写入和删除 | 原文证据正确；撤回后立即不可检索；共享来源删除正确；重试不产生重复版本；部分存储失败可重试或明确进入 orphan |
 | **P1 会话到长期记忆** | 会话问答、指导、反馈、经验蒸馏、水位、阶段化 improve | 新经验何时可见；哪些经验被拒；反馈准确关联且幂等 |
 | **P2 增强与商业化** | GraphCompletion、个性化、时间冲突、本体/代码/结构化专用路径、OIDC、配额计费、可观测、Neo4j/Qdrant 生产适配 | 独立消融显示收益；成本延迟符合预算；不破坏权限与溯源 |
 
@@ -277,7 +277,7 @@ EvidenceBundle {
 ## 13. 风险与边界
 
 1. **Rust 的 LLM/图生态弱**：用 reqwest 调 `/chat/completions` + JSON schema 校验，抽取走显式中间结果，不依赖 Python 生态；代价是 prompt/结构化输出/重试要自己写。
-2. **本地后端验收边界**：M5 已集成正式适配器、队列和账本，并通过 Windows 本地及远端 CI；主应用最低 Rust 1.88、Linux/macOS 和 release 仍待验收。Kuzu 采用单宿主共享实例，不能恢复为双进程直接打开读写库。
+2. **本地后端验收边界**：M5 已集成正式适配器、队列和账本，并通过 Windows 本地及远端 CI；主应用最低 Rust 1.88、Linux/macOS 和 release 仍待验收。关系库锁约束单宿主，图替换后仍不能恢复为两个应用进程直接打开同一数据目录。
 3. **自动发布 vs 治理**：去掉了人工审核门，靠溯源 + 删除级联 + 审计兜底；不承诺「自动抽取即事实正确」，原文证据始终可回查。
 4. **跨存储一致性**：无统一事务，靠产物账本 + 幂等重试 + 对账收敛；不承诺 exactly-once。
 5. **多 Worker 并发**：本地初期以 OS 文件锁限制单 Worker，保证崩溃释放与遗留任务恢复；旧 PG/Apalis 的会话锁仅属于历史实现。
@@ -290,7 +290,7 @@ EvidenceBundle {
 | --- | --- | --- |
 | 技术栈 | Rust | 复用 Origence 早期 API/Worker/RAG/RLS 基础 |
 | 治理模型 | 自动发布（Cognee 模式） | 去掉人工审核门；保留溯源/删除/审计 |
-| 存储 | 本地 SQLite/LanceDB/Kuzu + 可扩展接口 | PG/pgvector 仅预留扩展，不阻塞本地交付 |
+| 存储 | 本地 SQLite/LanceDB/SQLite 图 + 可扩展接口 | PG/pgvector 仅预留扩展，不阻塞本地交付 |
 | 初始化 | 自动创建新库，无版本化升级 | 不修改已有不兼容结构，启动检查失败时明确报错 |
 | 交付形态 | 本地存储平台，后续可服务化 | HTTP + MCP，所有后端统一 scope 隔离 |
 | 架构 | 模块化单体（API + Worker） | 本地同进程共享引擎，领域与存储边界保持独立 |
@@ -342,11 +342,11 @@ EvidenceBundle {
 
 ### A2.1 已确认目标与当前状态
 
-交付目标：本地交付固定为 SQLite + LanceDB + Kuzu，通过接口保留未来扩展 PostgreSQL/pgvector 的能力。PG 扩展不是本地版本的交付前置条件，不要求首版提供 PG 配置或任意混搭。
+交付目标：本地交付固定为 SQLite + LanceDB + SQLite 图，通过接口保留未来扩展 PostgreSQL/pgvector 的能力。PG 扩展不是本地版本的交付前置条件，不要求首版提供 PG 配置或任意混搭。
 
-本地适配器直接调用 Rust 三方库：SQLite 使用 SQLx，向量使用 `lancedb` crate，图使用 `kuzu` crate。数据库引擎嵌入应用，不另行部署数据库服务。Kuzu 的 Rust 绑定会链接其原生 C++ 库；编译这些依赖所需的 C++ 工具链、CMake、protoc 等属于构建环境，不是用户需要启动的数据库服务。库版本及具体构建条件由 M0 实测后固定。
+本地适配器直接调用 Rust 三方库：SQLite 使用 SQLx，向量使用 `lancedb` crate，图使用 SQLx/SQLite 实体与邻接表。数据库引擎嵌入应用，不另行部署数据库服务。SQLite/LanceDB 构建仍需编译器和 protoc；图后端不额外引入原生图引擎、CMake 或 Ninja。库版本固定在 Cargo.lock。
 
-截至 2026-09-29，M5 已将 SQLite/LanceDB/Kuzu 和存储接口接入默认应用，移除活动树中的 PG/Apalis 运行依赖。自动发布（A1）已实施：候选/审核门已移除，writer 记忆与 capture 抽取直接发布；会话记忆及服务化仍属于后续阶段。实际平台和检查结果见 [VALIDATION](../../VALIDATION.md)。
+截至 2026-09-29，M5 已将 SQLite/LanceDB/SQLite 图 和存储接口接入默认应用，移除活动树中的 PG/Apalis 运行依赖。自动发布（A1）已实施：候选/审核门已移除，writer 记忆与 capture 抽取直接发布；会话记忆及服务化仍属于后续阶段。实际平台和检查结果见 [VALIDATION](../../VALIDATION.md)。
 
 独立 M0 探针已在 Windows x64/MSVC、Rust 1.88.0 完成三个库的可执行文件构建与 14 项检查，见 [验证记录](../../VALIDATION.md)。这证明基础库组合及本地访问方式可行，不代表应用已经完成本地接入。
 
@@ -355,7 +355,7 @@ EvidenceBundle {
 | 关系、权限、来源、版本、审计、产物账本 | SQLite / SQLx | PostgreSQL / SQLx + RLS | SQLite，已接入 |
 | 作业队列 | SQLite 事务队列 | PostgreSQL 同事务队列（实现待定） | SQLite 自轮询，已接入 |
 | 向量 | LanceDB | pgvector | LanceDB，精确过滤查询 |
-| 图 | Kuzu | PostgreSQL 邻接表 | Kuzu，owner 权威在 SQLite |
+| 图 | SQLite 图 | PostgreSQL 邻接表 | 独立 `graph.db`，owner 权威在关系 SQLite |
 | 原始文件 | 本地目录 | 对象存储接口扩展 | 本地目录 |
 
 未来新增后端只改变存取实现，不改变 tenant/workspace、来源有效性、发布、撤回和幂等契约。切换配置不搬运已有数据，不提供后端间数据转换或历史库升级。
@@ -399,9 +399,9 @@ tx.commit()             # 任一步失败则共同回滚；不在事务内调用
 
 当前 `Service::open` 初始化并检查全部存储，然后恢复作业、执行账本对账和孤儿清理。`SqliteStore::open` 在独占文件锁下创建新库；已有库检查完整领域列投影，缺失则失败。检查不是列类型、索引和约束的完整等价证明。
 
-当前关系结构定义位于 `src/storage/sqlite-schema.sql`；LanceDB/Kuzu 定义位于各自适配器。旧 deploy/postgres SQL 和 runtime-setup 已从活动树移除；当前运行不需要数据库管理员连接或 PG 角色。
+当前关系结构定义位于 `src/storage/sqlite-schema.sql`；LanceDB/SQLite 图 定义位于各自适配器。旧 deploy/postgres SQL 和 runtime-setup 已从活动树移除；当前运行不需要数据库管理员连接或 PG 角色。
 
-SQLite 当前实现：打开配置目录内的数据库文件，逐连接设置 foreign_keys、busy_timeout，启用 WAL；首次创建完整结构时持有初始化锁。LanceDB 在 vectors 子目录创建集合；Kuzu 0.11.3 使用 graph 子目录中的数据库文件，例如 `graph/kuzu.db`，不能把已存在的目录当作数据库文件传入。已有不兼容数据拒绝打开。不把一次连接上的 PRAGMA 当作整个池的连接配置。
+SQLite 当前实现：打开配置目录内的数据库文件，逐连接设置 foreign_keys、busy_timeout，启用 WAL；首次创建完整结构时持有初始化锁。LanceDB 在 vectors 子目录创建集合；图适配器使用独立 SQLite 文件 `graph.db`，关系库继续使用 `context.db`；两者不共享业务事务。已有不兼容数据拒绝打开。不把一次连接上的 PRAGMA 当作整个池的连接配置。
 
 多存储初始化不能共享事务；在全部后端检查成功前，不启动 HTTP ready、任务消费或发布。失败后可重启并复用已经成功初始化的后端，初始化不得破坏已有业务数据。
 
@@ -411,13 +411,13 @@ SQLite 当前实现：打开配置目录内的数据库文件，逐连接设置 
 
 所有对象 ID、唯一约束、owner、缓存与文件 key 都包含 scope。SQLite 所有 SQL 在适配器内显式绑定 tenant/workspace；禁止返回一个忽略 scope 的裸事务作为隔离保证。未来 PG 扩展须使用同样的接口约束，可额外使用 FORCE RLS 作为第二层保护。
 
-LanceDB/Kuzu 的查询必须按 scope 在候选产生时过滤，不在生产中以“先全库取 top-k 再过滤”替代隔离和召回正确性。M0 已验证同 ID 跨 tenant/workspace、带 scope 的向量精确 top-1 和图邻接查询；授权、来源复核与 ANN 仍须后续验收。
+LanceDB/SQLite 图 的查询必须按 scope 在候选产生时过滤，不在生产中以“先全库取 top-k 再过滤”替代隔离和召回正确性。M0 已验证同 ID 跨 tenant/workspace、带 scope 的向量精确 top-1 和图邻接查询；授权、来源复核与 ANN 仍须后续验收。
 
-本地进程访问约束已按 Windows/Rust 1.88 的实际结果确定：
+本地进程访问约束：
 
-- Kuzu 读写宿主持有文件锁时，第二个进程无论读写还是只读打开均失败；没有写宿主时，两个只读进程可共存。同一 `Database` 实例下，另一线程的连接可读取写事务提交前后的正确快照。
-- 本地 API 与 Worker 在一个应用宿主内共享引擎，直接调用库；不另设数据库服务。库模式由调用方宿主持有 `StorageEngine`。独立 CLI/MCP 访问运行中的数据集时通过宿主应用接口；离线直接打开只用于独占运行，不能另起进程绕过 Kuzu 锁。
-- 同步 Kuzu 调用由适配器放入受限的阻塞执行器，不能阻塞异步 API/Worker 调度线程。M0 已验证共享实例的读写方式，完整 API/Worker 装配、客户端转发和关闭流程属于 M1/M5。
+- 关系适配器持有数据目录的独占 OS 文件锁，第二个宿主在打开关系库时被拒绝；图适配器不另设宿主锁。
+- 本地 API 与 Worker 在一个应用宿主内共享 `StorageEngine`，直接调用库，不另设数据库服务。独立 CLI/MCP 通过宿主应用接口访问运行中的数据集；离线打开要求独占目录。
+- SQLite 图使用 SQLx 异步连接池，逐连接设置 foreign_keys、busy_timeout，启用 WAL。实体/关系通过确定性 ID 幂等写入，所有查询按 scope 过滤，删除使用外键级联；跨存储可见性仍由关系账本决定。
 - LanceDB 默认不刷新其他进程提交的更新；本地适配器显式设置 `read_consistency_interval(Duration::ZERO)`。M0 已验证长连接看到另一进程的提交及双写进程的追加结果；这不代表跨存储事务原子性。
 
 关系库是最终可见性的权威：每条返回的 chunk、summary、entity、relation 都必须有仍有效的 owner/source、已发布版本和未删除资产。图/向量索引命中不能直接返回；撤回事务一旦提交，后续查询立即不可见，不等待异步物理清理。多个有效来源共享的图对象只移除被撤回的 owner。
@@ -449,9 +449,9 @@ SQLite 写事务从开始就使用 IMMEDIATE，不能先 BEGIN 再嵌套 BEGIN�
 
 ### A2.7 配置和能力降级
 
-本地版本固定装配 SQLite 关系库及队列、LanceDB 向量、Kuzu 图、本地文件，不设置 `local|postgres` 双配置选择，也不暴露尚未实现的 PG 开关。可插拔能力体现在领域接口与构造边界；未来 PG 适配器实现并通过契约测试后，再增加对应配置。
+本地版本固定装配 SQLite 关系库及队列、LanceDB 向量、SQLite 图、本地文件，不设置 `local|postgres` 双配置选择，也不暴露尚未实现的 PG 开关。可插拔能力体现在领域接口与构造边界；未来 PG 适配器实现并通过契约测试后，再增加对应配置。
 
-M5 使用 `OC_DATA_DIR` 指定本地根目录，下设 `context.db`、`vectors/`、`graph/kuzu.db` 和 `blobs/`。CLI/MCP 通过 `OC_SERVER_URL` 访问宿主；离线显式 `--offline` 且独占打开。本地交付不再读取 DATABASE_URL；凭据不进入日志。
+M5 使用 `OC_DATA_DIR` 指定本地根目录，下设 `context.db`、`vectors/`、`graph.db` 和 `blobs/`。CLI/MCP 通过 `OC_SERVER_URL` 访问宿主；离线显式 `--offline` 且独占打开。本地交付不再读取 DATABASE_URL；凭据不进入日志。
 
 启动时未知后端或缺依赖即失败，禁止静默切回 PG。查询明确请求缺失能力时返回 Unavailable；只有 allow_partial 才能降级，并返回 effective_mode、warnings、实际索引就绪状态。后端不存在与模型临时失败分开报告。
 
@@ -471,7 +471,7 @@ M5 使用 `OC_DATA_DIR` 指定本地根目录，下设 `context.db`、`vectors/`
 - 本地后端跑 scope 合约测试；未来 PG 扩展复用同一套测试，覆盖跨 tenant、同 tenant 不同 workspace、相同对象 ID/fact_key、撤销 key 和直接对象查询。
 - 队列覆盖业务/入队共同回滚、进程强退恢复、第二 Worker 拒绝、数据库错误重试、取消、generation/run_token 和迟到写入。
 - 图和向量覆盖检索前后可见性、共享 owner、摘要删除顺序、部分写入失败、重启对账和幂等重放。
-- 本地后端需实测目标 OS 上 SQLite/LanceDB/Kuzu 的构建、锁、双进程访问及最低 Rust 版本，再标为已支持。
+- 本地后端需实测目标 OS 上 SQLite/LanceDB/SQLite 图 的构建、锁、双进程访问及最低 Rust 版本，再标为已支持。
 
 本地实现前先验证三个后端的构建与进程访问能力，再细化接口和事务签名；不要求先实现或封装 PG 适配器。执行顺序见 [可插拔存储计划](../plans/2026-09-22-pluggable-storage-engine.md)。
 
@@ -530,12 +530,12 @@ stage_runs:    (tenant_id, workspace_id, job_id, stage, idempotency_key, waterma
 | --- | --- |
 | SQLite | workspaces、api_keys、events、files 元数据、assets、versions、chunks、summaries、jobs、commands、audit；来源有效性与发布状态的权威 |
 | SQLite | artifact_owners、index_entries、artifact_ledger；图/向量来源归属、写入进度、清理与对账状态的权威 |
-| Kuzu | entities、relations 及遍历需要的 scope/来源投影；不能取代 SQLite 的可见性复核 |
+| SQLite 图 | entities、relations 及遍历需要的 scope/来源投影；不能取代 SQLite 的可见性复核 |
 | LanceDB | 带 scope、artifact_id、profile、dimension、generation 的向量条目 |
 | 本地文件 | 原始文件正文，SQLite 保存文件归属与生命周期元数据 |
 | SQLite（P1） | session_turns、guidance、learnings、stage_runs；会话向量由 LanceDB 保存 |
 
-P0 记忆仍使用资产槽与版本；候选/审核功能已在自动发布阶段移除，并直接更新新库完整初始化定义，不升级旧库。实体与关系 owner 的逻辑语义统一归属关系库；Kuzu 中必要的冗余投影由账本对账，不以其状态单独判断可见性。
+P0 记忆仍使用资产槽与版本；候选/审核功能已在自动发布阶段移除，并直接更新新库完整初始化定义，不升级旧库。实体与关系 owner 的逻辑语义统一归属关系库；SQLite 图中必要的冗余投影由账本对账，不以其状态单独判断可见性。
 
 SQLite 表使用 oc_ 前缀；UUID 为 16 字节 BLOB，JSON 为 TEXT，布尔和 Unix 毫秒时间为 INTEGER；复合 scope 主键/外键和初始化定义在 `src/storage/sqlite-schema.sql`。SQLite 没有 RLS，所有领域操作显式绑定 scope。历史 PG 的 oc.* schema/jsonb/RLS 不属于当前运行实现。
 

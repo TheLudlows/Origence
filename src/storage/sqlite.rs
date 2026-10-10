@@ -1436,7 +1436,7 @@ impl DomainTx for SqliteTx {
 
     async fn owned_artifacts(&mut self) -> StorageResult<Value> {
         // Return the current owner set grouped by artifact. M4 diffs this
-        // against its Kuzu rows to find orphans (graph-core G4); M3 itself does
+        // against its graph rows to find orphans (graph-core G4); M3 itself does
         // not store entity/relation bodies.
         let owned: Vec<(String, Uuid)> = sqlx::query_as(
             "SELECT artifact_type, artifact_id FROM oc_artifact_owners \

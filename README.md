@@ -12,7 +12,7 @@ Origence is a Rust-based foundation for agent memory and knowledge. It provides 
 
 ## Quick start
 
-Requires Rust **1.98+** and native build tools (C++, CMake, Ninja, and Protobuf).
+Requires Rust **1.98+** and native build tools (a C/C++ compiler and Protobuf).
 
 ```sh
 cargo build --locked
@@ -26,4 +26,4 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 [API](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/superpowers/plans/2026-10-09-next-stage-roadmap.md)
 
-> The CLI is now named `origence`. Existing `OC_*` configuration variables, HTTP endpoints, and on-disk formats remain unchanged for compatibility.
+> The CLI is now named `origence`. Existing `OC_*` configuration variables and HTTP endpoints remain unchanged. The graph backend now uses `graph.db`; see [Operations](docs/OPERATIONS.md) for the rebuild boundary.

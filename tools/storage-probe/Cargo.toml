@@ -16,10 +16,9 @@ required-features = ["build-tools"]
 resolver = "3"
 
 [features]
-default = ["sqlite", "vector", "graph"]
+default = ["sqlite", "vector"]
 sqlite = ["dep:sqlx"]
 vector = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
-graph = ["dep:kuzu", "dep:cxx-build"]
 build-tools = ["dep:protoc-bin-vendored"]
 
 [dependencies]
@@ -31,13 +30,7 @@ lancedb = { version = "=0.23.1", default-features = false, optional = true }
 arrow-array = { version = "56.2", optional = true }
 arrow-schema = { version = "56.2", optional = true }
 futures = { version = "0.3", optional = true }
-kuzu = { version = "=0.11.3", optional = true }
 protoc-bin-vendored = { version = "3", optional = true }
-
-# kuzu pins cxx = 1.0.138 but leaves its bridge generator unconstrained.
-# Newer generators emit different symbol names and fail during final linking.
-[build-dependencies]
-cxx-build = { version = "=1.0.138", optional = true }
 
 [profile.dev]
 debug = 0

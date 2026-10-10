@@ -2,15 +2,11 @@
 
 > 文档定位（2026-09-28）：M0 独立探针，保留 Rust 1.88 可行性证据；M5 应用已完成本地装配，日常构建使用 [tools/build.ps1](../build.ps1)，当前验收见 [VALIDATION](../../docs/VALIDATION.md)。
 
-隔离的 Rust 工程，直接调用 `sqlx`、`lancedb`、`kuzu`，不连接数据库服务、不进入应用运行路径。候选版本与完整依赖分别固定在 Cargo.toml 和 Cargo.lock；这些版本尚不等于应用已支持的后端。
-
-Kuzu 0.11.3 固定 `cxx = 1.0.138`，但其 `cxx-build` 范围过宽。本工程同时约束生成器为 1.0.138：1.0.202 生成的 `cxxbridge1$202$...` 符号与旧运行库不匹配，已在 Windows 最终链接阶段复现失败。不能只用 `cargo check` 判断此组合可发布。
-
-Kuzu 保留默认扩展特性。在本机关闭默认特性时，CMake 仍构建默认扩展加载器，但 Rust 不链接对应扩展，最终出现 algo/fts/json/vector 的 4 个未解析符号。LanceDB 则关闭默认云端特性，使用本地文件接口。
+隔离的 Rust 工程，直接调用 `sqlx`、`lancedb`，不连接数据库服务、不进入应用运行路径。依赖固定在 Cargo.toml 和 Cargo.lock。图后端已替换为 SQLite，探针不再编译旧图引擎；图契约由 `tests/sqlite_graph_store.rs` 与本地应用/账本套件验证。LanceDB 关闭默认云端特性，使用本地文件接口。
 
 ## Windows 构建
 
-需要 Rust、MSVC C++ Build Tools、CMake 和 Ninja。`build.ps1` 优先使用 PATH 中的工具，否则从 Visual Studio 安装目录定位 CMake/Ninja。Lance 所需的 protoc 由可选构建辅助 crate 提供，不要求另行安装，也不是运行时服务。
+需要 Rust 和 MSVC C++ Build Tools，在 MSVC 开发环境运行。Lance 所需的 protoc 由可选构建辅助 crate 提供，不要求另行安装，也不是运行时服务。
 
 在仓库根目录执行：
 
@@ -29,17 +25,14 @@ python tools/storage-probe/verify.py --binary target/storage-probe-msrv/debug/or
 
 若 Windows 默认执行策略禁止 `.ps1`，可仅对本次构建进程使用 `powershell -NoProfile -ExecutionPolicy Bypass -File tools/storage-probe/build.ps1`，在后面追加上面的工具链参数；不需要修改系统执行策略。
 
-只检查某个后端可加 `--backend sqlite`、`--backend lancedb` 或 `--backend kuzu`。检查结果和临时数据库保留在 `target/storage-probe/runs/run-*/`，不访问应用数据库。
+只检查某个后端可加 `--backend sqlite`、`--backend lancedb`。检查结果和临时数据库保留在 `target/storage-probe/runs/run-*/`，不访问应用数据库。
 
 ## 检查范围
 
 - 重复初始化、读写、关闭后重新打开、按 tenant/workspace 删除，以及同 ID 跨 scope（含引号字符串）。
 - LanceDB 按 scope 预过滤的精确向量 top-1 查询，长连接读取其他进程提交的数据，两个写进程的并发追加。
 - SQLite WAL 下读写并发、写锁竞争、杀死未提交事务后的恢复。
-- Kuzu 实体/边及删除、读写进程的文件锁、两个只读进程、杀死未提交事务后的恢复。
-- Kuzu 同进程共享 Database，在写事务未提交时由另一线程的连接读取，再验证提交后的值。
-- 三种后端在已确认写入后被强制杀死，重新打开验证数据。
-- Kuzu 若只允许一个读写进程，用 JSON-lines 向持有嵌入式库的进程读写；这只是验证访问边界的测试驱动，不是生产存储服务或 RPC 实现。
+- 两种后端在已确认写入后被强制杀死，重新打开验证数据。
 
 实际通过项、构建失败和未验证项以 [验证记录](../../docs/VALIDATION.md) 与运行生成的 report.json 为准。脚本失败即返回非零状态；不会把预期支持当作已验证。
 

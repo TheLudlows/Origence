@@ -56,7 +56,7 @@ impl Service {
             relational.clone(),
             relational,
             LanceDbStore::open(dir.join("vectors")).await?,
-            KuzuStore::open(dir.join("graph")).await?,
+            SqliteGraphStore::open(dir.join("graph.db")).await?,
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;

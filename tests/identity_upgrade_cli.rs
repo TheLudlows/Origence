@@ -57,6 +57,6 @@ async fn cli_requires_offline_and_does_not_initialize_native_engines() {
         assert_eq!(report["status"], status);
     }
     assert!(!dir.path().join("vectors").exists());
-    assert!(!dir.path().join("graph").exists());
+    assert!(!dir.path().join("graph.db").exists());
     assert!(!dir.path().join("blobs").exists());
 }

@@ -1,13 +1,10 @@
 //! Pluggable storage interfaces (M1: interfaces & transaction contracts).
 //!
-//! # Ownership and blocking-call boundary (A2.4)
-//! The local API and Worker share one in-process [`StorageEngine`]; the engine
-//! (and the Kuzu database file it owns) has a single host process. Business
-//! modules hold a shared adapter reference and never open their own Kuzu
-//! database file — a second process that opens the same Kuzu file is rejected
-//! by its file lock. Synchronous Kuzu calls are confined to the adapter's
-//! bounded blocking executor so they cannot starve the async API/Worker
-//! scheduler.
+//! # Ownership boundary (A2.4)
+//! The local API and Worker share one in-process [`StorageEngine`]. The
+//! relational store holds the data directory's single-host OS lock; business
+//! modules share adapters rather than opening independent databases. Graph IO
+//! uses SQLx's asynchronous SQLite pool.
 //!
 //! # Shutdown order
 //! The host stops and joins the worker before [`StorageEngine::shutdown`].
@@ -23,14 +20,13 @@
 
 pub mod capabilities;
 pub mod error;
-#[cfg(feature = "local-graph")]
-pub mod kuzu;
 #[cfg(feature = "local-vector")]
 pub mod lancedb;
 pub mod ledger;
 pub mod local_blob;
 pub mod scope;
 pub mod sqlite;
+pub mod sqlite_graph;
 pub mod traits;
 
 pub fn hash(bytes: impl AsRef<[u8]>) -> String {
@@ -43,7 +39,7 @@ pub type LocalEngine = StorageEngine<
     std::sync::Arc<sqlite::SqliteStore>,
     std::sync::Arc<sqlite::SqliteStore>,
     LanceDbStore,
-    KuzuStore,
+    SqliteGraphStore,
     local_blob::LocalBlobStore,
 >;
 
@@ -61,13 +57,12 @@ impl<T: Lifecycle> Lifecycle for std::sync::Arc<T> {
 
 pub use capabilities::{BlobKey, Capabilities, Embedding, VectorEntry, VectorHit, VectorQuery};
 pub use error::{StorageError, StorageResult};
-#[cfg(feature = "local-graph")]
-pub use kuzu::KuzuStore;
 #[cfg(feature = "local-vector")]
 pub use lancedb::LanceDbStore;
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
 pub use scope::{AuthorizedScope, Permission, Scope, SourceVersion};
 pub use sqlite::SqliteStore;
+pub use sqlite_graph::SqliteGraphStore;
 pub use traits::{
     BlobStore, ClaimedJob, DomainTx, GraphStore, IssuedKey, JobFinish, JobQueue, Lifecycle,
     RelationalStore, VectorStore, WorkItem,
