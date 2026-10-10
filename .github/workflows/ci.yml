@@ -70,6 +70,10 @@ jobs:
         run: |
           cargo build --locked -j 2
           python3 tools/smoke.py --binary target/debug/origence
+      - name: AML in-flight process recovery (controlled model fixture)
+        env:
+          AML_TEST_BINARY: target/debug/origence
+        run: python3 -m unittest discover -s tools -p 'test_aml_recovery.py' -v
       # Evaluation evidence is run-specific, never part of the Cargo target cache.
       - name: Keyword retrieval seed evaluation (no model calls)
         run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"

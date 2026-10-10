@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -41,7 +42,9 @@ def request(base, path, key, body=None, timeout=60):
                 raise DrillError("response_too_large")
             return json.loads(data)
     except urllib.error.HTTPError as error:
-        raise DrillError("http_" + str(error.code)) from None
+        code = error.code
+        error.close()
+        raise DrillError("http_" + str(code)) from None
     except (urllib.error.URLError, TimeoutError, ConnectionError):
         raise DrillError("request_failed") from None
     except (ValueError, UnicodeError):
@@ -195,16 +198,28 @@ def drill(args, env, report):
             if search(0)[1] != before:
                 raise DrillError("idempotency_failed")
             host.stop()
+            # Copy the entire stopped-host data tree, including WAL and native stores.
+            backup = created / "backup"
+            shutil.copytree(created / "data", backup)
             recovery_start = time.perf_counter()
             host.start()
             add(batches[0])
             if search(0)[1] != before:
                 raise DrillError("restart_replay_failed")
+            restart_ms = round((time.perf_counter()-recovery_start)*1000, 2)
+            host.stop()
+            host.env["OC_DATA_DIR"] = str(backup)
+            restore_start = time.perf_counter()
+            host.start()
+            add(batches[0])
+            if search(0)[1] != before:
+                raise DrillError("backup_restore_failed")
+            restore_ms = round((time.perf_counter()-restore_start)*1000, 2)
             report.update(add=percentiles(add_times), search=percentiles([r[0] for r in found]),
                 users=args.users, concurrency=args.concurrency, rounds=args.rounds,
-                restart_ms=round((time.perf_counter()-recovery_start)*1000, 2),
+                restart_ms=restart_ms, backup_restore_ms=restore_ms,
                 disk_bytes=sum(p.stat().st_size for p in created.rglob("*") if p.is_file()),
-                checks=["isolated_users", "cross_session", "unknown_user", "stable_ids", "idempotency", "restart_after_publication"])
+                checks=["isolated_users", "cross_session", "unknown_user", "stable_ids", "idempotency", "restart_after_publication", "stopped_host_backup_restore"])
         finally:
             host.stop()
     report["temporary_tree_removed"] = not created.exists()
@@ -212,7 +227,7 @@ def drill(args, env, report):
         raise DrillError("temporary_cleanup_failed")
     report["limitations"] = ["synthetic protocol drill, not semantic ranking or official Smoke",
         "process death after completed publication, not in-flight crash or power loss",
-        "logical temporary-tree removal, not media erasure, backups or provider retention",
+        "logical temporary-tree removal including test backup, not media erasure, external copies or provider retention",
         "no peak memory, provider usage, sustained Full-duration load or production SLO"]
 
 
