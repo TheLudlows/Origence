@@ -7,6 +7,8 @@ use std::io;
 /// depends on a vendor error or a database pool type (A2.2).
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
+    #[error("{0}")]
+    InvalidArgument(&'static str),
     #[error("scope is required")]
     ScopeRequired,
     #[error("resource not found")]

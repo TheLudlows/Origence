@@ -24,6 +24,9 @@ pub fn router(service: Service) -> Router {
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
         .route("/admin/keys", post(issue_key))
+        .route("/admin/aml/namespace", post(enable_aml_namespace))
+        .route("/aml/add", post(aml_add))
+        .route("/aml/search", post(aml_search))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/v1/memories", post(memory))
         .route("/v1/memories/identified", post(identified_memory))
@@ -257,4 +260,27 @@ async fn revoke_key(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.revoke_key(&auth(&s, &h).await?, id).await?))
+}
+
+async fn enable_aml_namespace(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
+    s.enable_aml_namespace(&auth(&s, &h).await?).await?;
+    Ok(Json(json!({"enabled":true})))
+}
+async fn aml_add(
+    State(s): State<Service>,
+    h: HeaderMap,
+    body: Bytes,
+) -> Result<Json<crate::aml::AddResponse>> {
+    let auth = auth(&s, &h).await?;
+    let input = tokio::task::spawn_blocking(move || crate::aml::parse_add(&body))
+        .await
+        .map_err(|e| AppError::Internal(e.into()))??;
+    Ok(Json(s.aml_add(&auth, input).await?))
+}
+async fn aml_search(State(s): State<Service>, h: HeaderMap, body: Bytes) -> Result<Json<Value>> {
+    let auth = auth(&s, &h).await?;
+    let input = tokio::task::spawn_blocking(move || crate::aml::parse_search(&body))
+        .await
+        .map_err(|e| AppError::Internal(e.into()))??;
+    Ok(Json(s.aml_search(&auth, input).await?))
 }

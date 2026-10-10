@@ -27,6 +27,7 @@ use sqlx::Transaction;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 use uuid::Uuid;
 
+mod aml;
 mod app;
 
 use crate::storage::Lifecycle;
@@ -336,7 +337,7 @@ async fn schema_present(conn: &mut SqliteConnection) -> StorageResult<bool> {
 }
 
 async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    for schema in [SCHEMA, IDENTITY_SCHEMA] {
+    for schema in [SCHEMA, IDENTITY_SCHEMA, aml::AML_SCHEMA, aml::ADD_SCHEMA] {
         sqlx::raw_sql(schema)
             .execute(&mut *conn)
             .await
@@ -353,6 +354,9 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
             .map_err(|e| {
                 StorageError::Unavailable(format!("incompatible SQLite schema in {table}: {e}"))
             })?;
+    }
+    if aml::schema_available(conn).await? {
+        aml::check_schema(conn).await?;
     }
     // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
@@ -520,7 +524,10 @@ impl SqliteTx {
                 .fetch_optional(&mut *self.tx)
                 .await
                 .map_err(sqlite_err)?;
-        role.ok_or(StorageError::Forbidden)
+        match role {
+            Some(role) => Ok(role),
+            None => self.aml_role().await,
+        }
     }
 }
 

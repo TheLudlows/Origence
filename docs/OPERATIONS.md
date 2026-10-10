@@ -119,3 +119,21 @@ $env:OC_EMBEDDING_DIMENSION = '1024'
 不要在运行中分别复制各个数据库或只备份 `context.db`；目前没有在线跨库快照协议。本轮测试验证进程强退恢复，未完成完整备份演练或断电测试。删除保留原始内容，备份也仍包含这些内容。
 
 PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/db.rs`、PG 初始化/授权 SQL、Apalis 依赖及 PG 专用测试；新本地进程套件替代其核心应用验收。没有 PG 数据自动迁移功能，不应将 PG 数据目录当作 `OC_DATA_DIR`。
+
+## AML 评测 namespace 与批次任务
+
+AML 使用独立评测数据目录。新 SQLite 关系库创建 `oc_aml_namespaces`、`oc_aml_users`、`oc_aml_adds`。管理员通过库 API 或 `POST /admin/aml/namespace` 显式启用 namespace 后才允许在线创建用户 workspace。首次创建在同一个 BEGIN IMMEDIATE 事务中写入 workspace、映射和审计；并发首次请求复用同一映射，失败整体回滚。审计不保存外部 user_id 或消息正文。
+
+已有数据库缺少两张映射表时仍可使用原功能，启动不会补建；AML 接口返回不可用。本切片未提供旧库升级命令，应创建专用评测新库，不手工向业务库复制 DDL。仅存在部分表、同名 view 或不兼容 AML 表定义时拒绝打开，不自动修复。已有身份 schema 的显式升级机制不变。
+
+评测凭据的 namespace 是其原生 tenant/workspace；轮换为同 workspace 的新 key 可重新取得原用户映射。撤销旧 key 后，旧派生 AuthContext 和该 key 受理的待发布任务失去权限。同 namespace 的新 key 复用 Add receipt；密钥轮换不自动转移已受理任务的 created_by，因此应先排空旧 key 的任务再撤销它。
+
+仅含前两张映射表的上一切片库仍可打开并使用 scope 接口，但 Add 返回 503；不会自动安装 oc_aml_adds。不兼容的 Add 表定义同样拒绝启动。评测继续使用专用新目录。
+
+配置 embedding 后再启用 Add（环境变量沿用上文，库宿主可用 Models::configured 显式配置）。首版固定原文 vector，不调用摘要/抽取/图模型。每批正文与 receipt、资产、单个 aml_ingest job 在事务中一起落库；消息解析及预分词在 spawn_blocking、关系事务外执行，既有串行 Worker 等待完成后继续索引。没有新增解析进程或独立 Worker。超时/断线只终止观察，不取消同步闭包或持久任务，不提供硬时间/内存隔离保证。
+
+Add 的 HTTP 等待上限为 25 分钟；上游模型每次调用沿用 45 秒上限。网关需允许此长连接，或使用相同 request_id/相同请求重试；不得换 ID 绕过超时。排队、模型调用都计入等待，单 Worker 和多次分块调用可能使大批次超过上限；这些输入上限不是吞吐/SLO 声明。优雅停止沿用等待当前 Worker 任务的语义，已有 Add 观察请求还可能等待到 25 分钟结束；强退后按原恢复机制继续持久工作。
+
+模型失败沿用既有 failed 状态，不自动增加模型重试；相同 Add 重发仍指向失败任务并返回 503。授权库宿主用 submit_aml_add 的 receipt.job_id，在 lookup_aml_user 返回的 scope 内调用 Service::job_action(...,"retry") 显式重试原任务。当前没有额外 AML HTTP job 管理入口，原生 namespace 的 /v1/jobs 不能跨 scope 读取它。输入失败需新 request_id/修正内容；临时存储故障仍由原 Worker 的有限 retry_wait 处理。重放不保证上游模型计费一次。
+
+日志和审计不输出 AML 消息、query、options、外部用户 ID 或模型诊断；原文仍在来源/版本/任务发布计划中持久保存，墓碑不等于物理擦除。固定模型的全分支隔离回归与真实本地 BGE-M3 小规模协议演练已通过；正式模型配置、持续容量、数据物理清除、公网部署和正式 Smoke 仍待独立验收。可重复预检、运行演练和退役步骤见 [AML_DRILL](AML_DRILL.md)。

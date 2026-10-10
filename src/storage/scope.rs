@@ -16,8 +16,9 @@ pub struct Scope {
 
 /// A principal that has authenticated against a [`Scope`].
 ///
-/// Produced by the privileged `authenticate` path (token lookup), never by an
-/// ordinary business query (A2.2).
+/// Produced by token authentication or the explicitly enabled AML namespace
+/// mapping. Transactions recheck the live key and any persisted delegation;
+/// caller-supplied scope/role values do not grant access (A2.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorizedScope {
     pub scope: Scope,

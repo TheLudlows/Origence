@@ -31,6 +31,8 @@ jobs:
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
       - run: cargo test --locked --no-default-features --lib -j 2
       - run: cargo test --locked --no-default-features --test local -j 2
+      - name: AML drill client tests (no external model calls)
+        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
         run: python3 -m unittest discover -s evals -p 'test_*.py' -v
   linux-native:

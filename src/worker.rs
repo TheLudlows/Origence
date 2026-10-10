@@ -16,6 +16,8 @@ struct PublishedChunk {
     chunk: Chunk,
     embedding: Option<Vec<f32>>,
     summary: String,
+    #[serde(default)]
+    search_terms: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct PublishedMemory {
@@ -231,6 +233,19 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
         let asset = claim.asset.ok_or(AppError::NotFound)?;
         let chunks = match claim.kind.as_str() {
+            "aml_ingest" => {
+                if claim.payload["parser"] != crate::aml::MESSAGE_PARSER {
+                    return Err(AppError::Invalid("unsupported AML parser".into()));
+                }
+                let source = tx
+                    .event_content(claim.source.ok_or(AppError::NotFound)?, true)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                tx.commit().await?;
+                tokio::task::spawn_blocking(move || crate::aml::chunks(&source))
+                    .await
+                    .map_err(|e| AppError::Internal(e.into()))??
+            }
             "publish" => {
                 let text = tx
                     .event_content(claim.source.ok_or(AppError::NotFound)?, true)
@@ -301,6 +316,23 @@ async fn prepare(
     if drafts.iter().any(|d| d.chunks.is_empty()) {
         return Err(AppError::Conflict("no source chunks available".into()));
     }
+    let terms = if claim.kind == "aml_ingest" {
+        let texts: Vec<String> = drafts
+            .iter()
+            .flat_map(|d| d.chunks.iter().map(|c| c.content.clone()))
+            .collect();
+        tokio::task::spawn_blocking(move || {
+            texts
+                .iter()
+                .map(|text| parsing::lexical(text))
+                .collect::<Vec<_>>()
+        })
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?
+    } else {
+        Vec::new()
+    };
+    let mut terms = terms.into_iter();
     let mut memories = Vec::new();
     for (memory_index, draft) in drafts.into_iter().enumerate() {
         let mut out = Vec::new();
@@ -324,6 +356,7 @@ async fn prepare(
                 chunk,
                 embedding,
                 summary,
+                search_terms: terms.next(),
             });
         }
         memories.push(PublishedMemory {
@@ -513,7 +546,9 @@ async fn publish_prepared(
                 ordinal as i32,
                 &c.chunk.content,
                 &c.chunk.locator,
-                &parsing::lexical(&c.chunk.content),
+                &c.search_terms
+                    .clone()
+                    .unwrap_or_else(|| parsing::lexical(&c.chunk.content)),
             )
             .await?;
             tx.register_owner(source, "chunk", c.id, Some(c.id)).await?;
