@@ -2,7 +2,7 @@
 name = "origence"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.98"
+rust-version = "1.98.0"
 description = "The Intelligence Foundation for AI Agents."
 publish = false
 autotests = false
@@ -14,8 +14,8 @@ clap = { version = "4", features = ["derive", "env"] }
 fs2 = "0.4"
 futures = "0.3"
 jieba-rs = "0.7"
-lopdf = { version = "0.38", default-features = false }
-pdf-extract = "0.10"
+# Text extraction only; no OCR, rendering, or platform bindings.
+pdf_oxide = { version = "=0.3.78", default-features = false }
 pulldown-cmark = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rmcp = { version = "0.8", features = ["server", "transport-io"] }

@@ -11,6 +11,7 @@ Origence（原 openContext）的详细技术资料、实现状态与历史验收
 | 数据布局、备份和故障恢复 | [OPERATIONS](OPERATIONS.md) |
 | 已交付与待办 | [STATUS](STATUS.md) |
 | 当前及剩余任务计划 | [下一阶段实施路线图 S0–S4](superpowers/plans/2026-10-09-next-stage-roadmap.md)、[P0 验收补齐与评估基线](superpowers/plans/2026-10-08-validation-and-evaluation.md) |
+| 竞品借鉴、演进取舍与现有规划对照（建议稿） | [Nowledge Mem × TrueMemory 融合评审 v2.0](Origence_演进取舍与现有规划对比_v2.0.md) |
 | 实测命令、结果和未验证项 | [VALIDATION](VALIDATION.md) |
 | M5 交付与验收映射 | [本地宿主交付](superpowers/plans/2026-09-28-local-host-delivery.md) |
 | 已实施的自动发布（writer 记忆与抽取直接发布） | [自动发布](superpowers/plans/2026-09-22-auto-publish.md) |
@@ -24,6 +25,8 @@ Origence（原 openContext）的详细技术资料、实现状态与历史验收
 | 评估方法及样例 | [效果评估标准](Origence_效果评估与对比标准.md)、[evals](../evals/README.md)、[S1 真实模型结果](../evals/s1/results/local-77d43a8-v2/README.md) |
 | Cognee 固定版本调研 | [架构](Cognee_技术架构分析.md)、[细节比较](Cognee_技术细节与方案对比.md)、[图源和核验材料](assets/cognee/README.md) |
 | 历史方案备查 | [serverless 方案](agent_memory_knowledgebase_serverless.md) |
+
+融合评审稿按 v2.0 原文归档，采用文中注明的固定提交基线；其中“未修改 GitHub 仓库”指编制阶段。文档入库不代表建议已纳入执行计划或功能已实现，最新进度仍以 STATUS、路线图和 VALIDATION 为准。
 
 计划中的代码草稿用于解释当时设计，不应直接覆盖当前实现。自动发布已实施：候选/审核门已移除，writer 记忆与抽取直接发布。会话记忆、经验蒸馏、多租户 SaaS 不属于已完成范围。
 

@@ -3,7 +3,6 @@ use origence::{
     client::HostClient,
     host, mcp,
     models::Models,
-    parsing,
     service::Service,
     storage::{Lifecycle, RelationalStore, Scope, SqliteStore},
     types::{ResolveInput, SearchInput},
@@ -80,10 +79,6 @@ enum Command {
         #[arg(long)]
         version: Option<i32>,
     },
-    #[command(hide = true)]
-    ParsePdf {
-        path: PathBuf,
-    },
 }
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -91,14 +86,13 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "origence=info,sqlx=warn".into()),
+                .unwrap_or_else(|_| "origence=info,sqlx=warn".into())
+                // Upstream diagnostics may contain document internals. The
+                // worker records our sanitized error code instead.
+                .add_directive("pdf_oxide=off".parse()?),
         )
         .init();
     let cli = Cli::parse();
-    if let Command::ParsePdf { path } = &cli.command {
-        println!("{}", serde_json::to_string(&parsing::pdf_child(path)?)?);
-        return Ok(());
-    }
     if let Command::Serve { bind } = &cli.command {
         let service = Service::open(&cli.data_dir, Models::from_env()?).await?;
         let listener = tokio::net::TcpListener::bind(bind).await?;

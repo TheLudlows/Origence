@@ -6,7 +6,14 @@
 
 图后端于 2026-10-10 按 [替换计划](superpowers/plans/2026-10-10-replace-kuzu-with-sqlite-graph.md) 切换为 `SqliteGraphStore`，已删除 Kuzu crate、适配器、旧测试、探针和 `local-graph` feature；CI/Docker/Windows 脚本不再配置 CMake/Ninja。上方 S0 run 属于替换前代码，不能作为本轮替换验收；本轮 [PR #23](https://github.com/TheLudlows/Origence/pull/23) 的 [run 38030946507](https://github.com/TheLudlows/Origence/actions/runs/38030946507) 已完成：fast-check 与 Linux/MSRV 成功，默认 lib 28/local 89、13 项图回归、Clippy/HTTP smoke 全通过；PR #23 已合入 main `9c292a9`；主干 run `38032343493` 五作业全部成功，三平台默认 lib 28/local 89、13 项图回归与 vector/hybrid 定向回归均已核验。精确证据见 VALIDATION 最新记录。旧图文件需按 OPERATIONS 在新目录重新发布来源，不自动迁移。
 
-最低 Rust 版本为 **1.98**：Linux 原生 CI 以 **1.98.0** 执行完整测试并核验 MSRV，开发/Windows/macOS/Docker 使用 **1.98.1**。PR 执行 `fast-check` 与 `linux-native`；main 追加 Windows、macOS 和 Docker。Linux Native 统一 Debug，macOS 保留 Release，Docker 保留 Release 镜像/Smoke。以下旧平台测试数字属于历史证据，不代替最新代码验收。
+最低 Rust 版本为 **1.98.0**：所有平台（Linux 原生 CI、开发、Windows/macOS/Docker）统一使用 **1.98.0**，并核验 MSRV。PR 执行 `fast-check` 与 `linux-native`；main 追加 Windows、macOS 和 Docker。Linux Native 统一 Debug，macOS 保留 Release，Docker 保留 Release 镜像/Smoke。以下旧平台测试数字属于历史证据，不代替最新代码验收。
+
+PDF 解析已替换为 `pdf_oxide 0.3.78`，移除 `lopdf`/`pdf-extract` 与 `main`
+的隐藏子进程命令。库 API 使用 `spawn_blocking` 单次打开、逐页分块，保留
+页码和 UTF-8 来源区间；任一页失败整份文档不发布。旧子进程的 30 秒硬超时
+已移除，线程解析的退出/取消边界见 [OPERATIONS](OPERATIONS.md#pdf-解析)。
+新增根目录 [AGENTS.md](../AGENTS.md) 约束入口职责、库调用、进程引入、
+阻塞执行和替换验证。精确测试结果与未验收平台见 VALIDATION 最新记录。
 
 ## 当前能力与验收快照
 
@@ -33,7 +40,7 @@
 - 持久化发布计划与跨库账本；确定性产物 ID、generation/run_token 隔离、取消、有限自动重试、显式重试和启动恢复。外部产物只有在 SQLite 最终提交后可作为证据。
 - 中文预分词关键词检索、精确向量检索、摘要/图谱证据与 RRF、引用和保守预算。最终结果核验当前版本、来源、资产和授权。
 - 删除立即阻断读取，后台按 SQLite owner 清理派生数据；共享实体和关系有其他有效来源时保留，最后一个 owner 消失才删除。
-- 普通测试用临时数据目录运行，涵盖 API/CLI/MCP/PDF 子进程、本地模型模拟和恢复；CI、容器配置及文档统一到单宿主。
+- 普通测试用临时数据目录运行，涵盖 API/CLI/MCP、宿主内 PDF 解析、本地模型模拟和恢复；CI、容器配置及文档统一到单宿主。
 
 旧 PostgreSQL 运行代码、Apalis SQL 和专用测试从活动树裁剪，历史参考为提交 `72fb5aa`。未提供 PG 到本地库的数据迁移或可选 PG 运行模式；未来可实现存储接口，不能据此宣称已支持。
 
