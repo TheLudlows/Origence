@@ -1,0 +1,526 @@
+{
+  "schema": "origence-experiment-closeout-v1",
+  "checked_at_utc": "2026-10-11T13:22:05.353Z",
+  "experiment_main": "2b7b6a67300d9e96eca8be0de282d308b8ded576",
+  "scope": "Close existing AML quality, temporal and vector maintenance experiments; no new model runs or production behavior changes.",
+  "ci": {
+    "id": 38138182208,
+    "head_sha": "2b7b6a67300d9e96eca8be0de282d308b8ded576",
+    "event": "push",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/TheLudlows/Origence/actions/runs/38138182208",
+    "jobs": [
+      {
+        "id": 114466307295,
+        "name": "fast-check",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/TheLudlows/Origence/actions/runs/38138182208/job/114466307295"
+      },
+      {
+        "id": 114466307367,
+        "name": "windows",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/TheLudlows/Origence/actions/runs/38138182208/job/114466307367"
+      },
+      {
+        "id": 114466307395,
+        "name": "linux-native",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/TheLudlows/Origence/actions/runs/38138182208/job/114466307395"
+      },
+      {
+        "id": 114466307463,
+        "name": "container",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/TheLudlows/Origence/actions/runs/38138182208/job/114466307463"
+      },
+      {
+        "id": 114466307562,
+        "name": "macos",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/TheLudlows/Origence/actions/runs/38138182208/job/114466307562"
+      }
+    ]
+  },
+  "integrity": [
+    {
+      "manifest": "evals/aml/budget-v1/manifest.json",
+      "checked": 28,
+      "files": [
+        {
+          "path": "evals/aml/budget-v1/embedding-receipt.json",
+          "expected_sha256": "b07f118b54efddacc599e1086a222e67f29837ac4961f770d1c565cecba96874",
+          "actual_sha256": "b07f118b54efddacc599e1086a222e67f29837ac4961f770d1c565cecba96874",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/freeze.json",
+          "expected_sha256": "74a27d9a8391e5a890c4f83d011cdc88da12aa333c5d3173cdbe128ee8729f6e",
+          "actual_sha256": "74a27d9a8391e5a890c4f83d011cdc88da12aa333c5d3173cdbe128ee8729f6e",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/integrity-audit.json",
+          "expected_sha256": "1ead31e4679f441daddd2a300208e05108818dbe11c2e5e4107bd65957e89900",
+          "actual_sha256": "1ead31e4679f441daddd2a300208e05108818dbe11c2e5e4107bd65957e89900",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/integrity-audit.raw.json.gz",
+          "expected_sha256": "dde0102f3ffa13091562888457793511a8074d78f13d21c6db1068ae6e71f74e",
+          "actual_sha256": "dde0102f3ffa13091562888457793511a8074d78f13d21c6db1068ae6e71f74e",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/previous-main-ci.json",
+          "expected_sha256": "44bb16d221f35de78b91126fdb06d1e4dedbcfe1d7b43e940048049c9a3fbfd4",
+          "actual_sha256": "44bb16d221f35de78b91126fdb06d1e4dedbcfe1d7b43e940048049c9a3fbfd4",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-answer-bge.json.gz",
+          "expected_sha256": "f5a01e3171c51fc8eb4fb3ae307657be19c503f9d5888c7786afc6562b7845b8",
+          "actual_sha256": "f5a01e3171c51fc8eb4fb3ae307657be19c503f9d5888c7786afc6562b7845b8",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-answer-chat.json.gz",
+          "expected_sha256": "6a0aa6272b66a0a509e2b0237253880107a216d9c62320db9ad8d58514e92c3e",
+          "actual_sha256": "6a0aa6272b66a0a509e2b0237253880107a216d9c62320db9ad8d58514e92c3e",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-answer-vector.json.gz",
+          "expected_sha256": "0fb62411b12caedd469509c5e751ba0b393f973b2f755c474f93c1d31998748f",
+          "actual_sha256": "0fb62411b12caedd469509c5e751ba0b393f973b2f755c474f93c1d31998748f",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-grade.json.gz",
+          "expected_sha256": "18d5ddd2ce709849699b8587f00e45e9559e26b568b3337d7f831ee49b4a7359",
+          "actual_sha256": "18d5ddd2ce709849699b8587f00e45e9559e26b568b3337d7f831ee49b4a7359",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-prepare.json.gz",
+          "expected_sha256": "4e9b0254de479275c5d5af664f6b000ec391a1c5b1c3065997e9b495120d4ae3",
+          "actual_sha256": "4e9b0254de479275c5d5af664f6b000ec391a1c5b1c3065997e9b495120d4ae3",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-rank-bge.json.gz",
+          "expected_sha256": "d8d0d85e0ebb1ac0e5a614540d22040c3745e9b1a0a51e8f0205a43cdf4434c6",
+          "actual_sha256": "d8d0d85e0ebb1ac0e5a614540d22040c3745e9b1a0a51e8f0205a43cdf4434c6",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-rank-chat.json.gz",
+          "expected_sha256": "c92a373d2863a04d6d23b5ac68cd9ba899bfd39a1e91d529b0fdc1830f11e704",
+          "actual_sha256": "c92a373d2863a04d6d23b5ac68cd9ba899bfd39a1e91d529b0fdc1830f11e704",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-retrieval-diagnostic.json",
+          "expected_sha256": "f7f4ee7850d26f4140d63565704060376d8e63f2907fb46f5c0e13fe46d4cc48",
+          "actual_sha256": "f7f4ee7850d26f4140d63565704060376d8e63f2907fb46f5c0e13fe46d4cc48",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-retrieve.json.gz",
+          "expected_sha256": "4c3651ec2f036b45cad5ba0fae41e2373280185cd237eaac90e98cb0d1a51cad",
+          "actual_sha256": "4c3651ec2f036b45cad5ba0fae41e2373280185cd237eaac90e98cb0d1a51cad",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/public-semantic-audit.json",
+          "expected_sha256": "4aff5efe68d8524ea8584df939fa719465d54fa6f8631ac4f65d4644936c5cf2",
+          "actual_sha256": "4aff5efe68d8524ea8584df939fa719465d54fa6f8631ac4f65d4644936c5cf2",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/README.md",
+          "expected_sha256": "eed2f282edbea8f8b4625ab5a35201b0cf8c8e9588c39e35f4af7cd41b9d3cce",
+          "actual_sha256": "eed2f282edbea8f8b4625ab5a35201b0cf8c8e9588c39e35f4af7cd41b9d3cce",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/runtime-notes.json",
+          "expected_sha256": "fcf68aed49148100bf42c4757702a611e462ed04b98a256ba07587d7afba12e1",
+          "actual_sha256": "fcf68aed49148100bf42c4757702a611e462ed04b98a256ba07587d7afba12e1",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/summary.json",
+          "expected_sha256": "e62c0d19ffb11fd6730fbbaac9b3552d5b6d265070521b35a51c48dffa09d490",
+          "actual_sha256": "e62c0d19ffb11fd6730fbbaac9b3552d5b6d265070521b35a51c48dffa09d490",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/summary.raw.json.gz",
+          "expected_sha256": "7087d20ab248a824ac58823261acaa2dba217f510527495766d501146233f12c",
+          "actual_sha256": "7087d20ab248a824ac58823261acaa2dba217f510527495766d501146233f12c",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-answer-bge.json.gz",
+          "expected_sha256": "021c96d968b3a4942631fa51fddbec8ec8c547367a150492182bf8c2848334fd",
+          "actual_sha256": "021c96d968b3a4942631fa51fddbec8ec8c547367a150492182bf8c2848334fd",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-answer-chat.json.gz",
+          "expected_sha256": "d31312ceacceda5c3e6daeb9515674d81f4aa46616250272a5713e2d5cc72ea2",
+          "actual_sha256": "d31312ceacceda5c3e6daeb9515674d81f4aa46616250272a5713e2d5cc72ea2",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-answer-vector.json.gz",
+          "expected_sha256": "257368b2ac9306e18e21da8687b609bacc52e9a58b5089dd1c1e6ec8344df2c0",
+          "actual_sha256": "257368b2ac9306e18e21da8687b609bacc52e9a58b5089dd1c1e6ec8344df2c0",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-grade.json.gz",
+          "expected_sha256": "8175af23545fccca1290abd90238eb6fe4a0e7f162e667d21e1732b1ccec87a7",
+          "actual_sha256": "8175af23545fccca1290abd90238eb6fe4a0e7f162e667d21e1732b1ccec87a7",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-prepare.json.gz",
+          "expected_sha256": "7b3c968f79af2f03e71a6c4b506a5c178a46764ddbf90faee6d8dcb4337de9ed",
+          "actual_sha256": "7b3c968f79af2f03e71a6c4b506a5c178a46764ddbf90faee6d8dcb4337de9ed",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-rank-bge.json.gz",
+          "expected_sha256": "6349012fa6d7a06b843dc53e7c448dc8c0f04aa80126245113661554f9330edd",
+          "actual_sha256": "6349012fa6d7a06b843dc53e7c448dc8c0f04aa80126245113661554f9330edd",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-rank-chat.json.gz",
+          "expected_sha256": "9df5c3760b9dc6da8d94188a2808801c2a8286fcf59a5cab5dca8575d2001087",
+          "actual_sha256": "9df5c3760b9dc6da8d94188a2808801c2a8286fcf59a5cab5dca8575d2001087",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-retrieve.json.gz",
+          "expected_sha256": "47440610798a1f80769ecd5ab6db0e9b65ee134c0bcf4664819b116cdd1cbc2a",
+          "actual_sha256": "47440610798a1f80769ecd5ab6db0e9b65ee134c0bcf4664819b116cdd1cbc2a",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/budget-v1/v4-semantic-audit.json",
+          "expected_sha256": "75d024ec58e213ecffe11261324e0be68402e608339d7a520fd62eaf5b0f810f",
+          "actual_sha256": "75d024ec58e213ecffe11261324e0be68402e608339d7a520fd62eaf5b0f810f",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "manifest": "evals/aml/temporal-v1/manifest.json",
+      "checked": 12,
+      "files": [
+        {
+          "path": "evals/aml/temporal-v1/audit.json",
+          "expected_sha256": "0ccc94e50befed7471ffac88f10e72589514c7a05ec1e55845e2d7ad60128033",
+          "actual_sha256": "0ccc94e50befed7471ffac88f10e72589514c7a05ec1e55845e2d7ad60128033",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/calibration.json",
+          "expected_sha256": "2f9c54a87de115b68e2b48d57dd49ccad4d3c7ec0ad1a2f084069beaa20b69c5",
+          "actual_sha256": "2f9c54a87de115b68e2b48d57dd49ccad4d3c7ec0ad1a2f084069beaa20b69c5",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/freeze.json",
+          "expected_sha256": "7f840e8bf0ff911f48a421c6c1c0ae0a3a911ff4c83bba4fe77ef26bac8999db",
+          "actual_sha256": "7f840e8bf0ff911f48a421c6c1c0ae0a3a911ff4c83bba4fe77ef26bac8999db",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/previous-main-ci.json",
+          "expected_sha256": "bceb0d2e9dee26a9a7dc2e605ccdf7c558ce376f64a146df62dff5740231e3a3",
+          "actual_sha256": "bceb0d2e9dee26a9a7dc2e605ccdf7c558ce376f64a146df62dff5740231e3a3",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/README.md",
+          "expected_sha256": "875c9f32f7ef763d7bf500580696e366e51130e5e885385ddd2baf4b53794e3a",
+          "actual_sha256": "875c9f32f7ef763d7bf500580696e366e51130e5e885385ddd2baf4b53794e3a",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/run.json",
+          "expected_sha256": "6806b2529652b7d98fd89316d15bce675f20cf86e878b2d0127aa1561f50e59e",
+          "actual_sha256": "6806b2529652b7d98fd89316d15bce675f20cf86e878b2d0127aa1561f50e59e",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/search-comparison.json",
+          "expected_sha256": "54ec185c21e1b5f55892af8526b2fab8c44ad03ef316959968da11d706f06ee1",
+          "actual_sha256": "54ec185c21e1b5f55892af8526b2fab8c44ad03ef316959968da11d706f06ee1",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/search-profile-runner-v1.py.gz",
+          "expected_sha256": "6daeb5c7afc1ea2af2cfc664d625b2e6872989880a2715e043ca75e56d3be749",
+          "actual_sha256": "6daeb5c7afc1ea2af2cfc664d625b2e6872989880a2715e043ca75e56d3be749",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/search-profile.json",
+          "expected_sha256": "a11eaab1e648215622cfac436f72d928f8574a9b12ef44c8e0799fa2c4cfe982",
+          "actual_sha256": "a11eaab1e648215622cfac436f72d928f8574a9b12ef44c8e0799fa2c4cfe982",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/search-scale-plan.json",
+          "expected_sha256": "33076ed79cedba57a387321512bba8afa7cbe8864cf497f82383847668e0b576",
+          "actual_sha256": "33076ed79cedba57a387321512bba8afa7cbe8864cf497f82383847668e0b576",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/search-scale.json",
+          "expected_sha256": "11432dc3efeebbcd6d8bb73e062a41b1426ca26d05a488422e1c39052ec02f08",
+          "actual_sha256": "11432dc3efeebbcd6d8bb73e062a41b1426ca26d05a488422e1c39052ec02f08",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/temporal-v1/semantic-audit.json",
+          "expected_sha256": "9156542ee12af9235a96b263d4bc541bb1891552e97086c096fe17ccb129ef61",
+          "actual_sha256": "9156542ee12af9235a96b263d4bc541bb1891552e97086c096fe17ccb129ef61",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "manifest": "evals/aml/vector-perf-v1/manifest.json",
+      "checked": 13,
+      "files": [
+        {
+          "path": "evals/aml/vector-perf-v1/audit.json",
+          "expected_sha256": "c28bfb65c48edd74db3963f6eebfe08f91607779bc87ad7dee1f024049ec2755",
+          "actual_sha256": "c28bfb65c48edd74db3963f6eebfe08f91607779bc87ad7dee1f024049ec2755",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/baseline-lancedb.rs.gz",
+          "expected_sha256": "e3ea779af4ee514b8739394a5fc7b3fa8d4d11d92adffbb4764c0f3be76bb942",
+          "actual_sha256": "e3ea779af4ee514b8739394a5fc7b3fa8d4d11d92adffbb4764c0f3be76bb942",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/candidate-plan.json",
+          "expected_sha256": "b8b0dda2ce3b4e8c2b329d869aa48bc430aa98de2947880da630f3ea60dcbcec",
+          "actual_sha256": "b8b0dda2ce3b4e8c2b329d869aa48bc430aa98de2947880da630f3ea60dcbcec",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/layout-plan.json",
+          "expected_sha256": "7e7c4ceb106b8d033bbae0782ee1aeba13febe5bb6de52c80cd815710663c448",
+          "actual_sha256": "7e7c4ceb106b8d033bbae0782ee1aeba13febe5bb6de52c80cd815710663c448",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/layout.json",
+          "expected_sha256": "0a226574df8858bccaaf14aaf51d3537da2dbfbd5a31574046730d3f457095a7",
+          "actual_sha256": "0a226574df8858bccaaf14aaf51d3537da2dbfbd5a31574046730d3f457095a7",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/maintenance-plan.json",
+          "expected_sha256": "9c2461ff9387c246d565bf0953d9702b76b8e8a0f8aa50093cd73c79c95d24ba",
+          "actual_sha256": "9c2461ff9387c246d565bf0953d9702b76b8e8a0f8aa50093cd73c79c95d24ba",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/maintenance-summary.json",
+          "expected_sha256": "15efb4fdaa5b88b9b2c72de567b0147b4a0c98b352068aadc2316b7c60da0e84",
+          "actual_sha256": "15efb4fdaa5b88b9b2c72de567b0147b4a0c98b352068aadc2316b7c60da0e84",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/maintenance.json",
+          "expected_sha256": "2bbdccd131717e12132137fb82dcee439efc873f4a9d685cdf0a8da332921ac8",
+          "actual_sha256": "2bbdccd131717e12132137fb82dcee439efc873f4a9d685cdf0a8da332921ac8",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/plan.json",
+          "expected_sha256": "9a332980c0def0a833eadfaeb18eb0501f0a99cb7fb162e0cbd18a34727c83bd",
+          "actual_sha256": "9a332980c0def0a833eadfaeb18eb0501f0a99cb7fb162e0cbd18a34727c83bd",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/projection-lancedb.rs.gz",
+          "expected_sha256": "c8a47e1dc2bf9901de82fc3a913044275fda4415460dfaaab3e684241f1ad04f",
+          "actual_sha256": "c8a47e1dc2bf9901de82fc3a913044275fda4415460dfaaab3e684241f1ad04f",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/README.md",
+          "expected_sha256": "994ef803ec10604d1970ffac46cccf815ec67681ec8e4c9f3e4d668bbf09e6bd",
+          "actual_sha256": "994ef803ec10604d1970ffac46cccf815ec67681ec8e4c9f3e4d668bbf09e6bd",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/run.json",
+          "expected_sha256": "56163a15392a3033e6204a8ff3444961ffad8d139cc245e0f2be6b114f3a99fa",
+          "actual_sha256": "56163a15392a3033e6204a8ff3444961ffad8d139cc245e0f2be6b114f3a99fa",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/vector-perf-v1/summary.json",
+          "expected_sha256": "9fa8b395bad6c4169185fd034031904a337734e9de374db792f0a85e76165748",
+          "actual_sha256": "9fa8b395bad6c4169185fd034031904a337734e9de374db792f0a85e76165748",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "manifest": "evals/aml/maintenance-scale-v1/manifest.json",
+      "checked": 25,
+      "files": [
+        {
+          "path": "evals/aml/maintenance-scale-v1/audit.json",
+          "expected_sha256": "36469dc4aa0eb7d89453df869d99cc5d2e10ad589ac0a71c4e1483b303ec1ca1",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/implementation.json",
+          "expected_sha256": "5711eac4fa3365982bed3158c63118583afe15cbe5a85bb373c20c93807394c4",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/plan.json",
+          "expected_sha256": "c89a286eed1d75ee148eea69b1a6e759d49bbbe9eba36b26a06dd58a401b7d88",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/preflight.json",
+          "expected_sha256": "1828dfe49d58f608b09b2885ce2ada87ed1fe944b19b0ed815d4efd56f52dc68",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/progress.jsonl",
+          "expected_sha256": "ce7681e280ff1e243d08408d4925a5ee0ad844ecfd8f2ab36ef9af8794fef459",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/README.md",
+          "expected_sha256": "cd17a943a9377199516effe8ea706953fcf2a1d8b700d087ef722c87adf0a71a",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/responses.json.gz",
+          "expected_sha256": "39df5f2bf3f33803d91501ff25dcae3405c1130bfeffae6ce66fb55d01027cb6",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/maintenance-scale-v1/run.json",
+          "expected_sha256": "3f9916b842400e243af0d86bb760cb3c861be2630c53a68f7afbe23102fe0674",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_maintenance_scale.py",
+          "expected_sha256": "fa3bbd9b812dd8c17a138eb2ff5a6bd379a99d47779cba028ce23a93a33e136d",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_maintenance_verify.py",
+          "expected_sha256": "8f172e08ad39bbcd8f503543d32f983d5310e58274b8b99f27db198e2afbb3fd",
+          "passed": true
+        },
+        {
+          "path": "tools/test_aml_maintenance.py",
+          "expected_sha256": "e5d9f8e36395efef43b18d89e852913b06108eeb7ea7a8b72a2c81c53f721aa8",
+          "passed": true
+        },
+        {
+          "path": "tests/lancedb_store.rs",
+          "expected_sha256": "59bbed336c5e8ab679903d926fd2f71ad4ea1613ebc663ccbf03b42ae5643263",
+          "passed": true
+        },
+        {
+          "path": "src/storage/maintenance.rs",
+          "expected_sha256": "f8b6152485adfa3eda3a83d7b2ccfa37542e7dd5426075d62199ac5f69744261",
+          "passed": true
+        },
+        {
+          "path": "src/storage/lancedb.rs",
+          "expected_sha256": "080b233400fa1609c0c547f3de6608a9f6cf3f0387db31e6263d16988c145ea9",
+          "passed": true
+        },
+        {
+          "path": "src/storage/sqlite.rs",
+          "expected_sha256": "6c8c5dd30f9e7589bb8e3d06fe7361ac54c489b53fc62acf43b79be7d90d3030",
+          "passed": true
+        },
+        {
+          "path": "src/retrieval.rs",
+          "expected_sha256": "9d2aed14d7f1f0b34cca6a1ccf76815d4d821d321c982e12003cbdb5f9fa619c",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_drill.py",
+          "expected_sha256": "cf9b180ecda2b0f9fbb2c1b250767f46ed8fc35a60b3596d7cdf14d76317b5ae",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_compaction_profile.py",
+          "expected_sha256": "b8e83a8e6aa9a04a338165f25932a79dd73584a782351d4d18500f811c70d754",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_evidence.py",
+          "expected_sha256": "dad5451d81dae4d104b89e7cc50b8b1d5e0fbdde59286021f58141312f461e5b",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_public.py",
+          "expected_sha256": "5d19e05605f354cf895fd6d413df26f67ff6d2d1c4724f3adc2c5b48127ac98f",
+          "passed": true
+        },
+        {
+          "path": "tools/aml_quality.py",
+          "expected_sha256": "c7d42fae868c66a27ecc37a7414776e958bee1d0ae504d2db91abc80215395f8",
+          "passed": true
+        },
+        {
+          "path": "evals/aml/public/preparation.json",
+          "expected_sha256": "34c98feecaafb0bf9afc9384ee2625bb7546ed48fcaa3e611feeeeca3c534c08",
+          "passed": true
+        },
+        {
+          "path": "Cargo.toml",
+          "expected_sha256": "cda6a8e7d73f216eeb65026c273f02cd0189021f49a39249470572d57400bc08",
+          "passed": true
+        },
+        {
+          "path": "Cargo.lock",
+          "expected_sha256": "e06c4b924ab91de36d611e4a18f1d7897fd304e680f06db91a80354a444ae37e",
+          "passed": true
+        },
+        {
+          "path": "rust-toolchain.toml",
+          "expected_sha256": "e879701472a698533f43f54989bbf5f3101eb0503472159d32633f3bb8a13fdf",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Archive checks verify recorded file hashes; no rerun of models or semantic scoring.",
+    "Older manifests are checked for artifacts in their report directories; historical source/tool snapshots are not asserted to match current code. Maintenance manifest checks all 25 listed paths.",
+    "CI result belongs to experiment main 2b7b6a6, not the later documentation closeout commit.",
+    "Maintenance interruption, disk exhaustion, sustained capacity, power loss and independent label review remain unvalidated."
+  ]
+}

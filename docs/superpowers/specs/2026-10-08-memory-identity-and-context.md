@@ -3,15 +3,13 @@
 > **文件定位**：这是 I1–I4 的领域规格（身份、抽取、冲突与上下文边界），不是剩余任务的排期计划。具体实施顺序、未完成任务、每阶段完成标准见 [后续阶段路线图](../plans/2026-10-09-next-stage-roadmap.md)。已验收能力仍以 STATUS/VALIDATION 与实际代码为准。
 
 
-日期：2026-10-08；状态更新：2026-10-09，S0 验收代码 `42db5c21a8ef4788d07209be7110d85e01d7a85f`。已实现身份 v1 编码、SQLite 绑定、显式写入与单身份 capture、来源读取、绑定状态、精确 lookup、search/resolve 身份标注及候选前置过滤，以及调用方 expected_version。主干 run `37918105081` attempt 1 已 5/5 作业通过，三平台各 29 项 lib、81 项原生集成，包含两个真实 vector/hybrid 身份回归；Linux Rust 1.98.0 MSRV、Debug Smoke、macOS Release Smoke、容器及轻量检查均已核验。完整证据及旧 `8d8d224` 的历史验收保留于 [VALIDATION](../../VALIDATION.md)。固定向量仅证明 S0 正确性；自动推断、属性目录、未归一化状态、语义冲突、I3 会话及完整 I4 类型策略尚未实现。本文补充 [整体设计](2026-09-22-memory-knowledge-platform-design.md) §4/§5/§7/A3，不改变 A1 自动发布，不提前实现 P2 valid_from/to/as_of。
+初稿：2026-10-08；整理：2026-10-11。本文保留身份与语义规则，当前接口见 [API](../../API.md)，进度和历史验收见 [STATUS](../../STATUS.md)、[VALIDATION](../../VALIDATION.md)。
 
 ## 当前缺口与范围
 
-M5/A1 的旧 memory/capture 入口仍使用 workspace 内 fact_key 定位资产，capture 的 key 由模型生成；同义 key 不会自动合并，不同主体相同 key 仍可能错误更新。新显式身份入口已按完整业务身份隔离更新，expected_version 只防并发覆盖。API key 的 principal 是授权主体，不等于被记忆的用户/项目/Agent。知识与记忆共同检索不等于具备一致的事实身份。
+已实现：显式身份编码/绑定、写入、受限单身份 capture、lookup、候选前置过滤、上下文身份标注和 expected_version。未完成：属性目录、自动身份匹配、未归一化状态、语义冲突、会话反馈与完整类型预算。
 
-当前单身份 capture 只校验原文 quote/区间，否定、提议、主体归属仍依赖模型；不同 quote 拒绝更新是保守歧义规则，不是通用语义冲突检测。精确身份已在授权 tenant/workspace 内定位资产，并在 keyword 排名及原生 vector top-k 前限定候选；最终结果仍复核授权、来源、当前版本、墓碑和身份。S0 的三平台真实回归已证明目标不会被其他身份的 top-100 挤出，语义效果仍属 S1。图实体名称 ID 与 MemoryIdentity 是两套身份，图谱同名消歧仍需单独评估。
-
-本文冻结完整目标与评估反例；已交付接口以 API 文档为准，未交付目标不能标成现有能力。
+旧 fact_key/capture 按 workspace 内的键定位，仍有同义键分裂或同名主体误更新风险。显式入口按完整业务身份隔离；API key 的授权主体不等于被描述对象。expected_version 防并发覆盖，原文区间证明可追溯，二者都不证明事实真假。单身份 capture 对不同 quote 的保守拒绝不等于通用冲突检测。图实体名与 MemoryIdentity 也不是同一套身份。
 
 ## 身份契约
 
@@ -70,31 +68,20 @@ P2 保留业务时间与 GraphCompletion。存储接口的厂商解耦仍是欠�
 
 ## I1 首个代码切片：身份类型与 v1 编码
 
-`src/memory_identity.rs` 提供 `MemorySubject`、`SubjectKind`、`MemoryIdentity`、验证和 `key(scope)`。编码使用固定 JSON tuple（版本、tenant、workspace、主体种类、稳定 ID、属性、排序条件映射）后 SHA-256，前缀为 `memory-identity:v1:`。正文、来源、授权 principal 和 expected_version 不进入身份，允许同一身份后续追加业务版本。
-
-本切片不自动纠正大小写、Unicode 或空白；拒绝空值、边界空白、控制字符、超限字段与非法属性名。属性名语法校验不等于已实现属性目录。scope 必须由应用鉴权取得；codec 自身不提供认证或 scope 授权。
-
-八项 Rust 单元测试覆盖主体/属性/环境、tenant/workspace、条件排序、大小写/Unicode、无效字段、超限、版本化 key 与固定编码向量。该 codec 的 8 项测试已通过上一轮 CI；本轮新增持久化测试与发布烟测另行验收。
-
-首个 codec 切片已通过 8 项 Rust 测试。后续持久化/API 范围见下节；capture 的既有 fact_key 语义不因该切片自动改变。
+[实现](../../../src/memory_identity.rs) 使用固定 JSON tuple（版本、tenant、workspace、主体 kind/stable_id、属性、排序条件）后 SHA-256，前缀 memory-identity:v1:。正文、来源、授权 principal 和 expected_version 不进入身份。不折叠大小写、Unicode 或空白；拒绝空值、边界空白、控制字符及超限字段。属性语法校验不等于属性目录，codec 不提供鉴权。
 
 ## I1 持久化与显式写入切片
 
-新增 SQLite `oc_memory_identities` 保存 scope、v1 key、资产和完整身份 JSON；scope/key 与 scope/asset 双唯一约束、复合资产外键防止身份绑定漂移。`POST /v1/memories/identified` 在授权短写事务中绑定身份、写来源/审计/幂等响应并入队，Worker 沿用 expected_version 和原有发布治理。已绑定资产拒绝旧 slot 写入；与已有 legacy fact_key 碰撞返回冲突。资产读取在可见性核验后返回身份。
-
-新表只随新建库创建；旧库无表时旧接口仍可用，新入口 503，不在启动时迁移。已新增离线 `memory-identity-upgrade` 定向安装，见下节。CLI 检索仍默认不带身份过滤，MCP 是只读工具且 search/resolve Schema 已支持 memory_identity；显式写入与受限 capture 使用 HTTP。自动抽取身份/匹配尚未实现。新增 SQLite 契约测试与 release/container 发布烟测，验收结果以 VALIDATION 为准。
+SQLite 以 scope/key 和 scope/asset 双唯一约束及复合外键绑定资产；身份不可修改。来源、审计、幂等和任务同事务提交；旧入口不能改已绑定资产，旧键碰撞不自动转换。接口与删除后不可重建等规则见 [显式记忆身份](../../API.md#显式记忆身份)。
 
 ## 精确身份只读查找
 
-`POST /v1/memories/lookup` 接受完整 MemoryIdentity，在授权读事务中用 scope + v1 key 定位绑定，再复用 asset_view 的当前版本和有效来源过滤。reader 可以读取已发布内容；未命中不创建 slot，未发布、墓碑或撤回返回 404，旧库缺表返回 503。输入校验、绑定一致性校验和提交时权限复核保留。接口不提供别名、语义匹配或跨主体条件的模糊匹配，也不将读取版本当作后续写入的锁。
+lookup 在授权 scope 内精确定位当前发布版本，不创建占位资产、不回退历史版本、不支持别名/语义匹配，也不锁定后续写入。状态码、来源权限及版本条件见 [API](../../API.md#显式记忆身份)。
 
 ## I1 兼容库的显式安装边界
 
-只支持通过现有本地基础字段检查的库增加缺失身份表，fresh-data 与安装共用 `memory-identity-schema.sql`。必须停止宿主、独占已有库；dry-run 只报告 required/already_enabled，执行后 enabled，重复执行无变化。安装事务不更新任何业务记录；同名非表对象、未知身份 DDL、基础不兼容和锁占用均拒绝。该切片不引入自动升级历史链或 PG 迁移，后续 schema 变化需另行设计。用户可以选择继续使用旧库旧接口而不安装新表。
+旧库不自动升级。离线安装只为兼容基础 schema 增加身份表，不改业务数据或推断旧身份；独占锁、dry-run、DDL 校验、失败回滚和命令统一见 [OPERATIONS](../../OPERATIONS.md#显式启用记忆身份)。
 
 ## I1/I4 后续已实现契约
 
-PR #10 已合入 main `73fc51a`。显式 memory/capture 写入可选 expected_version：0 表示尚无发布版本，正数必须精确匹配受理时版本；负数拒绝，不匹配返回 409 且受理事务回滚。相同幂等请求成功重放优先返回原受理结果，省略/null 保持旧规范 payload；Worker 保留最终版本复核。实际接口见 [API](../../API.md)。
-
-search/resolve 返回 identity、kind、normalization_status，并将完整标注计入既有字节预算；完整 memory_identity 过滤只保留精确身份 memory。未实现别名/语义匹配、主体级混合证据、冲突识别或类型预算，不能将这些切片标为 I2/I4 全部完成。
-
+调用方 expected_version 与 Worker 最终版本检查共同防止覆盖；search/resolve 带 identity、kind、normalization_status，标注计入预算。完整身份在 keyword/vector top-k 前限定候选，返回前复核权限/版本/来源/墓碑。详见 [版本条件](../../API.md#显式写入的调用方版本前置条件)与[身份过滤](../../API.md#精确身份检索过滤)；这些切片不代表完整 I2/I4 已完成。

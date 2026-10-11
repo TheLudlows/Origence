@@ -1,6 +1,8 @@
 # Origence HTTP API v1
 
-适用 M5 本地宿主 SQLite/LanceDB/SQLite 图。参见 [文档索引](README.md) 和 [运维说明](OPERATIONS.md)。
+适用本地宿主 SQLite/LanceDB/SQLite 图。本文只描述已实现行为；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)。
+
+按需阅读：[接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
 
 所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。修改接口还需 1–200 个 ASCII 字符的 `Idempotency-Key`；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 
@@ -55,7 +57,7 @@
 
 ## 版本冲突
 
-memory 的更新按 `expected_version` 乐观校验：受理时记录资产当前版本，Worker 提交前复核；期间发生其他发布则任务变为 `superseded`，旧值保留，不发生覆盖。此时重新读取现状并再次提交。发布计划与账本保证重放不产生重复版本。
+更新受理时记录资产当前版本，Worker 提交前复核；期间发生其他发布则任务为 superseded，不覆盖先发布的版本，应重新读取后再提交。发布计划/账本保证重放不重复发布。显式身份入口还支持[调用方版本前置条件](#显式写入的调用方版本前置条件)。
 
 ## 任务与读取可见性
 
@@ -99,9 +101,9 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 
 资产读取增加 `identity` 字段；旧记忆/知识为 null。身份绑定资产且不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的资产，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
 
-`POST /v1/memories/lookup` 用完整身份精确定位当前记忆，请求体就是上述示例的 `identity` 对象，不含 content。scope 从 key 获取；不接受主体别名或语义近似匹配。未命中、尚无发布版本、资产已删除或当前来源已撤回均为 404，不回退旧版本，也不分配占位资产、来源或任务。缺失身份表仍返回 503。返回的 `version` 是读取时的当前版本，不保证随后异步写入一定成功；更新结果仍以任务的并发版本检查为准。reader 只能读取当前发布内容，不能借此读取原始 capture 输入。
+lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何资产/来源/任务；缺身份表为 503。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
 
-新建库包含 `oc_memory_identities` 表。旧库可以继续使用既有接口；缺失身份表时新入口返回 503。启动不会自动升级旧库；可停宿主后执行 `--offline memory-identity-upgrade` 显式安装身份表，详见 [运维说明](OPERATIONS.md#显式启用记忆身份)。旧 `/v1/captures` 保持 fact_key 模型；显式身份写入/capture 使用 HTTP。MCP 是只读工具，其 search/resolve Schema 已支持 memory_identity；CLI 检索仍默认不带过滤。
+新建库含 oc_memory_identities；旧库缺表时原接口可用，新身份入口 503。启动不自动升级，安装步骤见 [OPERATIONS](OPERATIONS.md#显式启用记忆身份)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索，CLI 默认不带该过滤。
 
 ## 单身份 capture
 
@@ -121,13 +123,13 @@ writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的�
 
 search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
 
-resolve 的 chunk 引用增加 kind、identity 与 normalization_status，rendered_context 在每块正文前附相同的 JSON 标注，context_policy 为 identity-provenance-v1。引用、标题、标注和正文全部计入既有 UTF-8 字节预算；整块保留或省略，不截断身份/引用。新增标注可能减少相同预算下的正文数量。图引用保留既有格式。状态表示身份绑定方式，不是事实真值、业务有效期或自动匹配置信度；当前尚未实现冲突识别与类型预算分配。
+resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normalization_status，context_policy=identity-provenance-v1；图引用格式不变。引用/标题/标注/正文均计入字节预算，整块保留或省略，因此标注可能减少正文容量。状态只表示身份绑定，不表示真值、有效期或置信度；冲突识别和类型预算未实现。
 
 ## 精确身份检索过滤
 
 search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,context:{}}`，省略时沿用混合检索。启用后只保留当前 scope 内完整身份精确相同的 memory；排除旧未识别记忆、知识块和图扩展。字段在模型调用前校验，不接受别名/语义近似/部分条件匹配；未知字段拒绝，非法身份 422，未命中为空结果。身份不替代鉴权，结果仍受当前版本、来源和墓碑规则约束。旧库缺身份表不会自动升级，没有显式绑定则不匹配。
 
-新实现先在已授权范围按完整身份定位资产，keyword 与 vector 候选仅对该资产生成，再进行各分支排序与 limit 截断，最终仍重新校验当前版本、来源、墓碑和权限。全局无身份查询仍保留各分支的候选数量限制；身份限定不等于语义召回保证。只定位当前资产且无检索需求时使用 memories/lookup。响应回显 memory_identity；resolve 将过滤条件透传给 search。HTTP/MCP 接受该字段，CLI 仍采用无过滤的默认行为。
+完整身份先定位授权资产，keyword/vector 候选限定于该资产后排序和截断，最终重新校验版本、来源、墓碑及权限。无身份查询仍有各分支候选上限；身份限定不保证语义召回。只需定位当前资产时用 lookup。响应回显 memory_identity，resolve 透传过滤；HTTP/MCP 支持，CLI 默认不带过滤。
 
 ## 显式写入的调用方版本前置条件
 

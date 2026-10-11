@@ -1,44 +1,49 @@
 # Origence · 当前状态
 
-更新：2026-10-11。Origence 仍是本地原型。核心写入、权限、来源追溯、版本和检索能力已实现；S0 身份过滤正确性验收完成。S1 工程检索实验已完成，新增题目的独立人工复核仍待进行。
+更新：2026-10-11。**P0 本地记忆与知识底座已落地；P1 会话反馈与经验学习闭环尚未实现。** 当前适合本地开发和验证，未完成生产级验收。
 
-## 已交付与边界
+## 产品能力
 
-| 范围 | 当前状态 | 主要限制 |
+| 范围 | 已实现 | 主要缺口或边界 |
 | --- | --- | --- |
-| 本地宿主 | SQLite 关系库、LanceDB 向量、SQLite 图和本地 Blob；单宿主、单 Worker | 不自动迁移旧 Kuzu 图文件；切换说明见 [OPERATIONS](OPERATIONS.md#sqlite-图替换边界) |
-| 写入与治理 | 记忆/知识发布、版本、scope、幂等、来源追溯、撤回和恢复 | 无企业身份、文档 ACL、配额或生产 SLO |
-| API 与接入 | HTTP、CLI、MCP；文件及 PDF 入库 | PDF 线程解析没有硬取消或进程隔离保证，见 [OPERATIONS](OPERATIONS.md#pdf-解析) |
-| 身份与上下文 | I1、受限 I2、I4 已实现；完整身份候选前置过滤已验收 | 语义冲突、属性目录、单值/多值和类型配额未实现 |
-| 检索质量 | 36 篇/300 题开发与留出切分；真实本地模型六配置及摘要/图消融已完成 | 新增 200 题尚未独立人工复核；12 道无答案题的 vector/hybrid 均误召回 |
-| 会话经验 | 目标规格已定义 | Session、反馈、显式 improve 和跨会话 Learning 未实现 |
+| 入库与存储 | 文本/Markdown/PDF、结构化记忆、受限原文抽取；SQLite 关系/图、LanceDB、本地 Blob | 单宿主、单 Worker；PDF 无硬取消/进程隔离；旧 Kuzu 图不自动迁移 |
+| 记忆身份 | 显式主体/属性/条件、精确 lookup、候选前置过滤、版本前置条件 | 自动身份匹配、属性目录、单值/多值和语义冲突未完成 |
+| 检索与上下文 | keyword/vector/hybrid、摘要/图开关、带来源与身份的 search/resolve | 冲突标注、类型预算和统一 EvidenceBundle 未完成；未证明真实 Agent 任务收益 |
+| 治理与恢复 | workspace/tenant 隔离、角色/密钥、幂等任务、版本/恢复、来源撤回、重启恢复 | 逻辑删除不等于物理擦除；无企业身份、文档 ACL、配额或生产 SLO |
+| 接入与维护 | HTTP、CLI、只读 MCP、显式离线向量压实 | 不自动调度维护；持续容量、维护故障和断电边界仍需验收 |
+| 会话学习 | 已有跨会话历史检索基础，见下节 | SessionTurn、Feedback、Improve、Learning 尚未实现 |
 
-SQLite 图替换已合入 main `9c292a9`；run [38032343493](https://github.com/TheLudlows/Origence/actions/runs/38032343493) 的五个作业全部成功，三平台默认 lib 28/local 89，13 项图回归通过。S0 身份过滤的独立跨平台验收见 run [37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081)。精确 checkout、job 和计数见 [VALIDATION](VALIDATION.md)。
+接口与运行细节分别见 [API](API.md)、[OPERATIONS](OPERATIONS.md)；历史测试和 CI 的精确版本见 [VALIDATION](VALIDATION.md)。
 
-## AML 当前实现切片
+## AML 已交付及产品复用
 
-已实现管理员显式启用 namespace、完整 user_id 到独立 workspace 的原子映射，以及 AML Add/Search HTTP 最小闭环。Add 保存不可变消息来源和持久批次幂等记录，整批发布并完成索引后返回成功；超时重试观察原任务。Search 使用原文 vector，关闭摘要/图，返回含角色、时间和会话标注的证据。已有库不自动升级；使用专用评测新库。测试结果及当前限制见 [VALIDATION](VALIDATION.md)。已补齐固定模型的摘要/图等检索分支隔离回归，并完成真实本地 BGE-M3 小规模协议、发布后重启和停止宿主后的整库备份恢复演练；固定模型处理中强退也已验证原任务恢复；运行工具及清理步骤见 [AML_DRILL](AML_DRILL.md)。正式参赛模型、公网容量、生产数据清理与官方 Smoke 尚未完成。
+Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 workspace；保存不可变批次、消息原文与定位，整批发布并可检索后确认成功。同一用户的多个 session 持续保存并共同检索，session_id 标记来源，不限制为单会话搜索。使用专用评测新库，旧库不自动升级。
 
-## 当前阶段与下一步
+这些路径已复用产品 Service、单 Worker、权限、来源和存储。离线压实是共享底座能力；恢复及长历史实验验证了共享路径。用户映射和消息角色/时间/session 适配属于 AML 专项。**跨 session 历史检索已实现，不等于反馈驱动的经验学习闭环已经实现。**
 
-S1 v2 在 36 篇合成文档、300 道问题（开发 200、留出 100）上完成六配置对照、1,800 次 search、1,728 次 resolve 和摘要/图消融，零请求错误。keyword/vector/hybrid-all 的文档 Recall@5 为 0.35%/97.57%/94.79%；vector 与 hybrid 的 12 道无答案题均全部误召回。摘要没有观察到增益，图配置 Recall 下降 2.78 个百分点。完整开发/留出分数、延迟、模型 hash 与限制见 [S1 实测报告](../evals/s1/results/local-77d43a8-v2/README.md)。
+正式 AML Search 保持原文 vector，关闭摘要/图，不生成 Answer。聊天重排、本地 BGE reranker、时间辅助与同模型核验留在实验层。正式组别/模型、持续容量与数据清理验收、官方 Smoke/Full 尚未完成；服务器和域名按用户要求后置。剩余任务见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)。
 
-AML Add/Search 最小闭环、本地 BGE-M3 协议模拟、64 用户并发及重启/备份恢复已完成；正式 Search 仍为原文 vector，不生成 Answer。早期短消息与查询扩展结果见 [本地实验](../evals/aml/experiments/results/README.md)，失败归因和正确证据/专用重排诊断见 [诊断报告](../evals/aml/diagnosis/README.md)。这些数据均已观察，只用于回归，不作未见验收。
+## 本轮实验已结束
 
-按“长消息校验 → 同预算冻结 → 新数据评测 → 方案决定”的 [本轮执行](../evals/aml/budget-v1/README.md)已完成：Search 暴露原有消息内字节定位，严格校验原文/范围/scope；v4 32 道成对题和固定公开 LongMemEval 32 题完成三臂比较，公开 1,524 批/15,685 条消息经真实 Add/Search。16 份阶段工件全部一致性通过，320 次聊天调用、477,289 个供应商报告 token，无执行错误。公开自动裁判的受支持成功为 vector/chat/BGE 22/32、22/32、21/32；三臂 3/3 无答案正确拒答。BGE 会话 Recall 稍高但未转成更高回答成功，聚类区间宽；这些不是官方 AML 成绩。
+2026-10-11 按用户确认收尾。冻结结论：正式 AML Search 保持原文 vector；重排、时间辅助及同模型核验留实验层；显式离线压实已交付，不增加自动维护。相关代码与工件经 PR #33–#35 合入 main 2b7b6a6，该提交[五项 CI](https://github.com/TheLudlows/Origence/actions/runs/38138182208)全部成功；[收尾核对](evidence/2026-10-11-experiment-closeout.json)记录 78 项哈希检查全部通过。历史报告中的“下一步”保留为当时记录，后续任务以路线图为准。
 
-复核发现 v4 题意/标签歧义、同模型裁判误扣分与错误放行、公开时间题参考/日期疑似冲突。原始数据、分数和历史工件保持不变，争议单独记录，不能把自动分数当严格语义准确率。**生产 Search 保持 vector；聊天重排、本地 BGE、同模型核验继续留在实验层。** BGE 的延迟优势仅支持继续研究，质量门槛尚未满足。正式组别/模型、独立人工复核与官方 Smoke/Full 仍未完成。
+本轮完成不等于生产可靠性、独立质量或官方 AML 验收完成。实验进程已结束，执行记录确认临时库已清理；不重跑已观察题来宣称新质量收益。
 
-[时间与裁判诊断](../evals/aml/temporal-v1/README.md)已完成：已观察公开题中 10 道时间题三臂、12 个支持分类反例双臂，共 54 次调用 / 53,719 token，无执行错误。日历日期差修复一个明确相对日期案例，但事件对应、取整与参考冲突仍存在。新支持分类器 11/12 与自建标签一致，仍会结构化错误放行；未经独立人工复核，继续留在实验层。
+## 当前证据与结论
 
-[向量后端定位与停机压实](../evals/aml/vector-perf-v1/README.md)已完成：打开表只占约 8 ms，主要成本在大量小文件的查询执行/读取；列投影无明显收益，已撤回。新增显式 --offline vector-compact（含 dry-run），复用非重入宿主锁，逐表 Compact、保留历史版本，不增加在线后台任务。真实本地 BGE-M3、最长公开历史加 512 个外部批次中，558 个碎片压到 1 个、1087 行不变；HTTP p50 从 2247.79 降到 644.13 ms，再次重启为 623.94 ms，32 次完整结果/顺序/原文字节/scope 一致。所有首请求保留，压实后 p95 仍为 1848.29 ms；这是早期单历史对照，完整库后续结果见下文，均不是生产 SLO。
+| 验证 | 已得到的结论 | 不能据此宣称 |
+| --- | --- | --- |
+| [S0 验收](VALIDATION.md)、[S1 产品检索](../evals/s1/results/local-77d43a8-v2/README.md) | 身份候选过滤已验收；36 篇/300 题六配置实验完成，摘要未见增益，图降低召回 | 新增 200 题尚未独立人工复核；无答案处理与真实 Agent 效果未验收 |
+| [AML 本地演练](AML_DRILL.md) | 真实 BGE-M3 协议、64 用户并发、跨 session、重启和停机备份恢复完成；固定模型处理中强退恢复通过 | 官方 Smoke、长期容量或断电保证 |
+| [同预算质量实验](../evals/aml/budget-v1/README.md)、[时间诊断](../evals/aml/temporal-v1/README.md) | 重排尚无稳定质量优势；发现标签歧义、时间问题和裁判错判，继续留实验层 | 当前 64 题已被观察，不能作为未见验收或官方分数 |
+| [完整库维护](../evals/aml/maintenance-scale-v1/README.md) | 32 用户、15,685 条消息；168 次 Search 完整响应/排序/原文字节复核通过；压实后延迟改善，追加后再次维护有效 | 冷启动尾部仍在；无长期 SLO、维护中断/磁盘不足或实际多模型性能验收 |
 
-[完整库与重复维护验收](../evals/aml/maintenance-scale-v1/README.md)已完成：32 用户/1524 批/15685 条消息，168 次真实 BGE-M3 Search 的 16800 个返回项经完整响应独立复核，内容、排序和原文字节检查一致。17823 行、1524 → 8 碎片；HTTP p50 5516.40 → 714.51 ms，重启 708.84 ms。追加四个用户 256 批后 p50 1524.36 ms，再次压实 781.30 ms，18079 行不变。首次和再次维护分别 2745.22 / 760.49 ms；保留冷启动约 2 秒的尾部。三 profile、四 scope、两代数据的三轮更新/删除/追加维护回归通过，但实际多 profile 模型推理性能尚未测量。显式停机维护继续保留，暂不设自动调度或固定维护周期。
+早期 [查询扩展](../evals/aml/experiments/results/README.md)、[重排诊断](../evals/aml/diagnosis/README.md)及[向量后端定位](../evals/aml/vector-perf-v1/README.md)保留为历史依据；原始分数和工件不改写。容器缺 examples 的问题已修复，具体提交与验收见 VALIDATION。
 
-容器缺 examples 的构建问题已由 PR #34 修复，并增加 PR 阶段 Docker 输入检查；main 5b4bd94 的 [五项 CI](https://github.com/TheLudlows/Origence/actions/runs/38135583388) 全部成功，含三平台和完整 release 容器 smoke。
+## 下一步
 
-**下一项优先：验证压实过程中强退、磁盘不足后的恢复边界，再定位冷启动尾延迟；同时明确日期单位/取整契约并独立校准标签。** 当前 64 题均为已观察回归集。按用户优先级，服务器/域名后置；已授权聊天网关可供受限 Answer/Eval 实验，凭据不入库。[依赖审计保留项](DEPENDENCY_AUDIT.md)继续跟踪；S1 新增 200 题仍待独立人工复核，再决定中文关键词及图配置。
+- **产品主线**：S2 记忆语义规则 → S3 会话/反馈/经验最小闭环 → S4 统一上下文与真实 Agent 对照；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
+- **可靠性与质量待办**：维护故障、持续容量、冷启动与标签复核已移入[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，不继续延长本轮实验；依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
+- **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 
-随后推进 I2 单值/多值及歧义契约，再实现 Session → Feedback → Improve → Learning 最小闭环。依赖审计已运行但存在保留告警；生产物理擦除、断电和生产备份恢复仍需独立验收；P2 服务化能力根据实际需求推进。
-
-当前文档分工：[平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md)保存完整架构，[身份规格](superpowers/specs/2026-10-08-memory-identity-and-context.md)保存契约；本文是唯一当前状态摘要，[路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)列未完成工作，[VALIDATION](VALIDATION.md)列当前验收。API 和运行边界见 [API](API.md) 与 [OPERATIONS](OPERATIONS.md)。
+完整 SaaS、分布式及新增后端按实际需求另行立项。设计、实现、工程测试与产品效果分别判断。

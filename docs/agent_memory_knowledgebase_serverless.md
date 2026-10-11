@@ -1,6 +1,6 @@
 # 云上 Agent 记忆与知识库服务的 Serverless 架构
 
-> 文档定位（2026-09-28）：历史 serverless 方案备查。当前交付已转为单宿主 SQLite/LanceDB/Kuzu，启动方式见 [项目 README](../README.md)，目标架构见 [文档索引](README.md)。
+> 历史 Serverless 方案备查（2026-09-28），不是当前部署指南。保留价值：权威数据与派生索引分离，逻辑租户与物理资源解耦。分片、弹性后台和在线迁移均未作为当前能力交付；当前 SQLite/LanceDB/SQLite 图 单宿主实现见 [STATUS](STATUS.md)，运行见 [OPERATIONS](OPERATIONS.md)。下文建议保留为当时方案，启用前重新评审。
 
 ## 1. 核心结论
 

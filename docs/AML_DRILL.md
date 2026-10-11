@@ -6,9 +6,7 @@ Origence 二进制和单 Worker，使用仓库 target/aml-drills 下的新临时
 
 ## 本地优先与官方 Smoke 的区别
 
-当前优先使用已运行的本地 Ollama BGE-M3（1024 维）；不需要公网服务器、域名或新的远端 embedding 凭据。本地验证先覆盖协议和恢复，再增加有标签的长对话、跨会话、时间更新、多跳、无答案与干扰证据，分别报告检索质量和运行指标。
-
-2026-10-11 核对[官方公开仓库](https://github.com/AML-memory/agent-memory-leaderboard/tree/1b8142bfe0f20f1c5218d6b554aa0012de34e504)：包含各 benchmark 的公开 pipeline 与配置，但没有完整离线 Smoke runner、语料或平台编排。官方流程要求 AML Key 和平台可访问的 Add/Search。这里的本地模拟不能登记官方 Smoke 通过状态；官方 Smoke/Full 与公网部署放到本地基线稳定之后。官网 docs/api-guide 本次返回 522，此判断依据该固定版本官方仓库，不声称已核对暂不可用页面的新变更。
+本地使用 Ollama BGE-M3（1024 维）演练，无需公网或域名。官方 Smoke 需平台 AML Key 和可访问的 Add/Search，公开仓库未提供完整离线 runner；规则核对记录与正式进入条件见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)，当前结果见 [STATUS](STATUS.md)。本地模拟不能登记为官方 Smoke 通过。
 
 ## 模型与运行
 
@@ -49,19 +47,13 @@ Linux/macOS 将 binary 改为 target/debug/origence。每次使用新报告路�
 维度、端点哈希、p50/p95/p99 和临时树清理结果。并发值是客户端请求数，宿主仍
 只有一个 Worker。重启恢复计时包含启动、重复 Add 和检索验证。
 
-这是小规模协议与持久性演练，不是语义排序评估、全量压测或正式 Smoke。
-没有峰值内存、供应商 token/费用统计；磁盘值为测量时目录文件大小之和。
-不能用每用户两个片段的完整召回声明实际检索质量，也不能把单轮延迟当作 SLO。
+本工具只验证小规模协议与持久性，不验证语义排序、持续容量、正式 Smoke 或 SLO。没有峰值内存和供应商 token/费用统计，磁盘值仅为测量时目录大小之和；每用户两个片段的完整召回不代表真实检索质量。
 HTTP 观察超时不取消持久任务；测试停止会杀死自己启动的宿主，故报告不声称优雅
 退出已验证。本演练工具的重启点在发布后。另有 tools/test_aml_recovery.py 在固定模型请求阻塞期间强退宿主，验证恢复原任务、没有部分发布或重复版本；设置 AML_TEST_BINARY 指向构建的宿主后执行上述 unittest 命令可运行。该用例不是原生存储写到一半的强杀或断电验证。
 
 ## 专用部署的进入条件
 
-公网部署前固定 commit/镜像摘要、模型及 profile、专用空数据卷和评测凭据。
-保持单宿主、单 Worker。接入 HTTPS；网关 Add 等待需覆盖 25 分钟，或保持同一
-request_id 重试。健康检查分开记录进程、存储/Worker 和模型连通性；ready 不
-代表模型正常。需要目标服务器/域名、容量预算和正式模型后，才能填入实际部署值。
-现有 compose.yaml 可作为单实例起点，不据此宣称公网、限流或容量已验收。
+部署门槛见 [AML 计划 B1/B3](AGENT_MEMORY_LEADERBOARD.md#b3-冻结smokefull-与审核)。使用固定构建/模型、专用空数据卷和凭据，保持单宿主/单 Worker。网关等待覆盖 Add 的 25 分钟，或以相同 request_id 重试；ready 不代表模型正常。compose.yaml 仅为单实例起点，实际配置需目标服务器/域名、正式模型与容量预算，不代表部署已验收。
 
 ## 退役与清理执行顺序
 

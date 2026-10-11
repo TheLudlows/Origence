@@ -1,15 +1,13 @@
 # Origence 记忆与知识统一平台详细设计
 
-> 实现对照（2026-10-09，验收代码 `8d8d224`）：M5 默认宿主为 SQLite/LanceDB/SQLite 图，CLI/MCP 默认转发 HTTP；A1 自动发布已实施。显式记忆身份、受限单身份 capture、lookup、身份标注/过滤及调用方版本前置条件已实现；现有 CI 已 7/7 通过，含三平台原生测试、Linux/macOS release/HTTP smoke 与关键词宿主评估、容器和 MSRV check。无模型合成关键词 Recall@5 为 63.6%，真实模型质量未验证；I2 自动语义匹配、I3 会话与完整 I4 上下文策略及 P1/P2 仍属目标设计。能力与验收的最新快照见 [STATUS](../../STATUS.md)，证据见 [VALIDATION](../../VALIDATION.md)。
+> 本文维护架构与领域契约，图示含未实现目标。当前能力见 [STATUS](../../STATUS.md)，接口见 [API](../../API.md)，运行边界见 [OPERATIONS](../../OPERATIONS.md)，验收按 [VALIDATION](../../VALIDATION.md) 中的精确版本判断。
 
 初稿日期：2026-09-22；整合修订：2026-09-23
 定位：团队 Agent 的记忆与知识库平台，先交付本地存储版本，保留后续服务化能力，Rust 实现，对标 Cognee（调研基线 v1.6.0，固定 commit `663a2dc15d04bc0d7ec2733a2dd604b7ed1b8c8e`）。
 
-本文基于 Origence 的早期实现（原 openContext/ContextDB）与 Cognee 调研（[架构分析](../../Cognee_技术架构分析.md)、[技术细节](../../Cognee_技术细节与方案对比.md)）的**转向设计**。相比之前的 ContextDB V3.1，本次改变四件事：技术栈锁定 Rust；治理模型从「候选审核 → 发布」改为 Cognee 式「自动发布」；存储改为可插拔引擎；交付先落地本地存储版本，SaaS 能力后续演进。继承不变的：workspace/tenant 隔离、来源溯源、删除级联、审计、可注入上下文与预算。
+设计沿用自动发布、tenant/workspace 隔离、来源溯源、删除级联、审计和上下文预算。本地固定 SQLite/LanceDB/SQLite 图；自动创建新库，不自动升级不兼容旧库，身份表支持离线显式安装。PG/pgvector 仅为扩展方向。
 
-> **实施基线：** 本文统一描述产品与存储设计；存储完整契约见 [A2](#storage-design)，执行顺序见 [本地存储实施计划](../plans/2026-09-22-pluggable-storage-engine.md)。本地固定 SQLite/LanceDB/SQLite 图，PG/pgvector 仅保留接口扩展能力；不提供自动版本化数据库升级；新增身份表支持离线显式定向安装，见 [运维说明](../../OPERATIONS.md#显式启用记忆身份)。产品目标与当前实现状态分别列示。
-
-> **一级产品目标：** 平台原生支持多个 tenant，以及每个 tenant 下的多个 workspace。tenant/workspace 隔离贯穿认证、scope、资产、来源、任务、文件、图/向量检索、缓存、审计和账本；它不是部署、计费或后续 SaaS 阶段才加入的能力。
+阅读路径：[产品边界](#1-产品边界) → [架构](#3-总体架构) → [存储契约](#storage-design)。实施顺序见 [产品路线图](../plans/2026-10-09-next-stage-roadmap.md)，身份语义见 [补充规格](2026-10-08-memory-identity-and-context.md)。tenant/workspace 隔离贯穿所有读写，不等待 SaaS 阶段。
 
 ---
 
@@ -125,7 +123,7 @@ PostgreSQL/pgvector 仅保留未来扩展能力，不要求先实现 PG 适配�
 
 ## 4. 数据模型
 
-沿用调研 §8.3 的最小数据契约，**去掉 `memory_candidates`/`review`（Cognee 模式自动发布）**，补上 tenant/workspace 归属。所有持久化对象通过适配器强制 scope 隔离；PG 使用 `oc` schema 并保留 RLS，SQLite 使用 `oc_` 表前缀，图/向量由各自后端保存。
+沿用调研 §8.3 的最小数据契约，**去掉 `memory_candidates`/`review`（Cognee 模式自动发布）**，补上 tenant/workspace 归属。下列名称是逻辑设计，包含 P1/P2 目标，不是已实现 DDL。当前 SQLite 使用 `oc_` 前缀，所有适配器强制 scope；物理归属见 A5，PG/RLS 仅为未来扩展。
 
 ```text
 sources            tenant_id, workspace_id, id, uri, content_hash, state
@@ -158,7 +156,7 @@ api_keys           id, tenant_id, workspace_id, token_hash, role   -- 已有
 
 ### 5.1 接收与登记（add）
 
-`add` 接收资料，解析 tenant/workspace 范围，登记 `sources` + `source_versions` + 一条 job。**导入成功 ≠ 图谱和索引已就绪**。区分新增/重放/更新：同 key 同内容复用，同 key 异内容走 `update`（内容版本化，不留新旧事实无解释共存）。
+`add` 接收资料，解析 tenant/workspace 范围，登记 `sources` + `source_versions` + 一条 job。**导入成功 ≠ 图谱和索引已就绪**。区分新增/重放/更新：同幂等 key 同请求复用，异请求返回 409；内容更新使用独立请求并追加资产版本，不能把幂等冲突当作更新授权。
 
 ### 5.2 加工（cognify）
 
@@ -179,7 +177,7 @@ api_keys           id, tenant_id, workspace_id, token_hash, role   -- 已有
 
 ### 6.1 范围解析（目标路由，尚未实现会话范围）
 
-当前 search/resolve 在认证 scope 内检索，可选完整 memory_identity 只保留精确绑定的 memory 并排除知识/图；它不是主体级的混合证据查询。身份过滤在最终响应 limit 前执行，候选分支截断仍可能漏召回。下表的 session/dataset/query_type 路由属于后续目标，不是当前 API 字段。
+当前 search/resolve 在认证 scope 内检索，可选完整 memory_identity 只保留精确绑定的 memory 并排除知识/图；它不是主体级的混合证据查询。完整身份先定位授权资产，再限定 keyword/vector 候选及 top-k，返回前重新复核可见性；该规则不保证语义召回。下表的 session/dataset/query_type 路由属于后续目标，不是当前 API 字段。
 
 | 调用条件 | 实际范围 |
 | --- | --- |
@@ -191,7 +189,7 @@ api_keys           id, tenant_id, workspace_id, token_hash, role   -- 已有
 
 ### 6.2 三种检索机制
 
-- **Hybrid**：并行搜 chunk/摘要 + 实体/事实句；摘要命中关联回原文；原文与摘要 RRF 融合；实体候选补一跳邻域；事实候选去重 + 范围过滤。返回「相关段落 + 实体关系 + 相关事实」。
+- **Hybrid**：原文 keyword/vector 与启用的摘要分支映射为 chunk 证据后 RRF 融合，按实体名种子扩展一跳关系；身份限定时关闭摘要/图。实际分支与开关见 [API](../../API.md#检索)。
 - **GraphCompletion**（P2）：头/边/尾联合评分取综合距离小者；重要性/反馈/可选个性化参与评分。不是「先找相似实体再无脑塞邻居」。
 - **范围贯穿**：向量候选、邻居扩展、事实索引、会话历史都要走同一 scope 过滤（调研 §2.2 第一点）。
 
@@ -212,25 +210,13 @@ EvidenceBundle {
 
 ## 7. 会话记忆与反馈
 
-- **SessionManager**：保存问答经历，准备后续上下文，关联实际使用的证据 ID。写入后尝试建立 `session_qa` 向量索引，失败记录并继续（不因缓存失败阻塞回答）。
-- **指导（Guidance）**：目标/规则/偏好/经验/工具规则。**用于当前回答的门槛 ≠ 用于长期蒸馏的门槛**，分别维护过滤条件。
-- **反馈**：回答保存时记录使用的图节点/边 ID，反馈回写 `apply_feedback_weights` 到对应对象。反馈状态与图权重是两套写入，存在重复应用窗口，**不承诺 exactly-once**（幂等 + 水位兜底）。
+P1 目标：记录问答、实际使用的证据、指导和幂等反馈，为下一次会话准备上下文。当前 AML 多 session 历史检索不等于已实现本节的 SessionTurn/Feedback。字段、索引失败处理与流程统一见 [A3](#a3-会话记忆与经验蒸馏p1详细设计)。
 
----
+Guidance 的回答使用门槛与长期蒸馏门槛分别维护；它是外部证据，不能提升为系统指令。反馈与图权重跨存储，不承诺全局 exactly-once，需幂等及水位防止重复应用。
 
 ## 8. 改进与蒸馏（improve）
 
-有序阶段（采纳 Cognee registry，缩到核心集）：
-
-```
-反馈调权 → 问答持久化 → 轨迹持久化 → 轨迹提炼指导 → 经验蒸馏 → 用户偏好更新 → 三元组增强 → 全局上下文索引
-```
-
-- **致命阶段**：仅「问答持久化」失败终止流程；其余阶段报错记录后继续。
-- **水位与阈值**：`stage_runs` 记录每阶段 watermark；条数/时间阈值满足才触发（时间判断在写入调用时，非独立定时器）；会话在阈值前结束由应用显式 `flush/improve`。
-- **蒸馏**：从合格 guidance + 问答时间线提案，查询相似旧经验与实体名，二次模型判断「新颖、持久、有依据」；接受后**写成文档走 add/cognify 入库**，不递归 remember/improve。保留从经验回到 guidance/问答的证据链，不把生成经验当无需出处的事实。
-
----
+长期目标包含反馈、归档、指导、蒸馏等有序阶段，详见 [A3](#a3-会话记忆与经验蒸馏p1详细设计)。当前 S3 只计划显式触发的经验提案、核验、发布最小闭环，不以全部八阶段为首版要求。经验必须保留条件和支持来源，经既有 add/cognify 发布，不递归触发 improve。
 
 ## 9. 删除与一致性
 
@@ -264,7 +250,7 @@ EvidenceBundle {
 
 ## 12. 评测与验收
 
-遵循现有 [效果评估与对比标准](../../Origence_效果评估与对比标准.md) 的 300 用例目标，扩充冻结数据集并接入评分工具（300 用例与评分工具尚未完整交付），但治理门槛按本文 A1 自动发布与 [A2.8 存储验收](#storage-acceptance) 定义；旧的“候选隔离/确认有效性”不再作为自动发布产品的验收条件。
+评测方法见 [效果评估标准](../../Origence_效果评估与对比标准.md)，治理验收按 A1 自动发布及 [A2.8](#storage-acceptance)。S1 已完成 300 题工程检索实验，但不等于覆盖该标准的全部企业生命周期与 Agent 任务；新增题目独立复核仍待完成。分数和限制统一见 STATUS/VALIDATION，不在设计中重复维护。
 
 上线前必须验证调研 §9 的五条假设，其中与本方案最相关的三条：
 
@@ -277,7 +263,7 @@ EvidenceBundle {
 ## 13. 风险与边界
 
 1. **Rust 的 LLM/图生态弱**：用 reqwest 调 `/chat/completions` + JSON schema 校验，抽取走显式中间结果，不依赖 Python 生态；代价是 prompt/结构化输出/重试要自己写。
-2. **本地后端验收边界**：M5 已集成正式适配器、队列和账本，并通过 Windows 本地及远端 CI；主应用最低 Rust 1.88、Linux/macOS 和 release 仍待验收。关系库锁约束单宿主，图替换后仍不能恢复为两个应用进程直接打开同一数据目录。
+2. **本地后端验收边界**：当前工具链为 Rust 1.98.0，平台与 release 验收按 VALIDATION 的对应提交记录判断。关系库锁约束单宿主，图替换后仍不能恢复为两个应用进程直接打开同一数据目录。
 3. **自动发布 vs 治理**：去掉了人工审核门，靠溯源 + 删除级联 + 审计兜底；不承诺「自动抽取即事实正确」，原文证据始终可回查。
 4. **跨存储一致性**：无统一事务，靠产物账本 + 幂等重试 + 对账收敛；不承诺 exactly-once。
 5. **多 Worker 并发**：本地初期以 OS 文件锁限制单 Worker，保证崩溃释放与遗留任务恢复；旧 PG/Apalis 的会话锁仅属于历史实现。
@@ -305,30 +291,23 @@ EvidenceBundle {
 
 ### A1.1 变更目标与影响面
 
-把现有「候选 → 审核 → 发布」改为「抽取/写入 → 直接发布」。影响：`oc.candidates`/`oc.reviews` 表、`memory`/`capture`/`review` 服务路径、`/v1/candidates*` 三个 HTTP 路由、worker 的 `Prepared::Candidates` 分支，以及 `tests/lifecycle.rs` 中依赖候选流的用例。
+自动发布已实施：去除候选/审核中转，writer 授权的记忆及 capture 结果经任务发布；旧 review 接口已移除。
 
 ### A1.2 数据模型变更
 
-- 删除 `oc.candidates`、`oc.reviews` 两张表（候选不是正式记忆，可弃；历史 action 已由 `oc.audit` 保留）。
-- 自动发布落地时，新库初始化定义不再包含 `oc.versions.review_id` 与审核表；不自动修改已有库。
-- `MemoryInput.publish_if_authorized` 字段废弃：保留在结构体里以兼容旧调用，但不再参与逻辑。
+新库不含候选/审核表及 review_id，不自动修改旧库。publish_if_authorized 仅兼容接受，不参与授权或发布逻辑。
 
 ### A1.3 写路径
 
-| 入口 | 新流程 |
-| --- | --- |
-| `memory`（结构化事实） | `event` → 直接 `publish` job（带 `asset_id`/`source_event_id`/`expected_version`），保留 `slot` 定位资产，去掉 `candidate` 中转。同 `fact_key` 已存在则走版本追加（`expected_version` 校验防覆盖竞态） |
-| `capture`（原始文本） | `event` → `extract` job → 抽取出的 `Vec<MemoryInput>` 逐个直接 `publish`，不再落到 candidates |
-| `knowledge`（文档） | 不变（已是 `ingest` → `publish`） |
-| `review` | 整个移除（API + 服务方法 + 路由） |
+memory：来源 → publish；capture：来源 → 抽取 → 逐条发布记忆；knowledge：来源 → ingest → publish。显式身份及 expected_version 行为以 [API](../../API.md) 为准。
 
 ### A1.4 worker 变更
 
-`Prepared` 去掉 `Candidates` 变体；`extract` 的 `prepare` 返回独立多记忆结果（如 `PublishMemories`），保留每条 fact_key、asset 和 expected_version；通过领域事务与账本逐条发布，不能把不同事实拼为单一文档。
+抽取结果逐条保留 fact_key、asset 和 expected_version，经领域事务与账本发布，不能把不同事实拼成单一文档。
 
 ### A1.5 保留的治理
 
-自动发布仍保留四件事：① 审计（`memory.direct_published` / `asset.published`）；② 溯源（每个版本/实体/关系挂 `source_event_id`）；③ 删除级联（撤回来源 → 派生内容退出检索）；④ 幂等（`begin_command`/`finish_command` 不变）。**唯一去掉的是人工审核门**。
+直接发布仍需审计、每个版本/图对象的来源归属、撤回级联和幂等；发布前复核权限、版本与任务状态，不以模型输出代替授权。
 
 ---
 
@@ -346,9 +325,7 @@ EvidenceBundle {
 
 本地适配器直接调用 Rust 三方库：SQLite 使用 SQLx，向量使用 `lancedb` crate，图使用 SQLx/SQLite 实体与邻接表。数据库引擎嵌入应用，不另行部署数据库服务。SQLite/LanceDB 构建仍需编译器和 protoc；图后端不额外引入原生图引擎、CMake 或 Ninja。库版本固定在 Cargo.lock。
 
-截至 2026-09-29，M5 已将 SQLite/LanceDB/SQLite 图 和存储接口接入默认应用，移除活动树中的 PG/Apalis 运行依赖。自动发布（A1）已实施：候选/审核门已移除，writer 记忆与 capture 抽取直接发布；会话记忆及服务化仍属于后续阶段。实际平台和检查结果见 [VALIDATION](../../VALIDATION.md)。
-
-独立 M0 探针已在 Windows x64/MSVC、Rust 1.88.0 完成三个库的可执行文件构建与 14 项检查，见 [验证记录](../../VALIDATION.md)。这证明基础库组合及本地访问方式可行，不代表应用已经完成本地接入。
+本地适配器已接入默认宿主；PG/Apalis 运行依赖已移除。固定版本的构建、隔离与恢复证据见 [VALIDATION](../../VALIDATION.md)，不在此维护历史探针计数。
 
 | 存储面 | 本地交付目标 | 未来扩展方向（仅保留接口） | 当前代码 |
 | --- | --- | --- | --- |
@@ -364,7 +341,7 @@ EvidenceBundle {
 
 ### A2.2 接口边界
 
-`StorageEngine` 组装 `RelationalStore`、`JobQueue`、`VectorStore`、`GraphStore`、`BlobStore`。首个实现固定装配本地后端，未来通过适配器扩展 PG。领域层不接触 PgPool、SqlitePool、数据库 SQL 或厂商类型。
+`StorageEngine` 组装 `RelationalStore`、`JobQueue`、`VectorStore`、`GraphStore`、`BlobStore`。首个实现固定装配本地后端，未来通过适配器扩展 PG。目标是领域层不接触数据库 SQL/厂商类型；当前 Service 仍持有 LocalEngine 并返回 SqliteTx，完整应用层解耦尚未实现。
 
 - `RelationalStore`：提供带 scope 的业务事务，涵盖来源、资产、版本、身份复核、幂等键、审计、作业登记及账本。用领域操作表示读写，不能用通用 SQL 执行接口代替抽象。
 - `JobQueue`：领取、提交确认、重试、取消、崩溃恢复；业务写入与入队必须处在同一关系事务中。本地 SQLite 适配器使用同库队列表；未来 PG 扩展也须满足同事务入队，是否复用 Apalis 留待该扩展实现时决定。不能把“写业务”和“入队”拆成两个无补偿操作。
@@ -411,14 +388,14 @@ SQLite 当前实现：打开配置目录内的数据库文件，逐连接设置 
 
 所有对象 ID、唯一约束、owner、缓存与文件 key 都包含 scope。SQLite 所有 SQL 在适配器内显式绑定 tenant/workspace；禁止返回一个忽略 scope 的裸事务作为隔离保证。未来 PG 扩展须使用同样的接口约束，可额外使用 FORCE RLS 作为第二层保护。
 
-LanceDB/SQLite 图 的查询必须按 scope 在候选产生时过滤，不在生产中以“先全库取 top-k 再过滤”替代隔离和召回正确性。M0 已验证同 ID 跨 tenant/workspace、带 scope 的向量精确 top-1 和图邻接查询；授权、来源复核与 ANN 仍须后续验收。
+LanceDB/SQLite 图 的查询必须按 scope 在候选产生时过滤，不在生产中以“先全库取 top-k 再过滤”替代隔离和召回正确性。scope 与完整身份候选过滤已有回归，授权/来源最终复核仍是每次读取的必要步骤；ANN 未实现，验收证据见 VALIDATION。
 
 本地进程访问约束：
 
 - 关系适配器持有数据目录的独占 OS 文件锁，第二个宿主在打开关系库时被拒绝；图适配器不另设宿主锁。
 - 本地 API 与 Worker 在一个应用宿主内共享 `StorageEngine`，直接调用库，不另设数据库服务。独立 CLI/MCP 通过宿主应用接口访问运行中的数据集；离线打开要求独占目录。
 - SQLite 图使用 SQLx 异步连接池，逐连接设置 foreign_keys、busy_timeout，启用 WAL。实体/关系通过确定性 ID 幂等写入，所有查询按 scope 过滤，删除使用外键级联；跨存储可见性仍由关系账本决定。
-- LanceDB 默认不刷新其他进程提交的更新；本地适配器显式设置 `read_consistency_interval(Duration::ZERO)`。M0 已验证长连接看到另一进程的提交及双写进程的追加结果；这不代表跨存储事务原子性。
+- LanceDB 默认不刷新其他进程提交的更新；本地适配器显式设置 `read_consistency_interval(Duration::ZERO)`。适配器级可见性测试不授权多个应用宿主并发打开同库，也不代表跨存储事务原子性。
 
 关系库是最终可见性的权威：每条返回的 chunk、summary、entity、relation 都必须有仍有效的 owner/source、已发布版本和未删除资产。图/向量索引命中不能直接返回；撤回事务一旦提交，后续查询立即不可见，不等待异步物理清理。多个有效来源共享的图对象只移除被撤回的 owner。
 
@@ -443,7 +420,7 @@ SQLite 写事务从开始就使用 IMMEDIATE，不能先 BEGIN 再嵌套 BEGIN�
 3. 关系事务重新检查取消、来源和 generation，确认产物并发布；失败写入可重试记录，迟到产物由对账清理。
 4. 删除先提交墓碑使检索不可见，再删除摘要等依赖对象、撤销 owner、清理孤儿和向量；共享来源对象保留。
 
-不承诺不同存储面的原子提交。重启重放与定期对账负责收敛。没有实现 ledger 前，不得宣称外部向量/图写入与关系库强一致。
+不承诺不同存储面的原子提交；已实现的发布计划、账本、串行清理与启动对账负责收敛，具体恢复和重试边界见 [API](../../API.md#任务与读取可见性)。
 
 <a id="storage-configuration"></a>
 
@@ -473,7 +450,7 @@ M5 使用 `OC_DATA_DIR` 指定本地根目录，下设 `context.db`、`vectors/`
 - 图和向量覆盖检索前后可见性、共享 owner、摘要删除顺序、部分写入失败、重启对账和幂等重放。
 - 本地后端需实测目标 OS 上 SQLite/LanceDB/SQLite 图 的构建、锁、双进程访问及最低 Rust 版本，再标为已支持。
 
-本地实现前先验证三个后端的构建与进程访问能力，再细化接口和事务签名；不要求先实现或封装 PG 适配器。执行顺序见 [可插拔存储计划](../plans/2026-09-22-pluggable-storage-engine.md)。
+新增后端先验证构建、scope、事务及进程访问，再接入应用；不要求先实现 PG。后续工作统一见 [产品路线图](../plans/2026-10-09-next-stage-roadmap.md)。
 
 ---
 
@@ -543,22 +520,6 @@ SQLite 表使用 oc_ 前缀；UUID 为 16 字节 BLOB，JSON 为 TEXT，布尔�
 
 ## A6. 完整 API 契约
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/health/live` `/health/ready` | 健康检查 |
-| POST | `/v1/memories` | 结构化记忆（自动发布） |
-| POST | `/v1/captures` | 原始文本捕获（抽取后自动发布） |
-| POST | `/v1/knowledge` | 文档/知识入库 |
-| POST | `/v1/search` | 检索（keyword/vector/hybrid，hybrid 含图证据） |
-| POST | `/v1/resolve` | 组装可注入上下文（含图证据，预算） |
-| GET | `/v1/assets/{id}` | 读资产/版本 |
-| POST | `/v1/assets/{id}/restore` | 追加式恢复 |
-| DELETE | `/v1/assets/{id}` `/v1/events/{id}` `/v1/files/{id}` | 逻辑删除 + 溯源清理 |
-| GET | `/v1/jobs/{id}` | 查任务 |
-| POST | `/v1/jobs/{id}/{action}` | cancel/retry |
-| POST | `/v1/files` | 上传 |
-| GET | `/v1/files/{id}` | 下载 |
-| — | `/v1/candidates*` `/v1/candidates/{id}/review` | **移除**（A1 自动发布） |
+[API](../../API.md) 是已交付 HTTP 行为的唯一清单，包含权限、幂等、版本、错误、显式身份及 AML 适配；本设计不再重复路由表。旧 candidates/review 接口已移除。
 
-所有修改请求带 `Idempotency-Key`；认证用 `Authorization: Bearer <token>`。MCP 保留 `context_search`/`context_get`/`context_resolve` 三个只读工具，`context_search`/`context_resolve` 在 hybrid 模式同样返回图证据。
-
+MCP 提供 context_search、context_get、context_resolve 三个只读工具；search/resolve 共用 HTTP 的检索、来源、身份与预算契约。目标 Session/Improve 接口待 S3 实现，不能从本设计推定已可调用。

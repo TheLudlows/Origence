@@ -2,7 +2,7 @@
 
 日期：2026-10-11。基线：Origence main de17218125cccd83e6cce3b5c39340fc5ae3bd52。状态：下一轮实验方向已确定，模型胜出者与生产接入尚未确定。本次只有文档调研、代码核对和方案取舍，没有新增模型评测结果。
 
-后续执行证据见[诊断与专用重排回归](../evals/aml/diagnosis/README.md)；本文保留研究时的取舍依据，当前进度以 STATUS 为准。
+> **历史决策快读**：本文的“下一轮”指当时计划。后续已完成[诊断](../evals/aml/diagnosis/README.md)、[同预算比较](../evals/aml/budget-v1/README.md)和[时间诊断](../evals/aml/temporal-v1/README.md)，尚未证明重排/核验的稳定质量收益，正式 Search 保持原文 vector。当前行动看 [STATUS](STATUS.md) 与 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)；以下研究正文、来源及原始阶段结论保留。
 
 ## 1. 决策
 
