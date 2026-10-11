@@ -1,0 +1,20 @@
+{
+  "created_at_utc": "2026-10-11T05:58:56.760Z",
+  "reason": "Single-history native vector stage 508–591 ms dominates, but does not reproduce historical ~5s. Measure effect of 512 unrelated one-message Add batches in four additional workspaces.",
+  "background_batches": 512,
+  "foreground_selection": "unchanged largest observed history",
+  "repeats": [
+    5,
+    100,
+    5,
+    100,
+    5,
+    100,
+    5,
+    100
+  ],
+  "binary_sha256": "645ab3c146010ae3fa48bda9f1d33bbc5d1da08b29581802b8047d89abe38454",
+  "runner_sha256": "0cf6daffcb4195294cb65b117d63ff748984fdb343655f97afc98d4fc76223bb",
+  "previous_runner_archive_sha256": "6daeb5c7afc1ea2af2cfc664d625b2e6872989880a2715e043ca75e56d3be749",
+  "claim_boundary": "Different fresh stores, UUIDs and query coldness; not full 32-user replay or production benchmark. No optimization being measured."
+}

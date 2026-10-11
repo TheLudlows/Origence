@@ -36,3 +36,5 @@ python -m unittest discover -s tools -p 'test_aml_quality.py' -v
 下一轮依据：[失败归因、正确证据与专用重排回归](diagnosis/README.md)、[尚未运行的 v4 成对反例](v4/README.md)。历史 v2/v3 已被观察，仅作回归。
 
 同预算三臂和长历史结果见 [budget-v1](budget-v1/README.md)：含执行前冻结、来源校验、语义评分争议和最终保留实验层的决定。v4/public 的早期准备 README 保留冻结时状态，以本轮报告和 STATUS 为当前进度。
+
+后续 [时间/裁判消融与 Search 性能诊断](temporal-v1/README.md)在已观察数据上继续定位问题；不替换 budget-v1 冻结成绩。

@@ -1,0 +1,3078 @@
+{
+  "schema": "aml-temporal-diagnostic-v1",
+  "started_at_utc": "2026-10-11T05:54:56Z",
+  "freeze_sha256": "7f840e8bf0ff911f48a421c6c1c0ae0a3a911ff4c83bba4fe77ef26bac8999db",
+  "chat_calls": [
+    {
+      "stage": "temporal_dates",
+      "question_id": "gpt4_68e94287",
+      "input_utf8_bytes": 6093,
+      "status": "completed",
+      "latency_ms": 1137.77,
+      "usage": {
+        "prompt_tokens": 1675,
+        "completion_tokens": 29,
+        "total_tokens": 1704
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"The post about the vegan chili recipe happened first.\", \"indices\": [0, 1]}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "gpt4_68e94287",
+      "input_utf8_bytes": 6750,
+      "status": "completed",
+      "latency_ms": 2027.15,
+      "usage": {
+        "prompt_tokens": 1953,
+        "completion_tokens": 103,
+        "total_tokens": 2056
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"The post about the vegan chili recipe happened first. The user mentioned sharing the recipe 'yesterday' in a message dated 2023-03-10 (implying the event was on 2023-03-09), while the participation in the #PlankChallenge occurred 'today' in a message dated 2023-03-15.\", \"indices\": [0, 1]}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "gpt4_68e94287",
+      "input_utf8_bytes": 5414,
+      "status": "completed",
+      "latency_ms": 969.39,
+      "usage": {
+        "prompt_tokens": 1391,
+        "completion_tokens": 29,
+        "total_tokens": 1420
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"The post about the vegan chili recipe happened first.\", \"indices\": [0, 1]}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "b29f3365",
+      "input_utf8_bytes": 6100,
+      "status": "completed",
+      "latency_ms": 760.68,
+      "usage": {
+        "prompt_tokens": 1771,
+        "completion_tokens": 15,
+        "total_tokens": 1786
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "b29f3365",
+      "input_utf8_bytes": 4772,
+      "status": "completed",
+      "latency_ms": 881.47,
+      "usage": {
+        "prompt_tokens": 1214,
+        "completion_tokens": 19,
+        "total_tokens": 1233
+      },
+      "output_text": "{\n\"answerable\": false,\n\"answer\": \"\",\n\"indices\": []\n}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "b29f3365",
+      "input_utf8_bytes": 5451,
+      "status": "completed",
+      "latency_ms": 985.67,
+      "usage": {
+        "prompt_tokens": 1498,
+        "completion_tokens": 19,
+        "total_tokens": 1517
+      },
+      "output_text": "{\n\"answerable\": false,\n\"answer\": \"\",\n\"indices\": []\n}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "gpt4_1e4a8aeb",
+      "input_utf8_bytes": 4709,
+      "status": "completed",
+      "latency_ms": 680.14,
+      "usage": {
+        "prompt_tokens": 1453,
+        "completion_tokens": 15,
+        "total_tokens": 1468
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "gpt4_1e4a8aeb",
+      "input_utf8_bytes": 3374,
+      "status": "completed",
+      "latency_ms": 698.81,
+      "usage": {
+        "prompt_tokens": 891,
+        "completion_tokens": 15,
+        "total_tokens": 906
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "gpt4_1e4a8aeb",
+      "input_utf8_bytes": 4053,
+      "status": "completed",
+      "latency_ms": 619.74,
+      "usage": {
+        "prompt_tokens": 1175,
+        "completion_tokens": 11,
+        "total_tokens": 1186
+      },
+      "output_text": "{\"answerable\":false,\"answer\":\"\",\"indices\":[]}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "gpt4_468eb064",
+      "input_utf8_bytes": 3516,
+      "status": "completed",
+      "latency_ms": 614.38,
+      "usage": {
+        "prompt_tokens": 1060,
+        "completion_tokens": 15,
+        "total_tokens": 1075
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "gpt4_468eb064",
+      "input_utf8_bytes": 4168,
+      "status": "completed",
+      "latency_ms": 856.16,
+      "usage": {
+        "prompt_tokens": 1334,
+        "completion_tokens": 15,
+        "total_tokens": 1349
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "gpt4_468eb064",
+      "input_utf8_bytes": 2837,
+      "status": "completed",
+      "latency_ms": 562.2,
+      "usage": {
+        "prompt_tokens": 776,
+        "completion_tokens": 15,
+        "total_tokens": 791
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "370a8ff4",
+      "input_utf8_bytes": 6689,
+      "status": "completed",
+      "latency_ms": 858.76,
+      "usage": {
+        "prompt_tokens": 1752,
+        "completion_tokens": 28,
+        "total_tokens": 1780
+      },
+      "output_text": "{\n\"answerable\": true,\n\"answer\": \"12 weeks\",\n\"indices\": [0, 2]\n}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "370a8ff4",
+      "input_utf8_bytes": 7354,
+      "status": "completed",
+      "latency_ms": 809.04,
+      "usage": {
+        "prompt_tokens": 2039,
+        "completion_tokens": 23,
+        "total_tokens": 2062
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"12 weeks\", \"indices\": [0, 2]}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "370a8ff4",
+      "input_utf8_bytes": 6010,
+      "status": "completed",
+      "latency_ms": 912.46,
+      "usage": {
+        "prompt_tokens": 1468,
+        "completion_tokens": 28,
+        "total_tokens": 1496
+      },
+      "output_text": "{\n\"answerable\": true,\n\"answer\": \"10 weeks\",\n\"indices\": [0, 2]\n}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "gpt4_a2d1d1f6",
+      "input_utf8_bytes": 3659,
+      "status": "completed",
+      "latency_ms": 766.79,
+      "usage": {
+        "prompt_tokens": 966,
+        "completion_tokens": 20,
+        "total_tokens": 986
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"0 days ago\", \"indices\": [0]}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "gpt4_a2d1d1f6",
+      "input_utf8_bytes": 4338,
+      "status": "completed",
+      "latency_ms": 725.8,
+      "usage": {
+        "prompt_tokens": 1250,
+        "completion_tokens": 20,
+        "total_tokens": 1270
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"2 days ago\", \"indices\": [0]}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "gpt4_a2d1d1f6",
+      "input_utf8_bytes": 4987,
+      "status": "completed",
+      "latency_ms": 1044.45,
+      "usage": {
+        "prompt_tokens": 1523,
+        "completion_tokens": 20,
+        "total_tokens": 1543
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"3 days ago\", \"indices\": [0]}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "bbf86515",
+      "input_utf8_bytes": 7332,
+      "status": "completed",
+      "latency_ms": 892.96,
+      "usage": {
+        "prompt_tokens": 2096,
+        "completion_tokens": 22,
+        "total_tokens": 2118
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"4 days\", \"indices\": [1, 2]}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "bbf86515",
+      "input_utf8_bytes": 6004,
+      "status": "completed",
+      "latency_ms": 720.9,
+      "usage": {
+        "prompt_tokens": 1539,
+        "completion_tokens": 22,
+        "total_tokens": 1561
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"4 days\", \"indices\": [1, 2]}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "bbf86515",
+      "input_utf8_bytes": 6683,
+      "status": "completed",
+      "latency_ms": 927.11,
+      "usage": {
+        "prompt_tokens": 1823,
+        "completion_tokens": 22,
+        "total_tokens": 1845
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"4 days\", \"indices\": [2, 4]}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "gpt4_93159ced_abs",
+      "input_utf8_bytes": 6046,
+      "status": "completed",
+      "latency_ms": 763.36,
+      "usage": {
+        "prompt_tokens": 1527,
+        "completion_tokens": 15,
+        "total_tokens": 1542
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "gpt4_93159ced_abs",
+      "input_utf8_bytes": 6725,
+      "status": "completed",
+      "latency_ms": 721.15,
+      "usage": {
+        "prompt_tokens": 1812,
+        "completion_tokens": 15,
+        "total_tokens": 1827
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "gpt4_93159ced_abs",
+      "input_utf8_bytes": 7374,
+      "status": "completed",
+      "latency_ms": 893.76,
+      "usage": {
+        "prompt_tokens": 2085,
+        "completion_tokens": 15,
+        "total_tokens": 2100
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "gpt4_f420262d",
+      "input_utf8_bytes": 4530,
+      "status": "completed",
+      "latency_ms": 625.35,
+      "usage": {
+        "prompt_tokens": 1272,
+        "completion_tokens": 15,
+        "total_tokens": 1287
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "gpt4_f420262d",
+      "input_utf8_bytes": 5199,
+      "status": "completed",
+      "latency_ms": 893.66,
+      "usage": {
+        "prompt_tokens": 1560,
+        "completion_tokens": 19,
+        "total_tokens": 1579
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"American Airlines\", \"indices\": [1]}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "gpt4_f420262d",
+      "input_utf8_bytes": 3851,
+      "status": "completed",
+      "latency_ms": 785.23,
+      "usage": {
+        "prompt_tokens": 988,
+        "completion_tokens": 22,
+        "total_tokens": 1010
+      },
+      "output_text": "{\"answerable\": true, \"answer\": \"American Airlines\", \"indices\": [0, 2]}"
+    },
+    {
+      "stage": "temporal_dates",
+      "question_id": "4dfccbf8",
+      "input_utf8_bytes": 4367,
+      "status": "completed",
+      "latency_ms": 630.42,
+      "usage": {
+        "prompt_tokens": 1249,
+        "completion_tokens": 15,
+        "total_tokens": 1264
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_offsets",
+      "question_id": "4dfccbf8",
+      "input_utf8_bytes": 5030,
+      "status": "completed",
+      "latency_ms": 745.21,
+      "usage": {
+        "prompt_tokens": 1533,
+        "completion_tokens": 15,
+        "total_tokens": 1548
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "temporal_raw",
+      "question_id": "4dfccbf8",
+      "input_utf8_bytes": 3688,
+      "status": "completed",
+      "latency_ms": 729.92,
+      "usage": {
+        "prompt_tokens": 965,
+        "completion_tokens": 15,
+        "total_tokens": 980
+      },
+      "output_text": "{\"answerable\": false, \"answer\": \"\", \"indices\": []}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "unit-positive",
+      "input_utf8_bytes": 1532,
+      "status": "completed",
+      "latency_ms": 2220.27,
+      "usage": {
+        "prompt_tokens": 357,
+        "completion_tokens": 105,
+        "total_tokens": 462
+      },
+      "output_text": "{\n  \"judgments\": [\n    {\n      \"index\": 0,\n      \"correct\": true,\n      \"supported\": true,\n      \"reason\": \"The answer '7.2' is numerically correct (18 * 0.4 = 7.2). Although the unit '千克' is missing in the final string, the question asks for the value in kilograms, and the calculation is fully supported by the cited fragment.\"\n    }\n  ]\n}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "unit-positive",
+      "input_utf8_bytes": 1259,
+      "status": "completed",
+      "latency_ms": 999.69,
+      "usage": {
+        "prompt_tokens": 273,
+        "completion_tokens": 29,
+        "total_tokens": 302
+      },
+      "output_text": "{\"state\":\"supported\",\"reason\":\"18件乘以每件0.4千克等于7.2千克，计算正确且证据支持。\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "unit-negative",
+      "input_utf8_bytes": 1536,
+      "status": "completed",
+      "latency_ms": 1947.6,
+      "usage": {
+        "prompt_tokens": 359,
+        "completion_tokens": 88,
+        "total_tokens": 447
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":false,\"supported\":true,\"reason\":\"The answer '7.2 克' is numerically correct (18 * 0.4 = 7.2) but uses the wrong unit ('克' instead of '千克'). The question asks for kilograms, and the reference expects '7.2 千克'. However, the calculation is supported by the cited fragment.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "unit-negative",
+      "input_utf8_bytes": 1263,
+      "status": "completed",
+      "latency_ms": 1851.1,
+      "usage": {
+        "prompt_tokens": 275,
+        "completion_tokens": 41,
+        "total_tokens": 316
+      },
+      "output_text": "{\"state\":\"contradicted\",\"reason\":\"Evidence states 18 items at 0.4 kg each, totaling 7.2 kg, but the answer claims 7.2 grams.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "strict-positive",
+      "input_utf8_bytes": 1562,
+      "status": "completed",
+      "latency_ms": 1490.45,
+      "usage": {
+        "prompt_tokens": 355,
+        "completion_tokens": 77,
+        "total_tokens": 432
+      },
+      "output_text": "{\"judgments\": [{\"index\": 0, \"correct\": true, \"supported\": true, \"reason\": \"The answer correctly states that 12°C is not allowed, which aligns with the reference. The cited fragment '运输温度必须严格低于 12℃' (transport temperature must be strictly below 12°C) logically supports this conclusion.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "strict-positive",
+      "input_utf8_bytes": 1278,
+      "status": "completed",
+      "latency_ms": 771.39,
+      "usage": {
+        "prompt_tokens": 270,
+        "completion_tokens": 29,
+        "total_tokens": 299
+      },
+      "output_text": "{\"state\":\"supported\",\"reason\":\"Evidence requires temperature to be strictly below 12°C, which excludes reaching exactly 12°C.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "strict-negative",
+      "input_utf8_bytes": 1559,
+      "status": "completed",
+      "latency_ms": 2088.21,
+      "usage": {
+        "prompt_tokens": 355,
+        "completion_tokens": 94,
+        "total_tokens": 449
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":false,\"supported\":false,\"reason\":\"The reference states that 12℃ is not allowed ('不允许达到 12℃'). The cited fragment says temperature must be 'strictly below 12℃' ('严格低于 12℃'), which implies 12℃ itself is not permitted. The answer claims it is allowed, contradicting both the reference and the logical interpretation of the evidence.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "strict-negative",
+      "input_utf8_bytes": 1275,
+      "status": "completed",
+      "latency_ms": 745.57,
+      "usage": {
+        "prompt_tokens": 270,
+        "completion_tokens": 26,
+        "total_tokens": 296
+      },
+      "output_text": "{\"state\":\"contradicted\",\"reason\":\"证据要求温度严格低于12℃，因此不允许达到12℃。\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "date-positive",
+      "input_utf8_bytes": 1596,
+      "status": "completed",
+      "latency_ms": 1496.72,
+      "usage": {
+        "prompt_tokens": 373,
+        "completion_tokens": 77,
+        "total_tokens": 450
+      },
+      "output_text": "{\"judgments\": [{\"index\": 0, \"correct\": true, \"supported\": true, \"reason\": \"The answer '3 days' is correct based on the reference. The cited fragment confirms the harvest date was April 15, 2023. Calculating the difference between April 18 and April 15 yields 3 days.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "date-positive",
+      "input_utf8_bytes": 1327,
+      "status": "completed",
+      "latency_ms": 1310.71,
+      "usage": {
+        "prompt_tokens": 292,
+        "completion_tokens": 59,
+        "total_tokens": 351
+      },
+      "output_text": "{\"state\":\"supported\",\"reason\":\"The evidence states the harvest occurred on 2023-04-15. The difference between 2023-04-18 and 2023-04-15 is exactly 3 days.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "date-negative",
+      "input_utf8_bytes": 1596,
+      "status": "completed",
+      "latency_ms": 1921.79,
+      "usage": {
+        "prompt_tokens": 373,
+        "completion_tokens": 90,
+        "total_tokens": 463
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":false,\"supported\":true,\"reason\":\"The answer '0 days' is incorrect; the reference states 3 days. However, the calculation (April 18 - April 15 = 3) is mathematically derivable from the cited fragment, so the claim is supported by evidence even though the final value provided in the answer object is wrong relative to the ground truth.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "date-negative",
+      "input_utf8_bytes": 1327,
+      "status": "completed",
+      "latency_ms": 1265.03,
+      "usage": {
+        "prompt_tokens": 292,
+        "completion_tokens": 52,
+        "total_tokens": 344
+      },
+      "output_text": "{\"state\":\"contradicted\",\"reason\":\"The evidence states the harvest occurred on April 15, 2023. On April 18, 2023, this is 3 days ago, not 0 days.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "arithmetic-positive",
+      "input_utf8_bytes": 1609,
+      "status": "completed",
+      "latency_ms": 1278.1,
+      "usage": {
+        "prompt_tokens": 362,
+        "completion_tokens": 74,
+        "total_tokens": 436
+      },
+      "output_text": "{\n  \"judgments\": [\n    {\n      \"index\": 0,\n      \"correct\": true,\n      \"supported\": true,\n      \"reason\": \"The answer correctly calculates the duration (6 weeks total - 2 weeks since purchase = 4 weeks) based on the cited fragments.\"\n    }\n  ]\n}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "arithmetic-positive",
+      "input_utf8_bytes": 1339,
+      "status": "completed",
+      "latency_ms": 1165.41,
+      "usage": {
+        "prompt_tokens": 281,
+        "completion_tokens": 48,
+        "total_tokens": 329
+      },
+      "output_text": "{\"state\":\"supported\",\"reason\":\"The evidence states the user has been taking lessons for six weeks as of today and bought the amp two weeks ago. Subtracting 2 from 6 yields 4 weeks, which matches the answer.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "arithmetic-negative",
+      "input_utf8_bytes": 1609,
+      "status": "completed",
+      "latency_ms": 7098.3,
+      "usage": {
+        "prompt_tokens": 362,
+        "completion_tokens": 477,
+        "total_tokens": 839
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":false,\"supported\":true,\"reason\":\"The answer '6 weeks' is incorrect based on the reference '4 weeks'. However, it is supported by the cited fragment which states lessons have been taken for six weeks and the amp was bought two weeks ago (implying 4 weeks of lessons prior to purchase if calculated, but the model simply extracted the total duration stated in the text without performing the subtraction required by the question context or misinterpreted the timeline). Wait, looking at the fragment: 'As of today I have been taking lessons for six weeks. I bought the amp two weeks ago.' If the question asks how long they had been taking lessons *when* they bought the amp, that would be 6 - 2 = 4 weeks. The model answered 6 weeks, which is the current duration, not the duration at the time of purchase. Thus, the answer is factually wrong relative to the specific event time requested. Is it supported? The claim '6 weeks' is directly in the text, but as an answer to 'how long... when I bought', it's a misinterpretation. Usually, 'supported' means the claims made are backed by evidence. The claim 'I had been taking lessons for 6 weeks [at the time of buying]' is NOT supported; the text says 'As of today... 6 weeks'. So the inference is flawed/unsupported in context. However, strict support often looks at whether the string exists. But the prompt says 'every substantive answer claim must follow from the cited original fragments'. The claim that the duration *at the time of purchase* was 6 weeks does not follow; the text implies it was 4 weeks. Therefore, supported should likely be false because the temporal condition isn't met by the evidence provided for that specific claim. Let's re-read carefully. Reference expected: 4 weeks. Model said: 6 weeks. Correct: False. Supported: The model claims the answer is 6 weeks. Does the evidence support '6 weeks' as the answer to 'How long had I been taking lessons when I bought the amp?' No. The evidence supports '6 weeks' as the answer to 'How long have I been taking lessons as of today?'. Therefore, the specific claim answering the question is unsupported.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "arithmetic-negative",
+      "input_utf8_bytes": 1339,
+      "status": "completed",
+      "latency_ms": 1581.23,
+      "usage": {
+        "prompt_tokens": 281,
+        "completion_tokens": 79,
+        "total_tokens": 360
+      },
+      "output_text": "{\"state\":\"supported\",\"reason\":\"The evidence states the user has been taking lessons for 6 weeks as of today and bought the amp 2 weeks ago. Therefore, at the time of purchase (2 weeks prior to today), the duration of lessons was 6 - 2 = 4 weeks. The answer '6 weeks' is incorrect based on the arithmetic derived from the evidence.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "wrong-event",
+      "input_utf8_bytes": 1571,
+      "status": "completed",
+      "latency_ms": 1628.94,
+      "usage": {
+        "prompt_tokens": 351,
+        "completion_tokens": 55,
+        "total_tokens": 406
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":false,\"supported\":false,\"reason\":\"The cited evidence states the flight was on February 10, not February 14. The answer is factually incorrect based on the provided fragment and unsupported by it.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "wrong-event",
+      "input_utf8_bytes": 1291,
+      "status": "completed",
+      "latency_ms": 844.86,
+      "usage": {
+        "prompt_tokens": 270,
+        "completion_tokens": 27,
+        "total_tokens": 297
+      },
+      "output_text": "{\"state\":\"insufficient\",\"reason\":\"The evidence states the flight was on February 10, not February 14.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "missing-bridge",
+      "input_utf8_bytes": 1568,
+      "status": "completed",
+      "latency_ms": 1514.21,
+      "usage": {
+        "prompt_tokens": 353,
+        "completion_tokens": 67,
+        "total_tokens": 420
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":true,\"supported\":false,\"reason\":\"The answer 'Cedar Lab' matches the expected answer, but the cited fragment only states that Sensor B is serviced at Cedar Lab. It does not provide evidence linking Sensor A to Cedar Lab or stating where Sensor A should be repaired.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "missing-bridge",
+      "input_utf8_bytes": 1296,
+      "status": "completed",
+      "latency_ms": 1003.8,
+      "usage": {
+        "prompt_tokens": 271,
+        "completion_tokens": 33,
+        "total_tokens": 304
+      },
+      "output_text": "{\"state\":\"insufficient\",\"reason\":\"The evidence states that Sensor B is serviced at Cedar Lab, but provides no information regarding the repair location for Sensor A.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "partial-evidence",
+      "input_utf8_bytes": 1567,
+      "status": "completed",
+      "latency_ms": 1228.9,
+      "usage": {
+        "prompt_tokens": 353,
+        "completion_tokens": 62,
+        "total_tokens": 415
+      },
+      "output_text": "{\"judgments\": [{\"index\": 0, \"correct\": false, \"supported\": false, \"reason\": \"The answer claims two services (Domino's and Uber Eats), but the cited evidence only supports Domino's. There is no evidence for Uber Eats in the provided fragments.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "partial-evidence",
+      "input_utf8_bytes": 1280,
+      "status": "completed",
+      "latency_ms": 973.89,
+      "usage": {
+        "prompt_tokens": 267,
+        "completion_tokens": 28,
+        "total_tokens": 295
+      },
+      "output_text": "{\"state\":\"insufficient\",\"reason\":\"The evidence only confirms the use of Domino's, but provides no information regarding Uber Eats.\"}"
+    },
+    {
+      "stage": "calibration_old",
+      "question_id": "missing-date",
+      "input_utf8_bytes": 1544,
+      "status": "completed",
+      "latency_ms": 1906.4,
+      "usage": {
+        "prompt_tokens": 347,
+        "completion_tokens": 71,
+        "total_tokens": 418
+      },
+      "output_text": "{\"judgments\":[{\"index\":0,\"correct\":false,\"supported\":true,\"reason\":\"The answer '0 days' contradicts the expected answer '3 days'. While the cited fragment says 'today', implying 0 days ago, the reference explicitly states the correct answer is 3 days. The model failed to align with the ground truth.\"}]}"
+    },
+    {
+      "stage": "calibration_support",
+      "question_id": "missing-date",
+      "input_utf8_bytes": 1275,
+      "status": "completed",
+      "latency_ms": 1072.17,
+      "usage": {
+        "prompt_tokens": 266,
+        "completion_tokens": 34,
+        "total_tokens": 300
+      },
+      "output_text": "{\"state\":\"insufficient\",\"reason\":\"The evidence is undated, so it is impossible to determine how many days ago the harvest occurred relative to the current date.\"}"
+    }
+  ],
+  "chat": {
+    "model": "qwen3.8-flash",
+    "endpoint_sha256": "98243434b143626ff12ede5aa9bc59abfa00dfba96b8f8ae1792e613bc66925b",
+    "temperature": 0,
+    "enable_thinking": false,
+    "response_format": "json_object",
+    "max_output_tokens_per_call": 2048,
+    "max_calls": 60,
+    "max_total_input_utf8_bytes": 1200000,
+    "max_input_utf8_bytes_per_call": 40000,
+    "timeout_seconds": 60,
+    "retries": 0
+  },
+  "prompt_sha256": {
+    "answer": "5edcde8e347fa2ae30e692fc45a8736175e01778c2d96593edb2e5264d20b16b",
+    "old_judge": "06e9618c05aeb852fc90bf1456cfa651a51569b4a32710d0ccefb7a8e8a90afe",
+    "support": "5824cc40669dcf5f098b1d7fce6f70704cb0d808e5fa83fba75e97637d011c99"
+  },
+  "temporal": [
+    {
+      "id": "gpt4_68e94287",
+      "arm": "dates",
+      "hit_ids": [
+        "0a7f2a5e-1f55-aab8-ed71-a2c27c829e0f",
+        "566b9ee3-fb83-96ee-8a23-e19f7e691f69",
+        "8ed11746-3799-dba8-2430-b997e2da8b0c",
+        "9f7d4327-3834-8f46-adb5-6af834d665d8",
+        "d0622f1b-46e8-c440-aee4-f03fd30511ab"
+      ],
+      "payload_sha256": "eb9ce30962d24e8f9ed79fa234b469f6a71a12e6fa3130dff654d3da5468407f",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-12T12:00:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-03-10T11:15:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-03-15T14:28:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-03-15T14:28:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-03-15T09:20:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-03-10T11:15:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "The post about the vegan chili recipe happened first.",
+        "indices": [
+          0,
+          1
+        ]
+      },
+      "cited_ids": [
+        "0a7f2a5e-1f55-aab8-ed71-a2c27c829e0f",
+        "566b9ee3-fb83-96ee-8a23-e19f7e691f69"
+      ]
+    },
+    {
+      "id": "gpt4_68e94287",
+      "arm": "offsets",
+      "hit_ids": [
+        "0a7f2a5e-1f55-aab8-ed71-a2c27c829e0f",
+        "566b9ee3-fb83-96ee-8a23-e19f7e691f69",
+        "8ed11746-3799-dba8-2430-b997e2da8b0c",
+        "9f7d4327-3834-8f46-adb5-6af834d665d8",
+        "d0622f1b-46e8-c440-aee4-f03fd30511ab"
+      ],
+      "payload_sha256": "d3d50ca85c3540f06a25656af6b66f370819b797cce101291a14bb1192663e0d",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-12T12:00:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-03-10T11:15:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-03-15T14:28:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-03-15T14:28:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-03-15T09:20:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-03-10T11:15:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 33
+          },
+          {
+            "index": 1,
+            "days": 28
+          },
+          {
+            "index": 2,
+            "days": 28
+          },
+          {
+            "index": 3,
+            "days": 28
+          },
+          {
+            "index": 4,
+            "days": 33
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 5
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 5
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 5
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": -5
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": -5
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": -5
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "The post about the vegan chili recipe happened first. The user mentioned sharing the recipe 'yesterday' in a message dated 2023-03-10 (implying the event was on 2023-03-09), while the participation in the #PlankChallenge occurred 'today' in a message dated 2023-03-15.",
+        "indices": [
+          0,
+          1
+        ]
+      },
+      "cited_ids": [
+        "0a7f2a5e-1f55-aab8-ed71-a2c27c829e0f",
+        "566b9ee3-fb83-96ee-8a23-e19f7e691f69"
+      ]
+    },
+    {
+      "id": "gpt4_68e94287",
+      "arm": "raw",
+      "hit_ids": [
+        "0a7f2a5e-1f55-aab8-ed71-a2c27c829e0f",
+        "566b9ee3-fb83-96ee-8a23-e19f7e691f69",
+        "8ed11746-3799-dba8-2430-b997e2da8b0c",
+        "9f7d4327-3834-8f46-adb5-6af834d665d8",
+        "d0622f1b-46e8-c440-aee4-f03fd30511ab"
+      ],
+      "payload_sha256": "c16eacf596a057843aff9e4c24931701ce2ee27f7a1f05daa9d76ec87b150302",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "The post about the vegan chili recipe happened first.",
+        "indices": [
+          0,
+          1
+        ]
+      },
+      "cited_ids": [
+        "0a7f2a5e-1f55-aab8-ed71-a2c27c829e0f",
+        "566b9ee3-fb83-96ee-8a23-e19f7e691f69"
+      ]
+    },
+    {
+      "id": "b29f3365",
+      "arm": "offsets",
+      "hit_ids": [
+        "00427358-da87-f40d-0ba3-02428af504b1",
+        "da63fb14-8b15-5238-0238-039e67d829fe",
+        "735f567b-2511-c4a1-2ac8-c914a19ce762",
+        "b5f50e09-0a03-3eab-69ed-2dc8657ae1be",
+        "3388a7c2-01da-9342-16d1-f336d4741919"
+      ],
+      "payload_sha256": "e1dc273bffdf8e79bad3f71ba10259b47dc1f76269b5c1bab9b4cf36e4eb713d",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-05-25T19:07:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-05-25T18:54:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-05-25T18:54:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-05-25T18:54:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-05-25T03:25:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-05-25T03:25:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 0
+          },
+          {
+            "index": 1,
+            "days": 0
+          },
+          {
+            "index": 2,
+            "days": 0
+          },
+          {
+            "index": 3,
+            "days": 0
+          },
+          {
+            "index": 4,
+            "days": 0
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "b29f3365",
+      "arm": "raw",
+      "hit_ids": [
+        "00427358-da87-f40d-0ba3-02428af504b1",
+        "da63fb14-8b15-5238-0238-039e67d829fe",
+        "735f567b-2511-c4a1-2ac8-c914a19ce762",
+        "b5f50e09-0a03-3eab-69ed-2dc8657ae1be",
+        "3388a7c2-01da-9342-16d1-f336d4741919"
+      ],
+      "payload_sha256": "0596e8e1811583897d1c9d325262579e12340dbeb24a252365866a81730aa4aa",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "b29f3365",
+      "arm": "dates",
+      "hit_ids": [
+        "00427358-da87-f40d-0ba3-02428af504b1",
+        "da63fb14-8b15-5238-0238-039e67d829fe",
+        "735f567b-2511-c4a1-2ac8-c914a19ce762",
+        "b5f50e09-0a03-3eab-69ed-2dc8657ae1be",
+        "3388a7c2-01da-9342-16d1-f336d4741919"
+      ],
+      "payload_sha256": "37a5067793bbbd54d89f25a3f2949ecd17363493f3c64b36440e12b32781b57b",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-05-25T19:07:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-05-25T18:54:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-05-25T18:54:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-05-25T18:54:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-05-25T03:25:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-05-25T03:25:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_1e4a8aeb",
+      "arm": "offsets",
+      "hit_ids": [
+        "c9bf9c1c-b2bf-c13a-3a5f-346e06f3e1cd",
+        "ea877e7c-cd40-30f5-cee7-c9c7b4dac47a",
+        "10405f36-07d9-46d6-57c2-de1c7c5ed7ff",
+        "356b7bce-fe58-a2bd-8603-a7b6618ddfe1",
+        "2bd46a17-7686-31a0-62f2-1f18c9a575b3"
+      ],
+      "payload_sha256": "c5638f20335c3dab8872f180a9d9ebb66eea62f8d3d742d11ce32cfec91d3b65",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-05-08T06:05:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-04-21T11:01:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-04-15T17:41:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-20T10:10:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-04-21T11:01:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-04-21T11:01:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 17
+          },
+          {
+            "index": 1,
+            "days": 23
+          },
+          {
+            "index": 2,
+            "days": 18
+          },
+          {
+            "index": 3,
+            "days": 17
+          },
+          {
+            "index": 4,
+            "days": 17
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": -6
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": -1
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 5
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 6
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 6
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 1
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 1
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_1e4a8aeb",
+      "arm": "raw",
+      "hit_ids": [
+        "c9bf9c1c-b2bf-c13a-3a5f-346e06f3e1cd",
+        "ea877e7c-cd40-30f5-cee7-c9c7b4dac47a",
+        "10405f36-07d9-46d6-57c2-de1c7c5ed7ff",
+        "356b7bce-fe58-a2bd-8603-a7b6618ddfe1",
+        "2bd46a17-7686-31a0-62f2-1f18c9a575b3"
+      ],
+      "payload_sha256": "4a328c55cb334da456508537ac3e347975cfa585332ab509660694eaf74bcb31",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_1e4a8aeb",
+      "arm": "dates",
+      "hit_ids": [
+        "c9bf9c1c-b2bf-c13a-3a5f-346e06f3e1cd",
+        "ea877e7c-cd40-30f5-cee7-c9c7b4dac47a",
+        "10405f36-07d9-46d6-57c2-de1c7c5ed7ff",
+        "356b7bce-fe58-a2bd-8603-a7b6618ddfe1",
+        "2bd46a17-7686-31a0-62f2-1f18c9a575b3"
+      ],
+      "payload_sha256": "e51eba93bd9025f95a3f29371ce2684cefe14dee0cd9fdf5575efc2fe4ec925d",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-05-08T06:05:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-04-21T11:01:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-04-15T17:41:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-20T10:10:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-04-21T11:01:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-04-21T11:01:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_468eb064",
+      "arm": "dates",
+      "hit_ids": [
+        "4e4b5eaf-fb9b-801f-9b47-cc8b49b87e0e",
+        "a01e0c07-65b4-ca42-d844-aa8c6345f18e",
+        "a315fd1f-139c-7ac4-fcdd-52d5154a8e6b",
+        "3058fd9f-7517-aef8-60cc-d8271ec3c146",
+        "6d5c0ac9-09ee-278b-818c-2f4a0dea49af"
+      ],
+      "payload_sha256": "873a35622e02bae042536a507a62536a54fe0455d6766833a9f950f480b93fb9",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-18T16:50:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-04-11T02:12:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-04-11T14:50:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-07T20:39:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-04-11T15:53:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-04-11T19:52:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_468eb064",
+      "arm": "offsets",
+      "hit_ids": [
+        "4e4b5eaf-fb9b-801f-9b47-cc8b49b87e0e",
+        "a01e0c07-65b4-ca42-d844-aa8c6345f18e",
+        "a315fd1f-139c-7ac4-fcdd-52d5154a8e6b",
+        "3058fd9f-7517-aef8-60cc-d8271ec3c146",
+        "6d5c0ac9-09ee-278b-818c-2f4a0dea49af"
+      ],
+      "payload_sha256": "006ff3af6de256c3b50e28ae9eae254cf7f38be0ce2f1ca7a233ed5594bc8e67",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-18T16:50:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-04-11T02:12:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-04-11T14:50:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-07T20:39:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-04-11T15:53:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-04-11T19:52:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 7
+          },
+          {
+            "index": 1,
+            "days": 7
+          },
+          {
+            "index": 2,
+            "days": 11
+          },
+          {
+            "index": 3,
+            "days": 7
+          },
+          {
+            "index": 4,
+            "days": 7
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": -4
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": -4
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 4
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 4
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_468eb064",
+      "arm": "raw",
+      "hit_ids": [
+        "4e4b5eaf-fb9b-801f-9b47-cc8b49b87e0e",
+        "a01e0c07-65b4-ca42-d844-aa8c6345f18e",
+        "a315fd1f-139c-7ac4-fcdd-52d5154a8e6b",
+        "3058fd9f-7517-aef8-60cc-d8271ec3c146",
+        "6d5c0ac9-09ee-278b-818c-2f4a0dea49af"
+      ],
+      "payload_sha256": "99d1de89f23a5ebe1bdd85784f0a21acd59ca7c7455dcf58012204b04f2df1f0",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "370a8ff4",
+      "arm": "dates",
+      "hit_ids": [
+        "acf46d70-5f29-ad81-71c1-78b347b6be80",
+        "b45cd620-1fd8-4ae3-e3c5-336fad22b5c8",
+        "a186a320-c8e5-3fe6-849a-0fc1c6d4aee2",
+        "d4fc0d54-b979-8c0d-92b2-5b46ba05f1a8",
+        "7aa8952a-5e3e-ce1b-f195-d607b351d6c0"
+      ],
+      "payload_sha256": "ce9c747d2bdbda88064a701d203f1d0698dec5ec570a29b5287177e07385c4ea",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-10-15T17:53:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-10T20:58:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "12 weeks",
+        "indices": [
+          0,
+          2
+        ]
+      },
+      "cited_ids": [
+        "acf46d70-5f29-ad81-71c1-78b347b6be80",
+        "a186a320-c8e5-3fe6-849a-0fc1c6d4aee2"
+      ]
+    },
+    {
+      "id": "370a8ff4",
+      "arm": "offsets",
+      "hit_ids": [
+        "acf46d70-5f29-ad81-71c1-78b347b6be80",
+        "b45cd620-1fd8-4ae3-e3c5-336fad22b5c8",
+        "a186a320-c8e5-3fe6-849a-0fc1c6d4aee2",
+        "d4fc0d54-b979-8c0d-92b2-5b46ba05f1a8",
+        "7aa8952a-5e3e-ce1b-f195-d607b351d6c0"
+      ],
+      "payload_sha256": "5b11ef3a26f857c2f08961a3138e7c7a96bdf0a9b2b05bb97b78d17e2a4b330f",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-10-15T17:53:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-10T20:58:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-01-19T10:47:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 269
+          },
+          {
+            "index": 1,
+            "days": 269
+          },
+          {
+            "index": 2,
+            "days": 188
+          },
+          {
+            "index": 3,
+            "days": 269
+          },
+          {
+            "index": 4,
+            "days": 269
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 81
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 81
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": -81
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": -81
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "12 weeks",
+        "indices": [
+          0,
+          2
+        ]
+      },
+      "cited_ids": [
+        "acf46d70-5f29-ad81-71c1-78b347b6be80",
+        "a186a320-c8e5-3fe6-849a-0fc1c6d4aee2"
+      ]
+    },
+    {
+      "id": "370a8ff4",
+      "arm": "raw",
+      "hit_ids": [
+        "acf46d70-5f29-ad81-71c1-78b347b6be80",
+        "b45cd620-1fd8-4ae3-e3c5-336fad22b5c8",
+        "a186a320-c8e5-3fe6-849a-0fc1c6d4aee2",
+        "d4fc0d54-b979-8c0d-92b2-5b46ba05f1a8",
+        "7aa8952a-5e3e-ce1b-f195-d607b351d6c0"
+      ],
+      "payload_sha256": "3f07cdc56f22960ce8726559d0219fc79aec9853a6eed1a052539be544f02bb3",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "10 weeks",
+        "indices": [
+          0,
+          2
+        ]
+      },
+      "cited_ids": [
+        "acf46d70-5f29-ad81-71c1-78b347b6be80",
+        "a186a320-c8e5-3fe6-849a-0fc1c6d4aee2"
+      ]
+    },
+    {
+      "id": "gpt4_a2d1d1f6",
+      "arm": "raw",
+      "hit_ids": [
+        "174967e1-519e-c449-844a-f99feba1eabe",
+        "46e28d99-3b35-6558-ff4f-885c251dae02",
+        "d74c1d2d-52a1-fca2-b8b2-9dd8170ec212",
+        "5b1a7569-0a1d-e609-33c5-7f3d4be938eb",
+        "c84d79e4-e996-da9e-229a-ba8479369f05"
+      ],
+      "payload_sha256": "5c30c67ca5bbf8000f2c6de91b74e1accdef80b73cd2115decd4da7c5a212e49",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "0 days ago",
+        "indices": [
+          0
+        ]
+      },
+      "cited_ids": [
+        "174967e1-519e-c449-844a-f99feba1eabe"
+      ]
+    },
+    {
+      "id": "gpt4_a2d1d1f6",
+      "arm": "dates",
+      "hit_ids": [
+        "174967e1-519e-c449-844a-f99feba1eabe",
+        "46e28d99-3b35-6558-ff4f-885c251dae02",
+        "d74c1d2d-52a1-fca2-b8b2-9dd8170ec212",
+        "5b1a7569-0a1d-e609-33c5-7f3d4be938eb",
+        "c84d79e4-e996-da9e-229a-ba8479369f05"
+      ],
+      "payload_sha256": "4649bb0236ec6d6bf179dede1bafa4c53bb6683506480a9480f5d173955f288e",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-18T01:48:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "2 days ago",
+        "indices": [
+          0
+        ]
+      },
+      "cited_ids": [
+        "174967e1-519e-c449-844a-f99feba1eabe"
+      ]
+    },
+    {
+      "id": "gpt4_a2d1d1f6",
+      "arm": "offsets",
+      "hit_ids": [
+        "174967e1-519e-c449-844a-f99feba1eabe",
+        "46e28d99-3b35-6558-ff4f-885c251dae02",
+        "d74c1d2d-52a1-fca2-b8b2-9dd8170ec212",
+        "5b1a7569-0a1d-e609-33c5-7f3d4be938eb",
+        "c84d79e4-e996-da9e-229a-ba8479369f05"
+      ],
+      "payload_sha256": "d1b3b7f7b5ddd13ca714261752e630db802aa8570fc6ceecf374c34b194ab09c",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-18T01:48:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-04-15T18:11:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 3
+          },
+          {
+            "index": 1,
+            "days": 3
+          },
+          {
+            "index": 2,
+            "days": 3
+          },
+          {
+            "index": 3,
+            "days": 3
+          },
+          {
+            "index": 4,
+            "days": 3
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "3 days ago",
+        "indices": [
+          0
+        ]
+      },
+      "cited_ids": [
+        "174967e1-519e-c449-844a-f99feba1eabe"
+      ]
+    },
+    {
+      "id": "bbf86515",
+      "arm": "offsets",
+      "hit_ids": [
+        "4b78f204-a056-8d96-7d5c-199d407f1234",
+        "12fbea58-c66f-05c1-97f9-68e51fd74147",
+        "571fc717-ec48-2ed7-8823-7c4335d210c9",
+        "35f0d204-7172-02d1-2f8b-4e424a7d477e",
+        "4edd67e9-fc71-4a22-fa68-2296791da77b"
+      ],
+      "payload_sha256": "e3a20830fab6722af8103183b287f185a82388c726d09eb1b6cd382106346702",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-06-28T22:12:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-06-28T18:23:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-06-28T20:26:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-06-28T18:23:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-06-28T18:23:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-06-28T20:26:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 0
+          },
+          {
+            "index": 1,
+            "days": 0
+          },
+          {
+            "index": 2,
+            "days": 0
+          },
+          {
+            "index": 3,
+            "days": 0
+          },
+          {
+            "index": 4,
+            "days": 0
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "4 days",
+        "indices": [
+          1,
+          2
+        ]
+      },
+      "cited_ids": [
+        "12fbea58-c66f-05c1-97f9-68e51fd74147",
+        "571fc717-ec48-2ed7-8823-7c4335d210c9"
+      ]
+    },
+    {
+      "id": "bbf86515",
+      "arm": "raw",
+      "hit_ids": [
+        "4b78f204-a056-8d96-7d5c-199d407f1234",
+        "12fbea58-c66f-05c1-97f9-68e51fd74147",
+        "571fc717-ec48-2ed7-8823-7c4335d210c9",
+        "35f0d204-7172-02d1-2f8b-4e424a7d477e",
+        "4edd67e9-fc71-4a22-fa68-2296791da77b"
+      ],
+      "payload_sha256": "245b5b0496e6573ece25c9c3aacd28706e29553034365726f3bc0d7b30e57d4e",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "4 days",
+        "indices": [
+          1,
+          2
+        ]
+      },
+      "cited_ids": [
+        "12fbea58-c66f-05c1-97f9-68e51fd74147",
+        "571fc717-ec48-2ed7-8823-7c4335d210c9"
+      ]
+    },
+    {
+      "id": "bbf86515",
+      "arm": "dates",
+      "hit_ids": [
+        "4b78f204-a056-8d96-7d5c-199d407f1234",
+        "12fbea58-c66f-05c1-97f9-68e51fd74147",
+        "571fc717-ec48-2ed7-8823-7c4335d210c9",
+        "35f0d204-7172-02d1-2f8b-4e424a7d477e",
+        "4edd67e9-fc71-4a22-fa68-2296791da77b"
+      ],
+      "payload_sha256": "60b7a19b00bbf67283bccc259e0b8179b3880c54248317b18923742b2180dc46",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-06-28T22:12:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-06-28T18:23:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-06-28T20:26:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-06-28T18:23:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-06-28T18:23:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-06-28T20:26:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "4 days",
+        "indices": [
+          2,
+          4
+        ]
+      },
+      "cited_ids": [
+        "571fc717-ec48-2ed7-8823-7c4335d210c9",
+        "4edd67e9-fc71-4a22-fa68-2296791da77b"
+      ]
+    },
+    {
+      "id": "gpt4_93159ced_abs",
+      "arm": "raw",
+      "hit_ids": [
+        "1a5c652c-a6f2-b693-c24b-4e49b896d752",
+        "1335df8a-df1d-73f4-da23-2feb05dd0405",
+        "98868945-4c3c-3827-ddc2-396b95a0baa8",
+        "500a8629-fb10-96f4-ffc3-c6c0a383e5b9",
+        "77300b69-6aba-fcea-94cb-bf0eff649b5d"
+      ],
+      "payload_sha256": "b00ab113146a34bf086ffd613bcb00237a11c36074d63374bc0eb38b288885c7",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_93159ced_abs",
+      "arm": "dates",
+      "hit_ids": [
+        "1a5c652c-a6f2-b693-c24b-4e49b896d752",
+        "1335df8a-df1d-73f4-da23-2feb05dd0405",
+        "98868945-4c3c-3827-ddc2-396b95a0baa8",
+        "500a8629-fb10-96f4-ffc3-c6c0a383e5b9",
+        "77300b69-6aba-fcea-94cb-bf0eff649b5d"
+      ],
+      "payload_sha256": "f21667bc978bdb79543b391e4101caa31a0994906650d48936191d44b11de9f0",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-05-30T18:54:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-05-30T16:35:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-05-30T16:35:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-05-30T09:17:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-05-30T03:53:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-05-30T19:59:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_93159ced_abs",
+      "arm": "offsets",
+      "hit_ids": [
+        "1a5c652c-a6f2-b693-c24b-4e49b896d752",
+        "1335df8a-df1d-73f4-da23-2feb05dd0405",
+        "98868945-4c3c-3827-ddc2-396b95a0baa8",
+        "500a8629-fb10-96f4-ffc3-c6c0a383e5b9",
+        "77300b69-6aba-fcea-94cb-bf0eff649b5d"
+      ],
+      "payload_sha256": "71e3d46d1562ac50f49ddaaf7ae55ef71c3100cab4446b242472df24ca010b15",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-05-30T18:54:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-05-30T16:35:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-05-30T16:35:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-05-30T09:17:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-05-30T03:53:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-05-30T19:59:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 0
+          },
+          {
+            "index": 1,
+            "days": 0
+          },
+          {
+            "index": 2,
+            "days": 0
+          },
+          {
+            "index": 3,
+            "days": 0
+          },
+          {
+            "index": 4,
+            "days": 0
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 0
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 0
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_f420262d",
+      "arm": "dates",
+      "hit_ids": [
+        "1daa5983-43b5-cbb4-c947-135a0cf86f77",
+        "f6973b57-778e-a342-a48b-d4bb7b5e683c",
+        "9fc6652c-aeca-69c0-f916-469bad1d4afa",
+        "9676c612-ecda-8f04-8584-3b377a07be0c",
+        "7869b875-6ae4-d103-cf0d-99d76fb5d465"
+      ],
+      "payload_sha256": "1227340789f938b411e40268925047a7d86f053522c60533029a0c4ed4e371fd",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-03-02T08:00:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2022-11-17T11:41:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-02-20T18:00:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-01-15T01:09:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-02-14T20:47:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2022-11-17T11:41:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "gpt4_f420262d",
+      "arm": "offsets",
+      "hit_ids": [
+        "1daa5983-43b5-cbb4-c947-135a0cf86f77",
+        "f6973b57-778e-a342-a48b-d4bb7b5e683c",
+        "9fc6652c-aeca-69c0-f916-469bad1d4afa",
+        "9676c612-ecda-8f04-8584-3b377a07be0c",
+        "7869b875-6ae4-d103-cf0d-99d76fb5d465"
+      ],
+      "payload_sha256": "84831597132d8b099b5cbf1f3291ef135a53c60da7292269e3033b9060ee52e7",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-03-02T08:00:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2022-11-17T11:41:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-02-20T18:00:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-01-15T01:09:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-02-14T20:47:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2022-11-17T11:41:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 105
+          },
+          {
+            "index": 1,
+            "days": 10
+          },
+          {
+            "index": 2,
+            "days": 46
+          },
+          {
+            "index": 3,
+            "days": 16
+          },
+          {
+            "index": 4,
+            "days": 105
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": 95
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 59
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": 89
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": -36
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": -6
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": -95
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": 30
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": -59
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": -89
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "American Airlines",
+        "indices": [
+          1
+        ]
+      },
+      "cited_ids": [
+        "f6973b57-778e-a342-a48b-d4bb7b5e683c"
+      ]
+    },
+    {
+      "id": "gpt4_f420262d",
+      "arm": "raw",
+      "hit_ids": [
+        "1daa5983-43b5-cbb4-c947-135a0cf86f77",
+        "f6973b57-778e-a342-a48b-d4bb7b5e683c",
+        "9fc6652c-aeca-69c0-f916-469bad1d4afa",
+        "9676c612-ecda-8f04-8584-3b377a07be0c",
+        "7869b875-6ae4-d103-cf0d-99d76fb5d465"
+      ],
+      "payload_sha256": "40f7552c9bd2208d27e3816e6a92b9e92311ffc561ef1288a730f2dd3ea9c4bc",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": true,
+        "answer": "American Airlines",
+        "indices": [
+          0,
+          2
+        ]
+      },
+      "cited_ids": [
+        "1daa5983-43b5-cbb4-c947-135a0cf86f77",
+        "9fc6652c-aeca-69c0-f916-469bad1d4afa"
+      ]
+    },
+    {
+      "id": "4dfccbf8",
+      "arm": "dates",
+      "hit_ids": [
+        "1fc26a0f-9593-fb34-70c8-1723a225990e",
+        "c2e66916-80bd-8459-d049-8fb9e163e36f",
+        "69aa4bb6-b032-efc3-6fa2-713312da2b58",
+        "bade480c-8cc3-8d68-6b3c-c4fad1ae34e2",
+        "6af8b7fb-d35a-8909-2036-e03125fb8e62"
+      ],
+      "payload_sha256": "9421b2f1a30737ce4499286354c5b0d8ec346ce54602fa7aa87c4ef24106892c",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-01T16:08:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-02-01T14:38:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-01-04T01:21:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-02-01T14:38:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-01-11T08:48:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-02-01T01:19:00+00:00"
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "4dfccbf8",
+      "arm": "offsets",
+      "hit_ids": [
+        "1fc26a0f-9593-fb34-70c8-1723a225990e",
+        "c2e66916-80bd-8459-d049-8fb9e163e36f",
+        "69aa4bb6-b032-efc3-6fa2-713312da2b58",
+        "bade480c-8cc3-8d68-6b3c-c4fad1ae34e2",
+        "6af8b7fb-d35a-8909-2036-e03125fb8e62"
+      ],
+      "payload_sha256": "d4a6addcac44d57a171dda1fbf47f7c8840231cff6c3b46672b6b411705e1a09",
+      "date_context": {
+        "policy": "Source dates are message dates, not automatically event dates. UTC is the dataset adapter convention, not a verified original timezone. Use explicit event dates in the content when present. Offsets are calendar-date differences excluding the starting date, not elapsed 24-hour periods or event ages.",
+        "question_utc": "2023-04-01T16:08:00+00:00",
+        "sources": [
+          {
+            "index": 0,
+            "message_utc": "2023-02-01T14:38:00+00:00"
+          },
+          {
+            "index": 1,
+            "message_utc": "2023-01-04T01:21:00+00:00"
+          },
+          {
+            "index": 2,
+            "message_utc": "2023-02-01T14:38:00+00:00"
+          },
+          {
+            "index": 3,
+            "message_utc": "2023-01-11T08:48:00+00:00"
+          },
+          {
+            "index": 4,
+            "message_utc": "2023-02-01T01:19:00+00:00"
+          }
+        ],
+        "question_minus_message_calendar_days": [
+          {
+            "index": 0,
+            "days": 59
+          },
+          {
+            "index": 1,
+            "days": 87
+          },
+          {
+            "index": 2,
+            "days": 59
+          },
+          {
+            "index": 3,
+            "days": 80
+          },
+          {
+            "index": 4,
+            "days": 59
+          }
+        ],
+        "message_pair_calendar_days": [
+          {
+            "from_index": 0,
+            "to_index": 1,
+            "days": -28
+          },
+          {
+            "from_index": 0,
+            "to_index": 2,
+            "days": 0
+          },
+          {
+            "from_index": 0,
+            "to_index": 3,
+            "days": -21
+          },
+          {
+            "from_index": 0,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 1,
+            "to_index": 2,
+            "days": 28
+          },
+          {
+            "from_index": 1,
+            "to_index": 3,
+            "days": 7
+          },
+          {
+            "from_index": 1,
+            "to_index": 4,
+            "days": 28
+          },
+          {
+            "from_index": 2,
+            "to_index": 3,
+            "days": -21
+          },
+          {
+            "from_index": 2,
+            "to_index": 4,
+            "days": 0
+          },
+          {
+            "from_index": 3,
+            "to_index": 4,
+            "days": 21
+          }
+        ]
+      },
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    },
+    {
+      "id": "4dfccbf8",
+      "arm": "raw",
+      "hit_ids": [
+        "1fc26a0f-9593-fb34-70c8-1723a225990e",
+        "c2e66916-80bd-8459-d049-8fb9e163e36f",
+        "69aa4bb6-b032-efc3-6fa2-713312da2b58",
+        "bade480c-8cc3-8d68-6b3c-c4fad1ae34e2",
+        "6af8b7fb-d35a-8909-2036-e03125fb8e62"
+      ],
+      "payload_sha256": "12878e69fd74a36dd73cc7022c625d9e922a7961c44b974cfc67edafcbac3a34",
+      "date_context": null,
+      "status": "completed",
+      "output": {
+        "answerable": false,
+        "answer": "",
+        "indices": []
+      },
+      "cited_ids": []
+    }
+  ],
+  "calibration": [
+    {
+      "id": "unit-positive",
+      "arm": "old",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": true,
+            "supported": true,
+            "reason": "The answer '7.2' is numerically correct (18 * 0.4 = 7.2). Although the unit '千克' is missing in the final string, the question asks for the value in kilograms, and the calculation is fully supported by the cited fragment."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "unit-positive",
+      "arm": "support",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "state": "supported",
+        "reason": "18件乘以每件0.4千克等于7.2千克，计算正确且证据支持。"
+      },
+      "predicted_state": "supported",
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "unit-negative",
+      "arm": "old",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": true,
+            "reason": "The answer '7.2 克' is numerically correct (18 * 0.4 = 7.2) but uses the wrong unit ('克' instead of '千克'). The question asks for kilograms, and the reference expects '7.2 千克'. However, the calculation is supported by the cited fragment."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": false,
+      "state_agreement": null
+    },
+    {
+      "id": "unit-negative",
+      "arm": "support",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "state": "contradicted",
+        "reason": "Evidence states 18 items at 0.4 kg each, totaling 7.2 kg, but the answer claims 7.2 grams."
+      },
+      "predicted_state": "contradicted",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "strict-positive",
+      "arm": "old",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": true,
+            "supported": true,
+            "reason": "The answer correctly states that 12°C is not allowed, which aligns with the reference. The cited fragment '运输温度必须严格低于 12℃' (transport temperature must be strictly below 12°C) logically supports this conclusion."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "strict-positive",
+      "arm": "support",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "state": "supported",
+        "reason": "Evidence requires temperature to be strictly below 12°C, which excludes reaching exactly 12°C."
+      },
+      "predicted_state": "supported",
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "strict-negative",
+      "arm": "old",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": false,
+            "reason": "The reference states that 12℃ is not allowed ('不允许达到 12℃'). The cited fragment says temperature must be 'strictly below 12℃' ('严格低于 12℃'), which implies 12℃ itself is not permitted. The answer claims it is allowed, contradicting both the reference and the logical interpretation of the evidence."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "strict-negative",
+      "arm": "support",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "state": "contradicted",
+        "reason": "证据要求温度严格低于12℃，因此不允许达到12℃。"
+      },
+      "predicted_state": "contradicted",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "date-positive",
+      "arm": "old",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": true,
+            "supported": true,
+            "reason": "The answer '3 days' is correct based on the reference. The cited fragment confirms the harvest date was April 15, 2023. Calculating the difference between April 18 and April 15 yields 3 days."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "date-positive",
+      "arm": "support",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "state": "supported",
+        "reason": "The evidence states the harvest occurred on 2023-04-15. The difference between 2023-04-18 and 2023-04-15 is exactly 3 days."
+      },
+      "predicted_state": "supported",
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "date-negative",
+      "arm": "old",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": true,
+            "reason": "The answer '0 days' is incorrect; the reference states 3 days. However, the calculation (April 18 - April 15 = 3) is mathematically derivable from the cited fragment, so the claim is supported by evidence even though the final value provided in the answer object is wrong relative to the ground truth."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": false,
+      "state_agreement": null
+    },
+    {
+      "id": "date-negative",
+      "arm": "support",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "state": "contradicted",
+        "reason": "The evidence states the harvest occurred on April 15, 2023. On April 18, 2023, this is 3 days ago, not 0 days."
+      },
+      "predicted_state": "contradicted",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "arithmetic-positive",
+      "arm": "old",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": true,
+            "supported": true,
+            "reason": "The answer correctly calculates the duration (6 weeks total - 2 weeks since purchase = 4 weeks) based on the cited fragments."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "arithmetic-positive",
+      "arm": "support",
+      "expected": "supported",
+      "status": "completed",
+      "output": {
+        "state": "supported",
+        "reason": "The evidence states the user has been taking lessons for six weeks as of today and bought the amp two weeks ago. Subtracting 2 from 6 yields 4 weeks, which matches the answer."
+      },
+      "predicted_state": "supported",
+      "predicted_supported": true,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "arithmetic-negative",
+      "arm": "old",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": true,
+            "reason": "The answer '6 weeks' is incorrect based on the reference '4 weeks'. However, it is supported by the cited fragment which states lessons have been taken for six weeks and the amp was bought two weeks ago (implying 4 weeks of lessons prior to purchase if calculated, but the model simply extracted the total duration stated in the text without performing the subtraction required by the question context or misinterpreted the timeline). Wait, looking at the fragment: 'As of today I have been taking lessons for six weeks. I bought the amp two weeks ago.' If the question asks how long they had been taking lessons *when* they bought the amp, that would be 6 - 2 = 4 weeks. The model answered 6 weeks, which is the current duration, not the duration at the time of purchase. Thus, the answer is factually wrong relative to the specific event time requested. Is it supported? The claim '6 weeks' is directly in the text, but as an answer to 'how long... when I bought', it's a misinterpretation. Usually, 'supported' means the claims made are backed by evidence. The claim 'I had been taking lessons for 6 weeks [at the time of buying]' is NOT supported; the text says 'As of today... 6 weeks'. So the inference is flawed/unsupported in context. However, strict support often looks at whether the string exists. But the prompt says 'every substantive answer claim must follow from the cited original fragments'. The claim that the duration *at the time of purchase* was 6 weeks does not follow; the text implies it was 4 weeks. Therefore, supported should likely be false because the temporal condition isn't met by the evidence provided for that specific claim. Let's re-read carefully. Reference expected: 4 weeks. Model said: 6 weeks. Correct: False. Supported: The model claims the answer is 6 weeks. Does the evidence support '6 weeks' as the answer to 'How long had I been taking lessons when I bought the amp?' No. The evidence supports '6 weeks' as the answer to 'How long have I been taking lessons as of today?'. Therefore, the specific claim answering the question is unsupported."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": false,
+      "state_agreement": null
+    },
+    {
+      "id": "arithmetic-negative",
+      "arm": "support",
+      "expected": "contradicted",
+      "status": "completed",
+      "output": {
+        "state": "supported",
+        "reason": "The evidence states the user has been taking lessons for 6 weeks as of today and bought the amp 2 weeks ago. Therefore, at the time of purchase (2 weeks prior to today), the duration of lessons was 6 - 2 = 4 weeks. The answer '6 weeks' is incorrect based on the arithmetic derived from the evidence."
+      },
+      "predicted_state": "supported",
+      "predicted_supported": true,
+      "binary_agreement": false,
+      "state_agreement": false
+    },
+    {
+      "id": "wrong-event",
+      "arm": "old",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": false,
+            "reason": "The cited evidence states the flight was on February 10, not February 14. The answer is factually incorrect based on the provided fragment and unsupported by it."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "wrong-event",
+      "arm": "support",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "state": "insufficient",
+        "reason": "The evidence states the flight was on February 10, not February 14."
+      },
+      "predicted_state": "insufficient",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "missing-bridge",
+      "arm": "old",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": true,
+            "supported": false,
+            "reason": "The answer 'Cedar Lab' matches the expected answer, but the cited fragment only states that Sensor B is serviced at Cedar Lab. It does not provide evidence linking Sensor A to Cedar Lab or stating where Sensor A should be repaired."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "missing-bridge",
+      "arm": "support",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "state": "insufficient",
+        "reason": "The evidence states that Sensor B is serviced at Cedar Lab, but provides no information regarding the repair location for Sensor A."
+      },
+      "predicted_state": "insufficient",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "partial-evidence",
+      "arm": "old",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": false,
+            "reason": "The answer claims two services (Domino's and Uber Eats), but the cited evidence only supports Domino's. There is no evidence for Uber Eats in the provided fragments."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": null
+    },
+    {
+      "id": "partial-evidence",
+      "arm": "support",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "state": "insufficient",
+        "reason": "The evidence only confirms the use of Domino's, but provides no information regarding Uber Eats."
+      },
+      "predicted_state": "insufficient",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    },
+    {
+      "id": "missing-date",
+      "arm": "old",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "judgments": [
+          {
+            "index": 0,
+            "correct": false,
+            "supported": true,
+            "reason": "The answer '0 days' contradicts the expected answer '3 days'. While the cited fragment says 'today', implying 0 days ago, the reference explicitly states the correct answer is 3 days. The model failed to align with the ground truth."
+          }
+        ]
+      },
+      "predicted_state": null,
+      "predicted_supported": true,
+      "binary_agreement": false,
+      "state_agreement": null
+    },
+    {
+      "id": "missing-date",
+      "arm": "support",
+      "expected": "insufficient",
+      "status": "completed",
+      "output": {
+        "state": "insufficient",
+        "reason": "The evidence is undated, so it is impossible to determine how many days ago the harvest occurred relative to the current date."
+      },
+      "predicted_state": "insufficient",
+      "predicted_supported": false,
+      "binary_agreement": true,
+      "state_agreement": true
+    }
+  ],
+  "summary": {
+    "temporal_assigned": 30,
+    "temporal_errors": 0,
+    "calibration": {
+      "old": {
+        "assigned": 12,
+        "errors": 0,
+        "binary_agreement": 8,
+        "state_agreement": null,
+        "false_accept": 4,
+        "false_reject": 0
+      },
+      "support": {
+        "assigned": 12,
+        "errors": 0,
+        "binary_agreement": 11,
+        "state_agreement": 11,
+        "false_accept": 1,
+        "false_reject": 0
+      }
+    }
+  },
+  "status": "completed"
+}
