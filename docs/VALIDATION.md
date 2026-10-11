@@ -2,6 +2,12 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #29 远端 CI
+
+[run 38101081592](https://github.com/TheLudlows/Origence/actions/runs/38101081592) 对实现 head `30ec9364b830472b4b70c635facd2477e6bfae64` 通过，实际 checkout 为合并预览 `7b472a3cf56a7c837dd8a397b6571748ac2fd967`。Linux/MSRV 默认 lib 31/local 108、Clippy、build、HTTP smoke、处理中强退恢复和关键词种子评估通过；fast-check 轻量 lib 30/local 86、fmt/Clippy、工具测试 19 passed/1 skipped（恢复另在 Linux 实跑）、既有评估 9 passed。
+
+Windows/macOS/container 按 main-only 策略跳过，不能据此称三平台主干验收完成。精确 job/step/checkout 见 [CI 工件](evidence/2026-10-11-aml-pr29-ci.json)。本记录仅新增文档证据，不改变以上受测实现。
+
 ## 2026-10-11 受限重排/查询扩展与引用式 Answer 对照
 
 基于 02edd6c，新增纯 Python 实验工具、单元测试、合成 v3 数据及工件。业务 Rust、CLI/API 行为、依赖和 Cargo.lock 均未改变；独立宿主复用现有演练 Host，退出回收自身进程和临时数据，不新增业务 worker 或重试循环。受测宿主仍为 main 85454bf，SHA-256 见报告。
