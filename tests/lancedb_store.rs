@@ -443,3 +443,149 @@ async fn offline_compaction_preserves_results_versions_and_rejects_live_host() {
     table.checkout_latest().await.unwrap();
     assert_eq!(table.version().await.unwrap(), unmodified_version);
 }
+
+#[tokio::test]
+async fn repeated_compaction_preserves_multiple_profiles_after_mutations() {
+    use origence::storage::{SqliteStore, maintenance::compact_vectors};
+    let dir = tempfile::tempdir().unwrap();
+    let relational = SqliteStore::open(dir.path().join("context.db"))
+        .await
+        .unwrap();
+    relational.shutdown().await.unwrap();
+    drop(relational);
+    let scopes: Vec<_> = (0..4)
+        .map(|i| Scope {
+            tenant_id: Uuid::from_u128(10 + i / 2),
+            workspace_id: Uuid::from_u128(20 + i % 2),
+        })
+        .collect();
+    let mut expected = Vec::new();
+    let store = LanceDbStore::open(dir.path().join("vectors"))
+        .await
+        .unwrap();
+    for dimension in [2, 3, 5] {
+        for (scope_index, scope) in scopes.iter().enumerate() {
+            for generation in [1, 2] {
+                for i in 1..=8 {
+                    let mut embedding = vec![0.0; dimension];
+                    embedding[0] = i as f32 + scope_index as f32 * 20.0 + generation as f32 * 100.0;
+                    let value = VectorEntry {
+                        id: Uuid::from_u128(i),
+                        source: SourceVersion {
+                            source_id: Uuid::from_u128(1000 + i),
+                            version: generation as i32,
+                        },
+                        generation,
+                        profile: format!("maintenance:dim{dimension}:v1"),
+                        dimension,
+                        embedding,
+                    };
+                    store.upsert(*scope, vec![value.clone()]).await.unwrap();
+                    expected.push((*scope, value));
+                }
+            }
+        }
+    }
+    drop(store);
+    // Repeated maintenance with intervening updates, scoped source deletion and new appends.
+    for round in 0..3 {
+        let store = LanceDbStore::open(dir.path().join("vectors"))
+            .await
+            .unwrap();
+        if round > 0 {
+            for (scope, value) in &mut expected {
+                if *scope == scopes[0] && value.id == Uuid::from_u128(1) && value.generation == 1 {
+                    value.embedding[0] = 0.25 / round as f32;
+                    store.upsert(*scope, vec![value.clone()]).await.unwrap();
+                }
+            }
+            let removed = SourceVersion {
+                source_id: Uuid::from_u128(1000 + 9 - round),
+                version: 1,
+            };
+            store.delete_source(scopes[0], removed).await.unwrap();
+            expected.retain(|(scope, value)| *scope != scopes[0] || value.source != removed);
+            for dimension in [2, 3, 5] {
+                let mut embedding = vec![0.0; dimension];
+                embedding[0] = 0.5 + round as f32;
+                let value = VectorEntry {
+                    id: Uuid::from_u128(100 + round),
+                    source: SourceVersion {
+                        source_id: Uuid::from_u128(2000 + round),
+                        version: 1,
+                    },
+                    generation: 1,
+                    profile: format!("maintenance:dim{dimension}:v1"),
+                    dimension,
+                    embedding,
+                };
+                store.upsert(scopes[0], vec![value.clone()]).await.unwrap();
+                expected.push((scopes[0], value));
+            }
+        }
+        let mut snapshots = Vec::new();
+        for dimension in [2, 3, 5] {
+            for scope in &scopes {
+                for generation in [1, 2] {
+                    for restricted in [false, true] {
+                        let allowed: Vec<_> =
+                            [2, 4, 6, 8].into_iter().map(Uuid::from_u128).collect();
+                        let mut embedding = vec![0.0; dimension];
+                        embedding[0] = -1.0;
+                        let q = VectorQuery {
+                            scope: *scope,
+                            profile: format!("maintenance:dim{dimension}:v1"),
+                            dimension,
+                            generation,
+                            embedding,
+                            limit: 100,
+                            artifact_ids: restricted.then(|| allowed.clone()),
+                        };
+                        let mut oracle: Vec<_> = expected
+                            .iter()
+                            .filter(|(s, v)| {
+                                s == scope
+                                    && v.dimension == dimension
+                                    && v.generation == generation
+                                    && (!restricted || allowed.contains(&v.id))
+                            })
+                            .map(|(_, v)| v)
+                            .collect();
+                        oracle.sort_by(|a, b| a.embedding[0].total_cmp(&b.embedding[0]));
+                        let actual = store.search(q.clone()).await.unwrap();
+                        assert_eq!(actual.len(), oracle.len());
+                        for (hit, value) in actual.iter().zip(oracle) {
+                            assert_eq!(hit.id, value.id);
+                            assert_eq!(hit.source, value.source);
+                            let distance = (value.embedding[0] + 1.0).powi(2);
+                            assert!((hit.score - 1.0 / (1.0 + distance)).abs() < 1e-6);
+                        }
+                        snapshots.push((q, serde_json::to_value(actual).unwrap()));
+                    }
+                }
+            }
+        }
+        drop(store);
+        let preview = compact_vectors(dir.path(), true).await.unwrap();
+        assert_eq!(preview.tables.len(), 3);
+        assert_eq!(
+            preview.tables.iter().map(|t| t.before.rows).sum::<usize>(),
+            expected.len()
+        );
+        assert!(preview.tables.iter().all(|t| t.before.fragments > 1));
+        let report = compact_vectors(dir.path(), false).await.unwrap();
+        assert!(report.tables.iter().all(|t| {
+            let after = t.after.as_ref().unwrap();
+            t.before.rows == after.rows && after.fragments == 1
+        }));
+        let reopened = LanceDbStore::open(dir.path().join("vectors"))
+            .await
+            .unwrap();
+        for (q, before) in snapshots {
+            assert_eq!(
+                serde_json::to_value(reopened.search(q).await.unwrap()).unwrap(),
+                before
+            );
+        }
+    }
+}

@@ -1,0 +1,224 @@
+{"ingested": 32, "total": 1524}
+{"ingested": 64, "total": 1524}
+{"ingested": 96, "total": 1524}
+{"ingested": 128, "total": 1524}
+{"ingested": 160, "total": 1524}
+{"ingested": 192, "total": 1524}
+{"ingested": 224, "total": 1524}
+{"ingested": 256, "total": 1524}
+{"ingested": 288, "total": 1524}
+{"ingested": 320, "total": 1524}
+{"ingested": 352, "total": 1524}
+{"ingested": 384, "total": 1524}
+{"ingested": 416, "total": 1524}
+{"ingested": 448, "total": 1524}
+{"ingested": 480, "total": 1524}
+{"ingested": 512, "total": 1524}
+{"ingested": 544, "total": 1524}
+{"ingested": 576, "total": 1524}
+{"ingested": 608, "total": 1524}
+{"ingested": 640, "total": 1524}
+{"ingested": 672, "total": 1524}
+{"ingested": 704, "total": 1524}
+{"ingested": 736, "total": 1524}
+{"ingested": 768, "total": 1524}
+{"ingested": 800, "total": 1524}
+{"ingested": 832, "total": 1524}
+{"ingested": 864, "total": 1524}
+{"ingested": 896, "total": 1524}
+{"ingested": 928, "total": 1524}
+{"ingested": 960, "total": 1524}
+{"ingested": 992, "total": 1524}
+{"ingested": 1024, "total": 1524}
+{"ingested": 1056, "total": 1524}
+{"ingested": 1088, "total": 1524}
+{"ingested": 1120, "total": 1524}
+{"ingested": 1152, "total": 1524}
+{"ingested": 1184, "total": 1524}
+{"ingested": 1216, "total": 1524}
+{"ingested": 1248, "total": 1524}
+{"ingested": 1280, "total": 1524}
+{"ingested": 1312, "total": 1524}
+{"ingested": 1344, "total": 1524}
+{"ingested": 1376, "total": 1524}
+{"ingested": 1408, "total": 1524}
+{"ingested": 1440, "total": 1524}
+{"ingested": 1472, "total": 1524}
+{"ingested": 1504, "total": 1524}
+{"phase": "baseline", "question_id": "09ba9854", "http_ms": 8092.558199998166}
+{"phase": "baseline", "question_id": "0ddfec37_abs", "http_ms": 7833.060600001772}
+{"phase": "baseline", "question_id": "18dcd5a5", "http_ms": 7840.76549999736}
+{"phase": "baseline", "question_id": "1b9b7252", "http_ms": 7883.878799999366}
+{"phase": "baseline", "question_id": "21d02d0d", "http_ms": 7891.251899993222}
+{"phase": "baseline", "question_id": "370a8ff4", "http_ms": 7870.547999998962}
+{"phase": "baseline", "question_id": "4100d0a0", "http_ms": 7959.762799997407}
+{"phase": "baseline", "question_id": "4dfccbf8", "http_ms": 7865.000600002531}
+{"phase": "baseline", "question_id": "603deb26", "http_ms": 7826.69220000389}
+{"phase": "baseline", "question_id": "60472f9c", "http_ms": 7878.055100001802}
+{"phase": "baseline", "question_id": "71315a70", "http_ms": 7891.200099998969}
+{"phase": "baseline", "question_id": "71a3fd6b", "http_ms": 4301.169300000765}
+{"phase": "baseline", "question_id": "72e3ee87", "http_ms": 7787.440500003868}
+{"phase": "baseline", "question_id": "76d63226", "http_ms": 8026.003599996329}
+{"phase": "baseline", "question_id": "853b0a1d", "http_ms": 7428.132600005483}
+{"phase": "baseline", "question_id": "8a2466db", "http_ms": 5429.548599997361}
+{"phase": "baseline", "question_id": "a06e4cfe", "http_ms": 5410.793600000034}
+{"phase": "baseline", "question_id": "afdc33df", "http_ms": 5539.76039999543}
+{"phase": "baseline", "question_id": "b29f3365", "http_ms": 5430.808099998103}
+{"phase": "baseline", "question_id": "b3c15d39", "http_ms": 5381.032400000549}
+{"phase": "baseline", "question_id": "ba358f49_abs", "http_ms": 5416.115699998045}
+{"phase": "baseline", "question_id": "bbf86515", "http_ms": 5335.797200001252}
+{"phase": "baseline", "question_id": "ceb54acb", "http_ms": 5411.377500000526}
+{"phase": "baseline", "question_id": "d682f1a2", "http_ms": 5516.401599998062}
+{"phase": "baseline", "question_id": "e47becba", "http_ms": 5551.145400000678}
+{"phase": "baseline", "question_id": "gpt4_1e4a8aeb", "http_ms": 5424.094699999841}
+{"phase": "baseline", "question_id": "gpt4_31ff4165", "http_ms": 5371.37249999796}
+{"phase": "baseline", "question_id": "gpt4_468eb064", "http_ms": 5417.742900004669}
+{"phase": "baseline", "question_id": "gpt4_68e94287", "http_ms": 5482.477099998505}
+{"phase": "baseline", "question_id": "gpt4_93159ced_abs", "http_ms": 5478.284299999359}
+{"phase": "baseline", "question_id": "gpt4_a2d1d1f6", "http_ms": 5412.580999996862}
+{"phase": "baseline", "question_id": "gpt4_f420262d", "http_ms": 5396.653299998434}
+{"phase": "compacted", "question_id": "09ba9854", "http_ms": 1962.9203000004054}
+{"phase": "compacted", "question_id": "0ddfec37_abs", "http_ms": 698.7670000016806}
+{"phase": "compacted", "question_id": "18dcd5a5", "http_ms": 810.2567000023555}
+{"phase": "compacted", "question_id": "1b9b7252", "http_ms": 846.7864999984158}
+{"phase": "compacted", "question_id": "21d02d0d", "http_ms": 729.2006999996374}
+{"phase": "compacted", "question_id": "370a8ff4", "http_ms": 742.1045000010054}
+{"phase": "compacted", "question_id": "4100d0a0", "http_ms": 746.523599998909}
+{"phase": "compacted", "question_id": "4dfccbf8", "http_ms": 751.360799993563}
+{"phase": "compacted", "question_id": "603deb26", "http_ms": 734.4918999951915}
+{"phase": "compacted", "question_id": "60472f9c", "http_ms": 711.4784000004875}
+{"phase": "compacted", "question_id": "71315a70", "http_ms": 794.9738999959663}
+{"phase": "compacted", "question_id": "71a3fd6b", "http_ms": 502.0678000000771}
+{"phase": "compacted", "question_id": "72e3ee87", "http_ms": 730.1672999965376}
+{"phase": "compacted", "question_id": "76d63226", "http_ms": 657.1537999989232}
+{"phase": "compacted", "question_id": "853b0a1d", "http_ms": 694.602900002792}
+{"phase": "compacted", "question_id": "8a2466db", "http_ms": 714.5098000037251}
+{"phase": "compacted", "question_id": "a06e4cfe", "http_ms": 651.84340000269}
+{"phase": "compacted", "question_id": "afdc33df", "http_ms": 687.739100001636}
+{"phase": "compacted", "question_id": "b29f3365", "http_ms": 670.5768000028911}
+{"phase": "compacted", "question_id": "b3c15d39", "http_ms": 733.118200005265}
+{"phase": "compacted", "question_id": "ba358f49_abs", "http_ms": 735.7881999996607}
+{"phase": "compacted", "question_id": "bbf86515", "http_ms": 701.9214000029024}
+{"phase": "compacted", "question_id": "ceb54acb", "http_ms": 706.6248999981326}
+{"phase": "compacted", "question_id": "d682f1a2", "http_ms": 678.0861000006553}
+{"phase": "compacted", "question_id": "e47becba", "http_ms": 686.7133999985526}
+{"phase": "compacted", "question_id": "gpt4_1e4a8aeb", "http_ms": 627.0070999962627}
+{"phase": "compacted", "question_id": "gpt4_31ff4165", "http_ms": 631.1660999999731}
+{"phase": "compacted", "question_id": "gpt4_468eb064", "http_ms": 726.9635000047856}
+{"phase": "compacted", "question_id": "gpt4_68e94287", "http_ms": 605.6830999950762}
+{"phase": "compacted", "question_id": "gpt4_93159ced_abs", "http_ms": 720.6099999966682}
+{"phase": "compacted", "question_id": "gpt4_a2d1d1f6", "http_ms": 740.8503000042401}
+{"phase": "compacted", "question_id": "gpt4_f420262d", "http_ms": 724.1206999970018}
+{"phase": "reopened", "question_id": "09ba9854", "http_ms": 1984.0727000046172}
+{"phase": "reopened", "question_id": "0ddfec37_abs", "http_ms": 827.374400003464}
+{"phase": "reopened", "question_id": "18dcd5a5", "http_ms": 758.315400002175}
+{"phase": "reopened", "question_id": "1b9b7252", "http_ms": 799.0349999963655}
+{"phase": "reopened", "question_id": "21d02d0d", "http_ms": 716.614999997546}
+{"phase": "reopened", "question_id": "370a8ff4", "http_ms": 737.5797999993665}
+{"phase": "reopened", "question_id": "4100d0a0", "http_ms": 719.301600001927}
+{"phase": "reopened", "question_id": "4dfccbf8", "http_ms": 755.0913000013679}
+{"phase": "reopened", "question_id": "603deb26", "http_ms": 719.983000002685}
+{"phase": "reopened", "question_id": "60472f9c", "http_ms": 665.0554000007105}
+{"phase": "reopened", "question_id": "71315a70", "http_ms": 672.8303999989294}
+{"phase": "reopened", "question_id": "71a3fd6b", "http_ms": 545.7328999982565}
+{"phase": "reopened", "question_id": "72e3ee87", "http_ms": 773.4909999999218}
+{"phase": "reopened", "question_id": "76d63226", "http_ms": 654.8232000059215}
+{"phase": "reopened", "question_id": "853b0a1d", "http_ms": 734.6198000013828}
+{"phase": "reopened", "question_id": "8a2466db", "http_ms": 703.8958999983151}
+{"phase": "reopened", "question_id": "a06e4cfe", "http_ms": 744.5742999989307}
+{"phase": "reopened", "question_id": "afdc33df", "http_ms": 647.7947999956086}
+{"phase": "reopened", "question_id": "b29f3365", "http_ms": 672.9560999956448}
+{"phase": "reopened", "question_id": "b3c15d39", "http_ms": 708.844599997974}
+{"phase": "reopened", "question_id": "ba358f49_abs", "http_ms": 779.3653999979142}
+{"phase": "reopened", "question_id": "bbf86515", "http_ms": 703.6655999982031}
+{"phase": "reopened", "question_id": "ceb54acb", "http_ms": 705.963200001861}
+{"phase": "reopened", "question_id": "d682f1a2", "http_ms": 656.4039000004414}
+{"phase": "reopened", "question_id": "e47becba", "http_ms": 747.640900000988}
+{"phase": "reopened", "question_id": "gpt4_1e4a8aeb", "http_ms": 643.0512000006274}
+{"phase": "reopened", "question_id": "gpt4_31ff4165", "http_ms": 697.0259000008809}
+{"phase": "reopened", "question_id": "gpt4_468eb064", "http_ms": 738.1214000051841}
+{"phase": "reopened", "question_id": "gpt4_68e94287", "http_ms": 663.2280000048922}
+{"phase": "reopened", "question_id": "gpt4_93159ced_abs", "http_ms": 668.0742999960785}
+{"phase": "reopened", "question_id": "gpt4_a2d1d1f6", "http_ms": 649.3564999982482}
+{"phase": "reopened", "question_id": "gpt4_f420262d", "http_ms": 713.3652000047732}
+{"phase": "during_growth", "question_id": "09ba9854", "http_ms": 673.6273999995319}
+{"phase": "during_growth", "question_id": "0ddfec37_abs", "http_ms": 647.7133000007598}
+{"phase": "during_growth", "question_id": "18dcd5a5", "http_ms": 598.1071000060183}
+{"phase": "during_growth", "question_id": "1b9b7252", "http_ms": 717.2614000010071}
+{"phase": "during_growth", "question_id": "21d02d0d", "http_ms": 665.0484999991022}
+{"phase": "during_growth", "question_id": "370a8ff4", "http_ms": 728.617499997199}
+{"phase": "during_growth", "question_id": "4100d0a0", "http_ms": 640.5691999971168}
+{"phase": "during_growth", "question_id": "4dfccbf8", "http_ms": 607.4588999981643}
+{"regrowth_added": 32}
+{"regrowth_added": 64}
+{"regrowth_added": 96}
+{"regrowth_added": 128}
+{"regrowth_added": 160}
+{"regrowth_added": 192}
+{"regrowth_added": 224}
+{"regrowth_added": 256}
+{"phase": "grown", "question_id": "09ba9854", "http_ms": 1524.3640999979107}
+{"phase": "grown", "question_id": "0ddfec37_abs", "http_ms": 1472.475900001882}
+{"phase": "grown", "question_id": "18dcd5a5", "http_ms": 1429.8102000029758}
+{"phase": "grown", "question_id": "1b9b7252", "http_ms": 1479.2012000034447}
+{"phase": "grown", "question_id": "21d02d0d", "http_ms": 1416.2705999988248}
+{"phase": "grown", "question_id": "370a8ff4", "http_ms": 1450.1072999992175}
+{"phase": "grown", "question_id": "4100d0a0", "http_ms": 1462.9270000004908}
+{"phase": "grown", "question_id": "4dfccbf8", "http_ms": 1474.926199996844}
+{"phase": "grown", "question_id": "603deb26", "http_ms": 1568.1380000023637}
+{"phase": "grown", "question_id": "60472f9c", "http_ms": 1506.7810000036843}
+{"phase": "grown", "question_id": "71315a70", "http_ms": 1555.184199998621}
+{"phase": "grown", "question_id": "71a3fd6b", "http_ms": 835.6991999971797}
+{"phase": "grown", "question_id": "72e3ee87", "http_ms": 1581.5078000014182}
+{"phase": "grown", "question_id": "76d63226", "http_ms": 1502.412900001218}
+{"phase": "grown", "question_id": "853b0a1d", "http_ms": 1455.8773000026122}
+{"phase": "grown", "question_id": "8a2466db", "http_ms": 1429.419300002337}
+{"phase": "grown", "question_id": "a06e4cfe", "http_ms": 1558.5636000032537}
+{"phase": "grown", "question_id": "afdc33df", "http_ms": 1523.2538999989629}
+{"phase": "grown", "question_id": "b29f3365", "http_ms": 1586.5396000008332}
+{"phase": "grown", "question_id": "b3c15d39", "http_ms": 1478.7388000040664}
+{"phase": "grown", "question_id": "ba358f49_abs", "http_ms": 1507.4492000057944}
+{"phase": "grown", "question_id": "bbf86515", "http_ms": 1688.228099999833}
+{"phase": "grown", "question_id": "ceb54acb", "http_ms": 1904.7773999991477}
+{"phase": "grown", "question_id": "d682f1a2", "http_ms": 1821.0121000010986}
+{"phase": "grown", "question_id": "e47becba", "http_ms": 1886.685799996485}
+{"phase": "grown", "question_id": "gpt4_1e4a8aeb", "http_ms": 1886.1409999954049}
+{"phase": "grown", "question_id": "gpt4_31ff4165", "http_ms": 1884.3690000067}
+{"phase": "grown", "question_id": "gpt4_468eb064", "http_ms": 1786.3484999979846}
+{"phase": "grown", "question_id": "gpt4_68e94287", "http_ms": 1975.1445000001695}
+{"phase": "grown", "question_id": "gpt4_93159ced_abs", "http_ms": 1881.2189000018407}
+{"phase": "grown", "question_id": "gpt4_a2d1d1f6", "http_ms": 1863.5349000032875}
+{"phase": "grown", "question_id": "gpt4_f420262d", "http_ms": 1802.0790000009583}
+{"phase": "recompacted", "question_id": "09ba9854", "http_ms": 1931.1375000033877}
+{"phase": "recompacted", "question_id": "0ddfec37_abs", "http_ms": 759.5034999976633}
+{"phase": "recompacted", "question_id": "18dcd5a5", "http_ms": 781.3019000022905}
+{"phase": "recompacted", "question_id": "1b9b7252", "http_ms": 752.1170999971218}
+{"phase": "recompacted", "question_id": "21d02d0d", "http_ms": 793.1240999969305}
+{"phase": "recompacted", "question_id": "370a8ff4", "http_ms": 651.207599999907}
+{"phase": "recompacted", "question_id": "4100d0a0", "http_ms": 722.921699998551}
+{"phase": "recompacted", "question_id": "4dfccbf8", "http_ms": 813.0942999996478}
+{"phase": "recompacted", "question_id": "603deb26", "http_ms": 778.6751000021468}
+{"phase": "recompacted", "question_id": "60472f9c", "http_ms": 755.8041000011144}
+{"phase": "recompacted", "question_id": "71315a70", "http_ms": 756.0972999999649}
+{"phase": "recompacted", "question_id": "71a3fd6b", "http_ms": 498.0349999968894}
+{"phase": "recompacted", "question_id": "72e3ee87", "http_ms": 1041.0455000019283}
+{"phase": "recompacted", "question_id": "76d63226", "http_ms": 691.8296000003465}
+{"phase": "recompacted", "question_id": "853b0a1d", "http_ms": 717.4634000039077}
+{"phase": "recompacted", "question_id": "8a2466db", "http_ms": 803.4410000036587}
+{"phase": "recompacted", "question_id": "a06e4cfe", "http_ms": 831.7089000047417}
+{"phase": "recompacted", "question_id": "afdc33df", "http_ms": 876.0497000039322}
+{"phase": "recompacted", "question_id": "b29f3365", "http_ms": 885.6129999985569}
+{"phase": "recompacted", "question_id": "b3c15d39", "http_ms": 803.9072999963537}
+{"phase": "recompacted", "question_id": "ba358f49_abs", "http_ms": 828.710299996601}
+{"phase": "recompacted", "question_id": "bbf86515", "http_ms": 642.960299999686}
+{"phase": "recompacted", "question_id": "ceb54acb", "http_ms": 889.6120999997947}
+{"phase": "recompacted", "question_id": "d682f1a2", "http_ms": 871.3963999980479}
+{"phase": "recompacted", "question_id": "e47becba", "http_ms": 894.526499992935}
+{"phase": "recompacted", "question_id": "gpt4_1e4a8aeb", "http_ms": 821.995500002231}
+{"phase": "recompacted", "question_id": "gpt4_31ff4165", "http_ms": 922.0074999975623}
+{"phase": "recompacted", "question_id": "gpt4_468eb064", "http_ms": 686.032300000079}
+{"phase": "recompacted", "question_id": "gpt4_68e94287", "http_ms": 647.9505000024801}
+{"phase": "recompacted", "question_id": "gpt4_93159ced_abs", "http_ms": 842.1802999946522}
+{"phase": "recompacted", "question_id": "gpt4_a2d1d1f6", "http_ms": 706.3984999986133}
+{"phase": "recompacted", "question_id": "gpt4_f420262d", "http_ms": 757.1090000055847}
+{"status": "completed", "error": null}

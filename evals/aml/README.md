@@ -40,3 +40,5 @@ python -m unittest discover -s tools -p 'test_aml_quality.py' -v
 后续 [时间/裁判消融与 Search 性能诊断](temporal-v1/README.md)在已观察数据上继续定位问题；不替换 budget-v1 冻结成绩。
 
 [向量后端定位与显式停机压实](vector-perf-v1/README.md)记录无效列投影、物理碎片对照及真实 CLI/HTTP 前后验证；局部性能收益不替代全库和官方评测。
+
+[完整库与重复维护](maintenance-scale-v1/README.md)已验证 32 用户、持续追加与再次压实，并保留完整响应及独立离线审计；另有三 profile 的库级更新/删除回归。

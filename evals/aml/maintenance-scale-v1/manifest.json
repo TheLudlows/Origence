@@ -1,0 +1,121 @@
+{
+  "schema": "aml-maintenance-scale-manifest-v1",
+  "created_at_utc": "2026-10-11T12:04:09.135Z",
+  "test_and_tool_commit": "1c90de2a2676ded0df2baab095d9dadcfce23ad3",
+  "production_source_commit": "cc4ee554a9cf097e1ddea49a8330f9db39593b6d",
+  "container_fix_main": "5b4bd94008d833b04078975bef2d122fd09d5001",
+  "binary_sha256": "fb88aa0547afa8addb5ec7ba2a9bc71f227d661feb12f8e5fc8aa36b6f9840e3",
+  "commands": [
+    "python -Werror::ResourceWarning tools/aml_maintenance_scale.py --binary target/vector-profile/maintenance.exe --report evals/aml/maintenance-scale-v1/run.json --responses evals/aml/maintenance-scale-v1/responses.json.gz",
+    "python -Werror::ResourceWarning tools/aml_maintenance_verify.py --directory evals/aml/maintenance-scale-v1 --output evals/aml/maintenance-scale-v1/audit.json"
+  ],
+  "files": [
+    {
+      "path": "evals/aml/maintenance-scale-v1/audit.json",
+      "sha256": "36469dc4aa0eb7d89453df869d99cc5d2e10ad589ac0a71c4e1483b303ec1ca1"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/implementation.json",
+      "sha256": "5711eac4fa3365982bed3158c63118583afe15cbe5a85bb373c20c93807394c4"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/plan.json",
+      "sha256": "c89a286eed1d75ee148eea69b1a6e759d49bbbe9eba36b26a06dd58a401b7d88"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/preflight.json",
+      "sha256": "1828dfe49d58f608b09b2885ce2ada87ed1fe944b19b0ed815d4efd56f52dc68"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/progress.jsonl",
+      "sha256": "ce7681e280ff1e243d08408d4925a5ee0ad844ecfd8f2ab36ef9af8794fef459"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/README.md",
+      "sha256": "cd17a943a9377199516effe8ea706953fcf2a1d8b700d087ef722c87adf0a71a"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/responses.json.gz",
+      "sha256": "39df5f2bf3f33803d91501ff25dcae3405c1130bfeffae6ce66fb55d01027cb6"
+    },
+    {
+      "path": "evals/aml/maintenance-scale-v1/run.json",
+      "sha256": "3f9916b842400e243af0d86bb760cb3c861be2630c53a68f7afbe23102fe0674"
+    },
+    {
+      "path": "tools/aml_maintenance_scale.py",
+      "sha256": "fa3bbd9b812dd8c17a138eb2ff5a6bd379a99d47779cba028ce23a93a33e136d"
+    },
+    {
+      "path": "tools/aml_maintenance_verify.py",
+      "sha256": "8f172e08ad39bbcd8f503543d32f983d5310e58274b8b99f27db198e2afbb3fd"
+    },
+    {
+      "path": "tools/test_aml_maintenance.py",
+      "sha256": "e5d9f8e36395efef43b18d89e852913b06108eeb7ea7a8b72a2c81c53f721aa8"
+    },
+    {
+      "path": "tests/lancedb_store.rs",
+      "sha256": "59bbed336c5e8ab679903d926fd2f71ad4ea1613ebc663ccbf03b42ae5643263"
+    },
+    {
+      "path": "src/storage/maintenance.rs",
+      "sha256": "f8b6152485adfa3eda3a83d7b2ccfa37542e7dd5426075d62199ac5f69744261"
+    },
+    {
+      "path": "src/storage/lancedb.rs",
+      "sha256": "080b233400fa1609c0c547f3de6608a9f6cf3f0387db31e6263d16988c145ea9"
+    },
+    {
+      "path": "src/storage/sqlite.rs",
+      "sha256": "6c8c5dd30f9e7589bb8e3d06fe7361ac54c489b53fc62acf43b79be7d90d3030"
+    },
+    {
+      "path": "src/retrieval.rs",
+      "sha256": "9d2aed14d7f1f0b34cca6a1ccf76815d4d821d321c982e12003cbdb5f9fa619c"
+    },
+    {
+      "path": "tools/aml_drill.py",
+      "sha256": "cf9b180ecda2b0f9fbb2c1b250767f46ed8fc35a60b3596d7cdf14d76317b5ae"
+    },
+    {
+      "path": "tools/aml_compaction_profile.py",
+      "sha256": "b8e83a8e6aa9a04a338165f25932a79dd73584a782351d4d18500f811c70d754"
+    },
+    {
+      "path": "tools/aml_evidence.py",
+      "sha256": "dad5451d81dae4d104b89e7cc50b8b1d5e0fbdde59286021f58141312f461e5b"
+    },
+    {
+      "path": "tools/aml_public.py",
+      "sha256": "5d19e05605f354cf895fd6d413df26f67ff6d2d1c4724f3adc2c5b48127ac98f"
+    },
+    {
+      "path": "tools/aml_quality.py",
+      "sha256": "c7d42fae868c66a27ecc37a7414776e958bee1d0ae504d2db91abc80215395f8"
+    },
+    {
+      "path": "evals/aml/public/preparation.json",
+      "sha256": "34c98feecaafb0bf9afc9384ee2625bb7546ed48fcaa3e611feeeeca3c534c08"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "cda6a8e7d73f216eeb65026c273f02cd0189021f49a39249470572d57400bc08"
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "e06c4b924ab91de36d611e4a18f1d7897fd304e680f06db91a80354a444ae37e"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "sha256": "e879701472a698533f43f54989bbf5f3101eb0503472159d32633f3bb8a13fdf"
+    }
+  ],
+  "notes": [
+    "Use new report/response/audit paths on rerun; existing evidence is never overwritten.",
+    "Source hashes refer to the recorded implementation snapshot; later repository changes require the matching checkout.",
+    "No product Rust changes, dependency updates or chat calls in this phase.",
+    "Public histories were already observed. Repeated phase responses are not independent semantic examples.",
+    "Complete responses are public benchmark excerpts, not private user/business data."
+  ]
+}

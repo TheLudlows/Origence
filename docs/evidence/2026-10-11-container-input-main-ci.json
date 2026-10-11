@@ -1,0 +1,64 @@
+{
+  "schema": "origence-ci-evidence-v1",
+  "run_id": 38135583388,
+  "url": "https://github.com/TheLudlows/Origence/actions/runs/38135583388",
+  "head_sha": "5b4bd94008d833b04078975bef2d122fd09d5001",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "linux-native",
+      "id": 114458649740,
+      "lines": [
+        "2026-10-11T11:27:58.5953574Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s",
+        "2026-10-11T11:28:17.8560900Z test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s",
+        "2026-10-11T11:28:17.8603694Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T11:28:39.1822142Z test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.31s",
+        "2026-10-11T11:28:39.3966162Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T11:28:41.4538595Z PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval",
+        "2026-10-11T11:28:43.8131497Z OK"
+      ],
+      "conclusion": "success"
+    },
+    {
+      "name": "windows",
+      "id": 114458649668,
+      "lines": [
+        "2026-10-11T11:30:34.8685129Z test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s\r",
+        "2026-10-11T11:30:34.8845126Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\r",
+        "2026-10-11T11:31:14.2546556Z test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.35s\r",
+        "2026-10-11T11:31:14.8653275Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\r"
+      ],
+      "conclusion": "success"
+    },
+    {
+      "name": "macos",
+      "id": 114458650087,
+      "lines": [
+        "2026-10-11T11:29:56.0942560Z test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s",
+        "2026-10-11T11:29:56.1029840Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T11:30:27.0013580Z test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.86s",
+        "2026-10-11T11:30:28.0587980Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T11:51:22.4987290Z PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval"
+      ],
+      "conclusion": "success"
+    },
+    {
+      "name": "container",
+      "id": 114458649718,
+      "conclusion": "success",
+      "lines": [
+        "2026-10-11T11:27:25.8844620Z #18 [build-inputs 9/9] RUN cargo metadata --no-deps --format-version 1 > /tmp/cargo-metadata.json",
+        "2026-10-11T11:48:49.1954234Z PASS: readiness, authentication, memory publication, identity versioning/isolation and keyword retrieval"
+      ]
+    },
+    {
+      "name": "fast-check",
+      "id": 114458649605,
+      "conclusion": "success"
+    }
+  ],
+  "notes": [
+    "Confirms container input repair in PR #34, including full release build and no-model HTTP smoke.",
+    "Default test counts here are 32 library / 110 local. New multi-profile regression produces 111 local tests and is separately covered by PR #35."
+  ]
+}

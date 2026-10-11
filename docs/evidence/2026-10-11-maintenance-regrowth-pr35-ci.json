@@ -1,0 +1,40 @@
+{
+  "schema": "origence-ci-evidence-v1",
+  "run_id": 38136121328,
+  "url": "https://github.com/TheLudlows/Origence/actions/runs/38136121328",
+  "head_sha": "1c90de2a2676ded0df2baab095d9dadcfce23ad3",
+  "checkout_merge_preview": "85cfafb",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "fast-check",
+      "id": 114460224064,
+      "conclusion": "success",
+      "selected_lines": [
+        "2026-10-11T11:35:33.3185317Z HEAD is now at 85cfafb Merge 1c90de2a2676ded0df2baab095d9dadcfce23ad3 into 5b4bd94008d833b04078975bef2d122fd09d5001",
+        "2026-10-11T11:36:35.8790018Z test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s",
+        "2026-10-11T11:36:41.5960378Z test result: ok. 86 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s",
+        "2026-10-11T11:36:42.4821750Z Ran 49 tests in 0.640s",
+        "2026-10-11T11:36:42.4821950Z OK (skipped=1)",
+        "2026-10-11T11:36:42.9726789Z Ran 9 tests in 0.407s",
+        "2026-10-11T11:36:42.9726973Z OK"
+      ]
+    },
+    {
+      "name": "linux-native",
+      "id": 114460224171,
+      "conclusion": "success",
+      "selected_lines": [
+        "2026-10-11T11:35:34.8967711Z HEAD is now at 85cfafb Merge 1c90de2a2676ded0df2baab095d9dadcfce23ad3 into 5b4bd94008d833b04078975bef2d122fd09d5001",
+        "2026-10-11T11:36:31.6626879Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s",
+        "2026-10-11T11:37:03.6534257Z test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.05s",
+        "2026-10-11T11:37:03.6573950Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T11:38:58.2224819Z test result: ok. 111 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 114.56s",
+        "2026-10-11T11:38:58.5829837Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T11:39:04.8579260Z OK"
+      ]
+    }
+  ],
+  "main_only_jobs": "Windows, macOS and full container skipped on PR; Docker build-inputs stage passed in fast-check.",
+  "scope": "Test/tool implementation head, before final experimental artifacts and documentation."
+}

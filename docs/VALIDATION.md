@@ -2,6 +2,28 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 完整公开库、持续写入与再次压实
+
+[计划与报告](../evals/aml/maintenance-scale-v1/README.md)、[原始记录](../evals/aml/maintenance-scale-v1/run.json)、[独立审计](../evals/aml/maintenance-scale-v1/audit.json)。真实本地 BGE-M3、32 用户/1524 批/15685 条消息，经实际 Add/Search 与停机 CLI 完成基线、压实、重启、外部四用户追加 256 批和再次压实。168 次 Search / 16800 个返回项无错误，完整响应 data/排序等值、原文字节/parser/范围/归属检查及维护行数/版本记录全部通过；完整压缩响应已保留，临时树已清理，无聊天调用。
+
+HTTP p50 / p95：基线 5516.40 / 8026.00 ms；压实 714.51 / 846.79；重启 708.84 / 827.37；追加完成 1524.36 / 1904.78；再次压实 781.30 / 1041.05。每阶段 32 条、nearest-rank，另有追加期间 8 条；保留全部首请求，压实相关阶段最大值仍约 1.93–1.98 秒。17823 行、1524 → 8 碎片，第一次维护 2745.22 ms；追加后 18079 行、264 → 8 碎片，第二次 760.49 ms，两次行数均保持。
+
+python -W error::ResourceWarning tools/aml_maintenance_verify.py --directory evals/aml/maintenance-scale-v1 --output evals/aml/maintenance-scale-v1/audit.json 退出码 0、passed，无模型调用。入库前段与本地回归重叠，不作吞吐量结论；本地测试在 Search 开始前已结束。公开历史有重叠，内容归属不能独立识别相同原文跨用户来源；跨 scope 的不同值和复用 ID 隔离由库与既有 HTTP 回归补充。无新语义质量、长期 SLO、多 profile 实际模型性能、维护中断、断电或磁盘不足验收。
+
+## 2026-10-11 容器输入修复主干验收
+
+PR #34 合入 main 5b4bd94008d833b04078975bef2d122fd09d5001；[run 38135583388](https://github.com/TheLudlows/Origence/actions/runs/38135583388) 五个作业全部成功。三平台默认 lib 32/local 110；Linux、macOS 与 container 的 HTTP smoke 通过，容器完成实际 release 编译。新的 Docker build-inputs 检查已在 PR #34 与主干 fast-check 执行成功。[精确记录](evidence/2026-10-11-container-input-main-ci.json)。这确认此前缺 examples 的构建故障已修复；新增 111 项回归计数属于下面的 PR #35，不混用两个提交的证据。
+
+## 2026-10-11 PR #35 回归与工具提交 CI
+
+[run 38136121328](https://github.com/TheLudlows/Origence/actions/runs/38136121328) 对 head 1c90de2a2676ded0df2baab095d9dadcfce23ad3 成功，合并预览 checkout 85cfafb。fast-check 轻量 lib 30/local 86、Docker build-inputs、Python 48 passed / 1 skipped（49 项）及 evals 9 passed；Linux 默认 lib 32/local 111、身份 8、Clippy/build/HTTP smoke/强退恢复通过。Windows/macOS/完整 container 按 main-only 策略跳过。[精确记录](evidence/2026-10-11-maintenance-regrowth-pr35-ci.json)。最终实测工件与文档追记的 CI 另核对。
+
+## 2026-10-11 多 profile 重复维护回归
+
+在 cc4ee55 生产实现上新增三维度 profile、四个 tenant/workspace scope、两代数据的三轮更新/删除/追加/压实回归；192 行，288 次库查询，维护前独立预期检查与维护后完整 NativeHit 等值检查通过。生产 Rust、依赖和 Cargo.lock 未改。完整公开库 HTTP 实验与复核结果见[本轮报告](../evals/aml/maintenance-scale-v1/README.md)，与确定性库测试分别判断。
+
+Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（8.41 秒）；cargo test --offline --locked --lib -j 2 为 32 passed（1.19 秒）；cargo test --offline --locked --test local -j 2 为 111 passed（137.63 秒）。新增测试单独为 1 passed / 110 filtered（129.83 秒）。Python 3.13.11 设置 AML_TEST_BINARY：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 49 passed / 0 skipped（4.727 秒）。没有压实中断、断电或生产 SLO 验收。
+
 ## 2026-10-11 PR #33 主干 CI 与容器输入修复
 
 main cc4ee554a9cf097e1ddea49a8330f9db39593b6d 的 [run 38122931813](https://github.com/TheLudlows/Origence/actions/runs/38122931813) 中 fast-check、Linux、Windows、macOS 成功，container 失败，不能称主干五项全绿。失败 [job 114421214131](https://github.com/TheLudlows/Origence/actions/runs/38122931813/job/114421214131) 在 Cargo 解析阶段报告缺少 examples/vector_layout_probe.rs：Dockerfile 未 COPY examples，且 .dockerignore 未放行它。
