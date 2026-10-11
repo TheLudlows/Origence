@@ -145,3 +145,24 @@ Add 的 HTTP 等待上限为 25 分钟；上游模型每次调用沿用 45 秒�
 branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户映射查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。性能工具另测完整 HTTP 耗时。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 
 本地实验命令及结果见[时间与性能诊断](../evals/aml/temporal-v1/README.md)。
+
+## 显式停机压实向量文件
+
+频繁的小批次 Add 会形成许多 LanceDB 碎片。停机维护命令只整理现有向量表的物理布局，使用原生 Compact，不执行 All/Prune、不创建索引、不删除历史版本、不更新模型、关系记录或来源原文。它不作为 Search、Add 或 Worker 的自动步骤。
+
+先按上文停止宿主并完成整库备份，再查看和执行：
+
+~~~powershell
+origence --data-dir <已有数据目录> --offline vector-compact --dry-run
+origence --data-dir <已有数据目录> --offline vector-compact
+~~~
+
+命令不需要 API key，不加载模型；授权来自数据目录的 OS 访问权限，范围是该库的所有向量 profile。必须有兼容的 context.db 和已初始化的 vectors 目录。dry-run 仍获取独占锁，但不改变向量数据或版本；缺失目录/库不会被初始化。维护期间，已有进程和同进程新开的宿主都被拒绝；维护退出后释放锁。不要绕过宿主锁直接并发写 LanceDB。
+
+所有表的命名与 schema 在首次压实前验证；输出按稳定排序的 table_index 给出版本、行数、碎片数和当前表字节数，不输出路径、凭据、源文本或底层错误详情。每表独立提交；中途失败时较早的表可能已经完成，可在检查磁盘和停机状态后显式重试。已是单碎片的表不重写。
+
+每次只处理一个表，使用两个库级压实任务，目标每片 4096 行。这个目标不是硬内存上限；没有硬超时或硬取消保证。维护需要额外磁盘空间并占用 IO/CPU；保留历史文件意味着它不是磁盘回收或物理擦除。强退/断电中的维护恢复尚未独立验收，不承诺任意断电安全。需要结束维护时应优先等待命令完成，再启动宿主。Worker、上传/解析的取消和关闭保证没有改变。
+
+成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。实测、被拒绝的列投影方案及范围见[向量性能对照](../evals/aml/vector-perf-v1/README.md)。
+
+更细的成功查询计时可设置 RUST_LOG=error,origence::search_timing=debug,origence::vector_timing=debug：vector_timing 提供 list_ms/open_ms/prepare_ms/execute_ms/collect_ms/decode_ms/total_ms 和 returned_count。execute 含规划/启动，collect 含流执行与读取，不应把它全部当作物理磁盘等待。日志不含查询、scope 或过滤表达式。

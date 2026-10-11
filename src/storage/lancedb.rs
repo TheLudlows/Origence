@@ -80,7 +80,7 @@ async fn check_dimension(table: &lancedb::Table, dimension: usize) -> StorageRes
     }
 }
 
-fn schema_for(dim: usize) -> Arc<Schema> {
+pub(super) fn schema_for(dim: usize) -> Arc<Schema> {
     Arc::new(Schema::new(vec![
         Field::new("tenant", DataType::Utf8, false),
         Field::new("workspace", DataType::Utf8, false),
@@ -229,6 +229,7 @@ impl VectorStore for LanceDbStore {
         if query.limit == 0 || query.artifact_ids.as_ref().is_some_and(Vec::is_empty) {
             return Ok(Vec::new());
         }
+        let started = std::time::Instant::now();
         let name = table_name(&query.profile);
         let names = self
             .db
@@ -239,12 +240,16 @@ impl VectorStore for LanceDbStore {
         if !names.iter().any(|n| n == &name) {
             return Ok(Vec::new());
         }
+        let list_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let open_started = std::time::Instant::now();
         let table = self
             .db
             .open_table(&name)
             .execute()
             .await
             .map_err(|e| StorageError::Backend(e.to_string()))?;
+        let open_ms = open_started.elapsed().as_secs_f64() * 1000.0;
+        let prepare_started = std::time::Instant::now();
         let mut filter = format!(
             "tenant='{}' AND workspace='{}' AND generation={}",
             quote(&query.scope.tenant_id.to_string()),
@@ -260,6 +265,8 @@ impl VectorStore for LanceDbStore {
             filter.push_str(&format!(" AND id IN ({ids})"));
         }
         check_dimension(&table, query.dimension).await?;
+        let prepare_ms = prepare_started.elapsed().as_secs_f64() * 1000.0;
+        let execute_started = std::time::Instant::now();
         let stream = table
             .query()
             .nearest_to(query.embedding.as_slice())
@@ -270,10 +277,14 @@ impl VectorStore for LanceDbStore {
             .execute()
             .await
             .map_err(|e| StorageError::Backend(e.to_string()))?;
+        let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
+        let collect_started = std::time::Instant::now();
         let batches: Vec<RecordBatch> = stream
             .try_collect()
             .await
             .map_err(|e| StorageError::Backend(e.to_string()))?;
+        let collect_ms = collect_started.elapsed().as_secs_f64() * 1000.0;
+        let decode_started = std::time::Instant::now();
         let mut hits = Vec::new();
         for batch in &batches {
             let ids = batch
@@ -313,6 +324,14 @@ impl VectorStore for LanceDbStore {
                 });
             }
         }
+        tracing::debug!(
+            target: "origence::vector_timing",
+            list_ms, open_ms, prepare_ms, execute_ms, collect_ms,
+            decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0,
+            total_ms = started.elapsed().as_secs_f64() * 1000.0,
+            returned_count = hits.len(),
+            "vector query completed"
+        );
         Ok(hits)
     }
 

@@ -2,6 +2,22 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #33 实现提交 CI
+
+[run 38122489432](https://github.com/TheLudlows/Origence/actions/runs/38122489432) 对实现 head 59854587de27530c48cf858a13cad261f1d58ec1 成功，实际合并预览 checkout 58bd52f。fast-check：轻量 lib 30/local 86，Python 工具 43 passed / 1 skipped（共 44），既有 evals 9 passed。Linux 默认 lib 32/local 110、身份回归 8、严格 Clippy、build、HTTP smoke、处理中强退恢复和关键词评测全部通过。Windows/macOS/container 按 main-only 策略跳过。[精确记录](evidence/2026-10-11-vector-compaction-pr33-ci.json)。本段追记仅改文档，不冒充后续文档提交或主干合并的 CI。
+
+## 2026-10-11 向量碎片定位与显式停机维护
+
+基于 main 6a609d3。[报告](../evals/aml/vector-perf-v1/README.md)、[工件清单](../evals/aml/vector-perf-v1/manifest.json)。只新增聚合后端计时、显式离线压实库 API / CLI，以及维护锁非重入保护；精确检索、权限、排序、原文、parser、Worker 和现有取消/隔离保证不变。新增命令逐表提交、保留旧版本，无跨表原子性、硬超时或硬内存保证；[运维边界](OPERATIONS.md#显式停机压实向量文件)。未执行用户业务库维护。
+
+- Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（11.92 秒）；cargo test --offline --locked --lib -j 2 为 32 passed（1.17 秒）；cargo test --offline --locked --test local -j 2 为 110 passed（27.07 秒）。覆盖跨连接更新/删除可见性、同/跨进程维护互斥、dry-run、重复维护、旧版本可读、全表预检查拒绝未知表。未带 --offline 的 CLI 正确拒绝。
+- Python 3.13.11，AML_TEST_BINARY 已设置：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 44 passed / 0 skipped（4.754 秒）。
+- 列投影候选：同库基线/候选/基线复测共 24 次真实 Search，结果全等；HTTP p50 2203/2230/2215 ms，无收益，撤回候选并保存两份源码快照。
+- 原生布局对照：1075 行、559 → 1 碎片，Compact 372.97 ms；压实前/后/重开共 24 次查询全部 ID/source/score/顺序一致，约 2.02–2.09 秒降到 0.41–0.44 秒。这是合成向量存储测量。
+- 最终真实 CLI / HTTP 对照：本地 BGE-M3，公开 46 批/502 消息加 512 外部批次，基线/dry-run/压实/重开各 8 次，共 32 次。CLI 活跃宿主拒绝通过；停机压实 2272.10 ms，558 → 1 碎片、1087 行不变；HTTP p50 2247.79 / 2215.76 / 644.13 / 623.94 ms，p95 2348.88 / 3985.38 / 1848.29 / 1779.17 ms。nearest-rank，包含首请求；完整响应 data、顺序、字节和 scope 校验通过。三个实验临时库均清理，无聊天调用。
+- 限制：单个已观察历史、重复查询、debug 构建，未重跑完整 32 用户库；无维护期间强退/断电/磁盘不足、多 profile 压力或生产 SLO 验收。不能把局部改善当全库成绩或质量提升。
+- 上一 main 6a609d3 的 [run 38117103321](https://github.com/TheLudlows/Origence/actions/runs/38117103321) 已成功；不是本次实现提交的 CI，新 PR 验证另记。
+
 ## 2026-10-11 时间与裁判消融、Search 分段定位
 
 基于 main 737e209；[报告](../evals/aml/temporal-v1/README.md)、[冻结](../evals/aml/temporal-v1/freeze.json)、[输入/引用审计](../evals/aml/temporal-v1/audit.json)。10 道已观察时间题三臂与 12 个支持校准反例双臂，共 54 次调用 / 53,719 个供应商报告 token，无执行错误、无重试。新日期旁注不改变证据字节；新支持分类仍存在错误放行。旧 supported 字段与新支持分类器分别为 8/12、11/12，与旧 correct AND supported 联合判断不可混为同一指标；旧联合判断这批负例为 0 错误放行。所有新结论只作诊断，不改历史分数或宣称质量验收。

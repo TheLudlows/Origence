@@ -1,0 +1,127 @@
+{
+  "schema": "aml-vector-performance-manifest-v1",
+  "base": "6a609d3aae52f03680d16517d15aea528c964d3a",
+  "created_at_utc": "2026-10-11T07:44:34.068Z",
+  "commands": [
+    "python tools/aml_vector_profile.py --binary target/vector-profile/baseline.exe --candidate target/vector-profile/candidate.exe --background-batches 512 --report evals/aml/vector-perf-v1/run.json",
+    "cargo run --offline --locked --example vector_layout_probe -- evals/aml/vector-perf-v1/layout.json",
+    "python tools/aml_compaction_profile.py --binary target/vector-profile/maintenance.exe --background-batches 512 --report evals/aml/vector-perf-v1/maintenance.json"
+  ],
+  "files": [
+    {
+      "path": "evals/aml/vector-perf-v1/audit.json",
+      "sha256": "c28bfb65c48edd74db3963f6eebfe08f91607779bc87ad7dee1f024049ec2755"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/baseline-lancedb.rs.gz",
+      "sha256": "e3ea779af4ee514b8739394a5fc7b3fa8d4d11d92adffbb4764c0f3be76bb942"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/candidate-plan.json",
+      "sha256": "b8b0dda2ce3b4e8c2b329d869aa48bc430aa98de2947880da630f3ea60dcbcec"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/layout-plan.json",
+      "sha256": "7e7c4ceb106b8d033bbae0782ee1aeba13febe5bb6de52c80cd815710663c448"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/layout.json",
+      "sha256": "0a226574df8858bccaaf14aaf51d3537da2dbfbd5a31574046730d3f457095a7"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/maintenance-plan.json",
+      "sha256": "9c2461ff9387c246d565bf0953d9702b76b8e8a0f8aa50093cd73c79c95d24ba"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/maintenance-summary.json",
+      "sha256": "15efb4fdaa5b88b9b2c72de567b0147b4a0c98b352068aadc2316b7c60da0e84"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/maintenance.json",
+      "sha256": "2bbdccd131717e12132137fb82dcee439efc873f4a9d685cdf0a8da332921ac8"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/plan.json",
+      "sha256": "9a332980c0def0a833eadfaeb18eb0501f0a99cb7fb162e0cbd18a34727c83bd"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/projection-lancedb.rs.gz",
+      "sha256": "c8a47e1dc2bf9901de82fc3a913044275fda4415460dfaaab3e684241f1ad04f"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/README.md",
+      "sha256": "994ef803ec10604d1970ffac46cccf815ec67681ec8e4c9f3e4d668bbf09e6bd"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/run.json",
+      "sha256": "56163a15392a3033e6204a8ff3444961ffad8d139cc245e0f2be6b114f3a99fa"
+    },
+    {
+      "path": "evals/aml/vector-perf-v1/summary.json",
+      "sha256": "9fa8b395bad6c4169185fd034031904a337734e9de374db792f0a85e76165748"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "4fa21c9d7149aa3f563397f355824031ab56464e90efe2915ae0c994d88ca96a"
+    },
+    {
+      "path": "src/storage/lancedb.rs",
+      "sha256": "080b233400fa1609c0c547f3de6608a9f6cf3f0387db31e6263d16988c145ea9"
+    },
+    {
+      "path": "src/storage/maintenance.rs",
+      "sha256": "f8b6152485adfa3eda3a83d7b2ccfa37542e7dd5426075d62199ac5f69744261"
+    },
+    {
+      "path": "src/storage/mod.rs",
+      "sha256": "2eb099829fbed4450e380fc75ea0184c2ebec4485553b69b601ff3260e5d660b"
+    },
+    {
+      "path": "src/storage/sqlite.rs",
+      "sha256": "6c8c5dd30f9e7589bb8e3d06fe7361ac54c489b53fc62acf43b79be7d90d3030"
+    },
+    {
+      "path": "src/retrieval.rs",
+      "sha256": "9d2aed14d7f1f0b34cca6a1ccf76815d4d821d321c982e12003cbdb5f9fa619c"
+    },
+    {
+      "path": "tests/lancedb_store.rs",
+      "sha256": "288c58a774be2fe75d4cb72e30267450bcc68e46d4bcca31287ab1587a1f26eb"
+    },
+    {
+      "path": "tests/sqlite_lock.rs",
+      "sha256": "f9c2efb493f8c5171e7032e4bcf871dc5c8765628a4be3f777305e738a6c1fa9"
+    },
+    {
+      "path": "examples/vector_layout_probe.rs",
+      "sha256": "7a85247a5051f5442211b8c9b2fb26b9ccc9d143cac921221371531c2062a9b9"
+    },
+    {
+      "path": "tools/aml_vector_profile.py",
+      "sha256": "693b37fbf7fe3586ebaadd17905bbe44c543dde1d0ebf145f981603fc50114ac"
+    },
+    {
+      "path": "tools/aml_compaction_profile.py",
+      "sha256": "b8e83a8e6aa9a04a338165f25932a79dd73584a782351d4d18500f811c70d754"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "cda6a8e7d73f216eeb65026c273f02cd0189021f49a39249470572d57400bc08"
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "e06c4b924ab91de36d611e4a18f1d7897fd304e680f06db91a80354a444ae37e"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "sha256": "e879701472a698533f43f54989bbf5f3101eb0503472159d32633f3bb8a13fdf"
+    }
+  ],
+  "notes": [
+    "Report destinations must not exist on rerun; use new paths.",
+    "Projection candidate rejected. Two compressed Rust snapshots retain baseline and candidate implementation.",
+    "Final production source differs from baseline snapshot only by schema_for visibility required by maintenance; the projection was reverted.",
+    "No dependency replacement or Cargo.lock change. No chat calls.",
+    "Projection experiment requires the candidate path to be absent initially. Start the runner on the archived baseline, then build the archived projection source into the candidate path while the runner waits after baseline; do not substitute the final maintenance binary as the candidate."
+  ]
+}

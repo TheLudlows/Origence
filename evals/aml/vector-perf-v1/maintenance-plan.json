@@ -1,0 +1,15 @@
+{
+  "created_at_utc": "2026-10-11T07:34:37.324Z",
+  "binary_sha256": "fb88aa0547afa8addb5ec7ba2a9bc71f227d661feb12f8e5fc8aa36b6f9840e3",
+  "runner_sha256": "b8e83a8e6aa9a04a338165f25932a79dd73584a782351d4d18500f811c70d754",
+  "library_sha256": "f8b6152485adfa3eda3a83d7b2ccfa37542e7dd5426075d62199ac5f69744261",
+  "selection": "same largest observed public history, 46 batches/502 messages, plus512 unrelated batches",
+  "phases": [
+    "baseline",
+    "dry_run",
+    "compacted",
+    "reopened"
+  ],
+  "queries_per_phase": 8,
+  "contract": "CLI must reject active host; after stopping host dry-run then compact via public library; full HTTP payload/order identical in all phases, original bytes and scope valid; temporary tree removed. No paid chat calls."
+}

@@ -9,7 +9,7 @@ use origence::storage::{StorageError, sqlite::SqliteStore};
 #[tokio::test]
 async fn reopen_in_process_is_reentrant() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("oc.db");
+    let path = dir.path().join("context.db");
 
     let _first = SqliteStore::open(&path).await.unwrap();
     // A second open in the same process shares the existing holder instead of
@@ -20,7 +20,7 @@ async fn reopen_in_process_is_reentrant() {
 #[tokio::test]
 async fn lock_is_exclusive_across_processes() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("oc.db");
+    let path = dir.path().join("context.db");
     let ready = dir.path().join("ready");
 
     // Spawn a helper that opens the store and signals once it holds the lock.
@@ -59,6 +59,12 @@ async fn lock_is_exclusive_across_processes() {
 
     assert!(matches!(
         SqliteStore::upgrade_memory_identity(&path, false).await,
+        Err(StorageError::Conflict(_))
+    ));
+
+    #[cfg(feature = "local-vector")]
+    assert!(matches!(
+        origence::storage::maintenance::compact_vectors(dir.path(), true).await,
         Err(StorageError::Conflict(_))
     ));
 

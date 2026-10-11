@@ -54,6 +54,11 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Compact existing local vector files; requires a stopped host. Never prunes history.
+    VectorCompact {
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Read-only stdio MCP; forwards to the running host by default.
     Mcp,
     Search {
@@ -101,6 +106,16 @@ async fn main() -> anyhow::Result<()> {
             json!({"listening":listener.local_addr()?.to_string()})
         );
         return host::serve(service, listener, host::shutdown_signal()).await;
+    }
+    if let Command::VectorCompact { dry_run } = &cli.command {
+        anyhow::ensure!(
+            cli.offline,
+            "vector-compact requires --offline and a stopped host"
+        );
+        let report =
+            origence::storage::maintenance::compact_vectors(&cli.data_dir, *dry_run).await?;
+        println!("{}", serde_json::to_string(&report)?);
+        return Ok(());
     }
     if let Command::MemoryIdentityUpgrade { dry_run } = &cli.command {
         anyhow::ensure!(

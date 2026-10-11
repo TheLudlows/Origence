@@ -1,0 +1,8 @@
+{
+  "created_at_utc": "2026-10-11T07:25:28.134Z",
+  "source_sha256": "7a85247a5051f5442211b8c9b2fb26b9ccc9d143cac921221371531c2062a9b9",
+  "fixture": "563 foreground vectors in batches of 12 plus 512 foreign single-row batches across four workspaces; dimension1024; foreign vectors are closer than permitted candidates",
+  "operation": "Only LanceDB OptimizeAction::Compact, target4096 rows per fragment, num_threads2. No All, no Prune, no production path accepted.",
+  "checks": "1075 rows unchanged; 8 query vectors/top-k configurations identical in id/source/score/order after compaction and reopen; temp directory removed.",
+  "limitation": "Synthetic native store benchmark, no embedding or public source semantics; compaction phase not reversible layout A/B/A, pre/post result equality is checked."
+}
