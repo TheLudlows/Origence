@@ -1,0 +1,194 @@
+"""Offline diagnosis of frozen AML experiments; never a production retrieval policy."""
+import argparse
+from collections import Counter
+import gzip
+import hashlib
+import json
+from pathlib import Path
+import time
+from aml_answer import ANSWER, assess, validate_answer
+from aml_drill import DrillError
+from aml_quality import decode_hits, digest, source_key, stream_digest
+
+ROOT = Path(__file__).resolve().parents[1]
+ARMS = ("vector", "rerank_only", "expanded_rerank")
+DATASETS = {
+    "development": ("v2", "development", "development.json.gz",
+                    ("development-answer.json.gz", "development-rerank-answer.json.gz")),
+    "new_topics": ("v3", "unseen_test", "new-topics.json.gz", ("new-topics-answer.json.gz",)),
+}
+
+
+def read_json(path):
+    opener = gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def payload_digest(path):
+    """Answer inputs were raw JSON before lossless gzip archival."""
+    if str(path).endswith(".gz"):
+        with gzip.open(path, "rb") as stream:
+            return stream_digest(stream)
+    return digest(path)
+
+
+def indexed(rows, expected):
+    ids = [row["id"] for row in rows]
+    if len(ids) != len(set(ids)) or set(ids) != set(expected):
+        raise DrillError("incomplete_or_duplicate_questions")
+    return {row["id"]: row for row in rows}
+
+
+def check_artifact(artifact, corpus_hash, input_hash=None, references_hash=None):
+    if artifact.get("status") != "completed" or artifact.get("corpus_sha256") != corpus_hash:
+        raise DrillError("invalid_diagnostic_artifact")
+    if input_hash is not None and artifact.get("input_sha256") != input_hash:
+        raise DrillError("answer_retrieval_mismatch")
+    if references_hash is not None and artifact.get("references_sha256") != references_hash:
+        raise DrillError("answer_reference_mismatch")
+
+
+def load_dataset(dataset):
+    version, split, retrieval_name, answer_names = DATASETS[dataset]
+    corpus_path = ROOT / f"evals/aml/{version}/corpus.json"
+    refs_path = ROOT / "evals/aml/experiments/answer-references.json"
+    directory = ROOT / "evals/aml/experiments/results"
+    retrieval_path = directory / retrieval_name
+    corpus, references = read_json(corpus_path), read_json(refs_path)[split]
+    questions = [q for q in corpus["questions"] if q["split"] == split]
+    expected = {q["id"] for q in questions}
+    if set(references) != expected:
+        raise DrillError("reference_questions_mismatch")
+    retrieval = read_json(retrieval_path)
+    check_artifact(retrieval, digest(corpus_path))
+    rows = indexed(retrieval["queries"], expected)
+    answers = {ident: {} for ident in expected}
+    paths = [corpus_path, refs_path, retrieval_path]
+    for name in answer_names:
+        path = directory / name
+        artifact = read_json(path)
+        check_artifact(artifact, digest(corpus_path), payload_digest(retrieval_path), digest(refs_path))
+        if artifact.get("answer_prompt_sha256") != hashlib.sha256(ANSWER.encode()).hexdigest():
+            raise DrillError("answer_prompt_mismatch")
+        for ident, row in indexed(artifact["queries"], expected).items():
+            if answers[ident].keys() & row["arms"].keys():
+                raise DrillError("duplicate_answer_arm")
+            answers[ident].update(row["arms"])
+        paths.append(path)
+    for q in questions:
+        if set(answers[q["id"]]) != set(ARMS) or bool(q["required"]) != bool(references[q["id"]]):
+            raise DrillError("incomplete_answer_arms_or_labels")
+        # Validate gold against the actual corpus without trusting report metrics.
+        decode_hits(oracle_hits(q, corpus), corpus["batches"], q["user_id"])
+    return corpus, questions, references, rows, answers, {str(p.relative_to(ROOT)).replace("\\", "/"): digest(p) for p in paths}
+
+
+def oracle_hits(question, corpus):
+    """Diagnostic-only gold input, with synthetic IDs; never exported as Search hits."""
+    known = {(b["session_id"], i): m for b in corpus["batches"] if b["user_id"] == question["user_id"]
+             for i, m in enumerate(b["messages"])}
+    hits = []
+    seen = set()
+    for required in question["required"]:
+        key = source_key(required)
+        if key not in known or key in seen:
+            raise DrillError("invalid_gold_source")
+        seen.add(key)
+        message = known[key]
+        metadata = {"session_id": key[0], "message_index": key[1], "role": message["role"], "timestamp": message.get("timestamp")}
+        hits.append({"id": f"diagnostic-only:{key[0]}:{key[1]}",
+                     "content": "Source metadata: " + json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n" + message["content"]})
+    return hits
+
+
+def classify(required, seed, pool, selected, metrics):
+    gold = set(required)
+    if not gold:
+        return {"first_evidence_loss": None,
+                "answer_outcome": "correct_abstention" if metrics["abstained"] else "unsupported_answer"}
+    loss = ("retrieval_top100" if not gold <= set(seed) else
+            "candidate_cutoff" if not gold <= set(pool) else
+            "selection_or_budget" if not gold <= set(selected) else None)
+    outcome = ("supported_proxy_success" if metrics["supported_proxy_success"] else
+               "abstained" if metrics["abstained"] else
+               "reference_mismatch" if not metrics["reference_match"] else "citation_incomplete")
+    return {"first_evidence_loss": loss, "answer_outcome": outcome,
+            "reader_proxy_failure_with_complete_evidence": loss is None and not metrics["supported_proxy_success"]}
+
+
+def diagnose_question(q, corpus, references, row, answers):
+    required = [source_key(x) for x in q["required"]]
+    seed = decode_hits(row["seed"], corpus["batches"], q["user_id"])
+    output = {"id": q["id"], "user_id": q["user_id"], "category": q["category"], "required": q["required"],
+              "required_seed_ranks": [seed.index(key) + 1 if key in seed else None for key in required], "arms": {}}
+    for arm in ARMS:
+        selected_hits = row["arms"][arm]
+        selected = decode_hits(selected_hits, corpus["batches"], q["user_id"])
+        # Expanded arm has additional searches; use their complete union as its retrieval pool.
+        if arm == "expanded_rerank":
+            pool = decode_hits(row["expanded_candidates"], corpus["batches"], q["user_id"])
+            retrieved = seed[:40] + [key for response in row["expansion_responses"]
+                                     for key in decode_hits(response["hits"], corpus["batches"], q["user_id"])]
+        else:
+            pool = seed if arm == "vector" else seed[:40]
+            retrieved = seed
+        if not set(selected) <= set(pool):
+            raise DrillError("selection_outside_candidate_pool")
+        answer = answers[arm]
+        cited = validate_answer(answer["output"], selected_hits)
+        if answer["cited_ids"] != [hit["id"] for hit in cited]:
+            raise DrillError("answer_citation_mismatch")
+        cited_keys = decode_hits(cited, corpus["batches"], q["user_id"])
+        metrics = assess(answer["output"], references[q["id"]], required, cited_keys)
+        if metrics != answer["metrics"]:
+            raise DrillError("saved_answer_metrics_mismatch")
+        classification = classify(required, retrieved, pool, selected, metrics)
+        if arm == "expanded_rerank" and classification["first_evidence_loss"] == "retrieval_top100":
+            classification["first_evidence_loss"] = "expanded_retrieval_union"
+        # Stages are observations, not a causal proof that this is the only error.
+        output["arms"][arm] = {**classification, "metrics": metrics,
+            "complete_selected_evidence": set(required) <= set(selected) if required else None,
+            "missing_selected": [list(key) for key in required if key not in selected],
+            "selected_keys": [list(key) for key in selected], "answer": answer["output"]}
+    return output
+
+
+def diagnose(dataset):
+    corpus, questions, refs, rows, answers, hashes = load_dataset(dataset)
+    diagnosed = [diagnose_question(q, corpus, refs, rows[q["id"]], answers[q["id"]]) for q in questions]
+    summary = {}
+    for arm in ARMS:
+        can = [r["arms"][arm] for r in diagnosed if r["required"]]
+        no = [r["arms"][arm] for r in diagnosed if not r["required"]]
+        summary[arm] = {"answerable": len(can), "no_answer": len(no),
+            "first_evidence_loss": dict(Counter(r["first_evidence_loss"] or "none" for r in can)),
+            "answer_outcomes": dict(Counter(r["answer_outcome"] for r in can + no)),
+            "reader_proxy_failures_with_complete_evidence": sum(r["reader_proxy_failure_with_complete_evidence"] for r in can)}
+    return {"inputs": hashes, "queries": diagnosed, "summary": summary}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--report", required=True)
+    args = parser.parse_args()
+    report = {"schema": "aml-offline-diagnosis-v1", "status": "running", "runner_sha256": digest(__file__),
+              "started_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "limitations": ["observed pipeline losses, not causal proof or full semantic accuracy",
+                              "frozen old synthetic data; not unseen validation", "no model calls or production behavior changes"]}
+    with open(args.report, "x", encoding="utf-8") as stream:
+        try:
+            report["datasets"] = {dataset: diagnose(dataset) for dataset in DATASETS}
+            report["status"] = "completed"
+        except DrillError as error:
+            report.update(status="failed", error=str(error))
+        except Exception:
+            report.update(status="failed", error="diagnosis_failed")
+        json.dump(report, stream, ensure_ascii=False, indent=2)
+        stream.write("\n")
+    print(json.dumps({"status": report["status"], "error": report.get("error")}))
+    return 0 if report["status"] == "completed" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

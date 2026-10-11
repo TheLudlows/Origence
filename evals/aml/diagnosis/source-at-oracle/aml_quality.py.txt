@@ -9,17 +9,9 @@ import time
 from aml_drill import DrillError, Host, percentiles, preflight
 
 
-def stream_digest(stream):
-    """Bounded-memory SHA-256, also supported by local GPU Python 3.10."""
-    value = hashlib.sha256()
-    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-        value.update(chunk)
-    return value.hexdigest()
-
-
 def digest(path):
     with open(path, "rb") as stream:
-        return stream_digest(stream)
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def source_key(value):

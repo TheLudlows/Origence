@@ -1,0 +1,23 @@
+{
+  "reason": "Existing GPU environment uses Python 3.10; hashlib.file_digest starts at 3.11. Replaced it in shared digest and compressed payload digest with streaming SHA-256. Hash bytes, model prompts, data and scoring unchanged.",
+  "initial_rerank_failure": {
+    "stage": "startup_before_report_open",
+    "error_type": "AttributeError",
+    "error_code": "hashlib_file_digest_unavailable",
+    "python": "3.10.20"
+  },
+  "oracle_source_snapshots": [
+    "source-at-oracle/aml_diagnose.py.txt",
+    "source-at-oracle/aml_quality.py.txt"
+  ],
+  "files": {
+    "tools/aml_diagnose.py": "53d1e6ce814f921c394109ad452bde31baf7794b787891592b876d4a1549e1c5",
+    "tools/aml_quality.py": "c7d42fae868c66a27ecc37a7414776e958bee1d0ae504d2db91abc80215395f8"
+  },
+  "reranker_import_failure": {
+    "error_type": "TypeError",
+    "stage": "transformers import via sklearn to scipy",
+    "cause": "Existing inherited SciPy interpolation extension and qhull have incompatible C signatures.",
+    "resolution": "Install scipy 1.15.3 and scikit-learn 1.6.1 in project-only venv; do not alter base environment."
+  }
+}

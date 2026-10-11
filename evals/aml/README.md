@@ -32,3 +32,5 @@ python -m unittest discover -s tools -p 'test_aml_quality.py' -v
 ## 查询扩展、重排和 Answer 实验
 
 [受限策略对照](experiments/results/README.md)比较原文向量、只重排、扩展融合和扩展重排，并单独测引用式答题与拒答。当前仅为工具层实验，尚未进入业务 API。
+
+下一轮依据：[失败归因、正确证据与专用重排回归](diagnosis/README.md)、[尚未运行的 v4 成对反例](v4/README.md)。历史 v2/v3 已被观察，仅作回归。

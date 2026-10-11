@@ -1,0 +1,48 @@
+{
+  "schema": "aml-pr-ci-v1",
+  "run_id": 38110406726,
+  "url": "https://github.com/TheLudlows/Origence/actions/runs/38110406726",
+  "source_head": "c7bc20192bd7d4b8839ba6954f57688376f80aa9",
+  "checkout": "6007c93660b599973b440042f91ac3df4ad7e7a5",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "fast-check",
+      "id": 114384592975,
+      "conclusion": "success",
+      "evidence": [
+        "2026-10-11T04:04:51.2094837Z test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s",
+        "2026-10-11T04:04:57.4832260Z test result: ok. 86 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.09s",
+        "2026-10-11T04:04:58.4534942Z Ran 34 tests in 0.654s",
+        "2026-10-11T04:04:58.4535227Z OK (skipped=1)",
+        "2026-10-11T04:04:58.9631838Z Ran 9 tests in 0.422s"
+      ]
+    },
+    {
+      "name": "linux-native",
+      "id": 114384593080,
+      "conclusion": "success",
+      "evidence": [
+        "2026-10-11T04:05:27.4700231Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s",
+        "2026-10-11T04:05:55.4820731Z test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s",
+        "2026-10-11T04:05:55.4860660Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T04:06:23.9381703Z test result: ok. 108 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 28.44s",
+        "2026-10-11T04:06:24.2576768Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "2026-10-11T04:06:30.5986179Z OK"
+      ]
+    },
+    {
+      "name": "windows",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "macos",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "container",
+      "conclusion": "skipped"
+    }
+  ],
+  "limits": "PR CI; main-only jobs skipped. Not a main all-platform or model-quality result."
+}

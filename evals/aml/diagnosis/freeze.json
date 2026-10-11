@@ -1,0 +1,22 @@
+{
+  "schema": "aml-diagnosis-freeze-v1",
+  "frozen_at_utc": "2026-10-11T03:41:59.584Z",
+  "purpose": "Gold-evidence diagnosis on already observed v2/v3; not unseen evaluation",
+  "expected_answerable": 28,
+  "excluded_no_answer": 7,
+  "chat_model": "qwen3.8-flash",
+  "temperature": 0,
+  "enable_thinking": false,
+  "max_calls": 60,
+  "max_output_tokens": 2048,
+  "retries": 0,
+  "files": {
+    "tools/aml_diagnose.py": "6bc59d1c3033e67a84d46f9dbec1494f44e540dc86aa94f64426bbbd7d38dc6e",
+    "tools/aml_oracle.py": "f52dd83a2e92f086a970f109fb078d9dc0d3319261a8af152327426a17323d94",
+    "tools/aml_answer.py": "928db36e5e95baf4375d444a428d43fde09c3038803712beb814bc8833d92fb4",
+    "tools/aml_experiment.py": "000b10947d90c5406b9577c09e32f165be8b5ead5b6cb9bb62b5e9367ee7ce2a",
+    "evals/aml/v2/corpus.json": "2fed7f54cf40cd570ddb15092c8496e92680bcb12b78cb2fa21f11bbcd279afb",
+    "evals/aml/v3/corpus.json": "f7de69b416ecd9d56808ebf310de6d9165d0f2d91faf5eef7415852604294db9",
+    "evals/aml/experiments/answer-references.json": "92706c0ef8fa94f207e8d080eaf0adb7826602189913192010b297ce70354647"
+  }
+}
