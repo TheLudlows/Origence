@@ -1,5 +1,5 @@
 # SQLite/LanceDB require a C/C++ compiler and protoc at build time.
-FROM rust:1.98.0-bookworm AS build
+FROM rust:1.98.0-bookworm AS build-inputs
 RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN test -f /usr/include/google/protobuf/empty.proto \
@@ -8,6 +8,11 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY tests ./tests
+COPY examples ./examples
+# Validate every declared target against the actual Docker build context.
+RUN cargo metadata --no-deps --format-version 1 > /tmp/cargo-metadata.json
+
+FROM build-inputs AS build
 # Bound Cargo compilation to control memory use.
 ARG BUILD_JOBS=1
 RUN cargo build --release --locked -j ${BUILD_JOBS}

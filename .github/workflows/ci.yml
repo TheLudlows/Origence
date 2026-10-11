@@ -25,6 +25,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Docker build context contains all Cargo targets
+        run: docker build --target build-inputs .
       - run: cargo fmt --all -- --check
       # Catch source-level Clippy warnings before the expensive native engines.
       - name: Lightweight Clippy (no native backends)

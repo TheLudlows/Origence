@@ -2,6 +2,12 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #33 主干 CI 与容器输入修复
+
+main cc4ee554a9cf097e1ddea49a8330f9db39593b6d 的 [run 38122931813](https://github.com/TheLudlows/Origence/actions/runs/38122931813) 中 fast-check、Linux、Windows、macOS 成功，container 失败，不能称主干五项全绿。失败 [job 114421214131](https://github.com/TheLudlows/Origence/actions/runs/38122931813/job/114421214131) 在 Cargo 解析阶段报告缺少 examples/vector_layout_probe.rs：Dockerfile 未 COPY examples，且 .dockerignore 未放行它。
+
+修复两处构建输入，并将既有构建准备拆为 build-inputs stage，以 cargo metadata --no-deps 检查真实 Docker 上下文中的所有声明目标。fast-check 在 PR 阶段执行该轻量 stage，提前捕获这类缺文件；最终镜像仍只复制 origence 二进制。没有改运行时或依赖。完整 release/container smoke 的结果后续单独核对，不以 metadata 检查代替编译验收。
+
 ## 2026-10-11 PR #33 实现提交 CI
 
 [run 38122489432](https://github.com/TheLudlows/Origence/actions/runs/38122489432) 对实现 head 59854587de27530c48cf858a13cad261f1d58ec1 成功，实际合并预览 checkout 58bd52f。fast-check：轻量 lib 30/local 86，Python 工具 43 passed / 1 skipped（共 44），既有 evals 9 passed。Linux 默认 lib 32/local 110、身份回归 8、严格 Clippy、build、HTTP smoke、处理中强退恢复和关键词评测全部通过。Windows/macOS/container 按 main-only 策略跳过。[精确记录](evidence/2026-10-11-vector-compaction-pr33-ci.json)。本段追记仅改文档，不冒充后续文档提交或主干合并的 CI。

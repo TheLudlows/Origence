@@ -5,3 +5,5 @@
 !src/**
 !tests/
 !tests/**
+!examples/
+!examples/**
