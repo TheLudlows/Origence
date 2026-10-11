@@ -2,6 +2,12 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 多 profile 重复维护回归
+
+在 cc4ee55 生产实现上新增三维度 profile、四个 tenant/workspace scope、两代数据的三轮更新/删除/追加/压实回归；192 行，288 次库查询，维护前独立预期检查与维护后完整 NativeHit 等值检查通过。生产 Rust、依赖和 Cargo.lock 未改。完整公开库 HTTP 实验与复核结果见[本轮报告](../evals/aml/maintenance-scale-v1/README.md)，与确定性库测试分别判断。
+
+Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（8.41 秒）；cargo test --offline --locked --lib -j 2 为 32 passed（1.19 秒）；cargo test --offline --locked --test local -j 2 为 111 passed（137.63 秒）。新增测试单独为 1 passed / 110 filtered（129.83 秒）。Python 3.13.11 设置 AML_TEST_BINARY：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 49 passed / 0 skipped（4.727 秒）。没有压实中断、断电或生产 SLO 验收。
+
 ## 2026-10-11 PR #33 主干 CI 与容器输入修复
 
 main cc4ee554a9cf097e1ddea49a8330f9db39593b6d 的 [run 38122931813](https://github.com/TheLudlows/Origence/actions/runs/38122931813) 中 fast-check、Linux、Windows、macOS 成功，container 失败，不能称主干五项全绿。失败 [job 114421214131](https://github.com/TheLudlows/Origence/actions/runs/38122931813/job/114421214131) 在 Cargo 解析阶段报告缺少 examples/vector_layout_probe.rs：Dockerfile 未 COPY examples，且 .dockerignore 未放行它。

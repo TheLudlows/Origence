@@ -1,0 +1,15 @@
+{
+  "started_at_utc": "2026-10-11T11:22:49Z",
+  "status": "passed",
+  "data_kind": "self_generated_synthetic",
+  "schema": "aml-drill-v1",
+  "configuration": {
+    "model": "bge-m3",
+    "dimension": 1024,
+    "endpoint_sha256": "9b514b1a65f6ebfaa4da53a116ea003831b044dc32a989733eace74554ef5b0c",
+    "extraction": null,
+    "summaries": false,
+    "graph": false,
+    "preflight": "passed"
+  }
+}
