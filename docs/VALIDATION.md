@@ -2,6 +2,10 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #33 实现提交 CI
+
+[run 38122489432](https://github.com/TheLudlows/Origence/actions/runs/38122489432) 对实现 head 59854587de27530c48cf858a13cad261f1d58ec1 成功，实际合并预览 checkout 58bd52f。fast-check：轻量 lib 30/local 86，Python 工具 43 passed / 1 skipped（共 44），既有 evals 9 passed。Linux 默认 lib 32/local 110、身份回归 8、严格 Clippy、build、HTTP smoke、处理中强退恢复和关键词评测全部通过。Windows/macOS/container 按 main-only 策略跳过。[精确记录](evidence/2026-10-11-vector-compaction-pr33-ci.json)。本段追记仅改文档，不冒充后续文档提交或主干合并的 CI。
+
 ## 2026-10-11 向量碎片定位与显式停机维护
 
 基于 main 6a609d3。[报告](../evals/aml/vector-perf-v1/README.md)、[工件清单](../evals/aml/vector-perf-v1/manifest.json)。只新增聚合后端计时、显式离线压实库 API / CLI，以及维护锁非重入保护；精确检索、权限、排序、原文、parser、Worker 和现有取消/隔离保证不变。新增命令逐表提交、保留旧版本，无跨表原子性、硬超时或硬内存保证；[运维边界](OPERATIONS.md#显式停机压实向量文件)。未执行用户业务库维护。
