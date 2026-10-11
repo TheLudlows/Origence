@@ -2,6 +2,14 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 AML 长消息来源与同预算评测
+
+基于 main `072ad2c`。Search 只增加已有 locator 的 parser/source_path/byte_basis/byte_start/end/message_count 标注；原文、分块算法、稳定 ID、解析器版本、Worker、超时/取消/隔离保证不变。新严格评测解码器检查原消息 UTF-8 半开区间、用户 scope 和元数据；片段命中不当作完整消息覆盖。
+
+- Rust 1.98.0：`cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过，8.27 秒；`cargo test --offline --locked --lib -j 2` 为 31 passed，1.18 秒；`cargo test --offline --locked --test local aml_ -j 2` 为 10 passed / 98 filtered，17.71 秒。真实 HTTP Add/Search 回归覆盖跨块中文、emoji、组合字符及范围连续性。
+- Python 3.13.11 设置 AML_TEST_BINARY：`python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py` 为 40 passed / 0 skipped，7.583 秒，含实际强退恢复。新增范围篡改、UTF-8 内部偏移、缺中间块、用户隔离、前缀预算、公开标签隔离和共享历史分组回归。初次测试夹具仅有两块，无法构造“缺中间块”；扩大夹具到三块以上后通过，不影响实现/数据。
+- 受测宿主已 build，二进制与执行器/输入哈希写入[执行冻结](../evals/aml/budget-v1/freeze.json)。固定 32 道 v4 及 32 道公开题，不根据结果改变题目、预算或提示词；运行结果见[本轮报告](../evals/aml/budget-v1/README.md)。本节写入时评测仍在执行，暂无最终质量或新 CI 结论。
+
 ## 2026-10-11 PR #30 远端 CI
 
 [run 38110406726](https://github.com/TheLudlows/Origence/actions/runs/38110406726) 对实现 head `c7bc20192bd7d4b8839ba6954f57688376f80aa9` 成功，实际 checkout 为合并预览 `6007c93660b599973b440042f91ac3df4ad7e7a5`。fast-check 轻量 lib 30/local 86、fmt/Clippy、Python 工具 33 passed/1 skipped、既有 evals 9 passed；Linux 默认 lib 31/local 108、身份回归 8、Clippy/build/HTTP smoke/处理中强退恢复通过。Windows/macOS/container 按 main-only 策略跳过，不能称三平台主干已验收。[精确记录](evidence/2026-10-11-aml-pr30-ci.json)。

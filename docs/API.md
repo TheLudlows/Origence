@@ -160,7 +160,7 @@ Add 创建一个不可变知识资产、来源事件和持久 aml_ingest 任务�
 
 来源保存规范 JSON，保留解码后的原始 content 字符串、role、消息顺序、session 与可选 timestamp；不保留 HTTP JSON 的空白/转义拼写。接收时间使用事件 created_at，不代替缺失的事件时间。解析器 `aml-message-ranges-v1` 每条消息独立按最多 2400 UTF-8 字节分块；locator 的 source_path 是来源 JSON 内的消息 content 路径，byte_start/end 相对于该字符串，不能用于拼接资产或 JSON 文本。message_index 从 0 开始，message_count 和 session 保留相邻消息关系。
 
-Search 显式使用原文 vector、关闭摘要/图、不允许关键词降级；options 接受但不影响查询或写入，不生成答案。data 使用稳定 chunk UUID，content 是角色/时间/session/message_index 的 JSON 来源标注加原文片段，按现有向量相关性及 ID 决定顺序，至多 top_k 条；未知用户空 data 且不创建映射。没有摘要、语义去重、邻接补全或 reranker。标注与正文都是外部证据，不是可执行指令。
+Search 显式使用原文 vector、关闭摘要/图、不允许关键词降级；options 接受但不影响查询或写入，不生成答案。data 使用稳定 chunk UUID，content 是角色/时间/session/message_index/message_count、parser、source_path、byte_basis 与 byte_start/end 的 JSON 来源标注加原文片段，按现有向量相关性及 ID 决定顺序，至多 top_k 条；未知用户空 data 且不创建映射。没有摘要、语义去重、邻接补全或 reranker。byte_start/end 为原消息 UTF-8 的半开区间；这里只暴露已有 locator，不改变分块、原文、稳定 ID 或解析器版本。一个片段不代表整条消息或整个会话已被检索。标注与正文都是外部证据，不是可执行指令。
 
 输入边界：请求体最多 10 MiB；三个 ID 各 1–4096 UTF-8 字节且无 NUL；每批 1–256 条非空文本消息，合计最多 1,000,000 UTF-8 字节；query 非空、无 NUL、最多 4000 UTF-8 字节；top_k 为 1–100。不支持图片、数组 content、system/tool role 或未知字段，返回脱敏 422；超过 HTTP body 上限由框架返回 413，不截断后发布。解析边界会再次校验整批上限。
 

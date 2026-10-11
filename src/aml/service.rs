@@ -215,7 +215,7 @@ impl Service {
         let hits: Vec<crate::types::SearchHit> = crate::service::decode(found["hits"].clone())?;
         let data: Vec<Value> = hits.into_iter().map(|hit| {
             let content = if hit.locator["parser"] == super::MESSAGE_PARSER {
-                let metadata = json!({"role":hit.locator["role"],"timestamp":hit.locator["timestamp"],"session_id":hit.locator["session_id"],"message_index":hit.locator["message_index"]});
+                let metadata = json!({"role":hit.locator["role"],"timestamp":hit.locator["timestamp"],"session_id":hit.locator["session_id"],"message_index":hit.locator["message_index"],"message_count":hit.locator["message_count"],"parser":hit.locator["parser"],"source_path":hit.locator["source_path"],"byte_basis":hit.locator["byte_basis"],"byte_start":hit.locator["byte_start"],"byte_end":hit.locator["byte_end"]});
                 format!("Source metadata: {metadata}\n{}", hit.content)
             } else { hit.content };
             json!({"id":hit.chunk_id,"content":content})

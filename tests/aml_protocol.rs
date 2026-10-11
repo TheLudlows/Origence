@@ -150,7 +150,7 @@ async fn aml_http_add_search_isolation_and_immediate_visibility() {
         &long_id,
         "request:完整",
         "session-one",
-        "Atlas 必须两人审批。🙂",
+        &"Atlas 必须两人审批。🙂 café é\n".repeat(160),
     );
     for input in [
         original.clone(),
@@ -193,15 +193,48 @@ async fn aml_http_add_search_isolation_and_immediate_visibility() {
             .json()
             .await
             .unwrap();
-        assert!(results["data"].as_array().unwrap().iter().any(|x| {
-            x["content"]
-                .as_str()
-                .unwrap()
-                .contains(&input.messages[0].content)
-        }));
+        let mut ranges = Vec::new();
+        for hit in results["data"].as_array().unwrap() {
+            let (header, content) = hit["content"].as_str().unwrap().split_once('\n').unwrap();
+            let metadata: Value =
+                serde_json::from_str(header.strip_prefix("Source metadata: ").unwrap()).unwrap();
+            if metadata["session_id"] != input.session_id {
+                continue;
+            }
+            let index = metadata["message_index"].as_u64().unwrap() as usize;
+            let message = &input.messages[index];
+            let start = metadata["byte_start"].as_u64().unwrap() as usize;
+            let end = metadata["byte_end"].as_u64().unwrap() as usize;
+            assert_eq!(metadata["parser"], aml::MESSAGE_PARSER);
+            assert_eq!(metadata["byte_basis"], "message_content_utf8");
+            assert_eq!(
+                metadata["source_path"],
+                format!("/messages/{index}/content")
+            );
+            assert_eq!(metadata["message_count"], input.messages.len());
+            assert_eq!(metadata["timestamp"], json!(message.timestamp));
+            assert_eq!(metadata["role"], json!(message.role));
+            assert_eq!(content, &message.content[start..end]);
+            if index == 0 {
+                ranges.push((start, end));
+            }
+        }
+        ranges.sort_unstable();
+        let mut cursor = 0;
+        for (start, end) in ranges {
+            assert_eq!(start, cursor);
+            cursor = end;
+        }
+        assert_eq!(cursor, input.messages[0].content.len());
     }
     let found = s.aml_search(&auth, search(&long_id, 100)).await.unwrap();
-    assert_eq!(found["data"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        found["data"].as_array().unwrap().len(),
+        aml::chunks(&serde_json::to_string(&original).unwrap())
+            .unwrap()
+            .len()
+            + 2
+    );
     assert!(!found.to_string().contains("不需要审批"));
     assert!(!found.to_string().contains("never store"));
     assert!(found.to_string().contains("1720000000000"));
