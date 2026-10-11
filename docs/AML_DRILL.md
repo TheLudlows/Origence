@@ -79,3 +79,7 @@ request_id 重试。健康检查分开记录进程、存储/Worker 和模型连�
 
 本地工具的清理范围为自己新建的临时目录及其中的测试备份，不创建外部备份或快照；本机模型服务的
 缓存/日志属于独立保留边界。正式数据的 30 天删除期限及当期规则须在申请时重新核对。
+
+## 带标签的检索质量评测
+
+协议演练之外，运行 `python tools/aml_quality.py --binary target/debug/origence.exe --report target/aml-quality-new.json`，沿用上述模型环境。语料、指标和已运行结果见 [AML 本地质量基线](../evals/aml/README.md)。报告目标必须不存在；只使用内置合成开发数据。
