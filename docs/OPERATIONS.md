@@ -163,6 +163,6 @@ origence --data-dir <已有数据目录> --offline vector-compact
 
 每次只处理一个表，使用两个库级压实任务，目标每片 4096 行。这个目标不是硬内存上限；没有硬超时或硬取消保证。维护需要额外磁盘空间并占用 IO/CPU；保留历史文件意味着它不是磁盘回收或物理擦除。强退/断电中的维护恢复尚未独立验收，不承诺任意断电安全。需要结束维护时应优先等待命令完成，再启动宿主。Worker、上传/解析的取消和关闭保证没有改变。
 
-成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。实测、被拒绝的列投影方案及范围见[向量性能对照](../evals/aml/vector-perf-v1/README.md)。
+成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。[完整库与追加写入对照](../evals/aml/maintenance-scale-v1/README.md)验证再次维护可恢复性能，但不据此设置固定维护周期；多 profile 正确性与单 profile 真实模型性能分别验收。实测、被拒绝的列投影方案及范围见[向量性能对照](../evals/aml/vector-perf-v1/README.md)。
 
 更细的成功查询计时可设置 RUST_LOG=error,origence::search_timing=debug,origence::vector_timing=debug：vector_timing 提供 list_ms/open_ms/prepare_ms/execute_ms/collect_ms/decode_ms/total_ms 和 returned_count。execute 含规划/启动，collect 含流执行与读取，不应把它全部当作物理磁盘等待。日志不含查询、scope 或过滤表达式。

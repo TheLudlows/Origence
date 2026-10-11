@@ -1,0 +1,117 @@
+{
+  "schema": "aml-maintenance-scale-audit-v1",
+  "status": "passed",
+  "queries": 168,
+  "evidence_items": 16800,
+  "percentile_method": "nearest-rank; all rows including cold first request; phases share fixed question order",
+  "phases": {
+    "baseline": {
+      "http_ms": {
+        "n": 32,
+        "p50": 5516.401599998062,
+        "p95": 8026.003599996329,
+        "min": 4301.169300000765,
+        "max": 8092.558199998166
+      },
+      "vector_ms": {
+        "n": 32,
+        "p50": 5252.5509,
+        "p95": 7730.3072,
+        "min": 3905.0988,
+        "max": 7843.2
+      }
+    },
+    "compacted": {
+      "http_ms": {
+        "n": 32,
+        "p50": 714.5098000037251,
+        "p95": 846.7864999984158,
+        "min": 502.0678000000771,
+        "max": 1962.9203000004054
+      },
+      "vector_ms": {
+        "n": 32,
+        "p50": 476.517,
+        "p95": 532.9774,
+        "min": 258.66319999999996,
+        "max": 561.6359
+      }
+    },
+    "reopened": {
+      "http_ms": {
+        "n": 32,
+        "p50": 708.844599997974,
+        "p95": 827.374400003464,
+        "min": 545.7328999982565,
+        "max": 1984.0727000046172
+      },
+      "vector_ms": {
+        "n": 32,
+        "p50": 482.50399999999996,
+        "p95": 520.2797,
+        "min": 278.6894,
+        "max": 565.5439
+      }
+    },
+    "grown": {
+      "http_ms": {
+        "n": 32,
+        "p50": 1524.3640999979107,
+        "p95": 1904.7773999991477,
+        "min": 835.6991999971797,
+        "max": 1975.1445000001695
+      },
+      "vector_ms": {
+        "n": 32,
+        "p50": 1300.2864,
+        "p95": 1675.7731,
+        "min": 660.6307,
+        "max": 1747.6340000000002
+      }
+    },
+    "recompacted": {
+      "http_ms": {
+        "n": 32,
+        "p50": 781.3019000022905,
+        "p95": 1041.0455000019283,
+        "min": 498.0349999968894,
+        "max": 1931.1375000033877
+      },
+      "vector_ms": {
+        "n": 32,
+        "p50": 483.6703,
+        "p95": 585.0014,
+        "min": 236.3722,
+        "max": 599.4956999999999
+      }
+    },
+    "during_growth": {
+      "http_ms": {
+        "n": 8,
+        "p50": 647.7133000007598,
+        "p95": 728.617499997199,
+        "min": 598.1071000060183,
+        "max": 728.617499997199
+      },
+      "vector_ms": {
+        "n": 8,
+        "p50": 496.2,
+        "p95": 522.3542,
+        "min": 469.372,
+        "max": 522.3542
+      }
+    }
+  },
+  "run_sha256": "3f9916b842400e243af0d86bb760cb3c861be2630c53a68f7afbe23102fe0674",
+  "responses_sha256": "39df5f2bf3f33803d91501ff25dcae3405c1130bfeffae6ce66fb55d01027cb6",
+  "verifier_sha256": "8f172e08ad39bbcd8f503543d32f983d5310e58274b8b99f27db198e2afbb3fd",
+  "checks": [
+    "frozen_inputs",
+    "complete_schedule",
+    "original_utf8_metadata_and_scope",
+    "complete_payload_and_order_equality",
+    "dry_run_and_restart_layout",
+    "rows_preserved",
+    "regrowth_then_recompaction"
+  ]
+}
