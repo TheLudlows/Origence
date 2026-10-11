@@ -2,6 +2,12 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #30 远端 CI
+
+[run 38110406726](https://github.com/TheLudlows/Origence/actions/runs/38110406726) 对实现 head `c7bc20192bd7d4b8839ba6954f57688376f80aa9` 成功，实际 checkout 为合并预览 `6007c93660b599973b440042f91ac3df4ad7e7a5`。fast-check 轻量 lib 30/local 86、fmt/Clippy、Python 工具 33 passed/1 skipped、既有 evals 9 passed；Linux 默认 lib 31/local 108、身份回归 8、Clippy/build/HTTP smoke/处理中强退恢复通过。Windows/macOS/container 按 main-only 策略跳过，不能称三平台主干已验收。[精确记录](evidence/2026-10-11-aml-pr30-ci.json)。
+
+本次追记仅增加 CI 文档和[公开数据准备清单](../evals/aml/public/README.md)：固定发布版文件已校验，32 道 test-only ID 预选，未运行模型或修改受测实现。
+
 ## 2026-10-11 AML 失败归因、正确证据与本地专用重排
 
 基于 main `de17218125cccd83e6cce3b5c39340fc5ae3bd52`。新增离线诊断、oracle、cross-encoder 和其 Answer 对照工具；共享 SHA-256 改为等价的 1 MiB 分块读取以兼容现有 GPU Python 3.10。正式 Rust Search/Add、依赖、Worker、超时/取消/隔离保证未改变。[完整报告](../evals/aml/diagnosis/README.md)、[命令及工件哈希](../evals/aml/diagnosis/manifest.json)。

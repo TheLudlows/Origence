@@ -1,0 +1,180 @@
+{
+  "schema": "aml-public-data-preparation-v1",
+  "prepared_at_utc": "2026-10-11T04:07:13.907Z",
+  "source": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+  "revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+  "license": "mit",
+  "file": "longmemeval_s_cleaned.json",
+  "bytes": 277383467,
+  "sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+  "selection": "First 32 question IDs by SHA-256 of Origence-public-test-v1: + question_id. No answers or outcomes used; test-only against separately tuned synthetic development.",
+  "selected": [
+    {
+      "id": "09ba9854",
+      "sort": "008c7b2784334ed8a1461a87f0fcb5f5b58eae0fb3be52575b449c995b2619b6",
+      "category": "multi-session"
+    },
+    {
+      "id": "gpt4_68e94287",
+      "sort": "011f75f98f34d65f7c73028e835bf77043b970e4061b69e8a3ec4fc4c28f9c7e",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "b29f3365",
+      "sort": "0256e3d9430ad246f8e3482afd8727346f10079fb4b41e2de55146913550a44b",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "gpt4_1e4a8aeb",
+      "sort": "033bb7d8506bc37ebeb195574cdf0e35ac4edb8e38313286d6693fad00f60d5a",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "18dcd5a5",
+      "sort": "035b6ef81fe3b1fdf71c09ba9d2d9f7209b82f3c3c881fc75e8276e295f70d62",
+      "category": "single-session-assistant"
+    },
+    {
+      "id": "76d63226",
+      "sort": "036ddfd838847a0705cb9a2fa9e6f5da200c677f5d60c1e8c6575687fe26f8b4",
+      "category": "single-session-user"
+    },
+    {
+      "id": "0ddfec37_abs",
+      "sort": "038e161d6926b348967f3000d28389fd0cfbfed569ca0d38aa5a3e9fb73ce724",
+      "category": "knowledge-update"
+    },
+    {
+      "id": "72e3ee87",
+      "sort": "04aae003dd3419c67e06ba6c8a5f7adcc9d78b9e9e1cba668d9bd3c13e40e957",
+      "category": "knowledge-update"
+    },
+    {
+      "id": "gpt4_468eb064",
+      "sort": "04ff24709c511f7a0202afd0bcca8868a333c48ba1d39e36bb7a0df74185b50a",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "d682f1a2",
+      "sort": "0521ddcad1fa9f476fc1f2a1a79bb7b2f9168abaac67c7a970eeb30c2efaa25a",
+      "category": "multi-session"
+    },
+    {
+      "id": "370a8ff4",
+      "sort": "0548ddce42d8bfd5b378a7f4f254e1cd05010e14a0e6e79018541bc773ce1f0a",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "60472f9c",
+      "sort": "057c0f784f30af99034e737c5074d140b034995817626a31b155e5e51d3d5a23",
+      "category": "multi-session"
+    },
+    {
+      "id": "4100d0a0",
+      "sort": "0610a97ec0f289aeeed1cc4844e987142547e65f8c04f7d25895fd09e7810380",
+      "category": "single-session-user"
+    },
+    {
+      "id": "b3c15d39",
+      "sort": "062adfb0cf389e4460b6b17299f34c9ddf71200628535ed4f3869b0b4d592ff5",
+      "category": "multi-session"
+    },
+    {
+      "id": "gpt4_a2d1d1f6",
+      "sort": "062fdc2d050e53c15b4c3d03bf9b8082127ec370d23158cdda9e973712cb7bf6",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "8a2466db",
+      "sort": "067e15e465b83a75ddf16a9b3cd148707f72bfc0fe4e2de3d1256ac01f433be6",
+      "category": "single-session-preference"
+    },
+    {
+      "id": "gpt4_31ff4165",
+      "sort": "06b680b2c721dfc6c699e9c2e9db99acbd3b8f30abfdb17264aa2f1463baf3ee",
+      "category": "multi-session"
+    },
+    {
+      "id": "bbf86515",
+      "sort": "076fabc776f121bd6e3b908f761812c8e53acb461096ab92fce176ca4772fb71",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "71315a70",
+      "sort": "0826152b8c60c37f510e2459cf447cec3615022adddc4c7216f6aaa43156c974",
+      "category": "knowledge-update"
+    },
+    {
+      "id": "gpt4_93159ced_abs",
+      "sort": "08be6fd4b8095c22173078790864a8896e243d967407c8eea91ec274fb33f6aa",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "a06e4cfe",
+      "sort": "09d919a4d625da059986bf8bdd4748fd44224137c33a8d131a87457566edd6a9",
+      "category": "single-session-user"
+    },
+    {
+      "id": "afdc33df",
+      "sort": "0a0e9bc068ed11c3107c3ddef19bbfcc31017e3c430746cd58612c2790e6c661",
+      "category": "single-session-preference"
+    },
+    {
+      "id": "603deb26",
+      "sort": "0a4ea03a0d5b107bca1ca0fb6593b294c712e1a0869b5cb34bd1b0a59c2076e9",
+      "category": "knowledge-update"
+    },
+    {
+      "id": "853b0a1d",
+      "sort": "0b01415519437486e7ff2a89a2267a5e105c75b396accd3ae7b94f9895dfa653",
+      "category": "single-session-user"
+    },
+    {
+      "id": "ceb54acb",
+      "sort": "0b02b5e7667a6130439d208ef7e86aba6a5c7b58ba7473a21afee65ef00d1943",
+      "category": "single-session-assistant"
+    },
+    {
+      "id": "21d02d0d",
+      "sort": "0b5e15c0ddb108a8ea4bd6fc6b2bbab0dcdb8c56a7aea9e3fd797287cf43f790",
+      "category": "multi-session"
+    },
+    {
+      "id": "1b9b7252",
+      "sort": "0c76b2ec10a1dff25c329862ee2376c32e40ddea375a3352a6ebc10f1b136a60",
+      "category": "single-session-assistant"
+    },
+    {
+      "id": "gpt4_f420262d",
+      "sort": "0d425046acf75e9b71601a5d1e01021845a64bd69b5435548bd6f732672ccddc",
+      "category": "temporal-reasoning"
+    },
+    {
+      "id": "71a3fd6b",
+      "sort": "0db4eedcae8648ae8c01924a7cfe4ec74ca7b83ddc8b3a4cc4d70e10ef159791",
+      "category": "single-session-assistant"
+    },
+    {
+      "id": "e47becba",
+      "sort": "0dbbd286f935902b1d4fa6a134fc01f9d31a6095dfe957129c37bba65bfff530",
+      "category": "single-session-user"
+    },
+    {
+      "id": "ba358f49_abs",
+      "sort": "0e22a2b30b71a5e59df1bfbc5fa2839fde446eccbc641170326c8f9710f115cd",
+      "category": "multi-session"
+    },
+    {
+      "id": "4dfccbf8",
+      "sort": "0ebb8f5ac9302ffa2d797c7e01a68d47b50df6bed4e7592882312c50b626d2ea",
+      "category": "temporal-reasoning"
+    }
+  ],
+  "source_records": 500,
+  "model_calls": 0,
+  "limitations": [
+    "preparation only; source/license/sampling details require final runner contract before evaluation",
+    "public test, not hidden test; no official AML score",
+    "shared histories require grouping analysis before statistical claims"
+  ]
+}
