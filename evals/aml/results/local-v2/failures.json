@@ -1,0 +1,308 @@
+[
+  {
+    "id": "workshop-q2",
+    "split": "development",
+    "category": "multihop",
+    "required": [
+      {
+        "session_id": "workshop-s1",
+        "message_index": 9,
+        "rank": 1
+      },
+      {
+        "session_id": "workshop-s2",
+        "message_index": 14,
+        "rank": 71
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 1,
+        "all_evidence": true,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      }
+    }
+  },
+  {
+    "id": "workshop-q4",
+    "split": "development",
+    "category": "multilingual",
+    "required": [
+      {
+        "session_id": "workshop-s5",
+        "message_index": 8,
+        "rank": 34
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 1,
+        "all_evidence": true,
+        "reciprocal_rank": 0.029411764705882353,
+        "nonempty_no_answer": null
+      }
+    }
+  },
+  {
+    "id": "workshop-q8",
+    "split": "development",
+    "category": "multihop",
+    "required": [
+      {
+        "session_id": "workshop-s10",
+        "message_index": 12,
+        "rank": 1
+      },
+      {
+        "session_id": "workshop-s12",
+        "message_index": 1,
+        "rank": 38
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 1,
+        "all_evidence": true,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      }
+    }
+  },
+  {
+    "id": "workshop-q11",
+    "split": "development",
+    "category": "cross_session",
+    "required": [
+      {
+        "session_id": "workshop-s4",
+        "message_index": 3,
+        "rank": 2
+      },
+      {
+        "session_id": "workshop-s5",
+        "message_index": 8,
+        "rank": null
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 0.5,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 0.5,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 0.5,
+        "nonempty_no_answer": null
+      }
+    }
+  },
+  {
+    "id": "gallery-q2",
+    "split": "holdout",
+    "category": "multihop",
+    "required": [
+      {
+        "session_id": "gallery-s1",
+        "message_index": 9,
+        "rank": 33
+      },
+      {
+        "session_id": "gallery-s2",
+        "message_index": 14,
+        "rank": 31
+      },
+      {
+        "session_id": "gallery-s4",
+        "message_index": 3,
+        "rank": 35
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0,
+        "all_evidence": false,
+        "reciprocal_rank": 0,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 1,
+        "all_evidence": true,
+        "reciprocal_rank": 0.03225806451612903,
+        "nonempty_no_answer": null
+      }
+    }
+  },
+  {
+    "id": "gallery-q9",
+    "split": "holdout",
+    "category": "multihop",
+    "required": [
+      {
+        "session_id": "gallery-s13",
+        "message_index": 6,
+        "rank": 1
+      },
+      {
+        "session_id": "gallery-s14",
+        "message_index": 11,
+        "rank": null
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 0.5,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      }
+    }
+  },
+  {
+    "id": "gallery-q10",
+    "split": "holdout",
+    "category": "cross_session",
+    "required": [
+      {
+        "session_id": "gallery-s2",
+        "message_index": 14,
+        "rank": 3
+      },
+      {
+        "session_id": "gallery-s4",
+        "message_index": 3,
+        "rank": 44
+      },
+      {
+        "session_id": "gallery-s5",
+        "message_index": 8,
+        "rank": 1
+      }
+    ],
+    "metrics": {
+      "1": {
+        "recall": 0.3333333333333333,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "5": {
+        "recall": 0.6666666666666666,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "10": {
+        "recall": 0.6666666666666666,
+        "all_evidence": false,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      },
+      "100": {
+        "recall": 1,
+        "all_evidence": true,
+        "reciprocal_rank": 1,
+        "nonempty_no_answer": null
+      }
+    }
+  }
+]

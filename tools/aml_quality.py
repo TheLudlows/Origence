@@ -1,4 +1,4 @@
-"""Synthetic development-only AML retrieval evaluation through Add/Search."""
+"""Synthetic local AML retrieval evaluation through Add/Search."""
 import argparse
 import hashlib
 import json
@@ -67,9 +67,10 @@ def summarize(rows, k):
 
 
 def evaluate(args, report):
-    corpus_path = Path(__file__).resolve().parents[1] / "evals/aml/corpus.json"
+    relative = "evals/aml/corpus.json" if args.dataset == "v1" else "evals/aml/v2/corpus.json"
+    corpus_path = Path(__file__).resolve().parents[1] / relative
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
-    report.update(corpus_sha256=digest(corpus_path), runner_sha256=digest(__file__),
+    report.update(dataset=args.dataset, corpus_sha256=digest(corpus_path), runner_sha256=digest(__file__),
                   corpus_origin=corpus["origin"], split=corpus["split"],
                   binary_sha256=digest(args.binary), configuration=preflight(os.environ),
                   cutoffs=[1, 5, 10, 100], requested_top_k=100,
@@ -100,13 +101,15 @@ def evaluate(args, report):
                     raise DrillError("search_contract_failed")
                 ranked = decode_hits(data, corpus["batches"], q["user_id"])
                 required = [source_key(x) for x in q["required"]]
-                rows.append({"id": q["id"], "category": q["category"], "latency_ms": round(elapsed, 2),
+                rows.append({"id": q["id"], "category": q["category"], "split": q.get("split", "development"), "latency_ms": round(elapsed, 2),
                              "required": q["required"], "response": result,
                              "metrics": {str(k): score(required, ranked, k) for k in report["cutoffs"]}})
             report["search_latency"] = percentiles([r["latency_ms"] for r in rows])
             report["summary"] = {str(k): summarize(rows, k) for k in report["cutoffs"]}
             report["by_category"] = {category: {str(k): summarize([r for r in rows if r["category"] == category], k)
                                       for k in report["cutoffs"]} for category in sorted({r["category"] for r in rows})}
+            report["by_split"] = {split: {str(k): summarize([r for r in rows if r["split"] == split], k)
+                                   for k in report["cutoffs"]} for split in sorted({r["split"] for r in rows})}
         finally:
             host.stop()
     report["temporary_tree_removed"] = not created.exists()
@@ -116,12 +119,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--report", required=True)
+    parser.add_argument("--dataset", choices=("v1", "v2"), default="v1")
     args = parser.parse_args()
     report = {"schema": "aml-local-quality-report-v1", "status": "running",
               "started_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-              "limitations": ["synthetic development only; no held-out generalization or official AML score",
+              "limitations": ["synthetic data without independent human review; no official AML score",
                               "retrieval only, no Answer/Eval; nonempty candidates do not prove wrong answers",
-                              "72 short messages per user, not full long-context or sustained capacity validation",
+                              "short messages only; longer history does not validate long-message chunking or sustained capacity",
                               "no provider usage or peak-memory instrumentation; latency is single local run"]}
     # Reserve an exclusive artifact before spending work; never overwrite evidence.
     with open(args.report, "x", encoding="utf-8") as output:

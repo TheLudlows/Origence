@@ -1,5 +1,6 @@
 """Metric and provenance regression tests for the AML quality evaluator."""
 import json
+import hashlib
 from pathlib import Path
 import unittest
 import tempfile
@@ -40,6 +41,29 @@ class QualityTests(unittest.TestCase):
                 with self.assertRaises(FileExistsError):
                     aml_quality.main()
                 self.assertEqual(report.read_bytes(), original)
+
+    def test_v2_frozen_source_disjoint_splits_and_labels(self):
+        folder = Path(__file__).resolve().parents[1] / "evals/aml/v2"
+        data = (folder / "corpus.json").read_bytes()
+        corpus = json.loads(data)
+        freeze = json.loads((folder / "freeze.json").read_text(encoding="utf-8"))
+        self.assertEqual(hashlib.sha256(data).hexdigest(), freeze["corpus_sha256"])
+        self.assertEqual(sum(len(b["messages"]) for b in corpus["batches"]), 512)
+        self.assertEqual(len(corpus["questions"]), 30)
+        sources = {split: set() for split in freeze["splits"]}
+        known = {(b["user_id"], b["session_id"], i): m for b in corpus["batches"] for i, m in enumerate(b["messages"])}
+        for q in corpus["questions"]:
+            self.assertEqual(q["user_id"], freeze["splits"][q["split"]])
+            self.assertEqual(not q["required"], q["category"] == "no_answer")
+            for gold in q["required"]:
+                key = (q["user_id"], gold["session_id"], gold["message_index"])
+                self.assertIn(key, known)
+                sources[q["split"]].add(key)
+        self.assertFalse(sources["development"] & sources["holdout"])
+        dev_text = {m["content"] for (u, _, _), m in known.items() if u == "workshop"}
+        hold_text = {m["content"] for (u, _, _), m in known.items() if u == "gallery"}
+        self.assertFalse(dev_text & hold_text)
+        self.assertEqual(len({q["id"] for q in corpus["questions"]}), 30)
 
     def test_corpus_labels_and_response_provenance(self):
         corpus = json.loads((Path(__file__).resolve().parents[1] / "evals/aml/corpus.json").read_text(encoding="utf-8"))

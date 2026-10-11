@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-11",
+  "base_commit": "08b606c",
+  "tested_rust_commit": "85454bf69e673af4411b2bdd7874942aabf92682",
+  "model": {
+    "name": "bge-m3:latest",
+    "model": "bge-m3:latest",
+    "modified_at": "2026-10-10T21:46:25.8964303+08:00",
+    "size": 1157672605,
+    "digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "bert",
+      "families": [
+        "bert"
+      ],
+      "parameter_size": "566.70M",
+      "quantization_level": "F16",
+      "context_length": 8192,
+      "embedding_length": 1024,
+      "runner": "ggml"
+    },
+    "capabilities": [
+      "embedding"
+    ]
+  },
+  "platform": "win32",
+  "arch": "x64",
+  "cpu": "Intel(R) Core(TM) i5-14600KF",
+  "logical_cpus": 20,
+  "memory_bytes": 34127998976,
+  "provider_fee": 0,
+  "cpu_cost": "not priced",
+  "command": "python tools/aml_quality.py --dataset v2 --binary target/debug/origence.exe --report target/aml-quality-v2-1791679172382.json"
+}
