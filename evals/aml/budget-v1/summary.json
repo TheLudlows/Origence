@@ -1,0 +1,3429 @@
+{
+  "v4": {
+    "dataset": "v4",
+    "grading_receipt": {
+      "file": "v4-grade.json.gz",
+      "sha256": "8175af23545fccca1290abd90238eb6fe4a0e7f162e667d21e1732b1ccec87a7"
+    },
+    "splits": {
+      "development": {
+        "assigned": 16,
+        "arms": {
+          "vector": {
+            "supported_successes": 16,
+            "supported_success_rate": 1.0,
+            "success_cluster_interval": {
+              "clusters": 8,
+              "lower": 1.0,
+              "upper": 1.0,
+              "draws": 10000
+            },
+            "answered": 8,
+            "answer_coverage": 0.5,
+            "correct_supported_answered": 8,
+            "selective_accuracy": 1.0,
+            "answerable_count": 8,
+            "answerable_successes": 8,
+            "answerable_abstentions": 0,
+            "no_answer_count": 8,
+            "correct_abstentions": 8,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "full_message_recall": 1.0
+          },
+          "chat": {
+            "supported_successes": 15,
+            "supported_success_rate": 0.9375,
+            "success_cluster_interval": {
+              "clusters": 8,
+              "lower": 0.8125,
+              "upper": 1.0,
+              "draws": 10000
+            },
+            "answered": 8,
+            "answer_coverage": 0.5,
+            "correct_supported_answered": 7,
+            "selective_accuracy": 0.875,
+            "answerable_count": 8,
+            "answerable_successes": 7,
+            "answerable_abstentions": 0,
+            "no_answer_count": 8,
+            "correct_abstentions": 8,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "full_message_recall": 1.0
+          },
+          "bge": {
+            "supported_successes": 16,
+            "supported_success_rate": 1.0,
+            "success_cluster_interval": {
+              "clusters": 8,
+              "lower": 1.0,
+              "upper": 1.0,
+              "draws": 10000
+            },
+            "answered": 8,
+            "answer_coverage": 0.5,
+            "correct_supported_answered": 8,
+            "selective_accuracy": 1.0,
+            "answerable_count": 8,
+            "answerable_successes": 8,
+            "answerable_abstentions": 0,
+            "no_answer_count": 8,
+            "correct_abstentions": 8,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "full_message_recall": 1.0
+          }
+        },
+        "paired_bge_minus_chat_interval": {
+          "clusters": 8,
+          "lower": 0.0,
+          "upper": 0.1875,
+          "draws": 10000
+        }
+      },
+      "unseen_test": {
+        "assigned": 16,
+        "arms": {
+          "vector": {
+            "supported_successes": 15,
+            "supported_success_rate": 0.9375,
+            "success_cluster_interval": {
+              "clusters": 8,
+              "lower": 0.8125,
+              "upper": 1.0,
+              "draws": 10000
+            },
+            "answered": 9,
+            "answer_coverage": 0.5625,
+            "correct_supported_answered": 8,
+            "selective_accuracy": 0.8888888888888888,
+            "answerable_count": 8,
+            "answerable_successes": 8,
+            "answerable_abstentions": 0,
+            "no_answer_count": 8,
+            "correct_abstentions": 7,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "full_message_recall": 1.0
+          },
+          "chat": {
+            "supported_successes": 14,
+            "supported_success_rate": 0.875,
+            "success_cluster_interval": {
+              "clusters": 8,
+              "lower": 0.6875,
+              "upper": 1.0,
+              "draws": 10000
+            },
+            "answered": 9,
+            "answer_coverage": 0.5625,
+            "correct_supported_answered": 7,
+            "selective_accuracy": 0.7777777777777778,
+            "answerable_count": 8,
+            "answerable_successes": 7,
+            "answerable_abstentions": 0,
+            "no_answer_count": 8,
+            "correct_abstentions": 7,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "full_message_recall": 1.0
+          },
+          "bge": {
+            "supported_successes": 15,
+            "supported_success_rate": 0.9375,
+            "success_cluster_interval": {
+              "clusters": 8,
+              "lower": 0.8125,
+              "upper": 1.0,
+              "draws": 10000
+            },
+            "answered": 9,
+            "answer_coverage": 0.5625,
+            "correct_supported_answered": 8,
+            "selective_accuracy": 0.8888888888888888,
+            "answerable_count": 8,
+            "answerable_successes": 8,
+            "answerable_abstentions": 0,
+            "no_answer_count": 8,
+            "correct_abstentions": 7,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "full_message_recall": 1.0
+          }
+        },
+        "paired_bge_minus_chat_interval": {
+          "clusters": 8,
+          "lower": 0.0,
+          "upper": 0.1875,
+          "draws": 10000
+        }
+      }
+    },
+    "rows": [
+      {
+        "id": "development-01-a",
+        "split": "development",
+        "cluster": "development-01",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected value 'QH-4817-S' and is directly supported by the cited fragment."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer contains the correct serial number 'QH-4817-S' within a full sentence, which is fully supported by the cited fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected value 'QH-4817-S' and is directly supported by the cited fragment."
+          }
+        }
+      },
+      {
+        "id": "development-01-b",
+        "split": "development",
+        "cluster": "development-01",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable. The answer correctly abstains (answerable: false, empty answer) without hallucinating or using similar objects, meeting the strict criteria for refusal."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable. The answer correctly abstains (answerable: false, empty answer) and cites no fragments, satisfying the rubric for explicit refusal based on missing facts."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable. The answer correctly abstains (answerable: false, empty answer) and cites no fragments, which aligns with the requirement to reject due to insufficient evidence."
+          }
+        }
+      },
+      {
+        "id": "development-02-a",
+        "split": "development",
+        "cluster": "development-02",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The phrase '控制在12摄氏度以下' in Chinese standard usage implies a strict upper bound (<12°C) for temperature control contexts, matching the reference's 'strictly below'. The cited fragments support the entity distinction and the temperature limit."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer '12摄氏度' is ambiguous regarding the boundary condition. The rubric requires 'strictly less than', but stating just the number could imply inclusive or exclusive without clarification, failing the strictness requirement of the reference."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer correctly identifies the entity (test samples), value (12°C), and strict boundary condition ('strictly below') as per the reference and cited evidence."
+          }
+        }
+      },
+      {
+        "id": "development-02-b",
+        "split": "development",
+        "cluster": "development-02",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement for explicit refusal due to insufficient evidence."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement for explicit refusal due to insufficient evidence."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement for explicit refusal due to insufficient evidence."
+          }
+        }
+      },
+      {
+        "id": "development-03-a",
+        "split": "development",
+        "cluster": "development-03",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected '东楼206室'. Cited fragment states meetings are in East Building Room 206 starting April 10, 2025, which covers the date May 1, 2025."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected '东楼206室'. Cited fragment states meetings are in East Building Room 206 starting April 10, 2025, which covers the date May 1, 2025."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected '东楼206室'. Cited fragment states meetings are in East Building Room 206 starting April 10, 2025, which covers the date May 1, 2025."
+          }
+        }
+      },
+      {
+        "id": "development-03-b",
+        "split": "development",
+        "cluster": "development-03",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the expected behavior for an unanswerable question."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the expected behavior for an unanswerable question."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the expected behavior for an unanswerable question."
+          }
+        }
+      },
+      {
+        "id": "development-04-a",
+        "split": "development",
+        "cluster": "development-04",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer correctly identifies both conditions (insulation test and supervisor signature) as required simultaneously, matching the reference and supported by the cited fragment."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer explicitly states that both conditions must be met simultaneously, which aligns with the reference and is fully supported by the source text."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer lists the two necessary conditions connected by 'and', accurately reflecting the requirement in the reference and supported by the evidence."
+          }
+        }
+      },
+      {
+        "id": "development-04-b",
+        "split": "development",
+        "cluster": "development-04",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the rubric requirement for explicit abstention when evidence is insufficient."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the rubric requirement for explicit abstention when evidence is insufficient."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the rubric requirement for explicit abstention when evidence is insufficient."
+          }
+        }
+      },
+      {
+        "id": "development-05-a",
+        "split": "development",
+        "cluster": "development-05",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly identifies that exactly 74 dB does not meet the requirement of being strictly below 74 dB. The cited fragment explicitly states 'strictly below 74 dB', supporting the conclusion."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly states non-compliance due to the strict lower bound requirement. The reasoning is directly supported by the cited fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly concludes non-compliance based on the strict inequality (<74) vs measured value (=74). Supported by the cited fragment stating 'strictly below 74 dB'."
+          }
+        }
+      },
+      {
+        "id": "development-05-b",
+        "split": "development",
+        "cluster": "development-05",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable due to missing critical facts. The answer correctly abstains (answerable: false) and makes no unsupported claims."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable due to missing critical facts. The answer correctly abstains (answerable: false) and makes no unsupported claims."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable due to missing critical facts. The answer correctly abstains (answerable: false) and makes no unsupported claims."
+          }
+        }
+      },
+      {
+        "id": "development-06-a",
+        "split": "development",
+        "cluster": "development-06",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer provides the correct address. Although the citation order in indices is mixed, the content of the cited fragments fully supports the multi-hop inference from Sensor to Meng Fan to Qingshi Workshop to the Address."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer correctly identifies the address '桂花路19号' and follows the required chain (Sensor -> Meng Fan -> Qingshi Workshop -> Address) using all three cited fragments."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer explicitly states the full reasoning chain and the final correct address, supported by the three cited fragments covering each step of the link."
+          }
+        }
+      },
+      {
+        "id": "development-06-b",
+        "split": "development",
+        "cluster": "development-06",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the expected behavior for an unanswerable question."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the expected behavior for an unanswerable question."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the expected behavior for an unanswerable question."
+          }
+        }
+      },
+      {
+        "id": "development-07-a",
+        "split": "development",
+        "cluster": "development-07",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly calculates 24 boxes * 0.25 kg/box = 6 kg based on cited fragments."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly calculates 24 boxes * 0.25 kg/box = 6 kg based on cited fragments."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly calculates 24 boxes * 0.25 kg/box = 6 kg based on cited fragments."
+          }
+        }
+      },
+      {
+        "id": "development-07-b",
+        "split": "development",
+        "cluster": "development-07",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the requirement for explicit abstention."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the requirement for explicit abstention."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the requirement for explicit abstention."
+          }
+        }
+      },
+      {
+        "id": "development-08-a",
+        "split": "development",
+        "cluster": "development-08",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected 'LK-2846'. Cited fragments include the admin confirmation and a note rejecting web content, supporting the rubric's requirement to use only admin-provided config."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected 'LK-2846'. Cited fragment explicitly states the admin confirmed this code."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected 'LK-2846'. Cited fragment explicitly states the admin confirmed this code."
+          }
+        }
+      },
+      {
+        "id": "development-08-b",
+        "split": "development",
+        "cluster": "development-08",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference indicates the question is unanswerable. The answer correctly abstains by marking it as not answerable with an empty string."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference indicates the question is unanswerable. The answer correctly abstains by marking it as not answerable with an empty string."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference indicates the question is unanswerable. The answer correctly abstains by marking it as not answerable with an empty string."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-01-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-01",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected serial number and is directly supported by cited fragment."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected serial number and is directly supported by cited fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer matches expected serial number and is directly supported by cited fragment."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-01-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-01",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement to reject due to insufficient evidence."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement to reject due to insufficient evidence."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement to reject due to insufficient evidence."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-02-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-02",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer correctly states the temperature is strictly below 9 degrees Celsius for experimental reagents, matching the reference. The cited fragment explicitly contains this information."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer correctly states the temperature is strictly below 9 degrees Celsius for experimental reagents, matching the reference. The cited fragment explicitly contains this information."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer correctly states the temperature is strictly below 9 degrees Celsius for experimental reagents, matching the reference. The cited fragment explicitly contains this information."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-02-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-02",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the rubric requirement to refuse due to insufficient evidence."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the rubric requirement to refuse due to insufficient evidence."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false, empty string), which matches the rubric requirement to refuse due to insufficient evidence."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-03-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-03",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer '北馆305室' matches expected answer. Cited fragment explicitly states the meeting moved to this location starting July 12, 2025, which is before August 1, 2025."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer '北馆305室' matches expected answer. Cited fragment explicitly states the meeting moved to this location starting July 12, 2025, which is before August 1, 2025."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer '北馆305室' matches expected answer. Cited fragment explicitly states the meeting moved to this location starting July 12, 2025, which is before August 1, 2025."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-03-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-03",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the requirement for explicit abstention on unanswerable questions."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the requirement for explicit abstention on unanswerable questions."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the requirement for explicit abstention on unanswerable questions."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-04-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-04",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer correctly identifies both required conditions (grounding check and station master's written approval) as stated in the cited fragment."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer correctly identifies both required conditions (grounding check and station master's written approval) as stated in the cited fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer correctly identifies both required conditions (grounding check and station master's written approval) as stated in the cited fragment."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-04-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-04",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the requirement for an unanswerable question."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the requirement for an unanswerable question."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the requirement for an unanswerable question."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-05-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-05",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly identifies that exactly 68 dB does not meet the requirement of being strictly below 68 dB. The cited fragment explicitly states 'strictly below 68 dB'."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly determines failure to meet specifications due to the strict inequality constraint. The reasoning aligns perfectly with the provided evidence fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly concludes non-compliance because the measured value (68) is not strictly less than the limit (68). Supported by the explicit text in the citation."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-05-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-05",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable due to missing critical facts. The answer correctly abstains (answerable: false) without making unsupported claims."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable due to missing critical facts. The answer correctly abstains (answerable: false) without making unsupported claims."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The reference is unanswerable due to missing critical facts. The answer correctly abstains (answerable: false) without making unsupported claims."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-06-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-06",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer correctly identifies the location '海棠街37号'. The cited fragments provide the complete chain: wind gauge maintained by Ren Ke (fragment 1), Ren Ke works at Songying Instrument Shop (fragment 3), and Songying Instrument Shop's repair address is Haitang Street No. 37 (fragment 2). All necessary bridge facts are present."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer correctly identifies the location '海棠街37号'. The cited fragments provide the complete logical chain: wind gauge -> Ren Ke (fragment 1), Ren Ke -> Songying Instrument Shop (fragment 2), Songying Instrument Shop -> Haitang Street No. 37 (fragment 3)."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer correctly identifies the location '海棠街37号'. The cited fragments support the full inference chain: wind gauge maintained by Ren Ke (fragment 1), Ren Ke works at Songying Instrument Shop (fragment 3), and the shop's address is Haitang Street No. 37 (fragment 2)."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-06-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-06",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. Answer fails to abstain and provides an entity ('松影仪器店') that is not the complete valid answer chain defined in the rubric (which requires stopping due to missing evidence)."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. Answer fails to abstain. The provided answer '松影仪器店' is incorrect because the necessary link to the specific repair address is missing from the evidence, making the question unanswerable per the rubric."
+          },
+          "bge": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable (requires full chain to address, but last fact removed). Answer provides '松影仪器店' instead of abstaining. Also, cited fragments do not support the final destination address or the specific repair location logic required by the rubric."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-07-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-07",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly calculates 18 * 0.4 = 7.2 kg using cited fragments for bottle count and unit mass."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Answer '7.2' lacks the required unit '千克' (kg), making it incomplete against the reference '7.2千克'."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "Correctly calculates 18 * 0.4 = 7.2 kg using cited fragments for bottle count and unit mass."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-07-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-07",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement to reject due to insufficient evidence."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement to reject due to insufficient evidence."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "Reference is unanswerable. The answer explicitly abstains (answerable: false), which matches the rubric requirement to reject due to insufficient evidence."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-08-a",
+        "split": "unseen_test",
+        "cluster": "unseen_test-08",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer 'MY-5731' is correct. The cited fragment directly attributes this code to the administrator, which aligns with the reference and rubric requirements."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer 'MY-5731' matches the expected answer. The cited fragment explicitly states that this is the current access code set by the administrator, satisfying the rubric's requirement to distinguish from forum instructions."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": 1.0,
+              "all_required_messages": true
+            },
+            "reason": "The answer 'MY-5731' is correct. The citations include both the fragment confirming the admin-set code and the fragment clarifying that forum posts are not admin confirmations, fully supporting the conclusion against the rubric."
+          }
+        }
+      },
+      {
+        "id": "unseen_test-08-b",
+        "split": "unseen_test",
+        "cluster": "unseen_test-08",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The answer correctly identifies the question as unanswerable and abstains, which aligns with the reference indicating insufficient evidence."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The answer correctly identifies the question as unanswerable and abstains, which aligns with the reference indicating insufficient evidence."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "full_message_recall": null,
+              "all_required_messages": null
+            },
+            "reason": "The answer correctly identifies the question as unanswerable and abstains, which aligns with the reference indicating insufficient evidence."
+          }
+        }
+      }
+    ],
+    "usage": {
+      "calls": 160,
+      "reported_total_tokens": 126798,
+      "missing_usage_calls": 0
+    },
+    "search_latency": {
+      "count": 32,
+      "p50_ms": 342.5,
+      "p95_ms": 390.22,
+      "p99_ms": 398.13
+    },
+    "rerank_extra_latency": {
+      "chat": {
+        "count": 32,
+        "p50_ms": 659.86,
+        "p95_ms": 3069.97,
+        "p99_ms": 3744.13
+      },
+      "bge": {
+        "count": 32,
+        "p50_ms": 35.24,
+        "p95_ms": 56.64,
+        "p99_ms": 514.02
+      }
+    },
+    "bge_gpu_allocator": {
+      "peak_allocated_bytes": 1174276096,
+      "peak_reserved_bytes": 1207959552
+    },
+    "notes": [
+      "same-model semantic judge; not independent human validation",
+      "cluster bootstrap is descriptive with few clusters",
+      "public session recall is not full evidence recall",
+      "reference-token upper limits, not equal actual reader context length"
+    ]
+  },
+  "public": {
+    "dataset": "public",
+    "grading_receipt": {
+      "file": "public-grade.json.gz",
+      "sha256": "18d5ddd2ce709849699b8587f00e45e9559e26b568b3337d7f831ee49b4a7359"
+    },
+    "splits": {
+      "public_test": {
+        "assigned": 32,
+        "arms": {
+          "vector": {
+            "supported_successes": 22,
+            "supported_success_rate": 0.6875,
+            "success_cluster_interval": {
+              "clusters": 10,
+              "lower": 0.5,
+              "upper": 0.8181818181818182,
+              "draws": 10000
+            },
+            "answered": 23,
+            "answer_coverage": 0.71875,
+            "correct_supported_answered": 19,
+            "selective_accuracy": 0.8260869565217391,
+            "answerable_count": 29,
+            "answerable_successes": 19,
+            "answerable_abstentions": 6,
+            "no_answer_count": 3,
+            "correct_abstentions": 3,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "session_recall": 0.9091954022988505
+          },
+          "chat": {
+            "supported_successes": 22,
+            "supported_success_rate": 0.6875,
+            "success_cluster_interval": {
+              "clusters": 10,
+              "lower": 0.3333333333333333,
+              "upper": 0.8157894736842105,
+              "draws": 10000
+            },
+            "answered": 25,
+            "answer_coverage": 0.78125,
+            "correct_supported_answered": 19,
+            "selective_accuracy": 0.76,
+            "answerable_count": 29,
+            "answerable_successes": 19,
+            "answerable_abstentions": 4,
+            "no_answer_count": 3,
+            "correct_abstentions": 3,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "session_recall": 0.8908045977011494
+          },
+          "bge": {
+            "supported_successes": 21,
+            "supported_success_rate": 0.65625,
+            "success_cluster_interval": {
+              "clusters": 10,
+              "lower": 0.4117647058823529,
+              "upper": 0.7659574468085106,
+              "draws": 10000
+            },
+            "answered": 22,
+            "answer_coverage": 0.6875,
+            "correct_supported_answered": 18,
+            "selective_accuracy": 0.8181818181818182,
+            "answerable_count": 29,
+            "answerable_successes": 18,
+            "answerable_abstentions": 7,
+            "no_answer_count": 3,
+            "correct_abstentions": 3,
+            "answer_errors": 0,
+            "judge_errors": 0,
+            "session_recall": 0.9218390804597701
+          }
+        },
+        "paired_bge_minus_chat_interval": {
+          "clusters": 10,
+          "lower": -0.16,
+          "upper": 0.25,
+          "draws": 10000
+        }
+      }
+    },
+    "rows": [
+      {
+        "id": "09ba9854",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence (taxi cost $60, train cost $10). Abstention is incorrect."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly calculates the savings ($60 - $10 = $50) using the cited fragments which provide the taxi and train costs. The arithmetic inference is valid and supported by the evidence."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence. Abstention is incorrect."
+          }
+        }
+      },
+      {
+        "id": "gpt4_68e94287",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies that the vegan chili post happened first. The cited evidence supports this conclusion through the comparison of event times derived from the message timestamps and content."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies that the vegan chili post happened first. The cited evidence supports this temporal ordering based on the timestamps and relative time references ('yesterday' vs 'today') in the source messages."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies that the vegan chili post happened first. The cited evidence shows the chili post was made 'yesterday' relative to a message timestamped March 10, 2023 (approx), while the Plank Challenge was participated in 'today' relative to a message timestamped March 15, 2023. Thus, the chili post occurred earlier."
+          }
+        }
+      },
+      {
+        "id": "b29f3365",
+        "split": "public_test",
+        "cluster": "history-40b883eeb8aa5ac1",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence, so abstention is incorrect. Abstention makes no factual claims, so it is technically supported in its own right (vacuously), but the judgment of correctness is false."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 0.5,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer 'Four weeks' is correct based on the arithmetic (6 weeks of lessons - 2 weeks since amp purchase = 4 weeks). However, it is not supported by the cited fragments because both fragments have the same timestamp (1684985100000), implying they were sent simultaneously. The text says 'for six weeks now' and 'bought... two weeks ago'. If these statements are made at the same time, the duration of lessons when the amp was bought would be 4 weeks. Wait, let's re-read carefully. Fragment 0: 'taking... for six weeks now'. Fragment 1: 'bought... two weeks ago'. If both are current status updates from the same point in time (implied by identical timestamps or lack of temporal markers distinguishing them as past events relative to each other in a way that changes the math), then at the time of speaking, lessons = 6 weeks, amp age = 2 weeks. Therefore, when amp was bought, lessons had been going on for 6 - 2 = 4 weeks. The logic holds. Why is supported false? The prompt requires 'every substantive answer claim must follow from the cited original fragments'. The calculation relies on interpreting the 'now' in fragment 0 and the 'recently... two weeks ago' in fragment 1 as referring to the same reference time. Given the identical timestamps in metadata, this is a valid inference. However, often 'supported' fails if the bridge fact (that the 'now' refers to the same moment) isn't explicitly clear or if there's ambiguity. Let's look closer. Actually, usually in these tasks, if the math is simple and derived directly from stated numbers with a clear temporal anchor, it is supported. But here, the timestamps are identical. Is it possible the user meant 'I have been taking lessons for 6 weeks [total history]' and 'I bought an amp 2 weeks ago'? Yes. So 6-2=4. This seems supported. Let me check for any hidden traps. 'New instructor Alex'. 'Weekly guitar lessons'. No trap found. Why might it be unsupported? Perhaps the assumption that the 'six weeks' count includes the period before the amp purchase is standard, but maybe the 'six weeks' is a total duration up to the *current* question date, while the 'two weeks ago' is relative to the *message* date? The message dates are identical. The question date is 2023/05/25. Timestamp 1684985100000 is May 25, 2023. So everything aligns. The answer is correct. Is it supported? Yes, the facts are present. I will mark supported=true unless there is a strict requirement for explicit textual linkage which is missing. The text doesn't say 'When I bought the amp, I had been taking lessons for X'. It requires subtraction. Subtraction is allowed ('Allow arithmetic'). So supported should be true. \n\nRe-evaluating Index 0: Correct=True. Supported=True.\n\nIndex 1: Answerable=False. Reference says Answerable=True. Incorrect.\n\nIndex 2: Answerable=False. Reference says Answerable=True. Incorrect."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence, so abstention is incorrect. Abstention makes no factual claims, so it is technically supported in its own right (vacuously), but the judgment of correctness is false."
+          }
+        }
+      },
+      {
+        "id": "gpt4_1e4a8aeb",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence timestamps, so abstention is incorrect."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The calculation is incorrect. The workshop was on April 15, 2023 (timestamp 1681580460000) and the planting was on April 21, 2023 (timestamp 1682074860000). The difference is 6 days, not 5."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence timestamps, so abstention is incorrect."
+          }
+        }
+      },
+      {
+        "id": "18dcd5a5",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states there are 4 mummies, matching the reference and supported by the cited evidence ('Mummies (4)')."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states there are 4 mummies, which matches the reference and is explicitly supported by the cited evidence ('Mummies (4)')."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states there are 4 mummies, matching the reference and supported by the cited evidence ('Mummies (4)')."
+          }
+        }
+      },
+      {
+        "id": "76d63226",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the TV size as 55 inches, matching the reference and supported by the cited text."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the TV size as 55 inches, matching the reference and supported by the cited text."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the TV size as 55 inches, which is explicitly stated in the cited fragment ('Samsung 55-inch 4K smart TV')."
+          }
+        }
+      },
+      {
+        "id": "0ddfec37_abs",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable because the user mentioned baseball, not football. The answer correctly marks it as unanswerable with an empty response and no citations."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable because the user mentioned baseball, not football. The answer correctly marks it as unanswerable with an empty response and no citations."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable because the user mentioned baseball, not football. The answer correctly marks it as unanswerable with an empty response and no citations."
+          }
+        }
+      },
+      {
+        "id": "72e3ee87",
+        "split": "public_test",
+        "cluster": "history-8e25897899ab017e",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer is '50'. Both cited fragments (user message and assistant response) confirm that 50 episodes were completed."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.5,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer is exactly '50', which matches the reference. The cited fragment supports this number directly."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states 50 episodes. The cited fragment explicitly mentions 'I just completed 50 episodes' of Crash Course's Science series."
+          }
+        }
+      },
+      {
+        "id": "gpt4_468eb064",
+        "split": "public_test",
+        "cluster": "history-fb2bfa4b9f53cc46",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.0,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable (reference says 'Emma'), but the model abstained. Abstention is incorrect for an answerable question."
+          },
+          "chat": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable (reference says 'Emma'), but the model abstained. Abstention is incorrect for an answerable question."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable (reference says 'Emma'), but the model abstained. Abstention is incorrect for an answerable question."
+          }
+        }
+      },
+      {
+        "id": "d682f1a2",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 0.6666666666666666,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer claims only 2 services were used, missing Uber Eats which is explicitly mentioned in the evidence (though not cited by this specific answer index, the question asks for total usage recently). More importantly, it fails to match the reference answer of 3. Even if we consider only cited fragments, the prompt implies evaluating against the full context or at least the correct ground truth. Since the ground truth is 3 and this says 2, it is incorrect. Additionally, citing only two fragments while ignoring the third relevant one leads to an incomplete/incorrect conclusion relative to the actual user history provided in the dataset context."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies three distinct food delivery services (Domino's Pizza, Fresh Fusion, Uber Eats) based on the cited fragments. The count matches the reference expected answer of 3."
+          },
+          "bge": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 0.6666666666666666,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer claims only 2 services were used, missing Uber Eats. It does not match the reference expected answer of 3."
+          }
+        }
+      },
+      {
+        "id": "370a8ff4",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '10 weeks' is incorrect compared to the reference '15'. Furthermore, calculating the time difference between the two cited timestamps (Feb 19, 2023 and Apr 10, 2023) yields approximately 7 weeks, not 10. Therefore, the answer is factually wrong relative to the evidence and the reference."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '10 weeks' is incorrect compared to the reference '15'. The cited fragments show a time gap of roughly 7 weeks (Feb 19 to Apr 10), so the claim of 10 weeks is unsupported by the provided evidence."
+          },
+          "bge": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '10 weeks' is incorrect. The reference expects '15'. The calculation requires finding the time difference between recovering from the flu (timestamp 1674125220000) and the 10th jog (timestamp 1681160280000). The difference is approximately 81 days, which is about 11.5-12 weeks, not 10. More importantly, the cited fragments do not support the specific number '10' as the duration since recovery; they only provide timestamps that require external calculation to derive the correct answer (which is ~11.5 weeks, but the reference says 15, implying a different interpretation or data point not fully clear, yet '10' is definitely wrong based on the provided timestamps). Actually, let's re-read carefully. Timestamp 1: 1674125220000 (Feb 19, 2023). Timestamp 2: 1681160280000 (Apr 10, 2023). Difference is ~50 days (~7 weeks). Wait, the reference answer is 15. Let's look at the question date: 2023/10/15. If the user recovered in Feb and jogs in Apr, that's 7 weeks. If the user recovered in Feb and the '10th jog' happened later? No, the fragment says 'I went on my 10th jog outdoors today' with timestamp Apr 10. So 7 weeks passed. Why is the reference 15? Perhaps there are other messages not cited? Regardless, the model answered '10 weeks'. This does not match the reference '15'. Also, the claim '10 weeks' is not supported by the arithmetic of the cited timestamps (which yield ~7 weeks). Thus incorrect and unsupported."
+          }
+        }
+      },
+      {
+        "id": "60472f9c",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '2' is correct. The evidence lists three projects: thesis, Data Mining, and Database Systems. Excluding the thesis leaves two projects."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.3333333333333333,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '2' is correct. The evidence lists three projects: thesis, Data Mining, and Database Systems. Excluding the thesis leaves two projects."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.6666666666666666,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '2' is correct. The evidence lists three projects: thesis, Data Mining, and Database Systems. Excluding the thesis leaves two projects."
+          }
+        }
+      },
+      {
+        "id": "4100d0a0",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the ethnicity as mixed Irish and Italian. The cited fragments include the user's statement confirming this heritage, making the claim fully supported."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the ethnicity as mixed Irish and Italian, which is explicitly stated in the cited user message fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the ethnicity as mixed Irish and Italian, directly supported by the text in the cited user message fragment."
+          }
+        }
+      },
+      {
+        "id": "b3c15d39",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '5 days' is correct. The cited fragments include the assistant's message confirming the Feb 5th order date and the user's message stating the item arrived on Feb 10th. The calculation follows from these facts."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '5 days' is correct based on the order date (Feb 5th) and arrival date (Feb 10th). The cited fragments explicitly provide both dates, allowing for valid arithmetic inference."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states it took 5 days. The cited fragments provide the necessary evidence: the order date of February 5th and the arrival date of February 10th. The difference between these dates supports the claim."
+          }
+        }
+      },
+      {
+        "id": "gpt4_a2d1d1f6",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '0 days ago' contradicts the reference '3 days ago'. The cited fragment states the harvest happened 'today', but the message timestamp indicates April 15, 2023, while the question date is April 18, 2023. The model failed to calculate the correct time difference."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '0 days ago' contradicts the reference '3 days ago'. The cited fragment states the harvest happened 'today', but the question date is 2023/04/18 while the message timestamp in metadata is 1681582260000 (April 15, 2023). Thus, relative to the question date, it was 3 days ago. The model failed to perform this temporal inference."
+          },
+          "bge": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '0 days ago' contradicts the reference '3 days ago'. The cited fragment states the harvest happened 'today', but the message timestamp indicates April 15, 2023, while the question date is April 18, 2023. The model failed to calculate the correct time difference."
+          }
+        }
+      },
+      {
+        "id": "8a2466db",
+        "split": "public_test",
+        "cluster": "history-7f4ff16520358ee2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer provides the same list of Adobe Premiere Pro-specific resources as the reference and cited evidence. It is semantically correct and fully supported."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer matches the reference expectations by listing Adobe Premiere Pro resources found in the cited evidence. No unsupported claims are made."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer lists specific resources (Adobe Premiere Pro docs, YouTube channels, online courses, forums) that match the reference's preference for Adobe Premiere Pro tailored resources. All claims are directly supported by the cited fragment."
+          }
+        }
+      },
+      {
+        "id": "gpt4_31ff4165",
+        "split": "public_test",
+        "cluster": "history-570eea0ef7eebbce",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.4,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable (reference says true), so abstention is incorrect."
+          },
+          "chat": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.6,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable (reference says true), so abstention is incorrect."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.6,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable (reference says true), so abstention is incorrect."
+          }
+        }
+      },
+      {
+        "id": "bbf86515",
+        "split": "public_test",
+        "cluster": "history-e8f495921a1f8edc",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the dates (June 14th for Turbocharged Tuesdays and June 18th for Rack Fest) from the cited fragments and calculates the difference as 4 days."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the dates (June 14th for Turbocharged Tuesdays and June 18th for Rack Fest) from the cited fragments and calculates the difference as 4 days."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.5,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence, so abstention is incorrect. However, since no factual claims were made, it is technically supported by the empty citation set in the context of non-claiming answers."
+          }
+        }
+      },
+      {
+        "id": "71315a70",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the time spent as 10-12 hours, matching the reference. The cited fragments explicitly state 'I've already spent 10-12 hours on my abstract ocean sculpture' and 'I've already put in 10-12 hours', directly supporting the claim."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer provides the exact value '10-12 hours' from the reference. The cited fragments contain this specific information regarding the abstract ocean sculpture, fully supporting the answer."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer states 'You have spent 10-12 hours on your abstract ocean sculpture', which matches the reference. The cited fragments confirm this duration for the specified object, making the claim supported."
+          }
+        }
+      },
+      {
+        "id": "gpt4_93159ced_abs",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable because the user hasn't started working at Google yet. The answer correctly marks it as unanswerable with an empty response and no citations, which aligns with the requirement for explicit abstention on unanswerable questions."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable. The answer correctly marks it as unanswerable with an empty response and no citations, satisfying the abstention requirement."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable. The answer correctly marks it as unanswerable with an empty response and no citations, satisfying the abstention requirement."
+          }
+        }
+      },
+      {
+        "id": "a06e4cfe",
+        "split": "public_test",
+        "cluster": "history-f8c273b60dd78afa",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the 3:1 ratio as stated in the cited evidence ('settled on a 3:1 ratio')."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the 3:1 ratio as stated in the cited evidence ('settled on a 3:1 ratio')."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the 3:1 ratio as stated in the cited evidence ('settled on a 3:1 ratio')."
+          }
+        }
+      },
+      {
+        "id": "afdc33df",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer lists organization tips derived from the evidence but does not address the user's specific concern regarding the maintenance of the granite surface near the sink, missing a critical condition from the reference."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer provides generic tips for organizing a utensil holder but fails to acknowledge the user's specific concern about maintaining their granite surface around the sink area, which is a key requirement in the reference."
+          },
+          "bge": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer focuses solely on utensil organization and ignores the reference's requirement to provide tips addressing the maintenance of the granite surface, particularly around the sink area."
+          }
+        }
+      },
+      {
+        "id": "603deb26",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '10 times' matches the reference. The cited fragments explicitly state 'I've tried making it at home 10 times now since my friend Emma showed me how to make it', supporting the claim."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '10' matches the reference semantically. The cited fragments explicitly state 'I've tried making it at home 10 times now since my friend Emma showed me how to make it', supporting the count."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '10 times' matches the reference. The cited fragments explicitly state 'I've tried making it at home 10 times now since my friend Emma showed me how to make it', supporting the claim."
+          }
+        }
+      },
+      {
+        "id": "853b0a1d",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies the age as 18 based on the explicit statement in the source metadata that the necklace was given on the user's 18th birthday."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer '18' matches the reference and is directly supported by the text 'my grandma gave me on my 18th birthday' in the cited fragments."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states the age as 18, which is explicitly mentioned in the cited fragments ('gave me on my 18th birthday'). The claim is fully supported by the evidence."
+          }
+        }
+      },
+      {
+        "id": "ceb54acb",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer lists the four specific terms requested, which exactly match the expected answer and are directly supported by the cited fragment."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer lists the four specific terms requested, which exactly match the expected answer and are directly supported by the cited fragment."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer lists the four specific terms requested, which exactly match the expected answer and are directly supported by the cited fragment."
+          }
+        }
+      },
+      {
+        "id": "21d02d0d",
+        "split": "public_test",
+        "cluster": "history-c4b3502b99674b8e",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly states 2 misses and lists the specific dates (March 5th and March 26th). Both dates are present in the cited fragments. The attribution of both to work commitments is supported by the text ('miss due to work commitments' for March 5th, and 'busy with work... missed... March 26th' for the other)."
+          },
+          "chat": {
+            "success": false,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": false,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer claims only 1 fun run was missed, which contradicts the reference answer of 2. Furthermore, it fails to account for the March 26th event mentioned in the available evidence (though not cited in this specific answer's indices, the error is primarily factual against the ground truth). Even if we look at just the cited fragment, it mentions one miss, but the question asks for the total count based on all available info, making the single citation insufficient to support the final count of 1 as the *total* correct answer when 2 exist."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies that 2 fun runs were missed. It cites two fragments: one explicitly stating a miss on March 5th due to work, and another stating a miss on March 26th while mentioning being 'busy with work lately'. The inference that the second miss was also due to work commitments is supported by the context provided in the cited evidence."
+          }
+        }
+      },
+      {
+        "id": "1b9b7252",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer 'Mindful.org' matches the expected answer. The cited fragment explicitly states that Mindful.org includes free guided imagery exercises such as 'The Mountain Meditation' and 'The Body Scan Meditation', directly supporting the claim."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer 'Mindful.org' matches the expected answer. The cited fragment explicitly states that Mindful.org includes free guided imagery exercises such as 'The Mountain Meditation' and 'The Body Scan Meditation', directly supporting the claim."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer 'Mindful.org' matches the expected answer. The cited fragment explicitly states that Mindful.org includes free guided imagery exercises such as 'The Mountain Meditation' and 'The Body Scan Meditation', directly supporting the claim."
+          }
+        }
+      },
+      {
+        "id": "gpt4_f420262d",
+        "split": "public_test",
+        "cluster": "history-f8c273b60dd78afa",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.8,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The cited fragment explicitly mentions a flight with American Airlines on February 10th. Since the question date is March 2nd, 2023, and Valentine's Day is February 14th, there is a temporal mismatch (Feb 10 vs Feb 14). However, in many personal context QA datasets, 'Valentine's day' might refer to the trip taken around that time or the user considers the Feb 10th flight as part of their Valentine's trip/experience. Let's look closer. The prompt asks for strict event time matching. Feb 10 is not Feb 14. Is there another flight? No other flights are mentioned in the snippets. Wait, looking at Index 2, it cites a different message but same content essentially. Let's re-read carefully. 'flight from New York to Los Angeles on February 10th'. The question asks about 'Valentine's day' (Feb 14). Strictly speaking, Feb 10 != Feb 14. However, often these questions rely on implicit context where the user refers to the trip *for* Valentine's day or similar. But the rubric says 'Reject wrong entity, event time...'. Feb 10 is the wrong event time for Valentine's Day. BUT, usually, if the only available data is Feb 10 and the question asks for Valentine's, it might be a trick or the dataset assumes Feb 10 was the relevant flight. Let's check if there is ambiguity. If I must be strict: Feb 10 is not Feb 14. Therefore, the answer 'American Airlines' is technically supported by the text for a Feb 10 flight, but does it match the 'Valentine's day' condition? If the user flew on Feb 10, they did not fly on Feb 14. Unless the flight was delayed or the user misremembered. Given the constraints, if no other flight is listed, and the system expects an answer, it likely maps the specific mentioned flight to the holiday context loosely OR the question implies the trip associated with that period. However, standard evaluation requires exact date match unless inference is allowed. 'Allow arithmetic and temporal inference.' Can we infer Feb 10 is Valentine's? No. Can we infer the user meant the Feb 10 flight when saying Valentine's? Possibly. Let's look at Index 2. Same answer, different citation. Both cite the Feb 10 flight. If the ground truth is American Airlines, then the evaluator accepts the Feb 10 flight as the Valentine's flight. This suggests a loose interpretation or that the 'Valentine's day' reference in the question is mapped to the specific event described in the memory which happened near that date. Given both indices provide the same answer and cite the same fact, and assuming the reference answer 'American Airlines' is correct, the mapping holds. I will mark them correct because the entity matches the only flight mentioned in the vicinity of the date, implying the user identifies this flight with the occasion. Supported=true because the airline is explicitly named in the cited fragment."
+          },
+          "chat": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.4,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the provided evidence, so abstention is incorrect."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.8,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "Same reasoning as index 1. The cited fragment confirms the airline was American Airlines for the flight on Feb 10th, which is accepted as the answer for the Valentine's day query in this context."
+          }
+        }
+      },
+      {
+        "id": "71a3fd6b",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer matches the reference phone number exactly. The cited fragment explicitly lists 'Phone: +49 (0) 62 32 / 14 23 - 0' for the Speyer tourism board."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer matches the reference phone number exactly. The cited fragment explicitly lists 'Phone: +49 (0) 62 32 / 14 23 - 0' for the Speyer tourism board."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer matches the reference phone number exactly. The cited fragment explicitly lists 'Phone: +49 (0) 62 32 / 14 23 - 0' for the Speyer tourism board."
+          }
+        }
+      },
+      {
+        "id": "e47becba",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer 'Business Administration' matches the expected answer exactly. It is directly supported by the cited text which states 'I graduated with a degree in Business Administration'."
+          },
+          "chat": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer correctly identifies 'Business Administration' as the degree, matching the reference. The cited fragment explicitly states 'I graduated with a degree in Business Administration', fully supporting the claim."
+          },
+          "bge": {
+            "success": true,
+            "answered": true,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 1.0,
+              "all_answer_sessions_hit": true,
+              "complete_evidence_recall": null
+            },
+            "reason": "The answer 'Business Administration' matches the expected answer exactly. It is directly supported by the cited text which states 'I graduated with a degree in Business Administration'."
+          }
+        }
+      },
+      {
+        "id": "ba358f49_abs",
+        "split": "public_test",
+        "cluster": "history-c15725d156e3baf2",
+        "answerable": false,
+        "arms": {
+          "vector": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable due to missing information. The answer correctly identifies it as unanswerable and abstains."
+          },
+          "chat": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable due to missing information. The answer correctly identifies it as unanswerable and abstains."
+          },
+          "bge": {
+            "success": true,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": true,
+            "supported": true,
+            "retrieval": {
+              "session_recall": null,
+              "all_answer_sessions_hit": null,
+              "complete_evidence_recall": null
+            },
+            "reason": "The reference indicates the question is unanswerable due to missing information. The answer correctly identifies it as unanswerable and abstains."
+          }
+        }
+      },
+      {
+        "id": "4dfccbf8",
+        "split": "public_test",
+        "cluster": "history-52857539762d223c",
+        "answerable": true,
+        "arms": {
+          "vector": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.5,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the reference, so abstention is incorrect."
+          },
+          "chat": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.5,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the reference, so abstention is incorrect."
+          },
+          "bge": {
+            "success": false,
+            "answered": false,
+            "answer_error": false,
+            "judge_error": false,
+            "correct": false,
+            "supported": true,
+            "retrieval": {
+              "session_recall": 0.5,
+              "all_answer_sessions_hit": false,
+              "complete_evidence_recall": null
+            },
+            "reason": "The question is answerable based on the reference, so abstention is incorrect."
+          }
+        }
+      }
+    ],
+    "usage": {
+      "calls": 160,
+      "reported_total_tokens": 350491,
+      "missing_usage_calls": 0
+    },
+    "search_latency": {
+      "count": 32,
+      "p50_ms": 5143.35,
+      "p95_ms": 5289.27,
+      "p99_ms": 5322.21
+    },
+    "rerank_extra_latency": {
+      "chat": {
+        "count": 32,
+        "p50_ms": 906.76,
+        "p95_ms": 1412.71,
+        "p99_ms": 1808.06
+      },
+      "bge": {
+        "count": 32,
+        "p50_ms": 353.48,
+        "p95_ms": 511.57,
+        "p99_ms": 671.04
+      }
+    },
+    "bge_gpu_allocator": {
+      "peak_allocated_bytes": 1312226816,
+      "peak_reserved_bytes": 1581252608
+    },
+    "notes": [
+      "same-model semantic judge; not independent human validation",
+      "cluster bootstrap is descriptive with few clusters",
+      "public session recall is not full evidence recall",
+      "reference-token upper limits, not equal actual reader context length"
+    ]
+  }
+}

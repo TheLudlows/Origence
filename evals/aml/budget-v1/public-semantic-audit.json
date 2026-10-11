@@ -1,0 +1,67 @@
+{
+  "schema": "aml-postrun-semantic-audit-v1",
+  "audited_at_utc": "2026-10-11T05:17:05.541Z",
+  "reviewer": "same coding agent, not independent human review",
+  "reviewed": "all 96 answer texts and 32 question/reference pairs; every failed judge summary; targeted citations for seven cases and original gold-session user messages for 370a8ff4",
+  "original_scores_unchanged": true,
+  "aggregate_rescoring": false,
+  "findings": [
+    {
+      "id": "b29f3365",
+      "arms": [
+        "chat"
+      ],
+      "kind": "judge_false_negative_and_reason_flag_conflict",
+      "detail": "Both cited messages share a session/time anchor: six weeks of lessons and amp purchased two weeks ago support four weeks. Structured supported=false contradicts the arithmetic and the judges own final explanation."
+    },
+    {
+      "id": "gpt4_f420262d",
+      "arms": [
+        "vector",
+        "bge"
+      ],
+      "kind": "judge_false_positive_support",
+      "detail": "Question asks about Valentines Day; cited fragments explicitly describe a February 10 flight. Judge marks supported=true by deferring to reference airline, despite acknowledging the date mismatch. Correct entity string does not establish event-time support."
+    },
+    {
+      "id": "gpt4_a2d1d1f6",
+      "arms": [
+        "vector",
+        "chat",
+        "bge"
+      ],
+      "kind": "reader_relative_time_failure_and_judge_support_false_positive",
+      "detail": "Message today is anchored to 2023-04-15, question date is 2023-04-18. All answers say 0 days. Judge marks correct=false but supported=true despite this contradiction; success already remains false."
+    },
+    {
+      "id": "370a8ff4",
+      "arms": [
+        "vector",
+        "chat",
+        "bge"
+      ],
+      "kind": "public_reference_date_inconsistency_and_judge_date_error",
+      "detail": "Original gold sessions are 2023-01-19 10:47 (recovered today) and 2023-04-10 20:58 (10th jog today), about 81.42 days / 11.63 weeks apart, while reference is 15 weeks. Answer 10 weeks is also unsupported. Judge additionally misreads the first epoch as February 19. No reference correction or rescoring applied."
+    },
+    {
+      "id": "d682f1a2",
+      "arms": [
+        "vector",
+        "bge"
+      ],
+      "kind": "incomplete_count_evidence",
+      "detail": "Answers enumerate two delivery services; reference and chat evidence include a third. A high session recall or individually true facts do not prove completeness of a count."
+    },
+    {
+      "id": "afdc33df",
+      "arms": [
+        "vector",
+        "chat",
+        "bge"
+      ],
+      "kind": "partial_personalization",
+      "detail": "Retrieved advice supports utensil organization but does not fulfill the granite/sink preference in the reference. Same answer-bearing session is not proof that all relevant facts were delivered."
+    }
+  ],
+  "decision_use": "Automated scores are diagnostic only. Do not promote BGE, chat rerank, or the same-model verifier into production based on this run. Retain exact artifacts; next tests need explicit temporal anchors, question/rubric review and evaluator calibration. Current public subset is now observed regression data."
+}

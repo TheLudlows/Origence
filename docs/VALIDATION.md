@@ -2,6 +2,18 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 同预算实验完成与方案决定
+
+[完整报告](../evals/aml/budget-v1/README.md)已完成既定四步。v4 32 题和公开 32 题的 16 份阶段工件原文、范围、排序、预算、引用及关联哈希均复验通过；共 320 次聊天调用 / 477,289 个供应商报告 token，无执行错误，无自动重试，两个临时宿主目录均清理。公开 1,524 批/15,685 条消息的 Add/Search 阶段耗时 30.45 分钟，Search p50/p95 5143.35/5289.27 ms；不是生产容量或 SLO 验收。
+
+公开自动受支持成功 vector/chat/BGE 22/32、22/32、21/32；可答成功 19/29、19/29、18/29，3/3 无答案均拒答。BGE−chat 的 10 分组区间为 −16 到 +25 个百分点。v4 自动原始计数保留，但题意/标签及裁判歧义使安全门槛无法验收。审计记录同模型裁判错误拦截、错误放行及参考日期冲突，不事后改题、剔除失败或重算分数。因此三种实验组件均不新增接入生产流程。
+
+新增聚类统计回归后，Python 3.13.11 `python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py`：41 passed / 0 skipped，4.752 秒（AML_TEST_BINARY 已设置）。`tools/aml_budget_verify.py` 在项目 GPU venv 下对两组各 32 题/8 工件检查全部通过；验证本身没有模型调用。Rust 实现自上节已通过的 head 2044d5a 后未改动，不重复测试来替代实际证据。最终 PR CI 另核对，不把较早 CI 冒充最终提交验收。
+
+## 2026-10-11 PR #31 实现提交 CI
+
+[run 38112578905](https://github.com/TheLudlows/Origence/actions/runs/38112578905) 对 head `2044d5a6751f095595b1bd01fc5c930a268e364d` 成功，实际合并预览 checkout `63111bd`。fast-check 轻量 lib 30/local 86，Python 工具 39 passed/1 skipped（共 40），既有 evals 9 passed；Linux 默认 lib 31/local 108、身份回归 8、Clippy/build/HTTP smoke/强退恢复成功。Windows/macOS/container 按 main-only 策略跳过。[精确记录](evidence/2026-10-11-aml-pr31-ci.json)。此前 main `072ad2c` 的 [run 38110941638](https://github.com/TheLudlows/Origence/actions/runs/38110941638) 五个作业均已成功；不把它当作本轮新改动的三平台验证。
+
 ## 2026-10-11 AML 长消息来源与同预算评测
 
 基于 main `072ad2c`。Search 只增加已有 locator 的 parser/source_path/byte_basis/byte_start/end/message_count 标注；原文、分块算法、稳定 ID、解析器版本、Worker、超时/取消/隔离保证不变。新严格评测解码器检查原消息 UTF-8 半开区间、用户 scope 和元数据；片段命中不当作完整消息覆盖。

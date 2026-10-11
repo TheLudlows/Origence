@@ -1,0 +1,38 @@
+{
+  "run": 38110941638,
+  "head": "072ad2c7fe182f78db84f438212319e315e3f822",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "id": 114386196570,
+      "name": "linux-native",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114386196675,
+      "name": "windows",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114386196701,
+      "name": "fast-check",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114386196721,
+      "name": "macos",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114386196771,
+      "name": "container",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}

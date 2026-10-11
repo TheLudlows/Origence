@@ -1,0 +1,11 @@
+{
+  "checked_after_retrieval_at_utc": "2026-10-11T05:12:05.987Z",
+  "before_digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+  "after": [
+    {
+      "name": "bge-m3:latest",
+      "digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab"
+    }
+  ],
+  "note": "Ollama manifest checked before/after; no per-call weight attestation"
+}

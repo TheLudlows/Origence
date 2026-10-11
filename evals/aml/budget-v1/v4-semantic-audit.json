@@ -1,0 +1,38 @@
+{
+  "schema": "aml-postrun-semantic-audit-v1",
+  "audited_at_utc": "2026-10-11T04:47:54.722Z",
+  "reviewer": "same coding agent; not independent human review",
+  "reviewed": "all 96 v4 answer texts, all failed judgments, corresponding question wording and relevant original messages",
+  "original_scores_unchanged": true,
+  "aggregate_rescoring": false,
+  "findings": [
+    {
+      "id": "development-02-a",
+      "arms": [
+        "chat",
+        "vector"
+      ],
+      "kind": "question_boundary_ambiguity_and_elliptical_answer",
+      "detail": "Question already asks how many degrees below; chat answer 12摄氏度 can inherit the question predicate. Judge rejects the abbreviated answer while accepting 12摄氏度以下, whose strictness is itself ambiguous. Not defensible evidence of a BGE quality win."
+    },
+    {
+      "id": "unseen_test-07-a",
+      "arms": [
+        "chat"
+      ],
+      "kind": "judge_false_negative",
+      "detail": "Question explicitly supplies kilograms; answer 7.2 correctly fills that unit-bearing slot and cited source chain computes 18×0.4. Penalizing omitted repeated unit is an overly literal judge decision."
+    },
+    {
+      "id": "unseen_test-06-b",
+      "arms": [
+        "vector",
+        "chat",
+        "bge"
+      ],
+      "kind": "ambiguous_question_vs_unanswerable_label",
+      "detail": "Question asks where to send the device, not explicitly street address. Source still identifies the repair shop. Answer 松影仪器店 is supported for that reading; gold forces street-address completion and abstention. This cannot establish a hallucination/rejection failure."
+    }
+  ],
+  "decision_use": "v4 scores remain frozen same-model automated observations; disputed cases invalidate an all-safety-cases-passed gate and do not establish reranker superiority. Future version must explicitly ask for street address / standalone full boundary when required, with independent label review before new evaluation."
+}
