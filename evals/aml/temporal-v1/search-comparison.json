@@ -1,0 +1,37 @@
+{
+  "schema": "aml-profile-comparison-v1",
+  "foreground_question_id": "afdc33df",
+  "foreground_messages": 502,
+  "base": {
+    "http": {
+      "count": 8,
+      "p50": 685.7563000012306,
+      "p95": 760.0791000004392
+    },
+    "vector": {
+      "count": 8,
+      "p50": 517.6455,
+      "p95": 591.4916999999999
+    }
+  },
+  "background_512": {
+    "http": {
+      "count": 8,
+      "p50": 2210.0376000016695,
+      "p95": 2311.688599998888
+    },
+    "vector": {
+      "count": 8,
+      "p50": 2017.9622,
+      "p95": 2126.6797
+    }
+  },
+  "checks": {
+    "both_completed": true,
+    "both_cleaned": true,
+    "all_native_count_163": true,
+    "all_vector_batches_2": true
+  },
+  "finding": "Unrelated workspace writes increase native vector stage cost while eligible hit count and vector request count are unchanged; neither query embedding nor final authorization is the main added cost.",
+  "unresolved": "Does not isolate table open/manifest/schema versus filtered scan; larger full corpus ~5.29s not rerun. No optimization or SLO claim."
+}

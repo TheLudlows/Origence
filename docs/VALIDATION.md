@@ -2,6 +2,17 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 时间与裁判消融、Search 分段定位
+
+基于 main 737e209；[报告](../evals/aml/temporal-v1/README.md)、[冻结](../evals/aml/temporal-v1/freeze.json)、[输入/引用审计](../evals/aml/temporal-v1/audit.json)。10 道已观察时间题三臂与 12 个支持校准反例双臂，共 54 次调用 / 53,719 个供应商报告 token，无执行错误、无重试。新日期旁注不改变证据字节；新支持分类仍存在错误放行。旧 supported 字段与新支持分类器分别为 8/12、11/12，与旧 correct AND supported 联合判断不可混为同一指标；旧联合判断这批负例为 0 错误放行。所有新结论只作诊断，不改历史分数或宣称质量验收。
+
+Rust 仅新增不含内容/ID 的聚合 debug 计时。真实 BGE-M3、最大已观察历史 46 批/502 消息先后在两个隔离宿主测量：单历史 HTTP 611–760 ms；追加其他四个用户 512 批单消息后 2143–2312 ms，额外成本集中在向量阶段。16 次 Search 原文/范围和宿主内重复 ID 均通过，两份临时库均清理。尚未复现完整 32 用户库或区分向量后端内部开销；不是优化或 SLO 验收。精确二进制/脚本哈希及首版执行器快照在报告目录。
+
+- Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（9.20 秒）；cargo test --offline --locked --lib -j 2 为 31 passed（1.25 秒）；cargo test --offline --locked --test local aml_ -j 2 为 10 passed / 98 filtered（17.54 秒）。构建完成 35.05 秒。
+- Python 3.13.11，AML_TEST_BINARY 已设置：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 44 passed / 0 skipped（4.607 秒），新增毫秒精度、负 epoch、闰日、缺失/非法时间、负日期差、UTF-8 原文不变与无效裁判输出检查。
+- python tools/aml_temporal_verify.py 离线重建 30 份输入与引用、核验 24 份校准字段及冻结哈希，passed；54 次调用输入合计 191,501 UTF-8 字节。
+- 前一轮 main 737e209 的 [run 38114714602](https://github.com/TheLudlows/Origence/actions/runs/38114714602) 五个作业全部成功，[记录](../evals/aml/temporal-v1/previous-main-ci.json)；它不是本轮改动的 CI。新 PR CI 在提交后核对。
+
 ## 2026-10-11 同预算实验完成与方案决定
 
 [完整报告](../evals/aml/budget-v1/README.md)已完成既定四步。v4 32 题和公开 32 题的 16 份阶段工件原文、范围、排序、预算、引用及关联哈希均复验通过；共 320 次聊天调用 / 477,289 个供应商报告 token，无执行错误，无自动重试，两个临时宿主目录均清理。公开 1,524 批/15,685 条消息的 Add/Search 阶段耗时 30.45 分钟，Search p50/p95 5143.35/5289.27 ms；不是生产容量或 SLO 验收。

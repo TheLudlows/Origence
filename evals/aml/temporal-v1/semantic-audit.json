@@ -1,0 +1,69 @@
+{
+  "schema": "aml-temporal-case-audit-v1",
+  "reviewer": "same coding agent; not independent human review",
+  "scope": "All 30 new answers and all 24 calibration output fields reviewed; changed-answer citations checked against frozen retrieved fragments. No historical rescoring.",
+  "cases": [
+    {
+      "id": "gpt4_a2d1d1f6",
+      "observed": {
+        "raw": "0 days",
+        "dates": "2 days",
+        "offsets": "3 days"
+      },
+      "finding": "Source message date April 15, question date April 18: 3 calendar days. Message timestamp to question timestamp is only 2 completed 24-hour periods; dates-only output exposes calendar-versus-elapsed ambiguity. The calendar-offset arm matches the registered reference convention, but event time within the source day is unknown."
+    },
+    {
+      "id": "370a8ff4",
+      "observed": {
+        "raw": "10 weeks",
+        "dates": "12 weeks",
+        "offsets": "12 weeks"
+      },
+      "finding": "Source dates January 19 and April 10 differ by 81 calendar days (11 weeks 4 days); 12 is rounded rather than exact. Dataset reference 15 remains in conflict. No arm receives a semantic success label for this disputed case."
+    },
+    {
+      "id": "gpt4_f420262d",
+      "observed": {
+        "raw": "American Airlines, citations 0 and 2",
+        "dates": "abstains",
+        "offsets": "American Airlines, citation 1"
+      },
+      "finding": "Raw citations concern February 10, not February 14. Offset citation 1 is an unnamed airline on a February 20 message date. Both answered arms lack support for the requested event; dates-only abstention avoids this unsupported claim. Calendar offsets do not solve event alignment."
+    },
+    {
+      "id": "gpt4_68e94287",
+      "observed": "all arms vegan chili first",
+      "finding": "Cited sources support March 9 recipe versus March 15 PlankChallenge; offset answer spells out these dates."
+    },
+    {
+      "id": "bbf86515",
+      "observed": "all arms 4 days",
+      "finding": "Citations explicitly name June 14 and June 18 events even though message timestamps are June 28; source-date offsets must not override explicit event dates."
+    },
+    {
+      "ids": [
+        "b29f3365",
+        "gpt4_1e4a8aeb",
+        "gpt4_468eb064",
+        "4dfccbf8",
+        "gpt4_93159ced_abs"
+      ],
+      "observed": "all arms abstain",
+      "finding": "No improvement observed with this fixed vector evidence; one question is registered unanswerable. No claim that all abstentions are semantically necessary."
+    }
+  ],
+  "calibration": {
+    "authored_states": {
+      "supported": 4,
+      "contradicted": 4,
+      "insufficient": 4
+    },
+    "old_support_false_accepts": 4,
+    "new_support_false_accepts": 1,
+    "false_rejects_both": 0,
+    "old_joint_correct_and_supported_false_accepts": 0,
+    "caution": "Old support boolean and new support-only classifier are different from old joint correctness-plus-support acceptance; do not claim end-to-end superiority.",
+    "new_failure": "arithmetic-negative: machine state says supported while brief explanation identifies 6 minus 2 equals 4 and rejects answer 6. Preserve the machine field; do not regex-repair reasons."
+  },
+  "decision": "Keep date sidecars and support classifier experimental. Need explicit date-unit/rounding conventions, event alignment and independently reviewed labels before any quality gate."
+}

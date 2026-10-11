@@ -23,6 +23,7 @@ impl Service {
         {
             return Err(AppError::Invalid("query, mode or limit invalid".into()));
         }
+        let started = std::time::Instant::now();
         // Resolve the scoped identity before branch candidate limits and native top-k.
         // The final authorized read below still verifies visibility and identity.
         let mut authorized = self.read(a, Permission::Read).await?;
@@ -45,6 +46,8 @@ impl Service {
                 "graph": {"entities": [], "relations": []}
             }));
         }
+        let authorization_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let embedding_started = std::time::Instant::now();
         let mut warnings = Vec::new();
         let mut effective = input.mode.clone();
         let embedding = if effective != "keyword" {
@@ -60,9 +63,14 @@ impl Service {
         } else {
             None
         };
+        let embedding_ms = embedding_started.elapsed().as_secs_f64() * 1000.0;
+        let mut eligibility_ms = 0.0;
+        let mut vector_ms = 0.0;
+        let mut vector_batches = 0_usize;
         let profile = self.models.profile.as_deref().unwrap_or("");
         let mut native_hits = Vec::new();
         if let Some(vector) = embedding {
+            let eligibility_started = std::time::Instant::now();
             let mut tx = self.read(a, Permission::Read).await?;
             let generations = tx.vector_generations(profile, vector.len()).await?;
             let mut eligible = Vec::new();
@@ -74,8 +82,11 @@ impl Service {
                 ));
             }
             tx.commit().await?;
+            eligibility_ms = eligibility_started.elapsed().as_secs_f64() * 1000.0;
+            let vector_started = std::time::Instant::now();
             for (generation, ids) in eligible {
                 for batch in ids.chunks(512) {
+                    vector_batches += 1;
                     for hit in self
                         .engine
                         .vector()
@@ -94,7 +105,10 @@ impl Service {
                     }
                 }
             }
+            vector_ms = vector_started.elapsed().as_secs_f64() * 1000.0;
         }
+        let native_count = native_hits.len();
+        let branches_started = std::time::Instant::now();
         let summaries_enabled =
             effective == "hybrid" && input.memory_identity.is_none() && input.components.summaries;
         let graph_enabled =
@@ -202,6 +216,8 @@ impl Service {
         }
         let hits = fuse(branches, effective == "hybrid");
         tx.commit().await?;
+        let branches_ms = branches_started.elapsed().as_secs_f64() * 1000.0;
+        let verification_started = std::time::Instant::now();
         let mut verify = self.read(a, Permission::Read).await?;
         let mut current = Vec::new();
         let mut identities = HashMap::new();
@@ -254,6 +270,7 @@ impl Service {
         }
         let relations = live_relations;
         verify.commit().await?;
+        let verification_ms = verification_started.elapsed().as_secs_f64() * 1000.0;
         let hits: Vec<Value> = hits
             .into_iter()
             .map(|hit| {
@@ -262,6 +279,14 @@ impl Service {
                 value
             })
             .collect();
+        // Opt-in aggregate diagnostics only: never record queries, IDs, paths or evidence.
+        tracing::debug!(
+            target: "origence::search_timing",
+            authorization_ms, embedding_ms, eligibility_ms, vector_ms, branches_ms,
+            verification_ms, total_ms = started.elapsed().as_secs_f64() * 1000.0,
+            vector_batches, native_count, returned_count = hits.len(),
+            "search completed"
+        );
         Ok(
             json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}}),
         )

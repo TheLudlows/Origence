@@ -1,0 +1,31 @@
+{
+  "schema": "aml-temporal-artifacts-v1",
+  "base_commit": "737e20936dd752a933290c06a8225ad8f74fa0d8",
+  "files": {
+    "audit.json": "0ccc94e50befed7471ffac88f10e72589514c7a05ec1e55845e2d7ad60128033",
+    "calibration.json": "2f9c54a87de115b68e2b48d57dd49ccad4d3c7ec0ad1a2f084069beaa20b69c5",
+    "freeze.json": "7f840e8bf0ff911f48a421c6c1c0ae0a3a911ff4c83bba4fe77ef26bac8999db",
+    "previous-main-ci.json": "bceb0d2e9dee26a9a7dc2e605ccdf7c558ce376f64a146df62dff5740231e3a3",
+    "README.md": "875c9f32f7ef763d7bf500580696e366e51130e5e885385ddd2baf4b53794e3a",
+    "run.json": "6806b2529652b7d98fd89316d15bce675f20cf86e878b2d0127aa1561f50e59e",
+    "search-comparison.json": "54ec185c21e1b5f55892af8526b2fab8c44ad03ef316959968da11d706f06ee1",
+    "search-profile-runner-v1.py.gz": "6daeb5c7afc1ea2af2cfc664d625b2e6872989880a2715e043ca75e56d3be749",
+    "search-profile.json": "a11eaab1e648215622cfac436f72d928f8574a9b12ef44c8e0799fa2c4cfe982",
+    "search-scale-plan.json": "33076ed79cedba57a387321512bba8afa7cbe8864cf497f82383847668e0b576",
+    "search-scale.json": "11432dc3efeebbcd6d8bb73e062a41b1426ca26d05a488422e1c39052ec02f08",
+    "semantic-audit.json": "9156542ee12af9235a96b263d4bc541bb1891552e97086c096fe17ccb129ef61"
+  },
+  "post_run_tools": {
+    "tools/aml_temporal_verify.py": "8fd49bbeb55b75c1e41a72a4a2eae91fce76107645d6781ed16c9504fb5b577d",
+    "tools/aml_search_profile.py": "0cf6daffcb4195294cb65b117d63ff748984fdb343655f97afc98d4fc76223bb",
+    "tools/test_aml_temporal.py": "9f3ae6feb8da4c54e65a9d823b1e64f2f4a5bea9bed726a9fe91b6345d041001",
+    "src/retrieval.rs": "9d2aed14d7f1f0b34cca6a1ccf76815d4d821d321c982e12003cbdb5f9fa619c"
+  },
+  "commands": [
+    "python tools/aml_temporal_eval.py --allow-chat-calls",
+    "python tools/aml_temporal_verify.py",
+    "python tools/aml_search_profile.py --binary target/debug/origence.exe --report evals/aml/temporal-v1/search-profile.json",
+    "python tools/aml_search_profile.py --binary target/debug/origence.exe --background-batches 512 --report evals/aml/temporal-v1/search-scale.json"
+  ],
+  "limitations": "Source of first performance run archived as gzip; current script adds optional background writes. Reports retain originals, no prior experiment modified."
+}

@@ -137,3 +137,11 @@ Add 的 HTTP 等待上限为 25 分钟；上游模型每次调用沿用 45 秒�
 模型失败沿用既有 failed 状态，不自动增加模型重试；相同 Add 重发仍指向失败任务并返回 503。授权库宿主用 submit_aml_add 的 receipt.job_id，在 lookup_aml_user 返回的 scope 内调用 Service::job_action(...,"retry") 显式重试原任务。当前没有额外 AML HTTP job 管理入口，原生 namespace 的 /v1/jobs 不能跨 scope 读取它。输入失败需新 request_id/修正内容；临时存储故障仍由原 Worker 的有限 retry_wait 处理。重放不保证上游模型计费一次。
 
 日志和审计不输出 AML 消息、query、options、外部用户 ID 或模型诊断；原文仍在来源/版本/任务发布计划中持久保存，墓碑不等于物理擦除。固定模型的全分支隔离回归与真实本地 BGE-M3 小规模协议演练已通过；正式模型配置、持续容量、数据物理清除、公网部署和正式 Smoke 仍待独立验收。可重复预检、运行演练和退役步骤见 [AML_DRILL](AML_DRILL.md)。
+
+## 检索分段诊断
+
+设置 RUST_LOG=error,origence::search_timing=debug 可记录成功 Search 的 authorization_ms、embedding_ms、eligibility_ms、vector_ms、branches_ms、verification_ms、total_ms，以及 vector_batches/native_count/returned_count。日志不含 query、证据、用户/资产 ID、路径或凭据。默认 info 不输出这些 debug 事件。
+
+branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户映射查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。性能工具另测完整 HTTP 耗时。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
+
+本地实验命令及结果见[时间与性能诊断](../evals/aml/temporal-v1/README.md)。

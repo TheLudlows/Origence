@@ -1,0 +1,162 @@
+{
+  "schema": "authored-support-calibration-v1",
+  "review": "Same coding agent authored labels; no independent human review; observed failure categories.",
+  "cases": [
+    {
+      "id": "unit-positive",
+      "question": "总净重是多少千克？",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "共 18 件，每件净重 0.4 千克。"
+        }
+      ],
+      "answer": "7.2",
+      "expected": "supported",
+      "reference": "7.2 千克"
+    },
+    {
+      "id": "unit-negative",
+      "question": "总净重是多少千克？",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "共 18 件，每件净重 0.4 千克。"
+        }
+      ],
+      "answer": "7.2 克",
+      "expected": "contradicted",
+      "reference": "7.2 千克"
+    },
+    {
+      "id": "strict-positive",
+      "question": "最高温度允许达到 12℃ 吗？",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "运输温度必须严格低于 12℃。"
+        }
+      ],
+      "answer": "不允许。",
+      "expected": "supported",
+      "reference": "不允许达到 12℃"
+    },
+    {
+      "id": "strict-negative",
+      "question": "最高温度允许达到 12℃ 吗？",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "运输温度必须严格低于 12℃。"
+        }
+      ],
+      "answer": "允许。",
+      "expected": "contradicted",
+      "reference": "不允许达到 12℃"
+    },
+    {
+      "id": "date-positive",
+      "question": "On April 18 2023, how many calendar days ago did I harvest my herbs?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "Message dated 2023-04-15 UTC: I harvested my first herbs today."
+        }
+      ],
+      "answer": "3 days",
+      "expected": "supported",
+      "reference": "3 days"
+    },
+    {
+      "id": "date-negative",
+      "question": "On April 18 2023, how many calendar days ago did I harvest my herbs?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "Message dated 2023-04-15 UTC: I harvested my first herbs today."
+        }
+      ],
+      "answer": "0 days",
+      "expected": "contradicted",
+      "reference": "3 days"
+    },
+    {
+      "id": "arithmetic-positive",
+      "question": "How long had I been taking lessons when I bought the amp?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "As of today I have been taking lessons for six weeks. I bought the amp two weeks ago."
+        }
+      ],
+      "answer": "4 weeks",
+      "expected": "supported",
+      "reference": "4 weeks"
+    },
+    {
+      "id": "arithmetic-negative",
+      "question": "How long had I been taking lessons when I bought the amp?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "As of today I have been taking lessons for six weeks. I bought the amp two weeks ago."
+        }
+      ],
+      "answer": "6 weeks",
+      "expected": "contradicted",
+      "reference": "4 weeks"
+    },
+    {
+      "id": "wrong-event",
+      "question": "Which airline did I fly on February 14?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "I flew with American Airlines on February 10."
+        }
+      ],
+      "answer": "American Airlines",
+      "expected": "insufficient",
+      "reference": "American Airlines"
+    },
+    {
+      "id": "missing-bridge",
+      "question": "Where should sensor A be repaired?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "Sensor A is assigned to Lin. Sensor B is serviced at Cedar Lab."
+        }
+      ],
+      "answer": "Cedar Lab",
+      "expected": "insufficient",
+      "reference": "Cedar Lab"
+    },
+    {
+      "id": "partial-evidence",
+      "question": "Which two delivery services did I use?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "I used Domino’s yesterday."
+        }
+      ],
+      "answer": "Domino’s and Uber Eats",
+      "expected": "insufficient",
+      "reference": "Domino’s and Uber Eats"
+    },
+    {
+      "id": "missing-date",
+      "question": "How many days ago did I harvest herbs?",
+      "evidence": [
+        {
+          "index": 0,
+          "content": "Undated message: I harvested herbs today."
+        }
+      ],
+      "answer": "0 days",
+      "expected": "insufficient",
+      "reference": "3 days"
+    }
+  ]
+}

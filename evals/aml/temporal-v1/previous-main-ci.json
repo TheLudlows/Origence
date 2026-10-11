@@ -1,0 +1,39 @@
+{
+  "run": 38114714602,
+  "url": "https://github.com/TheLudlows/Origence/actions/runs/38114714602",
+  "head_sha": "737e20936dd752a933290c06a8225ad8f74fa0d8",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "id": 114397211415,
+      "name": "container",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114397211527,
+      "name": "windows",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114397211534,
+      "name": "macos",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114397211552,
+      "name": "fast-check",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 114397211562,
+      "name": "linux-native",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}

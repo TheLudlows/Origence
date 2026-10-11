@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "freeze_sha256": "7f840e8bf0ff911f48a421c6c1c0ae0a3a911ff4c83bba4fe77ef26bac8999db",
+  "run_sha256": "6806b2529652b7d98fd89316d15bce675f20cf86e878b2d0127aa1561f50e59e",
+  "temporal_rows": 30,
+  "calibration_rows": 24,
+  "calls": 54,
+  "reported_total_tokens": 53719,
+  "input_utf8_bytes": 191501,
+  "old_joint_correct_and_supported_false_accepts": 0,
+  "notes": [
+    "old support field and new support-only classifier are compared, not end-to-end correct-and-supported rates",
+    "synthetic authored labels are not independent validation",
+    "reference labels never enter new support prompt or temporal Answer"
+  ]
+}
