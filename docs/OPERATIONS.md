@@ -1,6 +1,6 @@
 # 本地运维说明
 
-适用：M5 固定 SQLite/LanceDB/SQLite 图 运行栈。当前范围与实测平台见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
+适用单宿主 SQLite/LanceDB/SQLite 图。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份安装](#显式启用记忆身份) · [AML](#aml-评测-namespace-与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
 
 ## 目录与进程
 
@@ -22,28 +22,17 @@
 
 ## PDF 解析
 
-文本 PDF 使用 `pdf_oxide 0.3.78`，单次打开、逐页提取。同步文件 IO 与
-解析在 `spawn_blocking` 中完成，由既有单 Worker 串行等待；解析模块可直接
-通过库 API 调用，不再重启宿主二进制或使用隐藏的 `parse-pdf` 命令。
+文本 PDF 使用 pdf_oxide 0.3.78，单次打开、逐页提取；同步 IO/解析在 spawn_blocking 中由单 Worker 串行等待，解析模块可直接通过库 API 调用。
 
-解析入口检查实际读取内容不超过 10 MiB、页数为 1–200、全文 UTF-8 文本
-不超过 1,000,000 字节。沿用逐页质量检查：任一页不足 3 个字母/数字字符，
-包括空白页或没有文本层的扫描页，整份文档失败，不发布前面已提取的页。
-不启用 OCR 或密码解密；加密 PDF 拒绝。文件 IO 失败是内部错误，
-不支持或不合格的 PDF 是输入错误。
+| 检查 | 边界 |
+| --- | --- |
+| 输入与输出 | 实际读取 ≤10 MiB、1–200 页、提取全文 ≤1,000,000 UTF-8 字节；不是解析器内存预算 |
+| 完整性 | 每页至少 3 个字母/数字；空白/扫描无文本页、加密、内容操作数超限或对象提前 EOF 导致整份失败，不发布部分文本 |
+| 功能与错误 | 无 OCR/密码解密；IO 失败为内部错误，不支持/不合格 PDF 为输入错误 |
+| 来源定位 | 页码从 1 开始，字节/行号为页内提取文本位置，不是 PDF 二进制偏移；新 parser 为 pdf-oxide-0.3.78-v1，旧版本和标记不改写，仅重新导入/更新使用新解析器 |
+| 日志 | 即使 RUST_LOG 提高级别也关闭库原始日志；Worker 只记录任务 ID 与安全错误码 |
 
-宿主关闭 `pdf_oxide` 的原始日志（即使 `RUST_LOG` 打开更详细级别），避免
-第三方诊断包含文档内部内容；Worker 记录 Origence 的任务 ID 和安全错误码。
-
-上游会在触发内容操作数上限或遇到对象提前 EOF 时返回部分文本；此类
-结构化诊断也使整份导入失败，不能把非空的部分提取结果当作完整证据。
-`Cargo.lock` 将其传递依赖 `office_oxide` 保持为声明兼容的 0.1.9：0.1.13
-增加 `DocumentIR` 字段，导致 pdf_oxide 0.3.78 编译失败。升级依赖必须重新
-执行 locked 构建与解析回归，不应只删除锁文件重新解析版本。
-
-locator 页码从 1 开始，字节和行号区间相对于该页提取文本，不能作为原始
-PDF 二进制偏移。新文档记录 `pdf-oxide-0.3.78-v1`；旧版本内容及 parser
-标记不改写。重新导入或更新文件才使用新解析器，不自动重建历史版本。
+Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变更会使 pdf_oxide 0.3.78 编译失败。升级须运行 locked 构建与解析回归，不以删除锁文件解决。
 
 旧实现通过子进程实现 30 秒超时后强制终止解析。本实现移除了这个硬超时：
 `spawn_blocking` 的同步闭包不能通过取消 future/JoinHandle 停止，输入和输出
@@ -56,7 +45,7 @@ PDF 二进制偏移。新文档记录 `pdf-oxide-0.3.78-v1`；旧版本内容及
 
 先执行 `origence --offline workspace-create NAME`，保存返回的 token，再启动宿主。在线 `key-create`/`key-revoke` 通过 `/admin/keys` 限定在 token 所属 workspace 内；需 admin。离线管理依赖操作系统授权，不要求 API token，必须独占数据目录。
 
-程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。配置列表见 [项目 README](../README.md)。
+程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 
 ## 本地 embedding 服务
 
@@ -70,7 +59,7 @@ $env:OC_EMBEDDING_MODEL = 'bge-m3'
 $env:OC_EMBEDDING_DIMENSION = '1024'
 ```
 
-`ollama` 是本机服务的占位 key。上述值已在本机持久化为 Windows 用户环境变量；已打开的终端和宿主不会自动刷新，运行当前会话时可执行上述配置后再启动 Origence。Ollama 需保持运行，且已下载 `bge-m3`；接口路径为 `POST /v1/embeddings`。本配置只提供 embedding，不表示已配置抽取或生成模型。
+ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话；新终端需重新设置或显式配置持久环境，已运行宿主不会自动刷新。先下载 bge-m3 并保持 Ollama 运行，接口为 POST /v1/embeddings；该配置不提供抽取或生成模型。
 
 更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。S1 结果和限制见 [VALIDATION](VALIDATION.md)，运行入口见 [评估说明](../evals/README.md)。
 
@@ -116,19 +105,21 @@ $env:OC_EMBEDDING_DIMENSION = '1024'
 2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、向量、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
-不要在运行中分别复制各个数据库或只备份 `context.db`；目前没有在线跨库快照协议。本轮测试验证进程强退恢复，未完成完整备份演练或断电测试。删除保留原始内容，备份也仍包含这些内容。
+不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。已完成本地专用测试库的停机整库备份恢复，生产备份恢复及断电仍待验收，范围见 [AML_DRILL](AML_DRILL.md)。逻辑删除保留原文，备份也包含原文。
 
 PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/db.rs`、PG 初始化/授权 SQL、Apalis 依赖及 PG 专用测试；新本地进程套件替代其核心应用验收。没有 PG 数据自动迁移功能，不应将 PG 数据目录当作 `OC_DATA_DIR`。
 
 ## AML 评测 namespace 与批次任务
 
-AML 使用独立评测数据目录。新 SQLite 关系库创建 `oc_aml_namespaces`、`oc_aml_users`、`oc_aml_adds`。管理员通过库 API 或 `POST /admin/aml/namespace` 显式启用 namespace 后才允许在线创建用户 workspace。首次创建在同一个 BEGIN IMMEDIATE 事务中写入 workspace、映射和审计；并发首次请求复用同一映射，失败整体回滚。审计不保存外部 user_id 或消息正文。
+AML 使用独立评测新库，namespace/用户映射和权限见 [API](API.md#aml-用户-scope-库接口)。新库含 oc_aml_namespaces、oc_aml_users、oc_aml_adds；首次创建用户在同一 BEGIN IMMEDIATE 事务内写 workspace/映射/审计，并发复用、失败回滚，审计不保存外部 user_id/正文。
 
-已有数据库缺少两张映射表时仍可使用原功能，启动不会补建；AML 接口返回不可用。本切片未提供旧库升级命令，应创建专用评测新库，不手工向业务库复制 DDL。仅存在部分表、同名 view 或不兼容 AML 表定义时拒绝打开，不自动修复。已有身份 schema 的显式升级机制不变。
+| 既有库状态 | 处理 |
+| --- | --- |
+| 无映射表 | 原功能可用，AML 不可用；不自动安装，使用专用新库 |
+| 完整两张映射表、缺 Add 表 | scope 接口可用，Add 503；不自动补建 |
+| 部分映射表、同名 view 或不兼容 AML/Add 定义 | 拒绝打开，不自动修复 |
 
-评测凭据的 namespace 是其原生 tenant/workspace；轮换为同 workspace 的新 key 可重新取得原用户映射。撤销旧 key 后，旧派生 AuthContext 和该 key 受理的待发布任务失去权限。同 namespace 的新 key 复用 Add receipt；密钥轮换不自动转移已受理任务的 created_by，因此应先排空旧 key 的任务再撤销它。
-
-仅含前两张映射表的上一切片库仍可打开并使用 scope 接口，但 Add 返回 503；不会自动安装 oc_aml_adds。不兼容的 Add 表定义同样拒绝启动。评测继续使用专用新目录。
+不要向业务库手工复制 DDL；身份表的显式升级机制不变。同 workspace 新 key 可复用 namespace 映射及 Add receipt，但不会转移已有任务的 created_by。轮换时先排空旧 key 任务再撤销；撤销后旧派生 AuthContext 及待发布任务失去权限。
 
 配置 embedding 后再启用 Add（环境变量沿用上文，库宿主可用 Models::configured 显式配置）。首版固定原文 vector，不调用摘要/抽取/图模型。每批正文与 receipt、资产、单个 aml_ingest job 在事务中一起落库；消息解析及预分词在 spawn_blocking、关系事务外执行，既有串行 Worker 等待完成后继续索引。没有新增解析进程或独立 Worker。超时/断线只终止观察，不取消同步闭包或持久任务，不提供硬时间/内存隔离保证。
 
@@ -136,7 +127,7 @@ Add 的 HTTP 等待上限为 25 分钟；上游模型每次调用沿用 45 秒�
 
 模型失败沿用既有 failed 状态，不自动增加模型重试；相同 Add 重发仍指向失败任务并返回 503。授权库宿主用 submit_aml_add 的 receipt.job_id，在 lookup_aml_user 返回的 scope 内调用 Service::job_action(...,"retry") 显式重试原任务。当前没有额外 AML HTTP job 管理入口，原生 namespace 的 /v1/jobs 不能跨 scope 读取它。输入失败需新 request_id/修正内容；临时存储故障仍由原 Worker 的有限 retry_wait 处理。重放不保证上游模型计费一次。
 
-日志和审计不输出 AML 消息、query、options、外部用户 ID 或模型诊断；原文仍在来源/版本/任务发布计划中持久保存，墓碑不等于物理擦除。固定模型的全分支隔离回归与真实本地 BGE-M3 小规模协议演练已通过；正式模型配置、持续容量、数据物理清除、公网部署和正式 Smoke 仍待独立验收。可重复预检、运行演练和退役步骤见 [AML_DRILL](AML_DRILL.md)。
+日志和审计不输出 AML 消息、query、options、外部用户 ID 或模型诊断；原文仍在来源/版本/任务发布计划中持久保存，墓碑不等于物理擦除。演练与清理步骤见 [AML_DRILL](AML_DRILL.md)，当前完成范围及正式配置/容量/清理/Smoke 缺口统一见 [STATUS](STATUS.md)。
 
 ## 检索分段诊断
 

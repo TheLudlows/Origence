@@ -283,3 +283,27 @@ PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝
 - **PDF 解析**：`pdf_oxide 0.3.78` 保留页码、UTF-8 来源范围和整份失败策略；取消/隔离边界见 [OPERATIONS](OPERATIONS.md#pdf-解析)。
 
 整理后的本地文档链接检查与 `git diff --check` 通过。Rust 1.98.0 `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -j 2 -- -D warnings` 已在前一轮通过；本轮只改文档，未重跑代码测试或远端 CI。
+
+## 2026-10-11 当前文档精简
+
+仅整理文档入口、STATUS、产品路线图及 AML 计划：区分共享产品底座、AML 专用适配与实验；明确跨 session 检索已实现、反馈学习闭环未实现。移除重复指标和过时进度描述，保留验收条件、任务编号及证据入口；正式规则的旧核对记录显式标注待复核。四份文档按 Unicode 码点计数从 16637 减至 9297（减少 44.1%）。
+
+本地检查：四份文档的 48 个本地链接（含 3 个锚点）通过；仓库 Markdown 指向这四份文档的 23 处引用检查通过；UTF-8 解码、替换字符及行尾空白检查通过，git diff --check 退出码 0。4 个外部链接本轮未联网重验，不宣称更新官方规则。历史验收正文、设计/API/运维契约与 evals/evidence 工件保持不变。仅文档变更，未运行 Rust fmt、Clippy、代码测试或新 CI；本次检查不增加运行时能力或产品验收结论。
+
+## 2026-10-11 设计、操作与研究文档整理
+
+在上一轮基础上整理六份活动文档：平台设计、身份规格、API、OPERATIONS、AML_DRILL、效果评估标准。接口和运维细节集中到 API/OPERATIONS，保留领域不变量、输入限制、取消/关闭、schema 兼容、清理和验收边界；修正旧 Rust 1.88 描述、已删除存储计划链接、身份候选过滤及备份演练旧状态。六份文档按 Unicode 码点从 60301 减至 54774（减少 9.2%）。
+
+文档索引新增研究快读；AML 阶段决策和 Serverless 旧方案仅更新导读，正文逐字保持不变。两份 Cognee 研究、演进取舍 v2、依赖审计及配图说明原文未改；历史验收、evals/evidence 和代码未改。本轮未联网重验研究来源，不将历史结论改称当前外部事实。
+
+检查：本轮九份文档 108 个本地链接（含 39 个锚点）、全仓库 Markdown 的 85 处相关引用通过；九份文件严格 UTF-8 解码、替换字符和行尾空白检查通过；git diff --check 退出码 0。原 VALIDATION 字节前缀完整保留，仅追加本条。仅文档变更，未运行 Rust fmt、Clippy、代码测试或新 CI，不新增运行时/产品效果验收。
+
+## 2026-10-11 本轮实验收尾与最终实验主干 CI
+
+用户确认结束本轮实验；正式 Search 保持原文 vector，重排/时间辅助/核验留实验层，离线压实已交付。PR #33–#35 的最终实验主干为 2b7b6a67300d9e96eca8be0de282d308b8ded576；[run 38138182208](https://github.com/TheLudlows/Origence/actions/runs/38138182208) completed/success，fast-check、Linux、Windows、macOS、container 五项全部成功。只记录 API 返回的作业结果，不新增未读取日志的测试计数；本记录不代表后续文档提交的 CI。
+
+[收尾证据](evidence/2026-10-11-experiment-closeout.json)：同预算 28、时间诊断 12、早期向量性能 13 份报告目录工件及完整库 manifest 全部 25 项，合计 78 项 SHA-256 核对通过。前三份旧 manifest 只核对报告目录内工件，不把旧源码 hash 与当前代码混用。本次无模型调用、无重新评分，不改历史报告、分数或实验工件。
+
+维护故障、磁盘空间、持续容量、冷启动、独立标签复核及生产数据清理移至产品路线图的 R1–R4/Q1，明确启动条件；收尾不豁免正式参榜与生产验收。文档整理一并提交，当前开发入口切回 S2。
+
+收尾文档本地检查：13 份 Markdown 严格 UTF-8、替换字符与行尾空白通过，190 个本地链接（含 47 个锚点）有效，git diff --check 退出码 0；src/tests/tools/evals/Cargo.toml/Cargo.lock 无差异。仅文档与收尾证据变更，不重复本地 Rust fmt/Clippy/代码测试；本次 PR CI 单独核对。
