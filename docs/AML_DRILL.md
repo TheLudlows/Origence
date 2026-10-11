@@ -83,3 +83,7 @@ request_id 重试。健康检查分开记录进程、存储/Worker 和模型连�
 ## 带标签的检索质量评测
 
 协议演练之外，运行 `python tools/aml_quality.py --binary target/debug/origence.exe --report target/aml-quality-new.json`，沿用上述模型环境。语料、指标和已运行结果见 [AML 本地质量基线](../evals/aml/README.md)。报告目标必须不存在；只使用内置合成开发数据。
+
+## 查询扩展与答题验证
+
+[实验流程与预算](../evals/aml/experiments/README.md)及[完整结果](../evals/aml/experiments/results/README.md)保留失败 pilot、真实网关调用、来源核对与 Answer 拒答指标。聊天凭据仅经环境传入，正式服务仍维持原文 vector。

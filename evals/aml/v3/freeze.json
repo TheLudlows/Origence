@@ -1,0 +1,11 @@
+{
+  "schema": "aml-unseen-freeze-v1",
+  "base_commit": "02edd6c",
+  "frozen_before_test_execution": true,
+  "corpus_sha256": "f7de69b416ecd9d56808ebf310de6d9165d0f2d91faf5eef7415852604294db9",
+  "references_sha256": "92706c0ef8fa94f207e8d080eaf0adb7826602189913192010b297ce70354647",
+  "questions": 20,
+  "messages": 256,
+  "policy": "No query/label/reference edits or strategy tuning after viewing test outputs. Topics and sources distinct from v2; same author, not independent human evaluation.",
+  "pre_run_review": "Before any v3 retrieval or answer calls, camp-q0 was clarified to explicitly ask the coordinator as well as pickup location/time; the corresponding reference now includes the name so all three required sources are necessary."
+}

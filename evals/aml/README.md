@@ -28,3 +28,7 @@ python -m unittest discover -s tools -p 'test_aml_quality.py' -v
 ## 较长历史与来源分离留出集
 
 [v2](v2/README.md)扩展到 512 条短消息、30 题，加入近似干扰和开发/留出分组；使用 `--dataset v2` 运行，默认仍为 v1。两版使用不同语料，分数不可直接当作算法对比。
+
+## 查询扩展、重排和 Answer 实验
+
+[受限策略对照](experiments/results/README.md)比较原文向量、只重排、扩展融合和扩展重排，并单独测引用式答题与拒答。当前仅为工具层实验，尚未进入业务 API。
