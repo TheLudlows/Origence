@@ -1,0 +1,26 @@
+{
+  "run": 38112578905,
+  "head": "2044d5a6751f095595b1bd01fc5c930a268e364d",
+  "checkout_short": "63111bd",
+  "conclusion": "success",
+  "fast": {
+    "job": 114391025008,
+    "lib_passed": 30,
+    "local_passed": 86,
+    "tools_passed": 39,
+    "tools_skipped": 1,
+    "evals_passed": 9,
+    "fmt": "passed",
+    "clippy": "passed"
+  },
+  "linux": {
+    "job": 114391025137,
+    "identity_passed": 8,
+    "lib_passed": 31,
+    "local_passed": 108,
+    "clippy": "passed",
+    "http_smoke": "passed",
+    "inflight_recovery": "passed"
+  },
+  "main_only_jobs": "Windows/macOS/container skipped in PR; previous main full run38110941638 passed all five jobs"
+}

@@ -41,10 +41,13 @@ def verify_model(directory, manifest):
 
 
 class LocalReranker:
-    def __init__(self, directory, device, batch_size, report):
+    def __init__(self, directory, device, batch_size, report, max_pair_tokens=512):
         import torch
         import transformers
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
+        if max_pair_tokens not in (512, 1024):
+            raise DrillError("invalid_pair_limit")
+        self.max_pair_tokens = max_pair_tokens
         self.torch, self.device, self.batch_size = torch, device, batch_size
         torch.set_num_threads(4)
         torch.manual_seed(0)
@@ -60,7 +63,7 @@ class LocalReranker:
             torch.cuda.synchronize()
             torch.cuda.reset_peak_memory_stats()
         report["runtime"] = {"torch": torch.__version__, "transformers": transformers.__version__,
-            "device": device, "dtype": str(dtype), "batch_size": batch_size, "max_pair_tokens": 512,
+            "device": device, "dtype": str(dtype), "batch_size": batch_size, "max_pair_tokens": max_pair_tokens,
             "truncation": False, "threads": 4, "seed": 0, "load_ms": round((time.perf_counter() - started) * 1000, 2),
             "cuda_build": torch.version.cuda, "gpu": torch.cuda.get_device_name(0) if device == "cuda" else None,
             "packages": {p: importlib.metadata.version(p) for p in ("tokenizers", "safetensors", "sentencepiece", "huggingface_hub")}}
@@ -75,7 +78,7 @@ class LocalReranker:
             pairs = [(query, h["content"]) for h in batch]
             encoded = self.tokenizer(pairs, padding=False, truncation=False)
             batch_lengths = [len(tokens) for tokens in encoded["input_ids"]]
-            check_lengths(batch_lengths)
+            check_lengths(batch_lengths, self.max_pair_tokens)
             lengths.extend(batch_lengths)
             inputs = self.tokenizer.pad(encoded, padding=True, return_tensors="pt").to(self.device)
             with self.torch.inference_mode():

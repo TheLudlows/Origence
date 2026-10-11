@@ -1,0 +1,188 @@
+{
+  "schema": "aml-budget-manifest-v1",
+  "completed_at_utc": "2026-10-11T05:18:51.794Z",
+  "implementation_commit": "2044d5a6751f095595b1bd01fc5c930a268e364d",
+  "artifacts": [
+    {
+      "file": "embedding-receipt.json",
+      "bytes": 380,
+      "sha256": "b07f118b54efddacc599e1086a222e67f29837ac4961f770d1c565cecba96874"
+    },
+    {
+      "file": "freeze.json",
+      "bytes": 3983,
+      "sha256": "74a27d9a8391e5a890c4f83d011cdc88da12aa333c5d3173cdbe128ee8729f6e"
+    },
+    {
+      "file": "integrity-audit.json",
+      "bytes": 257,
+      "sha256": "1ead31e4679f441daddd2a300208e05108818dbe11c2e5e4107bd65957e89900"
+    },
+    {
+      "file": "integrity-audit.raw.json.gz",
+      "bytes": 132,
+      "sha256": "dde0102f3ffa13091562888457793511a8074d78f13d21c6db1068ae6e71f74e"
+    },
+    {
+      "file": "previous-main-ci.json",
+      "bytes": 770,
+      "sha256": "44bb16d221f35de78b91126fdb06d1e4dedbcfe1d7b43e940048049c9a3fbfd4"
+    },
+    {
+      "file": "public-answer-bge.json.gz",
+      "bytes": 13574,
+      "sha256": "f5a01e3171c51fc8eb4fb3ae307657be19c503f9d5888c7786afc6562b7845b8"
+    },
+    {
+      "file": "public-answer-chat.json.gz",
+      "bytes": 12593,
+      "sha256": "6a0aa6272b66a0a509e2b0237253880107a216d9c62320db9ad8d58514e92c3e"
+    },
+    {
+      "file": "public-answer-vector.json.gz",
+      "bytes": 13723,
+      "sha256": "0fb62411b12caedd469509c5e751ba0b393f973b2f755c474f93c1d31998748f"
+    },
+    {
+      "file": "public-grade.json.gz",
+      "bytes": 15391,
+      "sha256": "18d5ddd2ce709849699b8587f00e45e9559e26b568b3337d7f831ee49b4a7359"
+    },
+    {
+      "file": "public-prepare.json.gz",
+      "bytes": 192530,
+      "sha256": "4e9b0254de479275c5d5af664f6b000ec391a1c5b1c3065997e9b495120d4ae3"
+    },
+    {
+      "file": "public-rank-bge.json.gz",
+      "bytes": 58119,
+      "sha256": "d8d0d85e0ebb1ac0e5a614540d22040c3745e9b1a0a51e8f0205a43cdf4434c6"
+    },
+    {
+      "file": "public-rank-chat.json.gz",
+      "bytes": 19330,
+      "sha256": "c92a373d2863a04d6d23b5ac68cd9ba899bfd39a1e91d529b0fdc1830f11e704"
+    },
+    {
+      "file": "public-retrieval-diagnostic.json",
+      "bytes": 2390,
+      "sha256": "f7f4ee7850d26f4140d63565704060376d8e63f2907fb46f5c0e13fe46d4cc48"
+    },
+    {
+      "file": "public-retrieve.json.gz",
+      "bytes": 802199,
+      "sha256": "4c3651ec2f036b45cad5ba0fae41e2373280185cd237eaac90e98cb0d1a51cad"
+    },
+    {
+      "file": "public-semantic-audit.json",
+      "bytes": 3170,
+      "sha256": "4aff5efe68d8524ea8584df939fa719465d54fa6f8631ac4f65d4644936c5cf2"
+    },
+    {
+      "file": "README.md",
+      "bytes": 7012,
+      "sha256": "eed2f282edbea8f8b4625ab5a35201b0cf8c8e9588c39e35f4af7cd41b9d3cce"
+    },
+    {
+      "file": "runtime-notes.json",
+      "bytes": 505,
+      "sha256": "fcf68aed49148100bf42c4757702a611e462ed04b98a256ba07587d7afba12e1"
+    },
+    {
+      "file": "summary.json",
+      "bytes": 136906,
+      "sha256": "e62c0d19ffb11fd6730fbbaac9b3552d5b6d265070521b35a51c48dffa09d490"
+    },
+    {
+      "file": "summary.raw.json.gz",
+      "bytes": 13004,
+      "sha256": "7087d20ab248a824ac58823261acaa2dba217f510527495766d501146233f12c"
+    },
+    {
+      "file": "v4-answer-bge.json.gz",
+      "bytes": 4493,
+      "sha256": "021c96d968b3a4942631fa51fddbec8ec8c547367a150492182bf8c2848334fd"
+    },
+    {
+      "file": "v4-answer-chat.json.gz",
+      "bytes": 4410,
+      "sha256": "d31312ceacceda5c3e6daeb9515674d81f4aa46616250272a5713e2d5cc72ea2"
+    },
+    {
+      "file": "v4-answer-vector.json.gz",
+      "bytes": 4654,
+      "sha256": "257368b2ac9306e18e21da8687b609bacc52e9a58b5089dd1c1e6ec8344df2c0"
+    },
+    {
+      "file": "v4-grade.json.gz",
+      "bytes": 7655,
+      "sha256": "8175af23545fccca1290abd90238eb6fe4a0e7f162e667d21e1732b1ccec87a7"
+    },
+    {
+      "file": "v4-prepare.json.gz",
+      "bytes": 11267,
+      "sha256": "7b3c968f79af2f03e71a6c4b506a5c178a46764ddbf90faee6d8dcb4337de9ed"
+    },
+    {
+      "file": "v4-rank-bge.json.gz",
+      "bytes": 11456,
+      "sha256": "6349012fa6d7a06b843dc53e7c448dc8c0f04aa80126245113661554f9330edd"
+    },
+    {
+      "file": "v4-rank-chat.json.gz",
+      "bytes": 7030,
+      "sha256": "9df5c3760b9dc6da8d94188a2808801c2a8286fcf59a5cab5dca8575d2001087"
+    },
+    {
+      "file": "v4-retrieve.json.gz",
+      "bytes": 10347,
+      "sha256": "47440610798a1f80769ecd5ab6db0e9b65ee134c0bcf4664819b116cdd1cbc2a"
+    },
+    {
+      "file": "v4-semantic-audit.json",
+      "bytes": 1968,
+      "sha256": "75d024ec58e213ecffe11261324e0be68402e608339d7a520fd62eaf5b0f810f"
+    }
+  ],
+  "postrun_tools": {
+    "tools/aml_budget_summary.py": "da4f9eda6b4acb57aae7e5150c71255aa9361915fb719851648a943b65bf3b05",
+    "tools/aml_budget_verify.py": "7b2d4876fb20c77d664fbef94a2fae425b5e4029c6e7ca5305274cffdac1252c"
+  },
+  "commands": [
+    "python tools/aml_budget_eval.py --dataset v4 --stage retrieve",
+    "python tools/aml_budget_eval.py --dataset v4 --stage prepare",
+    "python tools/aml_budget_eval.py --dataset v4 --stage rank --arm chat --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset v4 --stage rank --arm bge",
+    "python tools/aml_budget_eval.py --dataset v4 --stage answer --arm vector --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset v4 --stage answer --arm chat --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset v4 --stage answer --arm bge --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset v4 --stage grade --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset public --stage retrieve",
+    "python tools/aml_budget_eval.py --dataset public --stage prepare",
+    "python tools/aml_budget_eval.py --dataset public --stage rank --arm chat --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset public --stage rank --arm bge",
+    "python tools/aml_budget_eval.py --dataset public --stage answer --arm vector --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset public --stage answer --arm chat --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset public --stage answer --arm bge --allow-chat-calls",
+    "python tools/aml_budget_eval.py --dataset public --stage grade --allow-chat-calls",
+    "python tools/aml_budget_summary.py",
+    "python tools/aml_budget_verify.py"
+  ],
+  "execution_environment": "Windows; Rust 1.98.0; retrieval/Python tests Python3.13.11; other evaluation stages project venv Python3.10.20 reusing installed Torch2.7.0+cu128; same fixed local BGE models; no production Python subprocess",
+  "chat_calls": 320,
+  "reported_total_tokens": 477289,
+  "errors": 0,
+  "limitations": [
+    "same-model automated judgments with documented false positives/negatives",
+    "no independent human validation; public data may be seen during pretraining",
+    "cluster intervals descriptive and small-sample; no official AML score",
+    "overlap between some stages; GPU allocator is not total RAM/VRAM",
+    "inherited requests dependency and torch_dtype deprecation warnings remain nonfatal"
+  ],
+  "temporary_trees_removed": true,
+  "serialization": {
+    "original_statistics": "summary.raw.json.gz and integrity-audit.raw.json.gz preserve exact Python Windows CRLF output",
+    "readable_statistics": "summary.json and integrity-audit.json are equivalent LF copies matching repository conventions",
+    "model_artifacts": "all 16 gzip stage artifacts unchanged"
+  }
+}

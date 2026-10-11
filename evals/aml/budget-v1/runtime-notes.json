@@ -1,0 +1,7 @@
+{
+  "started_at_utc": "2026-10-11T04:41:44.457Z",
+  "concurrency": "public embedding ingest overlaps v4 BGE rank and remote chat stages; v4 vector/chat Answer run concurrently; latency is observed under this overlap, not isolated SLO or direct historical comparison",
+  "statistical_script": "tools/aml_budget_summary.py",
+  "statistical_script_sha256": "da4f9eda6b4acb57aae7e5150c71255aa9361915fb719851648a943b65bf3b05",
+  "source_date_zone": "UTC encoding assumption; original question_date retained"
+}

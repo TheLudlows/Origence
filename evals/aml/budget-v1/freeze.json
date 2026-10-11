@@ -1,0 +1,70 @@
+{
+  "schema": "aml-budget-freeze-v1",
+  "frozen_at_utc": "2026-10-11T04:38:27.734Z",
+  "base_commit": "072ad2c7fe182f78db84f438212319e315e3f822",
+  "files": {
+    "tools/aml_budget_eval.py": "26e58c706ced84a8ede0c427bddd5b492d0b7c260ed6f7269a2d32ff76e1c367",
+    "tools/aml_budget.py": "afa0999ea804f7b14736577285c66ce784add21a091ffd685e8e90e5c280ff25",
+    "tools/aml_public.py": "5d19e05605f354cf895fd6d413df26f67ff6d2d1c4724f3adc2c5b48127ac98f",
+    "tools/aml_evidence.py": "dad5451d81dae4d104b89e7cc50b8b1d5e0fbdde59286021f58141312f461e5b",
+    "tools/aml_cross_encoder.py": "9f4033ee49e8d2f790175d1834fcd2127a104994e174546df622873d412b2883",
+    "tools/aml_drill.py": "cf9b180ecda2b0f9fbb2c1b250767f46ed8fc35a60b3596d7cdf14d76317b5ae",
+    "tools/aml_quality.py": "c7d42fae868c66a27ecc37a7414776e958bee1d0ae504d2db91abc80215395f8",
+    "tools/aml_answer.py": "928db36e5e95baf4375d444a428d43fde09c3038803712beb814bc8833d92fb4",
+    "tools/aml_experiment.py": "000b10947d90c5406b9577c09e32f165be8b5ead5b6cb9bb62b5e9367ee7ce2a",
+    "evals/aml/v4/corpus.json": "6cce9417c0719601d9c70bec4068ff0924702b49b47104835e6857ea9985dcbb",
+    "evals/aml/v4/rubrics.json": "4f16b20157a2b9274a0c134ff86010186f81eca668b2aa27db873d5c263b8f83",
+    "evals/aml/public/preparation.json": "34c98feecaafb0bf9afc9384ee2625bb7546ed48fcaa3e611feeeeca3c534c08",
+    "evals/aml/diagnosis/reranker-model.json": "64b05495b1d898f045ad3114ca8f9e709fc9fecb14c4b5a4dd18b5ad9b2a4c01",
+    "target/aml-rerank/model/tokenizer.json": "69564b696052886ed0ac63fa393e928384e0f8caada38c1f4864a9bfbf379c15"
+  },
+  "binary_sha256": "69357f7fd7ad9d6a7845825e1a9aeb0f06e3c1fe2684785295a1b6d81d7aeace",
+  "embedding": {
+    "model": "bge-m3",
+    "dimension": 1024,
+    "ollama_digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+    "endpoint": "http://127.0.0.1:11434/v1"
+  },
+  "chat_model": "qwen3.8-flash",
+  "chat_endpoint_sha256": "98243434b143626ff12ede5aa9bc59abfa00dfba96b8f8ae1792e613bc66925b",
+  "reranker": {
+    "model": "BAAI/bge-reranker-v2-m3",
+    "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+    "max_pair_tokens": 1024,
+    "batch_size": 8,
+    "device": "cuda",
+    "truncation": false
+  },
+  "arms": [
+    "vector",
+    "chat",
+    "bge"
+  ],
+  "budgets": {
+    "seed_top_k": 100,
+    "candidate_count": 40,
+    "candidate_reference_tokens": 8000,
+    "candidate_utf8_bytes": 32000,
+    "evidence_count": 5,
+    "evidence_reference_tokens": 2000,
+    "evidence_utf8_bytes": 9000,
+    "packing": "rank-order prefix; stop at first item exceeding either budget; never slice text",
+    "token_unit": "pinned BGE tokenizer tokens over serialized evidence list, excluding special tokens; not actual Qwen tokens",
+    "max_chat_calls_per_stage": 60,
+    "max_planned_chat_calls": 320,
+    "retries": 0,
+    "timeout_seconds": 60,
+    "temperature": 0,
+    "max_output_tokens_per_call": 2048
+  },
+  "scoring": {
+    "v4": "complete required message coverage plus strict semantic correctness and cited support",
+    "public": "session recall only, not complete evidence recall; strict semantic correctness and cited support judged by same Qwen model",
+    "judge": "anonymous arm order by SHA256(question_id:arm), same-model comparative judge, not independent review",
+    "errors": "retain all assigned questions in denominator; execution and judge errors fail",
+    "clusters": "v4 pair IDs; public connected components of shared original session IDs",
+    "intervals": "deterministic cluster bootstrap, seed 20261011, 10000 draws; descriptive only; few clusters",
+    "decision": "no production promotion without all paired positive/negative safety cases passing, no observed supported-success loss against chat on each frozen split, source invariants and no execution errors; rerank extra p95 <=3000ms and BGE allocated GPU <=3GiB in this run; wide uncertainty and no independent human review remain blockers to production claims"
+  },
+  "model_calls_before_freeze": 0
+}
