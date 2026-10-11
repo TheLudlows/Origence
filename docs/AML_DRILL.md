@@ -4,6 +4,12 @@
 Origence 二进制和单 Worker，使用仓库 target/aml-drills 下的新临时目录，结束后
 终止自己启动的宿主并删除该目录。不会打开业务 OC_DATA_DIR，不修改模型服务。
 
+## 本地优先与官方 Smoke 的区别
+
+当前优先使用已运行的本地 Ollama BGE-M3（1024 维）；不需要公网服务器、域名或新的远端 embedding 凭据。本地验证先覆盖协议和恢复，再增加有标签的长对话、跨会话、时间更新、多跳、无答案与干扰证据，分别报告检索质量和运行指标。
+
+2026-10-11 核对[官方公开仓库](https://github.com/AML-memory/agent-memory-leaderboard/tree/1b8142bfe0f20f1c5218d6b554aa0012de34e504)：包含各 benchmark 的公开 pipeline 与配置，但没有完整离线 Smoke runner、语料或平台编排。官方流程要求 AML Key 和平台可访问的 Add/Search。这里的本地模拟不能登记官方 Smoke 通过状态；官方 Smoke/Full 与公网部署放到本地基线稳定之后。官网 docs/api-guide 本次返回 522，此判断依据该固定版本官方仓库，不声称已核对暂不可用页面的新变更。
+
 ## 模型与运行
 
 先构建声明工具链下的宿主：
@@ -17,6 +23,15 @@ OC_EMBEDDING_DIMENSION。凭据不要放在命令参数、报告或仓库中。�
 或本机 loopback HTTP；兼容接口地址须包含提供商需要的 /v1 等前缀。
 只提供 chat/completions 的网关不能代替 embeddings；不从聊天文本伪造向量。
 本工具固定关闭抽取、摘要和图，不继承调用环境中的业务目录或应用 API key。
+
+本机 PowerShell 配置（ollama 是本地占位 key，不是远端凭据）：
+
+~~~powershell
+$env:OC_MODEL_BASE_URL = 'http://127.0.0.1:11434/v1'
+$env:OC_MODEL_API_KEY = 'ollama'
+$env:OC_EMBEDDING_MODEL = 'bge-m3'
+$env:OC_EMBEDDING_DIMENSION = '1024'
+~~~
 
 ~~~text
 python tools/aml_drill.py --preflight-only --report target/aml-preflight-001.json
@@ -64,3 +79,11 @@ request_id 重试。健康检查分开记录进程、存储/Worker 和模型连�
 
 本地工具的清理范围为自己新建的临时目录及其中的测试备份，不创建外部备份或快照；本机模型服务的
 缓存/日志属于独立保留边界。正式数据的 30 天删除期限及当期规则须在申请时重新核对。
+
+## 带标签的检索质量评测
+
+协议演练之外，运行 `python tools/aml_quality.py --binary target/debug/origence.exe --report target/aml-quality-new.json`，沿用上述模型环境。语料、指标和已运行结果见 [AML 本地质量基线](../evals/aml/README.md)。报告目标必须不存在；只使用内置合成开发数据。
+
+## 查询扩展与答题验证
+
+[实验流程与预算](../evals/aml/experiments/README.md)及[完整结果](../evals/aml/experiments/results/README.md)保留失败 pilot、真实网关调用、来源核对与 Answer 拒答指标。聊天凭据仅经环境传入，正式服务仍维持原文 vector。

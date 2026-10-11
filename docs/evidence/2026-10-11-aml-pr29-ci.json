@@ -1,0 +1,262 @@
+{
+  "schema": "github-ci-evidence-v1",
+  "repository": "TheLudlows/Origence",
+  "pr": 29,
+  "run_id": 38101081592,
+  "url": "https://github.com/TheLudlows/Origence/actions/runs/38101081592",
+  "head_sha": "30ec9364b830472b4b70c635facd2477e6bfae64",
+  "checkout_sha": "7b472a3cf56a7c837dd8a397b6571748ac2fd967",
+  "conclusion": "success",
+  "fast": {
+    "job_id": 114356972183,
+    "rust_lib_passed": 30,
+    "rust_local_passed": 86,
+    "tools_passed": 19,
+    "tools_skipped": 1,
+    "evals_passed": 9
+  },
+  "linux": {
+    "job_id": 114356972057,
+    "memory_identity_filtered_passed": 8,
+    "rust_lib_passed": 31,
+    "rust_local_passed": 108,
+    "inflight_recovery_passed": 1,
+    "clippy": true,
+    "build": true,
+    "http_smoke": true,
+    "keyword_seed_eval": true
+  },
+  "skipped": [
+    "windows",
+    "macos",
+    "container"
+  ],
+  "jobs": [
+    {
+      "id": 114356972057,
+      "name": "linux-native",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 38101081592,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run dtolnay/rust-toolchain@stable",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run Swatinem/rust-cache@v2",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Linux native build tools",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Confirm minimum Rust 1.98.0",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Memory identity on minimum Rust without native features",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run cargo clippy --locked --all-targets -j 2 -- -D warnings",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Run cargo test --locked -j 2 --no-fail-fast",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Debug build and no-model HTTP smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "AML in-flight process recovery (controlled model fixture)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Keyword retrieval seed evaluation (no model calls)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Preserve synthetic retrieval evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Post Run Swatinem/rust-cache@v2",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 25
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 26
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 27
+        }
+      ]
+    },
+    {
+      "id": 114356972183,
+      "name": "fast-check",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 38101081592,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run dtolnay/rust-toolchain@stable",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run Swatinem/rust-cache@v2",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Run cargo fmt --all -- --check",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Lightweight Clippy (no native backends)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Run cargo test --locked --no-default-features --lib -j 2",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run cargo test --locked --no-default-features --test local -j 2",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "AML drill client tests (no external model calls)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Python evaluation adapter tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Post Run Swatinem/rust-cache@v2",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 20
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21
+        }
+      ]
+    },
+    {
+      "id": 114356972711,
+      "name": "macos",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_id": 38101081592,
+      "logs_url": null,
+      "steps": null
+    },
+    {
+      "id": 114356972803,
+      "name": "windows",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_id": 38101081592,
+      "logs_url": null,
+      "steps": null
+    },
+    {
+      "id": 114356972809,
+      "name": "container",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_id": 38101081592,
+      "logs_url": null,
+      "steps": null
+    }
+  ],
+  "limitations": [
+    "PR run; main-only OS/container jobs skipped.",
+    "No external model requests in CI.",
+    "Documentation-only follow-up commits do not change the tested implementation."
+  ]
+}

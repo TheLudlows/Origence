@@ -1,0 +1,1665 @@
+{
+  "schema": "aml-local-quality-v3",
+  "origin": "New self-authored synthetic test topics frozen before strategy evaluation; same author, no independent human review.",
+  "split": "unseen_test",
+  "batches": [
+    {
+      "request_id": "camp-0",
+      "user_id": "camp",
+      "session_id": "camp-s0",
+      "messages": [
+        {
+          "role": "user",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 1/1，限定于本条活动。",
+          "timestamp": 1760000000000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：箱号示例 CS-5082-P 是采购材料中的编号。 档案 1/2，限定于本条活动。",
+          "timestamp": 1760000060000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 1/3，限定于本条活动。",
+          "timestamp": 1760000120000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地本季的补给协调员是罗晴。白桦营地由郑涛协调。",
+          "timestamp": 1760000180000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：无线电演习在9号频道开展，不代表正式分配。 档案 1/5，限定于本条活动。",
+          "timestamp": 1760000240000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 1/6，限定于本条活动。",
+          "timestamp": 1760000300000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：箱号示例 CS-5082-P 是采购材料中的编号。 档案 1/7，限定于本条活动。",
+          "timestamp": 1760000360000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 1/8，限定于本条活动。",
+          "timestamp": 1760000420000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：统一饮料有咖啡，但个人需求另行登记。 档案 1/9，限定于本条活动。",
+          "timestamp": 1760000480000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：无线电演习在9号频道开展，不代表正式分配。 档案 1/10，限定于本条活动。",
+          "timestamp": 1760000540000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 1/11，限定于本条活动。",
+          "timestamp": 1760000600000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：箱号示例 CS-5082-P 是采购材料中的编号。 档案 1/12，限定于本条活动。",
+          "timestamp": 1760000660000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 1/13，限定于本条活动。",
+          "timestamp": 1760000720000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：统一饮料有咖啡，但个人需求另行登记。 档案 1/14，限定于本条活动。",
+          "timestamp": 1760000780000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：无线电演习在9号频道开展，不代表正式分配。 档案 1/15，限定于本条活动。",
+          "timestamp": 1760000840000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 1/16，限定于本条活动。",
+          "timestamp": 1760000900000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-1",
+      "user_id": "camp",
+      "session_id": "camp-s1",
+      "messages": [
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 2/1，限定于本条活动。",
+          "timestamp": 1760000960000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：无线电演习在9号频道开展，不代表正式分配。 档案 2/2，限定于本条活动。",
+          "timestamp": 1760001020000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 2/3，限定于本条活动。",
+          "timestamp": 1760001080000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：箱号示例 CS-5082-P 是采购材料中的编号。 档案 2/4，限定于本条活动。",
+          "timestamp": 1760001140000
+        },
+        {
+          "role": "user",
+          "content": "罗晴负责的补给站叫溪谷站，所有雪松营地常规补给从该站发出。",
+          "timestamp": 1760001200000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 2/6，限定于本条活动。",
+          "timestamp": 1760001260000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：无线电演习在9号频道开展，不代表正式分配。 档案 2/7，限定于本条活动。",
+          "timestamp": 1760001320000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 2/8，限定于本条活动。",
+          "timestamp": 1760001380000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：箱号示例 CS-5082-P 是采购材料中的编号。 档案 2/9，限定于本条活动。",
+          "timestamp": 1760001440000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 2/10，限定于本条活动。",
+          "timestamp": 1760001500000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 2/11，限定于本条活动。",
+          "timestamp": 1760001560000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：无线电演习在9号频道开展，不代表正式分配。 档案 2/12，限定于本条活动。",
+          "timestamp": 1760001620000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 2/13，限定于本条活动。",
+          "timestamp": 1760001680000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：箱号示例 CS-5082-P 是采购材料中的编号。 档案 2/14，限定于本条活动。",
+          "timestamp": 1760001740000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 2/15，限定于本条活动。",
+          "timestamp": 1760001800000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 2/16，限定于本条活动。",
+          "timestamp": 1760001860000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-2",
+      "user_id": "camp",
+      "session_id": "camp-s2",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Cedar camp practice：箱号示例 CS-5082-P 是采购材料中的编号。 档案 3/1，限定于本条活动。",
+          "timestamp": 1760001920000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 3/2，限定于本条活动。",
+          "timestamp": 1760001980000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：统一饮料有咖啡，但个人需求另行登记。 档案 3/3，限定于本条活动。",
+          "timestamp": 1760002040000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：无线电演习在9号频道开展，不代表正式分配。 档案 3/4，限定于本条活动。",
+          "timestamp": 1760002100000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 3/5，限定于本条活动。",
+          "timestamp": 1760002160000
+        },
+        {
+          "role": "user",
+          "content": "溪谷站的提货窗口在东侧仓房二层，下午两点开放。",
+          "timestamp": 1760002220000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 3/7，限定于本条活动。",
+          "timestamp": 1760002280000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：统一饮料有咖啡，但个人需求另行登记。 档案 3/8，限定于本条活动。",
+          "timestamp": 1760002340000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：无线电演习在9号频道开展，不代表正式分配。 档案 3/9，限定于本条活动。",
+          "timestamp": 1760002400000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 3/10，限定于本条活动。",
+          "timestamp": 1760002460000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：箱号示例 CS-5082-P 是采购材料中的编号。 档案 3/11，限定于本条活动。",
+          "timestamp": 1760002520000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 3/12，限定于本条活动。",
+          "timestamp": 1760002580000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：统一饮料有咖啡，但个人需求另行登记。 档案 3/13，限定于本条活动。",
+          "timestamp": 1760002640000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：无线电演习在9号频道开展，不代表正式分配。 档案 3/14，限定于本条活动。",
+          "timestamp": 1760002700000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 3/15，限定于本条活动。",
+          "timestamp": 1760002760000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：箱号示例 CS-5082-P 是采购材料中的编号。 档案 3/16，限定于本条活动。",
+          "timestamp": 1760002820000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-3",
+      "user_id": "camp",
+      "session_id": "camp-s3",
+      "messages": [
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：无线电演习在9号频道开展，不代表正式分配。 档案 4/1，限定于本条活动。",
+          "timestamp": 1760002880000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 4/2，限定于本条活动。",
+          "timestamp": 1760002940000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：箱号示例 CS-5082-P 是采购材料中的编号。 档案 4/3，限定于本条活动。",
+          "timestamp": 1760003000000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 4/4，限定于本条活动。",
+          "timestamp": 1760003060000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：统一饮料有咖啡，但个人需求另行登记。 档案 4/5，限定于本条活动。",
+          "timestamp": 1760003120000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：无线电演习在9号频道开展，不代表正式分配。 档案 4/6，限定于本条活动。",
+          "timestamp": 1760003180000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地原计划周六从南坡上山。",
+          "timestamp": 1760003240000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：箱号示例 CS-5082-P 是采购材料中的编号。 档案 4/8，限定于本条活动。",
+          "timestamp": 1760003300000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 4/9，限定于本条活动。",
+          "timestamp": 1760003360000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：统一饮料有咖啡，但个人需求另行登记。 档案 4/10，限定于本条活动。",
+          "timestamp": 1760003420000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：无线电演习在9号频道开展，不代表正式分配。 档案 4/11，限定于本条活动。",
+          "timestamp": 1760003480000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 4/12，限定于本条活动。",
+          "timestamp": 1760003540000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：箱号示例 CS-5082-P 是采购材料中的编号。 档案 4/13，限定于本条活动。",
+          "timestamp": 1760003600000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 4/14，限定于本条活动。",
+          "timestamp": 1760003660000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：统一饮料有咖啡，但个人需求另行登记。 档案 4/15，限定于本条活动。",
+          "timestamp": 1760003720000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：无线电演习在9号频道开展，不代表正式分配。 档案 4/16，限定于本条活动。",
+          "timestamp": 1760003780000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-4",
+      "user_id": "camp",
+      "session_id": "camp-s4",
+      "messages": [
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 5/1，限定于本条活动。",
+          "timestamp": 1760003840000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：统一饮料有咖啡，但个人需求另行登记。 档案 5/2，限定于本条活动。",
+          "timestamp": 1760003900000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：无线电演习在9号频道开展，不代表正式分配。 档案 5/3，限定于本条活动。",
+          "timestamp": 1760003960000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 5/4，限定于本条活动。",
+          "timestamp": 1760004020000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：箱号示例 CS-5082-P 是采购材料中的编号。 档案 5/5，限定于本条活动。",
+          "timestamp": 1760004080000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 5/6，限定于本条活动。",
+          "timestamp": 1760004140000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：统一饮料有咖啡，但个人需求另行登记。 档案 5/7，限定于本条活动。",
+          "timestamp": 1760004200000
+        },
+        {
+          "role": "user",
+          "content": "巡护通知：雪松营地改为周日从东坡出发，旧南坡路线本周关闭。",
+          "timestamp": 1760004260000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 5/9，限定于本条活动。",
+          "timestamp": 1760004320000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：箱号示例 CS-5082-P 是采购材料中的编号。 档案 5/10，限定于本条活动。",
+          "timestamp": 1760004380000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 5/11，限定于本条活动。",
+          "timestamp": 1760004440000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：统一饮料有咖啡，但个人需求另行登记。 档案 5/12，限定于本条活动。",
+          "timestamp": 1760004500000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：无线电演习在9号频道开展，不代表正式分配。 档案 5/13，限定于本条活动。",
+          "timestamp": 1760004560000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 5/14，限定于本条活动。",
+          "timestamp": 1760004620000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：箱号示例 CS-5082-P 是采购材料中的编号。 档案 5/15，限定于本条活动。",
+          "timestamp": 1760004680000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 5/16，限定于本条活动。",
+          "timestamp": 1760004740000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-5",
+      "user_id": "camp",
+      "session_id": "camp-s5",
+      "messages": [
+        {
+          "role": "user",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 6/1，限定于本条活动。",
+          "timestamp": 1760004800000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：箱号示例 CS-5082-P 是采购材料中的编号。 档案 6/2，限定于本条活动。",
+          "timestamp": 1760004860000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 6/3，限定于本条活动。",
+          "timestamp": 1760004920000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：统一饮料有咖啡，但个人需求另行登记。 档案 6/4，限定于本条活动。",
+          "timestamp": 1760004980000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：无线电演习在9号频道开展，不代表正式分配。 档案 6/5，限定于本条活动。",
+          "timestamp": 1760005040000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 6/6，限定于本条活动。",
+          "timestamp": 1760005100000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：箱号示例 CS-5082-P 是采购材料中的编号。 档案 6/7，限定于本条活动。",
+          "timestamp": 1760005160000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 6/8，限定于本条活动。",
+          "timestamp": 1760005220000
+        },
+        {
+          "role": "user",
+          "content": "The Cedar camp radio allocation is channel 7; the forest patrol uses channel 9.",
+          "timestamp": 1760005280000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：无线电演习在9号频道开展，不代表正式分配。 档案 6/10，限定于本条活动。",
+          "timestamp": 1760005340000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 6/11，限定于本条活动。",
+          "timestamp": 1760005400000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：箱号示例 CS-5082-P 是采购材料中的编号。 档案 6/12，限定于本条活动。",
+          "timestamp": 1760005460000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 6/13，限定于本条活动。",
+          "timestamp": 1760005520000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：统一饮料有咖啡，但个人需求另行登记。 档案 6/14，限定于本条活动。",
+          "timestamp": 1760005580000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：无线电演习在9号频道开展，不代表正式分配。 档案 6/15，限定于本条活动。",
+          "timestamp": 1760005640000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 6/16，限定于本条活动。",
+          "timestamp": 1760005700000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-6",
+      "user_id": "camp",
+      "session_id": "camp-s6",
+      "messages": [
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 7/1，限定于本条活动。",
+          "timestamp": 1760005760000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：无线电演习在9号频道开展，不代表正式分配。 档案 7/2，限定于本条活动。",
+          "timestamp": 1760005820000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 7/3，限定于本条活动。",
+          "timestamp": 1760005880000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：箱号示例 CS-5082-P 是采购材料中的编号。 档案 7/4，限定于本条活动。",
+          "timestamp": 1760005940000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 7/5，限定于本条活动。",
+          "timestamp": 1760006000000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 7/6，限定于本条活动。",
+          "timestamp": 1760006060000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：无线电演习在9号频道开展，不代表正式分配。 档案 7/7，限定于本条活动。",
+          "timestamp": 1760006120000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 7/8，限定于本条活动。",
+          "timestamp": 1760006180000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：箱号示例 CS-5082-P 是采购材料中的编号。 档案 7/9，限定于本条活动。",
+          "timestamp": 1760006240000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地冷藏箱出库封条号为 CS-5082-D，箱体采购编号为 CS-5082-P。",
+          "timestamp": 1760006300000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 7/11，限定于本条活动。",
+          "timestamp": 1760006360000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：无线电演习在9号频道开展，不代表正式分配。 档案 7/12，限定于本条活动。",
+          "timestamp": 1760006420000
+        },
+        {
+          "role": "user",
+          "content": "Cedar camp practice：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 7/13，限定于本条活动。",
+          "timestamp": 1760006480000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：箱号示例 CS-5082-P 是采购材料中的编号。 档案 7/14，限定于本条活动。",
+          "timestamp": 1760006540000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 7/15，限定于本条活动。",
+          "timestamp": 1760006600000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：统一饮料有咖啡，但个人需求另行登记。 档案 7/16，限定于本条活动。",
+          "timestamp": 1760006660000
+        }
+      ]
+    },
+    {
+      "request_id": "camp-7",
+      "user_id": "camp",
+      "session_id": "camp-s7",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Cedar camp practice：箱号示例 CS-5082-P 是采购材料中的编号。 档案 8/1，限定于本条活动。",
+          "timestamp": 1760006720000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 8/2，限定于本条活动。",
+          "timestamp": 1760006780000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：统一饮料有咖啡，但个人需求另行登记。 档案 8/3，限定于本条活动。",
+          "timestamp": 1760006840000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：无线电演习在9号频道开展，不代表正式分配。 档案 8/4，限定于本条活动。",
+          "timestamp": 1760006900000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 8/5，限定于本条活动。",
+          "timestamp": 1760006960000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：箱号示例 CS-5082-P 是采购材料中的编号。 档案 8/6，限定于本条活动。",
+          "timestamp": 1760007020000
+        },
+        {
+          "role": "user",
+          "content": "白桦营地：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 8/7，限定于本条活动。",
+          "timestamp": 1760007080000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地摄影小组：统一饮料有咖啡，但个人需求另行登记。 档案 8/8，限定于本条活动。",
+          "timestamp": 1760007140000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地往年档案：无线电演习在9号频道开展，不代表正式分配。 档案 8/9，限定于本条活动。",
+          "timestamp": 1760007200000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地招生演示：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 8/10，限定于本条活动。",
+          "timestamp": 1760007260000
+        },
+        {
+          "role": "user",
+          "content": "我参加营地活动时不喝含咖啡因的饮料，希望准备温水。",
+          "timestamp": 1760007320000
+        },
+        {
+          "role": "assistant",
+          "content": "白桦营地：补给联系示例为郑涛，地点写作南侧仓房一层。 档案 8/12，限定于本条活动。",
+          "timestamp": 1760007380000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地摄影小组：统一饮料有咖啡，但个人需求另行登记。 档案 8/13，限定于本条活动。",
+          "timestamp": 1760007440000
+        },
+        {
+          "role": "assistant",
+          "content": "雪松营地往年档案：无线电演习在9号频道开展，不代表正式分配。 档案 8/14，限定于本条活动。",
+          "timestamp": 1760007500000
+        },
+        {
+          "role": "user",
+          "content": "雪松营地招生演示：周六从南坡出发是演示安排，请勿用作本季正式路线。 档案 8/15，限定于本条活动。",
+          "timestamp": 1760007560000
+        },
+        {
+          "role": "assistant",
+          "content": "Cedar camp practice：箱号示例 CS-5082-P 是采购材料中的编号。 档案 8/16，限定于本条活动。",
+          "timestamp": 1760007620000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-0",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s0",
+      "messages": [
+        {
+          "role": "user",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 1/1，限定于本条活动。",
+          "timestamp": 1760000000000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：单据示例 BT-9412-I 是购入资料编号。 档案 1/2，限定于本条活动。",
+          "timestamp": 1760000060000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：维护联系人示例写作周原，工作点在梧桐街62号。 档案 1/3，限定于本条活动。",
+          "timestamp": 1760000120000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团的低音提琴由修琴师唐越负责维护，长笛另由周原维护。",
+          "timestamp": 1760000180000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：声级示例是76 dB，与正式录音上限需分开确认。 档案 1/5，限定于本条活动。",
+          "timestamp": 1760000240000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 1/6，限定于本条活动。",
+          "timestamp": 1760000300000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：单据示例 BT-9412-I 是购入资料编号。 档案 1/7，限定于本条活动。",
+          "timestamp": 1760000360000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：维护联系人示例写作周原，工作点在梧桐街62号。 档案 1/8，限定于本条活动。",
+          "timestamp": 1760000420000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：团体票默认靠近音箱，个人偏好需另行登记。 档案 1/9，限定于本条活动。",
+          "timestamp": 1760000480000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：声级示例是76 dB，与正式录音上限需分开确认。 档案 1/10，限定于本条活动。",
+          "timestamp": 1760000540000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 1/11，限定于本条活动。",
+          "timestamp": 1760000600000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：单据示例 BT-9412-I 是购入资料编号。 档案 1/12，限定于本条活动。",
+          "timestamp": 1760000660000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：维护联系人示例写作周原，工作点在梧桐街62号。 档案 1/13，限定于本条活动。",
+          "timestamp": 1760000720000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：团体票默认靠近音箱，个人偏好需另行登记。 档案 1/14，限定于本条活动。",
+          "timestamp": 1760000780000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：声级示例是76 dB，与正式录音上限需分开确认。 档案 1/15，限定于本条活动。",
+          "timestamp": 1760000840000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 1/16，限定于本条活动。",
+          "timestamp": 1760000900000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-1",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s1",
+      "messages": [
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 2/1，限定于本条活动。",
+          "timestamp": 1760000960000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：声级示例是76 dB，与正式录音上限需分开确认。 档案 2/2，限定于本条活动。",
+          "timestamp": 1760001020000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：安排是周四晚的小排练厅，仅供该活动使用。 档案 2/3，限定于本条活动。",
+          "timestamp": 1760001080000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：单据示例 BT-9412-I 是购入资料编号。 档案 2/4，限定于本条活动。",
+          "timestamp": 1760001140000
+        },
+        {
+          "role": "user",
+          "content": "唐越工作的门店叫银桥琴坊，乐团的维修登记也在此办理。",
+          "timestamp": 1760001200000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 2/6，限定于本条活动。",
+          "timestamp": 1760001260000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：声级示例是76 dB，与正式录音上限需分开确认。 档案 2/7，限定于本条活动。",
+          "timestamp": 1760001320000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：安排是周四晚的小排练厅，仅供该活动使用。 档案 2/8，限定于本条活动。",
+          "timestamp": 1760001380000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：单据示例 BT-9412-I 是购入资料编号。 档案 2/9，限定于本条活动。",
+          "timestamp": 1760001440000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：维护联系人示例写作周原，工作点在梧桐街62号。 档案 2/10，限定于本条活动。",
+          "timestamp": 1760001500000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 2/11，限定于本条活动。",
+          "timestamp": 1760001560000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：声级示例是76 dB，与正式录音上限需分开确认。 档案 2/12，限定于本条活动。",
+          "timestamp": 1760001620000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：安排是周四晚的小排练厅，仅供该活动使用。 档案 2/13，限定于本条活动。",
+          "timestamp": 1760001680000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：单据示例 BT-9412-I 是购入资料编号。 档案 2/14，限定于本条活动。",
+          "timestamp": 1760001740000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：维护联系人示例写作周原，工作点在梧桐街62号。 档案 2/15，限定于本条活动。",
+          "timestamp": 1760001800000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 2/16，限定于本条活动。",
+          "timestamp": 1760001860000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-2",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s2",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：单据示例 BT-9412-I 是购入资料编号。 档案 3/1，限定于本条活动。",
+          "timestamp": 1760001920000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：维护联系人示例写作周原，工作点在梧桐街62号。 档案 3/2，限定于本条活动。",
+          "timestamp": 1760001980000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：团体票默认靠近音箱，个人偏好需另行登记。 档案 3/3，限定于本条活动。",
+          "timestamp": 1760002040000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：声级示例是76 dB，与正式录音上限需分开确认。 档案 3/4，限定于本条活动。",
+          "timestamp": 1760002100000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：安排是周四晚的小排练厅，仅供该活动使用。 档案 3/5，限定于本条活动。",
+          "timestamp": 1760002160000
+        },
+        {
+          "role": "user",
+          "content": "银桥琴坊在梧桐街26号，周一休息，周二至周日营业。",
+          "timestamp": 1760002220000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：维护联系人示例写作周原，工作点在梧桐街62号。 档案 3/7，限定于本条活动。",
+          "timestamp": 1760002280000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：团体票默认靠近音箱，个人偏好需另行登记。 档案 3/8，限定于本条活动。",
+          "timestamp": 1760002340000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：声级示例是76 dB，与正式录音上限需分开确认。 档案 3/9，限定于本条活动。",
+          "timestamp": 1760002400000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：安排是周四晚的小排练厅，仅供该活动使用。 档案 3/10，限定于本条活动。",
+          "timestamp": 1760002460000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：单据示例 BT-9412-I 是购入资料编号。 档案 3/11，限定于本条活动。",
+          "timestamp": 1760002520000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：维护联系人示例写作周原，工作点在梧桐街62号。 档案 3/12，限定于本条活动。",
+          "timestamp": 1760002580000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：团体票默认靠近音箱，个人偏好需另行登记。 档案 3/13，限定于本条活动。",
+          "timestamp": 1760002640000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：声级示例是76 dB，与正式录音上限需分开确认。 档案 3/14，限定于本条活动。",
+          "timestamp": 1760002700000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：安排是周四晚的小排练厅，仅供该活动使用。 档案 3/15，限定于本条活动。",
+          "timestamp": 1760002760000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：单据示例 BT-9412-I 是购入资料编号。 档案 3/16，限定于本条活动。",
+          "timestamp": 1760002820000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-3",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s3",
+      "messages": [
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：声级示例是76 dB，与正式录音上限需分开确认。 档案 4/1，限定于本条活动。",
+          "timestamp": 1760002880000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：安排是周四晚的小排练厅，仅供该活动使用。 档案 4/2，限定于本条活动。",
+          "timestamp": 1760002940000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：单据示例 BT-9412-I 是购入资料编号。 档案 4/3，限定于本条活动。",
+          "timestamp": 1760003000000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：维护联系人示例写作周原，工作点在梧桐街62号。 档案 4/4，限定于本条活动。",
+          "timestamp": 1760003060000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：团体票默认靠近音箱，个人偏好需另行登记。 档案 4/5，限定于本条活动。",
+          "timestamp": 1760003120000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：声级示例是76 dB，与正式录音上限需分开确认。 档案 4/6，限定于本条活动。",
+          "timestamp": 1760003180000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团原定周四晚在小排练厅合奏。",
+          "timestamp": 1760003240000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：单据示例 BT-9412-I 是购入资料编号。 档案 4/8，限定于本条活动。",
+          "timestamp": 1760003300000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：维护联系人示例写作周原，工作点在梧桐街62号。 档案 4/9，限定于本条活动。",
+          "timestamp": 1760003360000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：团体票默认靠近音箱，个人偏好需另行登记。 档案 4/10，限定于本条活动。",
+          "timestamp": 1760003420000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：声级示例是76 dB，与正式录音上限需分开确认。 档案 4/11，限定于本条活动。",
+          "timestamp": 1760003480000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：安排是周四晚的小排练厅，仅供该活动使用。 档案 4/12，限定于本条活动。",
+          "timestamp": 1760003540000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：单据示例 BT-9412-I 是购入资料编号。 档案 4/13，限定于本条活动。",
+          "timestamp": 1760003600000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：维护联系人示例写作周原，工作点在梧桐街62号。 档案 4/14，限定于本条活动。",
+          "timestamp": 1760003660000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：团体票默认靠近音箱，个人偏好需另行登记。 档案 4/15，限定于本条活动。",
+          "timestamp": 1760003720000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：声级示例是76 dB，与正式录音上限需分开确认。 档案 4/16，限定于本条活动。",
+          "timestamp": 1760003780000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-4",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s4",
+      "messages": [
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：维护联系人示例写作周原，工作点在梧桐街62号。 档案 5/1，限定于本条活动。",
+          "timestamp": 1760003840000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：团体票默认靠近音箱，个人偏好需另行登记。 档案 5/2，限定于本条活动。",
+          "timestamp": 1760003900000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：声级示例是76 dB，与正式录音上限需分开确认。 档案 5/3，限定于本条活动。",
+          "timestamp": 1760003960000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：安排是周四晚的小排练厅，仅供该活动使用。 档案 5/4，限定于本条活动。",
+          "timestamp": 1760004020000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：单据示例 BT-9412-I 是购入资料编号。 档案 5/5，限定于本条活动。",
+          "timestamp": 1760004080000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：维护联系人示例写作周原，工作点在梧桐街62号。 档案 5/6，限定于本条活动。",
+          "timestamp": 1760004140000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：团体票默认靠近音箱，个人偏好需另行登记。 档案 5/7，限定于本条活动。",
+          "timestamp": 1760004200000
+        },
+        {
+          "role": "user",
+          "content": "场地变更确认：暮光乐团合奏改到周六下午的大排练厅，周四安排取消。",
+          "timestamp": 1760004260000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：安排是周四晚的小排练厅，仅供该活动使用。 档案 5/9，限定于本条活动。",
+          "timestamp": 1760004320000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：单据示例 BT-9412-I 是购入资料编号。 档案 5/10，限定于本条活动。",
+          "timestamp": 1760004380000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：维护联系人示例写作周原，工作点在梧桐街62号。 档案 5/11，限定于本条活动。",
+          "timestamp": 1760004440000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：团体票默认靠近音箱，个人偏好需另行登记。 档案 5/12，限定于本条活动。",
+          "timestamp": 1760004500000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：声级示例是76 dB，与正式录音上限需分开确认。 档案 5/13，限定于本条活动。",
+          "timestamp": 1760004560000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：安排是周四晚的小排练厅，仅供该活动使用。 档案 5/14，限定于本条活动。",
+          "timestamp": 1760004620000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：单据示例 BT-9412-I 是购入资料编号。 档案 5/15，限定于本条活动。",
+          "timestamp": 1760004680000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：维护联系人示例写作周原，工作点在梧桐街62号。 档案 5/16，限定于本条活动。",
+          "timestamp": 1760004740000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-5",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s5",
+      "messages": [
+        {
+          "role": "user",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 6/1，限定于本条活动。",
+          "timestamp": 1760004800000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：单据示例 BT-9412-I 是购入资料编号。 档案 6/2，限定于本条活动。",
+          "timestamp": 1760004860000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：维护联系人示例写作周原，工作点在梧桐街62号。 档案 6/3，限定于本条活动。",
+          "timestamp": 1760004920000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：团体票默认靠近音箱，个人偏好需另行登记。 档案 6/4，限定于本条活动。",
+          "timestamp": 1760004980000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：声级示例是76 dB，与正式录音上限需分开确认。 档案 6/5，限定于本条活动。",
+          "timestamp": 1760005040000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 6/6，限定于本条活动。",
+          "timestamp": 1760005100000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：单据示例 BT-9412-I 是购入资料编号。 档案 6/7，限定于本条活动。",
+          "timestamp": 1760005160000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：维护联系人示例写作周原，工作点在梧桐街62号。 档案 6/8，限定于本条活动。",
+          "timestamp": 1760005220000
+        },
+        {
+          "role": "user",
+          "content": "For the Twilight ensemble recording, peak sound level must stay below 82 dB. The rehearsal target is 76 dB.",
+          "timestamp": 1760005280000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：声级示例是76 dB，与正式录音上限需分开确认。 档案 6/10，限定于本条活动。",
+          "timestamp": 1760005340000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 6/11，限定于本条活动。",
+          "timestamp": 1760005400000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：单据示例 BT-9412-I 是购入资料编号。 档案 6/12，限定于本条活动。",
+          "timestamp": 1760005460000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：维护联系人示例写作周原，工作点在梧桐街62号。 档案 6/13，限定于本条活动。",
+          "timestamp": 1760005520000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：团体票默认靠近音箱，个人偏好需另行登记。 档案 6/14，限定于本条活动。",
+          "timestamp": 1760005580000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：声级示例是76 dB，与正式录音上限需分开确认。 档案 6/15，限定于本条活动。",
+          "timestamp": 1760005640000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：安排是周四晚的小排练厅，仅供该活动使用。 档案 6/16，限定于本条活动。",
+          "timestamp": 1760005700000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-6",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s6",
+      "messages": [
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 7/1，限定于本条活动。",
+          "timestamp": 1760005760000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：声级示例是76 dB，与正式录音上限需分开确认。 档案 7/2，限定于本条活动。",
+          "timestamp": 1760005820000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：安排是周四晚的小排练厅，仅供该活动使用。 档案 7/3，限定于本条活动。",
+          "timestamp": 1760005880000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：单据示例 BT-9412-I 是购入资料编号。 档案 7/4，限定于本条活动。",
+          "timestamp": 1760005940000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：维护联系人示例写作周原，工作点在梧桐街62号。 档案 7/5，限定于本条活动。",
+          "timestamp": 1760006000000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 7/6，限定于本条活动。",
+          "timestamp": 1760006060000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：声级示例是76 dB，与正式录音上限需分开确认。 档案 7/7，限定于本条活动。",
+          "timestamp": 1760006120000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：安排是周四晚的小排练厅，仅供该活动使用。 档案 7/8，限定于本条活动。",
+          "timestamp": 1760006180000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：单据示例 BT-9412-I 是购入资料编号。 档案 7/9，限定于本条活动。",
+          "timestamp": 1760006240000
+        },
+        {
+          "role": "user",
+          "content": "低音提琴送修收据号是 BT-9412-R；乐器购入凭证号是 BT-9412-I。",
+          "timestamp": 1760006300000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 7/11，限定于本条活动。",
+          "timestamp": 1760006360000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：声级示例是76 dB，与正式录音上限需分开确认。 档案 7/12，限定于本条活动。",
+          "timestamp": 1760006420000
+        },
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：安排是周四晚的小排练厅，仅供该活动使用。 档案 7/13，限定于本条活动。",
+          "timestamp": 1760006480000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：单据示例 BT-9412-I 是购入资料编号。 档案 7/14，限定于本条活动。",
+          "timestamp": 1760006540000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：维护联系人示例写作周原，工作点在梧桐街62号。 档案 7/15，限定于本条活动。",
+          "timestamp": 1760006600000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：团体票默认靠近音箱，个人偏好需另行登记。 档案 7/16，限定于本条活动。",
+          "timestamp": 1760006660000
+        }
+      ]
+    },
+    {
+      "request_id": "orchestra-7",
+      "user_id": "orchestra",
+      "session_id": "orchestra-s7",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Twilight rehearsal example：单据示例 BT-9412-I 是购入资料编号。 档案 8/1，限定于本条活动。",
+          "timestamp": 1760006720000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：维护联系人示例写作周原，工作点在梧桐街62号。 档案 8/2，限定于本条活动。",
+          "timestamp": 1760006780000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：团体票默认靠近音箱，个人偏好需另行登记。 档案 8/3，限定于本条活动。",
+          "timestamp": 1760006840000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：声级示例是76 dB，与正式录音上限需分开确认。 档案 8/4，限定于本条活动。",
+          "timestamp": 1760006900000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：安排是周四晚的小排练厅，仅供该活动使用。 档案 8/5，限定于本条活动。",
+          "timestamp": 1760006960000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：单据示例 BT-9412-I 是购入资料编号。 档案 8/6，限定于本条活动。",
+          "timestamp": 1760007020000
+        },
+        {
+          "role": "user",
+          "content": "晨光乐团：维护联系人示例写作周原，工作点在梧桐街62号。 档案 8/7，限定于本条活动。",
+          "timestamp": 1760007080000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团新生训练：团体票默认靠近音箱，个人偏好需另行登记。 档案 8/8，限定于本条活动。",
+          "timestamp": 1760007140000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团去年的计划：声级示例是76 dB，与正式录音上限需分开确认。 档案 8/9，限定于本条活动。",
+          "timestamp": 1760007200000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团场地演示：安排是周四晚的小排练厅，仅供该活动使用。 档案 8/10，限定于本条活动。",
+          "timestamp": 1760007260000
+        },
+        {
+          "role": "user",
+          "content": "我看暮光乐团演出希望靠近过道，远离音箱，同行人没有座位要求。",
+          "timestamp": 1760007320000
+        },
+        {
+          "role": "assistant",
+          "content": "晨光乐团：维护联系人示例写作周原，工作点在梧桐街62号。 档案 8/12，限定于本条活动。",
+          "timestamp": 1760007380000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团新生训练：团体票默认靠近音箱，个人偏好需另行登记。 档案 8/13，限定于本条活动。",
+          "timestamp": 1760007440000
+        },
+        {
+          "role": "assistant",
+          "content": "暮光乐团去年的计划：声级示例是76 dB，与正式录音上限需分开确认。 档案 8/14，限定于本条活动。",
+          "timestamp": 1760007500000
+        },
+        {
+          "role": "user",
+          "content": "暮光乐团场地演示：安排是周四晚的小排练厅，仅供该活动使用。 档案 8/15，限定于本条活动。",
+          "timestamp": 1760007560000
+        },
+        {
+          "role": "assistant",
+          "content": "Twilight rehearsal example：单据示例 BT-9412-I 是购入资料编号。 档案 8/16，限定于本条活动。",
+          "timestamp": 1760007620000
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "camp-q0",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "multihop",
+      "query": "雪松营地补给由谁协调，要去哪个窗口领取，几点开放？",
+      "required": [
+        {
+          "session_id": "camp-s0",
+          "message_index": 3
+        },
+        {
+          "session_id": "camp-s1",
+          "message_index": 4
+        },
+        {
+          "session_id": "camp-s2",
+          "message_index": 5
+        }
+      ]
+    },
+    {
+      "id": "camp-q1",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "temporal",
+      "query": "雪松营地最终哪天从哪条坡道出发？",
+      "required": [
+        {
+          "session_id": "camp-s4",
+          "message_index": 7
+        }
+      ]
+    },
+    {
+      "id": "camp-q2",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "historical",
+      "query": "雪松营地最初计划的出发日和路线是什么？",
+      "required": [
+        {
+          "session_id": "camp-s3",
+          "message_index": 6
+        }
+      ]
+    },
+    {
+      "id": "camp-q3",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "multilingual",
+      "query": "雪松营地分配的无线电频道是几号？",
+      "required": [
+        {
+          "session_id": "camp-s5",
+          "message_index": 8
+        }
+      ]
+    },
+    {
+      "id": "camp-q4",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "exact",
+      "query": "交接雪松营地冷藏箱时应核对哪个封条号？",
+      "required": [
+        {
+          "session_id": "camp-s6",
+          "message_index": 9
+        }
+      ]
+    },
+    {
+      "id": "camp-q5",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "preference",
+      "query": "营地为我准备饮料时该遵守什么偏好？",
+      "required": [
+        {
+          "session_id": "camp-s7",
+          "message_index": 10
+        }
+      ]
+    },
+    {
+      "id": "camp-q6",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "cross_session",
+      "query": "出发去雪松营地应该走哪边，并把无线电调到哪个频道？",
+      "required": [
+        {
+          "session_id": "camp-s4",
+          "message_index": 7
+        },
+        {
+          "session_id": "camp-s5",
+          "message_index": 8
+        }
+      ]
+    },
+    {
+      "id": "camp-q7",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "direct",
+      "query": "本季雪松营地的补给协调员是谁？",
+      "required": [
+        {
+          "session_id": "camp-s0",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "id": "camp-q8",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "no_answer",
+      "query": "雪松营地夜间住宿的单人费用是多少？",
+      "required": []
+    },
+    {
+      "id": "camp-q9",
+      "user_id": "camp",
+      "split": "unseen_test",
+      "category": "no_answer",
+      "query": "罗晴的登山证什么时候到期？",
+      "required": []
+    },
+    {
+      "id": "orchestra-q0",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "multihop",
+      "query": "暮光乐团低音提琴应送到哪个地址维护，周一能去吗？",
+      "required": [
+        {
+          "session_id": "orchestra-s0",
+          "message_index": 3
+        },
+        {
+          "session_id": "orchestra-s1",
+          "message_index": 4
+        },
+        {
+          "session_id": "orchestra-s2",
+          "message_index": 5
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q1",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "temporal",
+      "query": "暮光乐团合奏现在确定在什么时间和场地？",
+      "required": [
+        {
+          "session_id": "orchestra-s4",
+          "message_index": 7
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q2",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "historical",
+      "query": "取消前的暮光乐团合奏时间和地点是什么？",
+      "required": [
+        {
+          "session_id": "orchestra-s3",
+          "message_index": 6
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q3",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "multilingual",
+      "query": "暮光乐团录音的峰值声级上限是多少？",
+      "required": [
+        {
+          "session_id": "orchestra-s5",
+          "message_index": 8
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q4",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "exact",
+      "query": "领取修好的低音提琴应该用哪张收据编号？",
+      "required": [
+        {
+          "session_id": "orchestra-s6",
+          "message_index": 9
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q5",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "preference",
+      "query": "安排我看乐团演出的座位时要满足哪两点？",
+      "required": [
+        {
+          "session_id": "orchestra-s7",
+          "message_index": 10
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q6",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "cross_session",
+      "query": "乐团合奏场地改到哪里，录音时声级不能超过多少？",
+      "required": [
+        {
+          "session_id": "orchestra-s4",
+          "message_index": 7
+        },
+        {
+          "session_id": "orchestra-s5",
+          "message_index": 8
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q7",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "direct",
+      "query": "谁维护暮光乐团的低音提琴？",
+      "required": [
+        {
+          "session_id": "orchestra-s0",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "id": "orchestra-q8",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "no_answer",
+      "query": "这把低音提琴购入时花了多少钱？",
+      "required": []
+    },
+    {
+      "id": "orchestra-q9",
+      "user_id": "orchestra",
+      "split": "unseen_test",
+      "category": "no_answer",
+      "query": "暮光乐团演出的准确时长是多少分钟？",
+      "required": []
+    }
+  ]
+}

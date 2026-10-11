@@ -1,0 +1,50 @@
+{
+  "started_at_utc": "2026-10-11T00:10:43Z",
+  "status": "passed",
+  "data_kind": "self_generated_synthetic",
+  "schema": "aml-drill-v1",
+  "configuration": {
+    "model": "bge-m3",
+    "dimension": 1024,
+    "endpoint_sha256": "9b514b1a65f6ebfaa4da53a116ea003831b044dc32a989733eace74554ef5b0c",
+    "extraction": null,
+    "summaries": false,
+    "graph": false,
+    "preflight": "passed"
+  },
+  "binary_sha256": "2f9a90106f06ef3f04709ad3741a437d2ec228a9a74a6a571bd6b5f79d1c3b41",
+  "add": {
+    "count": 32,
+    "p50_ms": 592.85,
+    "p95_ms": 1922.98,
+    "p99_ms": 2013.76
+  },
+  "search": {
+    "count": 80,
+    "p50_ms": 357.38,
+    "p95_ms": 491.22,
+    "p99_ms": 686.2
+  },
+  "users": 16,
+  "concurrency": 4,
+  "rounds": 5,
+  "restart_ms": 1711.34,
+  "backup_restore_ms": 1709.71,
+  "disk_bytes": 10389968,
+  "checks": [
+    "isolated_users",
+    "cross_session",
+    "unknown_user",
+    "stable_ids",
+    "idempotency",
+    "restart_after_publication",
+    "stopped_host_backup_restore"
+  ],
+  "temporary_tree_removed": true,
+  "limitations": [
+    "synthetic protocol drill, not semantic ranking or official Smoke",
+    "process death after completed publication, not in-flight crash or power loss",
+    "logical temporary-tree removal including test backup, not media erasure, external copies or provider retention",
+    "no peak memory, provider usage, sustained Full-duration load or production SLO"
+  ]
+}

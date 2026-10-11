@@ -1,0 +1,24 @@
+{
+  "base_commit": "02edd6c",
+  "frozen_before_full_development_and_unseen_runs": true,
+  "runner_sha256": "364bea9e0a071fbd354a098280161796f1e93298a2ed02421dd65a893d5b9090",
+  "answer_runner_sha256": "4d845bef740c6cfee2eab90342205782b7c8aba80be3b806f9a67077800b98e0",
+  "chat_model": "qwen3.8-flash",
+  "enable_thinking": false,
+  "model_mode_probe": {
+    "http": 200,
+    "elapsed_ms": 1221,
+    "usage": {
+      "completion_tokens": 38,
+      "prompt_tokens": 3397,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "text_tokens": 3397
+      },
+      "total_tokens": 3435
+    }
+  },
+  "policy": "No prompt/algorithm changes after successful full development or unseen outputs; failed transport/format runs retained. Not a production change.",
+  "response_format": "json_object",
+  "output_normalization": "JSON object or bounded array accepted; copied candidate objects must exactly match original content and valid indices; evidence is always selected from original candidates."
+}

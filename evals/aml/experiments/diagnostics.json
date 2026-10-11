@@ -1,0 +1,35 @@
+{
+  "schema": "aml-diagnostic-usage-v1",
+  "data_kind": "synthetic_only",
+  "requests": [
+    {
+      "purpose": "initial minimal JSON preflight",
+      "total_tokens": 112
+    },
+    {
+      "purpose": "small request availability check",
+      "total_tokens": 112
+    },
+    {
+      "purpose": "same-candidate non-thinking check",
+      "total_tokens": 3435,
+      "elapsed_ms": 1221
+    },
+    {
+      "purpose": "JSON mode shape check",
+      "total_tokens": 3408
+    },
+    {
+      "purpose": "three identical protocol probes",
+      "total_tokens": 10847,
+      "individual_total_tokens": [
+        3566,
+        3717,
+        3564
+      ]
+    }
+  ],
+  "unknown_usage": "Two failed 60-second calls have no returned usage; not assumed free.",
+  "pricing": "No provider price assumed; no monetary estimate.",
+  "note": "Failed and complete experiment runs have their own raw usage records. These diagnostic totals are additional."
+}

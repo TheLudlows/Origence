@@ -1,0 +1,27 @@
+{
+  "base_commit": "02edd6c",
+  "runner_sha256": "000b10947d90c5406b9577c09e32f165be8b5ead5b6cb9bb62b5e9367ee7ce2a",
+  "answer_runner_sha256": "928db36e5e95baf4375d444a428d43fde09c3038803712beb814bc8833d92fb4",
+  "chat_model": "qwen3.8-flash",
+  "enable_thinking": false,
+  "model_mode_probe": {
+    "http": 200,
+    "elapsed_ms": 1221,
+    "usage": {
+      "completion_tokens": 38,
+      "prompt_tokens": 3397,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "text_tokens": 3397
+      },
+      "total_tokens": 3435
+    }
+  },
+  "policy": "No prompt/algorithm changes after successful full development or unseen outputs; failed transport/format runs retained. Not a production change.",
+  "response_format": "json_object",
+  "output_normalization": "JSON object or bounded array accepted; copied candidate objects must exactly match original content and valid indices; evidence is always selected from original candidates.",
+  "adapter_correction": "After the first test run stopped on index-only objects, allow a bounded list of index objects; optional content must still exactly match original. Prompts, model settings, retrieval strategy and frozen test data unchanged. Interrupted test artifact retained; final test is a same-strategy rerun. A second interruption exposed a single-object wrapper array [{indices:[...]}]; unwrap exactly one recognized object. No retrieval prompts, strategy, model settings or dataset changes.",
+  "initial_strategy_frozen_before_full_runs": true,
+  "final_adapter_hash_recorded_after_interrupted_test": true,
+  "answer_arm_extension": "After observing equal all-evidence coverage for rerank-only and expanded-rerank on new topics, add exploratory rerank-only Answer comparison; prompt, references, dataset and retrieval outputs unchanged."
+}

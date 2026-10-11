@@ -1,0 +1,42 @@
+{
+  "base_commit": "02edd6c",
+  "tested_rust_commit": "85454bf69e673af4411b2bdd7874942aabf92682",
+  "binary_sha256": "2f9a90106f06ef3f04709ad3741a437d2ec228a9a74a6a571bd6b5f79d1c3b41",
+  "embedding_model": {
+    "name": "bge-m3:latest",
+    "model": "bge-m3:latest",
+    "modified_at": "2026-10-10T21:46:25.8964303+08:00",
+    "size": 1157672605,
+    "digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "bert",
+      "families": [
+        "bert"
+      ],
+      "parameter_size": "566.70M",
+      "quantization_level": "F16",
+      "context_length": 8192,
+      "embedding_length": 1024,
+      "runner": "ggml"
+    },
+    "capabilities": [
+      "embedding"
+    ]
+  },
+  "chat_model": "qwen3.8-flash",
+  "platform": "win32",
+  "arch": "x64",
+  "cpu": "Intel(R) Core(TM) i5-14600KF",
+  "logical_cpus": 20,
+  "memory_bytes": 34127998976,
+  "commands": [
+    "python tools/aml_experiment.py --binary target/debug/origence.exe --allow-chat-calls --report target/aml-experiment-dev3-1791680304044.json",
+    "python tools/aml_experiment.py --dataset unseen --binary target/debug/origence.exe --allow-chat-calls --report target/aml-experiment-unseen3-1791680728841.json",
+    "python tools/aml_answer.py --input target/aml-experiment-dev3-1791680304044.json --allow-chat-calls --report target/aml-answer-dev-1791680421413.json",
+    "python tools/aml_answer.py --input target/aml-experiment-dev3-1791680304044.json --arms rerank_only --allow-chat-calls --report target/aml-answer-dev-rerank-1791680882692.json",
+    "python tools/aml_answer.py --dataset unseen --input target/aml-experiment-unseen3-1791680728841.json --arms vector rerank_only expanded_rerank --allow-chat-calls --report target/aml-answer-unseen-1791680882689.json"
+  ],
+  "cost": "Actual tokens per raw artifact; no provider price or monetary cost assumed. Failed requests without usage are not assumed free. CPU not priced."
+}

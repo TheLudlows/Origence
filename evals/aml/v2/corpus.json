@@ -1,0 +1,3210 @@
+{
+  "schema": "aml-local-quality-v2",
+  "origin": "Self-authored synthetic histories; no official AML data; no independent human review.",
+  "split": "source_disjoint_development_holdout",
+  "batches": [
+    {
+      "request_id": "workshop-0",
+      "user_id": "workshop",
+      "session_id": "workshop-s0",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1735689600000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 1，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 1，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 1，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 1，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200000,
+          "content": "2025年1月的鸢尾设备项目由林岚负责，质量复核由陈诚负责。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 1，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 1，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 1，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736380800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 1，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736467200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 1，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736553600000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 1，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736640000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 1，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736726400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 1，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736812800000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 1，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736899200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 1，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736985600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 1，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-1",
+      "user_id": "workshop",
+      "session_id": "workshop-s1",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1737072000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 2，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737158400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 2，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1737244800000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 2，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737331200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 2，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737417600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 2，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1737504000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 2，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737590400000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 2，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737676800000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 2，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1737763200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 2，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737849600000,
+          "content": "2025年4月交接完成：鸢尾设备项目负责人改为顾言，林岚转去做培训。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737936000000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 2，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738022400000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 2，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738108800000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 2，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738195200000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 2，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738281600000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 2，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738368000000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 2，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-2",
+      "user_id": "workshop",
+      "session_id": "workshop-s2",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1738454400000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 3，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738540800000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 3，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738627200000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 3，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738713600000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 3，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738800000000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 3，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738886400000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 3，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738972800000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 3，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1739059200000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 3，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739145600000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 3，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739232000000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 3，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1739318400000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 3，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739404800000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 3，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739491200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 3，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1739577600000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 3，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739664000000,
+          "content": "顾言的办公室在南区二号楼的五层。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739750400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 3，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-3",
+      "user_id": "workshop",
+      "session_id": "workshop-s3",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1739836800000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 4，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739923200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 4，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740009600000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 4，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740096000000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 4，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740182400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 4，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740268800000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 4，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740355200000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 4，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740441600000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 4，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740528000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 4，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740614400000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 4，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740700800000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 4，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740787200000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 4，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740873600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 4，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740960000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 4，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741046400000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 4，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741132800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 4，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-4",
+      "user_id": "workshop",
+      "session_id": "workshop-s4",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1741219200000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 5，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741305600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 5，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741392000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 5，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741478400000,
+          "content": "鸢尾项目样机唯一的返修工单是 IR-7306-B，不能使用批量采购单。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741564800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 5，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741651200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 5，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741737600000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 5，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741824000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 5，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741910400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 5，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741996800000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 5，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742083200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 5，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742169600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 5，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742256000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 5，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742342400000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 5，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742428800000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 5，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742515200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 5，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-5",
+      "user_id": "workshop",
+      "session_id": "workshop-s5",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1742601600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 6，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742688000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 6，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742774400000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 6，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742860800000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 6，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742947200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 6，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743033600000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 6，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743120000000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 6，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1743206400000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 6，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743292800000,
+          "content": "The Iris prototype must be kept below 18 degrees Celsius during transport."
+        },
+        {
+          "role": "user",
+          "timestamp": 1743379200000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 6，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1743465600000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 6，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743552000000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 6，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743638400000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 6，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1743724800000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 6，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743811200000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 6，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743897600000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 6，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-6",
+      "user_id": "workshop",
+      "session_id": "workshop-s6",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1743984000000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 7，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744070400000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 7，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744156800000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 7，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1744243200000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 7，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744329600000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 7，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744416000000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 7，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1744502400000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 7，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744588800000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 7，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744675200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 7，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1744761600000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 7，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744848000000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 7，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744934400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 7，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745020800000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 7，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745107200000,
+          "content": "鸢尾项目原定周三上午验收。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745193600000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 7，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745280000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 7，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-7",
+      "user_id": "workshop",
+      "session_id": "workshop-s7",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1745366400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 8，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745452800000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 8，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745539200000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 8，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745625600000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 8，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745712000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 8，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745798400000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 8，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745884800000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 8，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745971200000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 8，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746057600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 8，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746144000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 8，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746230400000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 8，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746316800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 8，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746403200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 8，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746489600000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 8，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746576000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 8，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746662400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 8，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-8",
+      "user_id": "workshop",
+      "session_id": "workshop-s8",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1746748800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 9，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746835200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 9，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746921600000,
+          "content": "验收日更新为周五下午，适用于鸢尾项目；原周三的安排取消。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747008000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 9，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747094400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 9，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747180800000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 9，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747267200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 9，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747353600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 9，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747440000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 9，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747526400000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 9，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747612800000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 9，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747699200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 9，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747785600000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 9，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747872000000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 9，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747958400000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 9，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748044800000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 9，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-9",
+      "user_id": "workshop",
+      "session_id": "workshop-s9",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1748131200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 10，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748217600000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 10，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748304000000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 10，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1748390400000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 10，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748476800000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 10，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748563200000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 10，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1748649600000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 10，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748736000000,
+          "content": "只有客户签字和绝缘测试都完成，鸢尾样机才可以出库。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748822400000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 10，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1748908800000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 10，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748995200000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 10，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749081600000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 10，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749168000000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 10，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749254400000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 10，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749340800000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 10，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749427200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 10，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-10",
+      "user_id": "workshop",
+      "session_id": "workshop-s10",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1749513600000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 11，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749600000000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 11，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749686400000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 11，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749772800000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 11，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749859200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 11，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749945600000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 11，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750032000000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 11，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750118400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 11，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750204800000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 11，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750291200000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 11，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750377600000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 11，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750464000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 11，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750550400000,
+          "content": "鸢尾项目专用的绝缘测试台叫北辰台。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750636800000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 11，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750723200000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 11，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750809600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 11，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-11",
+      "user_id": "workshop",
+      "session_id": "workshop-s11",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1750896000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 12，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750982400000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 12，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751068800000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 12，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751155200000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 12，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1751241600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 12，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751328000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 12，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751414400000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 12，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1751500800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 12，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751587200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 12，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751673600000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 12，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1751760000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 12，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751846400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 12，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751932800000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 12，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1752019200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 12，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752105600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 12，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752192000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 12，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-12",
+      "user_id": "workshop",
+      "session_id": "workshop-s12",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1752278400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 13，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752364800000,
+          "content": "北辰台的操作手册保存在红色资料柜最底层。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752451200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 13，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1752537600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 13，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752624000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 13，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752710400000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 13，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1752796800000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 13，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752883200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 13，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752969600000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 13，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753056000000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 13，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753142400000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 13，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753228800000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 13，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753315200000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 13，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753401600000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 13，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753488000000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 13，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753574400000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 13，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-13",
+      "user_id": "workshop",
+      "session_id": "workshop-s13",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1753660800000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 14，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753747200000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 14，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753833600000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 14，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753920000000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 14，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754006400000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 14，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754092800000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 14，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754179200000,
+          "content": "我本人不能吃腰果；团队订餐请使用独立餐盒避免交叉接触。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754265600000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 14，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754352000000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 14，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754438400000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 14，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754524800000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 14，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754611200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 14，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754697600000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 14，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754784000000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 14，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754870400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 14，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754956800000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 14，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-14",
+      "user_id": "workshop",
+      "session_id": "workshop-s14",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1755043200000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 15，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755129600000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 15，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755216000000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 15，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755302400000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 15，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755388800000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 15，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755475200000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 15，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755561600000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 15，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755648000000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 15，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755734400000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 15，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755820800000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 15，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755907200000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 15，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755993600000,
+          "content": "The Iris crate weighs 42 kilograms without the reusable trolley."
+        },
+        {
+          "role": "user",
+          "timestamp": 1756080000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 15，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1756166400000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 15，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756252800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 15，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756339200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 15，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "workshop-15",
+      "user_id": "workshop",
+      "session_id": "workshop-s15",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1756425600000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 16，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756512000000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 16，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756598400000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 16，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1756684800000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 16，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756771200000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 16，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756857600000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 16，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1756944000000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 16，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757030400000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 16，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757116800000,
+          "content": "Iris training replica：操作手册示例放在蓝色柜子的上层。 记录批次 16，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1757203200000,
+          "content": "鸢尾采购流程：crate weight is 54 kilograms including its trolley. 记录批次 16，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757289600000,
+          "content": "水仙设备项目：今天的集体餐有腰果饼干，需另行登记个人禁忌。 记录批次 16，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757376000000,
+          "content": "鸢尾量产项目：负责人仍为林岚，临时代理为陈诚。 记录批次 16，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1757462400000,
+          "content": "鸢尾测试演练：验收时间暂定为周三上午，尚未召开排期确认会。 记录批次 16，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757548800000,
+          "content": "Iris packaging audit：返修工单示例是 IR-7306-A，此条仅供该流程参考。 记录批次 16，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757635200000,
+          "content": "鸢尾包装改造：设备运输温度以25摄氏度为上限。 记录批次 16，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1757721600000,
+          "content": "鸢尾培训课程：采购单确认和包装拍照是交付检查项。 记录批次 16，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-0",
+      "user_id": "gallery",
+      "session_id": "gallery-s0",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1735689600000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 1，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 1，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 1，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 1，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200000,
+          "content": "海盐展最初的策展人是陶文，海风展由于澄负责。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 1，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 1，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 1，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736380800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 1，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736467200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 1，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736553600000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 1，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736640000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 1，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736726400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 1，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736812800000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 1，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736899200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 1，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736985600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 1，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-1",
+      "user_id": "gallery",
+      "session_id": "gallery-s1",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1737072000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 2，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737158400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 2，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1737244800000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 2，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737331200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 2，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737417600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 2，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1737504000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 2，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737590400000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 2，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737676800000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 2，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1737763200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 2，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737849600000,
+          "content": "策展交接记录：海盐展现在由叶青负责，陶文继续担任顾问。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1737936000000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 2，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738022400000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 2，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738108800000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 2，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738195200000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 2，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738281600000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 2，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738368000000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 2，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-2",
+      "user_id": "gallery",
+      "session_id": "gallery-s2",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1738454400000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 3，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738540800000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 3，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738627200000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 3，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738713600000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 3，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1738800000000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 3，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738886400000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 3，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1738972800000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 3，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1739059200000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 3，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739145600000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 3，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739232000000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 3，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1739318400000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 3，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739404800000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 3，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739491200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 3，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1739577600000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 3，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739664000000,
+          "content": "叶青来自镜湖艺术中心，该中心是海盐展陶瓶的出借方。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739750400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 3，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-3",
+      "user_id": "gallery",
+      "session_id": "gallery-s3",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1739836800000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 4，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1739923200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 4，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740009600000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 4，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740096000000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 4，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740182400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 4，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740268800000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 4，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740355200000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 4，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740441600000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 4，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740528000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 4，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740614400000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 4，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740700800000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 4，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740787200000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 4，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1740873600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 4，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1740960000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 4，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741046400000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 4，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741132800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 4，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-4",
+      "user_id": "gallery",
+      "session_id": "gallery-s4",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1741219200000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 5，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741305600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 5，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741392000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 5，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741478400000,
+          "content": "镜湖艺术中心的运输收件处在栖霞路17号后院。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741564800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 5，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741651200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 5，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741737600000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 5，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741824000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 5，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1741910400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 5，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1741996800000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 5，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742083200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 5，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742169600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 5，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742256000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 5，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742342400000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 5，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742428800000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 5，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742515200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 5，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-5",
+      "user_id": "gallery",
+      "session_id": "gallery-s5",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1742601600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 6，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742688000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 6，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742774400000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 6，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1742860800000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 6，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1742947200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 6，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743033600000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 6，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743120000000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 6，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1743206400000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 6，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743292800000,
+          "content": "海盐展的镇馆陶瓶只接受恒湿柜保存，湿度需维持在45%到50%。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743379200000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 6，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1743465600000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 6，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743552000000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 6，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743638400000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 6，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1743724800000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 6，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743811200000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 6，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1743897600000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 6，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-6",
+      "user_id": "gallery",
+      "session_id": "gallery-s6",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1743984000000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 7，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744070400000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 7，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744156800000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 7，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1744243200000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 7，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744329600000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 7，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744416000000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 7，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1744502400000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 7，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744588800000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 7，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744675200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 7，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1744761600000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 7，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744848000000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 7，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1744934400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 7，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745020800000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 7，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745107200000,
+          "content": "展品运输箱的封签号码为 YH-2048-C，借展协议号为 YH-2048-A。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745193600000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 7，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745280000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 7，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-7",
+      "user_id": "gallery",
+      "session_id": "gallery-s7",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1745366400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 8，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745452800000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 8，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745539200000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 8，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745625600000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 8，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745712000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 8，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1745798400000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 8，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745884800000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 8，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1745971200000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 8，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746057600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 8，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746144000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 8，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746230400000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 8，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746316800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 8，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746403200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 8，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746489600000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 8，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746576000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 8，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746662400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 8，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-8",
+      "user_id": "gallery",
+      "session_id": "gallery-s8",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1746748800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 9，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1746835200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 9，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1746921600000,
+          "content": "海盐展原计划9月12日对公众开放。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747008000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 9，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747094400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 9，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747180800000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 9，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747267200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 9，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747353600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 9，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747440000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 9，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747526400000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 9，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747612800000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 9，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747699200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 9，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747785600000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 9，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1747872000000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 9，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1747958400000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 9，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748044800000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 9，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-9",
+      "user_id": "gallery",
+      "session_id": "gallery-s9",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1748131200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 10，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748217600000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 10，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748304000000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 10，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1748390400000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 10，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748476800000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 10，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748563200000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 10，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1748649600000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 10，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748736000000,
+          "content": "台风后调整通知：海盐展公众开放改为9月19日，12日仅供内部布展。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748822400000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 10，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1748908800000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 10，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1748995200000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 10，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749081600000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 10，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749168000000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 10，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749254400000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 10，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749340800000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 10，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749427200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 10，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-10",
+      "user_id": "gallery",
+      "session_id": "gallery-s10",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1749513600000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 11，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749600000000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 11，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749686400000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 11，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749772800000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 11，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1749859200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 11，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1749945600000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 11，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750032000000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 11，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750118400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 11，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750204800000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 11，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750291200000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 11，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750377600000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 11，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750464000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 11，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750550400000,
+          "content": "海盐展无障碍入口位于西门，坡道宽度为1.6米。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750636800000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 11，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750723200000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 11，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1750809600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 11，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-11",
+      "user_id": "gallery",
+      "session_id": "gallery-s11",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1750896000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 12，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1750982400000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 12，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751068800000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 12，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751155200000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 12，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1751241600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 12，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751328000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 12，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751414400000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 12，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1751500800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 12，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751587200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 12，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751673600000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 12，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1751760000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 12，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751846400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 12，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1751932800000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 12，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1752019200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 12，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752105600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 12，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752192000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 12，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-12",
+      "user_id": "gallery",
+      "session_id": "gallery-s12",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1752278400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 13，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752364800000,
+          "content": "I requested an audio guide in Japanese, not the standard English version."
+        },
+        {
+          "role": "user",
+          "timestamp": 1752451200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 13，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1752537600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 13，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752624000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 13，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752710400000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 13，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1752796800000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 13，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752883200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 13，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1752969600000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 13，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753056000000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 13，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753142400000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 13，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753228800000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 13，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753315200000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 13，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753401600000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 13，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753488000000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 13，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753574400000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 13，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-13",
+      "user_id": "gallery",
+      "session_id": "gallery-s13",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1753660800000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 14，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753747200000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 14，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1753833600000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 14，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1753920000000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 14，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754006400000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 14，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754092800000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 14，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754179200000,
+          "content": "海盐展那只陶瓶的作者是许墨，他师从程砚。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754265600000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 14，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754352000000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 14，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754438400000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 14，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754524800000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 14，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754611200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 14，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754697600000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 14，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754784000000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 14，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1754870400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 14，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1754956800000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 14，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-14",
+      "user_id": "gallery",
+      "session_id": "gallery-s14",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1755043200000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 15，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755129600000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 15，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755216000000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 15，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755302400000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 15，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755388800000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 15，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755475200000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 15，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755561600000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 15，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755648000000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 15，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755734400000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 15，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755820800000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 15，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1755907200000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 15，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1755993600000,
+          "content": "程砚的代表工艺是绞胎，不是青花。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756080000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 15，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1756166400000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 15，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756252800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 15，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756339200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 15，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    },
+    {
+      "request_id": "gallery-15",
+      "user_id": "gallery",
+      "session_id": "gallery-s15",
+      "messages": [
+        {
+          "role": "assistant",
+          "timestamp": 1756425600000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 16，事项 1，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756512000000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 16，事项 2，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756598400000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 16，事项 3，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1756684800000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 16，事项 4，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756771200000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 16，事项 5，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1756857600000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 16，事项 6，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1756944000000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 16，事项 7，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757030400000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 16，事项 8，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757116800000,
+          "content": "Sea Salt rehearsal：说明牌介绍青花工艺与常见的陶瓶造型。 记录批次 16，事项 9，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1757203200000,
+          "content": "海盐展往届巡展：Audio guides default to English for this activity. 记录批次 16，事项 10，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757289600000,
+          "content": "海盐展数字展厅：西门入口宽度测量示例为1.2米，不能用作正式无障碍数据。 记录批次 16，事项 11，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757376000000,
+          "content": "海盐展布展演习：策展负责人名单示例写着陶文，替补为于澄。 记录批次 16，事项 12，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1757462400000,
+          "content": "海盐展志愿者培训：开放日期暂列9月12日，实际日期需要另查正式通知。 记录批次 16，事项 13，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757548800000,
+          "content": "Sea Salt gift shop：编号 YH-2048-A 用于协议示例，封签号暂未登记。 记录批次 16，事项 14，本记录仅限所述活动。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1757635200000,
+          "content": "海盐展周边商品区：保存湿度练习参数是55%到60%。 记录批次 16，事项 15，本记录仅限所述活动。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1757721600000,
+          "content": "海风展：运输收件样例地址为栖霞路71号正门。 记录批次 16，事项 16，本记录仅限所述活动。"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "workshop-q0",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "historical",
+      "query": "鸢尾设备项目在一月份由谁负责？",
+      "required": [
+        {
+          "session_id": "workshop-s0",
+          "message_index": 4
+        }
+      ],
+      "rationale": "历史负责人"
+    },
+    {
+      "id": "workshop-q1",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "temporal",
+      "query": "交接后，鸢尾设备项目现在的负责人是谁？",
+      "required": [
+        {
+          "session_id": "workshop-s1",
+          "message_index": 9
+        }
+      ],
+      "rationale": "当前负责人"
+    },
+    {
+      "id": "workshop-q2",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "multihop",
+      "query": "现任鸢尾项目负责人在哪栋楼办公？",
+      "required": [
+        {
+          "session_id": "workshop-s1",
+          "message_index": 9
+        },
+        {
+          "session_id": "workshop-s2",
+          "message_index": 14
+        }
+      ],
+      "rationale": "当前负责人 + 人员地点"
+    },
+    {
+      "id": "workshop-q3",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "exact",
+      "query": "鸢尾样机返修时应该填写哪个单号？",
+      "required": [
+        {
+          "session_id": "workshop-s4",
+          "message_index": 3
+        }
+      ],
+      "rationale": "准确编号"
+    },
+    {
+      "id": "workshop-q4",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "multilingual",
+      "query": "运输鸢尾样机时，温度上限是多少？",
+      "required": [
+        {
+          "session_id": "workshop-s5",
+          "message_index": 8
+        }
+      ],
+      "rationale": "运输温度"
+    },
+    {
+      "id": "workshop-q5",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "temporal",
+      "query": "鸢尾项目最终改到什么时候验收？",
+      "required": [
+        {
+          "session_id": "workshop-s8",
+          "message_index": 2
+        }
+      ],
+      "rationale": "新安排"
+    },
+    {
+      "id": "workshop-q6",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "historical",
+      "query": "取消之前，鸢尾项目原定的验收时间是什么？",
+      "required": [
+        {
+          "session_id": "workshop-s6",
+          "message_index": 13
+        }
+      ],
+      "rationale": "旧安排"
+    },
+    {
+      "id": "workshop-q7",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "constraints",
+      "query": "鸢尾样机出库必须同时满足什么条件？",
+      "required": [
+        {
+          "session_id": "workshop-s9",
+          "message_index": 7
+        }
+      ],
+      "rationale": "双条件"
+    },
+    {
+      "id": "workshop-q8",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "multihop",
+      "query": "鸢尾专用测试设备的说明书在哪里？",
+      "required": [
+        {
+          "session_id": "workshop-s10",
+          "message_index": 12
+        },
+        {
+          "session_id": "workshop-s12",
+          "message_index": 1
+        }
+      ],
+      "rationale": "中间关系 + 终点关系"
+    },
+    {
+      "id": "workshop-q9",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "preference",
+      "query": "订餐时我有哪些食物禁忌和装餐要求？",
+      "required": [
+        {
+          "session_id": "workshop-s13",
+          "message_index": 6
+        }
+      ],
+      "rationale": "偏好约束"
+    },
+    {
+      "id": "workshop-q10",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "unit",
+      "query": "How heavy is the Iris crate excluding the trolley?",
+      "required": [
+        {
+          "session_id": "workshop-s14",
+          "message_index": 11
+        }
+      ],
+      "rationale": "单位干扰"
+    },
+    {
+      "id": "workshop-q11",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "cross_session",
+      "query": "返修鸢尾样机需要什么单号，运输时要控制到什么温度？",
+      "required": [
+        {
+          "session_id": "workshop-s4",
+          "message_index": 3
+        },
+        {
+          "session_id": "workshop-s5",
+          "message_index": 8
+        }
+      ],
+      "rationale": "准确编号 + 运输温度"
+    },
+    {
+      "id": "workshop-q12",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "no_answer",
+      "query": "鸢尾样机的序列号是什么？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    },
+    {
+      "id": "workshop-q13",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "no_answer",
+      "query": "北辰台校准证书的有效期是哪天？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    },
+    {
+      "id": "workshop-q14",
+      "user_id": "workshop",
+      "split": "development",
+      "category": "no_answer",
+      "query": "顾言的私人手机号码是多少？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    },
+    {
+      "id": "gallery-q0",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "historical",
+      "query": "海盐展最初请谁担任策展人？",
+      "required": [
+        {
+          "session_id": "gallery-s0",
+          "message_index": 4
+        }
+      ],
+      "rationale": "旧人选"
+    },
+    {
+      "id": "gallery-q1",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "temporal",
+      "query": "完成交接后，谁负责海盐展的策展工作？",
+      "required": [
+        {
+          "session_id": "gallery-s1",
+          "message_index": 9
+        }
+      ],
+      "rationale": "新人选"
+    },
+    {
+      "id": "gallery-q2",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "multihop",
+      "query": "当前海盐展策展人所属机构的运输收件地址是什么？",
+      "required": [
+        {
+          "session_id": "gallery-s1",
+          "message_index": 9
+        },
+        {
+          "session_id": "gallery-s2",
+          "message_index": 14
+        },
+        {
+          "session_id": "gallery-s4",
+          "message_index": 3
+        }
+      ],
+      "rationale": "新人选 + 机构关系 + 地址关系"
+    },
+    {
+      "id": "gallery-q3",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "constraints",
+      "query": "海盐展的陶瓶应该如何控制保存湿度？",
+      "required": [
+        {
+          "session_id": "gallery-s5",
+          "message_index": 8
+        }
+      ],
+      "rationale": "保存条件"
+    },
+    {
+      "id": "gallery-q4",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "exact",
+      "query": "拆开展品运输箱前需要核对哪个封签编号？",
+      "required": [
+        {
+          "session_id": "gallery-s6",
+          "message_index": 13
+        }
+      ],
+      "rationale": "相似编号"
+    },
+    {
+      "id": "gallery-q5",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "temporal",
+      "query": "普通观众最终能在哪一天参观海盐展？",
+      "required": [
+        {
+          "session_id": "gallery-s9",
+          "message_index": 7
+        }
+      ],
+      "rationale": "更新计划"
+    },
+    {
+      "id": "gallery-q6",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "historical",
+      "query": "调整之前，海盐展计划哪天对公众开放？",
+      "required": [
+        {
+          "session_id": "gallery-s8",
+          "message_index": 2
+        }
+      ],
+      "rationale": "历史计划"
+    },
+    {
+      "id": "gallery-q7",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "accessibility",
+      "query": "使用轮椅去海盐展应该从哪边进入？坡道有多宽？",
+      "required": [
+        {
+          "session_id": "gallery-s10",
+          "message_index": 12
+        }
+      ],
+      "rationale": "可达性"
+    },
+    {
+      "id": "gallery-q8",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "multilingual",
+      "query": "我之前要求哪一种语言的语音导览？",
+      "required": [
+        {
+          "session_id": "gallery-s12",
+          "message_index": 1
+        }
+      ],
+      "rationale": "语言偏好"
+    },
+    {
+      "id": "gallery-q9",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "multihop",
+      "query": "海盐展陶瓶作者的老师擅长什么工艺？",
+      "required": [
+        {
+          "session_id": "gallery-s13",
+          "message_index": 6
+        },
+        {
+          "session_id": "gallery-s14",
+          "message_index": 11
+        }
+      ],
+      "rationale": "关联作者 + 工艺终点"
+    },
+    {
+      "id": "gallery-q10",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "cross_session",
+      "query": "送回借展陶瓶要去哪里，又要采用什么湿度条件？",
+      "required": [
+        {
+          "session_id": "gallery-s2",
+          "message_index": 14
+        },
+        {
+          "session_id": "gallery-s4",
+          "message_index": 3
+        },
+        {
+          "session_id": "gallery-s5",
+          "message_index": 8
+        }
+      ],
+      "rationale": "出借方 + 地址关系 + 保存条件"
+    },
+    {
+      "id": "gallery-q11",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "no_answer",
+      "query": "海盐展的票价是多少钱？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    },
+    {
+      "id": "gallery-q12",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "no_answer",
+      "query": "那只陶瓶烧制于哪一年？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    },
+    {
+      "id": "gallery-q13",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "no_answer",
+      "query": "海盐展语音导览设备押金是多少？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    },
+    {
+      "id": "gallery-q14",
+      "user_id": "gallery",
+      "split": "holdout",
+      "category": "no_answer",
+      "query": "叶青拥有哪个大学的学位？",
+      "required": [],
+      "rationale": "No source provides the requested fact."
+    }
+  ]
+}

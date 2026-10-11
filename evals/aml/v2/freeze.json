@@ -1,0 +1,23 @@
+{
+  "dataset": "v2",
+  "frozen_before_first_run": true,
+  "base_commit": "08b606c",
+  "corpus_sha256": "2fed7f54cf40cd570ddb15092c8496e92680bcb12b78cb2fa21f11bbcd279afb",
+  "runner_sha256": "3f3520efcf2a4b3fe330dcae966b1b98012b0101975aa8d265a273876e7d7136",
+  "cutoffs": [
+    1,
+    5,
+    10,
+    100
+  ],
+  "requested_top_k": 100,
+  "model": "bge-m3",
+  "dimension": 1024,
+  "summaries": false,
+  "graph": false,
+  "policy": "No tuning or label changes after first run. Development workshop and holdout gallery have disjoint user/session sources and topics; authored by same agent, not independently curated.",
+  "splits": {
+    "development": "workshop",
+    "holdout": "gallery"
+  }
+}

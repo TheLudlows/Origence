@@ -28,3 +28,7 @@ vector/hybrid 仅在显式 `--allow-model-calls`、`OC_ENABLE_MODELS=true` 与�
 ## 已执行的 S1 实验
 
 [S1 v2 结果](s1/results/local-77d43a8-v2/README.md) 包含 300 题六配置、来源独立留出集、真实 BGE/Qwen 模型配置、原始响应压缩包、失败清单及独立审计。新增 200 题未独立人工复核，无答案误召回仍是明确缺口；完整平台、Agent 和生产验收另行执行。
+
+## AML 本地检索基线
+
+[AML 合成开发基线](aml/README.md)通过真实 Add/Search 评测消息级证据召回、多跳全部证据覆盖与无答案候选；与上面的文档去重指标分别报告。

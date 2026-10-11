@@ -1,0 +1,1077 @@
+{
+  "schema": "aml-local-quality-v1",
+  "origin": "Self-authored synthetic development data; no official AML data; no independent human review.",
+  "split": "development_only",
+  "batches": [
+    {
+      "request_id": "lin-0",
+      "user_id": "lin",
+      "session_id": "lin-session-0",
+      "messages": [
+        {
+          "role": "user",
+          "content": "2025年1月，我住在杭州。",
+          "timestamp": 1735689600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600000,
+          "content": "日常记录第1项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600001,
+          "content": "日常记录第2项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600002,
+          "content": "日常记录第3项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600003,
+          "content": "日常记录第4项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600004,
+          "content": "日常记录第5项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600005,
+          "content": "日常记录第6项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600006,
+          "content": "日常记录第7项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600007,
+          "content": "日常记录第8项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-1",
+      "user_id": "lin",
+      "session_id": "lin-session-1",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1735776000000,
+          "content": "日常记录第9项：花园浇水安排在周末。"
+        },
+        {
+          "role": "user",
+          "content": "The owner of project Cedar is Mira.",
+          "timestamp": 1738281600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000001,
+          "content": "日常记录第10项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000002,
+          "content": "日常记录第11项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000003,
+          "content": "日常记录第12项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000004,
+          "content": "日常记录第13项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000005,
+          "content": "日常记录第14项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000006,
+          "content": "日常记录第15项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000007,
+          "content": "日常记录第16项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-2",
+      "user_id": "lin",
+      "session_id": "lin-session-2",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1735862400000,
+          "content": "日常记录第17项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400001,
+          "content": "日常记录第18项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "content": "Mira works at the Riverside laboratory.",
+          "timestamp": 1740873600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400002,
+          "content": "日常记录第19项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400003,
+          "content": "日常记录第20项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400004,
+          "content": "日常记录第21项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400005,
+          "content": "日常记录第22项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400006,
+          "content": "日常记录第23项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400007,
+          "content": "日常记录第24项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-3",
+      "user_id": "lin",
+      "session_id": "lin-session-3",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1735948800000,
+          "content": "日常记录第25项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800001,
+          "content": "日常记录第26项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735948800002,
+          "content": "日常记录第27项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "user",
+          "content": "我对芝麻过敏，聚餐时务必避开。",
+          "timestamp": 1743465600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800003,
+          "content": "日常记录第28项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735948800004,
+          "content": "日常记录第29项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800005,
+          "content": "日常记录第30项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735948800006,
+          "content": "日常记录第31项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800007,
+          "content": "日常记录第32项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-4",
+      "user_id": "lin",
+      "session_id": "lin-session-4",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736035200000,
+          "content": "日常记录第33项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200001,
+          "content": "日常记录第34项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200002,
+          "content": "日常记录第35项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200003,
+          "content": "日常记录第36项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "content": "2025年6月，我从杭州搬到了苏州，现在住在苏州。",
+          "timestamp": 1746057600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200004,
+          "content": "日常记录第37项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200005,
+          "content": "日常记录第38项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200006,
+          "content": "日常记录第39项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200007,
+          "content": "日常记录第40项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-5",
+      "user_id": "lin",
+      "session_id": "lin-session-5",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736121600000,
+          "content": "日常记录第41项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600001,
+          "content": "日常记录第42项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600002,
+          "content": "日常记录第43项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600003,
+          "content": "日常记录第44项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600004,
+          "content": "日常记录第45项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "user",
+          "content": "设备返修工单编号是 ZX-7319，寄件前需填写该编号。",
+          "timestamp": 1748649600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600005,
+          "content": "日常记录第46项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600006,
+          "content": "日常记录第47项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600007,
+          "content": "日常记录第48项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-6",
+      "user_id": "lin",
+      "session_id": "lin-session-6",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736208000000,
+          "content": "日常记录第49项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000001,
+          "content": "日常记录第50项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736208000002,
+          "content": "日常记录第51项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000003,
+          "content": "日常记录第52项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736208000004,
+          "content": "日常记录第53项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000005,
+          "content": "日常记录第54项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "content": "I prefer overnight trains to morning flights when traveling.",
+          "timestamp": 1751241600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1736208000006,
+          "content": "日常记录第55项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000007,
+          "content": "日常记录第56项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "lin-7",
+      "user_id": "lin",
+      "session_id": "lin-session-7",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736294400000,
+          "content": "日常记录第57项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400001,
+          "content": "日常记录第58项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400002,
+          "content": "日常记录第59项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400003,
+          "content": "日常记录第60项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400004,
+          "content": "日常记录第61项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400005,
+          "content": "日常记录第62项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400006,
+          "content": "日常记录第63项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "user",
+          "content": "奶奶喜欢园艺，她生日想要一把轻便的修枝剪。",
+          "timestamp": 1753833600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400007,
+          "content": "日常记录第64项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-0",
+      "user_id": "chen",
+      "session_id": "chen-session-0",
+      "messages": [
+        {
+          "role": "user",
+          "content": "2025年1月，我住在成都。",
+          "timestamp": 1735689600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600000,
+          "content": "日常记录第1项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600001,
+          "content": "日常记录第2项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600002,
+          "content": "日常记录第3项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600003,
+          "content": "日常记录第4项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600004,
+          "content": "日常记录第5项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600005,
+          "content": "日常记录第6项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735689600006,
+          "content": "日常记录第7项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735689600007,
+          "content": "日常记录第8项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-1",
+      "user_id": "chen",
+      "session_id": "chen-session-1",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1735776000000,
+          "content": "日常记录第9项：花园浇水安排在周末。"
+        },
+        {
+          "role": "user",
+          "content": "The owner of project Cedar is Noah.",
+          "timestamp": 1738281600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000001,
+          "content": "日常记录第10项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000002,
+          "content": "日常记录第11项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000003,
+          "content": "日常记录第12项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000004,
+          "content": "日常记录第13项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000005,
+          "content": "日常记录第14项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735776000006,
+          "content": "日常记录第15项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735776000007,
+          "content": "日常记录第16项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-2",
+      "user_id": "chen",
+      "session_id": "chen-session-2",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1735862400000,
+          "content": "日常记录第17项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400001,
+          "content": "日常记录第18项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "content": "Noah works at the Riverside laboratory.",
+          "timestamp": 1740873600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400002,
+          "content": "日常记录第19项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400003,
+          "content": "日常记录第20项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400004,
+          "content": "日常记录第21项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400005,
+          "content": "日常记录第22项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735862400006,
+          "content": "日常记录第23项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735862400007,
+          "content": "日常记录第24项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-3",
+      "user_id": "chen",
+      "session_id": "chen-session-3",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1735948800000,
+          "content": "日常记录第25项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800001,
+          "content": "日常记录第26项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735948800002,
+          "content": "日常记录第27项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "user",
+          "content": "我对花生过敏，聚餐时务必避开。",
+          "timestamp": 1743465600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800003,
+          "content": "日常记录第28项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735948800004,
+          "content": "日常记录第29项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800005,
+          "content": "日常记录第30项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1735948800006,
+          "content": "日常记录第31项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1735948800007,
+          "content": "日常记录第32项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-4",
+      "user_id": "chen",
+      "session_id": "chen-session-4",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736035200000,
+          "content": "日常记录第33项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200001,
+          "content": "日常记录第34项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200002,
+          "content": "日常记录第35项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200003,
+          "content": "日常记录第36项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "content": "2025年6月，我从成都搬到了重庆，现在住在重庆。",
+          "timestamp": 1746057600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200004,
+          "content": "日常记录第37项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200005,
+          "content": "日常记录第38项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736035200006,
+          "content": "日常记录第39项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736035200007,
+          "content": "日常记录第40项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-5",
+      "user_id": "chen",
+      "session_id": "chen-session-5",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736121600000,
+          "content": "日常记录第41项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600001,
+          "content": "日常记录第42项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600002,
+          "content": "日常记录第43项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600003,
+          "content": "日常记录第44项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600004,
+          "content": "日常记录第45项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "user",
+          "content": "设备返修工单编号是 ZX-7319，寄件前需填写该编号。",
+          "timestamp": 1748649600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600005,
+          "content": "日常记录第46项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736121600006,
+          "content": "日常记录第47项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736121600007,
+          "content": "日常记录第48项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-6",
+      "user_id": "chen",
+      "session_id": "chen-session-6",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736208000000,
+          "content": "日常记录第49项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000001,
+          "content": "日常记录第50项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736208000002,
+          "content": "日常记录第51项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000003,
+          "content": "日常记录第52项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736208000004,
+          "content": "日常记录第53项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000005,
+          "content": "日常记录第54项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "content": "I prefer overnight trains to morning flights when traveling.",
+          "timestamp": 1751241600000
+        },
+        {
+          "role": "user",
+          "timestamp": 1736208000006,
+          "content": "日常记录第55项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736208000007,
+          "content": "日常记录第56项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    },
+    {
+      "request_id": "chen-7",
+      "user_id": "chen",
+      "session_id": "chen-session-7",
+      "messages": [
+        {
+          "role": "user",
+          "timestamp": 1736294400000,
+          "content": "日常记录第57项：花园浇水安排在周末。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400001,
+          "content": "日常记录第58项：今天测试了新的键盘布局。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400002,
+          "content": "日常记录第59项：会议室显示屏需要更换线缆。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400003,
+          "content": "日常记录第60项：项目 Maple 的文档正在校对。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400004,
+          "content": "日常记录第61项：晚餐准备煮面和青菜。"
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400005,
+          "content": "日常记录第62项：假期计划尚未确定。"
+        },
+        {
+          "role": "user",
+          "timestamp": 1736294400006,
+          "content": "日常记录第63项：实验室图书借阅期限是两周。"
+        },
+        {
+          "role": "user",
+          "content": "奶奶喜欢园艺，她生日想要一把轻便的修枝剪。",
+          "timestamp": 1753833600000
+        },
+        {
+          "role": "assistant",
+          "timestamp": 1736294400007,
+          "content": "日常记录第64项：旧设备的包装盒放在储藏室。"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "lin-q0",
+      "user_id": "lin",
+      "category": "historical",
+      "query": "2025年1月我住在哪个城市？",
+      "required": [
+        {
+          "session_id": "lin-session-0",
+          "message_index": 0
+        }
+      ]
+    },
+    {
+      "id": "lin-q1",
+      "user_id": "lin",
+      "category": "temporal",
+      "query": "我搬家后现在住在哪个城市？",
+      "required": [
+        {
+          "session_id": "lin-session-4",
+          "message_index": 4
+        }
+      ]
+    },
+    {
+      "id": "lin-q2",
+      "user_id": "lin",
+      "category": "cross_session",
+      "query": "谁负责 Cedar 项目？我对哪种食物过敏？",
+      "required": [
+        {
+          "session_id": "lin-session-1",
+          "message_index": 1
+        },
+        {
+          "session_id": "lin-session-3",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "id": "lin-q3",
+      "user_id": "lin",
+      "category": "multihop",
+      "query": "Which laboratory does the owner of project Cedar work at?",
+      "required": [
+        {
+          "session_id": "lin-session-1",
+          "message_index": 1
+        },
+        {
+          "session_id": "lin-session-2",
+          "message_index": 2
+        }
+      ]
+    },
+    {
+      "id": "lin-q4",
+      "user_id": "lin",
+      "category": "multilingual",
+      "query": "What ingredient must be avoided when preparing my meals?",
+      "required": [
+        {
+          "session_id": "lin-session-3",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "id": "lin-q5",
+      "user_id": "lin",
+      "category": "exact",
+      "query": "返修设备时要填写的工单号是什么？",
+      "required": [
+        {
+          "session_id": "lin-session-5",
+          "message_index": 5
+        }
+      ]
+    },
+    {
+      "id": "lin-q6",
+      "user_id": "lin",
+      "category": "paraphrase",
+      "query": "出远门时我更喜欢什么交通安排？",
+      "required": [
+        {
+          "session_id": "lin-session-6",
+          "message_index": 6
+        }
+      ]
+    },
+    {
+      "id": "lin-q7",
+      "user_id": "lin",
+      "category": "preference",
+      "query": "给奶奶选什么生日礼物合适？",
+      "required": [
+        {
+          "session_id": "lin-session-7",
+          "message_index": 7
+        }
+      ]
+    },
+    {
+      "id": "lin-q8",
+      "user_id": "lin",
+      "category": "no_answer",
+      "query": "我的护照有效期到哪一天？",
+      "required": []
+    },
+    {
+      "id": "lin-q9",
+      "user_id": "lin",
+      "category": "no_answer",
+      "query": "What is my blood type?",
+      "required": []
+    },
+    {
+      "id": "chen-q0",
+      "user_id": "chen",
+      "category": "historical",
+      "query": "2025年1月我住在哪个城市？",
+      "required": [
+        {
+          "session_id": "chen-session-0",
+          "message_index": 0
+        }
+      ]
+    },
+    {
+      "id": "chen-q1",
+      "user_id": "chen",
+      "category": "temporal",
+      "query": "我搬家后现在住在哪个城市？",
+      "required": [
+        {
+          "session_id": "chen-session-4",
+          "message_index": 4
+        }
+      ]
+    },
+    {
+      "id": "chen-q2",
+      "user_id": "chen",
+      "category": "cross_session",
+      "query": "谁负责 Cedar 项目？我对哪种食物过敏？",
+      "required": [
+        {
+          "session_id": "chen-session-1",
+          "message_index": 1
+        },
+        {
+          "session_id": "chen-session-3",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "id": "chen-q3",
+      "user_id": "chen",
+      "category": "multihop",
+      "query": "Which laboratory does the owner of project Cedar work at?",
+      "required": [
+        {
+          "session_id": "chen-session-1",
+          "message_index": 1
+        },
+        {
+          "session_id": "chen-session-2",
+          "message_index": 2
+        }
+      ]
+    },
+    {
+      "id": "chen-q4",
+      "user_id": "chen",
+      "category": "multilingual",
+      "query": "What ingredient must be avoided when preparing my meals?",
+      "required": [
+        {
+          "session_id": "chen-session-3",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "id": "chen-q5",
+      "user_id": "chen",
+      "category": "exact",
+      "query": "返修设备时要填写的工单号是什么？",
+      "required": [
+        {
+          "session_id": "chen-session-5",
+          "message_index": 5
+        }
+      ]
+    },
+    {
+      "id": "chen-q6",
+      "user_id": "chen",
+      "category": "paraphrase",
+      "query": "出远门时我更喜欢什么交通安排？",
+      "required": [
+        {
+          "session_id": "chen-session-6",
+          "message_index": 6
+        }
+      ]
+    },
+    {
+      "id": "chen-q7",
+      "user_id": "chen",
+      "category": "preference",
+      "query": "给奶奶选什么生日礼物合适？",
+      "required": [
+        {
+          "session_id": "chen-session-7",
+          "message_index": 7
+        }
+      ]
+    },
+    {
+      "id": "chen-q8",
+      "user_id": "chen",
+      "category": "no_answer",
+      "query": "我的护照有效期到哪一天？",
+      "required": []
+    },
+    {
+      "id": "chen-q9",
+      "user_id": "chen",
+      "category": "no_answer",
+      "query": "What is my blood type?",
+      "required": []
+    }
+  ]
+}
