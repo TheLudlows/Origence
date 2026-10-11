@@ -2,6 +2,16 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 本地优先 AML 演练
+
+基于已合入 main 的 PR #28（`85454bf69e673af4411b2bdd7874942aabf92682`），本轮仅更新文档与新增证据，未修改实现或依赖。
+
+- 本地 Ollama `bge-m3`、1024 维；执行 `python tools/aml_drill.py --binary target/debug/origence.exe --users 16 --concurrency 4 --rounds 5 --report target/aml-local-first-1791677443798.json`，退出码 0。模型环境设置见 [本地运行步骤](AML_DRILL.md)。
+- 16 用户、32 Add、80 Search；用户隔离、跨 session、未知用户、稳定证据 ID、幂等、发布后重启和停止宿主后整库复制恢复均通过，临时树已清理。Add p50/p95 为 592.85/1922.98 ms，Search p50/p95 为 357.38/491.22 ms；重启/恢复验证为 1711.34/1709.71 ms。计数和延迟不包含额外预检/重放验证调用。
+- [原始报告](evidence/2026-10-11-aml-bge-m3-local-first.json)记录二进制 SHA-256、模型配置及边界。该合成协议演练不产生语义排序分数，不等于官方 Smoke、长期负载或生产 SLO。
+- 核对[官方公开仓库 README](https://github.com/AML-memory/agent-memory-leaderboard/blob/1b8142bfe0f20f1c5218d6b554aa0012de34e504/README.md)及该提交文件树：正式 Smoke 由 AML 平台编排，需平台 AML Key 与公网可访问的 Add/Search；公开代码未包含完整离线 Smoke runner、评测数据与标签。官网/API guide 本次请求返回 HTTP 522，未宣称已复核其最新全文。本地模拟继续进行，服务器/域名后置。
+- 文档本地链接、凭据扫描和 `git diff --check` 通过。本轮无代码变更，不重跑 Rust fmt/Clippy/测试，沿用下列历史验收；未运行新远端 CI。
+
 ## 2026-10-11 PR #28 CI 与依赖审计
 
 [run 38096774752](https://github.com/TheLudlows/Origence/actions/runs/38096774752) 的两个实际作业通过：
