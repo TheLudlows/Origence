@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{sync::atomic::Ordering, time::Duration};
 use uuid::Uuid;
+mod semantic_capture;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct PublishedChunk {
@@ -69,7 +70,28 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
         return Err(AppError::Conflict("stale or cancelled job".into()));
     }
     tx.valid_targets(claim.asset, claim.source).await?;
-    if claim.kind != "extract" {
+    if claim.kind == "semantic_publish" {
+        if claim.payload["parser"] != crate::memory_semantics::PARSER {
+            return Err(AppError::Invalid("unsupported semantic parser".into()));
+        }
+        let members: Vec<crate::memory_semantics::Member> =
+            decode(claim.payload["semantic_members"].clone())?;
+        for member in members {
+            let source = tx
+                .event_content(member.source_event_id, true)
+                .await?
+                .ok_or_else(|| AppError::Conflict("semantic source unavailable".into()))?;
+            if source.get(member.statement.byte_start..member.statement.byte_end)
+                != Some(member.statement.quote.as_str())
+            {
+                return Err(AppError::Invalid("invalid semantic provenance".into()));
+            }
+        }
+    }
+    if claim.kind == "semantic_extract" {
+        semantic_capture::guard_capture(tx, claim).await?;
+    }
+    if !matches!(claim.kind.as_str(), "extract" | "semantic_extract") {
         let current = tx
             .asset_current_version(claim.asset.ok_or(AppError::NotFound)?)
             .await?;
@@ -148,6 +170,10 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         return Err(AppError::Unavailable(
             "worker embedding profile differs from accepted job".into(),
         ));
+    }
+    if claim.kind == "semantic_extract" {
+        tx.commit().await?;
+        return semantic_capture::process(service, claim).await;
     }
     if claim.kind == "extract" {
         // A saved plan replays without re-calling the extraction model.
@@ -246,6 +272,26 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                     .await
                     .map_err(|e| AppError::Internal(e.into()))??
             }
+            "semantic_publish" => {
+                let members: Vec<crate::memory_semantics::Member> =
+                    decode(claim.payload["semantic_members"].clone())?;
+                let identity: Option<crate::memory_identity::MemoryIdentity> =
+                    decode(claim.payload["suggested_identity"].clone())?;
+                let status = claim.payload["semantic_status"]
+                    .as_str()
+                    .ok_or_else(|| AppError::Invalid("missing semantic status".into()))?;
+                let chunks = crate::memory_semantics::chunks(
+                    &members,
+                    status,
+                    if status == "confirmed" {
+                        None
+                    } else {
+                        identity.as_ref()
+                    },
+                );
+                tx.commit().await?;
+                chunks
+            }
             "publish" => {
                 let text = tx
                     .event_content(claim.source.ok_or(AppError::NotFound)?, true)
@@ -316,7 +362,10 @@ async fn prepare(
     if drafts.iter().any(|d| d.chunks.is_empty()) {
         return Err(AppError::Conflict("no source chunks available".into()));
     }
-    let terms = if claim.kind == "aml_ingest" {
+    let terms = if matches!(
+        claim.kind.as_str(),
+        "aml_ingest" | "semantic_publish" | "semantic_extract"
+    ) {
         let texts: Vec<String> = drafts
             .iter()
             .flat_map(|d| d.chunks.iter().map(|c| c.content.clone()))
@@ -616,7 +665,10 @@ async fn publish_prepared(
         capabilities.push("graph");
     }
     let mut result = json!({"readiness":"ready","index_capabilities":capabilities});
-    if claim.kind == "extract" {
+    if claim.kind == "semantic_extract" {
+        result["memories"] = json!(semantic_capture::results(claim)?);
+        result["extractor"] = claim.payload["extractor"].clone();
+    } else if claim.kind == "extract" {
         result["memories"] = json!(
             publication
                 .memories
