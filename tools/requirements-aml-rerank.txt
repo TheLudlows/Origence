@@ -1,0 +1,12 @@
+# Optional offline experiment dependencies; production Rust host does not use these.
+# Validated with Python 3.10.20 and existing torch 2.7.0+cu128 on RTX 5060.
+# Install in a workspace venv; select PyTorch separately for the actual hardware.
+transformers==4.57.6
+tokenizers==0.22.2
+sentencepiece==0.2.1
+safetensors==0.7.0
+huggingface-hub==0.36.2
+regex==2026.9.29
+# Override incompatible optional scientific packages inherited from this machine.
+scipy==1.15.3
+scikit-learn==1.6.1

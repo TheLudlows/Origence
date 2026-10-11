@@ -13,6 +13,7 @@
 | 后续实施顺序 | [S0–S4 路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md) |
 | Agent Memory Leaderboard 参榜准备 | [专项方向与验收清单](AGENT_MEMORY_LEADERBOARD.md) |
 | 检索评估 | [评估入口](../evals/README.md)、[S1 数据集说明](../evals/s1/README.md)、[S1 v2 结果](../evals/s1/results/local-77d43a8-v2/README.md) |
+| AML 重排、证据与拒答选型 | [业界调研与阶段决策](AML_RETRIEVAL_DECISION.md) |
 | 当前验收 | [VALIDATION](VALIDATION.md) |
 
 文档权威顺序：当前行为以代码和 API 为准；当前进度以 STATUS 为准；设计目标以规格为准；运行证据以 VALIDATION 及所链接的 CI/原始工件为准。

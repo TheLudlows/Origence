@@ -1,0 +1,11 @@
+{
+  "frozen_at_utc": "2026-10-11T03:58:22.236Z",
+  "runner_sha256": "4b12c06e756ce97cca51c8d56e82ceb9f3228e826b4ed5b7b62fa29648e4bbd7",
+  "input_sha256": "894c3f56ceb0a4636318f1663f62590d25e4b3527371d38589a9166926dc5d86",
+  "depth": 40,
+  "output_limit": 5,
+  "expected_calls": 35,
+  "model": "qwen3.8-flash",
+  "prompt": "Existing unmodified aml_answer.ANSWER",
+  "interpretation": "Exploratory post-retrieval comparison on historical data"
+}

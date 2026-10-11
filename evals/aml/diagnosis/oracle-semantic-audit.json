@@ -1,0 +1,24 @@
+{
+  "schema": "aml-oracle-semantic-audit-v1",
+  "reviewer": "same coding agent; not independent human review",
+  "reviewed_answerable_questions": 28,
+  "proxy_successes": 28,
+  "strict_semantics": "Do not report 28/28 semantic accuracy.",
+  "findings": [
+    {
+      "id": "orchestra-q6",
+      "source_condition": "peak sound level must stay below 82 dB",
+      "answer_condition": "声级不能超过82 dB",
+      "verdict": "strict_boundary_weakened",
+      "explanation": "The generated condition allows equality; the original source excludes it. The old question wording also suggests a non-strict upper bound. Keep original corpus unchanged and score exact boundary in new paired cases."
+    },
+    {
+      "id": "workshop-q11",
+      "source_condition": "below 18 degrees Celsius",
+      "answer_condition": "18 摄氏度以下",
+      "verdict": "boundary_wording_ambiguous",
+      "explanation": "Numeric value and cited sources match, but this Chinese wording does not explicitly retain strictness; do not count the proxy as proof of inequality semantics."
+    }
+  ],
+  "scope": "Only explicit findings above are semantic annotations; no new aggregate semantic accuracy claimed."
+}

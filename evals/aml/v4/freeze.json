@@ -1,0 +1,23 @@
+{
+  "schema": "aml-paired-freeze-v1",
+  "frozen_at_utc": "2026-10-11T03:49:27.226Z",
+  "status": "data and semantic labels frozen before any model or retrieval evaluation; execution configuration still pending",
+  "corpus_sha256": "6cce9417c0719601d9c70bec4068ff0924702b49b47104835e6857ea9985dcbb",
+  "rubrics_sha256": "4f16b20157a2b9274a0c134ff86010186f81eca668b2aa27db873d5c263b8f83",
+  "questions": 32,
+  "pairs": 16,
+  "answerable": 16,
+  "no_answer": 16,
+  "model_calls_before_freeze": 0,
+  "limitations": [
+    "same author and shared capability templates, not independent human-reviewed validation",
+    "short messages and limited distractors, not a long-history capacity benchmark",
+    "public benchmark holdout remains a separate next step"
+  ],
+  "pre_run_review": {
+    "prior_archive": "pre-review.json.gz",
+    "prior_archive_sha256": "7d8f1780afc2c6ec28e924dfe673571762fe63d338ef7131faf0041d21248c0b",
+    "reason": "Make all source timestamps precede the as-of query and follow described events; ensure backfilled history is recorded after current update so latest-source shortcuts cannot pass.",
+    "model_calls_before_revision": 0
+  }
+}

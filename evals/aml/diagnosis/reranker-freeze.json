@@ -1,0 +1,25 @@
+{
+  "schema": "aml-cross-encoder-regression-freeze-v1",
+  "frozen_at_utc": "2026-10-11T03:50:43.837Z",
+  "runner_sha256": "fb6b72235e6fee555b5555d4824a15458b29b3b74776b4aee823a998916e07a4",
+  "model_manifest_sha256": "64b05495b1d898f045ad3114ca8f9e709fc9fecb14c4b5a4dd18b5ad9b2a4c01",
+  "candidate_depths": [
+    40,
+    100
+  ],
+  "cutoffs": [
+    5,
+    10,
+    20
+  ],
+  "device": "cuda",
+  "dtype": "float16",
+  "batch_size": 8,
+  "max_pair_tokens": 512,
+  "truncation": false,
+  "datasets": [
+    "development",
+    "new_topics"
+  ],
+  "interpretation": "Already observed regression data; depth sweeps are exploratory, no new-topic generalization claim."
+}

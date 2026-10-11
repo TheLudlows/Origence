@@ -1,0 +1,56 @@
+{
+  "schema": "aml-diagnosis-artifacts-v1",
+  "base_commit": "de17218125cccd83e6cce3b5c39340fc5ae3bd52",
+  "created_at_utc": "2026-10-11T04:02:33.817Z",
+  "commands": [
+    {
+      "purpose": "offline diagnosis",
+      "command": "python tools/aml_diagnose.py --report target/aml-diagnosis-final.json",
+      "note": "Executed before SHA-256 compatibility change; equivalent hashes verified afterward. Source snapshot preserved."
+    },
+    {
+      "purpose": "gold evidence",
+      "command": "python tools/aml_oracle.py --report target/aml-oracle-v1.json --allow-chat-calls",
+      "environment": "Authorized chat configuration supplied only through environment; no credentials archived."
+    },
+    {
+      "purpose": "cross encoder",
+      "command": "target/aml-rerank/venv/Scripts/python.exe tools/aml_cross_encoder.py --model-dir target/aml-rerank/model --model-manifest evals/aml/diagnosis/reranker-model.json --report target/aml-cross-encoder-v2.json --device cuda --batch-size 8"
+    },
+    {
+      "purpose": "cross encoder Answer",
+      "command": "python tools/aml_cross_encoder_answer.py --input target/aml-cross-encoder-v2.json --report target/aml-cross-encoder-answer-v1.json --depth 40 --allow-chat-calls"
+    }
+  ],
+  "validation": {
+    "rust_toolchain": "1.98.0-x86_64-pc-windows-msvc",
+    "fmt": "passed",
+    "clippy": "cargo clippy --offline --locked --all-targets -j 2 -- -D warnings; passed 1.27s",
+    "python": "3.13.11; 34 passed, 0 skipped, 4.680s; ResourceWarning treated as error; AML_TEST_BINARY set",
+    "gpu_python": "3.10.20; recorded in model environment description; six diagnosis tests passed before extra hash test",
+    "diff_check": "passed",
+    "scope": "No Rust production, dependency or API changes; no new official AML run; no remote CI claim"
+  },
+  "files": {
+    "evals/aml/diagnosis/compatibility-revision.json": "f024f42f04b572ca06892092b9a1aee78a3b079dd21846348c052e71d2acc9dc",
+    "evals/aml/diagnosis/freeze.json": "0efb54ab3bc9106a17cf96689f5a7b01d2642d37f010ee5b1e766f91779d4204",
+    "evals/aml/diagnosis/initial-archive-link-failure.json.gz": "810bcc0b0941fbdc8c7c41dd12b016faf2adb4c5f4d72e053de64f4ef0a0baa0",
+    "evals/aml/diagnosis/offline-report.json.gz": "3db0fb35993615a6671d28fb7dad4de00323cc2c9be13eed74c58d21d6cce073",
+    "evals/aml/diagnosis/oracle-report.json.gz": "9f3ebc2164a6b484915d56240cb00fda030eaf5ba1381a7ca5a9fbc5ebb4993c",
+    "evals/aml/diagnosis/oracle-semantic-audit.json": "82a611cd190e8dc5fb1b5caeb4f44cb0166cb5fae2d352e6e199d93453453c1f",
+    "evals/aml/diagnosis/README.md": "927071adb5294b4a1a46430829416ab036a4e0f03a1895faad6d325e53deba7e",
+    "evals/aml/diagnosis/reranker-answer-freeze.json": "d375f9ac4c098dd66e81bf4ee43e174f0c98ddea47f40464ada2ffc28e575136",
+    "evals/aml/diagnosis/reranker-answer-report.json.gz": "97fce90f45123b724ea4a954bdd347aa29ca8bf0727a409018b03b970bb6dc59",
+    "evals/aml/diagnosis/reranker-freeze.json": "414524c41cdc1a660b8d203485040c46986496bff2554f754500f1079e55432a",
+    "evals/aml/diagnosis/reranker-load-failure.json.gz": "e5a2f7db3ba7d8119cbbbd1352ac5f5b087b65502fb9d761198c6336c3b3d5f3",
+    "evals/aml/diagnosis/reranker-model.json": "64b05495b1d898f045ad3114ca8f9e709fc9fecb14c4b5a4dd18b5ad9b2a4c01",
+    "evals/aml/diagnosis/reranker-report.json.gz": "6b186c16dac99dbe66b0c512ecb959343ebb93bf23eff23da7636fa1d544eb8e",
+    "evals/aml/diagnosis/source-at-oracle/aml_diagnose.py.txt": "6bc59d1c3033e67a84d46f9dbec1494f44e540dc86aa94f64426bbbd7d38dc6e",
+    "evals/aml/diagnosis/source-at-oracle/aml_quality.py.txt": "3f3520efcf2a4b3fe330dcae966b1b98012b0101975aa8d265a273876e7d7136",
+    "evals/aml/v4/corpus.json": "6cce9417c0719601d9c70bec4068ff0924702b49b47104835e6857ea9985dcbb",
+    "evals/aml/v4/freeze.json": "4284029b60e0bc2b08a42ace3ad242b85c96108c5afb0078421d4789651fbdd6",
+    "evals/aml/v4/pre-review.json.gz": "7d8f1780afc2c6ec28e924dfe673571762fe63d338ef7131faf0041d21248c0b",
+    "evals/aml/v4/README.md": "2996874c291ff9cfd03e415342ce6553dc7c12cff0feabccd2dd7956eda617a0",
+    "evals/aml/v4/rubrics.json": "4f16b20157a2b9274a0c134ff86010186f81eca668b2aa27db873d5c263b8f83"
+  }
+}

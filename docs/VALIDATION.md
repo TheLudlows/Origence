@@ -2,6 +2,26 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 AML 失败归因、正确证据与本地专用重排
+
+基于 main `de17218125cccd83e6cce3b5c39340fc5ae3bd52`。新增离线诊断、oracle、cross-encoder 和其 Answer 对照工具；共享 SHA-256 改为等价的 1 MiB 分块读取以兼容现有 GPU Python 3.10。正式 Rust Search/Add、依赖、Worker、超时/取消/隔离保证未改变。[完整报告](../evals/aml/diagnosis/README.md)、[命令及工件哈希](../evals/aml/diagnosis/manifest.json)。
+
+- 离线核对 35 题、三个检索/回答策略；原文、用户、引用、输入关联哈希与重算指标一致。只重排 3 个可答失败含 2 个 top-40 裁剪、1 个 top-100 缺失。首次压缩归档关联检查失败保留，修复验证压缩前字节，不改历史报告。
+- 正确证据诊断 28 次聊天调用 / 8735 token，旧代理为 12/12 和 16/16；7 道无答案排除。逐题复核发现严格小于被弱化等边界问题，不能宣称语义全对或可靠拒答。
+- 固定官方 BGE-reranker-v2-m3 文件、大小与 SHA-256，RTX 5060 / float16 / batch 8 完成 35 题、3500 对。相同 40 候选 Recall@5 为 75.00%/83.33%，低于历史聊天重排的 91.67%/95.83%。100 对推理 p50 298.18/299.05 ms，p95 887.32/303.75 ms；开发含首次推理，模型加载另计 3319.31 ms。GPU allocated 峰值 1164659200 bytes，不是总进程或端到端指标。
+- 追加固定 Answer 比较 35 次 / 21420 token：专用重排可答代理 8/12、12/16，无答案拒答 3/3、4/4；仍低于聊天重排可答成绩，暂不替换。本轮共 63 次聊天调用、30155 个供应商报告 token；这是分开的两个受限运行，均未超过单运行 60 次上限，无自动重试。
+- 保留 Python 3.10 哈希 API 启动失败、继承 SciPy 二进制不兼容导入失败及修复说明。依赖修复仅在 target 下的项目 venv；模型/缓存不进入 Git。原 helper 快照保留 Oracle 受测代码，模型/提示词/标签不因环境修复调整。
+- [v4 成对数据](../evals/aml/v4/README.md)32 题 / 16 对 / 188 短消息冻结，尚未运行模型，执行配置仍待冻结；预运行时间戳修正前快照保留。无独立人工复核、真实长历史或公开 LongMemEval 新成绩。
+- Rust 1.98.0 `cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过，1.27 秒。无 Rust 实现修改，未重复全量 Rust 测试。
+- Python 3.13.11 设置 AML_TEST_BINARY 后，`python -W error::ResourceWarning -m unittest discover -s tools -p test_*.py -v`：34 passed / 0 skipped / 0 failed，4.680 秒，含实际宿主处理中强退恢复。Python 3.10 的初版 6 项诊断回归也通过；GPU 实验实际完成。
+- `git diff --check` 通过；当时 34 个变更文件的凭据/编码扫描无问题，82 个本地文档链接存在。模型权重已验证被 gitignore 排除；后续新增的本清单/链接再核对。远端 CI 未在此记录中宣称通过。
+
+## 2026-10-11 AML 检索方案调研与决策
+
+基于 main `de17218125cccd83e6cce3b5c39340fc5ae3bd52`，复核既有 Cognee/演进取舍/效果评估文档、当前 AML Search 和 Python 实验实现，并核对官方重排模型、Graphiti、Cognee BEAM 报告、上下文充分性研究及 AML 公开合同。结果见 [阶段决策](AML_RETRIEVAL_DECISION.md)。采用两阶段检索主线，专用/聊天重排待同预算比较；充分性和答案核验单独消融，不改变平台 Answer 边界。
+
+本轮仅新增决策文档并更新 STATUS、索引及本记录；没有改 Rust/Python 实现、依赖、数据或历史实验工件，没有下载新模型或新增模型调用。`git diff --check` 通过；决策/STATUS/索引的 34 个本地链接全部存在，三份文件 UTF-8 解码无替代字符且使用 LF，本节新增决策链接也已核对。未运行 fmt、Clippy 或测试：本轮无实现变更，既有验收记录不作为新策略通过的证据。文档中的待执行实验、模型表现、独立复核和生产接入均未标为已完成。
+
 ## 2026-10-11 PR #29 远端 CI
 
 [run 38101081592](https://github.com/TheLudlows/Origence/actions/runs/38101081592) 对实现 head `30ec9364b830472b4b70c635facd2477e6bfae64` 通过，实际 checkout 为合并预览 `7b472a3cf56a7c837dd8a397b6571748ac2fd967`。Linux/MSRV 默认 lib 31/local 108、Clippy、build、HTTP smoke、处理中强退恢复和关键词种子评估通过；fast-check 轻量 lib 30/local 86、fmt/Clippy、工具测试 19 passed/1 skipped（恢复另在 Linux 实跑）、既有评估 9 passed。
