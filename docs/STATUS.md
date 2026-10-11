@@ -23,8 +23,8 @@ SQLite 图替换已合入 main `9c292a9`；run [38032343493](https://github.com/
 
 S1 v2 在 36 篇合成文档、300 道问题（开发 200、留出 100）上完成六配置对照、1,800 次 search、1,728 次 resolve 和摘要/图消融，零请求错误。keyword/vector/hybrid-all 的文档 Recall@5 为 0.35%/97.57%/94.79%；vector 与 hybrid 的 12 道无答案题均全部误召回。摘要没有观察到增益，图配置 Recall 下降 2.78 个百分点。完整开发/留出分数、延迟、模型 hash 与限制见 [S1 实测报告](../evals/s1/results/local-77d43a8-v2/README.md)。
 
-AML Add/Search 最小闭环与本地协议演练已实现，下一步固定正式评测模型与配置、跟进 [PR #28](https://github.com/TheLudlows/Origence/pull/28) 的 CI，再在目标部署环境推进持续容量、原生写入阶段故障与生产副本清理验收。现有本地 BGE-M3 演练不代表参赛配置；提供的远端网关已验证聊天调用，embedding 模型名与维度仍待确定。检索质量方面仍需独立人工复核新增 200 题，并在不损害可答题召回的条件下评估拒答；之后再决定中文关键词改进和图配置。该实验不代表生产语料、完整平台用例或 Agent 成功率。
+AML Add/Search 最小闭环与本地协议演练已实现；[PR #28](https://github.com/TheLudlows/Origence/pull/28) 的 Linux/fast-check 已通过。下一步固定正式评测模型与配置、处理 [依赖审计保留项](DEPENDENCY_AUDIT.md)，再在目标部署环境推进持续容量、原生写入阶段故障与生产副本清理验收。现有本地 BGE-M3 演练不代表参赛配置；提供的远端网关已验证聊天调用，embedding 模型名与维度仍待确定。检索质量方面仍需独立人工复核新增 200 题，并在不损害可答题召回的条件下评估拒答；之后再决定中文关键词改进和图配置。该实验不代表生产语料、完整平台用例或 Agent 成功率。
 
-随后推进 I2 单值/多值及歧义契约，再实现 Session → Feedback → Improve → Learning 最小闭环。依赖安全审计、物理擦除、断电和备份恢复仍需独立验收；P2 服务化能力根据实际需求推进。
+随后推进 I2 单值/多值及歧义契约，再实现 Session → Feedback → Improve → Learning 最小闭环。依赖审计已运行但存在保留告警；生产物理擦除、断电和生产备份恢复仍需独立验收；P2 服务化能力根据实际需求推进。
 
 当前文档分工：[平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md)保存完整架构，[身份规格](superpowers/specs/2026-10-08-memory-identity-and-context.md)保存契约；本文是唯一当前状态摘要，[路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)列未完成工作，[VALIDATION](VALIDATION.md)列当前验收。API 和运行边界见 [API](API.md) 与 [OPERATIONS](OPERATIONS.md)。

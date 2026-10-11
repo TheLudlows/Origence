@@ -2,6 +2,25 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #28 CI 与依赖审计
+
+[run 38096774752](https://github.com/TheLudlows/Origence/actions/runs/38096774752) 的两个实际作业通过：
+head `035aa12f83fd46665636d436caf0a7e0b9a98aa3`，实际 checkout 为合并预览
+`f7d72fc673df9e604eb7f7db510e2ee497964f38`。Linux/MSRV 默认 lib 31/local 108、
+Clippy、build、HTTP smoke、处理中进程强退恢复和关键词种子评估通过；fast-check
+轻量 lib 30/local 86、fmt/Clippy、Python 客户端 4 passed/1 skipped（恢复用例在 Linux
+另跑）、既有 Python 评估 9 passed。Windows/macOS/container 按 main-only 策略跳过，
+不能据此宣称新版本三平台 main 验收。精确 job/checkout 证据见 [CI 工件](evidence/2026-10-11-aml-pr28-ci.json)。
+
+RustSec cargo-audit 0.22.2 审计 719 个锁文件依赖，数据库提交
+`7eebec69c352c7191b1f13eb95dd510eeca5d1de`；退出码 1，2 vulnerability、
+3 unmaintained、2 unsound，不能标为通过。没有 ignore，默认撤回版本检查未返回
+告警。原始报告、实际 feature/依赖路径与后续处置见 [DEPENDENCY_AUDIT](DEPENDENCY_AUDIT.md)。
+本轮没有升级依赖；当前 stdio 不使用 rmcp 公告涉及的 HTTP 传输，rsa 未在当前
+激活依赖树中，lru 上游缓存的具体调用已检查但不作为安全证明。
+
+本段及附带证据仅文档更新，不改变以上受测代码；历史记录不改写。
+
 ## 2026-10-11 AML 处理中恢复与整库备份（后续切片）
 
 继续在 `7b8d7719117f0b8c6ada4acdb5493ac64141278f` 上仅修改演练工具、Python 测试、CI 和文档。
