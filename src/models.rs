@@ -81,13 +81,6 @@ impl Models {
             return Ok(Self::disabled());
         }
         let base = std::env::var("OC_MODEL_BASE_URL")?;
-        let url = reqwest::Url::parse(&base)?;
-        anyhow::ensure!(
-            url.scheme() == "https"
-                || (url.scheme() == "http"
-                    && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))),
-            "model endpoint requires HTTPS except localhost"
-        );
         let embedding_model = std::env::var("OC_EMBEDDING_MODEL")
             .ok()
             .filter(|s| !s.trim().is_empty());
@@ -96,6 +89,32 @@ impl Models {
             .map(|s| s.parse())
             .transpose()?
             .unwrap_or(0);
+        Self::configured(
+            base,
+            std::env::var("OC_MODEL_API_KEY").unwrap_or_default(),
+            embedding_model,
+            std::env::var("OC_EXTRACTION_MODEL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            dimension,
+        )
+    }
+
+    /// Explicit configuration for library hosts, without process-global environment changes.
+    pub fn configured(
+        base: String,
+        key: String,
+        embedding_model: Option<String>,
+        extraction_model: Option<String>,
+        dimension: usize,
+    ) -> anyhow::Result<Self> {
+        let url = reqwest::Url::parse(&base)?;
+        anyhow::ensure!(
+            url.scheme() == "https"
+                || (url.scheme() == "http"
+                    && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))),
+            "model endpoint requires HTTPS except localhost"
+        );
         anyhow::ensure!(
             embedding_model.is_none() || (1..=4096).contains(&dimension),
             "embedding dimension must be 1..4096"
@@ -109,11 +128,9 @@ impl Models {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()?,
             base: Some(base.trim_end_matches('/').into()),
-            key: std::env::var("OC_MODEL_API_KEY").unwrap_or_default(),
+            key,
             embedding_model,
-            extraction_model: std::env::var("OC_EXTRACTION_MODEL")
-                .ok()
-                .filter(|s| !s.trim().is_empty()),
+            extraction_model,
             profile,
             dimension,
         })

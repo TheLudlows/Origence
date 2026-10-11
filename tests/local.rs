@@ -1,4 +1,7 @@
 // One integration executable avoids repeatedly linking the native engines.
+mod aml_protocol;
+mod aml_scope;
+mod aml_service;
 mod identity_upgrade_cli;
 mod identity_vector_regression;
 mod initialization;

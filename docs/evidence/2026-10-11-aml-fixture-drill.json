@@ -1,0 +1,49 @@
+{
+  "started_at_utc": "2026-10-10T23:50:20Z",
+  "status": "passed",
+  "data_kind": "self_generated_synthetic",
+  "schema": "aml-drill-v1",
+  "configuration": {
+    "model": "fixture-v1",
+    "dimension": 2,
+    "endpoint_sha256": "0a7fb856f127ae80832f7c485f9c56f274ab33baac9b184aced93613cbadcd48",
+    "extraction": null,
+    "summaries": false,
+    "graph": false,
+    "preflight": "passed"
+  },
+  "binary_sha256": "2f9a90106f06ef3f04709ad3741a437d2ec228a9a74a6a571bd6b5f79d1c3b41",
+  "add": {
+    "count": 8,
+    "p50_ms": 267.63,
+    "p95_ms": 1499.05,
+    "p99_ms": 1499.05
+  },
+  "search": {
+    "count": 8,
+    "p50_ms": 277.22,
+    "p95_ms": 309.39,
+    "p99_ms": 309.39
+  },
+  "users": 4,
+  "concurrency": 2,
+  "rounds": 2,
+  "restart_ms": 1585.09,
+  "disk_bytes": 1869986,
+  "checks": [
+    "isolated_users",
+    "cross_session",
+    "unknown_user",
+    "stable_ids",
+    "idempotency",
+    "restart_after_publication"
+  ],
+  "temporary_tree_removed": true,
+  "limitations": [
+    "synthetic protocol drill, not semantic ranking or official Smoke",
+    "process death after completed publication, not in-flight crash or power loss",
+    "logical temporary-tree removal, not media erasure, backups or provider retention",
+    "no peak memory, provider usage, sustained Full-duration load or production SLO"
+  ],
+  "validation_kind": "fixed-vector protocol fixture"
+}

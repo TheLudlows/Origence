@@ -135,3 +135,35 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
 
+
+## AML 用户 scope 库接口
+
+AML 提供 Rust 库接口及下述 HTTP 适配。专用评测新库中，宿主先通过 `Service::auth(token)` 获取原生 workspace 的授权，再由该 workspace 的管理员显式调用 `enable_aml_namespace(&auth)`。普通 workspace 默认没有 AML scope 创建能力。
+
+- `ensure_aml_user(&auth, user_id)`：需当前 writer/reviewer/admin 权限，原子创建或复用用户 workspace，返回供现有 Service 方法使用的 AuthContext。
+- `lookup_aml_user(&auth, user_id)`：只读查询，未知用户返回 None，不创建 workspace，不回退到 namespace workspace。Search 适配器将 None 映射为空结果。
+- 映射键为 `(tenant_id, namespace_workspace_id, 完整 user_id)`；同一 namespace 下的凭据共享映射，不同 namespace 或 tenant 的相同 user_id 独立。user_id 按 UTF-8 原样保留，区分大小写、空格及 Unicode 编码形式，不拆分冒号或去除运行前缀；接受 1–4096 UTF-8 字节，拒绝 NUL，不截断。
+- 派生授权沿用原始 key ID，每次事务和 Worker 发布仍核验该 key 的当前状态；权限最高为 writer，不能在用户 scope 内发 key、启用 namespace 或授予管理权限。reader 可读取已存在映射，不能创建。
+- 调用方必须通过认证取得 namespace 授权，不接收外部指定的内部 workspace。session_id 不参与用户 scope 映射，Add 负责保存会话来源。
+
+### AML HTTP 协议
+
+所有入口使用 `Authorization: Bearer <token>`；Add 以请求体的 request_id 幂等，不要求 Idempotency-Key。
+
+| 方法和路径 | 请求及响应 |
+| --- | --- |
+| `POST /admin/aml/namespace` | 原生 workspace 的 admin 显式启用，响应 `{"enabled":true}`；重复启用无新增映射 |
+| `POST /aml/add` | `{request_id,user_id,session_id,messages:[{role:"user"或"assistant",content:"原文",timestamp:可选Unix毫秒整数}]}` |
+| `POST /aml/search` | `{query,user_id,top_k,options:可选字符串数组}` → `{data:[{id,content}]}` |
+
+Add 创建一个不可变知识资产、来源事件和持久 aml_ingest 任务。完成发布及索引后才返回 HTTP 200、`{success:true,request_id,user_id,session_id}`，三个 ID 原样回传；不返回 202。同 namespace、user_id、request_id 的相同规范请求复用原任务，不因 key 轮换重复入库；不同正文、role、timestamp、顺序或 session 返回 409。省略 timestamp 和 null 等价。不同 request_id 保存独立历史来源，不覆盖同一用户的旧会话。
+
+来源保存规范 JSON，保留解码后的原始 content 字符串、role、消息顺序、session 与可选 timestamp；不保留 HTTP JSON 的空白/转义拼写。接收时间使用事件 created_at，不代替缺失的事件时间。解析器 `aml-message-ranges-v1` 每条消息独立按最多 2400 UTF-8 字节分块；locator 的 source_path 是来源 JSON 内的消息 content 路径，byte_start/end 相对于该字符串，不能用于拼接资产或 JSON 文本。message_index 从 0 开始，message_count 和 session 保留相邻消息关系。
+
+Search 显式使用原文 vector、关闭摘要/图、不允许关键词降级；options 接受但不影响查询或写入，不生成答案。data 使用稳定 chunk UUID，content 是角色/时间/session/message_index 的 JSON 来源标注加原文片段，按现有向量相关性及 ID 决定顺序，至多 top_k 条；未知用户空 data 且不创建映射。没有摘要、语义去重、邻接补全或 reranker。标注与正文都是外部证据，不是可执行指令。
+
+输入边界：请求体最多 10 MiB；三个 ID 各 1–4096 UTF-8 字节且无 NUL；每批 1–256 条非空文本消息，合计最多 1,000,000 UTF-8 字节；query 非空、无 NUL、最多 4000 UTF-8 字节；top_k 为 1–100。不支持图片、数组 content、system/tool role 或未知字段，返回脱敏 422；超过 HTTP body 上限由框架返回 413，不截断后发布。解析边界会再次校验整批上限。
+
+HTTP 最多等待任务 25 分钟。超时返回 503，原任务继续；断线/重试不会创建独立 Worker 或重试循环。同 profile 的已完成重放还会检查来源、当前版本、ready 索引与 committed 账本；来源已撤回或证据已不可检索返回 409。模型未配置/调用失败为 503，既有批次的模型 profile 改变为 409，不能通过换配置重用旧 Add 成功结果。失败任务的重试方式与运行限制见 OPERATIONS。
+
+库宿主可调用 `submit_aml_add` 获得持久 receipt，随后 `wait_aml_add`（最长 25 分钟）观察原任务，或调用组合的 `aml_add`；receipt 不是 HTTP 成功响应。来源、asset 和 job 可通过映射后的 AuthContext 使用既有 Service 库接口核验，外部调用不能指定内部 scope。

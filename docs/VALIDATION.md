@@ -2,6 +2,108 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 PR #28 CI 与依赖审计
+
+[run 38096774752](https://github.com/TheLudlows/Origence/actions/runs/38096774752) 的两个实际作业通过：
+head `035aa12f83fd46665636d436caf0a7e0b9a98aa3`，实际 checkout 为合并预览
+`f7d72fc673df9e604eb7f7db510e2ee497964f38`。Linux/MSRV 默认 lib 31/local 108、
+Clippy、build、HTTP smoke、处理中进程强退恢复和关键词种子评估通过；fast-check
+轻量 lib 30/local 86、fmt/Clippy、Python 客户端 4 passed/1 skipped（恢复用例在 Linux
+另跑）、既有 Python 评估 9 passed。Windows/macOS/container 按 main-only 策略跳过，
+不能据此宣称新版本三平台 main 验收。精确 job/checkout 证据见 [CI 工件](evidence/2026-10-11-aml-pr28-ci.json)。
+
+RustSec cargo-audit 0.22.2 审计 719 个锁文件依赖，数据库提交
+`7eebec69c352c7191b1f13eb95dd510eeca5d1de`；退出码 1，2 vulnerability、
+3 unmaintained、2 unsound，不能标为通过。没有 ignore，默认撤回版本检查未返回
+告警。原始报告、实际 feature/依赖路径与后续处置见 [DEPENDENCY_AUDIT](DEPENDENCY_AUDIT.md)。
+本轮没有升级依赖；当前 stdio 不使用 rmcp 公告涉及的 HTTP 传输，rsa 未在当前
+激活依赖树中，lru 上游缓存的具体调用已检查但不作为安全证明。
+
+本段及附带证据仅文档更新，不改变以上受测代码；历史记录不改写。
+
+## 2026-10-11 AML 处理中恢复与整库备份（后续切片）
+
+继续在 `7b8d7719117f0b8c6ada4acdb5493ac64141278f` 上仅修改演练工具、Python 测试、CI 和文档。
+
+- 设置 `AML_TEST_BINARY=target/debug/origence.exe` 后执行 `python -W error::ResourceWarning -m unittest discover -s tools -p 'test_*.py' -v`：5 passed，0 failed，4.384 秒，无 ResourceWarning。
+- 固定模型请求阻塞时强退真实宿主：确认原 job 为 processing、版本数为 0；重启并重试同一 Add 后，receipt/job ID 不变、仅 1 个 completed job、1 个版本和 2 个完整消息 chunk，重复请求及稳定证据 ID 验证通过。
+- [真实 BGE-M3 备份恢复演练](evidence/2026-10-11-aml-bge-m3-backup-drill.json)：8 用户、16 Add、24 Search，停止宿主后复制完整数据树，恢复到独立副本后原 receipt 与证据 ID 保持不变。重启验证 1727.83 ms、副本恢复验证 1741.41 ms；这两个计时都包括启动、重放和检索。数据树及测试备份均清理，target/aml-drills 为空。
+- 初版测试的 Python sqlite3 context manager 只退出事务而未关闭连接，造成 Windows 临时目录清理失败；使用 contextlib.closing 显式关闭后通过。另关闭 urllib HTTPError 响应句柄，消除资源警告。失败残留仅为该测试自建合成目录，核对绝对路径后已清理。
+- 没有变更 Rust 实现或依赖；沿用下面完整 Rust 验收，不重复运行无关编译。`git diff --check` 与改动文档本地链接/凭据扫描通过。
+
+Linux CI 新增这一真实进程恢复用例；无 binary 的 fast-check 跳过它。仍未测试原生存储写入中间的进程死亡、断电、长期满负载、生产快照或供应商保留。备份采用宿主进程已退出后的完整文件树，不能推广为在线跨库快照保证。历史演练工件保持不变。
+
+## 2026-10-11 AML 检索分支与运行演练
+
+基于 main `9bfc51b0406c0b83ddf0be61e167e980f0e68f79` 的 AML 本地变更，整理到
+`codex/aml-readiness`；本段为本地验收，远端 CI 另记。Windows x86_64 MSVC，
+声明 Rust/Cargo 1.98.0，离线锁定依赖；Cargo.lock 未变。
+
+- `cargo fmt --all -- --check`：通过。
+- `cargo clippy --offline --locked --all-targets -j 2 -- -D warnings`：通过，2.46 秒。
+- `cargo test --offline --locked -j 2 --no-fail-fast`：lib 31/local 108 通过，0 failed；main/doc-tests 0。编译 35.48 秒，执行 1.16/23.21 秒。
+- `cargo test --offline --locked --no-default-features -j 2 --no-fail-fast`：lib 30/local 86 通过，0 failed；doc-tests 0。编译 7.38 秒，执行 1.15/2.25 秒。
+- `python -m unittest discover -s tools -p 'test_*.py'`：4 passed，0 failed，覆盖向量形状/数值、HTTPS 与嵌入凭据拒绝、错误脱敏/重定向拒绝和分位数。
+- `python -m unittest discover -s evals -p 'test_*.py'`：9 项中 7 passed、2 skipped（未设置可执行文件的既有集成用例），0 failed。
+- `git diff --check`、变更文件凭据扫描和文档本地链接检查：通过。
+
+新增公开库 API 回归通过真实 SQLite/LanceDB/SQLite 图验证 AML 派生 scope 的关键词、
+向量、摘要、图及 resolve 组合、跨用户重复请求和 key 撤销。模型夹具固定向量；摘要
+独有词项的得分变化证明分支参与，图实体/边及来源证据保持用户范围。首轮新增测试
+失败于按原大小写匹配规范化图名称，修正为大小写归一后的检查后完整重跑通过。
+
+[固定向量演练](evidence/2026-10-11-aml-fixture-drill.json)覆盖 4 用户、8 Add、8 Search；
+[真实本地 BGE-M3 演练](evidence/2026-10-11-aml-bge-m3-drill.json)覆盖 8 用户、16 Add、24 Search，
+1024 维，模型 digest 和实际二进制 SHA-256 记录在工件中。后者 Add p50/p95 为
+278.23/1708.15 ms，Search p50/p95 为 276.71/444.52 ms；两次演练均通过跨 session、
+未知用户、用户隔离、稳定 ID、幂等及发布后强退重启，自己创建的临时树清理后不存在。
+报告计数是计时主体，额外预检/验证/重放调用不计入分位数。
+
+用户提供的远端模型网关 `/v1/models` 返回 200，公布 16 个聊天模型，没有公布
+embedding 模型；`qwen3.8-flash` 最小聊天请求返回 200、有效 content，usage 为
+prompt 65/completion 27/total 92。只使用合成提示，不在仓库保存网关凭据、完整地址或
+回复正文。这不证明网关完全不支持 embeddings；仍需可用模型名与维度。
+本地 BGE-M3 是既有开发环境，不能替代正式参赛模型或组别确认。
+
+限制：本轮没有语义排序分数、长时间 Full 负载、峰值内存/费用、公网 HTTPS、网关
+长连接、发布中强杀、断电、备份恢复或供应商保留验证；临时目录删除不等于物理擦除。
+演练工具及专用部署/清理步骤见 [AML_DRILL](AML_DRILL.md)。原生测试需要进程，但库实现
+没有新增 subprocess；演练脚本只启动独立待测应用，退出时终止并回收自己创建的宿主。
+PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝 Bypass；最终直接使用
+已安装工具链和缓存完成全部检查，没有修改策略或运行该脚本。
+
+## 2026-10-10 AML Add/Search 最小闭环
+
+继续基于 `9bfc51b0406c0b83ddf0be61e167e980f0e68f79` 的本地工作区，包含上一切片的 scope 变更；未提交、未运行远端 CI。Windows x86_64 MSVC，Rust/Cargo 1.98.0，使用安装在 D:\Rust 的声明工具链、本地依赖缓存与 vendored protoc；Cargo.lock 和依赖未变。
+
+- `cargo fmt --all -- --check`：通过。
+- `cargo clippy --offline --locked --all-targets -j 2 -- -D warnings`：通过，11.62 秒。
+- `cargo test --offline --locked -j 2 --no-fail-fast`：通过；lib 31 / local 107，0 failed；main/doc-tests 0。编译 51.36 秒，lib 执行 1.14 秒、local 25.78 秒。
+- `cargo test --offline --locked --no-default-features -j 2 --no-fail-fast`：通过；lib 30 / local 86，0 failed；doc-tests 0。编译 18.86 秒，lib 执行 1.14 秒、local 2.23 秒。
+- `git diff --check`：通过；13 个新增/相关文件的 UTF-8、行尾空白及文档本地链接检查通过。
+- 首轮 `cargo test --offline --locked -j 2 aml_ -- --nocapture` 为 lib 2 通过、local 6 通过/2 失败：测试错误地预期非法输入为 400，并预期模型失败自动 retry；按既有 422 与显式 job retry 契约修正测试，以上完整回归已覆盖并通过。实现额外收紧 Add 成功检查，要求向量索引对应 committed 账本。
+
+新增 6 项测试（parser 2、AML HTTP/Service 3、scope-only 旧 schema 1）。公开库 API 验证消息边界、多语言/emoji/组合字符、原文重建与消息局部 UTF-8 区间；空/超限/多模态/非法 JSON 整批拒绝。真实 loopback HTTP + 单 Worker + SQLite/LanceDB 验证管理员启用、同步 Add 响应、立即 vector Search、相反事实用户隔离、跨 session 召回、未知用户只读空结果、长 ID、top_k、稳定结果 ID、重复请求及内容冲突、reader/未认证拒绝、脱敏错误与模型不可用不降级。
+
+库层回归验证并发相同 Add 仅一任务、等待超时和丢弃观察 future 不取消持久任务、排队任务重开宿主后复用原 receipt/key 轮换、原文来源/locator、profile 改变及来源撤回不重放虚假成功。模型 fixture 在第二条消息 embedding 失败，整批没有版本或 chunks；显式重试原 job 后完整发布一次。上一 scope-only 数据库仍可映射但不自动安装 Add 表，缺失 Add 功能明确不可用，不兼容表定义拒绝检查。
+
+边界：模型为固定向量的测试服务，不能据此判断语义排序/召回质量、真实参赛配置或吞吐。重启用例覆盖已落库排队任务；未新增 AML 专用的发布中强杀/断电测试，既有保存发布计划恢复回归仍通过。断线用例通过丢弃库观察 future 模拟，未注入真实 TCP 半关闭。未实际等待 25 分钟或测试网关长连接。A2 摘要/图等全部分支专项验收、真实模型验证、部署容量、物理清除和官方 Smoke 未完成。旧库不自动迁移，需专用评测新库。历史证据保持不变。
+
+## 2026-10-10 AML 用户 scope 库接口
+
+基于 `9bfc51b0406c0b83ddf0be61e167e980f0e68f79` 的本地工作区变更；未提交、未运行远端 CI。Windows x86_64 MSVC，声明工具链 Rust/Cargo 1.98.0；使用已安装工具链与本地依赖缓存（Cargo `--offline --locked`），未更改 Cargo.lock 或依赖。
+
+- `cargo fmt --all -- --check`：通过。
+- `cargo clippy --offline --locked --all-targets -j 2 -- -D warnings`：通过。首轮发现测试中未使用的 Lifecycle 导入，移除后重跑通过。
+- `cargo test --offline --locked --no-default-features --test local aml_scope -j 2`：4 passed / 0 failed。
+- 上一命令生成的 `target/debug/deps/local-81113c4df62aa8b5.exe` 无过滤运行：85 passed / 0 failed，2.29 秒，覆盖轻量存储、权限、身份、图、PDF 等回归。
+- `cargo test --offline --locked -j 2 --no-fail-fast`：通过，lib 29 / local 103（含新增 AML 5 项），0 failed；main/doc-tests 均为 0 项。首次默认功能编译 13 分 08 秒，lib 执行 1.15 秒，local 执行 25.83 秒。
+- `git diff --check`：通过；新增/修改文档 UTF-8 与行尾空白检查通过。
+
+新增存储用例验证：显式管理员启用、并发首次创建唯一、Unicode/空格/大小写/运行前缀原样区分、同 tenant 不同 namespace 及跨 tenant 隔离、未知用户不分配、不接受伪造 scope/role、reader 不创建、派生 scope 不扩权、凭据撤销、事务中途失败无孤立 workspace、重开映射不变、旧库不自动升级及异常 schema 拒绝。Service 集成回归另覆盖原文上传 → durable job → keyword search、相反事实及跨会话来源、跨用户文件/资产/job 不可见、密钥轮换和撤销后待发布任务失败，已在本轮默认功能测试通过。
+
+边界：这是 A2 的库接口切片。AML Add/Search HTTP 适配、批次幂等及同步完成、真实模型 vector/hybrid/摘要/图的 AML 全分支端到端验收、部署容量、物理清理和官方 Smoke 尚未完成；不将本地测试视为完整 A2 或参榜验收。历史 S0/S1 证据保持不变。
+
 ## 2026-10-10 参榜准备文档
 
 新增 [AML 专项准备计划](AGENT_MEMORY_LEADERBOARD.md)，并补充文档索引及路线图入口。核对当期官方规则与 S1 v2 工件；专项任务仍为待实施。本轮涉及的四份文档经本地文件链接存在性、UTF-8 解码与替换字符、行尾空白检查通过，`git diff --check` 通过。仅修改文档，未重跑 Rust fmt、Clippy、代码测试或远端 CI，不代表 AML 接口、部署或正式评测已验收。
