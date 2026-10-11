@@ -311,3 +311,135 @@ async fn relational_candidates_filter_before_top_k() {
     q.artifact_ids = Some(vec![]);
     assert!(store.search(q).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn long_lived_reader_sees_other_connection_commits() {
+    let dir = tempfile::tempdir().unwrap();
+    let reader = LanceDbStore::open(dir.path()).await.unwrap();
+    let writer = LanceDbStore::open(dir.path()).await.unwrap();
+    let scope = make_scope();
+    let other = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let mut value = entry();
+    let q = query(scope, &value);
+    assert!(reader.search(q.clone()).await.unwrap().is_empty());
+
+    value.embedding = vec![0.0, 1.0];
+    writer.upsert(scope, vec![value.clone()]).await.unwrap();
+    writer.upsert(other, vec![value.clone()]).await.unwrap();
+    let first = reader.search(q.clone()).await.unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].source, value.source);
+    assert!((first[0].score - 1.0 / 3.0).abs() < 1e-6);
+
+    value.embedding = q.embedding.clone();
+    writer.upsert(scope, vec![value.clone()]).await.unwrap();
+    let updated = reader.search(q.clone()).await.unwrap();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].id, value.id);
+    assert_eq!(updated[0].score, 1.0);
+
+    let next = VectorEntry {
+        generation: 2,
+        ..value.clone()
+    };
+    writer.upsert(scope, vec![next.clone()]).await.unwrap();
+    assert_eq!(reader.search(q.clone()).await.unwrap().len(), 1);
+    assert_eq!(reader.search(query(scope, &next)).await.unwrap().len(), 1);
+    writer.delete_source(scope, value.source).await.unwrap();
+    assert!(reader.search(q).await.unwrap().is_empty());
+    assert!(reader.search(query(scope, &next)).await.unwrap().is_empty());
+    assert_eq!(reader.search(query(other, &value)).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn offline_compaction_preserves_results_versions_and_rejects_live_host() {
+    use origence::storage::{SqliteStore, maintenance::compact_vectors};
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("missing");
+    assert!(matches!(
+        compact_vectors(&missing, false).await,
+        Err(StorageError::NotFound)
+    ));
+    assert!(!missing.exists());
+    let relational = SqliteStore::open(dir.path().join("context.db"))
+        .await
+        .unwrap();
+    let store = LanceDbStore::open(dir.path().join("vectors"))
+        .await
+        .unwrap();
+    let scope = make_scope();
+    let base = entry();
+    let q = VectorQuery {
+        limit: 100,
+        embedding: vec![-1.0, 0.0],
+        ..query(scope, &base)
+    };
+    for i in 0..16 {
+        let value = VectorEntry {
+            embedding: vec![i as f32, 0.0],
+            ..entry()
+        };
+        store.upsert(scope, vec![value]).await.unwrap();
+    }
+    let expected = serde_json::to_value(store.search(q.clone()).await.unwrap()).unwrap();
+    assert!(matches!(
+        compact_vectors(dir.path(), true).await,
+        Err(StorageError::Conflict(_))
+    ));
+    drop(store);
+    relational.shutdown().await.unwrap();
+    drop(relational);
+    let preview = compact_vectors(dir.path(), true).await.unwrap();
+    assert_eq!(preview.tables.len(), 1);
+    assert_eq!(preview.tables[0].before.rows, 16);
+    assert!(preview.tables[0].before.fragments > 1);
+    assert!(preview.tables[0].after.is_none());
+    let same = compact_vectors(dir.path(), true).await.unwrap();
+    assert_eq!(preview.tables[0].before, same.tables[0].before);
+    let compacted = compact_vectors(dir.path(), false).await.unwrap();
+    let after = compacted.tables[0].after.as_ref().unwrap();
+    assert_eq!(after.rows, 16);
+    assert_eq!(after.fragments, 1);
+    assert!(compacted.historical_versions_retained);
+    let repeated = compact_vectors(dir.path(), false).await.unwrap();
+    assert_eq!(repeated.tables[0].after.as_ref().unwrap(), after);
+    let store = LanceDbStore::open(dir.path().join("vectors"))
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(store.search(q).await.unwrap()).unwrap(),
+        expected
+    );
+    let db = lancedb::connect(dir.path().join("vectors").to_str().unwrap())
+        .execute()
+        .await
+        .unwrap();
+    let names = db.table_names().execute().await.unwrap();
+    let table = db.open_table(&names[0]).execute().await.unwrap();
+    table
+        .checkout(preview.tables[0].before.version)
+        .await
+        .unwrap();
+    assert_eq!(table.count_rows(None).await.unwrap(), 16);
+    store.upsert(scope, vec![entry()]).await.unwrap();
+    drop(store);
+    table.checkout_latest().await.unwrap();
+    let unmodified_version = table.version().await.unwrap();
+    // Validate all tables before compacting any: an unexpected table must block the run.
+    db.create_empty_table(
+        "zz_foreign_table",
+        std::sync::Arc::new(arrow_schema::Schema::empty()),
+    )
+    .execute()
+    .await
+    .unwrap();
+    assert!(matches!(
+        compact_vectors(dir.path(), false).await,
+        Err(StorageError::InvalidArgument(_))
+    ));
+    table.checkout_latest().await.unwrap();
+    assert_eq!(table.version().await.unwrap(), unmodified_version);
+}

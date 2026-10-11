@@ -24,6 +24,8 @@ pub mod error;
 pub mod lancedb;
 pub mod ledger;
 pub mod local_blob;
+#[cfg(feature = "local-vector")]
+pub mod maintenance;
 pub mod scope;
 pub mod sqlite;
 pub mod sqlite_graph;

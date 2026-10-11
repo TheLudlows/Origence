@@ -234,6 +234,32 @@ impl SqliteStore {
     }
 }
 
+/// Holds the existing host lock without opening/initializing an application store.
+#[cfg(feature = "local-vector")]
+pub(super) struct MaintenanceLock {
+    _guard: LockGuard,
+}
+
+#[cfg(feature = "local-vector")]
+pub(super) async fn lock_for_maintenance(path: &Path) -> StorageResult<MaintenanceLock> {
+    let path = tokio::fs::canonicalize(path).await?;
+    if !path.is_file() {
+        return Err(StorageError::NotFound);
+    }
+    let (guard, opening) = acquire_path_lock(&path, false)?;
+    let _serialized = opening.lock().await;
+    let options = SqliteConnectOptions::new()
+        .filename(&path)
+        .create_if_missing(false)
+        .read_only(true);
+    let mut conn = SqliteConnection::connect_with(&options)
+        .await
+        .map_err(sqlite_err)?;
+    check_conn(&mut conn).await?;
+    conn.close().await.map_err(sqlite_err)?;
+    Ok(MaintenanceLock { _guard: guard })
+}
+
 /// The lock file path bound to a database path (A2.5).
 fn lock_path(path: &Path) -> PathBuf {
     let mut s = path.as_os_str().to_os_string();
@@ -252,6 +278,7 @@ struct HeldLock {
     #[allow(dead_code)]
     file: File,
     refs: usize,
+    reentrant: bool,
     /// Held across connect + initialize for every in-process open of this path.
     opening: Arc<tokio::sync::Mutex<()>>,
 }
@@ -276,7 +303,7 @@ fn acquire_path_lock(
         .lock()
         .expect("process lock registry poisoned");
     if let Some(held) = locks.get_mut(&key) {
-        if !reentrant {
+        if !reentrant || !held.reentrant {
             return Err(StorageError::Conflict(
                 "store is already open in this process".into(),
             ));
@@ -294,6 +321,7 @@ fn acquire_path_lock(
         HeldLock {
             file,
             refs: 1,
+            reentrant,
             opening: opening.clone(),
         },
     );
@@ -1925,5 +1953,30 @@ impl JobQueue for SqliteStore {
             return Err(StorageError::Conflict("stale job claim".to_string()));
         }
         Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "local-vector"))]
+mod maintenance_lock_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn maintenance_guard_blocks_new_in_process_opens_and_releases_on_drop() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("context.db");
+        let store = SqliteStore::open(&path).await.unwrap();
+        store.shutdown().await.unwrap();
+        drop(store);
+        let guard = lock_for_maintenance(&path).await.unwrap();
+        assert!(matches!(
+            SqliteStore::open(&path).await,
+            Err(StorageError::Conflict(_))
+        ));
+        assert!(matches!(
+            lock_for_maintenance(&path).await,
+            Err(StorageError::Conflict(_))
+        ));
+        drop(guard);
+        assert!(SqliteStore::open(&path).await.is_ok());
     }
 }

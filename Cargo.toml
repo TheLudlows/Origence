@@ -53,3 +53,7 @@ path = "tests/local.rs"
 name = "origence"
 path = "src/main.rs"
 required-features = ["local-storage"]
+
+[[example]]
+name = "vector_layout_probe"
+required-features = ["local-vector"]
