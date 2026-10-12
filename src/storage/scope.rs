@@ -16,14 +16,23 @@ pub struct Scope {
 
 /// A principal that has authenticated against a [`Scope`].
 ///
-/// Produced by token authentication or the explicitly enabled AML namespace
-/// mapping. Transactions recheck the live key and any persisted delegation;
+/// Produced by token authentication or an authorized workspace lookup.
+/// Transactions recheck the live key and any persisted ownership relationship;
 /// caller-supplied scope/role values do not grant access (A2.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorizedScope {
     pub scope: Scope,
     pub principal_id: Uuid,
     pub role: String,
+}
+
+/// Explicit capabilities granted when an administrator issues a key.
+/// Rotation never inherits these from another key or from the admin role.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KeyCapabilities {
+    #[serde(default)]
+    pub allow_owned_workspaces: bool,
 }
 
 /// A permission a domain operation can require (A2.2 `check_current_permission`).

@@ -393,15 +393,40 @@ impl SqliteTx {
         Ok(evidence)
     }
     pub async fn issue_scoped_key(&mut self, role: &str) -> StorageResult<IssuedKey> {
+        self.issue_scoped_key_with_capabilities(role, KeyCapabilities::default())
+            .await
+    }
+    pub async fn issue_scoped_key_with_capabilities(
+        &mut self,
+        role: &str,
+        capabilities: KeyCapabilities,
+    ) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::Delete).await?;
         if !ROLES.contains(&role) {
             return Err(StorageError::Conflict("invalid role".into()));
         }
+        if capabilities.allow_owned_workspaces {
+            let root: bool = sqlx::query_scalar(
+                "SELECT owner_workspace_id IS NULL FROM oc_workspaces WHERE tenant_id=? AND id=?",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .fetch_one(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)?;
+            if !root {
+                return Err(StorageError::Forbidden);
+            }
+        }
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        sqlx::query("INSERT INTO oc_api_keys(id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,?)").bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        self.audit("key.issue", key_id, json!({"role":role}))
-            .await?;
+        sqlx::query("INSERT INTO oc_api_keys(id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?)").bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capabilities.allow_owned_workspaces).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.audit(
+            "key.issue",
+            key_id,
+            json!({"role":role,"allow_owned_workspaces":capabilities.allow_owned_workspaces}),
+        )
+        .await?;
         Ok(IssuedKey { key_id, token })
     }
     pub async fn revoke_scoped_key(&mut self, id: Uuid) -> StorageResult<()> {

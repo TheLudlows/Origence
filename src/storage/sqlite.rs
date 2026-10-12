@@ -43,6 +43,7 @@ mod ledger;
 mod lifecycle;
 mod locking;
 mod provenance;
+mod publication;
 mod relational;
 mod schema;
 mod semantics;
@@ -55,7 +56,7 @@ use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::ledger::{
     LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey, MAX_LEDGER_ATTEMPTS,
 };
-use crate::storage::scope::{AuthorizedScope, Permission, Scope, SourceVersion};
+use crate::storage::scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
 use crate::storage::traits::{
     ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, RelationalStore, WorkItem,
 };
@@ -116,6 +117,7 @@ fn retry_delay(attempt: i32) -> i64 {
 /// The idempotency key opened by [`DomainTx::begin_command`] and closed by
 /// [`DomainTx::finish_command`].
 struct PendingCommand {
+    dedup_scope: String,
     operation: String,
     key: String,
     hash: String,

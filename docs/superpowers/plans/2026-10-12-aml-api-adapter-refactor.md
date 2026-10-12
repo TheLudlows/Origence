@@ -296,7 +296,7 @@ UUIDv5 只开启必要的 `uuid` feature；锁文件由 Cargo 更新并审查差
 - 通用 message role 为 1–64 UTF-8 字节、不含 Unicode 控制字符的原样标签；时间是可选有符号 i64 Unix 毫秒，允许负数，缺省不补值且不重排。AML 仍仅接受 user/assistant。
 - 批次命令操作名 `message_batch.ingest` 固定使用 workspace 幂等域，普通操作继续 principal 域。调用方不能自选域。
 - accepted spec 将 parser 标识、parser_version、chunking_version、raw_only=true 与 embedding_profile 保存在原 job payload 并参与请求 hash。
-- 固定跨语言向量见 [JSON](../../contracts/aml-workspace-v1-vectors.json)；实现必须使用 uuid crate 的 v5 功能。向量包含实际编码字节及实际 UUID，独立 Python RFC 9562 算法生成并由 Rust 测试核对。
+- 固定跨语言向量见 [JSON](../../contracts/aml-workspace-v1-vectors.json)；实现必须使用 uuid crate 的 v5 功能。向量包含实际编码字节及实际 UUID，独立 Python RFC 9562 算法生成，配套 Rust 测试核对（执行结果另记）。
 - 当前 schema 必须拒绝缺少通用列/约束的旧库，最终 P3 同时拒绝含旧 AML 专用表的库；不删除或转换旧数据。
 
 ### 执行环境与证据边界

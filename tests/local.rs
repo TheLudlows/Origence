@@ -11,6 +11,8 @@ mod learning_loop;
 mod local_app;
 mod local_blob;
 mod local_ledger;
+mod message_batches;
+mod owned_workspaces;
 mod pdf_parsing;
 mod semantic_capture;
 mod semantic_catalog;

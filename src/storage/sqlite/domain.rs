@@ -6,17 +6,35 @@ impl SqliteTx {
     /// The role in this transaction. IMMEDIATE writes serialize with revoke;
     /// model/native IO must precede a fresh authorized write transaction.
     pub(super) async fn live_role(&mut self) -> StorageResult<String> {
-        let role: Option<String> =
-            sqlx::query_scalar("SELECT role FROM oc_api_keys WHERE id = ? AND tenant_id = ? AND workspace_id = ? AND NOT revoked")
-                .bind(self.principal_id)
-                .bind(self.scope.tenant_id)
+        self.live_role_for_principal(self.principal_id).await
+    }
+
+    async fn live_role_for_principal(&mut self, principal_id: Uuid) -> StorageResult<String> {
+        let key: Option<(String, Uuid)> =
+            sqlx::query_as(
+                "SELECT k.role,k.workspace_id FROM oc_api_keys k \
+                 JOIN oc_workspaces target ON target.tenant_id=k.tenant_id AND target.id=? \
+                 JOIN oc_workspaces root ON root.tenant_id=k.tenant_id AND root.id=k.workspace_id \
+                 WHERE k.id=? AND k.tenant_id=? AND NOT k.revoked \
+                   AND (k.workspace_id=target.id OR \
+                       (k.allow_owned_workspaces=1 AND target.owner_workspace_id=k.workspace_id \
+                        AND root.owner_workspace_id IS NULL))",
+            )
                 .bind(self.scope.workspace_id)
+                .bind(principal_id)
+                .bind(self.scope.tenant_id)
                 .fetch_optional(&mut *self.tx)
                 .await
                 .map_err(sqlite_err)?;
-        match role {
-            Some(role) => Ok(role),
-            None => self.aml_role().await,
+        match key {
+            Some((role, workspace)) if workspace == self.scope.workspace_id => Ok(role),
+            Some((role, _)) => Ok(if Permission::Write.granted_by(&role) {
+                "writer"
+            } else {
+                "reader"
+            }
+            .into()),
+            None => self.aml_role_for_principal(principal_id).await,
         }
     }
 }
@@ -42,13 +60,21 @@ impl DomainTx for SqliteTx {
         idempotency_key: &str,
         request_hash: &str,
     ) -> StorageResult<Option<Value>> {
+        // Receipt access is authorized before lookup. The operation contract,
+        // never a request field, determines the cross-principal dedup domain.
+        self.check_permission(Permission::Write).await?;
+        let dedup_scope = if operation == "message_batch.ingest" {
+            "workspace".to_string()
+        } else {
+            format!("principal:{}", self.principal_id)
+        };
         let row: Option<(String, String)> = sqlx::query_as(
             "SELECT request_hash, response FROM oc_commands \
-             WHERE tenant_id = ? AND workspace_id = ? AND principal_id = ? AND operation = ? AND key = ?",
+             WHERE tenant_id = ? AND workspace_id = ? AND dedup_scope = ? AND operation = ? AND key = ?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
-        .bind(self.principal_id)
+        .bind(&dedup_scope)
         .bind(operation)
         .bind(idempotency_key)
         .fetch_optional(&mut *self.tx)
@@ -63,6 +89,7 @@ impl DomainTx for SqliteTx {
             ))),
             None => {
                 self.command = Some(PendingCommand {
+                    dedup_scope,
                     operation: operation.to_string(),
                     key: idempotency_key.to_string(),
                     hash: request_hash.to_string(),
@@ -70,6 +97,28 @@ impl DomainTx for SqliteTx {
                 Ok(None)
             }
         }
+    }
+
+    async fn require_job_creator_permission(
+        &mut self,
+        job: Uuid,
+        permission: Permission,
+    ) -> StorageResult<()> {
+        let creator: Option<Uuid> = sqlx::query_scalar(
+            "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(job)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let creator = creator.ok_or(StorageError::NotFound)?;
+        let role = self.live_role_for_principal(creator).await?;
+        if !permission.granted_by(&role) {
+            return Err(StorageError::Forbidden);
+        }
+        Ok(())
     }
 
     async fn record_source(&mut self, _source: SourceVersion) -> StorageResult<()> {
@@ -106,12 +155,13 @@ impl DomainTx for SqliteTx {
             StorageError::Unavailable("finish_command without begin_command".to_string())
         })?;
         sqlx::query(
-            "INSERT INTO oc_commands(tenant_id, workspace_id, principal_id, operation, key, request_hash, response, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO oc_commands(tenant_id, workspace_id, principal_id, dedup_scope, operation, key, request_hash, response, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(self.principal_id)
+        .bind(command.dedup_scope)
         .bind(command.operation)
         .bind(command.key)
         .bind(command.hash)

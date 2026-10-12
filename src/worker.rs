@@ -200,6 +200,14 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             "worker embedding profile differs from accepted job".into(),
         ));
     }
+    if let JobPayload::MessageBatchIngest { .. } = payload {
+        let source = tx
+            .event_content(claim.source.ok_or(AppError::NotFound)?, true)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        tx.commit().await?;
+        return process_message_batch(service, claim, payload, source).await;
+    }
     if payload.kind() == JobKind::SemanticExtract {
         tx.commit().await?;
         return semantic_capture::process(service, claim, payload).await;
@@ -393,6 +401,7 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 }
             }
             JobPayload::LegacyExtract { .. }
+            | JobPayload::MessageBatchIngest { .. }
             | JobPayload::IdentifiedExtract { .. }
             | JobPayload::SemanticExtract { .. }
             | JobPayload::Improve { .. }
@@ -416,6 +425,71 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
     };
     publish_prepared(service, claim, payload, publication).await
 }
+/// Generic batches use the same prepare/publish and native ledger as every
+/// other durable publication. Reparse even on recovery to validate the accepted
+/// resource limits and exact provenance outside the async executor and any tx.
+async fn process_message_batch(
+    service: &Service,
+    claim: &ClaimedJob,
+    payload: &JobPayload,
+    source: String,
+) -> Result<()> {
+    let JobPayload::MessageBatchIngest { accepted_spec, expected_version } = payload else {
+        return Err(AppError::Invalid("invalid message batch operation".into()));
+    };
+    let spec = accepted_spec.clone();
+    let source_event = claim.source.ok_or(AppError::NotFound)?;
+    let asset = claim.asset.ok_or(AppError::NotFound)?;
+    let expected = *expected_version;
+    let generation = claim.generation;
+    let job_id = claim.job_id;
+    let saved = claim.payload.get("publication")
+        .filter(|plan| plan["generation"] == generation).cloned();
+    let (chunks, saved) = tokio::task::spawn_blocking(move || -> Result<_> {
+        let chunks = crate::messages::chunks(&source, &spec, source_event)?;
+        let saved = if let Some(saved) = saved {
+            let publication: Publication = decode(saved)?;
+            if publication.generation != generation
+                || publication.profile.as_deref() != Some(spec.embedding_profile.as_str())
+                || publication.graph.is_some()
+                || publication.memories.len() != 1
+            {
+                return Err(AppError::Invalid("invalid message publication plan".into()));
+            }
+            let memory = &publication.memories[0];
+            if memory.asset != asset || memory.expected_version != expected
+                || memory.version != expected.unwrap_or(0) + 1 || memory.fact_key.is_some()
+                || memory.chunks.len() != chunks.len()
+                || memory.chunks.iter().zip(&chunks).enumerate().any(|(index, (saved, source))| {
+                    saved.id != graph::entity_id(&format!("chunk:{job_id}:{generation}:0:{index}"))
+                        || saved.chunk.content != source.content
+                        || saved.chunk.locator != source.locator
+                        || !saved.summary.is_empty()
+                        || saved.embedding.as_ref().is_none_or(|vector| {
+                            vector.is_empty() || vector.len() > 4096 || vector.iter().any(|x| !x.is_finite())
+                        })
+                })
+            {
+                return Err(AppError::Invalid("invalid message publication plan".into()));
+            }
+            Some(publication)
+        } else {
+            None
+        };
+        Ok((chunks, saved))
+    }).await.map_err(|error| AppError::Internal(error.into()))??;
+    let publication = match saved {
+        Some(publication) => publication,
+        None => prepare(service, claim, payload, Some(accepted_spec.embedding_profile.clone()), vec![DraftMemory {
+            asset,
+            fact_key: None,
+            expected_version: expected,
+            chunks,
+        }]).await?,
+    };
+    publish_prepared(service, claim, payload, publication).await
+}
+
 async fn prepare(
     service: &Service,
     claim: &ClaimedJob,
@@ -439,7 +513,10 @@ async fn prepare(
     let has_learning = learning_metadata.iter().any(Option::is_some);
     let terms = if matches!(
         payload.kind(),
-        JobKind::AmlIngest | JobKind::SemanticPublish | JobKind::SemanticExtract
+        JobKind::AmlIngest
+            | JobKind::MessageBatchIngest
+            | JobKind::SemanticPublish
+            | JobKind::SemanticExtract
     ) {
         let texts: Vec<String> = drafts
             .iter()

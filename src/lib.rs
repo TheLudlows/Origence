@@ -1,4 +1,6 @@
 pub mod aml;
+#[path = "api/aml_protocol.rs"]
+pub mod aml_protocol;
 #[cfg(feature = "local-storage")]
 pub mod api;
 pub mod capture;
@@ -18,6 +20,7 @@ pub mod learning;
 pub mod mcp;
 pub mod memory_identity;
 pub mod memory_semantics;
+pub mod messages;
 pub mod models;
 pub mod parsing;
 #[cfg(feature = "local-storage")]

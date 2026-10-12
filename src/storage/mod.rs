@@ -62,7 +62,7 @@ pub use error::{StorageError, StorageResult};
 #[cfg(feature = "local-vector")]
 pub use lancedb::LanceDbStore;
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
-pub use scope::{AuthorizedScope, Permission, Scope, SourceVersion};
+pub use scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
 pub use sqlite::SqliteStore;
 pub use sqlite_graph::SqliteGraphStore;
 pub use traits::{

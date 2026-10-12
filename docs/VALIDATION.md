@@ -515,3 +515,14 @@ Existing HTTP/AML recovery/evaluation steps remain unchanged.
   SHA-256 相同。临时只读 CI 生成锁/采集证据，完成后从最终变更删除；永久 CI 只新增 stdio 回归。
 
 该处置不代表 clean audit、生产安全验收、真实 Agent 质量提升或旧库升级/迁移验收。
+
+
+## 2026-10-12：AML 通用基础能力 P0–P2（实施中）
+
+基线 `edd058e646d2fd66ab60f0e0262559e5b3fcba05`；[PR #50](https://github.com/TheLudlows/Origence/pull/50) 当前为 draft。新库 DDL、owned workspace/key/command 契约和通用消息批次均须在同一最终 head 的 CI 与独立审查后才可认定完成。当前旧 AML 路径仅用于阶段过渡，最终 P3 移除。
+
+- 云端编辑环境无 Rust/Cargo；不声称本地 Rust tests、Clippy 或 rustfmt 通过。
+- [工具 run 38229211031](https://github.com/TheLudlows/Origence/actions/runs/38229211031) 在 `8617a2a57f627245f089cdc32deca1b43abff721` 使用 Cargo 1.98 工具链解析 `uuid/v5`。Cargo.lock SHA-256 为 `f83306ef2cd9f4f0f3068615e9dcdb520450441d57b528528f92a8eeacf003cf`；变化仅增加 sha1_smol 1.0.1 与 uuid 对它的依赖，保留 rmcp 1.8.0。下载产物 ZIP SHA-256 `e30eef51ffc5186e30ace7b2f6f2665657515fdf030be323064543abaae4a318` 与 Actions 元数据一致。
+- 锁文件生成/格式工具不是功能通过证据；临时 workflow 在最终验收前移除。初始普通 CI 因尚未提交更新的锁文件而失败属于过渡结果，不能用于验收。
+- Python 独立 UUIDv5 固定字节/ID 向量测试 1 passed；本地工具单测 50 tests，49 passed、1 skipped（缺少本地二进制的受控恢复测试）；评估适配单测 42 passed。最初因工作副本未包含冻结数据而报文件缺失，补齐同基线的只读仓库 fixture 后重跑通过；没有导入评测服务、运行真实模型或改写历史报告。
+- 最终 Rust 测试计数、失败修正、exact-head CI 与合入 main 检查结果待补。
