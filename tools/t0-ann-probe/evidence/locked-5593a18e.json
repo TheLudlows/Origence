@@ -1,0 +1,819 @@
+{
+  "artifact": {
+    "id": 11754305833,
+    "url": "https://github.com/TheLudlows/Origence/actions/runs/38261865400/artifacts/11754305833",
+    "zip_sha256": "19954885278f2247120e49675faf0f40bfab71605b2553e4e68036230faf726f"
+  },
+  "checks": {
+    "committed_format_and_lock": "PASS",
+    "overall_job": "FAIL due to preserved default 32/64 recall gate",
+    "python_tests_passed": 22,
+    "release_build": "PASS",
+    "rust_tests_passed": 3,
+    "same_executable_source_lock_fixture_digests_across_runs": true,
+    "warnings_denied_clippy": "PASS"
+  },
+  "head": "5593a18e7c1e0e4efeb4ca5328dd6b1340175d24",
+  "independent_numpy_review": {
+    "blocking_findings": 0,
+    "exact_top_10_and_100_set_checks": 388,
+    "fixture_digests_recreated": 2,
+    "paired_queries_checked": 194,
+    "retained_pair_and_merged_batch_hits_authority_l2_checked": 44666
+  },
+  "interpretation": {
+    "causality_limit": "Each invocation trained a separate physical index. They share full fixture digests and executable identity, not a fixed index; no cross-run causal latency or speedup comparison is supported.",
+    "cost_boundary": "Dense eligible lists of 4340-4356 still trigger nine serial native calls per mode in the 512-ID shape. Recorded component examples are in-memory synthetic costs and omit some setup, not full production pipeline latency.",
+    "default": "Still rejected. 43/97 pairs fail, compared with 49/97 at bootstrap; no thresholds changed. Native index training randomness is not explicitly seeded, so exact deficient buckets/counts can vary.",
+    "saturation": "All 97 pairs and all 33 batched groups pass. Every nonempty Recall@10/@100 is 1.0, all fallbacks match and all invariant counters are zero. Fresh rows remain complete after refresh and reopen.",
+    "scope": "Only bounded 10k/128D mechanics validated. No production default, speedup, real-corpus recall, application authorization/source-byte guarantee or higher-scale acceptance."
+  },
+  "job": 114854128752,
+  "job_url": "https://github.com/TheLudlows/Origence/actions/runs/38261865400/job/114854128752",
+  "lancedb": "0.23.1",
+  "observed_date_utc": "2026-10-12",
+  "run_url": "https://github.com/TheLudlows/Origence/actions/runs/38261865400",
+  "runs": [
+    {
+      "all_invariant_counters": {
+        "duplicate_ids": 0,
+        "score_distance_violations": 0,
+        "source_violations": 0,
+        "visibility_violations": 0
+      },
+      "all_nonempty_plan_probe_bounds_match_config": true,
+      "artifact_run_directory": "ivf_flat-10000-128-l_rxgwgy",
+      "batched_exact_matches": 33,
+      "batched_groups": 33,
+      "batched_passed": 19,
+      "bucket_minima": [
+        {
+          "ann_count_range": [
+            0,
+            0
+          ],
+          "bucket": "empty",
+          "eligible_count_range": [
+            0,
+            0
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": null,
+          "minimum_recall_at_100": null,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            1,
+            1
+          ],
+          "bucket": "one",
+          "eligible_count_range": [
+            1,
+            1
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            3,
+            6
+          ],
+          "bucket": "lt_10",
+          "eligible_count_range": [
+            7,
+            7
+          ],
+          "failed_pairs": 9,
+          "minimum_recall_at_10": 0.42857142857142855,
+          "minimum_recall_at_100": 0.42857142857142855,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            16,
+            19
+          ],
+          "bucket": "lt_100",
+          "eligible_count_range": [
+            37,
+            37
+          ],
+          "failed_pairs": 9,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 0.43243243243243246,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "dense_current",
+          "eligible_count_range": [
+            4340,
+            4356
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            21,
+            25
+          ],
+          "bucket": "sparse",
+          "eligible_count_range": [
+            45,
+            45
+          ],
+          "failed_pairs": 9,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 0.4666666666666667,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "other_tenant",
+          "eligible_count_range": [
+            218,
+            218
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            91,
+            100
+          ],
+          "bucket": "other_workspace",
+          "eligible_count_range": [
+            217,
+            217
+          ],
+          "failed_pairs": 3,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 0.91,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            2,
+            3
+          ],
+          "bucket": "source_version",
+          "eligible_count_range": [
+            8,
+            8
+          ],
+          "failed_pairs": 9,
+          "minimum_recall_at_10": 0.25,
+          "minimum_recall_at_100": 0.25,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "historical_generation",
+          "eligible_count_range": [
+            4340,
+            4340
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            8,
+            16
+          ],
+          "bucket": "fresh_unindexed",
+          "eligible_count_range": [
+            16,
+            16
+          ],
+          "failed_pairs": 4,
+          "minimum_recall_at_10": 0.8,
+          "minimum_recall_at_100": 0.5,
+          "pairs": 7
+        }
+      ],
+      "build_identity": {
+        "binary_sha256": "7f2ce71da9efa72e71758190022e496b70519595d580c2f07746b68914b32a41",
+        "lock_sha256": "565489ab5d8bf79c88a98410af3c2f0f45b4e9e5560b3a162b89a994fa41d5cf",
+        "manifest_sha256": "658971567d677538d522796a71bd0a9eb3c1f8643528a68a6d927e2dfcf3cd64",
+        "source_sha256": {
+          "probe.py": "966f0d88c484d610ad30cb8a96109aae9378dd84ba7029561cabce65eddaa515",
+          "src/fixture.rs": "ca7b73357ee29467c833ae8024308c3aca16b844bcc87aa5fd82f292888c140e",
+          "src/main.rs": "7692edcc949baa312c99eea24e3acbdf181ce4670c6803f574c4ecd6bf0fe700"
+        }
+      },
+      "config": {
+        "dimension": 128,
+        "index_kind": "ivf_flat",
+        "nprobes": 32,
+        "partitions": 64,
+        "queries_per_bucket": 3,
+        "refine_factor": 10,
+        "rows": 10000,
+        "seed": 52
+      },
+      "dense_512_component_examples": [
+        {
+          "ann_merge_ms": 0.083616,
+          "ann_native_ms": 130.684981,
+          "eligible_rows": 4340,
+          "filter_build_ms": 0.38948699999999997,
+          "native_calls_per_mode": 9,
+          "phase": "indexed",
+          "query": 0,
+          "selected_ann_component_sum_ms": 132.09046999999998,
+          "synthetic_authority_lookup_build_ms": 0.504461,
+          "synthetic_eligibility_ms": 0.34644199999999997,
+          "synthetic_final_verification_ms": 0.081483
+        },
+        {
+          "ann_merge_ms": 0.102585,
+          "ann_native_ms": 211.244434,
+          "eligible_rows": 4356,
+          "filter_build_ms": 0.402837,
+          "native_calls_per_mode": 9,
+          "phase": "fresh_before_refresh",
+          "query": 0,
+          "selected_ann_component_sum_ms": 212.70282300000002,
+          "synthetic_authority_lookup_build_ms": 0.494475,
+          "synthetic_eligibility_ms": 0.367334,
+          "synthetic_final_verification_ms": 0.091158
+        },
+        {
+          "ann_merge_ms": 0.107632,
+          "ann_native_ms": 158.909179,
+          "eligible_rows": 4356,
+          "filter_build_ms": 0.39792,
+          "native_calls_per_mode": 9,
+          "phase": "fresh_after_refresh",
+          "query": 0,
+          "selected_ann_component_sum_ms": 160.33122199999997,
+          "synthetic_authority_lookup_build_ms": 0.471311,
+          "synthetic_eligibility_ms": 0.356166,
+          "synthetic_final_verification_ms": 0.089014
+        }
+      ],
+      "driver_status": "FAIL",
+      "exact_fallback_matches": 97,
+      "failed_recall_pairs": 43,
+      "file_sha256": {
+        "config.json": "e22d42f0e3ab842e175f8adb6188d3aa2f0ff1f63c1b1706bf388abe83f0a335",
+        "driver-result.json": "73048c751e8cf57b098a20d153de2455b9e8400ef73d7ffb4ddc4d7195094b6f",
+        "environment.json": "298e45a42321bf7b2dae39315f5050c49bccfd9fd2ec5633393ad53207c02f30",
+        "native-report.json": "3f82a31527a22aec9b0cea4c5fee164ca74651d477ef295866d9d17d3c692112",
+        "native.log": "e570423a5ca31a15b59b1934cdf0112433e6e917e2013f53793d2e78ceb7ae2b",
+        "summary.md": "44c206a4a340dd8be555926dd1851b77674b170c87ea83f7bd99515236997ed4"
+      },
+      "fixture_final_sha256": "a15ff3af30877988a2ed85e0dee321ee88a099e46eab302d626804d9364c892b",
+      "fixture_indexed_sha256": "104b42b105d709b9743df93b2160be89e92ada29b4d954482e501d32c332ba07",
+      "fresh_row_evidence": {
+        "fresh_after_refresh": {
+          "ann_counts": [
+            10,
+            10,
+            8
+          ],
+          "exact_counts": [
+            16,
+            16,
+            16
+          ],
+          "recall_at_10": [
+            1.0,
+            1.0,
+            0.8
+          ],
+          "recall_at_100": [
+            0.625,
+            0.625,
+            0.5
+          ],
+          "snapshot": 46
+        },
+        "fresh_before_refresh": {
+          "ann_counts": [
+            16,
+            16,
+            16
+          ],
+          "exact_counts": [
+            16,
+            16,
+            16
+          ],
+          "recall_at_10": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "recall_at_100": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "snapshot": 45
+        },
+        "reopened": {
+          "ann_counts": [
+            10
+          ],
+          "exact_counts": [
+            16
+          ],
+          "recall_at_10": [
+            1.0
+          ],
+          "recall_at_100": [
+            0.625
+          ],
+          "snapshot": 46
+        }
+      },
+      "independent_validator_error_categories": {
+        "512-ID gate failed": 14,
+        "FAIL_GATE": 1,
+        "batched recall_at_10 below 0.95": 6,
+        "batched recall_at_100 below 0.95": 14,
+        "native gate failed": 43,
+        "recall_at_10 below 0.95 or invalid": 19,
+        "recall_at_100 below 0.95 or invalid": 43
+      },
+      "index_coverage": {
+        "fresh_evidence_after_refresh": {
+          "distance_type": "L2",
+          "indexed_rows": 10000,
+          "loss": 2.5097043812274933,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 0
+        },
+        "fresh_evidence_before_refresh": {
+          "distance_type": "L2",
+          "indexed_rows": 9984,
+          "loss": 1498.1957381516695,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 16
+        },
+        "indexed_evidence": {
+          "distance_type": "L2",
+          "indexed_rows": 9984,
+          "loss": 1498.1957381516695,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 0
+        },
+        "reopened_evidence": {
+          "distance_type": "L2",
+          "indexed_rows": 10000,
+          "loss": 2.5097043812274933,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 0
+        }
+      },
+      "label": "fixed_default_32_of_64",
+      "layouts": {
+        "layout_after_compact": {
+          "bytes": 5731026,
+          "fragments": 3,
+          "rows": 9984,
+          "version": 43
+        },
+        "layout_after_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 46
+        },
+        "layout_before_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 45
+        }
+      },
+      "native_exit": 1,
+      "native_status": "FAIL_GATE",
+      "nonempty_native_ann_proved": 88,
+      "pairs": 97,
+      "passed_pairs": 54,
+      "prepared_smoke_durations_ms": {
+        "compact_ms": 20.94827,
+        "elapsed_ms": 18188.733388,
+        "index_build_ms": 105.87867700000001,
+        "index_refresh_ms": 24.17959
+      },
+      "timeout": false
+    },
+    {
+      "all_invariant_counters": {
+        "duplicate_ids": 0,
+        "score_distance_violations": 0,
+        "source_violations": 0,
+        "visibility_violations": 0
+      },
+      "all_nonempty_plan_probe_bounds_match_config": true,
+      "artifact_run_directory": "ivf_flat-10000-128-4k9dj12z",
+      "batched_exact_matches": 33,
+      "batched_groups": 33,
+      "batched_passed": 33,
+      "bucket_minima": [
+        {
+          "ann_count_range": [
+            0,
+            0
+          ],
+          "bucket": "empty",
+          "eligible_count_range": [
+            0,
+            0
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": null,
+          "minimum_recall_at_100": null,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            1,
+            1
+          ],
+          "bucket": "one",
+          "eligible_count_range": [
+            1,
+            1
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            7,
+            7
+          ],
+          "bucket": "lt_10",
+          "eligible_count_range": [
+            7,
+            7
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            37,
+            37
+          ],
+          "bucket": "lt_100",
+          "eligible_count_range": [
+            37,
+            37
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "dense_current",
+          "eligible_count_range": [
+            4340,
+            4356
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            45,
+            45
+          ],
+          "bucket": "sparse",
+          "eligible_count_range": [
+            45,
+            45
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "other_tenant",
+          "eligible_count_range": [
+            218,
+            218
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "other_workspace",
+          "eligible_count_range": [
+            217,
+            217
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            8,
+            8
+          ],
+          "bucket": "source_version",
+          "eligible_count_range": [
+            8,
+            8
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            100,
+            100
+          ],
+          "bucket": "historical_generation",
+          "eligible_count_range": [
+            4340,
+            4340
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 9
+        },
+        {
+          "ann_count_range": [
+            16,
+            16
+          ],
+          "bucket": "fresh_unindexed",
+          "eligible_count_range": [
+            16,
+            16
+          ],
+          "failed_pairs": 0,
+          "minimum_recall_at_10": 1.0,
+          "minimum_recall_at_100": 1.0,
+          "pairs": 7
+        }
+      ],
+      "build_identity": {
+        "binary_sha256": "7f2ce71da9efa72e71758190022e496b70519595d580c2f07746b68914b32a41",
+        "lock_sha256": "565489ab5d8bf79c88a98410af3c2f0f45b4e9e5560b3a162b89a994fa41d5cf",
+        "manifest_sha256": "658971567d677538d522796a71bd0a9eb3c1f8643528a68a6d927e2dfcf3cd64",
+        "source_sha256": {
+          "probe.py": "966f0d88c484d610ad30cb8a96109aae9378dd84ba7029561cabce65eddaa515",
+          "src/fixture.rs": "ca7b73357ee29467c833ae8024308c3aca16b844bcc87aa5fd82f292888c140e",
+          "src/main.rs": "7692edcc949baa312c99eea24e3acbdf181ce4670c6803f574c4ecd6bf0fe700"
+        }
+      },
+      "config": {
+        "dimension": 128,
+        "index_kind": "ivf_flat",
+        "nprobes": 64,
+        "partitions": 64,
+        "queries_per_bucket": 3,
+        "refine_factor": 10,
+        "rows": 10000,
+        "seed": 52
+      },
+      "dense_512_component_examples": [
+        {
+          "ann_merge_ms": 0.083215,
+          "ann_native_ms": 132.644318,
+          "eligible_rows": 4340,
+          "filter_build_ms": 0.38514999999999994,
+          "native_calls_per_mode": 9,
+          "phase": "indexed",
+          "query": 0,
+          "selected_ann_component_sum_ms": 134.02791299999998,
+          "synthetic_authority_lookup_build_ms": 0.456428,
+          "synthetic_eligibility_ms": 0.37348299999999995,
+          "synthetic_final_verification_ms": 0.085319
+        },
+        {
+          "ann_merge_ms": 0.105019,
+          "ann_native_ms": 218.053775,
+          "eligible_rows": 4356,
+          "filter_build_ms": 0.401373,
+          "native_calls_per_mode": 9,
+          "phase": "fresh_before_refresh",
+          "query": 0,
+          "selected_ann_component_sum_ms": 219.496988,
+          "synthetic_authority_lookup_build_ms": 0.479833,
+          "synthetic_eligibility_ms": 0.362907,
+          "synthetic_final_verification_ms": 0.094081
+        },
+        {
+          "ann_merge_ms": 0.106781,
+          "ann_native_ms": 143.671034,
+          "eligible_rows": 4356,
+          "filter_build_ms": 0.393341,
+          "native_calls_per_mode": 9,
+          "phase": "fresh_after_refresh",
+          "query": 0,
+          "selected_ann_component_sum_ms": 145.125155,
+          "synthetic_authority_lookup_build_ms": 0.49332399999999993,
+          "synthetic_eligibility_ms": 0.36712399999999995,
+          "synthetic_final_verification_ms": 0.093551
+        }
+      ],
+      "driver_status": "PASS_SYNTHETIC_T0",
+      "exact_fallback_matches": 97,
+      "failed_recall_pairs": 0,
+      "file_sha256": {
+        "config.json": "2fffc48141e96a4a4f634b3e2a337c6733e4d224f515345628659f39f118e0e3",
+        "driver-result.json": "45d964e55ae51a080ebe41986103d54b97ee5fc942f8ab60f3b7b4bfcc47664a",
+        "environment.json": "c8f329bb3493d7f40f7231ff61624f990f3a3bdfc550e6ad239f4ad20b9c9f68",
+        "native-report.json": "36bea3c9b3a5d70acb674faf67e461646e59d11fd51cf9107176cca6f4d02141",
+        "native.log": "0cfa7636a0a30a2268b003b2f54768ce77cf20750a75f838d3db9d50df91baac",
+        "summary.md": "f6da72b46a886ecf2e97881d9e3bc814e9f74d165dfa4b1301abe5e3b05fb4be"
+      },
+      "fixture_final_sha256": "a15ff3af30877988a2ed85e0dee321ee88a099e46eab302d626804d9364c892b",
+      "fixture_indexed_sha256": "104b42b105d709b9743df93b2160be89e92ada29b4d954482e501d32c332ba07",
+      "fresh_row_evidence": {
+        "fresh_after_refresh": {
+          "ann_counts": [
+            16,
+            16,
+            16
+          ],
+          "exact_counts": [
+            16,
+            16,
+            16
+          ],
+          "recall_at_10": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "recall_at_100": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "snapshot": 46
+        },
+        "fresh_before_refresh": {
+          "ann_counts": [
+            16,
+            16,
+            16
+          ],
+          "exact_counts": [
+            16,
+            16,
+            16
+          ],
+          "recall_at_10": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "recall_at_100": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "snapshot": 45
+        },
+        "reopened": {
+          "ann_counts": [
+            16
+          ],
+          "exact_counts": [
+            16
+          ],
+          "recall_at_10": [
+            1.0
+          ],
+          "recall_at_100": [
+            1.0
+          ],
+          "snapshot": 46
+        }
+      },
+      "independent_validator_error_categories": {},
+      "index_coverage": {
+        "fresh_evidence_after_refresh": {
+          "distance_type": "L2",
+          "indexed_rows": 10000,
+          "loss": 2.5093957632780075,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 0
+        },
+        "fresh_evidence_before_refresh": {
+          "distance_type": "L2",
+          "indexed_rows": 9984,
+          "loss": 1501.3932095393538,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 16
+        },
+        "indexed_evidence": {
+          "distance_type": "L2",
+          "indexed_rows": 9984,
+          "loss": 1501.3932095393538,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 0
+        },
+        "reopened_evidence": {
+          "distance_type": "L2",
+          "indexed_rows": 10000,
+          "loss": 2.5093957632780075,
+          "num_indices": 1,
+          "type": "IVF_FLAT",
+          "unindexed_rows": 0
+        }
+      },
+      "label": "independent_full_partition_control_64_of_64",
+      "layouts": {
+        "layout_after_compact": {
+          "bytes": 5731026,
+          "fragments": 3,
+          "rows": 9984,
+          "version": 43
+        },
+        "layout_after_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 46
+        },
+        "layout_before_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 45
+        }
+      },
+      "native_exit": 0,
+      "native_status": "PASS_SYNTHETIC_T0",
+      "nonempty_native_ann_proved": 88,
+      "pairs": 97,
+      "passed_pairs": 97,
+      "prepared_smoke_durations_ms": {
+        "compact_ms": 21.106460000000002,
+        "elapsed_ms": 17783.612018,
+        "index_build_ms": 84.655269,
+        "index_refresh_ms": 23.679672
+      },
+      "timeout": false
+    }
+  ],
+  "schema": "origence-t0-ann-locked-diagnostic-evidence-v1",
+  "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "workflow_run": 38261865400
+}

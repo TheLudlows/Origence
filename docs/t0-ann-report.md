@@ -2,85 +2,90 @@
 
 Updated: 2026-10-12 UTC. Application baseline: `d0521c0935083e71890ab02c100920c2edaa7227`.
 
+This report preserves named-head evidence snapshots. Terminal CI for the latest source head is tracked in [draft PR #53](https://github.com/TheLudlows/Origence/pull/53); a report-only follow-up commit is not required after every final CI run.
+
 ## Decision today
 
-**The native probe executed and rejected the tested fixed 32-of-64 IVF_FLAT policy.** All 97 paired measurements completed; 49 failed the unchanged per-query Recall@10/@100 >=0.95 gate. This is a genuine recall result, not a compilation failure, timeout or identified probe defect. It is a 10k/128D synthetic smoke test, not production performance acceptance or a verdict against LanceDB ANN generally.
+**The locked run still rejects the default fixed 32-of-64 IVF_FLAT policy. The independent 64-of-64 saturation control passes the bounded mechanics gates.** The default failed recall in 43/97 pairs; the full-partition control passed 97/97 pairs and 33/33 batched groups. Every nonempty control Recall@10/@100 was 1.0.
 
-Exact fallback matched in all 97 pairs. Every recorded source, visibility, duplicate and distance/score violation counter was zero, including raw ANN/exact 512-ID results before truncation. All 88 nonempty pairs had actual native ANN plan evidence. The 33 batched groups reproduced the single-query exact result; 20 batched groups failed ANN recall.
+This supports fixed-probe undercoverage as the explanation for the tested selective-query misses. It does not establish useful approximation, a production ANN default or a speedup: the control searches every partition, and the two invocations independently trained different physical indexes. Each exact/ANN pair remains pinned to its own same snapshot, layout, L2 metric, predicate and candidate target 100.
 
-## Exact evidence
+Both runs matched exact fallback in all 97 pairs, proved native ANN on all 88 nonempty pairs, and recorded zero source, visibility, duplicate and distance/score violations, including raw 512-ID results before truncation. These are synthetic checks, not production authorization/source-preservation proof.
 
-- Draft PR head: `8d0af2136e95331eebcfa0e1e7422992d41e8d3d`.
-- [Workflow run 38257392122](https://github.com/TheLudlows/Origence/actions/runs/38257392122), [ANN job 114838864911](https://github.com/TheLudlows/Origence/actions/runs/38257392122/job/114838864911).
-- [Original ANN artifact 11752387239](https://github.com/TheLudlows/Origence/actions/runs/38257392122/artifacts/11752387239), SHA-256 `1250f53e432a3a584b73585e1494b0b8336a8bd6330189318cfdee2c3c8d4319`.
-- [Concise derived evidence JSON](../tools/t0-ann-probe/evidence/bootstrap-8d0af213.json) records individual file hashes, build/source/lock identity, fixture digests, bucket minima, index/layout evidence and validator error categories. Original artifact data was not modified.
+## Latest exact evidence
 
-The bootstrap generated the isolated Cargo lock and applied rustfmt before build. Warnings-denied Clippy, all 3 Rust fixture tests, all 22 Python tests and the release build passed with Rust 1.98.0 and LanceDB 0.23.1. Its committed-format/lock gate correctly failed because these generated changes were not in that head. The Cargo-generated lock and exact formatter patch have now been imported locally; a committed, locked exact-head rerun remains pending. Build source hashes in the artifact identify the formatted source actually executed.
+- Locked diagnostic head: `5593a18e7c1e0e4efeb4ca5328dd6b1340175d24`.
+- [Workflow run 38261865400](https://github.com/TheLudlows/Origence/actions/runs/38261865400), [ANN job 114854128752](https://github.com/TheLudlows/Origence/actions/runs/38261865400/job/114854128752).
+- [Original ANN artifact 11754305833](https://github.com/TheLudlows/Origence/actions/runs/38261865400/artifacts/11754305833), SHA-256 `19954885278f2247120e49675faf0f40bfab71605b2553e4e68036230faf726f`.
+- [Concise locked diagnostic evidence JSON](../tools/t0-ann-probe/evidence/locked-5593a18e.json) records file hashes, build identity, fixture digests, bucket minima, index/layout evidence, separate cost components and independent validator results. Original artifacts are unchanged.
 
-## Per-bucket recall
+Warnings-denied Clippy, all 3 Rust fixture tests, all 22 Python tests, release build and committed formatting/lock checks passed with Rust 1.98.0 and LanceDB 0.23.1. The overall ANN job remains failed because the original 32/64 recall gate is preserved. The 64/64 control ran afterward under an independent workflow condition and passed; it does not erase the first result.
 
-Minima below span the three measured phases and, for fresh rows, the reopened check. Empty buckets must return zero rows and have no recall percentage.
+Both reports use the same executable, manifest, Cargo lock and Rust/Python source hashes. Their canonical indexed/final fixture hashes also match each other and the bootstrap. Native index-training randomness is not explicitly seeded, and physical index UUIDs/training results differ across invocations.
 
-| Bucket | Eligible rows | Minimum Recall@10 | Minimum Recall@100 |
-| --- | ---: | ---: | ---: |
-| Empty | 0 | n/a | n/a |
-| One | 1 | 1.0000 | 1.0000 |
-| Fewer than 10 | 7 | 0.7143 | 0.7143 |
-| Fewer than 100 | 37 | 1.0000 | 0.5135 |
-| Dense current | 4,340–4,356 | 1.0000 | 1.0000 |
-| Sparse | 45 | 1.0000 | 0.4444 |
-| Other tenant | 218 | 1.0000 | 0.9000 |
-| Other workspace | 217 | 1.0000 | 0.8500 |
-| Source/version | 8 | 0.3750 | 0.3750 |
-| Historical generation | 4,340 | 1.0000 | 1.0000 |
-| Fresh rows, all phases | 16 | 0.6000 | 0.3750 |
+## Latest per-bucket recall
 
-Returning the requested number is not the recall gate: one workspace query returned 92 candidates but recalled only 85 of the exact top 100. Full retained hit lists independently reproduce the reported recall, rather than deriving it only from returned count.
+Minima span all measured phases and the reopened fresh check. Empty buckets return zero rows and have no recall percentage. All nonempty full-partition minima were 1.0.
 
-## Fresh-row and maintenance finding
+| Bucket | Eligible rows | Default 32/64 Recall@10 | Default 32/64 Recall@100 | Control 64/64, both K |
+| --- | ---: | ---: | ---: | ---: |
+| Empty | 0 | n/a | n/a | n/a |
+| One | 1 | 1.0000 | 1.0000 | 1.0000 |
+| Fewer than 10 | 7 | 0.4286 | 0.4286 | 1.0000 |
+| Fewer than 100 | 37 | 1.0000 | 0.4324 | 1.0000 |
+| Dense current | 4,340–4,356 | 1.0000 | 1.0000 | 1.0000 |
+| Sparse | 45 | 1.0000 | 0.4667 | 1.0000 |
+| Other tenant | 218 | 1.0000 | 1.0000 | 1.0000 |
+| Other workspace | 217 | 1.0000 | 0.9100 | 1.0000 |
+| Source/version | 8 | 0.2500 | 0.2500 | 1.0000 |
+| Historical generation | 4,340 | 1.0000 | 1.0000 | 1.0000 |
+| Fresh rows, all phases | 16 | 0.8000 | 0.5000 | 1.0000 |
 
-Before refresh, statistics reported 9,984 indexed and 16 unindexed rows. All three fresh queries returned all 16 rows, with Recall@10/@100=1. After the explicit index-only refresh, statistics correctly reported 10,000 indexed and zero unindexed rows, while the fresh ANN queries returned only 8, 9 and 6 rows. Their Recall@10 was 0.8/0.9/0.6 and Recall@100 was 0.5/0.5625/0.375. Reopen reproduced the first result (8/16).
+The default had 14 failing batched groups out of 33. Its batched-exact results matched single-query exact in all 33 groups. The control passed all 33 batched groups. The independent Python verifier reported only the expected default recall/status failures (140 errors including repeated gate summaries) and zero control errors; it recomputed recall and fallback equality from retained hit tuples. A separate NumPy reconstruction matched both fixture digests, exact top-10/top-100 sets in all 194 pairs (388 set checks), and authority/L2 values for all 44,666 retained pair and merged-batch hits.
 
-Exact search and forced fallback still returned every fresh row after refresh. The result is consistent with fixed-probe partition undercoverage, not observed row loss. It illustrates why unindexed-tail correctness alone cannot establish post-refresh filtered ANN recall. The independent saturation diagnostic below will test that interpretation without changing the default gate.
+## Fresh rows and maintenance
 
-Physical compaction reduced the initial 39 fragments to 3 before either exact/ANN query ran. Appending fresh rows added one fragment. Index-only refresh retained 4 fragments and all 10,000 rows. Only explicit `Compact` and `Index` actions were used, with no `All` or `Prune`.
+Both runs reported 9,984 indexed plus 16 unindexed rows after append. Both returned every fresh row before refresh. After explicit index-only refresh, both correctly reported 10,000 indexed and zero unindexed rows; exact and forced fallback still returned all 16.
 
-## Next bounded diagnostic
+The default ANN then returned 10, 10 and 8 fresh rows, with Recall@100=0.625/0.625/0.5. Reopen returned 10/16. The 64/64 control returned 16/16 in all queries before refresh, after refresh and on reopen, with Recall@10/@100=1.0. This is consistent with probe coverage, not observed row loss. Complete pre-refresh unindexed-tail results alone do not establish post-refresh ANN recall.
 
-Retain the default 32/64 run and its failing result. Separately run an explicit **64/64 saturation diagnostic** at the same 10k rows, 128D, candidate target 100 and seed 52:
+Physical compaction reduced 39 initial fragments to 3 before comparisons. Fresh append added one fragment. Index-only refresh retained 4 fragments and all 10,000 rows in both runs. Only explicit `Compact` and `Index` actions were used, with no `All` or `Prune`.
 
-```sh
-python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 \
-  --queries 3 --index ivf_flat --partitions 64 --nprobes 64 --timeout-seconds 1800
-```
+## Candidate-path cost remains
 
-Both runs retain the >=0.95 recall and zero-violation gates. This second invocation creates another database and independently trained index; compare canonical fixture digests, not physical index identity. Training randomness is not explicitly seeded. Each individual exact/ANN pair still uses its own same frozen snapshot, layout, L2 metric, merged predicate and candidate budget. Probing every IVF partition is a mechanics/coverage control, not evidence of useful approximation, ANN speedup or a suitable production default. There is no automatic tuning or promotion.
+Dense buckets have 4,340–4,356 eligible rows and still issue **nine serial native calls per mode** in the 512-ID shape. The evidence JSON keeps eligibility enumeration, authority-map construction, predicate construction, native query, merge and final-verification components separate for each phase and configuration. A passing native index control does not remove enumeration or batching.
 
-No probe code correction is currently warranted by the native result. A future sparse-scope exact policy, adaptive probing or revised candidate strategy needs a separately specified and tested policy; forced exact success does not convert this raw ANN failure into a pass.
+Those are prepared in-memory synthetic costs, not measured SQLite/service costs. `selected_ann_component_sum_ms` omits some setup and is not full pipeline wall time. Explain plans are prepared before timing, default query order is not balanced, and batched queries always run ANN first. Three samples per bucket cannot support production p95/P99 or an unbiased cross-run speedup claim.
 
-## Validation boundaries
+## Bootstrap retained
+
+The earlier bootstrap at head `8d0af2136e95331eebcfa0e1e7422992d41e8d3d`, [run 38257392122](https://github.com/TheLudlows/Origence/actions/runs/38257392122), completed all 97 pairs with 49 recall failures, 97 exact-fallback matches and zero violation counters. Fresh post-refresh ANN returned 8, 9 and 6 rows. Its source/lock gate failed as expected while generating the provisional lock and formatter patch.
+
+The unchanged [bootstrap evidence JSON](../tools/t0-ann-probe/evidence/bootstrap-8d0af213.json) links [artifact 11752387239](https://github.com/TheLudlows/Origence/actions/runs/38257392122/artifacts/11752387239), SHA-256 `1250f53e432a3a584b73585e1494b0b8336a8bd6330189318cfdee2c3c8d4319`. The locked run's 43 failures versus bootstrap's 49 is compatible with unseeded index-training variation; it is not a changed threshold or demonstrated improvement. Both reject the same tested fixed-probe policy.
+
+## Validation boundary and next decision
 
 | Check | Current result |
 | --- | --- |
-| Official 0.23.1 API and independent source review | Complete; no remaining blocking source-review findings |
-| Python tests / Rust fixture tests / warnings-denied Clippy / release build | PASS on bootstrap artifact source |
-| Cargo-generated lock and rustfmt | Generated and imported; committed locked rerun pending |
-| Real IVF_FLAT type/metric/coverage/native plan proof | PASS for all 88 nonempty paired measurements |
-| Fixed 32/64 per-bucket ANN recall | FAIL: 49/97 pairs; thresholds unchanged |
-| Exact fallback and batched-exact equivalence | PASS: 97/97 and 33/33 respectively |
-| Synthetic source/visibility/distance invariants | Zero violations recorded; not production authorization proof |
-| Independent 64/64 saturation diagnostic | NOT_RUN |
-| PQ/HNSW, 100k/1M, high dimensions, real corpus | NOT_RUN; HNSW_SQ not implemented in this scaffold |
+| Official 0.23.1 API and independent source review | Complete; no remaining blocking findings |
+| Python tests / Rust tests / warnings-denied Clippy / release build | PASS on locked head |
+| Committed Cargo-generated lock and formatting | PASS on locked head |
+| Real IVF_FLAT type/metric/coverage/native plan proof | PASS: 88 nonempty pairs in each configuration |
+| Default fixed 32/64 recall | FAIL: 43/97 latest pairs; >=0.95 thresholds unchanged |
+| Independent full-partition 64/64 control | PASS: 97/97 pairs, 33/33 batched groups; exhaustive partition coverage only |
+| Exact fallback and batched-exact equivalence | PASS: 97/97 and 33/33 in both runs |
+| Synthetic source/visibility/distance invariants | Zero violations in both runs; not production authorization proof |
+| PQ/HNSW, 100k/1M, high dimensions, real corpus | NOT_RUN; HNSW_SQ not implemented here |
 | Production public-library/HTTP path, source bytes, SLO | NOT_RUN |
 
-The isolated crate does not import Origence or change production modules, root Cargo files or application data. It retains full eligibility enumeration and measures the 512-ID shape separately. These are in-memory authority simulations, not measured SQLite/service costs. `selected_ann_component_sum_ms` omits some setup and is not full pipeline wall time.
+No probe implementation defect was identified, and no semantic Rust/Python correction was made to obtain the control pass. No production module, root Cargo file, capability flag or score mapping changed. The control is explicitly configured and independently reported; it is not the default and does not automatically promote ANN.
 
-All explain plans are prepared before timing; default query order is not balanced, and the batched comparison always runs ANN first. Three samples per bucket cannot support a production p95/P99 or unbiased speedup claim. The historic 563-row/1024D/49.44-second observation is not reproduced or explained by this fixture.
+Before an application ANN policy can be accepted, specify and separately validate sparse-scope exact fallback/adaptive probes and the actual candidate-filter strategy against representative embeddings, dimensions and scale. Full authorized ID enumeration is still retained here. Do not infer that saturating every IVF partition is a satisfactory production policy.
 
-Stored historical/current artifact IDs are distinct. Forged stale metadata and withdrawals are tested through a synthetic verifier, not the real source-event/identity/context-route contracts. Source-byte preservation, deletion/rebuild interruption, crash recovery, concurrent writes, real embeddings and production scale remain untested.
+Stored historical/current artifact IDs are distinct. Forged stale metadata and withdrawals use a synthetic verifier, not real source-event/identity/context-route contracts. Source-byte preservation, deletion/rebuild interruption, crash recovery, concurrent writes and real-service transactions remain untested. The historic 563-row/1024D/49.44-second observation is not reproduced or explained by this fixture.
 
 ## Preparation review resolved
 
-Two read-only reviews found no remaining blocking API/lifecycle or measurement-gate findings after corrections. Raw ANN and exact results are checked against each 512-ID batch before merging or truncation; fallback equality includes tenant/workspace. Required cardinalities and the reopened fresh-query identity/snapshot are enforced. Retained hit lists support independent recall/fallback checks, and actual plan text and index metadata support native ANN proof.
+Two read-only reviews found no remaining blocking API/lifecycle or measurement-gate findings after corrections. Raw ANN and exact results are checked against each 512-ID batch before merging/truncation; fallback equality includes tenant/workspace. Required cardinalities and reopened fresh-query identity/snapshot are enforced. Retained hit lists, actual plan text and index metadata support independent checks.
 
-All 22 Python tests passed, including independent mutations for all-empty fixtures with cleared hit lists, wrong reopen identity, contradictory ANN plans, raw-batch violations and fallback workspace mismatches. See the [probe README](../tools/t0-ann-probe/README.md) for reproduction commands and API sources.
+All 22 Python tests passed, including mutations for all-empty fixtures with cleared hits, wrong reopen identity, contradictory plans, raw-batch violations and fallback workspace mismatch. See the [probe README](../tools/t0-ann-probe/README.md) for commands and API sources.

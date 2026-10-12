@@ -251,26 +251,53 @@ def normalize_sql(sql):
     return tuple(tokens)
 
 
-def schema_roundtrip(db, allow_known_key_quote=False):
+def canonical_schema_tokens(sql, object_name):
+    """Only the observed DDL display differences, never a general unquoter."""
+    tokens = list(normalize_sql(sql))
+    changes = []
+    for prefix in [("create", "table"), ("create", "index"),
+                   ("create", "unique", "index"), ("create", "trigger")]:
+        end = len(prefix)
+        if tuple(tokens[:end]) == prefix and tokens[end:end + 3] == ["if", "not", "exists"]:
+            del tokens[end:end + 3]
+            changes.append("create_prefix_if_not_exists")
+            break
+    identifier = {"oc_commands": "key", "oc_audit": "action"}.get(object_name)
+    if identifier is not None and f'"{identifier}"' in tokens:
+        tokens = [identifier if token == f'"{identifier}"' else token for token in tokens]
+        changes.append(f"known_identifier_quote:{identifier}")
+    return tuple(tokens), changes
+
+
+def schema_roundtrip(db, explicit_canonicalization=False):
     checked = []
+    adjustments = []
     for name in SCHEMAS:
         for statement in statements((ROOT / "src/storage" / name).read_text()):
             match = re.search(r"CREATE (TABLE|(?:UNIQUE )?INDEX|TRIGGER) (?:IF NOT EXISTS )?(\w+)", statement)
             assert match, statement
             kind, obj = match.groups()
             original = statement[match.start():].strip()
-            # Existing graph schema uses IF NOT EXISTS; sqlite_master omits it.
-            original = original.replace("IF NOT EXISTS ", "")
             rows = db.query("SELECT sql FROM sqlite_master WHERE name=?", [obj])
             actual = rows[0][0] if len(rows) == 1 else ""
-            if allow_known_key_quote and obj == "oc_commands":
-                # A tightly scoped candidate, never a general quote stripper.
-                # This source table has no quoted string literal containing key.
-                assert "'" not in original and "'" not in actual
-                actual = re.sub(r'"key"', "key", actual)
-            assert len(rows) == 1 and normalize_sql(actual) == normalize_sql(original), (obj, rows)
+            if explicit_canonicalization:
+                expected, source_changes = canonical_schema_tokens(original, obj)
+                observed, engine_changes = canonical_schema_tokens(actual, obj)
+                if source_changes or engine_changes:
+                    adjustments.append({"object": obj, "source_sql": original,
+                                        "engine_sql": actual, "source_adjustments": source_changes,
+                                        "engine_adjustments": engine_changes,
+                                        "comparison_tokens": observed})
+            else:
+                # Preserve the original strict-check expectation and its native
+                # failures; the explicitly named candidate is a separate case.
+                expected = normalize_sql(original.replace("IF NOT EXISTS ", ""))
+                observed = normalize_sql(actual)
+            assert len(rows) == 1 and observed == expected, (obj, rows)
             checked.append(obj)
-    return {"checked_objects": checked}
+    return {"checked_objects": checked, "comparison": "explicit_t0_ddl_canonicalization_v1"
+            if explicit_canonicalization else "original_strict_comparison",
+            "canonicalization_adjustments": adjustments}
 
 
 def schema_metadata(db):
@@ -291,10 +318,43 @@ def schema_metadata(db):
     return {"sha256": digest, **value}
 
 
+def canonical_schema_metadata(metadata):
+    """Ignore only PRAGMA index_list display sequence and row ordering."""
+    value = json.loads(json.dumps(metadata))
+    value.pop("sha256")
+    for table in value["tables"].values():
+        rows = table["indexes"]
+        assert all(len(row) == 5 for row in rows), rows
+        assert len({row[1] for row in rows}) == len(rows), "duplicate index names"
+        # Retain name, unique, origin, partial, and every index membership.
+        table["indexes"] = sorted([row[1:] for row in rows], key=lambda row: row[0])
+    digest = hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+    return {"sha256": digest, **value}
+
+
+def compare_schema_metadata(expected, observed):
+    normalized_expected = canonical_schema_metadata(expected)
+    normalized_observed = canonical_schema_metadata(observed)
+    check_equal(normalized_observed, normalized_expected)
+    display_changes = [
+        {"table": name, "before": expected["tables"][name]["indexes"],
+         "after": observed["tables"][name]["indexes"]}
+        for name in expected["tables"]
+        if expected["tables"][name]["indexes"] != observed["tables"][name]["indexes"]
+    ]
+    return {"comparison": "index_list_display_order_canonicalization_v1",
+            "previous_case": "same_version_reopen_canonical_schema_structure",
+            "before_raw_sha256": expected["sha256"], "after_raw_sha256": observed["sha256"],
+            "raw_metadata_identical": observed == expected,
+            "canonical_sha256": normalized_observed["sha256"],
+            "index_list_display_changes": display_changes,
+            "sqlite_master_columns_fk_index_membership_flags_unchanged": True}
+
+
 def relational_cases(db, record):
     record("uuid_json_time_roundtrip", lambda: check_equal(db.query("SELECT id,typeof(id),length(id),created_at FROM oc_workspaces WHERE tenant_id=?", [T]), [[W, "blob", 16, 1700000000123]]))
     record("schema_master_exact_normalization", lambda: schema_roundtrip(db))
-    record("schema_narrow_key_identifier_quote_candidate", lambda: schema_roundtrip(db, allow_known_key_quote=True))
+    record("schema_explicit_ddl_canonicalization_candidate", lambda: schema_roundtrip(db, explicit_canonicalization=True))
     record("composite_foreign_key", lambda: expected_error(db, "INSERT INTO oc_chunks SELECT tenant_id,workspace_id,?, ?,version,99,content,locator,search_terms FROM oc_chunks WHERE id=?", [blob(90), blob(999), C]))
     record("partial_unique_memory_slot", lambda: expected_error(db, "INSERT INTO oc_assets SELECT tenant_id,workspace_id,? ,kind,title,fact_key,current_version,deleted,created_at FROM oc_assets WHERE id=?", [blob(91), A]))
     def immutable_owner():
@@ -785,11 +845,10 @@ def main():
                         reopened = Bridge(args.binary, base / "context.db", create=False)
                         try:
                             observed = schema_metadata(reopened)
-                            check_equal(observed, schema_reference[0])
-                            return {"sha256": observed["sha256"], "sqlite_master_columns_fk_indexes_unchanged": True}
+                            return compare_schema_metadata(schema_reference[0], observed)
                         finally:
                             reopened.close()
-                    record("same_version_reopen_canonical_schema_structure", reopen_canonical)
+                    record("same_version_reopen_index_order_canonical_candidate", reopen_canonical)
                     for count in counts:
                         for phase in ["pre_commit", "post_commit", "post_checkpoint"]:
                             record(f"crash_{count}_{phase}_backup_restore", lambda count=count, phase=phase: crash_case(args.binary, base / f"crash-{count}-{phase}", count, phase))

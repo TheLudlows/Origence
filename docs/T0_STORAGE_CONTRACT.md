@@ -11,7 +11,7 @@ how to adopt it, not the vendor choice. T1–T5 are not authorized by a T0 resul
 | Component | Candidate lock | Gate |
 | --- | --- | --- |
 | Rust | 1.98.0, repo toolchain | Actual rustc version, fmt and warnings-denied Clippy |
-| Turso Rust SDK | `=0.8.2`, defaults off, `fts` on | Cargo-generated isolated lock, resolved turso_core/sdk-kit versions, feature graph |
+| Turso Rust SDK | `=0.8.2`, defaults off, `fts` on | Cargo-generated isolated lock, resolved turso_core/sdk-kit versions, feature graph; dev-only `io_memory_yield` for forced cancellation |
 | FTS runtime | `experimental_index_method(true)` | Real physical index plus `QUERY INDEX METHOD fts` EXPLAIN evidence |
 | LanceDB | `=0.23.1`, defaults off | Isolated Cargo lock; only APIs verified in this release |
 | Data | Synthetic temporary new stores | No live app data, model/provider calls or existing-store rewrites |
@@ -62,9 +62,9 @@ stale web documentation is not evidence that it lacks transactions/RYW/merging.
    excluding the seed with deterministic dedup/order. Hybrid's graph expansion
    is a different, one-hop bidirectional behavior. Same-snapshot batched BFS is
    the fallback adaptation if the actual released engine cannot preserve the
-   recursive query's behavior. The bootstrap prepared that query successfully;
-   directed/cyclic/scoped 0–3-hop execution is measured separately rather than
-   declaring it unsupported from older documentation. One SQL call per node is disallowed.
+   recursive query's behavior. Locked 0.8.2 diagnostics passed the actual
+   directed/cyclic/scoped 0–3-hop query, so no unsupported-query claim or BFS
+   rewrite is justified by this result. One SQL call per node is disallowed.
    Resource exhaustion must be explicit, never silent "complete" truncation.
 9. Existing retrieval/context policy markers and historical evaluation records
    stay unchanged during T0. A new ranking/index strategy must receive a new
@@ -89,6 +89,13 @@ Native ANN requires index metadata, coverage/stats and an EXPLAIN plan. Ordinary
 ANN must include fresh unindexed rows; `fast_search` is forbidden. Index refresh
 uses **OptimizeAction::Index**, separately from data-file **Compact**. Never use
 **All** (which also prunes old versions) or **Prune** in these probes.
+
+Turso FTS also requires score provenance, not only an index-name plan marker.
+The tested raw visibility JOIN uses the FTS method for filtering but projects
+scalar zero scores. Same-snapshot scored CTE candidates passed correct positive
+scores and visibility-before-top-k; use the same bind slot for score/match, no
+early inner LIMIT, and retain the failed raw JOIN as regression evidence. The
+CTE's all-match materialization cost and production ranking remain unaccepted.
 
 Paired exact and ANN runs use the same compacted layout, frozen table snapshot,
 vectors, L2 metric, eligibility filters, tie rule and K. The exploratory first

@@ -68,6 +68,15 @@ update/delete and explicit optimize. The follow-up diagnostics compare raw JOIN
 scores with same-snapshot direct BM25 and test plain/materialized scored CTEs
 without any inner LIMIT. Equal scope-correct result IDs alone do not pass scoring.
 
+Schema diagnostics keep the original strict comparison separate from the
+explicit T0 candidate. The candidate only normalizes observed `key`/`action`
+identifier quoting and a CREATE-prefix `IF NOT EXISTS` guard; quoted values,
+other identifiers and all constraints remain byte-sensitive. Reopen metadata
+retains raw hashes and ignores only `PRAGMA index_list` display sequence/order,
+while comparing all schema SQL, columns, FKs, index names and flags. Mutation
+tests reject changed defaults, missing indexes and altered uniqueness. These
+diagnostics do not implement the production storage-format discriminator.
+
 ## Deliberate crash subprocesses and bounds
 
 The bridge is a separate executable exclusively to establish process termination

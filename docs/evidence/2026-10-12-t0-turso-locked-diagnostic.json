@@ -1,0 +1,1819 @@
+{
+  "head": "5593a18e7c1e0e4efeb4ca5328dd6b1340175d24",
+  "run_id": 38261865400,
+  "job_id": 114854128261,
+  "run_url": "https://github.com/TheLudlows/Origence/actions/runs/38261865400",
+  "artifact_id": 11753700298,
+  "artifact_sha256": "ecbd4ecee929679b6fc32228684c275c49662a672029831beff932e6c516aacd",
+  "native_report_sha256": "960dcec30bc8128b7620ab68098f267f84bcd93908a6e1bacb9e1f1e86d36640",
+  "locked": true,
+  "rustfmt_patch_bytes": 0,
+  "clippy": "PASS",
+  "forced_pending_sdk_unit": "PASS (1 test; synthetic MemoryYieldIO only)",
+  "summary": {
+    "PASS": 42,
+    "FAIL": 5,
+    "NOT_RUN": 1
+  },
+  "cases": [
+    {
+      "case": "engine_open",
+      "status": "PASS",
+      "elapsed_ms": 8.410221000019646,
+      "full_case_sha256": "3e5b916ba2d8662e830ff4445e73e8959b7e6b69572f2d0d7a9ce67edf026cb0",
+      "details": {
+        "opened": true
+      }
+    },
+    {
+      "case": "all_real_schemas_unmodified",
+      "status": "PASS",
+      "elapsed_ms": 3504.29919000004,
+      "full_case_sha256": "b34b6a214dee981b3a82a195682d78dcd627159b4162a25da97319e15fce9d57",
+      "details": {
+        "statement_count": 47
+      }
+    },
+    {
+      "case": "real_relational_fixture",
+      "status": "PASS",
+      "elapsed_ms": 9.725195000044096,
+      "full_case_sha256": "dce4e2d0fd948301af45b7620f7c70b22361037dceef301246a0765a1bdd4ae5",
+      "details": {
+        "seeded": true
+      }
+    },
+    {
+      "case": "uuid_json_time_roundtrip",
+      "status": "PASS",
+      "elapsed_ms": 1.02572999998074,
+      "full_case_sha256": "fccde2461adcfe99d66c19cbda6bcce38c184c08e080dacbf26925453147bb35",
+      "details": {
+        "observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000002"
+            },
+            "blob",
+            16,
+            1700000000123
+          ]
+        ]
+      }
+    },
+    {
+      "case": "schema_master_exact_normalization",
+      "status": "FAIL",
+      "elapsed_ms": 10.514215999990029,
+      "full_case_sha256": "c6a00fa852c3dff22a22926762ed6fab9e3101374bfe907c6398634689cb9287",
+      "error": "('oc_commands', [['CREATE TABLE oc_commands (tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, principal_id BLOB NOT NULL, dedup_scope TEXT NOT NULL, operation TEXT NOT NULL, \"key\" TEXT NOT NULL, request_hash TEXT NOT NULL, response TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, workspace_id, dedup_scope, operation, \"key\"))']])"
+    },
+    {
+      "case": "schema_narrow_key_identifier_quote_candidate",
+      "status": "FAIL",
+      "elapsed_ms": 10.29230900002176,
+      "full_case_sha256": "daa24719bc841dbb06c8dec52c342ea87b9d763114a358e961770cdb9583c2be",
+      "error": "('oc_audit', [['CREATE TABLE oc_audit (tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL, actor BLOB NOT NULL, \"action\" TEXT NOT NULL, target BLOB NOT NULL, details TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, workspace_id, id))']])"
+    },
+    {
+      "case": "composite_foreign_key",
+      "status": "PASS",
+      "elapsed_ms": 27.618813999993108,
+      "full_case_sha256": "caa40e289233eae099a5d7e2079dca67cc7cb3ae69b42a03f5f611ad0cffc8aa",
+      "details": {
+        "rejected": true,
+        "engine_error": "FOREIGN KEY constraint failed",
+        "error_category": "constraint",
+        "all_business_rows_unchanged": true
+      }
+    },
+    {
+      "case": "partial_unique_memory_slot",
+      "status": "PASS",
+      "elapsed_ms": 27.757807999989836,
+      "full_case_sha256": "94b86d2aaaacfcc35119acc1f32a85bf9d0d705cb9ad60f7f1f1dc16aa0ebc30",
+      "details": {
+        "rejected": true,
+        "engine_error": "UNIQUE constraint failed: oc_assets.(tenant_id, workspace_id, fact_key)",
+        "error_category": "constraint",
+        "all_business_rows_unchanged": true
+      }
+    },
+    {
+      "case": "owner_immutable_trigger",
+      "status": "PASS",
+      "elapsed_ms": 31.498744000032275,
+      "full_case_sha256": "d91ef423aa92f1410f671bb6e2a27bb2c095d17916f1981e8f856f4b9625648b",
+      "details": {
+        "rejected": true,
+        "engine_error": "workspace ownership is immutable",
+        "error_category": "engine_other",
+        "all_business_rows_unchanged": true
+      }
+    },
+    {
+      "case": "one_level_owner_trigger",
+      "status": "PASS",
+      "elapsed_ms": 32.88750000001528,
+      "full_case_sha256": "0ba133ec2ed91bb297993a8a8c8326363354d7a24356234247c2381e7151470b",
+      "details": {
+        "rejected": true,
+        "engine_error": "workspace owner must be a root",
+        "error_category": "engine_other",
+        "all_business_rows_unchanged": true
+      }
+    },
+    {
+      "case": "real_job_returning_explicit_rollback",
+      "status": "PASS",
+      "elapsed_ms": 3.2416209999723833,
+      "full_case_sha256": "52764f2cab4126518aa21c38b2e8365379ad2d01340e92530ba82fb90ba8dd21",
+      "details": {
+        "observed": [
+          [
+            1,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "case": "real_publication_json_queries",
+      "status": "PASS",
+      "elapsed_ms": 4.5363369999904535,
+      "full_case_sha256": "b90b59c4954f77b2c6c4711421f0c932f3b07dc76a0f7963092d29c928c9c9b9",
+      "details": {
+        "publication_json_each_distinct": [
+          2,
+          2
+        ],
+        "json_set": true
+      }
+    },
+    {
+      "case": "real_source_visibility_predicate",
+      "status": "PASS",
+      "elapsed_ms": 11.608377000015935,
+      "full_case_sha256": "9c9074bd51f5b79cedd11e352e4ae1d8e7a743dce2f935c1b7ef1229cb32f7ee",
+      "details": {
+        "active": 1,
+        "retracted": 0,
+        "wrong_tenant": 0
+      }
+    },
+    {
+      "case": "graph_cascade_same_transaction_rollback",
+      "status": "PASS",
+      "elapsed_ms": 6.989378000014312,
+      "full_case_sha256": "af6ba3ed14e8e262c1cfc11490b2ac2ef52b0dd25e40105b3e9cdf51bf243676",
+      "details": {
+        "observed": [
+          [
+            "pending"
+          ]
+        ]
+      }
+    },
+    {
+      "case": "real_recursive_graph_direction_hops_scope_cycle",
+      "status": "PASS",
+      "elapsed_ms": 21.539291000010508,
+      "full_case_sha256": "3d76d448094e0d80705d1b0937978e0c413306b1ea7c00b81f32d23414634cf1",
+      "details": {
+        "actual_production_sql_executed": true,
+        "by_hops": {
+          "0": [],
+          "1": [
+            [
+              "00000000-0000-0000-0000-000000002329"
+            ]
+          ],
+          "2": [
+            [
+              "00000000-0000-0000-0000-000000002329"
+            ],
+            [
+              "00000000-0000-0000-0000-00000000232a"
+            ]
+          ],
+          "3": [
+            [
+              "00000000-0000-0000-0000-000000002329"
+            ],
+            [
+              "00000000-0000-0000-0000-00000000232a"
+            ],
+            [
+              "00000000-0000-0000-0000-00000000232b"
+            ]
+          ]
+        },
+        "incoming_and_wrong_scope_excluded": true
+      }
+    },
+    {
+      "case": "composite_upsert",
+      "status": "PASS",
+      "elapsed_ms": 2.9975119999789968,
+      "full_case_sha256": "96f74642a886c438eafebb3170999994cc5ba2d15b2c1d13a22ebd2d16831b05",
+      "details": {
+        "upsert": true
+      }
+    },
+    {
+      "case": "real_learning_deferred_fk_commit_rollback",
+      "status": "PASS",
+      "elapsed_ms": 36.95713900003739,
+      "full_case_sha256": "66678e901877010710f64354855ac5178cc53935bd800f11c91845eea39efd05",
+      "details": {
+        "late_parent_commit": true,
+        "missing_parent_commit": {
+          "rejected": true,
+          "engine_error": "FOREIGN KEY constraint failed",
+          "error_category": "constraint",
+          "all_business_rows_unchanged": true
+        }
+      }
+    },
+    {
+      "case": "literal_real_sql_prepare_inventory",
+      "status": "PASS",
+      "elapsed_ms": 225.78445900001043,
+      "full_case_sha256": "0faa10c5f775c424d2b9fc8c12909701f71dfcff91da68f8b179bbf348d2d534",
+      "details": {
+        "prepared": 188,
+        "statements": [
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "69aca0515e73344f5a762fde0a54a30174ce4256358e9a1cfccd70116a5d5f50"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "a7515028472fc8251ce88b3438b1c5c61ff6b7203fb7dff2f8e4c1f83e372371"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "6d97f0db1c366c25d667813bb63a0c03673a2a6f1c4f246e0fa1436f481753a9"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "1c279a23c47365b92a1158071ebde6a0c3dda126f6952d64ae0fb6481b9939f2"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "f98fee95076f88d1aa358e53e521346590dd3ee7f32fdbe9fbcd0ed857357ed8"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "75a99942c318035ce873ed70fb4c4a6c33d69317727d867afdd7fc648dc19493"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "a7025e063e3e956f04ee5c134ca772b1b00535f4140bac4a48c9310a8c8c1c45"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "1da66fcc3bea010c20f264dc58f01f8cf3820c236e6084997f8c8ed2e846d16d"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "4b7c532375dc85b163f414102b55d225626d66459643c302749ce81ca044f239"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "b1de6d30dbabb70e63113d438a192152811b3f07e41ea8cc23a784d10198f600"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "a15c64801b0fa0a8eee75f29a0753b73e6935658b436295c5083f353739715b9"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "2d06a1dcf8df5c667fb5a922c1759764021f26ef8fd5561d186569a755d94f5e"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "18a069069a321bed3fd0ea9d65acf129326661ddf70e1736443bc2ad4ce25ec5"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "e162a6b185da3fda15c78f0f586b1a7ee58edf80d621fcf956bd4cd242a8c3b9"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "c5eaceb96c5b5d83a3eee2adb0f8a96ddcf2ebe42eef61dda86b5e923f3a8e99"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "dba8fac24b75eebc2efee94bfc8bf85b43da3476bcf4d5b0509e0f1b76b8818a"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "1a6eebb07247f8000a186a11b608fd9da37c2b0bf9c830e74513bd1500895d56"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "056a7fdaf7e637b71d9e3f79e56bfe93d92b74a451be0db5a374eae23c351843"
+          },
+          {
+            "path": "src/storage/sqlite/app.rs",
+            "sql_sha256": "8d88e1fe0cfae3a4d7d131665ca758d7b3622a0ec9d58e7d53bef0e047078907"
+          },
+          {
+            "path": "src/storage/sqlite/context.rs",
+            "sql_sha256": "7604d523957248a152d162725f47185b3dc5bc3f014243c70d6c10e8758f05ec"
+          },
+          {
+            "path": "src/storage/sqlite/context.rs",
+            "sql_sha256": "454b3c2e6363d7454a9cfdff25f2e9cf336f72809bbaa8eb12202cc40412a3b8"
+          },
+          {
+            "path": "src/storage/sqlite/context.rs",
+            "sql_sha256": "0db62bffce8d11e577f4d0adc1a2294b8a0de1b50f83eefeeb592e71f7c56f16"
+          },
+          {
+            "path": "src/storage/sqlite/context.rs",
+            "sql_sha256": "59aa9463d6aa7824c6921bbf09155a7adc9e49d5f145641d49b604fd7f3d5601"
+          },
+          {
+            "path": "src/storage/sqlite/context.rs",
+            "sql_sha256": "487b1eec4c427372337dc2d5829794ff4dc25d84ff34bea4cf6f8aca960babbf"
+          },
+          {
+            "path": "src/storage/sqlite/context.rs",
+            "sql_sha256": "f9611628c53f5f41cbe1d1e48c50c569fcd8bf04b8c0243c850c6ee5ceb6c62c"
+          },
+          {
+            "path": "src/storage/sqlite/domain.rs",
+            "sql_sha256": "ff01a2c9bf1919c3a4215e1e802d84d66cde7528690d0c2092936a3f976b82c0"
+          },
+          {
+            "path": "src/storage/sqlite/domain.rs",
+            "sql_sha256": "2dfe64b0b1e4f9c7e000cc0f7608cd634834dc050ddaa386fce167eae1166ede"
+          },
+          {
+            "path": "src/storage/sqlite/domain.rs",
+            "sql_sha256": "1574e237252746585d639340fa9b487bf104457fd31969b9f5952ef1efef1673"
+          },
+          {
+            "path": "src/storage/sqlite/domain.rs",
+            "sql_sha256": "ea581103f54718fbb56816debe442d889e4308d255ec184ae3fbc4b074b7bf55"
+          },
+          {
+            "path": "src/storage/sqlite/domain.rs",
+            "sql_sha256": "6c139e55b49b75ce9c318e62f959bb69debc508d9d5e80ce2594b939602981c9"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "5ced9e61da6d7a72f029726d896b9b3cb4f6976b8eca6d1c186de9d41ec1123f"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "f121f130308e073b9bb51eddc940bf34c90344072e72fb54a39ca815a01d0ce7"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "011dda7e040df140862a54619dee5dbae48cdaa05ac66dcafd8dc3230058a3c6"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "25f312c655238c1a47ff1b721ee1d2fbc3b365b7cbf42cf68e153b488f26acd7"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "502d448ff8226808f43bff5f155bdef249f9eac9640bcfc3d0db2d20c36e29db"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "84fafb07755b26232a424f7cc748eb551ff96e3f00d1910304b320d02fa595c7"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "96273f91ccf94cded35a71502db5e9eb3dcbdd28ab991547e2b3ffe8824affa8"
+          },
+          {
+            "path": "src/storage/sqlite/identity.rs",
+            "sql_sha256": "efb503a2d58a28ed20f95204ae92c5751396ad26ad6db455e769ff5b1b68fad8"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "9ce801f68e52849efc1db98050ef45f63ddd9377206c30978b827e9f682c1cc6"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "4ad9caf7a3eb3e3ec206266b4244c89d365ec97e31c95090b1c3698fbbf40a8d"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "84b1e646dae985556aff22dc4a8fa10e6ee3ea49a33af9a242e26df4a5de69dc"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "605d6402d41871b63b42ab627cc391032d2a4d6062f776549281b8c932fc25c3"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "13f572fecbc90937b010afbdc0f0892b15b8852eb3981cc4ce2d77c086d00b29"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "9027d1e444abceab761a6d714cc2fc8716d4527041d0fd1daa0d18208c965a33"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "11e4a7e2b0321936e187f974e03e2577276eedfc47ad42b85d698ea626c9510b"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "d46833448faa262d23b640d419450afe8701bb1003926c500fce65f147ccdf4e"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "d6580e5e2b31666bff1d407cb95970595d1bca80cba013cbd9f9af290553731c"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "3dabd0e2c240ee1d0796d923cef4546a060b5b1806c2ceded4de28b371081dff"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "62e84fce79b33e1a950f7da493ee5e7dbb7c33ed12d085b2fa2834457dcaf864"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "4ef412f0cf946110cc29833c2abee6a1a77d63868e6b04e86356f902a08ae341"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "e9ea8a8560745626f66bd3d7ac12d4140621c16912b34d703d3977afd4d70b91"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "61b4a18e2bceb39b6de25bcd7487e8533a155ba665f19bb5a25b8b38bb8492a3"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "8fb3ce4d35610bfb7357fd5469dcdf041e2c710f9a28e60e3b006ce8ef7f29ed"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "9ba5d8068c71b0f62015d40b2908d4629e4d27d6bb604cf0bcbbca209882bb42"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "359fb628f444e919433870ab6fc8c7bba593e10ceb4679873d721f4a9201f750"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "0e88e3fd9997349bb8d4361448eec852dfab55b4595218e5c2f5c55846cdd85a"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "b2fc1f262683846f41e7db447833fc89315134a5b690a38df771e20e5f992490"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "b9d2d0fcc8157ab4e09f72a4c252fcfc3419d04e197e76703982505c05566016"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "03e9c30ee1514e4bb43968c6a6d8e46255a27423466cd13f8a6804e24d91cfd4"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "fb26d4edd415d6c48f451d10cb5f0f9ce7c1677dd7fb8b9b8feecfe598a7cdc1"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "fb2b653c45ae9140fb1c24e39c62c9d42d4bfc2bcccdabe93692001472bb99b1"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "523f863b537ca2000961777233939d033b60758dd4adb5783495e28920bea7f0"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "32c1dae0ea19ff0ec8b306631515e6f5d4bde54a13ed2c605b849e99aea02489"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "48de05921ffaba79de499f5ee4ae31cd0daa5763d14d7885dc8ed17d1b2e1b82"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "cd3df1fe39b22f85884a4857ddf8cf5e3274f9b7d0d45a0f75991631d07f370f"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "12aceadd663b0646f7b6a7201eabc5a64ad9fd25a8d21124ba4a7da65b6476e2"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "de84a8b71a7349d21cc4ea5b05941f8b3edb8e4e0aa5727a5bf902db0ff1159a"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "32f7ec893d1f8f74ac85818561e795bc295bb7d49ac549cf4d0fa62b23f26a8c"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "dddca1fac28f99980050a491ed1756623d0e63621a57f96887d8af9af2005edf"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "3fb1b9bef9bbf7b2b4357995d62fa69ff3afdafac3bb43c26d9a77fe02cb7860"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "aaca7c9826d30bf463f3303556ca84eb5f6f80c5f70b9027d1a7e656d48e4e8f"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "694aaed6e3129d94bd9a105c40aa5871121685845880f5f19b651cb62fd461a9"
+          },
+          {
+            "path": "src/storage/sqlite/improve.rs",
+            "sql_sha256": "f4b42e00dd04a111076a7e62600fa170ba320687e1086f73b23cdaf9b5d4e251"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "9edb923719ca1eb47b8a7387b9f3d4c8cea54ba8e403d239b27e09f6390e3c23"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "96d95d60d36fabf4a93dfaf4b59344a298bb6596eddcbfaa358ea9190c4a13b9"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "b3d8e060f6121a6301b205aeabfb838b31b98b9be6c0fc358734f558fbba0527"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "484f90dc4840b02020bd760c3a529a1445aca80fa70f316d63cd9ded2bd4cd64"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "0ad78a2df89e55b188d9d92a485937d1ba74d2ea3b1dfee0999b3b3867bfd120"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "fa953eb714da23a2422f2211b80c991987269c87ed680bbda80c194c95cc31d7"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "f403623ef88d8b046c27a9f4a8b1d0f22ea392dff159049f5705b2e7d2152916"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "3b3eba22625bc3f126efd8f0151bae7e722568e34f11c2ca44edef1c9a7ce5b6"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "ed502f715b3dd226facadb850a61beb1c24c727c541986ba3f5bdb4c7a9cf58f"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "52ec822d8f63e2a5183639b3b11820c333f81ea674d8a9158b47b7bbc8abf9be"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "2d212a6b122fba2e747b42046eb3c996bd120e56e5056670aa93f84c04635933"
+          },
+          {
+            "path": "src/storage/sqlite/job_queue.rs",
+            "sql_sha256": "99549022353061bbca9d167c90e20f3382503b81a6d9c07a73d9c5da0e32f6af"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "009fdf76dc5870020e6b5bf85a28a0ec3bdaa1ac16281d50b38b8f4c0db7a4eb"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "e426cb65a923e526dd1351e802df0f31629bebea2d5361361db356c77b5ba41b"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "0985d5ca4ff84b86f081b8878409bf3b7588ddac54f5352564b48e3eab2dc78f"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "f12b7acab72f12f117fd3d9386a1563e381e79eb0f139979a39d242585304117"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "26e30521d59407a56a277a20342cdfd6ddb5698d032b9f68221286d4be7191f5"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "29907741cd317c7b31f3e56283f3fd1db5003fdeaa2d7bfc15322793dcb8df43"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "3dd087520a90b8963b3f7163db53f7e3e6a282c014e0b11eeda04edbf11e9c64"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "8b4dfbc630e74a7eea3df537b7aa1c1b8273284f9ad0702b8c501f47c5537acf"
+          },
+          {
+            "path": "src/storage/sqlite/learning_visibility.rs",
+            "sql_sha256": "de2c7fa65091c4333ff0d7203a67dbcbd73548213baa1fd864b4866e36617aba"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "0aaec7fbc0b8f475a7e1212c956a8b0f0e651c67c219d8b7a2970853b947f87b"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "d0c94814d28a777a442092dd79bb80e8de4f67cb254bf94e0f51a058ffd83bb3"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "9b6e46692bcf736b2a2212e7ec112f3845612fd819920df865c6ab6661df827e"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "767b5cde36137ecceb0dafb4776dad3801acda585bcf9996e157dfc92674687f"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "edb6fa3462368babc6215df979c99f07dd5344bc6ae1857074ad43df9d3218b4"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "e14e97362f94d21b63f64ebcfabd4de008103571fd76449f6d0e80cd61d45e8a"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "37dcb4cefd75edb27522faa7d8bac1c64a0ae657ada96d7933350b94f11b92c9"
+          },
+          {
+            "path": "src/storage/sqlite/ledger.rs",
+            "sql_sha256": "d708df725595f0c5701ebe7ae859f90b53c9573de969a3f0028ca301472d1bda"
+          },
+          {
+            "path": "src/storage/sqlite/lifecycle.rs",
+            "sql_sha256": "1bcf6c7eb625794e99112e2e7a77e4ea2a637cc33c2e0496a1d88eba5fd57eef"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "e2904174cc84edfddc977015b7363073fa26c9a8277d7cf74fd984624098b5f2"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "ef4450343ab47a87a6b84a9a23b027d2528ece3175e02505f29744f132943fef"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "34db965549009727542b886f54770df2c10223de25e2408a8701401c0770857f"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "a525da81dc7706e0d78a62b17891e8147aec9ba4a6949228a713c5acef40add3"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "51dfafd8c3a2b91b5f278daa77c6fc2f6462749dc75cbc11fc6d9dfedde01c52"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "de963ebea7169ee37e6384f1bee64ff3f50245a7de920a9541a90f580cb3d0d7"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "205f1693f28d1f820c3e1797a0fb2b72339e6397827ecc37093b8450eb69f904"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "0c1054ab54d1f90f46865d9b70551c223ff1c62cb0a92a456003bf710b70fbe0"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "f89d1e66fb9a235e90bfb0ab8db3c483e8974269a3fb8d3556b320326ac727d4"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "a4c764802deeeda0399c042898b19c356361eb80d8116bb913380ec32cd95525"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "852e389876af6f6df712a846189df3870d7afe671ec2859f8c2554d7217c7ca2"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "34f68a3809c3b573d1225d7cfc9a4cc5a7206f2525252d12514478a80e7d8573"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "10820bf3f4b9380929b29e414e9e76acb3bdd18ada11b3562c504dc521532b8f"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "8f45b3c90ac684d15b90f7e301349aa3193a36120be99d8d766d50467f0ca5b7"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "e265f85436bb66536ac4b5374eee1c13315588ffe3ade025faa50320c2f21077"
+          },
+          {
+            "path": "src/storage/sqlite/provenance.rs",
+            "sql_sha256": "9206918f70c8b34cca0c9afadf6850f98e32b514b8a6142a9dcbb11e5611e5b1"
+          },
+          {
+            "path": "src/storage/sqlite/publication.rs",
+            "sql_sha256": "41fa68acdb77ac05c538117e937cd10a3f4a8d6512fff49566c430bd1b492a8a"
+          },
+          {
+            "path": "src/storage/sqlite/publication.rs",
+            "sql_sha256": "b9f7f77d7180ffac51768d850b6bcd6e408730b7883b2936713534246fe00b03"
+          },
+          {
+            "path": "src/storage/sqlite/publication.rs",
+            "sql_sha256": "80485a69af09e1ac2c6961f84e5dbcf9080b9e4095c3840ff681345c02eb68fa"
+          },
+          {
+            "path": "src/storage/sqlite/publication.rs",
+            "sql_sha256": "4ae86a416ba77648aa9a14225b00499b1488abd2a825654568e5ab32dfc98b38"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "8ce8044f8aebc31664e7a33427446db487bd10fc63c20f5bec380daa006b3548"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "e0a293c538b056aff259629f3a06d5cc643c13dac070a5fd2373cc0a29f21eaa"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "fae08bdf52fdc79ea5c68ad8a468d138c2e8aa0b3403812726f7be95b210ed08"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "c6212f4f5ff76bba109941806eb6ed7f322cf93d1b81c7f0a932cc6df7ffa70c"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "5238147716502236666860d9964520aa8937bd3fd2eb6b8f582de66267d7adcc"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "be9f07d86ba92589779ca7e8c6127bb8809d4ca12418cb14cb51b517b72d0420"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "e5e098141fe1b7724a6a4fbdfffb0db7bfea3872075ffc58a771702da584915c"
+          },
+          {
+            "path": "src/storage/sqlite/relational.rs",
+            "sql_sha256": "5d1a9087b158a7793bf2c5cdd303391abe8852801d23fffd631b86d79ca29984"
+          },
+          {
+            "path": "src/storage/sqlite/schema.rs",
+            "sql_sha256": "3e1dc2d8e636c3fc9f69e88db3b4ec9dee21acb01cb5fffade39b6554b9f1ddf"
+          },
+          {
+            "path": "src/storage/sqlite/schema.rs",
+            "sql_sha256": "e54b3949811bd2b877aee9934bf6dbb7b0234f095f3d8d9932d98424f57e3446"
+          },
+          {
+            "path": "src/storage/sqlite/schema.rs",
+            "sql_sha256": "d8df49079e287aa67af43f87a54b35cd90fecbce0f3cf1fc21749a46ce452aad"
+          },
+          {
+            "path": "src/storage/sqlite/schema.rs",
+            "sql_sha256": "ebb783a9ad5b048d6814f3b35d3566a60058c55509dd1af519675b529dd1ca50"
+          },
+          {
+            "path": "src/storage/sqlite/schema.rs",
+            "sql_sha256": "3646eb43847c0ddb7056ac1047d5e7c16c12cb20e8058076dcc9481449562d78"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "6104c3dc8d37675d6738bf6101856438425640b1864a64f7c4d47a4b70833791"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "1835c9f75dfcced8a844edd5e5b1d791283d575ca5676af4c7eec9e159d634ee"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "d9655e87b9ce689bad65978bb24e3fdbaa2f481941d6790843f55dc35b092e64"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "52ed1db21eedea006181f015e31951b1e02ed80f150b344b25e77ec1016b3826"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "4a722e8ded49c8b95c93eb14b7f245cfadc9cf047b8d8974be1c50c0910ba4e9"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "76fe9a9fe019e53fc643471e6cddf99958170aca64c0014b78e16e54c280122c"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "c33a7a2d9b369b32ce8016b6a763290a60217e55f30e42d10be7c1a5cb3c4e16"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "1ba6125885b312352696a2b992550bcca19ac26ef510626c0d18f1e006a0ceb6"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "0db62bffce8d11e577f4d0adc1a2294b8a0de1b50f83eefeeb592e71f7c56f16"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "255f65991bc2c917c49401ebba2f866c19f00cc3ad773dafdd778e550f6ad078"
+          },
+          {
+            "path": "src/storage/sqlite/semantics.rs",
+            "sql_sha256": "533c992c9ea0b149ad41d72407eb9730c151c04554c97158a09cb5047c738413"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "024282ac84da7470c12401ed8690382f84f921e7e43f7206ad488629d70594c5"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "4ad9caf7a3eb3e3ec206266b4244c89d365ec97e31c95090b1c3698fbbf40a8d"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "998b1cf43d8363558e4bb9dcacfb8d26ea03497074e08344eb0f142f725414b3"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "71671cd98a393cf8f3bfe681471e66a09506864c565d8bbb04b6e49d1840369d"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "df3e6fcd8b81ae0bc35e6aa6a35d513a1ce02d581131684cb07c45a121050865"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "f6b0ff14a8705f0cf19e4c30559bc2d7a5599813807bc9c2cec0a7fdee718881"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "1fdd4c7f3b1409f0b676e43f7d6c5c9eea1a2fa042ec5a843ef822252cecdf85"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "3ec12c038493ffe7e20cf7a3746b0c84d4b37119a17c3d71fca0fdeec53f639b"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "3d5807cb3d6cace617502a66db580de218b3507c752156f1cdb02545d5dfeaa9"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "8a53c9115a2a04623137bbdc9c6ee14f9ed36126b3c5428f338cd45d00969d20"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "4aece33102d4cb2965821485a4384d8c66d8b7b4ae6fc54934f39f54193b8d2f"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "095a789b2c6cd2b4ebdd03b48e0a38c74a262e09d7aecddd8cc2dd3cfa3a6f26"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "9b14e7ceb5d6acaf53d1cebf2cd16c4d81862d68c4ffd9c91574713decea037c"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "84bccf4a0acb5e8d2e6a4d73130e8a4df2b844dac6c91ebff3e497e45c8fc2c0"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "89416ee30a41b3560f6d8236f30796425cc563faf866974f45e6e3d94abb9321"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "cd8c2d27c39c51b3854ca2f0145d9b7c362d95308915ba7b7bc8677d33572b7a"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "d6255306a34327e89cfcf252b0ff22aa7c0b965944994e4b0e48543b2edc2899"
+          },
+          {
+            "path": "src/storage/sqlite/session.rs",
+            "sql_sha256": "3dcbbfa721ff62a7ef64ba29227e52993554e884398a70a557bb00a153c80836"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "4e227475932f21ed3a968035190ee1c94913f441f052f1e7919b54aa138dfc6b"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "ac14a5960714a5173516f245d420d27f4456048e03b073fa7d588f98e79a8193"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "5bb7cbec7cdc98447c1790bbb7e83600b4283aaa6597fcd8064be001f6e03def"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "debd94965c75bd4fcd756ab0031dc4f2576bd0e3e4916f1e71fef3ce576efd28"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "73b00c5679f24f0fa8784c446c1479d4d80e2cc3616ad8e071f4bf7226131b3b"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "b2e7d65801b002ab92cb0a858883b564679105ff4a31f645b73a8b4da6b32b1a"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "71705d6e8527aef94697bfb18ccc665d3dfdc88d86af814a8b5d5ed66bd0a7e5"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "197fff48d438d922100410189502cbddc5bad785f2cdfd58deb402f33ba5dd1b"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "4eae78c3401530483264219037efdeadb764a98234ed344fe15e85c04a1bd772"
+          },
+          {
+            "path": "src/storage/sqlite/versions.rs",
+            "sql_sha256": "9d23d32767314fc675f34bf25c7161caa45a21a3088f1884aa6e64df0e000bad"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "f5b7b9cb044f0e8773b097f561953493f913dfc22f5ae9742f90c563503e2f9e"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "14c0fbd34e38d02b9953e9ce4fa8b01cb8bc1870e7993a038409a680654132a8"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "b42b76272b6da8718a6e945f61c6c0badd77614a1ae81a945bc505d2e30608ea"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "653e46207e46f1d1657ce5765b2fe7320a4eb03be46890e96569fc78715c2a54"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "77645e45e70b14b4bc88b7562b2de159d3cdcad531b3bda9f787d6e8be260f7b"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "a691ea9cb1408dd186f44a01e1e0596c84621a8e8618af4ba41a4e70e8a279a0"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "a9547fa1170ac3a2b5bc94092bd4ebbc44da1114822ea4db59186ad7ff61518f"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "487eb20519e2881f2b83120bd5aecf2b46ec45060cdd519f82966e9ea2b6890f"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "82e6136da2e2fe759ff406b0da89724958f177c23bc8276bd0a4c1574f3a34e4"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "38280da08db69c6089a5ed4d6b7ba4423fd171382198d6367fc86dd341d07078"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "7dcbd8c09c6f88b3dc75a143586560e42b831bc16affa0ab53f82fc9706f1a1d"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "26439ae66d513475e5dfc31ef4c5b01f33614de4f4fe4b2fe1044b90e7baf8a1"
+          },
+          {
+            "path": "src/storage/sqlite_graph.rs",
+            "sql_sha256": "706dbdbd40949b1d41dda7b7fed673667e935e7088b0f471863f9acfe14e37da"
+          }
+        ],
+        "assembled_projection_fragments": 2,
+        "dynamic_formatted_sql": "not exhaustively covered; visibility fragments are exercised separately"
+      }
+    },
+    {
+      "case": "sdk_transaction_drop_then_reuse",
+      "status": "PASS",
+      "elapsed_ms": 2.3283119999746305,
+      "full_case_sha256": "1d0922eb136b75bc75bf0f540c43d5cf7e7fcb5109205dded30695dd52bf105c",
+      "details": {
+        "observed": [
+          [
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "case": "returning_unconsumed_drop_rollback_reuse",
+      "status": "PASS",
+      "elapsed_ms": 4.179480999994212,
+      "full_case_sha256": "a2423d65e34291343dc961e5e95b0de06641fdc4e6c321662f125a9719ea0a0f",
+      "details": {
+        "consumed": [],
+        "dropped": true
+      }
+    },
+    {
+      "case": "returning_partially_consumed_drop_rollback_reuse",
+      "status": "PASS",
+      "elapsed_ms": 4.506653000021288,
+      "full_case_sha256": "8e7bfe665865ba736a8f50ac8649f8c076ec1ddb999ff1baed2564fefe7f91d9",
+      "details": {
+        "consumed": [
+          [
+            2
+          ]
+        ],
+        "dropped": true
+      }
+    },
+    {
+      "case": "one_poll_cancel_rollback_reuse",
+      "status": "NOT_RUN",
+      "elapsed_ms": 2.3222990000135724,
+      "full_case_sha256": "bdfe70a53b2927e1b2842516a0d672f8edea22559ef3b9b0ad7f366451d70005",
+      "reason": "write completed before first cancellation point; rollback/reuse passed, actual pending-future cancellation NOT_RUN"
+    },
+    {
+      "case": "two_connection_read_snapshot",
+      "status": "PASS",
+      "elapsed_ms": 5.070373000023665,
+      "full_case_sha256": "01987bd7bb15054c2f4545775fc76e421e74c2fe5c6a99832fe3a3cc74c70205",
+      "details": {
+        "stable_snapshot": true
+      }
+    },
+    {
+      "case": "fts_create_on_real_composite_uuid_tables",
+      "status": "PASS",
+      "elapsed_ms": 23.671993999982988,
+      "full_case_sha256": "4faac1b88cac1512b3131fff06ff6cedcdf4d61a748c91a84bf9a8b493a27ccf",
+      "details": {
+        "tables": [
+          "oc_chunks",
+          "oc_summaries"
+        ]
+      }
+    },
+    {
+      "case": "fts_explain_native_index",
+      "status": "PASS",
+      "elapsed_ms": 0.6827550000139126,
+      "full_case_sha256": "dcba4f5f0712f55aae051efbe2fde313a6f0385bf053a4fb8cb626580a689185",
+      "details": {
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "QUERY INDEX METHOD fts"
+          ]
+        ]
+      }
+    },
+    {
+      "case": "fts_explicit_and",
+      "status": "PASS",
+      "elapsed_ms": 2.1785670000440405,
+      "full_case_sha256": "28e19ad22f5987f7cda637b08268a5d2a0b445c6479e2c7ba1e2855b26c8bce6",
+      "details": {
+        "observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "case": "fts_missing_and_term",
+      "status": "PASS",
+      "elapsed_ms": 0.9913590000110162,
+      "full_case_sha256": "303fac3300c7f9f88f6d1ce5febfcf31ba15f024853be18c4fd7a8db7f3e2fed",
+      "details": {
+        "observed": []
+      }
+    },
+    {
+      "case": "fts_user_operator_punctuation_literal_roundtrip",
+      "status": "PASS",
+      "elapsed_ms": 23.66563399999677,
+      "full_case_sha256": "be96f40d57826d3d8156d18a51c44b913bd8c8e1f01c101ea5fc283416b27a97",
+      "details": {
+        "roundtripped_literal_terms": [
+          "AND",
+          "OR",
+          "NOT",
+          "foo\"bar",
+          "path\\part",
+          "x:y",
+          "v1.2",
+          "foo_bar",
+          "\u5317\u4eac"
+        ],
+        "empty_terms": "no FTS query issued"
+      }
+    },
+    {
+      "case": "fts_transaction_visibility_rollback",
+      "status": "PASS",
+      "elapsed_ms": 19.665605999989566,
+      "full_case_sha256": "2497ffc85903b994bec9b7c12e92056452f7e17fd16f576762d22b28a6b1d236",
+      "details": {
+        "own_writes_observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            }
+          ]
+        ],
+        "other_before_commit": [],
+        "rollback": true
+      }
+    },
+    {
+      "case": "fts_unicode_update_delete_optimize",
+      "status": "PASS",
+      "elapsed_ms": 113.33214799998359,
+      "full_case_sha256": "8bf8d6e1c991a25cbc18ae7c2aa16e12f7e4a36805fae6f156d7e7fc3dded4bd",
+      "details": {
+        "observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "case": "fts_summary_terms_union_same_chunk",
+      "status": "PASS",
+      "elapsed_ms": 31.76507699998865,
+      "full_case_sha256": "915b0103664ff3cedbb34e77d5f069e693a18bdea5258595af115ea02991e499",
+      "details": {
+        "matching_chunks": 1,
+        "single_summary_matches": 0
+      }
+    },
+    {
+      "case": "fts_positive_score_descending",
+      "status": "PASS",
+      "elapsed_ms": 29.749187999982496,
+      "full_case_sha256": "bf918a62f535bd3cbc5fd7fd6246e8dd49cdd0a64f6f91d900c78d9f377bcbdd",
+      "details": {
+        "rows": [
+          [
+            {
+              "blob": "0000000000000000000000000000003d"
+            },
+            0.2610187232494354
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.21745482087135315
+          ],
+          [
+            {
+              "blob": "0000000000000000000000000000003e"
+            },
+            0.07843711227178574
+          ]
+        ],
+        "direction": "descending",
+        "corpus": "global index statistics; scoped production default not selected"
+      }
+    },
+    {
+      "case": "fts_real_visibility_join_before_topk",
+      "status": "FAIL",
+      "elapsed_ms": 98.55076999997436,
+      "full_case_sha256": "20af3754eacda3380e45201a84ed48e0542891180f90aeb00a090da92fe723e4",
+      "details": {
+        "shape": "joined",
+        "scoped": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ]
+        ],
+        "direct": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.02882407046854496
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000041"
+            },
+            0.12456809729337692
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002c1"
+            },
+            0.14234395325183868
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002cb"
+            },
+            0.14234395325183868
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002d5"
+            },
+            0.14234395325183868
+          ]
+        ],
+        "direct_distinct_parameters": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000041"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002c1"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002cb"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002d5"
+            },
+            0.0
+          ]
+        ],
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "SEARCH c USING INDEX oc_chunks_scope (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            2,
+            0,
+            0,
+            "SEARCH a USING INDEX sqlite_autoindex_oc_assets_1 (tenant_id=? AND workspace_id=? AND id=?)"
+          ],
+          [
+            3,
+            0,
+            0,
+            "SEARCH v USING INDEX oc_versions_source (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            4,
+            0,
+            0,
+            "SEARCH e USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            23,
+            0,
+            0,
+            "QUERY INDEX METHOD fts"
+          ],
+          [
+            65,
+            0,
+            0,
+            "SCAN json_each AS ss"
+          ],
+          [
+            73,
+            0,
+            0,
+            "SEARCH se USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            116,
+            0,
+            0,
+            "USE SORTER FOR ORDER BY"
+          ]
+        ]
+      }
+    },
+    {
+      "case": "fts_materialized_score_visibility_candidate",
+      "status": "PASS",
+      "elapsed_ms": 127.96090000000504,
+      "full_case_sha256": "4b61f0f0666665816f5b83c94c00233b1144c564fb08d0e454b2087f7004dcad",
+      "details": {
+        "shape": "materialized",
+        "native_scoped_topk": [
+          [
+            {
+              "blob": "00000000000000000000000000000041"
+            },
+            0.12456809729337692
+          ]
+        ],
+        "direct_score": 0.12456809729337692,
+        "direct_distinct_parameters": [
+          [
+            {
+              "blob": "000000000000000000000000000002cb"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002c1"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000041"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002d5"
+            },
+            0.0
+          ]
+        ],
+        "distinct_parameter_shape_observation": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ]
+        ],
+        "unfiltered_top1_distractor": [
+          [
+            {
+              "blob": "000000000000000000000000000002cb"
+            }
+          ]
+        ],
+        "plan": [
+          [
+            3,
+            0,
+            0,
+            "QUERY INDEX METHOD fts"
+          ],
+          [
+            15,
+            0,
+            0,
+            "SEARCH c USING INDEX oc_chunks_scope (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            16,
+            0,
+            0,
+            "SEARCH v USING INDEX oc_versions_source (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            17,
+            0,
+            0,
+            "SEARCH e USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "SEARCH a USING INDEX sqlite_autoindex_oc_assets_1 (tenant_id=? AND workspace_id=? AND id=?)"
+          ],
+          [
+            19,
+            0,
+            0,
+            "SCAN scored AS s"
+          ],
+          [
+            80,
+            0,
+            0,
+            "SCAN json_each AS ss"
+          ],
+          [
+            88,
+            0,
+            0,
+            "SEARCH se USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            131,
+            0,
+            0,
+            "USE SORTER FOR ORDER BY"
+          ]
+        ],
+        "cross_tenant_and_retracted": 0
+      }
+    },
+    {
+      "case": "fts_plain_cte_score_visibility_candidate",
+      "status": "PASS",
+      "elapsed_ms": 129.22994799998833,
+      "full_case_sha256": "a9396a4de627f03892de7552bfa96809e5f795f20f75b3759f297103595ff38a",
+      "details": {
+        "shape": "cte",
+        "native_scoped_topk": [
+          [
+            {
+              "blob": "00000000000000000000000000000041"
+            },
+            0.12456809729337692
+          ]
+        ],
+        "direct_score": 0.12456809729337692,
+        "direct_distinct_parameters": [
+          [
+            {
+              "blob": "000000000000000000000000000002c1"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000041"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002d5"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ],
+          [
+            {
+              "blob": "000000000000000000000000000002cb"
+            },
+            0.0
+          ]
+        ],
+        "distinct_parameter_shape_observation": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ]
+        ],
+        "unfiltered_top1_distractor": [
+          [
+            {
+              "blob": "000000000000000000000000000002c1"
+            }
+          ]
+        ],
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "SEARCH c USING INDEX oc_chunks_scope (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            2,
+            0,
+            0,
+            "SEARCH v USING INDEX oc_versions_source (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            3,
+            0,
+            0,
+            "SEARCH e USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            4,
+            0,
+            0,
+            "SEARCH a USING INDEX sqlite_autoindex_oc_assets_1 (tenant_id=? AND workspace_id=? AND id=?)"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCAN scored AS s"
+          ],
+          [
+            7,
+            5,
+            0,
+            "QUERY INDEX METHOD fts"
+          ],
+          [
+            78,
+            0,
+            0,
+            "SCAN json_each AS ss"
+          ],
+          [
+            86,
+            0,
+            0,
+            "SEARCH se USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            129,
+            0,
+            0,
+            "USE SORTER FOR ORDER BY"
+          ]
+        ],
+        "cross_tenant_and_retracted": 0
+      }
+    },
+    {
+      "case": "canonical_schema_and_structure_before_close",
+      "status": "PASS",
+      "elapsed_ms": 27.036376000012297,
+      "full_case_sha256": "6a63895ef4f212ffca2ceaf71f63d1c3d9189a5d32552998390e20e853c0041a",
+      "details": {
+        "sha256": "e6eb6eb626cf053400d38102772259c95a8b1188f4dbcb09340e6b330f8f56a8",
+        "object_count": 53,
+        "table_count": 25
+      }
+    },
+    {
+      "case": "initial_clean_shutdown",
+      "status": "PASS",
+      "elapsed_ms": 3.2617210000012165,
+      "full_case_sha256": "78fdfcc32ae0e4ecdcd19691c928d66ac8fcb89aac551ee24e92a0b2ee531dd4",
+      "details": {
+        "closed": true
+      }
+    },
+    {
+      "case": "same_version_reopen_self_schema",
+      "status": "FAIL",
+      "elapsed_ms": 26.562518000048385,
+      "full_case_sha256": "d10ed88ffc8645c11ac0c5e2f30be030713f4c87a13f331b6bd6392ef870a7a0",
+      "error": "('oc_commands', [['CREATE TABLE oc_commands (tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, principal_id BLOB NOT NULL, dedup_scope TEXT NOT NULL, operation TEXT NOT NULL, \"key\" TEXT NOT NULL, request_hash TEXT NOT NULL, response TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, workspace_id, dedup_scope, operation, \"key\"))']])"
+    },
+    {
+      "case": "same_version_reopen_canonical_schema_structure",
+      "status": "FAIL",
+      "elapsed_ms": 44.25172600002725,
+      "full_case_sha256": "be2c38b96c71f17f902cc89dfe2475806a6f5c6984edb476938a9503417d581f",
+      "diagnosis": {
+        "raw_pragmas_compared_in_order": true,
+        "index_list_sequence_changed_tables": [
+          "oc_events",
+          "oc_assets",
+          "oc_versions",
+          "oc_jobs",
+          "oc_chunks",
+          "oc_summaries",
+          "oc_artifact_owners",
+          "oc_artifact_ledger",
+          "oc_feedback",
+          "oc_improve_runs",
+          "oc_learnings",
+          "oc_learning_support",
+          "oc_graph_entities",
+          "oc_graph_relations"
+        ],
+        "all_53_sqlite_master_objects_equal": true,
+        "columns_foreign_keys_index_membership_and_flags_equal": true,
+        "status_is_harness_comparison_false_failure": true
+      }
+    },
+    {
+      "case": "crash_999_pre_commit_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 554.0985599999999,
+      "full_case_sha256": "3a0efa86eb48920a7e4e29dc56b5f318f8443ff409f9aefe838031d8a4f5c386",
+      "details": {
+        "rows": 999,
+        "phase": "pre_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 0,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_999_post_commit_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 486.36505700000043,
+      "full_case_sha256": "feb8a0dda5454b5f5005f81cb772af5f6620c6bcbbb0f7b67421b4592c881c7d",
+      "details": {
+        "rows": 999,
+        "phase": "post_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 999,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_999_post_checkpoint_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 678.6359420000281,
+      "full_case_sha256": "034ab322f0301cfc321e85c1468887871c8c874d654d5e794b4f4741196ab8aa",
+      "details": {
+        "rows": 999,
+        "phase": "post_checkpoint",
+        "checkpoint": [
+          [
+            0,
+            326,
+            326
+          ]
+        ],
+        "expected_committed_rows": 999,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_1000_pre_commit_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 546.3381929999969,
+      "full_case_sha256": "2128e4952fc0a41f3fb9fc459a3973388e869862143b72fa441c15f97e036dd3",
+      "details": {
+        "rows": 1000,
+        "phase": "pre_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 0,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_1000_post_commit_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 616.2961569999652,
+      "full_case_sha256": "2e02a7ca76c99ea2ef51094258bfeea30de5cb7523b4425f589193ffeaae4b39",
+      "details": {
+        "rows": 1000,
+        "phase": "post_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 1000,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_1000_post_checkpoint_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 532.3271590000331,
+      "full_case_sha256": "df59ecf1214273fa46809ddf3a84ce64aed81aa6f636987a645db13907282ac7",
+      "details": {
+        "rows": 1000,
+        "phase": "post_checkpoint",
+        "checkpoint": [
+          [
+            0,
+            326,
+            326
+          ]
+        ],
+        "expected_committed_rows": 1000,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_1001_pre_commit_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 836.5220389999877,
+      "full_case_sha256": "4a01f708392ecf37a6f91f15c98ccbd4ca72b0a837efda1737fef84210781242",
+      "details": {
+        "rows": 1001,
+        "phase": "pre_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 0,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_1001_post_commit_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 597.3961210000311,
+      "full_case_sha256": "c0198172b7289bca206e2737c44c12b20547f2c8a45cdd5e0424197849ba7b35",
+      "details": {
+        "rows": 1001,
+        "phase": "post_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 1001,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    },
+    {
+      "case": "crash_1001_post_checkpoint_backup_restore",
+      "status": "PASS",
+      "elapsed_ms": 575.538809999955,
+      "full_case_sha256": "31d78d099d7ce23040101925ac635dfa060fe54bb7b87b334bc3b664a7d8cecb",
+      "details": {
+        "rows": 1001,
+        "phase": "post_checkpoint",
+        "checkpoint": [
+          [
+            0,
+            326,
+            326
+          ]
+        ],
+        "expected_committed_rows": 1001,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      }
+    }
+  ],
+  "interpretation": [
+    "Native raw JOIN score remains zero and chooses the weaker eligible row; same-value distinct parameter slots also return zero.",
+    "Plain and MATERIALIZED scored CTE candidates both preserve positive direct BM25 and source-filtered winner without an inner LIMIT. Their materialization/planner cost is not established at scale.",
+    "Actual production recursive SQL passes directed 0-3-hop, cycle, duplicate-edge and scope fixtures; do not claim it is unsupported.",
+    "Strict schema remains incompatible. Narrow key-only candidate also encounters action quoting; graph CREATE INDEX IF NOT EXISTS persists in engine metadata.",
+    "Structural reopen failure is only index_list enumeration sequence/order. A corrected semantic comparator requires another exact-head run.",
+    "All nine deterministic process-kill/stopped-directory restore cases pass. No arbitrary power-loss claim."
+  ]
+}
