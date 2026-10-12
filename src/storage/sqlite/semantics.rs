@@ -146,6 +146,11 @@ impl SqliteTx {
         if self.event_content(source, true).await?.is_none() {
             return Ok(Vec::new());
         }
+        match self.require_learning_source_visible(source).await {
+            Ok(()) => {}
+            Err(StorageError::NotFound) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        }
         let mut members = Vec::new();
         for (quote, locator) in self.chunks_for_version(asset, version).await? {
             if locator["parser"] != crate::memory_semantics::PARSER
@@ -162,12 +167,19 @@ impl SqliteTx {
                 .await?
                 .is_some()
             {
-                members.push(member);
+                match self
+                    .require_learning_source_visible(member.source_event_id)
+                    .await
+                {
+                    Ok(()) => members.push(member),
+                    Err(StorageError::NotFound) => {}
+                    Err(error) => return Err(error),
+                }
             }
         }
         Ok(members)
     }
-    pub async fn semantic_version_visible(
+    pub(super) async fn semantic_version_visible_local(
         &mut self,
         asset: Uuid,
         version: i32,
@@ -177,6 +189,30 @@ impl SqliteTx {
         let missing: bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_chunks c, json_each(c.locator,'$.support_sources') s WHERE c.tenant_id=? AND c.workspace_id=? AND c.asset_id=? AND c.version=? AND json_extract(c.locator,'$.parser')='memory-semantics:v1' AND NOT EXISTS(SELECT 1 FROM oc_events e WHERE e.tenant_id=c.tenant_id AND e.workspace_id=c.workspace_id AND hex(e.id)=upper(replace(s.value,'-','')) AND e.state='active'))")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(version).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(!missing)
+    }
+
+    pub async fn semantic_version_visible(
+        &mut self,
+        asset: Uuid,
+        version: i32,
+    ) -> StorageResult<bool> {
+        if !self.semantic_version_visible_local(asset, version).await?
+            || !self.learning_asset_visible(asset).await?
+        {
+            return Ok(false);
+        }
+        let sources: Vec<String> = sqlx::query_scalar("SELECT DISTINCT ss.value FROM oc_chunks c, json_each(c.locator,'$.support_sources') ss WHERE c.tenant_id=? AND c.workspace_id=? AND c.asset_id=? AND c.version=? AND json_extract(c.locator,'$.parser')='memory-semantics:v1'")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(version)
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+        let sources = sources
+            .iter()
+            .map(|source| Uuid::parse_str(source).map_err(|_| StorageError::NotFound))
+            .collect::<StorageResult<Vec<_>>>()?;
+        match self.require_learning_sources_visible(&sources).await {
+            Ok(()) => Ok(true),
+            Err(StorageError::NotFound) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 }
 

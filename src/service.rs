@@ -345,6 +345,7 @@ impl Service {
             return Err(AppError::NotFound);
         }
         let asset = if let Some(id) = input.asset_id {
+            tx.require_not_learning_asset(id).await?;
             let row = tx.asset_metadata(id).await?;
             if row["deleted"] == true
                 || row["kind"] != "knowledge"
@@ -412,6 +413,7 @@ impl Service {
         if let Some(v) = cached {
             return Ok(v);
         }
+        tx.require_not_learning_asset(id).await?;
         if tx.is_semantic_asset(id).await? {
             return Err(AppError::Conflict(
                 "semantic memories require an explicit semantic write".into(),
@@ -499,7 +501,13 @@ impl Service {
             tx.check_permission(Permission::Review).await?;
         }
         let state = row["state"].as_str().unwrap_or("");
-        if ["completed", "superseded"].contains(&state)
+        // Improve's model job can be completed while its Ingest children are
+        // still publishing. Explicit cancellation releases only the unfinished
+        // run, preserves already-published children, and never consumes input.
+        let cancelled_improve = action == "cancel"
+            && row["operation"] == "improve"
+            && tx.cancel_improve_job(id).await?;
+        if (!cancelled_improve && ["completed", "superseded"].contains(&state))
             || (action == "retry" && !["failed", "cancelled"].contains(&state))
         {
             return Err(AppError::Conflict(
@@ -513,6 +521,7 @@ impl Service {
             tx.check_permission(Permission::Delete).await?;
         }
         if action == "retry" {
+            tx.require_improve_job_retry_allowed(id).await?;
             tx.valid_targets(
                 decode(row["asset_id"].clone())?,
                 decode(row["source_event_id"].clone())?,

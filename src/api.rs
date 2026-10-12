@@ -47,6 +47,9 @@ pub fn router(service: Service) -> Router {
             "/v1/sessions/{session_id}/turns/{turn_id}/feedback",
             post(record_feedback).get(session_feedback),
         )
+        .route("/v1/sessions/{session_id}/improve", post(improve))
+        .route("/v1/improvements/{id}", get(improvement))
+        .route("/v1/learnings/{id}", get(learning))
         .route("/v1/search", post(search))
         .route("/v1/resolve", post(resolve))
         .route("/v1/assets/{id}", get(asset).delete(delete_asset))
@@ -376,4 +379,30 @@ async fn session_feedback(
         s.session_feedback(&auth(&s, &h).await?, session, turn)
             .await?,
     ))
+}
+
+async fn improve(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(session): Path<Uuid>,
+    Json(input): Json<crate::learning::ImproveInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.improve(&auth(&s, &h).await?, key(&h)?, session, input)
+            .await?,
+    ))
+}
+async fn improvement(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.improvement(&auth(&s, &h).await?, id).await?))
+}
+async fn learning(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.learning(&auth(&s, &h).await?, id).await?))
 }

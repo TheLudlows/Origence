@@ -1357,9 +1357,10 @@ async fn session_feedback_capacity_blocks_new_records_but_preserves_replays() {
     for ordinal in 1..256 {
         let feedback_id = Uuid::new_v4();
         let body = feedback(feedback_id, json!({"type":"turn"}));
-        sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at) VALUES(?,?,?,?,?,?,'capacity-fixture',?,?)")
+        sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,'capacity-fixture',?,?,?)")
             .bind(a.tenant_id).bind(a.workspace_id).bind(a.id).bind(feedback_id)
             .bind(session).bind(turn_id).bind(body.to_string()).bind(i64::from(ordinal))
+            .bind(i64::from(ordinal) + 1)
             .execute(&mut *tx).await.unwrap();
     }
     tx.commit().await.unwrap();

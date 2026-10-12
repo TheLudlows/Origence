@@ -290,6 +290,28 @@ locator 沿用 S2 原始来源与字节范围，自动提取的新成员附加 `
 {"feedback_id":"55555555-5555-4555-8555-555555555555","target":{"type":"evidence","evidence_ref_id":"66666666-6666-4666-8666-666666666666"},"rating":"unhelpful"}
 ```
 
-rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
+rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
 
 治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的资产删除、根来源撤回、S2 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；本切片尚无学习执行入口。逻辑撤回保留原始持久化记录，不等于物理擦除。
+
+## 显式 Improve → Learning（S3 第三个切片）
+
+仅新建数据库；现有 extraction model 配置提供提议与独立核验，不增加 provider、自动触发、排序改权或身份覆盖。调用方显式发起：
+
+- `POST /v1/sessions/{session_id}/improve`（writer+，Idempotency-Key）：`{improve_id,conditions:["仅在 staging 发布时"],max_feedback:32}`。improve_id 非 nil 且正文不可变；conditions 必填，1–8 个互异非空项，每项最多 256 UTF-8 字节；max_feedback 默认 32，范围 1–32。
+- `GET /v1/improvements/{improve_id}`（writer+）：返回状态、父任务、冻结水位、数量、提议/核验保存状态、Learning 子任务及安全错误码，不返回冻结问答或模型原始响应。依赖撤回后仍可读取这些管理信息。
+- `GET /v1/learnings/{learning_id}`（reader+）：只返回仍有完整有效支持的已发布 Learning，包含 statement、why、conditions、支持轮次/反馈标识、范围及知识资产/来源/任务。支持的原始问答 quote 不在 reader 响应中；writer 可通过原会话 API 读取。
+
+反馈使用 workspace 内事务分配的单调 feedback_sequence，身份仍是 tenant/workspace/principal/feedback_id。时间戳相同或回退不影响批次。每次冻结最多 32 条反馈、128 KiB JSON 输入；首条过大报错，不消费水位。提议与核验的每次完整序列化模型输入也限制为 128 KiB；核验加入候选后若超界，在发出请求前失败且不消费水位，可取消后缩小批次重试。冻结时已失效的轮次只保存跳过标识，不保留隐藏正文。同一 session 最多一个 accepted/publishing run；重放相同命令或 improve_id 复用领域结果，改变请求返回 409。
+
+Worker 先提议、持久化，再独立核验、持久化，最后一次事务登记知识资产、Learning 支持及普通 Ingest 子任务。最多 8 个候选，statement/why 分别不超过 8192/4096 UTF-8 字节，每个候选 1–32 条精确支持，每条 quote 最多 4096 UTF-8 字节。支持绑定冻结批次内的 turn_id、principal_id、feedback_id、question/answer 字段与 UTF-8 quote 范围；模型 conditions 必须与调用方逐项完全相同。核验 reason 只接受有限安全代码。helpful 不证明事实，unhelpful 不授权否定或覆盖记忆。
+
+所有 accepted 子任务发布完成后，才原子推进完成水位；空候选、拒绝与精确重复均有明确结果。精确 novelty 只比较 statement 与 conditions，不声称语义级去重。跨 session 并发或已保存核验的重放，还在登记事务中检查有效的 accepted/published 预留；冲突时整笔登记回滚、父任务为 superseded、水位不前移。显式 cancel 该未完成 run 后用新的 improve_id 再发起即可，不能通过 generic retry 绕开预留。每个 Learning 独立原子发布，多个 Learning 不承诺同时可见。失败子任务保持原 asset/source/job 标识，按现有 `/v1/jobs/{id}/retry` 重试；持久化的阶段结果复用。远端模型响应返回与本地提交之间若进程崩溃，调用可能重试，不承诺模型网络调用 exactly-once。
+
+Improve 的父模型任务完成后，run 可能仍为 publishing。此时对父任务调用既有 cancel 会取消未完成子任务并释放 run，水位不前移；已发布 Learning 保留有效性与可见性。取消的 run/子任务不能 retry；以新的 improve_id 再次显式发起，精确已发布重复不再创建新资产。已完成 run 不能取消。来源永久失效时可采用此取消/新请求路径，不因临时失败静默消费反馈。
+
+Learning 是独立 knowledge，不是 memory identity。每个 chunk 的 locator.learning 保存 conditions 和支持标识，resolve 将条件与片段一起渲染并计入预算；本切片只为 Learning 生成 keyword/vector，不生成可能丢失适用条件的 summary/graph，其他知识的配置不变。普通 knowledge 更新与 restore 不能重写 Learning。
+
+所有支持轮次必须整体有效，包括未被候选引用的实际证据、精确历史版本、根来源及 S2 全部原始成员来源。提议/计划重放/索引/最终提交及 search、get、resolve、graph、原始来源读取均重新检查；候选预算在失效过滤后使用。Learning 支持另一个 Learning 的轮次时进行有界传递校验，最多 64 个不同 Learning/轮次节点，循环或超界失败而非截断接受。撤回立即隐藏，先于异步原生清理。新版本/restore 不会复活历史失效支持。
+
+此闭环的确定性夹具只能证明工程流程；真实模型核验准确率、事实质量与 Agent 收益仍待独立验收。统一 EvidenceBundle 与真实 Agent 对照属于后续 S4。

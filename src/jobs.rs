@@ -26,6 +26,7 @@ pub enum JobKind {
     AmlIngest,
     SemanticPublish,
     SemanticExtract,
+    Improve,
     Cleanup,
 }
 impl JobKind {
@@ -38,6 +39,7 @@ impl JobKind {
             Self::AmlIngest => "aml_ingest",
             Self::SemanticPublish => "semantic_publish",
             Self::SemanticExtract => "semantic_extract",
+            Self::Improve => "improve",
             Self::Cleanup => "cleanup",
         }
     }
@@ -54,6 +56,7 @@ impl TryFrom<&str> for JobKind {
             "aml_ingest" => Ok(Self::AmlIngest),
             "semantic_publish" => Ok(Self::SemanticPublish),
             "semantic_extract" => Ok(Self::SemanticExtract),
+            "improve" => Ok(Self::Improve),
             "cleanup" => Ok(Self::Cleanup),
             _ => Err(AppError::Invalid("unknown job operation".into())),
         }
@@ -121,6 +124,13 @@ pub enum JobPayload {
         extraction_model: String,
         embedding_profile: Option<String>,
     },
+    Improve {
+        session_id: Uuid,
+        improve_id: Uuid,
+        extraction_profile: String,
+        extraction_model: String,
+        embedding_profile: Option<String>,
+    },
     Cleanup {
         target: String,
         id: Uuid,
@@ -177,6 +187,22 @@ impl JobPayload {
                 }
                 Ok(())
             }
+            Self::Improve {
+                session_id,
+                improve_id,
+                extraction_profile,
+                extraction_model,
+                ..
+            } => {
+                if session_id.is_nil()
+                    || improve_id.is_nil()
+                    || extraction_profile.trim().is_empty()
+                    || extraction_model.trim().is_empty()
+                {
+                    return Err(invalid_payload());
+                }
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -190,6 +216,7 @@ impl JobPayload {
             Self::AmlIngest { .. } => JobKind::AmlIngest,
             Self::SemanticPublish { .. } => JobKind::SemanticPublish,
             Self::SemanticExtract { .. } => JobKind::SemanticExtract,
+            Self::Improve { .. } => JobKind::Improve,
             Self::Cleanup { .. } => JobKind::Cleanup,
         }
     }
@@ -213,6 +240,9 @@ impl JobPayload {
                 embedding_profile, ..
             }
             | Self::SemanticExtract {
+                embedding_profile, ..
+            }
+            | Self::Improve {
                 embedding_profile, ..
             } => embedding_profile.as_deref(),
             Self::AmlIngest {
@@ -242,9 +272,10 @@ impl JobPayload {
             Self::Restore {
                 expected_version, ..
             } => Some(*expected_version),
-            Self::LegacyExtract { .. } | Self::SemanticExtract { .. } | Self::Cleanup { .. } => {
-                None
-            }
+            Self::LegacyExtract { .. }
+            | Self::SemanticExtract { .. }
+            | Self::Improve { .. }
+            | Self::Cleanup { .. } => None,
         }
     }
 
@@ -387,6 +418,17 @@ mod tests {
                 json!({"schema_version":1,"targets":[target],"properties":[property],"extractor":"semantic-capture:v1","extraction_profile":"extract:v1","extraction_model":"model","embedding_profile":null}),
             ),
             (
+                JobPayload::Improve {
+                    session_id: Uuid::from_u128(1),
+                    improve_id: Uuid::from_u128(2),
+                    extraction_profile: "improve:v1".into(),
+                    extraction_model: "model".into(),
+                    embedding_profile: None,
+                },
+                "improve",
+                json!({"schema_version":1,"session_id":"00000000-0000-0000-0000-000000000001","improve_id":"00000000-0000-0000-0000-000000000002","extraction_profile":"improve:v1","extraction_model":"model","embedding_profile":null}),
+            ),
+            (
                 JobPayload::Cleanup {
                     target: "event".into(),
                     id: Uuid::from_u128(1),
@@ -400,7 +442,7 @@ mod tests {
     #[test]
     fn all_job_variants_preserve_golden_version_one_payloads() {
         let fixtures = fixtures();
-        assert_eq!(fixtures.len(), 9);
+        assert_eq!(fixtures.len(), 10);
         for (typed, operation, golden) in fixtures {
             let (kind, encoded) = typed.clone().encode().unwrap();
             assert_eq!(kind.as_str(), operation);
@@ -456,6 +498,15 @@ mod tests {
                 ][..],
             ),
             ("cleanup", &["target", "id"][..]),
+            (
+                "improve",
+                &[
+                    "session_id",
+                    "improve_id",
+                    "extraction_profile",
+                    "extraction_model",
+                ][..],
+            ),
         ] {
             let golden = fixtures()
                 .into_iter()

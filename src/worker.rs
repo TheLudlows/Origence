@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{sync::atomic::Ordering, time::Duration};
 use uuid::Uuid;
+mod improve;
 mod semantic_capture;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -84,6 +85,8 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> R
         return Err(AppError::Conflict("stale or cancelled job".into()));
     }
     tx.valid_targets(claim.asset, claim.source).await?;
+    tx.guard_learning_publication(claim.asset, claim.source)
+        .await?;
     if let JobPayload::SemanticPublish {
         parser,
         semantic_members,
@@ -94,6 +97,8 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> R
             return Err(AppError::Invalid("unsupported semantic parser".into()));
         }
         for member in semantic_members {
+            tx.require_learning_source_visible(member.source_event_id)
+                .await?;
             let source = tx
                 .event_content(member.source_event_id, true)
                 .await?
@@ -108,7 +113,13 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> R
     if payload.kind() == JobKind::SemanticExtract {
         semantic_capture::guard_capture(tx, claim, payload).await?;
     }
-    if !matches!(payload.kind(), JobKind::Extract | JobKind::SemanticExtract) {
+    if payload.kind() == JobKind::Improve {
+        improve::guard_improve(tx, claim, payload).await?;
+    }
+    if !matches!(
+        payload.kind(),
+        JobKind::Extract | JobKind::SemanticExtract | JobKind::Improve
+    ) {
         let current = tx
             .asset_current_version(claim.asset.ok_or(AppError::NotFound)?)
             .await?;
@@ -193,6 +204,10 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         tx.commit().await?;
         return semantic_capture::process(service, claim, payload).await;
     }
+    if payload.kind() == JobKind::Improve {
+        tx.commit().await?;
+        return improve::process(service, claim, payload).await;
+    }
     if payload.kind() == JobKind::Extract {
         // A saved plan replays without re-calling the extraction model.
         if let Some(saved) = claim
@@ -259,12 +274,47 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         let publication = prepare(service, claim, payload, profile, drafts).await?;
         return publish_prepared(service, claim, payload, publication).await;
     }
+    let learning_metadata = tx
+        .learning_publication_metadata(claim.asset.ok_or(AppError::NotFound)?)
+        .await?;
     let saved = claim
         .payload
         .get("publication")
-        .filter(|p| p["generation"] == claim.generation);
+        .filter(|p| p["generation"] == claim.generation || learning_metadata.is_some());
     let publication = if let Some(saved) = saved {
-        let p: Publication = decode(saved.clone())?;
+        let mut p: Publication = decode(saved.clone())?;
+        if let Some(metadata) = learning_metadata {
+            // Learning publication is immutable and retries keep the accepted
+            // model plan. Explicit retry advances the queue generation, so
+            // rebind only native object IDs/ledger ownership to that generation.
+            // Other operations deliberately retain their existing replay rules.
+            if p.profile != profile
+                || p.graph.is_some()
+                || p.memories.len() != 1
+                || p.memories[0].asset != claim.asset.ok_or(AppError::NotFound)?
+                || p.memories[0].expected_version != payload.expected_version()
+                || p.memories[0].chunks.is_empty()
+                || p.memories[0]
+                    .chunks
+                    .iter()
+                    .any(|c| c.chunk.locator["learning"] != metadata || !c.summary.is_empty())
+            {
+                return Err(AppError::Invalid(
+                    "invalid learning publication plan".into(),
+                ));
+            }
+            if p.generation != claim.generation {
+                p.generation = claim.generation;
+                for (memory_index, memory) in p.memories.iter_mut().enumerate() {
+                    for (ordinal, chunk) in memory.chunks.iter_mut().enumerate() {
+                        chunk.id = graph::entity_id(&format!(
+                            "chunk:{}:{}:{}:{}",
+                            claim.job_id, claim.generation, memory_index, ordinal
+                        ));
+                    }
+                }
+            }
+        }
         tx.commit().await?;
         p
     } else {
@@ -345,6 +395,7 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             JobPayload::LegacyExtract { .. }
             | JobPayload::IdentifiedExtract { .. }
             | JobPayload::SemanticExtract { .. }
+            | JobPayload::Improve { .. }
             | JobPayload::Cleanup { .. } => {
                 return Err(AppError::Invalid("invalid publication operation".into()));
             }
@@ -375,6 +426,17 @@ async fn prepare(
     if drafts.iter().any(|d| d.chunks.is_empty()) {
         return Err(AppError::Conflict("no source chunks available".into()));
     }
+    // Applicability must survive normal knowledge chunking. Every Learning
+    // chunk keeps the same immutable conditions/provenance, including chunks
+    // that do not contain the source's leading conditions text.
+    let mut tx = service.read(&auth(claim), permission(payload)).await?;
+    guard(&mut tx, claim, payload).await?;
+    let mut learning_metadata = Vec::with_capacity(drafts.len());
+    for draft in &drafts {
+        learning_metadata.push(tx.learning_publication_metadata(draft.asset).await?);
+    }
+    tx.commit().await?;
+    let has_learning = learning_metadata.iter().any(Option::is_some);
     let terms = if matches!(
         payload.kind(),
         JobKind::AmlIngest | JobKind::SemanticPublish | JobKind::SemanticExtract
@@ -398,18 +460,27 @@ async fn prepare(
     let mut memories = Vec::new();
     for (memory_index, draft) in drafts.into_iter().enumerate() {
         let mut out = Vec::new();
-        for (ordinal, chunk) in draft.chunks.into_iter().enumerate() {
+        for (ordinal, mut chunk) in draft.chunks.into_iter().enumerate() {
+            if let Some(metadata) = &learning_metadata[memory_index] {
+                chunk
+                    .locator
+                    .as_object_mut()
+                    .ok_or_else(|| AppError::Invalid("invalid learning locator".into()))?
+                    .insert("learning".into(), metadata.clone());
+            }
             let embedding = if profile.is_some() {
                 Some(service.models.embed(&chunk.content).await?)
             } else {
                 None
             };
-            let summary =
-                if payload.kind() == JobKind::Ingest && service.models.extraction_enabled() {
-                    service.models.summarize(&chunk.content).await?
-                } else {
-                    String::new()
-                };
+            let summary = if payload.kind() == JobKind::Ingest
+                && !has_learning
+                && service.models.extraction_enabled()
+            {
+                service.models.summarize(&chunk.content).await?
+            } else {
+                String::new()
+            };
             let id = graph::entity_id(&format!(
                 "chunk:{}:{}:{}:{}",
                 claim.job_id, claim.generation, memory_index, ordinal
@@ -436,7 +507,10 @@ async fn prepare(
         .map(|c| c.chunk.content.as_str())
         .collect::<Vec<_>>()
         .join("");
-    let graph = if payload.kind() == JobKind::Ingest && service.models.extraction_enabled() {
+    let graph = if payload.kind() == JobKind::Ingest
+        && !has_learning
+        && service.models.extraction_enabled()
+    {
         Some(service.models.extract_graph(&text).await?)
     } else {
         None
@@ -698,6 +772,9 @@ async fn publish_prepared(
     }
     tx.settle_completed(claim.job_id, "published", &result)
         .await?;
+    for memory in &publication.memories {
+        tx.mark_learning_published(memory.asset).await?;
+    }
     tx.commit().await?;
     Ok(())
 }

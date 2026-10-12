@@ -150,16 +150,23 @@ impl Service {
         if let Some(graph) = graph {
             let all_entities: Vec<Value> = decode(graph["entities"].clone())?;
             let all_relations: Vec<Value> = decode(graph["relations"].clone())?;
-            let mut ids: HashSet<Uuid> = all_entities
-                .iter()
-                .filter(|e| {
-                    terms
-                        .split_whitespace()
-                        .any(|term| e["name"].as_str().unwrap_or("").contains(term))
-                })
-                .take(20)
-                .map(|e| decode(e["id"].clone()))
-                .collect::<Result<_>>()?;
+            let mut ids = HashSet::new();
+            for entity in &all_entities {
+                if !terms
+                    .split_whitespace()
+                    .any(|term| entity["name"].as_str().unwrap_or("").contains(term))
+                {
+                    continue;
+                }
+                let id: Uuid = decode(entity["id"].clone())?;
+                // Withdrawn dependencies must not consume the seed budget.
+                if !tx.graph_evidence(id).await?.is_empty() {
+                    ids.insert(id);
+                    if ids.len() == 20 {
+                        break;
+                    }
+                }
+            }
             let seeds = ids.clone();
             let mut edges = Vec::new();
             for edge in all_relations {
@@ -362,6 +369,9 @@ pub fn render(hits: &[SearchHit], budget: usize) -> (String, Vec<Value>) {
             identity["semantic_status"] = hit.locator["semantic_status"].clone();
             identity["suggested_identity"] = hit.locator["suggested_identity"].clone();
             identity["semantic_value"] = hit.locator["semantic_value"].clone();
+        }
+        if let Some(learning) = hit.locator.get("learning") {
+            identity["learning"] = learning.clone();
         }
         let block = format!("{marker} {}\n{identity}\n{}\n\n", hit.title, hit.content);
         if rendered.len() + block.len() > budget {
