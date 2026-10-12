@@ -33,7 +33,7 @@ RustSec 数据库提交 `7eebec69c352c7191b1f13eb95dd510eeca5d1de`，1296 条公
 审计收集 job 成功仅表示工件生成成功，不能代替审计退出码。
 
 [持久化 JSON 证据](evidence/2026-10-12-mcp-dependency-audit.json) 包含完整审计结果、
-六组 feature tree 及各命令退出码、工具和锁文件哈希、原始 CI ZIP 链接及 SHA-256。
+六组 feature tree 及各命令退出码、工具版本和锁文件哈希、原始 CI ZIP 链接及 SHA-256。
 无默认 features 时 lru 命令退出 101（包不在激活图中），不是构建失败；rsa 两组均无激活路径。
 本轮首次锁文件由 Cargo 生成；最终审计只用 `cargo metadata --locked` 验证，再读取原样锁文件，
 已逐字节确认审计工件与提交版本一致。中间一次重复 update 的工件不作为最终证据。
