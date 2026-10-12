@@ -65,10 +65,10 @@ jobs:
         run: cargo test --locked --no-default-features --lib memory_identity -j 2
       # Keep link memory pressure bounded.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
-      - name: Focused SQLite core contracts
+      - name: Focused SQLite core and visibility contracts
         run: |
           # Integration modules share one executable (autotests = false).
-          for filter in sqlite_ initialization:: storage_recovery::; do
+          for filter in sqlite_ initialization:: storage_recovery:: semantic_memory:: semantic_capture:: session_feedback:: learning_loop:: evidence_bundle::; do
             cargo test --locked --test local -j 2 "$filter"
           done
       - run: cargo test --locked -j 2 --no-fail-fast

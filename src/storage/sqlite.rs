@@ -48,6 +48,7 @@ mod schema;
 mod semantics;
 mod session;
 mod versions;
+mod visibility;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};

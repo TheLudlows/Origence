@@ -104,3 +104,13 @@ knowledge、Learning 独立候选，session 默认关闭且仅 writer。条件/�
 非部署 gold 诊断。真实模型评测 NOT_RUN，fixture 不证明任务收益。此前约 84 KB 合成诊断工件上传仍待完成，本轮结构整理不上传该工件；不将其视为真实模型验收。无新后端、
 迁移、Worker、编排器或 AML 重启。完整边界见 [S4 契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)
 与 [验证状态](VALIDATION.md#2026-10-12--s4-evidencebundle-工程实现与独立-agent-框架)。
+
+
+## 结构治理：SQLite 通用可见性
+
+在 PR #45 既有职责拆分之后，私有 visibility 模块收口当前 chunk 的 scope、
+current-version、未删除、活动版本根与 S2 本地支持谓词，以及读取/归档共享的
+精确版本根规则。当前检索与历史归档分开；Learning 完整依赖闭包、原始 session
+权限、图所有权与原始 S2 成员来源继续保持专用检查。没有统一成万能可见性布尔值，
+没有新增 schema、迁移、后端或产品功能。执行状态以本阶段精确 head 的 PR CI
+和 VALIDATION 为准，不能沿用前一 PR 的通过结论。

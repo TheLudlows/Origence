@@ -1,4 +1,5 @@
 //! Assets, immutable versions, chunks and publication projections.
+use super::visibility::ACTIVE_ASSET_VERSION;
 use super::*;
 
 impl SqliteTx {
@@ -70,11 +71,7 @@ impl SqliteTx {
         version: Option<i32>,
     ) -> StorageResult<Value> {
         let row: Option<(Uuid, String, String, i32, String, Uuid, Option<i32>, String)> = sqlx::query_as(
-            "SELECT a.id, a.kind, v.title, v.version, v.content, v.source_event_id, v.restored_from, v.content_hash \
-             FROM oc_assets a \
-             JOIN oc_versions v ON v.asset_id = a.id AND v.tenant_id = a.tenant_id AND v.workspace_id = a.workspace_id AND v.version = COALESCE(?, a.current_version) \
-             JOIN oc_events e ON e.id = v.source_event_id AND e.tenant_id = v.tenant_id AND e.workspace_id = v.workspace_id \
-             WHERE a.id = ? AND a.tenant_id = ? AND a.workspace_id = ? AND NOT a.deleted AND e.state = 'active'",
+            &format!("SELECT a.id, a.kind, v.title, v.version, v.content, v.source_event_id, v.restored_from, v.content_hash {ACTIVE_ASSET_VERSION}"),
         )
         .bind(version)
         .bind(id)

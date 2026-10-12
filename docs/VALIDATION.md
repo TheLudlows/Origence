@@ -450,3 +450,30 @@ S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
 
 本次不进行真实 Agent 质量验收（NOT_RUN）、不上传此前待上传合成诊断工件，
 不变更 DEPENDENCY_AUDIT 的保留风险；通用可见性规则收口是后续独立步骤。
+
+
+## 2026-10-12 — Shared SQLite visibility layers
+
+General SQLite visibility consolidation follows the core split at main
+`1a76e293d63cbc27a9d0b714f031b6d35580b846`. Shared fixed-alias SQL now owns
+current chunk scope/current-version/deletion/root predicates, local S2 snapshot
+support, and active exact-version asset roots. Search and context share the base
+current-row predicate; context retains route filtering before locator validation.
+Asset reads and archives share the version-root predicate, with explicit history
+remaining valid after a newer version is published.
+
+Specialized rules remain separate: exact graph artifact type and source/version
+ownership; original S2 member provenance; writer-only raw session reads; iterative
+Learning closure/cycle/64-node bounds and the accepted exact publishing-root
+exception; cleanup and low-level event reads. No schema, dependency, API,
+migration, ranking, or authorization-envelope change is intended.
+
+The editing environment has no Rust toolchain. Local Rust formatting, Clippy and
+tests are NOT_RUN here. Independent differential SQLite 3.53.1 review compared 225 locator cases,
+50,625 ordered two-chunk combinations and four out-of-scope malformed cases.
+The old and shared predicates agreed for malformed JSON, missing/null/scalar/
+object supports, inactive/missing/cross-workspace sources and EXISTS early
+termination. This is supplementary SQL evidence, not Rust acceptance. Exact-head PR CI must supply
+`cargo fmt --all -- --check`, strict default/no-default Clippy, focused contracts
+through the existing single `local` test target, and both full suites before merge.
+Existing HTTP/AML recovery/evaluation steps remain unchanged.
