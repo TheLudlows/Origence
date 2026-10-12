@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "arms": [
+    "no_memory",
+    "simple_hybrid",
+    "evidence_bundle",
+    "gold_diagnostic"
+  ],
+  "seed": 41012,
+  "max_model_calls": 4,
+  "max_tool_calls": 3,
+  "max_context_bytes": 24000,
+  "max_evidence_bytes": 7000,
+  "max_output_tokens": 512,
+  "max_response_bytes": 65536,
+  "http_timeout_seconds": 60,
+  "retrieval_limit": 12,
+  "temperature": 0
+}

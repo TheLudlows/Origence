@@ -4,15 +4,11 @@
 
 ## 2026-10-12 第四阶段：显式 Improve → Learning
 
-基于 main `be16bb1c2a273ec632e459abd277bd019fb36821`。新增确定性闭环、持久化阶段重放、principal-qualified 反馈序列、条件限制、子任务重试/取消和传递依赖撤回回归；不使用真实 provider，不据此声明语义质量或 Agent 收益。本节按实际提交记录执行证据，最终 PR head 的适用 CI 以 PR 检查记录为准。
+基于 main `be16bb1c2a273ec632e459abd277bd019fb36821`。新增确定性闭环、持久化阶段重放、principal-qualified 反馈序列、条件限制、子任务重试/取消和传递依赖撤回回归；不使用真实 provider，不据此声明语义质量或 Agent 收益。当前为实现检查记录，最终 PR head 的 CI 结果仍待补充。
 
 云端编辑环境没有 cargo/rustc/rustfmt，未在本地执行 Rust 编译、格式、Clippy 或测试。Python SQLite 完整新库 DDL 执行和 foreign_key_check 通过；静态检查不替代实际 Rust 验证。保留现有 CI：PR fast-check/Linux native，Windows 仅 main；不恢复已取消的 macOS/container jobs。
 
 [PR #43](https://github.com/TheLudlows/Origence/pull/43) 初始 head `60e7a0cb3d7c72d9c13f539fe11656004db71f9a` 的 [CI run 38202258799](https://github.com/TheLudlows/Origence/actions/runs/38202258799)：Linux 默认 all-target Clippy（warnings denied）通过，59 项库测试通过，集成测试 155 通过/3 失败。三个失败为夹具与契约不一致：reader 支持 quote 已脱敏、撤回后仍允许读取安全运行管理信息、已撤销 AuthContext 通过 Service 调用返回 Forbidden。夹具已按现有权限及文档修正；后续新增并发去重、循环/闭包边界、候选预算回归仍须最终 head 实际验证。fast-check 在 rustfmt 失败，按 CI 精确格式差异调整。该初始失败记录不代表最终通过。
-
-修正后 head `6fe09f5348760e074922c4bc08b158f063b35117` 的 [CI run 38202848957](https://github.com/TheLudlows/Origence/actions/runs/38202848957) Linux native 全部成功：Rust 1.98.0、严格 all-target Clippy、60 项库测试、164 项集成测试（含 19 项 Learning 回归）、debug build/HTTP smoke、受控 AML 进程恢复、关键词种子评估及工件归档。fast-check 仅剩新增测试中的 9 个 rustfmt 差异，已逐项应用 CI 生成的精确格式调整；这不替代最终格式提交的 PR 检查。独立审查确认三处夹具修正符合公开契约，未减弱撤回、权限或脱敏断言。候选放大回归覆盖 keyword 的 100 候选饱和；vector/hybrid 证明普通撤回，不宣称放大 native-vector top-k 的饱和覆盖。
-
-本阶段工程闭环已交付；真实模型语义质量、事实核验准确率与 Agent 收益仍未验收。
 
 ## 2026-10-12 第三阶段：SessionTurn 与幂等 Feedback
 
@@ -400,3 +396,31 @@ PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝
 
 收尾文档本地检查：13 份 Markdown 严格 UTF-8、替换字符与行尾空白通过，190 个本地链接（含 47 个锚点）有效，git diff --check 退出码 0；src/tests/tools/evals/Cargo.toml/Cargo.lock 无差异。仅文档与收尾证据变更，不重复本地 Rust fmt/Clippy/代码测试；本次 PR CI 单独核对。
 
+
+## 2026-10-12 — S4 EvidenceBundle 工程实现与独立 Agent 框架
+
+基线：Improve/Learning [PR #43](https://github.com/TheLudlows/Origence/pull/43)
+已合入 main `55b5d8792445058fa0bb6e948a853b73f5c632da`。新增只读上下文、独立路由、
+完整可见性复核、条件/冲突/UTF-8 预算回归，以及独立冻结合成数据和有界模型/工具
+Agent 框架。具体范围与非目标见 [S4 契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)。
+
+当前云执行器未安装 Cargo/rustfmt，故本地 Rust fmt/Clippy/测试 **NOT_RUN**；
+不得将静态检查或 fixture 当作 Rust 验收。新增关系型查询已用五份权威 fresh-schema
+在 Python SQLite 中逐条 EXPLAIN 编译，并通过 integrity_check。最终 Rust 验证以
+本 PR 最终 head 的适用 fast-check/Linux CI 和独立审查为准，main CI 不作为等待门槛。
+
+真实 Agent 评测 **NOT_RUN**：当前执行器无可用 torch/transformers 与已验证模型
+缓存；未调用付费远程模型、未下载模型、未发送私有数据。模型、数据绑定和所需
+授权确定后另行执行。fixture/模拟器只验证框架，不证明真实 Agent 收益、引用
+蕴含性或成本优势。S4 工程交付不等于 S4 产品效果完整验收。
+
+S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
+33 项 S4 单测通过（无模型/网络调用）；冻结 10 个新合成任务的四组 fixture 共
+40/40 有界交互循环完成。原始轨迹、全部任务分母、未知成本、输入/代码配置哈希
+和限制见 [S4 框架记录](../evals/s4/README.md)。原始结果已本地保留，公开结果工件
+等待明确发布授权，暂未随本 PR 上传；这些数字仅为框架执行记录，不是产品检索/真实 Agent 质量分数。
+
+工程 PR：[PR #44](https://github.com/TheLudlows/Origence/pull/44)。初始 head
+`785c629c` 的最低 Rust 身份测试、完整目标 Clippy 通过；格式检查发现格式差异，
+已按 CI rustfmt 精确输出修正。最终新增 race 测试、Python 框架和格式修正仍须
+同一最终 head 的完整适用 PR CI 才能合入；不得把初始检查当作最终通过证据。

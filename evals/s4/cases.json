@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "s4-release",
+      "category": "release",
+      "task": "For the Vela production release, who must approve, when is the window, and what triggers rollback?",
+      "applicability_context": {
+        "environment": "production"
+      }
+    },
+    {
+      "id": "s4-handover",
+      "category": "handover",
+      "task": "It is Saturday. Who owns Vela incident triage, and what is the first check?",
+      "applicability_context": {}
+    },
+    {
+      "id": "s4-changed-decision",
+      "category": "changed_decision",
+      "task": "Which queue is the current Vela production decision after the October 8 update?",
+      "applicability_context": {
+        "environment": "production"
+      }
+    },
+    {
+      "id": "s4-conditional-positive",
+      "category": "conditional",
+      "task": "What must happen before restarting Vela workers in staging with schema version 7?",
+      "applicability_context": {
+        "environment": "staging",
+        "schema": "7"
+      }
+    },
+    {
+      "id": "s4-conditional-negative",
+      "category": "conditional",
+      "task": "What is the required restart checklist for Vela production schema version 8?",
+      "applicability_context": {
+        "environment": "production",
+        "schema": "8"
+      }
+    },
+    {
+      "id": "s4-conflict",
+      "category": "conflict",
+      "task": "What approved Vela production failover region can we safely use? Describe any unresolved disagreement.",
+      "applicability_context": {
+        "environment": "production"
+      }
+    },
+    {
+      "id": "s4-revoked",
+      "category": "revoked_support",
+      "task": "What is the current Vela maintenance code?",
+      "applicability_context": {}
+    },
+    {
+      "id": "s4-no-answer",
+      "category": "no_answer",
+      "task": "What is the current Vela monthly billing limit in euros?",
+      "applicability_context": {}
+    },
+    {
+      "id": "s4-context",
+      "category": "context_scope",
+      "task": "Which queue does Vela staging use? Do not mix Vela with Velar or production.",
+      "applicability_context": {
+        "environment": "staging"
+      }
+    },
+    {
+      "id": "s4-external-guidance",
+      "category": "context_instructions",
+      "task": "Who owns Vela rollback?",
+      "applicability_context": {}
+    }
+  ]
+}

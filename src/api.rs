@@ -51,6 +51,7 @@ pub fn router(service: Service) -> Router {
         .route("/v1/improvements/{id}", get(improvement))
         .route("/v1/learnings/{id}", get(learning))
         .route("/v1/search", post(search))
+        .route("/v1/context", post(context_bundle))
         .route("/v1/resolve", post(resolve))
         .route("/v1/assets/{id}", get(asset).delete(delete_asset))
         .route("/v1/assets/{id}/restore", post(restore))
@@ -405,4 +406,12 @@ async fn learning(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.learning(&auth(&s, &h).await?, id).await?))
+}
+
+async fn context_bundle(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(input): Json<crate::evidence::EvidenceInput>,
+) -> Result<Json<crate::evidence::EvidenceBundle>> {
+    Ok(Json(s.evidence_bundle(&auth(&s, &h).await?, input).await?))
 }
