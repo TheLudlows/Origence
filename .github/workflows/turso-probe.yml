@@ -1,0 +1,85 @@
+name: Turso T0 compatibility probe
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/turso-probe/**'
+      - '.github/workflows/turso-probe.yml'
+      - 'src/storage/*schema.sql'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: turso-t0-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  turso-t0:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_BUILD_JOBS: 2
+    defaults:
+      run:
+        working-directory: tools/turso-probe
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - name: Resolve isolated probe dependencies
+        id: resolve
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          {
+            git rev-parse HEAD
+            rustc --version
+            cargo --version
+          } | tee evidence/environment.txt
+          if test -f Cargo.lock; then
+            cargo metadata --locked --format-version 1 > evidence/metadata.json
+          else
+            # Bootstrap only. Archive Cargo-generated lock; never hand-edit it.
+            cargo generate-lockfile 2>&1 | tee evidence/resolve.log
+            cargo metadata --locked --format-version 1 > evidence/metadata.json
+          fi
+          cp Cargo.lock evidence/Cargo.lock
+      - name: Format and record any required patch
+        id: format
+        if: ${{ !cancelled() && steps.resolve.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git diff -- tests/contracts.rs > evidence/rustfmt.patch
+          cp tests/contracts.rs evidence/contracts.rs
+          git diff --exit-code -- tests/contracts.rs
+      - name: Clippy
+        if: ${{ !cancelled() && steps.resolve.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          cargo clippy --locked --all-targets -- -D warnings 2>&1 | tee evidence/clippy.log
+      - name: Run isolated contracts
+        if: ${{ !cancelled() && steps.resolve.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          cargo test --locked --test contracts --no-fail-fast -- --nocapture --test-threads=1 2>&1 | tee evidence/tests.log
+      - name: Require a checked-in dependency lock before acceptance
+        if: ${{ !cancelled() && steps.resolve.outcome == 'success' }}
+        run: |
+          git ls-files --error-unmatch Cargo.lock || {
+            echo 'T0 remains draft: review and commit the Cargo-generated lock from this run.'
+            exit 1
+          }
+      - name: Preserve probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: turso-t0-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tools/turso-probe/evidence/
+          if-no-files-found: warn
+          retention-days: 14
