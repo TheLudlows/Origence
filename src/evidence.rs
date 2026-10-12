@@ -1,7 +1,7 @@
 //! Opt-in, bounded, read-only context. Visibility is not factual verification.
-use std::collections::BTreeSet;
 #[cfg(any(feature = "local-storage", test))]
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -11,7 +11,9 @@ use crate::memory_identity::MemoryIdentity;
 
 pub const CONTEXT_POLICY: &str = "evidence-bundle:utf8-whole-blocks:round-robin:v1";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceRoute {
     Memory,
@@ -20,9 +22,15 @@ pub enum EvidenceRoute {
     Session,
 }
 
-fn default_limit() -> usize { 20 }
-fn default_bytes() -> usize { 4000 }
-fn default_mode() -> String { "keyword".into() }
+fn default_limit() -> usize {
+    20
+}
+fn default_bytes() -> usize {
+    4000
+}
+fn default_mode() -> String {
+    "keyword".into()
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -35,8 +43,18 @@ pub struct RouteBudget {
 }
 
 fn default_routes() -> Vec<RouteBudget> {
-    [EvidenceRoute::Memory, EvidenceRoute::Knowledge, EvidenceRoute::Learning]
-        .into_iter().map(|route| RouteBudget { route, limit: default_limit(), max_bytes: default_bytes() }).collect()
+    [
+        EvidenceRoute::Memory,
+        EvidenceRoute::Knowledge,
+        EvidenceRoute::Learning,
+    ]
+    .into_iter()
+    .map(|route| RouteBudget {
+        route,
+        limit: default_limit(),
+        max_bytes: default_bytes(),
+    })
+    .collect()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
@@ -78,20 +96,36 @@ impl EvidenceInput {
         }
         let mut seen = BTreeSet::new();
         for route in &self.routes {
-            if !seen.insert(route.route) || !(1..=100).contains(&route.limit) || route.max_bytes > 32000 {
+            if !seen.insert(route.route)
+                || !(1..=100).contains(&route.limit)
+                || route.max_bytes > 32000
+            {
                 return Err("route budget invalid");
             }
         }
-        if self.memory_identity.as_ref().is_some_and(|i| i.validate().is_err()) {
+        if self
+            .memory_identity
+            .as_ref()
+            .is_some_and(|i| i.validate().is_err())
+        {
             return Err("memory identity invalid");
         }
-        if self.applicability_context.len() > 32 || self.applicability_context.iter().any(|s| s.trim().is_empty() || s.len() > 256 || s.contains('\0')) {
+        if self.applicability_context.len() > 32
+            || self
+                .applicability_context
+                .iter()
+                .any(|s| s.trim().is_empty() || s.len() > 256 || s.contains('\0'))
+        {
             return Err("applicability context invalid");
         }
-        if self.session_id.is_some_and(|id| id.is_nil()) || self.exclude_session_id.is_some_and(|id| id.is_nil()) {
+        if self.session_id.is_some_and(|id| id.is_nil())
+            || self.exclude_session_id.is_some_and(|id| id.is_nil())
+        {
             return Err("session identifier invalid");
         }
-        if (self.session_id.is_some() || self.exclude_session_id.is_some()) && !seen.contains(&EvidenceRoute::Session) {
+        if (self.session_id.is_some() || self.exclude_session_id.is_some())
+            && !seen.contains(&EvidenceRoute::Session)
+        {
             return Err("session filters require the session route");
         }
         Ok(())
@@ -232,16 +266,33 @@ fn units(mut items: Vec<EvidenceItem>) -> Vec<Unit> {
     }
     let mut identities: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (index, item) in unique.iter().enumerate() {
-        if item.single_valued && item.semantic_value.is_some() && matches!(item.semantic_status.as_deref(), Some("confirmed" | "conflict")) && let Some(identity) = &item.identity {
-            identities.entry(serde_json::to_string(identity).expect("identity is JSON")).or_default().push(index);
+        if item.single_valued
+            && item.semantic_value.is_some()
+            && matches!(
+                item.semantic_status.as_deref(),
+                Some("confirmed" | "conflict")
+            )
+            && let Some(identity) = &item.identity
+        {
+            identities
+                .entry(serde_json::to_string(identity).expect("identity is JSON"))
+                .or_default()
+                .push(index);
         }
     }
     let mut grouped = BTreeSet::new();
     let mut result = Vec::new();
     for indexes in identities.values() {
-        let values: BTreeSet<String> = indexes.iter().map(|&i| unique[i].semantic_value.as_ref().unwrap().to_string()).collect();
-        let explicit_conflict = indexes.iter().any(|&i| unique[i].semantic_status.as_deref() == Some("conflict"));
-        if values.len() < 2 && !explicit_conflict { continue; }
+        let values: BTreeSet<String> = indexes
+            .iter()
+            .map(|&i| unique[i].semantic_value.as_ref().unwrap().to_string())
+            .collect();
+        let explicit_conflict = indexes
+            .iter()
+            .any(|&i| unique[i].semantic_status.as_deref() == Some("conflict"));
+        if values.len() < 2 && !explicit_conflict {
+            continue;
+        }
         let id = format!("conflict:{}", result.len() + 1);
         let mut members = Vec::new();
         for &index in indexes {
@@ -260,10 +311,20 @@ fn units(mut items: Vec<EvidenceItem>) -> Vec<Unit> {
                 "Unresolved explicit single-value conflict. Preserve all alternatives; do not choose a winner from retrieval rank."
             }.into(),
         };
-        result.push(Unit { route: members[0].route, items: members, conflict: Some(conflict) });
+        result.push(Unit {
+            route: members[0].route,
+            items: members,
+            conflict: Some(conflict),
+        });
     }
     for (index, item) in unique.into_iter().enumerate() {
-        if !grouped.contains(&index) { result.push(Unit { route: item.route, items: vec![item], conflict: None }); }
+        if !grouped.contains(&index) {
+            result.push(Unit {
+                route: item.route,
+                items: vec![item],
+                conflict: None,
+            });
+        }
     }
     result
 }
@@ -272,7 +333,10 @@ fn units(mut items: Vec<EvidenceItem>) -> Vec<Unit> {
 fn block(unit: &Unit) -> String {
     let mut text = String::new();
     if let Some(conflict) = &unit.conflict {
-        text.push_str(&format!("CONFLICT {}: {}\n", conflict.conflict_id, conflict.warning));
+        text.push_str(&format!(
+            "CONFLICT {}: {}\n",
+            conflict.conflict_id, conflict.warning
+        ));
     }
     for item in &unit.items {
         // JSON escaping keeps embedded newlines/quotes in evidence metadata data.
@@ -283,7 +347,13 @@ fn block(unit: &Unit) -> String {
             "provenance":item.provenance,"conflict_id":item.conflict_id,
             "archive_roundtrip":item.archive_roundtrip
         });
-        text.push_str(&format!("[{}] {}\n{}\n{}\n\n", item.evidence_id, serde_json::to_string(&item.title).unwrap(), metadata, item.content));
+        text.push_str(&format!(
+            "[{}] {}\n{}\n{}\n\n",
+            item.evidence_id,
+            serde_json::to_string(&item.title).unwrap(),
+            metadata,
+            item.content
+        ));
     }
     text
 }
@@ -291,15 +361,24 @@ fn block(unit: &Unit) -> String {
 #[cfg(any(feature = "local-storage", test))]
 pub(crate) fn render(bundle: &mut EvidenceBundle, candidates: Vec<EvidenceItem>) {
     let mut queues: BTreeMap<EvidenceRoute, std::collections::VecDeque<Unit>> = BTreeMap::new();
-    for unit in units(candidates) { queues.entry(unit.route).or_default().push_back(unit); }
+    for unit in units(candidates) {
+        queues.entry(unit.route).or_default().push_back(unit);
+    }
     // Equal round-robin opportunity; ceilings are caps, not quality weights.
     loop {
         let mut progressed = false;
         for accounting in &mut bundle.routes {
-            let Some(unit) = queues.get_mut(&accounting.route).and_then(|q| q.pop_front()) else { continue; };
+            let Some(unit) = queues
+                .get_mut(&accounting.route)
+                .and_then(|q| q.pop_front())
+            else {
+                continue;
+            };
             progressed = true;
             let text = block(&unit);
-            if bundle.rendered_context.len() + text.len() > bundle.budget || accounting.used_bytes + text.len() > accounting.max_bytes {
+            if bundle.rendered_context.len() + text.len() > bundle.budget
+                || accounting.used_bytes + text.len() > accounting.max_bytes
+            {
                 accounting.omitted_for_budget += unit.items.len();
                 bundle.omitted_conflict_groups += usize::from(unit.conflict.is_some());
                 continue;
@@ -308,12 +387,21 @@ pub(crate) fn render(bundle: &mut EvidenceBundle, candidates: Vec<EvidenceItem>)
             accounting.retained += unit.items.len();
             bundle.rendered_context.push_str(&text);
             bundle.items.extend(unit.items);
-            if let Some(conflict) = unit.conflict { bundle.conflicts.push(conflict); }
+            if let Some(conflict) = unit.conflict {
+                bundle.conflicts.push(conflict);
+            }
         }
-        if !progressed { break; }
+        if !progressed {
+            break;
+        }
     }
     bundle.used_bytes = bundle.rendered_context.len();
-    if bundle.omitted_conflict_groups > 0 { bundle.warnings.push("Conflict groups omitted whole due to byte ceilings; no side was rendered alone.".into()); }
+    if bundle.omitted_conflict_groups > 0 {
+        bundle.warnings.push(
+            "Conflict groups omitted whole due to byte ceilings; no side was rendered alone."
+                .into(),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -329,24 +417,63 @@ mod tests {
             title: "中文 🦀".into(),
             content: format!("中文 🦀 {value}"),
             provenance: EvidenceProvenance::AssetChunk {
-                chunk_id: Uuid::from_u128(id), asset_id: Uuid::from_u128(id), asset_version: 2,
-                source_event_id: Uuid::from_u128(id + 10), source_version: 1,
-                version_root_source_event_id: Uuid::from_u128(id + 20), locator: serde_json::json!({"byte_start":0,"byte_end":10}),
+                chunk_id: Uuid::from_u128(id),
+                asset_id: Uuid::from_u128(id),
+                asset_version: 2,
+                source_event_id: Uuid::from_u128(id + 10),
+                source_version: 1,
+                version_root_source_event_id: Uuid::from_u128(id + 20),
+                locator: serde_json::json!({"byte_start":0,"byte_end":10}),
             },
-            identity: Some(MemoryIdentity { subject: MemorySubject { kind: SubjectKind::Project, stable_id: "Atlas".into() }, predicate: "runtime".into(), context: BTreeMap::new() }),
-            normalization_status: "explicit_identity".into(), semantic_status: Some("confirmed".into()),
-            semantic_value: Some(serde_json::json!(value)), learning: None, conditions: vec!["生产 🦀".into()],
-            applicability: "unverified".into(), score: 1.0, score_kind: "rrf60".into(), conflict_id: None,
-            archive_roundtrip: "chunk_supported".into(), single_valued: true,
+            identity: Some(MemoryIdentity {
+                subject: MemorySubject {
+                    kind: SubjectKind::Project,
+                    stable_id: "Atlas".into(),
+                },
+                predicate: "runtime".into(),
+                context: BTreeMap::new(),
+            }),
+            normalization_status: "explicit_identity".into(),
+            semantic_status: Some("confirmed".into()),
+            semantic_value: Some(serde_json::json!(value)),
+            learning: None,
+            conditions: vec!["生产 🦀".into()],
+            applicability: "unverified".into(),
+            score: 1.0,
+            score_kind: "rrf60".into(),
+            conflict_id: None,
+            archive_roundtrip: "chunk_supported".into(),
+            single_valued: true,
         }
     }
     fn bundle(budget: usize) -> EvidenceBundle {
         EvidenceBundle {
-            tenant_id: Uuid::nil(), workspace_id: Uuid::nil(), policy: CONTEXT_POLICY.into(),
-            validity: "current_visibility_snapshot".into(), conflict_assessment: "explicit_single_value_only".into(),
-            requested_mode: "keyword".into(), effective_mode: "keyword".into(), rendered_context: String::new(),
-            items: vec![], conflicts: vec![], warnings: vec![], budget, used_bytes: 0, omitted_conflict_groups: 0,
-            routes: vec![RouteAccounting { route: EvidenceRoute::Memory, candidate_limit: 20, max_bytes: 32000, candidates: 2, retained: 0, used_bytes: 0, omitted_for_budget: 0, invalidated_before_render: 0, scanned: None, scan_exhausted: None }],
+            tenant_id: Uuid::nil(),
+            workspace_id: Uuid::nil(),
+            policy: CONTEXT_POLICY.into(),
+            validity: "current_visibility_snapshot".into(),
+            conflict_assessment: "explicit_single_value_only".into(),
+            requested_mode: "keyword".into(),
+            effective_mode: "keyword".into(),
+            rendered_context: String::new(),
+            items: vec![],
+            conflicts: vec![],
+            warnings: vec![],
+            budget,
+            used_bytes: 0,
+            omitted_conflict_groups: 0,
+            routes: vec![RouteAccounting {
+                route: EvidenceRoute::Memory,
+                candidate_limit: 20,
+                max_bytes: 32000,
+                candidates: 2,
+                retained: 0,
+                used_bytes: 0,
+                omitted_for_budget: 0,
+                invalidated_before_render: 0,
+                scanned: None,
+                scan_exhausted: None,
+            }],
         }
     }
     #[test]
@@ -403,7 +530,14 @@ mod tests {
             let mut other = item(2, "Python");
             match variant {
                 0 => other.single_valued = false,
-                1 => { other.identity.as_mut().unwrap().context.insert("env".into(), "dev".into()); },
+                1 => {
+                    other
+                        .identity
+                        .as_mut()
+                        .unwrap()
+                        .context
+                        .insert("env".into(), "dev".into());
+                }
                 _ => other.semantic_status = Some("ambiguous".into()),
             }
             let mut b = bundle(32000);
@@ -425,13 +559,25 @@ mod tests {
     }
     #[test]
     fn input_rejects_unknown_fields_duplicate_routes_and_excessive_budgets() {
-        assert!(serde_json::from_value::<EvidenceInput>(serde_json::json!({"query":"Atlas","unknown":true})).is_err());
-        let mut input: EvidenceInput = serde_json::from_value(serde_json::json!({"query":"Atlas"})).unwrap();
+        assert!(
+            serde_json::from_value::<EvidenceInput>(
+                serde_json::json!({"query":"Atlas","unknown":true})
+            )
+            .is_err()
+        );
+        let mut input: EvidenceInput =
+            serde_json::from_value(serde_json::json!({"query":"Atlas"})).unwrap();
         assert!(input.validate().is_ok());
-        assert!(!input.routes.iter().any(|r| r.route == EvidenceRoute::Session));
+        assert!(
+            !input
+                .routes
+                .iter()
+                .any(|r| r.route == EvidenceRoute::Session)
+        );
         input.routes.push(input.routes[0].clone());
         assert!(input.validate().is_err());
-        input.routes.pop(); input.budget = 32001;
+        input.routes.pop();
+        input.budget = 32001;
         assert!(input.validate().is_err());
     }
 }

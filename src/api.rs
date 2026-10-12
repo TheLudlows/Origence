@@ -408,7 +408,6 @@ async fn learning(
     Ok(Json(s.learning(&auth(&s, &h).await?, id).await?))
 }
 
-
 async fn context_bundle(
     State(s): State<Service>,
     h: HeaderMap,

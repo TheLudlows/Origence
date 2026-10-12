@@ -2,12 +2,12 @@ pub mod aml;
 #[cfg(feature = "local-storage")]
 pub mod api;
 pub mod capture;
-pub mod error;
-pub mod evidence;
-#[cfg(feature = "local-storage")]
-mod context_retrieval;
 #[cfg(feature = "local-storage")]
 mod context;
+#[cfg(feature = "local-storage")]
+mod context_retrieval;
+pub mod error;
+pub mod evidence;
 pub mod graph;
 #[cfg(feature = "local-storage")]
 mod improvements;

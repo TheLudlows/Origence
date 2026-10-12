@@ -64,11 +64,23 @@ impl ContextMcp {
         Parameters(input): Parameters<crate::evidence::EvidenceInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
         if let Some(client) = &self.client {
-            return result(client.call(reqwest::Method::POST, "/v1/context", Some(&serde_json::json!(input)), None).await);
+            return result(
+                client
+                    .call(
+                        reqwest::Method::POST,
+                        "/v1/context",
+                        Some(&serde_json::json!(input)),
+                        None,
+                    )
+                    .await,
+            );
         }
         let service = self.service.as_ref().expect("local MCP service");
         let auth = service.auth(&self.token).await.map_err(mcp_error)?;
-        let bundle = service.evidence_bundle(&auth, input).await.map_err(mcp_error)?;
+        let bundle = service
+            .evidence_bundle(&auth, input)
+            .await
+            .map_err(mcp_error)?;
         result(Ok(serde_json::json!(bundle)))
     }
     #[tool(

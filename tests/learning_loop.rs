@@ -1648,7 +1648,6 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
     assert_eq!(cursor, 0);
 }
 
-
 #[tokio::test]
 async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_withdrawal() {
     let (models, fixture, _model) = models().await;
@@ -1672,7 +1671,11 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     });
     let mut roundtrip = None;
     for mode in ["keyword", "vector", "hybrid"] {
-        for conditions in [json!([]), json!(["all production systems"]), json!([CONDITION])] {
+        for conditions in [
+            json!([]),
+            json!(["all production systems"]),
+            json!([CONDITION]),
+        ] {
             let mut request = input.clone();
             request["mode"] = json!(mode);
             request["applicability_context"] = conditions.clone();
@@ -1715,13 +1718,24 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
             }
             assert!(!result.rendered_context.contains(ANSWER));
             assert!(result.rendered_context.contains(CONDITION));
-            assert!(result.rendered_context.contains(&metadata.learning_id.to_string()));
-            assert!(result.rendered_context.contains(&support.turn_id.to_string()));
+            assert!(
+                result
+                    .rendered_context
+                    .contains(&metadata.learning_id.to_string())
+            );
+            assert!(
+                result
+                    .rendered_context
+                    .contains(&support.turn_id.to_string())
+            );
             assert_eq!(result.used_bytes, result.rendered_context.len());
             assert!(result.used_bytes <= result.budget);
             let provenance = &serialized["provenance"];
             assert_eq!(provenance["asset_id"], first_learning["asset_id"]);
-            assert_eq!(provenance["source_event_id"], first_learning["source_event_id"]);
+            assert_eq!(
+                provenance["source_event_id"],
+                first_learning["source_event_id"]
+            );
             assert_eq!(item.archive_roundtrip, "chunk_supported");
             roundtrip = Some(json!({
                 "kind":"chunk","id":provenance["chunk_id"],"chunk_id":provenance["chunk_id"],
@@ -1748,7 +1762,10 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     feedback(&s, &a, &second_turn, Uuid::new_v4()).await;
     fixture.set_mode("second_statement");
     let second_learning = learn(&s, &a, second_session).await;
-    assert_ne!(first_learning["learning_id"], second_learning["learning_id"]);
+    assert_ne!(
+        first_learning["learning_id"],
+        second_learning["learning_id"]
+    );
     let before = s
         .evidence_bundle(&reader, serde_json::from_value(input.clone()).unwrap())
         .await
@@ -1776,9 +1793,14 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     assert_eq!(before.items.len(), 4);
     // Deliberately leave cleanup pending. Full source closure must hide both
     // generations of Learning and both raw archived turns immediately.
-    s.delete(&a, "withdraw-bundle-root", id(&original, "source_event_id"), "event")
-        .await
-        .unwrap();
+    s.delete(
+        &a,
+        "withdraw-bundle-root",
+        id(&original, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
     for mode in ["keyword", "vector", "hybrid"] {
         for (auth, mut request) in [(&reader, input.clone()), (&a, all_routes.clone())] {
             request["mode"] = json!(mode);

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "dataset_id": "s4-synthetic-v1",
+  "created_utc": "2026-10-12T04:36:00Z",
+  "phase": "frozen_before_any_inference",
+  "original_case_policy": "New S4 synthetic tasks; no S1/AML observed questions reused. Author-created and not independently human-reviewed.",
+  "files": {
+    "corpus.json": "b80b3709857197ab8f6bc428e114a4a6769d53b6f9bef82039ca65ff7cb05094",
+    "cases.json": "be66a0e559fa460975b0f77dd7e2732a05c7f436d6e08c8d37ebc2d04afb2ba6",
+    "labels.json": "a7a0d167da30ae25d895799cdcdfca371446188f091ff97a16b47b6da6e5b1f7",
+    "config.json": "6aa003112625d0f30012da9fcc910c2ee785f0751862e99099a8a16572d05abf"
+  }
+}

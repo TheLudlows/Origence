@@ -413,3 +413,14 @@ Agent 框架。具体范围与非目标见 [S4 契约](superpowers/plans/2026-10
 缓存；未调用付费远程模型、未下载模型、未发送私有数据。模型、数据绑定和所需
 授权确定后另行执行。fixture/模拟器只验证框架，不证明真实 Agent 收益、引用
 蕴含性或成本优势。S4 工程交付不等于 S4 产品效果完整验收。
+
+S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
+33 项 S4 单测通过（无模型/网络调用）；冻结 10 个新合成任务的四组 fixture 共
+40/40 有界交互循环完成。原始轨迹、全部任务分母、未知成本、输入/代码配置哈希
+和限制见 [S4 框架记录](../evals/s4/README.md)。原始结果已本地保留，公开结果工件
+等待明确发布授权，暂未随本 PR 上传；这些数字仅为框架执行记录，不是产品检索/真实 Agent 质量分数。
+
+工程 PR：[PR #44](https://github.com/TheLudlows/Origence/pull/44)。初始 head
+`785c629c` 的最低 Rust 身份测试、完整目标 Clippy 通过；格式检查发现格式差异，
+已按 CI rustfmt 精确输出修正。最终新增 race 测试、Python 框架和格式修正仍须
+同一最终 head 的完整适用 PR CI 才能合入；不得把初始检查当作最终通过证据。

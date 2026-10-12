@@ -1,6 +1,6 @@
 #![cfg(feature = "local-storage")]
 
-use axum::{Json, Router, routing::post};
+use axum::{Json, Router, extract::State, routing::post};
 use origence::{
     error::AppError,
     evidence::EvidenceInput,
@@ -11,7 +11,15 @@ use origence::{
     worker,
 };
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 fn id(value: &Value, field: &str) -> Uuid {
@@ -70,8 +78,7 @@ async fn knowledge(s: &Service, a: &AuthContext, text: &str) -> Value {
         .knowledge(
             a,
             &Uuid::new_v4().to_string(),
-            serde_json::from_value(json!({"title":"Original document","content":text}))
-                .unwrap(),
+            serde_json::from_value(json!({"title":"Original document","content":text})).unwrap(),
         )
         .await
         .unwrap();
@@ -122,6 +129,11 @@ fn assert_accounted(bundle: &Value) {
     let text = bundle["rendered_context"].as_str().unwrap();
     assert_eq!(bundle["used_bytes"], json!(text.len()));
     assert!(text.len() <= bundle["budget"].as_u64().unwrap() as usize);
+    let rendered_citations = text
+        .lines()
+        .filter(|line| line.starts_with("[chunk:") || line.starts_with("[turn:"))
+        .count();
+    assert_eq!(rendered_citations, items(bundle).len());
     let mut ids = BTreeSet::new();
     for item in items(bundle) {
         let evidence_id = item["evidence_id"].as_str().unwrap();
@@ -139,7 +151,12 @@ fn assert_accounted(bundle: &Value) {
             assert!(used <= route["max_bytes"].as_u64().unwrap() as usize);
             assert_eq!(
                 route["retained"],
-                json!(items(bundle).iter().filter(|i| i["route"] == route["route"]).count())
+                json!(
+                    items(bundle)
+                        .iter()
+                        .filter(|i| i["route"] == route["route"])
+                        .count()
+                )
             );
             used
         })
@@ -317,7 +334,11 @@ async fn evidence_routes_filter_before_keyword_vector_and_hybrid_top_k() {
         let dir = tempfile::tempdir().unwrap();
         let s = Service::open(dir.path(), models.clone()).await.unwrap();
         let (a, _) = provision(&s, None).await;
-        let other = if target_route == "memory" { "knowledge" } else { "memory" };
+        let other = if target_route == "memory" {
+            "knowledge"
+        } else {
+            "memory"
+        };
         // A hundred stronger candidates from another route must not starve the
         // route's only candidate. Distinct filler lowers lexical rank too.
         for index in 0..101 {
@@ -348,7 +369,12 @@ async fn evidence_routes_filter_before_keyword_vector_and_hybrid_top_k() {
                 assert_eq!(accounting(&result, target_route)["candidates"], 1);
                 for item in items(&result) {
                     assert_eq!(item["provenance"]["type"], "asset_chunk");
-                    assert!(!item["content"].as_str().unwrap().contains("Fixture summary"));
+                    assert!(
+                        !item["content"]
+                            .as_str()
+                            .unwrap()
+                            .contains("Fixture summary")
+                    );
                     if mode == "hybrid" {
                         let origins = item["retrieval_routes"].as_array().unwrap();
                         assert!(origins.iter().any(|value| value == "keyword"));
@@ -385,29 +411,53 @@ async fn evidence_preserves_current_chunks_and_historical_archived_references() 
     assert_eq!(historical["version"], 1);
     let current = bundle(&s, &a, request("Chronicle", &["memory", "session"])).await;
     assert_eq!(items(&current).len(), 2);
-    let memory_item = items(&current).iter().find(|item| item["route"] == "memory").unwrap();
+    let memory_item = items(&current)
+        .iter()
+        .find(|item| item["route"] == "memory")
+        .unwrap();
     assert_eq!(memory_item["provenance"]["asset_version"], 2);
-    assert_eq!(memory_item["provenance"]["source_event_id"], second["source_event_id"]);
+    assert_eq!(
+        memory_item["provenance"]["source_event_id"],
+        second["source_event_id"]
+    );
     assert!(memory_item["content"].as_str().unwrap().contains("revised"));
-    let session_item = items(&current).iter().find(|item| item["route"] == "session").unwrap();
+    let session_item = items(&current)
+        .iter()
+        .find(|item| item["route"] == "session")
+        .unwrap();
     assert_eq!(session_item["provenance"]["turn_id"], archived["turn_id"]);
     let reference = &session_item["provenance"]["used_evidence"][0];
     assert_eq!(reference["reference"]["asset_version"], 1);
     assert_eq!(reference["source_event_id"], first["source_event_id"]);
     assert_eq!(reference["source_version"], 1);
     assert_eq!(reference["locator"], old_item["provenance"]["locator"]);
-    assert!(session_item["content"].as_str().unwrap().contains("exact old answer"));
+    assert!(
+        session_item["content"]
+            .as_str()
+            .unwrap()
+            .contains("exact old answer")
+    );
     assert_accounted(&current);
     // With cleanup still queued, the old source invalidates the archived whole
     // turn but must not replace the current memory with its historical version.
-    s.delete(&a, "withdraw-chronicle", id(&first, "source_event_id"), "event")
-        .await
-        .unwrap();
+    s.delete(
+        &a,
+        "withdraw-chronicle",
+        id(&first, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
     let after = bundle(&s, &a, request("Chronicle", &["memory", "session"])).await;
     assert_eq!(items(&after).len(), 1);
     assert_eq!(items(&after)[0]["provenance"]["asset_version"], 2);
     assert_eq!(items(&after)[0]["route"], "memory");
-    assert!(!after["rendered_context"].as_str().unwrap().contains("exact old answer"));
+    assert!(
+        !after["rendered_context"]
+            .as_str()
+            .unwrap()
+            .contains("exact old answer")
+    );
     assert_accounted(&after);
 }
 
@@ -428,7 +478,11 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     archive(&s, &a, session, "Scopeneedle private raw session", vec![]).await;
     let default = bundle(&s, &reader, json!({"query":"Scopeneedle","budget":32000})).await;
     assert_eq!(items(&default).len(), 1);
-    assert!(items(&default).iter().all(|item| item["route"] != "session"));
+    assert!(
+        items(&default)
+            .iter()
+            .all(|item| item["route"] != "session")
+    );
     assert!(!default.to_string().contains("private raw session"));
     let input = request("Scopeneedle", &["memory", "session"]);
     let expected = bundle(&s, &a, input.clone()).await;
@@ -443,26 +497,50 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
         assert_eq!(isolated["workspace_id"], json!(other.workspace_id));
     }
     assert!(matches!(
-        s.evidence_bundle(&reader, serde_json::from_value(input.clone()).unwrap()).await,
+        s.evidence_bundle(&reader, serde_json::from_value(input.clone()).unwrap())
+            .await,
         Err(AppError::Forbidden)
     ));
     // A serialized bundle request is read-only across every relational table.
     let before = counts(&s).await;
     let (base, _api) = serve(origence::api::router(s.clone())).await;
     let http = reqwest::Client::new();
-    let response = http.post(format!("{base}/v1/context")).bearer_auth(&token).json(&input).send().await.unwrap();
+    let response = http
+        .post(format!("{base}/v1/context"))
+        .bearer_auth(&token)
+        .json(&input)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), 200);
     assert_eq!(response.json::<Value>().await.unwrap(), expected);
-    let response = http.post(format!("{base}/v1/context")).bearer_auth(reader_token).json(&input).send().await.unwrap();
+    let response = http
+        .post(format!("{base}/v1/context"))
+        .bearer_auth(reader_token)
+        .json(&input)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), 403);
     let denied: Value = response.json().await.unwrap();
     assert_eq!(denied["error"]["code"], "FORBIDDEN");
     assert!(!denied.to_string().contains("private raw session"));
     assert_eq!(
-        http.post(format!("{base}/v1/context")).json(&input).send().await.unwrap().status(),
+        http.post(format!("{base}/v1/context"))
+            .json(&input)
+            .send()
+            .await
+            .unwrap()
+            .status(),
         401
     );
-    let response = http.post(format!("{base}/v1/context")).bearer_auth(&token).json(&json!({"query":"Scopeneedle","budget":32001})).send().await.unwrap();
+    let response = http
+        .post(format!("{base}/v1/context"))
+        .bearer_auth(&token)
+        .json(&json!({"query":"Scopeneedle","budget":32001}))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), 422);
     assert_eq!(counts(&s).await, before);
     sqlx::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
@@ -471,15 +549,26 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
         .await
         .unwrap();
     assert!(matches!(
-        s.evidence_bundle(&writer, serde_json::from_value(input).unwrap()).await,
+        s.evidence_bundle(&writer, serde_json::from_value(input).unwrap())
+            .await,
         Err(AppError::Forbidden)
     ));
     s.revoke_key(&a, reader.id).await.unwrap();
     assert!(matches!(
-        s.evidence_bundle(&reader, serde_json::from_value(json!({"query":"Scopeneedle"})).unwrap()).await,
+        s.evidence_bundle(
+            &reader,
+            serde_json::from_value(json!({"query":"Scopeneedle"})).unwrap()
+        )
+        .await,
         Err(AppError::Forbidden)
     ));
-    let response = http.post(format!("{base}/v1/context")).bearer_auth(reader_token).json(&json!({"query":"Scopeneedle"})).send().await.unwrap();
+    let response = http
+        .post(format!("{base}/v1/context"))
+        .bearer_auth(reader_token)
+        .json(&json!({"query":"Scopeneedle"}))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), 401);
 }
 
@@ -490,7 +579,14 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
     let (a, _) = provision(&s, None).await;
     let target_session = Uuid::new_v4();
     let noise_session = Uuid::new_v4();
-    let oldest = archive(&s, &a, target_session, "Ancientneedle archived answer", vec![]).await;
+    let oldest = archive(
+        &s,
+        &a,
+        target_session,
+        "Ancientneedle archived answer",
+        vec![],
+    )
+    .await;
     // Fixture timestamps establish strict recency independent of machine speed.
     sqlx::query("UPDATE oc_session_turns SET created_at=1 WHERE source_event_id=?")
         .bind(id(&oldest, "source_event_id"))
@@ -498,7 +594,14 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
         .await
         .unwrap();
     for _ in 0..512 {
-        archive(&s, &a, noise_session, "Recent unrelated question and answer", vec![]).await;
+        archive(
+            &s,
+            &a,
+            noise_session,
+            "Recent unrelated question and answer",
+            vec![],
+        )
+        .await;
     }
     let input = request("Ancientneedle", &["session"]);
     let bounded = bundle(&s, &a, input.clone()).await;
@@ -507,10 +610,17 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
     assert_eq!(accounting(&bounded, "session")["scan_exhausted"], true);
     for filter in ["session_id", "exclude_session_id"] {
         let mut input = input.clone();
-        input[filter] = json!(if filter == "session_id" { target_session } else { noise_session });
+        input[filter] = json!(if filter == "session_id" {
+            target_session
+        } else {
+            noise_session
+        });
         let filtered = bundle(&s, &a, input).await;
         assert_eq!(items(&filtered).len(), 1, "{filtered}");
-        assert_eq!(items(&filtered)[0]["provenance"]["turn_id"], oldest["turn_id"]);
+        assert_eq!(
+            items(&filtered)[0]["provenance"]["turn_id"],
+            oldest["turn_id"]
+        );
         assert_eq!(accounting(&filtered, "session")["scanned"], 1);
         assert_eq!(accounting(&filtered, "session")["scan_exhausted"], false);
         assert_accounted(&filtered);
@@ -526,7 +636,13 @@ async fn evidence_utf8_whole_blocks_obey_global_and_route_byte_boundaries() {
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
     let (a, _) = provision(&s, None).await;
-    memory(&s, &a, "unicode", "Unicodeneedle 中文 🦀 👨‍👩‍👧‍👦 é\n原文字节必须完整。").await;
+    memory(
+        &s,
+        &a,
+        "unicode",
+        "Unicodeneedle 中文 🦀 👨‍👩‍👧‍👦 é\n原文字节必须完整。",
+    )
+    .await;
     let input = request("Unicodeneedle", &["memory"]);
     let full = bundle(&s, &a, input.clone()).await;
     assert_eq!(items(&full).len(), 1);
@@ -619,8 +735,26 @@ async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic()
     let (a, _) = provision(&s, None).await;
     property(&s, &a, "database.engine", "single").await;
     let identity = identity("database.engine", "production");
-    let confirmed = semantic(&s, &a, identity.clone(), "PostgreSQL", "assert", 0, "Conflictneedle").await;
-    let conflicting = semantic(&s, &a, identity.clone(), "MySQL", "assert", 1, "Conflictneedle").await;
+    let confirmed = semantic(
+        &s,
+        &a,
+        identity.clone(),
+        "PostgreSQL",
+        "assert",
+        0,
+        "Conflictneedle",
+    )
+    .await;
+    let conflicting = semantic(
+        &s,
+        &a,
+        identity.clone(),
+        "MySQL",
+        "assert",
+        1,
+        "Conflictneedle",
+    )
+    .await;
     assert_eq!(conflicting["semantic_status"], "conflict");
     let input = request("Conflictneedle", &["memory"]);
     let full = bundle(&s, &a, input.clone()).await;
@@ -631,8 +765,14 @@ async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic()
     let conflict = &full["conflicts"][0];
     assert_eq!(conflict["identity"], identity);
     assert_eq!(conflict["evidence_ids"].as_array().unwrap().len(), 2);
-    let values: BTreeSet<_> = items(&full).iter().map(|item| item["semantic_value"].to_string()).collect();
-    assert_eq!(values, BTreeSet::from([json!("PostgreSQL").to_string(), json!("MySQL").to_string()]));
+    let values: BTreeSet<_> = items(&full)
+        .iter()
+        .map(|item| item["semantic_value"].to_string())
+        .collect();
+    assert_eq!(
+        values,
+        BTreeSet::from([json!("PostgreSQL").to_string(), json!("MySQL").to_string()])
+    );
     assert_accounted(&full);
     assert_eq!(bundle(&s, &a, input.clone()).await, full);
     // Exact-identity recall must retain the explicit opposing suggestion too;
@@ -654,7 +794,10 @@ async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic()
             let result = bundle(&s, &a, limited).await;
             assert_accounted(&result);
             if ceiling < bytes {
-                assert!(items(&result).is_empty(), "must not select one side: {result}");
+                assert!(
+                    items(&result).is_empty(),
+                    "must not select one side: {result}"
+                );
                 assert_eq!(result["omitted_conflict_groups"], 1);
                 assert_eq!(accounting(&result, "memory")["omitted_for_budget"], 2);
                 assert!(!result["warnings"].as_array().unwrap().is_empty());
@@ -665,7 +808,14 @@ async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic()
     }
     // Withdrawal removes the unsupported alternative immediately, before its
     // queued cleanup, and must remove every dangling conflict annotation.
-    s.delete(&a, "withdraw-conflict", id(&conflicting, "source_event_id"), "event").await.unwrap();
+    s.delete(
+        &a,
+        "withdraw-conflict",
+        id(&conflicting, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
     let remaining = bundle(&s, &a, input).await;
     assert_eq!(items(&remaining).len(), 1);
     assert_eq!(items(&remaining)[0]["semantic_value"], "PostgreSQL");
@@ -685,22 +835,59 @@ async fn evidence_does_not_infer_conflicts_for_sets_contexts_proposals_or_prose(
     semantic(&s, &a, set.clone(), "Rust", "assert", 0, "Distinctneedle").await;
     semantic(&s, &a, set, "Python", "supplement", 1, "Distinctneedle").await;
     let prod = identity("database.engine", "production");
-    semantic(&s, &a, prod.clone(), "PostgreSQL", "assert", 0, "Distinctneedle").await;
-    semantic(&s, &a, identity("database.engine", "test"), "MySQL", "assert", 0, "Distinctneedle").await;
+    semantic(
+        &s,
+        &a,
+        prod.clone(),
+        "PostgreSQL",
+        "assert",
+        0,
+        "Distinctneedle",
+    )
+    .await;
+    semantic(
+        &s,
+        &a,
+        identity("database.engine", "test"),
+        "MySQL",
+        "assert",
+        0,
+        "Distinctneedle",
+    )
+    .await;
     for operation in ["propose", "negate", "ambiguous"] {
-        semantic(&s, &a, prod.clone(), "SQLite", operation, 1, "Distinctneedle").await;
+        semantic(
+            &s,
+            &a,
+            prod.clone(),
+            "SQLite",
+            operation,
+            1,
+            "Distinctneedle",
+        )
+        .await;
     }
     // Identical prose at distinct immutable locations remains two evidences.
     let first = knowledge(&s, &a, "Distinctneedle production database is Oracle.").await;
     let second = knowledge(&s, &a, "Distinctneedle production database is Oracle.").await;
     let result = bundle(&s, &a, request("Distinctneedle", &["memory", "knowledge"])).await;
     assert_eq!(items(&result).len(), 9);
-    assert!(result["conflicts"].as_array().unwrap().is_empty(), "{result}");
-    assert!(items(&result).iter().all(|item| item["conflict_id"].is_null()));
+    assert!(
+        result["conflicts"].as_array().unwrap().is_empty(),
+        "{result}"
+    );
+    assert!(
+        items(&result)
+            .iter()
+            .all(|item| item["conflict_id"].is_null())
+    );
     assert!(has_asset(&result, id(&first, "asset_id")));
     assert!(has_asset(&result, id(&second, "asset_id")));
     for status in ["proposed", "negated", "ambiguous"] {
-        let item = items(&result).iter().find(|item| item["semantic_status"] == status).unwrap();
+        let item = items(&result)
+            .iter()
+            .find(|item| item["semantic_status"] == status)
+            .unwrap();
         assert_eq!(item["normalization_status"], "unnormalized");
     }
     assert_accounted(&result);
@@ -710,7 +897,10 @@ async fn evidence_does_not_infer_conflicts_for_sets_contexts_proposals_or_prose(
     filtered["memory_identity"] = prod.clone();
     let filtered = bundle(&s, &a, filtered).await;
     assert_eq!(items(&filtered).len(), 3);
-    for item in items(&filtered).iter().filter(|item| item["route"] == "memory") {
+    for item in items(&filtered)
+        .iter()
+        .filter(|item| item["route"] == "memory")
+    {
         assert_eq!(item["identity"], prod);
         assert_eq!(item["semantic_value"], "PostgreSQL");
     }
@@ -733,21 +923,42 @@ async fn evidence_whole_snapshot_withdrawal_hides_unmatched_members_and_archived
     assert_eq!(provenance["asset_version"], 2);
     assert_eq!(provenance["source_version"], 1);
     assert_eq!(provenance["source_event_id"], first["source_event_id"]);
-    assert_eq!(provenance["version_root_source_event_id"], second["source_event_id"]);
+    assert_eq!(
+        provenance["version_root_source_event_id"],
+        second["source_event_id"]
+    );
     let before = bundle(&s, &a, request("Pythonneedle", &["memory"])).await;
     assert_eq!(items(&before).len(), 1);
     let item = &items(&before)[0];
     assert_eq!(item["provenance"]["asset_version"], 2);
-    assert_ne!(item["provenance"]["source_event_id"], first["source_event_id"]);
-    let archived = archive(&s, &a, Uuid::new_v4(), "Pythonneedle actual answer", vec![used(item)]).await;
+    assert_ne!(
+        item["provenance"]["source_event_id"],
+        first["source_event_id"]
+    );
+    let archived = archive(
+        &s,
+        &a,
+        Uuid::new_v4(),
+        "Pythonneedle actual answer",
+        vec![used(item)],
+    )
+    .await;
     let full = bundle(&s, &a, request("Pythonneedle", &["memory", "session"])).await;
     assert_eq!(items(&full).len(), 2);
-    s.delete(&a, "withdraw-unmatched-member", id(&first, "source_event_id"), "event").await.unwrap();
+    s.delete(
+        &a,
+        "withdraw-unmatched-member",
+        id(&first, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
     let hidden = bundle(&s, &a, request("Pythonneedle", &["memory", "session"])).await;
     assert!(items(&hidden).is_empty(), "{hidden}");
     assert_accounted(&hidden);
     assert!(matches!(
-        s.session_turn(&a, id(&archived, "session_id"), id(&archived, "turn_id")).await,
+        s.session_turn(&a, id(&archived, "session_id"), id(&archived, "turn_id"))
+            .await,
         Err(AppError::NotFound)
     ));
 }
@@ -763,7 +974,8 @@ async fn evidence_partial_mode_is_explicit_and_consistent_across_routes() {
         let mut input = request("Fallbackneedle", &["memory", "knowledge"]);
         input["mode"] = json!(mode);
         assert!(matches!(
-            s.evidence_bundle(&a, serde_json::from_value(input.clone()).unwrap()).await,
+            s.evidence_bundle(&a, serde_json::from_value(input.clone()).unwrap())
+                .await,
             Err(AppError::Unavailable(_))
         ));
         input["allow_partial"] = json!(true);
@@ -809,12 +1021,145 @@ async fn evidence_session_citations_use_the_full_session_and_turn_identity() {
     assert_eq!(citations.len(), 2);
     for item in items(&result) {
         assert_eq!(item["provenance"]["turn_id"], json!(turn));
-        assert_eq!(item["archive_roundtrip"], "unsupported_session_turn_reference");
+        assert_eq!(
+            item["archive_roundtrip"],
+            "unsupported_session_turn_reference"
+        );
         assert_eq!(
             item["evidence_id"],
-            json!(format!("turn:{}:{turn}", item["provenance"]["session_id"].as_str().unwrap()))
+            json!(format!(
+                "turn:{}:{turn}",
+                item["provenance"]["session_id"].as_str().unwrap()
+            ))
         );
         assert_eq!(item["provenance"]["used_evidence"], json!([]));
     }
     assert_accounted(&result);
+}
+
+#[derive(Clone, Default)]
+struct EmbeddingGate {
+    block: Arc<AtomicBool>,
+    calls: Arc<AtomicUsize>,
+    entered: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
+async fn gated_embedding(
+    State(gate): State<EmbeddingGate>,
+    Json(_body): Json<Value>,
+) -> Json<Value> {
+    gate.calls.fetch_add(1, Ordering::SeqCst);
+    if gate.block.load(Ordering::SeqCst) {
+        gate.entered.notify_one();
+        gate.release.notified().await;
+    }
+    Json(json!({"data":[{"embedding":[1.0,0.5,0.25]}]}))
+}
+
+#[tokio::test]
+async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io() {
+    let gate = EmbeddingGate::default();
+    let (base, _model) = serve(
+        Router::new()
+            .route("/embeddings", post(gated_embedding))
+            .route("/chat/completions", post(completions))
+            .with_state(gate.clone()),
+    )
+    .await;
+    let models = Models::configured(
+        base,
+        "fixture".into(),
+        Some("fixture".into()),
+        Some("fixture".into()),
+        3,
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let s = Service::open(dir.path(), models).await.unwrap();
+    let (a, _) = provision(&s, None).await;
+    let original = memory(&s, &a, "io-guard", "Guardneedle source withdrawn during query").await;
+    let surviving = knowledge(&s, &a, "Guardneedle independently supported document").await;
+    let reader_key = s.issue_key(&a, "reader").await.unwrap();
+    let reader = s.auth(reader_key["token"].as_str().unwrap()).await.unwrap();
+    let mut input = request("Guardneedle", &["memory", "knowledge", "learning"]);
+    input["mode"] = json!("hybrid");
+    let before_calls = gate.calls.load(Ordering::SeqCst);
+    let initial = bundle(&s, &reader, input.clone()).await;
+    assert_eq!(items(&initial).len(), 2);
+    assert_eq!(gate.calls.load(Ordering::SeqCst) - before_calls, 1);
+    assert_eq!(initial["effective_mode"], "hybrid");
+    // A forbidden session request is rejected before sending even the query to
+    // the provider; three other enabled routes do not downgrade this boundary.
+    let mut forbidden = input.clone();
+    forbidden["routes"].as_array_mut().unwrap().push(json!({
+        "route":"session","limit":20,"max_bytes":4000
+    }));
+    let before_calls = gate.calls.load(Ordering::SeqCst);
+    assert!(matches!(
+        s.evidence_bundle(&reader, serde_json::from_value(forbidden).unwrap())
+            .await,
+        Err(AppError::Forbidden)
+    ));
+    assert_eq!(gate.calls.load(Ordering::SeqCst), before_calls);
+    gate.block.store(true, Ordering::SeqCst);
+    let pending = {
+        let service = s.clone();
+        let auth = reader.clone();
+        let request = input.clone();
+        tokio::spawn(async move {
+            service
+                .evidence_bundle(&auth, serde_json::from_value(request).unwrap())
+                .await
+        })
+    };
+    tokio::time::timeout(Duration::from_secs(15), gate.entered.notified())
+        .await
+        .expect("query did not reach the embedding barrier");
+    // This runs while model IO is pending, after the request's first authorized
+    // read. No cleanup worker is processed before the response is assembled.
+    s.delete(
+        &a,
+        "withdraw-during-context-io",
+        id(&original, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
+    gate.release.notify_one();
+    let after = tokio::time::timeout(Duration::from_secs(15), pending)
+        .await
+        .expect("context did not resume after embedding")
+        .unwrap()
+        .unwrap();
+    let after = serde_json::to_value(after).unwrap();
+    assert_eq!(items(&after).len(), 1);
+    assert!(has_asset(&after, id(&surviving, "asset_id")));
+    assert!(!has_asset(&after, id(&original, "asset_id")));
+    assert!(
+        !after["rendered_context"]
+            .as_str()
+            .unwrap()
+            .contains("withdrawn during query")
+    );
+    assert_accounted(&after);
+    let pending = {
+        let service = s.clone();
+        let auth = reader.clone();
+        tokio::spawn(async move {
+            service
+                .evidence_bundle(&auth, serde_json::from_value(input).unwrap())
+                .await
+        })
+    };
+    tokio::time::timeout(Duration::from_secs(15), gate.entered.notified())
+        .await
+        .expect("second query did not reach the embedding barrier");
+    s.revoke_key(&a, reader.id).await.unwrap();
+    gate.release.notify_one();
+    let denied = tokio::time::timeout(Duration::from_secs(15), pending)
+        .await
+        .expect("revoked request did not resume after embedding")
+        .unwrap();
+    assert!(matches!(denied, Err(AppError::Forbidden)), "{denied:?}");
 }

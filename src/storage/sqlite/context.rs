@@ -123,7 +123,11 @@ impl SqliteTx {
                 hits.push(hit);
             }
         }
-        hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.chunk_id.cmp(&b.chunk_id)));
+        hits.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then(a.chunk_id.cmp(&b.chunk_id))
+        });
         hits.truncate(CONTEXT_CANDIDATE_LIMIT);
         Ok(hits)
     }
@@ -166,8 +170,10 @@ impl SqliteTx {
         if hit.kind != "memory" {
             return Ok(false);
         }
-        Ok(self.identity_for_asset(hit.asset_id).await?.as_ref() == Some(identity)
-            || conflict_identity(&hit.locator).as_ref() == Some(identity))
+        Ok(
+            self.identity_for_asset(hit.asset_id).await?.as_ref() == Some(identity)
+                || conflict_identity(&hit.locator).as_ref() == Some(identity),
+        )
     }
 
     /// Rebuild an exact current chunk under the caller's final snapshot. The
@@ -290,12 +296,12 @@ impl SqliteTx {
         turn: Uuid,
     ) -> StorageResult<Option<ContextSessionTurn>> {
         self.check_permission(Permission::Write).await?;
-        let (source_event_id, evidence) =
-            match self.require_turn_visible_local(session, turn).await {
-                Ok(value) => value,
-                Err(StorageError::NotFound) => return Ok(None),
-                Err(error) => return Err(error),
-            };
+        let (source_event_id, evidence) = match self.require_turn_visible_local(session, turn).await
+        {
+            Ok(value) => value,
+            Err(StorageError::NotFound) => return Ok(None),
+            Err(error) => return Err(error),
+        };
         match self.require_archived_evidence_set_visible(&evidence).await {
             Ok(()) => {}
             Err(StorageError::NotFound) => return Ok(None),

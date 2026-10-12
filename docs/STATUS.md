@@ -1,6 +1,6 @@
 # Origence · 当前状态
 
-更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查待本 PR 最终提交验证，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
 ## 当前 CI 范围
 
@@ -55,13 +55,13 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 新增 writer 及以上可用的同步关系型会话归档、确切读取与反馈 HTTP/Service API。调用方显式提交实际使用的 chunk/entity/relation 子集，保存精确历史资产版本、图支持所有权、原 locator 和 S2 原始成员来源；显式空证据与漏传不同。问答、来源事件、引用、审计与回执同事务落盘，命令及领域 ID 均幂等，改变已归档内容或评分返回冲突。
 
-反馈使用 helpful/unhelpful/neutral 保守枚举，只针对实际轮次或其稳定 evidence_ref_id。归档来源或任一引用支持失效时，整轮问答、反馈和原始 archive event 在清理前即隐藏，重放不能恢复可见。原始档案只允许 writer 及以上，仍是 workspace 共享权限。没有新增 Worker、模型调用、索引、排序调权、升级迁移或自动监听；尚未实现 Improve/Learning、会话检索及 S4 EvidenceBundle，也未证明真实 Agent 收益。API 限制与语义见 [API](API.md#会话归档与幂等反馈s3-第二个切片)，验证状态见 [VALIDATION](VALIDATION.md)。
+反馈使用 helpful/unhelpful/neutral 保守枚举，只针对实际轮次或其稳定 evidence_ref_id。归档来源或任一引用支持失效时，整轮问答、反馈和原始 archive event 在清理前即隐藏，重放不能恢复可见。原始档案只允许 writer 及以上，仍是 workspace 共享权限。没有新增 Worker、模型调用、索引、排序调权、升级迁移或自动监听；该切片当时不包含 Improve/Learning、会话检索及 S4 EvidenceBundle；后续交付见下文第四、第五阶段，仍未证明真实 Agent 收益。API 限制与语义见 [API](API.md#会话归档与幂等反馈s3-第二个切片)，验证状态见 [VALIDATION](VALIDATION.md)。
 
 ## 第四阶段：显式 Improve → Learning
 
 新增有条件、受限、可重放的提议 → 核验 → 普通知识发布闭环。单调反馈序列与 principal-qualified 标识防止同时间戳遗漏和重复计数；冻结批次、两阶段计划及子任务标识持久化，最后子任务成功前不推进完成水位。每条 Learning 独立原子发布；显式取消未完成 run 不消费反馈，并保留此前已发布且支持仍有效的条目。
 
-条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；当前执行结果尚待 CI。
+条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；该阶段已由 [PR #43](https://github.com/TheLudlows/Origence/pull/43) 合入 main `55b5d879`，其最终 head 的 PR CI 与独立审查通过；不替代 S4 CI。
 
 ## 本轮实验已结束
 
@@ -86,7 +86,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 ## 下一步
 
-- **产品主线**：S2 与 [S3 受控对话提取](superpowers/plans/2026-10-11-s3-semantic-capture.md)已实现，SessionTurn/Feedback 后，显式 Improve → Learning 最小闭环后，下一项为 S4 统一上下文与真实 Agent 对照；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
+- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning 已实现；S4 统一上下文与 Agent 框架已实现，工程记录见 PR #44，下一项为有授权且可复现的真实 Agent 对照，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
 - **可靠性与质量待办**：维护故障、持续容量、冷启动与标签复核已移入[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，不继续延长本轮实验；依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 - **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 

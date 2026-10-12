@@ -165,13 +165,7 @@ impl Service {
         if let Some(vector) = &query.embedding {
             for generation in tx.vector_generations(profile, vector.len()).await? {
                 let ids = tx
-                    .context_vector_candidates(
-                        profile,
-                        vector.len(),
-                        generation,
-                        route,
-                        identity,
-                    )
+                    .context_vector_candidates(profile, vector.len(), generation, route, identity)
                     .await?;
                 eligible.push((generation, ids));
             }
@@ -236,8 +230,7 @@ impl Service {
         let fused = fuse_context_branches(branches, query.effective_mode == "hybrid");
         let mut candidates = Vec::new();
         for (hit, origins) in fused {
-            if let Some(mut candidate) =
-                tx.context_candidate(hit.chunk_id, route, identity).await?
+            if let Some(mut candidate) = tx.context_candidate(hit.chunk_id, route, identity).await?
             {
                 candidate.hit.score = hit.score;
                 candidate.retrieval_routes = origins;
@@ -283,7 +276,9 @@ impl Service {
 }
 
 fn hit_order(a: &SearchHit, b: &SearchHit) -> std::cmp::Ordering {
-    b.score.total_cmp(&a.score).then(a.chunk_id.cmp(&b.chunk_id))
+    b.score
+        .total_cmp(&a.score)
+        .then(a.chunk_id.cmp(&b.chunk_id))
 }
 
 fn fuse_context_branches(
