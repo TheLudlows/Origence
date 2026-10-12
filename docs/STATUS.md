@@ -2,6 +2,12 @@
 
 更新：2026-10-12。**P0、S2 显式语义与 S3 受控对话提取首个切片已落地；P1 会话反馈与经验学习闭环尚未实现。** 当前适合本地开发和验证，未完成生产级验收。
 
+## 当前 CI 范围
+
+2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仍仅在主干运行。
+
+Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及证据归档保持不变。不删除测试用例、Dockerfile、Compose、容器冒烟脚本或 macOS 本地构建能力；macOS 兼容性与容器构建/运行不再由日常 CI 自动验证。下文和 VALIDATION 中五项 CI 的记录保留为对应历史提交的证据，不代表当前覆盖范围。该配置调整的实际 CI 结果以相应提交的 Actions 记录为准。
+
 ## 当前阶段范围
 
 设计、实现、测试与验收统一以新建数据库为目标；版本升级、旧库 schema 兼容和数据迁移不在当前范围内，不作为当前缺口、验收门槛或待办。只有后续明确调整需求时才重新考虑。开发约束见 [AGENTS](../AGENTS.md#current-stage-database-scope)，执行范围见[产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md#当前阶段范围)。
