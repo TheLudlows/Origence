@@ -25,5 +25,6 @@ mod sqlite_ledger;
 mod sqlite_lock;
 mod sqlite_owner;
 mod sqlite_store;
+mod sqlite_visibility;
 mod storage_contract;
 mod storage_recovery;
