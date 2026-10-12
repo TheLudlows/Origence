@@ -30,10 +30,15 @@ jobs:
           sha256sum Cargo.lock > evidence/lock.sha256
       - name: Inspect active dependency features
         run: |
+          set +e
+          export CARGO_TERM_COLOR=never
           for package in rmcp rsa lru; do
             cargo tree --locked --target all -e features -i "$package" > "evidence/$package-default.txt" 2>&1
+            echo "$?" > "evidence/$package-default-exit.txt"
             cargo tree --locked --target all --no-default-features -e features -i "$package" > "evidence/$package-no-default.txt" 2>&1
+            echo "$?" > "evidence/$package-no-default-exit.txt"
           done
+          exit 0
       - name: Install official RustSec audit tool
         run: cargo install cargo-audit --version 0.22.2 --locked
       - name: Record a fresh audit without ignores
