@@ -1,6 +1,6 @@
 # Origence · 当前状态
 
-更新：2026-10-12。**P0、S2 显式语义与 S3 受控对话提取首个切片已落地；P1 会话反馈与经验学习闭环尚未实现。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；Improve/Learning 经验学习闭环尚未实现。** 当前适合本地开发和验证，未完成生产级验收。
 
 ## 当前阶段范围
 
@@ -17,7 +17,7 @@
 | 检索与上下文 | keyword/vector/hybrid、摘要/图开关、带来源与身份的 search/resolve | 跨证据冲突识别、类型预算和统一 EvidenceBundle 未完成；未证明真实 Agent 任务收益 |
 | 治理与恢复 | workspace/tenant 隔离、角色/密钥、幂等任务、版本/恢复、来源撤回、重启恢复 | 逻辑删除不等于物理擦除；无企业身份、文档 ACL、配额或生产 SLO |
 | 接入与维护 | HTTP、CLI、只读 MCP、显式离线向量压实 | 不自动调度维护；持续容量、维护故障和断电边界仍需验收 |
-| 会话学习 | 跨会话历史检索；原文候选提取 → S2 写入 → 同 workspace 跨调用方复用 | SessionTurn、Feedback、Improve、Learning 尚未实现；当前捕获由调用方显式触发 |
+| 会话学习 | 跨会话历史检索；原文候选提取 → S2 写入 → 同 workspace 跨调用方复用 | SessionTurn/Feedback 已实现；Improve/Learning 尚未实现；捕获和归档均由调用方显式触发 |
 
 接口与运行细节分别见 [API](API.md)、[OPERATIONS](OPERATIONS.md)；历史测试和 CI 的精确版本见 [VALIDATION](VALIDATION.md)。
 
@@ -43,7 +43,13 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 在既有 SQLite JSON v1 任务信封上新增内部 JobKind/JobPayload，八种持久化操作对应九种有类型输入，显式区分旧 fact_key 与 identified 提取。Service 生产者由类型派生操作名；Worker 在已有失败结算路径内解码，未知操作或损坏字段正常失败而不阻断后续任务。保存的 publication 按 generation 先过滤再解码，semantic_capture_plan、权限、CAS、来源撤回与重试流程保持原样。
 
-共享测试矩阵核对 get/lookup、keyword/vector/hybrid 与 resolve 的来源和身份可见性，覆盖整快照成员撤回、根来源撤回、独立未归一化证据、重复来源与预算边界。不新增存储后端、schema、升级迁移、Worker 或发布路径；SessionTurn/Feedback/Improve/Learning 仍是后续阶段。具体执行证据见 [VALIDATION](VALIDATION.md)。
+共享测试矩阵核对 get/lookup、keyword/vector/hybrid 与 resolve 的来源和身份可见性，覆盖整快照成员撤回、根来源撤回、独立未归一化证据、重复来源与预算边界。不新增存储后端、schema、升级迁移、Worker 或发布路径；该阶段不包含 SessionTurn/Feedback，后者见下节；Improve/Learning 仍是后续阶段。具体执行证据见 [VALIDATION](VALIDATION.md)。
+
+## 第三阶段：SessionTurn 与幂等 Feedback
+
+新增 writer 及以上可用的同步关系型会话归档、确切读取与反馈 HTTP/Service API。调用方显式提交实际使用的 chunk/entity/relation 子集，保存精确历史资产版本、图支持所有权、原 locator 和 S2 原始成员来源；显式空证据与漏传不同。问答、来源事件、引用、审计与回执同事务落盘，命令及领域 ID 均幂等，改变已归档内容或评分返回冲突。
+
+反馈使用 helpful/unhelpful/neutral 保守枚举，只针对实际轮次或其稳定 evidence_ref_id。归档来源或任一引用支持失效时，整轮问答、反馈和原始 archive event 在清理前即隐藏，重放不能恢复可见。原始档案只允许 writer 及以上，仍是 workspace 共享权限。没有新增 Worker、模型调用、索引、排序调权、升级迁移或自动监听；尚未实现 Improve/Learning、会话检索及 S4 EvidenceBundle，也未证明真实 Agent 收益。API 限制与语义见 [API](API.md#会话归档与幂等反馈s3-第二个切片)，验证状态见 [VALIDATION](VALIDATION.md)。
 
 ## 本轮实验已结束
 
@@ -68,8 +74,9 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 ## 下一步
 
-- **产品主线**：S2 与 [S3 受控对话提取](superpowers/plans/2026-10-11-s3-semantic-capture.md)已实现，下一项为 S3 SessionTurn/Feedback/Improve/Learning 最小闭环 → S4 统一上下文与真实 Agent 对照；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
+- **产品主线**：S2 与 [S3 受控对话提取](superpowers/plans/2026-10-11-s3-semantic-capture.md)已实现，SessionTurn/Feedback 后，下一项为显式 Improve → Learning 最小闭环 → S4 统一上下文与真实 Agent 对照；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
 - **可靠性与质量待办**：维护故障、持续容量、冷启动与标签复核已移入[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，不继续延长本轮实验；依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 - **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 
 完整 SaaS、分布式及新增后端按实际需求另行立项。设计、实现、工程测试与产品效果分别判断。
+

@@ -13,6 +13,7 @@ mod pdf_parsing;
 mod semantic_capture;
 mod semantic_catalog;
 mod semantic_memory;
+mod session_feedback;
 mod sqlite_domain;
 mod sqlite_evidence;
 mod sqlite_graph_store;
@@ -24,3 +25,4 @@ mod sqlite_owner;
 mod sqlite_store;
 mod storage_contract;
 mod storage_recovery;
+

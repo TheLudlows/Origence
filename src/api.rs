@@ -38,6 +38,9 @@ pub fn router(service: Service) -> Router {
         .route("/v1/captures", post(capture))
         .route("/v1/captures/identified", post(identified_capture))
         .route("/v1/knowledge", post(knowledge))
+        .route("/v1/sessions/{session_id}/turns", post(archive_turn))
+        .route("/v1/sessions/{session_id}/turns/{turn_id}", get(session_turn))
+        .route("/v1/sessions/{session_id}/turns/{turn_id}/feedback", post(record_feedback).get(session_feedback))
         .route("/v1/search", post(search))
         .route("/v1/resolve", post(resolve))
         .route("/v1/assets/{id}", get(asset).delete(delete_asset))
@@ -325,4 +328,36 @@ async fn aml_search(State(s): State<Service>, h: HeaderMap, body: Bytes) -> Resu
         .await
         .map_err(|e| AppError::Internal(e.into()))??;
     Ok(Json(s.aml_search(&auth, input).await?))
+}
+
+
+async fn archive_turn(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(session): Path<Uuid>,
+    Json(input): Json<crate::session::SessionTurnInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.archive_turn(&auth(&s, &h).await?, key(&h)?, session, input).await?))
+}
+async fn session_turn(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path((session, turn)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.session_turn(&auth(&s, &h).await?, session, turn).await?))
+}
+async fn record_feedback(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path((session, turn)): Path<(Uuid, Uuid)>,
+    Json(input): Json<crate::session::FeedbackInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.record_feedback(&auth(&s, &h).await?, key(&h)?, session, turn, input).await?))
+}
+async fn session_feedback(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path((session, turn)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.session_feedback(&auth(&s, &h).await?, session, turn).await?))
 }

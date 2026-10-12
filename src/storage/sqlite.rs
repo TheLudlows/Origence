@@ -30,6 +30,7 @@ use uuid::Uuid;
 mod aml;
 mod app;
 mod semantics;
+mod session;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
@@ -372,6 +373,7 @@ async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
         aml::AML_SCHEMA,
         aml::ADD_SCHEMA,
         semantics::SCHEMA,
+        session::SCHEMA,
     ] {
         sqlx::raw_sql(schema)
             .execute(&mut *conn)
@@ -395,6 +397,9 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
     }
     if semantics::available(conn).await? {
         semantics::check_schema(conn).await?;
+    }
+    if session::available(conn).await? {
+        session::check_schema(conn).await?;
     }
     // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
@@ -1172,6 +1177,7 @@ impl DomainTx for SqliteTx {
     }
 
     async fn event_view(&mut self, id: Uuid) -> StorageResult<Value> {
+        self.require_session_source_visible(id).await?;
         let row: Option<(Uuid, String, String, Option<Uuid>, i64)> = sqlx::query_as(
             "SELECT e.id,e.kind,e.content,e.file_id,e.created_at FROM oc_events e \
              LEFT JOIN oc_files f ON f.tenant_id=e.tenant_id AND f.workspace_id=e.workspace_id AND f.id=e.file_id \
@@ -2006,3 +2012,4 @@ mod maintenance_lock_tests {
         assert!(SqliteStore::open(&path).await.is_ok());
     }
 }
+
