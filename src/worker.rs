@@ -210,7 +210,10 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
         // Guards/settlement use claim identity, generation, asset and source;
         // none of them reread this in-memory plan. The durable envelope stays
         // untouched until the ordinary save_publication transaction succeeds.
-        let saved = claim.payload.as_object_mut().and_then(|fields| fields.remove("publication"));
+        let saved = claim
+            .payload
+            .as_object_mut()
+            .and_then(|fields| fields.remove("publication"));
         return process_message_batch(service, claim, payload, source, saved).await;
     }
     if payload.kind() == JobKind::SemanticExtract {

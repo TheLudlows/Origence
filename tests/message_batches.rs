@@ -874,35 +874,80 @@ async fn owned_writer_capability_and_role_are_rechecked_after_embedding_io() {
         let dir = tempfile::tempdir().unwrap();
         let service = Service::open(dir.path(), models.models()).await.unwrap();
         let (_, root) = provision(&service).await;
-        let key = service.issue_key_with_capabilities(
-            &root,
-            "writer",
-            origence::storage::KeyCapabilities { allow_owned_workspaces: true },
-        ).await.unwrap();
+        let key = service
+            .issue_key_with_capabilities(
+                &root,
+                "writer",
+                origence::storage::KeyCapabilities {
+                    allow_owned_workspaces: true,
+                },
+            )
+            .await
+            .unwrap();
         let capable = service.auth(key["token"].as_str().unwrap()).await.unwrap();
-        let child = service.ensure_owned_workspace(&capable, Uuid::new_v4(), "Child").await.unwrap();
+        let child = service
+            .ensure_owned_workspace(&capable, Uuid::new_v4(), "Child")
+            .await
+            .unwrap();
         // Independent live authority can inspect the failed original task, but
         // cannot take over the revoked/downgraded creator's execution identity.
-        let observer_key = service.engine.relational().issue_key(
-            Scope { tenant_id: child.tenant_id, workspace_id: child.workspace_id }, "admin",
-        ).await.unwrap();
+        let observer_key = service
+            .engine
+            .relational()
+            .issue_key(
+                Scope {
+                    tenant_id: child.tenant_id,
+                    workspace_id: child.workspace_id,
+                },
+                "admin",
+            )
+            .await
+            .unwrap();
         let observer = service.auth(&observer_key.token).await.unwrap();
-        let receipt = service.submit_message_batch(&child, "owned-io", batch("owned-io"), models.spec()).await.unwrap();
+        let receipt = service
+            .submit_message_batch(&child, "owned-io", batch("owned-io"), models.spec())
+            .await
+            .unwrap();
         models.hold.store(true, Ordering::SeqCst);
         let running = service.clone();
         let task = tokio::spawn(async move { worker::process_next(&running).await });
-        tokio::time::timeout(Duration::from_secs(5), models.entered.notified()).await.unwrap();
-        sqlx::query(change).bind(capable.id).execute(service.engine.relational().pool()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), models.entered.notified())
+            .await
+            .unwrap();
+        sqlx::query(change)
+            .bind(capable.id)
+            .execute(service.engine.relational().pool())
+            .await
+            .unwrap();
         models.release.notify_one();
         assert!(task.await.unwrap().unwrap());
-        assert_eq!(status(&service, &observer, &receipt).await, PublicationStatus::Failed);
-        assert_eq!(service.job(&observer, receipt.job_id).await.unwrap()["error_code"], "FORBIDDEN");
+        assert_eq!(
+            status(&service, &observer, &receipt).await,
+            PublicationStatus::Failed
+        );
+        assert_eq!(
+            service.job(&observer, receipt.job_id).await.unwrap()["error_code"],
+            "FORBIDDEN"
+        );
         assert_eq!(count(&service, "oc_versions").await, 0);
         assert_eq!(count(&service, "oc_chunks").await, 0);
-        assert!(matches!(service.job_action(&observer, "no-owned-transfer", receipt.job_id, "retry").await, Err(AppError::Forbidden)));
-        assert!(service.search(&observer, query("keyword")).await.unwrap()["hits"].as_array().unwrap().is_empty());
+        assert!(matches!(
+            service
+                .job_action(&observer, "no-owned-transfer", receipt.job_id, "retry")
+                .await,
+            Err(AppError::Forbidden)
+        ));
+        assert!(
+            service.search(&observer, query("keyword")).await.unwrap()["hits"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         let creator: Uuid = sqlx::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
-            .bind(receipt.job_id).fetch_one(service.engine.relational().pool()).await.unwrap();
+            .bind(receipt.job_id)
+            .fetch_one(service.engine.relational().pool())
+            .await
+            .unwrap();
         assert_eq!(creator, capable.id);
         service.engine.shutdown().await.unwrap();
     }
@@ -914,31 +959,80 @@ async fn owned_reader_search_rechecks_capability_after_query_embedding_io() {
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), models.models()).await.unwrap();
     let (_, root) = provision(&service).await;
-    let writer_key = service.issue_key_with_capabilities(
-        &root, "writer", origence::storage::KeyCapabilities { allow_owned_workspaces: true },
-    ).await.unwrap();
-    let writer = service.auth(writer_key["token"].as_str().unwrap()).await.unwrap();
-    let child = service.ensure_owned_workspace(&writer, Uuid::new_v4(), "Search child").await.unwrap();
-    let receipt = service.submit_message_batch(&child, "reader-io", batch("reader-io"), models.spec()).await.unwrap();
+    let writer_key = service
+        .issue_key_with_capabilities(
+            &root,
+            "writer",
+            origence::storage::KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
+        .await
+        .unwrap();
+    let writer = service
+        .auth(writer_key["token"].as_str().unwrap())
+        .await
+        .unwrap();
+    let child = service
+        .ensure_owned_workspace(&writer, Uuid::new_v4(), "Search child")
+        .await
+        .unwrap();
+    let receipt = service
+        .submit_message_batch(&child, "reader-io", batch("reader-io"), models.spec())
+        .await
+        .unwrap();
     assert!(worker::process_next(&service).await.unwrap());
-    assert_eq!(status(&service, &child, &receipt).await, PublicationStatus::Retrievable);
-    let reader_key = service.issue_key_with_capabilities(
-        &root, "reader", origence::storage::KeyCapabilities { allow_owned_workspaces: true },
-    ).await.unwrap();
-    let reader = service.auth(reader_key["token"].as_str().unwrap()).await.unwrap();
-    let reading_child = service.lookup_owned_workspace(&reader, child.workspace_id).await.unwrap().unwrap();
-    assert!(!service.search(&reading_child, query("vector")).await.unwrap()["hits"].as_array().unwrap().is_empty());
+    assert_eq!(
+        status(&service, &child, &receipt).await,
+        PublicationStatus::Retrievable
+    );
+    let reader_key = service
+        .issue_key_with_capabilities(
+            &root,
+            "reader",
+            origence::storage::KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
+        .await
+        .unwrap();
+    let reader = service
+        .auth(reader_key["token"].as_str().unwrap())
+        .await
+        .unwrap();
+    let reading_child = service
+        .lookup_owned_workspace(&reader, child.workspace_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !service
+            .search(&reading_child, query("vector"))
+            .await
+            .unwrap()["hits"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     models.hold.store(true, Ordering::SeqCst);
     let searching = service.clone();
     let task = tokio::spawn(async move { searching.search(&reading_child, query("vector")).await });
-    tokio::time::timeout(Duration::from_secs(5), models.entered.notified()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), models.entered.notified())
+        .await
+        .unwrap();
     sqlx::query("UPDATE oc_api_keys SET allow_owned_workspaces=0 WHERE id=?")
-        .bind(reader.id).execute(service.engine.relational().pool()).await.unwrap();
+        .bind(reader.id)
+        .execute(service.engine.relational().pool())
+        .await
+        .unwrap();
     models.release.notify_one();
     assert!(matches!(task.await.unwrap(), Err(AppError::Forbidden)));
     // Revoking only the reader's derived access neither hides nor republishes
     // the valid source for a still-authorized writer.
-    assert_eq!(status(&service, &child, &receipt).await, PublicationStatus::Retrievable);
+    assert_eq!(
+        status(&service, &child, &receipt).await,
+        PublicationStatus::Retrievable
+    );
     assert_eq!(count(&service, "oc_versions").await, 1);
     service.engine.shutdown().await.unwrap();
 }
