@@ -1,9 +1,6 @@
 //! RelationalStore entry points: authentication, workspaces and API keys.
 use super::*;
 
-/// Roles an API key may hold (A2.2 role matrix).
-const ROLES: &[&str] = &["reader", "writer", "reviewer", "admin"];
-
 impl RelationalStore for SqliteStore {
     type Tx = SqliteTx;
 
