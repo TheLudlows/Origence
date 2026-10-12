@@ -11,7 +11,7 @@
 | 角色 | 权限 |
 | --- | --- |
 | reader | 已发布内容 get/search/resolve |
-| writer | reader + 上传/原文件下载/知识入库/结构化记忆发布/capture/任务查询；取消、重试自己任务 |
+| writer | reader + 上传/原文件下载/知识入库/结构化记忆发布/capture/会话归档与反馈/任务查询；取消、重试自己任务 |
 | reviewer | writer + 版本恢复/操作其他主体任务 |
 | admin | reviewer + 资产删除/来源撤回/文件删除/失败清理任务重试 |
 
@@ -41,6 +41,10 @@
 | `GET /v1/jobs/{id}` | operation/state/generation/outcome/result/error_code |
 | `POST /v1/jobs/{id}/cancel` | 标记 cancelled，增加 generation/run_token，旧执行不能提交；已完成任务不能取消，cleanup 不能取消 |
 | `POST /v1/jobs/{id}/retry` | 仅 failed/cancelled 且来源、资产仍有效；新 generation 原子入队；cleanup 重试需 admin |
+| `POST /v1/sessions/{session_id}/turns` | `{turn_id,question,answer,used_evidence:[]}` → 同步归档标识；writer 及以上，详见会话归档节 |
+| `GET /v1/sessions/{session_id}/turns/{turn_id}` | writer 及以上读取完整有效问答、归档引用与反馈 |
+| `POST /v1/sessions/{session_id}/turns/{turn_id}/feedback` | `{feedback_id,target,rating,comment?}` → 同步记录标识；不调权、不触发模型 |
+| `GET /v1/sessions/{session_id}/turns/{turn_id}/feedback` | writer 及以上读取该有效轮次的反馈列表 |
 | `POST /v1/search` | `{query,limit:10,mode:"keyword",allow_partial:false}`；mode 支持 keyword/vector/hybrid |
 | `POST /v1/resolve` | `{query,budget_tokens:2000,mode:"keyword",allow_partial:false}` → rendered_context 和 sources |
 
@@ -242,3 +246,50 @@ content 上限 64 KiB UTF-8，最多 20 个 targets；空 targets 合法，但�
 受理返回 `{state:"accepted",source_event_id,job_id}`。任务完成时 `result.memories` 按模型候选顺序返回 asset_id、version、target、requested_operation、state（published/duplicate）、semantic_status、identity 和 normalization_status。空候选返回空数组；全部重复也可 completed，不代表产生了新版本。lookup/get/search/resolve 继续使用既有接口，搜索身份过滤字段为 `memory_identity`。
 
 locator 沿用 S2 原始来源与字节范围，自动提取的新成员附加 `extraction:{parser:"semantic-capture:v1",model:"配置的模型名称"}`；集合中的旧成员保留自己的来源版本及 extraction，不标成新模型/新输入。来源撤回沿用 S2 整快照隐藏、无自动历史回退。检索跨调用方/跨会话可复用同 workspace 已发布记忆，但本接口不保存结构化 SessionTurn/Feedback，也不是 Improve/Learning 经验蒸馏接口。
+
+
+
+## 会话归档与幂等反馈（S3 第二个切片）
+
+仅新建数据库。SessionTurn 是不可变的问答档案，由调用方在回答完成后明确提交；不自动保存检索命中，不调用模型，也不生成资产、向量、图、任务或新的 Worker。`state:"archived"` 只表示关系型归档已提交，`state:"recorded"` 只表示反馈已提交，不表示可检索或已学习。Improve、Learning、会话向量召回、自动改权和指导均未在此切片实现。
+
+所有入口要求 writer/reviewer/admin，与原始来源读取权限一致；同 workspace 内上述角色共享档案，并非创建者私有。tenant/workspace 完全来自认证，撤销密钥后的旧 AuthContext 也不能继续读写。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil；POST 要求 Idempotency-Key，GET 不要求。未知字段、缺少必要字段、未知枚举均拒绝。
+
+`POST /v1/sessions/{session_id}/turns` 示例：
+
+```json
+{
+  "turn_id": "11111111-1111-4111-8111-111111111111",
+  "question": "Atlas 使用哪个数据库？",
+  "answer": "使用 SQLite。",
+  "used_evidence": [{
+    "kind": "chunk",
+    "id": "22222222-2222-4222-8222-222222222222",
+    "asset_id": "33333333-3333-4333-8333-333333333333",
+    "asset_version": 2,
+    "chunk_id": "22222222-2222-4222-8222-222222222222"
+  }]
+}
+```
+
+- question、answer 均须非空白，各不超过 65,536 UTF-8 字节。used_evidence 必填，显式 `[]` 表示未使用证据；缺省不是空数组。最多 64 条，不接受完全相同的重复引用。只提交实际用于回答的子集。
+- 引用 kind 为 chunk/entity/relation。chunk 的 id 必须等于 chunk_id；图引用的 id 是实体/关系 ID，chunk_id 由调用方选择为该次实际使用的支持片段。asset_version 是正整数的精确历史资产版本，不是当前版本别名。
+- 服务端核验片段、资产版本、根来源、所有 S2 快照支持来源与所属 scope。图引用还需匹配 kind/id/根来源/版本的 owner 和 committed graph ledger。当前图所有权是来源/版本级；所选片段必须属于同一支持来源/版本，本接口不声称已有逐片段图抽取对齐证明。
+- 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与 S2 support_sources），不重新解释历史偏移。
+- GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是 S2 成员的原始来源；version_source_event_id 是该资产快照根来源，reference.asset_version 是实际使用的资产版本，三者不能互相替代。
+
+归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id；相同正文和有序 used_evidence（即使换 Idempotency-Key 或同 workspace 换调用方）返回原标识，改变内容返回 409，不新增版本。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执；任一引用失败全部回滚。
+
+反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
+
+```json
+{"feedback_id":"44444444-4444-4444-8444-444444444444","target":{"type":"turn"},"rating":"helpful","comment":"回答解决了当前问题"}
+```
+
+```json
+{"feedback_id":"55555555-5555-4555-8555-555555555555","target":{"type":"evidence","evidence_ref_id":"66666666-6666-4666-8666-666666666666"},"rating":"unhelpful"}
+```
+
+rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
+
+治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的资产删除、根来源撤回、S2 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；本切片尚无学习执行入口。逻辑撤回保留原始持久化记录，不等于物理擦除。

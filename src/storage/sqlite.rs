@@ -30,6 +30,7 @@ use uuid::Uuid;
 mod aml;
 mod app;
 mod semantics;
+mod session;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
@@ -372,6 +373,7 @@ async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
         aml::AML_SCHEMA,
         aml::ADD_SCHEMA,
         semantics::SCHEMA,
+        session::SCHEMA,
     ] {
         sqlx::raw_sql(schema)
             .execute(&mut *conn)
@@ -395,6 +397,9 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
     }
     if semantics::available(conn).await? {
         semantics::check_schema(conn).await?;
+    }
+    if session::available(conn).await? {
+        session::check_schema(conn).await?;
     }
     // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
@@ -1187,6 +1192,9 @@ impl DomainTx for SqliteTx {
         let Some((event_id, kind, content, file_id, created_at)) = row else {
             return Err(StorageError::NotFound);
         };
+        if kind == "session_turn" {
+            self.require_session_source_visible(id).await?;
+        }
         Ok(
             json!({"event_id":event_id,"kind":kind,"content":content,"file_id":file_id,"created_at":created_at}),
         )

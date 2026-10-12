@@ -2,6 +2,14 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-12 第三阶段：SessionTurn 与幂等 Feedback
+
+基于 main `6a17c32b4407d530804ff63814d3858a474c4790`，按用户确认不等待该主干 CI 再开发。仅新库增加关系型会话表；无升级迁移、模型调用、索引任务、新 Worker 或反馈改权。公开请求类型覆盖严格字段、枚举、UUID、UTF-8 边界与显式实际证据；Service/HTTP 回归覆盖关系型事务、权限、历史 provenance、幂等及依赖撤回。具体执行结果以本 PR 最终 head CI 为准。
+
+云端编辑环境没有 Cargo、rustc、rustfmt；本地静态检查不能替代编译、格式、Clippy 与测试。SQLite DDL 执行和兼容性规范化检查通过。独立审查未发现剩余生产阻塞，并已修正两个测试夹具问题。
+
+[PR #41](https://github.com/TheLudlows/Origence/pull/41) head `933de3b1b2d4f61983988f9637a60e035f5b40b5` 的 [CI run 38199658817](https://github.com/TheLudlows/Origence/actions/runs/38199658817)：Linux native 成功，Rust 1.98.0、严格默认 Clippy、完整默认测试、debug build/HTTP smoke、受控进程恢复与 keyword 种子评估通过。新增 11 项契约单测与 15 项会话/反馈回归均成功。fast-check 在 rustfmt 检查失败（仅格式）；按工具输出调整格式，后续最终 head 必须重新通过格式、无默认特性检查与 Linux CI，不能用这次 Linux 成功替代完整门槛。Windows/macOS/container 在 PR 中按既有 main-only 策略跳过。历史记录保持原样。
+
 ## 2026-10-12 第二阶段：内部任务类型与证据可见性
 
 基于已通过五项主干 CI 的 `7a20540cfadf94199d2787415c619de2aaba9721`。新增私有 JobKind/JobPayload 编解码及九种输入的 JSON v1 golden 回归，Service/Worker 使用类型化字段；WorkItem/ClaimedJob、SQLite 表和保存计划路径不变。损坏任务在 process_claim 的既有错误结算边界解码，新增未知操作、损坏 schema/字段/identity 与后续有效任务回归，以及过期 publication 在解码前按 generation 忽略的回归。保留第一阶段日志哨兵、目标漂移及原有恢复/权限/取消/来源撤回测试。
@@ -379,3 +387,4 @@ PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝
 维护故障、磁盘空间、持续容量、冷启动、独立标签复核及生产数据清理移至产品路线图的 R1–R4/Q1，明确启动条件；收尾不豁免正式参榜与生产验收。文档整理一并提交，当前开发入口切回 S2。
 
 收尾文档本地检查：13 份 Markdown 严格 UTF-8、替换字符与行尾空白通过，190 个本地链接（含 47 个锚点）有效，git diff --check 退出码 0；src/tests/tools/evals/Cargo.toml/Cargo.lock 无差异。仅文档与收尾证据变更，不重复本地 Rust fmt/Clippy/代码测试；本次 PR CI 单独核对。
+
