@@ -47,7 +47,10 @@ fn row_json(row: &turso::Row) -> Result<Value> {
                 turso::Value::Real(v) => json!(v),
                 turso::Value::Text(v) => json!(v),
                 turso::Value::Blob(v) => {
-                    let hex = v.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+                    let hex = v
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>();
                     json!({"blob": hex})
                 }
             })
@@ -108,7 +111,9 @@ async fn request(conn: &mut Connection, request: &Value) -> Result<Value> {
             drop(operation);
             match first_poll {
                 Poll::Pending => Ok(json!({"interrupted_at": "pending_after_first_poll"})),
-                Poll::Ready(result) => Ok(json!({"interrupted_at": "completed_before_cancel", "changed": result?})),
+                Poll::Ready(result) => {
+                    Ok(json!({"interrupted_at": "completed_before_cancel", "changed": result?}))
+                }
             }
         }
         _ => bail!("unknown operation"),
@@ -118,7 +123,10 @@ async fn request(conn: &mut Connection, request: &Value) -> Result<Value> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
-    ensure!(args.len() == 3, "usage: origence-t0-turso-probe create|open PATH");
+    ensure!(
+        args.len() == 3,
+        "usage: origence-t0-turso-probe create|open PATH"
+    );
     let path = Path::new(&args[2]);
     match args[1].as_str() {
         "create" => ensure!(!path.exists(), "refusing to overwrite an existing database"),
@@ -131,7 +139,11 @@ async fn main() -> Result<()> {
         .await?;
     let mut connections = HashMap::<String, Connection>::new();
     let mut stdout = std::io::stdout().lock();
-    writeln!(stdout, "{}", json!({"ready": true, "sdk": "0.8.2", "fts": true}))?;
+    writeln!(
+        stdout,
+        "{}",
+        json!({"ready": true, "sdk": "0.8.2", "fts": true})
+    )?;
     stdout.flush()?;
     for line in std::io::stdin().lock().lines() {
         let line = line?;
@@ -148,10 +160,74 @@ async fn main() -> Result<()> {
         };
         let response = match request(conn, &input).await {
             Ok(result) => json!({"ok": true, "result": result}),
-            Err(error) => json!({"ok": false, "error_category": error_category(&error), "error": format!("{error:#}")}),
+            Err(error) => {
+                json!({"ok": false, "error_category": error_category(&error), "error": format!("{error:#}")})
+            }
         };
         writeln!(stdout, "{response}")?;
         stdout.flush()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_real_job_update_drop_rollback_and_reuse() -> Result<()> {
+        // The released SDK's byte-preserving memory VFS defers I/O completion.
+        // This is cooperative cancellation coverage, not disk durability proof.
+        // Builder requires Arc<dyn IO>; this current-thread test does not send it.
+        #[allow(clippy::arc_with_non_send_sync)]
+        let io = Arc::new(turso::core::MemoryYieldIO::new());
+        let database = Builder::new_local("t0-cancellation.db")
+            .with_io_impl(io.clone())
+            .build()
+            .await?;
+        let conn = database.connect()?;
+        conn.execute_batch(include_str!("../../../src/storage/sqlite-schema.sql"))
+            .await?;
+        conn.execute(
+            "INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(zeroblob(16),zeroblob(16),'fixture',1)",
+            (),
+        )
+        .await?;
+        conn.execute(
+            "INSERT INTO oc_jobs(tenant_id,workspace_id,id,created_by,operation,payload,created_at,updated_at) VALUES(zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),'fixture','{}',1,1)",
+            (),
+        )
+        .await?;
+        drop(conn);
+        drop(database);
+        // Reopen the same synthetic bytes with a cold page cache so updating
+        // the real jobs table must pass through a deferred page read.
+        let database = Builder::new_local("t0-cancellation.db")
+            .with_io_impl(io)
+            .build()
+            .await?;
+        let conn = database.connect()?;
+        conn.execute("BEGIN IMMEDIATE", ()).await?;
+        let mut operation = Box::pin(conn.execute("UPDATE oc_jobs SET generation=999", ()));
+        let first = poll_fn(|cx| Poll::Ready(operation.as_mut().poll(cx))).await;
+        drop(operation);
+        ensure!(
+            matches!(first, Poll::Pending),
+            "write did not yield; cancellation was not exercised"
+        );
+        conn.execute("ROLLBACK", ()).await?;
+        let mut rows = conn.query("SELECT generation FROM oc_jobs", ()).await?;
+        let row = rows.next().await?.context("job missing after rollback")?;
+        ensure!(row.get::<i64>(0)? == 1, "cancelled write escaped rollback");
+        ensure!(rows.next().await?.is_none(), "unexpected extra job");
+        drop(rows);
+        conn.execute("BEGIN IMMEDIATE", ()).await?;
+        conn.execute("UPDATE oc_jobs SET generation=2", ()).await?;
+        conn.execute("COMMIT", ()).await?;
+        let mut rows = conn.query("SELECT generation FROM oc_jobs", ()).await?;
+        let row = rows.next().await?.context("job missing on reuse")?;
+        ensure!(row.get::<i64>(0)? == 2, "connection was not reusable");
+        Ok(())
+    }
 }

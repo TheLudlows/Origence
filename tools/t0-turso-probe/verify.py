@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS = [
@@ -216,19 +217,41 @@ def seed(db):
     db.execute(f"INSERT INTO oc_chunks({CHUNK_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?)", [T, W, C, A, 1, 0, "alpha beta", '{"parser":"memory-semantics:v1","support_sources":["00000000-0000-0000-0000-000000000004"]}', "alpha beta"])
 
 
-def expected_error(db, sql, params=()):
+def expected_error(db, sql, params=(), trigger_message=None):
     def snapshot():
         tables = [row[0] for row in db.query("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'oc_%' ORDER BY name")]
         return {name: sorted(json.dumps(row, sort_keys=True) for row in db.query(f'SELECT * FROM "{name}"')) for name in tables}
     before = snapshot()
     response = db.raw(sql, params, op="execute")
-    assert not response["ok"] and response.get("error_category") == "constraint", response
+    # RAISE(ABORT, ...) is surfaced as the SDK's generic Error in 0.8.2.
+    # Admit only an exact, fixture-owned trigger message for those named tests;
+    # unrelated syntax/transport errors must still fail the constraint gate.
+    rejected = response.get("error_category") == "constraint"
+    if trigger_message is not None:
+        rejected = (response.get("error_category") in {"constraint", "engine_other"}
+                    and response.get("error") == trigger_message)
+    assert not response["ok"] and rejected, response
     assert snapshot() == before, "constraint failure changed business rows"
     return {"rejected": True, "engine_error": response["error"], "error_category": response["error_category"], "all_business_rows_unchanged": True}
 
 
-def schema_roundtrip(db):
-    normalize = lambda sql: "".join(sql.rstrip(";").split()).lower()
+def normalize_sql(sql):
+    """Compare DDL tokens without changing quoted values or identifier bytes."""
+    pattern = re.compile(
+        r"(?P<quoted>'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^\]]*\])"
+        r"|(?P<comment>--[^\r\n]*|/\*.*?\*/)"
+        r"|[A-Za-z_][A-Za-z_0-9]*|[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?"
+        r"|<>|!=|<=|>=|\|\||[^\s]",
+        re.S,
+    )
+    tokens = [match.group() if match.lastgroup == "quoted" else match.group().lower()
+              for match in pattern.finditer(sql) if match.lastgroup != "comment"]
+    if tokens and tokens[-1] == ";":
+        tokens.pop()
+    return tuple(tokens)
+
+
+def schema_roundtrip(db, allow_known_key_quote=False):
     checked = []
     for name in SCHEMAS:
         for statement in statements((ROOT / "src/storage" / name).read_text()):
@@ -239,14 +262,39 @@ def schema_roundtrip(db):
             # Existing graph schema uses IF NOT EXISTS; sqlite_master omits it.
             original = original.replace("IF NOT EXISTS ", "")
             rows = db.query("SELECT sql FROM sqlite_master WHERE name=?", [obj])
-            assert len(rows) == 1 and normalize(rows[0][0]) == normalize(original), (obj, rows)
+            actual = rows[0][0] if len(rows) == 1 else ""
+            if allow_known_key_quote and obj == "oc_commands":
+                # A tightly scoped candidate, never a general quote stripper.
+                # This source table has no quoted string literal containing key.
+                assert "'" not in original and "'" not in actual
+                actual = re.sub(r'"key"', "key", actual)
+            assert len(rows) == 1 and normalize_sql(actual) == normalize_sql(original), (obj, rows)
             checked.append(obj)
     return {"checked_objects": checked}
+
+
+def schema_metadata(db):
+    objects = db.query("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type,name")
+    tables = {}
+    for schema in SCHEMAS:
+        for sql in statements((ROOT / "src/storage" / schema).read_text()):
+            match = re.search(r"CREATE TABLE (?:IF NOT EXISTS )?(\w+)", sql)
+            if match:
+                name = match.group(1)
+                tables[name] = {
+                    "columns": db.query(f'PRAGMA table_info("{name}")'),
+                    "foreign_keys": db.query(f'PRAGMA foreign_key_list("{name}")'),
+                    "indexes": db.query(f'PRAGMA index_list("{name}")'),
+                }
+    value = {"objects": objects, "tables": tables}
+    digest = hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+    return {"sha256": digest, **value}
 
 
 def relational_cases(db, record):
     record("uuid_json_time_roundtrip", lambda: check_equal(db.query("SELECT id,typeof(id),length(id),created_at FROM oc_workspaces WHERE tenant_id=?", [T]), [[W, "blob", 16, 1700000000123]]))
     record("schema_master_exact_normalization", lambda: schema_roundtrip(db))
+    record("schema_narrow_key_identifier_quote_candidate", lambda: schema_roundtrip(db, allow_known_key_quote=True))
     record("composite_foreign_key", lambda: expected_error(db, "INSERT INTO oc_chunks SELECT tenant_id,workspace_id,?, ?,version,99,content,locator,search_terms FROM oc_chunks WHERE id=?", [blob(90), blob(999), C]))
     record("partial_unique_memory_slot", lambda: expected_error(db, "INSERT INTO oc_assets SELECT tenant_id,workspace_id,? ,kind,title,fact_key,current_version,deleted,created_at FROM oc_assets WHERE id=?", [blob(91), A]))
     def immutable_owner():
@@ -255,7 +303,7 @@ def relational_cases(db, record):
         # A real root owner satisfies the FK; only the immutable-owner rule
         # should reject this reassignment. A nonexistent owner would falsely
         # pass this probe even with the trigger removed.
-        result = expected_error(db, "UPDATE oc_workspaces SET owner_workspace_id=? WHERE id=?", [blob(75), W])
+        result = expected_error(db, "UPDATE oc_workspaces SET owner_workspace_id=? WHERE id=?", [blob(75), W], trigger_message="workspace ownership is immutable")
         db.execute("ROLLBACK")
         return result
     record("owner_immutable_trigger", immutable_owner)
@@ -263,7 +311,7 @@ def relational_cases(db, record):
     def owned_root():
         db.execute("INSERT INTO oc_workspaces VALUES (?,?,?,?,?)", [T, blob(80), "owned", W, 1])
         try:
-            return expected_error(db, "INSERT INTO oc_workspaces VALUES (?,?,?,?,?)", [T, blob(81), "nested", blob(80), 1])
+            return expected_error(db, "INSERT INTO oc_workspaces VALUES (?,?,?,?,?)", [T, blob(81), "nested", blob(80), 1], trigger_message="workspace owner must be a root")
         finally:
             db.execute("DELETE FROM oc_workspaces WHERE id=?", [blob(80)])
     record("one_level_owner_trigger", owned_root)
@@ -314,6 +362,29 @@ def relational_cases(db, record):
         check_equal(db.query("SELECT count(*) FROM oc_graph_entities"), [[0]])
         return check_equal(db.query("SELECT state FROM oc_jobs WHERE id=?", [J]), [["pending"]])
     record("graph_cascade_same_transaction_rollback", graph_atomic)
+
+    def actual_recursive_graph():
+        sql = actual_sql("src/storage/sqlite_graph.rs", "WITH RECURSIVE reach")
+        db.execute("BEGIN IMMEDIATE")
+        tenant, workspace = str(uuid.UUID(hex=T["blob"])), str(uuid.UUID(hex=W["blob"]))
+        labels = ["a", "b", "c", "d", "e", "incoming", "wrong-scope"]
+        ids = {label: str(uuid.UUID(int=9000 + number)) for number, label in enumerate(labels)}
+        uids = {label: f"{tenant}|{workspace}|{identifier}" for label, identifier in ids.items()}
+        for label in labels:
+            db.execute("INSERT INTO oc_graph_entities VALUES (?,?,?,?,?,?,?,?,?)", [uids[label], tenant, workspace, ids[label], label, "entity", "synthetic", "source", 1])
+        edges = [("a", "b", tenant), ("a", "b", tenant), ("b", "c", tenant), ("c", "d", tenant), ("d", "e", tenant), ("c", "a", tenant), ("incoming", "a", tenant), ("a", "wrong-scope", "other")]
+        for number, (head, tail, tenant) in enumerate(edges):
+            db.execute("INSERT INTO oc_graph_relations VALUES (?,?,?,?,?,?,?,?)", [str(number), tenant, workspace, uids[head], uids[tail], "edge", "source", 1])
+        tenant = str(uuid.UUID(hex=T["blob"]))
+        observed = {}
+        for hops, labels in [(0, []), (1, ["b"]), (2, ["b", "c"]), (3, ["b", "c", "d"])]:
+            expected = [[ids[label]] for label in labels]
+            rows = db.query(sql, [uids["a"], hops, tenant, workspace, tenant, workspace, uids["a"]])
+            check_equal(rows, expected)
+            observed[str(hops)] = rows
+        db.execute("ROLLBACK")
+        return {"actual_production_sql_executed": True, "by_hops": observed, "incoming_and_wrong_scope_excluded": True}
+    record("real_recursive_graph_direction_hops_scope_cycle", actual_recursive_graph)
 
     def upsert():
         db.execute("BEGIN IMMEDIATE")
@@ -514,12 +585,24 @@ def fts_cases(db, record):
         return {"rows": rows, "direction": "descending", "corpus": "global index statistics; scoped production default not selected"}
     record("fts_positive_score_descending", bm25)
 
-    def scoped():
+    def scoped(shape="joined"):
         current = actual_sql("src/storage/sqlite/visibility.rs", "FROM oc_chunks c JOIN")
         support = actual_sql("src/storage/sqlite/visibility.rs", "(json_extract(c.locator")
-        sql = f"SELECT c.id,fts_score(c.search_terms,?) AS score {current} AND {support} AND fts_match(c.search_terms,?) ORDER BY score DESC LIMIT 1"
+        indexes = iter(["?2", "?3"])
+        numbered_current = re.sub(r"\?", lambda _: next(indexes), current)
+        # The FTS optimizer matches the score and match expressions, including
+        # their parameter identity. Equal values in different slots are not an
+        # equivalent query shape in this SDK; preserve that original observation.
+        original_sql = f"SELECT c.id,fts_score(c.search_terms,?) AS score {current} AND {support} AND fts_match(c.search_terms,?) ORDER BY score DESC LIMIT 1"
+        sql = f"SELECT c.id,fts_score(c.search_terms,?1) AS score {numbered_current} AND {support} AND fts_match(c.search_terms,?1) ORDER BY score DESC LIMIT 1"
+        if shape in {"materialized", "cte"}:
+            hint = "MATERIALIZED " if shape == "materialized" else ""
+            joined = numbered_current.replace("FROM oc_chunks c", "FROM oc_chunks c JOIN scored s ON s.tenant_id=c.tenant_id AND s.workspace_id=c.workspace_id AND s.id=c.id", 1)
+            sql = f"WITH scored AS {hint}(SELECT tenant_id,workspace_id,id,fts_score(search_terms,?1) AS score FROM oc_chunks WHERE fts_match(search_terms,?1)) SELECT c.id,s.score {joined} AND {support} ORDER BY s.score DESC,c.id LIMIT 1"
         db.execute("BEGIN IMMEDIATE")
         db.execute("UPDATE oc_chunks SET search_terms=? WHERE id=?", ["alpha " + "filler " * 100, C])
+        winner = blob(65)
+        db.execute(f"INSERT INTO oc_chunks({CHUNK_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?)", [T, W, winner, A, 1, 65, "eligible stronger", "{}", "alpha alpha " + "filler " * 5])
         # Stronger native competitors must lose eligibility before top-k. These
         # represent another tenant, another workspace and a withdrawn source.
         for number, tenant, workspace, state in [(701, blob(701), blob(702), "active"), (711, T, blob(712), "active"), (721, T, W, "retracted")]:
@@ -531,17 +614,26 @@ def fts_cases(db, record):
             db.execute("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,title,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", [tenant, workspace, asset, 1, "distractor", "fixture", event, "distractor", P, 1])
             db.execute(f"INSERT INTO oc_chunks({CHUNK_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?)", [tenant, workspace, chunk, asset, 1, 0, "distractor", "{}", "alpha alpha alpha"])
         unfiltered = db.query("SELECT id FROM oc_chunks WHERE fts_match(search_terms,'alpha') ORDER BY fts_score(search_terms,'alpha') DESC LIMIT 1")
-        assert unfiltered and unfiltered[0][0] != C, unfiltered
-        plan = db.query("EXPLAIN QUERY PLAN " + sql, ["alpha", T, W, "alpha"])
+        assert unfiltered and unfiltered[0][0] not in [C, winner], unfiltered
+        original_rows = db.query(original_sql, ["alpha", T, W, "alpha"])
+        plan = db.query("EXPLAIN QUERY PLAN " + sql, ["alpha", T, W])
         assert "QUERY INDEX METHOD fts" in json.dumps(plan), plan
-        rows = db.query(sql, ["alpha", T, W, "alpha"])
-        assert len(rows) == 1 and rows[0][0] == C, rows
-        check_equal(db.query(sql, ["alpha", blob(999), W, "alpha"]), [])
+        vm_plan = db.query("EXPLAIN " + sql, ["alpha", T, W])
+        rows = db.query(sql, ["alpha", T, W])
+        direct = db.query("SELECT id,fts_score(search_terms,?1) AS score FROM oc_chunks WHERE fts_match(search_terms,?1)", ["alpha"])
+        distinct_parameters = db.query("SELECT id,fts_score(search_terms,?1) AS score FROM oc_chunks WHERE fts_match(search_terms,?2)", ["alpha", "alpha"])
+        direct_score = next(row[1] for row in direct if row[0] == winner)
+        original_score = next(row[1] for row in direct if row[0] == C)
+        assert direct_score > original_score > 0, direct
+        assert len(rows) == 1 and rows[0][0] == winner and rows[0][1] > 0 and abs(rows[0][1] - direct_score) <= 1e-6, {"shape": shape, "scoped": rows, "direct": direct, "direct_distinct_parameters": distinct_parameters, "plan": plan, "vm_plan": vm_plan}
+        check_equal(db.query(sql, ["alpha", blob(999), W]), [])
         db.execute("UPDATE oc_events SET state='retracted' WHERE id=?", [E])
-        check_equal(db.query(sql, ["alpha", T, W, "alpha"]), [])
+        check_equal(db.query(sql, ["alpha", T, W]), [])
         db.execute("ROLLBACK")
-        return {"native_scoped_topk": rows, "unfiltered_top1_distractor": unfiltered, "plan": plan, "cross_tenant_and_retracted": 0}
+        return {"shape": shape, "native_scoped_topk": rows, "direct_score": direct_score, "direct_distinct_parameters": distinct_parameters, "distinct_parameter_shape_observation": original_rows, "unfiltered_top1_distractor": unfiltered, "plan": plan, "vm_plan": vm_plan, "cross_tenant_and_retracted": 0}
     record("fts_real_visibility_join_before_topk", scoped)
+    record("fts_materialized_score_visibility_candidate", lambda: scoped("materialized"))
+    record("fts_plain_cte_score_visibility_candidate", lambda: scoped("cte"))
     return True
 
 
@@ -656,6 +748,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="origence-t0-") as tmp:
             base = Path(tmp)
             seeded = False
+            schema_reference = [None]
 
             def open_initial():
                 current[0] = SQLite(base / "context.db") if args.sqlite_baseline else Bridge(args.binary, base / "context.db")
@@ -671,6 +764,10 @@ def main():
                         if not args.sqlite_baseline:
                             driver_cases(db, record)
                             fts_cases(db, record)
+                        def capture_schema_metadata():
+                            schema_reference[0] = schema_metadata(db)
+                            return schema_reference[0]
+                        record("canonical_schema_and_structure_before_close", capture_schema_metadata)
                 if current[0] is not None:
                     db, current[0] = current[0], None
                     record("initial_clean_shutdown", lambda: (db.close(), {"closed": True})[1])
@@ -682,6 +779,17 @@ def main():
                         finally:
                             reopened.close()
                     record("same_version_reopen_self_schema", reopen_schema)
+                    def reopen_canonical():
+                        if schema_reference[0] is None:
+                            raise NotRun("no prior schema metadata snapshot")
+                        reopened = Bridge(args.binary, base / "context.db", create=False)
+                        try:
+                            observed = schema_metadata(reopened)
+                            check_equal(observed, schema_reference[0])
+                            return {"sha256": observed["sha256"], "sqlite_master_columns_fk_indexes_unchanged": True}
+                        finally:
+                            reopened.close()
+                    record("same_version_reopen_canonical_schema_structure", reopen_canonical)
                     for count in counts:
                         for phase in ["pre_commit", "post_commit", "post_checkpoint"]:
                             record(f"crash_{count}_{phase}_backup_restore", lambda count=count, phase=phase: crash_case(args.binary, base / f"crash-{count}-{phase}", count, phase))

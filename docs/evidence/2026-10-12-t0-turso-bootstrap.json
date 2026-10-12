@@ -1,0 +1,646 @@
+{
+  "phase": "T0 provisional native bootstrap",
+  "head": "8d0af2136e95331eebcfa0e1e7422992d41e8d3d",
+  "run_url": "https://github.com/TheLudlows/Origence/actions/runs/38257392122",
+  "job_id": 114838865498,
+  "artifact_id": 11750663853,
+  "artifact_sha256": "3aefd39c34bdc8c58fe8e4042569d7c39380d42412427415fa3e62b259cdc59f",
+  "cargo_lock_sha256": "e55f9a9d29be3d8a9cd5d85ace07241743f563de013e657aee31aa599fc93796",
+  "turso_packages": {
+    "turso": "0.8.2",
+    "turso_core": "0.8.2",
+    "turso_ext": "0.8.2",
+    "turso_macros": "0.8.2",
+    "turso_parser": "0.8.2",
+    "turso_sdk_kit": "0.8.2",
+    "turso_sdk_kit_macros": "0.8.2",
+    "turso_sync_engine": "0.8.2",
+    "turso_sync_sdk_kit": "0.8.2"
+  },
+  "summary": {
+    "PASS": 37,
+    "FAIL": 4,
+    "NOT_RUN": 1
+  },
+  "cases": [
+    {
+      "case": "engine_open",
+      "status": "PASS",
+      "details": {
+        "opened": true
+      },
+      "elapsed_ms": 4.278902000010021
+    },
+    {
+      "case": "all_real_schemas_unmodified",
+      "status": "PASS",
+      "details": {
+        "statement_count": 47
+      },
+      "elapsed_ms": 104.88792800001079
+    },
+    {
+      "case": "real_relational_fixture",
+      "status": "PASS",
+      "details": {
+        "seeded": true
+      },
+      "elapsed_ms": 7.266799999996465
+    },
+    {
+      "case": "uuid_json_time_roundtrip",
+      "status": "PASS",
+      "details": {
+        "observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000002"
+            },
+            "blob",
+            16,
+            1700000000123
+          ]
+        ]
+      },
+      "elapsed_ms": 0.7567179999909968
+    },
+    {
+      "case": "schema_master_exact_normalization",
+      "status": "FAIL",
+      "error": "('oc_commands', [['CREATE TABLE oc_commands (tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, principal_id BLOB NOT NULL, dedup_scope TEXT NOT NULL, operation TEXT NOT NULL, \"key\" TEXT NOT NULL, request_hash TEXT NOT NULL, response TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, workspace_id, dedup_scope, operation, \"key\"))']])",
+      "rollback_recovery": {
+        "error": "Transaction error: cannot rollback - no transaction is active",
+        "error_category": "engine_other",
+        "ok": false
+      },
+      "elapsed_ms": 8.737733999993225
+    },
+    {
+      "case": "composite_foreign_key",
+      "status": "PASS",
+      "details": {
+        "rejected": true,
+        "engine_error": "FOREIGN KEY constraint failed",
+        "error_category": "constraint",
+        "all_business_rows_unchanged": true
+      },
+      "elapsed_ms": 26.42695000000117
+    },
+    {
+      "case": "partial_unique_memory_slot",
+      "status": "PASS",
+      "details": {
+        "rejected": true,
+        "engine_error": "UNIQUE constraint failed: oc_assets.(tenant_id, workspace_id, fact_key)",
+        "error_category": "constraint",
+        "all_business_rows_unchanged": true
+      },
+      "elapsed_ms": 25.98707499998909
+    },
+    {
+      "case": "owner_immutable_trigger",
+      "status": "FAIL",
+      "error": "{'error': 'workspace ownership is immutable', 'error_category': 'engine_other', 'ok': False}",
+      "rollback_recovery": {
+        "ok": true,
+        "result": {
+          "changed": 0
+        }
+      },
+      "elapsed_ms": 17.0093730000076
+    },
+    {
+      "case": "one_level_owner_trigger",
+      "status": "FAIL",
+      "error": "{'error': 'workspace owner must be a root', 'error_category': 'engine_other', 'ok': False}",
+      "rollback_recovery": {
+        "error": "Transaction error: cannot rollback - no transaction is active",
+        "error_category": "engine_other",
+        "ok": false
+      },
+      "elapsed_ms": 17.181519999979855
+    },
+    {
+      "case": "real_job_returning_explicit_rollback",
+      "status": "PASS",
+      "details": {
+        "observed": [
+          [
+            1,
+            0
+          ]
+        ]
+      },
+      "elapsed_ms": 2.8597660000002634
+    },
+    {
+      "case": "real_publication_json_queries",
+      "status": "PASS",
+      "details": {
+        "publication_json_each_distinct": [
+          2,
+          2
+        ],
+        "json_set": true
+      },
+      "elapsed_ms": 4.05277599998044
+    },
+    {
+      "case": "real_source_visibility_predicate",
+      "status": "PASS",
+      "details": {
+        "active": 1,
+        "retracted": 0,
+        "wrong_tenant": 0
+      },
+      "elapsed_ms": 10.464770000027102
+    },
+    {
+      "case": "graph_cascade_same_transaction_rollback",
+      "status": "PASS",
+      "details": {
+        "observed": [
+          [
+            "pending"
+          ]
+        ]
+      },
+      "elapsed_ms": 6.388659000009511
+    },
+    {
+      "case": "composite_upsert",
+      "status": "PASS",
+      "details": {
+        "upsert": true
+      },
+      "elapsed_ms": 2.286471000019219
+    },
+    {
+      "case": "real_learning_deferred_fk_commit_rollback",
+      "status": "PASS",
+      "details": {
+        "late_parent_commit": true,
+        "missing_parent_commit": {
+          "rejected": true,
+          "engine_error": "FOREIGN KEY constraint failed",
+          "error_category": "constraint",
+          "all_business_rows_unchanged": true
+        }
+      },
+      "elapsed_ms": 36.46969100000774
+    },
+    {
+      "case": "literal_real_sql_prepare_inventory",
+      "status": "PASS",
+      "details": {
+        "prepared": 188,
+        "assembled_projection_fragments": 2,
+        "dynamic_formatted_sql": "not exhaustively covered; visibility fragments are exercised separately"
+      },
+      "elapsed_ms": 216.23858800001017
+    },
+    {
+      "case": "sdk_transaction_drop_then_reuse",
+      "status": "PASS",
+      "details": {
+        "observed": [
+          [
+            1
+          ]
+        ]
+      },
+      "elapsed_ms": 2.082176000016034
+    },
+    {
+      "case": "returning_unconsumed_drop_rollback_reuse",
+      "status": "PASS",
+      "details": {
+        "consumed": [],
+        "dropped": true
+      },
+      "elapsed_ms": 3.5625740000000405
+    },
+    {
+      "case": "returning_partially_consumed_drop_rollback_reuse",
+      "status": "PASS",
+      "details": {
+        "consumed": [
+          [
+            2
+          ]
+        ],
+        "dropped": true
+      },
+      "elapsed_ms": 3.8021709999895847
+    },
+    {
+      "case": "one_poll_cancel_rollback_reuse",
+      "status": "NOT_RUN",
+      "reason": "write completed before first cancellation point; rollback/reuse passed, actual pending-future cancellation NOT_RUN",
+      "elapsed_ms": 2.0182610000176737
+    },
+    {
+      "case": "two_connection_read_snapshot",
+      "status": "PASS",
+      "details": {
+        "stable_snapshot": true
+      },
+      "elapsed_ms": 4.800901999999496
+    },
+    {
+      "case": "fts_create_on_real_composite_uuid_tables",
+      "status": "PASS",
+      "details": {
+        "tables": [
+          "oc_chunks",
+          "oc_summaries"
+        ]
+      },
+      "elapsed_ms": 21.42451900002129
+    },
+    {
+      "case": "fts_explain_native_index",
+      "status": "PASS",
+      "details": {
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "QUERY INDEX METHOD fts"
+          ]
+        ]
+      },
+      "elapsed_ms": 0.5384929999934229
+    },
+    {
+      "case": "fts_explicit_and",
+      "status": "PASS",
+      "details": {
+        "observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            }
+          ]
+        ]
+      },
+      "elapsed_ms": 1.7446520000135024
+    },
+    {
+      "case": "fts_missing_and_term",
+      "status": "PASS",
+      "details": {
+        "observed": []
+      },
+      "elapsed_ms": 0.7611049999809438
+    },
+    {
+      "case": "fts_user_operator_punctuation_literal_roundtrip",
+      "status": "PASS",
+      "details": {
+        "roundtripped_literal_terms": [
+          "AND",
+          "OR",
+          "NOT",
+          "foo\"bar",
+          "path\\part",
+          "x:y",
+          "v1.2",
+          "foo_bar",
+          "北京"
+        ],
+        "empty_terms": "no FTS query issued"
+      },
+      "elapsed_ms": 22.28891799998678
+    },
+    {
+      "case": "fts_transaction_visibility_rollback",
+      "status": "PASS",
+      "details": {
+        "own_writes_observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            }
+          ]
+        ],
+        "other_before_commit": [],
+        "rollback": true
+      },
+      "elapsed_ms": 18.20577800000933
+    },
+    {
+      "case": "fts_unicode_update_delete_optimize",
+      "status": "PASS",
+      "details": {
+        "observed": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            }
+          ]
+        ]
+      },
+      "elapsed_ms": 41.399283999993486
+    },
+    {
+      "case": "fts_summary_terms_union_same_chunk",
+      "status": "PASS",
+      "details": {
+        "matching_chunks": 1,
+        "single_summary_matches": 0
+      },
+      "elapsed_ms": 30.312186000003294
+    },
+    {
+      "case": "fts_positive_score_descending",
+      "status": "PASS",
+      "details": {
+        "rows": [
+          [
+            {
+              "blob": "0000000000000000000000000000003d"
+            },
+            0.2610187232494354
+          ],
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.21745482087135315
+          ],
+          [
+            {
+              "blob": "0000000000000000000000000000003e"
+            },
+            0.07843711227178574
+          ]
+        ],
+        "direction": "descending",
+        "corpus": "global index statistics; scoped production default not selected"
+      },
+      "elapsed_ms": 28.30269800000451
+    },
+    {
+      "case": "fts_real_visibility_join_before_topk",
+      "status": "PASS",
+      "details": {
+        "native_scoped_topk": [
+          [
+            {
+              "blob": "00000000000000000000000000000007"
+            },
+            0.0
+          ]
+        ],
+        "unfiltered_top1_distractor": [
+          [
+            {
+              "blob": "000000000000000000000000000002cb"
+            }
+          ]
+        ],
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "SEARCH c USING INDEX oc_chunks_scope (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            2,
+            0,
+            0,
+            "SEARCH a USING INDEX sqlite_autoindex_oc_assets_1 (tenant_id=? AND workspace_id=? AND id=?)"
+          ],
+          [
+            3,
+            0,
+            0,
+            "SEARCH v USING INDEX oc_versions_source (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            4,
+            0,
+            0,
+            "SEARCH e USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            23,
+            0,
+            0,
+            "QUERY INDEX METHOD fts"
+          ],
+          [
+            65,
+            0,
+            0,
+            "SCAN json_each AS ss"
+          ],
+          [
+            73,
+            0,
+            0,
+            "SEARCH se USING INDEX oc_events_file (tenant_id=? AND workspace_id=?)"
+          ],
+          [
+            116,
+            0,
+            0,
+            "USE SORTER FOR ORDER BY"
+          ]
+        ],
+        "cross_tenant_and_retracted": 0
+      },
+      "elapsed_ms": 78.65526900002351
+    },
+    {
+      "case": "initial_clean_shutdown",
+      "status": "PASS",
+      "details": {
+        "closed": true
+      },
+      "elapsed_ms": 3.2335340000031465
+    },
+    {
+      "case": "same_version_reopen_self_schema",
+      "status": "FAIL",
+      "error": "('oc_commands', [['CREATE TABLE oc_commands (tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, principal_id BLOB NOT NULL, dedup_scope TEXT NOT NULL, operation TEXT NOT NULL, \"key\" TEXT NOT NULL, request_hash TEXT NOT NULL, response TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, workspace_id, dedup_scope, operation, \"key\"))']])",
+      "elapsed_ms": 22.470869000017046
+    },
+    {
+      "case": "crash_999_pre_commit_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 999,
+        "phase": "pre_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 0,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 514.1967670000156
+    },
+    {
+      "case": "crash_999_post_commit_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 999,
+        "phase": "post_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 999,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 845.6783100000109
+    },
+    {
+      "case": "crash_999_post_checkpoint_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 999,
+        "phase": "post_checkpoint",
+        "checkpoint": [
+          [
+            0,
+            326,
+            326
+          ]
+        ],
+        "expected_committed_rows": 999,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 475.1074380000091
+    },
+    {
+      "case": "crash_1000_pre_commit_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 1000,
+        "phase": "pre_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 0,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 501.18261299999745
+    },
+    {
+      "case": "crash_1000_post_commit_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 1000,
+        "phase": "post_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 1000,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 538.7565910000092
+    },
+    {
+      "case": "crash_1000_post_checkpoint_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 1000,
+        "phase": "post_checkpoint",
+        "checkpoint": [
+          [
+            0,
+            326,
+            326
+          ]
+        ],
+        "expected_committed_rows": 1000,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 1622.2373230000073
+    },
+    {
+      "case": "crash_1001_pre_commit_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 1001,
+        "phase": "pre_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 0,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 592.7395760000138
+    },
+    {
+      "case": "crash_1001_post_commit_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 1001,
+        "phase": "post_commit",
+        "checkpoint": null,
+        "expected_committed_rows": 1001,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 446.6334779999954
+    },
+    {
+      "case": "crash_1001_post_checkpoint_backup_restore",
+      "status": "PASS",
+      "details": {
+        "rows": 1001,
+        "phase": "post_checkpoint",
+        "checkpoint": [
+          [
+            0,
+            326,
+            326
+          ]
+        ],
+        "expected_committed_rows": 1001,
+        "backup_files": [
+          "bridge.stderr",
+          "context.db",
+          "context.db-wal"
+        ],
+        "power_loss_or_mid_io": "NOT_RUN"
+      },
+      "elapsed_ms": 472.7639280000062
+    }
+  ],
+  "production_changes": false,
+  "final_locked_ci": "NOT_RUN"
+}

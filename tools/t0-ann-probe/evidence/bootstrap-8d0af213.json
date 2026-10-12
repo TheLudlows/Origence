@@ -1,0 +1,398 @@
+{
+  "application_baseline": "d0521c0935083e71890ab02c100920c2edaa7227",
+  "artifact": {
+    "file_sha256": {
+      "config.json": "e22d42f0e3ab842e175f8adb6188d3aa2f0ff1f63c1b1706bf388abe83f0a335",
+      "driver-result.json": "ab2f263f65bb95c61d6f5950ba6143355d9fff15d4a56f6bd316f0d7a2c1cdec",
+      "environment.json": "59e4056ec0f0fd14f847572c1d16afa066d28cb40b88775edbbb3a05781deb15",
+      "native-report.json": "60c0ec3f572738f00d9fe6acb9b83c5b76dfb8772a4fcb21384ff9e088e0c6d5",
+      "native.log": "6035ddda72e751eabfc1a843595ffed3adc22f778d4eb4d7ab31df8c69280c13",
+      "summary.md": "0953107dacf93d7e8344f2c2b72ec3a430a52597d643e7654abf4e4bf7298fe4"
+    },
+    "id": 11752387239,
+    "url": "https://github.com/TheLudlows/Origence/actions/runs/38257392122/artifacts/11752387239",
+    "zip_sha256": "1250f53e432a3a584b73585e1494b0b8336a8bd6330189318cfdee2c3c8d4319"
+  },
+  "bootstrap_checks": {
+    "committed_format_lock_gate": "FAIL; bootstrap generated lock and rustfmt diff, now imported locally; frozen committed rerun pending",
+    "native_run": "FAIL_GATE",
+    "python_tests": {
+      "passed": 22
+    },
+    "release_build": "PASS",
+    "rust_fixture_tests": {
+      "passed": 3
+    },
+    "warnings_denied_clippy": "PASS"
+  },
+  "bucket_minima": [
+    {
+      "ann_count_range": [
+        0,
+        0
+      ],
+      "bucket": "empty",
+      "eligible_count_range": [
+        0,
+        0
+      ],
+      "failed_pairs": 0,
+      "minimum_recall_at_10": null,
+      "minimum_recall_at_100": null,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        1,
+        1
+      ],
+      "bucket": "one",
+      "eligible_count_range": [
+        1,
+        1
+      ],
+      "failed_pairs": 0,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 1.0,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        5,
+        7
+      ],
+      "bucket": "lt_10",
+      "eligible_count_range": [
+        7,
+        7
+      ],
+      "failed_pairs": 6,
+      "minimum_recall_at_10": 0.7142857142857143,
+      "minimum_recall_at_100": 0.7142857142857143,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        19,
+        25
+      ],
+      "bucket": "lt_100",
+      "eligible_count_range": [
+        37,
+        37
+      ],
+      "failed_pairs": 9,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 0.5135135135135135,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        100,
+        100
+      ],
+      "bucket": "dense_current",
+      "eligible_count_range": [
+        4340,
+        4356
+      ],
+      "failed_pairs": 0,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 1.0,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        20,
+        27
+      ],
+      "bucket": "sparse",
+      "eligible_count_range": [
+        45,
+        45
+      ],
+      "failed_pairs": 9,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 0.4444444444444444,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        90,
+        100
+      ],
+      "bucket": "other_tenant",
+      "eligible_count_range": [
+        218,
+        218
+      ],
+      "failed_pairs": 6,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 0.9,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        88,
+        100
+      ],
+      "bucket": "other_workspace",
+      "eligible_count_range": [
+        217,
+        217
+      ],
+      "failed_pairs": 6,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 0.85,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        3,
+        4
+      ],
+      "bucket": "source_version",
+      "eligible_count_range": [
+        8,
+        8
+      ],
+      "failed_pairs": 9,
+      "minimum_recall_at_10": 0.375,
+      "minimum_recall_at_100": 0.375,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        100,
+        100
+      ],
+      "bucket": "historical_generation",
+      "eligible_count_range": [
+        4340,
+        4340
+      ],
+      "failed_pairs": 0,
+      "minimum_recall_at_10": 1.0,
+      "minimum_recall_at_100": 1.0,
+      "pairs": 9
+    },
+    {
+      "ann_count_range": [
+        6,
+        16
+      ],
+      "bucket": "fresh_unindexed",
+      "eligible_count_range": [
+        16,
+        16
+      ],
+      "failed_pairs": 4,
+      "minimum_recall_at_10": 0.6,
+      "minimum_recall_at_100": 0.375,
+      "pairs": 7
+    }
+  ],
+  "build_identity": {
+    "binary_sha256": "a882e8f57a3b7394c20fe16ec3add31f9f359a2913a1da9ae4767b0b07afb677",
+    "lock_sha256": "565489ab5d8bf79c88a98410af3c2f0f45b4e9e5560b3a162b89a994fa41d5cf",
+    "manifest_sha256": "658971567d677538d522796a71bd0a9eb3c1f8643528a68a6d927e2dfcf3cd64",
+    "source_sha256": {
+      "probe.py": "966f0d88c484d610ad30cb8a96109aae9378dd84ba7029561cabce65eddaa515",
+      "src/fixture.rs": "ca7b73357ee29467c833ae8024308c3aca16b844bcc87aa5fd82f292888c140e",
+      "src/main.rs": "7692edcc949baa312c99eea24e3acbdf181ce4670c6803f574c4ecd6bf0fe700"
+    }
+  },
+  "config": {
+    "dimension": 128,
+    "index_kind": "ivf_flat",
+    "nprobes": 32,
+    "partitions": 64,
+    "queries_per_bucket": 3,
+    "refine_factor": 10,
+    "rows": 10000,
+    "seed": 52
+  },
+  "fixture_final_sha256": "a15ff3af30877988a2ed85e0dee321ee88a099e46eab302d626804d9364c892b",
+  "fixture_indexed_sha256": "104b42b105d709b9743df93b2160be89e92ada29b4d954482e501d32c332ba07",
+  "fresh_row_evidence": {
+    "fresh_after_refresh": {
+      "ann_counts": [
+        8,
+        9,
+        6
+      ],
+      "exact_counts": [
+        16,
+        16,
+        16
+      ],
+      "recall_at_10": [
+        0.8,
+        0.9,
+        0.6
+      ],
+      "recall_at_100": [
+        0.5,
+        0.5625,
+        0.375
+      ],
+      "snapshot": 46
+    },
+    "fresh_before_refresh": {
+      "ann_counts": [
+        16,
+        16,
+        16
+      ],
+      "exact_counts": [
+        16,
+        16,
+        16
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_100": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "snapshot": 45
+    },
+    "reopened": {
+      "ann_counts": [
+        8
+      ],
+      "exact_counts": [
+        16
+      ],
+      "recall_at_10": [
+        0.8
+      ],
+      "recall_at_100": [
+        0.5
+      ],
+      "snapshot": 46
+    }
+  },
+  "head": "8d0af2136e95331eebcfa0e1e7422992d41e8d3d",
+  "index_coverage": {
+    "fresh_evidence_after_refresh": {
+      "distance_type": "L2",
+      "indexed_rows": 10000,
+      "loss": 2.5148436427116394,
+      "num_indices": 1,
+      "type": "IVF_FLAT",
+      "unindexed_rows": 0
+    },
+    "fresh_evidence_before_refresh": {
+      "distance_type": "L2",
+      "indexed_rows": 9984,
+      "loss": 1498.8175102174282,
+      "num_indices": 1,
+      "type": "IVF_FLAT",
+      "unindexed_rows": 16
+    },
+    "indexed_evidence": {
+      "distance_type": "L2",
+      "indexed_rows": 9984,
+      "loss": 1498.8175102174282,
+      "num_indices": 1,
+      "type": "IVF_FLAT",
+      "unindexed_rows": 0
+    },
+    "reopened_evidence": {
+      "distance_type": "L2",
+      "indexed_rows": 10000,
+      "loss": 2.5148436427116394,
+      "num_indices": 1,
+      "type": "IVF_FLAT",
+      "unindexed_rows": 0
+    }
+  },
+  "interpretation": {
+    "finding": "Fixed 32-of-64 probes fail representative selective buckets at unchanged 0.95 recall gates; no probe implementation defect identified in this result.",
+    "fresh_rows": "Fresh unindexed rows were present and complete before Index refresh; after index-only refresh exact still returns all 16 while fixed-probe ANN misses rows. This is recall undercoverage, not proven data loss.",
+    "limits": "Synthetic authority, easy fixture, three queries per bucket, prepared/order-biased timings. No production SLO, real-corpus recall, application authorization, source-byte preservation or higher-scale acceptance.",
+    "next_diagnostic": "Retain failing default 32/64 run. Independently rebuild and execute explicitly labeled 64/64 saturation control at 10k/128D, same canonical fixture digests, same gates. Cross-run index training is not identical and no causal latency/speedup comparison is supported."
+  },
+  "job": 114838864911,
+  "job_url": "https://github.com/TheLudlows/Origence/actions/runs/38257392122/job/114838864911",
+  "lancedb": "0.23.1",
+  "layouts": {
+    "layout_after_compact": {
+      "bytes": 5731026,
+      "fragments": 3,
+      "rows": 9984,
+      "version": 43
+    },
+    "layout_after_index": {
+      "bytes": 5731026,
+      "fragments": 3,
+      "rows": 9984,
+      "version": 44
+    },
+    "layout_after_index_refresh": {
+      "bytes": 5740738,
+      "fragments": 4,
+      "rows": 10000,
+      "version": 46
+    },
+    "layout_before_compact": {
+      "bytes": 5537610,
+      "fragments": 39,
+      "rows": 9984,
+      "version": 40
+    },
+    "layout_before_index_refresh": {
+      "bytes": 5740738,
+      "fragments": 4,
+      "rows": 10000,
+      "version": 45
+    }
+  },
+  "observed_at_utc": "2026-10-12T14:12:00Z",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "prepared_smoke_durations_ms": {
+    "compact_ms": 32.137693,
+    "elapsed_ms": 20738.1347,
+    "fresh_append_ms": 1.3249309999999999,
+    "index_build_ms": 129.930218,
+    "index_refresh_ms": 30.279111
+  },
+  "result": {
+    "all_invariant_counters": {
+      "duplicate_ids": 0,
+      "score_distance_violations": 0,
+      "source_violations": 0,
+      "visibility_violations": 0
+    },
+    "batched_512_exact_matches": 33,
+    "batched_512_failed_recall": 20,
+    "batched_512_groups": 33,
+    "driver_status": "FAIL",
+    "exact_fallback_matches": 97,
+    "independent_validator_error_categories": {
+      "512-ID gate failed": 20,
+      "FAIL_GATE": 1,
+      "batched recall_at_10 below 0.95": 8,
+      "batched recall_at_100 below 0.95": 20,
+      "native gate failed": 49,
+      "recall_at_10 below 0.95 or invalid": 19,
+      "recall_at_100 below 0.95 or invalid": 49
+    },
+    "native_exit": 1,
+    "native_status": "FAIL_GATE",
+    "nonempty_native_ann_proved": 88,
+    "nonempty_pairs": 88,
+    "pairs_completed": 97,
+    "pairs_failed_recall": 49,
+    "timeout": false
+  },
+  "run_url": "https://github.com/TheLudlows/Origence/actions/runs/38257392122",
+  "schema": "origence-t0-ann-bootstrap-evidence-v1",
+  "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "workflow_run": 38257392122
+}

@@ -69,6 +69,50 @@ class ProbeTests(unittest.TestCase):
             db.close()
         self.assertIn("owner_immutable_trigger", failures)
 
+    def test_narrow_schema_quote_candidate_rejects_semantic_change(self):
+        class SchemaView:
+            def __init__(self, db, mutation, object_name="oc_commands"):
+                self.db, self.mutation, self.object_name = db, mutation, object_name
+
+            def query(self, sql, params=()):
+                rows = self.db.query(sql, params)
+                if params == [self.object_name]:
+                    return [[self.mutation(rows[0][0])]]
+                return rows
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = probe.SQLite(Path(tmp) / "baseline.db")
+            probe.initialize(db)
+            quoted = SchemaView(db, lambda sql: sql.replace("key TEXT", '"key" TEXT').replace("operation, key)", 'operation, "key")'))
+            with self.assertRaises(AssertionError):
+                probe.schema_roundtrip(quoted)
+            probe.schema_roundtrip(quoted, allow_known_key_quote=True)
+            changed = SchemaView(db, lambda sql: sql.replace("request_hash TEXT NOT NULL", "request_hash TEXT"))
+            with self.assertRaises(AssertionError):
+                probe.schema_roundtrip(changed, allow_known_key_quote=True)
+            changed_default = SchemaView(
+                db, lambda sql: sql.replace("DEFAULT 'pending'", "DEFAULT 'PENDING'"),
+                object_name="oc_jobs",
+            )
+            for allow_quote in [False, True]:
+                with self.subTest(allow_quote=allow_quote), self.assertRaises(AssertionError):
+                    probe.schema_roundtrip(changed_default, allow_known_key_quote=allow_quote)
+            db.close()
+
+    def test_sql_normalization_preserves_quoted_tokens(self):
+        self.assertEqual(probe.normalize_sql("SELECT 'a b', \"key\";"),
+                         probe.normalize_sql("select /* comment */ 'a b',\"key\""))
+        for original, changed in [
+            ("SELECT 'pending'", "SELECT 'PENDING'"),
+            ("SELECT 'a b'", "SELECT 'ab'"),
+            ("SELECT 'it''s A'", "SELECT 'it''s a'"),
+            ('SELECT "a b"', 'SELECT "ab"'),
+            ("SELECT 'a--b/*c*/'", "SELECT 'ab'"),
+            ("SELECT 12", "SELECT 1 2"),
+        ]:
+            with self.subTest(original=original):
+                self.assertNotEqual(probe.normalize_sql(original), probe.normalize_sql(changed))
+
 
 if __name__ == "__main__":
     unittest.main()

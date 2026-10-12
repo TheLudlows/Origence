@@ -61,7 +61,10 @@ stale web documentation is not evidence that it lacks transactions/RYW/merging.
 8. Public graph traversal is directed outgoing reachability, maximum 3 hops,
    excluding the seed with deterministic dedup/order. Hybrid's graph expansion
    is a different, one-hop bidirectional behavior. Same-snapshot batched BFS is
-   the planned recursive-CTE adaptation; one SQL call per node is disallowed.
+   the fallback adaptation if the actual released engine cannot preserve the
+   recursive query's behavior. The bootstrap prepared that query successfully;
+   directed/cyclic/scoped 0–3-hop execution is measured separately rather than
+   declaring it unsupported from older documentation. One SQL call per node is disallowed.
    Resource exhaustion must be explicit, never silent "complete" truncation.
 9. Existing retrieval/context policy markers and historical evaluation records
    stay unchanged during T0. A new ranking/index strategy must receive a new
@@ -93,6 +96,12 @@ run is 10k synthetic vectors at 128 dimensions, with production dimensions and
 100k/1M scale explicitly later work, not launched automatically. IVF_FLAT is the
 initial correctness/index-path candidate; PQ/HNSW comparison remains bounded by
 documented training/runtime constraints and cannot be labeled tested if omitted.
+
+The first native 32-of-64 IVF_FLAT run failed selective-bucket recall. That result
+is retained. A separate explicit 64-of-64 run diagnoses exhaustive partition
+coverage on the same canonical fixture; it rebuilds its own index and is not a
+same-physical-index parameter comparison or an ANN speedup claim. Neither the
+default candidate nor the frozen recall threshold is silently changed.
 
 Frozen acceptance target: per declared bucket Recall@10 and Recall@100 >= 0.95,
 denominator `min(K, eligible unique chunks)`, exact fallback = 1.0; empty buckets
@@ -136,7 +145,7 @@ cross-engine restore support are part of current acceptance.
 | Transactions | BEGIN IMMEDIATE, commit/rollback, SDK drop/reuse, RETURNING drop, once-polled cancellation, read snapshot | Every async yield point, multi-process/MVCC concurrency |
 | FTS | Real chunk/summary index, EXPLAIN, AND, summary union, Unicode/update/delete/optimize/rollback/scoped join | Representative corpus relevance, global-vs-scoped default, rebuild interruption |
 | Crash/restore | 999/1000/1001 rows at pre-commit/post-commit/post-checkpoint process-kill barriers; main+FTS+job+ledger; stopped whole-directory restore | Arbitrary mid-I/O power loss, disk-full, mid-OPTIMIZE/checkpoint/commit |
-| Graph | Current DDL/cascade/atomic rollback and literal recursive CTE compatibility observation | Directed 3-hop same-snapshot batched BFS and hybrid one-hop implementation |
+| Graph | Current DDL/cascade/atomic rollback and actual recursive CTE direction/hops/scope/cycle behavior | Batched BFS only if needed; full public/hybrid graph-service integration |
 | ANN | Separate physical IVF index and paired filtered exact baseline | Production integration and final scale/hardware SLO |
 
 PASS means the named executable assertion ran successfully. FAIL means it ran

@@ -1,62 +1,86 @@
-# Issue #52: isolated ANN T0 preparation
+# Issue #52: isolated ANN T0 results
 
-Date: 2026-10-12 UTC. Application baseline: `d0521c0935083e71890ab02c100920c2edaa7227`.
+Updated: 2026-10-12 UTC. Application baseline: `d0521c0935083e71890ab02c100920c2edaa7227`.
 
 ## Decision today
 
-**T0 harness prepared; native result NOT_RUN. No ANN production decision is supported yet. The initial 10k/128D/three-query run is a smoke test, not performance acceptance.**
+**The native probe executed and rejected the tested fixed 32-of-64 IVF_FLAT policy.** All 97 paired measurements completed; 49 failed the unchanged per-query Recall@10/@100 >=0.95 gate. This is a genuine recall result, not a compilation failure, timeout or identified probe defect. It is a 10k/128D synthetic smoke test, not production performance acceptance or a verdict against LanceDB ANN generally.
 
-The isolated crate pins LanceDB `=0.23.1`, disables its default cloud/provider features and does not import Origence. Only `tools/t0-ann-probe/` and this report were added by the ANN preparation task. Root Cargo files, production storage/retrieval/maintenance code and existing application data were untouched. The default plan is 10,000 total synthetic rows, 128 dimensions, real IVF_FLAT, 64 partitions, 32 probes and three queries per bucket. The 100k/1M ladder, higher dimensions and optional IVF_PQ/IVF_HNSW_PQ are explicit manual opt-ins. IVF_HNSW_SQ is NOT_IMPLEMENTED/NOT_RUN in this scaffold.
+Exact fallback matched in all 97 pairs. Every recorded source, visibility, duplicate and distance/score violation counter was zero, including raw ANN/exact 512-ID results before truncation. All 88 nonempty pairs had actual native ANN plan evidence. The 33 batched groups reproduced the single-query exact result; 20 batched groups failed ANN recall.
 
-## Actual validation
+## Exact evidence
 
-| Check | Result | Evidence / limit |
-| --- | --- | --- |
-| Read repository constraints and relevant source | DONE | AGENTS, STATUS/design, storage/lancedb, retrieval, context_retrieval, storage/maintenance; hashes in isolated source-baseline.json |
-| Exact LanceDB 0.23.1 API source inspection | DONE | Official tag resolves to `e8feaede1ee8dc7063c6f1e32b9936dacef915f9`; immutable links in probe README |
-| Independent read-only API/lifecycle and measurement review | DONE | No remaining blocking findings after raw-batch, cardinality, retained-hit and plan-proof corrections; not compilation evidence |
-| Python driver/report gates | PASS | 22 unit tests; Python compilation also passed |
-| Default no-execute plan | PASS | 10k/128D, 5,120,000 raw vector bytes, baseline hashes match; no native execution or DB creation |
-| Cargo-generated isolated lockfile | NOT_RUN | No Cargo installed; no lockfile was fabricated or copied |
-| Rust formatting / Clippy / compilation / unit tests | NOT_RUN | No Rust/Cargo toolchain in this executor |
-| Real IVF_FLAT build, metadata, explain/native plan | NOT_RUN | Code is prepared, not runtime evidence |
-| Per-bucket Recall@10 / Recall@100 and exact fallback | NOT_RUN | Requires native execution; configured gates are each >=0.95 and exact fallback 100% |
-| Source/visibility/score zero-violation gates | NOT_RUN | Synthetic implementation prepared; production integrations remain separate |
-| Fresh rows before/after Index refresh and reopen | NOT_RUN | Requires native execution |
-| 512-ID eligibility/native/final verification cost | NOT_RUN | Synthetic route prepared; real SQLite/service cost remains NOT_RUN |
-| PQ/HNSW, 100k/1M, high dimensions / real corpus | NOT_RUN | Not automatically run or inferred |
-| Production public-library/HTTP path, source bytes, SLO | NOT_RUN | Explicitly outside this isolated mechanics probe |
+- Draft PR head: `8d0af2136e95331eebcfa0e1e7422992d41e8d3d`.
+- [Workflow run 38257392122](https://github.com/TheLudlows/Origence/actions/runs/38257392122), [ANN job 114838864911](https://github.com/TheLudlows/Origence/actions/runs/38257392122/job/114838864911).
+- [Original ANN artifact 11752387239](https://github.com/TheLudlows/Origence/actions/runs/38257392122/artifacts/11752387239), SHA-256 `1250f53e432a3a584b73585e1494b0b8336a8bd6330189318cfdee2c3c8d4319`.
+- [Concise derived evidence JSON](../tools/t0-ann-probe/evidence/bootstrap-8d0af213.json) records individual file hashes, build/source/lock identity, fixture digests, bucket minima, index/layout evidence and validator error categories. Original artifact data was not modified.
 
-## Ready for the first authorized execution
+The bootstrap generated the isolated Cargo lock and applied rustfmt before build. Warnings-denied Clippy, all 3 Rust fixture tests, all 22 Python tests and the release build passed with Rust 1.98.0 and LanceDB 0.23.1. Its committed-format/lock gate correctly failed because these generated changes were not in that head. The Cargo-generated lock and exact formatter patch have now been imported locally; a committed, locked exact-head rerun remains pending. Build source hashes in the artifact identify the formatted source actually executed.
 
-See [probe README](../tools/t0-ann-probe/README.md) for exact commands. Generate the **isolated** `Cargo.lock` with Cargo, retain its artifact, import formatting changes, then rerun formatting/Clippy/tests/build with the lock frozen. Build with Rust 1.98.0 and retain logs proving the executable's source. A first CI bootstrap that generates the lock is not the final reproducible locked run.
+## Per-bucket recall
 
-First native command:
+Minima below span the three measured phases and, for fresh rows, the reopened check. Empty buckets must return zero rows and have no recall percentage.
+
+| Bucket | Eligible rows | Minimum Recall@10 | Minimum Recall@100 |
+| --- | ---: | ---: | ---: |
+| Empty | 0 | n/a | n/a |
+| One | 1 | 1.0000 | 1.0000 |
+| Fewer than 10 | 7 | 0.7143 | 0.7143 |
+| Fewer than 100 | 37 | 1.0000 | 0.5135 |
+| Dense current | 4,340–4,356 | 1.0000 | 1.0000 |
+| Sparse | 45 | 1.0000 | 0.4444 |
+| Other tenant | 218 | 1.0000 | 0.9000 |
+| Other workspace | 217 | 1.0000 | 0.8500 |
+| Source/version | 8 | 0.3750 | 0.3750 |
+| Historical generation | 4,340 | 1.0000 | 1.0000 |
+| Fresh rows, all phases | 16 | 0.6000 | 0.3750 |
+
+Returning the requested number is not the recall gate: one workspace query returned 92 candidates but recalled only 85 of the exact top 100. Full retained hit lists independently reproduce the reported recall, rather than deriving it only from returned count.
+
+## Fresh-row and maintenance finding
+
+Before refresh, statistics reported 9,984 indexed and 16 unindexed rows. All three fresh queries returned all 16 rows, with Recall@10/@100=1. After the explicit index-only refresh, statistics correctly reported 10,000 indexed and zero unindexed rows, while the fresh ANN queries returned only 8, 9 and 6 rows. Their Recall@10 was 0.8/0.9/0.6 and Recall@100 was 0.5/0.5625/0.375. Reopen reproduced the first result (8/16).
+
+Exact search and forced fallback still returned every fresh row after refresh. The result is consistent with fixed-probe partition undercoverage, not observed row loss. It illustrates why unindexed-tail correctness alone cannot establish post-refresh filtered ANN recall. The independent saturation diagnostic below will test that interpretation without changing the default gate.
+
+Physical compaction reduced the initial 39 fragments to 3 before either exact/ANN query ran. Appending fresh rows added one fragment. Index-only refresh retained 4 fragments and all 10,000 rows. Only explicit `Compact` and `Index` actions were used, with no `All` or `Prune`.
+
+## Next bounded diagnostic
+
+Retain the default 32/64 run and its failing result. Separately run an explicit **64/64 saturation diagnostic** at the same 10k rows, 128D, candidate target 100 and seed 52:
 
 ```sh
 python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 \
-  --queries 3 --index ivf_flat --timeout-seconds 1800
+  --queries 3 --index ivf_flat --partitions 64 --nprobes 64 --timeout-seconds 1800
 ```
 
-The driver requires both lock and executable, verifies the LanceDB version and baseline hashes, creates a unique report directory, and applies a native-process deadline. It never installs software or provisions compute. Record any compilation/API correction as a correction, then rerun the final source; do not label static source review as a native pass.
+Both runs retain the >=0.95 recall and zero-violation gates. This second invocation creates another database and independently trained index; compare canonical fixture digests, not physical index identity. Training randomness is not explicitly seeded. Each individual exact/ANN pair still uses its own same frozen snapshot, layout, L2 metric, merged predicate and candidate budget. Probing every IVF partition is a mechanics/coverage control, not evidence of useful approximation, ANN speedup or a suitable production default. There is no automatic tuning or promotion.
 
-The default three-query configuration has 30 indexed + 33 pre-refresh + 33 post-refresh paired measurements (96 query rows), plus one reopened fresh pair (97 total). Every pair also runs a forced exact fallback. The 512-ID comparison runs for query zero of each bucket/phase and the reopened fresh pair (33 groups).
+No probe code correction is currently warranted by the native result. A future sparse-scope exact policy, adaptive probing or revised candidate strategy needs a separately specified and tested policy; forced exact success does not convert this raw ANN failure into a pass.
 
-## Acceptance evidence the executable will retain
+## Validation boundaries
 
-1. Same snapshot/layout/query/L2/predicate/100-candidate exact-vs-ANN pairs; explicit prefilter, one merged AND filter, no fast search.
-2. Index type/column/metric from list/statistics plus full native explain text, independently parsed by the Python gate. A nonempty query without recognized native ANN proof fails rather than claiming an indexed speedup.
-3. Every query's retained exact/ANN/verified/fallback hit tuples and distances, with Python-recomputed recall/equality, plus canonical fixture SHA-256 digests. Recall at 10 and 100, including empty/one/<K/dense/sparse/tenant/workspace/source-version/historical/fresh buckets. Empty recall is null, not an invented 100%.
-4. Zero source/visibility/duplicate/distance-score violations and forced exact fallback equality. Exact fallback success never hides a failed raw ANN bucket.
-5. Separate enumeration, authority-map, predicate, 512-ID native query count/time, merge and final-verification timings. These are explicitly in-memory authority simulations, not measured SQLite performance. Selected component sums omit some setup and are not full pipeline wall times.
-6. Distinct Compact, index build and Index refresh timings; new rows demonstrably unindexed and returned before refresh, indexed afterward; unchanged row/fragment counts during index-only refresh; reopen evidence.
+| Check | Current result |
+| --- | --- |
+| Official 0.23.1 API and independent source review | Complete; no remaining blocking source-review findings |
+| Python tests / Rust fixture tests / warnings-denied Clippy / release build | PASS on bootstrap artifact source |
+| Cargo-generated lock and rustfmt | Generated and imported; committed locked rerun pending |
+| Real IVF_FLAT type/metric/coverage/native plan proof | PASS for all 88 nonempty paired measurements |
+| Fixed 32/64 per-bucket ANN recall | FAIL: 49/97 pairs; thresholds unchanged |
+| Exact fallback and batched-exact equivalence | PASS: 97/97 and 33/33 respectively |
+| Synthetic source/visibility/distance invariants | Zero violations recorded; not production authorization proof |
+| Independent 64/64 saturation diagnostic | NOT_RUN |
+| PQ/HNSW, 100k/1M, high dimensions, real corpus | NOT_RUN; HNSW_SQ not implemented in this scaffold |
+| Production public-library/HTTP path, source bytes, SLO | NOT_RUN |
 
-## Unresolved risks / honest boundaries
+The isolated crate does not import Origence or change production modules, root Cargo files or application data. It retains full eligibility enumeration and measures the 512-ID shape separately. These are in-memory authority simulations, not measured SQLite/service costs. `selected_ann_component_sum_ms` omits some setup and is not full pipeline wall time.
 
-- Static API alignment does not establish compilation. Native builder/planner/index-stat behavior must be observed on the pinned crate.
-- Fixed 32-of-64 probes can underfill selective or small eligible sets; this is intentionally surfaced as a failed bucket. A future adaptive or small-scope exact policy needs separate evidence. Nothing automatically tunes parameters until a pass appears.
-- Easy clustered synthetic geometry can pass while real embeddings fail. Three samples per bucket cannot justify a production p95 or general recall claim. Explain plans are prepared before each pair, so samples are not cold; odd query counts are not order-balanced and the batched route always runs ANN first. Timings are descriptive only.
-- Historical/current artifacts use distinct stored IDs here. Forged stale same-ID metadata is rejected by a synthetic verifier, but the real application's reused-ID/generation/source-event/visibility contracts are not exercised.
-- Full eligible ID filters are still enumerated and can be large. This does not validate a coarser-predicate redesign or eliminate the existing 512-ID path's overhead.
-- No source-byte preservation, crash/rebuild interruption, deletion, concurrent-write or real-service transaction proof is included. No production behavior, capability flag or score mapping has changed.
-- The historical 563-row/1024D/49.44-second result is not reproduced and must not be explained or compared using this differently sized/dimensional toy fixture.
+All explain plans are prepared before timing; default query order is not balanced, and the batched comparison always runs ANN first. Three samples per bucket cannot support a production p95/P99 or unbiased speedup claim. The historic 563-row/1024D/49.44-second observation is not reproduced or explained by this fixture.
+
+Stored historical/current artifact IDs are distinct. Forged stale metadata and withdrawals are tested through a synthetic verifier, not the real source-event/identity/context-route contracts. Source-byte preservation, deletion/rebuild interruption, crash recovery, concurrent writes, real embeddings and production scale remain untested.
+
+## Preparation review resolved
+
+Two read-only reviews found no remaining blocking API/lifecycle or measurement-gate findings after corrections. Raw ANN and exact results are checked against each 512-ID batch before merging or truncation; fallback equality includes tenant/workspace. Required cardinalities and the reopened fresh-query identity/snapshot are enforced. Retained hit lists support independent recall/fallback checks, and actual plan text and index metadata support native ANN proof.
+
+All 22 Python tests passed, including independent mutations for all-empty fixtures with cleared hit lists, wrong reopen identity, contradictory ANN plans, raw-batch violations and fallback workspace mismatches. See the [probe README](../tools/t0-ann-probe/README.md) for reproduction commands and API sources.

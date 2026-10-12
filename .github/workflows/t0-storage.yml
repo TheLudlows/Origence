@@ -62,8 +62,15 @@ jobs:
       - name: Warnings-denied isolated Clippy
         run: cargo clippy --locked --manifest-path tools/t0-turso-probe/Cargo.toml --all-targets -j 2 -- -D warnings
       - name: Build the pinned native bridge
+        id: native_bridge
         run: cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml -j 2
+      - name: Build the forced-pending SDK unit test
+        run: cargo test --locked --manifest-path tools/t0-turso-probe/Cargo.toml -j 2 --no-run
+      - name: Forced-pending SDK cancellation test (synthetic VFS only)
+        timeout-minutes: 2
+        run: cargo test --locked --manifest-path tools/t0-turso-probe/Cargo.toml -j 2
       - name: Real DDL, SQL, FTS, transaction and process recovery probes
+        if: ${{ !cancelled() && steps.native_bridge.outcome == 'success' }}
         run: python3 tools/t0-turso-probe/verify.py --binary tools/t0-turso-probe/target/debug/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/native"
       - name: Require committed source formatting
         if: always()
@@ -134,9 +141,13 @@ jobs:
       - name: Rust fixture tests
         run: cargo test --locked --manifest-path tools/t0-ann-probe/Cargo.toml -j 2
       - name: Build the pinned ANN executable
+        id: native_ann
         run: cargo build --locked --manifest-path tools/t0-ann-probe/Cargo.toml --release -j 2
       - name: Bounded 10k 128D synthetic paired exact and IVF_FLAT
         run: python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 --queries 3 --index ivf_flat --timeout-seconds 1800
+      - name: Independent full-partition diagnostic (64 of 64, no speedup claim)
+        if: ${{ !cancelled() && steps.native_ann.outcome == 'success' }}
+        run: python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 --queries 3 --index ivf_flat --nprobes 64 --timeout-seconds 1800
       - name: Require committed source formatting
         if: always()
         run: |

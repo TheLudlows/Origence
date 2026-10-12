@@ -9,7 +9,10 @@ databases, migrate schemas, call a model, or establish production readiness.
 - Declared toolchain: repository Rust **1.98.0**.
 - SDK candidate: **turso = 0.8.2**, default features disabled, only `fts` enabled.
 - Runtime opt-in: `Builder::experimental_index_method(true)`.
-- No libSQL, Cloud, Sync, MVCC, second Worker or new graph engine.
+- No libSQL, Cloud, Sync, MVCC, second Worker or new graph engine. The SDK's
+  `io_memory_yield` feature is enabled only as a dev dependency for a separate
+  forced-Pending cancellation unit test. It never changes the file-backed
+  bridge's VFS or stands in for disk recovery evidence.
 - This nested workspace has its own Cargo lock. The initial bootstrap must use
   Cargo to generate it; its exact resolved core/sdk-kit versions are evidence,
   not inferred from an SDK version string. Final acceptance requires that
@@ -26,6 +29,7 @@ cargo generate-lockfile --manifest-path tools/t0-turso-probe/Cargo.toml # bootst
 cargo fmt --manifest-path tools/t0-turso-probe/Cargo.toml -- --check
 cargo clippy --locked --manifest-path tools/t0-turso-probe/Cargo.toml --all-targets -j 2 -- -D warnings
 cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml -j 2
+cargo test --locked --manifest-path tools/t0-turso-probe/Cargo.toml -j 2
 python3 tools/t0-turso-probe/verify.py \
   --binary tools/t0-turso-probe/target/debug/origence-t0-turso-probe \
   --output /tmp/t0-turso-new
@@ -51,12 +55,18 @@ unconsumed/partially consumed RETURNING, a once-polled then dropped write future
 connection reuse, and two-connection read snapshots. The cancellation result
 records whether the future actually yielded; completion before cancellation is
 not reported as evidence of cancellation safety at an arbitrary execution point.
+The separate Rust unit test reopens real jobs-schema bytes in the released SDK's
+deferred-completion memory VFS, requires an observed Pending, drops the update,
+explicitly rolls back and checks connection reuse. That test is a deterministic
+SDK-control-flow check, not an on-disk crash/power-loss claim.
 
 FTS probes use the real composite UUID chunks/summaries tables: physical index
 creation, EXPLAIN index-method use, explicit AND, cross-summary term union by
 full chunk key, Unicode/identifiers/version terms, positive BM25 descending
 order, source-filtered top-k, own/cross-connection visibility, rollback,
-update/delete and explicit optimize.
+update/delete and explicit optimize. The follow-up diagnostics compare raw JOIN
+scores with same-snapshot direct BM25 and test plain/materialized scored CTEs
+without any inner LIMIT. Equal scope-correct result IDs alone do not pass scoring.
 
 ## Deliberate crash subprocesses and bounds
 
@@ -76,9 +86,10 @@ single database file is sufficient.
 These are nine deterministic process-kill cases, **not arbitrary mid-I/O power
 loss, disk-full, or filesystem fault injection**. Mid-OPTIMIZE/COMMIT/checkpoint
 interruption and production service recovery are explicitly NOT_RUN until an
-appropriate follow-on harness is executed. The original graph recursive CTE is
-expected to expose a compatibility gap; T2's bounded same-snapshot BFS is not
-implemented by this probe.
+appropriate follow-on harness is executed. The original graph recursive CTE
+prepared successfully in the bootstrap; the follow-up executes directed,
+cyclic and scoped 0–3-hop fixtures. Bounded same-snapshot BFS is a fallback
+adaptation if needed and is not implemented by this probe.
 
 ## Evidence and failure behavior
 

@@ -14,6 +14,11 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
 turso = { version = "=0.8.2", default-features = false, features = ["fts"] }
 
+[dev-dependencies]
+# SDK-provided deferred-completion VFS forces a real Pending in the dedicated
+# cancellation unit test. Never selected by the on-disk bridge or recovery run.
+turso = { version = "=0.8.2", default-features = false, features = ["fts", "io_memory_yield"] }
+
 [profile.dev]
 debug = 0
 

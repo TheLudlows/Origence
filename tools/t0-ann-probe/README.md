@@ -1,6 +1,6 @@
 # Isolated LanceDB 0.23.1 T0 probe
 
-Status at preparation: **Rust build/runtime NOT_RUN**. The local executor has Python but no `cargo`, `rustc`, `rustfmt` or `clippy`. The Python report-gate tests pass; this is not evidence that LanceDB compiled or that ANN passed.
+Status: the initial native bootstrap compiled and executed, and the default **32/64 probe policy failed recall in 49/97 pairs**. Exact fallbacks and zero-violation checks passed. The Cargo-generated lock and formatter patch were imported; the final committed locked rerun is pending. See [results and exact artifact provenance](../../docs/t0-ann-report.md). The local authoring executor still has no Rust toolchain; native evidence came from the authorized CI runner.
 
 This crate is an independent workspace and has no dependency on Origence. It never opens application data, calls a model, or provisions paid resources. All database writes are under a new temporary directory inside `tools/t0-ann-probe/runs/`. No root Cargo files or production modules are changed. Output reports contain only synthetic data.
 
@@ -8,10 +8,10 @@ This crate is an independent workspace and has no dependency on Origence. It nev
 
 Run from the repository root, on an authorized machine with the repository's declared Rust **1.98.0**, C/C++ build tools and Protobuf compiler/development headers. Do not silently choose a different toolchain. The exact direct LanceDB pin is `=0.23.1`, with default cloud/provider features disabled.
 
-1. Generate the isolated lockfile with Cargo, then retain/commit it before the final reproducible run. It has deliberately not been hand-written or copied from the application's lock.
+1. Use the isolated Cargo-generated lockfile. If starting from a preparation snapshot without it, generate it once with Cargo and retain/commit it before the final reproducible run. Never hand-write it or copy the application's lock. The bootstrap artifact lock has been imported.
 
    ```sh
-   cargo +1.98.0 generate-lockfile --manifest-path tools/t0-ann-probe/Cargo.toml
+   test -f tools/t0-ann-probe/Cargo.lock || cargo +1.98.0 generate-lockfile --manifest-path tools/t0-ann-probe/Cargo.toml
    cargo +1.98.0 fmt --manifest-path tools/t0-ann-probe/Cargo.toml
    cargo +1.98.0 fmt --manifest-path tools/t0-ann-probe/Cargo.toml -- --check
    cargo +1.98.0 clippy --locked --manifest-path tools/t0-ann-probe/Cargo.toml --all-targets -j 2 -- -D warnings
@@ -56,7 +56,7 @@ Run from the repository root, on an authorized machine with the repository's dec
    python3 tools/t0-ann-probe/probe.py --report tools/t0-ann-probe/runs/RUN/native-report.json
    ```
 
-Each run creates `config.json`, `environment.json`, `native.log`, `native-report.json`, `driver-result.json` and `summary.md`. The native report includes the complete explain plans and the exact, raw ANN, verified ANN and forced-fallback hit identities/distances/scores for every pair. The Python gate independently recomputes recall and exact/fallback identity-distance equality from these lists and checks the ANN operator in the actual plan text, plus index-list metadata. Raw pre-truncation batched results retain separate ANN/exact invariant counters and counts, while their merged candidate lists are retained for audit. `summary.md` shows per-bucket minimum recall, never just an aggregate mean. Defaults are 64 IVF partitions, 32 fixed probes, seed 52, candidate target 100 and three queries per bucket. This yields 30 indexed + 33 pre-refresh + 33 post-refresh query rows, plus one reopened pair (97 total); every pair also executes forced exact fallback. The 512-ID route runs in 33 bucket/phase groups. These are declared initial settings, **not validated tuning**. In particular, selective/small eligible sets can fail at fixed 32 probes. A raw ANN failure remains a failure even if forced exact fallback passes. Any later tuning must be a new labeled run with its own evidence. A run probing all partitions may prove mechanics but cannot establish useful approximation or speedup.
+Each run creates `config.json`, `environment.json`, `native.log`, `native-report.json`, `driver-result.json` and `summary.md`. The native report includes the complete explain plans and the exact, raw ANN, verified ANN and forced-fallback hit identities/distances/scores for every pair. The Python gate independently recomputes recall and exact/fallback identity-distance equality from these lists and checks the ANN operator in the actual plan text, plus index-list metadata. Raw pre-truncation batched results retain separate ANN/exact invariant counters and counts, while their merged candidate lists are retained for audit. `summary.md` shows per-bucket minimum recall, never just an aggregate mean. Defaults are 64 IVF partitions, 32 fixed probes, seed 52, candidate target 100 and three queries per bucket. This yields 30 indexed + 33 pre-refresh + 33 post-refresh query rows, plus one reopened pair (97 total); every pair also executes forced exact fallback. The 512-ID route runs in 33 bucket/phase groups. These are declared initial settings, **not validated tuning**. In particular, selective/small eligible sets can fail at fixed 32 probes. A raw ANN failure remains a failure even if forced exact fallback passes. Any later tuning must be a new labeled run with its own evidence. A run probing all partitions may prove mechanics but cannot establish useful approximation or speedup. An explicitly scheduled 64/64 diagnostic must remain separate from the failing 32/64 default: it rebuilds an independent index and shares the canonical fixture, not physical index identity or training randomness.
 
 ## What is measured
 
