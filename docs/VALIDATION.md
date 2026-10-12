@@ -424,3 +424,29 @@ S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
 `785c629c` 的最低 Rust 身份测试、完整目标 Clippy 通过；格式检查发现格式差异，
 已按 CI rustfmt 精确输出修正。最终新增 race 测试、Python 框架和格式修正仍须
 同一最终 head 的完整适用 PR CI 才能合入；不得把初始检查当作最终通过证据。
+
+
+## 2026-10-12 — SQLite 既有职责拆分（验证范围与执行记录）
+
+基线为 main `22fa1221ea1a1aa67a5d19bed5d6dbb418891168`。仅整理既有实现：
+生命周期/schema/进程锁、身份绑定、版本/分块、来源/所有权、账本及作业队列
+移至 SQLite 私有模块，DomainTx 保留权限/幂等/提交包络并直接委派同一个事务。
+不修改 SQL/schema、数据库格式、来源与可见性条件、重试/取消/错误语义或依赖。
+原有显式身份工具仅移动，不扩充升级或迁移范围。历史验证记录保持不变。
+
+本地无 Cargo/Rust 工具链，Rust fmt/Clippy/测试在本地为 NOT_RUN；不能用静态
+比对替代编译和运行。静态比对检查原有方法体、SQL 字符串和 bind 顺序保持原样；
+新增薄委派仅传递同名参数并 await。PR CI 加入聚焦 SQLite 契约测试，并运行
+完整默认/无默认特性测试、两组 Clippy（warnings denied）及 fmt。结果以 PR
+最终 head 的 Actions 记录为准；[PR #45](https://github.com/TheLudlows/Origence/pull/45)
+保留最终结果与精确运行链接，通过后再评估合并。
+
+执行中发现并修正：`e5445bd` 的 fmt 排版不符；`69b79eb` 的共享 ROLES
+常量移动后 app 模块不可见（真实编译错误，恢复原父模块位置）；`2876b1f`
+的 fmt、两组 Clippy 及完整无默认特性测试通过，但新增聚焦 CI 命令误把
+测试模块当作独立 target，尚未运行聚焦或完整默认测试。聚焦命令已改用
+现有唯一 `local` 集成 target 内的 sqlite_/initialization/storage_recovery 过滤，
+不更改测试本体。最终接受必须以修正后 head 的整套 CI 通过为准。
+
+本次不进行真实 Agent 质量验收（NOT_RUN）、不上传此前待上传合成诊断工件，
+不变更 DEPENDENCY_AUDIT 的保留风险；通用可见性规则收口是后续独立步骤。

@@ -31,7 +31,7 @@ Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及�
 
 Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 workspace；保存不可变批次、消息原文与定位，整批发布并可检索后确认成功。同一用户的多个 session 持续保存并共同检索，session_id 标记来源，不限制为单会话搜索。使用专用评测新库，旧库不自动升级。
 
-这些路径已复用产品 Service、单 Worker、权限、来源和存储。离线压实是共享底座能力；恢复及长历史实验验证了共享路径。用户映射和消息角色/时间/session 适配属于 AML 专项。**跨 session 历史检索已实现，不等于反馈驱动的经验学习闭环已经实现。**
+这些路径已复用产品 Service、单 Worker、权限、来源和存储。离线压实是共享底座能力；恢复及长历史实验验证了共享路径。用户映射和消息角色/时间/session 适配属于 AML 专项。**跨 session 历史检索本身不等于反馈驱动的经验学习；当前显式 Improve → Learning 最小闭环已实现，见第四阶段，真实效果仍未验收。**
 
 正式 AML Search 保持原文 vector，关闭摘要/图，不生成 Answer。聊天重排、本地 BGE reranker、时间辅助与同模型核验留在实验层。正式组别/模型、持续容量与数据清理验收、官方 Smoke/Full 尚未完成；服务器和域名按用户要求后置。剩余任务见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)。
 
@@ -43,13 +43,13 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 新增 semantic capture：模型在调用方指定的完整主体/属性/条件范围内生成候选及 operation/value，经过精确原文引用校验后复用 S2。单值覆盖必须由调用方 allow_update 明确授权；歧义、提议、否定与冲突保留未归一化证据。候选计划在 embedding 前持久化，重试/重开复用原分类与 provenance，所有候选原子发布并沿用来源撤回治理。
 
-本轮只面向新库，不开发升级。已交付入口不是完整的 SessionTurn → Feedback → Improve → Learning；实际使用证据归档与幂等反馈已在下述第三阶段实现；条件化经验蒸馏仍待实现。工程回归使用确定性模型桩，不能宣称真实模型分类质量或 Agent 任务收益。见 [实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、API、OPERATIONS、VALIDATION。
+该首个切片只面向新库，不开发升级，当时尚未包含完整的 SessionTurn → Feedback → Improve → Learning；实际使用证据归档、幂等反馈及条件化经验提议/核验随后已在下述第三、第四阶段实现。工程回归使用确定性模型桩，不能宣称真实模型分类质量或 Agent 任务收益。见 [实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、API、OPERATIONS、VALIDATION。
 
 ## 第二阶段：内部任务类型与证据可见性回归
 
 在既有 SQLite JSON v1 任务信封上新增内部 JobKind/JobPayload，八种持久化操作对应九种有类型输入，显式区分旧 fact_key 与 identified 提取。Service 生产者由类型派生操作名；Worker 在已有失败结算路径内解码，未知操作或损坏字段正常失败而不阻断后续任务。保存的 publication 按 generation 先过滤再解码，semantic_capture_plan、权限、CAS、来源撤回与重试流程保持原样。
 
-共享测试矩阵核对 get/lookup、keyword/vector/hybrid 与 resolve 的来源和身份可见性，覆盖整快照成员撤回、根来源撤回、独立未归一化证据、重复来源与预算边界。不新增存储后端、schema、升级迁移、Worker 或发布路径；该阶段不包含 SessionTurn/Feedback，后者见下节；Improve/Learning 仍是后续阶段。具体执行证据见 [VALIDATION](VALIDATION.md)。
+共享测试矩阵核对 get/lookup、keyword/vector/hybrid 与 resolve 的来源和身份可见性，覆盖整快照成员撤回、根来源撤回、独立未归一化证据、重复来源与预算边界。不新增存储后端、schema、升级迁移、Worker 或发布路径；该阶段当时不包含 SessionTurn/Feedback 与 Improve/Learning；两者后续交付分别见第三、第四阶段。具体执行证据见 [VALIDATION](VALIDATION.md)。
 
 ## 第三阶段：SessionTurn 与幂等 Feedback
 
@@ -61,7 +61,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 新增有条件、受限、可重放的提议 → 核验 → 普通知识发布闭环。单调反馈序列与 principal-qualified 标识防止同时间戳遗漏和重复计数；冻结批次、两阶段计划及子任务标识持久化，最后子任务成功前不推进完成水位。每条 Learning 独立原子发布；显式取消未完成 run 不消费反馈，并保留此前已发布且支持仍有效的条目。
 
-条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；该阶段已由 [PR #43](https://github.com/TheLudlows/Origence/pull/43) 合入 main `55b5d879`，其最终 head 的 PR CI 与独立审查通过；不替代 S4 CI。
+条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。该阶段当时尚未交付 S4 EvidenceBundle；其工程实现见第五阶段，独立真实质量仍未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；该阶段已由 [PR #43](https://github.com/TheLudlows/Origence/pull/43) 合入 main `55b5d879`，其最终 head 的 PR CI 与独立审查通过；不替代 S4 CI。
 
 ## 本轮实验已结束
 
@@ -86,7 +86,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 ## 下一步
 
-- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning 已实现；S4 统一上下文与 Agent 框架已实现，工程记录见 PR #44，下一项为有授权且可复现的真实 Agent 对照，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
+- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning 已实现；S4 统一上下文与 Agent 框架已实现，工程记录见 PR #44，当前先完成状态一致性、既有 SQLite 职责拆分及通用可见性规则收口，依赖风险单独处理；随后进行有授权且可复现的真实 Agent 对照，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
 - **可靠性与质量待办**：维护故障、持续容量、冷启动与标签复核已移入[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，不继续延长本轮实验；依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 - **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 
@@ -101,6 +101,6 @@ knowledge、Learning 独立候选，session 默认关闭且仅 writer。条件/�
 不推断一般文本矛盾；会话引用不能回填现有 used_evidence，已明确披露。
 
 独立新冻结合成用例与有界模型/工具 Agent 框架区分无记忆、简单 hybrid、Bundle、
-非部署 gold 诊断。真实模型评测 NOT_RUN，fixture 不证明任务收益。无新后端、
+非部署 gold 诊断。真实模型评测 NOT_RUN，fixture 不证明任务收益。此前约 84 KB 合成诊断工件上传仍待完成，本轮结构整理不上传该工件；不将其视为真实模型验收。无新后端、
 迁移、Worker、编排器或 AML 重启。完整边界见 [S4 契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)
 与 [验证状态](VALIDATION.md#2026-10-12--s4-evidencebundle-工程实现与独立-agent-框架)。
