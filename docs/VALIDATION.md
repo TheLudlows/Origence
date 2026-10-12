@@ -426,7 +426,7 @@ S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
 同一最终 head 的完整适用 PR CI 才能合入；不得把初始检查当作最终通过证据。
 
 
-## 2026-10-12 — SQLite 既有职责拆分（工程验证待 CI）
+## 2026-10-12 — SQLite 既有职责拆分（验证范围与执行记录）
 
 基线为 main `22fa1221ea1a1aa67a5d19bed5d6dbb418891168`。仅整理既有实现：
 生命周期/schema/进程锁、身份绑定、版本/分块、来源/所有权、账本及作业队列
@@ -438,7 +438,15 @@ S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
 比对替代编译和运行。静态比对检查原有方法体、SQL 字符串和 bind 顺序保持原样；
 新增薄委派仅传递同名参数并 await。PR CI 加入聚焦 SQLite 契约测试，并运行
 完整默认/无默认特性测试、两组 Clippy（warnings denied）及 fmt。结果以 PR
-最终 head 的 Actions 记录为准；通过后再评估合并。
+最终 head 的 Actions 记录为准；[PR #45](https://github.com/TheLudlows/Origence/pull/45)
+保留最终结果与精确运行链接，通过后再评估合并。
+
+执行中发现并修正：`e5445bd` 的 fmt 排版不符；`69b79eb` 的共享 ROLES
+常量移动后 app 模块不可见（真实编译错误，恢复原父模块位置）；`2876b1f`
+的 fmt、两组 Clippy 及完整无默认特性测试通过，但新增聚焦 CI 命令误把
+测试模块当作独立 target，尚未运行聚焦或完整默认测试。聚焦命令已改用
+现有唯一 `local` 集成 target 内的 sqlite_/initialization/storage_recovery 过滤，
+不更改测试本体。最终接受必须以修正后 head 的整套 CI 通过为准。
 
 本次不进行真实 Agent 质量验收（NOT_RUN）、不上传此前待上传合成诊断工件，
 不变更 DEPENDENCY_AUDIT 的保留风险；通用可见性规则收口是后续独立步骤。
