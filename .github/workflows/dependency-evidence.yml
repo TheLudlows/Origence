@@ -18,12 +18,12 @@ jobs:
         with:
           toolchain: 1.98.0
           components: rustfmt
-      - name: Resolve only the MCP SDK update using Cargo
+      - name: Validate the committed Cargo lock
         run: |
-          cargo update -p rmcp --precise 1.8.0
+          cargo metadata --locked --format-version 1 > /dev/null
           mkdir -p evidence
           cp Cargo.lock evidence/Cargo.lock
-          cargo fmt --all
+          cargo fmt --all -- --check
           cp src/mcp.rs evidence/mcp.rs
           rustc --version > evidence/toolchain.txt
           cargo --version >> evidence/toolchain.txt

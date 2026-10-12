@@ -76,6 +76,8 @@ jobs:
         run: |
           cargo build --locked -j 2
           python3 tools/smoke.py --binary target/debug/origence
+      - name: MCP stdio local and host-forwarding contracts (no models)
+        run: python3 tools/mcp_smoke.py --binary target/debug/origence
       - name: AML in-flight process recovery (controlled model fixture)
         env:
           AML_TEST_BINARY: target/debug/origence
