@@ -10,7 +10,9 @@ struct CapturePlan {
     extraction: Extraction,
     routes: Vec<SemanticPlan>,
 }
-/// Recheck every original member, including duplicates, on replay and before commit.
+/// Recheck each routed asset and original member, including duplicates, on replay
+/// and before commit. Unused targets are not dependencies; uncertain routes guard
+/// their independent evidence asset, not the suggested identity's current version.
 pub(super) async fn guard_capture(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
     if claim.payload["extractor"] != EXTRACTOR {
         return Err(AppError::Invalid("unsupported semantic extractor".into()));
