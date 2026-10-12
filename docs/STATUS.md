@@ -39,6 +39,12 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 本轮只面向新库，不开发升级。已交付入口不是完整的 SessionTurn → Feedback → Improve → Learning；后续仍需实际使用证据归档、幂等反馈和条件化经验蒸馏。工程回归使用确定性模型桩，不能宣称真实模型分类质量或 Agent 任务收益。见 [实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、API、OPERATIONS、VALIDATION。
 
+## 第二阶段：内部任务类型与证据可见性回归
+
+在既有 SQLite JSON v1 任务信封上新增内部 JobKind/JobPayload，八种持久化操作对应九种有类型输入，显式区分旧 fact_key 与 identified 提取。Service 生产者由类型派生操作名；Worker 在已有失败结算路径内解码，未知操作或损坏字段正常失败而不阻断后续任务。保存的 publication 按 generation 先过滤再解码，semantic_capture_plan、权限、CAS、来源撤回与重试流程保持原样。
+
+共享测试矩阵核对 get/lookup、keyword/vector/hybrid 与 resolve 的来源和身份可见性，覆盖整快照成员撤回、根来源撤回、独立未归一化证据、重复来源与预算边界。不新增存储后端、schema、升级迁移、Worker 或发布路径；SessionTurn/Feedback/Improve/Learning 仍是后续阶段。具体执行证据见 [VALIDATION](VALIDATION.md)。
+
 ## 本轮实验已结束
 
 2026-10-11 按用户确认收尾。冻结结论：正式 AML Search 保持原文 vector；重排、时间辅助及同模型核验留实验层；显式离线压实已交付，不增加自动维护。相关代码与工件经 PR #33–#35 合入 main 2b7b6a6，该提交[五项 CI](https://github.com/TheLudlows/Origence/actions/runs/38138182208)全部成功；[收尾核对](evidence/2026-10-11-experiment-closeout.json)记录 78 项哈希检查全部通过。历史报告中的“下一步”保留为当时记录，后续任务以路线图为准。
@@ -49,7 +55,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 ## 当前证据与结论
 
-2026-10-12 01:45 UTC 核验：当前 main `359365b` 的 [CI run 38192317487](https://github.com/TheLudlows/Origence/actions/runs/38192317487) 仍在运行；fast-check、Linux、Windows 已成功，macOS/container 尚未完成。上述历史 PR CI 不代表该 main 或后续改动全部通过。
+2026-10-12 核验：第一阶段收口已由 [PR #39](https://github.com/TheLudlows/Origence/pull/39) 合入 main `7a20540cfadf94199d2787415c619de2aaba9721`；[CI run 38194107923](https://github.com/TheLudlows/Origence/actions/runs/38194107923) 的 fast-check、Linux、Windows、macOS、container 五项均成功。该结果不替代后续提交的 CI。
 
 | 验证 | 已得到的结论 | 不能据此宣称 |
 | --- | --- | --- |

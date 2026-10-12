@@ -81,6 +81,174 @@ async fn lookup(s: &Service, a: &AuthContext, predicate: &str) -> Value {
         .await
         .unwrap()
 }
+
+/// Shared by explicit writes and capture: every read surface must apply the same
+/// evidence rules while derived cleanup is still pending.
+pub(super) async fn assert_evidence_matrix(
+    s: &Service,
+    a: &AuthContext,
+    snapshot: &Value,
+    query: &str,
+    visible: bool,
+) {
+    let asset = id(snapshot, "asset_id");
+    let version = snapshot["version"].as_i64().unwrap() as i32;
+    for requested_version in [None, Some(version)] {
+        let got = s.get(a, asset, requested_version).await;
+        if visible {
+            assert_eq!(got.unwrap(), *snapshot);
+        } else {
+            assert!(matches!(got, Err(AppError::NotFound)));
+        }
+    }
+    let confirmed = !snapshot["identity"].is_null();
+    let identity = if confirmed {
+        snapshot["identity"].clone()
+    } else {
+        snapshot["semantic_values"][0]["locator"]["suggested_identity"].clone()
+    };
+    let mut filters = vec![Value::Null];
+    if !identity.is_null() {
+        let got = s
+            .lookup_memory(a, serde_json::from_value(identity.clone()).unwrap())
+            .await;
+        if confirmed && visible {
+            assert_eq!(got.unwrap(), *snapshot);
+        } else if confirmed {
+            assert!(matches!(got, Err(AppError::NotFound)));
+        } else {
+            match got {
+                Ok(fact) => assert_ne!(fact["asset_id"], snapshot["asset_id"]),
+                Err(AppError::NotFound) => {}
+                Err(error) => panic!("unexpected lookup failure: {error}"),
+            }
+        }
+        filters.push(identity);
+    }
+    for mode in ["keyword", "vector", "hybrid"] {
+        for filter in &filters {
+            let search = s
+                .search(
+                    a,
+                    serde_json::from_value(json!({
+                        "query":query,"mode":mode,"limit":100,"memory_identity":filter
+                    }))
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(search["effective_mode"], mode);
+            assert_eq!(search["warnings"], json!([]));
+            let hits = search["hits"].as_array().unwrap();
+            let target_hits: Vec<_> = hits
+                .iter()
+                .filter(|hit| hit["asset_id"] == snapshot["asset_id"])
+                .collect();
+            let expected = visible && (confirmed || filter.is_null());
+            assert_eq!(!target_hits.is_empty(), expected, "{mode}: {search}");
+            if confirmed && !filter.is_null() {
+                assert_eq!(hits.len(), target_hits.len());
+            }
+            let resolved = s
+                .resolve(
+                    a,
+                    serde_json::from_value(json!({
+                        "query":query,"mode":mode,"budget_tokens":32000,
+                        "memory_identity":filter
+                    }))
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resolved["effective_mode"], mode);
+            assert_eq!(resolved["warnings"], json!([]));
+            let context = resolved["rendered_context"].as_str().unwrap();
+            assert_eq!(resolved["count"], json!(context.len()));
+            assert!(context.len() <= 32000);
+            let sources = resolved["sources"].as_array().unwrap();
+            let target_sources: Vec<_> = sources
+                .iter()
+                .filter(|source| source["asset_id"] == snapshot["asset_id"])
+                .collect();
+            assert_eq!(target_sources.len(), target_hits.len(), "{resolved}");
+            if confirmed && !filter.is_null() {
+                assert_eq!(sources.len(), target_sources.len());
+            }
+            if !expected {
+                assert!(!context.contains(&asset.to_string()));
+            }
+            for hit in target_hits {
+                let member = snapshot["semantic_values"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|member| member["value"] == hit["locator"]["semantic_value"])
+                    .unwrap();
+                assert_eq!(hit["version"], snapshot["version"]);
+                assert_eq!(hit["identity"], snapshot["identity"]);
+                assert_eq!(
+                    hit["normalization_status"],
+                    snapshot["normalization_status"]
+                );
+                assert_eq!(hit["source_event_id"], member["source_event_id"]);
+                assert_eq!(hit["locator"], member["locator"]);
+                let source = target_sources
+                    .iter()
+                    .find(|source| source["chunk_id"] == hit["chunk_id"])
+                    .unwrap();
+                for key in [
+                    "version",
+                    "identity",
+                    "normalization_status",
+                    "source_event_id",
+                    "locator",
+                ] {
+                    assert_eq!(source[key], hit[key], "{mode}: {key}");
+                }
+                assert!(context.contains(source["citation"].as_str().unwrap()));
+                assert!(context.contains(hit["content"].as_str().unwrap()));
+            }
+        }
+    }
+}
+
+pub(super) async fn assert_evidence_budget(
+    s: &Service,
+    a: &AuthContext,
+    identity: &Value,
+    query: &str,
+) {
+    for mode in ["keyword", "vector", "hybrid"] {
+        let request = json!({
+            "query":query,"mode":mode,"budget_tokens":32000,"memory_identity":identity
+        });
+        let full = s
+            .resolve(a, serde_json::from_value(request.clone()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(full["sources"].as_array().unwrap().len(), 1);
+        let bytes = full["rendered_context"].as_str().unwrap().len();
+        for budget in [0, bytes - 1, bytes] {
+            let mut request = request.clone();
+            request["budget_tokens"] = json!(budget);
+            let bounded = s
+                .resolve(a, serde_json::from_value(request).unwrap())
+                .await
+                .unwrap();
+            let context = bounded["rendered_context"].as_str().unwrap();
+            assert_eq!(bounded["count"], json!(context.len()));
+            assert!(context.len() <= budget);
+            if budget == bytes {
+                assert_eq!(bounded["rendered_context"], full["rendered_context"]);
+                assert_eq!(bounded["sources"], full["sources"]);
+            } else {
+                assert!(context.is_empty());
+                assert_eq!(bounded["sources"], json!([]));
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn semantic_single_duplicate_update_conflict_and_uncertain_provenance() {
     let dir = tempfile::tempdir().unwrap();
@@ -89,11 +257,13 @@ async fn semantic_single_duplicate_update_conflict_and_uncertain_provenance() {
     property(&s, &a, "database.engine", "single").await;
     let first = submit(&s, &a, input("database.engine", "PostgreSQL", "assert", 0)).await;
     finish(&s, &a, &first).await;
+    let original = lookup(&s, &a, "database.engine").await;
     let duplicate_input = input("database.engine", "PostgreSQL", "assert", 1);
     let duplicate = submit(&s, &a, duplicate_input.clone()).await;
     assert_eq!(duplicate["state"], "duplicate");
     assert!(duplicate.get("job_id").is_none());
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
+    assert_ne!(duplicate["source_event_id"], first["source_event_id"]);
+    assert_eq!(lookup(&s, &a, "database.engine").await, original);
     let conflict = submit(&s, &a, input("database.engine", "MySQL", "assert", 1)).await;
     assert_eq!(conflict["semantic_status"], "conflict");
     finish(&s, &a, &conflict).await;
@@ -449,6 +619,27 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     .await
     .1;
     finish(&s, &a, &proposal).await;
+    let published = lookup(&s, &a, "database.engine").await;
+    let uncertain = s.get(&a, id(&proposal, "asset_id"), None).await.unwrap();
+    assert!(uncertain["identity"].is_null());
+    assert_eq!(uncertain["normalization_status"], "unnormalized");
+    assert_evidence_matrix(&s, &a, &published, "needle", true).await;
+    assert_evidence_matrix(&s, &a, &uncertain, "needle", true).await;
+    assert_evidence_budget(&s, &a, &identity("database.engine"), "needle").await;
+    let duplicate = submit(&s, &a, input("database.engine", "needle", "assert", 1)).await;
+    assert_eq!(duplicate["state"], "duplicate");
+    assert_ne!(duplicate["source_event_id"], r["source_event_id"]);
+    assert_eq!(lookup(&s, &a, "database.engine").await, published);
+    s.delete(
+        &a,
+        "withdraw-duplicate",
+        id(&duplicate, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
+    // A duplicate audit source never replaces or adds publication support.
+    assert_evidence_matrix(&s, &a, &published, "needle", true).await;
     for mode in ["keyword", "vector", "hybrid"] {
         let (status, result) = http(
             &base,
@@ -489,9 +680,17 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     let (status, error) = http(&base, &token, "/v1/memories/semantic", "badspan", malformed).await;
     assert_eq!(status, 422);
     assert!(!error.to_string().contains("needle"));
-    s.delete(&a, "withdraw", id(&r, "source_event_id"), "event")
+    let withdrawal = s
+        .delete(&a, "withdraw", id(&r, "source_event_id"), "event")
         .await
         .unwrap();
+    assert_eq!(
+        s.job(&a, id(&withdrawal, "cleanup_job_id")).await.unwrap()["state"],
+        "pending"
+    );
+    assert_evidence_matrix(&s, &a, &published, "needle", false).await;
+    // Withdrawing the confirmed fact must not hide independent proposal evidence.
+    assert_evidence_matrix(&s, &a, &uncertain, "needle", true).await;
     let result = http(
         &base,
         &reader.token,
@@ -544,14 +743,22 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     assert_eq!(retained["source_event_id"], first["source_event_id"]);
     assert_eq!(retained["version"], 2);
     assert_eq!(retained["locator"]["source_version"], 1);
-    s.delete(
-        &a,
-        "withdraw-member",
-        id(&first, "source_event_id"),
-        "event",
-    )
-    .await
-    .unwrap();
+    let set = lookup(&s, &a, "service.languages").await;
+    assert_evidence_matrix(&s, &a, &set, "Python", true).await;
+    let withdrawal = s
+        .delete(
+            &a,
+            "withdraw-member",
+            id(&first, "source_event_id"),
+            "event",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        s.job(&a, id(&withdrawal, "cleanup_job_id")).await.unwrap()["state"],
+        "pending"
+    );
+    assert_evidence_matrix(&s, &a, &set, "Python", false).await;
     let hidden = http(
         &base,
         &reader.token,
@@ -581,6 +788,8 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
         after["hits"][0]["source_event_id"],
         second["source_event_id"]
     );
+    let rebuilt = lookup(&s, &a, "service.languages").await;
+    assert_evidence_matrix(&s, &a, &rebuilt, "Python", true).await;
 }
 
 #[tokio::test]

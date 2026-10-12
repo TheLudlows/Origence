@@ -2,6 +2,16 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-12 第二阶段：内部任务类型与证据可见性
+
+基于已通过五项主干 CI 的 `7a20540cfadf94199d2787415c619de2aaba9721`。新增私有 JobKind/JobPayload 编解码及九种输入的 JSON v1 golden 回归，Service/Worker 使用类型化字段；WorkItem/ClaimedJob、SQLite 表和保存计划路径不变。损坏任务在 process_claim 的既有错误结算边界解码，新增未知操作、损坏 schema/字段/identity 与后续有效任务回归，以及过期 publication 在解码前按 generation 忽略的回归。保留第一阶段日志哨兵、目标漂移及原有恢复/权限/取消/来源撤回测试。
+
+在现有语义测试中复用共享读取矩阵，对 get（当前/指定版本）、精确 lookup、keyword/vector/hybrid 及 resolve 比较资产、身份、来源、locator 与引用；覆盖根来源/集合成员撤回（清理前）、独立不确定证据、重复输入来源、资产删除与 scope 隔离。单块 resolve 覆盖精确字节预算和少一字节，包含语义标注及多语言引用。没有重写可见性 SQL，也不把工程夹具结果当作真实模型质量或 Agent 效果结论。
+
+本地云端编辑环境没有 Cargo、rustc 或 rustfmt；静态差异检查通过，不能据此宣称 Rust 编译、格式、Clippy 或测试已执行。Rust 1.98.0 的默认/无默认特性、严格 Clippy、格式及完整 local 生命周期验证由该 PR 的精确最终 head CI 核验，结果以精确提交的 CI 为准。
+
+[PR #40](https://github.com/TheLudlows/Origence/pull/40) 初始实现 head `349ac05c9085d4a82deafff42b155e1042f2916a` 的 [CI run 38196722600](https://github.com/TheLudlows/Origence/actions/runs/38196722600)：Linux native 成功，Rust 1.98.0 版本核验、默认严格 Clippy、lib 45/local 130、debug build/HTTP smoke、受控进程恢复和 keyword 种子评估均通过。六项 codec 单测、损坏任务/下一有效任务、publication generation、共享语义矩阵及第一阶段日志/目标漂移回归均在日志中明确成功。fast-check 在 rustfmt 处失败（仅格式）；随后按该工具输出修正换行、尾部空行与格式，不改变行为。无默认特性完整测试与格式门槛不能从这次 Linux 结果推断成功，仍由更新后 PR head 的 CI 核验；PR 中 Windows/macOS/container 按 main-only 规则跳过，合入后逐项核验主干。
+
 ## 2026-10-12 第一阶段收口：文档、日志与版本契约
 
 基于 main `359365b366f20380847f7bec868caca60946de8d`，保持新库范围和既有发布语义。本次修正 API 的四种 normalization_status、重复写入响应和目标版本检查边界；更新 STATUS/S3 计划中的已合入与远端 CI 证据。以下历史验证记录保持原样，不将当时的“未提交/无新远端 CI”改写为后来结果。

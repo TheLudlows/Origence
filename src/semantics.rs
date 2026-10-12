@@ -1,7 +1,7 @@
 //! S2 service operations share the existing command ledger and durable worker.
 use crate::{
-    error::Result, memory_semantics::MemoryProperty, service::Service, storage::Permission,
-    types::AuthContext,
+    error::Result, jobs::JobPayload, memory_semantics::MemoryProperty, service::Service,
+    storage::Permission, types::AuthContext,
 };
 use serde_json::{Value, json};
 impl Service {
@@ -172,8 +172,20 @@ impl Service {
             .await?;
             return Self::finish(tx,json!({"state":"duplicate","asset_id":plan.asset,"version":plan.expected_version,"source_event_id":source})).await;
         }
-        let job=Self::enqueue(&mut tx,"semantic_publish",json!({"expected_version":plan.expected_version,"embedding_profile":self.models.profile,
-            "semantic_members":plan.members,"semantic_status":plan.status,"suggested_identity":input.identity,"parser":domain::PARSER}),Some(plan.asset),Some(source)).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            JobPayload::SemanticPublish {
+                expected_version: plan.expected_version,
+                embedding_profile: self.models.profile.clone(),
+                semantic_members: plan.members,
+                semantic_status: plan.status.clone(),
+                suggested_identity: input.identity,
+                parser: domain::PARSER.into(),
+            },
+            Some(plan.asset),
+            Some(source),
+        )
+        .await?;
         tx.audit(
             "memory.semantic_accepted",
             plan.asset,
@@ -225,8 +237,26 @@ impl Service {
         let source = tx
             .create_event("semantic_capture", &input.content, None)
             .await?;
-        let job=Self::enqueue(&mut tx,"semantic_extract",json!({"targets":input.targets,"properties":properties,"extractor":crate::semantic_capture::EXTRACTOR,
-            "extraction_profile":profile,"extraction_model":self.models.summary_model(),"embedding_profile":self.models.profile}),None,Some(source)).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            JobPayload::SemanticExtract {
+                targets: input.targets,
+                properties,
+                extractor: crate::semantic_capture::EXTRACTOR.into(),
+                extraction_profile: profile,
+                extraction_model: self
+                    .models
+                    .summary_model()
+                    .ok_or_else(|| {
+                        AppError::Unavailable("extraction model is not configured".into())
+                    })?
+                    .to_owned(),
+                embedding_profile: self.models.profile.clone(),
+            },
+            None,
+            Some(source),
+        )
+        .await?;
         tx.audit("memory.semantic_capture", source, json!({"job_id":job}))
             .await?;
         Self::finish(

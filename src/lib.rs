@@ -4,6 +4,8 @@ pub mod api;
 pub mod capture;
 pub mod error;
 pub mod graph;
+#[cfg(any(feature = "local-storage", test))]
+mod jobs;
 #[cfg(feature = "local-storage")]
 pub mod mcp;
 pub mod memory_identity;
