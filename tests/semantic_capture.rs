@@ -1,4 +1,5 @@
 #![cfg(feature = "local-storage")]
+use super::semantic_memory::{assert_evidence_budget, assert_evidence_matrix};
 use origence::{
     error::AppError,
     models::Models,
@@ -275,6 +276,9 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
         .await
         .unwrap();
     assert!(resolved.to_string().contains("proposed"));
+    let original = lookup(&s, &a, "database.engine").await;
+    assert_evidence_matrix(&s, &a, &original, "PostgreSQL", true).await;
+    assert_evidence_budget(&s, &a, &identity("database.engine"), "PostgreSQL").await;
     for tenant in [None, Some(a.tenant_id)] {
         let (other, other_token) = provision(&s, tenant).await;
         assert!(matches!(
@@ -293,6 +297,7 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
             .await
             .unwrap();
         assert!(found["hits"].as_array().unwrap().is_empty());
+        assert_evidence_matrix(&s, &other, &original, "PostgreSQL", false).await;
     }
     let text = "Atlas 生产从 PostgreSQL 改用 MySQL。";
     stub.respond(vec![candidate(text, Some(0), "update", "MySQL", text)]);
@@ -302,11 +307,16 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
         request(text, vec![target("database.engine", 1, false)]),
     )
     .await;
-    assert_eq!(
-        finish(&s, &a, &unapproved).await["memories"][0]["semantic_status"],
-        "ambiguous"
-    );
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
+    let unapproved_result = finish(&s, &a, &unapproved).await;
+    assert_eq!(unapproved_result["memories"][0]["semantic_status"], "ambiguous");
+    let ambiguous = s
+        .get(&a, id(&unapproved_result["memories"][0], "asset_id"), None)
+        .await
+        .unwrap();
+    assert!(ambiguous["identity"].is_null());
+    assert_eq!(ambiguous["normalization_status"], "unnormalized");
+    assert_evidence_matrix(&s, &a, &ambiguous, "MySQL", true).await;
+    assert_eq!(lookup(&s, &a, "database.engine").await, original);
     stub.respond(vec![candidate(text, Some(0), "assert", "MySQL", text)]);
     let conflict = submit(
         &s,
@@ -314,10 +324,16 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
         request(text, vec![target("database.engine", 1, false)]),
     )
     .await;
-    assert_eq!(
-        finish(&s, &a, &conflict).await["memories"][0]["semantic_status"],
-        "conflict"
-    );
+    let conflict_result = finish(&s, &a, &conflict).await;
+    assert_eq!(conflict_result["memories"][0]["semantic_status"], "conflict");
+    let conflicting = s
+        .get(&a, id(&conflict_result["memories"][0], "asset_id"), None)
+        .await
+        .unwrap();
+    assert!(conflicting["identity"].is_null());
+    assert_eq!(conflicting["normalization_status"], "unnormalized");
+    assert_evidence_matrix(&s, &a, &conflicting, "MySQL", true).await;
+    assert_eq!(lookup(&s, &a, "database.engine").await, original);
     stub.respond(vec![candidate(text, Some(0), "update", "MySQL", text)]);
     let update = submit(
         &s,
@@ -326,7 +342,8 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     )
     .await;
     finish(&s, &a, &update).await;
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 2);
+    let updated = lookup(&s, &a, "database.engine").await;
+    assert_eq!(updated["version"], 2);
     stub.respond(vec![candidate(text, Some(0), "assert", "MySQL", text)]);
     let duplicate = submit(
         &s,
@@ -338,16 +355,57 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
         finish(&s, &a, &duplicate).await["memories"][0]["state"],
         "duplicate"
     );
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 2);
-    // Withdrawing publication support removes the fact from all current retrieval paths.
+    assert_ne!(duplicate["source_event_id"], update["source_event_id"]);
+    assert_eq!(lookup(&s, &a, "database.engine").await, updated);
     s.delete(
         &a,
-        "withdraw-update",
-        id(&update, "source_event_id"),
+        "withdraw-duplicate",
+        id(&duplicate, "source_event_id"),
         "event",
     )
     .await
     .unwrap();
+    assert_evidence_matrix(&s, &a, &updated, "MySQL", true).await;
+    // Suggested identity is not support: withdrawing uncertain evidence cannot
+    // withdraw the still-live confirmed fact that it refers to.
+    let uncertainty_withdrawal = s
+        .delete(
+            &a,
+            "withdraw-ambiguous",
+            id(&unapproved, "source_event_id"),
+            "event",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        s.job(&a, id(&uncertainty_withdrawal, "cleanup_job_id"))
+            .await
+            .unwrap()["state"],
+        "pending"
+    );
+    assert_evidence_matrix(&s, &a, &ambiguous, "MySQL", false).await;
+    assert_evidence_matrix(&s, &a, &updated, "MySQL", true).await;
+    // Withdrawing publication support removes the fact from all current retrieval paths.
+    let withdrawal = s
+        .delete(
+            &a,
+            "withdraw-update",
+            id(&update, "source_event_id"),
+            "event",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        s.job(&a, id(&withdrawal, "cleanup_job_id")).await.unwrap()["state"],
+        "pending"
+    );
+    assert_evidence_matrix(&s, &a, &updated, "MySQL", false).await;
+    assert_evidence_matrix(&s, &a, &conflicting, "MySQL", true).await;
+    // Only the withdrawn version loses historical reads; no fallback becomes current.
+    assert_eq!(
+        s.get(&a, id(&original, "asset_id"), Some(1)).await.unwrap(),
+        original
+    );
     assert!(matches!(
         s.lookup_memory(
             &a,
@@ -411,9 +469,16 @@ async fn semantic_capture_set_sources_survive_union_and_withdrawal() {
         fact["semantic_values"][0]["locator"]["extraction"]["parser"],
         "semantic-capture:v1"
     );
-    s.delete(&a, "withdraw-old", id(&first, "source_event_id"), "event")
+    assert_evidence_matrix(&s, &a, &fact, "Python", true).await;
+    let withdrawal = s
+        .delete(&a, "withdraw-old", id(&first, "source_event_id"), "event")
         .await
         .unwrap();
+    assert_eq!(
+        s.job(&a, id(&withdrawal, "cleanup_job_id")).await.unwrap()["state"],
+        "pending"
+    );
+    assert_evidence_matrix(&s, &a, &fact, "Python", false).await;
     for mode in ["keyword", "vector", "hybrid"] {
         let found = s
             .search(
@@ -442,6 +507,7 @@ async fn semantic_capture_set_sources_survive_union_and_withdrawal() {
         fact["semantic_values"][0]["locator"]["extraction"]["model"],
         "extract-fixture"
     );
+    assert_evidence_matrix(&s, &a, &fact, "Python", true).await;
 }
 
 #[tokio::test]

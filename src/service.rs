@@ -1,5 +1,6 @@
 use crate::{
     error::{AppError, Result},
+    jobs::JobPayload,
     models::Models,
     parsing,
     storage::{
@@ -123,16 +124,15 @@ impl Service {
     }
     pub(crate) async fn enqueue(
         tx: &mut SqliteTx,
-        kind: &str,
-        mut payload: Value,
+        payload: JobPayload,
         asset: Option<Uuid>,
         source: Option<Uuid>,
     ) -> Result<Uuid> {
-        payload["schema_version"] = json!(1);
+        let (kind, payload) = payload.encode()?;
         let job_id = Uuid::new_v4();
         tx.enqueue(crate::storage::WorkItem {
             job_id,
-            kind: kind.into(),
+            kind: kind.as_str().into(),
             payload,
             asset,
             source,
@@ -158,8 +158,11 @@ impl Service {
         let (asset, version) = tx.slot(&input.fact_key).await?;
         let job = Self::enqueue(
             &mut tx,
-            "publish",
-            json!({"expected_version":version,"format":"text","embedding_profile":self.models.profile}),
+            JobPayload::Publish {
+                expected_version: version,
+                format: "text".into(),
+                embedding_profile: self.models.profile.clone(),
+            },
             Some(asset),
             Some(source),
         )
@@ -206,8 +209,11 @@ impl Service {
         let source = tx.create_event("identified", &input.content, None).await?;
         let job = Self::enqueue(
             &mut tx,
-            "publish",
-            json!({"expected_version":version,"format":"text","embedding_profile":self.models.profile}),
+            JobPayload::Publish {
+                expected_version: version,
+                format: "text".into(),
+                embedding_profile: self.models.profile.clone(),
+            },
             Some(asset),
             Some(source),
         )
@@ -262,11 +268,15 @@ impl Service {
             .await?;
         let job = Self::enqueue(
             &mut tx,
-            "extract",
-            json!({"identity":input.identity,"expected_version":version,"embedding_profile":self.models.profile}),
+            JobPayload::IdentifiedExtract {
+                identity: input.identity,
+                expected_version: version,
+                embedding_profile: self.models.profile.clone(),
+            },
             Some(asset),
             Some(source),
-        ).await?;
+        )
+        .await?;
         tx.audit(
             "memory.identified_capture",
             source,
@@ -291,8 +301,9 @@ impl Service {
         let source = tx.create_event("capture", &input.content, None).await?;
         let job = Self::enqueue(
             &mut tx,
-            "extract",
-            json!({"embedding_profile":self.models.profile}),
+            JobPayload::LegacyExtract {
+                embedding_profile: self.models.profile.clone(),
+            },
             None,
             Some(source),
         )
@@ -357,7 +368,18 @@ impl Service {
                 input.file_id,
             )
             .await?;
-        let job=Self::enqueue(&mut tx,"ingest",json!({"format":input.format,"title":input.title,"expected_version":input.expected_version,"embedding_profile":self.models.profile}),Some(asset),Some(source)).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            JobPayload::Ingest {
+                format: input.format,
+                title: input.title,
+                expected_version: input.expected_version,
+                embedding_profile: self.models.profile.clone(),
+            },
+            Some(asset),
+            Some(source),
+        )
+        .await?;
         tx.audit("knowledge.ingest", asset, json!({"job_id":job}))
             .await?;
         Self::finish(
@@ -400,7 +422,18 @@ impl Service {
             return Err(AppError::Conflict("expected_version mismatch".into()));
         }
         let source = decode(row["source_event_id"].clone())?;
-        let job=Self::enqueue(&mut tx,"restore",json!({"target_version":input.target_version,"expected_version":input.expected_version,"title":row["title"],"embedding_profile":self.models.profile}),Some(id),Some(source)).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            JobPayload::Restore {
+                target_version: input.target_version,
+                expected_version: input.expected_version,
+                title: decode(row["title"].clone())?,
+                embedding_profile: self.models.profile.clone(),
+            },
+            Some(id),
+            Some(source),
+        )
+        .await?;
         tx.audit(
             "asset.restore_authorized",
             id,
@@ -523,8 +556,10 @@ impl Service {
         tx.cancel_affected_jobs().await?;
         let job = Self::enqueue(
             &mut tx,
-            "cleanup",
-            json!({"target":target,"id":id}),
+            JobPayload::Cleanup {
+                target: target.into(),
+                id,
+            },
             None,
             None,
         )
@@ -631,3 +666,4 @@ impl Service {
         Ok(json!({"key_id":id,"revoked":true}))
     }
 }
+

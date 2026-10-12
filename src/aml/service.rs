@@ -1,6 +1,7 @@
 //! AML protocol orchestration through the existing durable worker.
 use crate::{
     error::{AppError, Result},
+    jobs::JobPayload,
     service::{Service, authorized},
     storage::{AuthorizedScope, DomainTx, Permission, hash},
     types::AuthContext,
@@ -97,7 +98,17 @@ impl Service {
         }
         let asset = tx.insert_knowledge_asset("AML conversation batch").await?;
         let source_event = tx.create_event("aml_messages_v1", &source, None).await?;
-        let job = Self::enqueue(&mut tx, "aml_ingest", json!({"expected_version":null,"embedding_profile":profile,"parser":super::MESSAGE_PARSER}), Some(asset), Some(source_event)).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            JobPayload::AmlIngest {
+                expected_version: None,
+                embedding_profile: profile.clone(),
+                parser: super::MESSAGE_PARSER.into(),
+            },
+            Some(asset),
+            Some(source_event),
+        )
+        .await?;
         let record = AddRecord {
             request_id: input.request_id,
             session_id: input.session_id,
@@ -223,3 +234,4 @@ impl Service {
         Ok(json!({"data":data}))
     }
 }
+

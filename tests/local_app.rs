@@ -1425,6 +1425,195 @@ async fn racing_expected_versions_supersede_the_loser() {
 }
 
 #[tokio::test]
+async fn malformed_durable_jobs_settle_and_leave_the_worker_available() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let store = s.engine.relational();
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "malformed jobs")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "admin").await.unwrap();
+    let a = s.auth(&key.token).await.unwrap();
+    let cases = [
+        (
+            "unknown operation",
+            "unknown_operation",
+            json!({"schema_version":1,"expected_version":null,"embedding_profile":null}),
+        ),
+        (
+            "unsupported schema",
+            "publish",
+            json!({"schema_version":2,"expected_version":null,"embedding_profile":null}),
+        ),
+        (
+            "missing schema",
+            "publish",
+            json!({"expected_version":null,"embedding_profile":null}),
+        ),
+        ("non-object payload", "publish", Value::Null),
+        (
+            "missing ingest format",
+            "ingest",
+            json!({"schema_version":1,"expected_version":null,"embedding_profile":null}),
+        ),
+        (
+            "malformed ingest format",
+            "ingest",
+            json!({"schema_version":1,"format":7,"expected_version":null,"embedding_profile":null}),
+        ),
+        (
+            "malformed restore version",
+            "restore",
+            json!({"schema_version":1,"target_version":"invalid","expected_version":null,"embedding_profile":null}),
+        ),
+        (
+            "present null identity",
+            "extract",
+            json!({"schema_version":1,"identity":null,"expected_version":null,"embedding_profile":null}),
+        ),
+    ];
+    for (case, operation, payload) in cases {
+        let malformed = s
+            .memory(
+                &a,
+                &format!("malformed {case}"),
+                MemoryInput {
+                    fact_key: format!("malformed {case}"),
+                    content: "Malformed job source stays available".into(),
+                    publish_if_authorized: true,
+                },
+            )
+            .await
+            .unwrap();
+        let malformed_id = id(&malformed, "job_id");
+        // Bypass admission validation only in this durable-queue fixture. Keep
+        // real authorization, source and asset bindings, and force queue order.
+        sqlx::query("UPDATE oc_jobs SET operation=?,payload=?,created_at=0 WHERE id=?")
+            .bind(operation)
+            .bind(payload.to_string())
+            .bind(malformed_id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        let valid = s
+            .memory(
+                &a,
+                &format!("valid after {case}"),
+                MemoryInput {
+                    fact_key: format!("valid after {case}"),
+                    content: "The following valid job publishes".into(),
+                    publish_if_authorized: true,
+                },
+            )
+            .await
+            .unwrap();
+        let valid_id = id(&valid, "job_id");
+
+        assert!(origence::worker::process_next(&s).await.unwrap(), "{case}");
+        let failed = s.job(&a, malformed_id).await.unwrap();
+        assert_eq!(failed["state"], "failed", "{case}: {failed}");
+        assert_eq!(failed["error_code"], "INVALID_ARGUMENT", "{case}");
+        assert_eq!(s.job(&a, valid_id).await.unwrap()["state"], "pending");
+        assert!(s.get(&a, id(&malformed, "asset_id"), None).await.is_err());
+        assert_eq!(
+            s.source_event(&a, id(&malformed, "source_event_id"))
+                .await
+                .unwrap()["content"],
+            "Malformed job source stays available"
+        );
+
+        assert!(origence::worker::process_next(&s).await.unwrap(), "{case}");
+        assert_eq!(s.job(&a, valid_id).await.unwrap()["state"], "completed");
+        assert_eq!(
+            s.get(&a, id(&valid, "asset_id"), None).await.unwrap()["version"],
+            1
+        );
+        assert!(!origence::worker::process_next(&s).await.unwrap(), "{case}");
+    }
+    s.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn saved_publication_checks_generation_before_decoding() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let store = s.engine.relational();
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "publication generation")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "admin").await.unwrap();
+    let a = s.auth(&key.token).await.unwrap();
+    for (case, publication, state) in [
+        (
+            "stale generation",
+            json!({"generation":0,"memories":"malformed"}),
+            "completed",
+        ),
+        (
+            "missing generation",
+            json!({"memories":"malformed"}),
+            "completed",
+        ),
+        (
+            "wrong generation type",
+            json!({"generation":"1","memories":"malformed"}),
+            "completed",
+        ),
+        (
+            "current generation",
+            json!({"generation":1,"memories":"malformed"}),
+            "failed",
+        ),
+    ] {
+        let accepted = s
+            .memory(
+                &a,
+                case,
+                MemoryInput {
+                    fact_key: case.into(),
+                    content: "Fresh source evidence".into(),
+                    publish_if_authorized: true,
+                },
+            )
+            .await
+            .unwrap();
+        let job_id = id(&accepted, "job_id");
+        // An obsolete saved plan must be ignored before its body is decoded.
+        // The same malformed body is an input error when the generation matches.
+        sqlx::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)) WHERE id=?")
+            .bind(publication.to_string())
+            .bind(job_id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        assert!(origence::worker::process_next(&s).await.unwrap(), "{case}");
+        let settled = s.job(&a, job_id).await.unwrap();
+        assert_eq!(settled["state"], state, "{case}: {settled}");
+        if state == "completed" {
+            assert_eq!(
+                s.get(&a, id(&accepted, "asset_id"), None).await.unwrap()["version"],
+                1
+            );
+        } else {
+            assert_eq!(settled["error_code"], "INVALID_ARGUMENT");
+            assert!(s.get(&a, id(&accepted, "asset_id"), None).await.is_err());
+        }
+        assert!(!origence::worker::process_next(&s).await.unwrap(), "{case}");
+    }
+    s.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn saved_publication_recovers_after_external_graph_write() {
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
@@ -1631,3 +1820,4 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     assert!(!view.ready().await);
     assert!(!view.worker_running.load(Ordering::Acquire));
 }
+

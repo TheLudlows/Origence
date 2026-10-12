@@ -1,6 +1,8 @@
 use crate::{
     error::{AppError, Result},
-    graph, parsing,
+    graph,
+    jobs::{JobKind, JobPayload},
+    parsing,
     service::{Service, decode},
     storage::{sqlite::SqliteTx, *},
     types::{AuthContext, Chunk, GraphExtraction},
@@ -55,8 +57,8 @@ fn auth(claim: &ClaimedJob) -> AuthContext {
         role: String::new(),
     }
 }
-fn permission(claim: &ClaimedJob) -> Permission {
-    if claim.kind == "restore" {
+fn permission(payload: &JobPayload) -> Permission {
+    if payload.kind() == JobKind::Restore {
         Permission::Publish
     } else {
         Permission::Write
@@ -74,7 +76,7 @@ fn first_extracted_fact(
     tracing::warn!(%job_id, "duplicate extracted fact_key dropped");
     false
 }
-async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
+async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> Result<()> {
     if !tx
         .active_job(claim.job_id, claim.generation, claim.run_token)
         .await?
@@ -82,13 +84,16 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
         return Err(AppError::Conflict("stale or cancelled job".into()));
     }
     tx.valid_targets(claim.asset, claim.source).await?;
-    if claim.kind == "semantic_publish" {
-        if claim.payload["parser"] != crate::memory_semantics::PARSER {
+    if let JobPayload::SemanticPublish {
+        parser,
+        semantic_members,
+        ..
+    } = payload
+    {
+        if parser != crate::memory_semantics::PARSER {
             return Err(AppError::Invalid("unsupported semantic parser".into()));
         }
-        let members: Vec<crate::memory_semantics::Member> =
-            decode(claim.payload["semantic_members"].clone())?;
-        for member in members {
+        for member in semantic_members {
             let source = tx
                 .event_content(member.source_event_id, true)
                 .await?
@@ -100,14 +105,14 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
             }
         }
     }
-    if claim.kind == "semantic_extract" {
-        semantic_capture::guard_capture(tx, claim).await?;
+    if payload.kind() == JobKind::SemanticExtract {
+        semantic_capture::guard_capture(tx, claim, payload).await?;
     }
-    if !matches!(claim.kind.as_str(), "extract" | "semantic_extract") {
+    if !matches!(payload.kind(), JobKind::Extract | JobKind::SemanticExtract) {
         let current = tx
             .asset_current_version(claim.asset.ok_or(AppError::NotFound)?)
             .await?;
-        if json!(current) != claim.payload["expected_version"] {
+        if current != payload.expected_version() {
             return Err(AppError::Conflict(
                 "publication superseded by another version".into(),
             ));
@@ -162,10 +167,11 @@ pub async fn process_next(service: &Service) -> Result<bool> {
     Ok(true)
 }
 async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
-    if claim.payload["schema_version"] != 1 {
-        return Err(AppError::Invalid("unsupported job payload schema".into()));
-    }
-    if claim.kind == "cleanup" {
+    // Decode within the claim settlement path so invalid jobs fail normally and
+    // cannot strand the worker or bypass operation-specific validation.
+    let payload = JobPayload::decode(&claim.kind, &claim.payload)?;
+    let payload = &payload;
+    if payload.kind() == JobKind::Cleanup {
         cleanup(service).await?;
         service
             .engine
@@ -175,19 +181,19 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         return Ok(());
     }
     let a = auth(claim);
-    let mut tx = service.read(&a, permission(claim)).await?;
-    guard(&mut tx, claim).await?;
-    let profile: Option<String> = decode(claim.payload["embedding_profile"].clone())?;
+    let mut tx = service.read(&a, permission(payload)).await?;
+    guard(&mut tx, claim, payload).await?;
+    let profile = payload.embedding_profile().map(str::to_owned);
     if profile.is_some() && profile != service.models.profile {
         return Err(AppError::Unavailable(
             "worker embedding profile differs from accepted job".into(),
         ));
     }
-    if claim.kind == "semantic_extract" {
+    if payload.kind() == JobKind::SemanticExtract {
         tx.commit().await?;
-        return semantic_capture::process(service, claim).await;
+        return semantic_capture::process(service, claim, payload).await;
     }
-    if claim.kind == "extract" {
+    if payload.kind() == JobKind::Extract {
         // A saved plan replays without re-calling the extraction model.
         if let Some(saved) = claim
             .payload
@@ -196,25 +202,24 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         {
             let p: Publication = decode(saved.clone())?;
             tx.commit().await?;
-            return publish_prepared(service, claim, p).await;
+            return publish_prepared(service, claim, payload, p).await;
         }
         let text = tx
             .event_content(claim.source.ok_or(AppError::NotFound)?, true)
             .await?
             .ok_or(AppError::NotFound)?;
         tx.commit().await?;
-        if let Some(value) = claim.payload.get("identity") {
-            let identity: crate::memory_identity::MemoryIdentity = decode(value.clone())?;
-            let chunks = service.models.extract_identified(&text, &identity).await?;
+        if let JobPayload::IdentifiedExtract { identity, .. } = payload {
+            let chunks = service.models.extract_identified(&text, identity).await?;
             let mut tx = service.write(&a, Permission::Write).await?;
-            guard(&mut tx, claim).await?;
+            guard(&mut tx, claim, payload).await?;
             let asset = claim.asset.ok_or(AppError::NotFound)?;
-            if tx.identity_slot(&identity).await?.0 != asset {
+            if tx.identity_slot(identity).await?.0 != asset {
                 return Err(AppError::Conflict(
                     "identified capture asset binding changed".into(),
                 ));
             }
-            let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
+            let expected = payload.expected_version();
             let drafts = if chunks.is_empty() {
                 Vec::new()
             } else {
@@ -226,14 +231,14 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 }]
             };
             tx.commit().await?;
-            let publication = prepare(service, claim, profile, drafts).await?;
-            return publish_prepared(service, claim, publication).await;
+            let publication = prepare(service, claim, payload, profile, drafts).await?;
+            return publish_prepared(service, claim, payload, publication).await;
         }
         let memories = service.models.extract(&text).await?;
         // Slot every fact under a short write tx; versions are re-verified at
         // commit, so a race only supersedes the job without overwriting.
         let mut tx = service.write(&a, Permission::Write).await?;
-        guard(&mut tx, claim).await?;
+        guard(&mut tx, claim, payload).await?;
         let mut drafts = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for m in &memories {
@@ -251,8 +256,8 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             });
         }
         tx.commit().await?;
-        let publication = prepare(service, claim, profile, drafts).await?;
-        return publish_prepared(service, claim, publication).await;
+        let publication = prepare(service, claim, payload, profile, drafts).await?;
+        return publish_prepared(service, claim, payload, publication).await;
     }
     let saved = claim
         .payload
@@ -263,11 +268,11 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         tx.commit().await?;
         p
     } else {
-        let expected: Option<i32> = decode(claim.payload["expected_version"].clone())?;
+        let expected = payload.expected_version();
         let asset = claim.asset.ok_or(AppError::NotFound)?;
-        let chunks = match claim.kind.as_str() {
-            "aml_ingest" => {
-                if claim.payload["parser"] != crate::aml::MESSAGE_PARSER {
+        let chunks = match payload {
+            JobPayload::AmlIngest { parser, .. } => {
+                if parser != crate::aml::MESSAGE_PARSER {
                     return Err(AppError::Invalid("unsupported AML parser".into()));
                 }
                 let source = tx
@@ -279,16 +284,14 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                     .await
                     .map_err(|e| AppError::Internal(e.into()))??
             }
-            "semantic_publish" => {
-                let members: Vec<crate::memory_semantics::Member> =
-                    decode(claim.payload["semantic_members"].clone())?;
-                let identity: Option<crate::memory_identity::MemoryIdentity> =
-                    decode(claim.payload["suggested_identity"].clone())?;
-                let status = claim.payload["semantic_status"]
-                    .as_str()
-                    .ok_or_else(|| AppError::Invalid("missing semantic status".into()))?;
+            JobPayload::SemanticPublish {
+                semantic_members: members,
+                suggested_identity: identity,
+                semantic_status: status,
+                ..
+            } => {
                 let chunks = crate::memory_semantics::chunks(
-                    &members,
+                    members,
                     status,
                     if status == "confirmed" {
                         None
@@ -299,7 +302,7 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 tx.commit().await?;
                 chunks
             }
-            "publish" => {
+            JobPayload::Publish { .. } => {
                 let text = tx
                     .event_content(claim.source.ok_or(AppError::NotFound)?, true)
                     .await?
@@ -308,9 +311,9 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 tx.commit().await?;
                 chunks
             }
-            "restore" => {
+            JobPayload::Restore { target_version, .. } => {
                 let chunks = tx
-                    .chunks_for_version(asset, decode(claim.payload["target_version"].clone())?)
+                    .chunks_for_version(asset, *target_version)
                     .await?
                     .into_iter()
                     .map(|(content, locator)| Chunk { content, locator })
@@ -318,17 +321,13 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 tx.commit().await?;
                 chunks
             }
-            "ingest" => {
+            JobPayload::Ingest { format, .. } => {
                 let file = tx
                     .event_file(claim.source.ok_or(AppError::NotFound)?)
                     .await?;
-                let format = claim.payload["format"]
-                    .as_str()
-                    .unwrap_or("text")
-                    .to_string();
                 tx.commit().await?;
                 if let Some(id) = file["file_id"].as_str() {
-                    if file["media_type"] != format {
+                    if file["media_type"] != format.as_str() {
                         return Err(AppError::Invalid(
                             "file format does not match ingest request".into(),
                         ));
@@ -338,16 +337,22 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                         .await?;
                     let key =
                         Service::blob_key(&a, file["hash"].as_str().ok_or(AppError::NotFound)?);
-                    parsing::parse_file(&service.engine.blobs().path_for(&key)?, &format).await?
+                    parsing::parse_file(&service.engine.blobs().path_for(&key)?, format).await?
                 } else {
-                    parsing::chunks(file["content"].as_str().unwrap_or(""), &format)?
+                    parsing::chunks(file["content"].as_str().unwrap_or(""), format)?
                 }
             }
-            _ => return Err(AppError::Invalid("unknown job operation".into())),
+            JobPayload::LegacyExtract { .. }
+            | JobPayload::IdentifiedExtract { .. }
+            | JobPayload::SemanticExtract { .. }
+            | JobPayload::Cleanup { .. } => {
+                return Err(AppError::Invalid("invalid publication operation".into()));
+            }
         };
         prepare(
             service,
             claim,
+            payload,
             profile,
             vec![DraftMemory {
                 asset,
@@ -358,11 +363,12 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         )
         .await?
     };
-    publish_prepared(service, claim, publication).await
+    publish_prepared(service, claim, payload, publication).await
 }
 async fn prepare(
     service: &Service,
     claim: &ClaimedJob,
+    payload: &JobPayload,
     profile: Option<String>,
     drafts: Vec<DraftMemory>,
 ) -> Result<Publication> {
@@ -370,8 +376,8 @@ async fn prepare(
         return Err(AppError::Conflict("no source chunks available".into()));
     }
     let terms = if matches!(
-        claim.kind.as_str(),
-        "aml_ingest" | "semantic_publish" | "semantic_extract"
+        payload.kind(),
+        JobKind::AmlIngest | JobKind::SemanticPublish | JobKind::SemanticExtract
     ) {
         let texts: Vec<String> = drafts
             .iter()
@@ -398,7 +404,9 @@ async fn prepare(
             } else {
                 None
             };
-            let summary = if claim.kind == "ingest" && service.models.extraction_enabled() {
+            let summary = if payload.kind() == JobKind::Ingest
+                && service.models.extraction_enabled()
+            {
                 service.models.summarize(&chunk.content).await?
             } else {
                 String::new()
@@ -429,7 +437,7 @@ async fn prepare(
         .map(|c| c.chunk.content.as_str())
         .collect::<Vec<_>>()
         .join("");
-    let graph = if claim.kind == "ingest" && service.models.extraction_enabled() {
+    let graph = if payload.kind() == JobKind::Ingest && service.models.extraction_enabled() {
         Some(service.models.extract_graph(&text).await?)
     } else {
         None
@@ -519,12 +527,13 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
 async fn publish_prepared(
     service: &Service,
     claim: &ClaimedJob,
+    payload: &JobPayload,
     publication: Publication,
 ) -> Result<()> {
     let a = auth(claim);
     let entries = ledger(claim, &publication)?;
-    let mut tx = service.write(&a, permission(claim)).await?;
-    guard(&mut tx, claim).await?;
+    let mut tx = service.write(&a, permission(payload)).await?;
+    guard(&mut tx, claim, payload).await?;
     tx.save_publication(claim.job_id, &json!(publication))
         .await?;
     for entry in &entries {
@@ -562,8 +571,8 @@ async fn publish_prepared(
             .upsert_relations(claim.scope, source, g.relations.clone())
             .await?;
     }
-    let mut tx = service.write(&a, permission(claim)).await?;
-    guard(&mut tx, claim).await?;
+    let mut tx = service.write(&a, permission(payload)).await?;
+    guard(&mut tx, claim, payload).await?;
     for memory in &publication.memories {
         let current = tx.asset_current_version(memory.asset).await?;
         if current != memory.expected_version {
@@ -584,14 +593,8 @@ async fn publish_prepared(
             &content,
             &hash(content.as_bytes()),
             source.source_id,
-            decode(
-                claim
-                    .payload
-                    .get("target_version")
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            )?,
-            claim.payload["title"].as_str(),
+            payload.target_version(),
+            payload.title(),
         )
         .await?;
         for (ordinal, c) in memory.chunks.iter().enumerate() {
@@ -633,7 +636,7 @@ async fn publish_prepared(
         tx.update_asset_version(
             memory.asset,
             memory.version,
-            claim.payload["title"].as_str(),
+            payload.title(),
         )
         .await?;
     }
@@ -672,10 +675,12 @@ async fn publish_prepared(
         capabilities.push("graph");
     }
     let mut result = json!({"readiness":"ready","index_capabilities":capabilities});
-    if claim.kind == "semantic_extract" {
+    if payload.kind() == JobKind::SemanticExtract {
         result["memories"] = json!(semantic_capture::results(claim)?);
-        result["extractor"] = claim.payload["extractor"].clone();
-    } else if claim.kind == "extract" {
+        if let JobPayload::SemanticExtract { extractor, .. } = payload {
+            result["extractor"] = json!(extractor);
+        }
+    } else if payload.kind() == JobKind::Extract {
         result["memories"] = json!(
             publication
                 .memories
@@ -683,7 +688,7 @@ async fn publish_prepared(
                 .map(|m| json!({
                     "asset_id": m.asset,
                     "fact_key": m.fact_key,
-                    "identity": claim.payload.get("identity"),
+                    "identity": payload.identity(),
                     "version": m.version,
                 }))
                 .collect::<Vec<_>>()

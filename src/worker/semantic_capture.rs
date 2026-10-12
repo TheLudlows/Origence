@@ -13,8 +13,12 @@ struct CapturePlan {
 /// Recheck each routed asset and original member, including duplicates, on replay
 /// and before commit. Unused targets are not dependencies; uncertain routes guard
 /// their independent evidence asset, not the suggested identity's current version.
-pub(super) async fn guard_capture(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
-    if claim.payload["extractor"] != EXTRACTOR {
+pub(super) async fn guard_capture(
+    tx: &mut SqliteTx,
+    claim: &ClaimedJob,
+    payload: &JobPayload,
+) -> Result<()> {
+    if !matches!(payload, JobPayload::SemanticExtract { extractor, .. } if extractor == EXTRACTOR) {
         return Err(AppError::Invalid("unsupported semantic extractor".into()));
     }
     if let Some(value) = claim.payload.get("semantic_capture_plan") {
@@ -60,12 +64,26 @@ pub(super) fn results(claim: &ClaimedJob) -> Result<Vec<Value>> {
         })
         .collect())
 }
-pub(super) async fn process(service: &Service, claim: &ClaimedJob) -> Result<()> {
+pub(super) async fn process(
+    service: &Service,
+    claim: &ClaimedJob,
+    payload: &JobPayload,
+) -> Result<()> {
+    let JobPayload::SemanticExtract {
+        targets,
+        properties,
+        extraction_profile,
+        extraction_model,
+        ..
+    } = payload
+    else {
+        return Err(AppError::Invalid("invalid semantic capture operation".into()));
+    };
     let a = auth(claim);
-    let profile: Option<String> = decode(claim.payload["embedding_profile"].clone())?;
+    let profile = payload.embedding_profile().map(str::to_owned);
     let mut active = claim.clone();
     let mut tx = service.read(&a, Permission::Write).await?;
-    guard(&mut tx, claim).await?;
+    guard(&mut tx, claim, payload).await?;
     if let Some(saved) = claim
         .payload
         .get("publication")
@@ -73,15 +91,15 @@ pub(super) async fn process(service: &Service, claim: &ClaimedJob) -> Result<()>
     {
         let publication: Publication = decode(saved.clone())?;
         tx.commit().await?;
-        return publish_prepared(service, claim, publication).await;
+        return publish_prepared(service, claim, payload, publication).await;
     }
     let plan = if let Some(saved) = claim.payload.get("semantic_capture_plan") {
         let plan: CapturePlan = decode(saved.clone())?;
         tx.commit().await?;
         plan
     } else {
-        if json!(service.models.semantic_extraction_profile())
-            != claim.payload["extraction_profile"]
+        if service.models.semantic_extraction_profile().as_deref()
+            != Some(extraction_profile.as_str())
         {
             return Err(AppError::Unavailable(
                 "worker extraction profile differs from accepted job".into(),
@@ -94,21 +112,19 @@ pub(super) async fn process(service: &Service, claim: &ClaimedJob) -> Result<()>
             .ok_or(AppError::NotFound)?;
         let request = SemanticCaptureInput {
             content,
-            targets: decode(claim.payload["targets"].clone())?,
+            targets: targets.clone(),
         };
-        let properties: Vec<crate::memory_semantics::MemoryProperty> =
-            decode(claim.payload["properties"].clone())?;
         tx.commit().await?;
         let extraction = service
             .models
-            .extract_semantic(&request, &properties)
+            .extract_semantic(&request, properties)
             .await?;
         let provenance = ExtractionProvenance {
             parser: EXTRACTOR.into(),
-            model: decode(claim.payload["extraction_model"].clone())?,
+            model: extraction_model.clone(),
         };
         let mut tx = service.write(&a, Permission::Write).await?;
-        guard(&mut tx, claim).await?;
+        guard(&mut tx, claim, payload).await?;
         let mut routes = Vec::new();
         for candidate in &extraction.candidates {
             let input = candidate.input(&request)?;
@@ -138,6 +154,6 @@ pub(super) async fn process(service: &Service, claim: &ClaimedJob) -> Result<()>
             chunks: route.chunks(),
         })
         .collect();
-    let publication = prepare(service, &active, profile, drafts).await?;
-    publish_prepared(service, &active, publication).await
+    let publication = prepare(service, &active, payload, profile, drafts).await?;
+    publish_prepared(service, &active, payload, publication).await
 }
