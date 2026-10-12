@@ -3,6 +3,20 @@
 Read the relevant design, `docs/STATUS.md`, and current code before changing an
 implementation. Prefer the smallest change that meets the documented behavior.
 
+## Current-stage database scope
+
+- Target fresh databases for current design, implementation, testing, and
+  acceptance. Version upgrades, backward compatibility with older database
+  schemas, and data migrations are out of scope; do not track their absence as
+  current gaps or add upgrade/migration work to current milestones.
+- Reconsider this scope only after an explicit future requirement change.
+  Existing compatibility checks, historical tools, and validation records do
+  not create a requirement to extend upgrade or migration support.
+- This scope does not relax durability, restart/retry recovery, same-version
+  backup/restore, source preservation, or incompatible-schema rejection.
+  A fresh-database development target is not permission to delete, overwrite,
+  or silently convert existing data.
+
 ## Module boundaries and dependencies
 
 - Keep `src/main.rs` limited to CLI/configuration, startup, and dispatch. Put
