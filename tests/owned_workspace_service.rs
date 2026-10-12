@@ -42,7 +42,13 @@ async fn upload_worker_search_and_revocation_use_owned_workspaces() {
     let key = service
         .engine
         .relational()
-        .issue_key_with_capabilities(scope, "admin", KeyCapabilities { allow_owned_workspaces: true })
+        .issue_key_with_capabilities(
+            scope,
+            "admin",
+            KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
         .await
         .unwrap();
     let parent = service.auth(&key.token).await.unwrap();
@@ -155,11 +161,16 @@ async fn upload_worker_search_and_revocation_use_owned_workspaces() {
         )
         .await
         .unwrap();
-    let replacement = service.issue_key_with_capabilities(
-        &parent,
-        "admin",
-        KeyCapabilities { allow_owned_workspaces: true },
-    ).await.unwrap();
+    let replacement = service
+        .issue_key_with_capabilities(
+            &parent,
+            "admin",
+            KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
+        .await
+        .unwrap();
     let control = service
         .auth(replacement["token"].as_str().unwrap())
         .await
@@ -240,14 +251,26 @@ async fn owned_workspaces_isolate_summary_graph_and_repeated_queries() {
     let key = service
         .engine
         .relational()
-        .issue_key_with_capabilities(scope, "admin", KeyCapabilities { allow_owned_workspaces: true })
+        .issue_key_with_capabilities(
+            scope,
+            "admin",
+            KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
         .await
         .unwrap();
     let parent = service.auth(&key.token).await.unwrap();
     let alice_id = Uuid::new_v4();
     let bob_id = Uuid::new_v4();
-    let alice = service.ensure_owned_workspace(&parent, alice_id, "Alice").await.unwrap();
-    let bob = service.ensure_owned_workspace(&parent, bob_id, "Bob").await.unwrap();
+    let alice = service
+        .ensure_owned_workspace(&parent, alice_id, "Alice")
+        .await
+        .unwrap();
+    let bob = service
+        .ensure_owned_workspace(&parent, bob_id, "Bob")
+        .await
+        .unwrap();
     let mut assets = Vec::new();
     for (auth, content) in [
         (&alice, "Atlas ALICE_ONLY requires approval."),

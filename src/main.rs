@@ -114,7 +114,9 @@ async fn main() -> anyhow::Result<()> {
         return host::serve_with_options(
             service,
             listener,
-            origence::api::ApiOptions { enable_aml: *enable_aml },
+            origence::api::ApiOptions {
+                enable_aml: *enable_aml,
+            },
             host::shutdown_signal(),
         )
         .await;
@@ -163,12 +165,18 @@ async fn main() -> anyhow::Result<()> {
                 let key = store.issue_key(scope, "admin").await?;
                 json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token})
             }
-            Command::KeyCreate { workspace_id, role, allow_owned_workspaces } => json!(
+            Command::KeyCreate {
+                workspace_id,
+                role,
+                allow_owned_workspaces,
+            } => json!(
                 store
                     .issue_key_with_capabilities(
                         store.workspace_scope(workspace_id).await?,
                         &role,
-                        KeyCapabilities { allow_owned_workspaces },
+                        KeyCapabilities {
+                            allow_owned_workspaces
+                        },
                     )
                     .await?
             ),
@@ -292,10 +300,16 @@ async fn main() -> anyhow::Result<()> {
             ),
             None,
         ),
-        Command::KeyCreate { workspace_id, role, allow_owned_workspaces } => (
+        Command::KeyCreate {
+            workspace_id,
+            role,
+            allow_owned_workspaces,
+        } => (
             reqwest::Method::POST,
             "/admin/keys".into(),
-            Some(json!({"workspace_id":workspace_id,"role":role,"allow_owned_workspaces":allow_owned_workspaces})),
+            Some(
+                json!({"workspace_id":workspace_id,"role":role,"allow_owned_workspaces":allow_owned_workspaces}),
+            ),
         ),
         Command::KeyRevoke { key_id } => (
             reqwest::Method::DELETE,

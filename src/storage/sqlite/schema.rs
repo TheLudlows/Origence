@@ -68,12 +68,11 @@ const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
 /// A legacy protocol schema is incompatible, including a partial old database.
 /// This is only a rejection detector: no compatibility implementation or upgrade.
 pub(super) async fn reject_legacy_aml_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name GLOB 'oc_aml_*')",
-    )
-    .fetch_one(conn)
-    .await
-    .map_err(sqlite_err)?;
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name GLOB 'oc_aml_*')")
+            .fetch_one(conn)
+            .await
+            .map_err(sqlite_err)?;
     if exists {
         return Err(StorageError::Unavailable(
             "legacy AML schema requires a new database; no migration was attempted".into(),

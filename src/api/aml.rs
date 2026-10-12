@@ -322,12 +322,28 @@ mod tests {
         assert!(parse_add(&vec![b' '; parsing::MAX_FILE + 1]).is_err());
         assert!(parse_search(&vec![b' '; parsing::MAX_FILE + 1]).is_err());
         for top_k in [0, 101] {
-            assert!(parse_search(&serde_json::to_vec(&json!({"query":"x","user_id":"u","top_k":top_k})).unwrap()).is_err());
+            assert!(
+                parse_search(
+                    &serde_json::to_vec(&json!({"query":"x","user_id":"u","top_k":top_k})).unwrap()
+                )
+                .is_err()
+            );
         }
         for query in ["".into(), " ".into(), "a\0b".into(), "x".repeat(4001)] {
-            assert!(parse_search(&serde_json::to_vec(&json!({"query":query,"user_id":"u","top_k":1})).unwrap()).is_err());
+            assert!(
+                parse_search(
+                    &serde_json::to_vec(&json!({"query":query,"user_id":"u","top_k":1})).unwrap()
+                )
+                .is_err()
+            );
         }
-        let search = parse_search(&serde_json::to_vec(&json!({"query":"x","user_id":"u","top_k":100,"options":["ignored"]})).unwrap()).unwrap();
+        let search = parse_search(
+            &serde_json::to_vec(
+                &json!({"query":"x","user_id":"u","top_k":100,"options":["ignored"]}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(search.options.unwrap(), vec!["ignored"]);
     }
 }

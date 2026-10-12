@@ -532,9 +532,7 @@ async fn prepare(
     let has_learning = learning_metadata.iter().any(Option::is_some);
     let terms = if matches!(
         payload.kind(),
-        JobKind::MessageBatchIngest
-            | JobKind::SemanticPublish
-            | JobKind::SemanticExtract
+        JobKind::MessageBatchIngest | JobKind::SemanticPublish | JobKind::SemanticExtract
     ) {
         let texts: Vec<String> = drafts
             .iter()

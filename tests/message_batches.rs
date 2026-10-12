@@ -711,7 +711,10 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
         );
         if break_sql.contains("dimension=99") {
             assert_eq!(
-                service.wait_message_batch(&auth, &receipt, Duration::ZERO).await.unwrap(),
+                service
+                    .wait_message_batch(&auth, &receipt, Duration::ZERO)
+                    .await
+                    .unwrap(),
                 PublicationStatus::Invisible
             );
             let found = service.search(&auth, query("vector")).await.unwrap();

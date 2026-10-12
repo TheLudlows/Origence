@@ -3,8 +3,8 @@
 use axum::{Json, Router, routing::post};
 use origence::{
     api::aml::{self, AddInput},
-    messages::{AcceptedMessageSpec, IngestReceipt, PublicationStatus, MESSAGE_PARSER},
     error::AppError,
+    messages::{AcceptedMessageSpec, IngestReceipt, MESSAGE_PARSER, PublicationStatus},
     models::Models,
     service::Service,
     storage::{KeyCapabilities, RelationalStore, Scope},
@@ -98,7 +98,13 @@ async fn namespace(s: &Service) -> (String, AuthContext) {
     let key = s
         .engine
         .relational()
-        .issue_key_with_capabilities(scope, "admin", KeyCapabilities { allow_owned_workspaces: true })
+        .issue_key_with_capabilities(
+            scope,
+            "admin",
+            KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
         .await
         .unwrap();
     let auth = s.auth(&key.token).await.unwrap();
@@ -124,19 +130,31 @@ async fn count(s: &Service, table: &str) -> i64 {
 }
 
 async fn user_scope(s: &Service, root: &AuthContext, user: &str) -> AuthContext {
-    s.lookup_owned_workspace(root, aml::workspace_id(root.tenant_id, root.workspace_id, user))
-        .await.unwrap().unwrap()
+    s.lookup_owned_workspace(
+        root,
+        aml::workspace_id(root.tenant_id, root.workspace_id, user),
+    )
+    .await
+    .unwrap()
+    .unwrap()
 }
-async fn submit(s: &Service, root: &AuthContext, input: AddInput) -> origence::error::Result<IngestReceipt> {
+async fn submit(
+    s: &Service,
+    root: &AuthContext,
+    input: AddInput,
+) -> origence::error::Result<IngestReceipt> {
     input.validate()?;
     let target = aml::workspace_id(root.tenant_id, root.workspace_id, &input.user_id);
-    let user = s.ensure_owned_workspace(root, target, "AML test user").await?;
+    let user = s
+        .ensure_owned_workspace(root, target, "AML test user")
+        .await?;
     s.submit_message_batch(
         &user,
         &aml::add_command_key(&input.request_id),
         input.into_batch(),
         AcceptedMessageSpec::raw_only(s.models.profile.clone().unwrap()),
-    ).await
+    )
+    .await
 }
 
 #[tokio::test]
@@ -146,9 +164,20 @@ async fn aml_routes_are_disabled_by_default_and_namespace_endpoint_is_removed() 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let router = origence::api::router(s.clone());
-    let serving = tokio::spawn(async move { axum::serve(listener, router).await.unwrap(); });
+    let serving = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
     for path in ["/aml/add", "/aml/search", "/admin/aml/namespace"] {
-        assert_eq!(reqwest::Client::new().post(format!("{base}{path}")).json(&json!({})).send().await.unwrap().status(), 404);
+        assert_eq!(
+            reqwest::Client::new()
+                .post(format!("{base}{path}"))
+                .json(&json!({}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            404
+        );
     }
     serving.abort();
     s.engine.shutdown().await.unwrap();
@@ -163,9 +192,14 @@ async fn aml_http_add_search_isolation_and_immediate_visibility() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let (stop, stopped) = oneshot::channel();
-    let serving = tokio::spawn(origence::host::serve_with_options(s.clone(), listener, origence::api::ApiOptions { enable_aml: true }, async {
-        let _ = stopped.await;
-    }));
+    let serving = tokio::spawn(origence::host::serve_with_options(
+        s.clone(),
+        listener,
+        origence::api::ApiOptions { enable_aml: true },
+        async {
+            let _ = stopped.await;
+        },
+    ));
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
@@ -276,7 +310,9 @@ async fn aml_http_add_search_isolation_and_immediate_visibility() {
             &serde_json::to_string(&original.clone().into_batch()).unwrap(),
             &AcceptedMessageSpec::raw_only("fixture"),
             Uuid::nil(),
-        ).unwrap().len()
+        )
+        .unwrap()
+        .len()
             + 4
     );
     assert!(!found.to_string().contains("不需要审批"));
@@ -296,7 +332,9 @@ async fn aml_http_add_search_isolation_and_immediate_visibility() {
     );
     let before = count(&s, "oc_workspaces").await;
     assert_eq!(
-        aml::search(&s, &auth, search("unknown", 100)).await.unwrap(),
+        aml::search(&s, &auth, search("unknown", 100))
+            .await
+            .unwrap(),
         json!({"data":[]})
     );
     assert_eq!(count(&s, "oc_workspaces").await, before);
@@ -364,19 +402,49 @@ async fn aml_http_add_search_isolation_and_immediate_visibility() {
     // New keys do not inherit root capability, including admin keys. Even an
     // unknown user's empty result requires authorization before lookup.
     let ordinary = s.issue_key(&auth, "admin").await.unwrap();
-    for key in [reader["token"].as_str().unwrap(), ordinary["token"].as_str().unwrap()] {
-        assert_eq!(client.post(format!("{base}/aml/search")).bearer_auth(key)
-            .json(&search("unknown", 1)).send().await.unwrap().status(), 403);
+    for key in [
+        reader["token"].as_str().unwrap(),
+        ordinary["token"].as_str().unwrap(),
+    ] {
+        assert_eq!(
+            client
+                .post(format!("{base}/aml/search"))
+                .bearer_auth(key)
+                .json(&search("unknown", 1))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            403
+        );
     }
     let capable_reader: Value = client.post(format!("{base}/admin/keys"))
         .bearer_auth(&token)
         .json(&json!({"workspace_id":auth.workspace_id,"role":"reader","allow_owned_workspaces":true}))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let reader_token = capable_reader["token"].as_str().unwrap();
-    assert_eq!(client.post(format!("{base}/aml/search")).bearer_auth(reader_token)
-        .json(&search(&long_id, 1)).send().await.unwrap().status(), 200);
-    assert_eq!(client.post(format!("{base}/aml/add")).bearer_auth(reader_token)
-        .json(&original).send().await.unwrap().status(), 403);
+    assert_eq!(
+        client
+            .post(format!("{base}/aml/search"))
+            .bearer_auth(reader_token)
+            .json(&search(&long_id, 1))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        client
+            .post(format!("{base}/aml/add"))
+            .bearer_auth(reader_token)
+            .json(&original)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
     assert_eq!(count(&s, "oc_workspaces").await, before);
     models.fail.store(true, Ordering::SeqCst);
     assert_eq!(
@@ -414,15 +482,22 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
     let record = a.unwrap();
     assert_eq!(record.job_id, b.unwrap().job_id);
     assert!(matches!(
-        s.wait_message_batch(&user_scope(&s, &auth, "Alice").await, &record, Duration::from_millis(10))
-            .await,
+        s.wait_message_batch(
+            &user_scope(&s, &auth, "Alice").await,
+            &record,
+            Duration::from_millis(10)
+        )
+        .await,
         Ok(PublicationStatus::Pending)
     ));
     // Dropping an observer models a lost HTTP connection without cancelling the job.
     assert!(
-        tokio::time::timeout(Duration::from_millis(10), aml::add(&s, &auth, input.clone()))
-            .await
-            .is_err()
+        tokio::time::timeout(
+            Duration::from_millis(10),
+            aml::add(&s, &auth, input.clone())
+        )
+        .await
+        .is_err()
     );
     let alice = user_scope(&s, &auth, "Alice").await;
     assert_eq!(
@@ -434,22 +509,34 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
     drop(s);
     let s = Service::open(dir.path(), models.models()).await.unwrap();
     let auth = s.auth(&token).await.unwrap();
-    let replacement = s.issue_key_with_capabilities(&auth, "admin", KeyCapabilities { allow_owned_workspaces: true }).await.unwrap();
+    let replacement = s
+        .issue_key_with_capabilities(
+            &auth,
+            "admin",
+            KeyCapabilities {
+                allow_owned_workspaces: true,
+            },
+        )
+        .await
+        .unwrap();
     let rotated = s
         .auth(replacement["token"].as_str().unwrap())
         .await
         .unwrap();
     assert_eq!(
-        submit(&s, &rotated, input.clone())
-            .await
-            .unwrap()
-            .job_id,
+        submit(&s, &rotated, input.clone()).await.unwrap().job_id,
         record.job_id
     );
     assert!(worker::process_next(&s).await.unwrap());
     assert!(
-        s.wait_message_batch(&user_scope(&s, &rotated, "Alice").await, &record, Duration::from_secs(1))
-            .await.unwrap() == PublicationStatus::Retrievable
+        s.wait_message_batch(
+            &user_scope(&s, &rotated, "Alice").await,
+            &record,
+            Duration::from_secs(1)
+        )
+        .await
+        .unwrap()
+            == PublicationStatus::Retrievable
     );
     assert_eq!(
         submit(&s, &rotated, input.clone()).await.unwrap().asset_id,
@@ -495,7 +582,17 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
         ..s.clone()
     };
     assert!(matches!(
-        submit(&mismatched, &rotated, add("Alice", "same-id", "session-one", "Atlas 决策 requires approval.")).await,
+        submit(
+            &mismatched,
+            &rotated,
+            add(
+                "Alice",
+                "same-id",
+                "session-one",
+                "Atlas 决策 requires approval."
+            )
+        )
+        .await,
         Err(AppError::Conflict(_))
     ));
     let original_receipt: String = sqlx::query_scalar(
@@ -511,8 +608,12 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
         .await
         .unwrap();
     assert!(matches!(
-        s.wait_message_batch(&user_scope(&s, &rotated, "Alice").await, &record, Duration::from_secs(1))
-            .await,
+        s.wait_message_batch(
+            &user_scope(&s, &rotated, "Alice").await,
+            &record,
+            Duration::from_secs(1)
+        )
+        .await,
         Ok(PublicationStatus::Invisible)
     ));
     // Exercise the public replay response after withdrawal, not only the
@@ -544,7 +645,10 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
         .unwrap();
     assert_eq!(replay.status(), 409);
     let error: Value = replay.json().await.unwrap();
-    assert_eq!(error["error"]["message"], "AML evidence is no longer searchable");
+    assert_eq!(
+        error["error"]["message"],
+        "AML evidence is no longer searchable"
+    );
     let after_receipt: String = sqlx::query_scalar(
         "SELECT response FROM oc_commands WHERE operation='message_batch.ingest' AND dedup_scope='workspace'",
     )
@@ -613,7 +717,9 @@ async fn aml_model_failure_never_publishes_partial_batch_and_retry_uses_original
     assert!(worker::process_next(&s).await.unwrap());
     assert!(
         s.wait_message_batch(&alice, &record, Duration::from_secs(1))
-            .await.unwrap() == PublicationStatus::Retrievable
+            .await
+            .unwrap()
+            == PublicationStatus::Retrievable
     );
     assert_eq!(count(&s, "oc_versions").await, 1);
     assert_eq!(count(&s, "oc_jobs").await, 1);
