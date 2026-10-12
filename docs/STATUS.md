@@ -114,3 +114,14 @@ current-version、未删除、活动版本根与 S2 本地支持谓词，以及�
 权限、图所有权与原始 S2 成员来源继续保持专用检查。没有统一成万能可见性布尔值，
 没有新增 schema、迁移、后端或产品功能。执行状态以本阶段精确 head 的 PR CI
 和 VALIDATION 为准，不能沿用前一 PR 的通过结论。
+
+
+## MCP 依赖处置（2026-10-12）
+
+[PR #47](https://github.com/TheLudlows/Origence/pull/47) 将 stdio SDK 独立更新到 rmcp 1.8.0，
+仅显式开启 server/macros/transport-io，保持四个只读工具和既有认证/错误/host 转发行为。
+真实二进制 stdio 回归及实现提交 `8e1c6cb5` 的 Linux/fast-check 已通过；最终 head 与主干
+CI 以 PR/Actions 当前状态为准。协议协商和 schema 方言差异、执行记录见 [VALIDATION](VALIDATION.md)。
+
+rmcp 告警已消除，但完整审计仍退出 1，保留 rsa、lru、维护状态及 yoke-derive 撤回版本问题；
+不得表述为依赖风险全部解决。Lance/PDF 未扩大更新，详见 [依赖审计与证据](DEPENDENCY_AUDIT.md)。

@@ -477,3 +477,41 @@ termination. This is supplementary SQL evidence, not Rust acceptance. Exact-head
 `cargo fmt --all -- --check`, strict default/no-default Clippy, focused contracts
 through the existing single `local` test target, and both full suites before merge.
 Existing HTTP/AML recovery/evaluation steps remain unchanged.
+
+
+## 2026-10-12：MCP 依赖风险独立处置（PR #47）
+
+基线 main `7c8531afbfa2612a35d6869668df29f761c1d4a6`；实现验证提交
+`8e1c6cb5e06cb7a211b07b9223af69a46308328f`。
+[CI 38219833473](https://github.com/TheLudlows/Origence/actions/runs/38219833473)
+的 fast-check 与 linux-native 全部成功；Windows 按现有 main-only 策略跳过，macOS/容器
+不在当前自动 CI 范围。最终 PR head 的状态须另看 [PR #47](https://github.com/TheLudlows/Origence/pull/47)，
+不把此实现提交的结果冒充后续提交或主干结果。
+
+- `cargo fmt --all -- --check`、默认与 `--no-default-features` 的 all-target Clippy
+  (`-D warnings`)、两种配置测试通过；默认配置为 68 个 library、179 个 integration tests。
+- 原有 SQLite/可见性聚焦回归、HTTP smoke、受控模型桩进程恢复及关键词评测通过。
+- 新增 `python3 tools/mcp_smoke.py --binary target/debug/origence` 已在 Linux 真正启动二进制
+  stdio 验证，不是仅调用 Rust 方法或模拟 SDK 客户端。使用临时新库、临时 key，关闭模型，
+  清除继承的 OC/proxy 配置；不接触用户数据或真实 provider。
+- 测试覆盖本地 offline 与 HostClient 转发：initialize/initialized/ping，六种协议协商，
+  tools/list 恰好四个工具及完整输入字段/required/default/enum/nullable 结构，无 outputSchema；
+  每个工具的实际成功调用、UTF-8 预算/引用、当前和历史版本、无命中与错误后继续调用。
+- 错误回归覆盖 JSON-RPC `-32602` 缺参/类型/未知字段/未知工具及应用领域安全消息；
+  SDK/serde 参数错误可能反射调用方提交值，保持其既有协议不等于全面诊断脱敏。
+- 权限回归包括两种模式的无效/已撤销 token 启动拒绝、reader 的 session route 拒绝，
+  host 模式已连接 key 撤销后四个工具全部拒绝；offline 遵守排他数据库锁，不用原始 SQL
+  绕锁模拟撤销。EOF 正常退出和重开证明 stdio 关闭后释放锁；强制 kill 不算成功。
+- 子进程仅用于黑盒真实 stdio/CLI 边界验证，不能由库内调用替代；生产实现未引入子进程。
+  等待/退出有界且失败路径清理子进程；测试日志临时文件不是运行时硬输出配额。
+- 最终修改仅 rmcp 精确版本和必要宏依赖、显式 features、ServerInfo builder、stored-router
+  与旧参数错误兼容适配。四个工具业务实现、权限、HTTP host 转发、schema/存储职责不变；
+  输入 JSON Schema 方言及已知版本协商差异见 [依赖审计](DEPENDENCY_AUDIT.md)。
+- 独立源码审查复核了直接路由适配、启用状态守卫、macro 不覆盖显式方法与测试边界，
+  未发现阻断项。编辑环境没有 Cargo；所有 Rust 执行结果来自上述 CI，不声称本地执行。
+- fresh `cargo audit --json` 实际退出 **1**：rmcp 公告已移除，保留 rsa vulnerability、
+  两条 lru unsound、三条 unmaintained 和 yoke-derive yanked；无 ignore。
+  [完整锁定证据](evidence/2026-10-12-mcp-dependency-audit.json) 与提交 Cargo.lock 的
+  SHA-256 相同。临时只读 CI 生成锁/采集证据，完成后从最终变更删除；永久 CI 只新增 stdio 回归。
+
+该处置不代表 clean audit、生产安全验收、真实 Agent 质量提升或旧库升级/迁移验收。
