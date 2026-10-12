@@ -2,6 +2,12 @@
 
 更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
+## AML API 收敛实施中（Issue #48）
+
+[执行契约](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md)已冻结，并记录真实 UUIDv5 输入字节/ID 向量。P1/P2 提供通用一层所属 workspace、显式默认关闭的 key 能力、workspace 批次幂等、不可变处理规格、MessageBatch 及实时发布状态；独立审查与最终 head CI 尚待完成。过渡提交仍运行旧 AML 路由，未双写；P3 必须一次切换并删除旧专用路径，不能把本过渡状态视为 Issue 完成。
+
+真实模型、官方 Smoke/Full 与真实评测导入保持 NOT_RUN；不扩大旧库迁移范围，不修改历史实验结论。
+
 ## 当前 CI 范围
 
 2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仍仅在主干运行。

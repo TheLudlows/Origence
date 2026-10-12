@@ -79,6 +79,14 @@ impl JobQueue for SqliteStore {
         if claimed.rows_affected() == 0 {
             return Ok(None);
         }
+        // Recovery payloads may include a complete publication plan. Decode
+        // outside both the storage transaction and the async executor thread;
+        // malformed JSON still reaches the Worker's ordinary failure path.
+        let payload = tokio::task::spawn_blocking(move || {
+            serde_json::from_str(&payload).unwrap_or(Value::Null)
+        })
+        .await
+        .map_err(|_| StorageError::Unavailable("job payload decoding task failed".into()))?;
         Ok(Some(ClaimedJob {
             scope: Scope {
                 tenant_id,
@@ -86,7 +94,7 @@ impl JobQueue for SqliteStore {
             },
             job_id,
             kind,
-            payload: serde_json::from_str(&payload).unwrap_or(Value::Null),
+            payload,
             generation,
             run_token: run_token + 1,
             created_by,

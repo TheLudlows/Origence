@@ -7,10 +7,13 @@ pub(super) const IDENTITY_SCHEMA: &str = include_str!("../memory-identity-schema
 
 /// Complete column projections required by the fixed local schema.
 const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
-    ("oc_workspaces", "tenant_id,id,name,created_at"),
+    (
+        "oc_workspaces",
+        "tenant_id,id,name,owner_workspace_id,created_at",
+    ),
     (
         "oc_api_keys",
-        "id,tenant_id,workspace_id,token_hash,role,revoked,created_at",
+        "id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,revoked,created_at",
     ),
     (
         "oc_files",
@@ -42,7 +45,7 @@ const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
     ),
     (
         "oc_commands",
-        "tenant_id,workspace_id,principal_id,operation,key,request_hash,response,created_at",
+        "tenant_id,workspace_id,principal_id,dedup_scope,operation,key,request_hash,response,created_at",
     ),
     (
         "oc_audit",
@@ -99,6 +102,7 @@ pub(super) async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()>
                 StorageError::Unavailable(format!("incompatible SQLite schema in {table}: {e}"))
             })?;
     }
+    check_workspace_command_schema(conn).await?;
     if aml::schema_available(conn).await? {
         aml::check_schema(conn).await?;
     }
@@ -114,6 +118,48 @@ pub(super) async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()>
     // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
         check_identity_schema(conn).await?;
+    }
+    Ok(())
+}
+
+/// Columns alone cannot establish the owner FK, immutable one-level ownership,
+/// capability default, or command uniqueness contract. Reject incomplete or
+/// older definitions without attempting to migrate or repair any existing DB.
+async fn check_workspace_command_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
+    let normalize = |sql: &str| {
+        sql.trim_end_matches(';')
+            .split_whitespace()
+            .collect::<String>()
+            .to_ascii_lowercase()
+    };
+    for (kind, name, terminator) in [
+        ("TABLE", "oc_workspaces", ";"),
+        ("TABLE", "oc_api_keys", ";"),
+        ("TABLE", "oc_commands", ";"),
+        ("TRIGGER", "oc_workspace_owner_immutable", "END;"),
+        ("TRIGGER", "oc_workspace_owner_root", "END;"),
+    ] {
+        let prefix = format!("CREATE {kind} {name}");
+        let start = SCHEMA
+            .find(&prefix)
+            .ok_or_else(|| StorageError::Unavailable("invalid embedded workspace schema".into()))?;
+        let tail = &SCHEMA[start..];
+        let end = tail
+            .find(terminator)
+            .ok_or_else(|| StorageError::Unavailable("invalid embedded workspace schema".into()))?
+            + terminator.len();
+        let actual: Option<String> =
+            sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type=? AND name=?")
+                .bind(kind.to_ascii_lowercase())
+                .bind(name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(sqlite_err)?;
+        if actual.as_deref().map(&normalize) != Some(normalize(&tail[..end])) {
+            return Err(StorageError::Unavailable(format!(
+                "incompatible SQLite schema in {name}"
+            )));
+        }
     }
     Ok(())
 }

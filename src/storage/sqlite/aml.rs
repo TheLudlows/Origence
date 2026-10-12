@@ -180,14 +180,17 @@ impl SqliteTx {
         Ok(())
     }
 
-    pub(super) async fn aml_role(&mut self) -> StorageResult<String> {
+    pub(super) async fn aml_role_for_principal(
+        &mut self,
+        principal_id: Uuid,
+    ) -> StorageResult<String> {
         if !schema_available(&mut self.tx).await? {
             return Err(StorageError::Forbidden);
         }
         let role: Option<String> = sqlx::query_scalar(
             "SELECT k.role FROM oc_api_keys k JOIN oc_aml_namespaces n ON n.tenant_id=k.tenant_id AND n.workspace_id=k.workspace_id JOIN oc_aml_users u ON u.tenant_id=n.tenant_id AND u.namespace_workspace_id=n.workspace_id WHERE k.id=? AND k.tenant_id=? AND u.workspace_id=? AND NOT k.revoked",
         )
-        .bind(self.principal_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+        .bind(principal_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
         .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         role.map(|r| delegated_role(&r).to_string())
             .ok_or(StorageError::Forbidden)

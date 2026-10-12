@@ -24,6 +24,7 @@ pub enum JobKind {
     Restore,
     Extract,
     AmlIngest,
+    MessageBatchIngest,
     SemanticPublish,
     SemanticExtract,
     Improve,
@@ -37,6 +38,7 @@ impl JobKind {
             Self::Restore => "restore",
             Self::Extract => "extract",
             Self::AmlIngest => "aml_ingest",
+            Self::MessageBatchIngest => "message_batch_ingest",
             Self::SemanticPublish => "semantic_publish",
             Self::SemanticExtract => "semantic_extract",
             Self::Improve => "improve",
@@ -54,6 +56,7 @@ impl TryFrom<&str> for JobKind {
             "restore" => Ok(Self::Restore),
             "extract" => Ok(Self::Extract),
             "aml_ingest" => Ok(Self::AmlIngest),
+            "message_batch_ingest" => Ok(Self::MessageBatchIngest),
             "semantic_publish" => Ok(Self::SemanticPublish),
             "semantic_extract" => Ok(Self::SemanticExtract),
             "improve" => Ok(Self::Improve),
@@ -108,6 +111,10 @@ pub enum JobPayload {
         embedding_profile: String,
         parser: String,
     },
+    MessageBatchIngest {
+        expected_version: Option<i32>,
+        accepted_spec: crate::messages::AcceptedMessageSpec,
+    },
     SemanticPublish {
         expected_version: Option<i32>,
         embedding_profile: Option<String>,
@@ -154,7 +161,14 @@ impl JobPayload {
             JobKind::Extract => "legacy_extract",
             _ => kind.as_str(),
         };
-        let mut fields = object.clone();
+        // Recovery plans can contain every chunk embedding. The typed input
+        // codec ignores that separate envelope field; do not deep-clone it on
+        // the executor merely to have Serde discard it again.
+        let mut fields: serde_json::Map<String, Value> = object
+            .iter()
+            .filter(|(key, _)| key.as_str() != "publication")
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
         fields.insert("__job_payload_kind".into(), json!(discriminator));
         let decoded: Self =
             serde_json::from_value(Value::Object(fields)).map_err(|_| invalid_payload())?;
@@ -177,6 +191,9 @@ impl JobPayload {
             |identity: &MemoryIdentity| identity.validate().map_err(|_| invalid_payload());
         match self {
             Self::IdentifiedExtract { identity, .. } => validate(identity),
+            Self::MessageBatchIngest { accepted_spec, .. } => {
+                accepted_spec.validate().map_err(|_| invalid_payload())
+            }
             Self::SemanticPublish {
                 suggested_identity: Some(identity),
                 ..
@@ -214,6 +231,7 @@ impl JobPayload {
             Self::Restore { .. } => JobKind::Restore,
             Self::LegacyExtract { .. } | Self::IdentifiedExtract { .. } => JobKind::Extract,
             Self::AmlIngest { .. } => JobKind::AmlIngest,
+            Self::MessageBatchIngest { .. } => JobKind::MessageBatchIngest,
             Self::SemanticPublish { .. } => JobKind::SemanticPublish,
             Self::SemanticExtract { .. } => JobKind::SemanticExtract,
             Self::Improve { .. } => JobKind::Improve,
@@ -248,6 +266,9 @@ impl JobPayload {
             Self::AmlIngest {
                 embedding_profile, ..
             } => Some(embedding_profile),
+            Self::MessageBatchIngest { accepted_spec, .. } => {
+                Some(&accepted_spec.embedding_profile)
+            }
             Self::Cleanup { .. } => None,
         }
     }
@@ -264,6 +285,9 @@ impl JobPayload {
                 expected_version, ..
             }
             | Self::AmlIngest {
+                expected_version, ..
+            }
+            | Self::MessageBatchIngest {
                 expected_version, ..
             }
             | Self::SemanticPublish {
@@ -394,6 +418,14 @@ mod tests {
                 json!({"schema_version":1,"expected_version":null,"embedding_profile":"embedding:v1","parser":"aml-message-ranges-v1"}),
             ),
             (
+                JobPayload::MessageBatchIngest {
+                    expected_version: None,
+                    accepted_spec: crate::messages::AcceptedMessageSpec::raw_only("embedding:v1"),
+                },
+                "message_batch_ingest",
+                json!({"schema_version":1,"expected_version":null,"accepted_spec":{"parser":"message-batch-ranges-v1","parser_version":1,"chunking_version":1,"raw_only":true,"embedding_profile":"embedding:v1"}}),
+            ),
+            (
                 JobPayload::SemanticPublish {
                     expected_version: Some(1),
                     embedding_profile: None,
@@ -442,7 +474,7 @@ mod tests {
     #[test]
     fn all_job_variants_preserve_golden_version_one_payloads() {
         let fixtures = fixtures();
-        assert_eq!(fixtures.len(), 10);
+        assert_eq!(fixtures.len(), 11);
         for (typed, operation, golden) in fixtures {
             let (kind, encoded) = typed.clone().encode().unwrap();
             assert_eq!(kind.as_str(), operation);
@@ -483,6 +515,7 @@ mod tests {
             ("ingest", &["format", "title"][..]),
             ("restore", &["target_version", "expected_version"][..]),
             ("aml_ingest", &["embedding_profile", "parser"][..]),
+            ("message_batch_ingest", &["accepted_spec"][..]),
             (
                 "semantic_publish",
                 &["semantic_members", "semantic_status", "parser"][..],

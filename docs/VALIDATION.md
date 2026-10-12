@@ -515,3 +515,19 @@ Existing HTTP/AML recovery/evaluation steps remain unchanged.
   SHA-256 相同。临时只读 CI 生成锁/采集证据，完成后从最终变更删除；永久 CI 只新增 stdio 回归。
 
 该处置不代表 clean audit、生产安全验收、真实 Agent 质量提升或旧库升级/迁移验收。
+
+
+## 2026-10-12：AML 通用基础能力 P0–P2（实施中）
+
+基线 `edd058e646d2fd66ab60f0e0262559e5b3fcba05`；[PR #50](https://github.com/TheLudlows/Origence/pull/50) 当前为 draft。新库 DDL、owned workspace/key/command 契约和通用消息批次均须在同一最终 head 的 CI 与独立审查后才可认定完成。当前旧 AML 路径仅用于阶段过渡，最终 P3 移除。
+
+- 云端编辑环境无 Rust/Cargo；不声称本地 Rust tests、Clippy 或 rustfmt 通过。
+- [工具 run 38229211031](https://github.com/TheLudlows/Origence/actions/runs/38229211031) 在 `8617a2a57f627245f089cdc32deca1b43abff721` 使用 Cargo 1.98 工具链解析 `uuid/v5`。Cargo.lock SHA-256 为 `f83306ef2cd9f4f0f3068615e9dcdb520450441d57b528528f92a8eeacf003cf`；变化仅增加 sha1_smol 1.0.1 与 uuid 对它的依赖，保留 rmcp 1.8.0。下载产物 ZIP SHA-256 `e30eef51ffc5186e30ace7b2f6f2665657515fdf030be323064543abaae4a318` 与 Actions 元数据一致。
+- 锁文件生成/格式工具不是功能通过证据；临时 workflow 在最终验收前移除。初始普通 CI 因尚未提交更新的锁文件而失败属于过渡结果，不能用于验收。
+- Python 独立 UUIDv5 固定字节/ID 向量测试 1 passed；本地工具单测 50 tests，49 passed、1 skipped（缺少本地二进制的受控恢复测试）；评估适配单测 42 passed。最初因工作副本未包含冻结数据而报文件缺失，补齐同基线的只读仓库 fixture 后重跑通过；没有导入评测服务、运行真实模型或改写历史报告。
+- 首个实现 head `1c5fc23279d5213e0edb5d8db7e6d599b189d81d` 的 [CI 38230253089](https://github.com/TheLudlows/Origence/actions/runs/38230253089) 为 **失败的中间验证**：Linux Rust 1.98.0 确认、all-target Clippy（warnings denied）与全部聚焦回归通过；默认 library 74 passed，integration 199 passed / 1 failed。fast-check 因 rustfmt 失败而未执行其余步骤。HTTP/MCP/进程恢复/关键词评估未运行，Windows 按 PR 策略跳过。
+- 失败为新增 prepared-publication 重启测试把 retry_wait 强制设为 processing，却保留了未来 next_retry_at，导致重开后没有可 claim 的任务。测试现改为明确已到期的中断任务（next_retry_at=0），不修改生产重试/恢复策略。旧 head 的其他通过项不替代这项修正后的精确 head 复验。
+- 独立审查发现状态轮询复制/反序列化大 publication 的问题。改为 SQLite 元数据投影和一次 materialized chunk-ID CTE；200×4096 维合成 SQL 复现中旧相关扫描约 5.4 秒，修正完整查询约 0.074 秒。SQL-only 复核了全部可见、单索引 generation 失配及来源撤回的计数，不冒充 Rust/native 验收。队列 JSON 和消息恢复解析移到事务外 spawn_blocking，避免复制不用的 publication；仍为原单 Worker。
+- 修正后实现 head `857b4fcfd61ac758eeb23693a37b8c1998972538` 的 [CI 38232658239](https://github.com/TheLudlows/Origence/actions/runs/38232658239) fast-check/Linux 全部通过：无默认 features library 68、integration 101；默认 library 74、integration 202。format、两种严格 Clippy、聚焦 suites、HTTP、真实 stdio MCP、受控模型桩进程恢复、关键词合成评估全通过；Windows 仍按 PR 策略跳过。临时工具 workflow 已移除。
+- 最终审查另发现新增 creator retry 检查不应阻止现有特权 cleanup 回收：原 creator 撤销后，当前 admin 必须仍可重试 failed cleanup，调用方 Delete 权限、不可取消和 original created_by 保持。该保留既有行为的修正与真实删除/撤销回归须在后续 head 再验；上述通过结果不能代替它。
+- 最终精确 head CI 与合入 main 检查结果待补；真实模型/官方评测 NOT_RUN。

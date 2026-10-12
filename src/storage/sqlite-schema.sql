@@ -15,9 +15,32 @@ CREATE TABLE oc_workspaces (
     tenant_id BLOB NOT NULL,
     id BLOB PRIMARY KEY,
     name TEXT NOT NULL,
+    owner_workspace_id BLOB,
     created_at INTEGER NOT NULL,
-    UNIQUE (tenant_id, id)
+    UNIQUE (tenant_id, id),
+    CHECK (owner_workspace_id IS NULL OR owner_workspace_id != id),
+    FOREIGN KEY (tenant_id, owner_workspace_id) REFERENCES oc_workspaces(tenant_id, id)
 );
+
+-- Ownership is immutable: changing it would reinterpret existing jobs' access.
+CREATE TRIGGER oc_workspace_owner_immutable
+BEFORE UPDATE OF owner_workspace_id ON oc_workspaces
+WHEN NEW.owner_workspace_id IS NOT OLD.owner_workspace_id
+BEGIN
+    SELECT RAISE(ABORT, 'workspace ownership is immutable');
+END;
+
+-- The service also checks this inside its authorized creation transaction.
+CREATE TRIGGER oc_workspace_owner_root
+BEFORE INSERT ON oc_workspaces
+WHEN NEW.owner_workspace_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM oc_workspaces
+    WHERE tenant_id = NEW.tenant_id AND id = NEW.owner_workspace_id
+      AND owner_workspace_id IS NOT NULL
+)
+BEGIN
+    SELECT RAISE(ABORT, 'workspace owner must be a root');
+END;
 
 CREATE TABLE oc_api_keys (
     id BLOB PRIMARY KEY,
@@ -25,6 +48,7 @@ CREATE TABLE oc_api_keys (
     workspace_id BLOB NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     role TEXT NOT NULL CHECK (role IN ('reader','writer','reviewer','admin')),
+    allow_owned_workspaces INTEGER NOT NULL DEFAULT 0 CHECK (allow_owned_workspaces IN (0,1)),
     revoked INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id)
@@ -107,9 +131,10 @@ CREATE TABLE oc_summaries (
 
 CREATE TABLE oc_commands (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, principal_id BLOB NOT NULL,
+    dedup_scope TEXT NOT NULL,
     operation TEXT NOT NULL, key TEXT NOT NULL, request_hash TEXT NOT NULL, response TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    PRIMARY KEY (tenant_id, workspace_id, principal_id, operation, key)
+    PRIMARY KEY (tenant_id, workspace_id, dedup_scope, operation, key)
 );
 
 CREATE TABLE oc_audit (
