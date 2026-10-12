@@ -2,6 +2,14 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-12 评估数据的语言统计边界
+
+基于 main `d0521c0935083e71890ab02c100920c2edaa7227`，仅为评估语料、标签、冻结结果、历史源码快照与 `docs/evidence` 添加 `linguist-detectable=false`。不删除或修改数据，不将手写数据标为自动生成，不改 diff 展示；可执行测试、评估器和工具代码不新增排除。
+
+在隔离 Git 目录中使用主干完整文件清单，通过 `git check-attr --stdin linguist-detectable linguist-generated linguist-vendored text eol` 核对 424 个路径：173 个数据/工件路径命中，153 个 `.rs`/`.py` 源码路径属性不变，9 个历史 `.py.txt` 快照全部命中，`evals/s4/config.json` 未被排除；原有 LF 规则保持不变。`git diff --check` 通过。
+
+本地没有 Linguist/Ruby 或 Rust 工具链，未运行 Linguist 重算、Rust 格式、Clippy 或测试。该元数据修改不触及可执行代码；完整代码检查仍由既有 CI 执行。GitHub 语言占比按字节计算，在默认分支更新后异步刷新；JSON、压缩归档等多数文件原已默认忽略，不据此声称占比或代码行数下降。仓库未发现 cloc/tokei 配置，这些独立行数工具不会自动采用本规则。
+
 ## 2026-10-12 第四阶段：显式 Improve → Learning
 
 基于 main `be16bb1c2a273ec632e459abd277bd019fb36821`。新增确定性闭环、持久化阶段重放、principal-qualified 反馈序列、条件限制、子任务重试/取消和传递依赖撤回回归；不使用真实 provider，不据此声明语义质量或 Agent 收益。当前为实现检查记录，最终 PR head 的 CI 结果仍待补充。
