@@ -213,6 +213,7 @@ async fn session_empty_evidence_is_explicit_and_archive_needs_no_models_or_worke
     let content: Value = serde_json::from_str(source["content"].as_str().unwrap()).unwrap();
     assert_eq!(content["question"], input["question"]);
     assert_eq!(content["answer"], input["answer"]);
+    assert!(content.get("used_evidence").is_none());
     assert_eq!(count(&s, "oc_jobs").await, 0);
     assert_eq!(count(&s, "oc_assets").await, 0);
     assert_eq!(count(&s, "oc_chunks").await, 0);
@@ -353,6 +354,12 @@ async fn session_reference_validation_rejects_forged_ownership_without_partial_w
         rejected(archive(&s, &a, &format!("forged-{index}"), Uuid::new_v4(), turn(Uuid::new_v4(), vec![first.clone(), reference])).await);
         assert_eq!(counts(&s, true).await, before);
     }
+    let (foreign, _) = provision_scope(&s, a.tenant_id, Uuid::new_v4()).await;
+    publish(&s, &foreign, "foreign-reference", "Atlas foreign evidence").await;
+    let foreign_hit = search(&s, &foreign, "foreign").await;
+    let before = counts(&s, true).await;
+    rejected(archive(&s, &a, "cross-workspace-evidence", Uuid::new_v4(), turn(Uuid::new_v4(), vec![evidence(&foreign_hit["hits"][0])])).await);
+    assert_eq!(counts(&s, true).await, before);
     for extra in ["source_event_id", "locator", "evidence_ref_id"] {
         let mut forged = first.clone();
         forged[extra] = json!("caller cannot supply provenance");
@@ -419,6 +426,10 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
     let receipt = archive(&s, &writer, "private-turn", session, input.clone()).await.unwrap();
     let feedback = feedback(Uuid::new_v4(), json!({"type":"turn"}));
     record(&s, &writer, "private-feedback", session, turn_id, feedback.clone()).await.unwrap();
+    // Turn identity is workspace/session/turn, independent of the writer key.
+    let before = counts(&s, false).await;
+    assert_eq!(archive(&s, &a, "private-turn", session, input.clone()).await.unwrap(), receipt);
+    assert_eq!(counts(&s, false).await, before);
     // Another writer in the same workspace may inspect an authorized archive.
     assert_eq!(s.session_turn(&a, session, turn_id).await.unwrap()["source_event_id"], receipt["source_event_id"]);
     for other in [&same_tenant, &other_tenant] {
@@ -557,10 +568,12 @@ async fn assert_hidden(
     assert!(matches!(s.session_feedback(a, session, turn_id).await, Err(AppError::NotFound)));
     assert!(matches!(s.source_event(a, id(receipt, "source_event_id")).await, Err(AppError::NotFound)));
     let before = counts(s, true).await;
-    for key in ["withdrawn-archive", "new-command-withdrawn-archive"] {
+    let archive_key = format!("withdrawn-archive-{session}");
+    for key in [archive_key.as_str(), "new-command-withdrawn-archive"] {
         assert!(matches!(archive(s, a, key, session, input.clone()).await, Err(AppError::NotFound)));
     }
-    for key in ["withdrawn-feedback", "new-command-withdrawn-feedback"] {
+    let feedback_key = format!("withdrawn-feedback-{session}");
+    for key in [feedback_key.as_str(), "new-command-withdrawn-feedback"] {
         assert!(matches!(record(s, a, key, session, turn_id, feedback.clone()).await, Err(AppError::NotFound)));
     }
     assert!(matches!(record(s, a, "new-feedback-after-withdrawal", session, turn_id, self::feedback(Uuid::new_v4(), json!({"type":"turn"}))).await, Err(AppError::NotFound)));
@@ -579,9 +592,9 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
         let session = Uuid::new_v4();
         let turn_id = Uuid::new_v4();
         let input = turn(turn_id, hits["hits"].as_array().unwrap().iter().map(evidence).collect());
-        let receipt = archive(&s, &a, "withdrawn-archive", session, input.clone()).await.unwrap();
+        let receipt = archive(&s, &a, &format!("withdrawn-archive-{session}"), session, input.clone()).await.unwrap();
         let feedback = feedback(Uuid::new_v4(), json!({"type":"turn"}));
-        record(&s, &a, "withdrawn-feedback", session, turn_id, feedback.clone()).await.unwrap();
+        record(&s, &a, &format!("withdrawn-feedback-{session}"), session, turn_id, feedback.clone()).await.unwrap();
         let (target_id, kind) = match target {
             "archive" => (id(&receipt, "source_event_id"), "event"),
             "asset" => (id(&first, "asset_id"), "asset"),
@@ -590,6 +603,13 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
         let deleted = s.delete(&a, "withdraw-dependency", target_id, kind).await.unwrap();
         assert_eq!(s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"], "pending");
         assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+        if target != "archive" {
+            let before = counts(&s, true).await;
+            let mut new_turn = input.clone();
+            new_turn["turn_id"] = json!(Uuid::new_v4());
+            assert!(matches!(archive(&s, &a, "new-turn-with-withdrawn-evidence", session, new_turn).await, Err(AppError::NotFound)));
+            assert_eq!(counts(&s, true).await, before);
+        }
         // Even though the other used reference remains active, no partial Q&A
         // or feedback list may leak through either read endpoint.
         while worker::process_next(&s).await.unwrap() {}
@@ -621,9 +641,9 @@ async fn session_deleted_file_invalidates_archived_evidence_before_cleanup() {
     let session = Uuid::new_v4();
     let turn_id = Uuid::new_v4();
     let input = turn(turn_id, vec![evidence(&hits["hits"][0])]);
-    let receipt = archive(&s, &a, "withdrawn-archive", session, input.clone()).await.unwrap();
+    let receipt = archive(&s, &a, &format!("withdrawn-archive-{session}"), session, input.clone()).await.unwrap();
     let feedback = feedback(Uuid::new_v4(), json!({"type":"turn"}));
-    record(&s, &a, "withdrawn-feedback", session, turn_id, feedback.clone()).await.unwrap();
+    record(&s, &a, &format!("withdrawn-feedback-{session}"), session, turn_id, feedback.clone()).await.unwrap();
     let deleted = s.delete(&a, "delete-evidence-file", id(&upload, "file_id"), "file").await.unwrap();
     assert_eq!(s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"], "pending");
     assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
@@ -696,7 +716,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     let turn_id = Uuid::new_v4();
     let used = vec![evidence(first_hit), reference("entity", entity, first_hit), reference("relation", relation, first_hit)];
     let input = turn(turn_id, used.clone());
-    let receipt = archive(&s, &a, "withdrawn-archive", session, input.clone()).await.unwrap();
+    let receipt = archive(&s, &a, &format!("withdrawn-archive-{session}"), session, input.clone()).await.unwrap();
     let view = s.session_turn(&a, session, turn_id).await.unwrap();
     assert_eq!(view["used_evidence"].as_array().unwrap().len(), 3);
     for (saved, requested) in view["used_evidence"].as_array().unwrap().iter().zip(&used) {
@@ -707,7 +727,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     let feedback = feedback(Uuid::new_v4(), json!({
         "type":"evidence","evidence_ref_id":view["used_evidence"][1]["evidence_ref_id"]
     }));
-    record(&s, &a, "withdrawn-feedback", session, turn_id, feedback.clone()).await.unwrap();
+    record(&s, &a, &format!("withdrawn-feedback-{session}"), session, turn_id, feedback.clone()).await.unwrap();
     // Authoritative graph support can disappear before backend cleanup. Every
     // raw read and command replay revalidates the committed support then.
     sqlx::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE artifact_id=?")
@@ -751,7 +771,7 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
         let session = Uuid::new_v4();
         let turn_id = Uuid::new_v4();
         let input = turn(turn_id, vec![evidence(hit)]);
-        let receipt = archive(&s, &a, "withdrawn-archive", session, input.clone()).await.unwrap();
+        let receipt = archive(&s, &a, &format!("withdrawn-archive-{session}"), session, input.clone()).await.unwrap();
         let view = s.session_turn(&a, session, turn_id).await.unwrap();
         let saved = &view["used_evidence"][0];
         assert_eq!(saved["reference"]["asset_version"], 2);
@@ -771,7 +791,7 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
         let end = locator["byte_end"].as_u64().unwrap() as usize;
         assert_eq!(&content[start..end], hit["content"].as_str().unwrap());
         let feedback = feedback(Uuid::new_v4(), json!({"type":"turn"}));
-        record(&s, &a, "withdrawn-feedback", session, turn_id, feedback.clone()).await.unwrap();
+        record(&s, &a, &format!("withdrawn-feedback-{session}"), session, turn_id, feedback.clone()).await.unwrap();
         archives.push((session, input, receipt, feedback));
     }
     let deleted = s.delete(&a, "withdraw-member", id(&first, "source_event_id"), "event").await.unwrap();
@@ -792,30 +812,185 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
 }
 
 #[tokio::test]
-async fn session_partial_schema_is_rejected_without_erasing_saved_sources() {
+async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
+    for drop_all in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let (a, _) = provision(&s).await;
+        let session = Uuid::new_v4();
+        let input = turn(Uuid::new_v4(), vec![]);
+        let receipt = archive(&s, &a, "schema-source", session, input.clone()).await.unwrap();
+        let statement = if drop_all {
+            "DROP TABLE oc_feedback; DROP TABLE oc_session_turn_evidence; DROP TABLE oc_session_turns;"
+        } else {
+            "DROP TABLE oc_feedback;"
+        };
+        sqlx::raw_sql(statement).execute(s.engine.relational().pool()).await.unwrap();
+        if drop_all {
+            // Removing every session table must not turn an archived question
+            // and answer into an unguarded legacy raw event in the live host.
+            assert!(s.source_event(&a, id(&receipt, "source_event_id")).await.is_err());
+        }
+        s.engine.relational().pool().close().await;
+        drop(s);
+        assert!(Service::open(dir.path(), Models::disabled()).await.is_err());
+        use sqlx::Connection;
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(dir.path().join("context.db"))
+            .create_if_missing(false);
+        let mut conn = sqlx::SqliteConnection::connect_with(&options).await.unwrap();
+        let source: String = sqlx::query_scalar("SELECT content FROM oc_events WHERE id=?")
+            .bind(id(&receipt, "source_event_id")).fetch_one(&mut conn).await.unwrap();
+        let source: Value = serde_json::from_str(&source).unwrap();
+        assert_eq!(source["question"], input["question"]);
+        assert_eq!(source["answer"], input["answer"]);
+        let repaired: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')")
+            .fetch_one(&mut conn).await.unwrap();
+        assert!(!repaired, "opening an incompatible database must not install missing tables");
+        conn.close().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn session_feedback_capacity_blocks_new_records_but_preserves_replays() {
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
     let (a, _) = provision(&s).await;
     let session = Uuid::new_v4();
-    let input = turn(Uuid::new_v4(), vec![]);
-    let receipt = archive(&s, &a, "schema-source", session, input.clone()).await.unwrap();
-    sqlx::raw_sql("DROP TABLE oc_feedback;")
-        .execute(s.engine.relational().pool()).await.unwrap();
-    s.engine.relational().pool().close().await;
-    drop(s);
-    assert!(Service::open(dir.path(), Models::disabled()).await.is_err());
-    use sqlx::Connection;
-    let options = sqlx::sqlite::SqliteConnectOptions::new()
-        .filename(dir.path().join("context.db"))
-        .create_if_missing(false);
-    let mut conn = sqlx::SqliteConnection::connect_with(&options).await.unwrap();
-    let source: String = sqlx::query_scalar("SELECT content FROM oc_events WHERE id=?")
-        .bind(id(&receipt, "source_event_id")).fetch_one(&mut conn).await.unwrap();
-    let source: Value = serde_json::from_str(&source).unwrap();
-    assert_eq!(source["question"], input["question"]);
-    assert_eq!(source["answer"], input["answer"]);
-    let repaired: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')")
-        .fetch_one(&mut conn).await.unwrap();
-    assert!(!repaired, "opening an incompatible database must not install missing tables");
-    conn.close().await.unwrap();
+    let turn_id = Uuid::new_v4();
+    archive(&s, &a, "capacity-turn", session, turn(turn_id, vec![])).await.unwrap();
+    let input = feedback(Uuid::new_v4(), json!({"type":"turn"}));
+    let receipt = record(&s, &a, "capacity-feedback", session, turn_id, input.clone()).await.unwrap();
+    // Seed the remaining valid immutable rows in a single fixture transaction;
+    // exercise the public boundary rather than spending 255 writes on setup.
+    let mut tx = s.engine.relational().pool().begin().await.unwrap();
+    for ordinal in 1..256 {
+        let feedback_id = Uuid::new_v4();
+        let body = feedback(feedback_id, json!({"type":"turn"}));
+        sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at) VALUES(?,?,?,?,?,?,'capacity-fixture',?,?)")
+            .bind(a.tenant_id).bind(a.workspace_id).bind(a.id).bind(feedback_id)
+            .bind(session).bind(turn_id).bind(body.to_string()).bind(i64::from(ordinal))
+            .execute(&mut *tx).await.unwrap();
+    }
+    tx.commit().await.unwrap();
+    assert_eq!(s.session_feedback(&a, session, turn_id).await.unwrap()["feedback"].as_array().unwrap().len(), 256);
+    let before = counts(&s, true).await;
+    assert_eq!(record(&s, &a, "capacity-feedback", session, turn_id, input.clone()).await.unwrap(), receipt);
+    assert_eq!(counts(&s, true).await, before);
+    let before = counts(&s, false).await;
+    assert_eq!(record(&s, &a, "capacity-domain-replay", session, turn_id, input).await.unwrap(), receipt);
+    assert_eq!(counts(&s, false).await, before);
+    let writer = role(&s, &a, "writer").await;
+    for actor in [&a, &writer] {
+        let before = counts(&s, true).await;
+        assert!(matches!(record(&s, actor, "capacity-overflow", session, turn_id, feedback(Uuid::new_v4(), json!({"type":"turn"}))).await, Err(AppError::Conflict(_))));
+        assert_eq!(counts(&s, true).await, before);
+    }
+    let another = Uuid::new_v4();
+    archive(&s, &a, "capacity-other-turn", session, turn(another, vec![])).await.unwrap();
+    record(&s, &a, "capacity-other-feedback", session, another, feedback(Uuid::new_v4(), json!({"type":"turn"}))).await.unwrap();
+    assert_eq!(s.session_feedback(&a, session, another).await.unwrap()["feedback"].as_array().unwrap().len(), 1);
+}
+
+struct Server(tokio::task::JoinHandle<()>);
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+async fn serve(s: Service) -> (String, Server) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move {
+        axum::serve(listener, origence::api::router(s)).await.unwrap();
+    });
+    (url, Server(task))
+}
+
+#[tokio::test]
+async fn session_http_contract_validates_fields_permissions_and_idempotency() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let (a, token) = provision(&s).await;
+    let (_, other_token) = provision(&s).await;
+    let reader = s.issue_key(&a, "reader").await.unwrap();
+    let reader_token = reader["token"].as_str().unwrap();
+    let (base, _server) = serve(s.clone()).await;
+    let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build().unwrap();
+    let session = Uuid::new_v4();
+    let turn_id = Uuid::new_v4();
+    let turns_url = format!("{base}/v1/sessions/{session}/turns");
+    let turn_url = format!("{turns_url}/{turn_id}");
+    let feedback_url = format!("{turn_url}/feedback");
+    let input = turn(turn_id, vec![]);
+    let before = counts(&s, true).await;
+    for field in ["turn_id", "question", "answer", "used_evidence"] {
+        let mut missing = input.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        let response = http.post(&turns_url).bearer_auth(&token)
+            .header("Idempotency-Key", "invalid-turn").json(&missing).send().await.unwrap();
+        assert_eq!(response.status(), 422, "missing {field}");
+    }
+    let response = http.post(&turns_url).bearer_auth(&token).json(&input).send().await.unwrap();
+    assert_eq!(response.status(), 422);
+    let response = http.post(&turns_url).header("Idempotency-Key", "unauthenticated")
+        .json(&input).send().await.unwrap();
+    assert_eq!(response.status(), 401);
+    let response = http.post(&turns_url).bearer_auth(reader_token)
+        .header("Idempotency-Key", "reader-turn").json(&input).send().await.unwrap();
+    assert_eq!(response.status(), 403);
+    assert_eq!(counts(&s, true).await, before);
+    let response = http.post(&turns_url).bearer_auth(&token)
+        .header("Idempotency-Key", "http-turn").json(&input).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let receipt: Value = response.json().await.unwrap();
+    assert_eq!(receipt["state"], "archived");
+    let response = http.post(&turns_url).bearer_auth(&token)
+        .header("Idempotency-Key", "http-turn").json(&input).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.json::<Value>().await.unwrap(), receipt);
+    let mut changed = input.clone();
+    changed["answer"] = json!("different answer");
+    let response = http.post(&turns_url).bearer_auth(&token)
+        .header("Idempotency-Key", "http-turn").json(&changed).send().await.unwrap();
+    assert_eq!(response.status(), 409);
+    let body = feedback(Uuid::new_v4(), json!({"type":"turn"}));
+    let mut invalid = body.clone();
+    invalid["rating"] = json!("good");
+    let response = http.post(&feedback_url).bearer_auth(&token)
+        .header("Idempotency-Key", "invalid-rating").json(&invalid).send().await.unwrap();
+    assert_eq!(response.status(), 422);
+    let response = http.post(&feedback_url).bearer_auth(reader_token)
+        .header("Idempotency-Key", "reader-feedback").json(&body).send().await.unwrap();
+    assert_eq!(response.status(), 403);
+    let response = http.post(&feedback_url).bearer_auth(&token)
+        .header("Idempotency-Key", "http-feedback").json(&body).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.json::<Value>().await.unwrap()["state"], "recorded");
+    for url in [&turn_url, &feedback_url] {
+        assert_eq!(http.get(url).bearer_auth(reader_token).send().await.unwrap().status(), 403);
+        assert_eq!(http.get(url).bearer_auth(&other_token).send().await.unwrap().status(), 404);
+        assert_eq!(http.get(url).send().await.unwrap().status(), 401);
+        let response = http.get(url).bearer_auth(&token).send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        let value: Value = response.json().await.unwrap();
+        assert_eq!(value["feedback"].as_array().unwrap().len(), 1);
+    }
+    let raw_url = format!("{base}/v1/events/{}", id(&receipt, "source_event_id"));
+    assert_eq!(http.get(&raw_url).bearer_auth(reader_token).send().await.unwrap().status(), 403);
+    let deleted = s.delete(&a, "http-withdraw", id(&receipt, "source_event_id"), "event").await.unwrap();
+    assert_eq!(s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"], "pending");
+    for url in [&turn_url, &feedback_url, &raw_url] {
+        let response = http.get(url).bearer_auth(&token).send().await.unwrap();
+        assert_eq!(response.status(), 404);
+        let value: Value = response.json().await.unwrap();
+        assert_eq!(value["error"]["code"], "NOT_FOUND");
+        assert!(!value.to_string().contains(input["answer"].as_str().unwrap()));
+    }
+    assert_eq!(http.post(&turns_url).bearer_auth(&token)
+        .header("Idempotency-Key", "http-turn").json(&input).send().await.unwrap().status(), 404);
+    assert_eq!(http.post(&feedback_url).bearer_auth(&token)
+        .header("Idempotency-Key", "http-feedback").json(&body).send().await.unwrap().status(), 404);
 }

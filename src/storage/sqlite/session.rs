@@ -5,7 +5,7 @@ use crate::session::{ArchivedEvidence, EvidenceKind, FeedbackInput, FeedbackTarg
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
 
 pub(super) async fn available(conn: &mut SqliteConnection) -> StorageResult<bool> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback'))")
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
         .fetch_one(conn).await.map_err(sqlite_err)
 }
 
@@ -97,11 +97,12 @@ impl SqliteTx {
 
     /// Also gate the existing raw-source endpoint, so it cannot bypass withdrawal.
     pub(super) async fn require_session_source_visible(&mut self, source: Uuid) -> StorageResult<()> {
-        if !available(&mut self.tx).await? { return Ok(()); }
+        if !available(&mut self.tx).await? { return Err(StorageError::NotFound); }
         let turn: Option<(Uuid, Uuid)> = sqlx::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        if let Some((session, turn)) = turn { self.require_turn_visible(session, turn).await?; }
+        let (session, turn) = turn.ok_or(StorageError::NotFound)?;
+        self.require_turn_visible(session, turn).await?;
         Ok(())
     }
 

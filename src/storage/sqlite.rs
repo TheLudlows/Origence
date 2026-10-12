@@ -1177,7 +1177,6 @@ impl DomainTx for SqliteTx {
     }
 
     async fn event_view(&mut self, id: Uuid) -> StorageResult<Value> {
-        self.require_session_source_visible(id).await?;
         let row: Option<(Uuid, String, String, Option<Uuid>, i64)> = sqlx::query_as(
             "SELECT e.id,e.kind,e.content,e.file_id,e.created_at FROM oc_events e \
              LEFT JOIN oc_files f ON f.tenant_id=e.tenant_id AND f.workspace_id=e.workspace_id AND f.id=e.file_id \
@@ -1193,6 +1192,9 @@ impl DomainTx for SqliteTx {
         let Some((event_id, kind, content, file_id, created_at)) = row else {
             return Err(StorageError::NotFound);
         };
+        if kind == "session_turn" {
+            self.require_session_source_visible(id).await?;
+        }
         Ok(
             json!({"event_id":event_id,"kind":kind,"content":content,"file_id":file_id,"created_at":created_at}),
         )
