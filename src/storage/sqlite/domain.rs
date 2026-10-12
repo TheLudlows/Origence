@@ -10,22 +10,21 @@ impl SqliteTx {
     }
 
     async fn live_role_for_principal(&mut self, principal_id: Uuid) -> StorageResult<String> {
-        let key: Option<(String, Uuid)> =
-            sqlx::query_as(
-                "SELECT k.role,k.workspace_id FROM oc_api_keys k \
+        let key: Option<(String, Uuid)> = sqlx::query_as(
+            "SELECT k.role,k.workspace_id FROM oc_api_keys k \
                  JOIN oc_workspaces target ON target.tenant_id=k.tenant_id AND target.id=? \
                  JOIN oc_workspaces root ON root.tenant_id=k.tenant_id AND root.id=k.workspace_id \
                  WHERE k.id=? AND k.tenant_id=? AND NOT k.revoked \
                    AND (k.workspace_id=target.id OR \
                        (k.allow_owned_workspaces=1 AND target.owner_workspace_id=k.workspace_id \
                         AND root.owner_workspace_id IS NULL))",
-            )
-                .bind(self.scope.workspace_id)
-                .bind(principal_id)
-                .bind(self.scope.tenant_id)
-                .fetch_optional(&mut *self.tx)
-                .await
-                .map_err(sqlite_err)?;
+        )
+        .bind(self.scope.workspace_id)
+        .bind(principal_id)
+        .bind(self.scope.tenant_id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
         match key {
             Some((role, workspace)) if workspace == self.scope.workspace_id => Ok(role),
             Some((role, _)) => Ok(if Permission::Write.granted_by(&role) {

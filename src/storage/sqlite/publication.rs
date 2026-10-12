@@ -48,13 +48,16 @@ impl SqliteTx {
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.job_id)
         .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let row = row.ok_or(StorageError::NotFound)?;
-        let invalid = || StorageError::Conflict("receipt does not match accepted message batch".into());
-        let spec: AcceptedMessageSpec = serde_json::from_str(row.accepted_spec.as_deref().ok_or_else(invalid)?)
-            .map_err(|_| invalid())?;
+        let invalid =
+            || StorageError::Conflict("receipt does not match accepted message batch".into());
+        let spec: AcceptedMessageSpec =
+            serde_json::from_str(row.accepted_spec.as_deref().ok_or_else(invalid)?)
+                .map_err(|_| invalid())?;
         if row.operation != "message_batch_ingest"
             || row.asset_id != Some(receipt.asset_id)
             || row.source_event_id != Some(receipt.source_event_id)
-            || row.expected_version.unwrap_or(0).checked_add(1) != Some(i64::from(receipt.target_version))
+            || row.expected_version.unwrap_or(0).checked_add(1)
+                != Some(i64::from(receipt.target_version))
             || spec != receipt.accepted_spec
         {
             return Err(invalid());
@@ -108,10 +111,12 @@ impl SqliteTx {
         // JSON projection/iteration runs on SQLite's blocking connection thread;
         // no source text, embedding arrays or saved plan reach this async thread.
         let visible: i64 = sqlx::query_scalar(&format!(
-            "SELECT count(*) {} AND c.asset_id=? AND c.version=? AND e.id=? AND {} \
-             AND EXISTS(SELECT 1 FROM oc_jobs j,json_each(j.payload,'$.publication.memories[0].chunks') expected \
-                 WHERE j.tenant_id=c.tenant_id AND j.workspace_id=c.workspace_id AND j.id=? \
-                 AND upper(replace(json_extract(expected.value,'$.id'),'-',''))=hex(c.id)) \
+            "WITH expected AS MATERIALIZED ( \
+                 SELECT upper(replace(json_extract(chunk.value,'$.id'),'-','')) AS id \
+                 FROM oc_jobs j,json_each(j.payload,'$.publication.memories[0].chunks') chunk \
+                 WHERE j.tenant_id=? AND j.workspace_id=? AND j.id=?) \
+             SELECT count(*) {} AND c.asset_id=? AND c.version=? AND e.id=? AND {} \
+             AND EXISTS(SELECT 1 FROM expected WHERE expected.id=hex(c.id)) \
              AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id \
                  AND i.artifact_id=c.id AND i.field='content' AND i.model_id=? AND i.state='ready' AND i.generation=? \
                  AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id \
@@ -119,9 +124,10 @@ impl SqliteTx {
                      AND l.generation=i.generation AND l.surface='vector' AND l.state='committed'))",
             visibility::CURRENT_CHUNK_ROWS, visibility::CHUNK_SUPPORT_ACTIVE,
         ))
+        .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.job_id)
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
         .bind(receipt.asset_id).bind(receipt.target_version).bind(receipt.source_event_id)
-        .bind(receipt.job_id).bind(&spec.embedding_profile).bind(row.generation)
+        .bind(&spec.embedding_profile).bind(row.generation)
         .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         let count: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",

@@ -155,19 +155,16 @@ impl SqliteStore {
         // bound directly to this root, explicitly capable, and not revoked.
         let role = tx.require_owned_workspace_root(permission).await?;
         if workspace_id == tx.scope.workspace_id {
-            return Err(StorageError::Conflict(
-                "workspace cannot own itself".into(),
-            ));
+            return Err(StorageError::Conflict("workspace cannot own itself".into()));
         }
         // Lookup by global identity so a cross-tenant collision also fails;
         // never overwrite or silently select a different identity.
-        let existing: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
-            "SELECT tenant_id,owner_workspace_id FROM oc_workspaces WHERE id=?",
-        )
-        .bind(workspace_id)
-        .fetch_optional(&mut *tx.tx)
-        .await
-        .map_err(sqlite_err)?;
+        let existing: Option<(Uuid, Option<Uuid>)> =
+            sqlx::query_as("SELECT tenant_id,owner_workspace_id FROM oc_workspaces WHERE id=?")
+                .bind(workspace_id)
+                .fetch_optional(&mut *tx.tx)
+                .await
+                .map_err(sqlite_err)?;
         let found = match existing {
             Some((tenant, owner)) => {
                 if tenant != tx.scope.tenant_id || owner != Some(tx.scope.workspace_id) {

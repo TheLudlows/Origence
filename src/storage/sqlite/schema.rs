@@ -7,7 +7,10 @@ pub(super) const IDENTITY_SCHEMA: &str = include_str!("../memory-identity-schema
 
 /// Complete column projections required by the fixed local schema.
 const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
-    ("oc_workspaces", "tenant_id,id,name,owner_workspace_id,created_at"),
+    (
+        "oc_workspaces",
+        "tenant_id,id,name,owner_workspace_id,created_at",
+    ),
     (
         "oc_api_keys",
         "id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,revoked,created_at",
@@ -137,21 +140,21 @@ async fn check_workspace_command_schema(conn: &mut SqliteConnection) -> StorageR
         ("TRIGGER", "oc_workspace_owner_root", "END;"),
     ] {
         let prefix = format!("CREATE {kind} {name}");
-        let start = SCHEMA.find(&prefix).ok_or_else(|| {
-            StorageError::Unavailable("invalid embedded workspace schema".into())
-        })?;
+        let start = SCHEMA
+            .find(&prefix)
+            .ok_or_else(|| StorageError::Unavailable("invalid embedded workspace schema".into()))?;
         let tail = &SCHEMA[start..];
-        let end = tail.find(terminator).ok_or_else(|| {
-            StorageError::Unavailable("invalid embedded workspace schema".into())
-        })? + terminator.len();
-        let actual: Option<String> = sqlx::query_scalar(
-            "SELECT sql FROM sqlite_master WHERE type=? AND name=?",
-        )
-        .bind(kind.to_ascii_lowercase())
-        .bind(name)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(sqlite_err)?;
+        let end = tail
+            .find(terminator)
+            .ok_or_else(|| StorageError::Unavailable("invalid embedded workspace schema".into()))?
+            + terminator.len();
+        let actual: Option<String> =
+            sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type=? AND name=?")
+                .bind(kind.to_ascii_lowercase())
+                .bind(name)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(sqlite_err)?;
         if actual.as_deref().map(&normalize) != Some(normalize(&tail[..end])) {
             return Err(StorageError::Unavailable(format!(
                 "incompatible SQLite schema in {name}"

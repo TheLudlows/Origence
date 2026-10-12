@@ -68,7 +68,9 @@ impl AcceptedMessageSpec {
     pub fn validate_bounds(&self) -> Result<()> {
         for value in [&self.parser, &self.embedding_profile] {
             if value.trim().is_empty() || value.len() > MAX_ID_BYTES || value.contains('\0') {
-                return Err(AppError::Invalid("invalid message processing specification".into()));
+                return Err(AppError::Invalid(
+                    "invalid message processing specification".into(),
+                ));
             }
         }
         Ok(())
@@ -81,7 +83,9 @@ impl AcceptedMessageSpec {
             || self.chunking_version != CHUNKING_VERSION
             || !self.raw_only
         {
-            return Err(AppError::Invalid("unsupported message processing specification".into()));
+            return Err(AppError::Invalid(
+                "unsupported message processing specification".into(),
+            ));
         }
         Ok(())
     }
@@ -113,7 +117,9 @@ pub enum PublicationStatus {
 
 pub fn validate_id(value: &str) -> Result<()> {
     if value.is_empty() || value.len() > MAX_ID_BYTES || value.contains('\0') {
-        return Err(AppError::Invalid("message IDs must contain 1..4096 UTF-8 bytes without NUL".into()));
+        return Err(AppError::Invalid(
+            "message IDs must contain 1..4096 UTF-8 bytes without NUL".into(),
+        ));
     }
     Ok(())
 }
@@ -122,7 +128,9 @@ impl MessageBatch {
         validate_id(&self.batch_id)?;
         validate_id(&self.session_id)?;
         if self.messages.is_empty() || self.messages.len() > MAX_MESSAGES {
-            return Err(AppError::Invalid("message batch requires 1..256 messages".into()));
+            return Err(AppError::Invalid(
+                "message batch requires 1..256 messages".into(),
+            ));
         }
         let mut total = 0usize;
         for message in &self.messages {
@@ -130,7 +138,9 @@ impl MessageBatch {
                 || message.role.len() > MAX_ROLE_BYTES
                 || message.role.chars().any(char::is_control)
             {
-                return Err(AppError::Invalid("message labels require 1..64 UTF-8 bytes without controls".into()));
+                return Err(AppError::Invalid(
+                    "message labels require 1..64 UTF-8 bytes without controls".into(),
+                ));
             }
             parsing::validate_text(&message.content)?;
             total = total.saturating_add(message.content.len());
@@ -156,7 +166,11 @@ pub fn parse_batch(bytes: &[u8]) -> Result<MessageBatch> {
 
 /// CPU parser; callers on an async executor must run this outside transactions
 /// on spawn_blocking. Ranges address decoded original message UTF-8, not JSON.
-pub fn chunks(source: &str, spec: &AcceptedMessageSpec, source_event_id: Uuid) -> Result<Vec<Chunk>> {
+pub fn chunks(
+    source: &str,
+    spec: &AcceptedMessageSpec,
+    source_event_id: Uuid,
+) -> Result<Vec<Chunk>> {
     spec.validate()?;
     let batch = parse_batch(source.as_bytes())?;
     let count = batch.messages.len();
@@ -190,9 +204,21 @@ mod tests {
             batch_id: "external:批次:1".into(),
             session_id: "same-session".into(),
             messages: vec![
-                SourceMessage { role: "system".into(), content: "Atlas 中文🙂 café é\n".repeat(250), timestamp: Some(i64::MAX) },
-                SourceMessage { role: "tool".into(), content: "Atlas first tool response".into(), timestamp: Some(-1) },
-                SourceMessage { role: "agent: Planner".into(), content: "Atlas missing timestamp".into(), timestamp: None },
+                SourceMessage {
+                    role: "system".into(),
+                    content: "Atlas 中文🙂 café é\n".repeat(250),
+                    timestamp: Some(i64::MAX),
+                },
+                SourceMessage {
+                    role: "tool".into(),
+                    content: "Atlas first tool response".into(),
+                    timestamp: Some(-1),
+                },
+                SourceMessage {
+                    role: "agent: Planner".into(),
+                    content: "Atlas missing timestamp".into(),
+                    timestamp: None,
+                },
             ],
         }
     }
@@ -202,13 +228,30 @@ mod tests {
         let batch = batch();
         let source = serde_json::to_string(&batch).unwrap();
         let source_event = Uuid::from_u128(1);
-        let chunks = chunks(&source, &AcceptedMessageSpec::raw_only("fixture"), source_event).unwrap();
+        let chunks = chunks(
+            &source,
+            &AcceptedMessageSpec::raw_only("fixture"),
+            source_event,
+        )
+        .unwrap();
         assert!(chunks.len() > 3);
-        let indices: Vec<_> = chunks.iter().map(|chunk| chunk.locator["message_index"].as_u64().unwrap()).collect();
+        let indices: Vec<_> = chunks
+            .iter()
+            .map(|chunk| chunk.locator["message_index"].as_u64().unwrap())
+            .collect();
         assert!(indices.windows(2).all(|pair| pair[0] <= pair[1]));
         for (index, message) in batch.messages.iter().enumerate() {
-            let parts: Vec<_> = chunks.iter().filter(|chunk| chunk.locator["message_index"] == index).collect();
-            assert_eq!(parts.iter().map(|chunk| chunk.content.as_str()).collect::<String>(), message.content);
+            let parts: Vec<_> = chunks
+                .iter()
+                .filter(|chunk| chunk.locator["message_index"] == index)
+                .collect();
+            assert_eq!(
+                parts
+                    .iter()
+                    .map(|chunk| chunk.content.as_str())
+                    .collect::<String>(),
+                message.content
+            );
             for part in parts {
                 let start = part.locator["byte_start"].as_u64().unwrap() as usize;
                 let end = part.locator["byte_end"].as_u64().unwrap() as usize;
@@ -220,7 +263,10 @@ mod tests {
                 assert_eq!(part.locator["external_batch_id"], batch.batch_id);
                 assert_eq!(part.locator["session_id"], batch.session_id);
                 assert_eq!(part.locator["message_count"], 3);
-                assert_eq!(part.locator["source_path"], format!("/messages/{index}/content"));
+                assert_eq!(
+                    part.locator["source_path"],
+                    format!("/messages/{index}/content")
+                );
             }
         }
     }
@@ -228,7 +274,13 @@ mod tests {
     #[test]
     fn resource_and_json_time_validation_is_shared_by_parser() {
         let batch = batch();
-        for label in ["".into(), " ".into(), "x".repeat(MAX_ROLE_BYTES + 1), "tool\n".into(), "tool\0".into()] {
+        for label in [
+            "".into(),
+            " ".into(),
+            "x".repeat(MAX_ROLE_BYTES + 1),
+            "tool\n".into(),
+            "tool\0".into(),
+        ] {
             let mut invalid = batch.clone();
             invalid.messages[0].role = label;
             assert!(parse_batch(&serde_json::to_vec(&invalid).unwrap()).is_err());
@@ -238,8 +290,18 @@ mod tests {
             invalid["messages"][0]["timestamp"] = timestamp;
             assert!(parse_batch(&serde_json::to_vec(&invalid).unwrap()).is_err());
         }
-        for messages in [vec![], vec![batch.messages[1].clone(); MAX_MESSAGES + 1], vec![SourceMessage { content: "x".repeat(parsing::MAX_TEXT + 1), ..batch.messages[1].clone() }]] {
-            let invalid = MessageBatch { messages, ..batch.clone() };
+        for messages in [
+            vec![],
+            vec![batch.messages[1].clone(); MAX_MESSAGES + 1],
+            vec![SourceMessage {
+                content: "x".repeat(parsing::MAX_TEXT + 1),
+                ..batch.messages[1].clone()
+            }],
+        ] {
+            let invalid = MessageBatch {
+                messages,
+                ..batch.clone()
+            };
             assert!(parse_batch(&serde_json::to_vec(&invalid).unwrap()).is_err());
         }
         assert!(parse_batch(&vec![b' '; parsing::MAX_FILE + 1]).is_err());

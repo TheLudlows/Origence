@@ -156,10 +156,10 @@ pub async fn run(
     Ok(())
 }
 pub async fn process_next(service: &Service) -> Result<bool> {
-    let Some(claim) = service.engine.queue().claim_next().await? else {
+    let Some(mut claim) = service.engine.queue().claim_next().await? else {
         return Ok(false);
     };
-    let result = process_claim(service, &claim).await;
+    let result = process_claim(service, &mut claim).await;
     if let Err(error) = result {
         let retry = matches!(error, AppError::Database(_) | AppError::Internal(_));
         let state = if matches!(error, AppError::Conflict(_)) {
@@ -177,7 +177,7 @@ pub async fn process_next(service: &Service) -> Result<bool> {
     }
     Ok(true)
 }
-async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
+async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> {
     // Decode within the claim settlement path so invalid jobs fail normally and
     // cannot strand the worker or bypass operation-specific validation.
     let payload = JobPayload::decode(&claim.kind, &claim.payload)?;
@@ -206,7 +206,12 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
             .await?
             .ok_or(AppError::NotFound)?;
         tx.commit().await?;
-        return process_message_batch(service, claim, payload, source).await;
+        // Move only the generic batch's saved plan into the blocking parser.
+        // Guards/settlement use claim identity, generation, asset and source;
+        // none of them reread this in-memory plan. The durable envelope stays
+        // untouched until the ordinary save_publication transaction succeeds.
+        let saved = claim.payload.as_object_mut().and_then(|fields| fields.remove("publication"));
+        return process_message_batch(service, claim, payload, source, saved).await;
     }
     if payload.kind() == JobKind::SemanticExtract {
         tx.commit().await?;
@@ -433,8 +438,13 @@ async fn process_message_batch(
     claim: &ClaimedJob,
     payload: &JobPayload,
     source: String,
+    saved: Option<Value>,
 ) -> Result<()> {
-    let JobPayload::MessageBatchIngest { accepted_spec, expected_version } = payload else {
+    let JobPayload::MessageBatchIngest {
+        accepted_spec,
+        expected_version,
+    } = payload
+    else {
         return Err(AppError::Invalid("invalid message batch operation".into()));
     };
     let spec = accepted_spec.clone();
@@ -443,11 +453,9 @@ async fn process_message_batch(
     let expected = *expected_version;
     let generation = claim.generation;
     let job_id = claim.job_id;
-    let saved = claim.payload.get("publication")
-        .filter(|plan| plan["generation"] == generation).cloned();
     let (chunks, saved) = tokio::task::spawn_blocking(move || -> Result<_> {
         let chunks = crate::messages::chunks(&source, &spec, source_event)?;
-        let saved = if let Some(saved) = saved {
+        let saved = if let Some(saved) = saved.filter(|plan| plan["generation"] == generation) {
             let publication: Publication = decode(saved)?;
             if publication.generation != generation
                 || publication.profile.as_deref() != Some(spec.embedding_profile.as_str())
@@ -457,18 +465,28 @@ async fn process_message_batch(
                 return Err(AppError::Invalid("invalid message publication plan".into()));
             }
             let memory = &publication.memories[0];
-            if memory.asset != asset || memory.expected_version != expected
-                || memory.version != expected.unwrap_or(0) + 1 || memory.fact_key.is_some()
+            if memory.asset != asset
+                || memory.expected_version != expected
+                || memory.version != expected.unwrap_or(0) + 1
+                || memory.fact_key.is_some()
                 || memory.chunks.len() != chunks.len()
-                || memory.chunks.iter().zip(&chunks).enumerate().any(|(index, (saved, source))| {
-                    saved.id != graph::entity_id(&format!("chunk:{job_id}:{generation}:0:{index}"))
-                        || saved.chunk.content != source.content
-                        || saved.chunk.locator != source.locator
-                        || !saved.summary.is_empty()
-                        || saved.embedding.as_ref().is_none_or(|vector| {
-                            vector.is_empty() || vector.len() > 4096 || vector.iter().any(|x| !x.is_finite())
-                        })
-                })
+                || memory
+                    .chunks
+                    .iter()
+                    .zip(&chunks)
+                    .enumerate()
+                    .any(|(index, (saved, source))| {
+                        saved.id
+                            != graph::entity_id(&format!("chunk:{job_id}:{generation}:0:{index}"))
+                            || saved.chunk.content != source.content
+                            || saved.chunk.locator != source.locator
+                            || !saved.summary.is_empty()
+                            || saved.embedding.as_ref().is_none_or(|vector| {
+                                vector.is_empty()
+                                    || vector.len() > 4096
+                                    || vector.iter().any(|x| !x.is_finite())
+                            })
+                    })
             {
                 return Err(AppError::Invalid("invalid message publication plan".into()));
             }
@@ -477,15 +495,26 @@ async fn process_message_batch(
             None
         };
         Ok((chunks, saved))
-    }).await.map_err(|error| AppError::Internal(error.into()))??;
+    })
+    .await
+    .map_err(|error| AppError::Internal(error.into()))??;
     let publication = match saved {
         Some(publication) => publication,
-        None => prepare(service, claim, payload, Some(accepted_spec.embedding_profile.clone()), vec![DraftMemory {
-            asset,
-            fact_key: None,
-            expected_version: expected,
-            chunks,
-        }]).await?,
+        None => {
+            prepare(
+                service,
+                claim,
+                payload,
+                Some(accepted_spec.embedding_profile.clone()),
+                vec![DraftMemory {
+                    asset,
+                    fact_key: None,
+                    expected_version: expected,
+                    chunks,
+                }],
+            )
+            .await?
+        }
     };
     publish_prepared(service, claim, payload, publication).await
 }

@@ -161,7 +161,14 @@ impl JobPayload {
             JobKind::Extract => "legacy_extract",
             _ => kind.as_str(),
         };
-        let mut fields = object.clone();
+        // Recovery plans can contain every chunk embedding. The typed input
+        // codec ignores that separate envelope field; do not deep-clone it on
+        // the executor merely to have Serde discard it again.
+        let mut fields: serde_json::Map<String, Value> = object
+            .iter()
+            .filter(|(key, _)| key.as_str() != "publication")
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
         fields.insert("__job_payload_kind".into(), json!(discriminator));
         let decoded: Self =
             serde_json::from_value(Value::Object(fields)).map_err(|_| invalid_payload())?;
@@ -259,7 +266,9 @@ impl JobPayload {
             Self::AmlIngest {
                 embedding_profile, ..
             } => Some(embedding_profile),
-            Self::MessageBatchIngest { accepted_spec, .. } => Some(&accepted_spec.embedding_profile),
+            Self::MessageBatchIngest { accepted_spec, .. } => {
+                Some(&accepted_spec.embedding_profile)
+            }
             Self::Cleanup { .. } => None,
         }
     }
