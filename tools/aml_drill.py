@@ -95,7 +95,7 @@ class Host:
         self.directory = Path(directory)
         self.env = {k: v for k, v in env.items() if not k.startswith("OC_")}
         self.env.update({k: v for k, v in env.items() if k.startswith("OC_MODEL_") or k.startswith("OC_EMBEDDING_")})
-        self.env.update(OC_ENABLE_MODELS="true", OC_EXTRACTION_MODEL="", OC_DATA_DIR=str(self.directory / "data"), RUST_LOG="error")
+        self.env.update(OC_ENABLE_MODELS="true", OC_ENABLE_AML="true", OC_EXTRACTION_MODEL="", OC_DATA_DIR=str(self.directory / "data"), RUST_LOG="error")
         self.process = None
         self.log = None
 
@@ -105,9 +105,19 @@ class Host:
         if result.returncode:
             raise DrillError("bootstrap_failed")
         try:
-            self.key = json.loads(result.stdout)["token"]
+            workspace_id = json.loads(result.stdout)["workspace_id"]
         except (ValueError, KeyError):
             raise DrillError("bootstrap_response_invalid") from None
+        # Capability is explicit on every new key; admin alone does not grant it.
+        result = subprocess.run([self.binary, "--offline", "key-create", workspace_id,
+            "--role", "admin", "--allow-owned-workspaces"],
+            env=self.env, capture_output=True, timeout=120)
+        if result.returncode:
+            raise DrillError("capable_key_creation_failed")
+        try:
+            self.key = json.loads(result.stdout)["token"]
+        except (ValueError, KeyError):
+            raise DrillError("key_response_invalid") from None
 
     def start(self):
         self.log = tempfile.TemporaryFile(mode="w+b", dir=self.directory)
@@ -161,7 +171,6 @@ def drill(args, env, report):
         try:
             host.bootstrap()
             host.start()
-            host.call("/admin/aml/namespace", {})
             batches = []
             for user in range(args.users):
                 for session in range(2):

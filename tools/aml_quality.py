@@ -26,29 +26,61 @@ def source_key(value):
     return (value["session_id"], value["message_index"])
 
 
-def decode_hits(data, batches, user_id):
-    known = {(b["session_id"], i): message for b in batches
-             if b["user_id"] == user_id for i, message in enumerate(b["messages"])}
-    keys = []
-    ids = set()
-    for hit in data:
-        if not isinstance(hit.get("id"), str) or not hit["id"] or hit["id"] in ids:
-            raise DrillError("invalid_or_duplicate_hit_id")
-        ids.add(hit["id"])
-        header, separator, content = hit.get("content", "").partition("\n")
-        if not separator or not header.startswith("Source metadata: "):
-            raise DrillError("missing_source_metadata")
-        try:
-            metadata = json.loads(header[len("Source metadata: "):])
-            key = source_key(metadata)
-            message = known[key]
-        except (ValueError, KeyError, TypeError):
-            raise DrillError("unknown_or_foreign_source") from None
-        # Corpus messages fit a single chunk; full original text is required.
-        if content != message["content"] or any(metadata.get(k) != message.get(k) for k in ("role", "timestamp")):
-            raise DrillError("source_mismatch")
-        keys.append(key)
-    return keys
+def decode_hits(data, batches, user_id, *, allow_legacy=False):
+    """Validate full source fragments, then resolve the old gold-key vocabulary.
+
+    These short-message quality labels omit batch IDs. Refuse any ambiguous
+    session/index in their corpus instead of silently crediting another batch.
+    Richer batch-aware metrics use aml_evidence directly.
+    """
+    from aml_evidence import source_index, decode_fragments
+    if not isinstance(data, list) or len(data) > 100:
+        raise DrillError("invalid_hit_list")
+    known = source_index(batches, user_id)
+    legacy_keys = [(session, index) for session, _batch, index in known]
+    if len(set(legacy_keys)) != len(legacy_keys):
+        raise DrillError("ambiguous_quality_source")
+    if allow_legacy and data:
+        # The earliest frozen reports predate even the legacy range parser.
+        # Their explicit archival path means whole-message equality, never
+        # interpreting missing ranges as current message-batch provenance.
+        metadata = []
+        for hit in data:
+            try:
+                header, separator, content = hit["content"].partition("\n")
+                if not separator or not header.startswith("Source metadata: "):
+                    raise ValueError()
+                meta = json.loads(header.removeprefix("Source metadata: "))
+                if not isinstance(meta, dict):
+                    raise ValueError()
+                metadata.append((hit, meta, content))
+            except (KeyError, TypeError, AttributeError, ValueError):
+                raise DrillError("invalid_legacy_source") from None
+        if all("parser" not in meta for _hit, meta, _content in metadata):
+            original = {(session, index): message for (session, _batch, index), (message, _count) in known.items()}
+            ids, keys = set(), []
+            for hit, meta, content in metadata:
+                try:
+                    ident = hit["id"]
+                    if not isinstance(ident, str) or not ident or ident in ids:
+                        raise ValueError()
+                    ids.add(ident)
+                    if set(meta) != {"session_id", "message_index", "role", "timestamp"} or type(meta["message_index"]) is not int:
+                        raise ValueError()
+                    if meta["timestamp"] is not None and type(meta["timestamp"]) is not int:
+                        raise ValueError()
+                    key = source_key(meta)
+                    message = original[key]
+                    if content != message["content"] or any(meta[field] != message.get(field) for field in ("role", "timestamp")):
+                        raise ValueError()
+                    keys.append(key)
+                except (KeyError, TypeError, ValueError):
+                    raise DrillError("invalid_legacy_source") from None
+            return keys
+    parts = decode_fragments(data, known, allow_legacy=allow_legacy)
+    if any(part["start"] != 0 or part["end"] != part["message_bytes"] for part in parts):
+        raise DrillError("source_mismatch")
+    return [(part["key"][0], part["key"][2]) for part in parts]
 
 
 def score(required, ranked, k):
@@ -94,7 +126,6 @@ def evaluate(args, report):
         try:
             host.bootstrap()
             host.start()
-            host.call("/admin/aml/namespace", {})
             add_times = []
             for batch in corpus["batches"]:
                 result, elapsed = host.call("/aml/add", batch)

@@ -65,6 +65,33 @@ class QualityTests(unittest.TestCase):
         self.assertFalse(dev_text & hold_text)
         self.assertEqual(len({q["id"] for q in corpus["questions"]}), 30)
 
+    def test_same_session_batches_fail_closed_for_legacy_gold_keys(self):
+        message = {"role": "user", "content": "Atlas approval", "timestamp": None}
+        batches = [{"user_id": "u", "session_id": "same", "request_id": request,
+                    "messages": [message]} for request in ["one", "two"]]
+        metadata = {"session_id": "same", "external_batch_id": "one", "message_index": 0,
+                    "source_event_id": "00112233-4455-6677-8899-aabbccddeeff",
+                    "parser": "message-batch-ranges-v1", "parser_version": 1, "chunking_version": 1,
+                    "message_count": 1, "role": "user", "timestamp": None,
+                    "source_path": "/messages/0/content", "byte_basis": "message_content_utf8",
+                    "byte_start": 0, "byte_end": len(message["content"].encode())}
+        hit = {"id": "synthetic", "content": "Source metadata: " + json.dumps(metadata) + "\n" + message["content"]}
+        self.assertEqual(decode_hits([hit], batches[:1], "u"), [("same", 0)])
+        historical_metadata = {key: metadata[key] for key in ("session_id", "message_index", "role", "timestamp")}
+        historical_hit = {**hit, "content": "Source metadata: " + json.dumps(historical_metadata) + "\n" + message["content"]}
+        with self.assertRaises(DrillError):
+            decode_hits([historical_hit], batches[:1], "u")
+        self.assertEqual(decode_hits([historical_hit], batches[:1], "u", allow_legacy=True), [("same", 0)])
+        with self.assertRaisesRegex(DrillError, "ambiguous_quality_source"):
+            decode_hits([historical_hit], batches, "u", allow_legacy=True)
+        with self.assertRaisesRegex(DrillError, "ambiguous_quality_source"):
+            decode_hits([hit], batches, "u")
+        for field, value in [("external_batch_id", "two"), ("source_event_id", "invalid"), ("parser", "future")]:
+            altered = {**metadata, field: value}
+            bad = {**hit, "content": "Source metadata: " + json.dumps(altered) + "\n" + message["content"]}
+            with self.assertRaises(DrillError):
+                decode_hits([bad], batches[:1], "u")
+
     def test_corpus_labels_and_response_provenance(self):
         corpus = json.loads((Path(__file__).resolve().parents[1] / "evals/aml/corpus.json").read_text(encoding="utf-8"))
         batches = corpus["batches"]
@@ -77,7 +104,13 @@ class QualityTests(unittest.TestCase):
         batch = batches[0]
         message = batch["messages"][0]
         metadata = {"session_id": batch["session_id"], "message_index": 0,
-                    "timestamp": message["timestamp"], "role": message["role"]}
+                    "timestamp": message["timestamp"], "role": message["role"],
+                    "external_batch_id": batch["request_id"],
+                    "source_event_id": "00112233-4455-6677-8899-aabbccddeeff",
+                    "parser": "message-batch-ranges-v1", "parser_version": 1, "chunking_version": 1,
+                    "message_count": len(batch["messages"]), "source_path": "/messages/0/content",
+                    "byte_basis": "message_content_utf8", "byte_start": 0,
+                    "byte_end": len(message["content"].encode("utf-8"))}
         hit = {"id": "a", "content": "Source metadata: " + json.dumps(metadata) + "\n" + message["content"]}
         self.assertEqual(decode_hits([hit], batches, batch["user_id"]), [(batch["session_id"], 0)])
         for data, user in [([hit], "other"), ([hit, hit], batch["user_id"]),

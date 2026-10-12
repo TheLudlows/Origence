@@ -12,7 +12,7 @@ from aml_answer import ANSWER, validate_answer
 from aml_budget import Budget, checked_order
 from aml_cross_encoder import LocalReranker, rank_indices, verify_model
 from aml_drill import DrillError, Host, preflight, percentiles
-from aml_evidence import source_index, decode_fragments, coverage
+from aml_evidence import source_index, decode_fragments, coverage, resolve_required_messages
 from aml_experiment import Chat, RERANK, evidence_payload, select
 from aml_public import load_public
 from aml_quality import digest, source_key
@@ -52,8 +52,8 @@ def question_payload(q):
 
 
 def metrics(hits, known, label, dataset):
-    parts = decode_fragments(hits, known)
-    return coverage(parts, required_messages=[source_key(x) for x in label["required_source_keys"]]) if dataset == "v4" else coverage(parts, required_sessions=label["required_sessions"])
+    parts = decode_fragments(hits, known, allow_legacy=True)
+    return coverage(parts, required_messages=resolve_required_messages(known, [source_key(x) for x in label["required_source_keys"]])) if dataset == "v4" else coverage(parts, required_sessions=label["required_sessions"])
 
 
 def artifact_path(dataset, stage, arm=None):
@@ -99,7 +99,6 @@ def retrieve(args, report, corpus, labels):
         try:
             host.bootstrap()
             host.start()
-            host.call("/admin/aml/namespace", {})
             def add(batch):
                 result, elapsed = host.call("/aml/add", batch)
                 if result != {"success": True, **{k: batch[k] for k in ("request_id", "user_id", "session_id")}}:
@@ -142,7 +141,7 @@ def prepare(args, report, corpus, labels):
             row["error"] = "upstream_retrieval_failed"
             continue
         known = source_index(corpus["batches"], q["user_id"])
-        decode_fragments(original["hits"], known)
+        decode_fragments(original["hits"], known, allow_legacy=True)
         candidates, size = budget.pack(original["hits"], 40, 8000, 32000)
         hits, evidence_size = budget.pack(candidates, 5, 2000, 9000)
         row.update(candidates=candidates, candidate_size=size, omitted_from_seed=len(original["hits"])-len(candidates),
@@ -169,7 +168,7 @@ def rank(args, report, corpus, labels):
                 raise DrillError("upstream_retrieval_failed")
             candidates = original["candidates"]
             known = source_index(corpus["batches"], q["user_id"])
-            decode_fragments(candidates, known)
+            decode_fragments(candidates, known, allow_legacy=True)
             started = time.perf_counter()
             if not candidates:
                 selected = []
@@ -208,7 +207,7 @@ def answer(args, report, corpus, labels):
                 raise DrillError("upstream_ranking_failed")
             hits = original["hits"]
             known = source_index(corpus["batches"], q["user_id"])
-            decode_fragments(hits, known)
+            decode_fragments(hits, known, allow_legacy=True)
             result = chat.call("answer", q["id"], ANSWER, {**question_payload(q), "evidence": evidence_payload(hits)})
             cited = validate_answer(result, hits)
             row.update(status="completed", output=result, cited=cited,
@@ -239,7 +238,7 @@ def grade(args, report, corpus, labels):
             if item["status"] != "completed":
                 row["arms"][arm] = {"status": "failed", "correct": False, "supported": False, "reason": "answer_execution_failed"}
                 continue
-            decode_fragments(item["cited"], known)
+            decode_fragments(item["cited"], known, allow_legacy=True)
             payload.append({"index": i, "answer": item["output"], "cited_original_fragments": item["cited"]})
         if not payload:
             continue

@@ -531,3 +531,40 @@ Existing HTTP/AML recovery/evaluation steps remain unchanged.
 - 修正后实现 head `857b4fcfd61ac758eeb23693a37b8c1998972538` 的 [CI 38232658239](https://github.com/TheLudlows/Origence/actions/runs/38232658239) fast-check/Linux 全部通过：无默认 features library 68、integration 101；默认 library 74、integration 202。format、两种严格 Clippy、聚焦 suites、HTTP、真实 stdio MCP、受控模型桩进程恢复、关键词合成评估全通过；Windows 仍按 PR 策略跳过。临时工具 workflow 已移除。
 - 最终审查另发现新增 creator retry 检查不应阻止现有特权 cleanup 回收：原 creator 撤销后，当前 admin 必须仍可重试 failed cleanup，调用方 Delete 权限、不可取消和 original created_by 保持。该保留既有行为的修正与真实删除/撤销回归须在后续 head 再验；上述通过结果不能代替它。
 - 最终精确 head CI 与合入 main 检查结果待补；真实模型/官方评测 NOT_RUN。
+
+## 2026-10-12：P1/P2 最终验收与 AML API 切换 P3/P4
+
+P1/P2 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的 [CI 38233936996](https://github.com/TheLudlows/Origence/actions/runs/38233936996) completed/success；fast-check、linux-native 全通过，Windows 按 PR 策略跳过。无默认 features library 68、integration 101；默认 library 74、integration 203。Rust 1.98.0、fmt、两种严格 all-target Clippy、聚焦可见性、HTTP、真实 stdio MCP、受控模型桩进程恢复、合成关键词评估均通过。Python tools 50 run / 49 passed / 1 skipped（该 job 无二进制；Linux 独立恢复步骤通过），evals 42 passed。cleanup 原 creator 撤销后当前 admin 重试回归已实际执行。独立审查核对最终代码无阻断项。
+
+[PR #50](https://github.com/TheLudlows/Origence/pull/50) 已 squash 合入 main `8e39c873ba5bbdefc3df1789d53c94e10ead7891`；Git tree 与验收头相同。主干 fast-check/Linux/Windows 结果另行跟踪，不能把 PR 的 Windows skipped 当作通过。
+
+P3 一次切换 API 并移除旧专用路径，当前代码仍待其最终 head 的完整 CI；P1/P2 的通过结果不替代 P3 验收。当前云端仍无 Rust/Cargo，Rust、native、真实宿主/CLI 测试的本地执行均 NOT_RUN。
+
+- 本地 Python tools：56 run，54 passed、2 skipped（受控进程强退恢复与新增停服整库备份恢复，缺少 AML_TEST_BINARY）；evals 42 passed。包含下层边界、当前 parser 严格解码、多批次 session 不歧义及显式历史 decoder 回归；冻结 eval/report 数据未改写。
+- 独立源码审查核对 default-off 路由、认证 root 派生/能力、只读未知 Search、删除下层 AML 表/任务/DTO、旧 schema 无写入拒绝、历史工具显式解码；无剩余阻断项。它不是 Rust/native 执行证据或 GitHub maintainer approval。
+- 补强 T13：真实 LanceDB 临时表路径故障，要求持久 retry_wait、无部分可见版本/分块，修复测试自己的阻塞文件后复用原同 generation 的计划/证据 ID，不重复 embedding。生产代码没有新增故障开关或 Worker。
+- 补强 T14：同一个受控 loopback 模型、新建临时库发布多语种多块批次，确认进程已退出后复制完整数据树，恢复到另一个新目录；先检索再重放，核对原回执/job/creator/source/asset/version/chunk/locator，不修改原目录/备份。Host.stop 使用已记录的进程 kill，不宣称优雅退出、在线快照或断电保证。
+- 补强 T15：撤回后真实 HTTP Add 重放返回 409 且原回执及领域 ID 不变。独立审查另发现 ready 索引的 dimension 失配应与 vector Search 一样不可见；现从 materialized saved-chunk CTE 一次投影维度，匹配同 chunk/index 的有效维度，并保持 profile/generation/ledger/数量检查，无 native 每次轮询探测。SQLite-only 2×2 和 200×4096 fixture 通过正常/错维度/恢复/撤回/非法维度，约 0.13–0.23 秒；此项不替代 Rust/native 回归。
+- T01–T02 固定跨语言字节/ID；T03 并发 workspace/batch；T04–T07 所属关系、reader/普通 key、跨 root/tenant、递归、撤销/降权/能力关闭与 I/O 后复核；T08–T10 creator 不转移、全部内容/规格冲突、普通命令 principal 隔离；T11–T12 精确批次消息 UTF-8 locator 和非 AML system/tool；T16 既有 history/S2/S3/Session/Learning/Bundle；T17 新库无 AML 表和旧库原字节保留拒绝；T19 同 generation ID 恢复、显式 retry 规格/回执稳定、已发布任务不重写；T20 下层源码/DDL边界均有已注册测试。T18 需本次最终 default/no-default/HTTP/MCP/CLI CI 证明。
+
+真实 provider、真实评测导入、官方 Smoke/Full 与产品质量结论均 **NOT_RUN**。本次验收只覆盖固定合成/受控模型工程行为；不更改历史实验结果、不扩展迁移或生产级验收。最终精确 head、适用 CI 与主干结果在完成后补记。
+
+
+### P3 实现 head 已执行的验收
+
+实现 head `9c49231704430ea685e6e30661088442e1e62833` 的 [CI 38236518092](https://github.com/TheLudlows/Origence/actions/runs/38236518092) completed/success：fast-check/Linux 全通过，Windows 按 PR 策略 skipped。无默认 features library **69**、integration **99**；默认 library **75**、integration **203**，全部通过，无 Rust 测试跳过。format、双配置 all-target Clippy（warnings denied）、全部既有聚焦 suites、HTTP、真实 stdio MCP、关键词合成评估通过。
+
+`native_vector_write_failure_keeps_batch_invisible_and_recovers_original_plan` 在真实 LanceDB 上执行通过；维度不符 live status、非 AML system/tool、所属权限及新 schema 拒绝测试均包含在同头 integration suite。Linux 的受控真实宿主步骤实际执行 **2/2 passed**：处理中进程强退恢复、停服复制整个库到独立目录后的恢复和多次重放。fast-check tools 的 56 run / 54 passed / 2 skipped 仅表示该 job 未配置 binary，两项没有被省略验收；evals **42 passed**。
+
+独立审查逐个核对远端 head 的变更文件 blob hash 与已审查快照，确认临时 format workflow 删除、Cargo.lock 与历史 eval/evidence 无变化。格式产物来自 Rust1.98 [run 38236327157](https://github.com/TheLudlows/Origence/actions/runs/38236327157)，artifact11741110762 ZIP SHA-256 `39d18931fe28f3a78eb1bc22d82dd44947be2d7cdfaaf52d25fdbb6eedacddc2` 已验证；它只提供格式，不充当功能证据。最初未格式化 head09061e8 的普通 CI 被后续提交取代，不用于验收。
+
+后续最小部署修正：Compose 的显式环境列表现在转发 `OC_ENABLE_AML: ${OC_ENABLE_AML:-false}`，使 `.env` 的显式启用设置能到达宿主；静态边界回归新增该断言，本地 3/3 passed。它不改变默认关闭、安全能力或容器命令，不恢复 Docker/macOS CI，也不声称已运行 Docker。此配置/文档提交与任何后续提交在 ready/merge 前仍必须通过自己精确 head 的适用 CI；最终 SHA、CI 链接和合入结果以 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录为准，不借用旧头绿灯。
+
+P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235896871](https://github.com/TheLudlows/Origence/actions/runs/38235896871) 已到终态：fast-check、linux-native、windows 全部 success。这只证明该主干提交；P3 合入后的主干（包括 Windows）仍单独跟踪。
+
+
+### P4 配置与文档复验
+
+含 Compose 透传/静态断言的 head `efcb1ddd92deb7185b6b497f527f5db735014587` 经独立六文件 hash/delta 复核无阻断项，[CI 38238050316](https://github.com/TheLudlows/Origence/actions/runs/38238050316) completed/success，fast-check/Linux 全通过、Windows 按 PR 策略 skipped。Rust 仍为无默认 **69/99**、默认 **75/203**；tools 新增配置断言后 **57 run / 55 passed / 2 skipped**，evals **42 passed**；两个被 fast-check 跳过的真实宿主恢复用例在 Linux 独立步骤 **2/2 passed**，HTTP/MCP/原生故障/聚焦/关键词评估同样全过。Compose 本身只验证配置文本，Docker 运行仍 NOT_RUN。
+
+至此最终实现及部署配置验收完成。最后归档仅修改本验证记录与执行计划勾选，不改变源代码、配置、测试或历史结果；归档提交同样必须通过其精确 head 的适用 CI 后才可 ready/merge。最终归档 head/CI 与合入 main 后的 Windows 等结果，在 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录继续保留，避免自引用提交 SHA 或把前一头绿灯用于后一头。

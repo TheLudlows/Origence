@@ -65,6 +65,22 @@ const REQUIRED_PROJECTIONS: &[(&str, &str)] = &[
     ),
 ];
 
+/// A legacy protocol schema is incompatible, including a partial old database.
+/// This is only a rejection detector: no compatibility implementation or upgrade.
+pub(super) async fn reject_legacy_aml_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name GLOB 'oc_aml_*')")
+            .fetch_one(conn)
+            .await
+            .map_err(sqlite_err)?;
+    if exists {
+        return Err(StorageError::Unavailable(
+            "legacy AML schema requires a new database; no migration was attempted".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub(super) async fn schema_present(conn: &mut SqliteConnection) -> StorageResult<bool> {
     let n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='oc_workspaces'",
@@ -76,11 +92,10 @@ pub(super) async fn schema_present(conn: &mut SqliteConnection) -> StorageResult
 }
 
 pub(super) async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
+    reject_legacy_aml_schema(conn).await?;
     for schema in [
         SCHEMA,
         IDENTITY_SCHEMA,
-        aml::AML_SCHEMA,
-        aml::ADD_SCHEMA,
         semantics::SCHEMA,
         session::SCHEMA,
         improve::SCHEMA,
@@ -94,6 +109,7 @@ pub(super) async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()
 }
 
 pub(super) async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
+    reject_legacy_aml_schema(conn).await?;
     for (table, columns) in REQUIRED_PROJECTIONS {
         sqlx::query(&format!("SELECT {columns} FROM {table} LIMIT 0"))
             .fetch_optional(&mut *conn)
@@ -103,9 +119,6 @@ pub(super) async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()>
             })?;
     }
     check_workspace_command_schema(conn).await?;
-    if aml::schema_available(conn).await? {
-        aml::check_schema(conn).await?;
-    }
     if semantics::available(conn).await? {
         semantics::check_schema(conn).await?;
     }

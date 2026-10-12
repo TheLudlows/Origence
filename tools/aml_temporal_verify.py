@@ -24,7 +24,7 @@ def verify():
     for row in report["temporal"]:
         assert row["status"] == "completed"
         q, hits = questions[row["id"]], original[row["id"]]
-        decode_fragments(hits, source_index(corpus["batches"], q["user_id"]))
+        decode_fragments(hits, source_index(corpus["batches"], q["user_id"]), allow_legacy=True)
         data = payload(q["query"], q["question_date"], hits, row["arm"])
         assert row["payload_sha256"] == hashlib.sha256(json.dumps(data, ensure_ascii=False).encode()).hexdigest()
         assert row["date_context"] == data.get("date_context")

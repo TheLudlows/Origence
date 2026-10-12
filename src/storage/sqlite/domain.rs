@@ -33,7 +33,7 @@ impl SqliteTx {
                 "reader"
             }
             .into()),
-            None => self.aml_role_for_principal(principal_id).await,
+            None => Err(StorageError::Forbidden),
         }
     }
 }

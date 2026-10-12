@@ -2,6 +2,10 @@
 
 > 本文只保留当前未完成工作和验收条件。完整架构见[平台设计规格](../specs/2026-09-22-memory-knowledge-platform-design.md)，身份与上下文契约见[I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md)。当前进度见 [STATUS](../../STATUS.md)，实际证据见 [VALIDATION](../../VALIDATION.md)。
 
+## AML API 收敛工程
+
+[Issue #48 的冻结契约](2026-10-12-aml-api-adapter-refactor.md)将外部协议收敛到 API，复用通用一层所属 workspace、显式 key 能力和 MessageBatch/回执/发布状态；不新增 AML 存储模型、第二个 Worker 或旧库迁移。最终适用 CI/审查记录见 VALIDATION；不据此扩展真实模型、官方评测或产品质量结论。
+
 ## 当前阶段范围
 
 当前设计、实现、测试和验收只面向新建数据库。版本升级、旧库 schema 兼容和数据迁移不列入 S2–S4 或当前可靠性待办，也不以缺少这些能力判定当前切片未完成；只有未来明确调整需求后才重新评估并单独立项。既有历史工具与验证记录保留，不构成扩展升级/迁移能力的要求。

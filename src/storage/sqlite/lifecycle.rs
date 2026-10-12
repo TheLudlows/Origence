@@ -1,7 +1,8 @@
 //! Store open/initialize/check/shutdown and the existing explicit identity tool.
 use super::locking::{acquire_lock, acquire_path_lock};
 use super::schema::{
-    IDENTITY_SCHEMA, check_conn, check_identity_schema, exec_schema, schema_present,
+    IDENTITY_SCHEMA, check_conn, check_identity_schema, exec_schema, reject_legacy_aml_schema,
+    schema_present,
 };
 use super::*;
 use sqlx::Connection;
@@ -35,6 +36,21 @@ impl SqliteStore {
         // other processes, so a reopen would otherwise race the first open's
         // WAL transition and schema transaction (SQLITE_BUSY under load).
         let _serialized = opening.lock().await;
+
+        // Reject legacy protocol tables before opening a writable connection or
+        // changing journal mode. Existing data is never converted or removed.
+        if path.exists() && tokio::fs::metadata(&path).await?.len() != 0 {
+            let options = SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(false)
+                .read_only(true);
+            let mut conn = SqliteConnection::connect_with(&options)
+                .await
+                .map_err(sqlite_err)?;
+            let checked = reject_legacy_aml_schema(&mut conn).await;
+            conn.close().await.map_err(sqlite_err)?;
+            checked?;
+        }
         let options = SqliteConnectOptions::new()
             .filename(&path)
             .create_if_missing(true)
@@ -163,6 +179,7 @@ impl Lifecycle for SqliteStore {
 
 impl SqliteStore {
     async fn init_inner(conn: &mut sqlx::pool::PoolConnection<sqlx::Sqlite>) -> StorageResult<()> {
+        reject_legacy_aml_schema(&mut *conn).await?;
         if !schema_present(&mut *conn).await? {
             exec_schema(&mut *conn).await?;
         }

@@ -666,6 +666,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             .fetch_one(service.engine.relational().pool())
             .await
             .unwrap();
+    let publication_before = payload(&service, &receipt).await;
     for (break_sql, restore_sql) in [
         (
             "UPDATE oc_index_entries SET state='removed' WHERE artifact_id=?",
@@ -674,6 +675,10 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
         (
             "UPDATE oc_index_entries SET model_id='wrong' WHERE artifact_id=?",
             "UPDATE oc_index_entries SET model_id=(SELECT json_extract(payload,'$.accepted_spec.embedding_profile') FROM oc_jobs WHERE operation='message_batch_ingest') WHERE artifact_id=?",
+        ),
+        (
+            "UPDATE oc_index_entries SET dimension=99 WHERE artifact_id=?",
+            "UPDATE oc_index_entries SET dimension=2 WHERE artifact_id=?",
         ),
         (
             "UPDATE oc_index_entries SET generation=99 WHERE artifact_id=?",
@@ -704,6 +709,20 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
                 .unwrap(),
             receipt
         );
+        if break_sql.contains("dimension=99") {
+            assert_eq!(
+                service
+                    .wait_message_batch(&auth, &receipt, Duration::ZERO)
+                    .await
+                    .unwrap(),
+                PublicationStatus::Invisible
+            );
+            let found = service.search(&auth, query("vector")).await.unwrap();
+            let hits = found["hits"].as_array().unwrap();
+            assert!(!hits.is_empty());
+            assert!(hits.iter().all(|hit| hit["chunk_id"] != json!(chunk)));
+            assert_eq!(payload(&service, &receipt).await, publication_before);
+        }
         sqlx::query(restore_sql)
             .bind(chunk)
             .execute(service.engine.relational().pool())
@@ -1034,5 +1053,132 @@ async fn owned_reader_search_rechecks_capability_after_query_embedding_io() {
         PublicationStatus::Retrievable
     );
     assert_eq!(count(&service, "oc_versions").await, 1);
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original_plan() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let spec = models.spec();
+    // The public local vector adapter stores each profile at this documented
+    // name. Occupy its new table-directory path with a test-owned regular file:
+    // embeddings still succeed, but the real LanceDB upsert cannot create/open
+    // its dataset. No fake Worker, relational trigger or production fault hook.
+    let profile_hash = origence::storage::hash(&spec.embedding_profile);
+    let blocked = dir
+        .path()
+        .join("vectors")
+        .join(format!("vec_{}.lance", &profile_hash[..32]));
+    assert!(!blocked.exists());
+    tokio::fs::write(&blocked, b"test-owned native table obstruction")
+        .await
+        .unwrap();
+    let receipt = service
+        .submit_message_batch(&auth, "native-write", batch("native-write"), spec.clone())
+        .await
+        .unwrap();
+    let processed = worker::process_next(&service).await;
+    // Depending on native directory enumeration, orphan cleanup can encounter
+    // the same intentionally broken dataset after the job is already settled.
+    // Both outcomes still have to prove the durable retry state below.
+    assert!(matches!(processed, Ok(true) | Err(AppError::Internal(_))));
+    let job = service.job(&auth, receipt.job_id).await.unwrap();
+    assert_eq!(job["state"], "retry_wait");
+    assert_eq!(job["error_code"], "INTERNAL_ERROR");
+    assert_eq!(job["generation"], 1);
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Pending
+    );
+    assert_eq!(
+        service
+            .wait_message_batch(&auth, &receipt, Duration::ZERO)
+            .await
+            .unwrap(),
+        PublicationStatus::Pending
+    );
+    assert_eq!(count(&service, "oc_versions").await, 0);
+    assert_eq!(count(&service, "oc_chunks").await, 0);
+    assert_eq!(count(&service, "oc_index_entries").await, 0);
+    assert!(
+        service.search(&auth, query("keyword")).await.unwrap()["hits"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let saved = payload(&service, &receipt).await;
+    let expected: Vec<Value> = saved["publication"]["memories"][0]["chunks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|chunk| chunk["id"].clone())
+        .collect();
+    assert!(!expected.is_empty());
+    let calls = models.calls.load(Ordering::SeqCst);
+    assert_eq!(calls, expected.len());
+    assert_eq!(saved["accepted_spec"], json!(spec));
+    assert_eq!(
+        service
+            .submit_message_batch(&auth, "native-write", batch("native-write"), spec)
+            .await
+            .unwrap(),
+        receipt
+    );
+    // Repair only this known test-created obstruction, then simulate elapsed
+    // backoff without changing the production recovery or scheduling policy.
+    assert!(tokio::fs::metadata(&blocked).await.unwrap().is_file());
+    tokio::fs::remove_file(&blocked).await.unwrap();
+    assert_eq!(
+        sqlx::query("UPDATE oc_jobs SET next_retry_at=0 WHERE id=? AND state='retry_wait'")
+            .bind(receipt.job_id)
+            .execute(service.engine.relational().pool())
+            .await
+            .unwrap()
+            .rows_affected(),
+        1
+    );
+    assert!(worker::process_next(&service).await.unwrap());
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Retrievable
+    );
+    assert_eq!(models.calls.load(Ordering::SeqCst), calls);
+    let actual: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+            .bind(receipt.asset_id)
+            .fetch_all(service.engine.relational().pool())
+            .await
+            .unwrap();
+    assert_eq!(json!(actual), json!(expected));
+    assert_eq!(count(&service, "oc_jobs").await, 1);
+    assert_eq!(count(&service, "oc_events").await, 1);
+    assert_eq!(count(&service, "oc_assets").await, 1);
+    assert_eq!(count(&service, "oc_versions").await, 1);
+    assert_eq!(
+        service.search(&auth, query("vector")).await.unwrap()["hits"]
+            .as_array()
+            .unwrap()
+            .len(),
+        expected.len()
+    );
+    let published = payload(&service, &receipt).await;
+    assert!(matches!(
+        service
+            .job_action(&auth, "cannot-rewrite-published", receipt.job_id, "retry")
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    assert_eq!(payload(&service, &receipt).await, published);
+    let unchanged: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+            .bind(receipt.asset_id)
+            .fetch_all(service.engine.relational().pool())
+            .await
+            .unwrap();
+    assert_eq!(unchanged, actual);
+    assert!(!worker::process_next(&service).await.unwrap());
     service.engine.shutdown().await.unwrap();
 }

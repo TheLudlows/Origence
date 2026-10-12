@@ -23,7 +23,6 @@ pub enum JobKind {
     Ingest,
     Restore,
     Extract,
-    AmlIngest,
     MessageBatchIngest,
     SemanticPublish,
     SemanticExtract,
@@ -37,7 +36,6 @@ impl JobKind {
             Self::Ingest => "ingest",
             Self::Restore => "restore",
             Self::Extract => "extract",
-            Self::AmlIngest => "aml_ingest",
             Self::MessageBatchIngest => "message_batch_ingest",
             Self::SemanticPublish => "semantic_publish",
             Self::SemanticExtract => "semantic_extract",
@@ -55,7 +53,6 @@ impl TryFrom<&str> for JobKind {
             "ingest" => Ok(Self::Ingest),
             "restore" => Ok(Self::Restore),
             "extract" => Ok(Self::Extract),
-            "aml_ingest" => Ok(Self::AmlIngest),
             "message_batch_ingest" => Ok(Self::MessageBatchIngest),
             "semantic_publish" => Ok(Self::SemanticPublish),
             "semantic_extract" => Ok(Self::SemanticExtract),
@@ -105,11 +102,6 @@ pub enum JobPayload {
         identity: MemoryIdentity,
         expected_version: Option<i32>,
         embedding_profile: Option<String>,
-    },
-    AmlIngest {
-        expected_version: Option<i32>,
-        embedding_profile: String,
-        parser: String,
     },
     MessageBatchIngest {
         expected_version: Option<i32>,
@@ -230,7 +222,6 @@ impl JobPayload {
             Self::Ingest { .. } => JobKind::Ingest,
             Self::Restore { .. } => JobKind::Restore,
             Self::LegacyExtract { .. } | Self::IdentifiedExtract { .. } => JobKind::Extract,
-            Self::AmlIngest { .. } => JobKind::AmlIngest,
             Self::MessageBatchIngest { .. } => JobKind::MessageBatchIngest,
             Self::SemanticPublish { .. } => JobKind::SemanticPublish,
             Self::SemanticExtract { .. } => JobKind::SemanticExtract,
@@ -263,9 +254,6 @@ impl JobPayload {
             | Self::Improve {
                 embedding_profile, ..
             } => embedding_profile.as_deref(),
-            Self::AmlIngest {
-                embedding_profile, ..
-            } => Some(embedding_profile),
             Self::MessageBatchIngest { accepted_spec, .. } => {
                 Some(&accepted_spec.embedding_profile)
             }
@@ -282,9 +270,6 @@ impl JobPayload {
                 expected_version, ..
             }
             | Self::IdentifiedExtract {
-                expected_version, ..
-            }
-            | Self::AmlIngest {
                 expected_version, ..
             }
             | Self::MessageBatchIngest {
@@ -409,15 +394,6 @@ mod tests {
                 json!({"schema_version":1,"identity":identity,"expected_version":2,"embedding_profile":"embedding:v1"}),
             ),
             (
-                JobPayload::AmlIngest {
-                    expected_version: None,
-                    embedding_profile: "embedding:v1".into(),
-                    parser: "aml-message-ranges-v1".into(),
-                },
-                "aml_ingest",
-                json!({"schema_version":1,"expected_version":null,"embedding_profile":"embedding:v1","parser":"aml-message-ranges-v1"}),
-            ),
-            (
                 JobPayload::MessageBatchIngest {
                     expected_version: None,
                     accepted_spec: crate::messages::AcceptedMessageSpec::raw_only("embedding:v1"),
@@ -474,7 +450,7 @@ mod tests {
     #[test]
     fn all_job_variants_preserve_golden_version_one_payloads() {
         let fixtures = fixtures();
-        assert_eq!(fixtures.len(), 11);
+        assert_eq!(fixtures.len(), 10);
         for (typed, operation, golden) in fixtures {
             let (kind, encoded) = typed.clone().encode().unwrap();
             assert_eq!(kind.as_str(), operation);
@@ -514,7 +490,6 @@ mod tests {
             ("publish", &["format"][..]),
             ("ingest", &["format", "title"][..]),
             ("restore", &["target_version", "expected_version"][..]),
-            ("aml_ingest", &["embedding_profile", "parser"][..]),
             ("message_batch_ingest", &["accepted_spec"][..]),
             (
                 "semantic_publish",

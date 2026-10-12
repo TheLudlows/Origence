@@ -32,6 +32,10 @@ implementation. Prefer the smallest change that meets the documented behavior.
   direct/transitive dependencies, updating Cargo.lock with Cargo, and checking
   build/CI/container configuration. Enable only the needed crate features.
 
+- External evaluation protocol rules belong in API adapters, never storage
+  schemas, generic job types, or authorization decisions. New lower-level
+  capabilities must also be verified through a non-AML public-library caller.
+
 ## Blocking work and resource limits
 
 - Run synchronous CPU-heavy parsing/file IO on `spawn_blocking`, outside async

@@ -337,19 +337,6 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
         let expected = payload.expected_version();
         let asset = claim.asset.ok_or(AppError::NotFound)?;
         let chunks = match payload {
-            JobPayload::AmlIngest { parser, .. } => {
-                if parser != crate::aml::MESSAGE_PARSER {
-                    return Err(AppError::Invalid("unsupported AML parser".into()));
-                }
-                let source = tx
-                    .event_content(claim.source.ok_or(AppError::NotFound)?, true)
-                    .await?
-                    .ok_or(AppError::NotFound)?;
-                tx.commit().await?;
-                tokio::task::spawn_blocking(move || crate::aml::chunks(&source))
-                    .await
-                    .map_err(|e| AppError::Internal(e.into()))??
-            }
             JobPayload::SemanticPublish {
                 semantic_members: members,
                 suggested_identity: identity,
@@ -545,10 +532,7 @@ async fn prepare(
     let has_learning = learning_metadata.iter().any(Option::is_some);
     let terms = if matches!(
         payload.kind(),
-        JobKind::AmlIngest
-            | JobKind::MessageBatchIngest
-            | JobKind::SemanticPublish
-            | JobKind::SemanticExtract
+        JobKind::MessageBatchIngest | JobKind::SemanticPublish | JobKind::SemanticExtract
     ) {
         let texts: Vec<String> = drafts
             .iter()

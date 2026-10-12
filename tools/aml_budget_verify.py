@@ -34,7 +34,7 @@ def verify(dataset):
         if seed["status"] != "completed":
             errors.append(q["id"] + ":retrieve")
             continue
-        decode_fragments(seed["hits"], known)
+        decode_fragments(seed["hits"], known, allow_legacy=True)
         candidates, size = budget.pack(seed["hits"], 40, 8000, 32000)
         assert prep["candidates"] == candidates and prep["candidate_size"] == size
         for arm in ARMS:

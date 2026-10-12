@@ -3,6 +3,7 @@ x-local: &local
   build: .
   environment:
     OC_DATA_DIR: /data
+    OC_ENABLE_AML: ${OC_ENABLE_AML:-false}
     OC_ENABLE_MODELS: ${OC_ENABLE_MODELS:-false}
     OC_MODEL_BASE_URL: ${OC_MODEL_BASE_URL:-}
     OC_MODEL_API_KEY: ${OC_MODEL_API_KEY:-}
