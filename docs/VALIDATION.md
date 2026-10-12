@@ -4,11 +4,15 @@
 
 ## 2026-10-12 第四阶段：显式 Improve → Learning
 
-基于 main `be16bb1c2a273ec632e459abd277bd019fb36821`。新增确定性闭环、持久化阶段重放、principal-qualified 反馈序列、条件限制、子任务重试/取消和传递依赖撤回回归；不使用真实 provider，不据此声明语义质量或 Agent 收益。当前为实现检查记录，最终 PR head 的 CI 结果仍待补充。
+基于 main `be16bb1c2a273ec632e459abd277bd019fb36821`。新增确定性闭环、持久化阶段重放、principal-qualified 反馈序列、条件限制、子任务重试/取消和传递依赖撤回回归；不使用真实 provider，不据此声明语义质量或 Agent 收益。本节按实际提交记录执行证据，最终 PR head 的适用 CI 以 PR 检查记录为准。
 
 云端编辑环境没有 cargo/rustc/rustfmt，未在本地执行 Rust 编译、格式、Clippy 或测试。Python SQLite 完整新库 DDL 执行和 foreign_key_check 通过；静态检查不替代实际 Rust 验证。保留现有 CI：PR fast-check/Linux native，Windows 仅 main；不恢复已取消的 macOS/container jobs。
 
 [PR #43](https://github.com/TheLudlows/Origence/pull/43) 初始 head `60e7a0cb3d7c72d9c13f539fe11656004db71f9a` 的 [CI run 38202258799](https://github.com/TheLudlows/Origence/actions/runs/38202258799)：Linux 默认 all-target Clippy（warnings denied）通过，59 项库测试通过，集成测试 155 通过/3 失败。三个失败为夹具与契约不一致：reader 支持 quote 已脱敏、撤回后仍允许读取安全运行管理信息、已撤销 AuthContext 通过 Service 调用返回 Forbidden。夹具已按现有权限及文档修正；后续新增并发去重、循环/闭包边界、候选预算回归仍须最终 head 实际验证。fast-check 在 rustfmt 失败，按 CI 精确格式差异调整。该初始失败记录不代表最终通过。
+
+修正后 head `6fe09f5348760e074922c4bc08b158f063b35117` 的 [CI run 38202848957](https://github.com/TheLudlows/Origence/actions/runs/38202848957) Linux native 全部成功：Rust 1.98.0、严格 all-target Clippy、60 项库测试、164 项集成测试（含 19 项 Learning 回归）、debug build/HTTP smoke、受控 AML 进程恢复、关键词种子评估及工件归档。fast-check 仅剩新增测试中的 9 个 rustfmt 差异，已逐项应用 CI 生成的精确格式调整；这不替代最终格式提交的 PR 检查。独立审查确认三处夹具修正符合公开契约，未减弱撤回、权限或脱敏断言。候选放大回归覆盖 keyword 的 100 候选饱和；vector/hybrid 证明普通撤回，不宣称放大 native-vector top-k 的饱和覆盖。
+
+本阶段工程闭环已交付；真实模型语义质量、事实核验准确率与 Agent 收益仍未验收。
 
 ## 2026-10-12 第三阶段：SessionTurn 与幂等 Feedback
 

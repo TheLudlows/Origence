@@ -982,23 +982,38 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
     // allowed to accidentally publish the first child before the second parent.
     for (receipt, created_at) in [(&first, 1_i64), (&second, 2_i64)] {
         sqlx::query("UPDATE oc_jobs SET created_at=? WHERE id=?")
-            .bind(created_at).bind(id(receipt, "job_id"))
-            .execute(s.engine.relational().pool()).await.unwrap();
+            .bind(created_at)
+            .bind(id(receipt, "job_id"))
+            .execute(s.engine.relational().pool())
+            .await
+            .unwrap();
     }
     assert!(worker::process_next(&s).await.unwrap());
     assert!(worker::process_next(&s).await.unwrap());
-    assert_eq!(s.job(&a, id(&second, "job_id")).await.unwrap()["state"], "superseded");
+    assert_eq!(
+        s.job(&a, id(&second, "job_id")).await.unwrap()["state"],
+        "superseded"
+    );
     let conflicted = s.improvement(&a, id(&second, "improve_id")).await.unwrap();
     assert_eq!(conflicted["learnings"], json!([]));
     assert_eq!(conflicted["verification_saved"], true);
     assert_eq!(count(&s, "oc_assets").await, 1);
     assert_eq!(count(&s, "oc_learnings").await, 1);
-    let cursor: i64 = sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
-        .bind(second_session).fetch_one(s.engine.relational().pool()).await.unwrap();
+    let cursor: i64 =
+        sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
+            .bind(second_session)
+            .fetch_one(s.engine.relational().pool())
+            .await
+            .unwrap();
     assert_eq!(cursor, 0);
-    s.job_action(&a, "cancel-duplicate", id(&second, "job_id"), "cancel").await.unwrap();
+    s.job_action(&a, "cancel-duplicate", id(&second, "job_id"), "cancel")
+        .await
+        .unwrap();
     drain(&s).await;
-    assert_eq!(s.improvement(&a, id(&first, "improve_id")).await.unwrap()["status"], "completed");
+    assert_eq!(
+        s.improvement(&a, id(&first, "improve_id")).await.unwrap()["status"],
+        "completed"
+    );
     let retried = improve(&s, &a, second_session).await;
     assert_eq!(retried["feedback_count"], 1);
     drain(&s).await;
@@ -1218,10 +1233,7 @@ async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_sn
     drain(&s).await;
     assert_eq!(count(&s, "oc_assets").await, 0);
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 0);
-    let unavailable = s
-        .improvement(&a, id(&receipt, "improve_id"))
-        .await
-        .unwrap();
+    let unavailable = s.improvement(&a, id(&receipt, "improve_id")).await.unwrap();
     assert_ne!(unavailable["status"], "completed");
     assert!(unavailable.get("snapshot").is_none());
     assert!(unavailable.get("proposal_plan").is_none());
@@ -1326,8 +1338,13 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
 /// Obtain a genuine, server-resolved immutable reference before deliberately
 /// corrupting a different archive's dependency graph in the adversarial tests.
 async fn dependency_fixture(s: &Service, a: &AuthContext, learning: &Value) -> Value {
-    let chunk: Uuid = sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? AND version=1 ORDER BY ordinal LIMIT 1")
-        .bind(id(learning, "asset_id")).fetch_one(s.engine.relational().pool()).await.unwrap();
+    let chunk: Uuid = sqlx::query_scalar(
+        "SELECT id FROM oc_chunks WHERE asset_id=? AND version=1 ORDER BY ordinal LIMIT 1",
+    )
+    .bind(id(learning, "asset_id"))
+    .fetch_one(s.engine.relational().pool())
+    .await
+    .unwrap();
     let session = Uuid::new_v4();
     let donor = archive(
         s,
@@ -1431,7 +1448,8 @@ async fn learning_corrupt_over_limit_closure_rejects_the_whole_root_not_a_prefix
             Err(AppError::NotFound)
         ));
         assert!(matches!(
-            s.source_event(&a, id(&learnings[0], "source_event_id")).await,
+            s.source_event(&a, id(&learnings[0], "source_event_id"))
+                .await,
             Err(AppError::NotFound)
         ));
         // Exactly 32 Learnings + 32 turns remains within the same budget.
@@ -1470,8 +1488,12 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
     }
     let hidden = &learnings[0];
     let independent = &learnings[1];
-    let original_chunk: Uuid = sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
-        .bind(id(hidden, "asset_id")).fetch_one(s.engine.relational().pool()).await.unwrap();
+    let original_chunk: Uuid =
+        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
+            .bind(id(hidden, "asset_id"))
+            .fetch_one(s.engine.relational().pool())
+            .await
+            .unwrap();
     let mut tx = s.engine.relational().pool().begin().await.unwrap();
     for ordinal in 1000..1101 {
         let chunk = Uuid::new_v4();
@@ -1512,8 +1534,15 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
             .await
             .unwrap();
         assert_eq!(found["effective_mode"], mode);
-        assert_eq!(found["hits"].as_array().unwrap().len(), 1, "{mode}: {found}");
-        assert_eq!(found["hits"][0]["asset_id"], independent["asset_id"], "{mode}: {found}");
+        assert_eq!(
+            found["hits"].as_array().unwrap().len(),
+            1,
+            "{mode}: {found}"
+        );
+        assert_eq!(
+            found["hits"][0]["asset_id"], independent["asset_id"],
+            "{mode}: {found}"
+        );
     }
     assert_eq!(
         s.learning(&a, id(independent, "learning_id"))
@@ -1610,10 +1639,11 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 1);
     assert_eq!(fixture.verifications.load(Ordering::SeqCst), 0);
     assert_eq!(count(&s, "oc_assets").await, 0);
-    let cursor: i64 = sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
-        .bind(session)
-        .fetch_one(s.engine.relational().pool())
-        .await
-        .unwrap();
+    let cursor: i64 =
+        sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
+            .bind(session)
+            .fetch_one(s.engine.relational().pool())
+            .await
+            .unwrap();
     assert_eq!(cursor, 0);
 }

@@ -1,6 +1,6 @@
 # Origence · 当前状态
 
-更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已实现，等待本提交 CI 验证。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已实现。** 当前适合本地开发和验证，未完成生产级验收。
 
 ## 当前 CI 范围
 
@@ -61,7 +61,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 新增有条件、受限、可重放的提议 → 核验 → 普通知识发布闭环。单调反馈序列与 principal-qualified 标识防止同时间戳遗漏和重复计数；冻结批次、两阶段计划及子任务标识持久化，最后子任务成功前不推进完成水位。每条 Learning 独立原子发布；显式取消未完成 run 不消费反馈，并保留此前已发布且支持仍有效的条目。
 
-条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；当前执行结果尚待 CI。
+条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；Linux native 已通过 60 项库测试及 164 项集成测试（含 19 项 Learning 回归）；最终提交的适用 CI 见 PR #43。
 
 ## 本轮实验已结束
 
