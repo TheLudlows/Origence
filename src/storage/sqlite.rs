@@ -29,6 +29,8 @@ use uuid::Uuid;
 
 mod aml;
 mod app;
+#[cfg(feature = "local-storage")]
+mod context;
 mod improve;
 mod learning_visibility;
 mod semantics;

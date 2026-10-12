@@ -2,6 +2,7 @@
 mod aml_protocol;
 mod aml_scope;
 mod aml_service;
+mod evidence_bundle;
 mod identity_upgrade_cli;
 mod identity_vector_regression;
 mod initialization;

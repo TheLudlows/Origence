@@ -1,6 +1,6 @@
 # Origence · 当前状态
 
-更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已实现。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查待本 PR 最终提交验证，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
 ## 当前 CI 范围
 
@@ -20,7 +20,7 @@ Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及�
 | --- | --- | --- |
 | 入库与存储 | 文本/Markdown/PDF、结构化记忆、受限原文抽取；SQLite 关系/图、LanceDB、本地 Blob | 单宿主、单 Worker；PDF 无硬取消/进程隔离 |
 | 记忆身份与语义 | 显式身份、精确 lookup/过滤、版本条件；workspace 属性目录、单值更新/多值集合、冲突与未归一化证据 | 仅面向新库；显式写入或受控模型提取；不自动推断稳定身份/别名，真实模型分类质量未验收 |
-| 检索与上下文 | keyword/vector/hybrid、摘要/图开关、带来源与身份的 search/resolve | 跨证据冲突识别、类型预算和统一 EvidenceBundle 未完成；未证明真实 Agent 任务收益 |
+| 检索与上下文 | keyword/vector/hybrid、摘要/图开关、带来源与身份的 search/resolve | 统一 EvidenceBundle、独立类型召回/字节预算、明确单值身份冲突已实现；不推断普通文本矛盾，未证明真实 Agent 任务收益 |
 | 治理与恢复 | workspace/tenant 隔离、角色/密钥、幂等任务、版本/恢复、来源撤回、重启恢复 | 逻辑删除不等于物理擦除；无企业身份、文档 ACL、配额或生产 SLO |
 | 接入与维护 | HTTP、CLI、只读 MCP、显式离线向量压实 | 不自动调度维护；持续容量、维护故障和断电边界仍需验收 |
 | 会话学习 | 跨会话历史检索；原文候选提取 → S2 写入 → 同 workspace 跨调用方复用；实际证据归档与幂等反馈 | 捕获、归档和 Improve 均显式触发；无自动改权，真实模型质量未验收 |
@@ -61,7 +61,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 新增有条件、受限、可重放的提议 → 核验 → 普通知识发布闭环。单调反馈序列与 principal-qualified 标识防止同时间戳遗漏和重复计数；冻结批次、两阶段计划及子任务标识持久化，最后子任务成功前不推进完成水位。每条 Learning 独立原子发布；显式取消未完成 run 不消费反馈，并保留此前已发布且支持仍有效的条目。
 
-条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；Linux native 已通过 60 项库测试及 164 项集成测试（含 19 项 Learning 回归）；最终提交的适用 CI 见 PR #43。
+条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。独立真实质量与 S4 EvidenceBundle 尚未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；当前执行结果尚待 CI。
 
 ## 本轮实验已结束
 
@@ -92,3 +92,15 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 完整 SaaS、分布式及新增后端按实际需求另行立项。设计、实现、工程测试与产品效果分别判断。
 
+
+## 第五阶段：S4 EvidenceBundle 与独立 Agent 框架
+
+新增只读 `/v1/context` 与 MCP `context_bundle`，保留 search/resolve；memory、
+knowledge、Learning 独立候选，session 默认关闭且仅 writer。条件/引用/冲突警告
+按整 UTF-8 块预算，完整来源及传递支持在最终快照复核。仅检测明确单值身份冲突，
+不推断一般文本矛盾；会话引用不能回填现有 used_evidence，已明确披露。
+
+独立新冻结合成用例与有界模型/工具 Agent 框架区分无记忆、简单 hybrid、Bundle、
+非部署 gold 诊断。真实模型评测 NOT_RUN，fixture 不证明任务收益。无新后端、
+迁移、Worker、编排器或 AML 重启。完整边界见 [S4 契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)
+与 [验证状态](VALIDATION.md#2026-10-12--s4-evidencebundle-工程实现与独立-agent-框架)。

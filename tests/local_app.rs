@@ -952,7 +952,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
     )
     .await;
-    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 3);
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 4);
 
     let recalled=rpc(&mut input,&mut output,json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"context_search","arguments":{"query":"Atlas","mode":"hybrid"}}})).await;
     let recalled: Value =
@@ -969,6 +969,16 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
             .iter()
             .any(|s| s.get("entity_id").is_some() && !s["evidence"].as_array().unwrap().is_empty())
     );
+    let context_request = json!({"query":"Atlas", "mode":"keyword", "budget":32000,
+        "routes":[{"route":"memory","limit":20,"max_bytes":32000},{"route":"knowledge","limit":20,"max_bytes":32000}]});
+    let direct_bundle: Value = http.post(format!("{base}/v1/context"))
+        .bearer_auth(key["token"].as_str().unwrap())
+        .json(&context_request).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    let bundle_rpc = json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"context_bundle","arguments":context_request}});
+    let via_mcp = rpc(&mut input, &mut output, bundle_rpc.clone()).await;
+    let via_mcp: Value = serde_json::from_str(via_mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(direct_bundle, via_mcp);
+    assert!(!via_mcp["items"].as_array().unwrap().is_empty());
     let get = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context_get","arguments":{"asset_id":published["asset_id"]}}});
     let result = rpc(&mut input, &mut output, get.clone()).await;
     assert!(result.get("error").is_none(), "{result}");
@@ -993,6 +1003,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
             .get("error")
             .is_some()
     );
+    assert!(rpc(&mut input, &mut output, bundle_rpc).await.get("error").is_some());
     stop(&mut mcp).await;
     stop(&mut host).await;
     // No silent offline fallback when host is gone.
@@ -1826,3 +1837,4 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     assert!(!view.ready().await);
     assert!(!view.worker_running.load(Ordering::Acquire));
 }
+

@@ -315,3 +315,53 @@ Learning 是独立 knowledge，不是 memory identity。每个 chunk 的 locator
 所有支持轮次必须整体有效，包括未被候选引用的实际证据、精确历史版本、根来源及 S2 全部原始成员来源。提议/计划重放/索引/最终提交及 search、get、resolve、graph、原始来源读取均重新检查；候选预算在失效过滤后使用。Learning 支持另一个 Learning 的轮次时进行有界传递校验，最多 64 个不同 Learning/轮次节点，循环或超界失败而非截断接受。撤回立即隐藏，先于异步原生清理。新版本/restore 不会复活历史失效支持。
 
 此闭环的确定性夹具只能证明工程流程；真实模型核验准确率、事实质量与 Agent 收益仍待独立验收。统一 EvidenceBundle 与真实 Agent 对照属于后续 S4。
+
+## EvidenceBundle：显式统一上下文（S4）
+
+`POST /v1/context` 是只读请求，无幂等键；对应 MCP `context_bundle`，与
+`Service::evidence_bundle` 共用 `EvidenceInput` / `EvidenceBundle`。原有 search、
+resolve 合约不变。最小输入为 `{"query":"Atlas"}`。
+
+可选字段：`mode` 为 keyword（默认）/vector/hybrid，`allow_partial` 默认 false，
+`budget` 默认 4000、范围 0–32000（实际 UTF-8 字节，**不是 token**）；`routes`
+为唯一的路由配置列表，每项 `route` 为 memory/knowledge/learning/session，
+`limit` 默认 20、范围 1–100，`max_bytes` 默认 4000、范围 0–32000。
+默认启用前三项，session 默认关闭。未知字段、重复路由、非法预算返回输入错误。
+
+`memory_identity` 只限制 memory，使用精确主体/属性/条件；不改写知识或 Learning
+范围。`applicability_context` 为最多 32 个非空、每项最多 256 字节的调用方条件
+字符串。Learning 的每个条件与其逐字精确匹配才标记 `caller_context_exact_match`，
+否则保留并标记 `unverified`；两者都不代表系统验证了真实适用性。
+
+启用 session 必须 writer 以上，否则 403；该权限在任何模型调用前校验。
+`session_id` / `exclude_session_id` 可限制会话，必须同时启用 session。会话路由
+扫描最多 512 条近期关系型记录，完整来源/传递证据有效性先于保留条数限制，
+返回 `scanned` / `scan_exhausted`；扫描耗尽明确提示可能存在未扫描的更早记录。
+这不是全历史语义检索，不能把读者权限扩大为读取原始问答。
+
+返回 `rendered_context`、`items`、`conflicts`、`warnings`、scope、policy、
+requested/effective mode、总预算/实际字节及各路由候选/保留/省略计数。
+每个 item 保留类型、检索分支、条件/适用状态、语义身份、得分种类和稳定引用。
+`provenance.type=asset_chunk` 明确区分 asset_version、原始 source_version、
+version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/归档来源
+与历史 used_evidence，不伪造 chunk。来源及转引完整可见性在预算前和最终渲染
+快照中核验，撤回不等待物理清理。有效性仅表示通过该读取快照的可见性检查。
+
+仅对明确单值身份、同条件下的 confirmed/conflict 值做确定性冲突分组；组内所有
+候选与警告整体保留或整体省略。普通文本、不同条件及多值集合不推断互斥。
+冲突检查仅覆盖召回候选，不能据此声称跨文档事实无冲突。只对同一精确证据
+位置去重，合并 keyword/vector 路径，不合并相似文字。
+
+所有标题、引用、条件、来源、冲突警告和分隔符都计入实际 UTF-8 上下文预算；
+整块保留，不截断中文/emoji，不保留孤立引用。三个资产路由共享一次 embedding，
+各自独立候选过滤/预算。此版只用原文 chunk，不引入 summary/graph 路径。
+稳定轮询与各路由上限是中性工程默认，不代表已验证的最佳质量权重。
+
+**归档限制**：资产 item 可转换为原有 chunk used_evidence。session_turn 引用
+目前不能作为 `SessionTurn.used_evidence`（该合约只支持 chunk/entity/relation）；
+响应与会话正文标记 `unsupported_session_turn_reference`，调用方不得伪造 chunk
+或声称此类引用已完整归档。Learning 发布给 reader 的引用只有支持标识/范围，
+不返回支撑轮次的原始问答或 quote。
+
+详见 [S4 实施契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)。真实 Agent
+对照需独立执行；fixture 仅验证工具/模型交互框架，不是任务收益结果。

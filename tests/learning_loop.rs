@@ -1647,3 +1647,151 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
             .unwrap();
     assert_eq!(cursor, 0);
 }
+
+
+#[tokio::test]
+async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_withdrawal() {
+    let (models, fixture, _model) = models().await;
+    let dir = tempfile::tempdir().unwrap();
+    let s = Service::open(dir.path(), models).await.unwrap();
+    let (a, _) = provision(&s).await;
+    let original = publish(&s, &a).await;
+    let found = search(&s, &a, "keyword").await;
+    let first_session = Uuid::new_v4();
+    let first_turn = archive(&s, &a, first_session, vec![evidence(&found["hits"][0])]).await;
+    let feedback_id = Uuid::new_v4();
+    feedback(&s, &a, &first_turn, feedback_id).await;
+    let first_learning = learn(&s, &a, first_session).await;
+    let reader = role(&s, &a, "reader").await;
+    let input = json!({
+        "query":"Rust","budget":32000,
+        "routes":[
+            {"route":"knowledge","limit":100,"max_bytes":32000},
+            {"route":"learning","limit":100,"max_bytes":32000}
+        ]
+    });
+    let mut roundtrip = None;
+    for mode in ["keyword", "vector", "hybrid"] {
+        for conditions in [json!([]), json!(["all production systems"]), json!([CONDITION])] {
+            let mut request = input.clone();
+            request["mode"] = json!(mode);
+            request["applicability_context"] = conditions.clone();
+            let result = s
+                .evidence_bundle(&reader, serde_json::from_value(request).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(result.effective_mode, mode);
+            assert_eq!(result.items.len(), 1, "{result:?}");
+            let item = &result.items[0];
+            assert_eq!(item.route, origence::evidence::EvidenceRoute::Learning);
+            assert_eq!(item.conditions, [CONDITION]);
+            assert_eq!(
+                item.applicability,
+                if conditions == json!([CONDITION]) {
+                    "caller_context_exact_match"
+                } else {
+                    "unverified"
+                }
+            );
+            // Matching a caller assertion is still not factual verification.
+            assert!(result.validity.contains("not_factual_truth"));
+            let metadata = item.learning.as_ref().unwrap();
+            assert_eq!(metadata.learning_id, id(&first_learning, "learning_id"));
+            assert_eq!(metadata.session_id, first_session);
+            assert_eq!(metadata.conditions, [CONDITION]);
+            assert_eq!(metadata.statement, STATEMENT);
+            assert!(!metadata.why.is_empty());
+            assert_eq!(metadata.supports.len(), 1);
+            let support = &metadata.supports[0];
+            assert_eq!(support.turn_id, id(&first_turn, "turn_id"));
+            assert_eq!(support.feedback_id, feedback_id);
+            assert_eq!(support.principal_id, a.id);
+            assert_eq!(support.byte_start, 0);
+            assert_eq!(support.byte_end, ANSWER.len());
+            let serialized = serde_json::to_value(item).unwrap();
+            let exposed_support = &serialized["learning"]["supports"][0];
+            for forbidden in ["question", "answer", "quote", "comment"] {
+                assert!(exposed_support.get(forbidden).is_none());
+            }
+            assert!(!result.rendered_context.contains(ANSWER));
+            assert!(result.rendered_context.contains(CONDITION));
+            assert!(result.rendered_context.contains(&metadata.learning_id.to_string()));
+            assert!(result.rendered_context.contains(&support.turn_id.to_string()));
+            assert_eq!(result.used_bytes, result.rendered_context.len());
+            assert!(result.used_bytes <= result.budget);
+            let provenance = &serialized["provenance"];
+            assert_eq!(provenance["asset_id"], first_learning["asset_id"]);
+            assert_eq!(provenance["source_event_id"], first_learning["source_event_id"]);
+            assert_eq!(item.archive_roundtrip, "chunk_supported");
+            roundtrip = Some(json!({
+                "kind":"chunk","id":provenance["chunk_id"],"chunk_id":provenance["chunk_id"],
+                "asset_id":provenance["asset_id"],"asset_version":provenance["asset_version"]
+            }));
+            // The complete condition/support block is indivisible under both
+            // the route ceiling and the overall serialized UTF-8 byte ceiling.
+            let mut limited = input.clone();
+            limited["mode"] = json!(mode);
+            limited["applicability_context"] = conditions;
+            limited["budget"] = json!(result.used_bytes - 1);
+            let omitted = s
+                .evidence_bundle(&reader, serde_json::from_value(limited).unwrap())
+                .await
+                .unwrap();
+            assert!(omitted.items.is_empty());
+            assert!(omitted.rendered_context.is_empty());
+        }
+    }
+    // A second session can archive exactly the returned chunk and Learn from
+    // it. The second Learning depends transitively on the first raw source.
+    let second_session = Uuid::new_v4();
+    let second_turn = archive(&s, &a, second_session, vec![roundtrip.unwrap()]).await;
+    feedback(&s, &a, &second_turn, Uuid::new_v4()).await;
+    fixture.set_mode("second_statement");
+    let second_learning = learn(&s, &a, second_session).await;
+    assert_ne!(first_learning["learning_id"], second_learning["learning_id"]);
+    let before = s
+        .evidence_bundle(&reader, serde_json::from_value(input.clone()).unwrap())
+        .await
+        .unwrap();
+    let ids: std::collections::BTreeSet<_> = before
+        .items
+        .iter()
+        .map(|item| item.learning.as_ref().unwrap().learning_id)
+        .collect();
+    assert_eq!(
+        ids,
+        std::collections::BTreeSet::from([
+            id(&first_learning, "learning_id"),
+            id(&second_learning, "learning_id")
+        ])
+    );
+    let mut all_routes = input.clone();
+    all_routes["routes"].as_array_mut().unwrap().push(json!({
+        "route":"session","limit":100,"max_bytes":32000
+    }));
+    let before = s
+        .evidence_bundle(&a, serde_json::from_value(all_routes.clone()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(before.items.len(), 4);
+    // Deliberately leave cleanup pending. Full source closure must hide both
+    // generations of Learning and both raw archived turns immediately.
+    s.delete(&a, "withdraw-bundle-root", id(&original, "source_event_id"), "event")
+        .await
+        .unwrap();
+    for mode in ["keyword", "vector", "hybrid"] {
+        for (auth, mut request) in [(&reader, input.clone()), (&a, all_routes.clone())] {
+            request["mode"] = json!(mode);
+            let hidden = s
+                .evidence_bundle(auth, serde_json::from_value(request).unwrap())
+                .await
+                .unwrap();
+            assert!(hidden.items.is_empty(), "{hidden:?}");
+            assert!(hidden.conflicts.is_empty());
+            assert!(hidden.rendered_context.is_empty());
+            assert_eq!(hidden.used_bytes, 0);
+        }
+    }
+    assert_eq!(fixture.proposals.load(Ordering::SeqCst), 2);
+    assert_eq!(fixture.verifications.load(Ordering::SeqCst), 2);
+}
