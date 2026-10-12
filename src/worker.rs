@@ -62,6 +62,18 @@ fn permission(claim: &ClaimedJob) -> Permission {
         Permission::Write
     }
 }
+fn first_extracted_fact(
+    seen: &mut std::collections::HashSet<String>,
+    fact_key: &str,
+    job_id: Uuid,
+) -> bool {
+    if seen.insert(fact_key.to_owned()) {
+        return true;
+    }
+    // Model-provided keys can contain source text or other sensitive data.
+    tracing::warn!(%job_id, "duplicate extracted fact_key dropped");
+    false
+}
 async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob) -> Result<()> {
     if !tx
         .active_job(claim.job_id, claim.generation, claim.run_token)
@@ -227,12 +239,7 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
         for m in &memories {
             // One memory per fact key per extraction; slot is SELECT-then-INSERT,
             // so a duplicate would collide with itself at the version recheck.
-            if !seen.insert(m.fact_key.clone()) {
-                tracing::warn!(
-                    job_id=%claim.job_id,
-                    fact_key=%m.fact_key,
-                    "duplicate extracted fact_key dropped"
-                );
+            if !first_extracted_fact(&mut seen, &m.fact_key, claim.job_id) {
                 continue;
             }
             let (asset, expected) = tx.slot(&m.fact_key).await?;
@@ -722,4 +729,46 @@ pub async fn cleanup(service: &Service) -> Result<()> {
         service.engine.relational().finish_cleanup(scope).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct LogBuffer(Arc<Mutex<Vec<u8>>>);
+    impl std::io::Write for LogBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn duplicate_extracted_fact_log_omits_sensitive_key() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let writer = LogBuffer(bytes.clone());
+        let subscriber = tracing_subscriber::fmt()
+            .without_time()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let job_id = Uuid::new_v4();
+        let sensitive_key = "private-sentinel-user@example.test";
+        tracing::subscriber::with_default(subscriber, || {
+            let mut seen = std::collections::HashSet::new();
+            assert!(first_extracted_fact(&mut seen, sensitive_key, job_id));
+            assert!(bytes.lock().unwrap().is_empty());
+            assert!(!first_extracted_fact(&mut seen, sensitive_key, job_id));
+            assert_eq!(seen.len(), 1);
+        });
+        let logs = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        assert!(logs.contains("duplicate extracted fact_key dropped"));
+        assert!(logs.contains(&job_id.to_string()));
+        assert!(!logs.contains(sensitive_key));
+    }
 }

@@ -540,6 +540,72 @@ async fn semantic_capture_rejects_bad_batches_and_handles_empty_or_unknown() {
 }
 
 #[tokio::test]
+async fn semantic_capture_changed_unused_or_uncertain_target_does_not_block_publication() {
+    for operation in ["unused", "propose", "negate", "ambiguous", "update"] {
+        let (_dir, s, a, _, stub, _model) = fixture(true).await;
+        property(&s, &a, "database.engine", "single").await;
+        property(&s, &a, "service.languages", "multi").await;
+        stub.respond(vec![candidate("Rust", Some(0), "assert", "Rust", "Rust")]);
+        let first = submit(
+            &s,
+            &a,
+            request("Rust", vec![target("database.engine", 0, false)]),
+        )
+        .await;
+        // Hold the first publication outside SQL, so the later request passes
+        // admission at version 0 without relying on equal-timestamp queue order.
+        stub.hold_embedding.store(true, Ordering::SeqCst);
+        let worker_service = s.clone();
+        let running =
+            tokio::spawn(async move { worker::process_next(&worker_service).await.unwrap() });
+        tokio::time::timeout(std::time::Duration::from_secs(10), stub.entered.notified())
+            .await
+            .unwrap();
+        let later = submit(
+            &s,
+            &a,
+            request(
+                "Go",
+                vec![
+                    target("database.engine", 0, false),
+                    target("service.languages", 0, false),
+                ],
+            ),
+        )
+        .await;
+        stub.release.notify_one();
+        running.await.unwrap();
+        finish(&s, &a, &first).await;
+        let (index, requested) = if operation == "unused" {
+            (1, "supplement")
+        } else {
+            (0, operation)
+        };
+        stub.respond(vec![candidate("Go", Some(index), requested, "Go", "Go")]);
+        let result = finish(&s, &a, &later).await;
+        let memory = &result["memories"][0];
+        assert_eq!(memory["state"], "published", "{operation}");
+        assert_eq!(memory["requested_operation"], requested);
+        assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
+        if operation == "unused" {
+            assert_eq!(memory["normalization_status"], "explicit_identity");
+            assert_eq!(lookup(&s, &a, "service.languages").await["version"], 1);
+        } else {
+            // An unauthorized update is downgraded to ambiguous evidence;
+            // all uncertain routes preserve provenance without binding identity.
+            assert_eq!(memory["normalization_status"], "unnormalized");
+            assert!(memory["identity"].is_null());
+            let expected_status = match operation {
+                "propose" => "proposed",
+                "negate" => "negated",
+                _ => "ambiguous",
+            };
+            assert_eq!(memory["semantic_status"], expected_status);
+        }
+    }
+}
+
+#[tokio::test]
 async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     let (_dir, s, a, _, stub, _model) = fixture(true).await;
     property(&s, &a, "database.engine", "single").await;

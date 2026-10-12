@@ -2,6 +2,23 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-12 第一阶段收口：文档、日志与版本契约
+
+基于 main `359365b366f20380847f7bec868caca60946de8d`，保持新库范围和既有发布语义。本次修正 API 的四种 normalization_status、重复写入响应和目标版本检查边界；更新 STATUS/S3 计划中的已合入与远端 CI 证据。以下历史验证记录保持原样，不将当时的“未提交/无新远端 CI”改写为后来结果。
+
+原 fact_key 抽取的重复告警仅保留 job_id 和固定消息，不输出模型提供的键。新增 `worker::tests::duplicate_extracted_fact_log_omits_sensitive_key`，校验重复仍被丢弃、告警仍可按 job_id 关联且敏感哨兵字符串不出现在日志。新增 `semantic_capture_changed_unused_or_uncertain_target_does_not_block_publication`，在两个请求均受理后先发布一个目标，验证另一个请求的未使用目标、提议、否定、歧义及未经授权 update 的独立证据路径不被该目标版本变化阻断；原有确定性写入过期后 superseded 回归保留。不增加全目标 CAS、不改变事务、Worker、来源撤回、重试或持久化行为。
+
+本次云端编辑环境未安装 Cargo/Rust。`git diff --check` 通过；以下命令已尝试但均因 `cargo: command not found`（退出 127）未执行，不能视为通过：
+
+- `cargo fmt --all -- --check`
+- `cargo test --locked --lib duplicate_extracted_fact_log_omits_sensitive_key`（worker 由 local-storage feature 启用；先前尝试的 no-default-features 形式即使有 Cargo 也不会选中该测试）
+- `cargo test --locked --test local semantic_capture_`
+- `cargo clippy --locked --all-targets -j 2 -- -D warnings`
+
+本地完整测试、严格 Clippy、Rust 1.98.0 构建及原生存储验证均未执行。随后 [PR #39](https://github.com/TheLudlows/Origence/pull/39) 的实现提交 `238403bb2329fb959b0f5dd11e45d924aeba2ff6` 经 [CI run 38193448805](https://github.com/TheLudlows/Origence/actions/runs/38193448805) 验证成功：fast-check 与 Linux native 均通过。默认 lib 39/local 128、无默认特性 lib 36/local 89 全通过；新增日志哨兵与目标漂移回归、原有确定性版本竞争回归均在 Linux 日志中明确通过。格式、默认/无默认严格 Clippy、49 项 Python 工具测试及 9 项评估适配测试、debug build/HTTP smoke、受控进程恢复和 keyword 种子评估步骤均成功。Rust 版本确认步骤验证 1.98.0。
+
+这项远端结果属于上述精确实现提交；本节补记只更新验证文档，不改变已测代码。PR 规则跳过 Windows/macOS/container，不将跳过计作验收；后续提交仍须检查自己的 CI。工程桩回归不证明真实模型质量或 Agent 收益。
+
 ## 2026-10-11 S3 首个切片：受控对话提取 → S2
 
 按用户确认的三项串行完成纯库提取契约、S2 写入/持久 Worker 接入及端到端验证；只面向新库，不开发升级。基线 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf，包含上一节所记 S2 的未提交工作区改动。[实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、[完整命令输出与 19 个最终源码/测试文件哈希](evidence/2026-10-11-s3-semantic-capture-validation.json)。新增公开库 API 与 POST /v1/captures/semantic；调用方限定完整身份/版本和单值覆盖授权，模型生成 operation/value/quote 后复用同一个 S2 路由函数。未增加依赖、表、CLI 隐藏协议、Worker 或升级路径。

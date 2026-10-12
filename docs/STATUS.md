@@ -31,7 +31,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 ## S2 显式语义契约
 
-属性目录、确定性写入路由和端到端回归按三步串行交付。重复值不增版本；显式单值更新追加版本；多值补充保留成员原始来源；冲突、否定、提议和歧义以 unnormalized 证据发布，不能覆盖当前身份。整快照任一支持来源撤回即退出读取，后续显式补充可重建有效集合。旧库不自动安装 S2，旧 fact_key 不重新解释。具体 API/运行边界及本地验证见 API、OPERATIONS 和 VALIDATION；本工作区改动尚无新远端 CI 证据。
+属性目录、确定性写入路由和端到端回归按三步串行交付。重复值不增版本；显式单值更新追加版本；多值补充保留成员原始来源；冲突、否定、提议和歧义以 unnormalized 证据发布，不能覆盖当前身份。整快照任一支持来源撤回即退出读取，后续显式补充可重建有效集合。旧库不自动安装 S2，旧 fact_key 不重新解释。S2 与 S3 首个切片已由 [PR #37](https://github.com/TheLudlows/Origence/pull/37) 合入 main `daf25b1f`；其 head `a0ec23d1` 的 [PR CI](https://github.com/TheLudlows/Origence/actions/runs/38150659736) 成功，fast-check、Linux 通过，Windows/macOS/container 按 main-only 策略跳过。具体 API/运行边界及本地验证见 API、OPERATIONS 和 VALIDATION。
 
 ## S3 受控对话提取首个切片
 
@@ -45,7 +45,11 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 本轮完成不等于生产可靠性、独立质量或官方 AML 验收完成。实验进程已结束，执行记录确认临时库已清理；不重跑已观察题来宣称新质量收益。
 
+收尾文档经 [PR #36](https://github.com/TheLudlows/Origence/pull/36) 合入 main `db939960`；其 head `582d6be2` 的 [PR CI](https://github.com/TheLudlows/Origence/actions/runs/38142952091) 成功，fast-check、Linux 通过，Windows/macOS/container 按 main-only 策略跳过。
+
 ## 当前证据与结论
+
+2026-10-12 01:45 UTC 核验：当前 main `359365b` 的 [CI run 38192317487](https://github.com/TheLudlows/Origence/actions/runs/38192317487) 仍在运行；fast-check、Linux、Windows 已成功，macOS/container 尚未完成。上述历史 PR CI 不代表该 main 或后续改动全部通过。
 
 | 验证 | 已得到的结论 | 不能据此宣称 |
 | --- | --- | --- |

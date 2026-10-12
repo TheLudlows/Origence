@@ -116,13 +116,13 @@ lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精�
 
 ## 身份状态与来源核验
 
-资产 get 增加 normalization_status：记忆有显式身份绑定时为 explicit_identity；旧 fact_key 记忆为 legacy_unidentified；知识资产为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一资产身份。旧记忆不会因该字段被自动归一化。
+资产 get 增加 normalization_status：记忆有显式身份绑定时为 explicit_identity；S2/S3 保留的冲突、否定、提议和歧义证据为 unnormalized；旧 fact_key 记忆为 legacy_unidentified；知识资产为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一资产身份。旧记忆不会因该字段被自动归一化。
 
-writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。未归一化资产的独立状态和自动身份归并仍待后续实现。
+writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。S2 已提供未归一化资产的独立状态；自动身份归并尚未实现。
 
 ## 检索与上下文身份标注
 
-search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
+search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
 
 resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normalization_status，context_policy=identity-provenance-v1；图引用格式不变。引用/标题/标注/正文均计入字节预算，整块保留或省略，因此标注可能减少正文容量。状态只表示身份绑定，不表示真值、有效期或置信度；冲突识别和类型预算未实现。
 
@@ -178,7 +178,7 @@ HTTP 最多等待任务 25 分钟。超时返回 503，原任务继续；断线/
 
 - POST /admin/memory-properties：仅 admin，注册不可变属性，例如 {"predicate":"database.engine","cardinality":"single","required_context":["env"]}。cardinality 为 single 或 multi；required_context 最多 32 个合法条件名。相同定义可重放；改变定义或接管已有显式身份的属性返回 409。
 - GET /v1/memory-properties/{predicate}：reader 可读取本 workspace 的已登记定义，未登记返回 404。
-- POST /v1/memories/semantic：writer 及以上，受理后由现有单 Worker 发布，返回 job_id；只有任务 completed 后才能宣称已发布。已登记属性不能经 /identified 或 /captures/identified 写入（409）。未登记的旧显式身份入口和旧 fact_key 语义保持原样。
+- POST /v1/memories/semantic：writer 及以上；重复事实同步返回 `{state:"duplicate",asset_id,version,source_event_id}`，保存本次来源但不新建版本或任务，不含 job_id。需要发布时返回 `{state:"accepted",asset_id,source_event_id,job_id,semantic_status,normalization_status}`，由现有单 Worker 发布，只有任务 completed 后才能宣称新版本已发布。已登记属性不能经 /identified 或 /captures/identified 写入（409）。未登记的旧显式身份入口和旧 fact_key 语义保持原样。
 
 语义请求示例：
 
@@ -231,7 +231,9 @@ content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开�
 }
 ```
 
-首先由 admin 注册相应属性目录。每个 target 的属性必须已注册且包含所有必需条件；expected_version 必填，0 表示无已发布版本。受理时检查所有目标的版本，Worker 在路由确定性写入及最终提交前再次检查。相同身份不能重复列入 targets。allow_update 默认 false，只能为单值属性打开；即便打开，也只在模型分类为明确 update 时生效。模型把不同值分类为 assert 时，仍保留为 conflict 证据。
+首先由 admin 注册相应属性目录。每个 target 的属性必须已注册且包含所有必需条件；expected_version 必填，0 表示无已发布版本。受理时检查所有目标的版本，任一不匹配即返回 409，且不创建来源或任务。相同身份不能重复列入 targets。allow_update 默认 false，只能为单值属性打开；即便打开，也只在模型分类为明确 update 时生效。模型把不同值分类为 assert 时，仍保留为 conflict 证据。
+
+受理后不持续锁定整个 targets 列表：进入 S2 的确定性候选在路由时核对所用目标版本；计划保存后，Worker 在重试/恢复及最终提交前复核实际路由资产的版本、来源与可见性，包含 duplicate 结果是否仍为有效当前事实。未被候选使用的 target，以及未归一化证据仅作为 suggested_identity 保留的目标，不作为最终提交的身份版本前置条件。否定、提议、歧义和未获 allow_update 授权而降级的 update 不更新建议身份；确定性 assert 路由为 conflict 前仍检查目标版本，之后独立发布 conflict 证据。实际确定事实版本竞争失败时，整个任务 superseded，不部分发布。
 
 content 上限 64 KiB UTF-8，最多 20 个 targets；空 targets 合法，但所有结果只能是未归一化证据。模型输出最多 20 个候选、总计 32 个 statements，每个非空目标最多一个候选（冲突 statements 合并在同一候选中）。引用上限 8192 字节、value 上限 256 字节、集合最终上限 32 成员。模型只能返回目标索引/null、operation 和带精确原文区间的 statements；未知字段、重复目标、非法区间或超限导致整批失败，不部分发布。调用参数错误返回 422，版本/幂等冲突返回 409，模型未配置返回 503；受理后的模型失败记入 job，不在错误响应或日志中输出原文/模型诊断。
 
