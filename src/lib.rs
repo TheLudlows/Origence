@@ -15,13 +15,13 @@ pub mod parsing;
 #[cfg(feature = "local-storage")]
 pub mod retrieval;
 pub mod semantic_capture;
-pub mod session;
-#[cfg(feature = "local-storage")]
-mod sessions;
 #[cfg(feature = "local-storage")]
 mod semantics;
 #[cfg(feature = "local-storage")]
 pub mod service;
+pub mod session;
+#[cfg(feature = "local-storage")]
+mod sessions;
 pub mod storage;
 pub mod types;
 #[cfg(feature = "local-storage")]
@@ -31,4 +31,3 @@ pub mod worker;
 pub mod client;
 #[cfg(feature = "local-storage")]
 pub mod host;
-

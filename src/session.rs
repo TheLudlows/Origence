@@ -379,13 +379,15 @@ mod tests {
         assert_ne!(archive.source_event_id, archive.version_source_event_id);
         assert_eq!(archive.validate(), Ok(()));
         assert_eq!(
-            serde_json::from_value::<ArchivedEvidence>(
-                serde_json::to_value(&archive).unwrap()
-            )
-            .unwrap(),
+            serde_json::from_value::<ArchivedEvidence>(serde_json::to_value(&archive).unwrap())
+                .unwrap(),
             archive
         );
-        for field in ["evidence_ref_id", "source_event_id", "version_source_event_id"] {
+        for field in [
+            "evidence_ref_id",
+            "source_event_id",
+            "version_source_event_id",
+        ] {
             let mut value = serde_json::to_value(&archive).unwrap();
             value[field] = json!(Uuid::nil());
             let invalid: ArchivedEvidence = serde_json::from_value(value).unwrap();
@@ -431,7 +433,9 @@ mod tests {
         let id = Uuid::new_v4();
         for target in [
             FeedbackTarget::Turn,
-            FeedbackTarget::Evidence { evidence_ref_id: id },
+            FeedbackTarget::Evidence {
+                evidence_ref_id: id,
+            },
         ] {
             let value = serde_json::to_value(&target).unwrap();
             assert_eq!(
@@ -474,7 +478,10 @@ mod tests {
         assert!(input.validate().is_err());
         input = feedback();
         input.comment = Some("界".repeat(MAX_FEEDBACK_COMMENT_BYTES / 3) + "a");
-        assert_eq!(input.comment.as_ref().unwrap().len(), MAX_FEEDBACK_COMMENT_BYTES);
+        assert_eq!(
+            input.comment.as_ref().unwrap().len(),
+            MAX_FEEDBACK_COMMENT_BYTES
+        );
         assert_eq!(input.validate(), Ok(()));
         input.comment.as_mut().unwrap().push('a');
         assert!(input.validate().is_err());

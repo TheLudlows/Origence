@@ -6,7 +6,9 @@
 
 基于 main `6a17c32b4407d530804ff63814d3858a474c4790`，按用户确认不等待该主干 CI 再开发。仅新库增加关系型会话表；无升级迁移、模型调用、索引任务、新 Worker 或反馈改权。公开请求类型覆盖严格字段、枚举、UUID、UTF-8 边界与显式实际证据；Service/HTTP 回归覆盖关系型事务、权限、历史 provenance、幂等及依赖撤回。具体执行结果以本 PR 最终 head CI 为准。
 
-云端编辑环境没有 Cargo、rustc、rustfmt；本地静态检查不能替代编译、格式、Clippy 与测试。此处尚未记录本提交 CI 成功，最终提交前按精确 head 验证，旧阶段证据不作替代。历史记录保持原样。
+云端编辑环境没有 Cargo、rustc、rustfmt；本地静态检查不能替代编译、格式、Clippy 与测试。SQLite DDL 执行和兼容性规范化检查通过。独立审查未发现剩余生产阻塞，并已修正两个测试夹具问题。
+
+[PR #41](https://github.com/TheLudlows/Origence/pull/41) head `933de3b1b2d4f61983988f9637a60e035f5b40b5` 的 [CI run 38199658817](https://github.com/TheLudlows/Origence/actions/runs/38199658817)：Linux native 成功，Rust 1.98.0、严格默认 Clippy、完整默认测试、debug build/HTTP smoke、受控进程恢复与 keyword 种子评估通过。新增 11 项契约单测与 15 项会话/反馈回归均成功。fast-check 在 rustfmt 检查失败（仅格式）；按工具输出调整格式，后续最终 head 必须重新通过格式、无默认特性检查与 Linux CI，不能用这次 Linux 成功替代完整门槛。Windows/macOS/container 在 PR 中按既有 main-only 策略跳过。历史记录保持原样。
 
 ## 2026-10-12 第二阶段：内部任务类型与证据可见性
 

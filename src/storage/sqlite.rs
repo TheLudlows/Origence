@@ -2014,4 +2014,3 @@ mod maintenance_lock_tests {
         assert!(SqliteStore::open(&path).await.is_ok());
     }
 }
-
