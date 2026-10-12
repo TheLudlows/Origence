@@ -234,4 +234,3 @@ impl Service {
         Ok(json!({"data":data}))
     }
 }
-

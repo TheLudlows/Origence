@@ -242,7 +242,9 @@ impl JobPayload {
             Self::Restore {
                 expected_version, ..
             } => Some(*expected_version),
-            Self::LegacyExtract { .. } | Self::SemanticExtract { .. } | Self::Cleanup { .. } => None,
+            Self::LegacyExtract { .. } | Self::SemanticExtract { .. } | Self::Cleanup { .. } => {
+                None
+            }
         }
     }
 
@@ -429,7 +431,9 @@ mod tests {
                 let mut malformed = golden.clone();
                 malformed[field] = json!({"private_source":"must not appear in errors"});
                 let error = JobPayload::decode(operation, &malformed).unwrap_err();
-                assert!(matches!(error, AppError::Invalid(ref text) if text == "invalid job payload"));
+                assert!(
+                    matches!(error, AppError::Invalid(ref text) if text == "invalid job payload")
+                );
             }
         }
         for (operation, fields) in [

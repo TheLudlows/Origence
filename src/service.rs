@@ -666,4 +666,3 @@ impl Service {
         Ok(json!({"key_id":id,"revoked":true}))
     }
 }
-

@@ -308,7 +308,10 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     )
     .await;
     let unapproved_result = finish(&s, &a, &unapproved).await;
-    assert_eq!(unapproved_result["memories"][0]["semantic_status"], "ambiguous");
+    assert_eq!(
+        unapproved_result["memories"][0]["semantic_status"],
+        "ambiguous"
+    );
     let ambiguous = s
         .get(&a, id(&unapproved_result["memories"][0], "asset_id"), None)
         .await
@@ -325,7 +328,10 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     )
     .await;
     let conflict_result = finish(&s, &a, &conflict).await;
-    assert_eq!(conflict_result["memories"][0]["semantic_status"], "conflict");
+    assert_eq!(
+        conflict_result["memories"][0]["semantic_status"],
+        "conflict"
+    );
     let conflicting = s
         .get(&a, id(&conflict_result["memories"][0], "asset_id"), None)
         .await

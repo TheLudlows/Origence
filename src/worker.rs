@@ -404,13 +404,12 @@ async fn prepare(
             } else {
                 None
             };
-            let summary = if payload.kind() == JobKind::Ingest
-                && service.models.extraction_enabled()
-            {
-                service.models.summarize(&chunk.content).await?
-            } else {
-                String::new()
-            };
+            let summary =
+                if payload.kind() == JobKind::Ingest && service.models.extraction_enabled() {
+                    service.models.summarize(&chunk.content).await?
+                } else {
+                    String::new()
+                };
             let id = graph::entity_id(&format!(
                 "chunk:{}:{}:{}:{}",
                 claim.job_id, claim.generation, memory_index, ordinal
@@ -633,12 +632,8 @@ async fn publish_prepared(
                 .await?;
             }
         }
-        tx.update_asset_version(
-            memory.asset,
-            memory.version,
-            payload.title(),
-        )
-        .await?;
+        tx.update_asset_version(memory.asset, memory.version, payload.title())
+            .await?;
     }
     for entry in entries {
         if entry.key.surface == Surface::Graph {

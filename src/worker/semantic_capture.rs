@@ -77,7 +77,9 @@ pub(super) async fn process(
         ..
     } = payload
     else {
-        return Err(AppError::Invalid("invalid semantic capture operation".into()));
+        return Err(AppError::Invalid(
+            "invalid semantic capture operation".into(),
+        ));
     };
     let a = auth(claim);
     let profile = payload.embedding_profile().map(str::to_owned);

@@ -186,7 +186,10 @@ pub(super) async fn assert_evidence_matrix(
                     .unwrap();
                 assert_eq!(hit["version"], snapshot["version"]);
                 assert_eq!(hit["identity"], snapshot["identity"]);
-                assert_eq!(hit["normalization_status"], snapshot["normalization_status"]);
+                assert_eq!(
+                    hit["normalization_status"],
+                    snapshot["normalization_status"]
+                );
                 assert_eq!(hit["source_event_id"], member["source_event_id"]);
                 assert_eq!(hit["locator"], member["locator"]);
                 let source = target_sources
@@ -1005,4 +1008,3 @@ async fn semantic_source_withdrawal_during_pending_union_cannot_publish() {
         Err(AppError::NotFound)
     ));
 }
-

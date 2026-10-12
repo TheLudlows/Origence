@@ -8,7 +8,9 @@
 
 在现有语义测试中复用共享读取矩阵，对 get（当前/指定版本）、精确 lookup、keyword/vector/hybrid 及 resolve 比较资产、身份、来源、locator 与引用；覆盖根来源/集合成员撤回（清理前）、独立不确定证据、重复输入来源、资产删除与 scope 隔离。单块 resolve 覆盖精确字节预算和少一字节，包含语义标注及多语言引用。没有重写可见性 SQL，也不把工程夹具结果当作真实模型质量或 Agent 效果结论。
 
-本地云端编辑环境没有 Cargo、rustc 或 rustfmt；静态差异检查通过，不能据此宣称 Rust 编译、格式、Clippy 或测试已执行。Rust 1.98.0 的默认/无默认特性、严格 Clippy、格式及完整 local 生命周期验证由该 PR 的精确最终 head CI 核验，结果另附于本节。
+本地云端编辑环境没有 Cargo、rustc 或 rustfmt；静态差异检查通过，不能据此宣称 Rust 编译、格式、Clippy 或测试已执行。Rust 1.98.0 的默认/无默认特性、严格 Clippy、格式及完整 local 生命周期验证由该 PR 的精确最终 head CI 核验，结果以精确提交的 CI 为准。
+
+[PR #40](https://github.com/TheLudlows/Origence/pull/40) 初始实现 head `349ac05c9085d4a82deafff42b155e1042f2916a` 的 [CI run 38196722600](https://github.com/TheLudlows/Origence/actions/runs/38196722600)：Linux native 成功，Rust 1.98.0 版本核验、默认严格 Clippy、lib 45/local 130、debug build/HTTP smoke、受控进程恢复和 keyword 种子评估均通过。六项 codec 单测、损坏任务/下一有效任务、publication generation、共享语义矩阵及第一阶段日志/目标漂移回归均在日志中明确成功。fast-check 在 rustfmt 处失败（仅格式）；随后按该工具输出修正换行、尾部空行与格式，不改变行为。无默认特性完整测试与格式门槛不能从这次 Linux 结果推断成功，仍由更新后 PR head 的 CI 核验；PR 中 Windows/macOS/container 按 main-only 规则跳过，合入后逐项核验主干。
 
 ## 2026-10-12 第一阶段收口：文档、日志与版本契约
 

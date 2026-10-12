@@ -1548,7 +1548,11 @@ async fn saved_publication_checks_generation_before_decoding() {
     };
     let store = s.engine.relational();
     store
-        .create_workspace(scope.tenant_id, scope.workspace_id, "publication generation")
+        .create_workspace(
+            scope.tenant_id,
+            scope.workspace_id,
+            "publication generation",
+        )
         .await
         .unwrap();
     let key = store.issue_key(scope, "admin").await.unwrap();
@@ -1590,12 +1594,14 @@ async fn saved_publication_checks_generation_before_decoding() {
         let job_id = id(&accepted, "job_id");
         // An obsolete saved plan must be ignored before its body is decoded.
         // The same malformed body is an input error when the generation matches.
-        sqlx::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)) WHERE id=?")
-            .bind(publication.to_string())
-            .bind(job_id)
-            .execute(store.pool())
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)) WHERE id=?",
+        )
+        .bind(publication.to_string())
+        .bind(job_id)
+        .execute(store.pool())
+        .await
+        .unwrap();
         assert!(origence::worker::process_next(&s).await.unwrap(), "{case}");
         let settled = s.job(&a, job_id).await.unwrap();
         assert_eq!(settled["state"], state, "{case}: {settled}");
@@ -1820,4 +1826,3 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     assert!(!view.ready().await);
     assert!(!view.worker_running.load(Ordering::Acquire));
 }
-
