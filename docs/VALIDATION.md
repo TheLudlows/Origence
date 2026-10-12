@@ -15,7 +15,9 @@
 - `cargo test --locked --test local semantic_capture_`
 - `cargo clippy --locked --all-targets -j 2 -- -D warnings`
 
-本地完整测试、严格 Clippy、Rust 1.98.0 构建及原生存储验证均未执行。草稿 PR 将由现有 CI 对其精确提交运行格式、严格 Clippy、默认/无默认特性测试及 Linux 原生路径；在该轮 CI 完成前，本节不宣称新回归通过。PR 规则跳过 Windows/macOS/container，不将跳过计作验收。工程桩回归也不证明真实模型质量或 Agent 收益。
+本地完整测试、严格 Clippy、Rust 1.98.0 构建及原生存储验证均未执行。随后 [PR #39](https://github.com/TheLudlows/Origence/pull/39) 的实现提交 `238403bb2329fb959b0f5dd11e45d924aeba2ff6` 经 [CI run 38193448805](https://github.com/TheLudlows/Origence/actions/runs/38193448805) 验证成功：fast-check 与 Linux native 均通过。默认 lib 39/local 128、无默认特性 lib 36/local 89 全通过；新增日志哨兵与目标漂移回归、原有确定性版本竞争回归均在 Linux 日志中明确通过。格式、默认/无默认严格 Clippy、49 项 Python 工具测试及 9 项评估适配测试、debug build/HTTP smoke、受控进程恢复和 keyword 种子评估步骤均成功。Rust 版本确认步骤验证 1.98.0。
+
+这项远端结果属于上述精确实现提交；本节补记只更新验证文档，不改变已测代码。PR 规则跳过 Windows/macOS/container，不将跳过计作验收；后续提交仍须检查自己的 CI。工程桩回归不证明真实模型质量或 Agent 收益。
 
 ## 2026-10-11 S3 首个切片：受控对话提取 → S2
 
