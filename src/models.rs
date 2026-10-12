@@ -183,6 +183,12 @@ impl Models {
     }
 
     async fn learning_response(&self, prompt: &str, input: Value) -> Result<Value> {
+        let input = input.to_string();
+        if input.len() > crate::learning::MAX_SNAPSHOT_BYTES {
+            return Err(AppError::Invalid(
+                "learning model input exceeds 131072 bytes".into(),
+            ));
+        }
         let model = self
             .extraction_model
             .as_ref()
@@ -194,7 +200,7 @@ impl Models {
                     "model":model,"temperature":0,"response_format":{"type":"json_object"},
                     "messages":[
                         {"role":"system","content":prompt},
-                        {"role":"user","content":input.to_string()}
+                        {"role":"user","content":input}
                     ]
                 }),
             )
@@ -358,4 +364,3 @@ impl Models {
         Ok(memories)
     }
 }
-

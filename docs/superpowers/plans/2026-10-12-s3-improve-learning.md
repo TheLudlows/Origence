@@ -29,6 +29,10 @@ truth. Untrusted turn text, feedback and model responses cannot grant authority.
 4. Atomically create accepted Learning records, support references, generated
    source events, knowledge assets and ordinary Ingest jobs. No nested public
    Service command is allowed. Recovery reuses the original IDs and plans.
+   Exact statement/conditions dedup is rechecked against valid accepted/published
+   registrations in this same transaction. A conflicting reservation rolls staging
+   back and leaves the cursor unchanged; cancel that unfinished run and submit a
+   new improve_id after the competing outcome. It is not semantic deduplication.
 5. Each child follows existing publication and artifact ownership rules. Publication
    is atomic per Learning, not across the whole run: the graph publication structure
    assumes one knowledge asset. A failed child leaves the run unfinished. Explicit
@@ -37,7 +41,9 @@ truth. Untrusted turn text, feedback and model responses cannot grant authority.
    other frozen outcomes are durably accounted. Empty/rejected-only plans do not
    create fake assets. Cancelled/revoked/stale workers cannot finalize publication.
 
-Input is bounded to 32 feedback records and 128 KiB of frozen model input. Oversized
+Input is bounded to 32 feedback records and 128 KiB of frozen model input.
+Each fully serialized proposal/verification request, including conditions and the
+saved proposal where applicable, is also capped at 128 KiB before network IO. Oversized
 initial input fails without advancing the cursor. Conditions, statement, explanation,
 quotes and output count also have validation limits. Hidden turn inputs may be
 recorded as skipped by ID/sequence without exposing their content.

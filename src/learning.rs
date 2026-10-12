@@ -14,6 +14,7 @@ pub const MAX_CANDIDATES: usize = 8;
 pub const MAX_CONDITIONS: usize = 8;
 pub const MAX_CONDITION_BYTES: usize = 256;
 pub const MAX_SUPPORTS: usize = 32;
+pub const MAX_QUOTE_BYTES: usize = 4096;
 pub const MAX_STATEMENT_BYTES: usize = 8192;
 pub const MAX_WHY_BYTES: usize = 4096;
 
@@ -168,6 +169,7 @@ impl LearningCandidate {
                 || support.feedback_id.is_nil()
                 || support.principal_id.is_nil()
                 || support.quote.is_empty()
+                || support.quote.len() > MAX_QUOTE_BYTES
                 || !seen.insert(support)
             {
                 return Err("invalid or duplicate learning support");
@@ -211,10 +213,12 @@ mod tests {
         input.conditions = vec!["x".into()];
         input.max_feedback = MAX_FEEDBACK + 1;
         assert!(input.validate().is_err());
-        assert!(serde_json::from_value::<ImproveInput>(serde_json::json!({
-            "improve_id":id,"conditions":["x"],"tenant_id":id
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<ImproveInput>(serde_json::json!({
+                "improve_id":id,"conditions":["x"],"tenant_id":id
+            }))
+            .is_err()
+        );
     }
 
     #[test]
@@ -266,6 +270,52 @@ mod tests {
         assert!(candidate.validate(&snapshot, &conditions).is_err());
         candidate.supports[0].principal_id = principal;
         candidate.conditions.clear();
+        assert!(candidate.validate(&snapshot, &conditions).is_err());
+    }
+
+    #[test]
+    fn support_quote_byte_limit_accepts_boundary_and_rejects_one_more() {
+        let id = Uuid::new_v4();
+        let conditions = vec!["during rollout".to_string()];
+        let answer = "x".repeat(MAX_QUOTE_BYTES + 1);
+        let snapshot = FrozenSnapshot {
+            items: vec![FrozenFeedback {
+                sequence: 1,
+                principal_id: id,
+                feedback: FeedbackInput {
+                    feedback_id: id,
+                    target: FeedbackTarget::Turn,
+                    rating: FeedbackRating::Helpful,
+                    comment: None,
+                },
+                turn: FrozenTurn {
+                    session_id: id,
+                    turn_id: id,
+                    source_event_id: id,
+                    question: "Check?".into(),
+                    answer: answer.clone(),
+                    used_evidence: vec![],
+                },
+            }],
+            skipped: vec![],
+        };
+        let mut candidate = LearningCandidate {
+            statement: "Check first".into(),
+            why: "Conditional suggestion".into(),
+            conditions: conditions.clone(),
+            supports: vec![LearningSupport {
+                turn_id: id,
+                field: SupportField::Answer,
+                quote: answer[..MAX_QUOTE_BYTES].into(),
+                byte_start: 0,
+                byte_end: MAX_QUOTE_BYTES,
+                feedback_id: id,
+                principal_id: id,
+            }],
+        };
+        candidate.validate(&snapshot, &conditions).unwrap();
+        candidate.supports[0].quote = answer;
+        candidate.supports[0].byte_end = MAX_QUOTE_BYTES + 1;
         assert!(candidate.validate(&snapshot, &conditions).is_err());
     }
 }

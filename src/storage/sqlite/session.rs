@@ -151,7 +151,9 @@ impl SqliteTx {
         reference: &UsedEvidence,
         evidence_ref_id: Uuid,
     ) -> StorageResult<ArchivedEvidence> {
-        let evidence = self.archive_evidence_local(reference, evidence_ref_id).await?;
+        let evidence = self
+            .archive_evidence_local(reference, evidence_ref_id)
+            .await?;
         self.require_archived_evidence_visible(&evidence).await?;
         Ok(evidence)
     }
@@ -184,7 +186,8 @@ impl SqliteTx {
     pub async fn require_turn_visible(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Uuid> {
         self.check_permission(Permission::Write).await?;
         let (source, evidence) = self.require_turn_visible_local(session, turn).await?;
-        self.require_archived_evidence_set_visible(&evidence).await?;
+        self.require_archived_evidence_set_visible(&evidence)
+            .await?;
         Ok(source)
     }
 
@@ -232,7 +235,8 @@ impl SqliteTx {
             }
             // Enforce the closure bound over the whole turn, not separately
             // for each reference before writing an unreadable archive.
-            self.require_archived_evidence_set_visible(&evidence).await?;
+            self.require_archived_evidence_set_visible(&evidence)
+                .await?;
             let source = self
                 .create_event(
                     "session_turn",
@@ -352,4 +356,3 @@ impl SqliteTx {
         )
     }
 }
-

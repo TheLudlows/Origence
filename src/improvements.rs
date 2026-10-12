@@ -58,8 +58,12 @@ impl Service {
                 source: None,
             })
             .await?;
-            tx.audit("session.improve_requested", input.improve_id, json!({"session_id":session,"job_id":job_id}))
-                .await?;
+            tx.audit(
+                "session.improve_requested",
+                input.improve_id,
+                json!({"session_id":session,"job_id":job_id}),
+            )
+            .await?;
         }
         let receipt = tx.improve_view(input.improve_id).await?;
         Self::finish(tx, receipt).await

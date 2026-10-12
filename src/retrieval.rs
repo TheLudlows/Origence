@@ -152,9 +152,10 @@ impl Service {
             let all_relations: Vec<Value> = decode(graph["relations"].clone())?;
             let mut ids = HashSet::new();
             for entity in &all_entities {
-                if !terms.split_whitespace().any(|term| {
-                    entity["name"].as_str().unwrap_or("").contains(term)
-                }) {
+                if !terms
+                    .split_whitespace()
+                    .any(|term| entity["name"].as_str().unwrap_or("").contains(term))
+                {
                     continue;
                 }
                 let id: Uuid = decode(entity["id"].clone())?;
@@ -423,4 +424,3 @@ mod tests {
         assert_eq!(render(&[hit], text.len()).0, text);
     }
 }
-

@@ -167,7 +167,10 @@ impl SqliteTx {
                 .await?
                 .is_some()
             {
-                match self.require_learning_source_visible(member.source_event_id).await {
+                match self
+                    .require_learning_source_visible(member.source_event_id)
+                    .await
+                {
                     Ok(()) => members.push(member),
                     Err(StorageError::NotFound) => {}
                     Err(error) => return Err(error),
@@ -223,4 +226,3 @@ impl SqliteTx {
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
     }
 }
-

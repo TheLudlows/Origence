@@ -120,8 +120,7 @@ fn check_model_profile(service: &Service, payload: &JobPayload) -> Result<()> {
     else {
         return Err(invalid_plan());
     };
-    if service.models.improve_extraction_profile().as_deref()
-        != Some(extraction_profile.as_str())
+    if service.models.improve_extraction_profile().as_deref() != Some(extraction_profile.as_str())
         || service.models.summary_model() != Some(extraction_model.as_str())
     {
         return Err(AppError::Unavailable(
@@ -275,7 +274,11 @@ pub(super) async fn process(
             "job_id":child,"candidate":decision.candidate
         }));
     }
-    let stage = if learnings.is_empty() { "complete" } else { "indexing" };
+    let stage = if learnings.is_empty() {
+        "complete"
+    } else {
+        "indexing"
+    };
     tx.settle_completed(
         claim.job_id,
         stage,
@@ -299,22 +302,52 @@ mod tests {
     fn verification_must_account_for_every_candidate_exactly_once() {
         assert!(VerificationPlan::parse(json!({"decisions":[]}), 0).is_ok());
         assert!(VerificationPlan::parse(json!({"decisions":[]}), 1).is_err());
-        assert!(VerificationPlan::parse(json!({"decisions":[
-            {"candidate":0,"accepted":false,"reason":"unsupported"},
-            {"candidate":0,"accepted":true,"reason":"supported"}
-        ]}), 2).is_err());
-        assert!(VerificationPlan::parse(json!({"decisions":[
-            {"candidate":1,"accepted":false,"reason":"unsupported"}
-        ]}), 1).is_err());
-        assert!(VerificationPlan::parse(json!({"decisions":[
-            {"candidate":0,"accepted":true,"reason":""}
-        ]}), 1).is_err());
-        assert!(VerificationPlan::parse(json!({"decisions":[
-            {"candidate":0,"accepted":true,"reason":"supported","publish":true}
-        ]}), 1).is_err());
-        assert!(VerificationPlan::parse(json!({"decisions":[
-            {"candidate":1,"accepted":false,"reason":"unsupported"},
-            {"candidate":0,"accepted":true,"reason":"supported"}
-        ]}), 2).is_ok());
+        assert!(
+            VerificationPlan::parse(
+                json!({"decisions":[
+                    {"candidate":0,"accepted":false,"reason":"unsupported"},
+                    {"candidate":0,"accepted":true,"reason":"supported"}
+                ]}),
+                2
+            )
+            .is_err()
+        );
+        assert!(
+            VerificationPlan::parse(
+                json!({"decisions":[
+                    {"candidate":1,"accepted":false,"reason":"unsupported"}
+                ]}),
+                1
+            )
+            .is_err()
+        );
+        assert!(
+            VerificationPlan::parse(
+                json!({"decisions":[
+                    {"candidate":0,"accepted":true,"reason":""}
+                ]}),
+                1
+            )
+            .is_err()
+        );
+        assert!(
+            VerificationPlan::parse(
+                json!({"decisions":[
+                    {"candidate":0,"accepted":true,"reason":"supported","publish":true}
+                ]}),
+                1
+            )
+            .is_err()
+        );
+        assert!(
+            VerificationPlan::parse(
+                json!({"decisions":[
+                    {"candidate":1,"accepted":false,"reason":"unsupported"},
+                    {"candidate":0,"accepted":true,"reason":"supported"}
+                ]}),
+                2
+            )
+            .is_ok()
+        );
     }
 }

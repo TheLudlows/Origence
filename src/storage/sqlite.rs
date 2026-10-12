@@ -29,10 +29,10 @@ use uuid::Uuid;
 
 mod aml;
 mod app;
-mod semantics;
-mod session;
 mod improve;
 mod learning_visibility;
+mod semantics;
+mod session;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};

@@ -294,11 +294,14 @@ async fn process_claim(service: &Service, claim: &ClaimedJob) -> Result<()> {
                 || p.memories[0].asset != claim.asset.ok_or(AppError::NotFound)?
                 || p.memories[0].expected_version != payload.expected_version()
                 || p.memories[0].chunks.is_empty()
-                || p.memories[0].chunks.iter().any(|c| {
-                    c.chunk.locator["learning"] != metadata || !c.summary.is_empty()
-                })
+                || p.memories[0]
+                    .chunks
+                    .iter()
+                    .any(|c| c.chunk.locator["learning"] != metadata || !c.summary.is_empty())
             {
-                return Err(AppError::Invalid("invalid learning publication plan".into()));
+                return Err(AppError::Invalid(
+                    "invalid learning publication plan".into(),
+                ));
             }
             if p.generation != claim.generation {
                 p.generation = claim.generation;
@@ -470,15 +473,14 @@ async fn prepare(
             } else {
                 None
             };
-            let summary =
-                if payload.kind() == JobKind::Ingest
-                    && !has_learning
-                    && service.models.extraction_enabled()
-                {
-                    service.models.summarize(&chunk.content).await?
-                } else {
-                    String::new()
-                };
+            let summary = if payload.kind() == JobKind::Ingest
+                && !has_learning
+                && service.models.extraction_enabled()
+            {
+                service.models.summarize(&chunk.content).await?
+            } else {
+                String::new()
+            };
             let id = graph::entity_id(&format!(
                 "chunk:{}:{}:{}:{}",
                 claim.job_id, claim.generation, memory_index, ordinal
@@ -847,4 +849,3 @@ mod tests {
         assert!(!logs.contains(sensitive_key));
     }
 }
-

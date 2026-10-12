@@ -387,7 +387,10 @@ async fn improve(
     Path(session): Path<Uuid>,
     Json(input): Json<crate::learning::ImproveInput>,
 ) -> Result<Json<Value>> {
-    Ok(Json(s.improve(&auth(&s, &h).await?, key(&h)?, session, input).await?))
+    Ok(Json(
+        s.improve(&auth(&s, &h).await?, key(&h)?, session, input)
+            .await?,
+    ))
 }
 async fn improvement(
     State(s): State<Service>,

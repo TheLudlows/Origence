@@ -38,14 +38,16 @@ impl SqliteTx {
         let row: Option<(Uuid, Uuid, Uuid, String, bool)> = sqlx::query_as("SELECT l.id,l.source_event_id,l.session_id,l.status,EXISTS(SELECT 1 FROM oc_improve_runs r WHERE r.tenant_id=l.tenant_id AND r.workspace_id=l.workspace_id AND r.improve_id=l.improve_id AND r.status IN ('accepted','publishing')) FROM oc_learnings l WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        Ok(row.map(|(id, source, session, status, run_active)| LearningRecord {
-            id,
-            asset,
-            source,
-            session,
-            published: status == "published",
-            accepted: status == "accepted" && run_active,
-        }))
+        Ok(
+            row.map(|(id, source, session, status, run_active)| LearningRecord {
+                id,
+                asset,
+                source,
+                session,
+                published: status == "published",
+                accepted: status == "accepted" && run_active,
+            }),
+        )
     }
 
     async fn has_learning_source_version(&mut self, asset: Uuid) -> StorageResult<bool> {
@@ -64,9 +66,15 @@ impl SqliteTx {
     }
 
     async fn learning_asset_for_source(&mut self, source: Uuid) -> StorageResult<Option<Uuid>> {
-        let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        let kind: Option<String> = sqlx::query_scalar(
+            "SELECT kind FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(source)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
         let asset = if self.learning_catalog_present().await? {
             sqlx::query_scalar("SELECT asset_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
@@ -286,7 +294,9 @@ impl SqliteTx {
                 if source != Some(record.source) {
                     return Err(StorageError::NotFound);
                 }
-                return self.guard_learning_dependencies(vec![asset], Some(asset)).await;
+                return self
+                    .guard_learning_dependencies(vec![asset], Some(asset))
+                    .await;
             }
             self.require_learning_asset_visible(asset).await?;
         }
