@@ -1,11 +1,13 @@
 //! Store open/initialize/check/shutdown and the existing explicit identity tool.
 use super::locking::{acquire_lock, acquire_path_lock};
-use super::schema::{check_conn, check_identity_schema, exec_schema, schema_present, IDENTITY_SCHEMA};
+use super::schema::{
+    IDENTITY_SCHEMA, check_conn, check_identity_schema, exec_schema, schema_present,
+};
 use super::*;
-use std::path::Path;
-use std::time::Duration;
 use sqlx::Connection;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use std::path::Path;
+use std::time::Duration;
 
 impl SqliteStore {
     /// Open the store at `path`, creating the schema when the file is new.

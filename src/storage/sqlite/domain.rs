@@ -258,7 +258,16 @@ impl DomainTx for SqliteTx {
         restored_from: Option<i32>,
         title: Option<&str>,
     ) -> StorageResult<()> {
-        self.insert_version_inner(asset, version, content, content_hash, source, restored_from, title).await
+        self.insert_version_inner(
+            asset,
+            version,
+            content,
+            content_hash,
+            source,
+            restored_from,
+            title,
+        )
+        .await
     }
 
     async fn insert_chunk(
@@ -271,7 +280,16 @@ impl DomainTx for SqliteTx {
         locator: &Value,
         search_terms: &str,
     ) -> StorageResult<()> {
-        self.insert_chunk_inner(chunk, asset, version, ordinal, content, locator, search_terms).await
+        self.insert_chunk_inner(
+            chunk,
+            asset,
+            version,
+            ordinal,
+            content,
+            locator,
+            search_terms,
+        )
+        .await
     }
 
     async fn insert_summary(
@@ -282,7 +300,8 @@ impl DomainTx for SqliteTx {
         model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()> {
-        self.insert_summary_inner(summary, chunk, text, model_revision, search_terms).await
+        self.insert_summary_inner(summary, chunk, text, model_revision, search_terms)
+            .await
     }
 
     async fn update_asset_version(
@@ -314,7 +333,8 @@ impl DomainTx for SqliteTx {
         artifact_id: Uuid,
         chunk_id: Option<Uuid>,
     ) -> StorageResult<()> {
-        self.register_owner_inner(source, artifact_type, artifact_id, chunk_id).await
+        self.register_owner_inner(source, artifact_type, artifact_id, chunk_id)
+            .await
     }
 
     async fn detach_owners(&mut self, source: SourceVersion) -> StorageResult<u64> {
@@ -358,7 +378,8 @@ impl DomainTx for SqliteTx {
         state: &str,
         error_code: &str,
     ) -> StorageResult<()> {
-        self.settle_failed_inner(job, generation, run_token, state, error_code).await
+        self.settle_failed_inner(job, generation, run_token, state, error_code)
+            .await
     }
 
     async fn commit(mut self) -> StorageResult<()> {

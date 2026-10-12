@@ -252,7 +252,10 @@ impl SqliteTx {
         Ok(())
     }
 
-    pub(super) async fn detach_owners_inner(&mut self, source: SourceVersion) -> StorageResult<u64> {
+    pub(super) async fn detach_owners_inner(
+        &mut self,
+        source: SourceVersion,
+    ) -> StorageResult<u64> {
         let res = sqlx::query(
             "DELETE FROM oc_artifact_owners \
              WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ?",

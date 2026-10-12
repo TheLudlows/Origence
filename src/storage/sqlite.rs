@@ -82,6 +82,12 @@ pub struct SqliteStore {
     _lock: LockGuard,
 }
 
+/// Holds the existing host lock without opening/initializing an application store.
+#[cfg(feature = "local-vector")]
+pub(super) struct MaintenanceLock {
+    _guard: LockGuard,
+}
+
 fn sqlite_err(e: sqlx::Error) -> StorageError {
     StorageError::Backend(e.to_string())
 }

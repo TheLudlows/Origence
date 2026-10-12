@@ -88,7 +88,11 @@ impl SqliteTx {
         Ok(())
     }
 
-    pub(super) async fn fail_retryable_inner(&mut self, key: LedgerKey, error: &str) -> StorageResult<()> {
+    pub(super) async fn fail_retryable_inner(
+        &mut self,
+        key: LedgerKey,
+        error: &str,
+    ) -> StorageResult<()> {
         if key.scope != self.scope {
             return Err(StorageError::Forbidden);
         }
@@ -156,7 +160,11 @@ impl SqliteTx {
         Ok(())
     }
 
-    pub(super) async fn fail_permanent_inner(&mut self, key: LedgerKey, error: &str) -> StorageResult<()> {
+    pub(super) async fn fail_permanent_inner(
+        &mut self,
+        key: LedgerKey,
+        error: &str,
+    ) -> StorageResult<()> {
         if key.scope != self.scope {
             return Err(StorageError::Forbidden);
         }

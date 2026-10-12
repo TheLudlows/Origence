@@ -196,7 +196,11 @@ impl SqliteTx {
         }))
     }
 
-    pub(super) async fn set_job_action_inner(&mut self, id: Uuid, action: &str) -> StorageResult<i64> {
+    pub(super) async fn set_job_action_inner(
+        &mut self,
+        id: Uuid,
+        action: &str,
+    ) -> StorageResult<i64> {
         sqlx::query_scalar(
             "UPDATE oc_jobs SET state = ?, generation = generation + 1, run_token = run_token + 1, \
                     cancel_requested = ?, error_code = NULL, next_retry_at = NULL, attempt = 0, updated_at = ? \

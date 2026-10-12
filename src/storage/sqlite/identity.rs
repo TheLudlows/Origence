@@ -28,7 +28,10 @@ impl SqliteTx {
 }
 
 impl SqliteTx {
-    pub(super) async fn slot_inner(&mut self, fact_key: &str) -> StorageResult<(Uuid, Option<i32>)> {
+    pub(super) async fn slot_inner(
+        &mut self,
+        fact_key: &str,
+    ) -> StorageResult<(Uuid, Option<i32>)> {
         let existing: Option<(Uuid, Option<i32>, bool)> = sqlx::query_as(
             "SELECT id, current_version, deleted FROM oc_assets \
              WHERE tenant_id = ? AND workspace_id = ? AND kind = 'memory' AND fact_key = ?",

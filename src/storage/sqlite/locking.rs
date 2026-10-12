@@ -2,24 +2,20 @@
 #[cfg(feature = "local-vector")]
 use super::schema::check_conn;
 use super::*;
-use std::collections::HashMap;
-use std::fs::File;
-use std::path::Path;
-use std::sync::{Arc, LazyLock, Mutex};
 use fs2::FileExt;
 #[cfg(feature = "local-vector")]
 use sqlx::Connection;
 #[cfg(feature = "local-vector")]
 use sqlx::sqlite::SqliteConnectOptions;
-
-/// Holds the existing host lock without opening/initializing an application store.
-#[cfg(feature = "local-vector")]
-pub(in crate::storage) struct MaintenanceLock {
-    _guard: LockGuard,
-}
+use std::collections::HashMap;
+use std::fs::File;
+use std::path::Path;
+use std::sync::{Arc, LazyLock, Mutex};
 
 #[cfg(feature = "local-vector")]
-pub(in crate::storage) async fn lock_for_maintenance(path: &Path) -> StorageResult<MaintenanceLock> {
+pub(in crate::storage) async fn lock_for_maintenance(
+    path: &Path,
+) -> StorageResult<MaintenanceLock> {
     let path = tokio::fs::canonicalize(path).await?;
     if !path.is_file() {
         return Err(StorageError::NotFound);
@@ -130,7 +126,8 @@ impl Drop for LockGuard {
 
 #[cfg(all(test, feature = "local-vector"))]
 mod maintenance_lock_tests {
-    
+    use super::*;
+
     #[tokio::test]
     async fn maintenance_guard_blocks_new_in_process_opens_and_releases_on_drop() {
         let dir = tempfile::tempdir().unwrap();

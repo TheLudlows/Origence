@@ -2,7 +2,10 @@
 use super::*;
 
 impl SqliteTx {
-    pub(super) async fn insert_knowledge_asset_inner(&mut self, title: &str) -> StorageResult<Uuid> {
+    pub(super) async fn insert_knowledge_asset_inner(
+        &mut self,
+        title: &str,
+    ) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO oc_assets(tenant_id, workspace_id, id, kind, title, created_at) \
@@ -19,7 +22,11 @@ impl SqliteTx {
         Ok(id)
     }
 
-    pub(super) async fn restore_source_inner(&mut self, asset: Uuid, version: i32) -> StorageResult<Value> {
+    pub(super) async fn restore_source_inner(
+        &mut self,
+        asset: Uuid,
+        version: i32,
+    ) -> StorageResult<Value> {
         let row: Option<(Option<i32>, Uuid, String)> = sqlx::query_as(
             "SELECT a.current_version, v.source_event_id, v.title \
              FROM oc_assets a \
@@ -57,7 +64,11 @@ impl SqliteTx {
         .map(|r| r.rows_affected())
     }
 
-    pub(super) async fn asset_view_inner(&mut self, id: Uuid, version: Option<i32>) -> StorageResult<Value> {
+    pub(super) async fn asset_view_inner(
+        &mut self,
+        id: Uuid,
+        version: Option<i32>,
+    ) -> StorageResult<Value> {
         let row: Option<(Uuid, String, String, i32, String, Uuid, Option<i32>, String)> = sqlx::query_as(
             "SELECT a.id, a.kind, v.title, v.version, v.content, v.source_event_id, v.restored_from, v.content_hash \
              FROM oc_assets a \
@@ -143,7 +154,10 @@ impl SqliteTx {
             .collect())
     }
 
-    pub(super) async fn asset_current_version_inner(&mut self, asset: Uuid) -> StorageResult<Option<i32>> {
+    pub(super) async fn asset_current_version_inner(
+        &mut self,
+        asset: Uuid,
+    ) -> StorageResult<Option<i32>> {
         sqlx::query_scalar::<_, Option<i32>>(
             "SELECT current_version FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
