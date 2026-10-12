@@ -29,8 +29,8 @@ jobs:
       # Catch source-level Clippy warnings before the expensive native engines.
       - name: Lightweight Clippy (no native backends)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
-      - run: cargo test --locked --no-default-features --lib -j 2
-      - run: cargo test --locked --no-default-features --test local -j 2
+      - name: Full test suite without default features
+        run: cargo test --locked --no-default-features -j 2 --no-fail-fast
       - name: AML drill client tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
@@ -65,6 +65,8 @@ jobs:
         run: cargo test --locked --no-default-features --lib memory_identity -j 2
       # Keep link memory pressure bounded.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
+      - name: Focused SQLite core contracts
+        run: cargo test --locked -j 2 --test sqlite_store --test sqlite_domain --test sqlite_identity --test sqlite_evidence --test sqlite_owner --test sqlite_ledger --test sqlite_lock --test initialization --test storage_recovery
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Debug build and no-model HTTP smoke
         run: |
@@ -106,3 +108,4 @@ jobs:
         run: ./tools/build.ps1 -Action Validate -Jobs 1
       - name: Storage contracts without native backends
         run: cargo check --locked --no-default-features --lib -j 1
+
