@@ -31,6 +31,8 @@ mod aml;
 mod app;
 mod semantics;
 mod session;
+mod improve;
+mod learning_visibility;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
@@ -374,6 +376,7 @@ async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
         aml::ADD_SCHEMA,
         semantics::SCHEMA,
         session::SCHEMA,
+        improve::SCHEMA,
     ] {
         sqlx::raw_sql(schema)
             .execute(&mut *conn)
@@ -400,6 +403,9 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
     }
     if session::available(conn).await? {
         session::check_schema(conn).await?;
+    }
+    if improve::available(conn).await? {
+        improve::check_schema(conn).await?;
     }
     // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
@@ -1138,6 +1144,7 @@ impl DomainTx for SqliteTx {
         else {
             return Err(StorageError::NotFound);
         };
+        self.require_learning_asset_visible(asset_id).await?;
         let semantic_status = self.semantic_version_status(asset_id, v).await?;
         let semantic_chunks = if semantic_status.is_some() {
             if !self.semantic_version_visible(asset_id, v).await? {
@@ -1192,6 +1199,7 @@ impl DomainTx for SqliteTx {
         let Some((event_id, kind, content, file_id, created_at)) = row else {
             return Err(StorageError::NotFound);
         };
+        self.require_learning_source_visible(id).await?;
         if kind == "session_turn" {
             self.require_session_source_visible(id).await?;
         }

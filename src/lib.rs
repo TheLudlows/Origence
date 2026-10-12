@@ -8,6 +8,9 @@ pub mod graph;
 mod jobs;
 #[cfg(feature = "local-storage")]
 pub mod mcp;
+pub mod learning;
+#[cfg(feature = "local-storage")]
+mod improvements;
 pub mod memory_identity;
 pub mod memory_semantics;
 pub mod models;

@@ -56,7 +56,7 @@ impl SqliteTx {
     }
 
     /// Exact historical version, with complete S2 support. Never use current-only retrieval.
-    async fn archive_evidence(
+    pub(super) async fn archive_evidence_local(
         &mut self,
         reference: &UsedEvidence,
         evidence_ref_id: Uuid,
@@ -64,11 +64,19 @@ impl SqliteTx {
         reference
             .validate()
             .map_err(StorageError::InvalidArgument)?;
-        let version = self
-            .asset_view(reference.asset_id, Some(reference.asset_version))
-            .await?;
-        let root: Uuid = serde_json::from_value(version["source_event_id"].clone())
-            .map_err(|_| StorageError::Unavailable("invalid version provenance".into()))?;
+        // This local check is deliberately nonrecursive. The shared Learning
+        // guard walks the complete dependency graph after exact provenance has
+        // been checked, including for reader-visible published Learnings.
+        let root: Option<Uuid> = sqlx::query_scalar("SELECT v.source_event_id FROM oc_versions v JOIN oc_assets a ON a.tenant_id=v.tenant_id AND a.workspace_id=v.workspace_id AND a.id=v.asset_id JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE v.tenant_id=? AND v.workspace_id=? AND v.asset_id=? AND v.version=? AND NOT a.deleted AND e.state='active'")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(reference.asset_id)
+            .bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        let root = root.ok_or(StorageError::NotFound)?;
+        if !self
+            .semantic_version_visible_local(reference.asset_id, reference.asset_version)
+            .await?
+        {
+            return Err(StorageError::NotFound);
+        }
         let locator: Option<String> = sqlx::query_scalar("SELECT locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND version=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(reference.chunk_id)
             .bind(reference.asset_id).bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -129,27 +137,54 @@ impl SqliteTx {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Vec<ArchivedEvidence>> {
-        let rows: Vec<String> = sqlx::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
+        let rows: Vec<String> = sqlx::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal LIMIT 65")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+        if rows.len() > crate::session::MAX_USED_EVIDENCE {
+            return Err(StorageError::NotFound);
+        }
         rows.iter().map(|s| decode(s)).collect()
     }
 
-    pub async fn require_turn_visible(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Uuid> {
-        self.check_permission(Permission::Write).await?;
+    async fn archive_evidence(
+        &mut self,
+        reference: &UsedEvidence,
+        evidence_ref_id: Uuid,
+    ) -> StorageResult<ArchivedEvidence> {
+        let evidence = self.archive_evidence_local(reference, evidence_ref_id).await?;
+        self.require_archived_evidence_visible(&evidence).await?;
+        Ok(evidence)
+    }
+
+    /// Validate exact immutable provenance without following Learning edges.
+    /// The iterative Learning guard is the only caller which may use this
+    /// helper without the public writer-only archive permission check.
+    pub(super) async fn require_turn_visible_local(
+        &mut self,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_sessions().await?;
         let source: Option<Uuid> = sqlx::query_scalar("SELECT t.source_event_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.state='active'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let source = source.ok_or(StorageError::NotFound)?;
-        for evidence in self.turn_evidence(session, turn).await? {
+        let archived = self.turn_evidence(session, turn).await?;
+        for evidence in &archived {
             let current = self
-                .archive_evidence(&evidence.reference, evidence.evidence_ref_id)
+                .archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
                 .await?;
-            if current != evidence {
+            if current != *evidence {
                 return Err(StorageError::NotFound);
             }
         }
+        Ok((source, archived))
+    }
+
+    pub async fn require_turn_visible(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Uuid> {
+        self.check_permission(Permission::Write).await?;
+        let (source, evidence) = self.require_turn_visible_local(session, turn).await?;
+        self.require_archived_evidence_set_visible(&evidence).await?;
         Ok(source)
     }
 
@@ -195,6 +230,9 @@ impl SqliteTx {
             for reference in &input.used_evidence {
                 evidence.push(self.archive_evidence(reference, Uuid::new_v4()).await?);
             }
+            // Enforce the closure bound over the whole turn, not separately
+            // for each reference before writing an unreadable archive.
+            self.require_archived_evidence_set_visible(&evidence).await?;
             let source = self
                 .create_event(
                     "session_turn",
@@ -236,14 +274,16 @@ impl SqliteTx {
     }
 
     async fn feedback_rows(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Vec<Value>> {
-        let rows: Vec<(Uuid, String, i64)> = sqlx::query_as("SELECT principal_id,feedback,created_at FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY created_at,principal_id,feedback_id")
+        let rows: Vec<(Uuid, String, i64, i64)> = sqlx::query_as("SELECT principal_id,feedback,created_at,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY feedback_sequence")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         rows.into_iter()
-            .map(|(principal, body, created_at)| {
+            .map(|(principal, body, created_at, sequence)| {
                 let mut value: Value = decode(&body)?;
                 value["created_by"] = json!(principal);
                 value["created_at"] = json!(created_at);
+                value["principal_id"] = json!(principal);
+                value["feedback_sequence"] = json!(sequence);
                 Ok(value)
             })
             .collect()
@@ -278,13 +318,14 @@ impl SqliteTx {
                 return Err(StorageError::NotFound);
             }
         }
-        let existing: Option<String> = sqlx::query_scalar("SELECT request_hash FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND principal_id=? AND feedback_id=?")
+        let existing: Option<(String, Uuid, Uuid, i64)> = sqlx::query_as("SELECT request_hash,session_id,turn_id,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND principal_id=? AND feedback_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(self.principal_id).bind(input.feedback_id)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        if let Some(hash) = existing {
-            if hash != request_hash {
+        let sequence = if let Some((hash, stored_session, stored_turn, sequence)) = existing {
+            if hash != request_hash || stored_session != session || stored_turn != turn {
                 return Err(StorageError::Conflict("feedback is immutable".into()));
             }
+            sequence
         } else {
             let count: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
@@ -292,18 +333,23 @@ impl SqliteTx {
             if count >= 256 {
                 return Err(StorageError::Conflict("turn feedback limit reached".into()));
             }
-            sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
+            let sequence: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0)+1 FROM oc_feedback WHERE tenant_id=? AND workspace_id=?")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(self.principal_id).bind(input.feedback_id)
-                .bind(session).bind(turn).bind(request_hash).bind(encode(input)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+                .bind(session).bind(turn).bind(request_hash).bind(encode(input)?).bind(now_ms()).bind(sequence).execute(&mut *self.tx).await.map_err(sqlite_err)?;
             self.audit(
                 "session.feedback_recorded",
                 input.feedback_id,
-                json!({"session_id":session,"turn_id":turn}),
+                json!({"session_id":session,"turn_id":turn,"feedback_sequence":sequence}),
             )
             .await?;
-        }
+            sequence
+        };
         Ok(
-            json!({"session_id":session,"turn_id":turn,"feedback_id":input.feedback_id,"state":"recorded"}),
+            json!({"session_id":session,"turn_id":turn,"feedback_id":input.feedback_id,"principal_id":self.principal_id,"feedback_sequence":sequence,"state":"recorded"}),
         )
     }
 }
+

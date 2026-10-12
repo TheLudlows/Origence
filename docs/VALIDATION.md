@@ -2,6 +2,12 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-12 第四阶段：显式 Improve → Learning
+
+基于 main `be16bb1c2a273ec632e459abd277bd019fb36821`。新增确定性闭环、持久化阶段重放、principal-qualified 反馈序列、条件限制、子任务重试/取消和传递依赖撤回回归；不使用真实 provider，不据此声明语义质量或 Agent 收益。当前为实现检查记录，最终 PR head 的 CI 结果仍待补充。
+
+云端编辑环境没有 cargo/rustc/rustfmt，未在本地执行 Rust 编译、格式、Clippy 或测试。Python SQLite 完整新库 DDL 执行和 foreign_key_check 通过；静态检查不替代实际 Rust 验证。保留现有 CI：PR fast-check/Linux native，Windows 仅 main；不恢复已取消的 macOS/container jobs。
+
 ## 2026-10-12 第三阶段：SessionTurn 与幂等 Feedback
 
 基于 main `6a17c32b4407d530804ff63814d3858a474c4790`，按用户确认不等待该主干 CI 再开发。仅新库增加关系型会话表；无升级迁移、模型调用、索引任务、新 Worker 或反馈改权。公开请求类型覆盖严格字段、枚举、UUID、UTF-8 边界与显式实际证据；Service/HTTP 回归覆盖关系型事务、权限、历史 provenance、幂等及依赖撤回。具体执行结果以本 PR 最终 head CI 为准。

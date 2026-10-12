@@ -19,6 +19,8 @@ CREATE TABLE oc_feedback (
     principal_id BLOB NOT NULL, feedback_id BLOB NOT NULL,
     session_id BLOB NOT NULL, turn_id BLOB NOT NULL,
     request_hash TEXT NOT NULL, feedback TEXT NOT NULL, created_at INTEGER NOT NULL,
-    PRIMARY KEY (tenant_id, workspace_id, principal_id, feedback_id)
+    feedback_sequence INTEGER NOT NULL CHECK (feedback_sequence > 0),
+    PRIMARY KEY (tenant_id, workspace_id, principal_id, feedback_id),
+    UNIQUE (tenant_id, workspace_id, feedback_sequence)
 );
 CREATE INDEX oc_feedback_turn ON oc_feedback(tenant_id, workspace_id, session_id, turn_id);

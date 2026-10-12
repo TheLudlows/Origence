@@ -6,6 +6,7 @@ mod identity_upgrade_cli;
 mod identity_vector_regression;
 mod initialization;
 mod lancedb_store;
+mod learning_loop;
 mod local_app;
 mod local_blob;
 mod local_ledger;
