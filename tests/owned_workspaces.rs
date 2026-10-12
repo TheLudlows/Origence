@@ -678,6 +678,80 @@ mod retry_tests {
     }
 
     #[tokio::test]
+    async fn cleanup_retry_requires_current_admin_but_not_the_revoked_deleting_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let store = service.engine.relational();
+        let (creator, creator_token) = root(store, Uuid::new_v4()).await;
+        let (_, admin_token) = issue(store, &creator, "admin", false).await;
+        let (_, reviewer_token) = issue(store, &creator, "reviewer", false).await;
+        let original = service.auth(&creator_token).await.unwrap();
+        let admin = service.auth(&admin_token).await.unwrap();
+        let reviewer = service.auth(&reviewer_token).await.unwrap();
+        let accepted = service
+            .knowledge(&original, "accept", input())
+            .await
+            .unwrap();
+        let asset: Uuid = serde_json::from_value(accepted["asset_id"].clone()).unwrap();
+        let source: Uuid = serde_json::from_value(accepted["source_event_id"].clone()).unwrap();
+        assert!(origence::worker::process_next(&service).await.unwrap());
+        assert!(service.get(&original, asset, None).await.is_ok());
+        let deleted = service
+            .delete(&original, "delete", source, "event")
+            .await
+            .unwrap();
+        let job: Uuid = serde_json::from_value(deleted["cleanup_job_id"].clone()).unwrap();
+        // Simulate a failed native reclamation after the durable tombstone.
+        sqlx::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
+            .bind(job)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        service
+            .revoke_key(&admin, creator.principal_id)
+            .await
+            .unwrap();
+        assert!(matches!(
+            service.get(&admin, asset, None).await,
+            Err(AppError::NotFound)
+        ));
+        assert!(matches!(
+            service.job_action(&reviewer, "retry", job, "retry").await,
+            Err(AppError::Forbidden)
+        ));
+        assert!(matches!(
+            service.job_action(&admin, "cancel", job, "cancel").await,
+            Err(AppError::Conflict(_))
+        ));
+        let retried = service
+            .job_action(&admin, "retry", job, "retry")
+            .await
+            .unwrap();
+        assert_eq!(retried["state"], "pending");
+        assert_eq!(retried["generation"], 2);
+        assert!(origence::worker::process_next(&service).await.unwrap());
+        let (saved_creator, state): (Uuid, String) =
+            sqlx::query_as("SELECT created_by,state FROM oc_jobs WHERE id=?")
+                .bind(job)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(saved_creator, creator.principal_id);
+        assert_eq!(state, "completed");
+        let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_chunks WHERE asset_id=?")
+            .bind(asset)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(remaining, 0);
+        assert!(matches!(
+            service.get(&admin, asset, None).await,
+            Err(AppError::NotFound)
+        ));
+        service.engine.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn direct_child_admin_cannot_retry_a_revoked_root_creator() {
         let dir = tempfile::tempdir().unwrap();
         let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
