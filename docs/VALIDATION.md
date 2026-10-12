@@ -561,3 +561,10 @@ P3 一次切换 API 并移除旧专用路径，当前代码仍待其最终 head 
 后续最小部署修正：Compose 的显式环境列表现在转发 `OC_ENABLE_AML: ${OC_ENABLE_AML:-false}`，使 `.env` 的显式启用设置能到达宿主；静态边界回归新增该断言，本地 3/3 passed。它不改变默认关闭、安全能力或容器命令，不恢复 Docker/macOS CI，也不声称已运行 Docker。此配置/文档提交与任何后续提交在 ready/merge 前仍必须通过自己精确 head 的适用 CI；最终 SHA、CI 链接和合入结果以 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录为准，不借用旧头绿灯。
 
 P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235896871](https://github.com/TheLudlows/Origence/actions/runs/38235896871) 已到终态：fast-check、linux-native、windows 全部 success。这只证明该主干提交；P3 合入后的主干（包括 Windows）仍单独跟踪。
+
+
+### P4 配置与文档复验
+
+含 Compose 透传/静态断言的 head `efcb1ddd92deb7185b6b497f527f5db735014587` 经独立六文件 hash/delta 复核无阻断项，[CI 38238050316](https://github.com/TheLudlows/Origence/actions/runs/38238050316) completed/success，fast-check/Linux 全通过、Windows 按 PR 策略 skipped。Rust 仍为无默认 **69/99**、默认 **75/203**；tools 新增配置断言后 **57 run / 55 passed / 2 skipped**，evals **42 passed**；两个被 fast-check 跳过的真实宿主恢复用例在 Linux 独立步骤 **2/2 passed**，HTTP/MCP/原生故障/聚焦/关键词评估同样全过。Compose 本身只验证配置文本，Docker 运行仍 NOT_RUN。
+
+至此最终实现及部署配置验收完成。最后归档仅修改本验证记录与执行计划勾选，不改变源代码、配置、测试或历史结果；归档提交同样必须通过其精确 head 的适用 CI 后才可 ready/merge。最终归档 head/CI 与合入 main 后的 Windows 等结果，在 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录继续保留，避免自引用提交 SHA 或把前一头绿灯用于后一头。
