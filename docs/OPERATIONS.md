@@ -157,3 +157,29 @@ origence --data-dir <已有数据目录> --offline vector-compact
 成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。[完整库与追加写入对照](../evals/aml/maintenance-scale-v1/README.md)验证再次维护可恢复性能，但不据此设置固定维护周期；多 profile 正确性与单 profile 真实模型性能分别验收。实测、被拒绝的列投影方案及范围见[向量性能对照](../evals/aml/vector-perf-v1/README.md)。
 
 更细的成功查询计时可设置 RUST_LOG=error,origence::search_timing=debug,origence::vector_timing=debug：vector_timing 提供 list_ms/open_ms/prepare_ms/execute_ms/collect_ms/decode_ms/total_ms 和 returned_count。execute 含规划/启动，collect 含流执行与读取，不应把它全部当作物理磁盘等待。日志不含查询、scope 或过滤表达式。
+
+
+## S2 语义目录与发布边界
+
+S2 只对新建数据库安装 oc_memory_properties；旧库开机不 ALTER，不接管旧 fact_key 或既有 identity。缺表旧库可继续使用原功能，S2 注册/写入不可用。现有身份安装命令只安装 I1，不能用于启用 S2；旧库迁移/导入暂未提供，勿手工补表后宣称已验收升级。
+
+注册属性为管理员显式操作，定义不可变。必须在分配该属性的首个身份之前完成注册。更新属性定义需要单独迁移方案，不允许改表绕过约束。
+
+语义写入复用现有单 durable Worker、发布计划、账本、权限重检、版本竞争、取消和失败重试；没有新增后台循环、子进程、硬期限或内存隔离保证。每次任务最多 32 个成员，每个 quote 最多 8192 字节，来源读取受既有文本上限约束；这些是应用输出限制，不是 parser 内存预算。graceful shutdown 仍完成当前任务。
+
+semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿用整快照可见性：任何支持来源撤回即隐藏整版，并禁止通用 restore 绕过语义；若当前发布来源仍有效，下一次显式 supplement 可重建仍有支持的集合；若当前发布来源本身撤回，后续写入须重新提供事实，不从历史自动补回。追加快照的原生索引账本仍归属本次发布事件，历史成员原始来源保存在不可变 locator；支持来源撤回先阻断读取，不承诺立即物理擦除所有后续快照副本。物理清理/备份保留的既有边界仍适用。
+
+确定性工程回归不能证明调用方或模型提供的 operation/value 语义正确。自由文本抽取、自动别名归一化和通用语义理解仍需独立验收；不要把显式契约通过作为这些能力的证明。
+
+
+## S3 对话语义捕获运行边界
+
+新增 `semantic_extract` 作业，HTTP/Service 受理后由现有单一串行 Worker 执行。只支持新库，本轮不开发迁移或升级。复用现有 `OC_EXTRACTION_MODEL`、模型端点配置、45 秒单请求超时和有界响应读取；可不配 embedding，此时发布 keyword 能力。调用方明确提交 targets/expected_version，并按需要为单值目标启用 allow_update；没有自动循环、会话监听或新增 worker。
+
+抽取调用在存储事务外；模型 JSON 解析/候选校验及分词通过 await spawn_blocking 完成。S2 路由在短事务中保存 `semantic_capture_plan`（原候选、固定身份/版本、路由、原始成员来源），之后再做 embedding/native 写入。模型输出不充当系统指令或发布授权。所有候选的关系发布原子提交，失败不发布有效子集。
+
+计划已保存时，重试或重开复用它，不重新提取；显式 retry 的新 generation 只重建对应代次的发布产物。计划提交前崩溃或提取本身失败，重试可能再次调用模型，不承诺外部模型恰好一次。尚无计划时 Worker 的提取配置 fingerprint 必须匹配受理配置；已保存计划可继续使用其原 provenance，embedding profile 仍必须匹配。变更模型后不要把旧候选重新标成新模型结果。
+
+恢复和最终提交重新校验权限、任务 generation/run_token、资产版本及所有原始支持来源。撤回本次捕获来源会取消相关作业；撤回其他集合成员来源会阻断待发布计划，已发布集合整体退出检索。已有计划可能保留在任务内部；逻辑撤回不等于磁盘、备份或模型供应商副本物理擦除。
+
+取消和撤权阻止发布，不能保证已经发送的远程模型调用停止；spawn_blocking 不是硬取消。优雅停机继续等待当前作业，沿用原恢复/清理语义；本轮未增加进程隔离或硬截止时间。job 的空 memories 或 duplicate 结果是合法完成；superseded 需重读版本再提交新请求。工程验证使用确定性 loopback 模型桩，不等于真实模型分类或 Agent 效果验收。

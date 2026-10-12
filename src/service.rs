@@ -99,7 +99,7 @@ impl Service {
         tx.check_permission(permission).await?;
         Ok(tx)
     }
-    async fn command(
+    pub(crate) async fn command(
         &self,
         a: &AuthContext,
         permission: Permission,
@@ -116,7 +116,7 @@ impl Service {
         let cached = tx.begin_command(op, key, &hash(input.to_string())).await?;
         Ok((tx, cached))
     }
-    async fn finish(mut tx: SqliteTx, response: Value) -> Result<Value> {
+    pub(crate) async fn finish(mut tx: SqliteTx, response: Value) -> Result<Value> {
         tx.finish_command(response.clone()).await?;
         tx.commit().await?;
         Ok(response)
@@ -200,6 +200,7 @@ impl Service {
         if let Some(value) = cached {
             return Ok(value);
         }
+        tx.require_legacy_identity(&input.identity).await?;
         let (asset, version) = tx.identity_slot(&input.identity).await?;
         input.check_version(version)?;
         let source = tx.create_event("identified", &input.content, None).await?;
@@ -248,6 +249,7 @@ impl Service {
         if let Some(value) = cached {
             return Ok(value);
         }
+        tx.require_legacy_identity(&input.identity).await?;
         if !self.models.extraction_enabled() {
             return Err(AppError::Unavailable(
                 "extraction model is not configured".into(),
@@ -387,6 +389,11 @@ impl Service {
             .await?;
         if let Some(v) = cached {
             return Ok(v);
+        }
+        if tx.is_semantic_asset(id).await? {
+            return Err(AppError::Conflict(
+                "semantic memories require an explicit semantic write".into(),
+            ));
         }
         let row = tx.restore_source(id, input.target_version).await?;
         if row["current_version"] != input.expected_version {

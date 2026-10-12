@@ -28,9 +28,13 @@ pub fn router(service: Service) -> Router {
         .route("/aml/add", post(aml_add))
         .route("/aml/search", post(aml_search))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
+        .route("/admin/memory-properties", post(register_memory_property))
+        .route("/v1/memory-properties/{predicate}", get(memory_property))
         .route("/v1/memories", post(memory))
         .route("/v1/memories/identified", post(identified_memory))
+        .route("/v1/memories/semantic", post(semantic_memory))
         .route("/v1/memories/lookup", post(lookup_memory))
+        .route("/v1/captures/semantic", post(semantic_capture))
         .route("/v1/captures", post(capture))
         .route("/v1/captures/identified", post(identified_capture))
         .route("/v1/knowledge", post(knowledge))
@@ -70,12 +74,40 @@ async fn ready(State(s): State<Service>) -> impl IntoResponse {
         )
     }
 }
+async fn register_memory_property(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(i): Json<crate::memory_semantics::MemoryProperty>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.register_memory_property(&auth(&s, &h).await?, key(&h)?, i)
+            .await?,
+    ))
+}
+async fn memory_property(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(predicate): Path<String>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.memory_property(&auth(&s, &h).await?, &predicate).await?,
+    ))
+}
 async fn memory(
     State(s): State<Service>,
     h: HeaderMap,
     Json(i): Json<MemoryInput>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.memory(&auth(&s, &h).await?, key(&h)?, i).await?))
+}
+async fn semantic_memory(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(i): Json<crate::memory_semantics::SemanticMemoryInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.semantic_memory(&auth(&s, &h).await?, key(&h)?, i).await?,
+    ))
 }
 async fn identified_memory(
     State(s): State<Service>,
@@ -93,6 +125,16 @@ async fn lookup_memory(
     Json(identity): Json<crate::memory_identity::MemoryIdentity>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.lookup_memory(&auth(&s, &h).await?, identity).await?))
+}
+async fn semantic_capture(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(i): Json<crate::semantic_capture::SemanticCaptureInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.semantic_capture(&auth(&s, &h).await?, key(&h)?, i)
+            .await?,
+    ))
 }
 async fn identified_capture(
     State(s): State<Service>,

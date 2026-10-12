@@ -3,10 +3,19 @@ use super::*;
 use crate::types::SearchHit;
 use sqlx::Row;
 
-const VISIBLE: &str = "FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id AND a.current_version=c.version JOIN oc_versions v ON v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id AND v.asset_id=c.asset_id AND v.version=c.version JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE c.tenant_id=? AND c.workspace_id=? AND NOT a.deleted AND e.state='active'";
+const VISIBLE: &str = "FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id AND a.current_version=c.version JOIN oc_versions v ON v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id AND v.asset_id=c.asset_id AND v.version=c.version JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE c.tenant_id=? AND c.workspace_id=? AND NOT a.deleted AND e.state='active' AND (json_extract(c.locator,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(c.locator,'$.support_sources') ss WHERE NOT EXISTS(SELECT 1 FROM oc_events se WHERE se.tenant_id=c.tenant_id AND se.workspace_id=c.workspace_id AND hex(se.id)=upper(replace(ss.value,'-','')) AND se.state='active')))";
 const HIT: &str = "SELECT c.id, c.asset_id,c.version,a.kind,v.title,c.content,c.locator,v.source_event_id,c.search_terms";
 
 fn hit(row: &sqlx::sqlite::SqliteRow, score: f64) -> SearchHit {
+    let locator: Value = serde_json::from_str(row.get("locator")).unwrap_or(Value::Null);
+    let source_event_id = if locator["parser"] == crate::memory_semantics::PARSER {
+        locator["source_event_id"]
+            .as_str()
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .unwrap_or_else(|| row.get("source_event_id"))
+    } else {
+        row.get("source_event_id")
+    };
     SearchHit {
         identity: None,
         chunk_id: row.get("id"),
@@ -15,8 +24,8 @@ fn hit(row: &sqlx::sqlite::SqliteRow, score: f64) -> SearchHit {
         kind: row.get("kind"),
         title: row.get("title"),
         content: row.get("content"),
-        locator: serde_json::from_str(row.get("locator")).unwrap_or(Value::Null),
-        source_event_id: row.get("source_event_id"),
+        locator,
+        source_event_id,
         score,
     }
 }

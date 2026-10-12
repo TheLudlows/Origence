@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 mod aml;
 mod app;
+mod semantics;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
@@ -365,7 +366,13 @@ async fn schema_present(conn: &mut SqliteConnection) -> StorageResult<bool> {
 }
 
 async fn exec_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    for schema in [SCHEMA, IDENTITY_SCHEMA, aml::AML_SCHEMA, aml::ADD_SCHEMA] {
+    for schema in [
+        SCHEMA,
+        IDENTITY_SCHEMA,
+        aml::AML_SCHEMA,
+        aml::ADD_SCHEMA,
+        semantics::SCHEMA,
+    ] {
         sqlx::raw_sql(schema)
             .execute(&mut *conn)
             .await
@@ -385,6 +392,9 @@ async fn check_conn(conn: &mut SqliteConnection) -> StorageResult<()> {
     }
     if aml::schema_available(conn).await? {
         aml::check_schema(conn).await?;
+    }
+    if semantics::available(conn).await? {
+        semantics::check_schema(conn).await?;
     }
     // Optional for old databases; never installed by startup checks.
     if identity_table_present(conn).await? {
@@ -1123,15 +1133,26 @@ impl DomainTx for SqliteTx {
         else {
             return Err(StorageError::NotFound);
         };
+        let semantic_status = self.semantic_version_status(asset_id, v).await?;
+        let semantic_chunks = if semantic_status.is_some() {
+            if !self.semantic_version_visible(asset_id, v).await? {
+                return Err(StorageError::NotFound);
+            }
+            self.chunks_for_version(asset_id, v).await?
+        } else {
+            Vec::new()
+        };
         let identity = self.identity_for_asset(asset_id).await?;
         let normalization_status = if kind != "memory" {
             "not_applicable"
+        } else if semantic_status.as_deref().is_some_and(|s| s != "confirmed") {
+            "unnormalized"
         } else if identity.is_some() {
             "explicit_identity"
         } else {
             "legacy_unidentified"
         };
-        Ok(json!({
+        let mut value = json!({
             "asset_id": asset_id,
             "kind": kind,
             "title": title,
@@ -1142,7 +1163,12 @@ impl DomainTx for SqliteTx {
             "content_hash": content_hash,
             "identity": identity,
             "normalization_status": normalization_status,
-        }))
+        });
+        if let Some(status) = semantic_status {
+            value["semantic_status"] = json!(status);
+            value["semantic_values"] = json!(semantic_chunks.iter().map(|(_, l)| json!({"value":l["semantic_value"],"source_event_id":l["source_event_id"],"source_version":l["source_version"],"locator":l})).collect::<Vec<_>>());
+        }
+        Ok(value)
     }
 
     async fn event_view(&mut self, id: Uuid) -> StorageResult<Value> {

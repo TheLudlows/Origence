@@ -357,7 +357,12 @@ pub fn render(hits: &[SearchHit], budget: usize) -> (String, Vec<Value>) {
     let mut sources = Vec::new();
     for hit in hits {
         let marker = format!("[{}:{}:{}]", hit.asset_id, hit.version, hit.chunk_id);
-        let identity = json!({"kind":hit.kind,"identity":hit.identity,"normalization_status":hit.normalization_status()});
+        let mut identity = json!({"kind":hit.kind,"identity":hit.identity,"normalization_status":hit.normalization_status()});
+        if hit.locator["parser"] == crate::memory_semantics::PARSER {
+            identity["semantic_status"] = hit.locator["semantic_status"].clone();
+            identity["suggested_identity"] = hit.locator["suggested_identity"].clone();
+            identity["semantic_value"] = hit.locator["semantic_value"].clone();
+        }
         let block = format!("{marker} {}\n{identity}\n{}\n\n", hit.title, hit.content);
         if rendered.len() + block.len() > budget {
             continue;

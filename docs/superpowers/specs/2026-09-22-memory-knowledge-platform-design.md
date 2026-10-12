@@ -40,7 +40,7 @@
 
 ---
 
-记忆身份、跨主体更新及上下文冲突策略的 P1 前置契约见 [补充设计](2026-10-08-memory-identity-and-context.md)。当前保留旧 fact_key 接口，同时已提供完整 identity 的显式写入、单身份 capture、lookup 和 search/resolve 过滤。自动身份推断、属性目录、未归一化状态、语义冲突与类型预算仍未实现；expected_version 只约束并发版本，不证明事实真假。
+记忆身份、跨主体更新及上下文冲突策略的 P1 前置契约见 [补充设计](2026-10-08-memory-identity-and-context.md)。当前保留旧 fact_key 接口，同时已提供完整 identity 的显式写入、单身份 capture、lookup 和 search/resolve 过滤。S2 已增加属性目录、显式单值/多值语义和未归一化冲突证据；已增加调用方限定目标范围的模型候选分类与 S2 写入；自动稳定身份推断、一般自由文本语义质量验收与完整类型预算仍未完成。expected_version 只约束并发版本，不证明事实真假；边界见 [S2 契约](../plans/2026-10-11-s2-memory-semantics.md)。
 
 ## 2. 核心概念
 
@@ -169,7 +169,7 @@ api_keys           id, tenant_id, workspace_id, token_hash, role   -- 已有
 
 ### 5.3 记忆写入（remember）
 
-结构化记忆 P0 复用「asset 槽」与不可变版本：旧入口按 workspace 内 fact_key 定位，显式入口按 scope + subject + predicate + context 绑定同一资产。后续输入追加版本，受理时接受可选调用方 expected_version，Worker 最终仍复核受理版本；不再强制 review。当前没有根据语义冲突决定覆盖或并存的通用策略，单值/多值属性和歧义处理属于 I2 待交付范围。valid_from/to 与 as_of 属 P2。
+结构化记忆 P0 复用「asset 槽」与不可变版本：旧入口按 workspace 内 fact_key 定位，显式入口按 scope + subject + predicate + context 绑定同一资产。后续输入追加版本，受理时接受可选调用方 expected_version，Worker 最终仍复核受理版本；不再强制 review。S2 的 semantic 入口对已登记属性强制版本条件，采用显式 operation/value 路由单值更新、多值补充及不确定证据；不以语义相似授权覆盖。该确定性契约不代表通用自由文本冲突理解。valid_from/to 与 as_of 属 P2。
 
 ---
 

@@ -26,6 +26,7 @@
 | `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ asset/source/job 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → asset/source/job；同 scope 下相同身份复用资产；`conflict` 表示已有版本 |
 | `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与资产 GET 相同的当前已发布视图；不需要 Idempotency-Key，不创建资产 |
+| `POST /v1/captures/semantic` | `{content,targets:[{identity,expected_version,allow_update:false}]}` → source/job；受限模型分类并复用 S2，详见下节 |
 | `POST /v1/captures` | `{content}` → source/job；抽取结果逐条直接发布，结果见任务 `result.memories` |
 | `POST /v1/captures/identified` | `{identity,content}` → asset/source/job；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
@@ -169,3 +170,73 @@ Search 显式使用原文 vector、关闭摘要/图、不允许关键词降级�
 HTTP 最多等待任务 25 分钟。超时返回 503，原任务继续；断线/重试不会创建独立 Worker 或重试循环。同 profile 的已完成重放还会检查来源、当前版本、ready 索引与 committed 账本；来源已撤回或证据已不可检索返回 409。模型未配置/调用失败为 503，既有批次的模型 profile 改变为 409，不能通过换配置重用旧 Add 成功结果。失败任务的重试方式与运行限制见 OPERATIONS。
 
 库宿主可调用 `submit_aml_add` 获得持久 receipt，随后 `wait_aml_add`（最长 25 分钟）观察原任务，或调用组合的 `aml_add`；receipt 不是 HTTP 成功响应。来源、asset 和 job 可通过映射后的 AuthContext 使用既有 Service 库接口核验，外部调用不能指定内部 scope。
+
+
+## S2 显式记忆语义
+
+新数据库提供以下入口；旧数据库不自动安装 S2 表。所有 scope 来自认证，写操作需要 Idempotency-Key。
+
+- POST /admin/memory-properties：仅 admin，注册不可变属性，例如 {"predicate":"database.engine","cardinality":"single","required_context":["env"]}。cardinality 为 single 或 multi；required_context 最多 32 个合法条件名。相同定义可重放；改变定义或接管已有显式身份的属性返回 409。
+- GET /v1/memory-properties/{predicate}：reader 可读取本 workspace 的已登记定义，未登记返回 404。
+- POST /v1/memories/semantic：writer 及以上，受理后由现有单 Worker 发布，返回 job_id；只有任务 completed 后才能宣称已发布。已登记属性不能经 /identified 或 /captures/identified 写入（409）。未登记的旧显式身份入口和旧 fact_key 语义保持原样。
+
+语义请求示例：
+
+~~~json
+{
+  "identity": {"subject":{"kind":"service","stable_id":"Atlas"},"predicate":"database.engine","context":{"env":"production"}},
+  "content": "Atlas production uses PostgreSQL.",
+  "operation": "assert",
+  "expected_version": 0,
+  "statements": [{"value":"postgresql","quote":"Atlas production uses PostgreSQL.","byte_start":0,"byte_end":33}]
+}
+~~~
+
+content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开区间。最多 32 条 statement/集合成员，value 为 1–256 字节且无边界空白/控制字符，quote 最多 8192 字节；content 继续受既有文本限制。值以精确字符串区分，不自动折叠同义词或 Unicode。identity 的完整稳定主体、属性及条件共同定位资产；必需条件缺失或属性未登记返回 422。
+
+| operation | 行为 |
+| --- | --- |
+| assert | 首次建立事实；相同值返回 duplicate 且不创建版本/任务；单值与当前值相反时发布独立 conflict 证据。多值已有集合只接受其子集作为重复，新增值须用 supplement |
+| update | 只用于单值，显式更新并追加版本 |
+| supplement | 只用于多值，按精确值取并集，保留旧成员的原始来源与定位 |
+| negate / propose / ambiguous | 发布独立、未归一化证据；不绑定或覆盖当前身份 |
+
+单值请求含多个不同值时标为 conflict，不选择最后一条。省略 identity 同样保留为 ambiguous（negate/propose 保留具体状态），expected_version 必须为 0。有 identity 的不确定输入只把身份作为建议，仍检查已登记属性/必需条件，但 expected_version 不用于覆盖，因为没有目标事实更新。接口不推断别名，不增加审核队列；操作与 value 是调用方的显式分类，逐字 quote 不证明语义真假。
+
+确定事实必须提供非负 expected_version（0 表示尚未发布；小于 i32::MAX），接收和发布阶段都检查；过期请求返回 409，受理后竞争失败的任务为 superseded。同 key 同请求返回原响应；异请求返回 409。重复事实仍保存原始来源和审计，但不会把新输入追加为已有版本的额外支持。
+
+不确定证据在 search/resolve/get 标为 normalization_status=unnormalized，locator.semantic_status 为 proposed/negated/ambiguous/conflict；建议身份仅在 locator.suggested_identity 中，不被当作绑定身份。确定事实保留 explicit_identity 标记。精确 memory_identity 检索不会包含建议身份证据。
+
+语义 locator 使用 parser=memory-semantics:v1，包含 semantic_value、原始 source_event_id/source_version、byte_basis=source_utf8、byte_start/end 和完整 support_sources。SearchHit.source_event_id 指向该 quote 的原始事件；hit.version 是当前资产快照版本，原始来源版本看 locator.source_version。get/lookup 的 semantic_values 列出各成员的来源，不把快照 content 的拼接偏移当作原文偏移。
+
+多值采用整快照有效性：任一支持来源或本次操作来源撤回，整个快照立即退出 search/resolve/get/lookup，不回退历史。后续显式 supplement 可从仍有效的成员重建新版本；这种修复即使值重复也会产生发布任务。若撤回的是当前快照自身的发布来源，既有清理会移除该版 chunk；后续写入必须重新提供要保留的事实，不从历史自动补回。通用 restore 禁止恢复语义资产，应提交新的语义写入。旧版本原文与定位不改写。此规则偏保守，不代表逐成员独立发布或自动恢复。
+
+
+## 对话语义捕获（S3 首个切片）
+
+新库可调用 `POST /v1/captures/semantic`，或公开库 `Service::semantic_capture`。writer 及以上权限，必须配置 extraction model；只进行显式请求驱动的捕获，不后台监听会话。调用方提供保留说话人和适用条件的原始文本，以及允许匹配的完整身份列表；稳定主体 ID、属性目录和授权不能由原文或模型创建。
+
+```json
+{
+  "content": "用户：Atlas 在 production 使用 PostgreSQL。",
+  "targets": [{
+    "identity": {
+      "subject": {"kind": "service", "stable_id": "Atlas"},
+      "predicate": "database.engine",
+      "context": {"env": "production"}
+    },
+    "expected_version": 0,
+    "allow_update": false
+  }]
+}
+```
+
+首先由 admin 注册相应属性目录。每个 target 的属性必须已注册且包含所有必需条件；expected_version 必填，0 表示无已发布版本。受理时检查所有目标的版本，Worker 在路由确定性写入及最终提交前再次检查。相同身份不能重复列入 targets。allow_update 默认 false，只能为单值属性打开；即便打开，也只在模型分类为明确 update 时生效。模型把不同值分类为 assert 时，仍保留为 conflict 证据。
+
+content 上限 64 KiB UTF-8，最多 20 个 targets；空 targets 合法，但所有结果只能是未归一化证据。模型输出最多 20 个候选、总计 32 个 statements，每个非空目标最多一个候选（冲突 statements 合并在同一候选中）。引用上限 8192 字节、value 上限 256 字节、集合最终上限 32 成员。模型只能返回目标索引/null、operation 和带精确原文区间的 statements；未知字段、重复目标、非法区间或超限导致整批失败，不部分发布。调用参数错误返回 422，版本/幂等冲突返回 409，模型未配置返回 503；受理后的模型失败记入 job，不在错误响应或日志中输出原文/模型诊断。
+
+模型分类为否定、提议、歧义或无法匹配目标时，使用 S2 的未归一化路由。缺少 allow_update 授权的 update 降为 ambiguous，保留 quote，不能覆盖当前值。multi 用 supplement 追加；single 的 supplement 等不兼容操作使任务失败。重复值不增加版本，但保存本次输入来源。模型提取只是在调用方允许范围内进行判断；精确引用、身份限制和版本检查不证明模型的语义判断正确。
+
+受理返回 `{state:"accepted",source_event_id,job_id}`。任务完成时 `result.memories` 按模型候选顺序返回 asset_id、version、target、requested_operation、state（published/duplicate）、semantic_status、identity 和 normalization_status。空候选返回空数组；全部重复也可 completed，不代表产生了新版本。lookup/get/search/resolve 继续使用既有接口，搜索身份过滤字段为 `memory_identity`。
+
+locator 沿用 S2 原始来源与字节范围，自动提取的新成员附加 `extraction:{parser:"semantic-capture:v1",model:"配置的模型名称"}`；集合中的旧成员保留自己的来源版本及 extraction，不标成新模型/新输入。来源撤回沿用 S2 整快照隐藏、无自动历史回退。检索跨调用方/跨会话可复用同 workspace 已发布记忆，但本接口不保存结构化 SessionTurn/Feedback，也不是 Improve/Learning 经验蒸馏接口。

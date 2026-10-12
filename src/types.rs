@@ -193,6 +193,10 @@ impl SearchHit {
     pub fn normalization_status(&self) -> &'static str {
         if self.kind != "memory" {
             "not_applicable"
+        } else if self.locator["parser"] == crate::memory_semantics::PARSER
+            && self.locator["semantic_status"] != "confirmed"
+        {
+            "unnormalized"
         } else if self.identity.is_some() {
             "explicit_identity"
         } else {

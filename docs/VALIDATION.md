@@ -2,6 +2,51 @@
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
 
+## 2026-10-11 S3 首个切片：受控对话提取 → S2
+
+按用户确认的三项串行完成纯库提取契约、S2 写入/持久 Worker 接入及端到端验证；只面向新库，不开发升级。基线 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf，包含上一节所记 S2 的未提交工作区改动。[实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、[完整命令输出与 19 个最终源码/测试文件哈希](evidence/2026-10-11-s3-semantic-capture-validation.json)。新增公开库 API 与 POST /v1/captures/semantic；调用方限定完整身份/版本和单值覆盖授权，模型生成 operation/value/quote 后复用同一个 S2 路由函数。未增加依赖、表、CLI 隐藏协议、Worker 或升级路径。
+
+实际工具链 rustc 1.98.0 (88d9e12ae 2026-08-18)，Windows MSVC。统一 exec 启动器不可用，使用本地 Node/PowerShell 调用已安装工具链；所有 Cargo 命令串行、offline/locked。复核发现共用模型响应的外层 JSON 解析仍在异步线程，已改为 await spawn_blocking；内层模型候选解析/校验与分词也在事务外等待 blocking 工作，不增加硬取消保证。修正后重新运行完整矩阵，最终全部退出 0：
+
+| 命令 | 最终结果 |
+| --- | --- |
+| cargo fmt --all -- --check | 通过 |
+| cargo clippy --offline --locked --all-targets -j 2 -- -D warnings | 通过 |
+| cargo test --offline --locked --lib -j 2 | 38 passed，1.26 秒 |
+| cargo test --offline --locked --test local -j 2 | 127 passed，129.70 秒 |
+| cargo clippy --offline --locked --no-default-features --all-targets -j 2 -- -D warnings | 通过 |
+| cargo test --offline --locked --no-default-features --lib -j 2 | 36 passed，1.17 秒 |
+| cargo test --offline --locked --no-default-features --test local -j 2 | 89 passed，2.33 秒 |
+
+阶段验证：新纯库提取测试 3 passed；共享路由重构后的既有 semantic_ 回归 10 passed；新捕获端到端最终 7 passed / 120 filtered，2.39 秒。新增夹具首次编译把 revoke_key 错当成需要幂等键的方法（E0061），并修正搜索过滤字段为 memory_identity。首次运行 4 passed / 2 failed：误期望未注册属性返回 400（现有契约为 422），误期望撤回当前作业来源产生 superseded（来源撤回主动取消，实际 cancelled）。修正测试断言，并补充处理中撤销 writer 权限后 6 passed；新增旧成员来源撤回/模型配置检查后 7 passed。错误及修正均保存在证据文件中；未为迎合测试更改现有错误码/撤回语义。
+
+覆盖实际 loopback HTTP、公开 Service、SQLite/LanceDB、原串行 Worker 和 keyword/vector/hybrid/resolve：多语言原文字节范围及 extraction provenance；属性/条件/身份限制；未知字段、伪造引用、重复目标、超限和整批拒绝；空结果/未知身份；重复不增版本、受授权单值更新、冲突/提议/否定/歧义、集合并集；另一个同 workspace 调用方可检索，跨 tenant/跨 workspace 无泄漏；同名主体及不同环境独立；并发版本、幂等冲突、取消/重试、处理期间撤权及来源撤回；旧成员 provenance 经过并集/重建保持。embedding 失败前已保存计划，显式重试后 claim 并 Service 重开，提取请求总数仍为 1；受理后模型配置改变、待发布集合旧成员来源撤回均阻断发布。任何路由错误不发布已经验证成功的子集。
+
+限制：本轮完成受控对话捕获，不是完整 SessionTurn/Feedback/Improve/Learning，也未新增会话结构化归档或实际使用证据追踪。目标稳定身份和条件来自调用方，非自动别名解析；模型桩仅证明工程契约，未验证真实模型分类准确率、独立语义质量或 Agent 收益。显式 allow_update 与精确 quote 不证明事实真假。重开验证不是新强退/断电验收；无新远端 CI、Linux/macOS、release/container 或生产 SLO 证据。保留原有逻辑撤回/物理擦除边界，历史记录及 S2 原始证据不改写。
+
+## 2026-10-11 S2 显式记忆语义：三个任务串行交付
+
+基于本地 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf 的未提交工作区改动，按属性目录 → 写入规则 → 完整路径验收串行完成。[实施契约](superpowers/plans/2026-10-11-s2-memory-semantics.md)、[完整命令/输出/最终源码哈希](evidence/2026-10-11-s2-local-validation.json)。新增 workspace 管理员属性目录、单值/多值及必需条件；显式 semantic 入口复用命令幂等和单 Worker；重复不增版本、单值更新、多值补充、冲突/否定/提议/歧义的独立未归一化证据已覆盖。未修改依赖、Cargo.lock、身份 v1 编码、原有解析器或 CLI 分工。
+
+实际工具链 rustc 1.98.0 (88d9e12ae 2026-08-18)，Windows MSVC；使用本地 Node/PowerShell 启动已安装工具链（统一 exec 启动器不可用）。下列命令串行执行，最终均退出 0：
+
+| 命令 | 最终结果 |
+| --- | --- |
+| cargo fmt --all -- --check | 通过 |
+| cargo clippy --offline --locked --all-targets -j 2 -- -D warnings | 通过 |
+| cargo test --offline --locked --lib -j 2 | 35 passed，1.17 秒 |
+| cargo test --offline --locked --test local -j 2 | 120 passed，140.95 秒 |
+| cargo clippy --offline --locked --no-default-features --all-targets -j 2 -- -D warnings | 通过 |
+| cargo test --offline --locked --no-default-features --lib -j 2 | 33 passed，1.17 秒 |
+| cargo test --offline --locked --no-default-features --test local -j 2 | 89 passed，2.47 秒 |
+
+阶段结果：目录测试 3 passed；语义规则单元 3 passed；第二阶段服务回归 2 passed；第三阶段 semantic_ 筛选 10 passed（含既有 normalization_status 回归）。完整集成初次为 119 passed / 1 failed：新增 HTTP 夹具只处理一次队列，误把待执行 cleanup 当成目标发布已完成。修正夹具为驱动同一串行 Worker 直至目标任务完成后，该 HTTP 用例单独 1 passed / 119 filtered（4.38 秒），完整重跑 120 passed。修正只涉及测试夹具；不隐藏首次失败。目录夹具初次编译使用不存在的 close 方法，改为 pool().close() 后通过。
+
+新增回归通过公开 Service API 和实际 loopback HTTP → job → keyword/vector/hybrid/resolve 路径验证：管理员/reader 权限、跨 tenant 与同 tenant 跨 workspace、稳定主体和生产/测试条件隔离、幂等重放/冲突、并发 expected_version、32 成员上限、中文/emoji/组合字符原文定位、伪造范围拒绝、单值互斥输入、不确定状态渲染、旧入口/restore 绕过拒绝。固定向量模型失败后显式重试成功；取消后重试及已 claim 任务重开恢复通过。多值旧成员来源及 source_version 保持，支持来源撤回后整快照在向量候选及读取中退出；新显式补充可重建仍有支持的集合。原有 PDF、AML、身份、存储和维护测试包含于完整 local 回归。
+
+限制：S2 仅新库，未提供旧库迁移；operation/value 由调用方分类，逐字 quote 不证明语义真假；没有自动别名合并、真实模型语义质量或新 Agent 效果结论。整快照撤回是保守可见性规则，当前发布来源撤回后需重新提供事实；不承诺全部派生副本立即物理擦除。重开恢复不是新 S2 强退/断电验收；没有本改动的新远端 CI、Linux/macOS、容器/release 或生产 SLO 证据。历史记录与实验工件保持原样。
+
+
 ## 2026-10-11 完整公开库、持续写入与再次压实
 
 [计划与报告](../evals/aml/maintenance-scale-v1/README.md)、[原始记录](../evals/aml/maintenance-scale-v1/run.json)、[独立审计](../evals/aml/maintenance-scale-v1/audit.json)。真实本地 BGE-M3、32 用户/1524 批/15685 条消息，经实际 Add/Search 与停机 CLI 完成基线、压实、重启、外部四用户追加 256 批和再次压实。168 次 Search / 16800 个返回项无错误，完整响应 data/排序等值、原文字节/parser/范围/归属检查及维护行数/版本记录全部通过；完整压缩响应已保留，临时树已清理，无聊天调用。
