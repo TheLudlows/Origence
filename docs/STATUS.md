@@ -17,7 +17,7 @@
 | 检索与上下文 | keyword/vector/hybrid、摘要/图开关、带来源与身份的 search/resolve | 跨证据冲突识别、类型预算和统一 EvidenceBundle 未完成；未证明真实 Agent 任务收益 |
 | 治理与恢复 | workspace/tenant 隔离、角色/密钥、幂等任务、版本/恢复、来源撤回、重启恢复 | 逻辑删除不等于物理擦除；无企业身份、文档 ACL、配额或生产 SLO |
 | 接入与维护 | HTTP、CLI、只读 MCP、显式离线向量压实 | 不自动调度维护；持续容量、维护故障和断电边界仍需验收 |
-| 会话学习 | 跨会话历史检索；原文候选提取 → S2 写入 → 同 workspace 跨调用方复用 | SessionTurn/Feedback 已实现；Improve/Learning 尚未实现；捕获和归档均由调用方显式触发 |
+| 会话学习 | 跨会话历史检索；原文候选提取 → S2 写入 → 同 workspace 跨调用方复用；实际证据归档与幂等反馈 | Improve/Learning 尚未实现；捕获和归档均由调用方显式触发 |
 
 接口与运行细节分别见 [API](API.md)、[OPERATIONS](OPERATIONS.md)；历史测试和 CI 的精确版本见 [VALIDATION](VALIDATION.md)。
 
@@ -37,7 +37,7 @@ Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 w
 
 新增 semantic capture：模型在调用方指定的完整主体/属性/条件范围内生成候选及 operation/value，经过精确原文引用校验后复用 S2。单值覆盖必须由调用方 allow_update 明确授权；歧义、提议、否定与冲突保留未归一化证据。候选计划在 embedding 前持久化，重试/重开复用原分类与 provenance，所有候选原子发布并沿用来源撤回治理。
 
-本轮只面向新库，不开发升级。已交付入口不是完整的 SessionTurn → Feedback → Improve → Learning；后续仍需实际使用证据归档、幂等反馈和条件化经验蒸馏。工程回归使用确定性模型桩，不能宣称真实模型分类质量或 Agent 任务收益。见 [实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、API、OPERATIONS、VALIDATION。
+本轮只面向新库，不开发升级。已交付入口不是完整的 SessionTurn → Feedback → Improve → Learning；实际使用证据归档与幂等反馈已在下述第三阶段实现；条件化经验蒸馏仍待实现。工程回归使用确定性模型桩，不能宣称真实模型分类质量或 Agent 任务收益。见 [实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、API、OPERATIONS、VALIDATION。
 
 ## 第二阶段：内部任务类型与证据可见性回归
 
