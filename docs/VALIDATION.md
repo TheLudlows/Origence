@@ -525,4 +525,7 @@ Existing HTTP/AML recovery/evaluation steps remain unchanged.
 - [工具 run 38229211031](https://github.com/TheLudlows/Origence/actions/runs/38229211031) 在 `8617a2a57f627245f089cdc32deca1b43abff721` 使用 Cargo 1.98 工具链解析 `uuid/v5`。Cargo.lock SHA-256 为 `f83306ef2cd9f4f0f3068615e9dcdb520450441d57b528528f92a8eeacf003cf`；变化仅增加 sha1_smol 1.0.1 与 uuid 对它的依赖，保留 rmcp 1.8.0。下载产物 ZIP SHA-256 `e30eef51ffc5186e30ace7b2f6f2665657515fdf030be323064543abaae4a318` 与 Actions 元数据一致。
 - 锁文件生成/格式工具不是功能通过证据；临时 workflow 在最终验收前移除。初始普通 CI 因尚未提交更新的锁文件而失败属于过渡结果，不能用于验收。
 - Python 独立 UUIDv5 固定字节/ID 向量测试 1 passed；本地工具单测 50 tests，49 passed、1 skipped（缺少本地二进制的受控恢复测试）；评估适配单测 42 passed。最初因工作副本未包含冻结数据而报文件缺失，补齐同基线的只读仓库 fixture 后重跑通过；没有导入评测服务、运行真实模型或改写历史报告。
-- 最终 Rust 测试计数、失败修正、exact-head CI 与合入 main 检查结果待补。
+- 首个实现 head `1c5fc23279d5213e0edb5d8db7e6d599b189d81d` 的 [CI 38230253089](https://github.com/TheLudlows/Origence/actions/runs/38230253089) 为 **失败的中间验证**：Linux Rust 1.98.0 确认、all-target Clippy（warnings denied）与全部聚焦回归通过；默认 library 74 passed，integration 199 passed / 1 failed。fast-check 因 rustfmt 失败而未执行其余步骤。HTTP/MCP/进程恢复/关键词评估未运行，Windows 按 PR 策略跳过。
+- 失败为新增 prepared-publication 重启测试把 retry_wait 强制设为 processing，却保留了未来 next_retry_at，导致重开后没有可 claim 的任务。测试现改为明确已到期的中断任务（next_retry_at=0），不修改生产重试/恢复策略。旧 head 的其他通过项不替代这项修正后的精确 head 复验。
+- 独立审查发现状态轮询复制/反序列化大 publication 的问题。改为 SQLite 元数据投影和一次 materialized chunk-ID CTE；200×4096 维合成 SQL 复现中旧相关扫描约 5.4 秒，修正完整查询约 0.074 秒。SQL-only 复核了全部可见、单索引 generation 失配及来源撤回的计数，不冒充 Rust/native 验收。队列 JSON 和消息恢复解析移到事务外 spawn_blocking，避免复制不用的 publication；仍为原单 Worker。
+- 最终精确 head CI、修正后测试计数与合入 main 检查结果待补。

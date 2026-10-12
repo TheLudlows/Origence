@@ -478,7 +478,11 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
         .execute(service.engine.relational().pool())
         .await
         .unwrap();
-    sqlx::query("UPDATE oc_jobs SET state='processing' WHERE id=?")
+    // Model an already-due retry that was abandoned while processing. The
+    // injected storage failure schedules retry_wait with a future retry time;
+    // changing only its state would leave that backoff active after reopening.
+    // Keep production recovery/backoff policy unchanged and make the fixture due.
+    sqlx::query("UPDATE oc_jobs SET state='processing',next_retry_at=0 WHERE id=?")
         .bind(receipt.job_id)
         .execute(service.engine.relational().pool())
         .await
