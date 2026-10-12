@@ -1852,4 +1852,3 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     assert!(!view.ready().await);
     assert!(!view.worker_running.load(Ordering::Acquire));
 }
-

@@ -1078,7 +1078,13 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), models).await.unwrap();
     let (a, _) = provision(&s, None).await;
-    let original = memory(&s, &a, "io-guard", "Guardneedle source withdrawn during query").await;
+    let original = memory(
+        &s,
+        &a,
+        "io-guard",
+        "Guardneedle source withdrawn during query",
+    )
+    .await;
     let surviving = knowledge(&s, &a, "Guardneedle independently supported document").await;
     let reader_key = s.issue_key(&a, "reader").await.unwrap();
     let reader = s.auth(reader_key["token"].as_str().unwrap()).await.unwrap();
