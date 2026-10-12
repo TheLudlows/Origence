@@ -195,20 +195,36 @@ async fn sqlite_visibility_binds_scope_filters_and_vector_publication_independen
     // Active copies of the exact same UUIDs in another workspace or tenant
     // cannot rescue a withdrawn root/member or deleted local asset.
     for source in [ids.root, ids.member] {
-        sqlx::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(auth.scope.tenant_id).bind(auth.scope.workspace_id).bind(source)
-            .execute(store.pool()).await.unwrap();
+        sqlx::query(
+            "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(auth.scope.tenant_id)
+        .bind(auth.scope.workspace_id)
+        .bind(source)
+        .execute(store.pool())
+        .await
+        .unwrap();
         assert_visibility(&store, auth, ids, false).await;
         for other in &scopes[1..] {
             assert_visibility(&store, other, ids, true).await;
         }
-        sqlx::query("UPDATE oc_events SET state='active' WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(auth.scope.tenant_id).bind(auth.scope.workspace_id).bind(source)
-            .execute(store.pool()).await.unwrap();
+        sqlx::query(
+            "UPDATE oc_events SET state='active' WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(auth.scope.tenant_id)
+        .bind(auth.scope.workspace_id)
+        .bind(source)
+        .execute(store.pool())
+        .await
+        .unwrap();
     }
     sqlx::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(auth.scope.tenant_id).bind(auth.scope.workspace_id).bind(ids.asset)
-        .execute(store.pool()).await.unwrap();
+        .bind(auth.scope.tenant_id)
+        .bind(auth.scope.workspace_id)
+        .bind(ids.asset)
+        .execute(store.pool())
+        .await
+        .unwrap();
     assert_visibility(&store, auth, ids, false).await;
     for other in &scopes[1..] {
         assert_visibility(&store, other, ids, true).await;
@@ -236,15 +252,24 @@ async fn sqlite_visibility_preserves_invalid_support_and_malformed_locator_resul
         let mut locator = ids.locator();
         locator["support_sources"] = support;
         sqlx::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(locator.to_string()).bind(auth.scope.tenant_id).bind(auth.scope.workspace_id).bind(ids.chunk)
-            .execute(store.pool()).await.unwrap();
+            .bind(locator.to_string())
+            .bind(auth.scope.tenant_id)
+            .bind(auth.scope.workspace_id)
+            .bind(ids.chunk)
+            .execute(store.pool())
+            .await
+            .unwrap();
         assert_visibility(&store, &auth, ids, false).await;
     }
     // Invalid JSON remains a storage error, rather than becoming a visible
     // non-semantic chunk or being silently converted to an empty result.
     sqlx::query("UPDATE oc_chunks SET locator='{' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(auth.scope.tenant_id).bind(auth.scope.workspace_id).bind(ids.chunk)
-        .execute(store.pool()).await.unwrap();
+        .bind(auth.scope.tenant_id)
+        .bind(auth.scope.workspace_id)
+        .bind(ids.chunk)
+        .execute(store.pool())
+        .await
+        .unwrap();
     let mut tx = store.begin_read(auth).await.unwrap();
     assert!(matches!(
         tx.visible_hit(ids.chunk).await,

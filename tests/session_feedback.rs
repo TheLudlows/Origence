@@ -1181,7 +1181,12 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
         principal_id: a.id,
         role: a.role.clone(),
     };
-    let mut tx = s.engine.relational().begin_read(auth.clone()).await.unwrap();
+    let mut tx = s
+        .engine
+        .relational()
+        .begin_read(auth.clone())
+        .await
+        .unwrap();
     assert_eq!(tx.graph_evidence(entity).await.unwrap().len(), 2);
     tx.commit().await.unwrap();
     // Authoritative graph support can disappear before backend cleanup. Every

@@ -289,13 +289,15 @@ impl SqliteTx {
         Ok(Some(hit(&row, 0.0)))
     }
     pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
-        let row = sqlx::query(&format!("{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=?"))
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(id)
-            .fetch_optional(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
+        let row = sqlx::query(&format!(
+            "{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=?"
+        ))
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
         let Some(row) = row else {
             return Ok(None);
         };

@@ -64,9 +64,9 @@ impl SqliteTx {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
-            &format!("SELECT c.id,c.asset_id,c.search_terms,c.locator {CURRENT_CHUNK_ROWS} AND a.kind=?"),
-        )
+        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(&format!(
+            "SELECT c.id,c.asset_id,c.search_terms,c.locator {CURRENT_CHUNK_ROWS} AND a.kind=?"
+        ))
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(kind)

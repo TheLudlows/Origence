@@ -508,8 +508,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
         s.session_turn(&reader, session, id(&turn, "turn_id")).await,
         s.session_feedback(&reader, session, id(&turn, "turn_id"))
             .await,
-        s.source_event(&reader, id(&turn, "source_event_id"))
-            .await,
+        s.source_event(&reader, id(&turn, "source_event_id")).await,
     ] {
         assert!(matches!(raw, Err(AppError::Forbidden)), "{raw:?}");
     }
