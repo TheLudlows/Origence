@@ -54,7 +54,6 @@ def profile(binary, candidate, report, background_batches=512):
             host.env["RUST_LOG"] = "error,origence::search_timing=debug,origence::vector_timing=debug"
             host.env["NO_COLOR"] = "1"
             host.start()
-            host.call("/admin/aml/namespace", {})
             def add(batch):
                 result, _ = host.call("/aml/add", batch)
                 if result != {"success": True, **{k: batch[k] for k in ("request_id", "user_id", "session_id")}}:

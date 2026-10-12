@@ -74,11 +74,11 @@ def evaluate(args, report):
         rows.append(out)
         for arm in args.arms:
             candidates = row["arms"][arm]
-            decode_hits(candidates, corpus["batches"], q["user_id"])
+            decode_hits(candidates, corpus["batches"], q["user_id"], allow_legacy=True)
             result = chat.call("answer_" + arm, q["id"], ANSWER,
                                {"question": q["query"], "evidence": evidence_payload(candidates)})
             cited = validate_answer(result, candidates)
-            cited_keys = decode_hits(cited, corpus["batches"], q["user_id"])
+            cited_keys = decode_hits(cited, corpus["batches"], q["user_id"], allow_legacy=True)
             metrics = assess(result, refs[q["id"]], [source_key(g) for g in q["required"]], cited_keys)
             out["arms"][arm] = {"output": result, "cited_ids": [hit["id"] for hit in cited], "metrics": metrics}
         print(json.dumps({"completed": q["id"], "chat_calls": len(chat.calls)}), flush=True)

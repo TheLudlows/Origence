@@ -4,7 +4,7 @@ use origence::{
     host, mcp,
     models::Models,
     service::Service,
-    storage::{Lifecycle, RelationalStore, Scope, SqliteStore},
+    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore},
     types::{ResolveInput, SearchInput},
 };
 use serde_json::json;
@@ -36,6 +36,9 @@ enum Command {
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
+        /// Enable the AML protocol routes for explicitly capable root keys.
+        #[arg(long, env = "OC_ENABLE_AML", default_value_t = false)]
+        enable_aml: bool,
     },
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
@@ -45,6 +48,9 @@ enum Command {
         workspace_id: Uuid,
         #[arg(long, default_value = "reader")]
         role: String,
+        /// Allow this root key to access one layer of owned workspaces.
+        #[arg(long)]
+        allow_owned_workspaces: bool,
     },
     KeyRevoke {
         key_id: Uuid,
@@ -98,14 +104,20 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
     let cli = Cli::parse();
-    if let Command::Serve { bind } = &cli.command {
+    if let Command::Serve { bind, enable_aml } = &cli.command {
         let service = Service::open(&cli.data_dir, Models::from_env()?).await?;
         let listener = tokio::net::TcpListener::bind(bind).await?;
         println!(
             "{}",
             json!({"listening":listener.local_addr()?.to_string()})
         );
-        return host::serve(service, listener, host::shutdown_signal()).await;
+        return host::serve_with_options(
+            service,
+            listener,
+            origence::api::ApiOptions { enable_aml: *enable_aml },
+            host::shutdown_signal(),
+        )
+        .await;
     }
     if let Command::VectorCompact { dry_run } = &cli.command {
         anyhow::ensure!(
@@ -151,9 +163,13 @@ async fn main() -> anyhow::Result<()> {
                 let key = store.issue_key(scope, "admin").await?;
                 json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token})
             }
-            Command::KeyCreate { workspace_id, role } => json!(
+            Command::KeyCreate { workspace_id, role, allow_owned_workspaces } => json!(
                 store
-                    .issue_key(store.workspace_scope(workspace_id).await?, &role)
+                    .issue_key_with_capabilities(
+                        store.workspace_scope(workspace_id).await?,
+                        &role,
+                        KeyCapabilities { allow_owned_workspaces },
+                    )
                     .await?
             ),
             Command::KeyRevoke { key_id } => {
@@ -276,10 +292,10 @@ async fn main() -> anyhow::Result<()> {
             ),
             None,
         ),
-        Command::KeyCreate { workspace_id, role } => (
+        Command::KeyCreate { workspace_id, role, allow_owned_workspaces } => (
             reqwest::Method::POST,
             "/admin/keys".into(),
-            Some(json!({"workspace_id":workspace_id,"role":role})),
+            Some(json!({"workspace_id":workspace_id,"role":role,"allow_owned_workspaces":allow_owned_workspaces})),
         ),
         Command::KeyRevoke { key_id } => (
             reqwest::Method::DELETE,

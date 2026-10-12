@@ -112,12 +112,14 @@ impl SqliteTx {
         // no source text, embedding arrays or saved plan reach this async thread.
         let visible: i64 = sqlx::query_scalar(&format!(
             "WITH expected AS MATERIALIZED ( \
-                 SELECT upper(replace(json_extract(chunk.value,'$.id'),'-','')) AS id \
+                 SELECT upper(replace(json_extract(chunk.value,'$.id'),'-','')) AS id, \
+                        json_array_length(chunk.value,'$.embedding') AS dimension \
                  FROM oc_jobs j,json_each(j.payload,'$.publication.memories[0].chunks') chunk \
                  WHERE j.tenant_id=? AND j.workspace_id=? AND j.id=?) \
              SELECT count(*) {} AND c.asset_id=? AND c.version=? AND e.id=? AND {} \
-             AND EXISTS(SELECT 1 FROM expected WHERE expected.id=hex(c.id)) \
-             AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id \
+             AND EXISTS(SELECT 1 FROM expected,oc_index_entries i \
+                 WHERE expected.id=hex(c.id) AND expected.dimension BETWEEN 1 AND 4096 AND i.dimension=expected.dimension \
+                 AND i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id \
                  AND i.artifact_id=c.id AND i.field='content' AND i.model_id=? AND i.state='ready' AND i.generation=? \
                  AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id \
                      AND l.artifact_id=c.id AND l.artifact_type='chunk' AND l.source_id=e.id AND l.version=c.version \

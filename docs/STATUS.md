@@ -2,9 +2,11 @@
 
 更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
-## AML API 收敛实施中（Issue #48）
+## AML API 收敛（Issue #48）
 
-[执行契约](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md)已冻结，并记录真实 UUIDv5 输入字节/ID 向量。P1/P2 提供通用一层所属 workspace、显式默认关闭的 key 能力、workspace 批次幂等、不可变处理规格、MessageBatch 及实时发布状态；独立审查与最终 head CI 尚待完成。过渡提交仍运行旧 AML 路由，未双写；P3 必须一次切换并删除旧专用路径，不能把本过渡状态视为 Issue 完成。
+[执行契约](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md)已冻结并包含真实 UUIDv5 输入字节/ID 向量。[P1/P2 PR #50](https://github.com/TheLudlows/Origence/pull/50) 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的独立审查无阻断项，[适用 PR CI](https://github.com/TheLudlows/Origence/actions/runs/38233936996) 全通过。通用一层所属 workspace、显式默认关闭的 key 能力、workspace 批次幂等、不可变接受规格、MessageBatch 及实时发布状态可被非 AML 库调用方复用。
+
+P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同一 Worker/发布链并删除专表、专用任务与旧授权路径。AML 路由默认关闭；受信后端显式启用并授予 root key 能力。旧 schema 被拒绝，不删除或转换。最终 P3 head 的 Rust/HTTP/MCP/恢复与独立审查证据仍待完成，以下实现状态不能替代最终验收。
 
 真实模型、官方 Smoke/Full 与真实评测导入保持 NOT_RUN；不扩大旧库迁移范围，不修改历史实验结论。
 
@@ -33,13 +35,13 @@ Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及�
 
 接口与运行细节分别见 [API](API.md)、[OPERATIONS](OPERATIONS.md)；历史测试和 CI 的精确版本见 [VALIDATION](VALIDATION.md)。
 
-## AML 已交付及产品复用
+## AML 接入与产品复用
 
-Add/Search 已实现：管理员启用 namespace，完整 user_id 映射独立 workspace；保存不可变批次、消息原文与定位，整批发布并可检索后确认成功。同一用户的多个 session 持续保存并共同检索，session_id 标记来源，不限制为单会话搜索。使用专用评测新库，旧库不自动升级。
+Add/Search 的协议只保留在 API：认证 tenant/root 与完整 user_id 通过固定 UUIDv5 派生一层所属 workspace；不保存 AML namespace/user 映射。root key 仅供受信后端使用，可访问该 root 的全部所属 workspace；接入服务负责终端用户认证，不能将 root key 分发给用户。每个新 key 或轮换 key 均须显式授予默认关闭的 allow_owned_workspaces。
 
-这些路径已复用产品 Service、单 Worker、权限、来源和存储。离线压实是共享底座能力；恢复及长历史实验验证了共享路径。用户映射和消息角色/时间/session 适配属于 AML 专项。**跨 session 历史检索本身不等于反馈驱动的经验学习；当前显式 Improve → Learning 最小闭环已实现，见第四阶段，真实效果仍未验收。**
+Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规格和精确批次/消息范围，复用单 Worker 整批发布，全部索引可检索后才确认成功。同一用户多个 session 共同检索，session_id 只标记来源。跨 key 重放复用原回执但不转移任务 creator；撤销旧 key 不允许新 key 接管未完成任务。Search 对未知用户只读返回空，不创建 workspace。
 
-正式 AML Search 保持原文 vector，关闭摘要/图，不生成 Answer。聊天重排、本地 BGE reranker、时间辅助与同模型核验留在实验层。正式组别/模型、持续容量与数据清理验收、官方 Smoke/Full 尚未完成；服务器和域名按用户要求后置。剩余任务见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)。
+正式 AML Search 保持原文 vector，关闭摘要/图，不生成 Answer。聊天重排、本地 BGE reranker、时间辅助与同模型核验留在实验层。新来源 parser 为 message-batch-ranges-v1，带来源事件/批次/版本信息；历史 parser/报告不改写。跨 session 历史检索不等于反馈学习，真实模型质量、正式组别/模型、持续容量/清理验收、官方 Smoke/Full 尚未完成。服务器和域名按用户要求后置，剩余任务见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)。
 
 ## S2 显式语义契约
 

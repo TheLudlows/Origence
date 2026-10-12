@@ -1,10 +1,10 @@
-//! Public library upload/job/search regression for delegated AML scopes.
+//! Public library upload/job/search regression for generic owned workspaces.
 #![cfg(feature = "local-storage")]
 use origence::{
     error::AppError,
     models::Models,
     service::Service,
-    storage::{RelationalStore, Scope},
+    storage::{KeyCapabilities, RelationalStore, Scope},
     types::{KnowledgeInput, SearchInput},
     worker,
 };
@@ -26,7 +26,7 @@ fn query() -> SearchInput {
 }
 
 #[tokio::test]
-async fn upload_worker_search_and_revocation_use_the_mapped_scope() {
+async fn upload_worker_search_and_revocation_use_owned_workspaces() {
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
     let scope = Scope {
@@ -36,23 +36,24 @@ async fn upload_worker_search_and_revocation_use_the_mapped_scope() {
     service
         .engine
         .relational()
-        .create_workspace(scope.tenant_id, scope.workspace_id, "AML")
+        .create_workspace(scope.tenant_id, scope.workspace_id, "Workspace root")
         .await
         .unwrap();
     let key = service
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .issue_key_with_capabilities(scope, "admin", KeyCapabilities { allow_owned_workspaces: true })
         .await
         .unwrap();
     let parent = service.auth(&key.token).await.unwrap();
-    service.enable_aml_namespace(&parent).await.unwrap();
+    let alice_id = Uuid::new_v4();
+    let bob_id = Uuid::new_v4();
     let alice = service
-        .ensure_aml_user(&parent, "eval:run:Alice")
+        .ensure_owned_workspace(&parent, alice_id, "Alice")
         .await
         .unwrap();
     let bob = service
-        .ensure_aml_user(&parent, "eval:run:Bob")
+        .ensure_owned_workspace(&parent, bob_id, "Bob")
         .await
         .unwrap();
     let mut alice_assets = Vec::new();
@@ -128,7 +129,7 @@ async fn upload_worker_search_and_revocation_use_the_mapped_scope() {
     );
     assert!(
         service
-            .lookup_aml_user(&parent, "unknown")
+            .lookup_owned_workspace(&parent, Uuid::new_v4())
             .await
             .unwrap()
             .is_none()
@@ -154,13 +155,17 @@ async fn upload_worker_search_and_revocation_use_the_mapped_scope() {
         )
         .await
         .unwrap();
-    let replacement = service.issue_key(&parent, "admin").await.unwrap();
+    let replacement = service.issue_key_with_capabilities(
+        &parent,
+        "admin",
+        KeyCapabilities { allow_owned_workspaces: true },
+    ).await.unwrap();
     let control = service
         .auth(replacement["token"].as_str().unwrap())
         .await
         .unwrap();
     let rotated = service
-        .lookup_aml_user(&control, "eval:run:Alice")
+        .lookup_owned_workspace(&control, alice_id)
         .await
         .unwrap()
         .unwrap();
@@ -191,7 +196,7 @@ async fn upload_worker_search_and_revocation_use_the_mapped_scope() {
 
 // Fixed model outputs exercise each storage branch, not semantic quality.
 #[tokio::test]
-async fn aml_delegation_isolates_summary_graph_and_repeated_queries() {
+async fn owned_workspaces_isolate_summary_graph_and_repeated_queries() {
     use axum::{Json, Router, routing::post};
     use origence::types::{ResolveInput, RetrievalComponents};
     use serde_json::json;
@@ -229,19 +234,20 @@ async fn aml_delegation_isolates_summary_graph_and_repeated_queries() {
     service
         .engine
         .relational()
-        .create_workspace(scope.tenant_id, scope.workspace_id, "AML branches")
+        .create_workspace(scope.tenant_id, scope.workspace_id, "Workspace branches")
         .await
         .unwrap();
     let key = service
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .issue_key_with_capabilities(scope, "admin", KeyCapabilities { allow_owned_workspaces: true })
         .await
         .unwrap();
     let parent = service.auth(&key.token).await.unwrap();
-    service.enable_aml_namespace(&parent).await.unwrap();
-    let alice = service.ensure_aml_user(&parent, "Alice").await.unwrap();
-    let bob = service.ensure_aml_user(&parent, "Bob").await.unwrap();
+    let alice_id = Uuid::new_v4();
+    let bob_id = Uuid::new_v4();
+    let alice = service.ensure_owned_workspace(&parent, alice_id, "Alice").await.unwrap();
+    let bob = service.ensure_owned_workspace(&parent, bob_id, "Bob").await.unwrap();
     let mut assets = Vec::new();
     for (auth, content) in [
         (&alice, "Atlas ALICE_ONLY requires approval."),

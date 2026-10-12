@@ -22,7 +22,7 @@ class PairedCorpusTests(unittest.TestCase):
         self.assertEqual(set(refs), {q["id"] for q in corpus["questions"]})
         for q in corpus["questions"]:
             self.assertEqual(bool(q["required"]), refs[q["id"]]["answerable"])
-            decode_hits(oracle_hits(q, corpus), corpus["batches"], q["user_id"])
+            decode_hits(oracle_hits(q, corpus), corpus["batches"], q["user_id"], allow_legacy=True)
 
     def test_pair_differs_by_exactly_one_required_fact(self):
         corpus = json.loads((ROOT / "corpus.json").read_text(encoding="utf-8"))

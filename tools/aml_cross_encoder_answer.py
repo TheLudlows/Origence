@@ -40,13 +40,13 @@ def evaluate(args, report):
         report["datasets"][dataset] = output
         for q in questions:
             candidates = selected_candidates(ce_rows[q["id"]], sources[q["id"]]["seed"], args.depth)
-            decode_hits(candidates, corpus["batches"], q["user_id"])
+            decode_hits(candidates, corpus["batches"], q["user_id"], allow_legacy=True)
             row = {"id": q["id"], "answerable_reference": bool(q["required"]), "selected_ids": [h["id"] for h in candidates], "status": "running"}
             output["queries"].append(row)
             result = chat.call("cross_encoder_answer", q["id"], ANSWER,
                                {"question": q["query"], "evidence": evidence_payload(candidates)})
             cited = validate_answer(result, candidates)
-            keys = decode_hits(cited, corpus["batches"], q["user_id"])
+            keys = decode_hits(cited, corpus["batches"], q["user_id"], allow_legacy=True)
             metrics = assess(result, refs[q["id"]], [source_key(x) for x in q["required"]], keys)
             row.update(status="completed", output=result, cited_ids=[h["id"] for h in cited], metrics=metrics)
             print(json.dumps({"completed": q["id"], "calls": len(chat.calls)}), flush=True)

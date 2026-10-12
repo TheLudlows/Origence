@@ -30,7 +30,6 @@ use sqlx::Transaction;
 use sqlx::sqlite::SqlitePool;
 use uuid::Uuid;
 
-mod aml;
 mod app;
 #[cfg(feature = "local-storage")]
 mod context;

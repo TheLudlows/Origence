@@ -62,7 +62,7 @@ class DiagnosisTests(unittest.TestCase):
         corpus, questions, refs, _, _, _ = load_dataset("development")
         q = next(q for q in questions if len(q["required"]) > 1)
         hits = oracle_hits(q, corpus)
-        self.assertEqual(len(decode_hits(hits, corpus["batches"], q["user_id"])), len(q["required"]))
+        self.assertEqual(len(decode_hits(hits, corpus["batches"], q["user_id"], allow_legacy=True)), len(q["required"]))
         self.assertTrue(all(h["id"].startswith("diagnostic-only:") for h in hits))
         payload = {"question": q["query"], "evidence": evidence_payload(hits)}
         self.assertEqual(set(payload), {"question", "evidence"})

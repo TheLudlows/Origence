@@ -531,3 +531,20 @@ Existing HTTP/AML recovery/evaluation steps remain unchanged.
 - 修正后实现 head `857b4fcfd61ac758eeb23693a37b8c1998972538` 的 [CI 38232658239](https://github.com/TheLudlows/Origence/actions/runs/38232658239) fast-check/Linux 全部通过：无默认 features library 68、integration 101；默认 library 74、integration 202。format、两种严格 Clippy、聚焦 suites、HTTP、真实 stdio MCP、受控模型桩进程恢复、关键词合成评估全通过；Windows 仍按 PR 策略跳过。临时工具 workflow 已移除。
 - 最终审查另发现新增 creator retry 检查不应阻止现有特权 cleanup 回收：原 creator 撤销后，当前 admin 必须仍可重试 failed cleanup，调用方 Delete 权限、不可取消和 original created_by 保持。该保留既有行为的修正与真实删除/撤销回归须在后续 head 再验；上述通过结果不能代替它。
 - 最终精确 head CI 与合入 main 检查结果待补；真实模型/官方评测 NOT_RUN。
+
+## 2026-10-12：P1/P2 最终验收与 AML API 切换 P3/P4
+
+P1/P2 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的 [CI 38233936996](https://github.com/TheLudlows/Origence/actions/runs/38233936996) completed/success；fast-check、linux-native 全通过，Windows 按 PR 策略跳过。无默认 features library 68、integration 101；默认 library 74、integration 203。Rust 1.98.0、fmt、两种严格 all-target Clippy、聚焦可见性、HTTP、真实 stdio MCP、受控模型桩进程恢复、合成关键词评估均通过。Python tools 50 run / 49 passed / 1 skipped（该 job 无二进制；Linux 独立恢复步骤通过），evals 42 passed。cleanup 原 creator 撤销后当前 admin 重试回归已实际执行。独立审查核对最终代码无阻断项。
+
+[PR #50](https://github.com/TheLudlows/Origence/pull/50) 已 squash 合入 main `8e39c873ba5bbdefc3df1789d53c94e10ead7891`；Git tree 与验收头相同。主干 fast-check/Linux/Windows 结果另行跟踪，不能把 PR 的 Windows skipped 当作通过。
+
+P3 一次切换 API 并移除旧专用路径，当前代码仍待其最终 head 的完整 CI；P1/P2 的通过结果不替代 P3 验收。当前云端仍无 Rust/Cargo，Rust、native、真实宿主/CLI 测试的本地执行均 NOT_RUN。
+
+- 本地 Python tools：56 run，54 passed、2 skipped（受控进程强退恢复与新增停服整库备份恢复，缺少 AML_TEST_BINARY）；evals 42 passed。包含下层边界、当前 parser 严格解码、多批次 session 不歧义及显式历史 decoder 回归；冻结 eval/report 数据未改写。
+- 独立源码审查核对 default-off 路由、认证 root 派生/能力、只读未知 Search、删除下层 AML 表/任务/DTO、旧 schema 无写入拒绝、历史工具显式解码；无剩余阻断项。它不是 Rust/native 执行证据或 GitHub maintainer approval。
+- 补强 T13：真实 LanceDB 临时表路径故障，要求持久 retry_wait、无部分可见版本/分块，修复测试自己的阻塞文件后复用原同 generation 的计划/证据 ID，不重复 embedding。生产代码没有新增故障开关或 Worker。
+- 补强 T14：同一个受控 loopback 模型、新建临时库发布多语种多块批次，确认进程已退出后复制完整数据树，恢复到另一个新目录；先检索再重放，核对原回执/job/creator/source/asset/version/chunk/locator，不修改原目录/备份。Host.stop 使用已记录的进程 kill，不宣称优雅退出、在线快照或断电保证。
+- 补强 T15：撤回后真实 HTTP Add 重放返回 409 且原回执及领域 ID 不变。独立审查另发现 ready 索引的 dimension 失配应与 vector Search 一样不可见；现从 materialized saved-chunk CTE 一次投影维度，匹配同 chunk/index 的有效维度，并保持 profile/generation/ledger/数量检查，无 native 每次轮询探测。SQLite-only 2×2 和 200×4096 fixture 通过正常/错维度/恢复/撤回/非法维度，约 0.13–0.23 秒；此项不替代 Rust/native 回归。
+- T01–T02 固定跨语言字节/ID；T03 并发 workspace/batch；T04–T07 所属关系、reader/普通 key、跨 root/tenant、递归、撤销/降权/能力关闭与 I/O 后复核；T08–T10 creator 不转移、全部内容/规格冲突、普通命令 principal 隔离；T11–T12 精确批次消息 UTF-8 locator 和非 AML system/tool；T16 既有 history/S2/S3/Session/Learning/Bundle；T17 新库无 AML 表和旧库原字节保留拒绝；T19 同 generation ID 恢复、显式 retry 规格/回执稳定、已发布任务不重写；T20 下层源码/DDL边界均有已注册测试。T18 需本次最终 default/no-default/HTTP/MCP/CLI CI 证明。
+
+真实 provider、真实评测导入、官方 Smoke/Full 与产品质量结论均 **NOT_RUN**。本次验收只覆盖固定合成/受控模型工程行为；不更改历史实验结果、不扩展迁移或生产级验收。最终精确 head、适用 CI 与主干结果在完成后补记。
