@@ -1,0 +1,452 @@
+{
+  "baseline_commit": "7c8531afbfa2612a35d6869668df29f761c1d4a6",
+  "audited_commit": "8e1c6cb5e06cb7a211b07b9223af69a46308328f",
+  "lock_sha256": "afa7c5cf97d78d7fc6d5480d6bd7387ba1d80f139c7a79eb5eb198b7e03ea475",
+  "audit_tool": "cargo-audit 0.22.2",
+  "audit_command": "cargo audit --json",
+  "audit_exit_code": 1,
+  "audit": {
+    "database": {
+      "advisory-count": 1296,
+      "last-commit": "7eebec69c352c7191b1f13eb95dd510eeca5d1de",
+      "last-updated": "2026-10-09T10:12:02+02:00"
+    },
+    "lockfile": {
+      "dependency-count": 720
+    },
+    "settings": {
+      "target_arch": [],
+      "target_os": [],
+      "severity": null,
+      "ignore": [],
+      "informational_warnings": [
+        "unmaintained",
+        "unsound",
+        "notice"
+      ]
+    },
+    "vulnerabilities": {
+      "found": true,
+      "count": 1,
+      "list": [
+        {
+          "advisory": {
+            "id": "RUSTSEC-2023-0071",
+            "package": "rsa",
+            "title": "Marvin Attack: potential key recovery through timing sidechannels",
+            "description": "### Impact\nDue to a non-constant-time implementation, information about the private key is leaked through timing information which is observable over the network. An attacker may be able to use that information to recover the key.\n\n### Patches\nNo patch is yet available. The crypto-bigint migration ([RustCrypto/RSA#394](https://github.com/RustCrypto/RSA/pull/394)) did not close this. Tracking is [RustCrypto/RSA#626](https://github.com/RustCrypto/RSA/issues/626) (padding still not constant-time). Implicit rejection work is in [RustCrypto/RSA#680](https://github.com/RustCrypto/RSA/pull/680); default-path blinding is in [RustCrypto/RSA#702](https://github.com/RustCrypto/RSA/pull/702).\n\nStill affected as of 2026-09-12: rsa 0.9.10 (latest stable) and rsa 0.10.0-rc.18 (latest). `patched = []` is intentional.\n\n### Workarounds\nAvoid using the `rsa` crate in settings where attackers can observe timing, for example over the network. Local use on a non-compromised computer is fine.\n\n### References\nThis vulnerability was discovered as part of the \"[Marvin Attack]\", which revealed several implementations of RSA including OpenSSL had not properly mitigated timing sidechannel attacks.\n\n[Marvin Attack]: https://people.redhat.com/~hkario/marvin/",
+            "date": "2023-11-22",
+            "aliases": [
+              "CVE-2023-49092",
+              "GHSA-c38w-74pg-36hr",
+              "GHSA-4grx-2x9w-596c"
+            ],
+            "related": [],
+            "collection": "crates",
+            "categories": [
+              "crypto-failure"
+            ],
+            "keywords": [
+              "cryptography"
+            ],
+            "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+            "informational": null,
+            "references": [
+              "https://github.com/RustCrypto/RSA/issues/19#issuecomment-1822995643",
+              "https://people.redhat.com/~hkario/marvin/",
+              "https://github.com/RustCrypto/RSA/pull/394",
+              "https://github.com/RustCrypto/RSA/pull/680",
+              "https://github.com/RustCrypto/RSA/pull/702"
+            ],
+            "source": null,
+            "url": "https://github.com/RustCrypto/RSA/issues/626",
+            "withdrawn": null,
+            "license": "CC0-1.0",
+            "expect-deleted": false
+          },
+          "versions": {
+            "patched": [],
+            "unaffected": []
+          },
+          "affected": null,
+          "package": {
+            "name": "rsa",
+            "version": "0.9.10",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "b8573f03f5883dcaebdfcf4725caa1ecb9c15b2ef50c43a07b816e06799bb12d",
+            "dependencies": [
+              {
+                "name": "const-oid",
+                "version": "0.9.6",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "digest",
+                "version": "0.10.7",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "num-bigint-dig",
+                "version": "0.8.6",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "num-integer",
+                "version": "0.1.47",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "num-traits",
+                "version": "0.2.19",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "pkcs1",
+                "version": "0.7.5",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "pkcs8",
+                "version": "0.10.2",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "rand_core",
+                "version": "0.6.4",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "signature",
+                "version": "2.2.0",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "spki",
+                "version": "0.7.3",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "subtle",
+                "version": "2.6.1",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "zeroize",
+                "version": "1.9.0",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              }
+            ],
+            "replace": null
+          }
+        }
+      ]
+    },
+    "warnings": {
+      "unmaintained": [
+        {
+          "kind": "unmaintained",
+          "package": {
+            "name": "fxhash",
+            "version": "0.2.1",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c",
+            "dependencies": [
+              {
+                "name": "byteorder",
+                "version": "1.5.0",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              }
+            ],
+            "replace": null
+          },
+          "advisory": {
+            "id": "RUSTSEC-2025-0057",
+            "package": "fxhash",
+            "title": "fxhash - no longer maintained",
+            "description": "The fxhash crate is no longer maintained.\n\nThe repository is stale and owner is no longer active on GitHub.\n\nPlease take a look at [rustc-hash](https://github.com/rust-lang/rustc-hash) instead.\n```",
+            "date": "2025-09-05",
+            "aliases": [],
+            "related": [],
+            "collection": "crates",
+            "categories": [],
+            "keywords": [],
+            "cvss": null,
+            "informational": "unmaintained",
+            "references": [],
+            "source": null,
+            "url": "https://github.com/cbreeden/fxhash/issues/20",
+            "withdrawn": null,
+            "license": "CC0-1.0",
+            "expect-deleted": false
+          },
+          "affected": null,
+          "versions": {
+            "patched": [],
+            "unaffected": []
+          }
+        },
+        {
+          "kind": "unmaintained",
+          "package": {
+            "name": "paste",
+            "version": "1.0.15",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a",
+            "replace": null
+          },
+          "advisory": {
+            "id": "RUSTSEC-2024-0436",
+            "package": "paste",
+            "title": "paste - no longer maintained",
+            "description": "The creator of the crate `paste` has stated in the [`README.md`](https://github.com/dtolnay/paste/blob/master/README.md) \nthat this project is not longer maintained as well as archived the repository\n\n## Possible Alternative(s)\n\n- [`pastey`]: a fork of paste and is aimed to be a drop-in replacement with additional features for paste crate\n- [`with_builtin_macros`]: crate providing a [superset of `paste`'s functionality including general `macro_rules!` eager expansions](https://docs.rs/with_builtin_macros/0.1.0/with_builtin_macros/macro.with_eager_expansions.html)  and `concat!`/`concat_idents!` macros\n\n[`pastey`]: https://crates.io/crates/pastey\n[`with_builtin_macros`]: https://crates.io/crates/with_builtin_macros",
+            "date": "2024-10-07",
+            "aliases": [],
+            "related": [],
+            "collection": "crates",
+            "categories": [],
+            "keywords": [],
+            "cvss": null,
+            "informational": "unmaintained",
+            "references": [],
+            "source": null,
+            "url": "https://github.com/dtolnay/paste",
+            "withdrawn": null,
+            "license": "CC0-1.0",
+            "expect-deleted": false
+          },
+          "affected": null,
+          "versions": {
+            "patched": [],
+            "unaffected": []
+          }
+        },
+        {
+          "kind": "unmaintained",
+          "package": {
+            "name": "ttf-parser",
+            "version": "0.25.1",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31",
+            "replace": null
+          },
+          "advisory": {
+            "id": "RUSTSEC-2026-0192",
+            "package": "ttf-parser",
+            "title": "`ttf-parser` is unmaintained",
+            "description": "The author of `ttf-parser` has stated that the crate is unmaintained and will not receive further fixes (see the referenced issue).\n\n## Alternative(s)\n\n- [`skrifa`](https://crates.io/crates/skrifa), an actively maintained TrueType and OpenType font parsing crate, part of the Google Fonts \"oxidize\" (`fontations`) project.",
+            "date": "2026-06-28",
+            "aliases": [],
+            "related": [],
+            "collection": "crates",
+            "categories": [],
+            "keywords": [],
+            "cvss": null,
+            "informational": "unmaintained",
+            "references": [],
+            "source": null,
+            "url": "https://github.com/harfbuzz/ttf-parser/issues/217",
+            "withdrawn": null,
+            "license": "CC0-1.0",
+            "expect-deleted": false
+          },
+          "affected": null,
+          "versions": {
+            "patched": [],
+            "unaffected": []
+          }
+        }
+      ],
+      "unsound": [
+        {
+          "kind": "unsound",
+          "package": {
+            "name": "lru",
+            "version": "0.12.5",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38",
+            "dependencies": [
+              {
+                "name": "hashbrown",
+                "version": "0.15.5",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              }
+            ],
+            "replace": null
+          },
+          "advisory": {
+            "id": "RUSTSEC-2026-0253",
+            "package": "lru",
+            "title": "Potential use-after-free due to lack of panic safety in `LruCache::pop()`",
+            "description": "`LruCache::pop()` in `lru` was not panic-safe. If the `Drop` implementation of a stored key panics during `pop()`, `self.detach()` is never called, leaving dangling pointers in the internal doubly-linked list.\n\nA subsequent cache operation that triggers eviction can then dereference these dangling pointers:\n- The node is freed from the map, but remains linked in the LRU list due to the skipped `detach()` call\n- When a new insertion causes eviction, the LRU traversal encounters the dangling pointer\n- This results in a write to already-freed memory during the eviction process\n\n## Impact\n\n- **CWE-416 (Use-After-Free):** memory corruption when subsequent cache operations access freed node pointers in the linked list\n- **CWE-415 (Double Free):** potential heap corruption when the same memory is freed multiple times\n\nBoth types of undefined behavior can be invoked in safe Rust, but only if unwinding panics are enabled and `std::panic::catch_unwind` is used with key types that have potentially-panicking `Drop` implementations.\n\n## Fix\n\nFixed in `lru` 0.18.2 by detaching the node from the linked list before freeing it and dropping the key ([lru-rs#238](https://github.com/jeromefroe/lru-rs/pull/238)).",
+            "date": "2026-05-12",
+            "aliases": [],
+            "related": [],
+            "collection": "crates",
+            "categories": [
+              "memory-corruption"
+            ],
+            "keywords": [
+              "panic-safety",
+              "memory-safety",
+              "use-after-free",
+              "double-free"
+            ],
+            "cvss": null,
+            "informational": "unsound",
+            "references": [],
+            "source": null,
+            "url": "https://github.com/jeromefroe/lru-rs/pull/238",
+            "withdrawn": null,
+            "license": "CC0-1.0",
+            "expect-deleted": false
+          },
+          "affected": null,
+          "versions": {
+            "patched": [
+              ">=0.18.2"
+            ],
+            "unaffected": []
+          }
+        },
+        {
+          "kind": "unsound",
+          "package": {
+            "name": "lru",
+            "version": "0.12.5",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38",
+            "dependencies": [
+              {
+                "name": "hashbrown",
+                "version": "0.15.5",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              }
+            ],
+            "replace": null
+          },
+          "advisory": {
+            "id": "RUSTSEC-2026-0002",
+            "package": "lru",
+            "title": "`IterMut` violates Stacked Borrows by invalidating internal pointer",
+            "description": "Affected versions of this crate contain a soundness issue in the `IterMut`\niterator implementation. The `IterMut::next` and `IterMut::next_back`\nmethods temporarily create an exclusive reference to the key when\ndereferencing the internal node pointer.\n\nThis invalidates the shared pointer held by the internal `HashMap`,\nviolating Stacked Borrows rules.",
+            "date": "2026-01-07",
+            "aliases": [
+              "GHSA-rhfx-m35p-ff5j"
+            ],
+            "related": [],
+            "collection": "crates",
+            "categories": [
+              "memory-corruption"
+            ],
+            "keywords": [
+              "stacked-borrows"
+            ],
+            "cvss": null,
+            "informational": "unsound",
+            "references": [],
+            "source": null,
+            "url": "https://github.com/jeromefroe/lru-rs/pull/224",
+            "withdrawn": null,
+            "license": "CC0-1.0",
+            "expect-deleted": false
+          },
+          "affected": null,
+          "versions": {
+            "patched": [
+              ">=0.16.3"
+            ],
+            "unaffected": [
+              "<0.9.0"
+            ]
+          }
+        }
+      ],
+      "yanked": [
+        {
+          "kind": "yanked",
+          "package": {
+            "name": "yoke-derive",
+            "version": "0.8.3",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "33811428bee40dbceb6d545e95754741d17a6aef9a4849f0fd62e2ba4f412a78",
+            "dependencies": [
+              {
+                "name": "proc-macro2",
+                "version": "1.0.107",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "quote",
+                "version": "1.0.47",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "syn",
+                "version": "3.0.6",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              },
+              {
+                "name": "synstructure",
+                "version": "0.14.0",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+              }
+            ],
+            "replace": null
+          },
+          "advisory": null,
+          "affected": null,
+          "versions": null
+        }
+      ]
+    }
+  },
+  "toolchain": "rustc 1.98.0 (88d9e12ae 2026-08-18)\ncargo 1.98.0 (797e8a9bc 2026-08-05)\n",
+  "advisory_db_commit": "7eebec69c352c7191b1f13eb95dd510eeca5d1de",
+  "workflow_run": "https://github.com/TheLudlows/Origence/actions/runs/38219833365",
+  "raw_artifact": "https://github.com/TheLudlows/Origence/actions/runs/38219833365/artifacts/11734105616",
+  "raw_artifact_sha256": "71392dcc3831225695c6814d8150f98c511b2a48f4674d6500256872ce2dc8a3",
+  "lock_generation": {
+    "command": "cargo update -p rmcp --precise 1.8.0",
+    "run": "https://github.com/TheLudlows/Origence/actions/runs/38219065601",
+    "artifact_id": 11732733641,
+    "raw_artifact_sha256": "39dc57df649dcbfd62a8ecad7a23e4ad7a9867c24bf0eb7f19ab777e77cd27da"
+  },
+  "feature_trees": {
+    "rmcp-default": {
+      "command": "cargo tree --locked --target all -e features -i rmcp",
+      "exit_code": 0,
+      "output": "rmcp v1.8.0\n├── rmcp feature \"macros\"\n│   └── origence v0.1.0 (/home/runner/work/Origence/Origence)\n│       ├── origence feature \"default\" (command-line)\n│       ├── origence feature \"local-storage\"\n│       │   └── origence feature \"default\" (command-line)\n│       └── origence feature \"local-vector\"\n│           └── origence feature \"local-storage\" (*)\n├── rmcp feature \"server\"\n│   └── origence v0.1.0 (/home/runner/work/Origence/Origence) (*)\n├── rmcp feature \"transport-async-rw\"\n│   ├── rmcp feature \"server\" (*)\n│   └── rmcp feature \"transport-io\"\n│       └── origence v0.1.0 (/home/runner/work/Origence/Origence) (*)\n└── rmcp feature \"transport-io\" (*)\n",
+      "output_note": "ANSI escapes and crate-download progress removed; raw combined output retained in linked artifact."
+    },
+    "rmcp-no-default": {
+      "command": "cargo tree --locked --target all --no-default-features -e features -i rmcp",
+      "exit_code": 0,
+      "output": "rmcp v1.8.0\n├── rmcp feature \"macros\"\n│   └── origence v0.1.0 (/home/runner/work/Origence/Origence)\n├── rmcp feature \"server\"\n│   └── origence v0.1.0 (/home/runner/work/Origence/Origence)\n├── rmcp feature \"transport-async-rw\"\n│   ├── rmcp feature \"server\" (*)\n│   └── rmcp feature \"transport-io\"\n│       └── origence v0.1.0 (/home/runner/work/Origence/Origence)\n└── rmcp feature \"transport-io\" (*)\n",
+      "output_note": "ANSI escapes and crate-download progress removed; raw combined output retained in linked artifact."
+    },
+    "rsa-default": {
+      "command": "cargo tree --locked --target all -e features -i rsa",
+      "exit_code": 0,
+      "output": "warning: nothing to print.\n\nTo find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.\n",
+      "output_note": "ANSI escapes and crate-download progress removed; raw combined output retained in linked artifact."
+    },
+    "rsa-no-default": {
+      "command": "cargo tree --locked --target all --no-default-features -e features -i rsa",
+      "exit_code": 0,
+      "output": "warning: nothing to print.\n\nTo find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.\n",
+      "output_note": "ANSI escapes and crate-download progress removed; raw combined output retained in linked artifact."
+    },
+    "lru-default": {
+      "command": "cargo tree --locked --target all -e features -i lru",
+      "exit_code": 0,
+      "output": "lru v0.12.5\n├── lru feature \"default\"\n│   └── tantivy v0.24.2\n│       ├── tantivy feature \"default\"\n│       │   ├── lance v1.0.1\n│       │   │   ├── lance-namespace-impls v1.0.1\n│       │   │   │   └── lancedb v0.23.1\n│       │   │   │       └── origence v0.1.0 (/home/runner/work/Origence/Origence)\n│       │   │   │           ├── origence feature \"default\" (command-line)\n│       │   │   │           ├── origence feature \"local-storage\"\n│       │   │   │           │   └── origence feature \"default\" (command-line)\n│       │   │   │           └── origence feature \"local-vector\"\n│       │   │   │               └── origence feature \"local-storage\" (*)\n│       │   │   └── lancedb v0.23.1 (*)\n│       │   └── lance-index v1.0.1\n│       │       └── lance-index feature \"default\"\n│       │           ├── lance v1.0.1 (*)\n│       │           ├── lance-namespace-impls v1.0.1 (*)\n│       │           └── lancedb v0.23.1 (*)\n│       ├── tantivy feature \"fs4\"\n│       │   └── tantivy feature \"mmap\"\n│       │       └── tantivy feature \"default\" (*)\n│       ├── tantivy feature \"lz4-compression\"\n│       │   └── tantivy feature \"default\" (*)\n│       ├── tantivy feature \"lz4_flex\"\n│       │   └── tantivy feature \"lz4-compression\" (*)\n│       ├── tantivy feature \"memmap2\"\n│       │   └── tantivy feature \"mmap\" (*)\n│       ├── tantivy feature \"mmap\" (*)\n│       ├── tantivy feature \"stopwords\"\n│       │   ├── lance v1.0.1 (*)\n│       │   └── lance-index v1.0.1 (*)\n│       │   └── tantivy feature \"default\" (*)\n│       └── tantivy feature \"tempfile\"\n│           └── tantivy feature \"mmap\" (*)\n└── lru feature \"hashbrown\"\n    └── lru feature \"default\" (*)\n",
+      "output_note": "ANSI escapes and crate-download progress removed; raw combined output retained in linked artifact."
+    },
+    "lru-no-default": {
+      "command": "cargo tree --locked --target all --no-default-features -e features -i lru",
+      "exit_code": 101,
+      "output": "error: package ID specification `lru` did not match any packages\n\nhelp: a package with a similar name exists: `crc`\n",
+      "output_note": "ANSI escapes and crate-download progress removed; raw combined output retained in linked artifact."
+    }
+  }
+}
