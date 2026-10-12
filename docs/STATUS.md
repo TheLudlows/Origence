@@ -6,7 +6,7 @@
 
 [执行契约](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md)已冻结并包含真实 UUIDv5 输入字节/ID 向量。[P1/P2 PR #50](https://github.com/TheLudlows/Origence/pull/50) 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的独立审查无阻断项，[适用 PR CI](https://github.com/TheLudlows/Origence/actions/runs/38233936996) 全通过。通用一层所属 workspace、显式默认关闭的 key 能力、workspace 批次幂等、不可变接受规格、MessageBatch 及实时发布状态可被非 AML 库调用方复用。
 
-P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同一 Worker/发布链并删除专表、专用任务与旧授权路径。AML 路由默认关闭；受信后端显式启用并授予 root key 能力。旧 schema 被拒绝，不删除或转换。最终 P3 head 的 Rust/HTTP/MCP/恢复与独立审查证据仍待完成，以下实现状态不能替代最终验收。
+P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同一 Worker/发布链并删除专表、专用任务与旧授权路径。AML 路由默认关闭；受信后端显式启用并授予 root key 能力。旧 schema 被拒绝，不删除或转换。[P3 PR #51](https://github.com/TheLudlows/Origence/pull/51) 实现 head `9c49231704430ea685e6e30661088442e1e62833` 的独立审查无阻断项，[适用 PR CI](https://github.com/TheLudlows/Origence/actions/runs/38236518092) 全通过，包括原生写失败、进程恢复及停服整库备份恢复。后续文档/部署配置提交同样以 PR 的精确 head 检查为合入门禁；完整记录见 VALIDATION。
 
 真实模型、官方 Smoke/Full 与真实评测导入保持 NOT_RUN；不扩大旧库迁移范围，不修改历史实验结论。
 

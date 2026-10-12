@@ -548,3 +548,16 @@ P3 一次切换 API 并移除旧专用路径，当前代码仍待其最终 head 
 - T01–T02 固定跨语言字节/ID；T03 并发 workspace/batch；T04–T07 所属关系、reader/普通 key、跨 root/tenant、递归、撤销/降权/能力关闭与 I/O 后复核；T08–T10 creator 不转移、全部内容/规格冲突、普通命令 principal 隔离；T11–T12 精确批次消息 UTF-8 locator 和非 AML system/tool；T16 既有 history/S2/S3/Session/Learning/Bundle；T17 新库无 AML 表和旧库原字节保留拒绝；T19 同 generation ID 恢复、显式 retry 规格/回执稳定、已发布任务不重写；T20 下层源码/DDL边界均有已注册测试。T18 需本次最终 default/no-default/HTTP/MCP/CLI CI 证明。
 
 真实 provider、真实评测导入、官方 Smoke/Full 与产品质量结论均 **NOT_RUN**。本次验收只覆盖固定合成/受控模型工程行为；不更改历史实验结果、不扩展迁移或生产级验收。最终精确 head、适用 CI 与主干结果在完成后补记。
+
+
+### P3 实现 head 已执行的验收
+
+实现 head `9c49231704430ea685e6e30661088442e1e62833` 的 [CI 38236518092](https://github.com/TheLudlows/Origence/actions/runs/38236518092) completed/success：fast-check/Linux 全通过，Windows 按 PR 策略 skipped。无默认 features library **69**、integration **99**；默认 library **75**、integration **203**，全部通过，无 Rust 测试跳过。format、双配置 all-target Clippy（warnings denied）、全部既有聚焦 suites、HTTP、真实 stdio MCP、关键词合成评估通过。
+
+`native_vector_write_failure_keeps_batch_invisible_and_recovers_original_plan` 在真实 LanceDB 上执行通过；维度不符 live status、非 AML system/tool、所属权限及新 schema 拒绝测试均包含在同头 integration suite。Linux 的受控真实宿主步骤实际执行 **2/2 passed**：处理中进程强退恢复、停服复制整个库到独立目录后的恢复和多次重放。fast-check tools 的 56 run / 54 passed / 2 skipped 仅表示该 job 未配置 binary，两项没有被省略验收；evals **42 passed**。
+
+独立审查逐个核对远端 head 的变更文件 blob hash 与已审查快照，确认临时 format workflow 删除、Cargo.lock 与历史 eval/evidence 无变化。格式产物来自 Rust1.98 [run 38236327157](https://github.com/TheLudlows/Origence/actions/runs/38236327157)，artifact11741110762 ZIP SHA-256 `39d18931fe28f3a78eb1bc22d82dd44947be2d7cdfaaf52d25fdbb6eedacddc2` 已验证；它只提供格式，不充当功能证据。最初未格式化 head09061e8 的普通 CI 被后续提交取代，不用于验收。
+
+后续最小部署修正：Compose 的显式环境列表现在转发 `OC_ENABLE_AML: ${OC_ENABLE_AML:-false}`，使 `.env` 的显式启用设置能到达宿主；静态边界回归新增该断言，本地 3/3 passed。它不改变默认关闭、安全能力或容器命令，不恢复 Docker/macOS CI，也不声称已运行 Docker。此配置/文档提交与任何后续提交在 ready/merge 前仍必须通过自己精确 head 的适用 CI；最终 SHA、CI 链接和合入结果以 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录为准，不借用旧头绿灯。
+
+P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235896871](https://github.com/TheLudlows/Origence/actions/runs/38235896871) 已到终态：fast-check、linux-native、windows 全部 success。这只证明该主干提交；P3 合入后的主干（包括 Windows）仍单独跟踪。

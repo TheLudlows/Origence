@@ -119,7 +119,7 @@ PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/d
 
 仅使用独立新库。新 schema 不创建 oc_aml_namespaces、oc_aml_users、oc_aml_adds；发现旧 AML 表/视图或缺少新通用约束的库明确拒绝打开，不删除、自动升级、转换或静默补建。不得向业务库手工复制 DDL。正常同版本重启/停机备份恢复仍受支持；本次不扩展既有显式身份安装机制。
 
-1. 用现有 init 创建或配置明确的 root workspace。`OC_ENABLE_AML=true` / `serve --enable-aml` 显式启用路由，默认关闭。
+1. 用现有 init 创建或配置明确的 root workspace。`OC_ENABLE_AML=true` / `serve --enable-aml` 显式启用路由，默认关闭。Compose 显式透传该变量；`.env` 中未设置时仍为 false。
 2. root admin 使用通用 `/admin/keys` 的 `allow_owned_workspaces:true` 或 `key-create <root UUID> --role writer --allow-owned-workspaces` 签发受信服务端 key；每次轮换必须再次显式授予。仅知道 user_id 或目标 UUID 不构成授权。
 3. root key 按 reader/writer 权限访问该 root 全部所属用户 workspace，不向终端用户分发；接入服务负责终端用户身份和作用域选择。
 4. 配置 embedding 后使用 Add；固定 raw-only 原文 vector，不启用摘要/抽取/图。每批来源、asset、原 job 及命令回执在一个事务内受理，消息解析/预分词与保存计划解码在 spawn_blocking、事务外运行，仍由既有单 Worker 串行 prepare/publish。

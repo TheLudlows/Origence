@@ -20,6 +20,12 @@ class AmlAdapterBoundary(unittest.TestCase):
             with self.subTest(path=path.relative_to(root)):
                 self.assertIsNone(forbidden.search(path.read_text(encoding="utf-8")))
 
+    def test_compose_forwards_explicit_default_off_adapter_flag(self):
+        root = Path(__file__).resolve().parents[1]
+        self.assertIn("    OC_ENABLE_AML: ${OC_ENABLE_AML:-false}",
+                      (root / "compose.yaml").read_text(encoding="utf-8"))
+        self.assertIn("OC_ENABLE_AML=false", (root / ".env.example").read_text(encoding="utf-8"))
+
     def test_only_generic_schema_and_one_adapter_implementation_remain(self):
         root = Path(__file__).resolve().parents[1]
         for name in ("src/aml.rs", "src/aml/service.rs", "src/storage/sqlite/aml.rs",
