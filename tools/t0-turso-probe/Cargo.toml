@@ -1,0 +1,19 @@
+[package]
+name = "origence-t0-turso-probe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.0"
+publish = false
+
+# Separate lock/feature graph: no production backend or dependency changes.
+[workspace]
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
+turso = { version = "=0.8.2", default-features = false, features = ["fts"] }
+
+[profile.dev]
+debug = 0
+

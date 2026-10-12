@@ -1,0 +1,27 @@
+[package]
+name = "origence-t0-ann-probe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.0"
+publish = false
+
+# Deliberately not part of, or a dependency of, the application workspace.
+[workspace]
+
+[dependencies]
+anyhow = "1"
+arrow-array = "56.2"
+arrow-schema = "56.2"
+futures = "0.3"
+lancedb = { version = "=0.23.1", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+debug = 0

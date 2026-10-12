@@ -1,0 +1,14 @@
+{
+  "commit": "d0521c0935083e71890ab02c100920c2edaa7227",
+  "verification": "Source snapshot supplied and verified against main by the parent task. Hashes bind the inspected local snapshot.",
+  "sha256": {
+    "AGENTS.md": "74083f0a65b0fd7170236f0bf675029c800404d79218d639495758448016f368",
+    "Cargo.toml": "cd62e0f446b4d1f5adb8fe2af1c474fc4db6cdd9bd15ca236f447edc3232aca3",
+    "Cargo.lock": "f83306ef2cd9f4f0f3068615e9dcdb520450441d57b528528f92a8eeacf003cf",
+    "rust-toolchain.toml": "e879701472a698533f43f54989bbf5f3101eb0503472159d32633f3bb8a13fdf",
+    "src/storage/lancedb.rs": "080b233400fa1609c0c547f3de6608a9f6cf3f0387db31e6263d16988c145ea9",
+    "src/storage/maintenance.rs": "f8b6152485adfa3eda3a83d7b2ccfa37542e7dd5426075d62199ac5f69744261",
+    "src/retrieval.rs": "f8fb3a68daec5aac8644aa9557bbcf78b8eeab8b49a36dd678e97ded1fd34bb8",
+    "src/context_retrieval.rs": "1a3de93ad3ceaa58daeb4917c5ce61184f463b62dd3a37b1e80347af4df49e29"
+  }
+}

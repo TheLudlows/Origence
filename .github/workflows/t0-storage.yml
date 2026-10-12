@@ -1,0 +1,155 @@
+name: T0 isolated storage probes
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/t0-turso-probe/**'
+      - 'tools/t0-ann-probe/**'
+      - 'docs/T0_STORAGE_CONTRACT.md'
+      - '.github/workflows/t0-storage.yml'
+permissions:
+  contents: read
+concurrency:
+  group: t0-storage-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  turso-compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.0
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/t0-turso-probe
+          save-if: false
+      - name: Capture exact head, toolchain and runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/t0-turso"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/t0-turso/head.txt"
+          rustc --version | tee "$RUNNER_TEMP/t0-turso/rustc.txt"
+          rustc --version | grep -Fq 'rustc 1.98.0 ('
+          uname -a > "$RUNNER_TEMP/t0-turso/runner.txt"
+          lscpu >> "$RUNNER_TEMP/t0-turso/runner.txt"
+          free -h >> "$RUNNER_TEMP/t0-turso/runner.txt"
+      - name: Generate provisional isolated lock only if absent
+        run: |
+          if [ ! -f tools/t0-turso-probe/Cargo.lock ]; then
+            echo 'PROVISIONAL: lock generated on runner; final gate requires committed lock' | tee "$RUNNER_TEMP/t0-turso/lock-status.txt"
+            cargo generate-lockfile --manifest-path tools/t0-turso-probe/Cargo.toml
+          else
+            echo 'committed lock; all native commands use --locked' | tee "$RUNNER_TEMP/t0-turso/lock-status.txt"
+          fi
+          cargo metadata --locked --manifest-path tools/t0-turso-probe/Cargo.toml --format-version 1 > "$RUNNER_TEMP/t0-turso/cargo-metadata.json"
+          cargo tree --locked --manifest-path tools/t0-turso-probe/Cargo.toml -e features > "$RUNNER_TEMP/t0-turso/features.txt"
+      - name: Produce formatter patch for exact final-head verification
+        run: |
+          cargo fmt --manifest-path tools/t0-turso-probe/Cargo.toml
+          git diff -- tools/t0-turso-probe > "$RUNNER_TEMP/t0-turso/rustfmt.patch"
+      - name: Test probe fixtures without native engine
+        run: |
+          python3 -m unittest discover -s tools/t0-turso-probe -p 'test_*.py' -v
+          python3 tools/t0-turso-probe/verify.py --sqlite-baseline --output "$RUNNER_TEMP/t0-turso/sqlite-fixture"
+      - name: Warnings-denied isolated Clippy
+        run: cargo clippy --locked --manifest-path tools/t0-turso-probe/Cargo.toml --all-targets -j 2 -- -D warnings
+      - name: Build the pinned native bridge
+        run: cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml -j 2
+      - name: Real DDL, SQL, FTS, transaction and process recovery probes
+        run: python3 tools/t0-turso-probe/verify.py --binary tools/t0-turso-probe/target/debug/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/native"
+      - name: Require committed source formatting
+        if: always()
+        run: |
+          git diff --exit-code -- tools/t0-turso-probe/src
+          git ls-files --error-unmatch tools/t0-turso-probe/Cargo.lock
+          git diff --exit-code -- tools/t0-turso-probe/Cargo.lock
+      - name: Preserve results and Cargo-generated lock even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t0-turso-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/t0-turso/
+            tools/t0-turso-probe/Cargo.lock
+          if-no-files-found: error
+  ann-compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.0
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/t0-ann-probe
+          save-if: false
+      - name: Native protobuf build prerequisite
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
+          protoc --proto_path=/usr/include --descriptor_set_out=/tmp/t0-protobuf.pb google/protobuf/empty.proto
+      - name: Capture exact head, toolchain and runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/t0-ann"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/t0-ann/head.txt"
+          rustc --version | tee "$RUNNER_TEMP/t0-ann/rustc.txt"
+          rustc --version | grep -Fq 'rustc 1.98.0 ('
+          uname -a > "$RUNNER_TEMP/t0-ann/runner.txt"
+          lscpu >> "$RUNNER_TEMP/t0-ann/runner.txt"
+          free -h >> "$RUNNER_TEMP/t0-ann/runner.txt"
+      - name: Generate provisional isolated lock only if absent
+        run: |
+          if [ ! -f tools/t0-ann-probe/Cargo.lock ]; then
+            echo 'PROVISIONAL: lock generated on runner; final gate requires committed lock' | tee "$RUNNER_TEMP/t0-ann/lock-status.txt"
+            cargo generate-lockfile --manifest-path tools/t0-ann-probe/Cargo.toml
+          else
+            echo 'committed lock; all native commands use --locked' | tee "$RUNNER_TEMP/t0-ann/lock-status.txt"
+          fi
+          cargo metadata --locked --manifest-path tools/t0-ann-probe/Cargo.toml --format-version 1 > "$RUNNER_TEMP/t0-ann/cargo-metadata.json"
+          cargo tree --locked --manifest-path tools/t0-ann-probe/Cargo.toml -e features > "$RUNNER_TEMP/t0-ann/features.txt"
+      - name: Produce formatter patch for exact final-head verification
+        run: |
+          cargo fmt --manifest-path tools/t0-ann-probe/Cargo.toml
+          git diff -- tools/t0-ann-probe > "$RUNNER_TEMP/t0-ann/rustfmt.patch"
+      - name: Python report verifier tests
+        run: python3 -m unittest discover -s tools/t0-ann-probe -p 'test_*.py' -v
+      - name: Warnings-denied isolated Clippy
+        run: cargo clippy --locked --manifest-path tools/t0-ann-probe/Cargo.toml --all-targets -j 2 -- -D warnings
+      - name: Rust fixture tests
+        run: cargo test --locked --manifest-path tools/t0-ann-probe/Cargo.toml -j 2
+      - name: Build the pinned ANN executable
+        run: cargo build --locked --manifest-path tools/t0-ann-probe/Cargo.toml --release -j 2
+      - name: Bounded 10k 128D synthetic paired exact and IVF_FLAT
+        run: python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 --queries 3 --index ivf_flat --timeout-seconds 1800
+      - name: Require committed source formatting
+        if: always()
+        run: |
+          git diff --exit-code -- tools/t0-ann-probe/src
+          git ls-files --error-unmatch tools/t0-ann-probe/Cargo.lock
+          git diff --exit-code -- tools/t0-ann-probe/Cargo.lock
+      - name: Preserve results and Cargo-generated lock even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t0-ann-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/t0-ann/
+            tools/t0-ann-probe/Cargo.lock
+            tools/t0-ann-probe/runs/
+          if-no-files-found: error
