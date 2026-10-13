@@ -654,3 +654,34 @@ exact 对照检索、552 次事后 oracle 检索及 1,104 次事后 EXPLAIN，�
 已核对预映像并原样导入；Turso formatter 原本为空。最终提交将重新执行全部 locked CI，
 结果与 single-point FTS 诊断登记在 PR #53/issue #52；不会用首轮通过替代精确头验证，
 也不会仅为归档最终数值再次改头重跑。
+
+### 分步 Turso FTS 新切片：候选、批量权威校验与补取
+
+上一轮精确 head `380fedeffad2425c96715994dfdecd4c27e54f6c` 的原生证据已完成并独立复核，
+[专用 CI](https://github.com/TheLudlows/Origence/actions/runs/38340711565) 保留原始失败，
+[普通 CI](https://github.com/TheLudlows/Origence/actions/runs/38340711585) fast-check/Linux通过，
+Windows按PR策略跳过。ANN两构建各576配对全部通过、非空Recall@10/@100为1、零违规，
+完整路径策略/exact耗时比0.844850943与0.847450480；原通用32/64仍40/97配对失败。
+Turso旧矩阵44PASS/3FAIL/1NOT_RUN；正确CTE成本矩阵63PASS/3预算拒绝。唯一事后JOIN顺序
+对照比原形态慢22.24%，没有继续调JOIN。两份最终artifact SHA和独立审查见PR53/issue52，
+这些结果绑定380fede及d052应用快照，不冒称验证过单独恢复后的main。
+
+用户明确要求单表Turso FTS匹配、应用层分步批量校验，不将完整检索塞进复杂JOIN或一条SQL。
+新增隔离 `staged_fts.py`/测试和[契约第8节](T0_STORAGE_CONTRACT.md#8-staged-single-table-fts-follow-up-authorized-2026-10-13)：
+1k/10k、60配置、两次AB/BA配对，同读快照内256行分页与批量chunk/asset/version/source校验，
+最后另起新快照复核权限和完整元数据。稳定排序补取保证过滤后TopK；候选/权威行/native调用
+超限显式RESOURCE_EXHAUSTED且不返部分证据，撤销与快照变化明确失败。整驱动900秒进程组
+硬限，单次桥请求30秒及桥进程180秒限制另计。没有新增规模/模型/付费算力。
+
+准备阶段完整精确源码 **52/52 Turso Python聚合测试PASS**（其中18项分步测试，含完整60配置
+假FTS驱动），25/25 CI选择器测试通过，独立源码审查无剩余阻断。新原生矩阵、BM25、
+物理FTS计划和并发快照均为NOT_RUN，SQLite
+假FTS不能充当原生证据。八个原生专项为三类预算、插入/更新/删除快照及key/root撤销；
+显式等分并列、512/513边界、重复/坏JSON、非匹配兄弟S2及空/短结果暂为harness专项。
+Summary同chunk聚合AND和完整Context路由/identity/generation/ledger/Learning仍不在此切片。
+
+隔离workflow新增保守选择器：仅在synchronize事件的真实前后head、执行workflow字节和ANN
+输入/步骤/环境均可证明未变时跳过ANN；未知路径、上下文、YAML间接依赖或git读取失败则全跑。
+跳过记NOT_RUN，不搬用旧头PASS。旧CTE/post-hoc脚本及全部历史结果保留，但新原生成本步骤
+只运行分步探针。所有18个ANN文件、Rust桥与两套锁/根依赖保持不变，本切片未改生产/default，也未合并T0。
+最终精确新head和原生结果继续登记PR53/issue52，不为结果归档单独重跑代码头。

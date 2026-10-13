@@ -296,3 +296,80 @@ this diagnostic is the hard whole-process guarantee. Report extra calls separate
 scales or optimizer tuning may be tried in this round. Whether this candidate
 improves or fails, conclude the bounded round and state the engineering decision.
 A favorable single point is not cross-bucket acceptance or production SQL.
+
+## 8. Staged single-table FTS follow-up (authorized 2026-10-13)
+
+The user selected Turso FTS for lexical matching and explicitly rejected making
+complex JOINs or one SQL statement carry the whole retrieval workflow. The
+completed `380fede` CTE/JOIN experiments remain historical evidence. This new
+raw-chunk T0 slice does not retry JOIN-order tuning or change production SQL.
+
+### 8.1 Candidate stream and batch authority
+
+A single-table FTS query yields full scoped chunk identity and native BM25, with
+tenant/workspace predicates where the actual engine supports them. The score
+and match expressions bind the identical quoted query. Scope predicates do not
+turn physical-index-global BM25 statistics into scoped statistics. Actual FTS
+index use and nonzero score provenance remain measured gates.
+
+Within one explicit read transaction, consume a deterministic candidate stream
+ordered by descending native score and full scoped identity, then batch-load
+chunk, asset, version and source/support state. Apply the modeled current
+keyword authority rules in application code, including whole-version local S2
+support checks over sibling chunks that did not match the query. Do not use a
+JOIN or a correlated eligibility query as the staged candidate path. Cache only
+full scoped keys within that snapshot and batch bounded ID sets rather than
+issuing one lookup per candidate. JSON support semantics must match the real
+SQLite/Turso predicates, including missing, empty and invalid cases.
+
+Page size is 256. Refill until K unique eligible results are established or the
+ordered stream is proven exhausted; stable tie ordering crosses page boundaries.
+A fixed overfetch prefix is not a complete filtered top-K. Initial paging uses
+OFFSET and may repeatedly score/sort all matches. Record that cost rather than
+claiming an efficient index cursor or hidden engine-memory bound.
+
+### 8.2 Snapshot consistency, fresh checks and explicit limits
+
+Search assembly uses one snapshot. Before returning evidence, use a separate
+fresh read transaction and new caches to revalidate key authority and exact
+retained metadata/visibility. A revoked key returns an explicit authority
+failure; changed retained metadata returns a retryable snapshot-change failure.
+Both return no evidence. Never splice candidates from a new snapshot into an old ranking. This fresh check validates evidence authority; it
+does not claim ranking was recomputed after every concurrent insertion.
+
+Per-search logical caps are 10,000 examined candidates, 60,000 authority rows
+and 512 native requests, with cleanup capacity reserved. Distinguish unique
+examined candidates, lookahead/fetched rows, batch requests, transaction control
+and audit/setup calls. Prove stream exhaustion at an exact cap; a full LIMIT
+result alone is insufficient. Exceeding a logical budget returns explicit
+RESOURCE_EXHAUSTED without partial hits or a recall success. Native/IPC timeout
+and engine errors remain failed/incomplete execution, not successful rejection.
+An external 900-second process-group deadline covers the new bounded driver;
+request/process soft limits are documented separately from that hard cap.
+
+### 8.3 Frozen raw-chunk slice and remaining coverage
+
+Freeze 60 configurations: 1k/10k corpora, low/medium/all match density,
+source_1/source_8/source_64/source_512/dense eligibility, and K10/100, with one
+staged/full-scan pair in each AB/BA order. Both measured arms include their own
+authority assembly, retrieval, decoding/ranking and fresh verification costs.
+The full-scan comparator and an independent full-index native-score plus fixture
+truth-label oracle establish exact filtered ranking. Zero scope/source/version/
+duplicate/score violations is mandatory; all successful ranked metadata must
+match the oracle. Latencies and native-call counts are exploratory, not a
+production SLO or automatic ANN/FTS speedup claim.
+
+Focused cases cover deep filtering, multi-page ties, empty/short results, exact
+budget boundaries, authority-row/call limits, whole-version sibling support, and
+two-connection snapshot/revocation behavior. Report actual BUSY or unsupported
+concurrency instead of assuming an external writer progressed. On correctness,
+snapshot or score-provenance failure, preserve the failing case and mark unrun
+work NOT_RUN; no unplanned JOIN or paging variant follows silently.
+
+Summary matching remains AND over all summaries of the same fully scoped chunk.
+Context raw-chunk retrieval retains independent Memory/Knowledge/Learning pools
+and explicit score_kind. Summary aggregation, complete Context routing/identity,
+generation readiness, publication-ledger and transitive Learning semantics are
+NOT_RUN in this raw-keyword slice. Their absence must remain visible and cannot
+be turned into production substitution approval. No 100k/1M rung, real provider,
+root dependency change, default switch or merge follows this probe.

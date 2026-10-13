@@ -137,3 +137,33 @@ for parameter conversion, SDK execution, row draining and JSON-value building;
 it excludes connection setup and wire serialization/IPC, and is not pure engine
 CPU time. See [the frozen follow-up contract](../../docs/T0_STORAGE_CONTRACT.md#7-bounded-follow-up-frozen-before-native-execution-2026-10-13)
 and [the cost report](../../docs/t0-fts-cost-report.md) for scope and actual results.
+
+## Staged single-table FTS (new authorized direction)
+
+The CTE/JOIN cost round ended at `380fedeffad2425c96715994dfdecd4c27e54f6c`.
+Do not interpret those cost/diagnostic scripts as the current candidate design.
+The new test-only `staged_fts.py` uses a scoped single-table FTS stream, batched
+application authority checks in one read snapshot, deterministic refill, explicit
+resource rejection and separate fresh final validation. Native results are
+NOT_RUN at source preparation; the exact-head result lives in PR #53/issue #52.
+
+```sh
+python3 -m unittest discover -s tools/t0-turso-probe -p 'test_*.py' -v
+cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml --release -j 2
+timeout --signal=KILL 900s python3 tools/t0-turso-probe/staged_fts.py \
+  --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe \
+  --output /tmp/t0-staged-fts-new-output
+python3 tools/t0-turso-probe/staged_fts.py --report /tmp/t0-staged-fts-new-output/report.json
+```
+
+The output directory must not exist. Run only the frozen 1k/10k matrix and focused
+cases; do not add scales, variants or providers after observing a failure. The
+external process-group timeout is the hard whole-driver bound. Bridge request/
+process deadlines, row/page limits and logical resource rejection are distinct.
+
+See [contract section 8](../../docs/T0_STORAGE_CONTRACT.md#8-staged-single-table-fts-follow-up-authorized-2026-10-13)
+and [the staged report](../../docs/t0-staged-fts-report.md). SQLite fabricated-FTS
+harness checks do not prove native scoring. Summary AND and full Context route/
+identity/generation/ledger/Learning coverage remain outside this raw-chunk slice.
+Unchanged ANN jobs may be skipped by exact-input selection; a skip is NOT_RUN,
+not a transferred pass from a prior head.

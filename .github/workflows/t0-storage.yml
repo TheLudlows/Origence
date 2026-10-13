@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/t0-turso-probe/**'
       - 'tools/t0-ann-probe/**'
+      - 'tools/t0-ci-selection/**'
       - 'docs/T0_STORAGE_CONTRACT.md'
       - '.github/workflows/t0-storage.yml'
 permissions:
@@ -13,7 +14,24 @@ concurrency:
   group: t0-storage-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  select-probes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_turso: ${{ steps.select.outputs.run_turso }}
+      run_ann: ${{ steps.select.outputs.run_ann }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Test conservative job selection
+        run: python3 -m unittest discover -s tools/t0-ci-selection -p 'test_*.py' -v
+      - name: Select exact-head probes (unknown means both)
+        id: select
+        run: python3 tools/t0-ci-selection/select_jobs.py
   turso-compatibility:
+    needs: select-probes
+    if: ${{ !cancelled() && (needs.select-probes.result != 'success' || needs.select-probes.outputs.run_turso != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -72,19 +90,16 @@ jobs:
       - name: Real DDL, SQL, FTS, transaction and process recovery probes
         if: ${{ !cancelled() && steps.native_bridge.outcome == 'success' }}
         run: python3 tools/t0-turso-probe/verify.py --binary tools/t0-turso-probe/target/debug/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/native"
-      - name: Build release bridge for bounded scored-CTE cost measurements
+      - name: Build release bridge for bounded staged FTS measurements
         id: fts_release
         if: ${{ !cancelled() && steps.native_bridge.outcome == 'success' }}
         timeout-minutes: 45
         run: cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml --release -j 2
-      - name: Bounded FTS cost matrix and single post-hoc JOIN-order diagnostic
+      - name: Bounded single-table FTS and batched authority validation
         if: ${{ !cancelled() && steps.fts_release.outcome == 'success' }}
         timeout-minutes: 17
         run: |
-          timeout --signal=KILL 900s bash -euo pipefail -c '
-            python3 tools/t0-turso-probe/fts_cost.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/fts-cost"
-            python3 tools/t0-turso-probe/join_diagnostic.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/fts-join-diagnostic"
-          '
+          timeout --signal=KILL 900s python3 tools/t0-turso-probe/staged_fts.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/staged-fts"
       - name: Require committed source formatting
         if: always()
         run: |
@@ -101,6 +116,8 @@ jobs:
             tools/t0-turso-probe/Cargo.lock
           if-no-files-found: error
   ann-compatibility:
+    needs: select-probes
+    if: ${{ !cancelled() && (needs.select-probes.result != 'success' || needs.select-probes.outputs.run_ann != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
@@ -182,3 +199,21 @@ jobs:
             tools/t0-ann-probe/Cargo.lock
             tools/t0-ann-probe/runs/
           if-no-files-found: error
+  probe-results:
+    needs: [select-probes, turso-compatibility, ann-compatibility]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Report actual job results without carrying forward passes
+        env:
+          SELECTION_RESULT: ${{ needs.select-probes.result }}
+          TURSO_RESULT: ${{ needs.turso-compatibility.result }}
+          ANN_RESULT: ${{ needs.ann-compatibility.result }}
+        run: |
+          {
+            printf 'Selection job: %s\n\n' "$SELECTION_RESULT"
+            printf 'Turso compatibility: %s\n\n' "$TURSO_RESULT"
+            printf 'ANN compatibility: %s\n\n' "$ANN_RESULT"
+            printf 'Skipped = NOT_RUN on this head, not passed. Previous failures remain historical failures; no result is reused.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
