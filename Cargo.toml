@@ -23,15 +23,15 @@ schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "uuid", "chrono", "json", "macros"] }
+turso = { version = "=0.8.2", default-features = false }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
-lancedb = { version = "=0.23.1", default-features = false, optional = true }
-arrow-array = { version = "56.2", optional = true }
-arrow-schema = { version = "56.2", optional = true }
+lancedb = { version = "=0.40.0", default-features = false, features = ["remote"], optional = true }
+arrow-array = { version = "=58.3.0", optional = true }
+arrow-schema = { version = "=58.3.0", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
