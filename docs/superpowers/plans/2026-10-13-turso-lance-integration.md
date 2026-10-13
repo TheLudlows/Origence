@@ -1,6 +1,7 @@
 # Turso authority and LanceDB search integration
 
-Status: implemented; engineering CI passed at `b50e8748`, draft review pending.
+Status: merged by PR #58 at main `1d5e0554b38e12df094a894f11a23fb26a117568`.
+Implementation engineering CI passed at `b50e8748`; main CI is tracked separately.
 This is not production performance or real-model acceptance. Base: main
 `86fac48aeabdf349431801334485a2ac99c49448`, preserving restored history.
 
@@ -35,7 +36,7 @@ This is not production performance or real-model acceptance. Base: main
    stale native rows, complete scoped-key pre-RRF preparation and Summary.
 4. Generate the dependency lock with Cargo, run exact-head formatting, warnings-
    denied Clippy, focused and full tests, HTTP/MCP and process recovery CI.
-5. Keep the PR a draft, report PASS/FAIL/NOT_RUN separately, never auto-merge.
+5. Report PASS/FAIL/NOT_RUN separately; integration was reviewed as a draft and merged only with explicit approval.
 
 The cloud editor has no Cargo. Temporary preparation CI generated the real Cargo
 lock and rustfmt artifacts, which were committed and validated with `--locked`.
@@ -45,4 +46,6 @@ not copied as a substitute for production integration tests.
 
 Implementation CI: https://github.com/TheLudlows/Origence/actions/runs/38405514854.
 All five delivery steps above are complete at the implementation head. Final
-archive-only head checks remain visible on draft PR #58; no automatic merge.
+archive-only head checks remain visible on PR #58. The merged main run is
+https://github.com/TheLudlows/Origence/actions/runs/38417503442; its status does not
+follow automatically from the implementation run.

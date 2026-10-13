@@ -1,4 +1,4 @@
-# SQLite/LanceDB require a C/C++ compiler and protoc at build time.
+# Turso/LanceDB require a C/C++ compiler and protoc at build time.
 FROM rust:1.98.0-bookworm AS build-inputs
 RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev \
     && rm -rf /var/lib/apt/lists/*

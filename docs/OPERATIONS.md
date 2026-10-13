@@ -1,6 +1,6 @@
 # 本地运维说明
 
-适用单宿主原生 Turso/LanceDB/Turso 图；本轮接入工程 CI 已通过，仍为草稿待审；不代表生产容量或任意断电验收。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份检查](#显式启用记忆身份) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
+适用单宿主原生 Turso/LanceDB/Turso 图；PR #58 已合入主干，工程验证与当前 CI 见 STATUS；不代表生产容量或任意断电验收。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份检查](#显式启用记忆身份) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
@@ -69,7 +69,9 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。S1 结果和限制见 [VALIDATION](VALIDATION.md)，运行入口见 [评估说明](../evals/README.md)。
 
-## 显式启用记忆身份
+<a id="显式启用记忆身份"></a>
+
+## 离线检查记忆身份
 
 原生 Turso 新库始终包含完整身份 schema。历史命令名
 `memory-identity-upgrade` 保留为离线同版本检查，不创建或修复任何表。
@@ -168,7 +170,7 @@ origence --data-dir <已有数据目录> --offline vector-compact
 
 ## S2 语义目录与发布边界
 
-S2 只对新建数据库安装 oc_memory_properties；旧库开机不 ALTER，不接管旧 fact_key 或既有 identity。缺表旧库可继续使用原功能，S2 注册/写入不可用。现有身份安装命令只安装 I1，不能用于启用 S2；旧库迁移/导入暂未提供，勿手工补表后宣称已验收升级。
+新建数据库包含完整 oc_memory_properties 与身份 schema。不兼容或缺表库在打开时拒绝，不降级运行、不补表、不接管旧 fact_key 或既有 identity。离线身份命令仅检查同版本库；不得手工补表绕过检查。
 
 注册属性为管理员显式操作，定义不可变。必须在分配该属性的首个身份之前完成注册。当前阶段不支持修改已注册的属性定义，也不为此开发迁移方案；只有明确调整需求后才另行设计，不允许改表绕过约束。
 
@@ -192,9 +194,9 @@ semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿
 取消和撤权阻止发布，不能保证已经发送的远程模型调用停止；spawn_blocking 不是硬取消。优雅停机继续等待当前作业，沿用原恢复/清理语义；本轮未增加进程隔离或硬截止时间。job 的空 memories 或 duplicate 结果是合法完成；superseded 需重读版本再提交新请求。工程验证使用确定性 loopback 模型桩，不等于真实模型分类或 Agent 效果验收。
 
 
-## Turso / LanceDB 接入分支的运行边界
+## Turso / LanceDB 运行边界
 
-本节描述 PR #58 的新后端；实际验证状态以 VALIDATION 与精确 head CI 为准。
+本节描述当前存储后端；实际验证状态以 VALIDATION 与精确 head CI 为准。
 
 - 权威数据库使用原生 Rust Turso 0.8.2，不使用 SQLx SQLite 或 libSQL。
   数据目录仍包含 context.db、graph.db、vectors 与 blobs；原文 Blob 不改动。

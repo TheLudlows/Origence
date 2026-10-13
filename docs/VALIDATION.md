@@ -1,3 +1,14 @@
+> 当前能力与最新验收入口见 [STATUS](STATUS.md)。下文按记录时点保留，历史“进行中”“草稿”“未合入”不是当前 PR 状态；失败证据与原始工件不改写。
+
+## 2026-10-13 — 存储精简：第一阶段（当前文档）
+
+基线 main `1d5e0554b38e12df094a894f11a23fb26a117568`。更新当前架构、运行边界和依赖审计入口，
+历史 STATUS 原正文原样移入 STATUS_HISTORY；已有 VALIDATION 记录和证据工件不改写。
+本阶段未更改 Rust、SQL、依赖锁或运行配置，Dockerfile 仅修改引擎名称注释。
+本地 `git diff --check` 通过；Python tools 57 项中 55 PASS / 2 因未提供二进制 SKIP，
+eval adapters 42/42 PASS。云编辑环境无 Cargo/rustc/rustfmt，Rust 检查未在本地运行；
+这些 Python 与静态检查不替代后续代码阶段的精确 head CI。
+
 # Origence · 当前验收摘要
 
 本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
