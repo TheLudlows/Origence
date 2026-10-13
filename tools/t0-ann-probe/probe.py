@@ -41,7 +41,7 @@ def lock_errors(lock: Path) -> list[str]:
         return [f"isolated Cargo.lock is missing or malformed: {error}"]
     errors = []
     for name, expected in (("lancedb", LANCEDB_VERSION), ("lance", "13.0.0"),
-                           ("arrow-array", "58.0.0"), ("arrow-schema", "58.0.0")):
+                           ("arrow-array", "58.3.0"), ("arrow-schema", "58.3.0")):
         versions = [p.get("version") for p in packages if p.get("name") == name]
         valid = len(versions) == 1 and versions[0] == expected
         if not valid:

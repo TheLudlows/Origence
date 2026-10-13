@@ -6,7 +6,7 @@ read as adoption or as a passing replacement of any prior probe.
 ## Scope frozen before native execution
 
 - Isolated `tools/t0-ann-probe` now targets Rust `lancedb =0.40.0`, Lance 13.0.0,
-  Arrow array/schema `=58.0.0`, and the repository's Rust 1.98.0. The production
+  Arrow array/schema `=58.3.0`, and the repository's Rust 1.98.0. The production
   manifest, production lock and backend are unchanged. Cargo must generate the
   isolated resolved lock; a provisional runner lock is not final acceptance.
 - Chunk FTS and vectors are the new derived-index candidate. Turso remains the
@@ -99,3 +99,13 @@ No merge, default switch, production dependency change or T1 replacement occurs.
 Native results and exact-head artifact links will be reported on
 [PR #53](https://github.com/TheLudlows/Origence/pull/53) and
 [issue #52](https://github.com/TheLudlows/Origence/issues/52) after execution.
+
+
+## Initial native bootstrap attempt: dependency resolution failed
+
+Head `9e65e706def1f67e08d67ba2f62531603754486b`, [run 38360488838](https://github.com/TheLudlows/Origence/actions/runs/38360488838),
+failed before compilation: published DataFusion 54.0.0 requires Arrow schema
+`^58.3.0`, while the probe initially pinned `=58.0.0` from the top-level
+LanceDB manifest. Direct Arrow pins and lock guards are corrected to `=58.3.0`.
+No native FTS/ANN case ran in that attempt and no new lock was produced.
+The failed attempt remains evidence; it is not an engine-ranking result.

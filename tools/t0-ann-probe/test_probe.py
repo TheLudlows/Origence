@@ -63,7 +63,7 @@ class ReportGateTests(unittest.TestCase):
         self.assertTrue(any("training loss" in error for error in probe.validate_report(report)))
 
     def test_lock_version_guard_requires_current_complete_dependency_identity(self):
-        current = {"lancedb":"0.40.0", "lance":"13.0.0", "arrow-array":"58.0.0", "arrow-schema":"58.0.0"}
+        current = {"lancedb":"0.40.0", "lance":"13.0.0", "arrow-array":"58.3.0", "arrow-schema":"58.3.0"}
         with tempfile.TemporaryDirectory() as directory:
             lock = Path(directory) / "Cargo.lock"
             self.assertTrue(probe.lock_errors(lock))
@@ -71,7 +71,7 @@ class ReportGateTests(unittest.TestCase):
                 lock.write_text("\n".join(f'[[package]]\nname = "{name}"\nversion = "{version}"' for name, version in versions.items()))
             write(current)
             self.assertEqual(probe.lock_errors(lock), [])
-            for name, version in (("lancedb","0.23.1"),("lance","1.0.1"),("arrow-array","56.2.0"),("arrow-schema","58.1.0")):
+            for name, version in (("lancedb","0.23.1"),("lance","1.0.1"),("arrow-array","56.2.0"),("arrow-array","58.0.0"),("arrow-schema","58.0.0"),("arrow-schema","58.1.0")):
                 write({**current,name:version})
                 self.assertTrue(any(name in error for error in probe.lock_errors(lock)))
             write(current)
