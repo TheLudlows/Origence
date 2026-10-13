@@ -153,6 +153,9 @@ async fn compact_inner(data_dir: &Path, dry_run: bool) -> StorageResult<Compacti
             None
         } else {
             if before.fragments > 1 {
+                // Compact preserves indexed/unindexed coverage boundaries; a
+                // small table can legitimately retain multiple fragments. Do
+                // not refresh or drop indexes merely to force one fragment.
                 table
                     .optimize(OptimizeAction::Compact {
                         options: CompactionOptions {

@@ -656,3 +656,17 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
   catalog 缺表用例的“不兼容拒绝且 DDL/原文保持”修正已在该头编译，但未被
   本次聚焦筛选选中，完整测试又未执行，因此该修正的运行结果仍为 NOT_RUN。
   本段仅追记已测提交的结果，不将准备检查、格式回灌或通过子集视为最终验收。
+
+- 8a3815f1 的[正式 CI 38400833421](https://github.com/TheLudlows/Origence/actions/runs/38400833421)
+  与准备检查已完成：fmt、无默认特性/全目标 warnings-denied Clippy PASS；
+  无默认特性 78 lib + 99 integration 全过，包含 catalog 拒绝且不修复数据。
+  Python tools 55 PASS / 2 SKIP，evals 42 PASS。原三个 stack overflow 用例在
+  原线程栈与原断言下全部通过；semantic_capture / process_next future 分别
+  为 96 / 24 字节（inner 2040 / 7936 字节），只调整异步状态的分配边界。
+- 同头全部 focused 组 PASS；完整默认特性 lib 93/93 PASS，integration
+  217 PASS / 4 FAIL。失败为两个压实 fixture 仍预期所有 fragment 合为一个、
+  身份过滤 fixture 仅写权威 chunk 而没有原生 FTS/发布账本、graph 重放仍预期
+  只有 graph 一条账本。后续修正必须保持检索来源、版本/隔离、完整身份候选与
+  精确账本幂等断言；不能仅放宽失败计数或加入隐式重建。Lance 13 压实保留
+  indexed / unindexed fragment 覆盖边界，不将两组误报为未压实。
+  该头 HTTP/MCP smoke、受控模型进程恢复与 keyword 评估仍 NOT_RUN。

@@ -4,7 +4,8 @@
 
 use origence::storage::lancedb::LanceDbStore;
 use origence::storage::{
-    Lifecycle, Scope, SourceVersion, StorageError, VectorEntry, VectorQuery, VectorStore,
+    FullTextEntry, FullTextQuery, Lifecycle, Scope, SourceVersion, StorageError, VectorEntry,
+    VectorQuery, VectorStore,
 };
 use uuid::Uuid;
 
@@ -354,6 +355,59 @@ async fn long_lived_reader_sees_other_connection_commits() {
     assert_eq!(reader.search(query(other, &value)).await.unwrap().len(), 1);
 }
 
+// These fixtures fit below one target fragment. Lance preserves index coverage
+// boundaries, so each contiguous, nonempty coverage group needs one fragment.
+async fn vector_coverage_groups(data_dir: &std::path::Path) -> Vec<usize> {
+    use lance::index::DatasetIndexExt;
+    let db = lancedb::connect(data_dir.join("vectors").to_str().unwrap())
+        .execute()
+        .await
+        .unwrap();
+    let mut names = db.table_names().execute().await.unwrap();
+    names.retain(|name| name.starts_with("vec_"));
+    names.sort();
+    let mut counts = Vec::new();
+    for name in names {
+        let table = db.open_table(&name).execute().await.unwrap();
+        let dataset = table.dataset().unwrap().get().await.unwrap();
+        let indices = dataset.load_indices().await.unwrap();
+        let mut previous = None;
+        let mut groups = 0;
+        let mut group_rows = 0;
+        let mut total_rows = 0;
+        for fragment in dataset.fragments().iter() {
+            let rows = fragment.num_rows().unwrap();
+            total_rows += rows;
+            let coverage: Vec<_> = indices
+                .iter()
+                .enumerate()
+                .filter(|(_, index)| {
+                    index
+                        .fragment_bitmap
+                        .as_ref()
+                        .unwrap()
+                        .contains(u32::try_from(fragment.id).unwrap())
+                })
+                .map(|(position, _)| position)
+                .collect();
+            if previous.as_ref() != Some(&coverage) {
+                if group_rows > 0 {
+                    groups += 1;
+                }
+                previous = Some(coverage);
+                group_rows = 0;
+            }
+            group_rows += rows;
+        }
+        if group_rows > 0 {
+            groups += 1;
+        }
+        assert!(total_rows > 0 && total_rows < 4096);
+        counts.push(groups);
+    }
+    counts
+}
+
 #[tokio::test]
 async fn offline_compaction_preserves_results_versions_and_rejects_live_host() {
     use origence::storage::{SqliteStore, maintenance::compact_vectors};
@@ -385,6 +439,67 @@ async fn offline_compaction_preserves_results_versions_and_rejects_live_host() {
         store.upsert(scope, vec![value]).await.unwrap();
     }
     let expected = serde_json::to_value(store.search(q.clone()).await.unwrap()).unwrap();
+    let terms = FullTextEntry {
+        id: Uuid::new_v4(),
+        source: base.source,
+        generation: 1,
+        search_terms: "compact preservation".into(),
+    };
+    store
+        .upsert_full_text(scope, vec![terms.clone()])
+        .await
+        .unwrap();
+    store
+        .upsert_full_text(
+            scope,
+            vec![FullTextEntry {
+                id: Uuid::new_v4(),
+                ..terms.clone()
+            }],
+        )
+        .await
+        .unwrap();
+    let other = make_scope();
+    store
+        .upsert_full_text(other, vec![terms.clone()])
+        .await
+        .unwrap();
+    store
+        .upsert_full_text(
+            scope,
+            vec![FullTextEntry {
+                generation: 2,
+                ..terms
+            }],
+        )
+        .await
+        .unwrap();
+    let mut full_text_snapshots = Vec::new();
+    for (scope, generation) in [(scope, 1), (other, 1), (scope, 2)] {
+        let query = FullTextQuery {
+            scope,
+            artifact_ids: None,
+            generation,
+            search_terms: "compact preservation".into(),
+            limit: 100,
+        };
+        let hits = store.search_full_text(query.clone()).await.unwrap();
+        assert_eq!(
+            hits.len(),
+            if scope == other || generation == 2 {
+                1
+            } else {
+                2
+            }
+        );
+        full_text_snapshots.push((query, serde_json::to_value(hits).unwrap()));
+    }
+    let db = lancedb::connect(dir.path().join("vectors").to_str().unwrap())
+        .execute()
+        .await
+        .unwrap();
+    let full_text = db.open_table("chunk_terms_v1").execute().await.unwrap();
+    let full_text_version = full_text.version().await.unwrap();
     assert!(matches!(
         compact_vectors(dir.path(), true).await,
         Err(StorageError::Conflict(_))
@@ -399,10 +514,13 @@ async fn offline_compaction_preserves_results_versions_and_rejects_live_host() {
     assert!(preview.tables[0].after.is_none());
     let same = compact_vectors(dir.path(), true).await.unwrap();
     assert_eq!(preview.tables[0].before, same.tables[0].before);
+    let groups = vector_coverage_groups(dir.path()).await;
+    assert_eq!(groups, vec![2]); // First append indexed; later appends unindexed.
     let compacted = compact_vectors(dir.path(), false).await.unwrap();
     let after = compacted.tables[0].after.as_ref().unwrap();
     assert_eq!(after.rows, 16);
-    assert_eq!(after.fragments, 1);
+    assert_eq!(after.fragments, groups[0]);
+    assert!(after.fragments < preview.tables[0].before.fragments);
     assert!(compacted.historical_versions_retained);
     let repeated = compact_vectors(dir.path(), false).await.unwrap();
     assert_eq!(repeated.tables[0].after.as_ref().unwrap(), after);
@@ -413,12 +531,18 @@ async fn offline_compaction_preserves_results_versions_and_rejects_live_host() {
         serde_json::to_value(store.search(q).await.unwrap()).unwrap(),
         expected
     );
-    let db = lancedb::connect(dir.path().join("vectors").to_str().unwrap())
-        .execute()
-        .await
-        .unwrap();
+    store.check_full_text_available().await.unwrap();
+    for (query, expected) in full_text_snapshots {
+        assert_eq!(
+            serde_json::to_value(store.search_full_text(query).await.unwrap()).unwrap(),
+            expected
+        );
+    }
+    full_text.checkout_latest().await.unwrap();
+    assert_eq!(full_text.version().await.unwrap(), full_text_version);
     let names = db.table_names().execute().await.unwrap();
-    let table = db.open_table(&names[0]).execute().await.unwrap();
+    let name = names.iter().find(|name| name.starts_with("vec_")).unwrap();
+    let table = db.open_table(name).execute().await.unwrap();
     table
         .checkout(preview.tables[0].before.version)
         .await
@@ -528,8 +652,18 @@ async fn repeated_compaction_preserves_multiple_profiles_after_mutations() {
             for scope in &scopes {
                 for generation in [1, 2] {
                     for restricted in [false, true] {
-                        let allowed: Vec<_> =
-                            [2, 4, 6, 8].into_iter().map(Uuid::from_u128).collect();
+                        // Eligible IDs represent the current authority snapshot,
+                        // including the scoped source deletions above.
+                        let allowed: Vec<_> = expected
+                            .iter()
+                            .filter(|(s, v)| {
+                                s == scope
+                                    && v.dimension == dimension
+                                    && v.generation == generation
+                                    && [2, 4, 6, 8].contains(&v.id.as_u128())
+                            })
+                            .map(|(_, v)| v.id)
+                            .collect();
                         let mut embedding = vec![0.0; dimension];
                         embedding[0] = -1.0;
                         let q = VectorQuery {
@@ -573,10 +707,14 @@ async fn repeated_compaction_preserves_multiple_profiles_after_mutations() {
             expected.len()
         );
         assert!(preview.tables.iter().all(|t| t.before.fragments > 1));
+        let groups = vector_coverage_groups(dir.path()).await;
+        assert_eq!(groups.len(), preview.tables.len());
         let report = compact_vectors(dir.path(), false).await.unwrap();
-        assert!(report.tables.iter().all(|t| {
+        assert!(report.tables.iter().zip(groups).all(|(t, groups)| {
             let after = t.after.as_ref().unwrap();
-            t.before.rows == after.rows && after.fragments == 1
+            t.before.rows == after.rows
+                && after.fragments == groups
+                && after.fragments < t.before.fragments
         }));
         let reopened = LanceDbStore::open(dir.path().join("vectors"))
             .await

@@ -1072,14 +1072,16 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .begin(store.authenticate(&admin.token).await.unwrap())
         .await
         .unwrap();
+    let mut full_text = Vec::new();
     for i in 0..130 {
         let (asset, _) = tx.slot(&format!("decoy-{i}")).await.unwrap();
         let source = tx.create_event("memory", "approval", None).await.unwrap();
         tx.insert_version(asset, 1, "approval", "hash", source, None, None)
             .await
             .unwrap();
+        let chunk = Uuid::new_v4();
         tx.insert_chunk(
-            Uuid::new_v4(),
+            chunk,
             asset,
             1,
             0,
@@ -1090,6 +1092,15 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .await
         .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
+        full_text.push(FullTextEntry {
+            id: chunk,
+            source: SourceVersion {
+                source_id: source,
+                version: 1,
+            },
+            generation: 1,
+            search_terms: "approval".into(),
+        });
     }
     let (target, _) = tx.identity_slot(&identity).await.unwrap();
     let mut current_source = Uuid::nil();
@@ -1109,8 +1120,9 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         )
         .await
         .unwrap();
+        let chunk = Uuid::new_v4();
         tx.insert_chunk(
-            Uuid::new_v4(),
+            chunk,
             target,
             version,
             0,
@@ -1128,8 +1140,67 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             .await
             .unwrap();
         current_source = source;
+        full_text.push(FullTextEntry {
+            id: chunk,
+            source: SourceVersion {
+                source_id: source,
+                version,
+            },
+            generation: 1,
+            search_terms: "approval evidence supplemental".into(),
+        });
+    }
+    // This direct authority fixture must publish the same native surface as
+    // the worker; authority chunk terms alone are no longer a keyword index.
+    let ledger_key = |entry: &FullTextEntry| LedgerKey {
+        scope,
+        source: entry.source,
+        artifact_id: entry.id,
+        surface: Surface::FullText,
+        generation: entry.generation,
+    };
+    for entry in &full_text {
+        let key = ledger_key(entry);
+        tx.register_pending(LedgerEntry {
+            key,
+            artifact_type: "chunk".into(),
+            idempotency_key: ledger_idempotency_key(&key),
+        })
+        .await
+        .unwrap();
     }
     tx.commit().await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert_full_text(scope, full_text.clone())
+        .await
+        .unwrap();
+    let mut tx = store
+        .begin(store.authenticate(&admin.token).await.unwrap())
+        .await
+        .unwrap();
+    for entry in &full_text {
+        tx.confirm_committed(ledger_key(entry)).await.unwrap();
+    }
+    tx.commit().await.unwrap();
+    // Establish strict BM25 strength, without imposing any choice among the
+    // 130 tied decoys at the native cutoff. The old target version stays native.
+    let strength = service
+        .engine
+        .vector()
+        .search_full_text(FullTextQuery {
+            scope,
+            artifact_ids: Some(vec![full_text[0].id, full_text.last().unwrap().id]),
+            generation: 1,
+            search_terms: "approval".into(),
+            limit: 2,
+        })
+        .await
+        .unwrap();
+    assert_eq!(strength.len(), 2);
+    assert_eq!(strength[0].id, full_text[0].id);
+    assert!(strength[0].score > strength[1].score);
 
     let search = |filter| SearchInput {
         components: Default::default(),
@@ -1741,8 +1812,38 @@ async fn saved_publication_recovers_after_external_graph_write() {
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([entity_id])
     );
-    let counts:(i64,i64)=db::query_as("SELECT (SELECT count(*) FROM oc_versions),(SELECT count(*) FROM oc_artifact_ledger WHERE state='committed')").fetch_one(s.engine.relational().pool()).await.unwrap();
-    assert_eq!(counts, (1, 1));
+    let versions: i64 = db::query_scalar("SELECT count(*) FROM oc_versions")
+        .fetch_one(s.engine.relational().pool())
+        .await
+        .unwrap();
+    assert_eq!(versions, 1);
+    let publications: Vec<(String, Uuid, Uuid, i32, i64, String)> = db::query_as(
+        "SELECT surface,artifact_id,source_id,version,generation,state FROM oc_artifact_ledger ORDER BY surface",
+    )
+    .fetch_all(s.engine.relational().pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        publications,
+        vec![
+            (
+                "full_text".into(),
+                chunk_id,
+                source.source_id,
+                source.version,
+                claim.generation,
+                "committed".into(),
+            ),
+            (
+                "graph".into(),
+                entity_id,
+                source.source_id,
+                source.version,
+                claim.generation,
+                "committed".into(),
+            ),
+        ]
+    );
 
     // Put a real vector behind the same published chunk to check visibility before cleanup.
     let vk = LedgerKey {
