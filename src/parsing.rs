@@ -8,7 +8,12 @@ use pdf_oxide::{
 };
 use serde_json::json;
 use std::{io::Read, path::Path, sync::LazyLock};
-static JIEBA: LazyLock<jieba_rs::Jieba> = LazyLock::new(jieba_rs::Jieba::new);
+static JIEBA: LazyLock<jieba_rs::Jieba> = LazyLock::new(|| {
+    eprintln!("offline diagnostic: before Jieba initialization");
+    let jieba = jieba_rs::Jieba::new();
+    eprintln!("offline diagnostic: after Jieba initialization");
+    jieba
+});
 pub const MAX_TEXT: usize = 1_000_000;
 pub const MAX_FILE: usize = 10 * 1024 * 1024;
 const MAX_PDF_PAGES: usize = 200;

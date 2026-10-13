@@ -21,6 +21,7 @@ impl Service {
     }
 
     async fn search_inner(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
+        eprintln!("offline diagnostic: search inner entered");
         if let Some(identity) = &input.memory_identity {
             identity
                 .validate()
@@ -122,7 +123,9 @@ impl Service {
             }
             vector_ms = vector_started.elapsed().as_secs_f64() * 1000.0;
         }
+        eprintln!("offline diagnostic: before lexical");
         let terms = parsing::lexical(&input.query);
+        eprintln!("offline diagnostic: after lexical");
         let mut full_text_hits = Vec::new();
         if effective != "vector" && !terms.is_empty() {
             let mut eligibility = self.read(a, Permission::Read).await?;
@@ -139,6 +142,7 @@ impl Service {
                 if ids.is_empty() {
                     continue;
                 }
+                eprintln!("offline diagnostic: before native full text");
                 for hit in self
                     .engine
                     .vector()
@@ -156,6 +160,7 @@ impl Service {
                 {
                     full_text_hits.push((generation, hit));
                 }
+                eprintln!("offline diagnostic: after native full text");
             }
         }
         let native_count = native_hits.len() + full_text_hits.len();

@@ -197,8 +197,11 @@ async fn main() -> anyhow::Result<()> {
     let token =
         std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
     if cli.offline {
+        eprintln!("offline diagnostic: before open");
         let service = Service::open(&cli.data_dir, Models::from_env()?).await?;
+        eprintln!("offline diagnostic: after open");
         let auth = service.auth(&token).await?;
+        eprintln!("offline diagnostic: after auth, before dispatch");
         let result = match cli.command {
             Command::Mcp => {
                 mcp::run(service.clone(), token).await?;
@@ -249,7 +252,9 @@ async fn main() -> anyhow::Result<()> {
             }
             _ => unreachable!(),
         };
+        eprintln!("offline diagnostic: after dispatch, before shutdown");
         service.engine.shutdown().await?;
+        eprintln!("offline diagnostic: after shutdown");
         if let Some(v) = result {
             println!("{v}");
         }
