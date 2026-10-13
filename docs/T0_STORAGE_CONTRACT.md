@@ -3,7 +3,9 @@
 Latest candidate: [LanceDB 0.40.0 chunk FTS + ANN](t0-lance-040-report.md).
 The version table and Turso FTS measurements below retain earlier-round context;
 new native results do not inherit earlier passes. Shared retrieval contracts
-remain in force unless an explicit later decision changes them.
+remain in force unless an explicit later decision changes them. Section 9.1
+records the authorized Lance chunk-FTS tie policy; older deterministic Turso
+paging requirements below are historical and do not override that decision.
 
 Baseline: `main@d0521c0935083e71890ab02c100920c2edaa7227`, 2026-10-12.
 Scope: isolated compatibility/measurement probes only. The production SQLite,
@@ -380,12 +382,40 @@ be turned into production substitution approval. No 100k/1M rung, real provider,
 root dependency change, default switch or merge follows this probe.
 
 
-## 2026-10-13 LanceDB 0.40.0 candidate update
+## 9. 2026-10-13 LanceDB 0.40.0 candidate update
 
 The user selected native LanceDB chunk FTS plus ANN for the next bounded T0
 slice. See [the frozen 0.40.0 probe scope](t0-lance-040-report.md). Earlier Turso
 FTS and Lance0.23.1 evidence above remains historical, not current candidate
 acceptance. Turso remains the authority/graph target; summary placement and
 same-chunk summary-AND are not changed by the raw-chunk probe. No production
-backend/default or migration work is included. All new native results are
-NOT_RUN until exact-head execution.
+backend/default or migration work is included. The committed-lock v1 result is retained in the linked report. The explicit
+v2 tie decision below requires its own exact-head execution before acceptance.
+
+
+### 9.1 Authorized chunk-FTS cutoff ties (2026-10-13)
+
+The user explicitly accepts any BM25-valid K members at an equal-score cutoff.
+Every strictly higher-scoring eligible match must still be included; native
+scores must remain descending, provenance-correct and within the same scoped
+competition. This does not relax eligibility, zero safety violations or filtered
+Top-K completeness. A different tied member set may change lexical votes and
+the final hybrid result. Cross-rebuild membership stability is not promised.
+Current search/context inputs have no pagination or continuation cursor.
+
+Application preparation must happen before RRF rank assignment: deduplicate
+full scoped chunk keys, then order the retained set by score descending and
+scoped chunk ID ascending. Exact duplicate authority identities and scores may
+collapse; conflicting source/version/generation or scores must fail closed,
+not pick an arbitrary representative. Sorting after RRF would not repair
+changed rank-based weights. Sorting a returned set cannot recover omitted
+tied members and is not claimed to preserve the previous global-ID cutoff.
+
+The new isolated FTS v2 probe records this application stage and independently
+audits it. Raw native order, scores and old strict-ID compatibility observations
+remain visible. Historical v1 raw/report evidence keeps its original strict
+interpretation; a new policy cannot retrospectively make it pass. The explicit
+`_score DESC,id ASC` API limitation becomes an observation under v2 because the
+accepted contract does not require native global-ID tie selection. Production
+RRF integration, actual Turso authority and cross-store snapshots remain NOT_RUN.
+No new native query, full-FTS serving enumeration or matrix expansion is needed.

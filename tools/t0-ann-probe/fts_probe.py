@@ -20,7 +20,16 @@ import subprocess
 import time
 
 HERE = Path(__file__).resolve().parent
-SCHEMA = "origence-t0-lance-fts-v1"
+SCHEMA_V1 = "origence-t0-lance-fts-v1"
+SCHEMA_V2 = "origence-t0-lance-fts-v2"
+SCHEMA = SCHEMA_V2
+CONTRACT_V2 = {
+    "id": "native-bm25-tied-topk-pre-rrf-v2",
+    "cutoff_ties": "any_bm25_legal_members",
+    "dedup": "same_scoped_chunk_and_equal_authority_identity_and_score_only",
+    "application_order": "score_desc_scoped_chunk_id_asc",
+    "rebuild_member_stability_guaranteed": False,
+}
 CAP = 1000
 BATCH = 64
 DEADLINE = 180
@@ -39,6 +48,7 @@ EXPECTED = {("indexed", name): value for name, value in BASIC.items()} | {
     (phase, name): value for phase in PHASES for name, value in LIFECYCLE.items()}
 NOT_RUN = {"turso_authority_integration", "production_security", "summary_cross_document_AND",
            "summary_placement", "learning_closure", "production_identity", "efficient_tie_complete_refill", "10000_row_scale"}
+NOT_RUN_V2 = NOT_RUN | {"production_rrf_integration", "cross_generation_dedup_integration"}
 IDENTITY = ("tenant", "workspace", "id", "source", "version", "generation")
 TOKENIZER = {"base": "whitespace", "lower_case": False, "stem": False,
              "remove_stop_words": False, "ascii_folding": False, "max_token_length": None}
@@ -120,6 +130,51 @@ def valid_membership(raw, sorted_pool, k):
     return all(h["score"] >= cutoff for h in raw) and all(identity(h) in returned for h in sorted_pool if h["score"] > cutoff)
 
 
+def prepare_rank_inputs(inputs):
+    """Independent application reference; never repairs raw native acceptance.
+
+    Collapse only exact duplicates. A scoped chunk with conflicting authority
+    identity or score is ambiguous and fails closed rather than selecting a row.
+    """
+    unique = {}
+    for h in inputs:
+        if any(f not in h for f in (*IDENTITY, "score")) or not finite(h["score"]) or h["score"] <= 0:
+            raise ValueError("invalid pre-RRF identity or score")
+        scoped_key = key(h)
+        if scoped_key in unique and unique[scoped_key] != h:
+            raise ValueError("conflicting pre-RRF identity or score")
+        unique[scoped_key] = h
+    return sorted(unique.values(), key=rank_key)
+
+
+def audit_application(stage, inputs, errors, label):
+    before = len(errors)
+    if not isinstance(stage, dict):
+        errors.append(f"{label}: pre-RRF application stage missing")
+        return False
+    try:
+        expected = prepare_rank_inputs(inputs)
+    except (KeyError, TypeError, ValueError):
+        errors.append(f"{label}: conflicting/invalid pre-RRF input must fail closed")
+        return False
+    fields = {"schema": "origence-t0-pre-rrf-v1", "stage": "after_fresh_authority_before_rrf",
+              "input": "fresh_check.hits", "native_calls": 0, "rrf_executed": False,
+              "input_count": len(inputs), "output_count": len(expected),
+              "deduplicated_count": len(inputs)-len(expected), "rank_inputs": expected,
+              "rank_positions": list(range(1, len(expected)+1))}
+    for field, value in fields.items():
+        if stage.get(field) != value:
+            errors.append(f"{label}: pre-RRF application {field} differs from independent preparation")
+    for field in ("input_count", "output_count", "deduplicated_count", "native_calls"):
+        if type(stage.get(field)) is not int:
+            errors.append(f"{label}: pre-RRF application {field} has invalid type")
+    if stage.get("rrf_executed") is not False:
+        errors.append(f"{label}: production RRF execution cannot be claimed")
+    if not finite(stage.get("elapsed_ms")) or stage["elapsed_ms"] < 0:
+        errors.append(f"{label}: application preparation timing missing")
+    return len(errors) == before
+
+
 def reference_bm25(rows, terms):
     """Independent float64 BM25, fixed source k1=1.2,b=.75, global stats.
 
@@ -190,8 +245,9 @@ def audit_authority(result, inputs, rows, errors, label):
         errors.append(f"{label}: stale/revoked evidence did not fail closed")
 
 
-def audit_case(event, rows):
-    errors, blockers = [], []
+def audit_case(event, rows, schema=SCHEMA_V1):
+    errors, blockers, observations = [], [], []
+    v2 = schema == SCHEMA_V2
     label = f"{event.get('phase')}/{event.get('name')}"
     expected = EXPECTED.get((event.get("phase"), event.get("name")))
     if expected is None or event.get("terms") != expected[0] or event.get("k") != expected[1]:
@@ -231,7 +287,7 @@ def audit_case(event, rows):
         errors.append(f"{label}: invalid BM25 TopK excluding tie-equivalent substitutions")
     strict = same_hits(raw, topk)
     if not strict and event["name"] != "deep_authority":
-        blockers.append(f"{label}: native score/ID cutoff compatibility is not preserved")
+        (observations if v2 else blockers).append(f"{label}: native score/ID cutoff compatibility is not preserved")
     eligible = {identity(r) for r in rows if scoped(r) and r["eligible"]}
     checked = [h for h in raw if identity(h) in eligible]
     expected_eligible = [h for h in ordered if identity(h) in eligible]
@@ -241,11 +297,14 @@ def audit_case(event, rows):
     if not filtered and event["name"] != "deep_authority":
         blockers.append(f"{label}: scoped TopK then authority lacks exact filtered TopK completeness")
     audit_authority(event.get("fresh_check", {}), checked, rows, errors, label)
+    application_valid = None
+    if v2:
+        application_valid = audit_application(event.get("application_stage"), checked, errors, label)
     for field, expected_value in {"native_bm25_topk": bm25_valid, "native_score_descending": raw_order,
                                   "native_strict_topk": strict, "native_filtered_topk": filtered}.items():
         if event.get(field) is not expected_value:
             errors.append(f"{label}: native scalar {field} disagrees with retained evidence")
-    expected_status = "EXPECTED_NEGATIVE_CONTROL" if event["name"] == "deep_authority" and not filtered and bm25_valid else "PASS_BOUNDED_FIXTURE" if strict and filtered and bm25_valid else "BLOCKER"
+    expected_status = "EXPECTED_NEGATIVE_CONTROL" if event["name"] == "deep_authority" and not filtered and bm25_valid else "PASS_BOUNDED_FIXTURE" if (v2 or strict) and filtered and bm25_valid else "BLOCKER"
     if event.get("candidate_status") != expected_status:
         errors.append(f"{label}: candidate status overclaims acceptance")
     calls = {"candidate": 1, "oracle": 1, "plan": 1, "authority_native": 0,
@@ -253,10 +312,15 @@ def audit_case(event, rows):
     if event.get("calls") != calls:
         errors.append(f"{label}: native/authority call counts disagree")
     times = event.get("timing_ms", {})
-    if set(times) != {"eligibility_fixture_enumeration", "candidate_native", "candidate_authority_fixture", "candidate_total", "oracle_native", "plan"} or any(not finite(v) or v < 0 for v in times.values()):
+    expected_times = {"eligibility_fixture_enumeration", "candidate_native", "candidate_authority_fixture", "candidate_total", "oracle_native", "plan"}
+    if v2:
+        expected_times.add("application_prepare")
+    if set(times) != expected_times or any(not finite(v) or v < 0 for v in times.values()):
         errors.append(f"{label}: stage timing missing/invalid")
-    elif times["candidate_total"] + .01 < times["candidate_native"] + times["candidate_authority_fixture"]:
+    elif times["candidate_total"] + .01 < times["candidate_native"] + times["candidate_authority_fixture"] + (times["application_prepare"] if v2 else 0):
         errors.append(f"{label}: candidate wall excludes measured work")
+    if v2 and times.get("application_prepare") != (event.get("application_stage") or {}).get("elapsed_ms"):
+        errors.append(f"{label}: application preparation timing disagrees with stage")
     plan = event.get("plan", "")
     if not isinstance(plan, str) or re.search(r"(?m)^\s*MatchQuery:", plan) is None:
         errors.append(f"{label}: native FTS MatchQuery plan missing")
@@ -269,21 +333,27 @@ def audit_case(event, rows):
         absolute = "PASS" if complete and all(math.isclose(h["score"], expected_scores.get(identity(h), -1), rel_tol=1e-5, abs_tol=2e-5) for h in oracle) else "FAIL"
         if absolute == "FAIL":
             errors.append(f"{label}: independent global BM25 reference mismatch")
-    return dict(label=label, errors=errors, blockers=blockers, raw_score_descending=raw_order,
+    return dict(label=label, errors=errors, blockers=blockers, observations=observations, application_pre_rrf_valid=application_valid, raw_score_descending=raw_order,
                 bm25_valid_topk=bm25_valid, strict_id_topk=strict, exact_filtered_topk=filtered, negative_control=event["name"] == "deep_authority",
                 absolute_bm25=absolute, max_absolute_bm25_error=max_error,
                 cutoff_score=cutoff, cutoff_tie_count=sum(h["score"] == cutoff for h in oracle) if cutoff is not None else 0)
 
 
 def audit(records):
-    errors, blockers, results = [], [], []
+    errors, blockers, observations, results = [], [], [], []
     headers = [r for r in records if r.get("kind") == "header"]
     header = headers[0] if len(headers) == 1 else {}
-    if header.get("schema") != SCHEMA or header.get("lancedb") != "0.40.0" or header.get("arrow") != "58":
+    schema = header.get("schema")
+    v2 = schema == SCHEMA_V2
+    if schema not in (SCHEMA_V1, SCHEMA_V2) or header.get("lancedb") != "0.40.0" or header.get("arrow") != "58":
         errors.append("missing/version-mismatched header")
+    if v2 and header.get("contract") != CONTRACT_V2:
+        errors.append("v2 tie/application contract missing or changed")
+    if not v2 and "contract" in header:
+        errors.append("v1 evidence cannot carry a v2 contract override")
     if header.get("max_rows") != CAP or header.get("deadline_seconds") != DEADLINE or header.get("tokenizer") != TOKENIZER:
         errors.append("bounded rung/tokenizer/deadline changed")
-    if set(header.get("not_run", [])) != NOT_RUN or header.get("authority_kind") != "in_memory_fixture_only" or header.get("full_enumeration") != "diagnostic_oracle_only" or header.get("serving_strategy") != "native_scoped_topk_with_fixture_authority_prefilter_arm":
+    if set(header.get("not_run", [])) != (NOT_RUN_V2 if v2 else NOT_RUN) or header.get("authority_kind") != "in_memory_fixture_only" or header.get("full_enumeration") != "diagnostic_oracle_only" or header.get("serving_strategy") != "native_scoped_topk_with_fixture_authority_prefilter_arm":
         errors.append("fixture/oracle/production boundaries changed")
     snapshots = [r for r in records if r.get("kind") == "snapshot"]
     if [r.get("phase") for r in snapshots] != list(PHASES):
@@ -331,12 +401,13 @@ def audit(records):
         errors.append("missing/duplicate/unexpected native case coverage")
     for event in cases:
         try:
-            result = audit_case(event, fixture(event.get("phase")))
+            result = audit_case(event, fixture(event.get("phase")), schema=schema)
         except (KeyError, TypeError, ValueError, OverflowError) as exc:
             result = dict(label=f"{event.get('phase')}/{event.get('name')}", errors=[f"malformed raw evidence: {type(exc).__name__}"], blockers=[])
         results.append(result)
         errors.extend(result["errors"])
         blockers.extend(result["blockers"])
+        observations.extend(result.get("observations", []))
     empty = [r for r in records if r.get("kind") == "empty_terms"]
     if len(empty) != 1 or empty[0].get("native_calls") != 0 or empty[0].get("hits") != []:
         errors.append("empty tokens issued native work or missing evidence")
@@ -361,13 +432,20 @@ def audit(records):
     elif ordered[0].get("status") == "UNSUPPORTED":
         if not ordered[0].get("error"):
             errors.append("ordered API error detail missing")
-        blockers.append("explicit _score DESC/id ASC API unsupported; no bounded tie-complete refill proved")
+        if v2 and "Column _score not found" not in ordered[0].get("error", ""):
+            errors.append("unexpected order API failure cannot be treated as the known _score limitation")
+        (observations if v2 else blockers).append("explicit _score DESC/id ASC API unsupported; no bounded tie-complete refill proved")
     elif ordered[0].get("status") == "EXECUTED":
         ordered_hits = audit_hits(ordered[0].get("hits"), fixture(), ["tieanchor"], "ordered API", errors)
         tie_case = next((r for r in cases if r.get("phase") == "indexed" and r.get("name") == "ties"), {})
         expected_ties = sorted(tie_case.get("oracle_raw", []), key=rank_key)[:10]
+        if v2:
+            full_ties = sorted(tie_case.get("oracle_raw", []), key=rank_key)
+            score_by_id = {identity(h): h["score"] for h in full_ties}
+            if not valid_membership(ordered_hits, full_ties, 10) or any(h["score"] != score_by_id.get(identity(h)) for h in ordered_hits):
+                errors.append("executed order API returned an invalid BM25 TopK")
         if not same_hits(ordered_hits, expected_ties):
-            blockers.append("explicit order API does not preserve global score/ID cutoff")
+            (observations if v2 else blockers).append("explicit order API does not preserve global score/ID cutoff")
     else:
         errors.append("invalid ordered API diagnostic outcome")
     actions = [r for r in records if r.get("kind") == "mutation"]
@@ -394,10 +472,11 @@ def audit(records):
     # Every actual public native request is counted separately from fixture lookups.
     native_calls = sum(r.get("native_calls", 0) for r in records if type(r.get("native_calls", 0)) is int)
     native_calls += sum(sum(r.get("calls", {}).get(k, 0) for k in ("candidate", "oracle", "plan", "authority_native")) for r in cases)
-    return {"schema": SCHEMA + "-audit", "status": "FAIL_INVALID_OR_FAILED_EVIDENCE" if errors else "BLOCKER" if blockers else "PASS_BOUNDED_DIAGNOSTIC",
-            "errors": errors, "blockers": blockers, "cases": results, "native_calls": native_calls,
+    return {"schema": (schema if schema in (SCHEMA_V1, SCHEMA_V2) else "unknown") + "-audit", "source_schema": schema,
+            "contract": CONTRACT_V2 if v2 else "strict_global_score_id_v1", "status": "FAIL_INVALID_OR_FAILED_EVIDENCE" if errors else "BLOCKER" if blockers else "PASS_BOUNDED_DIAGNOSTIC",
+            "errors": errors, "blockers": blockers, "observations": observations, "cases": results, "native_calls": native_calls,
             "bm25_reference": {"source": SCORER_SOURCE, "k1": 1.2, "b": .75, "statistics": "physical_index_global", "scope": "initial_fully_indexed_fixture_only"},
-            "refresh_observation": changes, "not_run": sorted(NOT_RUN),
+            "refresh_observation": changes, "not_run": sorted(NOT_RUN_V2 if v2 else NOT_RUN),
             "production_acceptance": False, "oracle_is_serving_strategy": False}
 
 
@@ -440,7 +519,7 @@ def main(argv=None):
     started = time.monotonic()
     timed_out = False
     with (args.output/"native.stdout").open("xb") as out, (args.output/"native.stderr").open("xb") as err:
-        proc = subprocess.Popen([str(binary), "fts-v1", str(raw)], stdout=out, stderr=err)
+        proc = subprocess.Popen([str(binary), "fts-v2", str(raw)], stdout=out, stderr=err)
         try:
             rc = proc.wait(timeout=DEADLINE)
         except subprocess.TimeoutExpired:
@@ -451,6 +530,9 @@ def main(argv=None):
     try:
         records = read_records(raw) if raw.exists() else []
         report = audit(records)
+        if report.get("source_schema") != SCHEMA_V2:
+            report["status"] = "FAIL_INVALID_OR_FAILED_EVIDENCE"
+            report["errors"].append("v2 native invocation did not emit the v2 contract")
     except (ValueError, TypeError, KeyError, OSError) as exc:
         report = {"schema": SCHEMA+"-audit", "status": "FAIL_INVALID_OR_FAILED_EVIDENCE", "errors": [f"unreadable native evidence: {exc}"], "blockers": [], "production_acceptance": False}
     if rc != 0 or timed_out or elapsed > DEADLINE:

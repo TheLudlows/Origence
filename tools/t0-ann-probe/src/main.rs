@@ -743,10 +743,10 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
-    if args.get(1).is_some_and(|arg| arg == "fts-v1") {
+    if args.get(1).is_some_and(|arg| arg == "fts-v2") {
         ensure!(
             args.len() == 3,
-            "usage: origence-t0-ann-probe fts-v1 OUTPUT_JSONL"
+            "usage: origence-t0-ann-probe fts-v2 OUTPUT_JSONL"
         );
         return fts::run(Path::new(&args[2])).await;
     }

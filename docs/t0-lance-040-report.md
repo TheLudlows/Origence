@@ -1,7 +1,8 @@
 # T0 LanceDB 0.40.0: bounded chunk FTS and ANN probe
 
-Status: source preparation; native evidence **NOT_RUN**. This report must not be
-read as adoption or as a passing replacement of any prior probe.
+Status: committed-lock v1 native evidence completed at `a4545e94`; user-approved
+v2 tie-contract preparation is **NOT_RUN** until its own exact-head CI. This
+report must not be read as adoption or as a production acceptance result.
 
 ## Scope frozen before native execution
 
@@ -21,7 +22,10 @@ read as adoption or as a passing replacement of any prior probe.
   not a candidate FTS serving path in this slice; unchanged Turso tests are
   skipped, never relabeled as passing.
 
-## FTS gates and evidence
+## FTS v1 gates and evidence
+
+These are the original strict v1 gates. The explicit later v2 decision is
+recorded below; historical v1 failures are not reinterpreted.
 
 One synthetic raw-chunk corpus below 1,000 rows, with an explicit tokenizer and
 no default English stemming/stop-word removal of pretokenized lexical terms.
@@ -133,3 +137,50 @@ pre-feature lock is retained as evidence, not substituted for the new graph.
 [unconditional references](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/job.rs#L100-L120),
 [conditional variant](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/error.rs#L113-L124),
 [URI dispatch](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/connection.rs#L1477-L1498).
+
+
+## Committed-lock v1 evidence and explicit subsequent decision
+
+Head `a4545e94d01ae189d7c68e4ddf1852faa55abb2a`,
+[run 38368447647](https://github.com/TheLudlows/Origence/actions/runs/38368447647),
+uses the committed Cargo-generated lock (SHA-256
+`740d0cb2609f238403c3f77d61fbd7840aa673102b6fffa4848709af693c3766`).
+Actual resolution is LanceDB 0.40.0, Lance 13.0.0, Arrow 58.3.0 and DataFusion
+54.1.0; the manifest range did not pin DataFusion to 54.0.0. Formatting, locked
+Clippy, five Rust fixture tests, 100 Python tests and existing application CI
+passed. Artifact 11798007928 ZIP SHA-256 is
+`305550b4728e7216f30f7642f94d9251e20089a07c4366dde1bc0a614d243bca`.
+The earlier provisional native run `ae9354f` is retained at
+[run 38362672199](https://github.com/TheLudlows/Origence/actions/runs/38362672199).
+
+All 42 FTS cases satisfy native descending BM25 and tie-aware Top-K. The v1
+strict compatibility gate remains BLOCKER: at K=10 among 96 equal-scoring
+matches, native selected IDs 093,092,091,090,089,088,087,086,095,094 rather than
+000–009. The authority-prefilter case selected the correct 00–09 member set in
+a different order. These are not BM25 ranking errors. The explicit native
+ordering API reports `Column _score not found`. This K=10 fixture is not a
+measurement of production's 100-candidate branch boundary.
+
+The scope-only negative control demonstrates starvation after authority
+filtering; the authority-prefilter arm passes fixture completeness. Scope,
+literal/Chinese AND, unindexed insert, update/delete, Index refresh, Compact,
+reopen and fresh fixture-authority rejection have retained evidence. These
+checks perform zero native Turso calls. Full-fixture enumeration remains only
+an audit oracle. No serving enumeration strategy has been adopted.
+
+The unchanged ANN policy again passed both 576-pair builds on this fixed
+10k/128D mix. Complete selected/exact wall ratios were 0.659122 and 0.659399;
+ANN paired medians were 0.379291 and 0.377082. Worst bucket medians were 1.032445
+and 1.048140. Default 32/64 failed 32/97 pairs and 12/33 batched groups on this head;
+full 64/64 passed all 97 pairs and 33 groups. Full-partition passing
+does not demonstrate ANN benefit. Final evidence must retain actual per-run
+counts and uncontrolled training randomness, not reuse old 0.23.1 passes.
+
+After seeing these results, the user explicitly accepted arbitrary BM25-valid
+cutoff-tied K membership, including its possible effect on hybrid results.
+The v2 contract requires full-scoped deduplication and score/ID ordering before
+RRF rank assignment, and does not promise cross-rebuild tie membership. Its
+new isolated application preparation stage requires fresh native verification;
+v1 reports keep their original strict gate. See
+[T0 contract section 9.1](T0_STORAGE_CONTRACT.md#91-authorized-chunk-fts-cutoff-ties-2026-10-13).
+Production RRF, cross-store authority and summary placement remain NOT_RUN.

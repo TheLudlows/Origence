@@ -18,9 +18,11 @@ use lancedb::{
 };
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::{fs::OpenOptions, io::Write, path::Path, sync::Arc, time::Instant};
+use std::{
+    collections::BTreeMap, fs::OpenOptions, io::Write, path::Path, sync::Arc, time::Instant,
+};
 
-const SCHEMA: &str = "origence-t0-lance-fts-v1";
+const SCHEMA: &str = "origence-t0-lance-fts-v2";
 const INDEX: &str = "t0_chunk_terms";
 const CAP: usize = 1000;
 const BATCH: usize = 64;
@@ -290,6 +292,24 @@ fn sort_oracle(hits: &mut [Hit]) {
     hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(key(a).cmp(&key(b))));
 }
 
+// This bounded application step consumes only freshly checked candidates. It does
+// not refill a truncated native TopK, invent a score, or execute production RRF.
+fn prepare_rank_inputs(hits: &[Hit]) -> Result<Vec<Hit>> {
+    let mut unique: BTreeMap<(String, String, String), Hit> = BTreeMap::new();
+    for hit in hits {
+        ensure!(hit.score.is_finite() && hit.score > 0.0, "invalid pre-RRF score");
+        let scoped_key = (hit.tenant.clone(), hit.workspace.clone(), hit.id.clone());
+        if let Some(previous) = unique.get(&scoped_key) {
+            ensure!(previous == hit, "conflicting pre-RRF identity or score");
+        } else {
+            unique.insert(scoped_key, hit.clone());
+        }
+    }
+    let mut prepared: Vec<_> = unique.into_values().collect();
+    prepared.sort_by(|a, b| b.score.total_cmp(&a.score).then(key(a).cmp(&key(b))));
+    Ok(prepared)
+}
+
 // Deliberately a fixture-only batch API, not a Turso call and not a production security test.
 fn authority(hits: &[Hit], rows: &[Row], mutation: &str) -> Value {
     let start = Instant::now();
@@ -412,6 +432,20 @@ async fn case(
     }
     let authority_ms = ms(authority_start);
     let fresh = authority(&checked, rows, "none");
+    ensure!(
+        fresh["status"] == "OK",
+        "fresh authority did not permit rank preparation"
+    );
+    let application_started = Instant::now();
+    let rank_inputs = prepare_rank_inputs(&checked)?;
+    let application_ms = ms(application_started);
+    let application_stage = json!({
+        "schema":"origence-t0-pre-rrf-v1", "stage":"after_fresh_authority_before_rrf",
+        "input":"fresh_check.hits", "input_count":checked.len(), "output_count":rank_inputs.len(),
+        "deduplicated_count":checked.len()-rank_inputs.len(), "rank_inputs":rank_inputs,
+        "rank_positions":(1..=rank_inputs.len()).collect::<Vec<_>>(),
+        "native_calls":0, "elapsed_ms":application_ms, "rrf_executed":false
+    });
     let candidate_wall_ms = ms(total);
     // Oracle is outside measured candidate wall, separate native call, bounded to CAP+1.
     let (oracle_raw, oracle_ms) = execute(query(table, terms, CAP + 1, true)).await?;
@@ -451,10 +485,10 @@ async fn case(
         "candidate_raw":candidate,"oracle_raw":oracle_raw,"oracle_only":true,"oracle_complete":complete,
         "expected_scoped_matches":expected_matches,"checked_candidates":checked,"fresh_check":fresh,
         "native_bm25_topk":bm25_topk,"native_score_descending":score_ordered,
-        "native_strict_topk":strict,"native_filtered_topk":filtered,
-        "candidate_status":if name == "deep_authority" && !filtered && bm25_topk {"EXPECTED_NEGATIVE_CONTROL"} else if strict && filtered && bm25_topk {"PASS_BOUNDED_FIXTURE"} else {"BLOCKER"},
+        "native_strict_topk":strict,"native_filtered_topk":filtered,"application_stage":application_stage,
+        "candidate_status":if name == "deep_authority" && !filtered && bm25_topk {"EXPECTED_NEGATIVE_CONTROL"} else if filtered && bm25_topk {"PASS_BOUNDED_FIXTURE"} else {"BLOCKER"},
         "plan":plan,"calls":{"candidate":1,"oracle":1,"plan":1,"authority_native":0,"authority_fixture_batches":batch_calls},
-        "timing_ms":{"eligibility_fixture_enumeration":enumeration_ms,"candidate_native":candidate_ms,"candidate_authority_fixture":authority_ms,"candidate_total":candidate_wall_ms,"oracle_native":oracle_ms,"plan":plan_ms}}))?;
+        "timing_ms":{"eligibility_fixture_enumeration":enumeration_ms,"candidate_native":candidate_ms,"candidate_authority_fixture":authority_ms,"application_prepare":application_ms,"candidate_total":candidate_wall_ms,"oracle_native":oracle_ms,"plan":plan_ms}}))?;
     // Independent fresh-authority mutation fixture; these do not claim concurrent native DB writes.
     if phase == "indexed" && name == "rank" {
         for mutation in [
@@ -493,8 +527,11 @@ async fn probe(log: &mut Log) -> Result<()> {
     ensure!(rows.len() < CAP, "fixture exceeded bounded rung");
     log.emit(json!({"kind":"header","schema":SCHEMA,"lancedb":"0.40.0","arrow":"58",
         "max_rows":CAP,"deadline_seconds":180,"authority_kind":"in_memory_fixture_only",
+        "contract":{"id":"native-bm25-tied-topk-pre-rrf-v2","cutoff_ties":"any_bm25_legal_members",
+            "dedup":"same_scoped_chunk_and_equal_authority_identity_and_score_only",
+            "application_order":"score_desc_scoped_chunk_id_asc","rebuild_member_stability_guaranteed":false},
         "serving_strategy":"native_scoped_topk_with_fixture_authority_prefilter_arm","full_enumeration":"diagnostic_oracle_only",
-        "not_run":["turso_authority_integration","production_security","summary_cross_document_AND","summary_placement","learning_closure","production_identity","efficient_tie_complete_refill","10000_row_scale"],
+        "not_run":["turso_authority_integration","production_security","summary_cross_document_AND","summary_placement","learning_closure","production_identity","efficient_tie_complete_refill","10000_row_scale","production_rrf_integration","cross_generation_dedup_integration"],
         "tokenizer":{"base":"whitespace","lower_case":false,"stem":false,"remove_stop_words":false,"ascii_folding":false,"max_token_length":null},
         "source_urls":["https://github.com/lancedb/lancedb/blob/v0.40.0/rust/lancedb/src/query.rs","https://github.com/lance-format/lance/blob/v13.0.0/rust/lance/src/dataset/scanner.rs","https://github.com/lance-format/lance/blob/v13.0.0/rust/lance-index/src/scalar/inverted/query.rs","https://github.com/lance-format/lance/blob/v13.0.0/rust/lance-index/src/scalar/inverted/scorer.rs","https://github.com/lance-format/lance/blob/v13.0.0/rust/lance-index/src/scalar/inverted/tokenizer.rs"]}))?;
     let setup = Instant::now();
@@ -640,5 +677,77 @@ pub async fn run(output: &Path) -> Result<()> {
             log.file.flush()?;
             Err(error)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(id: &str, score: f32) -> Hit {
+        Hit {
+            tenant: "tenant-a".into(),
+            workspace: "workspace-a".into(),
+            id: id.into(),
+            source: format!("source-{id}"),
+            version: 2,
+            generation: 7,
+            score,
+        }
+    }
+
+    #[test]
+    fn preparation_deduplicates_before_assigning_ranks() {
+        let low = hit("a", 1.0);
+        let high = hit("z", 2.0);
+        let prepared = prepare_rank_inputs(&[low.clone(), high.clone(), low]).unwrap();
+        assert_eq!(prepared, vec![high, hit("a", 1.0)]);
+        let ranked_ids: Vec<_> = prepared
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (i + 1, h.id.as_str()))
+            .collect();
+        assert_eq!(ranked_ids, vec![(1, "z"), (2, "a")]);
+    }
+
+    #[test]
+    fn preparation_sorts_ties_before_rank_assignment() {
+        let raw = vec![hit("z", 1.0), hit("a", 1.0)];
+        let prepared = prepare_rank_inputs(&raw).unwrap();
+        assert_eq!(prepared, vec![hit("a", 1.0), hit("z", 1.0)]);
+        // A downstream rank consumer must enumerate this prepared vector, not raw.
+        assert_eq!(raw[0].id, "z");
+        assert_eq!(prepared[0].id, "a");
+    }
+
+    #[test]
+    fn preparation_rejects_conflicting_authority_or_score() {
+        let original = hit("a", 1.0);
+        for field in ["source", "version", "generation", "score"] {
+            let mut conflict = original.clone();
+            match field {
+                "source" => conflict.source.push_str("-conflict"),
+                "version" => conflict.version += 1,
+                "generation" => conflict.generation += 1,
+                "score" => conflict.score += 1.0,
+                _ => unreachable!(),
+            }
+            assert!(prepare_rank_inputs(&[original.clone(), conflict]).is_err());
+        }
+    }
+
+    #[test]
+    fn preparation_preserves_scope_and_rejects_invalid_scores() {
+        let original = hit("a", 1.0);
+        let mut other = original.clone();
+        other.workspace = "workspace-b".into();
+        assert_eq!(
+            prepare_rank_inputs(&[original.clone(), other]).unwrap().len(),
+            2
+        );
+        for score in [0.0, f32::NAN, f32::INFINITY, -1.0] {
+            assert!(prepare_rank_inputs(&[hit("a", score)]).is_err());
+        }
+        assert!(prepare_rank_inputs(&[]).unwrap().is_empty());
     }
 }

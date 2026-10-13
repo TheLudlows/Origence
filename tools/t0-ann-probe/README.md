@@ -7,7 +7,7 @@
 
 # Isolated LanceDB 0.40.0 T0 probe
 
-Status: **0.40.0 UPGRADE PREPARED; the first lock bootstrap failed dependency resolution before compilation; native compilation, ANN smoke/control and both filter-policy rebuilds remain NOT_RUN for this version.** The direct engine pin is `=0.40.0` and direct Arrow array/schema pins are `=58.3.0`. This authoring executor has Python but no Rust/Cargo. The retained 0.23.1 Cargo lock is intentionally unchanged until an authorized runner generates its replacement with Cargo. Plan-only launchers report the mismatch; execution refuses the old lock. API inspection and Python report-reader tests are not native evidence.
+Status: **0.40.0 committed-lock v1 native execution completed at a4545e94; user-approved FTS v2 contract verification remains NOT_RUN until its own exact-head CI.** The direct engine pin is `=0.40.0` and Arrow array/schema pins are `=58.3.0`; Cargo resolves Lance 13.0.0 and DataFusion 54.1.0. The generated isolated lock is committed. FTS v1 passed all 42 BM25-valid Top-K cases while retaining its strict-ID compatibility BLOCKER. ANN's default 32/64 failed 32/97 pairs on the locked head; full-partition and frozen filter-aware policy controls passed their bounded gates. No result implies production adoption. See [exact-head evidence and the subsequent user-approved tie contract](../../docs/t0-lance-040-report.md).
 
 Historical 0.23.1 evidence is preserved: the committed locked default **32/64 smoke failed recall in 43/97 pairs**, while the separate **64/64 full-partition control passed all 97 pairs and 33 batched groups**. Exact fallbacks matched and violation counters were zero. The bootstrap retains its original 49/97 failures. The old two-build filter policy also passed its bounded artificial-workload gates. None of these results transfers to 0.40.0. See [named-head historical results and artifacts](../../docs/t0-ann-report.md).
 
@@ -15,9 +15,9 @@ This crate is an independent workspace and has no dependency on Origence. It nev
 
 ## Reproduce
 
-Run from the repository root, on an authorized machine with the repository's declared Rust **1.98.0**, C/C++ build tools and Protobuf compiler/development headers. Do not silently choose a different toolchain. The exact direct LanceDB pin is `=0.40.0`, with default cloud/provider features disabled; Arrow array/schema are exactly `58.3.0`. Its official dependency graph uses Lance `13.0.0` and DataFusion `54.0.0`.
+Run from the repository root, on an authorized machine with the repository's declared Rust **1.98.0**, C/C++ build tools and Protobuf compiler/development headers. Do not silently choose a different toolchain. The exact direct LanceDB pin is `=0.40.0`, with default cloud/provider features disabled; Arrow array/schema are exactly `58.3.0`. The committed graph resolves Lance `13.0.0` and DataFusion `54.1.0` from the compatible declared range.
 
-1. Bootstrap the upgraded isolated lock once with real Cargo on the authorized runner, then retain/commit that generated lock and any formatter-only patch before the final reproducible run. The preparation snapshot still has the historical 0.23.1 lock, so an existence-only check is insufficient. Never hand-write a lock or copy the application's lock. All build/test commands after generation use `--locked`; a provisional bootstrap is not a committed-lock pass.
+1. Bootstrap the upgraded isolated lock once with real Cargo on the authorized runner, then retain/commit that generated lock and any formatter-only patch before the final reproducible run. The historical preparation snapshot used the 0.23.1 lock; the current lock is Cargo-generated 0.40.0, and its content identity is required rather than an existence-only check. Never hand-write a lock or copy the application's lock. All build/test commands after generation use `--locked`; a provisional bootstrap is not a committed-lock pass.
 
    ```sh
    # One-time 0.40.0 bootstrap; skip after the matching lock is committed.
@@ -96,7 +96,7 @@ Official LanceDB tag `v0.40.0` resolves to immutable commit `b1b080b97c3edd2fd9f
 - [Query/request API](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/query.rs): `only_if` replaces the prior filter; public `HasQuery` still sets prefilter/fast-search explicitly. `nprobes(n)` sets both minimum and maximum. Request assertions retain L2, candidate target, exact bypass and fixed probes. No adaptive query or score-based retry is added.
 - [Index statistics](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/index.rs): coverage/type/metric remain available, but public `IndexStatistics.loss` was removed. New reports retain `loss: null` and `loss_status: not_exposed_by_lancedb_0.40.0_public_index_stats`. Both readers require that disclosure; no training-loss value is invented.
 - [Table snapshots/statistics](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/table.rs) and [separate Compact/Index actions](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/table/optimize.rs): same pinned snapshots, maintenance order, fresh-row checks and fragment invariants remain. The meaning of table `total_bytes` is now manifest-recorded data/index/overlay bytes; it excludes unrecorded files and must not be presented as complete disk usage or compared directly with prior-engine bytes.
-- [LanceDB dependency declarations](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/Cargo.toml): Lance 13.0.0, Arrow `^58.0.0`, DataFusion 54.0.0. The [published DataFusion 54.0.0 registry entry](https://github.com/rust-lang/crates.io-index/blob/master/da/ta/datafusion) requires Arrow and arrow-schema `^58.3.0`, corroborated by its [official release manifest](https://github.com/apache/datafusion/blob/54.0.0/Cargo.toml). The isolated direct Arrow pins are therefore `=58.3.0`, compatible with both dependency ranges. The [Arrow 58 fixture constructor](https://github.com/apache/arrow-rs/blob/58.0.0/arrow-array/src/array/fixed_size_list_array.rs) API was inspected at 58.0.0; the 58.3.0 compile remains to be verified. Canonical fixture bytes and the frozen policy contract are unchanged.
+- [LanceDB dependency declarations](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/Cargo.toml): Lance 13.0.0, Arrow `^58.0.0`, DataFusion 54.0.0. The [published DataFusion 54.0.0 registry entry](https://github.com/rust-lang/crates.io-index/blob/master/da/ta/datafusion) requires Arrow and arrow-schema `^58.3.0`, corroborated by its [official release manifest](https://github.com/apache/datafusion/blob/54.0.0/Cargo.toml). The isolated direct Arrow pins are therefore `=58.3.0`, compatible with both dependency ranges. The [Arrow 58 fixture constructor](https://github.com/apache/arrow-rs/blob/58.0.0/arrow-array/src/array/fixed_size_list_array.rs) API was inspected at 58.0.0; the 58.3.0 compile is verified by the committed-lock v1 run. Canonical fixture bytes and the frozen policy contract are unchanged.
 - [Lance 13 native plan formatting](https://github.com/lance-format/lance/blob/0923349baa19fd9af776b7d4626dc758dc610c80/rust/lance/src/io/exec/knn.rs): the ANN operator, index UUID, fixed minimum/maximum probes and exact KNN distance markers remain. The existing strict native-plan gates are preserved; actual runtime plans still must be collected.
 
 The old [0.23.1 source commit](https://github.com/lancedb/lancedb/tree/e8feaede1ee8dc7063c6f1e32b9936dacef915f9) and prior native artifacts remain historical evidence. Both current report readers reject 0.23.1 reports even if their old native status says PASS. No existing evidence file is rewritten.
@@ -229,3 +229,16 @@ benefit fails, stop and recommend exact for this tested mix; preserve the failed
 candidate rather than tuning it. An all-exact recommendation still leaves
 conditional future ANN research possible. No 100k run, production switch, SLO,
 cold-start claim or paid/provider workload is authorized by this experiment.
+
+
+## Chunk FTS v2 tie contract
+
+`fts-v2 OUTPUT_JSONL` emits the explicitly authorized any-valid-BM25-cutoff-K
+contract. It keeps raw native order and strict-ID compatibility observations,
+then prepares authorized candidates by full-scoped deduplication and score/ID
+ordering before any RRF rank assignment. Conflicting duplicate authority
+metadata or scores fail closed. The probe does not execute production RRF.
+The Python auditor recognizes historical v1 separately and retains its strict
+BLOCKER results; unknown versions fail closed. No native query or corpus-size
+expansion is introduced. See the contract and report for immutable v1 evidence
+and the v2 exact-head verification boundary.

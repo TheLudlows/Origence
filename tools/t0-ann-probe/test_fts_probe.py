@@ -51,7 +51,7 @@ def case(phase, name):
 
 
 def evidence():
-    records = [{"kind": "header", "schema": f.SCHEMA, "lancedb": "0.40.0", "arrow": "58", "max_rows": f.CAP,
+    records = [{"kind": "header", "schema": f.SCHEMA_V1, "lancedb": "0.40.0", "arrow": "58", "max_rows": f.CAP,
                 "deadline_seconds": f.DEADLINE, "tokenizer": f.TOKENIZER, "not_run": list(f.NOT_RUN),
                 "authority_kind": "in_memory_fixture_only", "full_enumeration": "diagnostic_oracle_only",
                 "serving_strategy": "native_scoped_topk_with_fixture_authority_prefilter_arm"}]
@@ -79,6 +79,41 @@ def evidence():
         records.append({"kind": "mutation", "action": action, "native_calls": 1, "prune": False})
     records.append({"kind": "terminal", "status": "COMPLETED_NATIVE_MATRIX", "elapsed_ms": 100})
     return records
+
+
+def application(inputs):
+    # Test-data builder only; the explicit tests below independently assert the
+    # expected order and duplicate/conflict outcomes against hand-written values.
+    prepared = f.prepare_rank_inputs(inputs)
+    return {"schema": "origence-t0-pre-rrf-v1", "stage": "after_fresh_authority_before_rrf",
+            "input": "fresh_check.hits", "input_count": len(inputs), "output_count": len(prepared),
+            "deduplicated_count": len(inputs)-len(prepared), "rank_inputs": copy.deepcopy(prepared),
+            "rank_positions": list(range(1, len(prepared)+1)), "native_calls": 0,
+            "elapsed_ms": .02, "rrf_executed": False}
+
+
+def as_v2_case(event):
+    e = copy.deepcopy(event)
+    e["application_stage"] = application(e["checked_candidates"])
+    e["timing_ms"]["application_prepare"] = .02
+    if e["name"] != "deep_authority":
+        e["candidate_status"] = "PASS_BOUNDED_FIXTURE"
+    return e
+
+
+def evidence_v2():
+    records = evidence()
+    records[0].update(schema=f.SCHEMA_V2, contract=copy.deepcopy(f.CONTRACT_V2), not_run=sorted(f.NOT_RUN_V2))
+    return [as_v2_case(e) if e["kind"] == "case" else e for e in records]
+
+
+def tied_v2_case():
+    e = case("indexed", "ties")
+    e["candidate_raw"] = list(reversed(e["oracle_raw"][-10:]))
+    e["checked_candidates"] = copy.deepcopy(e["candidate_raw"])
+    e["fresh_check"] = fresh(e["checked_candidates"])
+    e.update(native_strict_topk=False, native_filtered_topk=True, candidate_status="BLOCKER")
+    return as_v2_case(e)
 
 
 class AuditorTests(unittest.TestCase):
@@ -250,6 +285,143 @@ class AuditorTests(unittest.TestCase):
         self.assertEqual(report["blockers"], [])
 
 
+class V2ContractTests(unittest.TestCase):
+    def test_v2_accepts_legal_tied_members_and_keeps_strict_observation(self):
+        e = tied_v2_case()
+        report = f.audit_case(e, f.fixture(), f.SCHEMA_V2)
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(report["blockers"], [])
+        self.assertTrue(report["bm25_valid_topk"])
+        self.assertTrue(report["application_pre_rrf_valid"])
+        self.assertFalse(report["strict_id_topk"])
+        self.assertTrue(report["observations"])
+        self.assertEqual([h["id"] for h in e["application_stage"]["rank_inputs"]], [f"tie-{n:03}" for n in range(86, 96)])
+
+    def test_v2_full_report_is_bounded_pass_with_known_api_observation(self):
+        records = evidence_v2()
+        index = next(i for i, e in enumerate(records) if e.get("name") == "ties")
+        records[index] = tied_v2_case()
+        report = f.audit(records)
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(report["blockers"], [])
+        self.assertEqual(report["status"], "PASS_BOUNDED_DIAGNOSTIC")
+        self.assertEqual(report["schema"], f.SCHEMA_V2+"-audit")
+        self.assertTrue(any("unsupported" in x for x in report["observations"]))
+        self.assertIn("production_rrf_integration", report["not_run"])
+        self.assertFalse(report["production_acceptance"])
+        self.assertEqual(len(report["cases"]), 42)
+
+    def test_v1_stays_strict_and_unknown_or_relabelled_header_fails(self):
+        old = evidence()
+        report = f.audit(old)
+        self.assertEqual(report["status"], "BLOCKER")
+        self.assertEqual(report["source_schema"], f.SCHEMA_V1)
+        self.assertEqual(report["schema"], f.SCHEMA_V1+"-audit")
+        old[0]["schema"] = f.SCHEMA_V2
+        self.assertTrue(f.audit(old)["errors"])
+        old[0]["schema"] = "unknown-future-contract"
+        self.assertTrue(f.audit(old)["errors"])
+        old = evidence()
+        old[0]["contract"] = f.CONTRACT_V2
+        self.assertTrue(f.audit(old)["errors"])
+
+    def test_preparation_deduplicates_and_orders_before_rank_assignment(self):
+        a, z = {**case("indexed", "rank")["candidate_raw"][0], "id": "a"}, {**case("indexed", "rank")["candidate_raw"][0], "id": "z"}
+        inputs = [z, a, z, a]
+        prepared = f.prepare_rank_inputs(inputs)
+        self.assertEqual([h["id"] for h in prepared], ["a", "z"])
+        self.assertEqual(list(enumerate([h["id"] for h in prepared], 1)), [(1, "a"), (2, "z")])
+        stage = application(inputs)
+        self.assertEqual(stage["deduplicated_count"], 2)
+        errors = []
+        self.assertTrue(f.audit_application(stage, inputs, errors, "synthetic duplicate unit"))
+        self.assertEqual(errors, [])
+        stage["rank_inputs"] = [z, a]
+        self.assertFalse(f.audit_application(stage, inputs, [], "unsorted before rank"))
+
+    def test_preparation_conflicting_source_version_generation_score_fail_closed(self):
+        original = case("indexed", "rank")["candidate_raw"][0]
+        for field, value in (("source", "wrong"), ("version", 3), ("generation", 8), ("score", original["score"]+.1)):
+            conflict = {**original, field: value}
+            with self.assertRaises(ValueError):
+                f.prepare_rank_inputs([original, conflict])
+            errors = []
+            self.assertFalse(f.audit_application(application([original]), [original, conflict], errors, "conflict"))
+            self.assertTrue(errors)
+
+    def test_preparation_uses_full_scoped_key_not_id_alone(self):
+        a = case("indexed", "rank")["candidate_raw"][0]
+        b = {**a, "workspace": "workspace-b"}
+        self.assertEqual(len(f.prepare_rank_inputs([a, b])), 2)
+        self.assertEqual(f.prepare_rank_inputs([]), [])
+
+    def test_v2_application_missing_changed_dropped_added_or_unsorted_rejected(self):
+        for mutate in (
+            lambda s: s.update(rank_inputs=s["rank_inputs"][1:]),
+            lambda s: s["rank_inputs"].reverse(),
+            lambda s: s["rank_inputs"].append(s["rank_inputs"][0]),
+            lambda s: s["rank_inputs"][0].update(score=123),
+            lambda s: s["rank_inputs"][0].update(version=99),
+            lambda s: s.update(rank_positions=list(reversed(s["rank_positions"]))),
+            lambda s: s.update(stage="after_rrf"),
+            lambda s: s.update(rrf_executed=True),
+            lambda s: s.update(deduplicated_count=10),
+        ):
+            e = tied_v2_case()
+            mutate(e["application_stage"])
+            self.assertTrue(f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"])
+        e = tied_v2_case()
+        del e["application_stage"]
+        self.assertTrue(f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"])
+
+    def test_v2_does_not_hide_invalid_raw_scores_by_sorting_application_output(self):
+        e = as_v2_case(case("indexed", "statistics_rank"))
+        e["candidate_raw"].reverse()
+        e["checked_candidates"] = copy.deepcopy(e["candidate_raw"])
+        e["fresh_check"] = fresh(e["checked_candidates"])
+        e["application_stage"] = application(e["checked_candidates"])
+        self.assertTrue(any("raw native score stream" in x for x in f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"]))
+
+    def test_v2_does_not_relax_native_duplicates_or_worse_topk(self):
+        e = tied_v2_case()
+        e["candidate_raw"][1] = copy.deepcopy(e["candidate_raw"][0])
+        e["checked_candidates"] = copy.deepcopy(e["candidate_raw"])
+        e["fresh_check"] = fresh(e["checked_candidates"])
+        e["application_stage"] = application(e["checked_candidates"])
+        self.assertTrue(any("duplicate scoped identity" in x for x in f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"]))
+        e = as_v2_case(case("indexed", "rank"))
+        e["candidate_raw"] = e["oracle_raw"][-1:]
+        self.assertTrue(any("invalid BM25 TopK" in x for x in f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"]))
+
+    def test_v2_keeps_authority_safety_and_exact_filtered_topk_gates(self):
+        e = as_v2_case(case("indexed", "authority_prefilter"))
+        e["candidate_raw"] = e["oracle_raw"][:10]
+        e["checked_candidates"] = []
+        e["fresh_check"] = fresh([])
+        e["application_stage"] = application([])
+        result = f.audit_case(e, f.fixture(), f.SCHEMA_V2)
+        self.assertTrue(result["errors"])
+        self.assertFalse(result["exact_filtered_topk"])
+        self.assertTrue(result["blockers"])
+        e = as_v2_case(case("indexed", "rank"))
+        e["fresh_check"].update(status="SNAPSHOT_CHANGED", hits=[])
+        self.assertTrue(f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"])
+
+    def test_v2_application_cost_is_inside_measured_candidate(self):
+        e = tied_v2_case()
+        e["application_stage"]["elapsed_ms"] = 5
+        e["timing_ms"]["application_prepare"] = 5
+        self.assertTrue(any("wall excludes" in x for x in f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"]))
+        e = tied_v2_case()
+        e["application_stage"]["elapsed_ms"] = 0
+        self.assertTrue(any("timing disagrees" in x for x in f.audit_case(e, f.fixture(), f.SCHEMA_V2)["errors"]))
+
+    def test_unexpected_api_error_is_not_the_known_unsupported_observation(self):
+        records = evidence_v2()
+        next(e for e in records if e["kind"] == "ordered_api")["error"] = "IO failure"
+        self.assertTrue(any("unexpected order API failure" in x for x in f.audit(records)["errors"]))
+
+
 class LauncherTests(unittest.TestCase):
     def test_missing_binary_does_not_launch(self):
         with mock.patch("subprocess.Popen") as popen, contextlib.redirect_stderr(io.StringIO()):
@@ -271,6 +443,7 @@ class LauncherTests(unittest.TestCase):
             process.kill.assert_called_once_with()
             self.assertEqual(process.wait.call_count, 2)
             self.assertNotIn("start_new_session", popen.call_args.kwargs)
+            self.assertEqual(popen.call_args.args[0][1], "fts-v2")
             report = json.loads((root/"out/report.json").read_text())
             self.assertTrue(report["execution"]["native_process_killed"])
             self.assertTrue(report["execution"]["outer_timeout_shares_process_group"])
