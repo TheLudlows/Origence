@@ -1,6 +1,7 @@
 # Turso authority and LanceDB search integration
 
-Status: implementation in progress, not production acceptance. Base: main
+Status: implemented; engineering CI passed at `b50e8748`, draft review pending.
+This is not production performance or real-model acceptance. Base: main
 `86fac48aeabdf349431801334485a2ac99c49448`, preserving restored history.
 
 ## Frozen scope
@@ -36,7 +37,12 @@ Status: implementation in progress, not production acceptance. Base: main
    denied Clippy, focused and full tests, HTTP/MCP and process recovery CI.
 5. Keep the PR a draft, report PASS/FAIL/NOT_RUN separately, never auto-merge.
 
-The cloud editor has no Cargo. Temporary preparation CI produces a real Cargo
-lock and rustfmt diff as artifacts; these must be committed and revalidated with
-`--locked` before completion. Historical T0 probes/reports stay in PR #53 and are
+The cloud editor has no Cargo. Temporary preparation CI generated the real Cargo
+lock and rustfmt artifacts, which were committed and validated with `--locked`.
+The preparation workflow is removed after successful integration CI; normal CI
+retains all applicable gates. Historical T0 probes/reports stay in PR #53 and are
 not copied as a substitute for production integration tests.
+
+Implementation CI: https://github.com/TheLudlows/Origence/actions/runs/38405514854.
+All five delivery steps above are complete at the implementation head. Final
+archive-only head checks remain visible on draft PR #58; no automatic merge.

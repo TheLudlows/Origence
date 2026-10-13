@@ -670,3 +670,31 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
   精确账本幂等断言；不能仅放宽失败计数或加入隐式重建。Lance 13 压实保留
   indexed / unindexed fragment 覆盖边界，不将两组误报为未压实。
   该头 HTTP/MCP smoke、受控模型进程恢复与 keyword 评估仍 NOT_RUN。
+
+### 本轮实现结果：b50e8748
+
+[正式 CI 38405514854](https://github.com/TheLudlows/Origence/actions/runs/38405514854)
+completed/success；fast-check 与 linux-native 全通过，Windows 按既有 PR 策略
+SKIP。fmt、无默认特性及全目标 warnings-denied Clippy、Rust 1.98 身份测试通过。
+无默认特性 78 lib + 99 integration；默认特性 93 lib + 221 integration 全通过。
+全部 focused native/publication/Context/Summary/semantic/learning 回归再次通过；
+前述 4 项 fixture 合同修复与 3 个原 stack overflow 用例均已闭合。
+
+真实二进制 HTTP readiness/auth/publication/identity/keyword smoke PASS；MCP
+host-forwarding 与 offline 协商/schema/安全错误/撤回/EOF/reopen PASS；受控模型
+夹具下的真实宿主处理中强退/恢复 2/2 PASS。Python tools 55 PASS / 2 SKIP、
+eval adapters 42/42 PASS；两个 tools 缺二进制跳过项由 Linux 专用步骤实跑。
+
+Keyword seed 为 24 题（22 可答、2 无答案），请求错误与无答案误命中均 0，
+document Recall@K / MRR / nDCG 均 0.63636。该值是本次 keyword-only 合成诊断，
+不是“所有问题正确”、ANN 通用召回保证或真实模型产品效果验收。证据工件
+[retrieval-linux / 11819827413](https://github.com/TheLudlows/Origence/actions/runs/38405514854/artifacts/11819827413)，
+SHA-256 `4c2a3b9e6777ca193ad2413a83a2d56ace12ae591194e59d6df6e9918d00e304`。
+
+本轮保留 fresh-only 范围；同版本重开/幂等/撤回、跨库阶段失败重放、候选前完整
+身份预检与返回前权威复核已通过工程回归。真实模型/官方 AML、通用 ANN 性能
+SLO、维护中断/磁盘不足、任意断电与在线跨库备份仍不在本次已验范围。
+
+最后归档只更新当前状态、实施/验证记录并移除临时 preparation workflow，不改
+运行源代码、依赖锁或测试。归档精确 head 的适用 CI 仍须通过，结果在草稿
+[PR #58](https://github.com/TheLudlows/Origence/pull/58) 保留；不自动合入。

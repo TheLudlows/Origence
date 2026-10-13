@@ -2,12 +2,15 @@
 
 更新：2026-10-13。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
-## Turso / LanceDB 正式接入（草稿验证中）
+## Turso / LanceDB 正式接入（工程 CI 通过，草稿待审）
 
 [PR #58](https://github.com/TheLudlows/Origence/pull/58) 基于恢复后的主干
 `86fac48`，接入 Turso Database 0.8.2 Rust 引擎权威存储与 LanceDB 0.40.0
-原生 chunk 全文/向量检索。实现与验证进行中，尚未通过完整工程验收；不得沿用
-T0 探针通过结论声称生产接入完成。范围、发布协议与检查见
+原生 chunk 全文/向量检索。实现提交 `b50e8748` 的[工程 CI](https://github.com/TheLudlows/Origence/actions/runs/38405514854)
+全部适用作业通过：无默认特性 78 + 99、默认特性 93 + 221 项 Rust 测试，
+HTTP/MCP、受控模型进程恢复及 keyword 种子评估均完成。PR 保持草稿未合入；
+归档后精确 head 的 CI 以 PR 为准。真实模型质量、生产 SLO 与任意断电保证
+未验收。范围、发布协议与检查见
 [实施合同](superpowers/plans/2026-10-13-turso-lance-integration.md)。
 
 仅面向新库；同版本重开、取消/崩溃恢复、幂等与来源撤回仍在验收范围。
