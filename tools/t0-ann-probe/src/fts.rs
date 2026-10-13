@@ -297,7 +297,10 @@ fn sort_oracle(hits: &mut [Hit]) {
 fn prepare_rank_inputs(hits: &[Hit]) -> Result<Vec<Hit>> {
     let mut unique: BTreeMap<(String, String, String), Hit> = BTreeMap::new();
     for hit in hits {
-        ensure!(hit.score.is_finite() && hit.score > 0.0, "invalid pre-RRF score");
+        ensure!(
+            hit.score.is_finite() && hit.score > 0.0,
+            "invalid pre-RRF score"
+        );
         let scoped_key = (hit.tenant.clone(), hit.workspace.clone(), hit.id.clone());
         if let Some(previous) = unique.get(&scoped_key) {
             ensure!(previous == hit, "conflicting pre-RRF identity or score");
@@ -742,7 +745,9 @@ mod tests {
         let mut other = original.clone();
         other.workspace = "workspace-b".into();
         assert_eq!(
-            prepare_rank_inputs(&[original.clone(), other]).unwrap().len(),
+            prepare_rank_inputs(&[original.clone(), other])
+                .unwrap()
+                .len(),
             2
         );
         for score in [0.0, f32::NAN, f32::INFINITY, -1.0] {
