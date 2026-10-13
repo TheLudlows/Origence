@@ -13,7 +13,9 @@ anyhow = "1"
 arrow-array = "=58.3.0"
 arrow-schema = "=58.3.0"
 futures = "0.3"
-lancedb = { version = "=0.40.0", default-features = false }
+# 0.40.0 job.rs references Error::Http, which requires remote even for local-only builds.
+# Probe URIs remain temporary filesystem paths; no remote credentials/endpoints are accepted.
+lancedb = { version = "=0.40.0", default-features = false, features = ["remote"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

@@ -1,3 +1,10 @@
+> Build configuration update: the released 0.40.0 package fails to compile with
+> no features because job.rs references Error::Http gated by `remote`. The
+> isolated probe now explicitly enables only `remote` with defaults still off.
+> All probe URIs remain temporary filesystem paths; no remote address,
+> credentials, authentication flow or provider calls are configured. See the
+> [preserved failed-run evidence](../../docs/t0-lance-040-report.md).
+
 # Isolated LanceDB 0.40.0 T0 probe
 
 Status: **0.40.0 UPGRADE PREPARED; the first lock bootstrap failed dependency resolution before compilation; native compilation, ANN smoke/control and both filter-policy rebuilds remain NOT_RUN for this version.** The direct engine pin is `=0.40.0` and direct Arrow array/schema pins are `=58.3.0`. This authoring executor has Python but no Rust/Cargo. The retained 0.23.1 Cargo lock is intentionally unchanged until an authorized runner generates its replacement with Cargo. Plan-only launchers report the mismatch; execution refuses the old lock. API inspection and Python report-reader tests are not native evidence.

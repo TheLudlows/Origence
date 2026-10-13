@@ -109,3 +109,27 @@ failed before compilation: published DataFusion 54.0.0 requires Arrow schema
 LanceDB manifest. Direct Arrow pins and lock guards are corrected to `=58.3.0`.
 No native FTS/ANN case ran in that attempt and no new lock was produced.
 The failed attempt remains evidence; it is not an engine-ranking result.
+
+
+## Second bootstrap attempt: released feature combination does not compile
+
+Head `dd605620ed81c55d900cca7df6c75e6a44e9d220`, [run 38361069756](https://github.com/TheLudlows/Origence/actions/runs/38361069756),
+resolved the Arrow correction and passed 100 Python tests, but Clippy failed
+inside published LanceDB0.40.0 before the probe compiled. `job.rs:102/112` uses
+`Error::Http` unconditionally while `error.rs:113` exposes it only with the
+`remote` feature. The release has an empty default feature set. This failure is
+retained; it is not a failure of a native FTS query that never ran.
+
+The next isolated configuration retains `default-features=false` and enables
+only `remote` as the smallest existing build workaround. This adds HTTP/TLS,
+OAuth, Arrow Flight/gRPC and namespace REST compilation dependencies. It does
+not enable provider features, configure endpoints/credentials, or call remote
+services. Both probes construct temporary filesystem paths; remote dispatch
+requires a `db` URI. Actual local native behavior still requires the next run.
+The Cargo-generated source-format patch from the failed run is imported; its
+pre-feature lock is retained as evidence, not substituted for the new graph.
+
+[Published feature declarations](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/Cargo.toml#L164-L177),
+[unconditional references](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/job.rs#L100-L120),
+[conditional variant](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/error.rs#L113-L124),
+[URI dispatch](https://github.com/lancedb/lancedb/blob/b1b080b97c3edd2fd9f2aae8a3b71ff19487b1f8/rust/lancedb/src/connection.rs#L1477-L1498).
