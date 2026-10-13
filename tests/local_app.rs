@@ -1080,17 +1080,9 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
-        tx.insert_chunk(
-            chunk,
-            asset,
-            1,
-            0,
-            "approval",
-            &json!({}),
-            "approval",
-        )
-        .await
-        .unwrap();
+        tx.insert_chunk(chunk, asset, 1, 0, "approval", &json!({}), "approval")
+            .await
+            .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
         full_text.push(FullTextEntry {
             id: chunk,
