@@ -90,7 +90,9 @@ Sources were inspected at LanceDB tag `v0.23.1`, resolved to immutable commit `e
 
 Reading these sources is API design evidence; successful compilation and actual native plans remain runtime evidence that must be collected.
 
-## Frozen filter-aware follow-up (2026-10-13; native execution NOT_RUN)
+## Frozen filter-aware follow-up (2026-10-13; initial native pass)
+
+Initial head `fa19309f` passed both frozen two-build gates: all 576 pairs/build had nonempty Recall@10/@100=1.0 and zero invariant violations. Complete candidate-path workload ratios were 0.844294 and 0.847120; ANN-stratum medians 0.517181 and 0.511865; worst case medians 1.021915 and 1.020810. This supports the bounded synthetic candidate only. Final committed-format exact-head CI is pending; see the [named-head evidence](evidence/filter-policy-fa19309f.json) and [report](../../docs/t0-ann-report.md).
 
 The opt-in follow-up does not replace the original smoke launcher, its 32/64
 failures, or the separate 64/64 saturation control. The frozen machine-readable

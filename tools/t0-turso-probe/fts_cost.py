@@ -225,9 +225,9 @@ class OverallDeadline:
         signal.signal(signal.SIGALRM, self.previous)
 
 
-def require_time(deadline):
+def require_time(deadline, seconds=DEADLINE_SECONDS):
     if time.monotonic() >= deadline:
-        raise TimeoutError("overall 900-second driver deadline exceeded")
+        raise TimeoutError(f"overall {seconds}-second driver deadline exceeded")
 
 
 class Meter:
@@ -236,7 +236,7 @@ class Meter:
         self.db, self.deadline, self.calls = db, deadline, []
 
     def call(self, label, sql, params=(), execute=False):
-        require_time(self.deadline)
+        require_time(self.deadline, getattr(self.db, "deadline_seconds", DEADLINE_SECONDS))
         request = {"sql": sql, "params": list(params), "op": "execute" if execute else "query", "connection": "default", "timing": True}
         request_bytes = len((json.dumps(request, ensure_ascii=False) + "\n").encode())
         assert request_bytes < POLICY["max_request_bytes"], "request exceeds frozen bridge input budget"
@@ -262,7 +262,7 @@ def require_authority(meter, label):
     assert rows == [[T, W, KEY, "reader"]], "synthetic key not authorized for exact target scope"
 
 
-def measured(db, data, case, arm, deadline):
+def measured(db, data, case, arm, deadline, *, candidate_statement=None):
     meter = Meter(db, deadline)
     started = time.perf_counter()
     result = {"arm": arm, "outcome": "FAIL", "calls": meter.calls, "hits": [], "final_verified_metadata": []}
@@ -281,7 +281,7 @@ def measured(db, data, case, arm, deadline):
                 result.update({"outcome": "RESOURCE_EXHAUSTED", "rank_status": "NOT_RUN", "recall": None})
                 return result
         if arm == "candidate":
-            sql, params = candidate_sql(data, case["bucket"], case["k"])
+            sql, params = candidate_sql(data, case["bucket"], case["k"]) if candidate_statement is None else candidate_statement
             hits = meter.call("candidate_cte", sql, [query] + params)
         else:
             visibility, params = visibility_sql(source=bucket_source(data, case["bucket"]))

@@ -1,0 +1,600 @@
+{
+  "schema": "origence-t0-filter-policy-evidence-v1",
+  "recorded_utc": "2026-10-13",
+  "source_head": "fa19309ff6a0f8623f1670b0a3a34a686073ad85",
+  "workflow_run": 38333646435,
+  "ann_job": 115088769024,
+  "artifact": {
+    "id": 11785013021,
+    "bytes": 16551521,
+    "sha256": "50f432565dece226edfd82fd003aa9d05e6aa47d283e98a38ae5e863ac8b325e",
+    "url": "https://github.com/TheLudlows/Origence/actions/runs/38333646435/artifacts/11785013021"
+  },
+  "decision": "BOUNDED_CANDIDATE_ON_FROZEN_SYNTHETIC_MIX",
+  "validation": {
+    "python_tests": 69,
+    "rust_tests": 5,
+    "warnings_denied_clippy": "PASS",
+    "release_build": "PASS",
+    "committed_formatting": "FAIL_expected_formatter_import_required",
+    "rustfmt_patch_bytes": 28014,
+    "rustfmt_patch_sha256": "2344f826ba1f19d08fe8f040e814266b67d5104b77868de994b034e29937701a",
+    "final_exact_head_rerun": "PENDING",
+    "release_build_seconds": 1382
+  },
+  "environment": {
+    "binary_sha256": "6f662788cd00e7124ab6248999bd4c14bed798d4a21037479badfd5302691245",
+    "source_sha256": {
+      "Cargo.toml": "658971567d677538d522796a71bd0a9eb3c1f8643528a68a6d927e2dfcf3cd64",
+      "Cargo.lock": "565489ab5d8bf79c88a98410af3c2f0f45b4e9e5560b3a162b89a994fa41d5cf",
+      "src/main.rs": "7fb784ab61b76a4e1696d9060eb4cff622864d45236c08bd3f55f0d51735da26",
+      "src/fixture.rs": "ca7b73357ee29467c833ae8024308c3aca16b844bcc87aa5fd82f292888c140e",
+      "src/policy.rs": "f9748822c85213b5563e48541bf96dfb097ed7905df6313f61a44efe2eb1d438",
+      "probe.py": "966f0d88c484d610ad30cb8a96109aae9378dd84ba7029561cabce65eddaa515",
+      "policy.py": "8b346b6c42cb7f4dc997ca6946d2efdfaed79f73cd31d5a295a1917e4752e3ec",
+      "policy_report.py": "a7ba8a3e2cd910d9d647c2bfd97be40249f674225d9caeba4b9c49a81af6a019",
+      "policy-contract.json": "c98288a45e5f911f8e2db8f6dd121fbdf354aba77c4b97de96310a4935ab92a3"
+    },
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "baseline_matches": true,
+    "baseline_commit": "d0521c0935083e71890ab02c100920c2edaa7227"
+  },
+  "contract_sha256": "c98288a45e5f911f8e2db8f6dd121fbdf354aba77c4b97de96310a4935ab92a3",
+  "builds": [
+    {
+      "build": "build-1",
+      "artifact_relative_path": "Origence/Origence/tools/t0-ann-probe/runs/filter-policy-v1-qp5y6smx/build-1",
+      "native_report_sha256": "64902bc8b21444b9d6adcd90bb5a03b78da67719d366490a90adee33d300e8a7",
+      "driver_result_sha256": "ca3e9e00b8ff3d95ebd1eb1e313bc6c7cba21071908ac65408cb9470d342cc99",
+      "native_status": "PASS_QUALITY",
+      "independent_validator_errors": 0,
+      "quality_passed": true,
+      "performance": {
+        "performance_passed": true,
+        "quality_passed": true,
+        "workload_sum_time_ratio": 0.8442941788961164,
+        "ann_median_paired_ratio": 0.5171811934553853,
+        "selected_wall_sum_ms": 29907.42629000003,
+        "exact_wall_sum_ms": 35422.99240900001,
+        "performance_errors": [],
+        "recommendation": "candidate_for_tested_mix",
+        "interpretation": "Exploratory artificial fixed mix, one rebuild only; both fresh rebuilds must pass separately. Not production, cold-I/O, SQLite cost, or an SLO.",
+        "worst_case_median_paired_ratio": {
+          "case_id": "fresh_before_refresh/count_2048",
+          "ratio": 1.0219145007792156
+        },
+        "all_72_case_medians_at_most_1_10": true
+      },
+      "native_process_wall_seconds": 178.55367982200005,
+      "python_audit_wall_seconds": 6.180735168999945,
+      "cases": 72,
+      "paired_samples": 576,
+      "route_sample_counts": {
+        "empty": 24,
+        "exact": 408,
+        "ann": 144
+      },
+      "initial_index_uuids": [
+        "2c607868-855d-4335-9050-361797a6dd2d"
+      ],
+      "fixture_indexed_sha256": "104b42b105d709b9743df93b2160be89e92ada29b4d954482e501d32c332ba07",
+      "fixture_final_sha256": "a15ff3af30877988a2ed85e0dee321ee88a099e46eab302d626804d9364c892b",
+      "exact_oracle_matches": 576,
+      "selected_exact_oracle_matches": 432,
+      "recall_at_10_min": 1.0,
+      "recall_at_100_min": 1.0,
+      "invariant_sums": {
+        "selected_raw_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "selected_verified_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "exact_raw_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "exact_verified_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "oracle_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        }
+      },
+      "call_counts": {
+        "exact_native": 552,
+        "explain_plans": 1104,
+        "oracle_native": 552,
+        "selected_native": 552
+      },
+      "setup_sdk_calls": {
+        "add": 40,
+        "checkout": 4,
+        "checkout_latest": 3,
+        "compact": 1,
+        "connect": 1,
+        "create_empty_table": 1,
+        "create_index": 1,
+        "index_refresh": 1,
+        "index_stats": 4,
+        "list_indices": 4,
+        "open_table": 1,
+        "table_stats": 5,
+        "table_version": 13
+      },
+      "call_count_scope": "Completed explicit LanceDB SDK calls, not underlying file reads/RPCs. Vector execution and explain calls are separate in call_counts.",
+      "unique_plan_texts": 64,
+      "per_case_slot_plan_references": 8,
+      "retained_hit_entries_audited": 217680,
+      "route_costs": {
+        "ann": {
+          "samples": 144,
+          "selected_wall_sum_ms": 6639.794489,
+          "exact_wall_sum_ms": 12143.297516999999,
+          "median_paired_wall_ratio": 0.5171811934553853,
+          "selected_median_wall_ms": 43.842415,
+          "exact_median_wall_ms": 84.277424,
+          "selected_median_components_ms": {
+            "authority_map": 0.6379090000000001,
+            "eligibility": 0.484351,
+            "native_decode_sort": 41.9144465,
+            "selection_filter_query": 0.6184375,
+            "verification": 0.0629725
+          }
+        },
+        "exact": {
+          "samples": 408,
+          "selected_wall_sum_ms": 23259.38024,
+          "exact_wall_sum_ms": 23271.818804,
+          "median_paired_wall_ratio": 1.0005998356883232,
+          "selected_median_wall_ms": 52.2668845,
+          "exact_median_wall_ms": 52.531563,
+          "selected_median_components_ms": {
+            "authority_map": 0.6167739999999999,
+            "eligibility": 0.4379545,
+            "native_decode_sort": 51.170704,
+            "selection_filter_query": 0.039333999999999994,
+            "verification": 0.055955000000000005
+          }
+        },
+        "empty": {
+          "samples": 24,
+          "selected_wall_sum_ms": 8.251561,
+          "exact_wall_sum_ms": 7.876088,
+          "median_paired_wall_ratio": 1.0031629595837108,
+          "selected_median_wall_ms": 0.3107215,
+          "exact_median_wall_ms": 0.311884,
+          "selected_median_components_ms": {
+            "authority_map": 0.31021600000000005,
+            "eligibility": 4e-05,
+            "native_decode_sort": 2.9999999999999997e-05,
+            "selection_filter_query": 4e-05,
+            "verification": 4e-05
+          }
+        }
+      },
+      "lifecycle": {
+        "indexed_evidence": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 9984,
+            "loss": 1498.0923874117434,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 0
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "fresh_evidence_before_refresh": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 9984,
+            "loss": 1498.0923874117434,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 16
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "fresh_evidence_after_refresh": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 10000,
+            "loss": 2.5178915560245514,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 0
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "reopened_evidence": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 10000,
+            "loss": 2.5178915560245514,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 0
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "layout_before_compact": {
+          "bytes": 5537610,
+          "fragments": 39,
+          "rows": 9984,
+          "version": 40
+        },
+        "layout_after_compact": {
+          "bytes": 5731026,
+          "fragments": 3,
+          "rows": 9984,
+          "version": 43
+        },
+        "layout_after_index": {
+          "bytes": 5731026,
+          "fragments": 3,
+          "rows": 9984,
+          "version": 44
+        },
+        "layout_before_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 45
+        },
+        "layout_after_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 46
+        },
+        "temporary_database_removed": true
+      }
+    },
+    {
+      "build": "build-2",
+      "artifact_relative_path": "Origence/Origence/tools/t0-ann-probe/runs/filter-policy-v1-qp5y6smx/build-2",
+      "native_report_sha256": "6347ae12b8904f968fbb8296c5015d63e07879d03c35ffe7258c671b1d8c5328",
+      "driver_result_sha256": "420c639e5764bc438558ca618bc5375fb53813166a472970525e42a3b60ee4ad",
+      "native_status": "PASS_QUALITY",
+      "independent_validator_errors": 0,
+      "quality_passed": true,
+      "performance": {
+        "performance_passed": true,
+        "quality_passed": true,
+        "workload_sum_time_ratio": 0.8471198379984727,
+        "ann_median_paired_ratio": 0.5118653000896916,
+        "selected_wall_sum_ms": 29759.111431,
+        "exact_wall_sum_ms": 35129.75389800003,
+        "performance_errors": [],
+        "recommendation": "candidate_for_tested_mix",
+        "interpretation": "Exploratory artificial fixed mix, one rebuild only; both fresh rebuilds must pass separately. Not production, cold-I/O, SQLite cost, or an SLO.",
+        "worst_case_median_paired_ratio": {
+          "case_id": "fresh_after_refresh/fresh_unindexed",
+          "ratio": 1.0208104910427218
+        },
+        "all_72_case_medians_at_most_1_10": true
+      },
+      "native_process_wall_seconds": 177.09619150000026,
+      "python_audit_wall_seconds": 2.607591631000105,
+      "cases": 72,
+      "paired_samples": 576,
+      "route_sample_counts": {
+        "empty": 24,
+        "exact": 408,
+        "ann": 144
+      },
+      "initial_index_uuids": [
+        "060771b2-378a-4db9-b333-7839cd0baabd"
+      ],
+      "fixture_indexed_sha256": "104b42b105d709b9743df93b2160be89e92ada29b4d954482e501d32c332ba07",
+      "fixture_final_sha256": "a15ff3af30877988a2ed85e0dee321ee88a099e46eab302d626804d9364c892b",
+      "exact_oracle_matches": 576,
+      "selected_exact_oracle_matches": 432,
+      "recall_at_10_min": 1.0,
+      "recall_at_100_min": 1.0,
+      "invariant_sums": {
+        "selected_raw_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "selected_verified_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "exact_raw_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "exact_verified_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        },
+        "oracle_invariants": {
+          "duplicate_ids": 0,
+          "score_distance_violations": 0,
+          "source_violations": 0,
+          "visibility_violations": 0
+        }
+      },
+      "call_counts": {
+        "exact_native": 552,
+        "explain_plans": 1104,
+        "oracle_native": 552,
+        "selected_native": 552
+      },
+      "setup_sdk_calls": {
+        "add": 40,
+        "checkout": 4,
+        "checkout_latest": 3,
+        "compact": 1,
+        "connect": 1,
+        "create_empty_table": 1,
+        "create_index": 1,
+        "index_refresh": 1,
+        "index_stats": 4,
+        "list_indices": 4,
+        "open_table": 1,
+        "table_stats": 5,
+        "table_version": 13
+      },
+      "call_count_scope": "Completed explicit LanceDB SDK calls, not underlying file reads/RPCs. Vector execution and explain calls are separate in call_counts.",
+      "unique_plan_texts": 64,
+      "per_case_slot_plan_references": 8,
+      "retained_hit_entries_audited": 217680,
+      "route_costs": {
+        "ann": {
+          "samples": 144,
+          "selected_wall_sum_ms": 6538.431979,
+          "exact_wall_sum_ms": 11955.914903,
+          "median_paired_wall_ratio": 0.5118653000896916,
+          "selected_median_wall_ms": 42.546218499999995,
+          "exact_median_wall_ms": 82.493014,
+          "selected_median_components_ms": {
+            "authority_map": 0.6568045,
+            "eligibility": 0.49844750000000004,
+            "native_decode_sort": 40.798671,
+            "selection_filter_query": 0.61187,
+            "verification": 0.06361900000000001
+          }
+        },
+        "exact": {
+          "samples": 408,
+          "selected_wall_sum_ms": 23212.360933,
+          "exact_wall_sum_ms": 23165.799858,
+          "median_paired_wall_ratio": 0.9999094675958456,
+          "selected_median_wall_ms": 52.2827365,
+          "exact_median_wall_ms": 52.28929049999999,
+          "selected_median_components_ms": {
+            "authority_map": 0.6291575,
+            "eligibility": 0.4597805,
+            "native_decode_sort": 51.187760499999996,
+            "selection_filter_query": 0.039729,
+            "verification": 0.057423
+          }
+        },
+        "empty": {
+          "samples": 24,
+          "selected_wall_sum_ms": 8.318519,
+          "exact_wall_sum_ms": 8.039137,
+          "median_paired_wall_ratio": 1.0009486115167077,
+          "selected_median_wall_ms": 0.31635199999999997,
+          "exact_median_wall_ms": 0.31754950000000004,
+          "selected_median_components_ms": {
+            "authority_map": 0.315691,
+            "eligibility": 4e-05,
+            "native_decode_sort": 2.9999999999999997e-05,
+            "selection_filter_query": 4e-05,
+            "verification": 4e-05
+          }
+        }
+      },
+      "lifecycle": {
+        "indexed_evidence": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 9984,
+            "loss": 1496.5760044902563,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 0
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "fresh_evidence_before_refresh": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 9984,
+            "loss": 1496.5760044902563,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 16
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "fresh_evidence_after_refresh": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 10000,
+            "loss": 2.5102031528949738,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 0
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "reopened_evidence": {
+          "index_stats": {
+            "distance_type": "L2",
+            "indexed_rows": 10000,
+            "loss": 2.5102031528949738,
+            "num_indices": 1,
+            "type": "IVF_FLAT",
+            "unindexed_rows": 0
+          },
+          "list_indices": [
+            {
+              "columns": [
+                "vector"
+              ],
+              "name": "t0_vector_l2",
+              "type": "IVF_FLAT"
+            }
+          ]
+        },
+        "layout_before_compact": {
+          "bytes": 5537610,
+          "fragments": 39,
+          "rows": 9984,
+          "version": 40
+        },
+        "layout_after_compact": {
+          "bytes": 5731026,
+          "fragments": 3,
+          "rows": 9984,
+          "version": 43
+        },
+        "layout_after_index": {
+          "bytes": 5731026,
+          "fragments": 3,
+          "rows": 9984,
+          "version": 44
+        },
+        "layout_before_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 45
+        },
+        "layout_after_index_refresh": {
+          "bytes": 5740738,
+          "fragments": 4,
+          "rows": 10000,
+          "version": 46
+        },
+        "temporary_database_removed": true
+      }
+    }
+  ],
+  "original_smokes": [
+    {
+      "nprobes": 32,
+      "status": "FAIL_GATE",
+      "paired_pass": 48,
+      "paired_fail": 49,
+      "batch_pass": 16,
+      "batch_fail": 17,
+      "native_report_sha256": "0d0cd42db1c2d265277a9018c76a08e70297583f932301400a2af68a60b17ed5",
+      "artifact_relative_path": "Origence/Origence/tools/t0-ann-probe/runs/ivf_flat-10000-128-5bfs3cqo/native-report.json"
+    },
+    {
+      "nprobes": 64,
+      "status": "PASS_SYNTHETIC_T0",
+      "paired_pass": 97,
+      "paired_fail": 0,
+      "batch_pass": 33,
+      "batch_fail": 0,
+      "native_report_sha256": "fd4cfffc5e85447be3c77ebaa9f9d5d815b7b1f67bc8e27e3fd18f6be6ccac44",
+      "artifact_relative_path": "Origence/Origence/tools/t0-ann-probe/runs/ivf_flat-10000-128-_wee4ykp/native-report.json"
+    }
+  ],
+  "limits": [
+    "10k128D synthetic geometry and frozen artificial workload weights only; not production recall or traffic",
+    "4096 threshold calibrated from prior dense/history evidence;0.40 redundant at10k",
+    "one authorized-ID query still enumerates eligibility; not application512-ID batching or SQLite service cost",
+    "warm/prepared same-snapshot balanced pairs; not cold-I/O/SLO/statistical independence",
+    "native training seed uncontrolled; two fresh indexes not independent randomized-trial claim",
+    "no parameter/query/gate tuning after results; no100k/1M/highdimension/PQ/HNSW/realembedding run",
+    "native exact oracle retained and audited; Python independently reconstructs full-vector distances but does not exhaustively select all nearest neighbors",
+    "Rust formatter output executed in first follow-up CI; final committed-format exact-head run still required"
+  ],
+  "independent_offline_numpy_audit": {
+    "paired_queries": 1152,
+    "exhaustive_top10_top100_set_checks": 2304,
+    "all_oracle_sets_match": true,
+    "retained_hit_entries": 435360,
+    "all_authority_and_l2_checks_pass": true,
+    "maximum_absolute_l2_difference": 2.13e-05,
+    "fixture_and_query_regeneration": true,
+    "limitation": "Offline audit of this artifact; not a production or real-embedding acceptance test"
+  }
+}

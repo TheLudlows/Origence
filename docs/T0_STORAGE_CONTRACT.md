@@ -196,7 +196,9 @@ eligible IDs alongside dense/history/empty and existing safety buckets. Use eigh
 held-out queries per bucket (four new near-row offsets and four off-row queries),
 indexed/fresh-before-refresh/fresh-after-refresh/reopen snapshots, and balanced
 four AB/four BA timing order. Each build has 72 bucket/snapshot cases and 576
-paired queries. No 100k or 1M run is scheduled in this pass.
+paired queries. No 100k or 1M run is scheduled in this pass. The isolated release-build
+steps have a separate 45-minute CI limit; this does not alter the main
+application workflow or native measurement deadlines.
 
 Each arm independently measures the complete eligibility-enumeration,
 authority-map/set, route/filter/query construction, native execution/decode/sort,
@@ -266,3 +268,31 @@ complete report, with missing work NOT_RUN. Expensive failing work is not
 retried unboundedly. Quality, source safety, ranking and explicit-budget behavior
 are gates. Latencies are exploratory because representative hardware and SLOs
 are not yet fixed.
+
+### 7.3 Single post-hoc JOIN-order diagnostic, then stop
+
+The initial native follow-up at `fa19309ff6a0f8623f1670b0a3a34a686073ad85`
+completed all 66 FTS configurations with correct ranking/budget behavior, but
+10k/all-match/dense/K100 took 14.678–14.701 seconds in the candidate pipeline,
+versus 0.386–0.399 seconds in its independent full-index BM25/eligibility
+comparator. `SCAN scored AS s` appears after visibility joins. This supports a
+JOIN-shape cost hypothesis, not a proven optimizer root cause or a universal
+FTS slowdown; small-source cases behave differently.
+
+After observing that result, authorize **one explicitly post-hoc point only**:
+repeat 10k/all/dense/K100 using the original CTE and a scored-first CROSS JOIN
+candidate in two paired orders (current/forced, then forced/current). Retain
+actual plans and original full scoped BM25/metadata ranking, authority and fresh
+verification. Collect oracle/plan work after measured paths. The new report is
+separate; the original 66 configurations, 2,226 measured bridge requests, initial
+cost evidence and quality gates are unchanged. Syntax alone cannot establish
+the physical order; report the observed plans.
+
+Use a fresh synthetic store, a 180-second diagnostic native-work SIGALRM
+deadline (bounded cleanup/verification may follow), and reject a completed
+report whose measured driver duration exceeds 180 seconds. One combined
+900-second CI SIGKILL process-group cap around the original cost driver plus
+this diagnostic is the hard whole-process guarantee. Report extra calls separately. No other shapes, thresholds,
+scales or optimizer tuning may be tried in this round. Whether this candidate
+improves or fails, conclude the bounded round and state the engineering decision.
+A favorable single point is not cross-bucket acceptance or production SQL.

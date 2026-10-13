@@ -75,11 +75,16 @@ jobs:
       - name: Build release bridge for bounded scored-CTE cost measurements
         id: fts_release
         if: ${{ !cancelled() && steps.native_bridge.outcome == 'success' }}
+        timeout-minutes: 45
         run: cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml --release -j 2
-      - name: Bounded 1k and 10k scored-CTE cost and budget probes
+      - name: Bounded FTS cost matrix and single post-hoc JOIN-order diagnostic
         if: ${{ !cancelled() && steps.fts_release.outcome == 'success' }}
         timeout-minutes: 17
-        run: timeout --signal=KILL 900s python3 tools/t0-turso-probe/fts_cost.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/fts-cost"
+        run: |
+          timeout --signal=KILL 900s bash -euo pipefail -c '
+            python3 tools/t0-turso-probe/fts_cost.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/fts-cost"
+            python3 tools/t0-turso-probe/join_diagnostic.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/fts-join-diagnostic"
+          '
       - name: Require committed source formatting
         if: always()
         run: |
@@ -150,6 +155,7 @@ jobs:
         run: cargo test --locked --manifest-path tools/t0-ann-probe/Cargo.toml -j 2
       - name: Build the pinned ANN executable
         id: native_ann
+        timeout-minutes: 45
         run: cargo build --locked --manifest-path tools/t0-ann-probe/Cargo.toml --release -j 2
       - name: Bounded 10k 128D synthetic paired exact and IVF_FLAT
         run: python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 --queries 3 --index ivf_flat --timeout-seconds 1800

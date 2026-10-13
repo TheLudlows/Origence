@@ -698,19 +698,19 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
     if report["schema"] == policy::SCHEMA {
         policy::reopened(&reopened, &rows, config, report).await?;
     } else {
-    let fresh_bucket = fixture::buckets(true)
-        .pop()
-        .context("missing fresh bucket")?;
-    report["reopened_fresh_query"] = measured_pair(
-        &reopened,
-        &rows,
-        &fresh_bucket,
-        0,
-        config,
-        "reopened",
-        reopened.version().await?,
-    )
-    .await?;
+        let fresh_bucket = fixture::buckets(true)
+            .pop()
+            .context("missing fresh bucket")?;
+        report["reopened_fresh_query"] = measured_pair(
+            &reopened,
+            &rows,
+            &fresh_bucket,
+            0,
+            config,
+            "reopened",
+            reopened.version().await?,
+        )
+        .await?;
     }
     drop(reopened);
     drop(table);
@@ -719,7 +719,9 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
     report["temporary_database_removed"] = json!(!location.exists());
     if report["schema"] == policy::SCHEMA {
         report["setup_sdk_calls"] = json!({"connect":1,"create_empty_table":1,"add":40,"compact":1,"create_index":1,"index_refresh":1,"open_table":1,"list_indices":4,"index_stats":4,"table_stats":5,"table_version":13,"checkout":4,"checkout_latest":3});
-        report["call_count_scope"] = json!("Completed explicit LanceDB SDK calls, not underlying file reads/RPCs. Vector execution and explain calls are separate in call_counts.");
+        report["call_count_scope"] = json!(
+            "Completed explicit LanceDB SDK calls, not underlying file reads/RPCs. Vector execution and explain calls are separate in call_counts."
+        );
     }
     Ok(())
 }
@@ -751,15 +753,27 @@ async fn main() -> Result<()> {
             "selected ANN component sum excludes some setup; it is not complete pipeline wall time",
             "full authorized ID predicate retained; coarser-predicate authorization architecture NOT_IMPLEMENTED"]});
     let policy_mode = args.len() == 4;
-    if policy_mode { report = policy::initial_report(&config)?; }
+    if policy_mode {
+        report = policy::initial_report(&config)?;
+    }
     let started = Instant::now();
     match probe(&config, &mut report).await {
         Ok(()) => {
-            let passed = if policy_mode { policy::passed(&report) } else { report["queries"]
-                .as_array()
-                .is_some_and(|q| !q.is_empty() && q.iter().all(|q| q["passed"] == true))
-                && report["reopened_fresh_query"]["passed"] == true };
-            report["status"] = json!(if policy_mode { if passed { "PASS_QUALITY" } else { "FAIL_QUALITY" } } else if passed {
+            let passed = if policy_mode {
+                policy::passed(&report)
+            } else {
+                report["queries"]
+                    .as_array()
+                    .is_some_and(|q| !q.is_empty() && q.iter().all(|q| q["passed"] == true))
+                    && report["reopened_fresh_query"]["passed"] == true
+            };
+            report["status"] = json!(if policy_mode {
+                if passed {
+                    "PASS_QUALITY"
+                } else {
+                    "FAIL_QUALITY"
+                }
+            } else if passed {
                 "PASS_SYNTHETIC_T0"
             } else {
                 "FAIL_GATE"
