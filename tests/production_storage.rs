@@ -9,7 +9,9 @@
 use axum::{Json, Router, routing::post};
 use origence::{
     error::AppError,
-    messages::{AcceptedMessageSpec, IngestReceipt, MessageBatch, PublicationStatus, SourceMessage},
+    messages::{
+        AcceptedMessageSpec, IngestReceipt, MessageBatch, PublicationStatus, SourceMessage,
+    },
     models::Models,
     parsing,
     service::Service,
@@ -126,7 +128,11 @@ async fn provision(service: &Service) -> (String, AuthContext) {
     service
         .engine
         .relational()
-        .create_workspace(scope.tenant_id, scope.workspace_id, "production storage regression")
+        .create_workspace(
+            scope.tenant_id,
+            scope.workspace_id,
+            "production storage regression",
+        )
         .await
         .unwrap();
     let key = service
@@ -187,7 +193,10 @@ async fn context(service: &Service, auth: &AuthContext, text: &str, mode: &str) 
 
 async fn assert_invisible(service: &Service, auth: &AuthContext) {
     for mode in ["keyword", "vector", "hybrid"] {
-        let result = service.search(auth, query("Atlas", mode, false)).await.unwrap();
+        let result = service
+            .search(auth, query("Atlas", mode, false))
+            .await
+            .unwrap();
         assert_eq!(result["hits"], json!([]), "{mode}: {result}");
         let result = context(service, auth, "Atlas", mode).await;
         assert_eq!(result["items"], json!([]), "{mode}: {result}");
@@ -274,7 +283,10 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     tokio::fs::write(&obstruction, b"test-owned full-text obstruction")
         .await
         .unwrap();
-    let input = batch("full-text-restart", &["Atlas 中文🙂 first", "Atlas café second"]);
+    let input = batch(
+        "full-text-restart",
+        &["Atlas 中文🙂 first", "Atlas café second"],
+    );
     let receipt = service
         .submit_message_batch(&auth, "full-text-restart", input.clone(), models.spec())
         .await
@@ -364,7 +376,10 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     .unwrap();
     assert_eq!(committed, planned.len() as i64);
     for mode in ["keyword", "vector", "hybrid"] {
-        let result = service.search(&auth, query("Atlas", mode, false)).await.unwrap();
+        let result = service
+            .search(&auth, query("Atlas", mode, false))
+            .await
+            .unwrap();
         let hits = result["hits"].as_array().unwrap();
         let actual: BTreeSet<Uuid> = hits
             .iter()
@@ -395,7 +410,9 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
         Err(AppError::Conflict(_))
     ));
     assert!(matches!(
-        service.job_action(&auth, "no-republish", receipt.job_id, "retry").await,
+        service
+            .job_action(&auth, "no-republish", receipt.job_id, "retry")
+            .await,
         Err(AppError::Conflict(_))
     ));
     assert_eq!(payload(&service, &receipt).await, saved);
@@ -423,7 +440,14 @@ async fn withdrawn_source_is_hidden_before_cleanup_and_cannot_be_resurrected_by_
     let service = Service::open(dir.path(), models.models()).await.unwrap();
     let (token, auth) = provision(&service).await;
     let (_, other) = provision(&service).await;
-    let receipt = publish(&service, &auth, &models, "withdraw", "Atlas retained original").await;
+    let receipt = publish(
+        &service,
+        &auth,
+        &models,
+        "withdraw",
+        "Atlas retained original",
+    )
+    .await;
     let saved = payload(&service, &receipt).await;
     let indexed = entries(&receipt, &saved);
     let expected: BTreeSet<_> = indexed.iter().map(|entry| entry.id).collect();
@@ -495,43 +519,78 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
     let (_, auth) = provision(&service).await;
     let receipt = publish(&service, &auth, &models, "rrf", "Atlas single evidence").await;
     let entry = entries(&receipt, &payload(&service, &receipt).await).remove(0);
-    let before = service.search(&auth, query("Atlas", "hybrid", false)).await.unwrap();
+    let before = service
+        .search(&auth, query("Atlas", "hybrid", false))
+        .await
+        .unwrap();
     let context_before = context(&service, &auth, "Atlas", "hybrid").await;
     assert_eq!(before["hits"].as_array().unwrap().len(), 1);
     assert!((before["hits"][0]["score"].as_f64().unwrap() - 2.0 / 61.0).abs() < 1e-12);
-    assert_eq!(context_before["items"][0]["retrieval_routes"], json!(["keyword", "vector"]));
+    assert_eq!(
+        context_before["items"][0]["retrieval_routes"],
+        json!(["keyword", "vector"])
+    );
     for _ in 0..2 {
-        service.engine.vector().upsert_full_text(scope(&auth), vec![entry.clone()]).await.unwrap();
-        service.engine.vector().upsert(scope(&auth), vec![VectorEntry {
-            id: entry.id,
-            source: entry.source,
-            generation: entry.generation,
-            profile: models.spec().embedding_profile,
-            dimension: 2,
-            embedding: vec![1.0, 0.5],
-        }]).await.unwrap();
+        service
+            .engine
+            .vector()
+            .upsert_full_text(scope(&auth), vec![entry.clone()])
+            .await
+            .unwrap();
+        service
+            .engine
+            .vector()
+            .upsert(
+                scope(&auth),
+                vec![VectorEntry {
+                    id: entry.id,
+                    source: entry.source,
+                    generation: entry.generation,
+                    profile: models.spec().embedding_profile,
+                    dimension: 2,
+                    embedding: vec![1.0, 0.5],
+                }],
+            )
+            .await
+            .unwrap();
     }
-    let native = service.engine.vector().search_full_text(FullTextQuery {
-        scope: scope(&auth),
-        artifact_ids: Some(vec![entry.id]),
-        generation: entry.generation,
-        search_terms: parsing::lexical("Atlas"),
-        limit: 100,
-    }).await.unwrap();
+    let native = service
+        .engine
+        .vector()
+        .search_full_text(FullTextQuery {
+            scope: scope(&auth),
+            artifact_ids: Some(vec![entry.id]),
+            generation: entry.generation,
+            search_terms: parsing::lexical("Atlas"),
+            limit: 100,
+        })
+        .await
+        .unwrap();
     assert_eq!(native.len(), 1);
     assert_eq!(native[0].id, entry.id);
     assert_eq!(native[0].source, entry.source);
-    assert_eq!(service.search(&auth, query("Atlas", "hybrid", false)).await.unwrap()["hits"], before["hits"]);
-    assert_eq!(context(&service, &auth, "Atlas", "hybrid").await["items"], context_before["items"]);
+    assert_eq!(
+        service
+            .search(&auth, query("Atlas", "hybrid", false))
+            .await
+            .unwrap()["hits"],
+        before["hits"]
+    );
+    assert_eq!(
+        context(&service, &auth, "Atlas", "hybrid").await["items"],
+        context_before["items"]
+    );
 
     // An uncommitted generation never lends its score or visibility. Unlike a
     // corrupted source within an eligible generation, it is not queried at all.
     let mut uncommitted = entry.clone();
     uncommitted.generation = 2;
-    service.engine.vector().upsert_full_text(
-        scope(&auth),
-        vec![uncommitted.clone()],
-    ).await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert_full_text(scope(&auth), vec![uncommitted.clone()])
+        .await
+        .unwrap();
     let mut vectors = vec![VectorEntry {
         id: uncommitted.id,
         source: uncommitted.source,
@@ -550,24 +609,51 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
         dimension: 2,
         embedding: vec![2.0, 0.5],
     });
-    service.engine.vector().upsert(scope(&auth), vectors).await.unwrap();
-    let vectors = service.search(&auth, query("Atlas", "vector", false)).await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert(scope(&auth), vectors)
+        .await
+        .unwrap();
+    let vectors = service
+        .search(&auth, query("Atlas", "vector", false))
+        .await
+        .unwrap();
     assert_eq!(vectors["hits"].as_array().unwrap().len(), 1);
     assert!((vectors["hits"][0]["score"].as_f64().unwrap() - 0.5).abs() < 1e-6);
     let vectors = context(&service, &auth, "Atlas", "vector").await;
     assert_eq!(vectors["items"].as_array().unwrap().len(), 1);
     assert!((vectors["items"][0]["score"].as_f64().unwrap() - 0.5).abs() < 1e-6);
-    assert_eq!(service.search(&auth, query("Atlas", "hybrid", false)).await.unwrap()["hits"], before["hits"]);
-    assert_eq!(context(&service, &auth, "Atlas", "hybrid").await["items"], context_before["items"]);
+    assert_eq!(
+        service
+            .search(&auth, query("Atlas", "hybrid", false))
+            .await
+            .unwrap()["hits"],
+        before["hits"]
+    );
+    assert_eq!(
+        context(&service, &auth, "Atlas", "hybrid").await["items"],
+        context_before["items"]
+    );
 
     // Normal plans never reuse one chunk UUID for two committed generations.
     // There is no active-generation pointer to choose between these records;
     // injecting conflicting authority must fail closed, never take max/first.
-    let mut tx = service.engine.relational().begin(authorized(&auth)).await.unwrap();
-    tx.check_permission(Permission::Write).await.unwrap();
-    tx.index_ready(entry.id, &models.spec().embedding_profile, 2, uncommitted.generation)
+    let mut tx = service
+        .engine
+        .relational()
+        .begin(authorized(&auth))
         .await
         .unwrap();
+    tx.check_permission(Permission::Write).await.unwrap();
+    tx.index_ready(
+        entry.id,
+        &models.spec().embedding_profile,
+        2,
+        uncommitted.generation,
+    )
+    .await
+    .unwrap();
     for surface in [Surface::FullText, Surface::Vector] {
         let key = LedgerKey {
             scope: scope(&auth),
@@ -580,17 +666,32 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
             key,
             artifact_type: "chunk".into(),
             idempotency_key: ledger_idempotency_key(&key),
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         tx.confirm_committed(key).await.unwrap();
     }
     tx.commit().await.unwrap();
     for mode in ["keyword", "vector", "hybrid"] {
-        assert!(matches!(service.search(&auth, query("Atlas", mode, false)).await, Err(AppError::Conflict(_))), "{mode}");
+        assert!(
+            matches!(
+                service.search(&auth, query("Atlas", mode, false)).await,
+                Err(AppError::Conflict(_))
+            ),
+            "{mode}"
+        );
         let input = serde_json::from_value(json!({
             "query":"Atlas","mode":mode,"budget":32000,
             "routes":[{"route":"knowledge","limit":100,"max_bytes":32000}]
-        })).unwrap();
-        assert!(matches!(service.evidence_bundle(&auth, input).await, Err(AppError::Conflict(_))), "{mode}");
+        }))
+        .unwrap();
+        assert!(
+            matches!(
+                service.evidence_bundle(&auth, input).await,
+                Err(AppError::Conflict(_))
+            ),
+            "{mode}"
+        );
     }
     // This fixture never asserts membership at a tied top-k cutoff.
     service.engine.shutdown().await.unwrap();
@@ -680,11 +781,20 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
     let service = Service::open(dir.path(), models.models()).await.unwrap();
     let (_, auth) = provision(&service).await;
     let mut chunks = Vec::new();
-    for (id, text) in [("both", "original first"), ("alpha", "original second"), ("beta", "original third")] {
+    for (id, text) in [
+        ("both", "original first"),
+        ("alpha", "original second"),
+        ("beta", "original third"),
+    ] {
         let receipt = publish(&service, &auth, &models, id, text).await;
         chunks.push(entries(&receipt, &payload(&service, &receipt).await)[0].id);
     }
-    let mut tx = service.engine.relational().begin(authorized(&auth)).await.unwrap();
+    let mut tx = service
+        .engine
+        .relational()
+        .begin(authorized(&auth))
+        .await
+        .unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     for (chunk, text) in [
         (chunks[0], "alpha"),
@@ -692,25 +802,53 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
         (chunks[1], "alpha"),
         (chunks[2], "beta"),
     ] {
-        tx.insert_summary(Uuid::new_v4(), chunk, text, "fixture-summary", &parsing::lexical(text))
-            .await
-            .unwrap();
+        tx.insert_summary(
+            Uuid::new_v4(),
+            chunk,
+            text,
+            "fixture-summary",
+            &parsing::lexical(text),
+        )
+        .await
+        .unwrap();
     }
     tx.commit().await.unwrap();
-    let mut tx = service.engine.relational().begin_read(authorized(&auth)).await.unwrap();
+    let mut tx = service
+        .engine
+        .relational()
+        .begin_read(authorized(&auth))
+        .await
+        .unwrap();
     tx.check_permission(Permission::Read).await.unwrap();
     let direct = tx.keyword_hits("alpha beta", true, None).await.unwrap();
     assert_eq!(direct.len(), 1);
     assert_eq!(direct[0].chunk_id, chunks[0]);
-    assert!(tx.keyword_hits("alpha beta absent", true, None).await.unwrap().is_empty());
+    assert!(
+        tx.keyword_hits("alpha beta absent", true, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.commit().await.unwrap();
     assert_eq!(
-        service.search(&auth, query("alpha beta", "keyword", false)).await.unwrap()["hits"],
+        service
+            .search(&auth, query("alpha beta", "keyword", false))
+            .await
+            .unwrap()["hits"],
         json!([])
     );
-    assert_eq!(context(&service, &auth, "alpha beta", "keyword").await["items"], json!([]));
-    let without = service.search(&auth, query("alpha beta", "hybrid", false)).await.unwrap();
-    let with = service.search(&auth, query("alpha beta", "hybrid", true)).await.unwrap();
+    assert_eq!(
+        context(&service, &auth, "alpha beta", "keyword").await["items"],
+        json!([])
+    );
+    let without = service
+        .search(&auth, query("alpha beta", "hybrid", false))
+        .await
+        .unwrap();
+    let with = service
+        .search(&auth, query("alpha beta", "hybrid", true))
+        .await
+        .unwrap();
     let (without, with) = (scores(&without), scores(&with));
     assert_eq!(without.len(), 3);
     assert_eq!(with.len(), 3);
@@ -726,7 +864,10 @@ async fn assert_storage_mismatch(service: &Service, auth: &AuthContext) {
     for mode in ["keyword", "vector", "hybrid"] {
         let search = service.search(auth, query("Atlas", mode, false)).await;
         assert!(
-            matches!(search, Err(AppError::Conflict(_) | AppError::Unavailable(_))),
+            matches!(
+                search,
+                Err(AppError::Conflict(_) | AppError::Unavailable(_))
+            ),
             "{mode} must report native/authority mismatch, got {search:?}"
         );
         let request = serde_json::from_value(json!({
@@ -736,7 +877,10 @@ async fn assert_storage_mismatch(service: &Service, auth: &AuthContext) {
         .unwrap();
         let context = service.evidence_bundle(auth, request).await;
         assert!(
-            matches!(context, Err(AppError::Conflict(_) | AppError::Unavailable(_))),
+            matches!(
+                context,
+                Err(AppError::Conflict(_) | AppError::Unavailable(_))
+            ),
             "{mode} Context must report native/authority mismatch, got {context:?}"
         );
     }
@@ -770,34 +914,78 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
     };
     // A total row count is insufficient: one absent eligible chunk plus one
     // wrong-source copy of another chunk still equals two physical rows.
-    service.engine.vector().delete_objects(scope(&auth), vec![originals[1].id]).await.unwrap();
+    service
+        .engine
+        .vector()
+        .delete_objects(scope(&auth), vec![originals[1].id])
+        .await
+        .unwrap();
     let mut wrong = originals[0].clone();
     wrong.source.source_id = Uuid::new_v4();
-    service.engine.vector().upsert_full_text(scope(&auth), vec![wrong.clone()]).await.unwrap();
-    service.engine.vector().upsert(scope(&auth), vec![vector(&wrong)]).await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert_full_text(scope(&auth), vec![wrong.clone()])
+        .await
+        .unwrap();
+    service
+        .engine
+        .vector()
+        .upsert(scope(&auth), vec![vector(&wrong)])
+        .await
+        .unwrap();
     assert_storage_mismatch(&service, &auth).await;
 
-    service.engine.vector().upsert_full_text(scope(&auth), vec![originals[1].clone()]).await.unwrap();
-    service.engine.vector().upsert(scope(&auth), vec![vector(&originals[1])]).await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert_full_text(scope(&auth), vec![originals[1].clone()])
+        .await
+        .unwrap();
+    service
+        .engine
+        .vector()
+        .upsert(scope(&auth), vec![vector(&originals[1])])
+        .await
+        .unwrap();
     // More than the production branch cap have a legal chunk UUID and scope,
     // but the wrong source version. Post-limit hiding would silently lose
     // valid matches; exact vector routing cannot fix that ordering mistake.
     let residuals: Vec<_> = (2..=126)
         .map(|version| FullTextEntry {
-            source: SourceVersion { source_id: originals[0].source.source_id, version },
+            source: SourceVersion {
+                source_id: originals[0].source.source_id,
+                version,
+            },
             ..originals[0].clone()
         })
         .collect();
-    service.engine.vector().upsert_full_text(scope(&auth), residuals.clone()).await.unwrap();
-    service.engine.vector().upsert(scope(&auth), residuals.iter().map(&vector).collect()).await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert_full_text(scope(&auth), residuals.clone())
+        .await
+        .unwrap();
+    service
+        .engine
+        .vector()
+        .upsert(scope(&auth), residuals.iter().map(&vector).collect())
+        .await
+        .unwrap();
     assert_storage_mismatch(&service, &auth).await;
     // Even exact ID coverage and one row per ID are insufficient if a lone
     // replacement carries the wrong source/version and no longer matches the
     // query. It cannot be detected by validating returned top-k hits alone.
     for replace_source in [true, false] {
-        service.engine.vector().delete_objects(
-            scope(&auth), originals.iter().map(|entry| entry.id).collect(),
-        ).await.unwrap();
+        service
+            .engine
+            .vector()
+            .delete_objects(
+                scope(&auth),
+                originals.iter().map(|entry| entry.id).collect(),
+            )
+            .await
+            .unwrap();
         let mut replacement = originals[0].clone();
         if replace_source {
             replacement.source.source_id = Uuid::new_v4();
@@ -806,12 +994,30 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
         }
         replacement.search_terms = parsing::lexical("unrelated tokens");
         let rows = vec![replacement, originals[1].clone()];
-        service.engine.vector().upsert_full_text(scope(&auth), rows.clone()).await.unwrap();
-        service.engine.vector().upsert(scope(&auth), rows.iter().map(&vector).collect()).await.unwrap();
-        let native = service.engine.vector().search_full_text(FullTextQuery {
-            scope: scope(&auth), artifact_ids: None, generation: 1,
-            search_terms: parsing::lexical("Atlas"), limit: 100,
-        }).await.unwrap();
+        service
+            .engine
+            .vector()
+            .upsert_full_text(scope(&auth), rows.clone())
+            .await
+            .unwrap();
+        service
+            .engine
+            .vector()
+            .upsert(scope(&auth), rows.iter().map(&vector).collect())
+            .await
+            .unwrap();
+        let native = service
+            .engine
+            .vector()
+            .search_full_text(FullTextQuery {
+                scope: scope(&auth),
+                artifact_ids: None,
+                generation: 1,
+                search_terms: parsing::lexical("Atlas"),
+                limit: 100,
+            })
+            .await
+            .unwrap();
         assert_eq!(native.len(), 1);
         assert_eq!(native[0].id, originals[1].id);
         assert_storage_mismatch(&service, &auth).await;
@@ -827,11 +1033,28 @@ async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), models.models()).await.unwrap();
     let (_, auth) = provision(&service).await;
-    assert!(!service.engine.relational().has_committed_full_text().await.unwrap());
+    assert!(
+        !service
+            .engine
+            .relational()
+            .has_committed_full_text()
+            .await
+            .unwrap()
+    );
     service.worker_running.store(true, Ordering::Release);
-    assert!(service.ready().await, "a fresh empty authority does not require an FTS table");
+    assert!(
+        service.ready().await,
+        "a fresh empty authority does not require an FTS table"
+    );
     service.worker_running.store(false, Ordering::Release);
-    let receipt = publish(&service, &auth, &models, "missing-table", "Atlas committed evidence").await;
+    let receipt = publish(
+        &service,
+        &auth,
+        &models,
+        "missing-table",
+        "Atlas committed evidence",
+    )
+    .await;
     let indexed = entries(&receipt, &payload(&service, &receipt).await);
     // Isolate the storage half of readiness without starting another worker.
     // No job is pending, and no background task races the test-owned move.
@@ -842,38 +1065,60 @@ async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
     assert!(tokio::fs::metadata(&dataset).await.unwrap().is_dir());
     tokio::fs::rename(&dataset, &held).await.unwrap();
     assert!(!service.ready().await);
-    let native = service.engine.vector().search_full_text(FullTextQuery {
-        scope: scope(&auth),
-        artifact_ids: Some(indexed.iter().map(|entry| entry.id).collect()),
-        generation: 1,
-        search_terms: parsing::lexical("Atlas"),
-        limit: 100,
-    }).await;
-    assert!(matches!(native, Err(origence::storage::StorageError::Unavailable(_))));
+    let native = service
+        .engine
+        .vector()
+        .search_full_text(FullTextQuery {
+            scope: scope(&auth),
+            artifact_ids: Some(indexed.iter().map(|entry| entry.id).collect()),
+            generation: 1,
+            search_terms: parsing::lexical("Atlas"),
+            limit: 100,
+        })
+        .await;
+    assert!(matches!(
+        native,
+        Err(origence::storage::StorageError::Unavailable(_))
+    ));
     assert!(matches!(
         service.message_batch_status(&auth, &receipt).await,
         Err(AppError::Unavailable(_))
     ));
     assert!(matches!(
-        service.search(&auth, query("Atlas", "keyword", false)).await,
+        service
+            .search(&auth, query("Atlas", "keyword", false))
+            .await,
         Err(AppError::Unavailable(_))
     ));
     let request = serde_json::from_value(json!({
         "query":"Atlas","mode":"keyword","budget":32000,
         "routes":[{"route":"knowledge","limit":100,"max_bytes":32000}]
-    })).unwrap();
-    assert!(matches!(service.evidence_bundle(&auth, request).await, Err(AppError::Unavailable(_))));
+    }))
+    .unwrap();
+    assert!(matches!(
+        service.evidence_bundle(&auth, request).await,
+        Err(AppError::Unavailable(_))
+    ));
     service.worker_running.store(false, Ordering::Release);
     service.engine.shutdown().await.unwrap();
     drop(service);
-    assert!(matches!(Service::open(dir.path(), models.models()).await, Err(AppError::Unavailable(_))));
+    assert!(matches!(
+        Service::open(dir.path(), models.models()).await,
+        Err(AppError::Unavailable(_))
+    ));
     // The missing derived surface must not cause silent authority deletion or
     // automatic recreation. Restore the same dataset to verify the same source.
     tokio::fs::rename(&held, &dataset).await.unwrap();
     let service = Service::open(dir.path(), models.models()).await.unwrap();
-    let result = service.search(&auth, query("Atlas", "keyword", false)).await.unwrap();
+    let result = service
+        .search(&auth, query("Atlas", "keyword", false))
+        .await
+        .unwrap();
     assert_eq!(result["hits"].as_array().unwrap().len(), 1);
     assert_eq!(result["hits"][0]["content"], "Atlas committed evidence");
-    assert_eq!(service.message_batch_status(&auth, &receipt).await.unwrap(), PublicationStatus::Retrievable);
+    assert_eq!(
+        service.message_batch_status(&auth, &receipt).await.unwrap(),
+        PublicationStatus::Retrievable
+    );
     service.engine.shutdown().await.unwrap();
 }

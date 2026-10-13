@@ -1,10 +1,10 @@
 # 本地运维说明
 
-适用单宿主 SQLite/LanceDB/SQLite 图。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份安装](#显式启用记忆身份) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
+适用单宿主原生 Turso/LanceDB/Turso 图；本轮接入仍处于草稿验证阶段。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份检查](#显式启用记忆身份) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
-当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#当前阶段范围)。本文保留已有身份安装命令和旧基线说明，供识别既有行为与安全边界，不代表当前升级/迁移路线图。
+当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#当前阶段范围)。历史身份命令现在只执行同版本检查；旧基线说明仅供识别安全边界，不提供升级或安装。
 
 同版本运行中的持久化、重启/重试恢复和备份恢复要求不变。不兼容 schema 仍应拒绝打开；使用新目录不意味着可以删除、覆盖或静默转换旧数据，原始来源和备份继续按既有要求保留。
 
@@ -14,10 +14,10 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db`、SQLite WAL/SHM | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
+| `context.db` 及原生 Turso WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
-| `vectors/` | 按模型 profile 分表的 LanceDB 向量 |
-| `graph.db`、SQLite WAL/SHM | SQLite 图实体、关系与遍历投影 |
+| `vectors/` | 按模型 profile 分表的 LanceDB 向量及 chunk_terms_v1 全文表 |
+| `graph.db` 及原生 Turso WAL | Turso 图实体、关系与遍历投影 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
 实际锁文件命名和数据库路径以配置及启动实现为准。不要直接修改任一库的业务记录；向量和图不是来源状态的权威。数据目录只授予宿主 OS 身份访问权限，API key 不能保护已经取得本地文件访问权的用户。
@@ -71,18 +71,16 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 ## 显式启用记忆身份
 
-本命令只为兼容当前本地基础 schema、但缺少 `oc_memory_identities` 的既有 SQLite 库安装身份表，不是通用版本迁移或 PG 导入。启动仍不会自动升级。
+原生 Turso 新库始终包含完整身份 schema。历史命令名
+`memory-identity-upgrade` 保留为离线同版本检查，不创建或修复任何表。
 
-1. 正常停止宿主及所有离线客户端，按下节备份整个数据目录。
-2. 预检：`origence --data-dir DATA_DIR --offline memory-identity-upgrade --dry-run`。
-3. 安装：`origence --data-dir DATA_DIR --offline memory-identity-upgrade`。
-4. 重启宿主；旧 get/search 应保持可用，新入口 `/v1/memories/identified` 可以写入。
+1. 正常停止宿主及所有离线客户端，备份整个数据目录。
+2. 执行 `origence --data-dir DATA_DIR --offline memory-identity-upgrade --dry-run`。
+3. 合法同版本库输出 `already_enabled`；去掉 `--dry-run` 结果相同。
 
-输出 `{feature:"memory-identity-v1",status,dry_run}`：预检缺表返回 `required`，安装成功 `enabled`，已安装时 `already_enabled`。重复执行不会增加映射或版本。预检不改 schema/业务数据，但仍要求独占锁；它不是在线检查。
-
-升级只在 `BEGIN IMMEDIATE` 事务内创建身份表，基础 schema 检查失败、已有身份表与已知 DDL 不一致（包括缺失唯一约束/外键）、同名视图占用、锁冲突时拒绝，不自动修复。已有身份表只允许当前已知定义，SQL 大小写和空白差异不影响检查。失败不会提交 schema 变更。
-
-命令不要求 API key，也不加载模型、LanceDB/图存储或 Blob；授权依赖数据目录的操作系统访问权限。不存在的 `context.db` 不会被新建。旧资产、fact_key、事件和版本不被转换，已有记忆读取的 identity 仍为 null；新身份写入与旧槽碰撞仍返回 409。此工具仅启用新表，不为旧记忆推断主体或条件。
+缺文件、缺表、未标记旧库、弱约束或同名视图占用均拒绝，不安装、不转换。
+命令不加载模型、LanceDB、图或 Blob；依赖 OS 目录权限并要求独占锁。
+不存在的 context.db 不会被新建。历史 `required`/`enabled` 安装状态不再是当前行为。
 
 ## 失败与恢复
 
@@ -93,22 +91,25 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 | 短暂存储错误 | 作业进入 retry_wait，最多 5 次；错误持久化，耗尽后 failed |
 | Worker 或宿主退出 | 修复存储错误后重启；processing 在独占启动时恢复，无需等待租约超时 |
 | 取消/删除发生在模型处理中 | 迟到提交复核 generation/权限/来源，不能覆盖或复活；外部孤儿由串行清理移除 |
-| 原生写完成、SQLite 发布未提交 | 保存的发布计划和账本用于重放；启动先清除无 owner 产物，再幂等写入并发布 |
+| 原生写完成、Turso 发布未提交 | 保存的发布计划和账本用于重放；启动先清除无 owner 产物，再幂等写入并发布 |
 | cleanup 失败 | 读取仍被墓碑阻断；修复存储后重试失败的 cleanup，或重启触发全范围对账 |
 | schema 不兼容 | 停止并保留现场，不自动 ALTER；使用匹配版本或新目录，不覆盖旧数据 |
 
 已受理任务的 embedding profile 与 Worker 配置必须一致；改模型不会自动重建已有向量。强退发生在发布计划保存前，模型调用可能重复。发布保证幂等，不保证外部供应商计费恰好一次。
 
-## SQLite 图替换边界
+## 图存储与来源边界
 
-图存储使用 `graph.db`，沿用 `GraphStore`、确定性对象 ID 和 SQLite owner/跨存储账本。所有连接启用外键，实体删除级联移除入边、出边和自环；有向遍历最多三跳、去重并排除起点。新文件自动创建完整结构，已有不兼容结构拒绝打开，不自动修复。
+图存储使用 `graph.db`，沿用 `GraphStore`、确定性对象 ID 和 Turso owner/跨存储账本。所有连接启用外键，实体删除级联移除入边、出边和自环；有向遍历最多三跳、去重并排除起点。新文件自动创建完整结构，已有不兼容结构拒绝打开，不自动修复。
 
-本版本不加载旧 `graph/kuzu.db`，也不提供旧图文件格式迁移。按替换设计，图是可重新发布的派生投影。已有数据目录的 owner/账本不会因为新图文件为空而自动重建已发布图谱；不能把“服务可启动”当作“旧图已恢复”。切换前停服并备份整个目录，使用新目录重新导入/发布来源，再验证 graph/hybrid 检索后切换。不要只删除旧图文件或单独清空账本来尝试迁移。已有原始来源和旧备份应保留至重建完成。
+本版本不加载旧 graph/kuzu.db，也不迁移旧 SQLite 图文件。实体、关系与来源
+归属由 Turso 保存，跨文件发布仍通过权威 owner/账本控制读取。
+只支持新建或同版本完整目录；不要删除图文件或清空账本来尝试迁移或恢复。
+原始来源与既有备份必须保留，不能把“新图文件可创建”理解为“旧图已恢复”。
 
 ## 备份与旧基线
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、向量、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、全文/向量、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。已完成本地专用测试库的停机整库备份恢复，生产备份恢复及断电仍待验收，范围见 [AML_DRILL](AML_DRILL.md)。逻辑删除保留原文，备份也包含原文。
@@ -117,7 +118,7 @@ PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/d
 
 ## AML 适配启用与批次任务
 
-仅使用独立新库。新 schema 不创建 oc_aml_namespaces、oc_aml_users、oc_aml_adds；发现旧 AML 表/视图或缺少新通用约束的库明确拒绝打开，不删除、自动升级、转换或静默补建。不得向业务库手工复制 DDL。正常同版本重启/停机备份恢复仍受支持；本次不扩展既有显式身份安装机制。
+仅使用独立新库。新 schema 不创建 oc_aml_namespaces、oc_aml_users、oc_aml_adds；发现旧 AML 表/视图或缺少新通用约束的库明确拒绝打开，不删除、自动升级、转换或静默补建。不得向业务库手工复制 DDL。正常同版本重启/停机备份恢复仍受支持；历史身份命令不再安装旧库缺表。
 
 1. 用现有 init 创建或配置明确的 root workspace。`OC_ENABLE_AML=true` / `serve --enable-aml` 显式启用路由，默认关闭。Compose 显式透传该变量；`.env` 中未设置时仍为 false。
 2. root admin 使用通用 `/admin/keys` 的 `allow_owned_workspaces:true` 或 `key-create <root UUID> --role writer --allow-owned-workspaces` 签发受信服务端 key；每次轮换必须再次显式授予。仅知道 user_id 或目标 UUID 不构成授权。
@@ -206,6 +207,8 @@ semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿
   清理保留连接额度与宿主 OS 锁，失败弃连接并使池不可用；shutdown 等清理结束。
   这不是硬时限：没有新增业务 worker/重试循环，也没有宣称强制终止文件 IO。
   原生 query（包括 RETURNING）先完整读取结果，再归还连接。
+  引擎自动中止或取消的托管事务拒绝后续 SQL 与 commit；只能 rollback/drop，
+  不允许其后写入意外变成自动提交。
 - chunk full_text 与 vector 分别有发布账本；原生写全部成功后才在权威事务中
   发布版本、所有者、索引就绪及任务成功。失败后重用持久化计划与完整身份重放。
   撤回先改变权威可见性，再清理派生索引，残留原生行不能恢复已撤回来源。
@@ -213,6 +216,10 @@ semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿
   检索前按固定原生 snapshot 校验全部候选的 id/source/version，缺失、重复、
   错配明确失败，不静默返回不完整结果。此检查读取身份元数据，增加查询开销；
   不能把 T0 的耗时比直接当成生产性能结果。没有自动重建或自动修复损坏数据。
+- Search/Context 最终权威快照重新核对全部已参与原生排名的完整发布身份。
+  排名期间撤回返回可重试的不可用错误；活跃对象的来源/版本/代次/索引状态
+  错配返回冲突，不静默缩短 TopK 或沿用旧分数。没有无界自动重试，
+  也没有承诺 Turso 与 LanceDB 之间存在一个共同事务快照。
 - LanceDB 的 remote feature 仅因 0.40 发布包编译缺陷开启；连接只使用绝对本地
   文件路径，不配置远端地址、凭据或付费服务。
 - ANN 使用 64 分区 IVF_FLAT/L2 与固定 32 probes，满足冻结候选数量/过滤比例

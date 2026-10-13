@@ -9,8 +9,8 @@
 
 use std::path::Path;
 
-use serde_json::{Value, json};
 use crate::storage::native_turso::{self, Connection, Pool};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::graph::{entity_id, relation_id};
@@ -66,17 +66,24 @@ impl TursoGraphStore {
         }
         if path.exists() && tokio::fs::metadata(path).await?.len() != 0 {
             let pool = Pool::open_read_only(path).await.map_err(turso_err)?;
-            if let Some(guard) = &guard { pool.hold_lifetime_guard(guard.clone()); }
+            if let Some(guard) = &guard {
+                pool.hold_lifetime_guard(guard.clone());
+            }
             let outcome = async {
                 let mut conn = pool.acquire().await.map_err(turso_err)?;
-                native_turso::check_format(&mut conn, "graph").await.map_err(turso_err)?;
+                native_turso::check_format(&mut conn, "graph")
+                    .await
+                    .map_err(turso_err)?;
                 check_schema(&mut conn).await
-            }.await;
+            }
+            .await;
             pool.close().await;
             outcome?;
         }
         let pool = Pool::open(path).await.map_err(turso_err)?;
-        if let Some(guard) = guard { pool.hold_lifetime_guard(guard); }
+        if let Some(guard) = guard {
+            pool.hold_lifetime_guard(guard);
+        }
         let store = Self { pool, max_hops: 3 };
         store.initialize().await?;
         Ok(store)
@@ -360,8 +367,12 @@ impl GraphStore for TursoGraphStore {
 // Compare known DDL, including keys, cascades and indexes, rather than only
 // testing column projections. Accept native Turso's whitespace/case normalization.
 async fn check_schema(conn: &mut Connection) -> StorageResult<()> {
-    native_turso::check_format(conn, "graph").await.map_err(turso_err)?;
-    native_turso::verify_schema(conn, &[SCHEMA]).await.map_err(turso_err)
+    native_turso::check_format(conn, "graph")
+        .await
+        .map_err(turso_err)?;
+    native_turso::verify_schema(conn, &[SCHEMA])
+        .await
+        .map_err(turso_err)
 }
 
 impl Lifecycle for TursoGraphStore {
@@ -384,7 +395,9 @@ impl Lifecycle for TursoGraphStore {
                 .execute(&mut *tx)
                 .await
                 .map_err(turso_err)?;
-            native_turso::install_format(&mut tx, "graph").await.map_err(turso_err)?;
+            native_turso::install_format(&mut tx, "graph")
+                .await
+                .map_err(turso_err)?;
         }
         check_schema(&mut tx).await?;
         tx.commit().await.map_err(turso_err)
@@ -413,12 +426,18 @@ mod host_lock_tests {
         let path = dir.path().join("context.db");
         let authority = crate::storage::TursoStore::open(&path).await.unwrap();
         let graph = TursoGraphStore::open_with_authority(dir.path().join("graph.db"), &authority)
-            .await.unwrap();
+            .await
+            .unwrap();
         authority.shutdown().await.unwrap();
         drop(authority);
-        assert!(matches!(crate::storage::sqlite::lock_for_maintenance(&path).await, Err(StorageError::Conflict(_))));
+        assert!(matches!(
+            crate::storage::sqlite::lock_for_maintenance(&path).await,
+            Err(StorageError::Conflict(_))
+        ));
         graph.shutdown().await.unwrap();
         drop(graph);
-        let _maintenance = crate::storage::sqlite::lock_for_maintenance(&path).await.unwrap();
+        let _maintenance = crate::storage::sqlite::lock_for_maintenance(&path)
+            .await
+            .unwrap();
     }
 }

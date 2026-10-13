@@ -16,9 +16,10 @@ use crate::{
     learning::SupportField,
     memory_identity::MemoryIdentity,
     parsing,
+    retrieval::{NativePublicationProof, NativeRankedCandidate},
     service::{Service, scope},
     session::ArchivedEvidence,
-    storage::{DomainTx, Permission, FullTextQuery, VectorQuery},
+    storage::{DomainTx, FullTextQuery, Permission, VectorQuery},
     types::{AuthContext, SearchHit},
 };
 
@@ -80,6 +81,11 @@ pub(crate) struct ContextCandidate {
     pub single_valued: bool,
     pub semantic_identity: Option<MemoryIdentity>,
     pub semantic_value: Option<Value>,
+}
+
+pub(crate) struct ContextCandidateResult {
+    pub candidates: Vec<ContextCandidate>,
+    pub ranked_native: Vec<NativeRankedCandidate>,
 }
 
 #[derive(Clone, Debug)]
@@ -148,7 +154,7 @@ impl Service {
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
         limit: usize,
-    ) -> Result<Vec<ContextCandidate>> {
+    ) -> Result<ContextCandidateResult> {
         if !(1..=CONTEXT_CANDIDATE_LIMIT).contains(&limit) {
             return Err(AppError::Invalid("context candidate limit invalid".into()));
         }
@@ -161,6 +167,7 @@ impl Service {
         }
         let mut tx = self.read(auth, Permission::Read).await?;
         let profile = self.models.profile.as_deref().unwrap_or("");
+        let vector_dimension = query.embedding.as_ref().map_or(0, Vec::len);
         let mut eligible = Vec::new();
         if let Some(vector) = &query.embedding {
             for generation in tx.vector_generations(profile, vector.len()).await? {
@@ -174,7 +181,9 @@ impl Service {
         let mut full_text_eligible = Vec::new();
         if query.effective_mode != "vector" && !query.terms.is_empty() {
             for generation in tx.full_text_generations().await? {
-                let ids = tx.context_full_text_candidates(generation, route, identity).await?;
+                let ids = tx
+                    .context_full_text_candidates(generation, route, identity)
+                    .await?;
                 let sources = tx.native_candidate_sources(&ids).await?;
                 full_text_eligible.push((generation, ids, sources));
             }
@@ -182,11 +191,24 @@ impl Service {
         tx.commit().await?;
         let mut full_text_hits = Vec::new();
         for (generation, ids, sources) in full_text_eligible {
-            if ids.is_empty() { continue; }
-            for hit in self.engine.vector().search_full_text_authorized(FullTextQuery {
-                scope: scope(auth), artifact_ids: Some(ids), generation,
-                search_terms: query.terms.clone(), limit: CONTEXT_CANDIDATE_LIMIT,
-            }, &sources).await? {
+            if ids.is_empty() {
+                continue;
+            }
+            for hit in self
+                .engine
+                .vector()
+                .search_full_text_authorized(
+                    FullTextQuery {
+                        scope: scope(auth),
+                        artifact_ids: Some(ids),
+                        generation,
+                        search_terms: query.terms.clone(),
+                        limit: CONTEXT_CANDIDATE_LIMIT,
+                    },
+                    &sources,
+                )
+                .await?
+            {
                 full_text_hits.push((generation, hit));
             }
         }
@@ -198,15 +220,18 @@ impl Service {
                     for hit in self
                         .engine
                         .vector()
-                        .search_authorized(VectorQuery {
-                            scope: scope(auth),
-                            artifact_ids: Some(ids),
-                            profile: profile.into(),
-                            dimension: vector.len(),
-                            generation,
-                            embedding: vector.clone(),
-                            limit: CONTEXT_CANDIDATE_LIMIT,
-                        }, &sources)
+                        .search_authorized(
+                            VectorQuery {
+                                scope: scope(auth),
+                                artifact_ids: Some(ids),
+                                profile: profile.into(),
+                                dimension: vector.len(),
+                                generation,
+                                embedding: vector.clone(),
+                                limit: CONTEXT_CANDIDATE_LIMIT,
+                            },
+                            &sources,
+                        )
                         .await?
                     {
                         native_hits.push((generation, hit));
@@ -219,17 +244,39 @@ impl Service {
         // and reject stale, cross-route or newly withdrawn candidates.
         let mut tx = self.read(auth, Permission::Read).await?;
         let mut branches = Vec::new();
+        let mut ranked_native = Vec::new();
         if query.effective_mode != "vector" {
             let mut keyword = Vec::new();
             let mut seen = HashMap::new();
             for (generation, native) in full_text_hits {
-                let candidate = tx.full_text_hit(native.id, native.source, generation).await?;
-                if let Some(mut hit) = crate::retrieval::live_native_candidate(&mut tx, native.id, candidate).await?
-                    && tx.context_route_matches(hit.asset_id, route).await?
-                    && tx.context_identity_matches(&hit, identity).await?
+                let candidate = tx
+                    .full_text_hit(native.id, native.source, generation)
+                    .await?;
+                if let Some(mut hit) =
+                    crate::retrieval::live_native_candidate(&mut tx, native.id, candidate).await?
                 {
-                    if !crate::retrieval::unique_native(&mut seen, native.id, generation, native.source, native.score)? { continue; }
+                    if !tx.context_route_matches(hit.asset_id, route).await?
+                        || !tx.context_identity_matches(&hit, identity).await?
+                    {
+                        return Err(AppError::Conflict("native context candidate route changed".into()));
+                    }
+                    if !crate::retrieval::unique_native(
+                        &mut seen,
+                        native.id,
+                        generation,
+                        native.source,
+                        native.score,
+                    )? {
+                        continue;
+                    }
                     hit.score = f64::from(native.score);
+                    ranked_native.push(NativeRankedCandidate {
+                        hit: hit.clone(),
+                        proof: NativePublicationProof::FullText {
+                            source: native.source,
+                            generation,
+                        },
+                    });
                     keyword.push(hit);
                 }
             }
@@ -240,13 +287,36 @@ impl Service {
             let mut vectors = Vec::new();
             let mut seen = HashMap::new();
             for (generation, native) in native_hits {
-                let candidate = tx.vector_hit(native.id, native.source, profile, generation).await?;
-                if let Some(mut hit) = crate::retrieval::live_native_candidate(&mut tx, native.id, candidate).await?
-                    && tx.context_route_matches(hit.asset_id, route).await?
-                    && tx.context_identity_matches(&hit, identity).await?
+                let candidate = tx
+                    .vector_hit_exact(native.id, native.source, profile, vector_dimension, generation)
+                    .await?;
+                if let Some(mut hit) =
+                    crate::retrieval::live_native_candidate(&mut tx, native.id, candidate).await?
                 {
-                    if !crate::retrieval::unique_native(&mut seen, native.id, generation, native.source, native.score)? { continue; }
+                    if !tx.context_route_matches(hit.asset_id, route).await?
+                        || !tx.context_identity_matches(&hit, identity).await?
+                    {
+                        return Err(AppError::Conflict("native context candidate route changed".into()));
+                    }
+                    if !crate::retrieval::unique_native(
+                        &mut seen,
+                        native.id,
+                        generation,
+                        native.source,
+                        native.score,
+                    )? {
+                        continue;
+                    }
                     hit.score = native.score as f64;
+                    ranked_native.push(NativeRankedCandidate {
+                        hit: hit.clone(),
+                        proof: NativePublicationProof::Vector {
+                            source: native.source,
+                            generation,
+                            profile: profile.into(),
+                            dimension: vector_dimension,
+                        },
+                    });
                     vectors.push(hit);
                 }
             }
@@ -264,10 +334,12 @@ impl Service {
                 if candidates.len() == limit {
                     break;
                 }
+            } else {
+                return Err(AppError::Conflict("native context candidate route changed".into()));
             }
         }
         tx.commit().await?;
-        Ok(candidates)
+        Ok(ContextCandidateResult { candidates, ranked_native })
     }
 
     pub(crate) async fn context_session_candidates(

@@ -3,8 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use arrow_array::{
-    Array, Float32Array, Int32Array, Int64Array, RecordBatch, RecordBatchIterator,
-    StringArray,
+    Array, Float32Array, Int32Array, Int64Array, RecordBatch, RecordBatchIterator, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
@@ -51,7 +50,9 @@ pub(super) fn schema_for() -> Arc<Schema> {
 
 pub(super) async fn check_schema(table: &Table) -> StorageResult<()> {
     if table.schema().await.map_err(backend)?.as_ref() != schema_for().as_ref() {
-        return Err(StorageError::Conflict("incompatible full-text schema".into()));
+        return Err(StorageError::Conflict(
+            "incompatible full-text schema".into(),
+        ));
     }
     Ok(())
 }
@@ -72,10 +73,7 @@ async fn ensure_index(table: &Table) -> StorageResult<()> {
     let indices = table.list_indices().await.map_err(backend)?;
     if !indices.iter().any(|index| index.name == INDEX_NAME) {
         table
-            .create_index(
-                &["search_terms"],
-                Index::FTS(index_parameters()),
-            )
+            .create_index(&["search_terms"], Index::FTS(index_parameters()))
             .name(INDEX_NAME.into())
             .replace(false)
             .execute()
@@ -87,22 +85,32 @@ async fn ensure_index(table: &Table) -> StorageResult<()> {
 
 async fn check_index(table: &Table) -> StorageResult<()> {
     if !filter_indexes::check(table, INDEX_NAME, IndexType::FTS, "search_terms").await? {
-        return Err(StorageError::Unavailable("native full-text index is not ready".into()));
+        return Err(StorageError::Unavailable(
+            "native full-text index is not ready".into(),
+        ));
     }
     let indices = table.list_indices().await.map_err(backend)?;
-    let details = indices.iter().find(|index| index.name == INDEX_NAME)
+    let details = indices
+        .iter()
+        .find(|index| index.name == INDEX_NAME)
         .and_then(|index| index.index_details.as_deref())
-        .ok_or_else(|| StorageError::Unavailable("full-text tokenizer details are missing".into()))?;
+        .ok_or_else(|| {
+            StorageError::Unavailable("full-text tokenizer details are missing".into())
+        })?;
     let actual: FtsIndexBuilder = serde_json::from_str(details)
         .map_err(|_| StorageError::Conflict("invalid full-text tokenizer details".into()))?;
     if actual != index_parameters() {
-        return Err(StorageError::Conflict("incompatible full-text tokenizer".into()));
+        return Err(StorageError::Conflict(
+            "incompatible full-text tokenizer".into(),
+        ));
     }
     Ok(())
 }
 
 pub(super) async fn check_available(store: &LanceDbStore) -> StorageResult<()> {
-    let table = store.open_existing(TABLE_NAME).await?
+    let table = store
+        .open_existing(TABLE_NAME)
+        .await?
         .ok_or_else(|| StorageError::Unavailable("native full-text table is missing".into()))?;
     let version = table.version().await.map_err(backend)?;
     table.checkout(version).await.map_err(backend)?;
@@ -129,12 +137,19 @@ pub(super) async fn upsert(
         if let Some(previous) = unique.insert(key, entry)
             && previous.search_terms != entry.search_terms
         {
-            return Err(StorageError::Conflict("conflicting full-text batch identity".into()));
+            return Err(StorageError::Conflict(
+                "conflicting full-text batch identity".into(),
+            ));
         }
     }
     let mut entries: Vec<_> = unique.into_values().collect();
     entries.sort_by_key(|entry| {
-        (entry.id, entry.source.source_id, entry.source.version, entry.generation)
+        (
+            entry.id,
+            entry.source.source_id,
+            entry.source.version,
+            entry.generation,
+        )
     });
     let schema = schema_for();
     let table = store
@@ -151,18 +166,54 @@ pub(super) async fn upsert(
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
-            Arc::new(StringArray::from(vec![scope.tenant_id.to_string(); entries.len()])),
-            Arc::new(StringArray::from(vec![scope.workspace_id.to_string(); entries.len()])),
-            Arc::new(StringArray::from(entries.iter().map(|entry| entry.id.to_string()).collect::<Vec<_>>())),
-            Arc::new(StringArray::from(entries.iter().map(|entry| entry.source.source_id.to_string()).collect::<Vec<_>>())),
-            Arc::new(Int32Array::from(entries.iter().map(|entry| entry.source.version).collect::<Vec<_>>())),
-            Arc::new(Int64Array::from(entries.iter().map(|entry| entry.generation).collect::<Vec<_>>())),
-            Arc::new(StringArray::from(entries.iter().map(|entry| entry.search_terms.as_str()).collect::<Vec<_>>())),
+            Arc::new(StringArray::from(vec![
+                scope.tenant_id.to_string();
+                entries.len()
+            ])),
+            Arc::new(StringArray::from(vec![
+                scope.workspace_id.to_string();
+                entries.len()
+            ])),
+            Arc::new(StringArray::from(
+                entries
+                    .iter()
+                    .map(|entry| entry.id.to_string())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                entries
+                    .iter()
+                    .map(|entry| entry.source.source_id.to_string())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(Int32Array::from(
+                entries
+                    .iter()
+                    .map(|entry| entry.source.version)
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(Int64Array::from(
+                entries
+                    .iter()
+                    .map(|entry| entry.generation)
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                entries
+                    .iter()
+                    .map(|entry| entry.search_terms.as_str())
+                    .collect::<Vec<_>>(),
+            )),
         ],
     )
     .map_err(|error| StorageError::Backend(error.to_string()))?;
     let mut merge = table.merge_insert(&[
-        "tenant", "workspace", "source_id", "version", "id", "generation",
+        "tenant",
+        "workspace",
+        "source_id",
+        "version",
+        "id",
+        "generation",
     ]);
     merge.when_matched_update_all(None);
     merge.when_not_matched_insert_all();
@@ -191,7 +242,9 @@ pub(super) async fn search(
     }
     let Some(table) = store.open_existing(TABLE_NAME).await? else {
         return if query.artifact_ids.is_some() {
-            Err(StorageError::Unavailable("native full-text table is missing".into()))
+            Err(StorageError::Unavailable(
+                "native full-text table is missing".into(),
+            ))
         } else {
             Ok(Vec::new())
         };
@@ -205,7 +258,14 @@ pub(super) async fn search(
         ids.dedup();
     }
     let filter = scoped_filter(query.scope, query.generation, query.artifact_ids.as_deref());
-    eligibility::check(&table, &filter, query.generation, query.artifact_ids.as_deref(), expected_sources).await?;
+    eligibility::check(
+        &table,
+        &filter,
+        query.generation,
+        query.artifact_ids.as_deref(),
+        expected_sources,
+    )
+    .await?;
     // Structured MatchQuery treats AND/OR, quotes and punctuation as literal
     // token input. No raw query-string parser can change conjunction or scope.
     let fts = FullTextSearchQuery::new_query(
@@ -216,7 +276,11 @@ pub(super) async fn search(
             .into(),
     )
     .wand_factor(Some(1.0));
-    let mut native = table.query().full_text_search(fts).only_if(filter).limit(query.limit);
+    let mut native = table
+        .query()
+        .full_text_search(fts)
+        .only_if(filter)
+        .limit(query.limit);
     native.mut_query().prefilter = true;
     native.mut_query().fast_search = false;
     let batches = native
@@ -229,7 +293,8 @@ pub(super) async fn search(
     let mut hits = Vec::new();
     for batch in batches {
         let strings = |name| -> StorageResult<&StringArray> {
-            batch.column_by_name(name)
+            batch
+                .column_by_name(name)
                 .and_then(|column| column.as_any().downcast_ref::<StringArray>())
                 .ok_or_else(|| StorageError::Backend("invalid full-text string column".into()))
         };
@@ -237,29 +302,45 @@ pub(super) async fn search(
         let tenants = strings("tenant")?;
         let workspaces = strings("workspace")?;
         let sources = strings("source_id")?;
-        let versions = batch.column_by_name("version")
+        let versions = batch
+            .column_by_name("version")
             .and_then(|column| column.as_any().downcast_ref::<Int32Array>())
             .ok_or_else(|| StorageError::Backend("invalid full-text version column".into()))?;
-        let generations = batch.column_by_name("generation")
+        let generations = batch
+            .column_by_name("generation")
             .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
             .ok_or_else(|| StorageError::Backend("invalid full-text generation column".into()))?;
-        let scores = batch.column_by_name("_score")
+        let scores = batch
+            .column_by_name("_score")
             .and_then(|column| column.as_any().downcast_ref::<Float32Array>())
             .ok_or_else(|| StorageError::Backend("invalid full-text score column".into()))?;
         for index in 0..batch.num_rows() {
-            if [ids, tenants, workspaces, sources].iter().any(|column| column.is_null(index))
-                || versions.is_null(index) || generations.is_null(index) || scores.is_null(index)
-                || !scores.value(index).is_finite() || scores.value(index) <= 0.0
+            if [ids, tenants, workspaces, sources]
+                .iter()
+                .any(|column| column.is_null(index))
+                || versions.is_null(index)
+                || generations.is_null(index)
+                || scores.is_null(index)
+                || !scores.value(index).is_finite()
+                || scores.value(index) <= 0.0
                 || tenants.value(index) != query.scope.tenant_id.to_string()
                 || workspaces.value(index) != query.scope.workspace_id.to_string()
                 || generations.value(index) != query.generation
             {
-                return Err(StorageError::Backend("invalid scoped full-text candidate".into()));
+                return Err(StorageError::Backend(
+                    "invalid scoped full-text candidate".into(),
+                ));
             }
             let id = Uuid::parse_str(ids.value(index))
                 .map_err(|_| StorageError::Backend("invalid full-text identity".into()))?;
-            if query.artifact_ids.as_ref().is_some_and(|allowed| allowed.binary_search(&id).is_err()) {
-                return Err(StorageError::Backend("ineligible full-text candidate".into()));
+            if query
+                .artifact_ids
+                .as_ref()
+                .is_some_and(|allowed| allowed.binary_search(&id).is_err())
+            {
+                return Err(StorageError::Backend(
+                    "ineligible full-text candidate".into(),
+                ));
             }
             hits.push(FullTextHit {
                 id,

@@ -271,23 +271,40 @@ async fn sqlite_visibility_preserves_invalid_support_and_malformed_locator_resul
         .execute(store.pool())
         .await
         .unwrap();
-    let mut tx = store.begin_read(auth).await.unwrap();
+    // A native runtime error may abort the transaction. Exercise each entry
+    // point in its own snapshot so a prior error cannot mask a later query.
+    let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert!(matches!(
         tx.visible_hit(ids.chunk).await,
         Err(StorageError::Backend(_))
     ));
+    tx.rollback().await.unwrap();
+    let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert!(matches!(
         tx.keyword_hits("needle", false, None).await,
         Err(StorageError::Backend(_))
     ));
+    tx.rollback().await.unwrap();
+    let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert!(matches!(
         tx.vector_candidates("profile-visibility", 7, 11, None)
             .await,
         Err(StorageError::Backend(_))
     ));
+    tx.rollback().await.unwrap();
+    let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert!(matches!(
         tx.graph_evidence(ids.graph).await,
         Err(StorageError::Backend(_))
     ));
-    tx.commit().await.unwrap();
+    tx.rollback().await.unwrap();
+    db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(ids.locator().to_string())
+        .bind(auth.scope.tenant_id)
+        .bind(auth.scope.workspace_id)
+        .bind(ids.chunk)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    assert_visibility(&store, &auth, ids, true).await;
 }

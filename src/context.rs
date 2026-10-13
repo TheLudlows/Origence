@@ -55,6 +55,7 @@ impl Service {
             bundle.warnings.push("Session-turn citations cannot be submitted as SessionTurn used_evidence; that archive contract supports only chunk/entity/relation references.".into());
         }
         let mut assets = Vec::new();
+        let mut ranked_native = Vec::new();
         let mut turns = Vec::new();
         for route in &input.routes {
             let mut accounting = RouteAccounting {
@@ -80,8 +81,9 @@ impl Service {
                             route.limit,
                         )
                         .await?;
-                    accounting.candidates = found.len();
-                    assets.extend(found);
+                    accounting.candidates = found.candidates.len();
+                    assets.extend(found.candidates);
+                    ranked_native.extend(found.ranked_native);
                 }
                 None => {
                     let found = self
@@ -105,6 +107,7 @@ impl Service {
             bundle.routes.push(accounting);
         }
         let mut tx = self.read(auth, permission).await?;
+        crate::retrieval::verify_native_candidates(&mut tx, &ranked_native).await?;
         let mut items = Vec::new();
         for candidate in assets {
             if let Some(mut fresh) = tx
@@ -119,13 +122,9 @@ impl Service {
                 fresh.retrieval_routes = candidate.retrieval_routes;
                 items.push(asset_item(fresh, &input, &query.effective_mode)?);
             } else {
-                let route = evidence_route(candidate.route);
-                bundle
-                    .routes
-                    .iter_mut()
-                    .find(|r| r.route == route)
-                    .unwrap()
-                    .invalidated_before_render += 1;
+                return Err(AppError::Conflict(
+                    "native context candidate route changed".into(),
+                ));
             }
         }
         for candidate in turns {

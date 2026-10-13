@@ -288,6 +288,35 @@ impl TursoTx {
         }
         Ok(Some(hit(&row, 0.0)))
     }
+    /// Exact vector publication check for native scores retained across read
+    /// snapshots. The public legacy helper has no dimension parameter.
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn vector_hit_exact(
+        &mut self,
+        id: Uuid,
+        source: SourceVersion,
+        profile: &str,
+        dimension: usize,
+        generation: i64,
+    ) -> StorageResult<Option<SearchHit>> {
+        let hit = self.vector_hit(id, source, profile, generation).await?;
+        if hit.is_none() {
+            return Ok(None);
+        }
+        let ready: bool = native_turso::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content' AND model_id=? AND dimension=? AND generation=? AND state='ready')",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(id)
+        .bind(profile)
+        .bind(dimension)
+        .bind(generation)
+        .fetch_one(&mut *self.tx)
+        .await
+        .map_err(turso_err)?;
+        Ok(if ready { hit } else { None })
+    }
     pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
         let row = native_turso::query(&format!(
             "{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=?"

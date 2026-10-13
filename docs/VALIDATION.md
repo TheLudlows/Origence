@@ -591,3 +591,18 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
   本段记录时仍为 NOT_RUN。最终验收必须依据修复后的精确 head 重跑。
 
 真实模型/官方 AML 质量评测、生产性能 SLO、在线跨库备份、旧库迁移均未宣称通过。
+
+- 修复提交 d95935da 的
+  [准备 CI](https://github.com/TheLudlows/Origence/actions/runs/38390159122)
+  cargo check --locked --all-targets PASS（15.32 秒），无 Rust warning；格式补丁
+  由 artifact 11809150175 生成并回灌。准备步骤再次解析仅改变若干 Windows
+  间接依赖引用，未采纳该二次锁变化；后续准备检查改为只验证已提交锁，不再更新。
+  最终精确锁与测试门禁仍看后续提交的正式 CI，不把准备检查等同整体验收。
+
+- d95935da 的正式 [CI 38390159324](https://github.com/TheLudlows/Origence/actions/runs/38390159324)：
+  Rust 1.98 最小特性身份测试、全目标 warnings-denied Clippy PASS；首组原生
+  核心/图/权限/可见性回归 59 项中 58 PASS、1 FAIL。失败是畸形 JSON 查询后
+  Turso 已终止事务，旧用例随后 commit 得到 no transaction is active；不吞掉
+  commit 错误，也不将已回滚写入报告为成功。其余运行门禁当次未执行。
+  同次 fmt FAIL 的正式补丁已应用。后续 CI 将优先运行新增生产发布和 Lance
+  合同，保留全部原回归，并允许 PR 自身缓存失败作业的依赖以避免重复冷编译。

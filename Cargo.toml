@@ -30,6 +30,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 lancedb = { version = "=0.40.0", default-features = false, features = ["remote"], optional = true }
+# Read-only physical IVF partition verification; same version already used by LanceDB.
+lance = { version = "=13.0.0", default-features = false, optional = true }
 arrow-array = { version = "=58.3.0", optional = true }
 arrow-schema = { version = "=58.3.0", optional = true }
 
@@ -40,7 +42,7 @@ tempfile = "3"
 
 [features]
 default = ["local-storage"]
-local-vector = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema"]
+local-vector = ["dep:lancedb", "dep:lance", "dep:arrow-array", "dep:arrow-schema"]
 local-storage = ["local-vector"]
 
 [profile.release]

@@ -7,7 +7,8 @@ Origence is a Rust-based foundation for agent memory and knowledge. It provides 
 ## Features
 
 - **Memory & Knowledge** — Store structured memories and ingest documents.
-- **Retrieval** — Keyword, vector, and graph-enhanced search.
+- **Retrieval** — Native LanceDB full-text/vector search and graph-enhanced evidence.
+- **Storage** — Native Rust Turso authority, local LanceDB indexes, and original blobs.
 - **Governance** — Workspace isolation, versioning, provenance, and revocation.
 
 ## Quick start

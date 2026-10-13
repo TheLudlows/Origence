@@ -36,6 +36,10 @@ pub enum Error {
     Incompatible(&'static str),
     #[error("database connection cleanup failed")]
     Cleanup,
+    #[error("database transaction was aborted")]
+    TransactionAborted,
+    #[error("database operation failed or did not finish; rollback or release the connection")]
+    Unfinished,
     #[error("database pool is closed")]
     Closed,
     #[error(transparent)]
@@ -153,6 +157,7 @@ impl Pool {
                 Connection {
                     raw,
                     interrupted: false,
+                    managed_transaction: false,
                 }
             }
         };
@@ -166,6 +171,7 @@ impl Pool {
             probe_connection(&connection.raw).await?;
             connection.interrupted = false;
         }
+        connection.managed_transaction = false;
         Ok(PoolConnection {
             connection: Some(connection),
             pool: self.0.clone(),
@@ -183,6 +189,7 @@ impl Pool {
         }
         let mut connection = self.acquire().await?;
         query(statement).execute(&mut *connection).await?;
+        connection.managed_transaction = true;
         Ok(Transaction { connection })
     }
 
@@ -239,6 +246,20 @@ async fn probe_connection(connection: &turso::Connection) -> turso::Result<()> {
 pub struct Connection {
     raw: turso::Connection,
     interrupted: bool,
+    managed_transaction: bool,
+}
+impl Connection {
+    fn check_ready(&mut self) -> Result<()> {
+        // A caller may catch a query error or cancel its future while keeping
+        // the lease. Neither permits the next write to escape its transaction.
+        if self.interrupted {
+            return Err(Error::Unfinished);
+        }
+        if self.managed_transaction && self.raw.is_autocommit()? {
+            return Err(Error::TransactionAborted);
+        }
+        Ok(())
+    }
 }
 
 pub struct PoolConnection {
@@ -263,6 +284,7 @@ impl Drop for PoolConnection {
             return;
         };
         if !connection.interrupted && connection.raw.is_autocommit().unwrap_or(false) {
+            connection.managed_transaction = false;
             self.pool
                 .idle
                 .lock()
@@ -291,6 +313,7 @@ impl Drop for PoolConnection {
                 .await;
                 if cleaned.is_ok() {
                     connection.interrupted = false;
+                    connection.managed_transaction = false;
                     pool.idle
                         .lock()
                         .expect("Turso pool poisoned")
@@ -317,11 +340,25 @@ pub struct Transaction {
 }
 impl Transaction {
     pub async fn commit(mut self) -> Result<()> {
-        query("COMMIT").execute(&mut *self).await?;
+        self.connection.check_ready()?;
+        self.connection.interrupted = true;
+        self.connection.raw.execute("COMMIT", ()).await?;
+        self.connection.interrupted = false;
+        self.connection.managed_transaction = false;
         Ok(())
     }
     pub async fn rollback(mut self) -> Result<()> {
-        query("ROLLBACK").execute(&mut *self).await?;
+        // Some native execution errors already roll the transaction back.
+        // Only rollback may settle that state; commit must never claim success.
+        if !self.connection.raw.is_autocommit()? {
+            self.connection.interrupted = true;
+            self.connection.raw.execute("ROLLBACK", ()).await?;
+        }
+        if self.connection.interrupted {
+            probe_connection(&self.connection.raw).await?;
+        }
+        self.connection.interrupted = false;
+        self.connection.managed_transaction = false;
         Ok(())
     }
 }
@@ -632,10 +669,11 @@ impl<T> Query<T> {
         let Query { sql, params, .. } = self;
         Box::pin(async move {
             let mut connection = executor.connection().await?;
+            connection.check_ready()?;
             connection.interrupted = true;
-            let result = connection.raw.execute(sql, params?).await;
+            let result = connection.raw.execute(sql, params?).await?;
             connection.interrupted = false;
-            Ok(QueryResult(result?))
+            Ok(QueryResult(result))
         })
     }
 }
@@ -644,6 +682,7 @@ impl<T: FromRow + Send + 'static> Query<T> {
         let executor = executor.into();
         Box::pin(async move {
             let mut connection = executor.connection().await?;
+            connection.check_ready()?;
             connection.interrupted = true;
             let mut rows = connection.raw.query(self.sql, self.params?).await?;
             let names = Arc::new(rows.column_names());
@@ -662,7 +701,10 @@ impl<T: FromRow + Send + 'static> Query<T> {
             Ok(output)
         })
     }
-    pub fn fetch_optional<'a>(self, executor: impl Into<Executor<'a>>) -> DriverFuture<'a, Option<T>> {
+    pub fn fetch_optional<'a>(
+        self,
+        executor: impl Into<Executor<'a>>,
+    ) -> DriverFuture<'a, Option<T>> {
         let rows = self.fetch_all(executor);
         Box::pin(async move { Ok(rows.await?.into_iter().next()) })
     }
@@ -683,7 +725,10 @@ impl<T: for<'r> Decode<'r> + Send + 'static> ScalarQuery<T> {
         let rows = self.0.fetch_all(executor);
         Box::pin(async move { Ok(rows.await?.into_iter().map(|row| row.0).collect()) })
     }
-    pub fn fetch_optional<'a>(self, executor: impl Into<Executor<'a>>) -> DriverFuture<'a, Option<T>> {
+    pub fn fetch_optional<'a>(
+        self,
+        executor: impl Into<Executor<'a>>,
+    ) -> DriverFuture<'a, Option<T>> {
         let row = self.0.fetch_optional(executor);
         Box::pin(async move { Ok(row.await?.map(|row| row.0)) })
     }
@@ -707,6 +752,7 @@ impl RawSql {
         let executor = executor.into();
         Box::pin(async move {
             let mut connection = executor.connection().await?;
+            connection.check_ready()?;
             connection.interrupted = true;
             connection.raw.execute_batch(self.0).await?;
             connection.interrupted = false;
@@ -1066,6 +1112,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn aborted_transaction_cannot_autocommit_following_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = Pool::open(dir.path().join("aborted.db")).await.unwrap();
+        raw_sql("CREATE TABLE t(value INTEGER); INSERT INTO t VALUES(0)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for entry in ["fetch", "execute", "batch"] {
+            let mut tx = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            query("UPDATE t SET value=10")
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            let error = match entry {
+                "fetch" => query("SELECT json_extract('{', '$.value')")
+                    .fetch_all(&mut *tx)
+                    .await
+                    .map(|_| ()),
+                "execute" => query("UPDATE t SET value=json_extract('{', '$.value')")
+                    .execute(&mut *tx)
+                    .await
+                    .map(|_| ()),
+                _ => raw_sql("UPDATE t SET value=json_extract('{', '$.value')")
+                    .execute(&mut *tx)
+                    .await
+                    .map(|_| ()),
+            };
+            assert!(matches!(error, Err(Error::Native(_))));
+            // All entry points must refuse the retained transaction. In
+            // particular, none may silently run in the engine's autocommit.
+            assert!(matches!(
+                query("UPDATE t SET value=20").execute(&mut *tx).await,
+                Err(Error::Unfinished | Error::TransactionAborted)
+            ));
+            assert!(matches!(
+                query("UPDATE t SET value=30 RETURNING value")
+                    .fetch_all(&mut *tx)
+                    .await,
+                Err(Error::Unfinished | Error::TransactionAborted)
+            ));
+            assert!(matches!(
+                raw_sql("UPDATE t SET value=40").execute(&mut *tx).await,
+                Err(Error::Unfinished | Error::TransactionAborted)
+            ));
+            assert!(matches!(
+                tx.commit().await,
+                Err(Error::Unfinished | Error::TransactionAborted)
+            ));
+            // A new writer also waits for any asynchronous rollback cleanup.
+            let mut next = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            assert_eq!(
+                query_scalar::<i64>("SELECT value FROM t")
+                    .fetch_one(&mut *next)
+                    .await
+                    .unwrap(),
+                0
+            );
+            query("UPDATE t SET value=1")
+                .execute(&mut *next)
+                .await
+                .unwrap();
+            next.rollback().await.unwrap();
+        }
+        pool.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn concurrent_reader_retains_snapshot_until_commit() {
         let dir = tempfile::tempdir().unwrap();
         let pool = Pool::open(dir.path().join("snapshot.db")).await.unwrap();
@@ -1119,60 +1232,79 @@ mod tests {
                 lifetime_guard: Mutex::new(None),
             }))
         }
-        // The SDK's deferred-completion VFS forces an actual Pending. It is
-        // not evidence for file-backed mid-I/O cancellation or power failure.
-        #[allow(clippy::arc_with_non_send_sync)]
-        let io = Arc::new(turso::core::MemoryYieldIO::new());
-        let database = turso::Builder::new_local("adapter-cancellation.db")
-            .with_io_impl(io.clone())
-            .build()
-            .await
-            .unwrap();
-        let first = pool(database);
-        raw_sql(include_str!("sqlite-schema.sql"))
-            .execute(&first)
-            .await
-            .unwrap();
-        query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(zeroblob(16),zeroblob(16),'fixture',1)").execute(&first).await.unwrap();
-        query("INSERT INTO oc_jobs(tenant_id,workspace_id,id,created_by,operation,payload,created_at,updated_at) VALUES(zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),'fixture','{}',1,1)").execute(&first).await.unwrap();
-        first.shutdown().await.unwrap();
-        drop(first);
-        let database = turso::Builder::new_local("adapter-cancellation.db")
-            .with_io_impl(io)
-            .build()
-            .await
-            .unwrap();
-        let reopened = pool(database);
-        let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
-        let mut operation = Box::pin(query("UPDATE oc_jobs SET generation=999").execute(&mut *tx));
-        let first_poll = poll_fn(|cx| Poll::Ready(operation.as_mut().poll(cx))).await;
-        assert!(
-            matches!(first_poll, Poll::Pending),
-            "write must yield to exercise cancellation"
-        );
-        drop(operation);
-        drop(tx);
-        assert_eq!(
-            query_scalar::<i64>("SELECT generation FROM oc_jobs")
-                .fetch_one(&reopened)
+        for explicit_rollback in [false, true] {
+            // The SDK's deferred-completion VFS forces an actual Pending. It is
+            // not evidence for file-backed mid-I/O cancellation or power failure.
+            #[allow(clippy::arc_with_non_send_sync)]
+            let io = Arc::new(turso::core::MemoryYieldIO::new());
+            let database = turso::Builder::new_local("adapter-cancellation.db")
+                .with_io_impl(io.clone())
+                .build()
                 .await
-                .unwrap(),
-            1
-        );
-        let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
-        query("UPDATE oc_jobs SET generation=2")
-            .execute(&mut *tx)
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-        assert_eq!(
-            query_scalar::<i64>("SELECT generation FROM oc_jobs")
-                .fetch_one(&reopened)
+                .unwrap();
+            let first = pool(database);
+            raw_sql(include_str!("sqlite-schema.sql"))
+                .execute(&first)
                 .await
-                .unwrap(),
-            2
-        );
-        reopened.shutdown().await.unwrap();
+                .unwrap();
+            query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(zeroblob(16),zeroblob(16),'fixture',1)").execute(&first).await.unwrap();
+            query("INSERT INTO oc_jobs(tenant_id,workspace_id,id,created_by,operation,payload,created_at,updated_at) VALUES(zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),'fixture','{}',1,1)").execute(&first).await.unwrap();
+            first.shutdown().await.unwrap();
+            drop(first);
+            let database = turso::Builder::new_local("adapter-cancellation.db")
+                .with_io_impl(io)
+                .build()
+                .await
+                .unwrap();
+            let reopened = pool(database);
+            let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            let mut operation = Box::pin(query("UPDATE oc_jobs SET generation=999").execute(&mut *tx));
+            let first_poll = poll_fn(|cx| Poll::Ready(operation.as_mut().poll(cx))).await;
+            assert!(
+                matches!(first_poll, Poll::Pending),
+                "write must yield to exercise cancellation"
+            );
+            drop(operation);
+            assert!(matches!(
+                query("UPDATE oc_jobs SET generation=888")
+                    .execute(&mut *tx)
+                    .await,
+                Err(Error::Unfinished)
+            ));
+            assert!(matches!(
+                query_scalar::<i64>("SELECT generation FROM oc_jobs")
+                    .fetch_one(&mut *tx)
+                    .await,
+                Err(Error::Unfinished)
+            ));
+            if explicit_rollback {
+                tx.rollback().await.unwrap();
+            } else {
+                // Refused commit consumes the transaction, so Drop still cleans it.
+                assert!(matches!(tx.commit().await, Err(Error::Unfinished)));
+            }
+            assert_eq!(
+                query_scalar::<i64>("SELECT generation FROM oc_jobs")
+                    .fetch_one(&reopened)
+                    .await
+                    .unwrap(),
+                1
+            );
+            let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            query("UPDATE oc_jobs SET generation=2")
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(
+                query_scalar::<i64>("SELECT generation FROM oc_jobs")
+                    .fetch_one(&reopened)
+                    .await
+                    .unwrap(),
+                2
+            );
+            reopened.shutdown().await.unwrap();
+        }
     }
 
     #[tokio::test]

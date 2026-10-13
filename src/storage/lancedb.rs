@@ -28,8 +28,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::storage::capabilities::{
-    Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit,
-    VectorQuery,
+    Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery,
 };
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::scope::{Scope, SourceVersion};
@@ -114,7 +113,11 @@ fn scoped_filter(scope: Scope, generation: i64, ids: Option<&[Uuid]>) -> String 
         scope.tenant_id, scope.workspace_id, generation,
     );
     if let Some(ids) = ids {
-        let values = ids.iter().map(|id| format!("'{id}'")).collect::<Vec<_>>().join(",");
+        let values = ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect::<Vec<_>>()
+            .join(",");
         filter.push_str(&format!(" AND id IN ({values})"));
     }
     filter
@@ -184,28 +187,45 @@ impl LanceDbStore {
         let started = std::time::Instant::now();
         let Some(table) = self.open_existing(&table_name(&query.profile)).await? else {
             return if query.artifact_ids.is_some() {
-                Err(StorageError::Unavailable("native vector table is missing".into()))
+                Err(StorageError::Unavailable(
+                    "native vector table is missing".into(),
+                ))
             } else {
                 Ok(Vec::new())
             };
         };
-        let version = table.version().await
+        let version = table
+            .version()
+            .await
             .map_err(|error| StorageError::Backend(error.to_string()))?;
-        table.checkout(version).await
+        table
+            .checkout(version)
+            .await
             .map_err(|error| StorageError::Backend(error.to_string()))?;
         let open_ms = started.elapsed().as_secs_f64() * 1000.0;
         let prepare_started = std::time::Instant::now();
         let filter = scoped_filter(query.scope, query.generation, query.artifact_ids.as_deref());
         check_dimension(&table, query.dimension).await?;
-        eligibility::check(&table, &filter, query.generation, query.artifact_ids.as_deref(), expected_sources).await?;
+        eligibility::check(
+            &table,
+            &filter,
+            query.generation,
+            query.artifact_ids.as_deref(),
+            expected_sources,
+        )
+        .await?;
         let (native, used_ann) = ann::prepare(&table, &query, &filter).await?;
         let prepare_ms = prepare_started.elapsed().as_secs_f64() * 1000.0;
         let execute_started = std::time::Instant::now();
-        let stream = native.execute().await
+        let stream = native
+            .execute()
+            .await
             .map_err(|error| StorageError::Backend(error.to_string()))?;
         let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
         let collect_started = std::time::Instant::now();
-        let batches: Vec<RecordBatch> = stream.try_collect().await
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
             .map_err(|error| StorageError::Backend(error.to_string()))?;
         let collect_ms = collect_started.elapsed().as_secs_f64() * 1000.0;
         let decode_started = std::time::Instant::now();
@@ -235,28 +255,42 @@ impl LanceDbStore {
                 .as_any()
                 .downcast_ref::<Int32Array>()
                 .ok_or_else(|| StorageError::Backend("version column type".into()))?;
-            let tenants = batch.column_by_name("tenant")
+            let tenants = batch
+                .column_by_name("tenant")
                 .and_then(|column| column.as_any().downcast_ref::<StringArray>())
                 .ok_or_else(|| StorageError::Backend("invalid vector tenant column".into()))?;
-            let workspaces = batch.column_by_name("workspace")
+            let workspaces = batch
+                .column_by_name("workspace")
                 .and_then(|column| column.as_any().downcast_ref::<StringArray>())
                 .ok_or_else(|| StorageError::Backend("invalid vector workspace column".into()))?;
-            let generations = batch.column_by_name("generation")
+            let generations = batch
+                .column_by_name("generation")
                 .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
                 .ok_or_else(|| StorageError::Backend("invalid vector generation column".into()))?;
             for i in 0..ids.len() {
-                if [ids, srcs, tenants, workspaces].iter().any(|column| column.is_null(i))
-                    || vers.is_null(i) || generations.is_null(i) || dists.is_null(i)
-                    || !dists.value(i).is_finite() || dists.value(i) < 0.0
+                if [ids, srcs, tenants, workspaces]
+                    .iter()
+                    .any(|column| column.is_null(i))
+                    || vers.is_null(i)
+                    || generations.is_null(i)
+                    || dists.is_null(i)
+                    || !dists.value(i).is_finite()
+                    || dists.value(i) < 0.0
                     || tenants.value(i) != query.scope.tenant_id.to_string()
                     || workspaces.value(i) != query.scope.workspace_id.to_string()
                     || generations.value(i) != query.generation
                 {
-                    return Err(StorageError::Backend("invalid scoped vector candidate".into()));
+                    return Err(StorageError::Backend(
+                        "invalid scoped vector candidate".into(),
+                    ));
                 }
                 let id = Uuid::parse_str(ids.value(i))
                     .map_err(|_| StorageError::Backend("invalid vector identity".into()))?;
-                if query.artifact_ids.as_ref().is_some_and(|allowed| allowed.binary_search(&id).is_err()) {
+                if query
+                    .artifact_ids
+                    .as_ref()
+                    .is_some_and(|allowed| allowed.binary_search(&id).is_err())
+                {
                     return Err(StorageError::Backend("ineligible vector candidate".into()));
                 }
                 hits.push(VectorHit {
@@ -291,21 +325,36 @@ impl LanceDbStore {
     }
 
     async fn managed_tables(&self) -> StorageResult<Vec<lancedb::Table>> {
-        let names = self.db.table_names().execute().await
+        let names = self
+            .db
+            .table_names()
+            .execute()
+            .await
             .map_err(|error| StorageError::Backend(error.to_string()))?;
         let mut tables = Vec::new();
         for name in names {
             if name != FULL_TEXT_TABLE && !vector_table_name(&name) {
-                return Err(StorageError::Conflict("unexpected native index table".into()));
+                return Err(StorageError::Conflict(
+                    "unexpected native index table".into(),
+                ));
             }
-            let table = self.db.open_table(&name).execute().await
+            let table = self
+                .db
+                .open_table(&name)
+                .execute()
+                .await
                 .map_err(|error| StorageError::Backend(error.to_string()))?;
             if name == FULL_TEXT_TABLE {
                 full_text::check_schema(&table).await?;
             } else {
-                let schema = table.schema().await
+                let schema = table
+                    .schema()
+                    .await
                     .map_err(|error| StorageError::Backend(error.to_string()))?;
-                let dimension = match schema.field_with_name("vector").map(|field| field.data_type()) {
+                let dimension = match schema
+                    .field_with_name("vector")
+                    .map(|field| field.data_type())
+                {
                     Ok(DataType::FixedSizeList(_, size)) if *size > 0 => *size as usize,
                     _ => return Err(StorageError::Conflict("incompatible vector schema".into())),
                 };
@@ -352,7 +401,9 @@ impl VectorStore for LanceDbStore {
             if let Some(previous) = unique.insert(key, entry)
                 && (previous.dimension != entry.dimension || previous.embedding != entry.embedding)
             {
-                return Err(StorageError::Conflict("conflicting vector batch identity".into()));
+                return Err(StorageError::Conflict(
+                    "conflicting vector batch identity".into(),
+                ));
             }
         }
         let mut groups: HashMap<String, Vec<&VectorEntry>> = HashMap::new();
