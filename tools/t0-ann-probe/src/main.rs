@@ -1,5 +1,6 @@
 //! Isolated, synthetic LanceDB 0.23.1 probe. Never opens an application database.
 mod fixture;
+mod policy;
 
 use anyhow::{Context, Result, ensure};
 use arrow_array::{Array, Float32Array, Int32Array, Int64Array, RecordBatch, StringArray};
@@ -534,6 +535,9 @@ async fn measure_phase(
     phase: &str,
     report: &mut Value,
 ) -> Result<()> {
+    if report["schema"] == policy::SCHEMA {
+        return policy::measure_phase(table, rows, config, phase, report).await;
+    }
     let version = table.version().await?;
     table.checkout(version).await?;
     for bucket in fixture::buckets(phase != "indexed") {
@@ -691,6 +695,9 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
     // Reopen only for durable index metadata and fresh-row visibility, not another benchmark.
     let reopened = db.open_table("t0_vectors").execute().await?;
     report["reopened_evidence"] = index_evidence(&reopened, config).await?;
+    if report["schema"] == policy::SCHEMA {
+        policy::reopened(&reopened, &rows, config, report).await?;
+    } else {
     let fresh_bucket = fixture::buckets(true)
         .pop()
         .context("missing fresh bucket")?;
@@ -704,11 +711,16 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
         reopened.version().await?,
     )
     .await?;
+    }
     drop(reopened);
     drop(table);
     drop(db);
     directory.close()?;
     report["temporary_database_removed"] = json!(!location.exists());
+    if report["schema"] == policy::SCHEMA {
+        report["setup_sdk_calls"] = json!({"connect":1,"create_empty_table":1,"add":40,"compact":1,"create_index":1,"index_refresh":1,"open_table":1,"list_indices":4,"index_stats":4,"table_stats":5,"table_version":13,"checkout":4,"checkout_latest":3});
+        report["call_count_scope"] = json!("Completed explicit LanceDB SDK calls, not underlying file reads/RPCs. Vector execution and explain calls are separate in call_counts.");
+    }
     Ok(())
 }
 
@@ -716,8 +728,8 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
     ensure!(
-        args.len() == 3,
-        "usage: origence-t0-ann-probe CONFIG.json NEW_REPORT.json"
+        args.len() == 3 || (args.len() == 4 && args[3] == "filter-policy-v1"),
+        "usage: origence-t0-ann-probe CONFIG.json NEW_REPORT.json [filter-policy-v1]"
     );
     let config: Config = serde_json::from_slice(&std::fs::read(&args[1])?)?;
     config.validate()?;
@@ -738,14 +750,16 @@ async fn main() -> Result<()> {
             "fixture seed and SHA256 are fixed; native index-training randomness is not explicitly seeded",
             "selected ANN component sum excludes some setup; it is not complete pipeline wall time",
             "full authorized ID predicate retained; coarser-predicate authorization architecture NOT_IMPLEMENTED"]});
+    let policy_mode = args.len() == 4;
+    if policy_mode { report = policy::initial_report(&config)?; }
     let started = Instant::now();
     match probe(&config, &mut report).await {
         Ok(()) => {
-            let passed = report["queries"]
+            let passed = if policy_mode { policy::passed(&report) } else { report["queries"]
                 .as_array()
                 .is_some_and(|q| !q.is_empty() && q.iter().all(|q| q["passed"] == true))
-                && report["reopened_fresh_query"]["passed"] == true;
-            report["status"] = json!(if passed {
+                && report["reopened_fresh_query"]["passed"] == true };
+            report["status"] = json!(if policy_mode { if passed { "PASS_QUALITY" } else { "FAIL_QUALITY" } } else if passed {
                 "PASS_SYNTHETIC_T0"
             } else {
                 "FAIL_GATE"
@@ -762,7 +776,7 @@ async fn main() -> Result<()> {
     writeln!(file)?;
     println!("{}", json!({"status":report["status"]}));
     ensure!(
-        report["status"] == "PASS_SYNTHETIC_T0",
+        report["status"] == "PASS_SYNTHETIC_T0" || report["status"] == "PASS_QUALITY",
         "T0 did not pass; inspect report"
     );
     Ok(())

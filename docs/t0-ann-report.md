@@ -1,10 +1,22 @@
 # Issue #52: isolated ANN T0 results
 
-Updated: 2026-10-12 UTC. Application baseline: `d0521c0935083e71890ab02c100920c2edaa7227`.
+Updated: 2026-10-13 UTC. Application baseline: `d0521c0935083e71890ab02c100920c2edaa7227`.
 
 This report preserves named-head evidence snapshots. Terminal CI for the latest source head is tracked in [draft PR #53](https://github.com/TheLudlows/Origence/pull/53); a report-only follow-up commit is not required after every final CI run.
 
-## Decision today
+## Frozen follow-up: filter-aware routing (native NOT_RUN)
+
+The next isolated experiment is frozen in the [policy contract](../tools/t0-ann-probe/policy-contract.json); original smoke results and artifacts below remain unchanged. Use fixed 32/64 IVF_FLAT only for at least 4,096 eligible rows and fraction >= 0.40, otherwise exact bypass; empty scopes make zero vector calls in both arms. The fraction condition is redundant at 10k. Calibration uses the previous dense/history evidence; routing never reads query distances, observed recall, returned K or answers.
+
+The opt-in launcher runs exactly two fresh 10k/128D rebuilds, each capped at 900 native-process seconds. Each has 72 bucket/snapshot cases × eight new near-row/inter-cluster queries = 576 pairs, including count boundaries, rotated/subsampled selections, all lifecycle phases and reopened fresh rows. Training randomness is uncontrolled; two rebuilds are not a statistical-independence claim. Every attempt is retained.
+
+Selected-policy and all-exact arms independently measure the same complete synthetic candidate-path wall-clock boundary, including eligibility, authority maps/sets, routing/filter/query build, native execute/decode/sort, final verification and cleanup. Each case has balanced four AB/four BA orders; oracle/audits follow the pair and plans follow the bucket. Actual plans for all eight vectors in every case are collected after the bucket (1,104 explain calls/build), pooled without truncation, hit lists/query/fixture hashes retained, and actual SDK vector/diagnostic/setup call counts separated. This remains prepared in-memory cost, not SQLite/service or cold-storage performance.
+
+Both builds must pass every >=0.95 Recall@10/@100 and zero-invariant gate; exact-selected results must equal the separate oracle. Exploratory benefit additionally requires workload sum-time ratio <=0.90, ANN-stratum median paired ratio <=0.90, and every bucket/snapshot median <=1.10, separately per rebuild. If quality or benefit fails, stop and recommend exact for this tested mix without changing thresholds, probes or test weights. No automatic larger rung or production activation follows. Commands, timing details and remaining limits are in the [README](../tools/t0-ann-probe/README.md#frozen-filter-aware-follow-up-2026-10-13-native-execution-not_run).
+
+New native compile/Clippy/formatting and execution are **NOT_RUN** until their exact-head CI evidence is available. The local authoring executor still lacks Rust/Cargo. The isolated Cargo dependencies and lock remain unchanged.
+
+## Previous frozen decision
 
 **The locked run still rejects the default fixed 32-of-64 IVF_FLAT policy. The independent 64-of-64 saturation control passes the bounded mechanics gates.** The default failed recall in 43/97 pairs; the full-partition control passed 97/97 pairs and 33/33 batched groups. Every nonempty control Recall@10/@100 was 1.0.
 

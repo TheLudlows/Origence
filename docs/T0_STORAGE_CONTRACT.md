@@ -170,3 +170,99 @@ probe assumptions and the measured filtering strategy. An unresolved safety or
 persistence blocker stops default switching. Large scale and real-model work
 require their own bounded plan. Passing this probe is not T1 implementation,
 production acceptance, merge authority or permission to enable a default.
+
+## 7. Bounded follow-up frozen before native execution (2026-10-13)
+
+This follow-up is still T0. Historical raw-schema, raw-JOIN-score and fixed-probe
+recall failures remain in the reports and executable compatibility gates. It
+cannot authorize a production adapter, default switch, merge, or new vendor
+selection. The local editing environment has no Rust/Cargo; native results must
+come from the committed exact-head, locked CI run. All data remains synthetic.
+
+### 7.1 One filter-aware ANN policy, two new index builds
+
+The only candidate routing rule is metadata-based: use IVF_FLAT with fixed
+32-of-64 probes when the authorized eligible count is at least 4096 **and** at
+least 40% of snapshot rows; otherwise use exact bypass. Empty eligibility makes
+zero retrieval-native calls. Never choose the path from returned K, vectors,
+measured recall, or the exact oracle. The 40% clause is redundant at this 10k
+scale; the rule is calibrated from earlier evidence, not a cross-scale policy.
+
+Each of two fresh 10k/128D index builds uses the canonical fixture and records
+training/index metadata. The released builder exposes no fixed training seed;
+these are repeated builds, not claimed statistically independent trials. Add
+metadata-only rotated/subsampled sets around 100/101/512/513/2048/4095/4096/4097
+eligible IDs alongside dense/history/empty and existing safety buckets. Use eight
+held-out queries per bucket (four new near-row offsets and four off-row queries),
+indexed/fresh-before-refresh/fresh-after-refresh/reopen snapshots, and balanced
+four AB/four BA timing order. Each build has 72 bucket/snapshot cases and 576
+paired queries. No 100k or 1M run is scheduled in this pass.
+
+Each arm independently measures the complete eligibility-enumeration,
+authority-map/set, route/filter/query construction, native execution/decode/sort,
+and fresh-verification wall time. The exact comparator has the same empty fast
+path. Retrieval uses one merged authorized-ID filter and one native query per
+nonempty arm; enumeration is retained, including the 512-ID boundary, rather than
+silently optimized away. Report actual retrieval, setup, plan, and audit calls
+separately. The independent exact oracle/audit runs after measured pairs; query
+plans for all eight query vectors run after their bucket (1,104 recorded explain
+requests per build, with deduplicated plan text and per-slot hash references).
+This is prepared/warm synthetic work, not cold I/O.
+
+Quality is a gate on **every** nonempty pair: Recall@10 and Recall@100 >= 0.95,
+zero source/visibility/duplicate/distance violations; exact-selected paths must
+match exact completely. Selected ANN must prove an actual fixed-32-probe plan.
+An exploratory benefit decision separately requires, in **each** fresh build:
+aggregate selected/exact full-wall ratio <= 0.90, ANN-stratum median paired ratio
+<= 0.90, and each bucket median ratio <= 1.10. These are declared heuristics for
+this artificial mix, not a production latency SLO. Either quality or benefit
+failure ends tuning in this round: recommend exact for the tested mix and report
+why. Full-partition recall is not an ANN speedup. Each native build is limited to
+900 seconds; an incomplete run is not a pass.
+
+### 7.2 Correct scored-CTE FTS cost and explicit budget rejection
+
+Use the proven MATERIALIZED scored CTE with identical query parameters for
+`fts_score` and `fts_match`, no early scored-row LIMIT, current Origence DDL and
+visibility/authority SQL. Preserve full scoped keys and asset/version/source
+metadata. The independent ranking oracle enumerates full-index native BM25 and
+then applies authoritative eligibility and deterministic tie ordering outside
+the candidate CTE. Statistics are global to the physical FTS index; this does
+not select the future scoped/global product default.
+
+Freeze 60 unbudgeted configurations: 1k/10k corpora x three approximate lexical
+match densities (1%, 10%, all) x five eligible/source buckets (1, 8, 64, 512,
+dense) x K=10/100, with two AB/BA pairs each. Add six budget configurations, one
+per corpus/query at dense K=100, with two rounds each: 66 configurations total.
+Ninety percent of corpus rows are target-scope eligible; adversarial competitors
+include foreign tenant/workspace, withdrawn/deleted/stale/unpublished state and
+same-ID wrong-scope collisions. Only modeled states count as tested coverage.
+
+Each reopened phase first records a setup-only SELECT 1 and the implicit
+foreign-key PRAGMA; it does not prewarm FTS. Connection setup is outside both
+measured prepared-query arms. Native-call counts distinguish bridge requests
+from implicit setup SQL statements. Candidate end-to-end wall time includes
+bridge IPC, BEGIN, current API-key
+authority, optional guard, scored CTE plus visibility, COMMIT, fresh transaction
+reauthorization/visibility verification, and decoding. Exact uses its own
+eligible-ID query plus full-index direct BM25 and Python filter/sort, with the
+same authority and fresh-check stages. Log actual query counts. A separate
+optional `engine_elapsed_ms` span covers bridge parameter conversion, SDK call,
+row drain, and JSON-value construction; it excludes connection setup, request
+parse, serialization and IPC, and is not pure engine CPU time. CI uses a release
+bridge for these costs; no production Rust end-to-end speedup is inferred.
+
+A logical 512-row preflight budget reads at most 513 matches. More than 512 yields
+explicit `RESOURCE_EXHAUSTED`, not empty success or an accepted low-recall answer;
+ranking/recall are NOT_RUN for that rejected request and coverage/rejections are
+reported. LIMIT bounds materialized/output rows, not hidden engine CPU or memory.
+Unbudgeted all-match materialization remains measured separately. Oracle/plan
+work occurs outside measured spans, after measured pairs. Per-request and
+per-process deadlines remain bounded. CI places the whole Python driver and
+its child process group under an external 900-second SIGKILL cap, covering
+startup, setup and report validation as well as measured SQL. The driver also
+checks its deadline and saves incremental evidence; a hard stop retains the last
+complete report, with missing work NOT_RUN. Expensive failing work is not
+retried unboundedly. Quality, source safety, ranking and explicit-budget behavior
+are gates. Latencies are exploratory because representative hardware and SLOs
+are not yet fixed.

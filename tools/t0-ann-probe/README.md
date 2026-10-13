@@ -89,3 +89,120 @@ Sources were inspected at LanceDB tag `v0.23.1`, resolved to immutable commit `e
 - [0.23.1 dependency versions: Lance 1.0.1 and Arrow 56.2](https://github.com/lancedb/lancedb/blob/e8feaede1ee8dc7063c6f1e32b9936dacef915f9/Cargo.toml)
 
 Reading these sources is API design evidence; successful compilation and actual native plans remain runtime evidence that must be collected.
+
+## Frozen filter-aware follow-up (2026-10-13; native execution NOT_RUN)
+
+The opt-in follow-up does not replace the original smoke launcher, its 32/64
+failures, or the separate 64/64 saturation control. The frozen machine-readable
+[policy contract](policy-contract.json) is checked into the isolated probe.
+No dependency or Cargo lock changed.
+
+Routing uses **only** the independently enumerated eligible count and snapshot
+row count: use fixed IVF_FLAT 32/64 when `eligible_count >= 4096` and
+`eligible_count * 5 >= snapshot_rows * 2`; otherwise use exact bypass. Both
+arms return an empty list with zero native vector executions when no IDs are
+eligible. The 0.40 condition is redundant at this 10k rung. This conservative
+threshold was calibrated from the old dense/history results, not from the new
+query results; it has no cross-scale or production calibration. There is no
+answer-dependent retry, returned-K rule, distance rule, recall check in routing,
+or automatic probe/threshold tuning. One merged full authorized-ID predicate
+reaches each nonempty native query. Enumeration and final verification remain;
+this is not the application's existing 512-ID batching architecture.
+
+Run the bounded plan, or deliberately execute both fresh rebuilds:
+
+```sh
+python3 tools/t0-ann-probe/policy.py
+python3 tools/t0-ann-probe/policy.py --execute --timeout-seconds 900
+```
+
+The second command requires the same isolated `--locked` release build as above.
+It runs **exactly two** sequential native processes, each with a new temporary
+database and a hard 900-second native-process deadline. The Unix process group
+is killed on timeout. Both declared attempts are retained even when the first
+quality or benefit gate fails; no failed attempt is silently replaced. Source,
+contract, lock and executable hashes are recorded and checked across attempts.
+There is no hard RAM cap, and timeout can leave an isolated temporary fixture
+under `runs/`. A fresh rebuild is not a claim of independently randomized
+training: the native training seed is not controlled. Retain actual plans,
+index UUIDs, coverage/loss and fixture hashes when interpreting repetitions.
+
+Outputs live under `runs/filter-policy-v1-*/`, with `environment.json`, combined
+`driver-result.json`, `summary.txt`, and `build-1/` / `build-2/` containing config,
+native log, complete native report and independently computed driver result.
+Every held-out vector has actual selected/exact plan proof collected after its
+bucket. Identical full plan text is retained once in a root pool, with eight
+per-slot hash references per case: 1,104 diagnostic explain calls per rebuild.
+Reports are not silently truncated; reports above the 256 MiB audit bound fail
+explicitly and the original is retained. Revalidate both reports with:
+
+```sh
+python3 tools/t0-ann-probe/policy.py   --report tools/t0-ann-probe/runs/RUN/build-1/native-report.json   --report tools/t0-ann-probe/runs/RUN/build-2/native-report.json
+```
+
+### Frozen matrix and complete timing boundary
+
+Each rebuild runs 72 bucket/snapshot cases and 576 paired samples. The indexed
+phase has 23 cases; the pre-refresh and post-refresh phases each have 24; reopened
+fresh visibility has one. The original scope and tiny/dense/history/source/fresh
+buckets remain, extended by counts 100, 101, 512, 513, 2048, 4095, 4096 and 4097;
+4095/4096/4097 rotations by 541 eligible positions; and stride-2/stride-3 dense
+subsamples. These shapes use metadata order only. Boundary and rotated cases
+prevent success from consisting only of relabeled prior dense-query results.
+
+Each case has eight frozen held-out synthetic queries: four new near-row offsets
+17–20, and four off-row/inter-cluster bridge vectors. The precise f32 math is in
+`src/policy.rs` and independently reproduced in `policy_report.py`. Query vectors,
+query hashes, canonical indexed/final fixture digests, allowed IDs and their
+digest, and full raw/verified/oracle hit tuples are retained. These queries were
+chosen before this round's results; they are not a held-out real embedding corpus.
+
+The selected-policy and all-exact arms call the same pipeline implementation.
+Each arm's wall clock starts before its own eligibility enumeration and ends
+after authority-map/set construction, routing, filter and query construction,
+native execution, decode/sort, final authority verification and temporary-state
+cleanup. No precomputed eligibility, map or filter is passed into either arm.
+The input query vector, table/snapshot setup, independent oracle/audit, explain
+and report serialization are outside the candidate-path boundary. Component
+measurements are diagnostic; the comparison uses actual full wall time, never
+a sum of selected components. This still uses an in-memory authority surrogate,
+not real SQLite eligibility or service/RRF work.
+
+Four pairs run selected-first and four exact-first in every case (two of each
+within each query family). Each measured pair executes before its oracle and
+audits; plans are collected after that bucket's eight pairs. Both arms use the
+same empty zero-query fast path. This avoids deliberate same-query explain/oracle
+prewarming before the pair but remains a warm/prepared synthetic workload, not a
+cold-I/O measurement. Actual vector executions and explain requests are counted
+separately from completed setup/maintenance SDK operations (552 selected +
+552 all-exact + 552 oracle executions per build; 24 empty samples make zero
+vector calls). These are SDK-level
+call counts, not underlying file reads or RPC counts.
+
+### Frozen terminal decision
+
+Every nonempty pair must meet Recall@10 and Recall@100 >= 0.95, with zero
+source/scope/visibility/duplicate/distance/score violations, including raw hits
+before final verification. The all-exact arm and selected-exact rows must match
+the separate exact oracle at 100%. Nonempty selected ANN cases require actual
+32-of-64 native operators, index/metric/coverage proof, and the same frozen
+snapshot; full partitions cannot qualify as useful ANN acceleration.
+
+Python independently reconstructs authority, fixture/query hashes and full-vector
+distances, checks retained hit recall/equality, actual plan text, coverage,
+physical vector-call counts, balanced order and timing consistency. Mutation
+tests target false passes. The retained exact oracle is audited; this reader
+is not an independent exhaustive Python nearest-neighbor engine.
+
+Quality and exploratory benefit are reported separately. **Each rebuild** must
+pass all quality checks and these predeclared artificial-workload benefit criteria:
+
+- sum(selected complete wall time) / sum(exact complete wall time) <= 0.90
+- median paired ratio in the ANN-selected stratum <= 0.90
+- median paired ratio in every bucket/snapshot case <= 1.10
+
+No aggregate can rescue a failed query, case, or rebuild. If either quality or
+benefit fails, stop and recommend exact for this tested mix; preserve the failed
+candidate rather than tuning it. An all-exact recommendation still leaves
+conditional future ANN research possible. No 100k run, production switch, SLO,
+cold-start claim or paid/provider workload is authorized by this experiment.

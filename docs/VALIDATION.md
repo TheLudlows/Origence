@@ -568,3 +568,45 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
 含 Compose 透传/静态断言的 head `efcb1ddd92deb7185b6b497f527f5db735014587` 经独立六文件 hash/delta 复核无阻断项，[CI 38238050316](https://github.com/TheLudlows/Origence/actions/runs/38238050316) completed/success，fast-check/Linux 全通过、Windows 按 PR 策略 skipped。Rust 仍为无默认 **69/99**、默认 **75/203**；tools 新增配置断言后 **57 run / 55 passed / 2 skipped**，evals **42 passed**；两个被 fast-check 跳过的真实宿主恢复用例在 Linux 独立步骤 **2/2 passed**，HTTP/MCP/原生故障/聚焦/关键词评估同样全过。Compose 本身只验证配置文本，Docker 运行仍 NOT_RUN。
 
 至此最终实现及部署配置验收完成。最后归档仅修改本验证记录与执行计划勾选，不改变源代码、配置、测试或历史结果；归档提交同样必须通过其精确 head 的适用 CI 后才可 ready/merge。最终归档 head/CI 与合入 main 后的 Windows 等结果，在 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录继续保留，避免自引用提交 SHA 或把前一头绿灯用于后一头。
+
+## 2026-10-13：issue #52 隔离存储 T0 与有界成本复验
+
+[PR #53](https://github.com/TheLudlows/Origence/pull/53) 保持 draft，基线 main 为
+`d0521c0935083e71890ab02c100920c2edaa7227`。Turso 0.8.2 与 LanceDB 0.23.1
+仅用于隔离探针；生产源码、默认后端及根 Cargo 依赖不变，没有旧库迁移、真实模型或付费算力。
+PR #54 是另一个独立 SDK 小切片，不混用它的证据，也不修改其内容。
+
+上一轮最终 head `1cc6905f32c882d60ec2f678374cdc21db0ad898` 的
+[专用 CI 38265361792](https://github.com/TheLudlows/Origence/actions/runs/38265361792)
+到终态 failure，保留真实不兼容和召回失败，并非完成后端验收。
+[普通 CI 38265361769](https://github.com/TheLudlows/Origence/actions/runs/38265361769)
+fast-check/Linux success，Windows 按 PR 策略 skipped。
+
+- Turso native：48 项中 44 PASS、3 FAIL、1 NOT_RUN；失败为两项旧 schema 字符串比较、
+  原始可见性 JOIN 的 FTS score 为 0/排名不符。狭义 DDL 归一化候选、结构重开、实际递归图查询、
+  plain/MATERIALIZED scored CTE 的正分数/直接 BM25 一致性、9 组 999/1000/1001 行强停恢复通过。
+  188 条实际 SQL prepared 不等于全部分支执行。文件 I/O 更新一次 poll 前已完成，真正 pending
+  取消为 NOT_RUN；单独合成 MemoryYieldIO forced-pending 单测通过，不充当磁盘持久性保证。
+- ANN 固定 32/64 probes：43/97 配对召回、17/33 批次失败；64/64 穷尽分区诊断为 97/97 配对、
+  33/33 批次通过。两个运行各 97 项 exact 回退一致，来源/可见性/重复/距离违规均为 0。
+  两次训练是不同物理索引，不能称为同一索引调参对照、统计独立试验或 ANN 性能收益。
+- 上述 head 的隔离 formatter、Cargo --locked、严格 Clippy、Rust/Python 探针单测均通过；
+  Turso 9 个组件锁定 0.8.2。完整初始失败及中间诊断保留在专用报告和 evidence 文件中。
+
+用户批准继续小范围 T0：只测一个冻结的 filter-aware ANN/exact 规则及正确 scored CTE 的成本。
+冻结矩阵/完整计时边界/独立排序 oracle/512 行显式预算拒绝见
+[`T0_STORAGE_CONTRACT.md` 第 7 节](T0_STORAGE_CONTRACT.md#7-bounded-follow-up-frozen-before-native-execution-2026-10-13)。
+ANN 两个 10k/128D 新索引，各 576 配对查询；FTS 1k/10k 共 66 配置。每条新原生驱动最多 900 秒。
+本轮新增结果在精确 head 原生 CI 完成前均为 **NOT_RUN**。本地编辑环境无 Rust/Cargo，
+源码审查或 Python 单测不替代原生执行。若冻结规则不满足每对 0.95 召回/零违规或探索成本门槛，
+本轮停止调参并建议该测量工作负载使用 exact；不放宽阈值或把全分区当作 ANN 加速。
+
+最终精确 head、锁定 CI、独立复核及测量结果在 PR #53/issue #52 和专用报告中继续登记，
+不借用前一头绿灯，也不因 T0 探针通过推断允许合入、切默认或开展 T1 替换。
+
+本轮提交前探针检查：ANN 聚合 Python tests **69/69 PASS**（22 项原有、43 项策略门禁、4 项
+双构建驱动），FTS/Turso 聚合 **25/25 PASS**。独立源码复核无剩余阻断项：ANN 576 条新查询
+向量经独立 f32 生成核对；每条查询都有桶后采集的计划证明（每构建 1,104 次 EXPLAIN，
+不计入候选计时）。FTS 启动/构建阶段总超时漏洞已修正，真实假桥进程挂起回归验证终止；
+每阶段显式登记连接初始化，避免把隐式 PRAGMA 漏算入首个候选。原生结果仍待本提交 CI，
+以上通过仅证明探针/门禁本身，不能推广为 Turso 或 ANN 通过。

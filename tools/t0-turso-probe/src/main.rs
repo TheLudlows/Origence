@@ -9,6 +9,7 @@ use std::future::{Future, poll_fn};
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::task::Poll;
+use std::time::Instant;
 use turso::{Builder, Connection, transaction::TransactionBehavior};
 
 fn params(request: &Value) -> Result<Vec<turso::Value>> {
@@ -158,12 +159,21 @@ async fn main() -> Result<()> {
                 entry.insert(conn)
             }
         };
-        let response = match request(conn, &input).await {
+        // Optional diagnostic span: parameter conversion, SDK execution, row
+        // drain and JSON-value construction. Excludes connection setup, request
+        // parsing and response serialization/IPC; not pure engine CPU time.
+        let started = Instant::now();
+        let result = request(conn, &input).await;
+        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let mut response = match result {
             Ok(result) => json!({"ok": true, "result": result}),
             Err(error) => {
                 json!({"ok": false, "error_category": error_category(&error), "error": format!("{error:#}")})
             }
         };
+        if input["timing"].as_bool().unwrap_or(false) {
+            response["engine_elapsed_ms"] = json!(elapsed_ms);
+        }
         writeln!(stdout, "{response}")?;
         stdout.flush()?;
     }

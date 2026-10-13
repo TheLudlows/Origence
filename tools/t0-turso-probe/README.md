@@ -110,3 +110,30 @@ checks. A failed schema or authorization invariant blocks default switching.
 Keep the report, generated lock, `cargo metadata`, feature tree, Rust version,
 runner information and exact tested commit together. See
 [`T0_STORAGE_CONTRACT.md`](../../docs/T0_STORAGE_CONTRACT.md).
+
+## Optional bounded scored-CTE cost follow-up
+
+`fts_cost.py` is separate from the historical compatibility gate. It measures
+60 unbudgeted and six guarded configurations on new 1k/10k synthetic stores,
+with current scoped visibility/authority SQL and a full-index BM25 oracle.
+No arguments prints its frozen plan. After building the isolated release binary:
+
+```sh
+cargo build --locked --release --manifest-path tools/t0-turso-probe/Cargo.toml
+python3 tools/t0-turso-probe/fts_cost.py \
+  --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe \
+  --output /tmp/t0-fts-cost-new
+python3 tools/t0-turso-probe/fts_cost.py --report /tmp/t0-fts-cost-new/report.json
+```
+
+CI additionally wraps this entire driver/process group in a 900-second SIGKILL
+deadline; the 17-minute step limit is only a runner backstop. The output directory
+must be new. The driver preserves partial evidence and
+explicit failures/rejections; a 512-row logical guard rejects its 513th result
+rather than silently truncating relevance. This is not a hard internal engine
+CPU/memory budget. Python wall time includes IPC, serialization, filtering and
+fresh verification. Optional bridge `timing: true` returns `engine_elapsed_ms`
+for parameter conversion, SDK execution, row draining and JSON-value building;
+it excludes connection setup and wire serialization/IPC, and is not pure engine
+CPU time. See [the frozen follow-up contract](../../docs/T0_STORAGE_CONTRACT.md#7-bounded-follow-up-frozen-before-native-execution-2026-10-13)
+and [the cost report](../../docs/t0-fts-cost-report.md) for scope and actual results.

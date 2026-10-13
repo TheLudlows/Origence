@@ -1,0 +1,23 @@
+{
+  "schema": "origence-t0-filter-policy-v1",
+  "policy_id": "eligible4096-fraction40-ivf32of64-v1",
+  "config": {"rows":10000,"dimension":128,"queries_per_bucket":8,"partitions":64,"nprobes":32,"refine_factor":10,"index_kind":"ivf_flat","seed":52},
+  "routing": {"minimum_eligible":4096,"minimum_fraction_numerator":2,"minimum_fraction_denominator":5,"empty_native_calls":0,"nonempty_native_calls":1},
+  "quality": {"candidate_limit":100,"recall_at_10_min":0.95,"recall_at_100_min":0.95,"all_invariant_counters":0,"exact_identity_distance_match":true},
+  "benefit": {"workload_sum_time_ratio_max":0.90,"ann_median_paired_ratio_max":0.90,"per_bucket_median_paired_ratio_max":1.10,"interpretation":"exploratory on this artificial fixed mix; each rebuild must pass separately"},
+  "query_slots":8,
+  "near_query_offsets":[17,18,19,20],
+  "bridge_slots":[0,1,2,3],
+  "count_buckets":[100,101,512,513,2048,4095,4096,4097],
+  "rotated_count_buckets":[4095,4096,4097],
+  "rotation":541,
+  "subsample_strides":[2,3],
+  "native_vector_calls_per_build":{"selected":552,"exact":552,"oracle":552},
+  "diagnostic_explain_calls_per_build":1104,
+  "plan_proof":"Actual selected and exact plans for every held-out vector after its bucket; root text pool deduplicates identical plans and retains per-slot hashes",
+  "native_deadline_seconds":900,
+  "fresh_rebuilds":2,
+  "timing":"Each pair first, oracle/audit afterward, plans after bucket; 4 selected-first and 4 exact-first per bucket; same zero-call empty path. Full candidate wall time measured independently in each arm, with no shared precomputed eligibility/map/filter.",
+  "stop_rule":"Do not tune thresholds, probes, query set, matrix weights or benefit criteria after results. If quality or benefit fails in either rebuild, recommend exact for this tested mix. Preserve every attempt.",
+  "limits":["0.40 fraction is redundant with count4096 at10k; no cross-scale calibration","full authorized-ID enumeration remains; one native query is not the existing512-ID application shape","two fresh rebuilds are not a claim of independent randomized training","no production/cold-I/O/SQLite/SLO or useful ANN speedup claim from full partitions"]
+}

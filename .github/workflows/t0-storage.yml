@@ -72,6 +72,14 @@ jobs:
       - name: Real DDL, SQL, FTS, transaction and process recovery probes
         if: ${{ !cancelled() && steps.native_bridge.outcome == 'success' }}
         run: python3 tools/t0-turso-probe/verify.py --binary tools/t0-turso-probe/target/debug/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/native"
+      - name: Build release bridge for bounded scored-CTE cost measurements
+        id: fts_release
+        if: ${{ !cancelled() && steps.native_bridge.outcome == 'success' }}
+        run: cargo build --locked --manifest-path tools/t0-turso-probe/Cargo.toml --release -j 2
+      - name: Bounded 1k and 10k scored-CTE cost and budget probes
+        if: ${{ !cancelled() && steps.fts_release.outcome == 'success' }}
+        timeout-minutes: 17
+        run: timeout --signal=KILL 900s python3 tools/t0-turso-probe/fts_cost.py --binary tools/t0-turso-probe/target/release/origence-t0-turso-probe --output "$RUNNER_TEMP/t0-turso/fts-cost"
       - name: Require committed source formatting
         if: always()
         run: |
@@ -148,6 +156,10 @@ jobs:
       - name: Independent full-partition diagnostic (64 of 64, no speedup claim)
         if: ${{ !cancelled() && steps.native_ann.outcome == 'success' }}
         run: python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 --queries 3 --index ivf_flat --nprobes 64 --timeout-seconds 1800
+      - name: Frozen filter-aware policy, two fresh 10k 128D builds
+        if: ${{ !cancelled() && steps.native_ann.outcome == 'success' }}
+        timeout-minutes: 35
+        run: python3 tools/t0-ann-probe/policy.py --execute --timeout-seconds 900
       - name: Require committed source formatting
         if: always()
         run: |
