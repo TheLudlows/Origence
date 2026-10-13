@@ -1258,7 +1258,8 @@ mod tests {
                 .unwrap();
             let reopened = pool(database);
             let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
-            let mut operation = Box::pin(query("UPDATE oc_jobs SET generation=999").execute(&mut *tx));
+            let mut operation =
+                Box::pin(query("UPDATE oc_jobs SET generation=999").execute(&mut *tx));
             let first_poll = poll_fn(|cx| Poll::Ready(operation.as_mut().poll(cx))).await;
             assert!(
                 matches!(first_poll, Poll::Pending),

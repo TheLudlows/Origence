@@ -258,7 +258,9 @@ impl Service {
                     if !tx.context_route_matches(hit.asset_id, route).await?
                         || !tx.context_identity_matches(&hit, identity).await?
                     {
-                        return Err(AppError::Conflict("native context candidate route changed".into()));
+                        return Err(AppError::Conflict(
+                            "native context candidate route changed".into(),
+                        ));
                     }
                     if !crate::retrieval::unique_native(
                         &mut seen,
@@ -288,7 +290,13 @@ impl Service {
             let mut seen = HashMap::new();
             for (generation, native) in native_hits {
                 let candidate = tx
-                    .vector_hit_exact(native.id, native.source, profile, vector_dimension, generation)
+                    .vector_hit_exact(
+                        native.id,
+                        native.source,
+                        profile,
+                        vector_dimension,
+                        generation,
+                    )
                     .await?;
                 if let Some(mut hit) =
                     crate::retrieval::live_native_candidate(&mut tx, native.id, candidate).await?
@@ -296,7 +304,9 @@ impl Service {
                     if !tx.context_route_matches(hit.asset_id, route).await?
                         || !tx.context_identity_matches(&hit, identity).await?
                     {
-                        return Err(AppError::Conflict("native context candidate route changed".into()));
+                        return Err(AppError::Conflict(
+                            "native context candidate route changed".into(),
+                        ));
                     }
                     if !crate::retrieval::unique_native(
                         &mut seen,
@@ -335,11 +345,16 @@ impl Service {
                     break;
                 }
             } else {
-                return Err(AppError::Conflict("native context candidate route changed".into()));
+                return Err(AppError::Conflict(
+                    "native context candidate route changed".into(),
+                ));
             }
         }
         tx.commit().await?;
-        Ok(ContextCandidateResult { candidates, ranked_native })
+        Ok(ContextCandidateResult {
+            candidates,
+            ranked_native,
+        })
     }
 
     pub(crate) async fn context_session_candidates(

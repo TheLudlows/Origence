@@ -176,7 +176,9 @@ impl Service {
                     .await?;
                 if let Some(mut hit) = live_native_candidate(&mut tx, native.id, candidate).await? {
                     if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
-                        return Err(AppError::Conflict("native retrieval identity changed".into()));
+                        return Err(AppError::Conflict(
+                            "native retrieval identity changed".into(),
+                        ));
                     }
                     if !unique_native(
                         &mut seen,
@@ -205,11 +207,19 @@ impl Service {
         let mut seen_vectors = HashMap::new();
         for (generation, native) in native_hits {
             let candidate = tx
-                .vector_hit_exact(native.id, native.source, profile, vector_dimension, generation)
+                .vector_hit_exact(
+                    native.id,
+                    native.source,
+                    profile,
+                    vector_dimension,
+                    generation,
+                )
                 .await?;
             if let Some(mut hit) = live_native_candidate(&mut tx, native.id, candidate).await? {
                 if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
-                    return Err(AppError::Conflict("native retrieval identity changed".into()));
+                    return Err(AppError::Conflict(
+                        "native retrieval identity changed".into(),
+                    ));
                 }
                 if !unique_native(
                     &mut seen_vectors,
@@ -338,7 +348,9 @@ impl Service {
                 }
                 live.identity = identities[&live.asset_id].clone();
                 if !live.matches_identity(input.memory_identity.as_ref()) {
-                    return Err(AppError::Conflict("native retrieval identity changed".into()));
+                    return Err(AppError::Conflict(
+                        "native retrieval identity changed".into(),
+                    ));
                 }
                 current.push(live);
                 if current.len() == input.limit {
@@ -478,16 +490,26 @@ pub(crate) async fn verify_native_candidates(
         let original = &candidate.hit;
         let current = match &candidate.proof {
             NativePublicationProof::FullText { source, generation } => {
-                tx.full_text_hit(original.chunk_id, *source, *generation).await?
+                tx.full_text_hit(original.chunk_id, *source, *generation)
+                    .await?
             }
-            NativePublicationProof::Vector { source, generation, profile, dimension } => {
-                tx.vector_hit_exact(original.chunk_id, *source, profile, *dimension, *generation).await?
+            NativePublicationProof::Vector {
+                source,
+                generation,
+                profile,
+                dimension,
+            } => {
+                tx.vector_hit_exact(original.chunk_id, *source, profile, *dimension, *generation)
+                    .await?
             }
         };
-        let current = live_native_candidate(tx, original.chunk_id, current).await?
+        let current = live_native_candidate(tx, original.chunk_id, current)
+            .await?
             .ok_or_else(|| AppError::Unavailable("native retrieval became unavailable".into()))?;
         if !same_evidence_identity(original, &current) {
-            return Err(AppError::Conflict("native retrieval evidence changed".into()));
+            return Err(AppError::Conflict(
+                "native retrieval evidence changed".into(),
+            ));
         }
     }
     Ok(())
@@ -506,7 +528,9 @@ pub(crate) async fn live_native_candidate(
                 "native retrieval does not match live publication".into(),
             ));
         }
-        return Err(AppError::Unavailable("native retrieval became unavailable".into()));
+        return Err(AppError::Unavailable(
+            "native retrieval became unavailable".into(),
+        ));
     }
     Ok(candidate)
 }

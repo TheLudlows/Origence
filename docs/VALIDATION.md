@@ -606,3 +606,9 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
   commit 错误，也不将已回滚写入报告为成功。其余运行门禁当次未执行。
   同次 fmt FAIL 的正式补丁已应用。后续 CI 将优先运行新增生产发布和 Lance
   合同，保留全部原回归，并允许 PR 自身缓存失败作业的依赖以避免重复冷编译。
+
+- 804701d9 的 [准备 CI 38393321292](https://github.com/TheLudlows/Origence/actions/runs/38393321292)
+  全目标编译再次 PASS。artifact 11811247090 包含 Cargo 真实生成的锁与格式补丁；
+  锁 diff 仅为 origence 根依赖新增已锁存的 `lance`，所有依赖 package 记录完全
+  不变（准备步骤有逐记录断言，本地亦复核）。新增原生事务中止护栏、最终发布
+  proof、物理 IVF 分区校验及其测试均已编译；运行测试仍待回灌锁/格式后的 CI。

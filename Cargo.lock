@@ -5015,6 +5015,7 @@ dependencies = [
  "fs2",
  "futures",
  "jieba-rs 0.7.4",
+ "lance",
  "lancedb",
  "pdf_oxide",
  "pulldown-cmark",

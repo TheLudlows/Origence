@@ -29,21 +29,10 @@ jobs:
         with:
           toolchain: 1.98.0
           components: rustfmt, clippy
-      - name: Record the existing Lance dependency as an explicit root dependency
+      - name: Verify committed dependency lock without resolving updates
         run: |
-          cp Cargo.lock "$RUNNER_TEMP/before.lock"
-          cargo metadata --format-version 1 > /dev/null
-          python3 - <<'PYLOCK'
-          import os, pathlib, tomllib
-          before = tomllib.loads(pathlib.Path(os.environ['RUNNER_TEMP'], 'before.lock').read_text())
-          after = tomllib.loads(pathlib.Path('Cargo.lock').read_text())
-          dependencies = lambda lock: [p for p in lock['package'] if p['name'] != 'origence']
-          assert dependencies(before) == dependencies(after), 'unexpected dependency package drift'
-          root = lambda lock: next(p for p in lock['package'] if p['name'] == 'origence')
-          expected = dict(root(before))
-          expected['dependencies'] = sorted(set(expected['dependencies']) | {'lance'})
-          assert expected == root(after), 'unexpected root dependency change'
-          PYLOCK
+          cargo metadata --locked --format-version 1 > /dev/null
+          git diff --exit-code -- Cargo.lock
       - uses: Swatinem/rust-cache@v2
         with:
           key: turso-lance-production

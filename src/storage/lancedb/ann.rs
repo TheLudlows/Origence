@@ -71,20 +71,29 @@ async fn check_index(table: &Table) -> StorageResult<()> {
 /// LanceDB's summary stats and manifest details omit the physical IVF count.
 /// Inspect the actual segment statistics through the public Lance API instead.
 async fn check_physical_partitions(table: &Table) -> StorageResult<()> {
-    let dataset = table.dataset()
+    let dataset = table
+        .dataset()
         .ok_or_else(|| StorageError::Unavailable("native vector dataset is unavailable".into()))?
-        .get().await.map_err(backend)?;
-    let segments = dataset.load_indices_by_name(INDEX_NAME).await
+        .get()
+        .await
+        .map_err(backend)?;
+    let segments = dataset
+        .load_indices_by_name(INDEX_NAME)
+        .await
         .map_err(|error| StorageError::Backend(error.to_string()))?;
     if segments.is_empty() {
-        return Err(StorageError::Conflict("vector index has no physical segments".into()));
+        return Err(StorageError::Conflict(
+            "vector index has no physical segments".into(),
+        ));
     }
     // index_statistics can auto-migrate legacy fragment metadata. Refuse both
     // triggers before calling it, using this exact immutable dataset snapshot.
     // This adapter must never turn a read into repair or a format migration.
     let mut covered = HashSet::new();
     for segment in &segments {
-        let bitmap = segment.fragment_bitmap.as_ref()
+        let bitmap = segment
+            .fragment_bitmap
+            .as_ref()
             .ok_or_else(|| StorageError::Conflict("vector index coverage is missing".into()))?;
         for fragment in dataset.fragments().iter() {
             let id = u32::try_from(fragment.id)
@@ -93,17 +102,22 @@ async fn check_physical_partitions(table: &Table) -> StorageResult<()> {
                 let rows = fragment.physical_rows.and_then(|physical| {
                     match fragment.deletion_file.as_ref() {
                         None => Some(physical),
-                        Some(deletion) => deletion.num_deleted_rows
+                        Some(deletion) => deletion
+                            .num_deleted_rows
                             .and_then(|deleted| physical.checked_sub(deleted)),
                     }
                 });
                 if rows.is_none() || !covered.insert(fragment.id) {
-                    return Err(StorageError::Conflict("incompatible vector fragment metadata".into()));
+                    return Err(StorageError::Conflict(
+                        "incompatible vector fragment metadata".into(),
+                    ));
                 }
             }
         }
     }
-    let raw = dataset.index_statistics(INDEX_NAME).await
+    let raw = dataset
+        .index_statistics(INDEX_NAME)
+        .await
         .map_err(|error| StorageError::Backend(error.to_string()))?;
     validate_partition_statistics(&raw, segments.len())
 }
@@ -117,13 +131,19 @@ fn validate_partition_statistics(raw: &str, expected_segments: usize) -> Storage
     struct Statistics {
         indices: Vec<SegmentStatistics>,
     }
-    let statistics: Statistics = serde_json::from_str(raw)
-        .map_err(|_| StorageError::Conflict("vector partition statistics are unavailable".into()))?;
+    let statistics: Statistics = serde_json::from_str(raw).map_err(|_| {
+        StorageError::Conflict("vector partition statistics are unavailable".into())
+    })?;
     if expected_segments == 0
         || statistics.indices.len() != expected_segments
-        || statistics.indices.iter().any(|segment| segment.num_partitions != u64::from(PARTITIONS))
+        || statistics
+            .indices
+            .iter()
+            .any(|segment| segment.num_partitions != u64::from(PARTITIONS))
     {
-        return Err(StorageError::Conflict("vector index must have 64 partitions per segment".into()));
+        return Err(StorageError::Conflict(
+            "vector index must have 64 partitions per segment".into(),
+        ));
     }
     Ok(())
 }
@@ -187,17 +207,29 @@ mod tests {
     #[test]
     fn physical_partition_statistics_require_every_segment_to_match() {
         assert!(validate_partition_statistics(r#"{"indices":[{"num_partitions":64}]}"#, 1).is_ok());
-        assert!(validate_partition_statistics(r#"{"indices":[{"num_partitions":64},{"num_partitions":64}]}"#, 2).is_ok());
+        assert!(
+            validate_partition_statistics(
+                r#"{"indices":[{"num_partitions":64},{"num_partitions":64}]}"#,
+                2
+            )
+            .is_ok()
+        );
         for (raw, segments) in [
             (r#"{"indices":[{"num_partitions":32}]}"#, 1),
             (r#"{"indices":[{"num_partitions":128}]}"#, 1),
-            (r#"{"indices":[{"num_partitions":64},{"num_partitions":32}]}"#, 2),
+            (
+                r#"{"indices":[{"num_partitions":64},{"num_partitions":32}]}"#,
+                2,
+            ),
             (r#"{"indices":[{}]}"#, 1),
             (r#"{"indices":[]}"#, 0),
             (r#"{"num_indices":64}"#, 1),
             (r#"{"indices":[{"num_partitions":64}]}"#, 2),
         ] {
-            assert!(validate_partition_statistics(raw, segments).is_err(), "{raw}");
+            assert!(
+                validate_partition_statistics(raw, segments).is_err(),
+                "{raw}"
+            );
         }
     }
 
@@ -326,10 +358,28 @@ mod native_tests {
 
         // A same-name, same-metric replacement must not silently change the
         // frozen 32-of-64 policy into a full-partition 32-of-32 search.
-        let table = store.open_existing(&table_name(&query.profile)).await.unwrap().unwrap();
-        table.create_index(&["vector"], Index::IvfFlat(
-            IvfFlatIndexBuilder::default().distance_type(DistanceType::L2).num_partitions(32),
-        )).name(INDEX_NAME.into()).replace(true).execute().await.unwrap();
-        assert!(matches!(store.search(query).await, Err(StorageError::Conflict(_))));
+        let table = store
+            .open_existing(&table_name(&query.profile))
+            .await
+            .unwrap()
+            .unwrap();
+        table
+            .create_index(
+                &["vector"],
+                Index::IvfFlat(
+                    IvfFlatIndexBuilder::default()
+                        .distance_type(DistanceType::L2)
+                        .num_partitions(32),
+                ),
+            )
+            .name(INDEX_NAME.into())
+            .replace(true)
+            .execute()
+            .await
+            .unwrap();
+        assert!(matches!(
+            store.search(query).await,
+            Err(StorageError::Conflict(_))
+        ));
     }
 }

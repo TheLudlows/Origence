@@ -27,8 +27,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       - run: cargo fmt --all -- --check
-      # Catch source-level Clippy warnings before the expensive native engines.
-      - name: Lightweight Clippy (no native backends)
+      # Check the Turso authority layer before the full Lance vector backend.
+      - name: Authority-only Clippy (without Lance)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
       - name: Full test suite without default features
         run: cargo test --locked --no-default-features -j 2 --no-fail-fast
@@ -119,6 +119,6 @@ jobs:
       - name: Build tools, lint, and all local lifecycle tests
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1
-      - name: Storage contracts without native backends
+      - name: Authority contracts without Lance
         run: cargo check --locked --no-default-features --lib -j 1
 
