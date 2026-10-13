@@ -29,7 +29,14 @@ jobs:
         with:
           toolchain: 1.98.0
           components: rustfmt, clippy
-      - run: cargo generate-lockfile
+      - name: Update only required locked dependencies
+        run: |
+          cargo update -p lancedb --precise 0.40.0
+          # Retain the tested native engine family, not just its SDK facade.
+          for package in turso_sync_sdk_kit turso_sync_engine turso_sdk_kit turso_core turso_parser turso_ext turso_macros turso_sdk_kit_macros; do
+            cargo update -p "$package" --precise 0.8.2
+          done
+          cargo update -p office_oxide --precise 0.1.9
       - uses: Swatinem/rust-cache@v2
         with:
           key: turso-lance-production

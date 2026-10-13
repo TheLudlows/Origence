@@ -1,5 +1,6 @@
 #![cfg(feature = "local-storage")]
 
+use origence::storage::native_turso as db;
 use axum::{Json, Router, extract::State, routing::post};
 use origence::{
     error::AppError,
@@ -212,7 +213,7 @@ async fn archive(
 
 async fn counts(s: &Service) -> Vec<(String, i64)> {
     let pool = s.engine.relational().pool();
-    let names: Vec<String> = sqlx::query_scalar(
+    let names: Vec<String> = db::query_scalar(
         "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'oc_%' ORDER BY name",
     )
     .fetch_all(pool)
@@ -220,7 +221,7 @@ async fn counts(s: &Service) -> Vec<(String, i64)> {
     .unwrap();
     let mut result = Vec::new();
     for name in names {
-        let count = sqlx::query_scalar::<_, i64>(&format!("SELECT count(*) FROM {name}"))
+        let count = db::query_scalar::< i64>(&format!("SELECT count(*) FROM {name}"))
             .fetch_one(pool)
             .await
             .unwrap();
@@ -543,7 +544,7 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
         .unwrap();
     assert_eq!(response.status(), 422);
     assert_eq!(counts(&s).await, before);
-    sqlx::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
+    db::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
         .bind(writer.id)
         .execute(s.engine.relational().pool())
         .await
@@ -588,7 +589,7 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
     )
     .await;
     // Fixture timestamps establish strict recency independent of machine speed.
-    sqlx::query("UPDATE oc_session_turns SET created_at=1 WHERE source_event_id=?")
+    db::query("UPDATE oc_session_turns SET created_at=1 WHERE source_event_id=?")
         .bind(id(&oldest, "source_event_id"))
         .execute(s.engine.relational().pool())
         .await

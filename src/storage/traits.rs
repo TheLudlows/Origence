@@ -32,7 +32,10 @@ use uuid::Uuid;
 
 use crate::storage::ledger::{LedgerEntry, LedgerKey};
 use crate::storage::{
-    capabilities::{BlobKey, Capabilities, VectorEntry, VectorHit, VectorQuery},
+    capabilities::{
+        BlobKey, Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry,
+        VectorHit, VectorQuery,
+    },
     error::{StorageError, StorageResult},
     scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion},
 };
@@ -489,10 +492,27 @@ pub trait VectorStore {
     /// Scoped nearest-neighbour search.
     async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>>;
 
-    /// Delete orphan artifacts without deleting other assets sharing a source.
+    /// Idempotently index original-chunk lexical terms under the same durable
+    /// publication generation as the relational ledger. Unsupported backends
+    /// fail explicitly; silently treating an absent index as readiness is unsafe.
+    async fn upsert_full_text(
+        &self,
+        _scope: Scope,
+        _entries: Vec<FullTextEntry>,
+    ) -> StorageResult<()> {
+        Err(StorageError::Unavailable("native full-text storage unavailable".into()))
+    }
+
+    /// Native conjunctive BM25 candidates. This never grants evidence visibility.
+    async fn search_full_text(&self, _query: FullTextQuery) -> StorageResult<Vec<FullTextHit>> {
+        Err(StorageError::Unavailable("native full-text storage unavailable".into()))
+    }
+
+    /// Delete orphan artifacts from vector and full-text indexes without
+    /// deleting other assets sharing a source.
     async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()>;
 
-    /// Remove every vector originating from a source version.
+    /// Remove every vector and full-text row originating from a source version.
     async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()>;
 }
 

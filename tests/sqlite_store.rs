@@ -1,6 +1,7 @@
 //! SQLite adapter tests (M2): privileged ops, scoped transactions, idempotency
 //! and the self-polled queue against a real database file in a temp dir.
 
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, IssuedKey, JobFinish, JobQueue, Permission, RelationalStore, Scope,
     StorageError, WorkItem, sqlite::SqliteStore,
@@ -94,7 +95,7 @@ async fn transaction_commits_enqueue_audit_and_command() {
     store.settle(claimed, JobFinish::Completed).await.unwrap();
     assert!(store.claim_next().await.unwrap().is_none());
 
-    let audit_count: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_audit")
+    let audit_count: i64 = db::query_scalar("SELECT count(*) FROM oc_audit")
         .fetch_one(store.pool())
         .await
         .unwrap();
@@ -167,7 +168,7 @@ async fn rollback_discards_writes() {
     }
 
     assert!(store.claim_next().await.unwrap().is_none());
-    let command_count: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_commands")
+    let command_count: i64 = db::query_scalar("SELECT count(*) FROM oc_commands")
         .fetch_one(store.pool())
         .await
         .unwrap();
@@ -266,7 +267,7 @@ async fn retry_wait_defers_claim_until_due() {
     assert!(store.claim_next().await.unwrap().is_none());
 
     // Once due, the same job is claimed again with a bumped run_token.
-    sqlx::query("UPDATE oc_jobs SET next_retry_at = 0")
+    db::query("UPDATE oc_jobs SET next_retry_at = 0")
         .execute(store.pool())
         .await
         .unwrap();
@@ -301,7 +302,7 @@ async fn abandoned_processing_job_is_recovered() {
     }
 
     // Simulate a worker that claimed the job then crashed without settling.
-    sqlx::query("UPDATE oc_jobs SET state = 'processing', run_token = 1, updated_at = 0")
+    db::query("UPDATE oc_jobs SET state = 'processing', run_token = 1, updated_at = 0")
         .execute(store.pool())
         .await
         .unwrap();

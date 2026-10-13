@@ -1,5 +1,6 @@
 //! Ledger reconcile tests (M3): stuck pending and due retry_wait converge.
 
+use origence::storage::native_turso as db;
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
 use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion,
@@ -64,7 +65,7 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
     }
 
     // Make `stuck` look abandoned and `due` already past its retry time.
-    sqlx::query(
+    db::query(
         "UPDATE oc_artifact_ledger SET state = 'retry_wait', next_retry_at = 0, attempt = 1 \
          WHERE artifact_id = ?",
     )
@@ -72,7 +73,7 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
     .execute(store.pool())
     .await
     .unwrap();
-    sqlx::query("UPDATE oc_artifact_ledger SET updated_at = 0 WHERE artifact_id = ?")
+    db::query("UPDATE oc_artifact_ledger SET updated_at = 0 WHERE artifact_id = ?")
         .bind(stuck.key.artifact_id)
         .execute(store.pool())
         .await
@@ -83,7 +84,7 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
     assert_eq!(report["requeued"].as_i64().unwrap(), 1);
 
     let stuck_state: String =
-        sqlx::query_scalar("SELECT state FROM oc_artifact_ledger WHERE artifact_id = ?")
+        db::query_scalar("SELECT state FROM oc_artifact_ledger WHERE artifact_id = ?")
             .bind(stuck.key.artifact_id)
             .fetch_one(store.pool())
             .await
@@ -91,7 +92,7 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
     assert_eq!(stuck_state, "orphan");
 
     let due_state: String =
-        sqlx::query_scalar("SELECT state FROM oc_artifact_ledger WHERE artifact_id = ?")
+        db::query_scalar("SELECT state FROM oc_artifact_ledger WHERE artifact_id = ?")
             .bind(due.key.artifact_id)
             .fetch_one(store.pool())
             .await
@@ -133,7 +134,7 @@ async fn confirm_is_idempotent_and_republishes_nothing_twice() {
     }
 
     let state: String =
-        sqlx::query_scalar("SELECT state FROM oc_artifact_ledger WHERE artifact_id = ?")
+        db::query_scalar("SELECT state FROM oc_artifact_ledger WHERE artifact_id = ?")
             .bind(e.key.artifact_id)
             .fetch_one(store.pool())
             .await

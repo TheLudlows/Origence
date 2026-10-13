@@ -34,6 +34,8 @@ arrow-array = { version = "=58.3.0", optional = true }
 arrow-schema = { version = "=58.3.0", optional = true }
 
 [dev-dependencies]
+# Deterministic Pending cancellation coverage; production uses no VFS test feature.
+turso = { version = "=0.8.2", default-features = false, features = ["io_memory_yield"] }
 tempfile = "3"
 
 [features]

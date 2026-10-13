@@ -1,5 +1,6 @@
 #![cfg(feature = "local-storage")]
 
+use origence::storage::native_turso as db;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use origence::{
     error::AppError,
@@ -352,7 +353,7 @@ async fn learn(s: &Service, a: &AuthContext, session: Uuid) -> Value {
 }
 
 async fn snapshot(s: &Service, run: Uuid) -> Value {
-    let raw: String = sqlx::query_scalar("SELECT snapshot FROM oc_improve_runs WHERE improve_id=?")
+    let raw: String = db::query_scalar("SELECT snapshot FROM oc_improve_runs WHERE improve_id=?")
         .bind(run)
         .fetch_one(s.engine.relational().pool())
         .await
@@ -361,7 +362,7 @@ async fn snapshot(s: &Service, run: Uuid) -> Value {
 }
 
 async fn count(s: &Service, table: &str) -> i64 {
-    sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
+    db::query_scalar(&format!("SELECT count(*) FROM {table}"))
         .fetch_one(s.engine.relational().pool())
         .await
         .unwrap()
@@ -610,7 +611,7 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
     let shared_id = Uuid::new_v4();
     feedback(&s, &a, &first, shared_id).await;
     feedback(&s, &writer, &second, shared_id).await;
-    sqlx::query("UPDATE oc_feedback SET created_at=42")
+    db::query("UPDATE oc_feedback SET created_at=42")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
@@ -633,7 +634,7 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
     // Late feedback may have an earlier wall clock. It must still be selected by
     // the next run and must not change the already-frozen first snapshot.
     feedback(&s, &a, &second, Uuid::new_v4()).await;
-    sqlx::query("UPDATE oc_feedback SET created_at=1 WHERE feedback_sequence=3")
+    db::query("UPDATE oc_feedback SET created_at=1 WHERE feedback_sequence=3")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
@@ -713,7 +714,7 @@ async fn learning_invalid_proposals_fail_closed_without_consuming_feedback() {
         );
         assert_eq!(count(&s, "oc_assets").await, 0, "{mode}");
         let cursor: i64 =
-            sqlx::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0) FROM oc_improve_cursors")
+            db::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0) FROM oc_improve_cursors")
                 .fetch_one(s.engine.relational().pool())
                 .await
                 .unwrap();
@@ -850,12 +851,12 @@ async fn learning_child_retry_reuses_saved_embeddings_after_publication_transact
     let run = s.improvement(&a, id(&receipt, "improve_id")).await.unwrap();
     let learning = &run["learnings"][0];
     let child = id(learning, "ingest_job_id");
-    sqlx::raw_sql("CREATE TRIGGER fail_learning_publication BEFORE INSERT ON oc_chunks BEGIN SELECT RAISE(ABORT,'fixture publication failure'); END;")
+    db::raw_sql("CREATE TRIGGER fail_learning_publication BEFORE INSERT ON oc_chunks BEGIN SELECT RAISE(ABORT,'fixture publication failure'); END;")
         .execute(s.engine.relational().pool()).await.unwrap();
     assert!(worker::process_next(&s).await.unwrap());
     assert_eq!(s.job(&a, child).await.unwrap()["state"], "retry_wait");
     assert_eq!(count(&s, "oc_chunks").await, 0);
-    let raw: String = sqlx::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+    let raw: String = db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
         .bind(child)
         .fetch_one(s.engine.relational().pool())
         .await
@@ -867,7 +868,7 @@ async fn learning_child_retry_reuses_saved_embeddings_after_publication_transact
     );
     let embeddings = fixture.embeddings.load(Ordering::SeqCst);
     assert!(embeddings > 0);
-    sqlx::raw_sql("DROP TRIGGER fail_learning_publication;")
+    db::raw_sql("DROP TRIGGER fail_learning_publication;")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
@@ -967,7 +968,7 @@ async fn learning_partial_publication_cancel_preserves_published_children_and_re
         "already-published exact statement must be rejected as duplicate"
     );
     let visible: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM oc_learnings WHERE status='published'")
+        db::query_scalar("SELECT count(*) FROM oc_learnings WHERE status='published'")
             .fetch_one(s.engine.relational().pool())
             .await
             .unwrap();
@@ -991,7 +992,7 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
     // Make queue ordering explicit; no wall-clock sleep or millisecond tie is
     // allowed to accidentally publish the first child before the second parent.
     for (receipt, created_at) in [(&first, 1_i64), (&second, 2_i64)] {
-        sqlx::query("UPDATE oc_jobs SET created_at=? WHERE id=?")
+        db::query("UPDATE oc_jobs SET created_at=? WHERE id=?")
             .bind(created_at)
             .bind(id(receipt, "job_id"))
             .execute(s.engine.relational().pool())
@@ -1010,7 +1011,7 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
     assert_eq!(count(&s, "oc_assets").await, 1);
     assert_eq!(count(&s, "oc_learnings").await, 1);
     let cursor: i64 =
-        sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
+        db::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
             .bind(second_session)
             .fetch_one(s.engine.relational().pool())
             .await
@@ -1348,7 +1349,7 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
 /// Obtain a genuine, server-resolved immutable reference before deliberately
 /// corrupting a different archive's dependency graph in the adversarial tests.
 async fn dependency_fixture(s: &Service, a: &AuthContext, learning: &Value) -> Value {
-    let chunk: Uuid = sqlx::query_scalar(
+    let chunk: Uuid = db::query_scalar(
         "SELECT id FROM oc_chunks WHERE asset_id=? AND version=1 ORDER BY ordinal LIMIT 1",
     )
     .bind(id(learning, "asset_id"))
@@ -1371,7 +1372,7 @@ async fn dependency_fixture(s: &Service, a: &AuthContext, learning: &Value) -> V
 }
 
 async fn corrupt_archive_dependency(s: &Service, a: &AuthContext, turn: &Value, reference: &Value) {
-    sqlx::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,0,?)")
+    db::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,0,?)")
         .bind(a.tenant_id).bind(a.workspace_id).bind(id(turn, "session_id")).bind(id(turn, "turn_id"))
         .bind(id(reference, "evidence_ref_id")).bind(reference.to_string())
         .execute(s.engine.relational().pool()).await.unwrap();
@@ -1499,7 +1500,7 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
     let hidden = &learnings[0];
     let independent = &learnings[1];
     let original_chunk: Uuid =
-        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
+        db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
             .bind(id(hidden, "asset_id"))
             .fetch_one(s.engine.relational().pool())
             .await
@@ -1509,9 +1510,9 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
         let chunk = Uuid::new_v4();
         // More than the branch's 100 candidates, each scoring above the visible
         // independent Learning. This is bounded index-fixture amplification.
-        sqlx::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) SELECT tenant_id,workspace_id,?,asset_id,version,?,'Rust',locator,'rust' FROM oc_chunks WHERE id=?")
+        db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) SELECT tenant_id,workspace_id,?,asset_id,version,?,'Rust',locator,'rust' FROM oc_chunks WHERE id=?")
             .bind(chunk).bind(ordinal).bind(original_chunk).execute(&mut *tx).await.unwrap();
-        sqlx::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,1,'chunk',?,?,0)")
+        db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,1,'chunk',?,?,0)")
             .bind(a.tenant_id).bind(a.workspace_id).bind(id(hidden, "source_event_id"))
             .bind(chunk).bind(chunk).execute(&mut *tx).await.unwrap();
     }
@@ -1650,7 +1651,7 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
     assert_eq!(fixture.verifications.load(Ordering::SeqCst), 0);
     assert_eq!(count(&s, "oc_assets").await, 0);
     let cursor: i64 =
-        sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
+        db::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
             .bind(session)
             .fetch_one(s.engine.relational().pool())
             .await

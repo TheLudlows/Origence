@@ -1,5 +1,6 @@
 //! Public library upload/job/search regression for generic owned workspaces.
 #![cfg(feature = "local-storage")]
+use origence::storage::native_turso as db;
 use origence::{
     error::AppError,
     models::Models,
@@ -195,7 +196,7 @@ async fn upload_worker_search_and_revocation_use_owned_workspaces() {
     ));
     assert!(worker::process_next(&service).await.unwrap());
     let (state, code): (String, String) =
-        sqlx::query_as("SELECT state,error_code FROM oc_jobs WHERE id=?")
+        db::query_as("SELECT state,error_code FROM oc_jobs WHERE id=?")
             .bind(id(&pending, "job_id"))
             .fetch_one(service.engine.relational().pool())
             .await

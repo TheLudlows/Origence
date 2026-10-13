@@ -4,11 +4,11 @@
 //! The local API and Worker share one in-process [`StorageEngine`]. The
 //! relational store holds the data directory's single-host OS lock; business
 //! modules share adapters rather than opening independent databases. Graph IO
-//! uses SQLx's asynchronous SQLite pool.
+//! uses the native Rust Turso connection pool.
 //!
 //! # Shutdown order
 //! The host stops and joins the worker before [`StorageEngine::shutdown`].
-//! Native stores close before the queue/relational authority; SQLite backs
+//! Native stores close before the queue/relational authority; Turso backs
 //! both queue and relational roles, so shutting down either closes its pool.
 //!
 //! # Transaction boundary
@@ -24,11 +24,14 @@ pub mod error;
 pub mod lancedb;
 pub mod ledger;
 pub mod local_blob;
+pub mod native_turso;
 #[cfg(feature = "local-vector")]
 pub mod maintenance;
 pub mod scope;
 pub mod sqlite;
 pub mod sqlite_graph;
+pub use sqlite as turso;
+pub use sqlite_graph as turso_graph;
 pub mod traits;
 
 pub fn hash(bytes: impl AsRef<[u8]>) -> String {
@@ -38,10 +41,10 @@ pub fn hash(bytes: impl AsRef<[u8]>) -> String {
 
 #[cfg(feature = "local-storage")]
 pub type LocalEngine = StorageEngine<
-    std::sync::Arc<sqlite::SqliteStore>,
-    std::sync::Arc<sqlite::SqliteStore>,
+    std::sync::Arc<sqlite::TursoStore>,
+    std::sync::Arc<sqlite::TursoStore>,
     LanceDbStore,
-    SqliteGraphStore,
+    TursoGraphStore,
     local_blob::LocalBlobStore,
 >;
 
@@ -57,14 +60,14 @@ impl<T: Lifecycle> Lifecycle for std::sync::Arc<T> {
     }
 }
 
-pub use capabilities::{BlobKey, Capabilities, Embedding, VectorEntry, VectorHit, VectorQuery};
+pub use capabilities::{BlobKey, Capabilities, Embedding, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery};
 pub use error::{StorageError, StorageResult};
 #[cfg(feature = "local-vector")]
 pub use lancedb::LanceDbStore;
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
 pub use scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
-pub use sqlite::SqliteStore;
-pub use sqlite_graph::SqliteGraphStore;
+pub use sqlite::{SqliteStore, TursoStore};
+pub use sqlite_graph::{SqliteGraphStore, TursoGraphStore};
 pub use traits::{
     BlobStore, ClaimedJob, DomainTx, GraphStore, IssuedKey, JobFinish, JobQueue, Lifecycle,
     RelationalStore, VectorStore, WorkItem,

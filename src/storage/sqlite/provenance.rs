@@ -1,7 +1,7 @@
 //! Source events/files, withdrawal and artifact ownership.
 use super::*;
 
-impl SqliteTx {
+impl TursoTx {
     pub(super) async fn create_event_inner(
         &mut self,
         kind: &str,
@@ -9,7 +9,7 @@ impl SqliteTx {
         file: Option<Uuid>,
     ) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_events(tenant_id, workspace_id, id, content, kind, file_id, state, created_by, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)",
         )
@@ -23,7 +23,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(id)
     }
 
@@ -35,7 +35,7 @@ impl SqliteTx {
         size: i64,
     ) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_files(tenant_id, workspace_id, id, name, media_type, hash, size, deleted, created_by, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
         )
@@ -50,12 +50,12 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(id)
     }
 
     pub(super) async fn file_exists_inner(&mut self, id: Uuid) -> StorageResult<bool> {
-        sqlx::query_scalar(
+        native_turso::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_files WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND NOT deleted)",
         )
         .bind(self.scope.tenant_id)
@@ -63,11 +63,11 @@ impl SqliteTx {
         .bind(id)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
     }
 
     pub(super) async fn file_hash_inner(&mut self, id: Uuid) -> StorageResult<Option<String>> {
-        sqlx::query_scalar(
+        native_turso::query_scalar(
             "SELECT hash FROM oc_files WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND NOT deleted",
         )
         .bind(self.scope.tenant_id)
@@ -75,7 +75,7 @@ impl SqliteTx {
         .bind(id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
     }
 
     pub(super) async fn file_visible_inner(&mut self, id: Uuid) -> StorageResult<bool> {
@@ -83,7 +83,7 @@ impl SqliteTx {
     }
 
     pub(super) async fn retract_event_inner(&mut self, id: Uuid) -> StorageResult<u64> {
-        sqlx::query(
+        native_turso::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -91,12 +91,12 @@ impl SqliteTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
         .map(|r| r.rows_affected())
     }
 
     pub(super) async fn delete_file_inner(&mut self, id: Uuid) -> StorageResult<u64> {
-        let count = sqlx::query(
+        let count = native_turso::query(
             "UPDATE oc_files SET deleted = 1 WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -104,9 +104,9 @@ impl SqliteTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?
+        .map_err(turso_err)?
         .rows_affected();
-        sqlx::query(
+        native_turso::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND file_id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -114,7 +114,7 @@ impl SqliteTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(count)
     }
 
@@ -124,7 +124,7 @@ impl SqliteTx {
         source: Option<Uuid>,
     ) -> StorageResult<()> {
         if let Some(id) = asset {
-            let valid: bool = sqlx::query_scalar(
+            let valid: bool = native_turso::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND NOT deleted)",
             )
             .bind(self.scope.tenant_id)
@@ -132,7 +132,7 @@ impl SqliteTx {
             .bind(id)
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(sqlite_err)?;
+            .map_err(turso_err)?;
             if !valid {
                 return Err(StorageError::Conflict(
                     "asset is deleted or missing".to_string(),
@@ -140,7 +140,7 @@ impl SqliteTx {
             }
         }
         if let Some(id) = source {
-            let valid: bool = sqlx::query_scalar(
+            let valid: bool = native_turso::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND state = 'active')",
             )
             .bind(self.scope.tenant_id)
@@ -148,7 +148,7 @@ impl SqliteTx {
             .bind(id)
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(sqlite_err)?;
+            .map_err(turso_err)?;
             if !valid {
                 return Err(StorageError::Conflict(
                     "source is retracted or missing".to_string(),
@@ -159,7 +159,7 @@ impl SqliteTx {
     }
 
     pub(super) async fn event_view_inner(&mut self, id: Uuid) -> StorageResult<Value> {
-        let row: Option<(Uuid, String, String, Option<Uuid>, i64)> = sqlx::query_as(
+        let row: Option<(Uuid, String, String, Option<Uuid>, i64)> = native_turso::query_as(
             "SELECT e.id,e.kind,e.content,e.file_id,e.created_at FROM oc_events e \
              LEFT JOIN oc_files f ON f.tenant_id=e.tenant_id AND f.workspace_id=e.workspace_id AND f.id=e.file_id \
              WHERE e.tenant_id=? AND e.workspace_id=? AND e.id=? AND e.state='active' \
@@ -170,7 +170,7 @@ impl SqliteTx {
         .bind(id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let Some((event_id, kind, content, file_id, created_at)) = row else {
             return Err(StorageError::NotFound);
         };
@@ -193,17 +193,17 @@ impl SqliteTx {
         } else {
             "SELECT content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ?"
         };
-        sqlx::query_scalar(sql)
+        native_turso::query_scalar(sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
             .bind(source)
             .fetch_optional(&mut *self.tx)
             .await
-            .map_err(sqlite_err)
+            .map_err(turso_err)
     }
 
     pub(super) async fn event_file_inner(&mut self, source: Uuid) -> StorageResult<Value> {
-        let row: Option<(String, Option<Uuid>, Option<String>, Option<String>)> = sqlx::query_as(
+        let row: Option<(String, Option<Uuid>, Option<String>, Option<String>)> = native_turso::query_as(
             "SELECT e.content, e.file_id, f.hash, f.media_type \
              FROM oc_events e \
              LEFT JOIN oc_files f ON f.id = e.file_id AND f.tenant_id = e.tenant_id AND f.workspace_id = e.workspace_id AND NOT f.deleted \
@@ -214,7 +214,7 @@ impl SqliteTx {
         .bind(self.scope.workspace_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let Some((content, file_id, hash, media_type)) = row else {
             return Err(StorageError::NotFound);
         };
@@ -233,7 +233,7 @@ impl SqliteTx {
         artifact_id: Uuid,
         chunk_id: Option<Uuid>,
     ) -> StorageResult<()> {
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_artifact_owners(tenant_id, workspace_id, source_id, version, \
              artifact_type, artifact_id, chunk_id, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
@@ -248,7 +248,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -256,7 +256,7 @@ impl SqliteTx {
         &mut self,
         source: SourceVersion,
     ) -> StorageResult<u64> {
-        let res = sqlx::query(
+        let res = native_turso::query(
             "DELETE FROM oc_artifact_owners \
              WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ?",
         )
@@ -266,7 +266,7 @@ impl SqliteTx {
         .bind(source.version)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(res.rows_affected())
     }
 
@@ -274,7 +274,7 @@ impl SqliteTx {
         // Return the current owner set grouped by artifact. M4 diffs this
         // against its graph rows to find orphans (graph-core G4); M3 itself does
         // not store entity/relation bodies.
-        let owned: Vec<(String, Uuid)> = sqlx::query_as(
+        let owned: Vec<(String, Uuid)> = native_turso::query_as(
             "SELECT artifact_type, artifact_id FROM oc_artifact_owners \
              WHERE tenant_id = ? AND workspace_id = ? \
                AND artifact_type IN ('entity','relation')",
@@ -283,7 +283,7 @@ impl SqliteTx {
         .bind(self.scope.workspace_id)
         .fetch_all(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let mut relations = Vec::new();
         let mut entities = Vec::new();
         for (kind, id) in owned {

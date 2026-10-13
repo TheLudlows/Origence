@@ -4,7 +4,6 @@ use crate::messages::{AcceptedMessageSpec, IngestReceipt, PublicationStatus};
 
 /// Project only small metadata. Publication JSON contains every embedding and
 /// must never be deserialized on the async executor during a status poll.
-#[derive(sqlx::FromRow)]
 struct BatchPublicationRow {
     operation: String,
     state: String,
@@ -22,7 +21,28 @@ struct BatchPublicationRow {
     distinct_chunk_ids: i64,
 }
 
-impl SqliteTx {
+impl native_turso::FromRow for BatchPublicationRow {
+    fn from_row(row: &native_turso::Row) -> native_turso::Result<Self> {
+        Ok(Self {
+            operation: row.try_get("operation")?,
+            state: row.try_get("state")?,
+            generation: row.try_get("generation")?,
+            asset_id: row.try_get("asset_id")?,
+            source_event_id: row.try_get("source_event_id")?,
+            accepted_spec: row.try_get("accepted_spec")?,
+            expected_version: row.try_get("expected_version")?,
+            publication_generation: row.try_get("publication_generation")?,
+            publication_profile: row.try_get("publication_profile")?,
+            memory_count: row.try_get("memory_count")?,
+            publication_asset: row.try_get("publication_asset")?,
+            publication_version: row.try_get("publication_version")?,
+            chunk_count: row.try_get("chunk_count")?,
+            distinct_chunk_ids: row.try_get("distinct_chunk_ids")?,
+        })
+    }
+}
+
+impl TursoTx {
     /// Scope and live access are established by the caller's transaction. Receipt
     /// references are verified against the original job and source, not trusted as
     /// authority. Historical/source/Learning reads keep their own visibility rules.
@@ -31,7 +51,7 @@ impl SqliteTx {
         receipt: &IngestReceipt,
     ) -> StorageResult<PublicationStatus> {
         self.check_permission(Permission::Write).await?;
-        let row: Option<BatchPublicationRow> = sqlx::query_as(
+        let row: Option<BatchPublicationRow> = native_turso::query_as(
             "SELECT operation,state,generation,asset_id,source_event_id, \
              json_extract(payload,'$.accepted_spec') AS accepted_spec, \
              json_extract(payload,'$.expected_version') AS expected_version, \
@@ -46,7 +66,7 @@ impl SqliteTx {
              FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.job_id)
-        .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let row = row.ok_or(StorageError::NotFound)?;
         let invalid =
             || StorageError::Conflict("receipt does not match accepted message batch".into());
@@ -62,12 +82,12 @@ impl SqliteTx {
         {
             return Err(invalid());
         }
-        let source: Option<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
+        let source: Option<(String, String, Option<String>, Option<String>)> = native_turso::query_as(
             "SELECT kind,state,json_extract(content,'$.batch_id'),json_extract(content,'$.session_id') \
              FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.source_event_id)
-        .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let Some((kind, source_state, batch_id, session_id)) = source else {
             return Ok(PublicationStatus::Invisible);
         };
@@ -77,10 +97,10 @@ impl SqliteTx {
         {
             return Err(invalid());
         }
-        let live_asset: Option<(Option<i32>, bool)> = sqlx::query_as(
+        let live_asset: Option<(Option<i32>, bool)> = native_turso::query_as(
             "SELECT current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.asset_id)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let Some((current_version, deleted)) = live_asset else {
             return Ok(PublicationStatus::Invisible);
         };
@@ -108,9 +128,9 @@ impl SqliteTx {
         {
             return Ok(PublicationStatus::Invisible);
         }
-        // JSON projection/iteration runs on SQLite's blocking connection thread;
+        // JSON projection/iteration runs on native Turso's blocking connection thread;
         // no source text, embedding arrays or saved plan reach this async thread.
-        let visible: i64 = sqlx::query_scalar(&format!(
+        let visible: i64 = native_turso::query_scalar(&format!(
             "WITH expected AS MATERIALIZED ( \
                  SELECT upper(replace(json_extract(chunk.value,'$.id'),'-','')) AS id, \
                         json_array_length(chunk.value,'$.embedding') AS dimension \
@@ -123,18 +143,18 @@ impl SqliteTx {
                  AND i.artifact_id=c.id AND i.field='content' AND i.model_id=? AND i.state='ready' AND i.generation=? \
                  AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id \
                      AND l.artifact_id=c.id AND l.artifact_type='chunk' AND l.source_id=e.id AND l.version=c.version \
-                     AND l.generation=i.generation AND l.surface='vector' AND l.state='committed'))",
+                     AND l.generation=i.generation AND l.surface='vector' AND l.state='committed')) AND EXISTS(SELECT 1 FROM oc_artifact_ledger f WHERE f.tenant_id=c.tenant_id AND f.workspace_id=c.workspace_id AND f.artifact_id=c.id AND f.artifact_type='chunk' AND f.source_id=e.id AND f.version=c.version AND f.generation=? AND f.surface='full_text' AND f.state='committed')",
             visibility::CURRENT_CHUNK_ROWS, visibility::CHUNK_SUPPORT_ACTIVE,
         ))
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.job_id)
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
         .bind(receipt.asset_id).bind(receipt.target_version).bind(receipt.source_event_id)
-        .bind(&spec.embedding_profile).bind(row.generation)
-        .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-        let count: i64 = sqlx::query_scalar(
+        .bind(&spec.embedding_profile).bind(row.generation).bind(row.generation)
+        .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let count: i64 = native_turso::query_scalar(
             "SELECT count(*) FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.asset_id).bind(receipt.target_version)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         Ok(if visible == chunk_count && count == visible {
             PublicationStatus::Retrievable
         } else {

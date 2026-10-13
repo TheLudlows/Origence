@@ -1,5 +1,6 @@
 //! Public AML library and real HTTP regressions with a deterministic model server.
 #![cfg(feature = "local-storage")]
+use origence::storage::native_turso as db;
 use axum::{Json, Router, routing::post};
 use origence::{
     api::aml::{self, AddInput},
@@ -123,7 +124,7 @@ fn search(user: &str, top_k: usize) -> aml::SearchInput {
 }
 async fn count(s: &Service, table: &str) -> i64 {
     // Only fixed test table names enter this query.
-    sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
+    db::query_scalar(&format!("SELECT count(*) FROM {table}"))
         .fetch_one(s.engine.relational().pool())
         .await
         .unwrap()
@@ -544,7 +545,7 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
     );
     assert_eq!(count(&s, "oc_versions").await, 1);
     assert_eq!(count(&s, "oc_events").await, 1);
-    let content: String = sqlx::query_scalar("SELECT content FROM oc_events WHERE id=?")
+    let content: String = db::query_scalar("SELECT content FROM oc_events WHERE id=?")
         .bind(record.source_event_id)
         .fetch_one(s.engine.relational().pool())
         .await
@@ -556,7 +557,7 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
     );
     assert!(source["messages"][1].get("timestamp").is_none());
     let locators: Vec<(String, String)> =
-        sqlx::query_as("SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+        db::query_as("SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
             .bind(record.asset_id)
             .fetch_all(s.engine.relational().pool())
             .await
@@ -595,14 +596,14 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
         .await,
         Err(AppError::Conflict(_))
     ));
-    let original_receipt: String = sqlx::query_scalar(
+    let original_receipt: String = db::query_scalar(
         "SELECT response FROM oc_commands WHERE operation='message_batch.ingest' AND dedup_scope='workspace'",
     )
     .fetch_one(s.engine.relational().pool())
     .await
     .unwrap();
     // Removed evidence must never turn an old successful receipt into false success.
-    sqlx::query("UPDATE oc_events SET state='retracted' WHERE id=?")
+    db::query("UPDATE oc_events SET state='retracted' WHERE id=?")
         .bind(record.source_event_id)
         .execute(s.engine.relational().pool())
         .await
@@ -649,7 +650,7 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
         error["error"]["message"],
         "AML evidence is no longer searchable"
     );
-    let after_receipt: String = sqlx::query_scalar(
+    let after_receipt: String = db::query_scalar(
         "SELECT response FROM oc_commands WHERE operation='message_batch.ingest' AND dedup_scope='workspace'",
     )
     .fetch_one(s.engine.relational().pool())
@@ -663,13 +664,13 @@ async fn aml_pending_retry_restart_and_key_rotation_reuse_one_batch() {
         ("oc_events", record.source_event_id),
     ] {
         // Only fixed test table names enter this query.
-        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT id FROM {table}"))
+        let ids: Vec<Uuid> = db::query_scalar(&format!("SELECT id FROM {table}"))
             .fetch_all(s.engine.relational().pool())
             .await
             .unwrap();
         assert_eq!(ids, vec![expected]);
     }
-    let state: String = sqlx::query_scalar("SELECT state FROM oc_events WHERE id=?")
+    let state: String = db::query_scalar("SELECT state FROM oc_events WHERE id=?")
         .bind(record.source_event_id)
         .fetch_one(s.engine.relational().pool())
         .await

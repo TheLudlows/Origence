@@ -2,13 +2,13 @@
 use super::visibility::ACTIVE_ASSET_VERSION;
 use super::*;
 
-impl SqliteTx {
+impl TursoTx {
     pub(super) async fn insert_knowledge_asset_inner(
         &mut self,
         title: &str,
     ) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_assets(tenant_id, workspace_id, id, kind, title, created_at) \
              VALUES (?, ?, ?, 'knowledge', ?, ?)",
         )
@@ -19,7 +19,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(id)
     }
 
@@ -28,7 +28,7 @@ impl SqliteTx {
         asset: Uuid,
         version: i32,
     ) -> StorageResult<Value> {
-        let row: Option<(Option<i32>, Uuid, String)> = sqlx::query_as(
+        let row: Option<(Option<i32>, Uuid, String)> = native_turso::query_as(
             "SELECT a.current_version, v.source_event_id, v.title \
              FROM oc_assets a \
              JOIN oc_versions v ON v.asset_id = a.id AND v.tenant_id = a.tenant_id AND v.workspace_id = a.workspace_id \
@@ -41,7 +41,7 @@ impl SqliteTx {
         .bind(version)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let Some((current_version, source_event_id, title)) = row else {
             return Err(StorageError::NotFound);
         };
@@ -53,7 +53,7 @@ impl SqliteTx {
     }
 
     pub(super) async fn delete_asset_inner(&mut self, id: Uuid) -> StorageResult<u64> {
-        sqlx::query(
+        native_turso::query(
             "UPDATE oc_assets SET deleted = 1, current_version = NULL WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -61,7 +61,7 @@ impl SqliteTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
         .map(|r| r.rows_affected())
     }
 
@@ -70,7 +70,7 @@ impl SqliteTx {
         id: Uuid,
         version: Option<i32>,
     ) -> StorageResult<Value> {
-        let row: Option<(Uuid, String, String, i32, String, Uuid, Option<i32>, String)> = sqlx::query_as(
+        let row: Option<(Uuid, String, String, i32, String, Uuid, Option<i32>, String)> = native_turso::query_as(
             &format!("SELECT a.id, a.kind, v.title, v.version, v.content, v.source_event_id, v.restored_from, v.content_hash {ACTIVE_ASSET_VERSION}"),
         )
         .bind(version)
@@ -79,7 +79,7 @@ impl SqliteTx {
         .bind(self.scope.workspace_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let Some((asset_id, kind, title, v, content, source_event_id, restored_from, content_hash)) =
             row
         else {
@@ -129,7 +129,7 @@ impl SqliteTx {
         asset: Uuid,
         version: i32,
     ) -> StorageResult<Vec<(String, Value)>> {
-        let rows: Vec<(String, String)> = sqlx::query_as(
+        let rows: Vec<(String, String)> = native_turso::query_as(
             "SELECT content, locator FROM oc_chunks \
              WHERE tenant_id = ? AND workspace_id = ? AND asset_id = ? AND version = ? ORDER BY ordinal",
         )
@@ -139,7 +139,7 @@ impl SqliteTx {
         .bind(version)
         .fetch_all(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(rows
             .into_iter()
             .map(|(content, locator)| {
@@ -155,7 +155,7 @@ impl SqliteTx {
         &mut self,
         asset: Uuid,
     ) -> StorageResult<Option<i32>> {
-        sqlx::query_scalar::<_, Option<i32>>(
+        native_turso::query_scalar::< Option<i32>>(
             "SELECT current_version FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -163,7 +163,7 @@ impl SqliteTx {
         .bind(asset)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
         .map(Option::flatten)
     }
 
@@ -177,7 +177,7 @@ impl SqliteTx {
         restored_from: Option<i32>,
         title: Option<&str>,
     ) -> StorageResult<()> {
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_versions(tenant_id, workspace_id, asset_id, version, content, content_hash, source_event_id, restored_from, title, created_by, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT title FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ?)), ?, ?)",
         )
@@ -197,7 +197,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -211,7 +211,7 @@ impl SqliteTx {
         locator: &Value,
         search_terms: &str,
     ) -> StorageResult<()> {
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_chunks(tenant_id, workspace_id, id, asset_id, version, ordinal, content, locator, search_terms) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
@@ -226,7 +226,7 @@ impl SqliteTx {
         .bind(search_terms)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -238,7 +238,7 @@ impl SqliteTx {
         model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()> {
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_summaries(tenant_id, workspace_id, id, chunk_id, text, model_revision, search_terms) \
              VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
@@ -251,7 +251,7 @@ impl SqliteTx {
         .bind(search_terms)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -261,7 +261,7 @@ impl SqliteTx {
         version: i32,
         title: Option<&str>,
     ) -> StorageResult<()> {
-        sqlx::query(
+        native_turso::query(
             "UPDATE oc_assets SET current_version = ?, title = COALESCE(?, title) WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(version)
@@ -271,12 +271,12 @@ impl SqliteTx {
         .bind(asset)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
     pub(super) async fn cleanup_derived_chunks_inner(&mut self) -> StorageResult<u64> {
-        sqlx::query(
+        native_turso::query(
             "DELETE FROM oc_chunks WHERE tenant_id = ? AND workspace_id = ? \
                AND (EXISTS(SELECT 1 FROM oc_assets a WHERE a.id = oc_chunks.asset_id AND a.tenant_id = oc_chunks.tenant_id AND a.workspace_id = oc_chunks.workspace_id AND a.deleted) \
                  OR EXISTS(SELECT 1 FROM oc_versions v JOIN oc_events e ON e.id = v.source_event_id AND e.tenant_id = v.tenant_id AND e.workspace_id = v.workspace_id WHERE v.asset_id = oc_chunks.asset_id AND v.version = oc_chunks.version AND v.tenant_id = oc_chunks.tenant_id AND v.workspace_id = oc_chunks.workspace_id AND e.state = 'retracted'))",
@@ -285,7 +285,7 @@ impl SqliteTx {
         .bind(self.scope.workspace_id)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
         .map(|r| r.rows_affected())
     }
 }

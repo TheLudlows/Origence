@@ -6,36 +6,11 @@ use crate::session::{
 
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
 
-pub(super) async fn available(conn: &mut SqliteConnection) -> StorageResult<bool> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
-        .fetch_one(conn).await.map_err(sqlite_err)
+pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
+    native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
+        .fetch_one(conn).await.map_err(turso_err)
 }
 
-pub(super) async fn check_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    let normalize = |s: &str| {
-        s.split_whitespace()
-            .collect::<String>()
-            .to_ascii_lowercase()
-    };
-    for statement in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-        let name = statement
-            .split_whitespace()
-            .nth(2)
-            .ok_or_else(|| StorageError::Unavailable("invalid session schema".into()))?;
-        let actual: Option<String> =
-            sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE name=?")
-                .bind(name)
-                .fetch_optional(&mut *conn)
-                .await
-                .map_err(sqlite_err)?;
-        if actual.as_deref().map(normalize) != Some(normalize(statement)) {
-            return Err(StorageError::Unavailable(
-                "incompatible session schema".into(),
-            ));
-        }
-    }
-    Ok(())
-}
 
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s).map_err(|_| StorageError::Unavailable("invalid session record".into()))
@@ -45,7 +20,7 @@ fn encode<T: serde::Serialize>(value: &T) -> StorageResult<String> {
         .map_err(|_| StorageError::Unavailable("invalid session record".into()))
 }
 
-impl SqliteTx {
+impl TursoTx {
     async fn require_sessions(&mut self) -> StorageResult<()> {
         if !available(&mut self.tx).await? {
             return Err(StorageError::Unavailable(
@@ -70,13 +45,13 @@ impl SqliteTx {
         let root = self
             .require_active_version_local(reference.asset_id, reference.asset_version)
             .await?;
-        let locator: Option<String> = sqlx::query_scalar("SELECT locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND version=?")
+        let locator: Option<String> = native_turso::query_scalar("SELECT locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND version=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(reference.chunk_id)
-            .bind(reference.asset_id).bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .bind(reference.asset_id).bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let locator: Value = decode(&locator.ok_or(StorageError::NotFound)?)?;
-        let chunk_owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND source_id=? AND version=? AND artifact_type='chunk' AND artifact_id=? AND chunk_id=?)")
+        let chunk_owned: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND source_id=? AND version=? AND artifact_type='chunk' AND artifact_id=? AND chunk_id=?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(root).bind(reference.asset_version)
-            .bind(reference.chunk_id).bind(reference.chunk_id).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .bind(reference.chunk_id).bind(reference.chunk_id).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if !chunk_owned {
             return Err(StorageError::NotFound);
         }
@@ -88,9 +63,9 @@ impl SqliteTx {
             };
             // Existing graph ownership is source/version-level (chunk_id is NULL).
             // Require the caller's chosen chunk to belong to that same exact support.
-            let owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_owners o JOIN oc_artifact_ledger l ON l.tenant_id=o.tenant_id AND l.workspace_id=o.workspace_id AND l.source_id=o.source_id AND l.version=o.version AND l.artifact_type=o.artifact_type AND l.artifact_id=o.artifact_id WHERE o.tenant_id=? AND o.workspace_id=? AND o.source_id=? AND o.version=? AND o.artifact_type=? AND o.artifact_id=? AND l.surface='graph' AND l.state='committed')")
+            let owned: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_owners o JOIN oc_artifact_ledger l ON l.tenant_id=o.tenant_id AND l.workspace_id=o.workspace_id AND l.source_id=o.source_id AND l.version=o.version AND l.artifact_type=o.artifact_type AND l.artifact_id=o.artifact_id WHERE o.tenant_id=? AND o.workspace_id=? AND o.source_id=? AND o.version=? AND o.artifact_type=? AND o.artifact_id=? AND l.surface='graph' AND l.state='committed')")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(root).bind(reference.asset_version)
-                .bind(kind).bind(reference.id).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+                .bind(kind).bind(reference.id).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
             if !owned {
                 return Err(StorageError::NotFound);
             }
@@ -130,9 +105,9 @@ impl SqliteTx {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Vec<ArchivedEvidence>> {
-        let rows: Vec<String> = sqlx::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal LIMIT 65")
+        let rows: Vec<String> = native_turso::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal LIMIT 65")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         if rows.len() > crate::session::MAX_USED_EVIDENCE {
             return Err(StorageError::NotFound);
         }
@@ -160,9 +135,9 @@ impl SqliteTx {
         turn: Uuid,
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_sessions().await?;
-        let source: Option<Uuid> = sqlx::query_scalar("SELECT t.source_event_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.state='active'")
+        let source: Option<Uuid> = native_turso::query_scalar("SELECT t.source_event_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.state='active'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let source = source.ok_or(StorageError::NotFound)?;
         let archived = self.turn_evidence(session, turn).await?;
         for evidence in &archived {
@@ -192,9 +167,9 @@ impl SqliteTx {
         if !available(&mut self.tx).await? {
             return Err(StorageError::NotFound);
         }
-        let turn: Option<(Uuid, Uuid)> = sqlx::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+        let turn: Option<(Uuid, Uuid)> = native_turso::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let (session, turn) = turn.ok_or(StorageError::NotFound)?;
         self.require_turn_visible(session, turn).await?;
         Ok(())
@@ -212,9 +187,9 @@ impl SqliteTx {
         if session.is_nil() {
             return Err(StorageError::InvalidArgument("session_id must be non-nil"));
         }
-        let existing: Option<(Uuid, String)> = sqlx::query_as("SELECT source_event_id,request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+        let existing: Option<(Uuid, String)> = native_turso::query_as("SELECT source_event_id,request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let source = if let Some((source, hash)) = existing {
             if hash != request_hash {
                 return Err(StorageError::Conflict("turn is immutable".into()));
@@ -237,13 +212,13 @@ impl SqliteTx {
                     None,
                 )
                 .await?;
-            sqlx::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
+            native_turso::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
-                .bind(source).bind(request_hash).bind(self.principal_id).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+                .bind(source).bind(request_hash).bind(self.principal_id).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
             for (ordinal, item) in evidence.iter().enumerate() {
-                sqlx::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,?,?)")
+                native_turso::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,?,?)")
                     .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
-                    .bind(item.evidence_ref_id).bind(ordinal as i32).bind(encode(item)?).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+                    .bind(item.evidence_ref_id).bind(ordinal as i32).bind(encode(item)?).execute(&mut *self.tx).await.map_err(turso_err)?;
             }
             self.audit("session.turn_archived", input.turn_id, json!({"session_id":session,"source_event_id":source,"evidence_count":evidence.len()})).await?;
             source
@@ -260,9 +235,9 @@ impl SqliteTx {
             .await?
             .ok_or(StorageError::NotFound)?;
         let body: Value = decode(&body)?;
-        let (created_by, created_at): (Uuid, i64) = sqlx::query_as("SELECT created_by,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+        let (created_by, created_at): (Uuid, i64) = native_turso::query_as("SELECT created_by,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         let evidence = self.turn_evidence(session, turn).await?;
         let feedback = self.feedback_rows(session, turn).await?;
         Ok(
@@ -271,9 +246,9 @@ impl SqliteTx {
     }
 
     async fn feedback_rows(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Vec<Value>> {
-        let rows: Vec<(Uuid, String, i64, i64)> = sqlx::query_as("SELECT principal_id,feedback,created_at,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY feedback_sequence")
+        let rows: Vec<(Uuid, String, i64, i64)> = native_turso::query_as("SELECT principal_id,feedback,created_at,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY feedback_sequence")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         rows.into_iter()
             .map(|(principal, body, created_at, sequence)| {
                 let mut value: Value = decode(&body)?;
@@ -308,34 +283,34 @@ impl SqliteTx {
         }
         self.require_turn_visible(session, turn).await?;
         if let FeedbackTarget::Evidence { evidence_ref_id } = &input.target {
-            let found: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND evidence_ref_id=?)")
+            let found: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND evidence_ref_id=?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn).bind(evidence_ref_id)
-                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
             if !found {
                 return Err(StorageError::NotFound);
             }
         }
-        let existing: Option<(String, Uuid, Uuid, i64)> = sqlx::query_as("SELECT request_hash,session_id,turn_id,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND principal_id=? AND feedback_id=?")
+        let existing: Option<(String, Uuid, Uuid, i64)> = native_turso::query_as("SELECT request_hash,session_id,turn_id,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND principal_id=? AND feedback_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(self.principal_id).bind(input.feedback_id)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let sequence = if let Some((hash, stored_session, stored_turn, sequence)) = existing {
             if hash != request_hash || stored_session != session || stored_turn != turn {
                 return Err(StorageError::Conflict("feedback is immutable".into()));
             }
             sequence
         } else {
-            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+            let count: i64 = native_turso::query_scalar("SELECT count(*) FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
             if count >= 256 {
                 return Err(StorageError::Conflict("turn feedback limit reached".into()));
             }
-            let sequence: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0)+1 FROM oc_feedback WHERE tenant_id=? AND workspace_id=?")
+            let sequence: i64 = native_turso::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0)+1 FROM oc_feedback WHERE tenant_id=? AND workspace_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-            sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,?,?,?,?)")
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+            native_turso::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(self.principal_id).bind(input.feedback_id)
-                .bind(session).bind(turn).bind(request_hash).bind(encode(input)?).bind(now_ms()).bind(sequence).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+                .bind(session).bind(turn).bind(request_hash).bind(encode(input)?).bind(now_ms()).bind(sequence).execute(&mut *self.tx).await.map_err(turso_err)?;
             self.audit(
                 "session.feedback_recorded",
                 input.feedback_id,

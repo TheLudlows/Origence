@@ -2,7 +2,7 @@ use crate::{
     error::{AppError, Result},
     parsing,
     service::{Service, decode, scope},
-    storage::{DomainTx, Permission, VectorQuery, VectorStore},
+    storage::{DomainTx, Permission, FullTextQuery, SourceVersion, VectorQuery, VectorStore},
     types::*,
 };
 use serde_json::{Value, json};
@@ -42,7 +42,7 @@ impl Service {
                 "warnings": [],
                 "embedding_profile": self.models.profile,
                 "active_components": {"summaries": false, "graph": false},
-                "retrieval_policy": "local-scoped-exact-rrf60-v1",
+                "retrieval_policy": "turso-lance-filtered-rrf60-v2",
                 "graph": {"entities": [], "relations": []}
             }));
         }
@@ -85,14 +85,14 @@ impl Service {
             eligibility_ms = eligibility_started.elapsed().as_secs_f64() * 1000.0;
             let vector_started = std::time::Instant::now();
             for (generation, ids) in eligible {
-                for batch in ids.chunks(512) {
+                if !ids.is_empty() {
                     vector_batches += 1;
                     for hit in self
                         .engine
                         .vector()
                         .search(VectorQuery {
                             scope: scope(a),
-                            artifact_ids: Some(batch.to_vec()),
+                            artifact_ids: Some(ids),
                             profile: profile.into(),
                             dimension: vector.len(),
                             generation,
@@ -107,7 +107,26 @@ impl Service {
             }
             vector_ms = vector_started.elapsed().as_secs_f64() * 1000.0;
         }
-        let native_count = native_hits.len();
+        let terms = parsing::lexical(&input.query);
+        let mut full_text_hits = Vec::new();
+        if effective != "vector" && !terms.is_empty() {
+            let mut eligibility = self.read(a, Permission::Read).await?;
+            let mut eligible = Vec::new();
+            for generation in eligibility.full_text_generations().await? {
+                eligible.push((generation, eligibility.full_text_candidates(generation, asset_filter).await?));
+            }
+            eligibility.commit().await?;
+            for (generation, ids) in eligible {
+                if ids.is_empty() { continue; }
+                for hit in self.engine.vector().search_full_text(FullTextQuery {
+                    scope: scope(a), artifact_ids: Some(ids), generation,
+                    search_terms: terms.clone(), limit: 100,
+                }).await? {
+                    full_text_hits.push((generation, hit));
+                }
+            }
+        }
+        let native_count = native_hits.len() + full_text_hits.len();
         let branches_started = std::time::Instant::now();
         let summaries_enabled =
             effective == "hybrid" && input.memory_identity.is_none() && input.components.summaries;
@@ -118,28 +137,36 @@ impl Service {
         } else {
             None
         };
-        let terms = parsing::lexical(&input.query);
         // Native candidates become evidence only inside a fresh scoped snapshot.
         let mut tx = self.read(a, Permission::Read).await?;
         let mut branches = Vec::new();
         if effective != "vector" {
-            branches.push(tx.keyword_hits(&terms, false, asset_filter).await?);
+            let mut keyword = Vec::new();
+            let mut seen = HashMap::new();
+            for (generation, native) in full_text_hits {
+                if let Some(mut hit) = tx.full_text_hit(native.id, native.source, generation).await? {
+                    if asset_filter.is_some_and(|asset| hit.asset_id != asset) { continue; }
+                    if !unique_native(&mut seen, native.id, generation, native.source, native.score)? { continue; }
+                    hit.score = f64::from(native.score);
+                    keyword.push(hit);
+                }
+            }
+            prepare_branch(&mut keyword, 100);
+            branches.push(keyword);
         }
         let mut vectors = Vec::new();
+        let mut seen_vectors = HashMap::new();
         for (generation, native) in native_hits {
             if let Some(mut hit) = tx
                 .vector_hit(native.id, native.source, profile, generation)
                 .await?
             {
+                if !unique_native(&mut seen_vectors, native.id, generation, native.source, native.score)? { continue; }
                 hit.score = native.score as f64;
                 vectors.push(hit);
             }
         }
-        vectors.sort_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
-                .then(a.chunk_id.cmp(&b.chunk_id))
-        });
+        prepare_branch(&mut vectors, 100);
         if effective != "keyword" {
             branches.push(vectors);
         }
@@ -295,7 +322,7 @@ impl Service {
             "search completed"
         );
         Ok(
-            json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"local-scoped-exact-rrf60-v1","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}}),
+            json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"turso-lance-filtered-rrf60-v2","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}}),
         )
     }
     pub async fn resolve(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {
@@ -336,9 +363,36 @@ impl Service {
     }
 }
 
+/// Native duplicates are collapsible only when the complete authoritative
+/// identity and score agree. Contradictory committed generations are not a
+/// license to choose a convenient score; a rebuild needs an active pointer.
+pub(crate) fn unique_native(
+    seen: &mut HashMap<Uuid, (i64, SourceVersion, u32)>,
+    id: Uuid, generation: i64, source: SourceVersion, score: f32,
+) -> Result<bool> {
+    if !score.is_finite() { return Err(AppError::Conflict("invalid native retrieval score".into())); }
+    let identity = (generation, source, score.to_bits());
+    if let Some(previous) = seen.get(&id) {
+        if *previous != identity { return Err(AppError::Conflict("conflicting native retrieval identity".into())); }
+        return Ok(false);
+    }
+    seen.insert(id, identity);
+    Ok(true)
+}
+
+/// Normalize each scoped branch before assigning RRF ranks. A retried native
+/// generation cannot cast extra votes for the same evidence identity.
+pub(crate) fn prepare_branch(hits: &mut Vec<SearchHit>, limit: usize) {
+    hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.chunk_id.cmp(&b.chunk_id)));
+    let mut seen = HashSet::new();
+    hits.retain(|hit| seen.insert((hit.asset_id, hit.version, hit.chunk_id, hit.source_event_id)));
+    hits.truncate(limit);
+}
+
 fn fuse(branches: Vec<Vec<SearchHit>>, hybrid: bool) -> Vec<SearchHit> {
     let mut merged: HashMap<Uuid, SearchHit> = HashMap::new();
-    for branch in branches {
+    for mut branch in branches {
+        prepare_branch(&mut branch, 100);
         for (rank, mut hit) in branch.into_iter().enumerate() {
             if hybrid {
                 hit.score = 1.0 / (60.0 + rank as f64 + 1.0);

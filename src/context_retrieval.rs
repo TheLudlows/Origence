@@ -18,7 +18,7 @@ use crate::{
     parsing,
     service::{Service, scope},
     session::ArchivedEvidence,
-    storage::{DomainTx, Permission, VectorQuery, VectorStore},
+    storage::{DomainTx, Permission, FullTextQuery, VectorQuery, VectorStore},
     types::{AuthContext, SearchHit},
 };
 
@@ -170,18 +170,34 @@ impl Service {
                 eligible.push((generation, ids));
             }
         }
+        let mut full_text_eligible = Vec::new();
+        if query.effective_mode != "vector" && !query.terms.is_empty() {
+            for generation in tx.full_text_generations().await? {
+                full_text_eligible.push((generation, tx.context_full_text_candidates(generation, route, identity).await?));
+            }
+        }
         tx.commit().await?;
+        let mut full_text_hits = Vec::new();
+        for (generation, ids) in full_text_eligible {
+            if ids.is_empty() { continue; }
+            for hit in self.engine.vector().search_full_text(FullTextQuery {
+                scope: scope(auth), artifact_ids: Some(ids), generation,
+                search_terms: query.terms.clone(), limit: CONTEXT_CANDIDATE_LIMIT,
+            }).await? {
+                full_text_hits.push((generation, hit));
+            }
+        }
 
         let mut native_hits = Vec::new();
         if let Some(vector) = &query.embedding {
             for (generation, ids) in eligible {
-                for batch in ids.chunks(512) {
+                if !ids.is_empty() {
                     for hit in self
                         .engine
                         .vector()
                         .search(VectorQuery {
                             scope: scope(auth),
-                            artifact_ids: Some(batch.to_vec()),
+                            artifact_ids: Some(ids),
                             profile: profile.into(),
                             dimension: vector.len(),
                             generation,
@@ -201,14 +217,24 @@ impl Service {
         let mut tx = self.read(auth, Permission::Read).await?;
         let mut branches = Vec::new();
         if query.effective_mode != "vector" {
-            branches.push((
-                "keyword",
-                tx.context_keyword_hits(&query.terms, route, identity)
-                    .await?,
-            ));
+            let mut keyword = Vec::new();
+            let mut seen = HashMap::new();
+            for (generation, native) in full_text_hits {
+                if let Some(mut hit) = tx.full_text_hit(native.id, native.source, generation).await?
+                    && tx.context_route_matches(hit.asset_id, route).await?
+                    && tx.context_identity_matches(&hit, identity).await?
+                {
+                    if !crate::retrieval::unique_native(&mut seen, native.id, generation, native.source, native.score)? { continue; }
+                    hit.score = f64::from(native.score);
+                    keyword.push(hit);
+                }
+            }
+            crate::retrieval::prepare_branch(&mut keyword, CONTEXT_CANDIDATE_LIMIT);
+            branches.push(("keyword", keyword));
         }
         if query.effective_mode != "keyword" {
             let mut vectors = Vec::new();
+            let mut seen = HashMap::new();
             for (generation, native) in native_hits {
                 if let Some(mut hit) = tx
                     .vector_hit(native.id, native.source, profile, generation)
@@ -216,15 +242,12 @@ impl Service {
                     && tx.context_route_matches(hit.asset_id, route).await?
                     && tx.context_identity_matches(&hit, identity).await?
                 {
+                    if !crate::retrieval::unique_native(&mut seen, native.id, generation, native.source, native.score)? { continue; }
                     hit.score = native.score as f64;
                     vectors.push(hit);
                 }
             }
-            vectors.sort_by(hit_order);
-            // Multiple generations must not give one chunk extra RRF votes.
-            let mut seen = std::collections::HashSet::new();
-            vectors.retain(|hit| seen.insert(hit.chunk_id));
-            vectors.truncate(CONTEXT_CANDIDATE_LIMIT);
+            crate::retrieval::prepare_branch(&mut vectors, CONTEXT_CANDIDATE_LIMIT);
             branches.push(("vector", vectors));
         }
         let fused = fuse_context_branches(branches, query.effective_mode == "hybrid");
@@ -286,7 +309,8 @@ fn fuse_context_branches(
     hybrid: bool,
 ) -> Vec<(SearchHit, Vec<String>)> {
     let mut merged: HashMap<Uuid, (SearchHit, Vec<String>)> = HashMap::new();
-    for (origin, branch) in branches {
+    for (origin, mut branch) in branches {
+        crate::retrieval::prepare_branch(&mut branch, CONTEXT_CANDIDATE_LIMIT);
         for (rank, mut hit) in branch.into_iter().enumerate() {
             if hybrid {
                 hit.score = 1.0 / (60.0 + rank as f64 + 1.0);

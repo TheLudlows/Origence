@@ -8,7 +8,7 @@ use super::visibility::CURRENT_CHUNK_ROWS;
 use super::*;
 use crate::{
     context_retrieval::{
-        CONTEXT_CANDIDATE_LIMIT, ContextCandidate, ContextLearning, ContextLearningSupport,
+        ContextCandidate, ContextLearning, ContextLearningSupport,
         ContextRoute, ContextSessionResult, ContextSessionTurn, SESSION_SCAN_LIMIT,
     },
     learning::LearningCandidate,
@@ -18,13 +18,13 @@ use crate::{
 };
 use std::collections::HashSet;
 
-impl SqliteTx {
+impl TursoTx {
     pub(crate) async fn context_route_matches(
         &mut self,
         asset: Uuid,
         route: ContextRoute,
     ) -> StorageResult<bool> {
-        let kind: Option<String> = sqlx::query_scalar(
+        let kind: Option<String> = native_turso::query_scalar(
             "SELECT kind FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted AND current_version IS NOT NULL",
         )
         .bind(self.scope.tenant_id)
@@ -32,7 +32,7 @@ impl SqliteTx {
         .bind(asset)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let expected = match route {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
@@ -48,14 +48,14 @@ impl SqliteTx {
         if !is_learning || !super::improve::available(&mut self.tx).await? {
             return Ok(false);
         }
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=? AND l.status='published')")
+        native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=? AND l.status='published')")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)
     }
 
     /// No candidate LIMIT here. Independent type filtering happens before the
     /// lexical candidate cap or the native vector backend sees any identifiers.
-    async fn context_route_rows(
+    pub(super) async fn context_route_rows(
         &mut self,
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
@@ -64,7 +64,7 @@ impl SqliteTx {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(&format!(
+        let rows: Vec<(Uuid, Uuid, String, String)> = native_turso::query_as(&format!(
             "SELECT c.id,c.asset_id,c.search_terms,c.locator {CURRENT_CHUNK_ROWS} AND a.kind=?"
         ))
         .bind(self.scope.tenant_id)
@@ -72,7 +72,7 @@ impl SqliteTx {
         .bind(kind)
         .fetch_all(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let mut membership = HashMap::new();
         let mut result = Vec::new();
         for (id, asset, terms, locator) in rows {
@@ -99,38 +99,6 @@ impl SqliteTx {
             result.push((id, terms));
         }
         Ok(result)
-    }
-
-    pub(crate) async fn context_keyword_hits(
-        &mut self,
-        terms: &str,
-        route: ContextRoute,
-        identity: Option<&MemoryIdentity>,
-    ) -> StorageResult<Vec<SearchHit>> {
-        let words: HashSet<_> = terms.split_whitespace().collect();
-        if words.is_empty() {
-            return Ok(Vec::new());
-        }
-        let rows = self.context_route_rows(route, identity).await?;
-        let mut hits = Vec::new();
-        for (id, text) in rows {
-            // The complete guard runs before ranking and the candidate cap.
-            let Some(mut hit) = self.visible_hit(id).await? else {
-                continue;
-            };
-            let tokens: HashSet<_> = text.split_whitespace().collect();
-            if words.is_subset(&tokens) {
-                hit.score = words.len() as f64 / tokens.len().max(1) as f64;
-                hits.push(hit);
-            }
-        }
-        hits.sort_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
-                .then(a.chunk_id.cmp(&b.chunk_id))
-        });
-        hits.truncate(CONTEXT_CANDIDATE_LIMIT);
-        Ok(hits)
     }
 
     pub(crate) async fn context_vector_candidates(
@@ -196,7 +164,7 @@ impl SqliteTx {
         if route == ContextRoute::Memory && !self.context_identity_matches(&hit, identity).await? {
             return Ok(None);
         }
-        let version_root_source_event_id: Uuid = sqlx::query_scalar(
+        let version_root_source_event_id: Uuid = native_turso::query_scalar(
             "SELECT source_event_id FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         )
         .bind(self.scope.tenant_id)
@@ -205,7 +173,7 @@ impl SqliteTx {
         .bind(hit.version)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let semantic = hit.locator["parser"] == crate::memory_semantics::PARSER;
         let source_version = if semantic {
             hit.locator["source_version"]
@@ -262,9 +230,9 @@ impl SqliteTx {
         // Candidate's visible_hit has already checked the complete transitive
         // support closure. Do not call the writer-only raw session API here.
         let (learning_id, improve_id, session_id, body): (Uuid, Uuid, Uuid, String) =
-            sqlx::query_as("SELECT id,improve_id,session_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND status='published'")
+            native_turso::query_as("SELECT id,improve_id,session_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND status='published'")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         let candidate: LearningCandidate = serde_json::from_str(&body)
             .map_err(|_| StorageError::Unavailable("invalid learning record".into()))?;
         Ok(ContextLearning {
@@ -308,9 +276,9 @@ impl SqliteTx {
             Err(StorageError::NotFound) => return Ok(None),
             Err(error) => return Err(error),
         }
-        let row: Option<(String, i64)> = sqlx::query_as("SELECT e.content,t.created_at FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.id=? AND e.kind='session_turn' AND e.state='active'")
+        let row: Option<(String, i64)> = native_turso::query_as("SELECT e.content,t.created_at FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.id=? AND e.kind='session_turn' AND e.state='active'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn).bind(source_event_id)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let Some((body, created_at)) = row else {
             return Ok(None);
         };
@@ -341,11 +309,11 @@ impl SqliteTx {
         limit: usize,
     ) -> StorageResult<ContextSessionResult> {
         self.check_permission(Permission::Write).await?;
-        let rows: Vec<(Uuid, Uuid)> = sqlx::query_as("SELECT t.session_id,t.turn_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND e.state='active' AND e.kind='session_turn' AND (? IS NULL OR t.session_id=?) AND (? IS NULL OR t.session_id!=?) ORDER BY t.created_at DESC,t.session_id,t.turn_id LIMIT ?")
+        let rows: Vec<(Uuid, Uuid)> = native_turso::query_as("SELECT t.session_id,t.turn_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND e.state='active' AND e.kind='session_turn' AND (? IS NULL OR t.session_id=?) AND (? IS NULL OR t.session_id!=?) ORDER BY t.created_at DESC,t.session_id,t.turn_id LIMIT ?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
             .bind(session).bind(session).bind(exclude_session).bind(exclude_session)
             .bind((SESSION_SCAN_LIMIT + 1) as i64)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         let scan_exhausted = rows.len() > SESSION_SCAN_LIMIT;
         let words: HashSet<_> = terms.split_whitespace().collect();
         let mut turns = Vec::new();

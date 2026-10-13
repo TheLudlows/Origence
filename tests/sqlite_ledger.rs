@@ -1,5 +1,6 @@
 //! Ledger type unit tests (M3): surface/state encoding and deterministic keys.
 
+use origence::storage::native_turso as db;
 use origence::storage::ledger::{
     LedgerEntry, LedgerKey, LedgerState, MAX_LEDGER_ATTEMPTS, Surface, ledger_idempotency_key,
 };
@@ -106,7 +107,7 @@ fn entry(scope: Scope, source_id: uuid::Uuid, artifact_id: uuid::Uuid) -> Ledger
 }
 
 async fn ledger_state(store: &SqliteStore, key: &LedgerKey) -> String {
-    sqlx::query_scalar(
+    db::query_scalar(
         "SELECT state FROM oc_artifact_ledger \
          WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
            AND artifact_id = ? AND surface = ? AND generation = ?",

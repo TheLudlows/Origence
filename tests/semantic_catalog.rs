@@ -1,3 +1,4 @@
+use origence::storage::native_turso as db;
 use origence::{
     memory_semantics::MemoryProperty,
     storage::{
@@ -81,7 +82,7 @@ async fn old_database_does_not_get_catalog_on_reopen() {
     let path = dir.path().join("test.db");
     {
         let store = SqliteStore::open(&path).await.unwrap();
-        sqlx::query("DROP TABLE oc_memory_properties")
+        db::query("DROP TABLE oc_memory_properties")
             .execute(store.pool())
             .await
             .unwrap();

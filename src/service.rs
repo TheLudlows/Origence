@@ -5,7 +5,7 @@ use crate::{
     parsing,
     storage::{
         local_blob::LocalBlobStore,
-        sqlite::{SqliteStore, SqliteTx},
+        sqlite::{TursoStore, TursoTx},
         *,
     },
     types::*,
@@ -54,12 +54,12 @@ impl Service {
         let dir = tokio::fs::canonicalize(dir.as_ref())
             .await
             .map_err(anyhow::Error::from)?;
-        let relational = Arc::new(SqliteStore::open(dir.join("context.db")).await?);
+        let relational = Arc::new(TursoStore::open(dir.join("context.db")).await?);
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
             LanceDbStore::open(dir.join("vectors")).await?,
-            SqliteGraphStore::open(dir.join("graph.db")).await?,
+            TursoGraphStore::open(dir.join("graph.db")).await?,
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;
@@ -92,12 +92,12 @@ impl Service {
             role: a.role,
         })
     }
-    pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
+    pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<TursoTx> {
         let mut tx = self.engine.relational().begin_read(authorized(a)).await?;
         tx.check_permission(permission).await?;
         Ok(tx)
     }
-    pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
+    pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<TursoTx> {
         let mut tx = self.engine.relational().begin(authorized(a)).await?;
         tx.check_permission(permission).await?;
         Ok(tx)
@@ -109,7 +109,7 @@ impl Service {
         op: &str,
         key: &str,
         input: &Value,
-    ) -> Result<(SqliteTx, Option<Value>)> {
+    ) -> Result<(TursoTx, Option<Value>)> {
         if key.is_empty() || key.len() > 200 || !key.is_ascii() {
             return Err(AppError::Invalid(
                 "Idempotency-Key must contain 1..200 ASCII characters".into(),
@@ -119,13 +119,13 @@ impl Service {
         let cached = tx.begin_command(op, key, &hash(input.to_string())).await?;
         Ok((tx, cached))
     }
-    pub(crate) async fn finish(mut tx: SqliteTx, response: Value) -> Result<Value> {
+    pub(crate) async fn finish(mut tx: TursoTx, response: Value) -> Result<Value> {
         tx.finish_command(response.clone()).await?;
         tx.commit().await?;
         Ok(response)
     }
     pub(crate) async fn enqueue(
-        tx: &mut SqliteTx,
+        tx: &mut TursoTx,
         payload: JobPayload,
         asset: Option<Uuid>,
         source: Option<Uuid>,

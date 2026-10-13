@@ -1,5 +1,6 @@
 #![cfg(feature = "local-storage")]
 
+use origence::storage::native_turso as db;
 use origence::{
     error::{AppError, Result},
     models::Models,
@@ -144,7 +145,7 @@ async fn record(
 /// feedback row, command reservation, or queued work behind.
 async fn counts(s: &Service, include_commands: bool) -> Vec<(String, i64)> {
     let pool = s.engine.relational().pool();
-    let names: Vec<String> = sqlx::query_scalar(
+    let names: Vec<String> = db::query_scalar(
         "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'oc_%' ORDER BY name",
     )
     .fetch_all(pool)
@@ -156,7 +157,7 @@ async fn counts(s: &Service, include_commands: bool) -> Vec<(String, i64)> {
             continue;
         }
         let query = format!("SELECT count(*) FROM \"{}\"", name.replace('"', "\"\""));
-        let count = sqlx::query_scalar::<_, i64>(&query)
+        let count = db::query_scalar::< i64>(&query)
             .fetch_one(pool)
             .await
             .unwrap();
@@ -167,7 +168,7 @@ async fn counts(s: &Service, include_commands: bool) -> Vec<(String, i64)> {
 
 async fn count(s: &Service, table: &str) -> i64 {
     let query = format!("SELECT count(*) FROM {table}");
-    sqlx::query_scalar(&query)
+    db::query_scalar(&query)
         .fetch_one(s.engine.relational().pool())
         .await
         .unwrap()
@@ -627,7 +628,7 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
         assert!(matches!(result, Err(AppError::Forbidden)), "{result:?}");
     }
     // A cached AuthContext must not turn stale permission into standing access.
-    sqlx::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
+    db::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
         .bind(writer.id)
         .execute(s.engine.relational().pool())
         .await
@@ -759,7 +760,7 @@ async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit
     );
     assert_eq!(input["used_evidence"].as_array().unwrap().len(), 2);
     // Failure occurs after the source, turn, and first evidence insertion.
-    sqlx::raw_sql("CREATE TRIGGER fail_second_session_reference BEFORE INSERT ON oc_session_turn_evidence WHEN NEW.ordinal=1 BEGIN SELECT RAISE(ABORT,'fixture reference failure'); END;")
+    db::raw_sql("CREATE TRIGGER fail_second_session_reference BEFORE INSERT ON oc_session_turn_evidence WHEN NEW.ordinal=1 BEGIN SELECT RAISE(ABORT,'fixture reference failure'); END;")
         .execute(s.engine.relational().pool()).await.unwrap();
     let before = counts(&s, true).await;
     assert!(
@@ -772,7 +773,7 @@ async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit
         s.session_turn(&a, session, turn_id).await,
         Err(AppError::NotFound)
     ));
-    sqlx::raw_sql("DROP TRIGGER fail_second_session_reference;")
+    db::raw_sql("DROP TRIGGER fail_second_session_reference;")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
@@ -782,7 +783,7 @@ async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit
     assert_eq!(count(&s, "oc_session_turn_evidence").await, 2);
 
     // An audit failure must also roll back the feedback and command reservation.
-    sqlx::raw_sql("CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON oc_audit BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;")
+    db::raw_sql("CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON oc_audit BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;")
         .execute(s.engine.relational().pool()).await.unwrap();
     let before = counts(&s, true).await;
     let input = feedback(Uuid::new_v4(), json!({"type":"turn"}));
@@ -796,7 +797,7 @@ async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit
         s.session_feedback(&a, session, turn_id).await.unwrap()["feedback"],
         json!([])
     );
-    sqlx::raw_sql("DROP TRIGGER fail_feedback_audit;")
+    db::raw_sql("DROP TRIGGER fail_feedback_audit;")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
@@ -932,7 +933,7 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
         // or feedback list may leak through either read endpoint.
         while worker::process_next(&s).await.unwrap() {}
         assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
-        let originals: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_events WHERE id=?")
+        let originals: i64 = db::query_scalar("SELECT count(*) FROM oc_events WHERE id=?")
             .bind(id(&receipt, "source_event_id"))
             .fetch_one(s.engine.relational().pool())
             .await
@@ -1026,10 +1027,10 @@ async fn graph_support(
     artifact: Uuid,
     state: &str,
 ) {
-    sqlx::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,?,?,?,NULL,0)")
+    db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,?,?,?,NULL,0)")
         .bind(a.tenant_id).bind(a.workspace_id).bind(source).bind(version)
         .bind(kind).bind(artifact).execute(s.engine.relational().pool()).await.unwrap();
-    sqlx::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'graph',1,?,?,0,0)")
+    db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'graph',1,?,?,0,0)")
         .bind(a.tenant_id).bind(a.workspace_id).bind(source).bind(version)
         .bind(kind).bind(artifact).bind(Uuid::new_v4().to_string()).bind(state)
         .execute(s.engine.relational().pool()).await.unwrap();
@@ -1078,7 +1079,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     }
     // Even a matching relation owner cannot borrow the entity's committed
     // ledger row. Archive support requires the same exact artifact kind.
-    sqlx::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,1,'relation',?,NULL,0)")
+    db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,1,'relation',?,NULL,0)")
         .bind(a.tenant_id).bind(a.workspace_id).bind(id(&first, "source_event_id")).bind(entity)
         .execute(s.engine.relational().pool()).await.unwrap();
     let reference = |kind: &str, artifact: Uuid, hit: &Value| {
@@ -1191,7 +1192,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     tx.commit().await.unwrap();
     // Authoritative graph support can disappear before backend cleanup. Every
     // raw read and command replay revalidates the committed support then.
-    sqlx::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE tenant_id=? AND workspace_id=? AND source_id=? AND artifact_id=?")
+    db::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE tenant_id=? AND workspace_id=? AND source_id=? AND artifact_id=?")
         .bind(a.tenant_id).bind(a.workspace_id).bind(id(&first, "source_event_id")).bind(entity)
         .execute(s.engine.relational().pool()).await.unwrap();
     assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
@@ -1365,7 +1366,7 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
         } else {
             "DROP TABLE oc_feedback;"
         };
-        sqlx::raw_sql(statement)
+        db::raw_sql(statement)
             .execute(s.engine.relational().pool())
             .await
             .unwrap();
@@ -1381,32 +1382,30 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
         s.engine.relational().pool().close().await;
         drop(s);
         assert!(Service::open(dir.path(), Models::disabled()).await.is_err());
-        use sqlx::Connection;
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(dir.path().join("context.db"))
-            .create_if_missing(false);
-        let mut conn = sqlx::SqliteConnection::connect_with(&options)
-            .await
-            .unwrap();
-        let source: String = sqlx::query_scalar("SELECT content FROM oc_events WHERE id=?")
+
+        let database_path = dir.path().join("context.db");
+        let raw_pool = db::Pool::open(database_path).await.unwrap();
+        let mut conn = raw_pool.acquire().await.unwrap();
+        let source: String = db::query_scalar("SELECT content FROM oc_events WHERE id=?")
             .bind(id(&receipt, "source_event_id"))
-            .fetch_one(&mut conn)
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
         let source: Value = serde_json::from_str(&source).unwrap();
         assert_eq!(source["question"], input["question"]);
         assert_eq!(source["answer"], input["answer"]);
-        let repaired: bool = sqlx::query_scalar(
+        let repaired: bool = db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')",
         )
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *conn)
         .await
         .unwrap();
         assert!(
             !repaired,
             "opening an incompatible database must not install missing tables"
         );
-        conn.close().await.unwrap();
+        drop(conn);
+        raw_pool.close().await;
     }
 }
 
@@ -1430,7 +1429,7 @@ async fn session_feedback_capacity_blocks_new_records_but_preserves_replays() {
     for ordinal in 1..256 {
         let feedback_id = Uuid::new_v4();
         let body = feedback(feedback_id, json!({"type":"turn"}));
-        sqlx::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,'capacity-fixture',?,?,?)")
+        db::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,'capacity-fixture',?,?,?)")
             .bind(a.tenant_id).bind(a.workspace_id).bind(a.id).bind(feedback_id)
             .bind(session).bind(turn_id).bind(body.to_string()).bind(i64::from(ordinal))
             .bind(i64::from(ordinal) + 1)

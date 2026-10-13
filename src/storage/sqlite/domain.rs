@@ -2,7 +2,7 @@
 //! Delegates borrow the same transaction; no new transaction or connection boundary.
 use super::*;
 
-impl SqliteTx {
+impl TursoTx {
     /// The role in this transaction. IMMEDIATE writes serialize with revoke;
     /// model/native IO must precede a fresh authorized write transaction.
     pub(super) async fn live_role(&mut self) -> StorageResult<String> {
@@ -10,7 +10,7 @@ impl SqliteTx {
     }
 
     async fn live_role_for_principal(&mut self, principal_id: Uuid) -> StorageResult<String> {
-        let key: Option<(String, Uuid)> = sqlx::query_as(
+        let key: Option<(String, Uuid)> = native_turso::query_as(
             "SELECT k.role,k.workspace_id FROM oc_api_keys k \
                  JOIN oc_workspaces target ON target.tenant_id=k.tenant_id AND target.id=? \
                  JOIN oc_workspaces root ON root.tenant_id=k.tenant_id AND root.id=k.workspace_id \
@@ -24,7 +24,7 @@ impl SqliteTx {
         .bind(self.scope.tenant_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         match key {
             Some((role, workspace)) if workspace == self.scope.workspace_id => Ok(role),
             Some((role, _)) => Ok(if Permission::Write.granted_by(&role) {
@@ -38,7 +38,7 @@ impl SqliteTx {
     }
 }
 
-impl DomainTx for SqliteTx {
+impl DomainTx for TursoTx {
     fn scope(&self) -> Scope {
         self.scope
     }
@@ -67,7 +67,7 @@ impl DomainTx for SqliteTx {
         } else {
             format!("principal:{}", self.principal_id)
         };
-        let row: Option<(String, String)> = sqlx::query_as(
+        let row: Option<(String, String)> = native_turso::query_as(
             "SELECT request_hash, response FROM oc_commands \
              WHERE tenant_id = ? AND workspace_id = ? AND dedup_scope = ? AND operation = ? AND key = ?",
         )
@@ -78,7 +78,7 @@ impl DomainTx for SqliteTx {
         .bind(idempotency_key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         match row {
             Some((hash, response)) if hash == request_hash => {
                 Ok(Some(serde_json::from_str(&response).unwrap_or(Value::Null)))
@@ -103,7 +103,7 @@ impl DomainTx for SqliteTx {
         job: Uuid,
         permission: Permission,
     ) -> StorageResult<()> {
-        let creator: Option<Uuid> = sqlx::query_scalar(
+        let creator: Option<Uuid> = native_turso::query_scalar(
             "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
@@ -111,7 +111,7 @@ impl DomainTx for SqliteTx {
         .bind(job)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let creator = creator.ok_or(StorageError::NotFound)?;
         let role = self.live_role_for_principal(creator).await?;
         if !permission.granted_by(&role) {
@@ -131,7 +131,7 @@ impl DomainTx for SqliteTx {
     }
 
     async fn audit(&mut self, action: &str, target: Uuid, detail: Value) -> StorageResult<()> {
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_audit(tenant_id, workspace_id, id, actor, action, target, details, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
@@ -145,7 +145,7 @@ impl DomainTx for SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -153,7 +153,7 @@ impl DomainTx for SqliteTx {
         let command = self.command.take().ok_or_else(|| {
             StorageError::Unavailable("finish_command without begin_command".to_string())
         })?;
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_commands(tenant_id, workspace_id, principal_id, dedup_scope, operation, key, request_hash, response, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
@@ -168,7 +168,7 @@ impl DomainTx for SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -440,10 +440,10 @@ impl DomainTx for SqliteTx {
                 }
             }
         }
-        self.tx.commit().await.map_err(sqlite_err)
+        self.tx.commit().await.map_err(turso_err)
     }
 
     async fn rollback(self) -> StorageResult<()> {
-        self.tx.rollback().await.map_err(sqlite_err)
+        self.tx.rollback().await.map_err(turso_err)
     }
 }

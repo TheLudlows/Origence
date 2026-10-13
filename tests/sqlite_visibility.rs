@@ -1,3 +1,4 @@
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, RelationalStore, Scope, SourceVersion, SqliteStore, StorageError,
 };
@@ -43,34 +44,34 @@ async fn seed(store: &SqliteStore, scope: Scope, ids: EvidenceIds) -> Authorized
     let key = store.issue_key(scope, "admin").await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     for source in [ids.root, ids.member] {
-        sqlx::query("INSERT INTO oc_events(tenant_id,workspace_id,id,content,kind,created_by,created_at) VALUES(?,?,?,'needle','memory',?,0)")
+        db::query("INSERT INTO oc_events(tenant_id,workspace_id,id,content,kind,created_by,created_at) VALUES(?,?,?,'needle','memory',?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(source).bind(auth.principal_id)
             .execute(store.pool()).await.unwrap();
     }
-    sqlx::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,created_at) VALUES(?,?,?,'memory','visibility',3,0)")
+    db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,created_at) VALUES(?,?,?,'memory','visibility',3,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset)
         .execute(store.pool()).await.unwrap();
-    sqlx::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle','fixture',?,'visibility',?,0)")
+    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle','fixture',?,'visibility',?,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset).bind(ids.root).bind(auth.principal_id)
         .execute(store.pool()).await.unwrap();
-    sqlx::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,3,0,?,?,'needle')")
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,3,0,?,?,'needle')")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.chunk).bind(ids.asset)
         .bind(scope.workspace_id.to_string()).bind(ids.locator().to_string())
         .execute(store.pool()).await.unwrap();
-    sqlx::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,text,search_terms) VALUES(?,?,?,?,'summary','summary')")
+    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,text,search_terms) VALUES(?,?,?,?,'summary','summary')")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::new_v4()).bind(ids.chunk)
         .execute(store.pool()).await.unwrap();
-    sqlx::query("INSERT INTO oc_index_entries(tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at) VALUES(?,?,?,'content','profile-visibility',7,11,'ready',0)")
+    db::query("INSERT INTO oc_index_entries(tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at) VALUES(?,?,?,'content','profile-visibility',7,11,'ready',0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.chunk)
         .execute(store.pool()).await.unwrap();
     for (artifact, kind, surface) in [
         (ids.chunk, "chunk", "vector"),
         (ids.graph, "entity", "graph"),
     ] {
-        sqlx::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,3,?,?,?,0)")
+        db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,3,?,?,?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.root).bind(kind).bind(artifact)
             .bind((kind == "chunk").then_some(ids.chunk)).execute(store.pool()).await.unwrap();
-        sqlx::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,3,?,?,?,11,?,'committed',0,0)")
+        db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,3,?,?,?,11,?,'committed',0,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.root).bind(kind).bind(artifact)
             .bind(surface).bind(Uuid::new_v4().to_string()).execute(store.pool()).await.unwrap();
     }
@@ -195,7 +196,7 @@ async fn sqlite_visibility_binds_scope_filters_and_vector_publication_independen
     // Active copies of the exact same UUIDs in another workspace or tenant
     // cannot rescue a withdrawn root/member or deleted local asset.
     for source in [ids.root, ids.member] {
-        sqlx::query(
+        db::query(
             "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(auth.scope.tenant_id)
@@ -208,7 +209,7 @@ async fn sqlite_visibility_binds_scope_filters_and_vector_publication_independen
         for other in &scopes[1..] {
             assert_visibility(&store, other, ids, true).await;
         }
-        sqlx::query(
+        db::query(
             "UPDATE oc_events SET state='active' WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(auth.scope.tenant_id)
@@ -218,7 +219,7 @@ async fn sqlite_visibility_binds_scope_filters_and_vector_publication_independen
         .await
         .unwrap();
     }
-    sqlx::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
+    db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(auth.scope.tenant_id)
         .bind(auth.scope.workspace_id)
         .bind(ids.asset)
@@ -251,7 +252,7 @@ async fn sqlite_visibility_preserves_invalid_support_and_malformed_locator_resul
     for support in [json!([ids.root, "not-a-uuid"]), json!([ids.root, 17])] {
         let mut locator = ids.locator();
         locator["support_sources"] = support;
-        sqlx::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(locator.to_string())
             .bind(auth.scope.tenant_id)
             .bind(auth.scope.workspace_id)
@@ -263,7 +264,7 @@ async fn sqlite_visibility_preserves_invalid_support_and_malformed_locator_resul
     }
     // Invalid JSON remains a storage error, rather than becoming a visible
     // non-semantic chunk or being silently converted to an empty result.
-    sqlx::query("UPDATE oc_chunks SET locator='{' WHERE tenant_id=? AND workspace_id=? AND id=?")
+    db::query("UPDATE oc_chunks SET locator='{' WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(auth.scope.tenant_id)
         .bind(auth.scope.workspace_id)
         .bind(ids.chunk)

@@ -1,4 +1,5 @@
 #![cfg(feature = "local-storage")]
+use origence::storage::native_turso as db;
 use axum::{Json, Router, extract::State};
 use origence::{models::Models, service::Service, storage::*, types::*};
 use serde_json::{Value, json};
@@ -1519,7 +1520,7 @@ async fn malformed_durable_jobs_settle_and_leave_the_worker_available() {
         let malformed_id = id(&malformed, "job_id");
         // Bypass admission validation only in this durable-queue fixture. Keep
         // real authorization, source and asset bindings, and force queue order.
-        sqlx::query("UPDATE oc_jobs SET operation=?,payload=?,created_at=0 WHERE id=?")
+        db::query("UPDATE oc_jobs SET operation=?,payload=?,created_at=0 WHERE id=?")
             .bind(operation)
             .bind(payload.to_string())
             .bind(malformed_id)
@@ -1620,7 +1621,7 @@ async fn saved_publication_checks_generation_before_decoding() {
         let job_id = id(&accepted, "job_id");
         // An obsolete saved plan must be ignored before its body is decoded.
         // The same malformed body is an input error when the generation matches.
-        sqlx::query(
+        db::query(
             "UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)) WHERE id=?",
         )
         .bind(publication.to_string())
@@ -1740,7 +1741,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([entity_id])
     );
-    let counts:(i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM oc_versions),(SELECT count(*) FROM oc_artifact_ledger WHERE state='committed')").fetch_one(s.engine.relational().pool()).await.unwrap();
+    let counts:(i64,i64)=db::query_as("SELECT (SELECT count(*) FROM oc_versions),(SELECT count(*) FROM oc_artifact_ledger WHERE state='committed')").fetch_one(s.engine.relational().pool()).await.unwrap();
     assert_eq!(counts, (1, 1));
 
     // Put a real vector behind the same published chunk to check visibility before cleanup.

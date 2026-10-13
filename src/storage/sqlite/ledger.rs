@@ -1,10 +1,10 @@
 //! Artifact publication ledger transitions and reconciliation.
 use super::*;
 
-impl SqliteStore {
+impl TursoStore {
     pub(super) async fn reconcile_ledger_inner(&self) -> StorageResult<Value> {
         let now = now_ms();
-        let orphaned = sqlx::query(
+        let orphaned = native_turso::query(
             "UPDATE oc_artifact_ledger SET state = 'orphan', updated_at = ? \
              WHERE state = 'pending' AND updated_at < ?",
         )
@@ -12,9 +12,9 @@ impl SqliteStore {
         .bind(now - LEDGER_PENDING_TIMEOUT_MS)
         .execute(&self.pool)
         .await
-        .map_err(sqlite_err)?
+        .map_err(turso_err)?
         .rows_affected();
-        let requeued = sqlx::query(
+        let requeued = native_turso::query(
             "UPDATE oc_artifact_ledger SET state = 'pending', updated_at = ? \
              WHERE state = 'retry_wait' AND next_retry_at IS NOT NULL AND next_retry_at <= ?",
         )
@@ -22,18 +22,18 @@ impl SqliteStore {
         .bind(now)
         .execute(&self.pool)
         .await
-        .map_err(sqlite_err)?
+        .map_err(turso_err)?
         .rows_affected();
         Ok(json!({ "requeued": requeued, "orphaned": orphaned }))
     }
 }
 
-impl SqliteTx {
+impl TursoTx {
     pub(super) async fn register_pending_inner(&mut self, entry: LedgerEntry) -> StorageResult<()> {
         if entry.key.scope != self.scope {
             return Err(StorageError::Forbidden);
         }
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_artifact_ledger(tenant_id, workspace_id, source_id, version, \
              artifact_type, artifact_id, surface, generation, idempotency_key, state, \
              created_at, updated_at) \
@@ -53,7 +53,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -63,7 +63,7 @@ impl SqliteTx {
         }
         // Re-check source validity and generation in the same statement (A2.6
         // step 3): only an active source's matching generation commits.
-        sqlx::query(
+        native_turso::query(
             "UPDATE oc_artifact_ledger SET state = 'committed', updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
                AND artifact_id = ? AND surface = ? AND generation = ? \
@@ -84,7 +84,7 @@ impl SqliteTx {
         .bind(key.generation)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 
@@ -97,7 +97,7 @@ impl SqliteTx {
             return Err(StorageError::Forbidden);
         }
         let now = now_ms();
-        let attempt: i32 = sqlx::query_scalar(
+        let attempt: i32 = native_turso::query_scalar(
             "SELECT attempt FROM oc_artifact_ledger \
              WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
                AND artifact_id = ? AND surface = ? AND generation = ?",
@@ -111,10 +111,10 @@ impl SqliteTx {
         .bind(key.generation)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let next = attempt + 1;
         if next >= MAX_LEDGER_ATTEMPTS {
-            sqlx::query(
+            native_turso::query(
                 "UPDATE oc_artifact_ledger SET state = 'orphan', attempt = ?, last_error = ?, \
                  next_retry_at = NULL, updated_at = ? \
                  WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
@@ -133,9 +133,9 @@ impl SqliteTx {
             .bind(key.generation)
             .execute(&mut *self.tx)
             .await
-            .map_err(sqlite_err)?;
+            .map_err(turso_err)?;
         } else {
-            sqlx::query(
+            native_turso::query(
                 "UPDATE oc_artifact_ledger SET state = 'retry_wait', attempt = ?, last_error = ?, \
                  next_retry_at = ?, updated_at = ? \
                  WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
@@ -155,7 +155,7 @@ impl SqliteTx {
             .bind(key.generation)
             .execute(&mut *self.tx)
             .await
-            .map_err(sqlite_err)?;
+            .map_err(turso_err)?;
         }
         Ok(())
     }
@@ -168,7 +168,7 @@ impl SqliteTx {
         if key.scope != self.scope {
             return Err(StorageError::Forbidden);
         }
-        sqlx::query(
+        native_turso::query(
             "UPDATE oc_artifact_ledger SET state = 'orphan', last_error = ?, updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
                AND artifact_id = ? AND surface = ? AND generation = ? \
@@ -185,7 +185,7 @@ impl SqliteTx {
         .bind(key.generation)
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok(())
     }
 }

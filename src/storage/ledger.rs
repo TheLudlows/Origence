@@ -10,6 +10,7 @@ use crate::storage::scope::{Scope, SourceVersion};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Surface {
     Vector,
+    FullText,
     Graph,
 }
 
@@ -17,6 +18,7 @@ impl Surface {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Vector => "vector",
+            Self::FullText => "full_text",
             Self::Graph => "graph",
         }
     }
