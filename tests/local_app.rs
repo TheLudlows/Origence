@@ -1034,10 +1034,19 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let offline = command(dir.path())
         .env("OC_API_KEY", token)
         .args(["--offline", "search", "approval"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .output()
         .await
         .unwrap();
-    assert!(offline.status.success());
+    assert!(
+        offline.status.success(),
+        "offline search after host termination: status={:?}, code={:?}, stdout={}, stderr={}",
+        offline.status,
+        offline.status.code(),
+        String::from_utf8_lossy(&offline.stdout),
+        String::from_utf8_lossy(&offline.stderr)
+    );
     mock.abort();
 }
 fn post_route() -> axum::routing::MethodRouter<Arc<AtomicBool>> {

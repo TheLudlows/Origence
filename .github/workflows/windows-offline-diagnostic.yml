@@ -1,0 +1,48 @@
+name: Windows offline recovery diagnostic
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: windows-offline-diagnostic-${{ github.head_ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    if: github.head_ref == 'fix/windows-offline-recovery'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      # Same job name and toolchain/environment as main reuse its native cache.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: true
+          cache-on-failure: true
+      - name: Reproduce original offline lifecycle test with process diagnostics
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual Studio C++ tools missing.' }
+          & (Join-Path $vs 'Common7\Tools\Launch-VsDevShell.ps1') -Arch amd64 -HostArch amd64 | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Visual Studio setup failed.' }
+          $env:RUSTUP_TOOLCHAIN = '1.98.0-x86_64-pc-windows-msvc'
+          $env:CC = 'cl.exe'
+          $env:CXX = 'cl.exe'
+          if (-not $env:PROTOC -and -not (Get-Command protoc -ErrorAction SilentlyContinue)) {
+            $protoc = & cargo run --manifest-path tools/storage-probe/Cargo.toml --locked --no-default-features --features build-tools --bin probe-protoc --target-dir target/storage-probe -j 1
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot locate protoc.' }
+            $env:PROTOC = $protoc.Trim()
+          }
+          & cargo test --locked --test local -j 1 local_app::local_host_api_cli_mcp_models_and_recovery -- --exact --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Original lifecycle regression failed; inspect captured process status and output.' }
