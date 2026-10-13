@@ -568,3 +568,133 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
 含 Compose 透传/静态断言的 head `efcb1ddd92deb7185b6b497f527f5db735014587` 经独立六文件 hash/delta 复核无阻断项，[CI 38238050316](https://github.com/TheLudlows/Origence/actions/runs/38238050316) completed/success，fast-check/Linux 全通过、Windows 按 PR 策略 skipped。Rust 仍为无默认 **69/99**、默认 **75/203**；tools 新增配置断言后 **57 run / 55 passed / 2 skipped**，evals **42 passed**；两个被 fast-check 跳过的真实宿主恢复用例在 Linux 独立步骤 **2/2 passed**，HTTP/MCP/原生故障/聚焦/关键词评估同样全过。Compose 本身只验证配置文本，Docker 运行仍 NOT_RUN。
 
 至此最终实现及部署配置验收完成。最后归档仅修改本验证记录与执行计划勾选，不改变源代码、配置、测试或历史结果；归档提交同样必须通过其精确 head 的适用 CI 后才可 ready/merge。最终归档 head/CI 与合入 main 后的 Windows 等结果，在 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录继续保留，避免自引用提交 SHA 或把前一头绿灯用于后一头。
+
+
+## 2026-10-13 — Turso / LanceDB 正式接入（进行中）
+
+草稿 [PR #58](https://github.com/TheLudlows/Origence/pull/58)，独立于历史 T0
+草稿 #53。新后端尚未完成运行验收。
+
+- 准备提交 898e3ef 的全量重新解析锁暴露 office_oxide 0.1.13 与既有
+  pdf_oxide 0.3.78 的编译不兼容；同时 Turso 内部组件漂移到 0.8.3。
+  此失败保留，不通过更新 PDF 实现或伪造锁绕过。
+- 实现提交 99beb45c 的
+  [准备 CI](https://github.com/TheLudlows/Origence/actions/runs/38388541517)
+  已使用 Cargo 保留既有锁并精确解析：Turso 全套 0.8.2、LanceDB 0.40.0、
+  Lance 13.0.0、Arrow 58.3.0、DataFusion 54.1.0、office_oxide 0.1.9。
+  生成的真实锁与 rustfmt 补丁作为 artifact 11808495075 归档。
+- 同一提交编译 FAIL：新查询适配的泛型异步 Executor 生命周期/Send 证明
+  引起 HTTP/MCP 级联错误，正在修复；未跳过 Send、多线程 host 或相关测试。
+- 本地 Python tools：57 tests，55 PASS、2 按缺少二进制条件 SKIP；evals：
+  42/42 PASS。云编辑环境无 Rust 工具链，这些结果不替代 Rust 编译或集成运行。
+- 新增原生驱动、Lance 原生检索及生产发布/回滚/撤回/Context/Summary 回归；
+  本段记录时仍为 NOT_RUN。最终验收必须依据修复后的精确 head 重跑。
+
+真实模型/官方 AML 质量评测、生产性能 SLO、在线跨库备份、旧库迁移均未宣称通过。
+
+- 修复提交 d95935da 的
+  [准备 CI](https://github.com/TheLudlows/Origence/actions/runs/38390159122)
+  cargo check --locked --all-targets PASS（15.32 秒），无 Rust warning；格式补丁
+  由 artifact 11809150175 生成并回灌。准备步骤再次解析仅改变若干 Windows
+  间接依赖引用，未采纳该二次锁变化；后续准备检查改为只验证已提交锁，不再更新。
+  最终精确锁与测试门禁仍看后续提交的正式 CI，不把准备检查等同整体验收。
+
+- d95935da 的正式 [CI 38390159324](https://github.com/TheLudlows/Origence/actions/runs/38390159324)：
+  Rust 1.98 最小特性身份测试、全目标 warnings-denied Clippy PASS；首组原生
+  核心/图/权限/可见性回归 59 项中 58 PASS、1 FAIL。失败是畸形 JSON 查询后
+  Turso 已终止事务，旧用例随后 commit 得到 no transaction is active；不吞掉
+  commit 错误，也不将已回滚写入报告为成功。其余运行门禁当次未执行。
+  同次 fmt FAIL 的正式补丁已应用。后续 CI 将优先运行新增生产发布和 Lance
+  合同，保留全部原回归，并允许 PR 自身缓存失败作业的依赖以避免重复冷编译。
+
+- 804701d9 的 [准备 CI 38393321292](https://github.com/TheLudlows/Origence/actions/runs/38393321292)
+  全目标编译再次 PASS。artifact 11811247090 包含 Cargo 真实生成的锁与格式补丁；
+  锁 diff 仅为 origence 根依赖新增已锁存的 `lance`，所有依赖 package 记录完全
+  不变（准备步骤有逐记录断言，本地亦复核）。新增原生事务中止护栏、最终发布
+  proof、物理 IVF 分区校验及其测试均已编译；运行测试仍待回灌锁/格式后的 CI。
+
+- 7413db37 的 [正式 CI 38394036490](https://github.com/TheLudlows/Origence/actions/runs/38394036490)：
+  fmt、无默认特性 Clippy 与全功能 warnings-denied Clippy PASS；无默认特性
+  78 个 lib 测试全过（含 9 个原生 Turso 驱动测试与真实 Pending/错误读后的
+  fail-closed 回归）。无默认特性集成 98 PASS、1 FAIL，为旧 catalog 缺表后
+  仍期待重开的用例；已改为拒绝不兼容库且 DDL/原文不变的合同回归，待复跑。
+  全功能运行此记录时仍在执行，不能据此宣称生产发布、Context 或 ANN 全过。
+  Cargo 生成的 feature tree 确认未启用 Turso FTS；摘要仍走应用层 token 聚合。
+
+- 同一 7413db37 全功能聚焦运行已结束：最终 publication proof 3/3、Turso driver
+  9/9、production_storage 7/7、Lance 原生检索 10/10、权威/图 59/59、初始化
+  4/4、恢复 2/2、Session feedback 15/15、EvidenceBundle 12/12 PASS。
+  semantic_memory、semantic_capture、learning_loop 三组分别在既有大型 HTTP/
+  学习回归发生 stack overflow SIGABRT；没有 Rust panic backtrace。完整测试与
+  HTTP/MCP/进程恢复步骤因此 NOT_RUN，不把通过子集当作整体通过。
+  后续修复缩小公开 search/resolve/evidence_bundle future 的内联状态，并打印
+  未构造/未 poll 的 native 与 public future 类型尺寸；原三测试不改、线程栈不
+  增大，必须真实重跑判断是否解决，当前不能确定唯一根因。
+
+- 6e0bb01a 的[准备 CI 38397478901](https://github.com/TheLudlows/Origence/actions/runs/38397478901)
+  全目标编译 PASS；[正式 CI 38397478898](https://github.com/TheLudlows/Origence/actions/runs/38397478898)
+  的 Linux Rust 1.98 最小特性身份测试与全目标 warnings-denied Clippy PASS。
+  公开 search/resolve/evidence_bundle future 类型尺寸实测分别为 176/176/256
+  字节；Turso acquire/begin/begin_with 为 448/512/496 字节，commit/rollback
+  为 424/440 字节。诊断只取类型尺寸，不构造或 poll 被测 future；尺寸结果不是
+  完整调用链的运行栈上限，也不单独证明 stack overflow 根因。
+- 同一 6e0bb01a 的全功能聚焦运行：最终 publication proof 3/3、Turso driver
+  9/9、production_storage 8/8、Lance 原生检索 10/10、权威/图 59/59、初始化
+  4/4、恢复 2/2、semantic_memory 6/6、Session feedback 15/15、learning_loop
+  20/20、EvidenceBundle 12/12 PASS。新增 vector 表丢失时 readiness/已完成
+  receipt 拒绝，以及来源撤回后允许 cleanup 的回归通过；原生事务错误后禁止
+  自动提交、真实 Pending 后显式 rollback/Drop 清理与畸形 JSON 可见性回归
+  再次通过。既有 semantic_memory 与 learning_loop 爆栈用例在未增大线程栈、
+  未修改原测试断言的条件下通过。
+- semantic_capture 组已有 7 项明确 PASS，但
+  `semantic_capture_http_multilingual_search_isolation_and_updates` 仍发生
+  stack overflow / SIGABRT，整个聚焦步骤 FAIL。未把进程中止记为普通断言失败，
+  也未将其余七项通过当作该组整体通过。完整默认特性测试、debug build/HTTP
+  smoke、MCP smoke、AML 进程恢复与 keyword 种子评估当次均为 NOT_RUN。
+- 该头 fast-check 在 fmt 检查失败，其后无默认特性 Clippy/完整测试及 Python
+  门禁 NOT_RUN；正式 rustfmt 补丁已从准备工件回灌本地，仍须后续精确提交验证。
+  catalog 缺表用例的“不兼容拒绝且 DDL/原文保持”修正已在该头编译，但未被
+  本次聚焦筛选选中，完整测试又未执行，因此该修正的运行结果仍为 NOT_RUN。
+  本段仅追记已测提交的结果，不将准备检查、格式回灌或通过子集视为最终验收。
+
+- 8a3815f1 的[正式 CI 38400833421](https://github.com/TheLudlows/Origence/actions/runs/38400833421)
+  与准备检查已完成：fmt、无默认特性/全目标 warnings-denied Clippy PASS；
+  无默认特性 78 lib + 99 integration 全过，包含 catalog 拒绝且不修复数据。
+  Python tools 55 PASS / 2 SKIP，evals 42 PASS。原三个 stack overflow 用例在
+  原线程栈与原断言下全部通过；semantic_capture / process_next future 分别
+  为 96 / 24 字节（inner 2040 / 7936 字节），只调整异步状态的分配边界。
+- 同头全部 focused 组 PASS；完整默认特性 lib 93/93 PASS，integration
+  217 PASS / 4 FAIL。失败为两个压实 fixture 仍预期所有 fragment 合为一个、
+  身份过滤 fixture 仅写权威 chunk 而没有原生 FTS/发布账本、graph 重放仍预期
+  只有 graph 一条账本。后续修正必须保持检索来源、版本/隔离、完整身份候选与
+  精确账本幂等断言；不能仅放宽失败计数或加入隐式重建。Lance 13 压实保留
+  indexed / unindexed fragment 覆盖边界，不将两组误报为未压实。
+  该头 HTTP/MCP smoke、受控模型进程恢复与 keyword 评估仍 NOT_RUN。
+
+### 本轮实现结果：b50e8748
+
+[正式 CI 38405514854](https://github.com/TheLudlows/Origence/actions/runs/38405514854)
+completed/success；fast-check 与 linux-native 全通过，Windows 按既有 PR 策略
+SKIP。fmt、无默认特性及全目标 warnings-denied Clippy、Rust 1.98 身份测试通过。
+无默认特性 78 lib + 99 integration；默认特性 93 lib + 221 integration 全通过。
+全部 focused native/publication/Context/Summary/semantic/learning 回归再次通过；
+前述 4 项 fixture 合同修复与 3 个原 stack overflow 用例均已闭合。
+
+真实二进制 HTTP readiness/auth/publication/identity/keyword smoke PASS；MCP
+host-forwarding 与 offline 协商/schema/安全错误/撤回/EOF/reopen PASS；受控模型
+夹具下的真实宿主处理中强退/恢复 2/2 PASS。Python tools 55 PASS / 2 SKIP、
+eval adapters 42/42 PASS；两个 tools 缺二进制跳过项由 Linux 专用步骤实跑。
+
+Keyword seed 为 24 题（22 可答、2 无答案），请求错误与无答案误命中均 0，
+document Recall@K / MRR / nDCG 均 0.63636。该值是本次 keyword-only 合成诊断，
+不是“所有问题正确”、ANN 通用召回保证或真实模型产品效果验收。证据工件
+[retrieval-linux / 11819827413](https://github.com/TheLudlows/Origence/actions/runs/38405514854/artifacts/11819827413)，
+SHA-256 `4c2a3b9e6777ca193ad2413a83a2d56ace12ae591194e59d6df6e9918d00e304`。
+
+本轮保留 fresh-only 范围；同版本重开/幂等/撤回、跨库阶段失败重放、候选前完整
+身份预检与返回前权威复核已通过工程回归。真实模型/官方 AML、通用 ANN 性能
+SLO、维护中断/磁盘不足、任意断电与在线跨库备份仍不在本次已验范围。
+
+最后归档只更新当前状态、实施/验证记录并移除临时 preparation workflow，不改
+运行源代码、依赖锁或测试。归档精确 head 的适用 CI 仍须通过，结果在草稿
+[PR #58](https://github.com/TheLudlows/Origence/pull/58) 保留；不自动合入。

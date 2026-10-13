@@ -24,10 +24,11 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
+          cache-on-failure: true
       - run: cargo fmt --all -- --check
-      # Catch source-level Clippy warnings before the expensive native engines.
-      - name: Lightweight Clippy (no native backends)
+      # Check the Turso authority layer before the full Lance vector backend.
+      - name: Authority-only Clippy (without Lance)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
       - name: Full test suite without default features
         run: cargo test --locked --no-default-features -j 2 --no-fail-fast
@@ -52,7 +53,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
+          cache-on-failure: true
       - name: Linux native build tools
         run: |
           sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
@@ -65,12 +67,18 @@ jobs:
         run: cargo test --locked --no-default-features --lib memory_identity -j 2
       # Keep link memory pressure bounded.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
-      - name: Focused SQLite core and visibility contracts
+      - name: Focused native storage, publication, and visibility contracts
         run: |
           # Integration modules share one executable (autotests = false).
-          for filter in sqlite_ initialization:: storage_recovery:: semantic_memory:: semantic_capture:: session_feedback:: learning_loop:: evidence_bundle::; do
-            cargo test --locked --test local -j 2 "$filter"
+          status=0
+          cargo test --locked --lib -j 2 future_sizes -- --nocapture || status=1
+          cargo test --locked --lib -j 2 storage::lancedb::ann::tests || status=1
+          cargo test --locked --lib -j 2 final_native_validation_ || status=1
+          cargo test --locked --lib -j 2 storage::native_turso::tests || status=1
+          for filter in production_storage:: lancedb_native_search:: sqlite_ initialization:: storage_recovery:: semantic_memory:: semantic_capture:: session_feedback:: learning_loop:: evidence_bundle::; do
+            cargo test --locked --test local -j 2 "$filter" || status=1
           done
+          exit "$status"
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Debug build and no-model HTTP smoke
         run: |
@@ -108,10 +116,11 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
+          cache-on-failure: true
       - name: Build tools, lint, and all local lifecycle tests
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1
-      - name: Storage contracts without native backends
+      - name: Authority contracts without Lance
         run: cargo check --locked --no-default-features --lib -j 1
 

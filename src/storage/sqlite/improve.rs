@@ -8,40 +8,9 @@ use crate::session::{ArchivedEvidence, FeedbackInput};
 
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
 
-pub(super) async fn available(conn: &mut SqliteConnection) -> StorageResult<bool> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_improve_cursors','oc_improve_runs','oc_learnings','oc_learning_support')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='learning') OR EXISTS(SELECT 1 FROM oc_jobs WHERE operation='improve')")
-        .fetch_one(conn).await.map_err(sqlite_err)
-}
-
-pub(super) async fn check_schema(conn: &mut SqliteConnection) -> StorageResult<()> {
-    let normalize = |s: &str| {
-        s.split_whitespace()
-            .collect::<String>()
-            .to_ascii_lowercase()
-    };
-    for statement in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-        let tokens: Vec<&str> = statement.split_whitespace().collect();
-        let name = tokens
-            .get(if tokens.get(1) == Some(&"UNIQUE") {
-                3
-            } else {
-                2
-            })
-            .copied()
-            .ok_or_else(|| StorageError::Unavailable("invalid learning schema".into()))?;
-        let actual: Option<String> =
-            sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE name=?")
-                .bind(name)
-                .fetch_optional(&mut *conn)
-                .await
-                .map_err(sqlite_err)?;
-        if actual.as_deref().map(normalize) != Some(normalize(statement)) {
-            return Err(StorageError::Unavailable(
-                "incompatible learning schema".into(),
-            ));
-        }
-    }
-    Ok(())
+pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
+    native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_improve_cursors','oc_improve_runs','oc_learnings','oc_learning_support')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='learning') OR EXISTS(SELECT 1 FROM oc_jobs WHERE operation='improve')")
+        .fetch_one(conn).await.map_err(turso_err)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(body: &str) -> StorageResult<T> {
@@ -149,7 +118,7 @@ fn verification(
     Ok((proposal, plan))
 }
 
-impl SqliteTx {
+impl TursoTx {
     async fn require_improve(&mut self) -> StorageResult<()> {
         if !available(&mut self.tx).await? {
             return Err(StorageError::Unavailable(
@@ -172,9 +141,9 @@ impl SqliteTx {
         let answer = body["answer"]
             .as_str()
             .ok_or_else(|| StorageError::Unavailable("invalid archived turn".into()))?;
-        let rows: Vec<String> = sqlx::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
+        let rows: Vec<String> = native_turso::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         let used_evidence: Vec<ArchivedEvidence> = rows
             .iter()
             .map(|row| decode(row))
@@ -206,9 +175,9 @@ impl SqliteTx {
                 "session and job identifiers must be non-nil",
             ));
         }
-        let existing: Option<(Uuid, String, String)> = sqlx::query_as("SELECT session_id,request_hash,request FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
+        let existing: Option<(Uuid, String, String)> = native_turso::query_as("SELECT session_id,request_hash,request FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(input.improve_id)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         if let Some((stored_session, hash, request)) = existing {
             if stored_session != session
                 || hash != request_hash
@@ -222,30 +191,30 @@ impl SqliteTx {
             self.require_improve_snapshot_visible(&run).await?;
             return Ok(run);
         }
-        let session_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=?)")
+        let session_exists: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if !session_exists {
             return Err(StorageError::NotFound);
         }
-        let unfinished: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND session_id=? AND status IN ('accepted','publishing'))")
+        let unfinished: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND session_id=? AND status IN ('accepted','publishing'))")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if unfinished {
             return Err(StorageError::Conflict(
                 "session already has an unfinished improve run".into(),
             ));
         }
-        sqlx::query("INSERT INTO oc_improve_cursors(tenant_id,workspace_id,session_id,feedback_sequence) VALUES(?,?,?,0) ON CONFLICT DO NOTHING")
+        native_turso::query("INSERT INTO oc_improve_cursors(tenant_id,workspace_id,session_id,feedback_sequence) VALUES(?,?,?,0) ON CONFLICT DO NOTHING")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        let lower: i64 = sqlx::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE tenant_id=? AND workspace_id=? AND session_id=?")
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
+        let lower: i64 = native_turso::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE tenant_id=? AND workspace_id=? AND session_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-        let rows: Vec<(i64, Uuid, Uuid, Uuid, String)> = sqlx::query_as("SELECT feedback_sequence,principal_id,feedback_id,turn_id,feedback FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND feedback_sequence>? ORDER BY feedback_sequence LIMIT ?")
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let rows: Vec<(i64, Uuid, Uuid, Uuid, String)> = native_turso::query_as("SELECT feedback_sequence,principal_id,feedback_id,turn_id,feedback FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND feedback_sequence>? ORDER BY feedback_sequence LIMIT ?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
             .bind(lower).bind(input.max_feedback as i64)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         let mut snapshot = FrozenSnapshot::default();
         let mut target = lower;
         for (sequence, principal_id, feedback_id, turn_id, body) in rows {
@@ -302,10 +271,10 @@ impl SqliteTx {
             }
             target = sequence;
         }
-        sqlx::query("INSERT INTO oc_improve_runs(tenant_id,workspace_id,improve_id,session_id,job_id,request_hash,request,snapshot,lower_sequence,target_sequence,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+        native_turso::query("INSERT INTO oc_improve_runs(tenant_id,workspace_id,improve_id,session_id,job_id,request_hash,request,snapshot,lower_sequence,target_sequence,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(input.improve_id).bind(session).bind(job_id)
             .bind(request_hash).bind(encode(input)?).bind(encode(&snapshot)?).bind(lower).bind(target)
-            .bind(self.principal_id).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .bind(self.principal_id).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
         self.audit("session.improve_accepted", input.improve_id,
             json!({"session_id":session,"job_id":job_id,"lower_sequence":lower,"target_sequence":target,"feedback_count":snapshot.items.len(),"skipped_count":snapshot.skipped.len()})).await?;
         self.improve_run(session, input.improve_id).await
@@ -314,9 +283,9 @@ impl SqliteTx {
     pub async fn lookup_improve(&mut self, improve_id: Uuid) -> StorageResult<ImproveRun> {
         self.check_permission(Permission::Write).await?;
         self.require_improve().await?;
-        let row: Option<(Uuid, Uuid, String, i64, i64, String, Option<String>, Option<String>, String)> = sqlx::query_as("SELECT session_id,job_id,request,lower_sequence,target_sequence,snapshot,proposal_plan,verification_plan,status FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
+        let row: Option<(Uuid, Uuid, String, i64, i64, String, Option<String>, Option<String>, String)> = native_turso::query_as("SELECT session_id,job_id,request,lower_sequence,target_sequence,snapshot,proposal_plan,verification_plan,status FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve_id)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let (
             session_id,
             job_id,
@@ -363,10 +332,10 @@ impl SqliteTx {
             {
                 return Err(StorageError::NotFound);
             }
-            let stored: Option<(i64, String)> = sqlx::query_as("SELECT feedback_sequence,feedback FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND principal_id=? AND feedback_id=?")
+            let stored: Option<(i64, String)> = native_turso::query_as("SELECT feedback_sequence,feedback FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND principal_id=? AND feedback_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run.session_id)
                 .bind(item.turn.turn_id).bind(item.principal_id).bind(item.feedback.feedback_id)
-                .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+                .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
             let Some((sequence, body)) = stored else {
                 return Err(StorageError::NotFound);
             };
@@ -398,9 +367,9 @@ impl SqliteTx {
                 "improve run is no longer accepting a plan".into(),
             ));
         }
-        sqlx::query("UPDATE oc_improve_runs SET proposal_plan=? WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND proposal_plan IS NULL")
+        native_turso::query("UPDATE oc_improve_runs SET proposal_plan=? WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND proposal_plan IS NULL")
             .bind(encode(plan)?).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
         Ok(())
     }
 
@@ -427,9 +396,9 @@ impl SqliteTx {
                 "improve run is no longer accepting verification".into(),
             ));
         }
-        sqlx::query("UPDATE oc_improve_runs SET verification_plan=? WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND verification_plan IS NULL")
+        native_turso::query("UPDATE oc_improve_runs SET verification_plan=? WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND verification_plan IS NULL")
             .bind(encode(plan)?).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
         Ok(())
     }
 
@@ -476,9 +445,9 @@ impl SqliteTx {
                 "learning was not accepted by verification".into(),
             ));
         }
-        let existing: Option<(Uuid, Uuid, Uuid, Uuid, String)> = sqlx::query_as("SELECT id,asset_id,source_event_id,ingest_job_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND candidate_index=?")
+        let existing: Option<(Uuid, Uuid, Uuid, Uuid, String)> = native_turso::query_as("SELECT id,asset_id,source_event_id,ingest_job_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND candidate_index=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve).bind(candidate_index as i64)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         if let Some((id, stored_asset, stored_source, stored_job, body)) = existing {
             if (id, stored_asset, stored_source, stored_job)
                 != (learning_id, asset, source, ingest_job)
@@ -507,27 +476,27 @@ impl SqliteTx {
                 "learning already registered; cancel run and request again".into(),
             ));
         }
-        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets a JOIN oc_events e ON e.tenant_id=a.tenant_id AND e.workspace_id=a.workspace_id JOIN oc_jobs j ON j.tenant_id=a.tenant_id AND j.workspace_id=a.workspace_id WHERE a.tenant_id=? AND a.workspace_id=? AND a.id=? AND a.kind='knowledge' AND a.deleted=0 AND e.id=? AND e.kind='learning' AND e.state='active' AND j.id=? AND j.asset_id=a.id AND j.source_event_id=e.id AND j.operation='ingest' AND j.cancel_requested=0 AND j.state IN ('pending','processing','retry_wait'))")
+        let valid: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets a JOIN oc_events e ON e.tenant_id=a.tenant_id AND e.workspace_id=a.workspace_id JOIN oc_jobs j ON j.tenant_id=a.tenant_id AND j.workspace_id=a.workspace_id WHERE a.tenant_id=? AND a.workspace_id=? AND a.id=? AND a.kind='knowledge' AND a.deleted=0 AND e.id=? AND e.kind='learning' AND e.state='active' AND j.id=? AND j.asset_id=a.id AND j.source_event_id=e.id AND j.operation='ingest' AND j.cancel_requested=0 AND j.state IN ('pending','processing','retry_wait'))")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(source).bind(ingest_job)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if !valid {
             return Err(StorageError::Conflict(
                 "learning requires its registered knowledge ingestion".into(),
             ));
         }
-        sqlx::query("INSERT INTO oc_learnings(tenant_id,workspace_id,id,improve_id,session_id,candidate_index,asset_id,source_event_id,ingest_job_id,candidate,fingerprint,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        native_turso::query("INSERT INTO oc_learnings(tenant_id,workspace_id,id,improve_id,session_id,candidate_index,asset_id,source_event_id,ingest_job_id,candidate,fingerprint,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(learning_id).bind(improve).bind(session).bind(candidate_index as i64)
             .bind(asset).bind(source).bind(ingest_job).bind(encode(candidate)?).bind(fingerprint(candidate)?).bind(self.principal_id).bind(now_ms())
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
         for (ordinal, support) in candidate.supports.iter().enumerate() {
-            sqlx::query("INSERT INTO oc_learning_support(tenant_id,workspace_id,learning_id,session_id,turn_id,support_ordinal,principal_id,feedback_id) VALUES(?,?,?,?,?,?,?,?)")
+            native_turso::query("INSERT INTO oc_learning_support(tenant_id,workspace_id,learning_id,session_id,turn_id,support_ordinal,principal_id,feedback_id) VALUES(?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(learning_id).bind(session).bind(support.turn_id)
                 .bind(ordinal as i64).bind(support.principal_id).bind(support.feedback_id)
-                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+                .execute(&mut *self.tx).await.map_err(turso_err)?;
         }
-        sqlx::query("UPDATE oc_improve_runs SET status='publishing' WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND status='accepted'")
+        native_turso::query("UPDATE oc_improve_runs SET status='publishing' WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND status='accepted'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
         self.audit("learning.accepted", learning_id, json!({"improve_id":improve,"asset_id":asset,"source_event_id":source,"ingest_job_id":ingest_job})).await?;
         Ok(
             json!({"learning_id":learning_id,"asset_id":asset,"source_event_id":source,"ingest_job_id":ingest_job,"status":"accepted"}),
@@ -553,28 +522,28 @@ impl SqliteTx {
             .iter()
             .filter(|decision| decision.accepted)
             .count() as i64;
-        let (count, published): (i64, i64) = sqlx::query_as("SELECT count(*),COALESCE(SUM(status='published'),0) FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
+        let (count, published): (i64, i64) = native_turso::query_as("SELECT count(*),COALESCE(SUM(status='published'),0) FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if count != accepted || published != accepted {
             return Ok(false);
         }
-        let parent_active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=? AND cancel_requested=0 AND state IN ('processing','completed'))")
+        let parent_active: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=? AND cancel_requested=0 AND state IN ('processing','completed'))")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run.job_id)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if !parent_active {
             return Ok(false);
         }
         self.require_improve_snapshot_visible(&run).await?;
-        let affected = sqlx::query("UPDATE oc_improve_cursors SET feedback_sequence=? WHERE tenant_id=? AND workspace_id=? AND session_id=? AND feedback_sequence=?")
+        let affected = native_turso::query("UPDATE oc_improve_cursors SET feedback_sequence=? WHERE tenant_id=? AND workspace_id=? AND session_id=? AND feedback_sequence=?")
             .bind(run.target_sequence).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(run.lower_sequence)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?.rows_affected();
+            .execute(&mut *self.tx).await.map_err(turso_err)?.rows_affected();
         if affected != 1 {
             return Err(StorageError::Conflict("improve cursor changed".into()));
         }
-        sqlx::query("UPDATE oc_improve_runs SET status='completed',completed_at=? WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
+        native_turso::query("UPDATE oc_improve_runs SET status='completed',completed_at=? WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
             .bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
         self.audit("session.improve_completed", improve,
             json!({"session_id":session,"target_sequence":run.target_sequence,"published_count":published,"skipped_count":run.snapshot.skipped.len()})).await?;
         Ok(true)
@@ -585,25 +554,25 @@ impl SqliteTx {
         if !available(&mut self.tx).await? {
             return Ok(());
         }
-        let row: Option<(Uuid, Uuid, Uuid, Uuid)> = sqlx::query_as("SELECT id,session_id,improve_id,source_event_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
+        let row: Option<(Uuid, Uuid, Uuid, Uuid)> = native_turso::query_as("SELECT id,session_id,improve_id,source_event_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let Some((id, session, improve, source)) = row else {
             return Ok(());
         };
         self.guard_learning_publication(Some(asset), Some(source))
             .await?;
-        let ready: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id JOIN oc_jobs j ON j.tenant_id=l.tenant_id AND j.workspace_id=l.workspace_id AND j.id=l.ingest_job_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.id=? AND j.state='completed' AND j.outcome='published' AND j.cancel_requested=0 AND EXISTS(SELECT 1 FROM oc_chunks c WHERE c.tenant_id=a.tenant_id AND c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.version=a.current_version))")
+        let ready: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id JOIN oc_jobs j ON j.tenant_id=l.tenant_id AND j.workspace_id=l.workspace_id AND j.id=l.ingest_job_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.id=? AND j.state='completed' AND j.outcome='published' AND j.cancel_requested=0 AND EXISTS(SELECT 1 FROM oc_chunks c WHERE c.tenant_id=a.tenant_id AND c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.version=a.current_version))")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if !ready {
             return Err(StorageError::Conflict(
                 "learning ingestion has not completed publication".into(),
             ));
         }
-        let changed = sqlx::query("UPDATE oc_learnings SET status='published',published_at=COALESCE(published_at,?) WHERE tenant_id=? AND workspace_id=? AND id=? AND status='accepted'")
+        let changed = native_turso::query("UPDATE oc_learnings SET status='published',published_at=COALESCE(published_at,?) WHERE tenant_id=? AND workspace_id=? AND id=? AND status='accepted'")
             .bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?.rows_affected();
+            .execute(&mut *self.tx).await.map_err(turso_err)?.rows_affected();
         if changed == 1 {
             self.audit(
                 "learning.published",
@@ -627,9 +596,9 @@ impl SqliteTx {
 
     pub async fn improve_view(&mut self, improve: Uuid) -> StorageResult<Value> {
         let run = self.lookup_improve(improve).await?;
-        let rows: Vec<(Uuid, Uuid, Uuid, Uuid, String)> = sqlx::query_as("SELECT id,asset_id,source_event_id,ingest_job_id,status FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=? ORDER BY candidate_index")
+        let rows: Vec<(Uuid, Uuid, Uuid, Uuid, String)> = native_turso::query_as("SELECT id,asset_id,source_event_id,ingest_job_id,status FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=? ORDER BY candidate_index")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         let mut learnings = Vec::with_capacity(rows.len());
         for (id, asset, source, job, status) in rows {
             let job_view = self.job_view(job).await?;
@@ -666,9 +635,9 @@ impl SqliteTx {
     pub async fn learning_view(&mut self, learning: Uuid) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
         self.require_improve().await?;
-        let row: Option<(Uuid, Uuid, Uuid, Uuid, Uuid, String, String)> = sqlx::query_as("SELECT improve_id,session_id,asset_id,source_event_id,ingest_job_id,status,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=?")
+        let row: Option<(Uuid, Uuid, Uuid, Uuid, Uuid, String, String)> = native_turso::query_as("SELECT improve_id,session_id,asset_id,source_event_id,ingest_job_id,status,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(learning)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let (improve, session, asset, source, job, status, candidate) =
             row.ok_or(StorageError::NotFound)?;
         self.require_learning_asset_visible(asset).await?;
@@ -695,7 +664,7 @@ impl SqliteTx {
     }
 }
 
-impl SqliteTx {
+impl TursoTx {
     /// Live accepted rows reserve their exact statement until publication or an
     /// explicit cancellation. This runs under the same write lock as insertion,
     /// closing both cross-session queue ordering and saved-verification races.
@@ -703,9 +672,9 @@ impl SqliteTx {
         &mut self,
         candidate: &LearningCandidate,
     ) -> StorageResult<Option<Uuid>> {
-        let rows: Vec<(Uuid, Uuid, Uuid, String)> = sqlx::query_as("SELECT id,asset_id,source_event_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND status IN ('accepted','published') ORDER BY created_at,id")
+        let rows: Vec<(Uuid, Uuid, Uuid, String)> = native_turso::query_as("SELECT id,asset_id,source_event_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND status IN ('accepted','published') ORDER BY created_at,id")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(fingerprint(candidate)?)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         for (id, asset, source, body) in rows {
             let stored: LearningCandidate = decode(&body)?;
             if stored.statement != candidate.statement || stored.conditions != candidate.conditions
@@ -731,9 +700,9 @@ impl SqliteTx {
     ) -> StorageResult<Option<Uuid>> {
         self.check_permission(Permission::Write).await?;
         self.require_improve().await?;
-        let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as("SELECT id,asset_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND status='published' ORDER BY created_at,id")
+        let rows: Vec<(Uuid, Uuid, String)> = native_turso::query_as("SELECT id,asset_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND status='published' ORDER BY created_at,id")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(fingerprint(candidate)?)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         for (id, asset, body) in rows {
             let stored: LearningCandidate = decode(&body)?;
             if stored.statement != candidate.statement || stored.conditions != candidate.conditions
@@ -757,9 +726,9 @@ impl SqliteTx {
         if !available(&mut self.tx).await? {
             return Ok(None);
         }
-        let row: Option<(Uuid, Uuid, String)> = sqlx::query_as("SELECT id,source_event_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
+        let row: Option<(Uuid, Uuid, String)> = native_turso::query_as("SELECT id,source_event_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let Some((id, source, body)) = row else {
             return Ok(None);
         };
@@ -785,24 +754,24 @@ impl SqliteTx {
         if !available(&mut self.tx).await? {
             return Ok(false);
         }
-        let row: Option<(Uuid, Uuid, String)> = sqlx::query_as("SELECT improve_id,session_id,status FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND job_id=?")
+        let row: Option<(Uuid, Uuid, String)> = native_turso::query_as("SELECT improve_id,session_id,status FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND job_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let Some((improve, session, status)) = row else {
             return Ok(false);
         };
         if !["accepted", "publishing"].contains(&status.as_str()) {
             return Ok(false);
         }
-        let children: Vec<Uuid> = sqlx::query_scalar("SELECT j.id FROM oc_learnings l JOIN oc_jobs j ON j.tenant_id=l.tenant_id AND j.workspace_id=l.workspace_id AND j.id=l.ingest_job_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.improve_id=? AND l.status!='published' AND j.state NOT IN ('completed','cancelled','superseded')")
+        let children: Vec<Uuid> = native_turso::query_scalar("SELECT j.id FROM oc_learnings l JOIN oc_jobs j ON j.tenant_id=l.tenant_id AND j.workspace_id=l.workspace_id AND j.id=l.ingest_job_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.improve_id=? AND l.status!='published' AND j.state NOT IN ('completed','cancelled','superseded')")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         for child in children {
             self.set_job_action(child, "cancel").await?;
         }
-        sqlx::query("UPDATE oc_improve_runs SET status='cancelled',completed_at=? WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
+        native_turso::query("UPDATE oc_improve_runs SET status='cancelled',completed_at=? WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
             .bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
         self.audit(
             "session.improve_cancelled",
             improve,
@@ -816,9 +785,9 @@ impl SqliteTx {
         if !available(&mut self.tx).await? {
             return Ok(());
         }
-        let cancelled: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_improve_runs r WHERE r.tenant_id=? AND r.workspace_id=? AND r.status='cancelled' AND (r.job_id=? OR EXISTS(SELECT 1 FROM oc_learnings l WHERE l.tenant_id=r.tenant_id AND l.workspace_id=r.workspace_id AND l.improve_id=r.improve_id AND l.ingest_job_id=?)))")
+        let cancelled: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_improve_runs r WHERE r.tenant_id=? AND r.workspace_id=? AND r.status='cancelled' AND (r.job_id=? OR EXISTS(SELECT 1 FROM oc_learnings l WHERE l.tenant_id=r.tenant_id AND l.workspace_id=r.workspace_id AND l.improve_id=r.improve_id AND l.ingest_job_id=?)))")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).bind(job)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if cancelled {
             return Err(StorageError::Conflict(
                 "cancelled improve runs require a new improve_id".into(),

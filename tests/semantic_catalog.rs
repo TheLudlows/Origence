@@ -1,7 +1,9 @@
+use origence::storage::native_turso as db;
 use origence::{
     memory_semantics::MemoryProperty,
     storage::{
-        AuthorizedScope, DomainTx, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
+        AuthorizedScope, DomainTx, Lifecycle, RelationalStore, Scope, StorageError,
+        sqlite::SqliteStore,
     },
 };
 use serde_json::json;
@@ -76,29 +78,47 @@ async fn catalog_never_reinterprets_existing_identity_or_legacy_keys() {
     tx.rollback().await.unwrap();
 }
 #[tokio::test]
-async fn old_database_does_not_get_catalog_on_reopen() {
+async fn incomplete_catalog_schema_is_rejected_without_repair_or_source_changes() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.db");
-    {
-        let store = SqliteStore::open(&path).await.unwrap();
-        sqlx::query("DROP TABLE oc_memory_properties")
-            .execute(store.pool())
-            .await
-            .unwrap();
-        store.pool().close().await;
-    }
     let store = SqliteStore::open(&path).await.unwrap();
     let a = auth(&store).await;
     let mut tx = store.begin(a).await.unwrap();
-    assert!(
-        tx.memory_property("database.engine")
+    let source = tx
+        .create_event("memory", "preserved catalog source", None)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    db::query("DROP TABLE oc_memory_properties")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let before: Vec<(String, String)> =
+        db::query_as("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")
+            .fetch_all(store.pool())
             .await
-            .unwrap()
-            .is_none()
-    );
+            .unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
     assert!(matches!(
-        tx.register_memory_property(&property()).await,
+        SqliteStore::open(&path).await,
         Err(StorageError::Unavailable(_))
     ));
-    tx.rollback().await.unwrap();
+    let inspect = db::Pool::open_read_only(&path).await.unwrap();
+    let after: Vec<(String, String)> =
+        db::query_as("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")
+            .fetch_all(&inspect)
+            .await
+            .unwrap();
+    assert_eq!(after, before);
+    assert!(!after.iter().any(|(name, _)| name == "oc_memory_properties"));
+    assert_eq!(
+        db::query_scalar::<String>("SELECT content FROM oc_events WHERE id=?")
+            .bind(source)
+            .fetch_one(&inspect)
+            .await
+            .unwrap(),
+        "preserved catalog source"
+    );
+    inspect.shutdown().await.unwrap();
 }

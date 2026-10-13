@@ -3,10 +3,6 @@
 use super::schema::check_conn;
 use super::*;
 use fs2::FileExt;
-#[cfg(feature = "local-vector")]
-use sqlx::Connection;
-#[cfg(feature = "local-vector")]
-use sqlx::sqlite::SqliteConnectOptions;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
@@ -21,16 +17,20 @@ pub(in crate::storage) async fn lock_for_maintenance(
         return Err(StorageError::NotFound);
     }
     let (guard, opening) = acquire_path_lock(&path, false)?;
+    let guard = Arc::new(guard);
     let _serialized = opening.lock().await;
-    let options = SqliteConnectOptions::new()
-        .filename(&path)
-        .create_if_missing(false)
-        .read_only(true);
-    let mut conn = SqliteConnection::connect_with(&options)
-        .await
-        .map_err(sqlite_err)?;
-    check_conn(&mut conn).await?;
-    conn.close().await.map_err(sqlite_err)?;
+    let pool = Pool::open_read_only(&path).await.map_err(turso_err)?;
+    pool.hold_lifetime_guard(guard.clone());
+    let outcome = async {
+        let mut conn = pool.acquire().await.map_err(turso_err)?;
+        native_turso::check_format(&mut conn, "authority")
+            .await
+            .map_err(turso_err)?;
+        check_conn(&mut conn).await
+    }
+    .await;
+    pool.close().await;
+    outcome?;
     Ok(MaintenanceLock { _guard: guard })
 }
 
@@ -46,7 +46,7 @@ fn lock_path(path: &Path) -> PathBuf {
 /// re-taking the OS lock, so the API and Worker (one process) share one holder
 /// while a second process is still rejected (A2.5). `opening` serializes
 /// same-process opens end to end so a reopen cannot race the first open's
-/// connect and initialize (SQLITE_BUSY under load).
+/// connect and initialize (busy conflicts under load).
 struct HeldLock {
     /// Owned solely to hold the OS lock until the last in-process store drops.
     #[allow(dead_code)]
@@ -132,12 +132,12 @@ mod maintenance_lock_tests {
     async fn maintenance_guard_blocks_new_in_process_opens_and_releases_on_drop() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("context.db");
-        let store = SqliteStore::open(&path).await.unwrap();
+        let store = TursoStore::open(&path).await.unwrap();
         store.shutdown().await.unwrap();
         drop(store);
         let guard = lock_for_maintenance(&path).await.unwrap();
         assert!(matches!(
-            SqliteStore::open(&path).await,
+            TursoStore::open(&path).await,
             Err(StorageError::Conflict(_))
         ));
         assert!(matches!(
@@ -145,6 +145,6 @@ mod maintenance_lock_tests {
             Err(StorageError::Conflict(_))
         ));
         drop(guard);
-        assert!(SqliteStore::open(&path).await.is_ok());
+        assert!(TursoStore::open(&path).await.is_ok());
     }
 }

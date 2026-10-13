@@ -4,7 +4,7 @@ use origence::{
     host, mcp,
     models::Models,
     service::Service,
-    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore},
+    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, TursoStore},
     types::{ResolveInput, SearchInput},
 };
 use serde_json::json;
@@ -55,7 +55,7 @@ enum Command {
     KeyRevoke {
         key_id: Uuid,
     },
-    /// Offline, explicit upgrade of an existing database to enable identity writes.
+    /// Offline inspection of the current Turso identity schema; never migrates a database.
     MemoryIdentityUpgrade {
         #[arg(long)]
         dry_run: bool,
@@ -97,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "origence=info,sqlx=warn".into())
+                .unwrap_or_else(|_| "origence=info,turso=warn".into())
                 // Upstream diagnostics may contain document internals. The
                 // worker records our sanitized error code instead.
                 .add_directive("pdf_oxide=off".parse()?),
@@ -137,7 +137,7 @@ async fn main() -> anyhow::Result<()> {
             "memory-identity-upgrade requires --offline and a stopped host"
         );
         let status =
-            SqliteStore::upgrade_memory_identity(cli.data_dir.join("context.db"), *dry_run).await?;
+            TursoStore::upgrade_memory_identity(cli.data_dir.join("context.db"), *dry_run).await?;
         println!(
             "{}",
             json!({"feature":"memory-identity-v1","status":status,"dry_run":dry_run})
@@ -151,7 +151,7 @@ async fn main() -> anyhow::Result<()> {
         )
     {
         tokio::fs::create_dir_all(&cli.data_dir).await?;
-        let store = SqliteStore::open(cli.data_dir.join("context.db")).await?;
+        let store = TursoStore::open(cli.data_dir.join("context.db")).await?;
         let result = match cli.command {
             Command::WorkspaceCreate { name } => {
                 anyhow::ensure!(!name.trim().is_empty(), "name is required");

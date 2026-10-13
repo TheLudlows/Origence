@@ -38,7 +38,7 @@ pub enum AppError {
     #[error("{0}")]
     Unavailable(String),
     #[error(transparent)]
-    Database(#[from] sqlx::Error),
+    Database(#[from] crate::storage::native_turso::Error),
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }

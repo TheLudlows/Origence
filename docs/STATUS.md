@@ -1,6 +1,20 @@
 # Origence · 当前状态
 
-更新：2026-10-12。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-13。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+
+## Turso / LanceDB 正式接入（工程 CI 通过，草稿待审）
+
+[PR #58](https://github.com/TheLudlows/Origence/pull/58) 基于恢复后的主干
+`86fac48`，接入 Turso Database 0.8.2 Rust 引擎权威存储与 LanceDB 0.40.0
+原生 chunk 全文/向量检索。实现提交 `b50e8748` 的[工程 CI](https://github.com/TheLudlows/Origence/actions/runs/38405514854)
+全部适用作业通过：无默认特性 78 + 99、默认特性 93 + 221 项 Rust 测试，
+HTTP/MCP、受控模型进程恢复及 keyword 种子评估均完成。PR 保持草稿未合入；
+归档后精确 head 的 CI 以 PR 为准。真实模型质量、生产 SLO 与任意断电保证
+未验收。范围、发布协议与检查见
+[实施合同](superpowers/plans/2026-10-13-turso-lance-integration.md)。
+
+仅面向新库；同版本重开、取消/崩溃恢复、幂等与来源撤回仍在验收范围。
+Summary 保持权威文本按同 chunk 跨行聚合后的 AND 语义，不使用 Turso FTS。
 
 ## AML API 收敛（Issue #48）
 
@@ -26,7 +40,7 @@ Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及�
 
 | 范围 | 已实现 | 主要缺口或边界 |
 | --- | --- | --- |
-| 入库与存储 | 文本/Markdown/PDF、结构化记忆、受限原文抽取；SQLite 关系/图、LanceDB、本地 Blob | 单宿主、单 Worker；PDF 无硬取消/进程隔离 |
+| 入库与存储 | 文本/Markdown/PDF、结构化记忆、受限原文抽取；Turso 权威关系/图、LanceDB 原生全文/向量、本地 Blob | 单宿主、单 Worker；PDF 无硬取消/进程隔离 |
 | 记忆身份与语义 | 显式身份、精确 lookup/过滤、版本条件；workspace 属性目录、单值更新/多值集合、冲突与未归一化证据 | 仅面向新库；显式写入或受控模型提取；不自动推断稳定身份/别名，真实模型分类质量未验收 |
 | 检索与上下文 | keyword/vector/hybrid、摘要/图开关、带来源与身份的 search/resolve | 统一 EvidenceBundle、独立类型召回/字节预算、明确单值身份冲突已实现；不推断普通文本矛盾，未证明真实 Agent 任务收益 |
 | 治理与恢复 | workspace/tenant 隔离、角色/密钥、幂等任务、版本/恢复、来源撤回、重启恢复 | 逻辑删除不等于物理擦除；无企业身份、文档 ACL、配额或生产 SLO |
@@ -94,7 +108,7 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 
 ## 下一步
 
-- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning 已实现；S4 统一上下文与 Agent 框架已实现，工程记录见 PR #44，当前先完成状态一致性、既有 SQLite 职责拆分及通用可见性规则收口，依赖风险单独处理；随后进行有授权且可复现的真实 Agent 对照，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
+- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning 已实现；S4 统一上下文与 Agent 框架已实现，工程记录见 PR #44，当前验证 Turso 权威存储与 LanceDB 原生检索接入及跨库恢复，依赖风险单独处理；随后进行有授权且可复现的真实 Agent 对照，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
 - **可靠性与质量待办**：维护故障、持续容量、冷启动与标签复核已移入[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，不继续延长本轮实验；依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 - **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 

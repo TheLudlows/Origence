@@ -1,5 +1,6 @@
 //! Generic workspace ownership, live key capability and command-domain tests.
 //! These deliberately use no external protocol DTOs, mappings or routes.
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, JobQueue, KeyCapabilities, Lifecycle, Permission, RelationalStore,
     Scope, StorageError, WorkItem, sqlite::SqliteStore,
@@ -67,7 +68,7 @@ async fn explicit_capability_concurrent_ensure_and_same_version_reopen() {
             .unwrap()
             .is_none()
     );
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_workspaces")
+    let count: i64 = db::query_scalar("SELECT count(*) FROM oc_workspaces")
         .fetch_one(store.pool())
         .await
         .unwrap();
@@ -80,12 +81,12 @@ async fn explicit_capability_concurrent_ensure_and_same_version_reopen() {
     assert_eq!(child, right.unwrap());
     assert_eq!(child.principal_id, capable.principal_id);
     assert_eq!(child.role, "writer");
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_workspaces")
+    let count: i64 = db::query_scalar("SELECT count(*) FROM oc_workspaces")
         .fetch_one(store.pool())
         .await
         .unwrap();
     assert_eq!(count, 2);
-    let owner: Uuid = sqlx::query_scalar("SELECT owner_workspace_id FROM oc_workspaces WHERE id=?")
+    let owner: Uuid = db::query_scalar("SELECT owner_workspace_id FROM oc_workspaces WHERE id=?")
         .bind(target)
         .fetch_one(store.pool())
         .await
@@ -210,7 +211,7 @@ async fn ownership_conflicts_and_forged_scopes_fail_without_mutation() {
         Err(StorageError::Conflict(_))
     ));
     let actual: (Uuid, Option<Uuid>, String) =
-        sqlx::query_as("SELECT tenant_id,owner_workspace_id,name FROM oc_workspaces WHERE id=?")
+        db::query_as("SELECT tenant_id,owner_workspace_id,name FROM oc_workspaces WHERE id=?")
             .bind(target)
             .fetch_one(store.pool())
             .await
@@ -284,7 +285,7 @@ async fn owned_access_has_no_admin_or_second_level_capability() {
         Err(StorageError::Forbidden)
     ));
     tx.rollback().await.unwrap();
-    sqlx::query("UPDATE oc_api_keys SET allow_owned_workspaces=1 WHERE id=?")
+    db::query("UPDATE oc_api_keys SET allow_owned_workspaces=1 WHERE id=?")
         .bind(key.key_id)
         .execute(store.pool())
         .await
@@ -317,7 +318,7 @@ async fn live_revocation_role_and_capability_override_stale_contexts() {
     tx.commit().await.unwrap();
     // This models the gap occupied by model/native I/O before a fresh read or
     // publish transaction. No cached AuthContext role can restore permission.
-    sqlx::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
+    db::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
         .bind(capable.principal_id)
         .execute(store.pool())
         .await
@@ -329,7 +330,7 @@ async fn live_revocation_role_and_capability_override_stale_contexts() {
     ));
     tx.check_permission(Permission::Read).await.unwrap();
     tx.commit().await.unwrap();
-    sqlx::query("UPDATE oc_api_keys SET role='admin',allow_owned_workspaces=0 WHERE id=?")
+    db::query("UPDATE oc_api_keys SET role='admin',allow_owned_workspaces=0 WHERE id=?")
         .bind(capable.principal_id)
         .execute(store.pool())
         .await
@@ -344,7 +345,7 @@ async fn live_revocation_role_and_capability_override_stale_contexts() {
             .await,
         Err(StorageError::Forbidden)
     ));
-    sqlx::query("UPDATE oc_api_keys SET allow_owned_workspaces=1 WHERE id=?")
+    db::query("UPDATE oc_api_keys SET allow_owned_workspaces=1 WHERE id=?")
         .bind(capable.principal_id)
         .execute(store.pool())
         .await
@@ -450,7 +451,7 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
         Err(StorageError::Conflict(_))
     ));
     tx.commit().await.unwrap();
-    let (creator, domain): (Uuid, String) = sqlx::query_as(
+    let (creator, domain): (Uuid, String) = db::query_as(
         "SELECT principal_id,dedup_scope FROM oc_commands WHERE operation='message_batch.ingest'",
     )
     .fetch_one(store.pool())
@@ -473,7 +474,7 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
         Err(StorageError::Forbidden)
     ));
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM oc_jobs")
+        db::query_scalar::<i64>("SELECT count(*) FROM oc_jobs")
             .fetch_one(store.pool())
             .await
             .unwrap(),
@@ -503,7 +504,7 @@ async fn ordinary_commands_keep_principal_isolation_and_receipts_require_writer(
         tx.commit().await.unwrap();
     }
     let rows: Vec<(Uuid, String)> =
-        sqlx::query_as("SELECT principal_id,dedup_scope FROM oc_commands")
+        db::query_as("SELECT principal_id,dedup_scope FROM oc_commands")
             .fetch_all(store.pool())
             .await
             .unwrap();
@@ -547,18 +548,18 @@ async fn schema_enforces_same_tenant_one_level_and_immutable_ownership() {
         ),
         (admin.scope.tenant_id, Uuid::new_v4(), Uuid::new_v4()),
     ] {
-        assert!(sqlx::query("INSERT INTO oc_workspaces(tenant_id,id,name,owner_workspace_id,created_at) VALUES(?,?,'Invalid',?,0)")
+        assert!(db::query("INSERT INTO oc_workspaces(tenant_id,id,name,owner_workspace_id,created_at) VALUES(?,?,'Invalid',?,0)")
             .bind(tenant).bind(id).bind(owner).execute(store.pool()).await.is_err());
     }
     assert!(
-        sqlx::query("UPDATE oc_workspaces SET owner_workspace_id=NULL WHERE id=?")
+        db::query("UPDATE oc_workspaces SET owner_workspace_id=NULL WHERE id=?")
             .bind(child.scope.workspace_id)
             .execute(store.pool())
             .await
             .is_err()
     );
     assert!(
-        sqlx::query("UPDATE oc_workspaces SET owner_workspace_id=? WHERE id=?")
+        db::query("UPDATE oc_workspaces SET owner_workspace_id=? WHERE id=?")
             .bind(child.scope.workspace_id)
             .bind(admin.scope.workspace_id)
             .execute(store.pool())
@@ -566,7 +567,7 @@ async fn schema_enforces_same_tenant_one_level_and_immutable_ownership() {
             .is_err()
     );
     assert!(
-        sqlx::query("UPDATE oc_api_keys SET allow_owned_workspaces=2 WHERE id=?")
+        db::query("UPDATE oc_api_keys SET allow_owned_workspaces=2 WHERE id=?")
             .bind(admin.principal_id)
             .execute(store.pool())
             .await
@@ -581,7 +582,7 @@ async fn incompatible_owner_constraints_are_rejected_without_repair() {
     let path = dir.path().join("incompatible.db");
     let store = SqliteStore::open(&path).await.unwrap();
     let (admin, _) = root(&store, Uuid::new_v4()).await;
-    sqlx::query("DROP TRIGGER oc_workspace_owner_immutable")
+    db::query("DROP TRIGGER oc_workspace_owner_immutable")
         .execute(store.pool())
         .await
         .unwrap();
@@ -595,23 +596,16 @@ async fn incompatible_owner_constraints_are_rejected_without_repair() {
         SqliteStore::open(&path).await,
         Err(StorageError::Unavailable(_))
     ));
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .connect_with(
-            sqlx::sqlite::SqliteConnectOptions::new()
-                .filename(&path)
-                .create_if_missing(false),
-        )
-        .await
-        .unwrap();
+    let pool = db::Pool::open(&path).await.unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM oc_workspaces")
+        db::query_scalar::<Uuid>("SELECT id FROM oc_workspaces")
             .fetch_one(&pool)
             .await
             .unwrap(),
         admin.scope.workspace_id
     );
     assert_eq!(
-        sqlx::query_scalar::<_, i64>(
+        db::query_scalar::<i64>(
             "SELECT count(*) FROM sqlite_master WHERE name='oc_workspace_owner_immutable'"
         )
         .fetch_one(&pool)
@@ -653,7 +647,7 @@ mod retry_tests {
             .await
             .unwrap();
         let job: Uuid = serde_json::from_value(accepted["job_id"].clone()).unwrap();
-        sqlx::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
+        db::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
             .bind(job)
             .execute(store.pool())
             .await
@@ -663,7 +657,7 @@ mod retry_tests {
             .await
             .unwrap();
         assert_eq!(retried["state"], "pending");
-        let creator: Uuid = sqlx::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
+        let creator: Uuid = db::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
             .bind(job)
             .fetch_one(store.pool())
             .await
@@ -702,7 +696,7 @@ mod retry_tests {
             .unwrap();
         let job: Uuid = serde_json::from_value(deleted["cleanup_job_id"].clone()).unwrap();
         // Simulate a failed native reclamation after the durable tombstone.
-        sqlx::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
+        db::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
             .bind(job)
             .execute(store.pool())
             .await
@@ -731,14 +725,14 @@ mod retry_tests {
         assert_eq!(retried["generation"], 2);
         assert!(origence::worker::process_next(&service).await.unwrap());
         let (saved_creator, state): (Uuid, String) =
-            sqlx::query_as("SELECT created_by,state FROM oc_jobs WHERE id=?")
+            db::query_as("SELECT created_by,state FROM oc_jobs WHERE id=?")
                 .bind(job)
                 .fetch_one(store.pool())
                 .await
                 .unwrap();
         assert_eq!(saved_creator, creator.principal_id);
         assert_eq!(state, "completed");
-        let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM oc_chunks WHERE asset_id=?")
+        let remaining: i64 = db::query_scalar("SELECT count(*) FROM oc_chunks WHERE asset_id=?")
             .bind(asset)
             .fetch_one(store.pool())
             .await
@@ -765,7 +759,7 @@ mod retry_tests {
             .unwrap();
         let accepted = service.knowledge(&child, "accept", input()).await.unwrap();
         let job: Uuid = serde_json::from_value(accepted["job_id"].clone()).unwrap();
-        sqlx::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
+        db::query("UPDATE oc_jobs SET state='failed' WHERE id=?")
             .bind(job)
             .execute(store.pool())
             .await
@@ -787,7 +781,7 @@ mod retry_tests {
             Err(AppError::Forbidden)
         ));
         let (creator, state, generation): (Uuid, String, i64) =
-            sqlx::query_as("SELECT created_by,state,generation FROM oc_jobs WHERE id=?")
+            db::query_as("SELECT created_by,state,generation FROM oc_jobs WHERE id=?")
                 .bind(job)
                 .fetch_one(store.pool())
                 .await
@@ -796,7 +790,7 @@ mod retry_tests {
         assert_eq!(state, "failed");
         assert_eq!(generation, 1);
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM oc_commands WHERE operation=?")
+            db::query_scalar::<i64>("SELECT count(*) FROM oc_commands WHERE operation=?")
                 .bind(format!("job/{job}/retry"))
                 .fetch_one(store.pool())
                 .await

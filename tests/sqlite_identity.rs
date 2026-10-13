@@ -1,9 +1,10 @@
 //! Structured identity persistence and legacy compatibility.
 use origence::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Lifecycle, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
-use sqlx::Connection;
+
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -153,12 +154,11 @@ async fn missing_lookup_does_not_allocate_a_slot() {
     ));
     tx.commit().await.unwrap();
     store.shutdown().await.unwrap();
-    let mut conn = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
-        .await
-        .unwrap();
+    let raw_pool = db::Pool::open(&path).await.unwrap();
+    let mut conn = raw_pool.acquire().await.unwrap();
     for table in ["oc_assets", "oc_memory_identities", "oc_events", "oc_jobs"] {
-        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
-            .fetch_one(&mut conn)
+        let count: i64 = db::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
         assert_eq!(count, 0, "lookup wrote {table}");
@@ -257,7 +257,7 @@ async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k
     // Model the authoritative committed vector ledger without starting LanceDB:
     // vector_candidates must constrain artifact IDs before native search ranks them.
     for (chunk, source) in &records {
-        sqlx::query(
+        db::query(
             "INSERT INTO oc_artifact_ledger
              (tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,
               surface,generation,idempotency_key,state,created_at,updated_at)
@@ -286,49 +286,54 @@ async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k
 }
 
 #[tokio::test]
-async fn old_database_is_not_upgraded_implicitly() {
+async fn incomplete_database_is_rejected_without_implicit_repair() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("oc.db");
     let store = SqliteStore::open(&path).await.unwrap();
     let (auth, _) = provision(&store).await;
-    store.shutdown().await.unwrap();
-    let mut conn = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
-        .await
-        .unwrap();
-    sqlx::query("DROP TABLE oc_memory_identities")
-        .execute(&mut conn)
-        .await
-        .unwrap();
-    drop(conn);
-    let store = SqliteStore::open(&path).await.unwrap();
-    store.check().await.unwrap();
+    let principal_id = auth.principal_id;
     let mut tx = store.begin(auth).await.unwrap();
-    tx.slot("legacy.fact").await.unwrap();
-    assert!(matches!(
-        tx.identity_slot(&identity()).await,
-        Err(StorageError::Unavailable(_))
-    ));
-    assert!(matches!(
-        tx.identity_view(&identity()).await,
-        Err(StorageError::Unavailable(_))
-    ));
-    // Search on a pre-identity local database must not implicitly install tables.
-    assert!(
-        tx.identity_candidate_asset(&identity())
-            .await
-            .unwrap()
-            .is_none()
-    );
-    tx.commit().await.unwrap();
-    store.shutdown().await.unwrap();
-    let mut conn = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
+    let source = tx
+        .create_event("structured", "source must remain", None)
         .await
         .unwrap();
-    let exists: bool = sqlx::query_scalar(
+    let (asset, _) = tx.slot("legacy.fact").await.unwrap();
+    tx.commit().await.unwrap();
+    db::query("DROP TABLE oc_memory_identities")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
+    assert!(matches!(
+        SqliteStore::open(&path).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    let raw_pool = db::Pool::open_read_only(&path).await.unwrap();
+    let exists: bool = db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_memory_identities')",
     )
-    .fetch_one(&mut conn)
+    .fetch_one(&raw_pool)
     .await
     .unwrap();
     assert!(!exists);
+    let content: String = db::query_scalar("SELECT content FROM oc_events WHERE id=?")
+        .bind(source)
+        .fetch_one(&raw_pool)
+        .await
+        .unwrap();
+    assert_eq!(content, "source must remain");
+    let fact_key: String = db::query_scalar("SELECT fact_key FROM oc_assets WHERE id=?")
+        .bind(asset)
+        .fetch_one(&raw_pool)
+        .await
+        .unwrap();
+    assert_eq!(fact_key, "legacy.fact");
+    let role: String = db::query_scalar("SELECT role FROM oc_api_keys WHERE id=?")
+        .bind(principal_id)
+        .fetch_one(&raw_pool)
+        .await
+        .unwrap();
+    assert_eq!(role, "admin");
+    raw_pool.close().await;
 }

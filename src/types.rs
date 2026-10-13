@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthContext {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -164,7 +164,7 @@ fn default_budget() -> usize {
     2000
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchHit {
     pub asset_id: Uuid,
     pub version: i32,
@@ -176,7 +176,6 @@ pub struct SearchHit {
     pub source_event_id: Uuid,
     pub score: f64,
     #[serde(default)]
-    #[sqlx(skip)]
     pub identity: Option<crate::memory_identity::MemoryIdentity>,
 }
 

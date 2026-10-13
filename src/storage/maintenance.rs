@@ -97,6 +97,24 @@ async fn compact_inner(data_dir: &Path, dry_run: bool) -> StorageResult<Compacti
     names.sort();
     let mut tables = Vec::new();
     for name in names {
+        if name == super::lancedb::FULL_TEXT_TABLE {
+            let table = db
+                .open_table(&name)
+                .execute()
+                .await
+                .map_err(|_| StorageError::Unavailable("full-text table unavailable".into()))?;
+            let schema = table
+                .schema()
+                .await
+                .map_err(|_| StorageError::Unavailable("full-text schema unavailable".into()))?;
+            if schema.as_ref() != super::lancedb::full_text_schema().as_ref() {
+                return Err(StorageError::InvalidArgument(
+                    "incompatible full-text table",
+                ));
+            }
+            // Vector maintenance does not rebuild or prune the independent FTS surface.
+            continue;
+        }
         if name.len() != 36
             || !name.starts_with("vec_")
             || !name[4..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -135,6 +153,9 @@ async fn compact_inner(data_dir: &Path, dry_run: bool) -> StorageResult<Compacti
             None
         } else {
             if before.fragments > 1 {
+                // Compact preserves indexed/unindexed coverage boundaries; a
+                // small table can legitimately retain multiple fragments. Do
+                // not refresh or drop indexes merely to force one fragment.
                 table
                     .optimize(OptimizeAction::Compact {
                         options: CompactionOptions {

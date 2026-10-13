@@ -2,10 +2,11 @@
 //! source-tagged delete, and delete-by-id primitives against a real SQLite db.
 
 use origence::graph::{entity_id, relation_id};
+use origence::storage::native_turso as db;
 use origence::storage::sqlite_graph::SqliteGraphStore;
 use origence::storage::{GraphStore, Lifecycle, Scope, SourceVersion};
 use origence::types::{Entity, Relation};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
 use uuid::Uuid;
 
 fn make_scope() -> Scope {
@@ -163,15 +164,9 @@ async fn partial_graph_schema_is_rejected_without_repair() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("graph.db");
     {
-        let options = SqliteConnectOptions::new()
-            .filename(&path)
-            .create_if_missing(true);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await
-            .unwrap();
-        sqlx::query("CREATE TABLE oc_graph_entities (uid TEXT PRIMARY KEY)")
+        let database_path = &path;
+        let pool = db::Pool::open(database_path).await.unwrap();
+        db::query("CREATE TABLE oc_graph_entities (uid TEXT PRIMARY KEY)")
             .execute(&pool)
             .await
             .unwrap();
@@ -180,13 +175,9 @@ async fn partial_graph_schema_is_rejected_without_repair() {
     // open() runs initialize (no repair) then check (must fail on the partial
     // column projection).
     assert!(SqliteGraphStore::open(&path).await.is_err());
-    let options = SqliteConnectOptions::new().filename(&path);
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(options)
-        .await
-        .unwrap();
-    let tables: i64 = sqlx::query_scalar(
+    let database_path = &path;
+    let pool = db::Pool::open(database_path).await.unwrap();
+    let tables: i64 = db::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'oc_graph_%'",
     )
     .fetch_one(&pool)
@@ -512,15 +503,7 @@ async fn snapshot_is_normalized_sorted_scoped_and_persistent() {
 async fn schema_without_keys_or_cascades_is_rejected_without_repair() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("graph.db");
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(&path)
-                .create_if_missing(true),
-        )
-        .await
-        .unwrap();
+    let pool = db::Pool::open(&path).await.unwrap();
     let weakened = include_str!("../src/storage/sqlite-graph-schema.sql")
         .replace(
             ",\n    FOREIGN KEY (head_uid) REFERENCES oc_graph_entities(uid) ON DELETE CASCADE",
@@ -530,15 +513,12 @@ async fn schema_without_keys_or_cascades_is_rejected_without_repair() {
             ",\n    FOREIGN KEY (tail_uid) REFERENCES oc_graph_entities(uid) ON DELETE CASCADE",
             "",
         );
-    sqlx::raw_sql(&weakened).execute(&pool).await.unwrap();
+    db::raw_sql(&weakened).execute(&pool).await.unwrap();
     pool.close().await;
     assert!(SqliteGraphStore::open(&path).await.is_err());
-    let pool = SqlitePoolOptions::new()
-        .connect_with(SqliteConnectOptions::new().filename(&path))
-        .await
-        .unwrap();
+    let pool = db::Pool::open(&path).await.unwrap();
     let sql: String =
-        sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE name='oc_graph_relations'")
+        db::query_scalar("SELECT sql FROM sqlite_master WHERE name='oc_graph_relations'")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -550,20 +530,13 @@ async fn schema_without_keys_or_cascades_is_rejected_without_repair() {
 async fn occupied_schema_view_is_rejected_without_creating_tables() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("graph.db");
-    let pool = SqlitePoolOptions::new()
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(&path)
-                .create_if_missing(true),
-        )
-        .await
-        .unwrap();
-    sqlx::query("CREATE VIEW oc_graph_entities AS SELECT 'x' AS uid")
+    let pool = db::Pool::open(&path).await.unwrap();
+    db::query("CREATE VIEW oc_graph_entities AS SELECT 'x' AS uid")
         .execute(&pool)
         .await
         .unwrap();
     assert!(SqliteGraphStore::open(&path).await.is_err());
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM sqlite_master WHERE type='table'")
+    let count: i64 = db::query_scalar("SELECT count(*) FROM sqlite_master WHERE type='table'")
         .fetch_one(&pool)
         .await
         .unwrap();

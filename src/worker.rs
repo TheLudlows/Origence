@@ -156,6 +156,20 @@ pub async fn run(
     Ok(())
 }
 pub async fn process_next(service: &Service) -> Result<bool> {
+    // Preserve the single serialized worker while keeping publication futures
+    // out of every host's surrounding async state and debug stack frame.
+    Box::pin(process_next_inner(service)).await
+}
+
+#[cfg(test)]
+pub(crate) fn unboxed_process_next_future_size(service: &Service) -> usize {
+    fn size<F: std::future::Future>(_: impl FnOnce() -> F) -> usize {
+        std::mem::size_of::<F>()
+    }
+    size(|| process_next_inner(service))
+}
+
+async fn process_next_inner(service: &Service) -> Result<bool> {
     let Some(mut claim) = service.engine.queue().claim_next().await? else {
         return Ok(false);
     };
@@ -648,6 +662,14 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
     for memory in &publication.memories {
         let source = source_for(claim, memory.version)?;
         for chunk in &memory.chunks {
+            push(
+                &mut items,
+                claim,
+                source,
+                chunk.id,
+                "chunk",
+                Surface::FullText,
+            );
             if chunk.embedding.is_some() {
                 push(
                     &mut items,
@@ -708,9 +730,19 @@ async fn publish_prepared(
     }
     tx.commit().await?;
     let mut vectors = Vec::new();
+    let mut full_text = Vec::new();
     for memory in &publication.memories {
         let source = source_for(claim, memory.version)?;
         for c in &memory.chunks {
+            full_text.push(FullTextEntry {
+                id: c.id,
+                source,
+                generation: claim.generation,
+                search_terms: c
+                    .search_terms
+                    .clone()
+                    .unwrap_or_else(|| parsing::lexical(&c.chunk.content)),
+            });
             if let Some(embedding) = &c.embedding {
                 vectors.push(VectorEntry {
                     id: c.id,
@@ -724,6 +756,11 @@ async fn publish_prepared(
         }
     }
     service.engine.vector().upsert(claim.scope, vectors).await?;
+    service
+        .engine
+        .vector()
+        .upsert_full_text(claim.scope, full_text)
+        .await?;
     if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
         let source = source_for(claim, first.version)?;
         service

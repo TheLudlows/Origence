@@ -1,6 +1,6 @@
 # Origence HTTP API v1
 
-适用本地宿主 SQLite/LanceDB/SQLite 图。本文只描述已实现行为；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)。
+适用本地宿主原生 Turso/LanceDB/Turso 图（当前接入验证进度见 STATUS）。本文只描述已实现行为；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)。
 
 按需阅读：[接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
 
@@ -70,9 +70,9 @@
 
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
 
-所有业务写事务以 SQLite `BEGIN IMMEDIATE` 开始，原子提交业务、幂等、审计和入队。模型/文件/原生索引 IO 在关系事务外执行。最终提交再次校验权限、墓碑、来源、预期版本、generation 和 run_token；密钥撤销与写事务串行化。SQLite 无 RLS，scope 由适配器显式绑定。
+所有业务写事务以 Turso `BEGIN IMMEDIATE` 开始，原子提交业务、幂等、审计和入队。模型/文件/原生索引 IO 在关系事务外执行。最终提交再次校验权限、墓碑、来源、预期版本、generation 和 run_token；密钥撤销与写事务串行化。此本地适配器无 RLS，scope 由适配器显式绑定。
 
-发布计划和 pending 账本先落 SQLite，向量/图写入后，版本、owner、ready 索引及 committed 账本与任务完成一起提交。外部产物不等于已发布证据。短暂存储错误进入 `retry_wait`，最多尝试 5 次；模型/输入失败需显式重试。独占宿主重启时恢复 processing 并提升 run_token，先对账清理再接收请求。
+发布计划和 pending 账本先落 Turso，全文/向量/图写入后，版本、owner、ready 索引及 committed 账本与任务完成一起提交。外部产物不等于已发布证据。短暂存储错误进入 `retry_wait`，最多尝试 5 次；模型/输入失败需显式重试。独占宿主重启时恢复 processing 并提升 run_token，先对账清理再接收请求。
 
 cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原始事件、版本和文件仍保留，不等于原文物理擦除。
 
@@ -84,7 +84,7 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
 
-关键词使用 Jieba 预分词字段的精确词项匹配（查询词项全部出现），限定当前 scope。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。SQLite owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
+原文关键词使用 LanceDB 原生 BM25，对 Jieba 预分词字段做显式 whitespace/AND 匹配（查询词项全部出现），限定当前 scope、发布代与完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。原生候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
 search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默认均为 true，仅 hybrid 且未限定 memory_identity 时启用。可独立关闭摘要、图分支做同库消融，原文 keyword/vector 分支始终保留；省略 components 保持旧行为。响应 `active_components` 表示实际启用的分支（不代表已有产物或命中）。resolve 沿用相同开关和现有来源/字节预算检查；HTTP 与 MCP 共用此契约。
 
@@ -126,7 +126,7 @@ writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的�
 
 ## 检索与上下文身份标注
 
-search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
+search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 Turso 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
 
 resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normalization_status，context_policy=identity-provenance-v1；图引用格式不变。引用/标题/标注/正文均计入字节预算，整块保留或省略，因此标注可能减少正文容量。状态只表示身份绑定，不表示真值、有效期或置信度；冲突识别和类型预算未实现。
 
@@ -287,7 +287,7 @@ locator 沿用 S2 原始来源与字节范围，自动提取的新成员附加 `
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与 S2 support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是 S2 成员的原始来源；version_source_event_id 是该资产快照根来源，reference.asset_version 是实际使用的资产版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id；相同正文和有序 used_evidence（即使换 Idempotency-Key 或同 workspace 换调用方）返回原标识，改变内容返回 409，不新增版本。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执；任一引用失败全部回滚。
+归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id；相同正文和有序 used_evidence（即使换 Idempotency-Key 或同 workspace 换调用方）返回原标识，改变内容返回 409，不新增版本。Turso 事务原子保存问答来源事件、档案、实际引用、审计与命令回执；任一引用失败全部回滚。
 
 反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
 

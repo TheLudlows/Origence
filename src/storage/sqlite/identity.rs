@@ -1,7 +1,7 @@
 //! Legacy fact slots and exact structured identity bindings.
 use super::*;
 
-impl SqliteTx {
+impl TursoTx {
     pub(super) async fn identity_for_asset(
         &mut self,
         asset: Uuid,
@@ -9,7 +9,7 @@ impl SqliteTx {
         if !identity_table_present(&mut self.tx).await? {
             return Ok(None);
         }
-        let value: Option<String> = sqlx::query_scalar(
+        let value: Option<String> = native_turso::query_scalar(
             "SELECT identity_json FROM oc_memory_identities WHERE tenant_id = ? AND workspace_id = ? AND asset_id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -17,7 +17,7 @@ impl SqliteTx {
         .bind(asset)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         value
             .map(|value| {
                 serde_json::from_str(&value)
@@ -27,12 +27,12 @@ impl SqliteTx {
     }
 }
 
-impl SqliteTx {
+impl TursoTx {
     pub(super) async fn slot_inner(
         &mut self,
         fact_key: &str,
     ) -> StorageResult<(Uuid, Option<i32>)> {
-        let existing: Option<(Uuid, Option<i32>, bool)> = sqlx::query_as(
+        let existing: Option<(Uuid, Option<i32>, bool)> = native_turso::query_as(
             "SELECT id, current_version, deleted FROM oc_assets \
              WHERE tenant_id = ? AND workspace_id = ? AND kind = 'memory' AND fact_key = ?",
         )
@@ -41,7 +41,7 @@ impl SqliteTx {
         .bind(fact_key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         if let Some((id, version, deleted)) = existing {
             if self.identity_for_asset(id).await?.is_some() {
                 return Err(StorageError::Conflict(
@@ -56,7 +56,7 @@ impl SqliteTx {
             return Ok((id, version));
         }
         let id = Uuid::new_v4();
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_assets(tenant_id, workspace_id, id, kind, title, fact_key, created_at) \
              VALUES (?, ?, ?, 'memory', ?, ?, ?)",
         )
@@ -68,7 +68,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok((id, None))
     }
 
@@ -84,7 +84,7 @@ impl SqliteTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let asset: Option<Uuid> = sqlx::query_scalar(
+        let asset: Option<Uuid> = native_turso::query_scalar(
             "SELECT asset_id FROM oc_memory_identities \
              WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
         )
@@ -93,7 +93,7 @@ impl SqliteTx {
         .bind(key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let asset = asset.ok_or(StorageError::NotFound)?;
         if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
             return Err(StorageError::Unavailable(
@@ -115,7 +115,7 @@ impl SqliteTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let existing: Option<(Uuid, Option<i32>, bool)> = sqlx::query_as(
+        let existing: Option<(Uuid, Option<i32>, bool)> = native_turso::query_as(
             "SELECT a.id,a.current_version,a.deleted FROM oc_memory_identities i \
              JOIN oc_assets a ON a.tenant_id=i.tenant_id AND a.workspace_id=i.workspace_id AND a.id=i.asset_id \
              WHERE i.tenant_id=? AND i.workspace_id=? AND i.identity_key=? AND a.kind='memory'",
@@ -125,7 +125,7 @@ impl SqliteTx {
         .bind(&key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         if let Some((asset, version, deleted)) = existing {
             if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
                 return Err(StorageError::Conflict(
@@ -139,7 +139,7 @@ impl SqliteTx {
             }
             return Ok((asset, version));
         }
-        let collision: bool = sqlx::query_scalar(
+        let collision: bool = native_turso::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?)",
         )
         .bind(self.scope.tenant_id)
@@ -147,14 +147,14 @@ impl SqliteTx {
         .bind(&key)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         if collision {
             return Err(StorageError::Conflict(
                 "memory identity conflicts with a legacy fact slot".into(),
             ));
         }
         let asset = Uuid::new_v4();
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at) VALUES (?,?,?,'memory',?,?,?)",
         )
         .bind(self.scope.tenant_id)
@@ -165,10 +165,10 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let encoded = serde_json::to_string(identity)
             .map_err(|_| StorageError::Unavailable("memory identity encoding failed".into()))?;
-        sqlx::query(
+        native_turso::query(
             "INSERT INTO oc_memory_identities(tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at) VALUES (?,?,?,?,?,?)",
         )
         .bind(self.scope.tenant_id)
@@ -179,7 +179,7 @@ impl SqliteTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         Ok((asset, None))
     }
 }

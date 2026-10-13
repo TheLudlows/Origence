@@ -1,4 +1,4 @@
--- Graph tables backing SqliteGraphStore (M4). DDL, keys, cascades and indexes
+-- Graph tables backing TursoGraphStore (M4). DDL, keys, cascades and indexes
 -- are validated by Lifecycle::check, never repaired at runtime (A2.3).
 CREATE TABLE IF NOT EXISTS oc_graph_entities (
     uid TEXT PRIMARY KEY,

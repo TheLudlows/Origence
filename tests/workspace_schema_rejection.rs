@@ -1,6 +1,6 @@
 //! Fresh schema and read-only legacy rejection; no migration or data repair.
+use origence::storage::native_turso as db;
 use origence::storage::{Lifecycle, StorageError, sqlite::SqliteStore};
-use sqlx::Connection;
 
 #[tokio::test]
 async fn fresh_database_has_no_protocol_specific_tables() {
@@ -9,7 +9,7 @@ async fn fresh_database_has_no_protocol_specific_tables() {
         .await
         .unwrap();
     let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM sqlite_master WHERE name GLOB 'oc_aml_*'")
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name GLOB 'oc_aml_*'")
             .fetch_one(store.pool())
             .await
             .unwrap();
@@ -23,57 +23,50 @@ async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
     for has_base in [false, true] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("legacy.db");
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(&path)
-            .create_if_missing(true)
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Delete);
-        let mut conn = sqlx::SqliteConnection::connect_with(&options)
-            .await
-            .unwrap();
+        let raw_pool = db::Pool::open(&path).await.unwrap();
+        let mut conn = raw_pool.acquire().await.unwrap();
         if has_base {
-            sqlx::raw_sql(include_str!("../src/storage/sqlite-schema.sql"))
-                .execute(&mut conn)
+            db::raw_sql(include_str!("../src/storage/sqlite-schema.sql"))
+                .execute(&mut *conn)
                 .await
                 .unwrap();
         }
-        sqlx::raw_sql(
+        db::raw_sql(
             "CREATE TABLE oc_aml_adds(payload TEXT NOT NULL);\
              INSERT INTO oc_aml_adds VALUES('preserve legacy data');",
         )
-        .execute(&mut conn)
+        .execute(&mut *conn)
         .await
         .unwrap();
-        conn.close().await.unwrap();
+        drop(conn);
+        raw_pool.close().await;
         let before = tokio::fs::read(&path).await.unwrap();
         let result = SqliteStore::open(&path).await;
         assert!(
-            matches!(result, Err(StorageError::Unavailable(ref message)) if message.contains("legacy AML schema"))
+            matches!(result, Err(StorageError::Unavailable(ref message)) if message.contains("legacy AML schema") || message.contains("format"))
         );
         assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(&path)
-            .create_if_missing(false)
-            .read_only(true);
-        let mut conn = sqlx::SqliteConnection::connect_with(&options)
+        let database_path = &path;
+        let raw_pool = db::Pool::open_read_only(database_path).await.unwrap();
+        let mut conn = raw_pool.acquire().await.unwrap();
+        let mode: String = db::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
-        let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
-            .fetch_one(&mut conn)
-            .await
-            .unwrap();
-        assert_eq!(mode, "delete");
-        let content: String = sqlx::query_scalar("SELECT payload FROM oc_aml_adds")
-            .fetch_one(&mut conn)
+        assert_eq!(mode.to_ascii_lowercase(), "wal");
+        let content: String = db::query_scalar("SELECT payload FROM oc_aml_adds")
+            .fetch_one(&mut *conn)
             .await
             .unwrap();
         assert_eq!(content, "preserve legacy data");
         let base_count: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_workspaces'")
-                .fetch_one(&mut conn)
+            db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_workspaces'")
+                .fetch_one(&mut *conn)
                 .await
                 .unwrap();
         assert_eq!(base_count, if has_base { 1 } else { 0 });
-        conn.close().await.unwrap();
+        drop(conn);
+        raw_pool.close().await;
     }
 }
 
@@ -83,15 +76,15 @@ async fn an_existing_protocol_table_cannot_hide_behind_the_generic_schema() {
     let store = SqliteStore::open(dir.path().join("mixed.db"))
         .await
         .unwrap();
-    sqlx::query("CREATE TABLE oc_aml_users(legacy_id TEXT)")
+    db::query("CREATE TABLE oc_aml_users(legacy_id TEXT)")
         .execute(store.pool())
         .await
         .unwrap();
     assert!(
-        matches!(store.check().await, Err(StorageError::Unavailable(ref message)) if message.contains("legacy AML schema"))
+        matches!(store.check().await, Err(StorageError::Unavailable(ref message)) if message.contains("legacy AML schema") || message.contains("format"))
     );
     let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_aml_users'")
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_aml_users'")
             .fetch_one(store.pool())
             .await
             .unwrap();

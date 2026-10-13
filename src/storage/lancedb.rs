@@ -1,10 +1,15 @@
-//! LanceDB vector backend (M4).
+//! LanceDB derived full-text and vector backend.
 //!
 //! One LanceDB table per embedding `profile`, named `vec_` + the first 16
 //! bytes of SHA-256(profile). Each profile's vectors share a fixed dimension,
 //! so `nearest_to` can run on a `FixedSizeList`. Writes are idempotent by
 //! `(tenant, workspace, source_id, version, id, generation)` via `merge_insert`;
 //! replay targets the same ledger identity without replacing other generations.
+
+mod ann;
+mod eligibility;
+mod filter_indexes;
+mod full_text;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -18,16 +23,18 @@ use arrow_array::{
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
 use lancedb::database::CreateTableMode;
-use lancedb::query::{ExecutableQuery, QueryBase};
+use lancedb::query::ExecutableQuery;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::storage::capabilities::{Capabilities, VectorEntry, VectorHit, VectorQuery};
+use crate::storage::capabilities::{
+    Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery,
+};
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::scope::{Scope, SourceVersion};
 use crate::storage::traits::{Lifecycle, VectorStore};
 
-/// A vector backend rooted at a LanceDB directory.
+/// Derived native indexes rooted at a local LanceDB directory.
 pub struct LanceDbStore {
     db: lancedb::Connection,
 }
@@ -65,18 +72,12 @@ async fn check_dimension(table: &lancedb::Table, dimension: usize) -> StorageRes
         .schema()
         .await
         .map_err(|e| StorageError::Backend(e.to_string()))?;
-    match schema
-        .field_with_name("vector")
-        .map(|field| field.data_type())
-    {
-        Ok(DataType::FixedSizeList(item, size))
-            if *size as usize == dimension && item.data_type() == &DataType::Float32 =>
-        {
-            Ok(())
-        }
-        _ => Err(StorageError::Conflict(
-            "embedding profile dimension does not match table".into(),
-        )),
+    if schema.as_ref() == schema_for(dimension).as_ref() {
+        Ok(())
+    } else {
+        Err(StorageError::Conflict(
+            "embedding profile schema or dimension does not match table".into(),
+        ))
     }
 }
 
@@ -99,11 +100,42 @@ pub(super) fn schema_for(dim: usize) -> Arc<Schema> {
     ]))
 }
 
+/// Recognized pure full-text table, for offline maintenance schema validation.
+pub(super) const FULL_TEXT_TABLE: &str = full_text::TABLE_NAME;
+
+pub(super) fn full_text_schema() -> Arc<Schema> {
+    full_text::schema_for()
+}
+
+fn scoped_filter(scope: Scope, generation: i64, ids: Option<&[Uuid]>) -> String {
+    let mut filter = format!(
+        "tenant='{}' AND workspace='{}' AND generation={}",
+        scope.tenant_id, scope.workspace_id, generation,
+    );
+    if let Some(ids) = ids {
+        let values = ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect::<Vec<_>>()
+            .join(",");
+        filter.push_str(&format!(" AND id IN ({values})"));
+    }
+    filter
+}
+
+fn vector_table_name(name: &str) -> bool {
+    name.len() == 36 && name.starts_with("vec_") && name[4..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 impl LanceDbStore {
     /// Open the store rooted at `dir`, creating the directory if absent.
     pub async fn open(dir: impl AsRef<Path>) -> StorageResult<Self> {
         let dir = dir.as_ref().to_path_buf();
         tokio::fs::create_dir_all(&dir).await?;
+        // Absolute filesystem paths cannot be interpreted as remote URIs.
+        // Unlike canonicalize, absolute does not add Windows device prefixes.
+        // The crate's remote feature is only a 0.40.0 compilation workaround.
+        let dir = std::path::absolute(&dir)?;
         let path = dir
             .to_str()
             .ok_or_else(|| StorageError::Unavailable("non-UTF8 vector path".into()))?;
@@ -113,6 +145,257 @@ impl LanceDbStore {
             .await
             .map_err(|e| StorageError::Backend(e.to_string()))?;
         Ok(Self { db })
+    }
+
+    /// Read-only health gate for relationally committed full-text publications.
+    /// Empty/new authorities need not call this until an index is required.
+    pub async fn check_full_text_available(&self) -> StorageResult<()> {
+        full_text::check_available(self).await
+    }
+
+    /// Read-only schema health for an authority-required vector profile. Small
+    /// tables legitimately have no ANN index; this never scans or builds rows.
+    pub async fn check_vector_available(
+        &self,
+        profile: &str,
+        dimension: usize,
+    ) -> StorageResult<()> {
+        if dimension == 0 || dimension > i32::MAX as usize {
+            return Err(StorageError::Conflict(
+                "invalid committed vector dimension".into(),
+            ));
+        }
+        let table = self
+            .open_existing(&table_name(profile))
+            .await?
+            .ok_or_else(|| StorageError::Unavailable("native vector table is missing".into()))?;
+        let version = table
+            .version()
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        table
+            .checkout(version)
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        check_dimension(&table, dimension).await
+    }
+
+    /// Compare every eligible native identity against the caller's relational
+    /// snapshot before top-k. Final live authority verification remains required.
+    pub(crate) async fn search_authorized(
+        &self,
+        query: VectorQuery,
+        expected_sources: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<VectorHit>> {
+        self.search_inner(query, Some(expected_sources)).await
+    }
+
+    pub(crate) async fn search_full_text_authorized(
+        &self,
+        query: FullTextQuery,
+        expected_sources: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<FullTextHit>> {
+        full_text::search(self, query, Some(expected_sources)).await
+    }
+
+    async fn search_inner(
+        &self,
+        mut query: VectorQuery,
+        expected_sources: Option<&HashMap<Uuid, SourceVersion>>,
+    ) -> StorageResult<Vec<VectorHit>> {
+        validate_vector(query.dimension, &query.embedding)?;
+        if query.limit == 0 || query.artifact_ids.as_ref().is_some_and(Vec::is_empty) {
+            return Ok(Vec::new());
+        }
+        if let Some(ids) = query.artifact_ids.as_mut() {
+            ids.sort_unstable();
+            ids.dedup();
+        }
+        let started = std::time::Instant::now();
+        let Some(table) = self.open_existing(&table_name(&query.profile)).await? else {
+            return if query.artifact_ids.is_some() {
+                Err(StorageError::Unavailable(
+                    "native vector table is missing".into(),
+                ))
+            } else {
+                Ok(Vec::new())
+            };
+        };
+        let version = table
+            .version()
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        table
+            .checkout(version)
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let open_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let prepare_started = std::time::Instant::now();
+        let filter = scoped_filter(query.scope, query.generation, query.artifact_ids.as_deref());
+        check_dimension(&table, query.dimension).await?;
+        eligibility::check(
+            &table,
+            &filter,
+            query.generation,
+            query.artifact_ids.as_deref(),
+            expected_sources,
+        )
+        .await?;
+        let (native, used_ann) = ann::prepare(&table, &query, &filter).await?;
+        let prepare_ms = prepare_started.elapsed().as_secs_f64() * 1000.0;
+        let execute_started = std::time::Instant::now();
+        let stream = native
+            .execute()
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
+        let collect_started = std::time::Instant::now();
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let collect_ms = collect_started.elapsed().as_secs_f64() * 1000.0;
+        let decode_started = std::time::Instant::now();
+        let mut hits = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .ok_or_else(|| StorageError::Backend("missing id column".into()))?
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| StorageError::Backend("id column type".into()))?;
+            let dists = batch
+                .column_by_name("_distance")
+                .ok_or_else(|| StorageError::Backend("missing _distance column".into()))?
+                .as_any()
+                .downcast_ref::<Float32Array>()
+                .ok_or_else(|| StorageError::Backend("_distance column type".into()))?;
+            let srcs = batch
+                .column_by_name("source_id")
+                .ok_or_else(|| StorageError::Backend("missing source_id column".into()))?
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| StorageError::Backend("source_id column type".into()))?;
+            let vers = batch
+                .column_by_name("version")
+                .ok_or_else(|| StorageError::Backend("missing version column".into()))?
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .ok_or_else(|| StorageError::Backend("version column type".into()))?;
+            let tenants = batch
+                .column_by_name("tenant")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| StorageError::Backend("invalid vector tenant column".into()))?;
+            let workspaces = batch
+                .column_by_name("workspace")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| StorageError::Backend("invalid vector workspace column".into()))?;
+            let generations = batch
+                .column_by_name("generation")
+                .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| StorageError::Backend("invalid vector generation column".into()))?;
+            for i in 0..ids.len() {
+                if [ids, srcs, tenants, workspaces]
+                    .iter()
+                    .any(|column| column.is_null(i))
+                    || vers.is_null(i)
+                    || generations.is_null(i)
+                    || dists.is_null(i)
+                    || !dists.value(i).is_finite()
+                    || dists.value(i) < 0.0
+                    || tenants.value(i) != query.scope.tenant_id.to_string()
+                    || workspaces.value(i) != query.scope.workspace_id.to_string()
+                    || generations.value(i) != query.generation
+                {
+                    return Err(StorageError::Backend(
+                        "invalid scoped vector candidate".into(),
+                    ));
+                }
+                let id = Uuid::parse_str(ids.value(i))
+                    .map_err(|_| StorageError::Backend("invalid vector identity".into()))?;
+                if query
+                    .artifact_ids
+                    .as_ref()
+                    .is_some_and(|allowed| allowed.binary_search(&id).is_err())
+                {
+                    return Err(StorageError::Backend("ineligible vector candidate".into()));
+                }
+                hits.push(VectorHit {
+                    id,
+                    score: 1.0 / (1.0 + dists.value(i)),
+                    source: SourceVersion {
+                        source_id: Uuid::parse_str(srcs.value(i))
+                            .map_err(|e| StorageError::Backend(e.to_string()))?,
+                        version: vers.value(i),
+                    },
+                });
+            }
+        }
+        if used_ann {
+            let eligible = query.artifact_ids.as_ref().ok_or_else(|| {
+                StorageError::Unavailable("ANN eligibility is unavailable".into())
+            })?;
+            ann::check_ann_result_count(query.limit, eligible.len(), hits.len())?;
+        }
+        hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.id.cmp(&b.id)));
+        tracing::debug!(
+            target: "origence::vector_timing",
+            used_ann, open_ms, prepare_ms, execute_ms, collect_ms,
+            decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0,
+            total_ms = started.elapsed().as_secs_f64() * 1000.0,
+            returned_count = hits.len(),
+            "vector query completed"
+        );
+        Ok(hits)
+    }
+
+    async fn open_existing(&self, name: &str) -> StorageResult<Option<lancedb::Table>> {
+        match self.db.open_table(name).execute().await {
+            Ok(table) => Ok(Some(table)),
+            Err(lancedb::Error::TableNotFound { .. }) => Ok(None),
+            Err(error) => Err(StorageError::Backend(error.to_string())),
+        }
+    }
+
+    async fn managed_tables(&self) -> StorageResult<Vec<lancedb::Table>> {
+        let names = self
+            .db
+            .table_names()
+            .execute()
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let mut tables = Vec::new();
+        for name in names {
+            if name != FULL_TEXT_TABLE && !vector_table_name(&name) {
+                return Err(StorageError::Conflict(
+                    "unexpected native index table".into(),
+                ));
+            }
+            let table = self
+                .db
+                .open_table(&name)
+                .execute()
+                .await
+                .map_err(|error| StorageError::Backend(error.to_string()))?;
+            if name == FULL_TEXT_TABLE {
+                full_text::check_schema(&table).await?;
+            } else {
+                let schema = table
+                    .schema()
+                    .await
+                    .map_err(|error| StorageError::Backend(error.to_string()))?;
+                let dimension = match schema
+                    .field_with_name("vector")
+                    .map(|field| field.data_type())
+                {
+                    Ok(DataType::FixedSizeList(_, size)) if *size > 0 => *size as usize,
+                    _ => return Err(StorageError::Conflict("incompatible vector schema".into())),
+                };
+                check_dimension(&table, dimension).await?;
+            }
+            tables.push(table);
+        }
+        Ok(tables)
     }
 
     async fn ensure_table(&self, name: &str, dim: usize) -> StorageResult<()> {
@@ -133,7 +416,7 @@ impl LanceDbStore {
 impl VectorStore for LanceDbStore {
     fn capabilities(&self) -> Capabilities {
         Capabilities {
-            filtered_ann: false,
+            filtered_ann: true,
             exact_search: true,
             max_hops: 0,
             shared_source_delete: false,
@@ -144,10 +427,21 @@ impl VectorStore for LanceDbStore {
         if entries.is_empty() {
             return Ok(());
         }
+        let mut unique: HashMap<_, &VectorEntry> = HashMap::new();
+        for entry in &entries {
+            validate_vector(entry.dimension, &entry.embedding)?;
+            let key = (&entry.profile, entry.id, entry.source, entry.generation);
+            if let Some(previous) = unique.insert(key, entry)
+                && (previous.dimension != entry.dimension || previous.embedding != entry.embedding)
+            {
+                return Err(StorageError::Conflict(
+                    "conflicting vector batch identity".into(),
+                ));
+            }
+        }
         let mut groups: HashMap<String, Vec<&VectorEntry>> = HashMap::new();
-        for e in &entries {
-            validate_vector(e.dimension, &e.embedding)?;
-            groups.entry(e.profile.clone()).or_default().push(e);
+        for entry in unique.into_values() {
+            groups.entry(entry.profile.clone()).or_default().push(entry);
         }
         // Validate the whole batch before writing any profile.
         for group in groups.values() {
@@ -220,135 +514,29 @@ impl VectorStore for LanceDbStore {
                 .execute(Box::new(reader))
                 .await
                 .map_err(|e| StorageError::Backend(e.to_string()))?;
+            ann::ensure_index(&table).await?;
         }
         Ok(())
     }
 
     async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
-        validate_vector(query.dimension, &query.embedding)?;
-        if query.limit == 0 || query.artifact_ids.as_ref().is_some_and(Vec::is_empty) {
-            return Ok(Vec::new());
-        }
-        let started = std::time::Instant::now();
-        let name = table_name(&query.profile);
-        let names = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        if !names.iter().any(|n| n == &name) {
-            return Ok(Vec::new());
-        }
-        let list_ms = started.elapsed().as_secs_f64() * 1000.0;
-        let open_started = std::time::Instant::now();
-        let table = self
-            .db
-            .open_table(&name)
-            .execute()
-            .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        let open_ms = open_started.elapsed().as_secs_f64() * 1000.0;
-        let prepare_started = std::time::Instant::now();
-        let mut filter = format!(
-            "tenant='{}' AND workspace='{}' AND generation={}",
-            quote(&query.scope.tenant_id.to_string()),
-            quote(&query.scope.workspace_id.to_string()),
-            query.generation
-        );
-        if let Some(ids) = &query.artifact_ids {
-            let ids = ids
-                .iter()
-                .map(|id| format!("'{id}'"))
-                .collect::<Vec<_>>()
-                .join(",");
-            filter.push_str(&format!(" AND id IN ({ids})"));
-        }
-        check_dimension(&table, query.dimension).await?;
-        let prepare_ms = prepare_started.elapsed().as_secs_f64() * 1000.0;
-        let execute_started = std::time::Instant::now();
-        let stream = table
-            .query()
-            .nearest_to(query.embedding.as_slice())
-            .map_err(|e| StorageError::Backend(e.to_string()))?
-            .bypass_vector_index()
-            .only_if(filter)
-            .limit(query.limit)
-            .execute()
-            .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
-        let collect_started = std::time::Instant::now();
-        let batches: Vec<RecordBatch> = stream
-            .try_collect()
-            .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        let collect_ms = collect_started.elapsed().as_secs_f64() * 1000.0;
-        let decode_started = std::time::Instant::now();
-        let mut hits = Vec::new();
-        for batch in &batches {
-            let ids = batch
-                .column_by_name("id")
-                .ok_or_else(|| StorageError::Backend("missing id column".into()))?
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| StorageError::Backend("id column type".into()))?;
-            let dists = batch
-                .column_by_name("_distance")
-                .ok_or_else(|| StorageError::Backend("missing _distance column".into()))?
-                .as_any()
-                .downcast_ref::<Float32Array>()
-                .ok_or_else(|| StorageError::Backend("_distance column type".into()))?;
-            let srcs = batch
-                .column_by_name("source_id")
-                .ok_or_else(|| StorageError::Backend("missing source_id column".into()))?
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| StorageError::Backend("source_id column type".into()))?;
-            let vers = batch
-                .column_by_name("version")
-                .ok_or_else(|| StorageError::Backend("missing version column".into()))?
-                .as_any()
-                .downcast_ref::<Int32Array>()
-                .ok_or_else(|| StorageError::Backend("version column type".into()))?;
-            for i in 0..ids.len() {
-                hits.push(VectorHit {
-                    id: Uuid::parse_str(ids.value(i))
-                        .map_err(|e| StorageError::Backend(e.to_string()))?,
-                    score: 1.0 / (1.0 + dists.value(i)),
-                    source: SourceVersion {
-                        source_id: Uuid::parse_str(srcs.value(i))
-                            .map_err(|e| StorageError::Backend(e.to_string()))?,
-                        version: vers.value(i),
-                    },
-                });
-            }
-        }
-        tracing::debug!(
-            target: "origence::vector_timing",
-            list_ms, open_ms, prepare_ms, execute_ms, collect_ms,
-            decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0,
-            total_ms = started.elapsed().as_secs_f64() * 1000.0,
-            returned_count = hits.len(),
-            "vector query completed"
-        );
-        Ok(hits)
+        self.search_inner(query, None).await
+    }
+
+    async fn upsert_full_text(
+        &self,
+        scope: Scope,
+        entries: Vec<FullTextEntry>,
+    ) -> StorageResult<()> {
+        full_text::upsert(self, scope, entries).await
+    }
+
+    async fn search_full_text(&self, query: FullTextQuery) -> StorageResult<Vec<FullTextHit>> {
+        full_text::search(self, query, None).await
     }
 
     async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()> {
-        let names = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        for name in names {
-            let table = self
-                .db
-                .open_table(&name)
-                .execute()
-                .await
-                .map_err(|e| StorageError::Backend(e.to_string()))?;
+        for table in self.managed_tables().await? {
             let filter = format!(
                 "tenant='{}' AND workspace='{}' AND source_id='{}' AND version={}",
                 quote(&scope.tenant_id.to_string()),
@@ -368,19 +556,7 @@ impl VectorStore for LanceDbStore {
         if ids.is_empty() {
             return Ok(());
         }
-        let names = self
-            .db
-            .table_names()
-            .execute()
-            .await
-            .map_err(|e| StorageError::Backend(e.to_string()))?;
-        for name in names {
-            let table = self
-                .db
-                .open_table(&name)
-                .execute()
-                .await
-                .map_err(|e| StorageError::Backend(e.to_string()))?;
+        for table in self.managed_tables().await? {
             for batch in ids.chunks(100) {
                 let values = batch
                     .iter()
@@ -406,12 +582,7 @@ impl Lifecycle for LanceDbStore {
     }
 
     async fn check(&self) -> StorageResult<()> {
-        self.db
-            .table_names()
-            .execute()
-            .await
-            .map(|_| ())
-            .map_err(|e| StorageError::Backend(e.to_string()))
+        self.managed_tables().await.map(|_| ())
     }
 
     async fn shutdown(&self) -> StorageResult<()> {

@@ -2,6 +2,7 @@
 //! Deterministic localhost embeddings exercise engineering, not model quality.
 #![cfg(feature = "local-storage")]
 use axum::{Json, Router, routing::post};
+use origence::storage::native_turso as db;
 use origence::{
     error::AppError,
     messages::{
@@ -181,7 +182,7 @@ fn query(mode: &str) -> SearchInput {
 }
 async fn count(service: &Service, table: &str) -> i64 {
     // Only fixed test-owned table literals are passed to this helper.
-    sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
+    db::query_scalar(&format!("SELECT count(*) FROM {table}"))
         .fetch_one(service.engine.relational().pool())
         .await
         .unwrap()
@@ -194,7 +195,7 @@ async fn status(
     service.message_batch_status(auth, receipt).await.unwrap()
 }
 async fn payload(service: &Service, receipt: &IngestReceipt) -> Value {
-    let text: String = sqlx::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+    let text: String = db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
         .bind(receipt.job_id)
         .fetch_one(service.engine.relational().pool())
         .await
@@ -232,13 +233,12 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
         let source: Value = serde_json::from_str(original["content"].as_str().unwrap()).unwrap();
         assert_eq!(source, json!(input));
         assert!(source["messages"][2].get("timestamp").is_none());
-        let rows: Vec<(String, String)> = sqlx::query_as(
-            "SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal",
-        )
-        .bind(receipt.asset_id)
-        .fetch_all(service.engine.relational().pool())
-        .await
-        .unwrap();
+        let rows: Vec<(String, String)> =
+            db::query_as("SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+                .bind(receipt.asset_id)
+                .fetch_all(service.engine.relational().pool())
+                .await
+                .unwrap();
         for (index, message) in input.messages.iter().enumerate() {
             let parts: Vec<_> = rows
                 .iter()
@@ -314,12 +314,12 @@ async fn workspace_replay_preserves_creator_and_all_spec_input_conflicts() {
     );
     let receipt = first.unwrap();
     assert_eq!(receipt, duplicate.unwrap());
-    let creator: Uuid = sqlx::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
+    let creator: Uuid = db::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
         .bind(receipt.job_id)
         .fetch_one(service.engine.relational().pool())
         .await
         .unwrap();
-    let command_creator: Uuid = sqlx::query_scalar(
+    let command_creator: Uuid = db::query_scalar(
         "SELECT principal_id FROM oc_commands WHERE operation='message_batch.ingest'",
     )
     .fetch_one(service.engine.relational().pool())
@@ -460,7 +460,7 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
         .await
         .unwrap();
     // Fail relational publication after the durable plan/native index prepare.
-    sqlx::query("CREATE TRIGGER test_fail_chunks BEFORE INSERT ON oc_chunks BEGIN SELECT RAISE(ABORT,'test publication failure'); END")
+    db::query("CREATE TRIGGER test_fail_chunks BEFORE INSERT ON oc_chunks BEGIN SELECT RAISE(ABORT,'test publication failure'); END")
         .execute(service.engine.relational().pool()).await.unwrap();
     assert!(worker::process_next(&service).await.unwrap());
     assert_eq!(count(&service, "oc_versions").await, 0);
@@ -474,7 +474,7 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
         .collect();
     assert!(!ids.is_empty());
     let calls = models.calls.load(Ordering::SeqCst);
-    sqlx::query("DROP TRIGGER test_fail_chunks")
+    db::query("DROP TRIGGER test_fail_chunks")
         .execute(service.engine.relational().pool())
         .await
         .unwrap();
@@ -482,7 +482,7 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
     // injected storage failure schedules retry_wait with a future retry time;
     // changing only its state would leave that backoff active after reopening.
     // Keep production recovery/backoff policy unchanged and make the fixture due.
-    sqlx::query("UPDATE oc_jobs SET state='processing',next_retry_at=0 WHERE id=?")
+    db::query("UPDATE oc_jobs SET state='processing',next_retry_at=0 WHERE id=?")
         .bind(receipt.job_id)
         .execute(service.engine.relational().pool())
         .await
@@ -509,7 +509,7 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
     );
     assert_eq!(models.calls.load(Ordering::SeqCst), calls);
     let actual: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+        db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
             .bind(receipt.asset_id)
             .fetch_all(service.engine.relational().pool())
             .await
@@ -635,7 +635,7 @@ async fn revoked_creator_cannot_publish_or_transfer_work_through_replay() {
         status(&service, &rotated, &receipt).await,
         PublicationStatus::Failed
     );
-    let creator: Uuid = sqlx::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
+    let creator: Uuid = db::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
         .bind(receipt.job_id)
         .fetch_one(service.engine.relational().pool())
         .await
@@ -661,7 +661,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
         PublicationStatus::Retrievable
     );
     let chunk: Uuid =
-        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
+        db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
             .bind(receipt.asset_id)
             .fetch_one(service.engine.relational().pool())
             .await
@@ -693,7 +693,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             "UPDATE oc_artifact_ledger SET state='committed' WHERE artifact_id=?",
         ),
     ] {
-        sqlx::query(break_sql)
+        db::query(break_sql)
             .bind(chunk)
             .execute(service.engine.relational().pool())
             .await
@@ -723,7 +723,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             assert!(hits.iter().all(|hit| hit["chunk_id"] != json!(chunk)));
             assert_eq!(payload(&service, &receipt).await, publication_before);
         }
-        sqlx::query(restore_sql)
+        db::query(restore_sql)
             .bind(chunk)
             .execute(service.engine.relational().pool())
             .await
@@ -750,7 +750,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             receipt.asset_id,
         ),
     ] {
-        sqlx::query(break_sql)
+        db::query(break_sql)
             .bind(id)
             .execute(service.engine.relational().pool())
             .await
@@ -759,7 +759,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             status(&service, &auth, &receipt).await,
             PublicationStatus::Invisible
         );
-        sqlx::query(restore_sql)
+        db::query(restore_sql)
             .bind(id)
             .execute(service.engine.relational().pool())
             .await
@@ -769,7 +769,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             PublicationStatus::Retrievable
         );
     }
-    sqlx::query("DELETE FROM oc_chunks WHERE id=?")
+    db::query("DELETE FROM oc_chunks WHERE id=?")
         .bind(chunk)
         .execute(service.engine.relational().pool())
         .await
@@ -814,7 +814,7 @@ async fn service_and_worker_reject_unbounded_source_and_cancelled_status_is_term
         .await
         .unwrap();
     // Simulates a corrupt importer bypassing the public service boundary.
-    sqlx::query("UPDATE oc_events SET content=json_set(content,'$.messages[0].role',?) WHERE id=?")
+    db::query("UPDATE oc_events SET content=json_set(content,'$.messages[0].role',?) WHERE id=?")
         .bind("x".repeat(65))
         .bind(receipt.source_event_id)
         .execute(service.engine.relational().pool())
@@ -933,7 +933,7 @@ async fn owned_writer_capability_and_role_are_rechecked_after_embedding_io() {
         tokio::time::timeout(Duration::from_secs(5), models.entered.notified())
             .await
             .unwrap();
-        sqlx::query(change)
+        db::query(change)
             .bind(capable.id)
             .execute(service.engine.relational().pool())
             .await
@@ -962,7 +962,7 @@ async fn owned_writer_capability_and_role_are_rechecked_after_embedding_io() {
                 .unwrap()
                 .is_empty()
         );
-        let creator: Uuid = sqlx::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
+        let creator: Uuid = db::query_scalar("SELECT created_by FROM oc_jobs WHERE id=?")
             .bind(receipt.job_id)
             .fetch_one(service.engine.relational().pool())
             .await
@@ -1039,7 +1039,7 @@ async fn owned_reader_search_rechecks_capability_after_query_embedding_io() {
     tokio::time::timeout(Duration::from_secs(5), models.entered.notified())
         .await
         .unwrap();
-    sqlx::query("UPDATE oc_api_keys SET allow_owned_workspaces=0 WHERE id=?")
+    db::query("UPDATE oc_api_keys SET allow_owned_workspaces=0 WHERE id=?")
         .bind(reader.id)
         .execute(service.engine.relational().pool())
         .await
@@ -1132,7 +1132,7 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
     assert!(tokio::fs::metadata(&blocked).await.unwrap().is_file());
     tokio::fs::remove_file(&blocked).await.unwrap();
     assert_eq!(
-        sqlx::query("UPDATE oc_jobs SET next_retry_at=0 WHERE id=? AND state='retry_wait'")
+        db::query("UPDATE oc_jobs SET next_retry_at=0 WHERE id=? AND state='retry_wait'")
             .bind(receipt.job_id)
             .execute(service.engine.relational().pool())
             .await
@@ -1147,7 +1147,7 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
     );
     assert_eq!(models.calls.load(Ordering::SeqCst), calls);
     let actual: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+        db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
             .bind(receipt.asset_id)
             .fetch_all(service.engine.relational().pool())
             .await
@@ -1173,7 +1173,7 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
     ));
     assert_eq!(payload(&service, &receipt).await, published);
     let unchanged: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+        db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
             .bind(receipt.asset_id)
             .fetch_all(service.engine.relational().pool())
             .await

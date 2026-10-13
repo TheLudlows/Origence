@@ -201,6 +201,32 @@ impl Service {
         key: &str,
         input: SemanticCaptureInput,
     ) -> Result<Value> {
+        Box::pin(self.semantic_capture_inner(a, key, input)).await
+    }
+
+    #[cfg(test)]
+    pub(crate) fn unboxed_semantic_capture_future_size(&self, auth: &AuthContext) -> usize {
+        fn size<F: std::future::Future>(_: impl FnOnce() -> F) -> usize {
+            std::mem::size_of::<F>()
+        }
+        size(|| {
+            self.semantic_capture_inner(
+                auth,
+                "size-only",
+                SemanticCaptureInput {
+                    content: String::new(),
+                    targets: Vec::new(),
+                },
+            )
+        })
+    }
+
+    async fn semantic_capture_inner(
+        &self,
+        a: &AuthContext,
+        key: &str,
+        input: SemanticCaptureInput,
+    ) -> Result<Value> {
         input.validate()?;
         let (mut tx, cached) = self
             .command(a, Permission::Write, "semantic_capture", key, &json!(input))

@@ -96,6 +96,11 @@ impl Service {
         let mut tx = self.read(auth, Permission::Write).await?;
         let status = tx.message_batch_status(receipt).await?;
         tx.commit().await?;
+        if status == PublicationStatus::Retrievable {
+            // DomainTx reports authority readiness. The public service also
+            // verifies the required native surface outside that transaction.
+            self.check_committed_surfaces().await?;
+        }
         Ok(status)
     }
 

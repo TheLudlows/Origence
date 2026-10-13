@@ -24,20 +24,20 @@ enum Visit {
     Leave(Uuid),
 }
 
-impl SqliteTx {
+impl TursoTx {
     async fn learning_catalog_present(&mut self) -> StorageResult<bool> {
-        sqlx::query_scalar(
+        native_turso::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_learnings')",
         )
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(sqlite_err)
+        .map_err(turso_err)
     }
 
     async fn learning_record(&mut self, asset: Uuid) -> StorageResult<Option<LearningRecord>> {
-        let row: Option<(Uuid, Uuid, Uuid, String, bool)> = sqlx::query_as("SELECT l.id,l.source_event_id,l.session_id,l.status,EXISTS(SELECT 1 FROM oc_improve_runs r WHERE r.tenant_id=l.tenant_id AND r.workspace_id=l.workspace_id AND r.improve_id=l.improve_id AND r.status IN ('accepted','publishing')) FROM oc_learnings l WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=?")
+        let row: Option<(Uuid, Uuid, Uuid, String, bool)> = native_turso::query_as("SELECT l.id,l.source_event_id,l.session_id,l.status,EXISTS(SELECT 1 FROM oc_improve_runs r WHERE r.tenant_id=l.tenant_id AND r.workspace_id=l.workspace_id AND r.improve_id=l.improve_id AND r.status IN ('accepted','publishing')) FROM oc_learnings l WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         Ok(
             row.map(|(id, source, session, status, run_active)| LearningRecord {
                 id,
@@ -51,9 +51,9 @@ impl SqliteTx {
     }
 
     async fn has_learning_source_version(&mut self, asset: Uuid) -> StorageResult<bool> {
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_versions v JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE v.tenant_id=? AND v.workspace_id=? AND v.asset_id=? AND e.kind='learning')")
+        native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_versions v JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE v.tenant_id=? AND v.workspace_id=? AND v.asset_id=? AND e.kind='learning')")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)
     }
 
     /// Also catches an orphaned source mapping, so generic edits cannot turn a
@@ -66,7 +66,7 @@ impl SqliteTx {
     }
 
     async fn learning_asset_for_source(&mut self, source: Uuid) -> StorageResult<Option<Uuid>> {
-        let kind: Option<String> = sqlx::query_scalar(
+        let kind: Option<String> = native_turso::query_scalar(
             "SELECT kind FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
@@ -74,11 +74,11 @@ impl SqliteTx {
         .bind(source)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(sqlite_err)?;
+        .map_err(turso_err)?;
         let asset = if self.learning_catalog_present().await? {
-            sqlx::query_scalar("SELECT asset_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+            native_turso::query_scalar("SELECT asset_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-                .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
+                .fetch_optional(&mut *self.tx).await.map_err(turso_err)?
         } else {
             None
         };
@@ -172,16 +172,16 @@ impl SqliteTx {
             {
                 return Err(StorageError::NotFound);
             }
-            let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets a JOIN oc_events e ON e.tenant_id=a.tenant_id AND e.workspace_id=a.workspace_id AND e.id=? WHERE a.tenant_id=? AND a.workspace_id=? AND a.id=? AND a.kind='knowledge' AND NOT a.deleted AND e.kind='learning' AND e.state='active')")
+            let active: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets a JOIN oc_events e ON e.tenant_id=a.tenant_id AND e.workspace_id=a.workspace_id AND e.id=? WHERE a.tenant_id=? AND a.workspace_id=? AND a.id=? AND a.kind='knowledge' AND NOT a.deleted AND e.kind='learning' AND e.state='active')")
                 .bind(record.source).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(record.asset)
-                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
             if !active {
                 return Err(StorageError::NotFound);
             }
             // Fetch one extra row to detect truncation, never authorize a prefix.
-            let supports: Vec<(Uuid, Uuid)> = sqlx::query_as("SELECT DISTINCT session_id,turn_id FROM oc_learning_support WHERE tenant_id=? AND workspace_id=? AND learning_id=? ORDER BY session_id,turn_id LIMIT 65")
+            let supports: Vec<(Uuid, Uuid)> = native_turso::query_as("SELECT DISTINCT session_id,turn_id FROM oc_learning_support WHERE tenant_id=? AND workspace_id=? AND learning_id=? ORDER BY session_id,turn_id LIMIT 65")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(record.id)
-                .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+                .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
             if supports.is_empty() || supports.len() > MAX_LEARNING_CLOSURE {
                 return Err(StorageError::NotFound);
             }
@@ -264,14 +264,14 @@ impl SqliteTx {
         if !self.learning_catalog_present().await? {
             return Ok(());
         }
-        let records: Vec<(Uuid, Uuid)> = sqlx::query_as("SELECT asset_id,source_event_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=?")
+        let records: Vec<(Uuid, Uuid)> = native_turso::query_as("SELECT asset_id,source_event_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         for (asset, source) in records {
             if !self.learning_asset_visible(asset).await? {
-                sqlx::query("DELETE FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND source_id=?")
+                native_turso::query("DELETE FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND source_id=?")
                     .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-                    .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+                    .execute(&mut *self.tx).await.map_err(turso_err)?;
             }
         }
         Ok(())

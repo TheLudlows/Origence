@@ -1,17 +1,12 @@
-//! Store open/initialize/check/shutdown and the existing explicit identity tool.
+//! Native Turso open/initialize/check/shutdown; never migrate existing databases.
 use super::locking::{acquire_lock, acquire_path_lock};
-use super::schema::{
-    IDENTITY_SCHEMA, check_conn, check_identity_schema, exec_schema, reject_legacy_aml_schema,
-    schema_present,
-};
+use super::schema::{check_conn, exec_schema, reject_legacy_aml_schema, schema_present};
 use super::*;
-use sqlx::Connection;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use std::path::Path;
-use std::time::Duration;
 
-impl SqliteStore {
-    /// Open the store at `path`, creating the schema when the file is new.
+impl TursoStore {
+    /// Open a fresh or same-version native Turso database. Existing unmarked
+    /// databases are inspected read-only and rejected before any writable open.
     pub async fn open(path: impl AsRef<Path>) -> StorageResult<Self> {
         let requested = path.as_ref();
         let parent = requested
@@ -28,40 +23,25 @@ impl SqliteStore {
                     .ok_or_else(|| StorageError::Conflict("database filename required".into()))?,
             )
         };
-        // Take the single-writer lock before touching the database: a second
-        // process that opens the same path fails fast here instead of racing
-        // the running worker (A2.5). Reentrant within this process.
         let (lock, opening) = acquire_lock(&path)?;
-        // Same-process opens serialize end to end: the OS lock only rejects
-        // other processes, so a reopen would otherwise race the first open's
-        // WAL transition and schema transaction (SQLITE_BUSY under load).
+        let lock = std::sync::Arc::new(lock);
         let _serialized = opening.lock().await;
-
-        // Reject legacy protocol tables before opening a writable connection or
-        // changing journal mode. Existing data is never converted or removed.
         if path.exists() && tokio::fs::metadata(&path).await?.len() != 0 {
-            let options = SqliteConnectOptions::new()
-                .filename(&path)
-                .create_if_missing(false)
-                .read_only(true);
-            let mut conn = SqliteConnection::connect_with(&options)
-                .await
-                .map_err(sqlite_err)?;
-            let checked = reject_legacy_aml_schema(&mut conn).await;
-            conn.close().await.map_err(sqlite_err)?;
-            checked?;
+            let pool = Pool::open_read_only(&path).await.map_err(turso_err)?;
+            pool.hold_lifetime_guard(lock.clone());
+            let outcome = async {
+                let mut conn = pool.acquire().await.map_err(turso_err)?;
+                native_turso::check_format(&mut conn, "authority")
+                    .await
+                    .map_err(turso_err)?;
+                check_conn(&mut conn).await
+            }
+            .await;
+            pool.close().await;
+            outcome?;
         }
-        let options = SqliteConnectOptions::new()
-            .filename(&path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .busy_timeout(Duration::from_secs(5))
-            .journal_mode(SqliteJournalMode::Wal);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await
-            .map_err(sqlite_err)?;
+        let pool = Pool::open(&path).await.map_err(turso_err)?;
+        pool.hold_lifetime_guard(lock.clone());
         let store = Self {
             pool,
             path,
@@ -71,118 +51,84 @@ impl SqliteStore {
         Ok(store)
     }
 
-    /// Enable identity writes in a compatible existing database. Requires an
-    /// exclusive lock, validates before changing anything, and never creates a
-    /// missing database or reinterprets legacy assets. Dry-run only reports.
+    /// Historical API retained only for same-version inspection. Native Turso
+    /// databases always contain identity support; incompatible files are rejected.
     pub async fn upgrade_memory_identity(
         path: impl AsRef<Path>,
-        dry_run: bool,
+        _dry_run: bool,
     ) -> StorageResult<MemoryIdentityUpgrade> {
         let path = tokio::fs::canonicalize(path.as_ref()).await?;
-        if !path.is_file() {
-            return Err(StorageError::Conflict(
-                "existing database file required".into(),
-            ));
-        }
-        let (_lock, opening) = acquire_path_lock(&path, false)?;
+        let (lock, opening) = acquire_path_lock(&path, false)?;
+        let lock = std::sync::Arc::new(lock);
         let _serialized = opening.lock().await;
-        let options = SqliteConnectOptions::new()
-            .filename(&path)
-            .create_if_missing(false)
-            .foreign_keys(true)
-            .busy_timeout(Duration::from_secs(5));
-        let mut conn = SqliteConnection::connect_with(&options)
-            .await
-            .map_err(sqlite_err)?;
-        let mut tx = conn
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(sqlite_err)?;
-        check_conn(&mut tx).await?;
-        let status = if identity_table_present(&mut tx).await? {
-            MemoryIdentityUpgrade::AlreadyEnabled
-        } else {
-            let objects: i64 = sqlx::query_scalar(
-                "SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'",
-            )
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(sqlite_err)?;
-            if objects != 0 {
-                return Err(StorageError::Unavailable(
-                    "memory identity schema name is occupied".into(),
-                ));
-            }
-            if dry_run {
-                MemoryIdentityUpgrade::Required
-            } else {
-                sqlx::raw_sql(IDENTITY_SCHEMA)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(sqlite_err)?;
-                check_identity_schema(&mut tx).await?;
-                MemoryIdentityUpgrade::Enabled
-            }
-        };
-        tx.commit().await.map_err(sqlite_err)?;
-        conn.close().await.map_err(sqlite_err)?;
-        Ok(status)
+        let pool = Pool::open_read_only(&path).await.map_err(turso_err)?;
+        pool.hold_lifetime_guard(lock);
+        let outcome = async {
+            let mut conn = pool.acquire().await.map_err(turso_err)?;
+            native_turso::check_format(&mut conn, "authority")
+                .await
+                .map_err(turso_err)?;
+            check_conn(&mut conn).await?;
+            Ok(MemoryIdentityUpgrade::AlreadyEnabled)
+        }
+        .await;
+        pool.close().await;
+        outcome
     }
 
-    /// The shared connection pool. Domain operations borrow short-lived
-    /// connections; model/file IO never holds one (A2.5).
-    pub fn pool(&self) -> &SqlitePool {
+    /// Native Turso leases for storage adapters and diagnostic tests. Domain
+    /// transactions never expose the pool through the vendor-neutral trait.
+    pub fn pool(&self) -> &Pool {
         &self.pool
     }
-
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn native_lifetime_guard(&self) -> std::sync::Arc<dyn Send + Sync> {
+        self._lock.clone()
+    }
     pub fn path(&self) -> &Path {
         &self.path
     }
 }
 
-impl Lifecycle for SqliteStore {
+impl Lifecycle for TursoStore {
     async fn initialize(&self) -> StorageResult<()> {
-        let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
-        // BEGIN IMMEDIATE serializes concurrent initializers: a second one
-        // waits on busy_timeout, then observes the now-present schema instead
-        // of racing the first (A2.3).
-        sqlx::query("BEGIN IMMEDIATE")
-            .execute(&mut *conn)
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
             .await
-            .map_err(sqlite_err)?;
-        let outcome = Self::init_inner(&mut conn).await;
-        match outcome {
-            Ok(()) => {
-                sqlx::query("COMMIT")
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(sqlite_err)?;
-                Ok(())
+            .map_err(turso_err)?;
+        reject_legacy_aml_schema(&mut tx).await?;
+        if !schema_present(&mut tx).await? {
+            let existing: i64 = native_turso::query_scalar(
+                "SELECT count(*) FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(turso_err)?;
+            if existing != 0 {
+                return Err(StorageError::Unavailable(
+                    "incompatible database; no migration was attempted".into(),
+                ));
             }
-            Err(e) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                Err(e)
-            }
+            exec_schema(&mut tx).await?;
+            native_turso::install_format(&mut tx, "authority")
+                .await
+                .map_err(turso_err)?;
         }
+        native_turso::check_format(&mut tx, "authority")
+            .await
+            .map_err(turso_err)?;
+        check_conn(&mut tx).await?;
+        tx.commit().await.map_err(turso_err)
     }
-
     async fn check(&self) -> StorageResult<()> {
-        let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
+        let mut conn = self.pool.acquire().await.map_err(turso_err)?;
+        native_turso::check_format(&mut conn, "authority")
+            .await
+            .map_err(turso_err)?;
         check_conn(&mut conn).await
     }
-
     async fn shutdown(&self) -> StorageResult<()> {
-        self.pool.close().await;
-        Ok(())
-    }
-}
-
-impl SqliteStore {
-    async fn init_inner(conn: &mut sqlx::pool::PoolConnection<sqlx::Sqlite>) -> StorageResult<()> {
-        reject_legacy_aml_schema(&mut *conn).await?;
-        if !schema_present(&mut *conn).await? {
-            exec_schema(&mut *conn).await?;
-        }
-        check_conn(&mut *conn).await
+        self.pool.shutdown().await.map_err(turso_err)
     }
 }

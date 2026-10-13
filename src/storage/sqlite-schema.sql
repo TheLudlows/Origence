@@ -1,15 +1,15 @@
--- Base schema for a NEW SQLite database; optional identity schema is applied separately (A2.3).
+-- Base schema for a NEW native Turso database; identity schema is applied in the same transaction (A2.3).
 --
 -- Encodings are fixed here (A5):
---   UUID        -> BLOB (16 bytes, sqlx `uuid` mapping)
+--   UUID        -> BLOB (16 bytes, native adapter UUID encoding)
 --   JSON        -> TEXT (serialised JSON)
---   boolean     -> INTEGER (0/1, sqlx `bool` mapping)
+--   boolean     -> INTEGER (0/1, native adapter boolean encoding)
 --   timestamp   -> INTEGER (unix epoch milliseconds, bound from Rust)
 --   text        -> TEXT
 --
 -- Scope isolation is enforced by the adapter binding tenant_id/workspace_id on
--- every statement (A2.4): SQLite has no row-level security. `foreign_keys`,
--- `busy_timeout` and WAL are set per-connection by the adapter, never here.
+-- every statement (A2.4): Turso has no row-level security. `foreign_keys` and
+-- `busy_timeout` are set per connection; Turso uses its native WAL mode.
 
 CREATE TABLE oc_workspaces (
     tenant_id BLOB NOT NULL,
@@ -177,7 +177,7 @@ CREATE TABLE oc_artifact_ledger (
     source_id BLOB NOT NULL, version INTEGER NOT NULL,
     artifact_type TEXT NOT NULL CHECK (artifact_type IN ('chunk','summary','entity','relation')),
     artifact_id BLOB NOT NULL,
-    surface TEXT NOT NULL CHECK (surface IN ('vector','graph')),
+    surface TEXT NOT NULL CHECK (surface IN ('vector','graph','full_text')),
     generation INTEGER NOT NULL DEFAULT 1,
     idempotency_key TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','committed','retry_wait','orphan')),
