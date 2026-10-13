@@ -207,35 +207,121 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         std::mem::size_of::<F>()
     }
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), crate::models::Models::disabled()).await.unwrap();
+    let service = Service::open(dir.path(), crate::models::Models::disabled())
+        .await
+        .unwrap();
     let auth = AuthContext {
-        id: Uuid::new_v4(), tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4(), role: "reader".into(),
+        id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+        role: "reader".into(),
     };
-    let search_input = || serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap();
-    let resolve_input = || serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap();
+    let search_input =
+        || serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap();
+    let resolve_input =
+        || serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap();
     let sizes = [
-        ("search", future_size(|| service.search(&auth, search_input()))),
-        ("resolve", future_size(|| service.resolve(&auth, resolve_input()))),
-        ("evidence_bundle", future_size(|| service.evidence_bundle(&auth, serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap()))),
+        (
+            "search",
+            future_size(|| service.search(&auth, search_input())),
+        ),
+        (
+            "resolve",
+            future_size(|| service.resolve(&auth, resolve_input())),
+        ),
+        (
+            "evidence_bundle",
+            future_size(|| {
+                service.evidence_bundle(
+                    &auth,
+                    serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap(),
+                )
+            }),
+        ),
+        (
+            "semantic_capture",
+            future_size(|| {
+                service.semantic_capture(
+                    &auth,
+                    "size-only",
+                    crate::semantic_capture::SemanticCaptureInput {
+                        content: "fixture".into(),
+                        targets: Vec::new(),
+                    },
+                )
+            }),
+        ),
+        (
+            "process_next",
+            future_size(|| crate::worker::process_next(&service)),
+        ),
     ];
-    eprintln!("unboxed search implementation bytes={}", future_size(|| service.search_inner(&auth, search_input())));
-    eprintln!("unboxed resolve implementation bytes={}", future_size(|| service.resolve_inner(&auth, resolve_input())));
+    eprintln!(
+        "unboxed search implementation bytes={}",
+        future_size(|| service.search_inner(&auth, search_input()))
+    );
+    eprintln!(
+        "unboxed resolve implementation bytes={}",
+        future_size(|| service.resolve_inner(&auth, resolve_input()))
+    );
+    eprintln!(
+        "unboxed semantic_capture implementation bytes={}",
+        service.unboxed_semantic_capture_future_size(&auth)
+    );
+    eprintln!(
+        "unboxed process_next implementation bytes={}",
+        crate::worker::unboxed_process_next_future_size(&service)
+    );
     let pool = service.engine.relational().pool();
-    eprintln!("Turso acquire/begin/begin_with future bytes={}/{}/{}", future_size(|| pool.acquire()), future_size(|| pool.begin()), future_size(|| pool.begin_with("BEGIN DEFERRED")));
-    eprintln!("Turso commit/rollback future bytes={}/{}", consuming_future_size(db::Transaction::commit), consuming_future_size(db::Transaction::rollback));
-    let scope = Scope { tenant_id: auth.tenant_id, workspace_id: auth.workspace_id };
+    eprintln!(
+        "Turso acquire/begin/begin_with future bytes={}/{}/{}",
+        future_size(|| pool.acquire()),
+        future_size(|| pool.begin()),
+        future_size(|| pool.begin_with("BEGIN DEFERRED"))
+    );
+    eprintln!(
+        "Turso commit/rollback future bytes={}/{}",
+        consuming_future_size(db::Transaction::commit),
+        consuming_future_size(db::Transaction::rollback)
+    );
+    let scope = Scope {
+        tenant_id: auth.tenant_id,
+        workspace_id: auth.workspace_id,
+    };
     let native = service.engine.vector();
-    eprintln!("Lance vector search future bytes={}", future_size(|| native.search(VectorQuery {
-        scope, artifact_ids: None, profile: "fixture".into(), dimension: 2,
-        generation: 1, embedding: vec![1.0, 0.0], limit: 100,
-    })));
-    eprintln!("Lance full-text search future bytes={}", future_size(|| native.search_full_text(FullTextQuery {
-        scope, artifact_ids: None, generation: 1, search_terms: "fixture".into(), limit: 100,
-    })));
-    eprintln!("Lance vector/full-text upsert future bytes={}/{}", future_size(|| native.upsert(scope, Vec::new())), future_size(|| native.upsert_full_text(scope, Vec::new())));
+    eprintln!(
+        "Lance vector search future bytes={}",
+        future_size(|| native.search(VectorQuery {
+            scope,
+            artifact_ids: None,
+            profile: "fixture".into(),
+            dimension: 2,
+            generation: 1,
+            embedding: vec![1.0, 0.0],
+            limit: 100,
+        }))
+    );
+    eprintln!(
+        "Lance full-text search future bytes={}",
+        future_size(|| native.search_full_text(FullTextQuery {
+            scope,
+            artifact_ids: None,
+            generation: 1,
+            search_terms: "fixture".into(),
+            limit: 100,
+        }))
+    );
+    eprintln!(
+        "Lance vector/full-text upsert future bytes={}/{}",
+        future_size(|| native.upsert(scope, Vec::new())),
+        future_size(|| native.upsert_full_text(scope, Vec::new()))
+    );
     for (name, bytes) in sizes {
         eprintln!("public {name} future bytes={bytes}");
-        assert!(bytes <= 1024, "{name} public future embeds {bytes} bytes of stack state");
+        assert!(
+            bytes <= 1024,
+            "{name} public future embeds {bytes} bytes of stack state"
+        );
     }
     service.engine.shutdown().await.unwrap();
 }

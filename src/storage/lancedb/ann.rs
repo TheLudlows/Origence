@@ -23,6 +23,21 @@ fn route_ann(eligible: usize, snapshot_rows: usize) -> bool {
         && (eligible as u128) * 5 >= (snapshot_rows as u128) * 2
 }
 
+/// Fixed probes may underfill even with complete metadata. Fail explicitly
+/// rather than expanding probes or silently returning a partial candidate set.
+pub(super) fn check_ann_result_count(
+    limit: usize,
+    eligible: usize,
+    returned: usize,
+) -> StorageResult<()> {
+    if returned < limit.min(eligible) {
+        return Err(StorageError::Unavailable(
+            "ANN returned fewer candidates than required".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Build only during the serialized publication write, never from a read or
 /// a background maintenance loop. Appends remain searchable without refresh.
 pub(super) async fn ensure_index(table: &Table) -> StorageResult<()> {
@@ -202,7 +217,33 @@ fn backend(error: lancedb::Error) -> StorageError {
 
 #[cfg(test)]
 mod tests {
-    use super::{route_ann, validate_partition_statistics};
+    use super::{StorageError, check_ann_result_count, route_ann, validate_partition_statistics};
+
+    #[test]
+    fn ann_result_count_requires_the_smaller_of_limit_and_eligible() {
+        for (limit, eligible, returned) in [
+            (100, 4096, 0),
+            (100, 4096, 99),
+            (100, 99, 98),
+            (1, 1, 0),
+            (usize::MAX, usize::MAX, usize::MAX - 1),
+        ] {
+            assert!(matches!(
+                check_ann_result_count(limit, eligible, returned),
+                Err(StorageError::Unavailable(_))
+            ));
+        }
+        for (limit, eligible, returned) in [
+            (100, 4096, 100),
+            (100, 4096, 101),
+            (100, 99, 99),
+            (0, 4096, 0),
+            (100, 0, 0),
+            (usize::MAX, usize::MAX, usize::MAX),
+        ] {
+            assert!(check_ann_result_count(limit, eligible, returned).is_ok());
+        }
+    }
 
     #[test]
     fn physical_partition_statistics_require_every_segment_to_match() {

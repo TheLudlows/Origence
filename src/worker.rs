@@ -156,6 +156,20 @@ pub async fn run(
     Ok(())
 }
 pub async fn process_next(service: &Service) -> Result<bool> {
+    // Preserve the single serialized worker while keeping publication futures
+    // out of every host's surrounding async state and debug stack frame.
+    Box::pin(process_next_inner(service)).await
+}
+
+#[cfg(test)]
+pub(crate) fn unboxed_process_next_future_size(service: &Service) -> usize {
+    fn size<F: std::future::Future>(_: impl FnOnce() -> F) -> usize {
+        std::mem::size_of::<F>()
+    }
+    size(|| process_next_inner(service))
+}
+
+async fn process_next_inner(service: &Service) -> Result<bool> {
     let Some(mut claim) = service.engine.queue().claim_next().await? else {
         return Ok(false);
     };

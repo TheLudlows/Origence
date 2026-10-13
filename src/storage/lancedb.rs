@@ -155,14 +155,28 @@ impl LanceDbStore {
 
     /// Read-only schema health for an authority-required vector profile. Small
     /// tables legitimately have no ANN index; this never scans or builds rows.
-    pub async fn check_vector_available(&self, profile: &str, dimension: usize) -> StorageResult<()> {
+    pub async fn check_vector_available(
+        &self,
+        profile: &str,
+        dimension: usize,
+    ) -> StorageResult<()> {
         if dimension == 0 || dimension > i32::MAX as usize {
-            return Err(StorageError::Conflict("invalid committed vector dimension".into()));
+            return Err(StorageError::Conflict(
+                "invalid committed vector dimension".into(),
+            ));
         }
-        let table = self.open_existing(&table_name(profile)).await?
+        let table = self
+            .open_existing(&table_name(profile))
+            .await?
             .ok_or_else(|| StorageError::Unavailable("native vector table is missing".into()))?;
-        let version = table.version().await.map_err(|error| StorageError::Backend(error.to_string()))?;
-        table.checkout(version).await.map_err(|error| StorageError::Backend(error.to_string()))?;
+        let version = table
+            .version()
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        table
+            .checkout(version)
+            .await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
         check_dimension(&table, dimension).await
     }
 
@@ -316,6 +330,12 @@ impl LanceDbStore {
                     },
                 });
             }
+        }
+        if used_ann {
+            let eligible = query.artifact_ids.as_ref().ok_or_else(|| {
+                StorageError::Unavailable("ANN eligibility is unavailable".into())
+            })?;
+            ann::check_ann_result_count(query.limit, eligible.len(), hits.len())?;
         }
         hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.id.cmp(&b.id)));
         tracing::debug!(

@@ -1130,12 +1130,38 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), models.models()).await.unwrap();
     let (_, auth) = provision(&service).await;
-    assert!(service.engine.relational().committed_vector_profiles().await.unwrap().is_empty());
-    let receipt = publish(&service, &auth, &models, "missing-vector", "Atlas vector evidence").await;
+    assert!(
+        service
+            .engine
+            .relational()
+            .committed_vector_profiles()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let receipt = publish(
+        &service,
+        &auth,
+        &models,
+        "missing-vector",
+        "Atlas vector evidence",
+    )
+    .await;
     let profile = models.spec().embedding_profile;
-    assert_eq!(service.engine.relational().committed_vector_profiles().await.unwrap(), vec![(profile.clone(), 2)]);
+    assert_eq!(
+        service
+            .engine
+            .relational()
+            .committed_vector_profiles()
+            .await
+            .unwrap(),
+        vec![(profile.clone(), 2)]
+    );
     let digest = Sha256::digest(profile.as_bytes());
-    let name = digest[..16].iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    let name = digest[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     let dataset = dir.path().join(format!("vectors/vec_{name}.lance"));
     let held = dir.path().join("held-vector-dataset");
     service.worker_running.store(true, Ordering::Release);
@@ -1143,41 +1169,106 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
     tokio::fs::rename(&dataset, &held).await.unwrap();
     // The full-text surface is intact. It cannot substitute for the committed
     // vector profile when reporting the whole publication as retrievable.
-    service.engine.vector().check_full_text_available().await.unwrap();
+    service
+        .engine
+        .vector()
+        .check_full_text_available()
+        .await
+        .unwrap();
     assert!(!service.ready().await);
-    assert!(matches!(service.message_batch_status(&auth, &receipt).await, Err(AppError::Unavailable(_))));
-    assert!(matches!(service.search(&auth, query("Atlas", "vector", false)).await, Err(AppError::Unavailable(_))));
+    assert!(matches!(
+        service.message_batch_status(&auth, &receipt).await,
+        Err(AppError::Unavailable(_))
+    ));
+    assert!(matches!(
+        service.search(&auth, query("Atlas", "vector", false)).await,
+        Err(AppError::Unavailable(_))
+    ));
     service.worker_running.store(false, Ordering::Release);
     service.engine.shutdown().await.unwrap();
     drop(service);
-    assert!(matches!(Service::open(dir.path(), models.models()).await, Err(AppError::Unavailable(_))));
-    assert!(!dataset.exists(), "a health check must not recreate a missing surface");
+    assert!(matches!(
+        Service::open(dir.path(), models.models()).await,
+        Err(AppError::Unavailable(_))
+    ));
+    assert!(
+        !dataset.exists(),
+        "a health check must not recreate a missing surface"
+    );
     tokio::fs::rename(&held, &dataset).await.unwrap();
     let service = Service::open(dir.path(), models.models()).await.unwrap();
-    assert_eq!(service.message_batch_status(&auth, &receipt).await.unwrap(), PublicationStatus::Retrievable);
-    let result = service.search(&auth, query("Atlas", "vector", false)).await.unwrap();
+    assert_eq!(
+        service.message_batch_status(&auth, &receipt).await.unwrap(),
+        PublicationStatus::Retrievable
+    );
+    let result = service
+        .search(&auth, query("Atlas", "vector", false))
+        .await
+        .unwrap();
     assert_eq!(result["hits"][0]["content"], "Atlas vector evidence");
-    assert!(matches!(service.engine.vector().check_vector_available(&profile, 3).await, Err(origence::storage::StorageError::Conflict(_))));
+    assert!(matches!(
+        service
+            .engine
+            .vector()
+            .check_vector_available(&profile, 3)
+            .await,
+        Err(origence::storage::StorageError::Conflict(_))
+    ));
 
     // These health queries deliberately check active current version roots,
     // not semantic support closure. A retracted root needs neither surface;
     // leftover committed ledger rows must not prevent startup from cleaning up.
-    service.delete(&auth, "withdraw-before-reopen", receipt.source_event_id, "event").await.unwrap();
-    assert!(!service.engine.relational().has_committed_full_text().await.unwrap());
-    assert!(service.engine.relational().committed_vector_profiles().await.unwrap().is_empty());
-    let committed: i64 = native_turso::query_scalar("SELECT count(*) FROM oc_artifact_ledger WHERE state='committed'")
-        .fetch_one(service.engine.relational().pool()).await.unwrap();
-    assert!(committed > 0, "the fixture must retain the pre-cleanup publication ledger");
+    service
+        .delete(
+            &auth,
+            "withdraw-before-reopen",
+            receipt.source_event_id,
+            "event",
+        )
+        .await
+        .unwrap();
+    assert!(
+        !service
+            .engine
+            .relational()
+            .has_committed_full_text()
+            .await
+            .unwrap()
+    );
+    assert!(
+        service
+            .engine
+            .relational()
+            .committed_vector_profiles()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let committed: i64 = native_turso::query_scalar(
+        "SELECT count(*) FROM oc_artifact_ledger WHERE state='committed'",
+    )
+    .fetch_one(service.engine.relational().pool())
+    .await
+    .unwrap();
+    assert!(
+        committed > 0,
+        "the fixture must retain the pre-cleanup publication ledger"
+    );
     tokio::fs::rename(&dataset, &held).await.unwrap();
     let full_text = dir.path().join("vectors/chunk_terms_v1.lance");
-    tokio::fs::rename(&full_text, dir.path().join("held-full-text-dataset")).await.unwrap();
+    tokio::fs::rename(&full_text, dir.path().join("held-full-text-dataset"))
+        .await
+        .unwrap();
     service.worker_running.store(true, Ordering::Release);
     assert!(service.ready().await);
     service.worker_running.store(false, Ordering::Release);
     service.engine.shutdown().await.unwrap();
     drop(service);
     let service = Service::open(dir.path(), models.models()).await.unwrap();
-    assert_eq!(service.message_batch_status(&auth, &receipt).await.unwrap(), PublicationStatus::Invisible);
+    assert_eq!(
+        service.message_batch_status(&auth, &receipt).await.unwrap(),
+        PublicationStatus::Invisible
+    );
     assert!(!dataset.exists());
     assert!(!full_text.exists());
     assert_invisible(&service, &auth).await;

@@ -93,12 +93,11 @@ async fn incomplete_catalog_schema_is_rejected_without_repair_or_source_changes(
         .execute(store.pool())
         .await
         .unwrap();
-    let before: Vec<(String, String)> = db::query_as(
-        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
-    )
-    .fetch_all(store.pool())
-    .await
-    .unwrap();
+    let before: Vec<(String, String)> =
+        db::query_as("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")
+            .fetch_all(store.pool())
+            .await
+            .unwrap();
     store.shutdown().await.unwrap();
     drop(store);
     assert!(matches!(
@@ -106,12 +105,11 @@ async fn incomplete_catalog_schema_is_rejected_without_repair_or_source_changes(
         Err(StorageError::Unavailable(_))
     ));
     let inspect = db::Pool::open_read_only(&path).await.unwrap();
-    let after: Vec<(String, String)> = db::query_as(
-        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
-    )
-    .fetch_all(&inspect)
-    .await
-    .unwrap();
+    let after: Vec<(String, String)> =
+        db::query_as("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")
+            .fetch_all(&inspect)
+            .await
+            .unwrap();
     assert_eq!(after, before);
     assert!(!after.iter().any(|(name, _)| name == "oc_memory_properties"));
     assert_eq!(

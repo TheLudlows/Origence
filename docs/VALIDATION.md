@@ -630,3 +630,29 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
   后续修复缩小公开 search/resolve/evidence_bundle future 的内联状态，并打印
   未构造/未 poll 的 native 与 public future 类型尺寸；原三测试不改、线程栈不
   增大，必须真实重跑判断是否解决，当前不能确定唯一根因。
+
+- 6e0bb01a 的[准备 CI 38397478901](https://github.com/TheLudlows/Origence/actions/runs/38397478901)
+  全目标编译 PASS；[正式 CI 38397478898](https://github.com/TheLudlows/Origence/actions/runs/38397478898)
+  的 Linux Rust 1.98 最小特性身份测试与全目标 warnings-denied Clippy PASS。
+  公开 search/resolve/evidence_bundle future 类型尺寸实测分别为 176/176/256
+  字节；Turso acquire/begin/begin_with 为 448/512/496 字节，commit/rollback
+  为 424/440 字节。诊断只取类型尺寸，不构造或 poll 被测 future；尺寸结果不是
+  完整调用链的运行栈上限，也不单独证明 stack overflow 根因。
+- 同一 6e0bb01a 的全功能聚焦运行：最终 publication proof 3/3、Turso driver
+  9/9、production_storage 8/8、Lance 原生检索 10/10、权威/图 59/59、初始化
+  4/4、恢复 2/2、semantic_memory 6/6、Session feedback 15/15、learning_loop
+  20/20、EvidenceBundle 12/12 PASS。新增 vector 表丢失时 readiness/已完成
+  receipt 拒绝，以及来源撤回后允许 cleanup 的回归通过；原生事务错误后禁止
+  自动提交、真实 Pending 后显式 rollback/Drop 清理与畸形 JSON 可见性回归
+  再次通过。既有 semantic_memory 与 learning_loop 爆栈用例在未增大线程栈、
+  未修改原测试断言的条件下通过。
+- semantic_capture 组已有 7 项明确 PASS，但
+  `semantic_capture_http_multilingual_search_isolation_and_updates` 仍发生
+  stack overflow / SIGABRT，整个聚焦步骤 FAIL。未把进程中止记为普通断言失败，
+  也未将其余七项通过当作该组整体通过。完整默认特性测试、debug build/HTTP
+  smoke、MCP smoke、AML 进程恢复与 keyword 种子评估当次均为 NOT_RUN。
+- 该头 fast-check 在 fmt 检查失败，其后无默认特性 Clippy/完整测试及 Python
+  门禁 NOT_RUN；正式 rustfmt 补丁已从准备工件回灌本地，仍须后续精确提交验证。
+  catalog 缺表用例的“不兼容拒绝且 DDL/原文保持”修正已在该头编译，但未被
+  本次聚焦筛选选中，完整测试又未执行，因此该修正的运行结果仍为 NOT_RUN。
+  本段仅追记已测提交的结果，不将准备检查、格式回灌或通过子集视为最终验收。

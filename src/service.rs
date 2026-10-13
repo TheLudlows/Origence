@@ -90,7 +90,10 @@ impl Service {
         }
         let profiles = self.engine.relational().committed_vector_profiles().await?;
         for (profile, dimension) in profiles {
-            self.engine.vector().check_vector_available(&profile, dimension).await?;
+            self.engine
+                .vector()
+                .check_vector_available(&profile, dimension)
+                .await?;
         }
         Ok(())
     }
