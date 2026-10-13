@@ -146,7 +146,7 @@ class SelectorTests(unittest.TestCase):
         result = s.select(event(), "pull_request", REPOSITORY, self.fake_git([s.WORKFLOW], old, new))
         self.assertFalse(result["run_ann"])
 
-    def test_every_ann_execution_and_global_change_runs_both(self):
+    def test_every_ann_execution_and_global_change_selects_safely(self):
         replacements = (
             ("cargo build --locked --release", "cargo build --release"),
             ("RUSTUP_TOOLCHAIN: 1.98.0", "RUSTUP_TOOLCHAIN: 1.99.0"),
@@ -169,7 +169,71 @@ class SelectorTests(unittest.TestCase):
                 candidate = wired().replace(old_text, new_text)
                 self.assertNotEqual(candidate, wired())
                 result = s.select(event(), "pull_request", REPOSITORY, self.fake_git([s.WORKFLOW], new=candidate))
-                self.assert_both(result)
+                global_or_wiring = old_text in {
+                    "contents: read", "cancel-in-progress: true", "name: T0 probes", "jobs:\n",
+                    "  ann-compatibility:\n", s.CONTROL["ann"],
+                    "run: python3 tools/t0-ci-selection/select_jobs.py",
+                }
+                self.assertTrue(result["run_ann"], result)
+                self.assertEqual(result["run_turso"], global_or_wiring, result)
+
+    def test_ann_only_workflow_and_source_upgrade_skips_unchanged_turso(self):
+        old = wired()
+        new = old.replace("timeout-minutes: 180", "timeout-minutes: 160").replace(
+            "save-if: false", "save-if: true"
+        ).replace("name: ANN build", "name: Lance 0.40 ANN and FTS build").replace(
+            "cargo build --locked --release", "cargo build --locked --release -j 2\n      - run: python3 tools/t0-ann-probe/fts.py"
+        )
+        paths = [s.WORKFLOW, "tools/t0-ann-probe/Cargo.toml", "tools/t0-ann-probe/Cargo.lock",
+                 "tools/t0-ann-probe/fts.py", "tools/t0-ci-selection/select_jobs.py",
+                 "docs/VALIDATION.md", "docs/T0_STORAGE_CONTRACT.md", "docs/t0-lance-040-report.md"]
+        result = s.select(event(), "pull_request", REPOSITORY, self.fake_git(paths, old, new))
+        self.assertFalse(result["run_turso"], result)
+        self.assertTrue(result["run_ann"], result)
+        self.assertEqual(s.workflow_probe_changes(old, new), (False, True))
+        self.assertIn("Turso: SKIPPED / NOT_RUN", s.summary(result))
+        # Changing Turso's actual source must still run Turso even with its
+        # workflow block preserved byte-for-byte.
+        paths.append("tools/t0-turso-probe/verify.py")
+        self.assert_both(s.select(event(), "pull_request", REPOSITORY, self.fake_git(paths, old, new)))
+
+    def test_symmetric_workflow_only_changes_and_selection_only_edits(self):
+        old = wired()
+        for new, expected in (
+            (old.replace("tools/t0-turso-probe/verify.py", "tools/t0-turso-probe/staged.py"), (True, False)),
+            (old.replace("name: ANN build", "name: ANN and FTS build"), (False, True)),
+            (old.replace("tools/t0-turso-probe/verify.py", "tools/t0-turso-probe/staged.py").replace("name: ANN build", "name: ANN and FTS build"), (True, True)),
+            (old, (False, False)),
+        ):
+            with self.subTest(expected=expected):
+                result = s.select(event(), "pull_request", REPOSITORY, self.fake_git([s.WORKFLOW, "tools/t0-ci-selection/select_jobs.py"], old, new))
+                self.assertEqual((result["run_turso"], result["run_ann"]), expected)
+        result = s.select(event(), "pull_request", REPOSITORY, self.fake_git(["tools/t0-ci-selection/test_select_jobs.py"], old, old))
+        self.assertFalse(result["run_turso"])
+        self.assertFalse(result["run_ann"])
+        self.assertEqual(result["reason"], "selection_only")
+
+    def test_ann_only_upgrade_falls_back_for_global_alias_and_fetch_failures(self):
+        old = wired()
+        new = old.replace("name: ANN build", "name: Lance 0.40 build")
+        paths = [s.WORKFLOW, "tools/t0-ann-probe/Cargo.toml"]
+        for changed in (
+            new.replace("contents: read", "contents: write"),
+            new.replace("    timeout-minutes: 180", "    env: &shared {INPUT: changed}\n    timeout-minutes: 180"),
+            new.replace("run: python3 tools/t0-ci-selection/select_jobs.py", "run: echo modified selector"),
+        ):
+            self.assert_both(s.select(event(), "pull_request", REPOSITORY, self.fake_git(paths, old, changed)))
+        def unavailable(*args):
+            if args[0] in ("cat-file", "fetch"):
+                raise subprocess.CalledProcessError(1, ["git", *args])
+            return self.fake_git(paths, old, new)(*args)
+        self.assert_both(s.select(event(), "pull_request", REPOSITORY, unavailable))
+
+    def test_new_lance_report_is_exact_documentation_allowlist_entry(self):
+        result = s.select(event(), "pull_request", REPOSITORY, self.fake_git(["docs/t0-lance-040-report.md"]))
+        self.assertFalse(result["run_turso"])
+        self.assertFalse(result["run_ann"])
+        self.assert_both(s.select(event(), "pull_request", REPOSITORY, self.fake_git(["docs/t0-lance-040-other-report.md"])))
 
     def test_cross_job_yaml_anchor_cannot_hide_ann_environment_change(self):
         old = wired().replace(
@@ -395,6 +459,28 @@ class GitFixtureTests(unittest.TestCase):
             self.assertIn(current, summary.read_text())
             for temporary in (event_file, output, summary):
                 temporary.unlink()
+            # Inverse update: earlier Turso work remains in the PR, but only
+            # ANN inputs/workflow plus the explicit report change now.
+            ann.write_text("upgraded ANN and FTS inputs\n")
+            workflow.write_text(wired().replace("name: ANN build", "name: Lance 0.40 ANN and FTS build"))
+            report = root / "docs/t0-lance-040-report.md"
+            report.parent.mkdir(parents=True)
+            report.write_text("Native execution not run in this fixture.\n")
+            ann_current = commit("ANN-only workflow and source update")
+            result = s.select(event(current, ann_current), "pull_request", REPOSITORY, git)
+            self.assertFalse(result["run_turso"], result)
+            self.assertTrue(result["run_ann"], result)
+            self.assertEqual(s.check_execution_context(result, ann_current, git)["run_turso"], False)
+            self.assertIn(b"tools/t0-turso-probe/input", git("diff", "--name-only", base, ann_current))
+            event_file.write_text(json.dumps(event(current, ann_current)))
+            env["GITHUB_WORKFLOW_SHA"] = ann_current
+            subprocess.run([sys.executable, str(Path(s.__file__).resolve())], cwd=root,
+                           env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            self.assertEqual(output.read_text(), "run_turso=false\nrun_ann=true\n")
+            self.assertIn("Turso: SKIPPED / NOT_RUN", summary.read_text())
+            for temporary in (event_file, output, summary):
+                temporary.unlink()
+            current = ann_current
             # Renames must expose deletion from ANN as well as addition to FTS.
             ann.rename(fts.parent / "moved-ann-input")
             renamed = commit("cross-probe move")

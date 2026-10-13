@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("t0_probe", Path(__file__).with_name("probe.py"))
@@ -34,18 +35,51 @@ def complete_report():
     for i, phase in enumerate(probe.PHASES):
         for bucket in probe.BUCKETS + (() if i == 0 else ("fresh_unindexed",)):
             queries.append(row(phase,bucket,i+1))
-    report = {"schema":probe.SCHEMA,"status":"PASS_SYNTHETIC_T0","config":config,"lancedb":"0.23.1",
+    report = {"schema":probe.SCHEMA,"status":"PASS_SYNTHETIC_T0","config":config,"lancedb":"0.40.0",
               "candidate_limit":100,"queries":queries,"reopened_fresh_query":row("reopened","fresh_unindexed",3),
               "temporary_database_removed":True,"fixture_indexed_sha256":"a"*64,"fixture_final_sha256":"b"*64}
     for key, indexed, unindexed in (("indexed_evidence",9984,0),("fresh_evidence_before_refresh",9984,16),
                                      ("fresh_evidence_after_refresh",10000,0),("reopened_evidence",10000,0)):
-        report[key] = {"list_indices":[{"name":"t0_vector_l2","type":"IVF_FLAT","columns":["vector"]}],"index_stats":{"indexed_rows":indexed,"unindexed_rows":unindexed,"type":"IVF_FLAT","distance_type":"L2"}}
+        report[key] = {"list_indices":[{"name":"t0_vector_l2","type":"IVF_FLAT","columns":["vector"]}],"index_stats":{"indexed_rows":indexed,"unindexed_rows":unindexed,"type":"IVF_FLAT","distance_type":"L2","loss":None,"loss_status":probe.LOSS_STATUS}}
     return report
 
 
 class ReportGateTests(unittest.TestCase):
     def test_complete_synthetic_report(self):
         self.assertEqual(probe.validate_report(complete_report()), [])
+
+    def test_previous_dependency_pass_is_not_current_evidence(self):
+        report = complete_report()
+        report["lancedb"] = "0.23.1"
+        self.assertIn("dependency or candidate-limit mismatch", probe.validate_report(report))
+
+    def test_removed_training_loss_is_explicit_not_fabricated(self):
+        for field, value in (("loss", 0.0), ("loss_status", "measured")):
+            report = complete_report()
+            report["indexed_evidence"]["index_stats"][field] = value
+            self.assertTrue(any("training loss" in error for error in probe.validate_report(report)))
+        report = complete_report()
+        del report["indexed_evidence"]["index_stats"]["loss"]
+        self.assertTrue(any("training loss" in error for error in probe.validate_report(report)))
+
+    def test_lock_version_guard_requires_current_complete_dependency_identity(self):
+        current = {"lancedb":"0.40.0", "lance":"13.0.0", "arrow-array":"58.0.0", "arrow-schema":"58.0.0"}
+        with tempfile.TemporaryDirectory() as directory:
+            lock = Path(directory) / "Cargo.lock"
+            self.assertTrue(probe.lock_errors(lock))
+            def write(versions):
+                lock.write_text("\n".join(f'[[package]]\nname = "{name}"\nversion = "{version}"' for name, version in versions.items()))
+            write(current)
+            self.assertEqual(probe.lock_errors(lock), [])
+            for name, version in (("lancedb","0.23.1"),("lance","1.0.1"),("arrow-array","56.2.0"),("arrow-schema","58.1.0")):
+                write({**current,name:version})
+                self.assertTrue(any(name in error for error in probe.lock_errors(lock)))
+            write(current)
+            with lock.open("a") as stream:
+                stream.write('\n[[package]]\nname = "lancedb"\nversion = "0.23.1"\n')
+            self.assertTrue(probe.lock_errors(lock))
+            lock.write_text("not valid = [")
+            self.assertTrue(probe.lock_errors(lock))
 
     def test_missing_and_duplicate_buckets_fail(self):
         report = complete_report()

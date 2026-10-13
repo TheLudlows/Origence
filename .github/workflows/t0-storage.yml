@@ -133,10 +133,6 @@ jobs:
         with:
           toolchain: 1.98.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: tools/t0-ann-probe
-          save-if: false
       - name: Native protobuf build prerequisite
         run: |
           sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
@@ -150,14 +146,29 @@ jobs:
           uname -a > "$RUNNER_TEMP/t0-ann/runner.txt"
           lscpu >> "$RUNNER_TEMP/t0-ann/runner.txt"
           free -h >> "$RUNNER_TEMP/t0-ann/runner.txt"
-      - name: Generate provisional isolated lock only if absent
+      - name: Generate provisional 0.40 lock only when the isolated pin changed
         run: |
-          if [ ! -f tools/t0-ann-probe/Cargo.lock ]; then
-            echo 'PROVISIONAL: lock generated on runner; final gate requires committed lock' | tee "$RUNNER_TEMP/t0-ann/lock-status.txt"
+          if ! python3 - <<'PYLOCK'
+          import pathlib, tomllib
+          p = pathlib.Path('tools/t0-ann-probe/Cargo.lock')
+          packages = tomllib.loads(p.read_text()).get('package', []) if p.exists() else []
+          assert [x['version'] for x in packages if x['name'] == 'lancedb'] == ['0.40.0']
+          assert [x['version'] for x in packages if x['name'] == 'arrow-array'] == ['58.0.0']
+          PYLOCK
+          then
+            echo 'PROVISIONAL: Cargo regenerated isolated lock; final gate requires committed lock' | tee "$RUNNER_TEMP/t0-ann/lock-status.txt"
             cargo generate-lockfile --manifest-path tools/t0-ann-probe/Cargo.toml
           else
-            echo 'committed lock; all native commands use --locked' | tee "$RUNNER_TEMP/t0-ann/lock-status.txt"
+            echo 'committed 0.40 lock; native commands use --locked' | tee "$RUNNER_TEMP/t0-ann/lock-status.txt"
           fi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/t0-ann-probe
+          shared-key: t0-lance-040-release
+          save-if: true
+          cache-on-failure: true
+      - name: Capture resolved dependency and feature graph
+        run: |
           cargo metadata --locked --manifest-path tools/t0-ann-probe/Cargo.toml --format-version 1 > "$RUNNER_TEMP/t0-ann/cargo-metadata.json"
           cargo tree --locked --manifest-path tools/t0-ann-probe/Cargo.toml -e features > "$RUNNER_TEMP/t0-ann/features.txt"
       - name: Produce formatter patch for exact final-head verification
@@ -166,15 +177,23 @@ jobs:
           git diff -- tools/t0-ann-probe > "$RUNNER_TEMP/t0-ann/rustfmt.patch"
       - name: Python report verifier tests
         run: python3 -m unittest discover -s tools/t0-ann-probe -p 'test_*.py' -v
-      - name: Warnings-denied isolated Clippy
-        run: cargo clippy --locked --manifest-path tools/t0-ann-probe/Cargo.toml --all-targets -j 2 -- -D warnings
-      - name: Rust fixture tests
-        run: cargo test --locked --manifest-path tools/t0-ann-probe/Cargo.toml -j 2
-      - name: Build the pinned ANN executable
+      - name: Warnings-denied isolated release Clippy
+        timeout-minutes: 45
+        run: cargo clippy --release --locked --manifest-path tools/t0-ann-probe/Cargo.toml --all-targets -j 2 --timings -- -D warnings
+      - name: Rust release fixture tests
+        timeout-minutes: 45
+        run: cargo test --release --locked --manifest-path tools/t0-ann-probe/Cargo.toml -j 2 --timings
+      - name: Build the pinned Lance 0.40 FTS and ANN executable
         id: native_ann
         timeout-minutes: 45
-        run: cargo build --locked --manifest-path tools/t0-ann-probe/Cargo.toml --release -j 2
+        run: cargo build --locked --manifest-path tools/t0-ann-probe/Cargo.toml --release -j 2 --timings
+      - name: Bounded native chunk FTS ranking, scope and lifecycle
+        if: ${{ !cancelled() && steps.native_ann.outcome == 'success' }}
+        timeout-minutes: 4
+        run: |
+          timeout --signal=KILL 210s python3 tools/t0-ann-probe/fts_probe.py --binary tools/t0-ann-probe/target/release/origence-t0-ann-probe --output "$RUNNER_TEMP/t0-ann/fts"
       - name: Bounded 10k 128D synthetic paired exact and IVF_FLAT
+        if: ${{ !cancelled() && steps.native_ann.outcome == 'success' }}
         run: python3 tools/t0-ann-probe/probe.py --execute --rows 10000 --dimension 128 --queries 3 --index ivf_flat --timeout-seconds 1800
       - name: Independent full-partition diagnostic (64 of 64, no speedup claim)
         if: ${{ !cancelled() && steps.native_ann.outcome == 'success' }}
@@ -198,6 +217,7 @@ jobs:
             ${{ runner.temp }}/t0-ann/
             tools/t0-ann-probe/Cargo.lock
             tools/t0-ann-probe/runs/
+            tools/t0-ann-probe/target/cargo-timings/
           if-no-files-found: error
   probe-results:
     needs: [select-probes, turso-compatibility, ann-compatibility]

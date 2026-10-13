@@ -229,7 +229,7 @@ impl Bucket {
             .collect()
     }
     // Exactly one merged AND expression reaches only_if(). Repeated only_if calls
-    // replace the filter in LanceDB 0.23.1 and must not be used as conjunctions.
+    // replace the filter in LanceDB 0.40.0 and must not be used as conjunctions.
     pub fn filter(&self, rows: &[Row], ids: &[usize]) -> String {
         let mut terms = vec![
             format!("tenant = '{}'", quote(self.tenant)),

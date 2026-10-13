@@ -24,7 +24,7 @@ are made from a bounded subset, so these tests validate report checks only.
 """
     report = {"schema": policy.SCHEMA, "policy_id": policy.POLICY_ID,
               "config": policy.CONFIG.copy(), "contract_sha256": policy.CONTRACT_SHA256,
-              "status": "PASS_QUALITY", "lancedb": "0.23.1", "candidate_limit": 100,
+              "status": "PASS_QUALITY", "lancedb": "0.40.0", "candidate_limit": 100,
               "fixture_indexed_sha256": policy.fixture_sha256(9984),
               "fixture_final_sha256": policy.fixture_sha256(10000),
               "temporary_database_removed": True, "setup_sdk_calls": policy.SETUP_SDK_CALLS.copy(),
@@ -74,7 +74,7 @@ are made from a bounded subset, so these tests validate report checks only.
                                      ("fresh_evidence_after_refresh", 10000, 0), ("reopened_evidence", 10000, 0)):
         report[key] = {"list_indices": [{"name": "t0_vector_l2", "type": "IVF_FLAT", "columns": ["vector"]}],
                        "index_stats": {"indexed_rows": indexed, "unindexed_rows": unindexed,
-                                       "type": "IVF_FLAT", "distance_type": "L2"}}
+                                       "type": "IVF_FLAT", "distance_type": "L2", "loss": None, "loss_status": policy.LOSS_STATUS}}
     for key, version, count, fragments in (("layout_before_compact", 1, 9984, 39),
             ("layout_after_compact", 2, 9984, 3), ("layout_after_index", 3, 9984, 3),
             ("layout_before_index_refresh", 4, 10000, 4), ("layout_after_index_refresh", 5, 10000, 4)):
@@ -422,6 +422,20 @@ class PolicyReportTests(unittest.TestCase):
         report = complete_report()
         report["temporary_database_removed"] = False
         self.assert_rejected(report, "cleanup")
+
+    def test_previous_dependency_pass_is_not_current_evidence(self):
+        report = complete_report()
+        report["lancedb"] = "0.23.1"
+        self.assert_rejected(report, "lancedb: frozen contract mismatch")
+
+    def test_removed_training_loss_cannot_be_invented_or_silently_missing(self):
+        for field, value in (("loss", 0.0), ("loss_status", "measured")):
+            report = complete_report()
+            report["indexed_evidence"]["index_stats"][field] = value
+            self.assert_rejected(report, "training loss")
+        report = complete_report()
+        del report["indexed_evidence"]["index_stats"]["loss"]
+        self.assert_rejected(report, "training loss")
 
     def test_native_and_explain_call_counts_are_recomputed(self):
         for key in ("selected_native", "exact_native", "oracle_native", "explain_plans"):

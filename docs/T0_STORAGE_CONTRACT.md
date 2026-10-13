@@ -1,5 +1,10 @@
 # Issue #52 T0: frozen candidate contracts and evidence gates
 
+Latest candidate: [LanceDB 0.40.0 chunk FTS + ANN](t0-lance-040-report.md).
+The version table and Turso FTS measurements below retain earlier-round context;
+new native results do not inherit earlier passes. Shared retrieval contracts
+remain in force unless an explicit later decision changes them.
+
 Baseline: `main@d0521c0935083e71890ab02c100920c2edaa7227`, 2026-10-12.
 Scope: isolated compatibility/measurement probes only. The production SQLite,
 LanceDB exact-query path, root Cargo manifest/lock, protocols and default backend
@@ -373,3 +378,14 @@ generation readiness, publication-ledger and transitive Learning semantics are
 NOT_RUN in this raw-keyword slice. Their absence must remain visible and cannot
 be turned into production substitution approval. No 100k/1M rung, real provider,
 root dependency change, default switch or merge follows this probe.
+
+
+## 2026-10-13 LanceDB 0.40.0 candidate update
+
+The user selected native LanceDB chunk FTS plus ANN for the next bounded T0
+slice. See [the frozen 0.40.0 probe scope](t0-lance-040-report.md). Earlier Turso
+FTS and Lance0.23.1 evidence above remains historical, not current candidate
+acceptance. Turso remains the authority/graph target; summary placement and
+same-chunk summary-AND are not changed by the raw-chunk probe. No production
+backend/default or migration work is included. All new native results are
+NOT_RUN until exact-head execution.

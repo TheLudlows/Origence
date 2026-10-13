@@ -1,5 +1,6 @@
-//! Isolated, synthetic LanceDB 0.23.1 probe. Never opens an application database.
+//! Isolated, synthetic LanceDB 0.40.0 probe. Never opens an application database.
 mod fixture;
+mod fts;
 mod policy;
 
 use anyhow::{Context, Result, ensure};
@@ -109,7 +110,7 @@ fn query(
         .distance_type(DistanceType::L2)
         .only_if(filter)
         .limit(CANDIDATE_LIMIT);
-    // 0.23.1 has postfilter(), but no public prefilter() builder. Be explicit through
+    // 0.40.0 has postfilter(), but no public prefilter() builder. Be explicit through
     // its public HasQuery trait; do not rely solely on today's default.
     query.mut_query().prefilter = true;
     query.mut_query().fast_search = false;
@@ -131,6 +132,18 @@ fn query(
         "unsafe query mode"
     );
     ensure!(request.use_index == ann, "wrong exact/ANN mode");
+    ensure!(
+        request.distance_type == Some(DistanceType::L2)
+            && request.base.limit == Some(CANDIDATE_LIMIT),
+        "query metric or candidate target changed"
+    );
+    if ann {
+        ensure!(
+            request.minimum_nprobes == config.nprobes
+                && request.maximum_nprobes == Some(config.nprobes),
+            "ANN must use fixed, non-adaptive probe coverage"
+        );
+    }
     Ok(query)
 }
 
@@ -524,7 +537,8 @@ async fn index_evidence(table: &Table, config: &Config) -> Result<Value> {
     Ok(
         json!({"list_indices":indices.iter().map(|i| json!({"name":i.name,"type":i.index_type.to_string(),"columns":i.columns})).collect::<Vec<_>>(),
         "index_stats":{"indexed_rows":stats.num_indexed_rows,"unindexed_rows":stats.num_unindexed_rows,
-        "type":stats.index_type.to_string(),"distance_type":"L2","num_indices":stats.num_indices,"loss":stats.loss}}),
+        "type":stats.index_type.to_string(),"distance_type":"L2","num_indices":stats.num_indices,
+        "loss":null,"loss_status":"not_exposed_by_lancedb_0.40.0_public_index_stats"}}),
     )
 }
 
@@ -729,6 +743,13 @@ async fn probe(config: &Config, report: &mut Value) -> Result<()> {
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
+    if args.get(1).is_some_and(|arg| arg == "fts-v1") {
+        ensure!(
+            args.len() == 3,
+            "usage: origence-t0-ann-probe fts-v1 OUTPUT_JSONL"
+        );
+        return fts::run(Path::new(&args[2])).await;
+    }
     ensure!(
         args.len() == 3 || (args.len() == 4 && args[3] == "filter-policy-v1"),
         "usage: origence-t0-ann-probe CONFIG.json NEW_REPORT.json [filter-policy-v1]"
@@ -740,7 +761,7 @@ async fn main() -> Result<()> {
         .create_new(true)
         .open(&args[2])?;
     let mut report = json!({"schema":"origence-t0-ann-v1","status":"RUNNING","config":config,
-        "lancedb":"0.23.1","application_baseline":"d0521c0935083e71890ab02c100920c2edaa7227",
+        "lancedb":"0.40.0","application_baseline":"d0521c0935083e71890ab02c100920c2edaa7227",
         "candidate_limit":CANDIDATE_LIMIT,"score_semantics":"1/(1+returned_L2); returned_L2 verified against squared Euclidean full-vector distance",
         "queries":[],"limitations":["synthetic clustered geometry; not embedding/production recall",
             "in-memory authority surrogate; SQLite, source events, route/identity contracts NOT_RUN",

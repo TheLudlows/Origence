@@ -18,6 +18,8 @@ import struct
 
 HERE = Path(__file__).resolve().parent
 SCHEMA = "origence-t0-filter-policy-v1"
+LANCEDB_VERSION = "0.40.0"
+LOSS_STATUS = "not_exposed_by_lancedb_0.40.0_public_index_stats"
 POLICY_ID = "eligible4096-fraction40-ivf32of64-v1"
 CONFIG = {"rows": 10000, "dimension": 128, "queries_per_bucket": 8,
           "partitions": 64, "nprobes": 32, "refine_factor": 10,
@@ -299,6 +301,8 @@ def _audit_evidence(report, cases, errors):
                 not _equal_value(stats.get("unindexed_rows"), unindexed) or
                 stats.get("type") != "IVF_FLAT" or stats.get("distance_type") != "L2"):
             errors.append(f"{key}: index metric/type/coverage mismatch")
+        if "loss" not in stats or stats["loss"] is not None or stats.get("loss_status") != LOSS_STATUS:
+            errors.append(f"{key}: unavailable public training loss must be explicitly null")
     layouts = {}
     for key, rows in (("layout_before_compact", 9984), ("layout_after_compact", 9984),
                       ("layout_after_index", 9984), ("layout_before_index_refresh", 10000),
@@ -332,7 +336,7 @@ def validate_report(report):
     if not isinstance(report, dict):
         return ["report is not an object"]
     for key, value in (("schema", SCHEMA), ("policy_id", POLICY_ID), ("config", CONFIG),
-                       ("contract_sha256", CONTRACT_SHA256), ("lancedb", "0.23.1"),
+                       ("contract_sha256", CONTRACT_SHA256), ("lancedb", LANCEDB_VERSION),
                        ("candidate_limit", 100), ("setup_sdk_calls", SETUP_SDK_CALLS),
                        ("call_count_scope", CALL_COUNT_SCOPE), ("timing_protocol", "pair_then_oracle_audit_then_bucket_plans")):
         if not _equal_value(report.get(key), value):

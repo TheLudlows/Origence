@@ -426,7 +426,7 @@ pub fn initial_report(config: &Config) -> Result<Value> {
     );
     Ok(
         json!({"schema":SCHEMA,"policy_id":POLICY_ID,"contract_sha256":hash_bytes(CONTRACT.as_bytes()),"status":"RUNNING","config":config,
-        "lancedb":"0.23.1","application_baseline":"d0521c0935083e71890ab02c100920c2edaa7227","candidate_limit":100,
+        "lancedb":"0.40.0","application_baseline":"d0521c0935083e71890ab02c100920c2edaa7227","candidate_limit":100,
         "queries":[],"cases":[],"plan_pool":{},"call_counts":{"selected_native":0,"exact_native":0,"oracle_native":0,"explain_plans":0},
         "timing_protocol":"pair_then_oracle_audit_then_bucket_plans",
         "timing_boundary":"Independent eligibility, authority map/set, routing/filter/query build, native execution/decode/sort, final verification and temporary state cleanup; excludes input query generation, oracle, plan, independent audit and report serialization",

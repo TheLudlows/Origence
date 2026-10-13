@@ -14,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import tomllib
 
 import probe
 import policy_report
@@ -115,7 +114,9 @@ def main() -> int:
     baseline = probe.baseline_evidence()
     binary = (args.binary or HERE / "target/release/origence-t0-ann-probe").resolve()
     lock = HERE / "Cargo.lock"
+    dependency_errors = probe.lock_errors(lock)
     plan = {"status":"PLANNED_NOT_RUN","contract":frozen,"contract_sha256":sha256(CONTRACT_PATH),
+            "lancedb":probe.LANCEDB_VERSION,"lock_compatible":not dependency_errors,"lock_errors":dependency_errors,
             "baseline_matches":baseline["matches"],"binary_exists":binary.is_file(),"lock_exists":lock.is_file(),
             "native_processes":2,"native_deadline_seconds_each":900,"raw_vector_bytes_per_build":5120000,
             "memory_note":"No hard RAM bound; only fixed rows/dimension/query matrix and native process deadline.",
@@ -125,12 +126,11 @@ def main() -> int:
         return 0
     if not baseline["matches"]:
         raise SystemExit("Application baseline mismatch; no native run started")
-    if not lock.is_file() or not binary.is_file():
+    if dependency_errors:
+        raise SystemExit("NOT_RUN: Cargo lock bootstrap required; " + "; ".join(dependency_errors))
+    if not binary.is_file():
         raise SystemExit("NOT_RUN: isolated Cargo lock and locked release executable required")
-    lancedb = [entry for entry in tomllib.loads(lock.read_text())["package"] if entry["name"]=="lancedb"]
-    if len(lancedb)!=1 or lancedb[0]["version"]!="0.23.1":
-        raise SystemExit("Isolated lock must resolve exactly LanceDB 0.23.1")
-    source_names = ["Cargo.toml","Cargo.lock","src/main.rs","src/fixture.rs","src/policy.rs","probe.py","policy.py","policy_report.py","policy-contract.json"]
+    source_names = ["Cargo.toml","Cargo.lock","src/main.rs","src/fixture.rs","src/policy.rs","src/fts.rs","probe.py","policy.py","policy_report.py","policy-contract.json"]
     hashes = {name:sha256(HERE/name) for name in source_names}
     environment = {**plan,"baseline":baseline,"source_sha256":hashes,"binary_sha256":sha256(binary),
                    "platform":platform.platform(),"python":sys.version,

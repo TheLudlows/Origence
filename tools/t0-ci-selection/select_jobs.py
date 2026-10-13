@@ -22,6 +22,7 @@ DOCUMENTATION = frozenset({
     "docs/t0-ann-report.md",
     "docs/t0-fts-cost-report.md",
     "docs/t0-staged-fts-report.md",
+    "docs/t0-lance-040-report.md",
 })
 EVIDENCE_PATH = re.compile(
     r"docs/evidence/[0-9]{4}-[0-9]{2}-[0-9]{2}-t0-"
@@ -168,11 +169,11 @@ def workflow_blocks(source):
     if not sep or source.count("\njobs:\n") != 1:
         raise UnknownContext("unknown_workflow_layout")
     # A root-level key after jobs would leave the jobs mapping. Never let an
-    # apparent Turso-only block conceal a new global env/defaults/permissions.
+    # apparent probe-only block conceal a new global env/defaults/permissions.
     if any(line and not line.startswith(" ") for line in body.splitlines()):
         raise UnknownContext("unknown_workflow_root_key")
     # Do not silently absorb valid but unrecognized YAML job headings into
-    # the preceding Turso block (uppercase, underscores, quotes, inline maps).
+    # the preceding probe block (uppercase, underscores, quotes, inline maps).
     for line in body.splitlines():
         if not line.strip():
             continue
@@ -202,33 +203,44 @@ def execution_block(block, name):
     return heading + body
 
 
-def workflow_keeps_ann_inputs(before_source, after_source):
-    """Allow FTS step edits and exactly this selector's declared wiring only.
+def workflow_probe_changes(before_source, after_source):
+    """Return (Turso changed, ANN changed), or None for unknown context.
 
-    All existing ANN steps, env, runner, timeouts, actions and job permissions
-    are compared byte-for-byte. No YAML parser or permissive key stripping.
+    Each job's steps, env, runner, timeouts, actions and permissions are
+    compared byte-for-byte. Only the exact declared selector controls are
+    stripped; shared settings and known selector/report wiring must match.
     """
     old_header, old_jobs = workflow_blocks(before_source)
     new_header, new_jobs = workflow_blocks(after_source)
     if old_header.count(HELPER_TRIGGER) > 1 or new_header.count(HELPER_TRIGGER) > 1:
-        return False
+        return None
     if old_header.replace(HELPER_TRIGGER, "") != new_header.replace(HELPER_TRIGGER, ""):
-        return False
+        return None
     probes = {"turso-compatibility", "ann-compatibility"}
     selected = probes | {"select-probes", "probe-results"}
     if set(old_jobs) not in (probes, selected) or set(new_jobs) != selected:
-        return False
+        return None
     for name, template in (("select-probes", SELECT_JOB), ("probe-results", REPORT_JOB)):
         if new_jobs[name] != template or (name in old_jobs and old_jobs[name] != template):
-            return False
+            return None
     if not new_jobs["turso-compatibility"].startswith("  turso-compatibility:\n" + CONTROL["turso"]):
-        return False
+        return None
     if not new_jobs["ann-compatibility"].startswith("  ann-compatibility:\n" + CONTROL["ann"]):
-        return False
-    return execution_block(old_jobs["ann-compatibility"], "ann") == execution_block(new_jobs["ann-compatibility"], "ann")
+        return None
+    return tuple(
+        execution_block(old_jobs[f"{name}-compatibility"], name)
+        != execution_block(new_jobs[f"{name}-compatibility"], name)
+        for name in ("turso", "ann")
+    )
 
 
-def classify(paths, workflow_safe=False):
+def workflow_keeps_ann_inputs(before_source, after_source):
+    """Retain the original narrow comparison for callers and regressions."""
+    changes = workflow_probe_changes(before_source, after_source)
+    return changes is not None and not changes[1]
+
+
+def classify(paths, workflow_changes=None):
     turso = ann = False
     selection_changed = False
     for path in paths:
@@ -238,16 +250,21 @@ def classify(paths, workflow_safe=False):
             ann = True
         elif path == WORKFLOW or path.startswith("tools/t0-ci-selection/"):
             selection_changed = True
-            turso = True
         elif path in DOCUMENTATION or EVIDENCE_PATH.fullmatch(path):
             continue
         else:
             return True, True, "shared_or_unknown_input_changed"
-    if selection_changed and not workflow_safe:
-        return True, True, "workflow_or_selection_context_changed"
+    if selection_changed:
+        if workflow_changes is None:
+            return True, True, "workflow_or_selection_context_changed"
+        turso = turso or workflow_changes[0]
+        ann = ann or workflow_changes[1]
     if not paths:
         return True, True, "empty_diff"
-    return turso, ann, "exact_head_inputs_selected" if turso or ann else "documentation_only"
+    reason = "exact_head_inputs_selected" if turso or ann else (
+        "selection_only" if selection_changed else "documentation_only"
+    )
+    return turso, ann, reason
 
 
 def select(event, event_name, repository, run=git):
@@ -257,12 +274,12 @@ def select(event, event_name, repository, run=git):
         result.update(before=before, after=after)
         paths = changed_paths(before, after, run)
         result["paths"] = paths
-        workflow_safe = False
+        workflow_changes = None
         if any(p == WORKFLOW or p.startswith("tools/t0-ci-selection/") for p in paths):
             old = run("show", f"{before}:{WORKFLOW}").decode("utf-8")
             new = run("show", f"{after}:{WORKFLOW}").decode("utf-8")
-            workflow_safe = workflow_keeps_ann_inputs(old, new)
-        turso, ann, reason = classify(paths, workflow_safe)
+            workflow_changes = workflow_probe_changes(old, new)
+        turso, ann, reason = classify(paths, workflow_changes)
         result.update(run_turso=turso, run_ann=ann, reason=reason)
     except UnknownContext as exc:
         result["reason"] = str(exc)

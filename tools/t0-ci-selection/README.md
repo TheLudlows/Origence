@@ -18,22 +18,29 @@ Only changes confined to the standalone Turso or ANN probe select that probe.
 Explicit T0 report/contract/validation Markdown and dated T0 evidence JSON
 paths listed in the selector are non-executed documentation. They do not
 select a native probe by themselves; edits to their semantics are not validated
-by historical ANN results. The executable ANN policy contract and source
+by historical probe results. The executable ANN policy contract and source
 baseline stay inside the ANN input directory and always select ANN.
 
 Shared/unknown paths, incomplete event context, forks, unavailable commits,
 fetch/diff failures, empty changes, and unrecognized workflow edits run both.
 A selector-job failure or missing output also runs both via downstream guards.
 
-For the initial selector introduction and later Turso-only workflow edits, the
+For the initial selector introduction and later one-probe workflow edits, the
 workflow comparison accepts only the known top-level layout. Global settings
-must remain byte-identical except the added helper-path trigger. The ANN job
-must remain byte-identical after stripping only the two exact `needs` / `if`
-control lines introduced here. The new selector/report jobs must exactly match
-the bounded templates in `select_jobs.py`. ANN steps, runner, toolchain, env,
-permissions, caches and timeouts cannot change under this exception. Unknown
-jobs or selector wiring changes run both. Changes under this helper directory
-can use that same proof; they are not native ANN build inputs.
+must remain byte-identical except the added helper-path trigger. Each probe job
+is compared independently after stripping only the two exact `needs` / `if`
+control lines introduced here. A changed job selects its probe. Skipping the
+other probe requires its entire steps, runner, toolchain, env, permissions,
+cache configuration and timeouts to remain byte-identical, with no changed
+source/input path belonging to that probe. This works both for Turso-only work
+and ANN-only upgrades, including the isolated Lance 0.40 ANN/FTS probes.
+
+Selector/report jobs must exactly match the bounded templates in
+`select_jobs.py`. Unknown jobs, YAML indirection, global settings or selector
+wiring changes run both. Helper-only edits with both execution blocks unchanged
+run the selector tests but select neither native probe. The exact document
+`docs/t0-lance-040-report.md` is also non-executed documentation; this does not
+ignore other Lance-related paths or validate the report's claims.
 
 The summary records the exact before/after IDs and selected probes. An
 unselected probe is **SKIPPED / NOT_RUN on the current head**, never a pass.

@@ -15,10 +15,13 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 SCHEMA = "origence-t0-ann-v1"
+LANCEDB_VERSION = "0.40.0"
+LOSS_STATUS = "not_exposed_by_lancedb_0.40.0_public_index_stats"
 PHASES = ("indexed", "fresh_before_refresh", "fresh_after_refresh")
 BUCKETS = ("empty", "one", "lt_10", "lt_100", "dense_current", "sparse",
            "other_tenant", "other_workspace", "source_version", "historical_generation")
@@ -26,6 +29,24 @@ BUCKETS = ("empty", "one", "lt_10", "lt_100", "dense_current", "sparse",
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def lock_errors(lock: Path) -> list[str]:
+    """Fail closed on the old lock; only Cargo may generate its replacement."""
+    try:
+        packages = tomllib.loads(lock.read_text()).get("package", [])
+        if not isinstance(packages, list) or any(not isinstance(p, dict) for p in packages):
+            raise ValueError("invalid package list")
+    except (OSError, ValueError) as error:
+        return [f"isolated Cargo.lock is missing or malformed: {error}"]
+    errors = []
+    for name, expected in (("lancedb", LANCEDB_VERSION), ("lance", "13.0.0"),
+                           ("arrow-array", "58.0.0"), ("arrow-schema", "58.0.0")):
+        versions = [p.get("version") for p in packages if p.get("name") == name]
+        valid = len(versions) == 1 and versions[0] == expected
+        if not valid:
+            errors.append(f"Cargo.lock must resolve {name} {expected} exactly once; found {versions}")
+    return errors
 
 
 def baseline_evidence() -> dict:
@@ -106,7 +127,7 @@ def validate_report(report: dict) -> list[str]:
         errors.append("unknown report schema")
     if report.get("status") != "PASS_SYNTHETIC_T0":
         errors.append(f"native status: {report.get('status', 'missing')}")
-    if report.get("lancedb") != "0.23.1" or report.get("candidate_limit") != 100:
+    if report.get("lancedb") != LANCEDB_VERSION or report.get("candidate_limit") != 100:
         errors.append("dependency or candidate-limit mismatch")
     config = report.get("config", {})
     for digest in ("fixture_indexed_sha256", "fixture_final_sha256"):
@@ -212,6 +233,8 @@ def validate_report(report: dict) -> list[str]:
         expected_type = config.get("index_kind", "").upper()
         if stats.get("distance_type") != "L2" or stats.get("type") != expected_type:
             errors.append(f"{key}: wrong metric/index type")
+        if "loss" not in stats or stats["loss"] is not None or stats.get("loss_status") != LOSS_STATUS:
+            errors.append(f"{key}: unavailable public training loss must be explicitly null")
         indices = report.get(key, {}).get("list_indices")
         if indices != [{"name":"t0_vector_l2", "type":expected_type, "columns":["vector"]}]:
             errors.append(f"{key}: index-list metadata missing or inconsistent")
@@ -296,29 +319,28 @@ def main() -> int:
     manifest = HERE / "Cargo.toml"
     lock = HERE / "Cargo.lock"
     binary = (args.binary or HERE / "target/release/origence-t0-ann-probe").resolve()
+    dependency_errors = lock_errors(lock)
     plan = {"status":"PLANNED_NOT_RUN","config":config,"raw_vector_bytes":args.rows*args.dimension*4,
             "memory_warning":"Arrow, indexes, training and metadata add substantial overhead; this is not a RAM limit",
             "cargo_available":shutil.which("cargo") is not None,"rustc_available":shutil.which("rustc") is not None,
             "lock_exists":lock.exists(),"binary_exists":binary.is_file(),"baseline_matches":evidence["matches"],
-            "manifest_sha256":sha256(manifest),"timeout_seconds":args.timeout_seconds}
+            "manifest_sha256":sha256(manifest),"timeout_seconds":args.timeout_seconds,
+            "lancedb":LANCEDB_VERSION,"lock_compatible":not dependency_errors,"lock_errors":dependency_errors}
     if not args.execute:
         print(json.dumps(plan, indent=2))
         return 0
     if not evidence["matches"]:
         raise SystemExit("baseline source files changed; reconcile baseline evidence before executing")
-    if not lock.is_file() or not binary.is_file():
+    if dependency_errors:
+        raise SystemExit("NOT_RUN: Cargo lock bootstrap required; " + "; ".join(dependency_errors))
+    if not binary.is_file():
         raise SystemExit("NOT_RUN: generate Cargo.lock with Cargo, then build the isolated executable with --locked; see README")
-    import tomllib
-    locked = tomllib.loads(lock.read_text())
-    lancedb = [p for p in locked.get("package", []) if p.get("name") == "lancedb"]
-    if len(lancedb) != 1 or lancedb[0]["version"] != "0.23.1":
-        raise SystemExit("Cargo.lock must resolve exactly lancedb 0.23.1")
     (HERE / "runs").mkdir(exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix=f"{args.index}-{args.rows}-{args.dimension}-", dir=HERE / "runs"))
     (output / "config.json").write_text(json.dumps(config, indent=2)+"\n")
     (output / "environment.json").write_text(json.dumps({**plan,"baseline":evidence,"platform":platform.platform(),
         "python":sys.version,"binary_sha256":sha256(binary),"lock_sha256":sha256(lock),
-        "source_sha256":{p:sha256(HERE/p) for p in ("src/main.rs", "src/fixture.rs", "probe.py")},
+        "source_sha256":{p:sha256(HERE/p) for p in ("src/main.rs", "src/fixture.rs", "src/policy.rs", "src/fts.rs", "policy-contract.json", "probe.py")},
         "build_verification":"A binary hash is recorded; the caller must retain the --locked build log proving its provenance."}, indent=2)+"\n")
     native = output / "native-report.json"
     started = time.monotonic()
