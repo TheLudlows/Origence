@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.98.0"
 publish = false
-default-run = "origence-storage-probe"
 
 [[bin]]
 name = "probe-protoc"
@@ -16,20 +15,10 @@ required-features = ["build-tools"]
 resolver = "3"
 
 [features]
-default = ["sqlite", "vector"]
-sqlite = ["dep:sqlx"]
-vector = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 build-tools = ["dep:protoc-bin-vendored"]
 
 [dependencies]
 anyhow = "1"
-serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
-sqlx = { version = "=0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"], optional = true }
-lancedb = { version = "=0.23.1", default-features = false, optional = true }
-arrow-array = { version = "56.2", optional = true }
-arrow-schema = { version = "56.2", optional = true }
-futures = { version = "0.3", optional = true }
 protoc-bin-vendored = { version = "3", optional = true }
 
 [profile.dev]
