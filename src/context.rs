@@ -13,6 +13,16 @@ impl Service {
     pub async fn evidence_bundle(
         &self,
         auth: &AuthContext,
+        input: EvidenceInput,
+    ) -> Result<EvidenceBundle> {
+        // A bounded public future prevents native retrieval state from being
+        // duplicated on the stack of each embedding host's async call chain.
+        Box::pin(self.evidence_bundle_inner(auth, input)).await
+    }
+
+    async fn evidence_bundle_inner(
+        &self,
+        auth: &AuthContext,
         mut input: EvidenceInput,
     ) -> Result<EvidenceBundle> {
         input

@@ -15,6 +15,12 @@ mod publication_tests;
 
 impl Service {
     pub async fn search(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
+        // Native query futures are large. Keep that state on the heap rather
+        // than embedding it in every host/router/helper future awaiting us.
+        Box::pin(self.search_inner(a, input)).await
+    }
+
+    async fn search_inner(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
         if let Some(identity) = &input.memory_identity {
             identity
                 .validate()
@@ -409,6 +415,10 @@ impl Service {
         )
     }
     pub async fn resolve(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {
+        Box::pin(self.resolve_inner(a, input)).await
+    }
+
+    async fn resolve_inner(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {
         if input.budget_tokens > 32000 {
             return Err(AppError::Invalid("budget_tokens must be <=32000".into()));
         }

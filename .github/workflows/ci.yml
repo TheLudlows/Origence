@@ -71,6 +71,8 @@ jobs:
         run: |
           # Integration modules share one executable (autotests = false).
           status=0
+          cargo test --locked --lib -j 2 future_sizes -- --nocapture || status=1
+          cargo test --locked --lib -j 2 storage::lancedb::ann::tests || status=1
           cargo test --locked --lib -j 2 final_native_validation_ || status=1
           cargo test --locked --lib -j 2 storage::native_turso::tests || status=1
           for filter in production_storage:: lancedb_native_search:: sqlite_ initialization:: storage_recovery:: semantic_memory:: semantic_capture:: session_feedback:: learning_loop:: evidence_bundle::; do

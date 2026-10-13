@@ -69,10 +69,10 @@ impl Service {
             models,
             worker_running: Arc::new(AtomicBool::new(false)),
         };
-        // Empty fresh stores legitimately have no native full-text table. Once
-        // publication committed, a missing table/index is a storage failure,
+        // Empty fresh stores legitimately have no native tables. Once a live
+        // publication committed, a missing required surface is a storage failure,
         // never an empty corpus or permission to recreate authoritative data.
-        service.check_committed_full_text().await?;
+        service.check_committed_surfaces().await?;
         service.engine.relational().recover_jobs().await?;
         crate::worker::cleanup(&service).await?;
         Ok(service)
@@ -80,13 +80,17 @@ impl Service {
     pub async fn ready(&self) -> bool {
         self.worker_running.load(Ordering::Acquire)
             && self.engine.check().await.is_ok()
-            && self.check_committed_full_text().await.is_ok()
+            && self.check_committed_surfaces().await.is_ok()
     }
-    pub(crate) async fn check_committed_full_text(&self) -> Result<()> {
+    pub(crate) async fn check_committed_surfaces(&self) -> Result<()> {
         if self.engine.relational().has_committed_full_text().await? {
             // The authority metadata query has completed and holds no lease or
             // transaction while the independent native adapter is inspected.
             self.engine.vector().check_full_text_available().await?;
+        }
+        let profiles = self.engine.relational().committed_vector_profiles().await?;
+        for (profile, dimension) in profiles {
+            self.engine.vector().check_vector_available(&profile, dimension).await?;
         }
         Ok(())
     }

@@ -612,3 +612,21 @@ P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235
   锁 diff 仅为 origence 根依赖新增已锁存的 `lance`，所有依赖 package 记录完全
   不变（准备步骤有逐记录断言，本地亦复核）。新增原生事务中止护栏、最终发布
   proof、物理 IVF 分区校验及其测试均已编译；运行测试仍待回灌锁/格式后的 CI。
+
+- 7413db37 的 [正式 CI 38394036490](https://github.com/TheLudlows/Origence/actions/runs/38394036490)：
+  fmt、无默认特性 Clippy 与全功能 warnings-denied Clippy PASS；无默认特性
+  78 个 lib 测试全过（含 9 个原生 Turso 驱动测试与真实 Pending/错误读后的
+  fail-closed 回归）。无默认特性集成 98 PASS、1 FAIL，为旧 catalog 缺表后
+  仍期待重开的用例；已改为拒绝不兼容库且 DDL/原文不变的合同回归，待复跑。
+  全功能运行此记录时仍在执行，不能据此宣称生产发布、Context 或 ANN 全过。
+  Cargo 生成的 feature tree 确认未启用 Turso FTS；摘要仍走应用层 token 聚合。
+
+- 同一 7413db37 全功能聚焦运行已结束：最终 publication proof 3/3、Turso driver
+  9/9、production_storage 7/7、Lance 原生检索 10/10、权威/图 59/59、初始化
+  4/4、恢复 2/2、Session feedback 15/15、EvidenceBundle 12/12 PASS。
+  semantic_memory、semantic_capture、learning_loop 三组分别在既有大型 HTTP/
+  学习回归发生 stack overflow SIGABRT；没有 Rust panic backtrace。完整测试与
+  HTTP/MCP/进程恢复步骤因此 NOT_RUN，不把通过子集当作整体通过。
+  后续修复缩小公开 search/resolve/evidence_bundle future 的内联状态，并打印
+  未构造/未 poll 的 native 与 public future 类型尺寸；原三测试不改、线程栈不
+  增大，必须真实重跑判断是否解决，当前不能确定唯一根因。

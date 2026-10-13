@@ -55,7 +55,7 @@ enum Command {
     KeyRevoke {
         key_id: Uuid,
     },
-    /// Offline, explicit upgrade of an existing database to enable identity writes.
+    /// Offline inspection of the current Turso identity schema; never migrates a database.
     MemoryIdentityUpgrade {
         #[arg(long)]
         dry_run: bool,

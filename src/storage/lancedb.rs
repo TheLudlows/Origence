@@ -153,6 +153,19 @@ impl LanceDbStore {
         full_text::check_available(self).await
     }
 
+    /// Read-only schema health for an authority-required vector profile. Small
+    /// tables legitimately have no ANN index; this never scans or builds rows.
+    pub async fn check_vector_available(&self, profile: &str, dimension: usize) -> StorageResult<()> {
+        if dimension == 0 || dimension > i32::MAX as usize {
+            return Err(StorageError::Conflict("invalid committed vector dimension".into()));
+        }
+        let table = self.open_existing(&table_name(profile)).await?
+            .ok_or_else(|| StorageError::Unavailable("native vector table is missing".into()))?;
+        let version = table.version().await.map_err(|error| StorageError::Backend(error.to_string()))?;
+        table.checkout(version).await.map_err(|error| StorageError::Backend(error.to_string()))?;
+        check_dimension(&table, dimension).await
+    }
+
     /// Compare every eligible native identity against the caller's relational
     /// snapshot before top-k. Final live authority verification remains required.
     pub(crate) async fn search_authorized(

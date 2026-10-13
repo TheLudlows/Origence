@@ -8,11 +8,25 @@ use crate::storage::native_turso as db;
 use crate::types::SearchHit;
 
 impl TursoStore {
-    /// Small authority-only health metadata. Native availability is checked by
-    /// the host after this query's lease has been released, never in a DB tx.
+    /// Root-active current publication metadata, not a visibility decision:
+    /// semantic/support closure remains the retrieval transaction's job. Native
+    /// availability is checked after this query releases its lease.
     pub async fn has_committed_full_text(&self) -> StorageResult<bool> {
-        db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_ledger WHERE surface='full_text' AND state='committed')")
+        db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id AND a.current_version=c.version JOIN oc_versions v ON v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id AND v.asset_id=c.asset_id AND v.version=c.version JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id JOIN oc_artifact_ledger l ON l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.artifact_type='chunk' AND l.source_id=v.source_event_id AND l.version=v.version AND l.surface='full_text' AND l.state='committed' WHERE NOT a.deleted AND e.state='active')")
             .fetch_one(self.pool()).await.map_err(turso_err)
+    }
+
+    /// Required profile schemas only; no content, embeddings or support graph
+    /// is loaded. Withdrawn/superseded roots do not prevent startup cleanup.
+    pub async fn committed_vector_profiles(&self) -> StorageResult<Vec<(String, usize)>> {
+        let rows: Vec<(String, i64)> = db::query_as("SELECT DISTINCT i.model_id,i.dimension FROM oc_index_entries i JOIN oc_chunks c ON c.tenant_id=i.tenant_id AND c.workspace_id=i.workspace_id AND c.id=i.artifact_id JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id AND a.current_version=c.version JOIN oc_versions v ON v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id AND v.asset_id=c.asset_id AND v.version=c.version JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id JOIN oc_artifact_ledger l ON l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.artifact_type='chunk' AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=i.generation AND l.surface='vector' AND l.state='committed' WHERE i.field='content' AND i.state='ready' AND NOT a.deleted AND e.state='active' ORDER BY i.model_id,i.dimension")
+            .fetch_all(self.pool()).await.map_err(turso_err)?;
+        rows.into_iter().map(|(profile, dimension)| {
+            if !(1..=i64::from(i32::MAX)).contains(&dimension) {
+                return Err(StorageError::Conflict("invalid committed vector dimension".into()));
+            }
+            Ok((profile, dimension as usize))
+        }).collect()
     }
 }
 

@@ -99,7 +99,7 @@ impl Service {
         if status == PublicationStatus::Retrievable {
             // DomainTx reports authority readiness. The public service also
             // verifies the required native surface outside that transaction.
-            self.check_committed_full_text().await?;
+            self.check_committed_surfaces().await?;
         }
         Ok(status)
     }
