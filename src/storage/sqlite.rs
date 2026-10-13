@@ -23,17 +23,17 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::storage::native_turso::{self, Connection, Pool, Transaction};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use crate::storage::native_turso::{self, Connection, Pool, Transaction};
 use uuid::Uuid;
 
 mod app;
 #[cfg(feature = "local-storage")]
-mod full_text;
-#[cfg(feature = "local-storage")]
 mod context;
 mod domain;
+#[cfg(feature = "local-storage")]
+mod full_text;
 mod identity;
 mod improve;
 mod job_queue;

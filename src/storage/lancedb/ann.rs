@@ -51,9 +51,11 @@ pub(super) async fn ensure_index(table: &Table) -> StorageResult<()> {
 async fn check_index(table: &Table) -> StorageResult<()> {
     let present = filter_indexes::check(table, INDEX_NAME, IndexType::IvfFlat, "vector").await?;
     let stats = table.index_stats(INDEX_NAME).await.map_err(backend)?;
-    if !present || !stats.is_some_and(|stats| {
-        stats.index_type == IndexType::IvfFlat && stats.distance_type == Some(DistanceType::L2)
-    }) {
+    if !present
+        || !stats.is_some_and(|stats| {
+            stats.index_type == IndexType::IvfFlat && stats.distance_type == Some(DistanceType::L2)
+        })
+    {
         return Err(StorageError::Conflict("incompatible vector index".into()));
     }
     Ok(())
@@ -143,29 +145,50 @@ mod native_tests {
     async fn frozen_native_ann_and_exact_requests_preserve_unindexed_rows() {
         let dir = tempfile::tempdir().unwrap();
         let store = LanceDbStore::open(dir.path()).await.unwrap();
-        let scope = Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() };
-        let source = SourceVersion { source_id: Uuid::new_v4(), version: 1 };
+        let scope = Scope {
+            tenant_id: Uuid::new_v4(),
+            workspace_id: Uuid::new_v4(),
+        };
+        let source = SourceVersion {
+            source_id: Uuid::new_v4(),
+            version: 1,
+        };
         let mut state = 52_u64;
-        let entries: Vec<_> = (0..4096).map(|id| VectorEntry {
-            id: Uuid::from_u128(id + 1),
-            source,
-            generation: 1,
-            profile: "frozen-policy:v1".into(),
-            dimension: 128,
-            embedding: (0..128).map(|_| {
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                ((state >> 40) as f32) / 16777216.0
-            }).collect(),
-        }).collect();
+        let entries: Vec<_> = (0..4096)
+            .map(|id| VectorEntry {
+                id: Uuid::from_u128(id + 1),
+                source,
+                generation: 1,
+                profile: "frozen-policy:v1".into(),
+                dimension: 128,
+                embedding: (0..128)
+                    .map(|_| {
+                        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                        ((state >> 40) as f32) / 16777216.0
+                    })
+                    .collect(),
+            })
+            .collect();
         store.upsert(scope, entries.clone()).await.unwrap();
         let ids: Vec<_> = entries.iter().map(|entry| entry.id).collect();
         let mut query = VectorQuery {
-            scope, artifact_ids: Some(ids), generation: 1,
-            profile: entries[0].profile.clone(), dimension: 128,
-            embedding: entries[0].embedding.clone(), limit: 100,
+            scope,
+            artifact_ids: Some(ids),
+            generation: 1,
+            profile: entries[0].profile.clone(),
+            dimension: 128,
+            embedding: entries[0].embedding.clone(),
+            limit: 100,
         };
-        let table = store.open_existing(&table_name(&query.profile)).await.unwrap().unwrap();
-        table.checkout(table.version().await.unwrap()).await.unwrap();
+        let table = store
+            .open_existing(&table_name(&query.profile))
+            .await
+            .unwrap()
+            .unwrap();
+        table
+            .checkout(table.version().await.unwrap())
+            .await
+            .unwrap();
         let filter = scoped_filter(scope, 1, query.artifact_ids.as_deref());
         let (ann, selected) = prepare(&table, &query, &filter).await.unwrap();
         assert!(selected);
@@ -181,16 +204,35 @@ mod native_tests {
         let (exact, selected) = prepare(&table, &query, &filter).await.unwrap();
         assert!(!selected);
         assert!(!exact.clone().into_request().use_index);
-        assert!(exact.explain_plan(true).await.unwrap().contains("KNNVectorDistance"));
+        assert!(
+            exact
+                .explain_plan(true)
+                .await
+                .unwrap()
+                .contains("KNNVectorDistance")
+        );
         query.artifact_ids = None;
-        assert!(!prepare(&table, &query, &scoped_filter(scope, 1, None)).await.unwrap().1);
+        assert!(
+            !prepare(&table, &query, &scoped_filter(scope, 1, None))
+                .await
+                .unwrap()
+                .1
+        );
         drop(table);
         // Fresh appended data is deliberately not added to the existing index.
         let fresh = VectorEntry {
-            id: Uuid::from_u128(100000), embedding: vec![2.0; 128], ..entries[0].clone()
+            id: Uuid::from_u128(100000),
+            embedding: vec![2.0; 128],
+            ..entries[0].clone()
         };
         store.upsert(scope, vec![fresh.clone()]).await.unwrap();
-        query.artifact_ids = Some(entries.iter().map(|entry| entry.id).chain([fresh.id]).collect());
+        query.artifact_ids = Some(
+            entries
+                .iter()
+                .map(|entry| entry.id)
+                .chain([fresh.id])
+                .collect(),
+        );
         query.embedding = fresh.embedding;
         let hits = store.search(query).await.unwrap();
         assert_eq!(hits.len(), 100);

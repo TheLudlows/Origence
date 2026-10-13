@@ -66,10 +66,11 @@ impl TursoStore {
         })
     }
     pub async fn scopes(&self) -> StorageResult<Vec<Scope>> {
-        let rows: Vec<(Uuid, Uuid)> = native_turso::query_as("SELECT tenant_id,id FROM oc_workspaces")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(turso_err)?;
+        let rows: Vec<(Uuid, Uuid)> =
+            native_turso::query_as("SELECT tenant_id,id FROM oc_workspaces")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(turso_err)?;
         Ok(rows
             .into_iter()
             .map(|(tenant_id, workspace_id)| Scope {
@@ -235,7 +236,7 @@ impl TursoTx {
         let sql = format!(
             "SELECT c.id,c.asset_id,c.version {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE}{asset_clause} AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"
         );
-        let query = native_turso::query_as::< (Uuid, Uuid, i32)>(&sql)
+        let query = native_turso::query_as::<(Uuid, Uuid, i32)>(&sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id);
         let query = if let Some(asset) = asset_filter {

@@ -19,7 +19,7 @@ use lancedb::{
 };
 use uuid::Uuid;
 
-use super::{LanceDbStore, filter_indexes, scoped_filter};
+use super::{LanceDbStore, eligibility, filter_indexes, scoped_filter};
 use crate::storage::{
     capabilities::{FullTextEntry, FullTextHit, FullTextQuery},
     error::{StorageError, StorageResult},
@@ -29,9 +29,8 @@ use crate::storage::{
 pub(super) const TABLE_NAME: &str = "chunk_terms_v1";
 const INDEX_NAME: &str = "chunk_terms_whitespace_v1";
 
-// The marker records the application creation contract. Public index_stats
-// exposes type/columns, not a tokenizer attestation. It cannot prove that an
-// external writer has not replaced an index under the same name and type.
+// The marker records the application creation contract. Runtime validation
+// additionally loads the physical tokenizer parameters from index_details.
 pub(super) fn schema_for() -> Arc<Schema> {
     Arc::new(
         Schema::new(vec![
@@ -57,6 +56,17 @@ pub(super) async fn check_schema(table: &Table) -> StorageResult<()> {
     Ok(())
 }
 
+fn index_parameters() -> FtsIndexBuilder {
+    FtsIndexBuilder::default()
+        .lance_tokenizer("text".into())
+        .base_tokenizer("whitespace".into())
+        .lower_case(false)
+        .stem(false)
+        .remove_stop_words(false)
+        .ascii_folding(false)
+        .max_token_length(None)
+}
+
 async fn ensure_index(table: &Table) -> StorageResult<()> {
     filter_indexes::ensure(table, INDEX_NAME, IndexType::FTS, "search_terms").await?;
     let indices = table.list_indices().await.map_err(backend)?;
@@ -64,15 +74,7 @@ async fn ensure_index(table: &Table) -> StorageResult<()> {
         table
             .create_index(
                 &["search_terms"],
-                Index::FTS(
-                    FtsIndexBuilder::default()
-                        .base_tokenizer("whitespace".into())
-                        .lower_case(false)
-                        .stem(false)
-                        .remove_stop_words(false)
-                        .ascii_folding(false)
-                        .max_token_length(None),
-                ),
+                Index::FTS(index_parameters()),
             )
             .name(INDEX_NAME.into())
             .replace(false)
@@ -87,7 +89,25 @@ async fn check_index(table: &Table) -> StorageResult<()> {
     if !filter_indexes::check(table, INDEX_NAME, IndexType::FTS, "search_terms").await? {
         return Err(StorageError::Unavailable("native full-text index is not ready".into()));
     }
+    let indices = table.list_indices().await.map_err(backend)?;
+    let details = indices.iter().find(|index| index.name == INDEX_NAME)
+        .and_then(|index| index.index_details.as_deref())
+        .ok_or_else(|| StorageError::Unavailable("full-text tokenizer details are missing".into()))?;
+    let actual: FtsIndexBuilder = serde_json::from_str(details)
+        .map_err(|_| StorageError::Conflict("invalid full-text tokenizer details".into()))?;
+    if actual != index_parameters() {
+        return Err(StorageError::Conflict("incompatible full-text tokenizer".into()));
+    }
     Ok(())
+}
+
+pub(super) async fn check_available(store: &LanceDbStore) -> StorageResult<()> {
+    let table = store.open_existing(TABLE_NAME).await?
+        .ok_or_else(|| StorageError::Unavailable("native full-text table is missing".into()))?;
+    let version = table.version().await.map_err(backend)?;
+    table.checkout(version).await.map_err(backend)?;
+    check_schema(&table).await?;
+    check_index(&table).await
 }
 
 pub(super) async fn upsert(
@@ -158,6 +178,7 @@ pub(super) async fn upsert(
 pub(super) async fn search(
     store: &LanceDbStore,
     mut query: FullTextQuery,
+    expected_sources: Option<&HashMap<Uuid, SourceVersion>>,
 ) -> StorageResult<Vec<FullTextHit>> {
     if query.limit == 0
         || query.search_terms.split_whitespace().next().is_none()
@@ -169,7 +190,11 @@ pub(super) async fn search(
         return Err(StorageError::InvalidArgument("full-text terms contain NUL"));
     }
     let Some(table) = store.open_existing(TABLE_NAME).await? else {
-        return Ok(Vec::new());
+        return if query.artifact_ids.is_some() {
+            Err(StorageError::Unavailable("native full-text table is missing".into()))
+        } else {
+            Ok(Vec::new())
+        };
     };
     let version = table.version().await.map_err(backend)?;
     table.checkout(version).await.map_err(backend)?;
@@ -180,6 +205,7 @@ pub(super) async fn search(
         ids.dedup();
     }
     let filter = scoped_filter(query.scope, query.generation, query.artifact_ids.as_deref());
+    eligibility::check(&table, &filter, query.generation, query.artifact_ids.as_deref(), expected_sources).await?;
     // Structured MatchQuery treats AND/OR, quotes and punctuation as literal
     // token input. No raw query-string parser can change conjunction or scope.
     let fts = FullTextSearchQuery::new_query(

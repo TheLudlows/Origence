@@ -23,9 +23,12 @@ pub(in crate::storage) async fn lock_for_maintenance(
     pool.hold_lifetime_guard(guard.clone());
     let outcome = async {
         let mut conn = pool.acquire().await.map_err(turso_err)?;
-        native_turso::check_format(&mut conn, "authority").await.map_err(turso_err)?;
+        native_turso::check_format(&mut conn, "authority")
+            .await
+            .map_err(turso_err)?;
         check_conn(&mut conn).await
-    }.await;
+    }
+    .await;
     pool.close().await;
     outcome?;
     Ok(MaintenanceLock { _guard: guard })

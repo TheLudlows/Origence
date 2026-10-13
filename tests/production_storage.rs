@@ -524,30 +524,23 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
     assert_eq!(service.search(&auth, query("Atlas", "hybrid", false)).await.unwrap()["hits"], before["hits"]);
     assert_eq!(context(&service, &auth, "Atlas", "hybrid").await["items"], context_before["items"]);
 
-    // Better-looking native rows under the same chunk UUID but a wrong source,
-    // wrong version or uncommitted generation never lend a score or visibility.
-    let mut wrong_version = entry.clone();
-    wrong_version.source.version += 1;
-    let mut wrong_source = entry.clone();
-    wrong_source.source.source_id = Uuid::new_v4();
+    // An uncommitted generation never lends its score or visibility. Unlike a
+    // corrupted source within an eligible generation, it is not queried at all.
     let mut uncommitted = entry.clone();
     uncommitted.generation = 2;
     service.engine.vector().upsert_full_text(
         scope(&auth),
-        vec![wrong_version.clone(), wrong_source.clone(), uncommitted.clone()],
+        vec![uncommitted.clone()],
     ).await.unwrap();
-    let mut vectors = Vec::new();
-    for native in [wrong_version, wrong_source, uncommitted.clone()] {
-        vectors.push(VectorEntry {
-            id: native.id,
-            source: native.source,
-            generation: native.generation,
-            profile: models.spec().embedding_profile,
-            dimension: 2,
-            embedding: vec![1.0, 0.5],
-        });
-    }
-    // If a forged candidate passes validation, its 1.0 would replace the only
+    let mut vectors = vec![VectorEntry {
+        id: uncommitted.id,
+        source: uncommitted.source,
+        generation: uncommitted.generation,
+        profile: models.spec().embedding_profile,
+        dimension: 2,
+        embedding: vec![1.0, 0.5],
+    }];
+    // If this candidate passes validation, its 1.0 would replace the only
     // legitimate score of 0.5 and make this boundary failure observable.
     vectors.push(VectorEntry {
         id: entry.id,
@@ -726,5 +719,161 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
         assert_eq!(with[chunk], without[chunk]);
     }
     assert_eq!(models.chats.load(Ordering::SeqCst), 0);
+    service.engine.shutdown().await.unwrap();
+}
+
+async fn assert_storage_mismatch(service: &Service, auth: &AuthContext) {
+    for mode in ["keyword", "vector", "hybrid"] {
+        let search = service.search(auth, query("Atlas", mode, false)).await;
+        assert!(
+            matches!(search, Err(AppError::Conflict(_) | AppError::Unavailable(_))),
+            "{mode} must report native/authority mismatch, got {search:?}"
+        );
+        let request = serde_json::from_value(json!({
+            "query":"Atlas","mode":mode,"budget":32000,
+            "routes":[{"route":"knowledge","limit":100,"max_bytes":32000}]
+        }))
+        .unwrap();
+        let context = service.evidence_bundle(auth, request).await;
+        assert!(
+            matches!(context, Err(AppError::Conflict(_) | AppError::Unavailable(_))),
+            "{mode} Context must report native/authority mismatch, got {context:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budget() {
+    let models = FixtureModels::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(
+            &auth,
+            "native-coverage",
+            batch("native-coverage", &["Atlas first", "Atlas second"]),
+            models.spec(),
+        )
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let originals = entries(&receipt, &payload(&service, &receipt).await);
+    assert_eq!(originals.len(), 2);
+    let vector = |entry: &FullTextEntry| VectorEntry {
+        id: entry.id,
+        source: entry.source,
+        generation: entry.generation,
+        profile: models.spec().embedding_profile,
+        dimension: 2,
+        embedding: vec![1.0, 0.5],
+    };
+    // A total row count is insufficient: one absent eligible chunk plus one
+    // wrong-source copy of another chunk still equals two physical rows.
+    service.engine.vector().delete_objects(scope(&auth), vec![originals[1].id]).await.unwrap();
+    let mut wrong = originals[0].clone();
+    wrong.source.source_id = Uuid::new_v4();
+    service.engine.vector().upsert_full_text(scope(&auth), vec![wrong.clone()]).await.unwrap();
+    service.engine.vector().upsert(scope(&auth), vec![vector(&wrong)]).await.unwrap();
+    assert_storage_mismatch(&service, &auth).await;
+
+    service.engine.vector().upsert_full_text(scope(&auth), vec![originals[1].clone()]).await.unwrap();
+    service.engine.vector().upsert(scope(&auth), vec![vector(&originals[1])]).await.unwrap();
+    // More than the production branch cap have a legal chunk UUID and scope,
+    // but the wrong source version. Post-limit hiding would silently lose
+    // valid matches; exact vector routing cannot fix that ordering mistake.
+    let residuals: Vec<_> = (2..=126)
+        .map(|version| FullTextEntry {
+            source: SourceVersion { source_id: originals[0].source.source_id, version },
+            ..originals[0].clone()
+        })
+        .collect();
+    service.engine.vector().upsert_full_text(scope(&auth), residuals.clone()).await.unwrap();
+    service.engine.vector().upsert(scope(&auth), residuals.iter().map(&vector).collect()).await.unwrap();
+    assert_storage_mismatch(&service, &auth).await;
+    // Even exact ID coverage and one row per ID are insufficient if a lone
+    // replacement carries the wrong source/version and no longer matches the
+    // query. It cannot be detected by validating returned top-k hits alone.
+    for replace_source in [true, false] {
+        service.engine.vector().delete_objects(
+            scope(&auth), originals.iter().map(|entry| entry.id).collect(),
+        ).await.unwrap();
+        let mut replacement = originals[0].clone();
+        if replace_source {
+            replacement.source.source_id = Uuid::new_v4();
+        } else {
+            replacement.source.version += 1;
+        }
+        replacement.search_terms = parsing::lexical("unrelated tokens");
+        let rows = vec![replacement, originals[1].clone()];
+        service.engine.vector().upsert_full_text(scope(&auth), rows.clone()).await.unwrap();
+        service.engine.vector().upsert(scope(&auth), rows.iter().map(&vector).collect()).await.unwrap();
+        let native = service.engine.vector().search_full_text(FullTextQuery {
+            scope: scope(&auth), artifact_ids: None, generation: 1,
+            search_terms: parsing::lexical("Atlas"), limit: 100,
+        }).await.unwrap();
+        assert_eq!(native.len(), 1);
+        assert_eq!(native[0].id, originals[1].id);
+        assert_storage_mismatch(&service, &auth).await;
+    }
+    // Fail-closed detection is the contract here. This is not an ANN recall
+    // proof, a tied-cutoff membership oracle, or a concurrent-snapshot claim.
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
+    let models = FixtureModels::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    assert!(!service.engine.relational().has_committed_full_text().await.unwrap());
+    service.worker_running.store(true, Ordering::Release);
+    assert!(service.ready().await, "a fresh empty authority does not require an FTS table");
+    service.worker_running.store(false, Ordering::Release);
+    let receipt = publish(&service, &auth, &models, "missing-table", "Atlas committed evidence").await;
+    let indexed = entries(&receipt, &payload(&service, &receipt).await);
+    // Isolate the storage half of readiness without starting another worker.
+    // No job is pending, and no background task races the test-owned move.
+    service.worker_running.store(true, Ordering::Release);
+    assert!(service.ready().await);
+    let dataset = dir.path().join("vectors/chunk_terms_v1.lance");
+    let held = dir.path().join("held-full-text-dataset");
+    assert!(tokio::fs::metadata(&dataset).await.unwrap().is_dir());
+    tokio::fs::rename(&dataset, &held).await.unwrap();
+    assert!(!service.ready().await);
+    let native = service.engine.vector().search_full_text(FullTextQuery {
+        scope: scope(&auth),
+        artifact_ids: Some(indexed.iter().map(|entry| entry.id).collect()),
+        generation: 1,
+        search_terms: parsing::lexical("Atlas"),
+        limit: 100,
+    }).await;
+    assert!(matches!(native, Err(origence::storage::StorageError::Unavailable(_))));
+    assert!(matches!(
+        service.message_batch_status(&auth, &receipt).await,
+        Err(AppError::Unavailable(_))
+    ));
+    assert!(matches!(
+        service.search(&auth, query("Atlas", "keyword", false)).await,
+        Err(AppError::Unavailable(_))
+    ));
+    let request = serde_json::from_value(json!({
+        "query":"Atlas","mode":"keyword","budget":32000,
+        "routes":[{"route":"knowledge","limit":100,"max_bytes":32000}]
+    })).unwrap();
+    assert!(matches!(service.evidence_bundle(&auth, request).await, Err(AppError::Unavailable(_))));
+    service.worker_running.store(false, Ordering::Release);
+    service.engine.shutdown().await.unwrap();
+    drop(service);
+    assert!(matches!(Service::open(dir.path(), models.models()).await, Err(AppError::Unavailable(_))));
+    // The missing derived surface must not cause silent authority deletion or
+    // automatic recreation. Restore the same dataset to verify the same source.
+    tokio::fs::rename(&held, &dataset).await.unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let result = service.search(&auth, query("Atlas", "keyword", false)).await.unwrap();
+    assert_eq!(result["hits"].as_array().unwrap().len(), 1);
+    assert_eq!(result["hits"][0]["content"], "Atlas committed evidence");
+    assert_eq!(service.message_batch_status(&auth, &receipt).await.unwrap(), PublicationStatus::Retrievable);
     service.engine.shutdown().await.unwrap();
 }

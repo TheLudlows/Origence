@@ -1,8 +1,8 @@
 //! Public, non-protocol message ingestion through the real Worker/search pipeline.
 //! Deterministic localhost embeddings exercise engineering, not model quality.
 #![cfg(feature = "local-storage")]
-use origence::storage::native_turso as db;
 use axum::{Json, Router, routing::post};
+use origence::storage::native_turso as db;
 use origence::{
     error::AppError,
     messages::{
@@ -233,13 +233,12 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
         let source: Value = serde_json::from_str(original["content"].as_str().unwrap()).unwrap();
         assert_eq!(source, json!(input));
         assert!(source["messages"][2].get("timestamp").is_none());
-        let rows: Vec<(String, String)> = db::query_as(
-            "SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal",
-        )
-        .bind(receipt.asset_id)
-        .fetch_all(service.engine.relational().pool())
-        .await
-        .unwrap();
+        let rows: Vec<(String, String)> =
+            db::query_as("SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+                .bind(receipt.asset_id)
+                .fetch_all(service.engine.relational().pool())
+                .await
+                .unwrap();
         for (index, message) in input.messages.iter().enumerate() {
             let parts: Vec<_> = rows
                 .iter()

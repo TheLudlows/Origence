@@ -55,25 +55,40 @@ impl Service {
             .await
             .map_err(anyhow::Error::from)?;
         let relational = Arc::new(TursoStore::open(dir.join("context.db")).await?);
+        let graph = TursoGraphStore::open_with_authority(dir.join("graph.db"), &relational).await?;
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
             LanceDbStore::open(dir.join("vectors")).await?,
-            TursoGraphStore::open(dir.join("graph.db")).await?,
+            graph,
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;
-        engine.relational().recover_jobs().await?;
         let service = Self {
             engine,
             models,
             worker_running: Arc::new(AtomicBool::new(false)),
         };
+        // Empty fresh stores legitimately have no native full-text table. Once
+        // publication committed, a missing table/index is a storage failure,
+        // never an empty corpus or permission to recreate authoritative data.
+        service.check_committed_full_text().await?;
+        service.engine.relational().recover_jobs().await?;
         crate::worker::cleanup(&service).await?;
         Ok(service)
     }
     pub async fn ready(&self) -> bool {
-        self.worker_running.load(Ordering::Acquire) && self.engine.check().await.is_ok()
+        self.worker_running.load(Ordering::Acquire)
+            && self.engine.check().await.is_ok()
+            && self.check_committed_full_text().await.is_ok()
+    }
+    pub(crate) async fn check_committed_full_text(&self) -> Result<()> {
+        if self.engine.relational().has_committed_full_text().await? {
+            // The authority metadata query has completed and holds no lease or
+            // transaction while the independent native adapter is inspected.
+            self.engine.vector().check_full_text_available().await?;
+        }
+        Ok(())
     }
     pub async fn auth(&self, token: &str) -> Result<AuthContext> {
         let a = self

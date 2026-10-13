@@ -70,8 +70,10 @@ async fn fresh_schema_has_no_review_tables_or_column() -> anyhow::Result<()> {
         .execute(store.pool())
         .await?;
     assert!(store.check().await.is_err());
-    let preserved: i64 = db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_candidates'")
-        .fetch_one(store.pool()).await?;
+    let preserved: i64 =
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_candidates'")
+            .fetch_one(store.pool())
+            .await?;
     assert_eq!(preserved, 1);
     Ok(())
 }

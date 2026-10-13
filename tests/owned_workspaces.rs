@@ -474,7 +474,7 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
         Err(StorageError::Forbidden)
     ));
     assert_eq!(
-        db::query_scalar::< i64>("SELECT count(*) FROM oc_jobs")
+        db::query_scalar::<i64>("SELECT count(*) FROM oc_jobs")
             .fetch_one(store.pool())
             .await
             .unwrap(),
@@ -598,14 +598,14 @@ async fn incompatible_owner_constraints_are_rejected_without_repair() {
     ));
     let pool = db::Pool::open(&path).await.unwrap();
     assert_eq!(
-        db::query_scalar::< Uuid>("SELECT id FROM oc_workspaces")
+        db::query_scalar::<Uuid>("SELECT id FROM oc_workspaces")
             .fetch_one(&pool)
             .await
             .unwrap(),
         admin.scope.workspace_id
     );
     assert_eq!(
-        db::query_scalar::< i64>(
+        db::query_scalar::<i64>(
             "SELECT count(*) FROM sqlite_master WHERE name='oc_workspace_owner_immutable'"
         )
         .fetch_one(&pool)
@@ -790,7 +790,7 @@ mod retry_tests {
         assert_eq!(state, "failed");
         assert_eq!(generation, 1);
         assert_eq!(
-            db::query_scalar::< i64>("SELECT count(*) FROM oc_commands WHERE operation=?")
+            db::query_scalar::<i64>("SELECT count(*) FROM oc_commands WHERE operation=?")
                 .bind(format!("job/{job}/retry"))
                 .fetch_one(store.pool())
                 .await

@@ -8,8 +8,8 @@ use super::visibility::CURRENT_CHUNK_ROWS;
 use super::*;
 use crate::{
     context_retrieval::{
-        ContextCandidate, ContextLearning, ContextLearningSupport,
-        ContextRoute, ContextSessionResult, ContextSessionTurn, SESSION_SCAN_LIMIT,
+        ContextCandidate, ContextLearning, ContextLearningSupport, ContextRoute,
+        ContextSessionResult, ContextSessionTurn, SESSION_SCAN_LIMIT,
     },
     learning::LearningCandidate,
     memory_identity::MemoryIdentity,

@@ -1,7 +1,7 @@
 //! Ledger reconcile tests (M3): stuck pending and due retry_wait converge.
 
-use origence::storage::native_turso as db;
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion,
     sqlite::SqliteStore,

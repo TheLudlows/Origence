@@ -24,9 +24,9 @@ pub mod error;
 pub mod lancedb;
 pub mod ledger;
 pub mod local_blob;
-pub mod native_turso;
 #[cfg(feature = "local-vector")]
 pub mod maintenance;
+pub mod native_turso;
 pub mod scope;
 pub mod sqlite;
 pub mod sqlite_graph;
@@ -60,7 +60,10 @@ impl<T: Lifecycle> Lifecycle for std::sync::Arc<T> {
     }
 }
 
-pub use capabilities::{BlobKey, Capabilities, Embedding, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery};
+pub use capabilities::{
+    BlobKey, Capabilities, Embedding, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry,
+    VectorHit, VectorQuery,
+};
 pub use error::{StorageError, StorageResult};
 #[cfg(feature = "local-vector")]
 pub use lancedb::LanceDbStore;

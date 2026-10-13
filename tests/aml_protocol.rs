@@ -1,7 +1,7 @@
 //! Public AML library and real HTTP regressions with a deterministic model server.
 #![cfg(feature = "local-storage")]
-use origence::storage::native_turso as db;
 use axum::{Json, Router, routing::post};
+use origence::storage::native_turso as db;
 use origence::{
     api::aml::{self, AddInput},
     error::AppError,

@@ -13,7 +13,6 @@ pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
         .fetch_one(conn).await.map_err(turso_err)
 }
 
-
 fn decode<T: serde::de::DeserializeOwned>(body: &str) -> StorageResult<T> {
     serde_json::from_str(body)
         .map_err(|_| StorageError::Unavailable("invalid learning record".into()))

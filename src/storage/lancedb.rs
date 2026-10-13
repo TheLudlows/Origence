@@ -7,6 +7,7 @@
 //! replay targets the same ledger identity without replacing other generations.
 
 mod ann;
+mod eligibility;
 mod filter_indexes;
 mod full_text;
 
@@ -141,6 +142,144 @@ impl LanceDbStore {
             .await
             .map_err(|e| StorageError::Backend(e.to_string()))?;
         Ok(Self { db })
+    }
+
+    /// Read-only health gate for relationally committed full-text publications.
+    /// Empty/new authorities need not call this until an index is required.
+    pub async fn check_full_text_available(&self) -> StorageResult<()> {
+        full_text::check_available(self).await
+    }
+
+    /// Compare every eligible native identity against the caller's relational
+    /// snapshot before top-k. Final live authority verification remains required.
+    pub(crate) async fn search_authorized(
+        &self,
+        query: VectorQuery,
+        expected_sources: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<VectorHit>> {
+        self.search_inner(query, Some(expected_sources)).await
+    }
+
+    pub(crate) async fn search_full_text_authorized(
+        &self,
+        query: FullTextQuery,
+        expected_sources: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<FullTextHit>> {
+        full_text::search(self, query, Some(expected_sources)).await
+    }
+
+    async fn search_inner(
+        &self,
+        mut query: VectorQuery,
+        expected_sources: Option<&HashMap<Uuid, SourceVersion>>,
+    ) -> StorageResult<Vec<VectorHit>> {
+        validate_vector(query.dimension, &query.embedding)?;
+        if query.limit == 0 || query.artifact_ids.as_ref().is_some_and(Vec::is_empty) {
+            return Ok(Vec::new());
+        }
+        if let Some(ids) = query.artifact_ids.as_mut() {
+            ids.sort_unstable();
+            ids.dedup();
+        }
+        let started = std::time::Instant::now();
+        let Some(table) = self.open_existing(&table_name(&query.profile)).await? else {
+            return if query.artifact_ids.is_some() {
+                Err(StorageError::Unavailable("native vector table is missing".into()))
+            } else {
+                Ok(Vec::new())
+            };
+        };
+        let version = table.version().await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        table.checkout(version).await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let open_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let prepare_started = std::time::Instant::now();
+        let filter = scoped_filter(query.scope, query.generation, query.artifact_ids.as_deref());
+        check_dimension(&table, query.dimension).await?;
+        eligibility::check(&table, &filter, query.generation, query.artifact_ids.as_deref(), expected_sources).await?;
+        let (native, used_ann) = ann::prepare(&table, &query, &filter).await?;
+        let prepare_ms = prepare_started.elapsed().as_secs_f64() * 1000.0;
+        let execute_started = std::time::Instant::now();
+        let stream = native.execute().await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
+        let collect_started = std::time::Instant::now();
+        let batches: Vec<RecordBatch> = stream.try_collect().await
+            .map_err(|error| StorageError::Backend(error.to_string()))?;
+        let collect_ms = collect_started.elapsed().as_secs_f64() * 1000.0;
+        let decode_started = std::time::Instant::now();
+        let mut hits = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .ok_or_else(|| StorageError::Backend("missing id column".into()))?
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| StorageError::Backend("id column type".into()))?;
+            let dists = batch
+                .column_by_name("_distance")
+                .ok_or_else(|| StorageError::Backend("missing _distance column".into()))?
+                .as_any()
+                .downcast_ref::<Float32Array>()
+                .ok_or_else(|| StorageError::Backend("_distance column type".into()))?;
+            let srcs = batch
+                .column_by_name("source_id")
+                .ok_or_else(|| StorageError::Backend("missing source_id column".into()))?
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| StorageError::Backend("source_id column type".into()))?;
+            let vers = batch
+                .column_by_name("version")
+                .ok_or_else(|| StorageError::Backend("missing version column".into()))?
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .ok_or_else(|| StorageError::Backend("version column type".into()))?;
+            let tenants = batch.column_by_name("tenant")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| StorageError::Backend("invalid vector tenant column".into()))?;
+            let workspaces = batch.column_by_name("workspace")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| StorageError::Backend("invalid vector workspace column".into()))?;
+            let generations = batch.column_by_name("generation")
+                .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| StorageError::Backend("invalid vector generation column".into()))?;
+            for i in 0..ids.len() {
+                if [ids, srcs, tenants, workspaces].iter().any(|column| column.is_null(i))
+                    || vers.is_null(i) || generations.is_null(i) || dists.is_null(i)
+                    || !dists.value(i).is_finite() || dists.value(i) < 0.0
+                    || tenants.value(i) != query.scope.tenant_id.to_string()
+                    || workspaces.value(i) != query.scope.workspace_id.to_string()
+                    || generations.value(i) != query.generation
+                {
+                    return Err(StorageError::Backend("invalid scoped vector candidate".into()));
+                }
+                let id = Uuid::parse_str(ids.value(i))
+                    .map_err(|_| StorageError::Backend("invalid vector identity".into()))?;
+                if query.artifact_ids.as_ref().is_some_and(|allowed| allowed.binary_search(&id).is_err()) {
+                    return Err(StorageError::Backend("ineligible vector candidate".into()));
+                }
+                hits.push(VectorHit {
+                    id,
+                    score: 1.0 / (1.0 + dists.value(i)),
+                    source: SourceVersion {
+                        source_id: Uuid::parse_str(srcs.value(i))
+                            .map_err(|e| StorageError::Backend(e.to_string()))?,
+                        version: vers.value(i),
+                    },
+                });
+            }
+        }
+        hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.id.cmp(&b.id)));
+        tracing::debug!(
+            target: "origence::vector_timing",
+            used_ann, open_ms, prepare_ms, execute_ms, collect_ms,
+            decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0,
+            total_ms = started.elapsed().as_secs_f64() * 1000.0,
+            returned_count = hits.len(),
+            "vector query completed"
+        );
+        Ok(hits)
     }
 
     async fn open_existing(&self, name: &str) -> StorageResult<Option<lancedb::Table>> {
@@ -296,109 +435,8 @@ impl VectorStore for LanceDbStore {
         Ok(())
     }
 
-    async fn search(&self, mut query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
-        validate_vector(query.dimension, &query.embedding)?;
-        if query.limit == 0 || query.artifact_ids.as_ref().is_some_and(Vec::is_empty) {
-            return Ok(Vec::new());
-        }
-        if let Some(ids) = query.artifact_ids.as_mut() {
-            ids.sort_unstable();
-            ids.dedup();
-        }
-        let started = std::time::Instant::now();
-        let Some(table) = self.open_existing(&table_name(&query.profile)).await? else {
-            return Ok(Vec::new());
-        };
-        let version = table.version().await
-            .map_err(|error| StorageError::Backend(error.to_string()))?;
-        table.checkout(version).await
-            .map_err(|error| StorageError::Backend(error.to_string()))?;
-        let open_ms = started.elapsed().as_secs_f64() * 1000.0;
-        let prepare_started = std::time::Instant::now();
-        let filter = scoped_filter(query.scope, query.generation, query.artifact_ids.as_deref());
-        check_dimension(&table, query.dimension).await?;
-        let (native, used_ann) = ann::prepare(&table, &query, &filter).await?;
-        let prepare_ms = prepare_started.elapsed().as_secs_f64() * 1000.0;
-        let execute_started = std::time::Instant::now();
-        let stream = native.execute().await
-            .map_err(|error| StorageError::Backend(error.to_string()))?;
-        let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
-        let collect_started = std::time::Instant::now();
-        let batches: Vec<RecordBatch> = stream.try_collect().await
-            .map_err(|error| StorageError::Backend(error.to_string()))?;
-        let collect_ms = collect_started.elapsed().as_secs_f64() * 1000.0;
-        let decode_started = std::time::Instant::now();
-        let mut hits = Vec::new();
-        for batch in &batches {
-            let ids = batch
-                .column_by_name("id")
-                .ok_or_else(|| StorageError::Backend("missing id column".into()))?
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| StorageError::Backend("id column type".into()))?;
-            let dists = batch
-                .column_by_name("_distance")
-                .ok_or_else(|| StorageError::Backend("missing _distance column".into()))?
-                .as_any()
-                .downcast_ref::<Float32Array>()
-                .ok_or_else(|| StorageError::Backend("_distance column type".into()))?;
-            let srcs = batch
-                .column_by_name("source_id")
-                .ok_or_else(|| StorageError::Backend("missing source_id column".into()))?
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| StorageError::Backend("source_id column type".into()))?;
-            let vers = batch
-                .column_by_name("version")
-                .ok_or_else(|| StorageError::Backend("missing version column".into()))?
-                .as_any()
-                .downcast_ref::<Int32Array>()
-                .ok_or_else(|| StorageError::Backend("version column type".into()))?;
-            let tenants = batch.column_by_name("tenant")
-                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| StorageError::Backend("invalid vector tenant column".into()))?;
-            let workspaces = batch.column_by_name("workspace")
-                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| StorageError::Backend("invalid vector workspace column".into()))?;
-            let generations = batch.column_by_name("generation")
-                .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
-                .ok_or_else(|| StorageError::Backend("invalid vector generation column".into()))?;
-            for i in 0..ids.len() {
-                if [ids, srcs, tenants, workspaces].iter().any(|column| column.is_null(i))
-                    || vers.is_null(i) || generations.is_null(i) || dists.is_null(i)
-                    || !dists.value(i).is_finite() || dists.value(i) < 0.0
-                    || tenants.value(i) != query.scope.tenant_id.to_string()
-                    || workspaces.value(i) != query.scope.workspace_id.to_string()
-                    || generations.value(i) != query.generation
-                {
-                    return Err(StorageError::Backend("invalid scoped vector candidate".into()));
-                }
-                let id = Uuid::parse_str(ids.value(i))
-                    .map_err(|_| StorageError::Backend("invalid vector identity".into()))?;
-                if query.artifact_ids.as_ref().is_some_and(|allowed| allowed.binary_search(&id).is_err()) {
-                    return Err(StorageError::Backend("ineligible vector candidate".into()));
-                }
-                hits.push(VectorHit {
-                    id,
-                    score: 1.0 / (1.0 + dists.value(i)),
-                    source: SourceVersion {
-                        source_id: Uuid::parse_str(srcs.value(i))
-                            .map_err(|e| StorageError::Backend(e.to_string()))?,
-                        version: vers.value(i),
-                    },
-                });
-            }
-        }
-        hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.id.cmp(&b.id)));
-        tracing::debug!(
-            target: "origence::vector_timing",
-            used_ann, open_ms, prepare_ms, execute_ms, collect_ms,
-            decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0,
-            total_ms = started.elapsed().as_secs_f64() * 1000.0,
-            returned_count = hits.len(),
-            "vector query completed"
-        );
-        Ok(hits)
+    async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
+        self.search_inner(query, None).await
     }
 
     async fn upsert_full_text(
@@ -410,7 +448,7 @@ impl VectorStore for LanceDbStore {
     }
 
     async fn search_full_text(&self, query: FullTextQuery) -> StorageResult<Vec<FullTextHit>> {
-        full_text::search(self, query).await
+        full_text::search(self, query, None).await
     }
 
     async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()> {

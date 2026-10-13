@@ -1,9 +1,9 @@
 //! Ledger type unit tests (M3): surface/state encoding and deterministic keys.
 
-use origence::storage::native_turso as db;
 use origence::storage::ledger::{
     LedgerEntry, LedgerKey, LedgerState, MAX_LEDGER_ATTEMPTS, Surface, ledger_idempotency_key,
 };
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion, StorageError,
     sqlite::SqliteStore,

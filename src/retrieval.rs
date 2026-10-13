@@ -2,7 +2,7 @@ use crate::{
     error::{AppError, Result},
     parsing,
     service::{Service, decode, scope},
-    storage::{DomainTx, Permission, FullTextQuery, SourceVersion, VectorQuery, VectorStore},
+    storage::{DomainTx, Permission, FullTextQuery, SourceVersion, VectorQuery},
     types::*,
 };
 use serde_json::{Value, json};
@@ -75,22 +75,20 @@ impl Service {
             let generations = tx.vector_generations(profile, vector.len()).await?;
             let mut eligible = Vec::new();
             for generation in generations {
-                eligible.push((
-                    generation,
-                    tx.vector_candidates(profile, vector.len(), generation, asset_filter)
-                        .await?,
-                ));
+                let ids = tx.vector_candidates(profile, vector.len(), generation, asset_filter).await?;
+                let sources = tx.native_candidate_sources(&ids).await?;
+                eligible.push((generation, ids, sources));
             }
             tx.commit().await?;
             eligibility_ms = eligibility_started.elapsed().as_secs_f64() * 1000.0;
             let vector_started = std::time::Instant::now();
-            for (generation, ids) in eligible {
+            for (generation, ids, sources) in eligible {
                 if !ids.is_empty() {
                     vector_batches += 1;
                     for hit in self
                         .engine
                         .vector()
-                        .search(VectorQuery {
+                        .search_authorized(VectorQuery {
                             scope: scope(a),
                             artifact_ids: Some(ids),
                             profile: profile.into(),
@@ -98,7 +96,7 @@ impl Service {
                             generation,
                             embedding: vector.clone(),
                             limit: 100,
-                        })
+                        }, &sources)
                         .await?
                     {
                         native_hits.push((generation, hit));
@@ -113,15 +111,17 @@ impl Service {
             let mut eligibility = self.read(a, Permission::Read).await?;
             let mut eligible = Vec::new();
             for generation in eligibility.full_text_generations().await? {
-                eligible.push((generation, eligibility.full_text_candidates(generation, asset_filter).await?));
+                let ids = eligibility.full_text_candidates(generation, asset_filter).await?;
+                let sources = eligibility.native_candidate_sources(&ids).await?;
+                eligible.push((generation, ids, sources));
             }
             eligibility.commit().await?;
-            for (generation, ids) in eligible {
+            for (generation, ids, sources) in eligible {
                 if ids.is_empty() { continue; }
-                for hit in self.engine.vector().search_full_text(FullTextQuery {
+                for hit in self.engine.vector().search_full_text_authorized(FullTextQuery {
                     scope: scope(a), artifact_ids: Some(ids), generation,
                     search_terms: terms.clone(), limit: 100,
-                }).await? {
+                }, &sources).await? {
                     full_text_hits.push((generation, hit));
                 }
             }
@@ -144,7 +144,8 @@ impl Service {
             let mut keyword = Vec::new();
             let mut seen = HashMap::new();
             for (generation, native) in full_text_hits {
-                if let Some(mut hit) = tx.full_text_hit(native.id, native.source, generation).await? {
+                let candidate = tx.full_text_hit(native.id, native.source, generation).await?;
+                if let Some(mut hit) = live_native_candidate(&mut tx, native.id, candidate).await? {
                     if asset_filter.is_some_and(|asset| hit.asset_id != asset) { continue; }
                     if !unique_native(&mut seen, native.id, generation, native.source, native.score)? { continue; }
                     hit.score = f64::from(native.score);
@@ -157,10 +158,8 @@ impl Service {
         let mut vectors = Vec::new();
         let mut seen_vectors = HashMap::new();
         for (generation, native) in native_hits {
-            if let Some(mut hit) = tx
-                .vector_hit(native.id, native.source, profile, generation)
-                .await?
-            {
+            let candidate = tx.vector_hit(native.id, native.source, profile, generation).await?;
+            if let Some(mut hit) = live_native_candidate(&mut tx, native.id, candidate).await? {
                 if !unique_native(&mut seen_vectors, native.id, generation, native.source, native.score)? { continue; }
                 hit.score = native.score as f64;
                 vectors.push(hit);
@@ -361,6 +360,20 @@ impl Service {
             json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","memory_identity":search["memory_identity"],"count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"active_components":search["active_components"],"graph":search["graph"]}),
         )
     }
+}
+
+/// A concurrent withdrawal may hide a candidate. A still-live chunk whose
+/// native publication identity no longer agrees is an index error, not an empty
+/// successful search: silently dropping it could conceal an incomplete top-k.
+pub(crate) async fn live_native_candidate(
+    tx: &mut crate::storage::sqlite::TursoTx,
+    id: Uuid,
+    candidate: Option<SearchHit>,
+) -> Result<Option<SearchHit>> {
+    if candidate.is_none() && tx.visible_hit(id).await?.is_some() {
+        return Err(AppError::Conflict("native retrieval does not match live publication".into()));
+    }
+    Ok(candidate)
 }
 
 /// Native duplicates are collapsible only when the complete authoritative

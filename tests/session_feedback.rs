@@ -157,7 +157,7 @@ async fn counts(s: &Service, include_commands: bool) -> Vec<(String, i64)> {
             continue;
         }
         let query = format!("SELECT count(*) FROM \"{}\"", name.replace('"', "\"\""));
-        let count = db::query_scalar::< i64>(&query)
+        let count = db::query_scalar::<i64>(&query)
             .fetch_one(pool)
             .await
             .unwrap();
@@ -1394,12 +1394,11 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
         let source: Value = serde_json::from_str(&source).unwrap();
         assert_eq!(source["question"], input["question"]);
         assert_eq!(source["answer"], input["answer"]);
-        let repaired: bool = db::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')",
-        )
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
+        let repaired: bool =
+            db::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
         assert!(
             !repaired,
             "opening an incompatible database must not install missing tables"

@@ -11,7 +11,6 @@ pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
         .fetch_one(conn).await.map_err(turso_err)
 }
 
-
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s).map_err(|_| StorageError::Unavailable("invalid session record".into()))
 }

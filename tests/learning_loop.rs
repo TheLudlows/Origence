@@ -1,7 +1,7 @@
 #![cfg(feature = "local-storage")]
 
-use origence::storage::native_turso as db;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use origence::storage::native_turso as db;
 use origence::{
     error::AppError,
     learning::ImproveInput,

@@ -182,16 +182,17 @@ impl TursoTx {
     }
 
     pub(super) async fn job_row_inner(&mut self, id: Uuid) -> StorageResult<Value> {
-        let row: Option<(Uuid, String, String, Option<Uuid>, Option<Uuid>)> = native_turso::query_as(
-            "SELECT created_by, state, operation, asset_id, source_event_id FROM oc_jobs \
+        let row: Option<(Uuid, String, String, Option<Uuid>, Option<Uuid>)> =
+            native_turso::query_as(
+                "SELECT created_by, state, operation, asset_id, source_event_id FROM oc_jobs \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(id)
+            .fetch_optional(&mut *self.tx)
+            .await
+            .map_err(turso_err)?;
         let Some((created_by, state, operation, asset, source)) = row else {
             return Err(StorageError::NotFound);
         };

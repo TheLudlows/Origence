@@ -2,7 +2,6 @@
 use origence::storage::native_turso as db;
 use origence::storage::{Lifecycle, StorageError, sqlite::SqliteStore};
 
-
 #[tokio::test]
 async fn fresh_database_has_no_protocol_specific_tables() {
     let dir = tempfile::tempdir().unwrap();

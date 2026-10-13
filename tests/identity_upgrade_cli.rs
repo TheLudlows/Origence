@@ -63,12 +63,11 @@ async fn cli_requires_offline_and_does_not_initialize_native_engines() {
         assert!(!upgrade(dir.path(), &args).status.success());
     }
     let raw = db::Pool::open_read_only(&path).await.unwrap();
-    let count: i64 = db::query_scalar(
-        "SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'",
-    )
-    .fetch_one(&raw)
-    .await
-    .unwrap();
+    let count: i64 =
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'")
+            .fetch_one(&raw)
+            .await
+            .unwrap();
     assert_eq!(count, 0);
     raw.close().await;
     assert!(!dir.path().join("vectors").exists());

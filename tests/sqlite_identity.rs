@@ -1,6 +1,6 @@
 //! Structured identity persistence and legacy compatibility.
-use origence::storage::native_turso as db;
 use origence::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
+use origence::storage::native_turso as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Lifecycle, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
@@ -293,26 +293,47 @@ async fn incomplete_database_is_rejected_without_implicit_repair() {
     let (auth, _) = provision(&store).await;
     let principal_id = auth.principal_id;
     let mut tx = store.begin(auth).await.unwrap();
-    let source = tx.create_event("structured", "source must remain", None).await.unwrap();
+    let source = tx
+        .create_event("structured", "source must remain", None)
+        .await
+        .unwrap();
     let (asset, _) = tx.slot("legacy.fact").await.unwrap();
     tx.commit().await.unwrap();
-    db::query("DROP TABLE oc_memory_identities").execute(store.pool()).await.unwrap();
+    db::query("DROP TABLE oc_memory_identities")
+        .execute(store.pool())
+        .await
+        .unwrap();
     store.shutdown().await.unwrap();
     drop(store);
-    assert!(matches!(SqliteStore::open(&path).await, Err(StorageError::Unavailable(_))));
+    assert!(matches!(
+        SqliteStore::open(&path).await,
+        Err(StorageError::Unavailable(_))
+    ));
     let raw_pool = db::Pool::open_read_only(&path).await.unwrap();
     let exists: bool = db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_memory_identities')",
-    ).fetch_one(&raw_pool).await.unwrap();
+    )
+    .fetch_one(&raw_pool)
+    .await
+    .unwrap();
     assert!(!exists);
     let content: String = db::query_scalar("SELECT content FROM oc_events WHERE id=?")
-        .bind(source).fetch_one(&raw_pool).await.unwrap();
+        .bind(source)
+        .fetch_one(&raw_pool)
+        .await
+        .unwrap();
     assert_eq!(content, "source must remain");
     let fact_key: String = db::query_scalar("SELECT fact_key FROM oc_assets WHERE id=?")
-        .bind(asset).fetch_one(&raw_pool).await.unwrap();
+        .bind(asset)
+        .fetch_one(&raw_pool)
+        .await
+        .unwrap();
     assert_eq!(fact_key, "legacy.fact");
     let role: String = db::query_scalar("SELECT role FROM oc_api_keys WHERE id=?")
-        .bind(principal_id).fetch_one(&raw_pool).await.unwrap();
+        .bind(principal_id)
+        .fetch_one(&raw_pool)
+        .await
+        .unwrap();
     assert_eq!(role, "admin");
     raw_pool.close().await;
 }

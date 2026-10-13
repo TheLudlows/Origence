@@ -33,8 +33,8 @@ use uuid::Uuid;
 use crate::storage::ledger::{LedgerEntry, LedgerKey};
 use crate::storage::{
     capabilities::{
-        BlobKey, Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry,
-        VectorHit, VectorQuery,
+        BlobKey, Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit,
+        VectorQuery,
     },
     error::{StorageError, StorageResult},
     scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion},
@@ -500,12 +500,16 @@ pub trait VectorStore {
         _scope: Scope,
         _entries: Vec<FullTextEntry>,
     ) -> StorageResult<()> {
-        Err(StorageError::Unavailable("native full-text storage unavailable".into()))
+        Err(StorageError::Unavailable(
+            "native full-text storage unavailable".into(),
+        ))
     }
 
     /// Native conjunctive BM25 candidates. This never grants evidence visibility.
     async fn search_full_text(&self, _query: FullTextQuery) -> StorageResult<Vec<FullTextHit>> {
-        Err(StorageError::Unavailable("native full-text storage unavailable".into()))
+        Err(StorageError::Unavailable(
+            "native full-text storage unavailable".into(),
+        ))
     }
 
     /// Delete orphan artifacts from vector and full-text indexes without

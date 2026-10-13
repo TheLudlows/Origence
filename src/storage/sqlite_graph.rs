@@ -43,12 +43,30 @@ impl TursoGraphStore {
     /// Open the store at `path` (a native Turso file), creating the file and schema
     /// when absent. Fails without repairing if the schema is incompatible.
     pub async fn open(path: impl AsRef<Path>) -> StorageResult<Self> {
+        Self::open_inner(path, None).await
+    }
+
+    /// The application graph shares the authority's host lock, including
+    /// cancelled initialization and deferred rollback after Service drop.
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn open_with_authority(
+        path: impl AsRef<Path>,
+        authority: &crate::storage::TursoStore,
+    ) -> StorageResult<Self> {
+        Self::open_inner(path, Some(authority.native_lifetime_guard())).await
+    }
+
+    async fn open_inner(
+        path: impl AsRef<Path>,
+        guard: Option<std::sync::Arc<dyn Send + Sync>>,
+    ) -> StorageResult<Self> {
         let path = path.as_ref();
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             tokio::fs::create_dir_all(parent).await?;
         }
         if path.exists() && tokio::fs::metadata(path).await?.len() != 0 {
             let pool = Pool::open_read_only(path).await.map_err(turso_err)?;
+            if let Some(guard) = &guard { pool.hold_lifetime_guard(guard.clone()); }
             let outcome = async {
                 let mut conn = pool.acquire().await.map_err(turso_err)?;
                 native_turso::check_format(&mut conn, "graph").await.map_err(turso_err)?;
@@ -58,6 +76,7 @@ impl TursoGraphStore {
             outcome?;
         }
         let pool = Pool::open(path).await.map_err(turso_err)?;
+        if let Some(guard) = guard { pool.hold_lifetime_guard(guard); }
         let store = Self { pool, max_hops: 3 };
         store.initialize().await?;
         Ok(store)
@@ -383,3 +402,23 @@ impl Lifecycle for TursoGraphStore {
 
 /// Compatibility alias; graph SQL executes on native Rust Turso.
 pub type SqliteGraphStore = TursoGraphStore;
+
+#[cfg(all(test, feature = "local-storage"))]
+mod host_lock_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn graph_holds_host_lock_after_authority_shutdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("context.db");
+        let authority = crate::storage::TursoStore::open(&path).await.unwrap();
+        let graph = TursoGraphStore::open_with_authority(dir.path().join("graph.db"), &authority)
+            .await.unwrap();
+        authority.shutdown().await.unwrap();
+        drop(authority);
+        assert!(matches!(crate::storage::sqlite::lock_for_maintenance(&path).await, Err(StorageError::Conflict(_))));
+        graph.shutdown().await.unwrap();
+        drop(graph);
+        let _maintenance = crate::storage::sqlite::lock_for_maintenance(&path).await.unwrap();
+    }
+}

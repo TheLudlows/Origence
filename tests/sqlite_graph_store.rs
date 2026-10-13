@@ -1,8 +1,8 @@
 //! SQLite graph adapter tests (M4): idempotent upsert, scoped traversal,
 //! source-tagged delete, and delete-by-id primitives against a real SQLite db.
 
-use origence::storage::native_turso as db;
 use origence::graph::{entity_id, relation_id};
+use origence::storage::native_turso as db;
 use origence::storage::sqlite_graph::SqliteGraphStore;
 use origence::storage::{GraphStore, Lifecycle, Scope, SourceVersion};
 use origence::types::{Entity, Relation};

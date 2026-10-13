@@ -25,12 +25,15 @@ fn validate(
             &index.index_type == native_type && index.columns == [native_column]
         } else {
             FILTERS.iter().any(|(name, column)| {
-                index.name == *name && index.index_type == IndexType::BTree
+                index.name == *name
+                    && index.index_type == IndexType::BTree
                     && index.columns == [*column]
             })
         };
         if !valid {
-            return Err(StorageError::Conflict("incompatible native filter index".into()));
+            return Err(StorageError::Conflict(
+                "incompatible native filter index".into(),
+            ));
         }
     }
     Ok(())
@@ -69,8 +72,13 @@ pub(super) async fn check(
 ) -> StorageResult<bool> {
     let indices = table.list_indices().await.map_err(backend)?;
     validate(&indices, native_name, &native_type, native_column)?;
-    if !FILTERS.iter().all(|(name, _)| indices.iter().any(|index| index.name == *name)) {
-        return Err(StorageError::Unavailable("native filter indexes are not ready".into()));
+    if !FILTERS
+        .iter()
+        .all(|(name, _)| indices.iter().any(|index| index.name == *name))
+    {
+        return Err(StorageError::Unavailable(
+            "native filter indexes are not ready".into(),
+        ));
     }
     Ok(indices.iter().any(|index| index.name == native_name))
 }

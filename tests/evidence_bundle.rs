@@ -1,7 +1,7 @@
 #![cfg(feature = "local-storage")]
 
-use origence::storage::native_turso as db;
 use axum::{Json, Router, extract::State, routing::post};
+use origence::storage::native_turso as db;
 use origence::{
     error::AppError,
     evidence::EvidenceInput,
@@ -221,7 +221,7 @@ async fn counts(s: &Service) -> Vec<(String, i64)> {
     .unwrap();
     let mut result = Vec::new();
     for name in names {
-        let count = db::query_scalar::< i64>(&format!("SELECT count(*) FROM {name}"))
+        let count = db::query_scalar::<i64>(&format!("SELECT count(*) FROM {name}"))
             .fetch_one(pool)
             .await
             .unwrap();

@@ -7,7 +7,33 @@ use super::visibility::{CHUNK_SUPPORT_ACTIVE, CURRENT_CHUNK_ROWS};
 use crate::storage::native_turso as db;
 use crate::types::SearchHit;
 
+impl TursoStore {
+    /// Small authority-only health metadata. Native availability is checked by
+    /// the host after this query's lease has been released, never in a DB tx.
+    pub async fn has_committed_full_text(&self) -> StorageResult<bool> {
+        db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_ledger WHERE surface='full_text' AND state='committed')")
+            .fetch_one(self.pool()).await.map_err(turso_err)
+    }
+}
+
 impl TursoTx {
+    /// Exact root identity for already-eligible IDs, in the same authority snapshot.
+    /// The native metadata preflight compares every row before ranking.
+    pub async fn native_candidate_sources(&mut self, ids: &[Uuid]) -> StorageResult<HashMap<Uuid, SourceVersion>> {
+        let wanted: std::collections::HashSet<_> = ids.iter().copied().collect();
+        if wanted.is_empty() { return Ok(HashMap::new()); }
+        let rows: Vec<(Uuid, Uuid, i32)> = db::query_as(&format!(
+            "SELECT c.id,v.source_event_id,v.version {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE}"))
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let sources: HashMap<_, _> = rows.into_iter().filter(|(id, _, _)| wanted.contains(id))
+            .map(|(id, source_id, version)| (id, SourceVersion { source_id, version })).collect();
+        if sources.len() != wanted.len() {
+            return Err(StorageError::Unavailable("inconsistent authoritative candidates".into()));
+        }
+        Ok(sources)
+    }
+
     pub async fn full_text_generations(&mut self) -> StorageResult<Vec<i64>> {
         db::query_scalar("SELECT DISTINCT generation FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND surface='full_text' AND state='committed'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id)

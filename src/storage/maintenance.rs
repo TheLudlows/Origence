@@ -98,12 +98,19 @@ async fn compact_inner(data_dir: &Path, dry_run: bool) -> StorageResult<Compacti
     let mut tables = Vec::new();
     for name in names {
         if name == super::lancedb::FULL_TEXT_TABLE {
-            let table = db.open_table(&name).execute().await
+            let table = db
+                .open_table(&name)
+                .execute()
+                .await
                 .map_err(|_| StorageError::Unavailable("full-text table unavailable".into()))?;
-            let schema = table.schema().await
+            let schema = table
+                .schema()
+                .await
                 .map_err(|_| StorageError::Unavailable("full-text schema unavailable".into()))?;
             if schema.as_ref() != super::lancedb::full_text_schema().as_ref() {
-                return Err(StorageError::InvalidArgument("incompatible full-text table"));
+                return Err(StorageError::InvalidArgument(
+                    "incompatible full-text table",
+                ));
             }
             // Vector maintenance does not rebuild or prune the independent FTS surface.
             continue;

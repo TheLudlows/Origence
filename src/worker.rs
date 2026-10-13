@@ -648,7 +648,14 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
     for memory in &publication.memories {
         let source = source_for(claim, memory.version)?;
         for chunk in &memory.chunks {
-            push(&mut items, claim, source, chunk.id, "chunk", Surface::FullText);
+            push(
+                &mut items,
+                claim,
+                source,
+                chunk.id,
+                "chunk",
+                Surface::FullText,
+            );
             if chunk.embedding.is_some() {
                 push(
                     &mut items,
@@ -714,8 +721,13 @@ async fn publish_prepared(
         let source = source_for(claim, memory.version)?;
         for c in &memory.chunks {
             full_text.push(FullTextEntry {
-                id: c.id, source, generation: claim.generation,
-                search_terms: c.search_terms.clone().unwrap_or_else(|| parsing::lexical(&c.chunk.content)),
+                id: c.id,
+                source,
+                generation: claim.generation,
+                search_terms: c
+                    .search_terms
+                    .clone()
+                    .unwrap_or_else(|| parsing::lexical(&c.chunk.content)),
             });
             if let Some(embedding) = &c.embedding {
                 vectors.push(VectorEntry {
@@ -730,7 +742,11 @@ async fn publish_prepared(
         }
     }
     service.engine.vector().upsert(claim.scope, vectors).await?;
-    service.engine.vector().upsert_full_text(claim.scope, full_text).await?;
+    service
+        .engine
+        .vector()
+        .upsert_full_text(claim.scope, full_text)
+        .await?;
     if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
         let source = source_for(claim, first.version)?;
         service
