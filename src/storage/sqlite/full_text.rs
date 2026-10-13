@@ -73,10 +73,12 @@ impl TursoTx {
         generation: i64,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
+        eprintln!("offline diagnostic: candidates SQL before");
         let rows: Vec<(Uuid, Uuid, i32)> = db::query_as(&format!(
             "SELECT c.id,c.asset_id,c.version {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='full_text' AND l.state='committed')"))
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(generation)
             .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        eprintln!("offline diagnostic: candidates SQL after");
         let mut visibility = HashMap::new();
         let mut ids = Vec::new();
         for (id, asset, version) in rows {
@@ -86,7 +88,9 @@ impl TursoTx {
             let visible = if let Some(visible) = visibility.get(&(asset, version)) {
                 *visible
             } else {
+                eprintln!("offline diagnostic: candidates visibility before");
                 let visible = self.semantic_version_visible(asset, version).await?;
+                eprintln!("offline diagnostic: candidates visibility after");
                 visibility.insert((asset, version), visible);
                 visible
             };

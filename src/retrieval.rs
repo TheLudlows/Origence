@@ -128,16 +128,26 @@ impl Service {
         eprintln!("offline diagnostic: after lexical");
         let mut full_text_hits = Vec::new();
         if effective != "vector" && !terms.is_empty() {
+            eprintln!("offline diagnostic: before eligibility transaction");
             let mut eligibility = self.read(a, Permission::Read).await?;
+            eprintln!("offline diagnostic: after eligibility transaction");
             let mut eligible = Vec::new();
-            for generation in eligibility.full_text_generations().await? {
+            eprintln!("offline diagnostic: before full text generations");
+            let generations = eligibility.full_text_generations().await?;
+            eprintln!("offline diagnostic: after full text generations");
+            for generation in generations {
+                eprintln!("offline diagnostic: before full text candidates");
                 let ids = eligibility
                     .full_text_candidates(generation, asset_filter)
                     .await?;
+                eprintln!("offline diagnostic: after full text candidates");
                 let sources = eligibility.native_candidate_sources(&ids).await?;
+                eprintln!("offline diagnostic: after native source identities");
                 eligible.push((generation, ids, sources));
             }
+            eprintln!("offline diagnostic: before eligibility commit");
             eligibility.commit().await?;
+            eprintln!("offline diagnostic: after eligibility commit");
             for (generation, ids, sources) in eligible {
                 if ids.is_empty() {
                     continue;
