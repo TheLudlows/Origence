@@ -21,6 +21,8 @@ use std::{
 };
 use uuid::Uuid;
 
+mod workspaces;
+
 #[derive(Clone)]
 pub struct Service {
     pub engine: Arc<LocalEngine>,
@@ -521,6 +523,17 @@ impl Service {
             tx.check_permission(Permission::Delete).await?;
         }
         if action == "retry" {
+            // Reclamation is privileged in the Worker and must remain possible
+            // after the deleting key is revoked. The retrying actor still needs
+            // Delete above; publication jobs retain their original authority.
+            if row["operation"] != "cleanup" {
+                let creator_permission = match row["operation"].as_str() {
+                    Some("restore") => Permission::Publish,
+                    _ => Permission::Write,
+                };
+                tx.require_job_creator_permission(id, creator_permission)
+                    .await?;
+            }
             tx.require_improve_job_retry_allowed(id).await?;
             tx.valid_targets(
                 decode(row["asset_id"].clone())?,

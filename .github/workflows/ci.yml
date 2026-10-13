@@ -29,8 +29,8 @@ jobs:
       # Catch source-level Clippy warnings before the expensive native engines.
       - name: Lightweight Clippy (no native backends)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
-      - run: cargo test --locked --no-default-features --lib -j 2
-      - run: cargo test --locked --no-default-features --test local -j 2
+      - name: Full test suite without default features
+        run: cargo test --locked --no-default-features -j 2 --no-fail-fast
       - name: AML drill client tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
@@ -65,11 +65,19 @@ jobs:
         run: cargo test --locked --no-default-features --lib memory_identity -j 2
       # Keep link memory pressure bounded.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
+      - name: Focused SQLite core and visibility contracts
+        run: |
+          # Integration modules share one executable (autotests = false).
+          for filter in sqlite_ initialization:: storage_recovery:: semantic_memory:: semantic_capture:: session_feedback:: learning_loop:: evidence_bundle::; do
+            cargo test --locked --test local -j 2 "$filter"
+          done
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Debug build and no-model HTTP smoke
         run: |
           cargo build --locked -j 2
           python3 tools/smoke.py --binary target/debug/origence
+      - name: MCP stdio local and host-forwarding contracts (no models)
+        run: python3 tools/mcp_smoke.py --binary target/debug/origence
       - name: AML in-flight process recovery (controlled model fixture)
         env:
           AML_TEST_BINARY: target/debug/origence
@@ -106,3 +114,4 @@ jobs:
         run: ./tools/build.ps1 -Action Validate -Jobs 1
       - name: Storage contracts without native backends
         run: cargo check --locked --no-default-features --lib -j 1
+

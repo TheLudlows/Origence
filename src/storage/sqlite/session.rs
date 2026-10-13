@@ -67,16 +67,9 @@ impl SqliteTx {
         // This local check is deliberately nonrecursive. The shared Learning
         // guard walks the complete dependency graph after exact provenance has
         // been checked, including for reader-visible published Learnings.
-        let root: Option<Uuid> = sqlx::query_scalar("SELECT v.source_event_id FROM oc_versions v JOIN oc_assets a ON a.tenant_id=v.tenant_id AND a.workspace_id=v.workspace_id AND a.id=v.asset_id JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE v.tenant_id=? AND v.workspace_id=? AND v.asset_id=? AND v.version=? AND NOT a.deleted AND e.state='active'")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(reference.asset_id)
-            .bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        let root = root.ok_or(StorageError::NotFound)?;
-        if !self
-            .semantic_version_visible_local(reference.asset_id, reference.asset_version)
-            .await?
-        {
-            return Err(StorageError::NotFound);
-        }
+        let root = self
+            .require_active_version_local(reference.asset_id, reference.asset_version)
+            .await?;
         let locator: Option<String> = sqlx::query_scalar("SELECT locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND version=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(reference.chunk_id)
             .bind(reference.asset_id).bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;

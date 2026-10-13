@@ -80,14 +80,21 @@ def load_dataset(dataset):
         if set(answers[q["id"]]) != set(ARMS) or bool(q["required"]) != bool(references[q["id"]]):
             raise DrillError("incomplete_answer_arms_or_labels")
         # Validate gold against the actual corpus without trusting report metrics.
-        decode_hits(oracle_hits(q, corpus), corpus["batches"], q["user_id"])
+        decode_hits(oracle_hits(q, corpus), corpus["batches"], q["user_id"], allow_legacy=True)
     return corpus, questions, references, rows, answers, {str(p.relative_to(ROOT)).replace("\\", "/"): digest(p) for p in paths}
 
 
 def oracle_hits(question, corpus):
     """Diagnostic-only gold input, with synthetic IDs; never exported as Search hits."""
-    known = {(b["session_id"], i): m for b in corpus["batches"] if b["user_id"] == question["user_id"]
-             for i, m in enumerate(b["messages"])}
+    known = {}
+    for batch in corpus["batches"]:
+        if batch["user_id"] != question["user_id"]:
+            continue
+        for index, message in enumerate(batch["messages"]):
+            key = (batch["session_id"], index)
+            if key in known:
+                raise DrillError("ambiguous_gold_source")
+            known[key] = (message, len(batch["messages"]))
     hits = []
     seen = set()
     for required in question["required"]:
@@ -95,8 +102,12 @@ def oracle_hits(question, corpus):
         if key not in known or key in seen:
             raise DrillError("invalid_gold_source")
         seen.add(key)
-        message = known[key]
-        metadata = {"session_id": key[0], "message_index": key[1], "role": message["role"], "timestamp": message.get("timestamp")}
+        message, count = known[key]
+        metadata = {"session_id": key[0], "message_index": key[1], "role": message["role"],
+                    "timestamp": message.get("timestamp"), "message_count": count,
+                    "parser": "aml-message-ranges-v1", "source_path": f"/messages/{key[1]}/content",
+                    "byte_basis": "message_content_utf8", "byte_start": 0,
+                    "byte_end": len(message["content"].encode("utf-8"))}
         hits.append({"id": f"diagnostic-only:{key[0]}:{key[1]}",
                      "content": "Source metadata: " + json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n" + message["content"]})
     return hits
@@ -119,17 +130,17 @@ def classify(required, seed, pool, selected, metrics):
 
 def diagnose_question(q, corpus, references, row, answers):
     required = [source_key(x) for x in q["required"]]
-    seed = decode_hits(row["seed"], corpus["batches"], q["user_id"])
+    seed = decode_hits(row["seed"], corpus["batches"], q["user_id"], allow_legacy=True)
     output = {"id": q["id"], "user_id": q["user_id"], "category": q["category"], "required": q["required"],
               "required_seed_ranks": [seed.index(key) + 1 if key in seed else None for key in required], "arms": {}}
     for arm in ARMS:
         selected_hits = row["arms"][arm]
-        selected = decode_hits(selected_hits, corpus["batches"], q["user_id"])
+        selected = decode_hits(selected_hits, corpus["batches"], q["user_id"], allow_legacy=True)
         # Expanded arm has additional searches; use their complete union as its retrieval pool.
         if arm == "expanded_rerank":
-            pool = decode_hits(row["expanded_candidates"], corpus["batches"], q["user_id"])
+            pool = decode_hits(row["expanded_candidates"], corpus["batches"], q["user_id"], allow_legacy=True)
             retrieved = seed[:40] + [key for response in row["expansion_responses"]
-                                     for key in decode_hits(response["hits"], corpus["batches"], q["user_id"])]
+                                     for key in decode_hits(response["hits"], corpus["batches"], q["user_id"], allow_legacy=True)]
         else:
             pool = seed if arm == "vector" else seed[:40]
             retrieved = seed
@@ -139,7 +150,7 @@ def diagnose_question(q, corpus, references, row, answers):
         cited = validate_answer(answer["output"], selected_hits)
         if answer["cited_ids"] != [hit["id"] for hit in cited]:
             raise DrillError("answer_citation_mismatch")
-        cited_keys = decode_hits(cited, corpus["batches"], q["user_id"])
+        cited_keys = decode_hits(cited, corpus["batches"], q["user_id"], allow_legacy=True)
         metrics = assess(answer["output"], references[q["id"]], required, cited_keys)
         if metrics != answer["metrics"]:
             raise DrillError("saved_answer_metrics_mismatch")

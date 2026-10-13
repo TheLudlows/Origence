@@ -179,18 +179,6 @@ impl SqliteTx {
         }
         Ok(members)
     }
-    pub(super) async fn semantic_version_visible_local(
-        &mut self,
-        asset: Uuid,
-        version: i32,
-    ) -> StorageResult<bool> {
-        // Each semantic chunk carries the full snapshot support set. Missing
-        // any source hides the whole version rather than publishing a partial set.
-        let missing: bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_chunks c, json_each(c.locator,'$.support_sources') s WHERE c.tenant_id=? AND c.workspace_id=? AND c.asset_id=? AND c.version=? AND json_extract(c.locator,'$.parser')='memory-semantics:v1' AND NOT EXISTS(SELECT 1 FROM oc_events e WHERE e.tenant_id=c.tenant_id AND e.workspace_id=c.workspace_id AND hex(e.id)=upper(replace(s.value,'-','')) AND e.state='active'))")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(version).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-        Ok(!missing)
-    }
-
     pub async fn semantic_version_visible(
         &mut self,
         asset: Uuid,

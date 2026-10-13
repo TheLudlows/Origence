@@ -8,6 +8,14 @@ Origence 二进制和单 Worker，使用仓库 target/aml-drills 下的新临时
 
 本地使用 Ollama BGE-M3（1024 维）演练，无需公网或域名。官方 Smoke 需平台 AML Key 和可访问的 Add/Search，公开仓库未提供完整离线 runner；规则核对记录与正式进入条件见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)，当前结果见 [STATUS](STATUS.md)。本地模拟不能登记为官方 Smoke 通过。
 
+## 新版适配启用
+
+当前工具使用通用 key capability 和确定性用户 workspace；会显式启用宿主 AML 路由并签发 allow_owned_workspaces=true 的服务端 key，不调用已移除的 /admin/aml/namespace。路由默认关闭，手工部署须设置 OC_ENABLE_AML=true 或 serve --enable-aml。每次轮换重新显式授予能力，先排空旧 key 任务；紧急撤销不接管未完成任务。
+
+只使用新版本创建的新库；旧 schema 被拒绝且不自动清理/转换。相同 root/user 在同库重启时 ID 固定，session/request/key/model 不参与派生。新独立评测用另一个明确 root 隔离；不要每次启动随机切换 root。
+
+Source metadata 使用 message-batch-ranges-v1，加 source_event_id/external_batch_id 及版本信息区分同 session 多批次。历史报告和冻结 parser 保持原样；这些工具的旧版结果仅代表当时版本，不替代本次最终 head 证据。
+
 ## 模型与运行
 
 先构建声明工具链下的宿主：

@@ -32,7 +32,7 @@ def evaluate(report):
             result = chat.call("diagnostic_gold_evidence", q["id"], ANSWER,
                                {"question": q["query"], "evidence": evidence_payload(candidates)})
             cited = validate_answer(result, candidates)
-            keys = decode_hits(cited, corpus["batches"], q["user_id"])
+            keys = decode_hits(cited, corpus["batches"], q["user_id"], allow_legacy=True)
             metrics = assess(result, refs[q["id"]], [source_key(x) for x in q["required"]], keys)
             row.update(status="completed", output=result, cited_ids=[x["id"] for x in cited], metrics=metrics)
             print(json.dumps({"completed": q["id"], "calls": len(chat.calls)}), flush=True)

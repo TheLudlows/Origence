@@ -5,7 +5,7 @@ use origence::{
     models::Models,
     service::Service,
     session::{FeedbackInput, SessionTurnInput},
-    storage::{RelationalStore, Scope},
+    storage::{AuthorizedScope, DomainTx, RelationalStore, Scope},
     types::AuthContext,
     worker,
 };
@@ -1076,6 +1076,11 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
         )
         .await;
     }
+    // Even a matching relation owner cannot borrow the entity's committed
+    // ledger row. Archive support requires the same exact artifact kind.
+    sqlx::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,1,'relation',?,NULL,0)")
+        .bind(a.tenant_id).bind(a.workspace_id).bind(id(&first, "source_event_id")).bind(entity)
+        .execute(s.engine.relational().pool()).await.unwrap();
     let reference = |kind: &str, artifact: Uuid, hit: &Value| {
         let mut value = evidence(hit);
         value["kind"] = json!(kind);
@@ -1143,14 +1148,63 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     )
     .await
     .unwrap();
-    // Authoritative graph support can disappear before backend cleanup. Every
-    // raw read and command replay revalidates the committed support then.
-    sqlx::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE artifact_id=?")
-        .bind(entity)
-        .execute(s.engine.relational().pool())
+    // A graph artifact can have multiple current owners. General graph
+    // retrieval can retain the other owner, but an archive must keep its exact
+    // chosen source/version and cannot silently substitute that owner.
+    graph_support(
+        &s,
+        &a,
+        id(&second, "source_event_id"),
+        1,
+        "entity",
+        entity,
+        "committed",
+    )
+    .await;
+    let other_session = Uuid::new_v4();
+    let other_turn = Uuid::new_v4();
+    archive(
+        &s,
+        &a,
+        "other-graph-owner",
+        other_session,
+        turn(other_turn, vec![reference("entity", entity, second_hit)]),
+    )
+    .await
+    .unwrap();
+    let other_view = s.session_turn(&a, other_session, other_turn).await.unwrap();
+    let auth = AuthorizedScope {
+        scope: Scope {
+            tenant_id: a.tenant_id,
+            workspace_id: a.workspace_id,
+        },
+        principal_id: a.id,
+        role: a.role.clone(),
+    };
+    let mut tx = s
+        .engine
+        .relational()
+        .begin_read(auth.clone())
         .await
         .unwrap();
+    assert_eq!(tx.graph_evidence(entity).await.unwrap().len(), 2);
+    tx.commit().await.unwrap();
+    // Authoritative graph support can disappear before backend cleanup. Every
+    // raw read and command replay revalidates the committed support then.
+    sqlx::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE tenant_id=? AND workspace_id=? AND source_id=? AND artifact_id=?")
+        .bind(a.tenant_id).bind(a.workspace_id).bind(id(&first, "source_event_id")).bind(entity)
+        .execute(s.engine.relational().pool()).await.unwrap();
     assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+    assert_eq!(
+        s.session_turn(&a, other_session, other_turn).await.unwrap(),
+        other_view
+    );
+    let mut tx = s.engine.relational().begin_read(auth).await.unwrap();
+    let remaining = tx.graph_evidence(entity).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0]["asset_id"], second["asset_id"]);
+    assert_eq!(remaining[0]["source_event_id"], second["source_event_id"]);
+    tx.commit().await.unwrap();
 }
 
 fn semantic_identity() -> Value {
@@ -1245,6 +1299,25 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
         .unwrap();
         archives.push((session, input, receipt, feedback));
     }
+    let third = semantic_member(&s, &a, "Go", "supplement", 2).await;
+    let current_rust = search(&s, &a, "Rust").await;
+    assert_eq!(current_rust["hits"].as_array().unwrap().len(), 1);
+    assert_eq!(current_rust["hits"][0]["version"], 3);
+    assert_eq!(
+        current_rust["hits"][0]["source_event_id"],
+        first["source_event_id"]
+    );
+    assert_eq!(current_rust["hits"][0]["locator"]["source_version"], 1);
+    for (session, input, _, _) in &archives {
+        let view = s
+            .session_turn(&a, *session, id(input, "turn_id"))
+            .await
+            .unwrap();
+        let saved = &view["used_evidence"][0];
+        assert_eq!(saved["reference"]["asset_version"], 2);
+        assert_eq!(saved["version_source_event_id"], second["source_event_id"]);
+        assert_ne!(saved["version_source_event_id"], third["source_event_id"]);
+    }
     let deleted = s
         .delete(
             &a,
@@ -1264,11 +1337,11 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
         assert_hidden(&s, &a, *session, input, receipt, feedback).await;
     }
     while worker::process_next(&s).await.unwrap() {}
-    let rebuilt = semantic_member(&s, &a, "Python", "supplement", 2).await;
+    let rebuilt = semantic_member(&s, &a, "Python", "supplement", 3).await;
     assert_eq!(rebuilt["asset_id"], first["asset_id"]);
     assert_eq!(
         s.get(&a, id(&rebuilt, "asset_id"), None).await.unwrap()["version"],
-        3
+        4
     );
     // Rebuilding a new valid version never rewrites the older archived version.
     for (session, input, receipt, feedback) in &archives {

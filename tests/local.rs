@@ -1,7 +1,5 @@
 // One integration executable avoids repeatedly linking the native engines.
 mod aml_protocol;
-mod aml_scope;
-mod aml_service;
 mod evidence_bundle;
 mod identity_upgrade_cli;
 mod identity_vector_regression;
@@ -11,6 +9,9 @@ mod learning_loop;
 mod local_app;
 mod local_blob;
 mod local_ledger;
+mod message_batches;
+mod owned_workspace_service;
+mod owned_workspaces;
 mod pdf_parsing;
 mod semantic_capture;
 mod semantic_catalog;
@@ -25,5 +26,7 @@ mod sqlite_ledger;
 mod sqlite_lock;
 mod sqlite_owner;
 mod sqlite_store;
+mod sqlite_visibility;
 mod storage_contract;
 mod storage_recovery;
+mod workspace_schema_rejection;
