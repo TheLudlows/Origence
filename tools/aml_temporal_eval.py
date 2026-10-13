@@ -38,7 +38,7 @@ def evaluate(report):
         if original["status"] != "completed":
             raise DrillError("upstream_failed")
         hits = original["hits"]
-        decode_fragments(hits, source_index(corpus["batches"], q["user_id"]))
+        decode_fragments(hits, source_index(corpus["batches"], q["user_id"]), allow_legacy=True)
         # Rotate arm order deterministically; no extra retry or posthoc prompt adjustment.
         arms = ["raw", "dates", "offsets"]
         offset = int(hashlib.sha256(qid.encode()).hexdigest(), 16) % 3

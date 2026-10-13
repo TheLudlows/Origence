@@ -424,3 +424,147 @@ S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
 `785c629c` 的最低 Rust 身份测试、完整目标 Clippy 通过；格式检查发现格式差异，
 已按 CI rustfmt 精确输出修正。最终新增 race 测试、Python 框架和格式修正仍须
 同一最终 head 的完整适用 PR CI 才能合入；不得把初始检查当作最终通过证据。
+
+
+## 2026-10-12 — SQLite 既有职责拆分（验证范围与执行记录）
+
+基线为 main `22fa1221ea1a1aa67a5d19bed5d6dbb418891168`。仅整理既有实现：
+生命周期/schema/进程锁、身份绑定、版本/分块、来源/所有权、账本及作业队列
+移至 SQLite 私有模块，DomainTx 保留权限/幂等/提交包络并直接委派同一个事务。
+不修改 SQL/schema、数据库格式、来源与可见性条件、重试/取消/错误语义或依赖。
+原有显式身份工具仅移动，不扩充升级或迁移范围。历史验证记录保持不变。
+
+本地无 Cargo/Rust 工具链，Rust fmt/Clippy/测试在本地为 NOT_RUN；不能用静态
+比对替代编译和运行。静态比对检查原有方法体、SQL 字符串和 bind 顺序保持原样；
+新增薄委派仅传递同名参数并 await。PR CI 加入聚焦 SQLite 契约测试，并运行
+完整默认/无默认特性测试、两组 Clippy（warnings denied）及 fmt。结果以 PR
+最终 head 的 Actions 记录为准；[PR #45](https://github.com/TheLudlows/Origence/pull/45)
+保留最终结果与精确运行链接，通过后再评估合并。
+
+执行中发现并修正：`e5445bd` 的 fmt 排版不符；`69b79eb` 的共享 ROLES
+常量移动后 app 模块不可见（真实编译错误，恢复原父模块位置）；`2876b1f`
+的 fmt、两组 Clippy 及完整无默认特性测试通过，但新增聚焦 CI 命令误把
+测试模块当作独立 target，尚未运行聚焦或完整默认测试。聚焦命令已改用
+现有唯一 `local` 集成 target 内的 sqlite_/initialization/storage_recovery 过滤，
+不更改测试本体。最终接受必须以修正后 head 的整套 CI 通过为准。
+
+本次不进行真实 Agent 质量验收（NOT_RUN）、不上传此前待上传合成诊断工件，
+不变更 DEPENDENCY_AUDIT 的保留风险；通用可见性规则收口是后续独立步骤。
+
+
+## 2026-10-12 — Shared SQLite visibility layers
+
+General SQLite visibility consolidation follows the core split at main
+`1a76e293d63cbc27a9d0b714f031b6d35580b846`. Shared fixed-alias SQL now owns
+current chunk scope/current-version/deletion/root predicates, local S2 snapshot
+support, and active exact-version asset roots. Search and context share the base
+current-row predicate; context retains route filtering before locator validation.
+Asset reads and archives share the version-root predicate, with explicit history
+remaining valid after a newer version is published.
+
+Specialized rules remain separate: exact graph artifact type and source/version
+ownership; original S2 member provenance; writer-only raw session reads; iterative
+Learning closure/cycle/64-node bounds and the accepted exact publishing-root
+exception; cleanup and low-level event reads. No schema, dependency, API,
+migration, ranking, or authorization-envelope change is intended.
+
+The editing environment has no Rust toolchain. Local Rust formatting, Clippy and
+tests are NOT_RUN here. Independent differential SQLite 3.53.1 review compared 225 locator cases,
+50,625 ordered two-chunk combinations and four out-of-scope malformed cases.
+The old and shared predicates agreed for malformed JSON, missing/null/scalar/
+object supports, inactive/missing/cross-workspace sources and EXISTS early
+termination. This is supplementary SQL evidence, not Rust acceptance. Exact-head PR CI must supply
+`cargo fmt --all -- --check`, strict default/no-default Clippy, focused contracts
+through the existing single `local` test target, and both full suites before merge.
+Existing HTTP/AML recovery/evaluation steps remain unchanged.
+
+
+## 2026-10-12：MCP 依赖风险独立处置（PR #47）
+
+基线 main `7c8531afbfa2612a35d6869668df29f761c1d4a6`；实现验证提交
+`8e1c6cb5e06cb7a211b07b9223af69a46308328f`。
+[CI 38219833473](https://github.com/TheLudlows/Origence/actions/runs/38219833473)
+的 fast-check 与 linux-native 全部成功；Windows 按现有 main-only 策略跳过，macOS/容器
+不在当前自动 CI 范围。最终 PR head 的状态须另看 [PR #47](https://github.com/TheLudlows/Origence/pull/47)，
+不把此实现提交的结果冒充后续提交或主干结果。
+
+- `cargo fmt --all -- --check`、默认与 `--no-default-features` 的 all-target Clippy
+  (`-D warnings`)、两种配置测试通过；默认配置为 68 个 library、179 个 integration tests。
+- 原有 SQLite/可见性聚焦回归、HTTP smoke、受控模型桩进程恢复及关键词评测通过。
+- 新增 `python3 tools/mcp_smoke.py --binary target/debug/origence` 已在 Linux 真正启动二进制
+  stdio 验证，不是仅调用 Rust 方法或模拟 SDK 客户端。使用临时新库、临时 key，关闭模型，
+  清除继承的 OC/proxy 配置；不接触用户数据或真实 provider。
+- 测试覆盖本地 offline 与 HostClient 转发：initialize/initialized/ping，六种协议协商，
+  tools/list 恰好四个工具及完整输入字段/required/default/enum/nullable 结构，无 outputSchema；
+  每个工具的实际成功调用、UTF-8 预算/引用、当前和历史版本、无命中与错误后继续调用。
+- 错误回归覆盖 JSON-RPC `-32602` 缺参/类型/未知字段/未知工具及应用领域安全消息；
+  SDK/serde 参数错误可能反射调用方提交值，保持其既有协议不等于全面诊断脱敏。
+- 权限回归包括两种模式的无效/已撤销 token 启动拒绝、reader 的 session route 拒绝，
+  host 模式已连接 key 撤销后四个工具全部拒绝；offline 遵守排他数据库锁，不用原始 SQL
+  绕锁模拟撤销。EOF 正常退出和重开证明 stdio 关闭后释放锁；强制 kill 不算成功。
+- 子进程仅用于黑盒真实 stdio/CLI 边界验证，不能由库内调用替代；生产实现未引入子进程。
+  等待/退出有界且失败路径清理子进程；测试日志临时文件不是运行时硬输出配额。
+- 最终修改仅 rmcp 精确版本和必要宏依赖、显式 features、ServerInfo builder、stored-router
+  与旧参数错误兼容适配。四个工具业务实现、权限、HTTP host 转发、schema/存储职责不变；
+  输入 JSON Schema 方言及已知版本协商差异见 [依赖审计](DEPENDENCY_AUDIT.md)。
+- 独立源码审查复核了直接路由适配、启用状态守卫、macro 不覆盖显式方法与测试边界，
+  未发现阻断项。编辑环境没有 Cargo；所有 Rust 执行结果来自上述 CI，不声称本地执行。
+- fresh `cargo audit --json` 实际退出 **1**：rmcp 公告已移除，保留 rsa vulnerability、
+  两条 lru unsound、三条 unmaintained 和 yoke-derive yanked；无 ignore。
+  [完整锁定证据](evidence/2026-10-12-mcp-dependency-audit.json) 与提交 Cargo.lock 的
+  SHA-256 相同。临时只读 CI 生成锁/采集证据，完成后从最终变更删除；永久 CI 只新增 stdio 回归。
+
+该处置不代表 clean audit、生产安全验收、真实 Agent 质量提升或旧库升级/迁移验收。
+
+
+## 2026-10-12：AML 通用基础能力 P0–P2（实施中）
+
+基线 `edd058e646d2fd66ab60f0e0262559e5b3fcba05`；[PR #50](https://github.com/TheLudlows/Origence/pull/50) 当前为 draft。新库 DDL、owned workspace/key/command 契约和通用消息批次均须在同一最终 head 的 CI 与独立审查后才可认定完成。当前旧 AML 路径仅用于阶段过渡，最终 P3 移除。
+
+- 云端编辑环境无 Rust/Cargo；不声称本地 Rust tests、Clippy 或 rustfmt 通过。
+- [工具 run 38229211031](https://github.com/TheLudlows/Origence/actions/runs/38229211031) 在 `8617a2a57f627245f089cdc32deca1b43abff721` 使用 Cargo 1.98 工具链解析 `uuid/v5`。Cargo.lock SHA-256 为 `f83306ef2cd9f4f0f3068615e9dcdb520450441d57b528528f92a8eeacf003cf`；变化仅增加 sha1_smol 1.0.1 与 uuid 对它的依赖，保留 rmcp 1.8.0。下载产物 ZIP SHA-256 `e30eef51ffc5186e30ace7b2f6f2665657515fdf030be323064543abaae4a318` 与 Actions 元数据一致。
+- 锁文件生成/格式工具不是功能通过证据；临时 workflow 在最终验收前移除。初始普通 CI 因尚未提交更新的锁文件而失败属于过渡结果，不能用于验收。
+- Python 独立 UUIDv5 固定字节/ID 向量测试 1 passed；本地工具单测 50 tests，49 passed、1 skipped（缺少本地二进制的受控恢复测试）；评估适配单测 42 passed。最初因工作副本未包含冻结数据而报文件缺失，补齐同基线的只读仓库 fixture 后重跑通过；没有导入评测服务、运行真实模型或改写历史报告。
+- 首个实现 head `1c5fc23279d5213e0edb5d8db7e6d599b189d81d` 的 [CI 38230253089](https://github.com/TheLudlows/Origence/actions/runs/38230253089) 为 **失败的中间验证**：Linux Rust 1.98.0 确认、all-target Clippy（warnings denied）与全部聚焦回归通过；默认 library 74 passed，integration 199 passed / 1 failed。fast-check 因 rustfmt 失败而未执行其余步骤。HTTP/MCP/进程恢复/关键词评估未运行，Windows 按 PR 策略跳过。
+- 失败为新增 prepared-publication 重启测试把 retry_wait 强制设为 processing，却保留了未来 next_retry_at，导致重开后没有可 claim 的任务。测试现改为明确已到期的中断任务（next_retry_at=0），不修改生产重试/恢复策略。旧 head 的其他通过项不替代这项修正后的精确 head 复验。
+- 独立审查发现状态轮询复制/反序列化大 publication 的问题。改为 SQLite 元数据投影和一次 materialized chunk-ID CTE；200×4096 维合成 SQL 复现中旧相关扫描约 5.4 秒，修正完整查询约 0.074 秒。SQL-only 复核了全部可见、单索引 generation 失配及来源撤回的计数，不冒充 Rust/native 验收。队列 JSON 和消息恢复解析移到事务外 spawn_blocking，避免复制不用的 publication；仍为原单 Worker。
+- 修正后实现 head `857b4fcfd61ac758eeb23693a37b8c1998972538` 的 [CI 38232658239](https://github.com/TheLudlows/Origence/actions/runs/38232658239) fast-check/Linux 全部通过：无默认 features library 68、integration 101；默认 library 74、integration 202。format、两种严格 Clippy、聚焦 suites、HTTP、真实 stdio MCP、受控模型桩进程恢复、关键词合成评估全通过；Windows 仍按 PR 策略跳过。临时工具 workflow 已移除。
+- 最终审查另发现新增 creator retry 检查不应阻止现有特权 cleanup 回收：原 creator 撤销后，当前 admin 必须仍可重试 failed cleanup，调用方 Delete 权限、不可取消和 original created_by 保持。该保留既有行为的修正与真实删除/撤销回归须在后续 head 再验；上述通过结果不能代替它。
+- 最终精确 head CI 与合入 main 检查结果待补；真实模型/官方评测 NOT_RUN。
+
+## 2026-10-12：P1/P2 最终验收与 AML API 切换 P3/P4
+
+P1/P2 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的 [CI 38233936996](https://github.com/TheLudlows/Origence/actions/runs/38233936996) completed/success；fast-check、linux-native 全通过，Windows 按 PR 策略跳过。无默认 features library 68、integration 101；默认 library 74、integration 203。Rust 1.98.0、fmt、两种严格 all-target Clippy、聚焦可见性、HTTP、真实 stdio MCP、受控模型桩进程恢复、合成关键词评估均通过。Python tools 50 run / 49 passed / 1 skipped（该 job 无二进制；Linux 独立恢复步骤通过），evals 42 passed。cleanup 原 creator 撤销后当前 admin 重试回归已实际执行。独立审查核对最终代码无阻断项。
+
+[PR #50](https://github.com/TheLudlows/Origence/pull/50) 已 squash 合入 main `8e39c873ba5bbdefc3df1789d53c94e10ead7891`；Git tree 与验收头相同。主干 fast-check/Linux/Windows 结果另行跟踪，不能把 PR 的 Windows skipped 当作通过。
+
+P3 一次切换 API 并移除旧专用路径，当前代码仍待其最终 head 的完整 CI；P1/P2 的通过结果不替代 P3 验收。当前云端仍无 Rust/Cargo，Rust、native、真实宿主/CLI 测试的本地执行均 NOT_RUN。
+
+- 本地 Python tools：56 run，54 passed、2 skipped（受控进程强退恢复与新增停服整库备份恢复，缺少 AML_TEST_BINARY）；evals 42 passed。包含下层边界、当前 parser 严格解码、多批次 session 不歧义及显式历史 decoder 回归；冻结 eval/report 数据未改写。
+- 独立源码审查核对 default-off 路由、认证 root 派生/能力、只读未知 Search、删除下层 AML 表/任务/DTO、旧 schema 无写入拒绝、历史工具显式解码；无剩余阻断项。它不是 Rust/native 执行证据或 GitHub maintainer approval。
+- 补强 T13：真实 LanceDB 临时表路径故障，要求持久 retry_wait、无部分可见版本/分块，修复测试自己的阻塞文件后复用原同 generation 的计划/证据 ID，不重复 embedding。生产代码没有新增故障开关或 Worker。
+- 补强 T14：同一个受控 loopback 模型、新建临时库发布多语种多块批次，确认进程已退出后复制完整数据树，恢复到另一个新目录；先检索再重放，核对原回执/job/creator/source/asset/version/chunk/locator，不修改原目录/备份。Host.stop 使用已记录的进程 kill，不宣称优雅退出、在线快照或断电保证。
+- 补强 T15：撤回后真实 HTTP Add 重放返回 409 且原回执及领域 ID 不变。独立审查另发现 ready 索引的 dimension 失配应与 vector Search 一样不可见；现从 materialized saved-chunk CTE 一次投影维度，匹配同 chunk/index 的有效维度，并保持 profile/generation/ledger/数量检查，无 native 每次轮询探测。SQLite-only 2×2 和 200×4096 fixture 通过正常/错维度/恢复/撤回/非法维度，约 0.13–0.23 秒；此项不替代 Rust/native 回归。
+- T01–T02 固定跨语言字节/ID；T03 并发 workspace/batch；T04–T07 所属关系、reader/普通 key、跨 root/tenant、递归、撤销/降权/能力关闭与 I/O 后复核；T08–T10 creator 不转移、全部内容/规格冲突、普通命令 principal 隔离；T11–T12 精确批次消息 UTF-8 locator 和非 AML system/tool；T16 既有 history/S2/S3/Session/Learning/Bundle；T17 新库无 AML 表和旧库原字节保留拒绝；T19 同 generation ID 恢复、显式 retry 规格/回执稳定、已发布任务不重写；T20 下层源码/DDL边界均有已注册测试。T18 需本次最终 default/no-default/HTTP/MCP/CLI CI 证明。
+
+真实 provider、真实评测导入、官方 Smoke/Full 与产品质量结论均 **NOT_RUN**。本次验收只覆盖固定合成/受控模型工程行为；不更改历史实验结果、不扩展迁移或生产级验收。最终精确 head、适用 CI 与主干结果在完成后补记。
+
+
+### P3 实现 head 已执行的验收
+
+实现 head `9c49231704430ea685e6e30661088442e1e62833` 的 [CI 38236518092](https://github.com/TheLudlows/Origence/actions/runs/38236518092) completed/success：fast-check/Linux 全通过，Windows 按 PR 策略 skipped。无默认 features library **69**、integration **99**；默认 library **75**、integration **203**，全部通过，无 Rust 测试跳过。format、双配置 all-target Clippy（warnings denied）、全部既有聚焦 suites、HTTP、真实 stdio MCP、关键词合成评估通过。
+
+`native_vector_write_failure_keeps_batch_invisible_and_recovers_original_plan` 在真实 LanceDB 上执行通过；维度不符 live status、非 AML system/tool、所属权限及新 schema 拒绝测试均包含在同头 integration suite。Linux 的受控真实宿主步骤实际执行 **2/2 passed**：处理中进程强退恢复、停服复制整个库到独立目录后的恢复和多次重放。fast-check tools 的 56 run / 54 passed / 2 skipped 仅表示该 job 未配置 binary，两项没有被省略验收；evals **42 passed**。
+
+独立审查逐个核对远端 head 的变更文件 blob hash 与已审查快照，确认临时 format workflow 删除、Cargo.lock 与历史 eval/evidence 无变化。格式产物来自 Rust1.98 [run 38236327157](https://github.com/TheLudlows/Origence/actions/runs/38236327157)，artifact11741110762 ZIP SHA-256 `39d18931fe28f3a78eb1bc22d82dd44947be2d7cdfaaf52d25fdbb6eedacddc2` 已验证；它只提供格式，不充当功能证据。最初未格式化 head09061e8 的普通 CI 被后续提交取代，不用于验收。
+
+后续最小部署修正：Compose 的显式环境列表现在转发 `OC_ENABLE_AML: ${OC_ENABLE_AML:-false}`，使 `.env` 的显式启用设置能到达宿主；静态边界回归新增该断言，本地 3/3 passed。它不改变默认关闭、安全能力或容器命令，不恢复 Docker/macOS CI，也不声称已运行 Docker。此配置/文档提交与任何后续提交在 ready/merge 前仍必须通过自己精确 head 的适用 CI；最终 SHA、CI 链接和合入结果以 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录为准，不借用旧头绿灯。
+
+P1/P2 合入主干 `8e39c873ba5bbdefc3df1789d53c94e10ead7891` 的 [main CI 38235896871](https://github.com/TheLudlows/Origence/actions/runs/38235896871) 已到终态：fast-check、linux-native、windows 全部 success。这只证明该主干提交；P3 合入后的主干（包括 Windows）仍单独跟踪。
+
+
+### P4 配置与文档复验
+
+含 Compose 透传/静态断言的 head `efcb1ddd92deb7185b6b497f527f5db735014587` 经独立六文件 hash/delta 复核无阻断项，[CI 38238050316](https://github.com/TheLudlows/Origence/actions/runs/38238050316) completed/success，fast-check/Linux 全通过、Windows 按 PR 策略 skipped。Rust 仍为无默认 **69/99**、默认 **75/203**；tools 新增配置断言后 **57 run / 55 passed / 2 skipped**，evals **42 passed**；两个被 fast-check 跳过的真实宿主恢复用例在 Linux 独立步骤 **2/2 passed**，HTTP/MCP/原生故障/聚焦/关键词评估同样全过。Compose 本身只验证配置文本，Docker 运行仍 NOT_RUN。
+
+至此最终实现及部署配置验收完成。最后归档仅修改本验证记录与执行计划勾选，不改变源代码、配置、测试或历史结果；归档提交同样必须通过其精确 head 的适用 CI 后才可 ready/merge。最终归档 head/CI 与合入 main 后的 Windows 等结果，在 [PR #51](https://github.com/TheLudlows/Origence/pull/51) 的核对记录继续保留，避免自引用提交 SHA 或把前一头绿灯用于后一头。

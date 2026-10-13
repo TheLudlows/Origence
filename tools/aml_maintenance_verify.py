@@ -79,7 +79,7 @@ def verify(directory):
     for row, response in zip(report["searches"], responses):
         data = response["data"]
         require(len(data) == 100 and row["returned_count"] == 100, "response_count_changed")
-        decode_fragments(data, known[row["question_id"]])
+        decode_fragments(data, known[row["question_id"]], allow_legacy=True)
         require(payload_hash(data) == row["payload_sha256"], "response_hash_mismatch")
         if row["phase"] == "baseline":
             baseline[row["question_id"]] = data

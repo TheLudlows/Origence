@@ -1,9 +1,9 @@
 //! Local application queries. SQL stays inside the SQLite adapter.
+use super::visibility::{CHUNK_SUPPORT_ACTIVE, CURRENT_CHUNK_ROWS};
 use super::*;
 use crate::types::SearchHit;
 use sqlx::Row;
 
-const VISIBLE: &str = "FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id AND a.current_version=c.version JOIN oc_versions v ON v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id AND v.asset_id=c.asset_id AND v.version=c.version JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE c.tenant_id=? AND c.workspace_id=? AND NOT a.deleted AND e.state='active' AND (json_extract(c.locator,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(c.locator,'$.support_sources') ss WHERE NOT EXISTS(SELECT 1 FROM oc_events se WHERE se.tenant_id=c.tenant_id AND se.workspace_id=c.workspace_id AND hex(se.id)=upper(replace(ss.value,'-','')) AND se.state='active')))";
 const HIT: &str = "SELECT c.id, c.asset_id,c.version,a.kind,v.title,c.content,c.locator,v.source_event_id,c.search_terms";
 
 fn hit(row: &sqlx::sqlite::SqliteRow, score: f64) -> SearchHit {
@@ -234,7 +234,7 @@ impl SqliteTx {
             ""
         };
         let sql = format!(
-            "SELECT c.id,c.asset_id,c.version {VISIBLE}{asset_clause} AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"
+            "SELECT c.id,c.asset_id,c.version {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE}{asset_clause} AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"
         );
         let query = sqlx::query_as::<_, (Uuid, Uuid, i32)>(&sql)
             .bind(self.scope.tenant_id)
@@ -276,7 +276,7 @@ impl SqliteTx {
         profile: &str,
         generation: i64,
     ) -> StorageResult<Option<SearchHit>> {
-        let row = sqlx::query(&format!("{HIT} {VISIBLE} AND c.id=? AND v.source_event_id=? AND v.version=? AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')")).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(source.source_id).bind(source.version).bind(profile).bind(generation).bind(generation).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        let row = sqlx::query(&format!("{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=? AND v.source_event_id=? AND v.version=? AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')")).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(source.source_id).bind(source.version).bind(profile).bind(generation).bind(generation).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let Some(row) = row else {
             return Ok(None);
         };
@@ -289,13 +289,15 @@ impl SqliteTx {
         Ok(Some(hit(&row, 0.0)))
     }
     pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
-        let row = sqlx::query(&format!("{HIT} {VISIBLE} AND c.id=?"))
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(id)
-            .fetch_optional(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
+        let row = sqlx::query(&format!(
+            "{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=?"
+        ))
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
         let Some(row) = row else {
             return Ok(None);
         };
@@ -323,7 +325,7 @@ impl SqliteTx {
         } else {
             ""
         };
-        let sql = format!("{select} {VISIBLE}{asset_clause}");
+        let sql = format!("{select} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE}{asset_clause}");
         let query = sqlx::query(&sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id);
@@ -367,7 +369,7 @@ impl SqliteTx {
         Ok(hits)
     }
     pub async fn graph_evidence(&mut self, artifact: Uuid) -> StorageResult<Vec<Value>> {
-        let rows = sqlx::query(&format!("{HIT} {VISIBLE} AND EXISTS(SELECT 1 FROM oc_artifact_owners o JOIN oc_artifact_ledger l ON l.tenant_id=o.tenant_id AND l.workspace_id=o.workspace_id AND l.source_id=o.source_id AND l.version=o.version AND l.artifact_id=o.artifact_id AND l.surface='graph' AND l.state='committed' WHERE o.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND o.artifact_id=? AND o.source_id=v.source_event_id AND o.version=v.version) ORDER BY c.id")).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(artifact).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+        let rows = sqlx::query(&format!("{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND EXISTS(SELECT 1 FROM oc_artifact_owners o JOIN oc_artifact_ledger l ON l.tenant_id=o.tenant_id AND l.workspace_id=o.workspace_id AND l.source_id=o.source_id AND l.version=o.version AND l.artifact_id=o.artifact_id AND l.surface='graph' AND l.state='committed' WHERE o.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND o.artifact_id=? AND o.source_id=v.source_event_id AND o.version=v.version) ORDER BY c.id")).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(artifact).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         let mut evidence = Vec::new();
         let mut visibility = HashMap::new();
         for row in rows {
@@ -391,15 +393,40 @@ impl SqliteTx {
         Ok(evidence)
     }
     pub async fn issue_scoped_key(&mut self, role: &str) -> StorageResult<IssuedKey> {
+        self.issue_scoped_key_with_capabilities(role, KeyCapabilities::default())
+            .await
+    }
+    pub async fn issue_scoped_key_with_capabilities(
+        &mut self,
+        role: &str,
+        capabilities: KeyCapabilities,
+    ) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::Delete).await?;
         if !ROLES.contains(&role) {
             return Err(StorageError::Conflict("invalid role".into()));
         }
+        if capabilities.allow_owned_workspaces {
+            let root: bool = sqlx::query_scalar(
+                "SELECT owner_workspace_id IS NULL FROM oc_workspaces WHERE tenant_id=? AND id=?",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .fetch_one(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)?;
+            if !root {
+                return Err(StorageError::Forbidden);
+            }
+        }
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        sqlx::query("INSERT INTO oc_api_keys(id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,?)").bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        self.audit("key.issue", key_id, json!({"role":role}))
-            .await?;
+        sqlx::query("INSERT INTO oc_api_keys(id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?)").bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capabilities.allow_owned_workspaces).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.audit(
+            "key.issue",
+            key_id,
+            json!({"role":role,"allow_owned_workspaces":capabilities.allow_owned_workspaces}),
+        )
+        .await?;
         Ok(IssuedKey { key_id, token })
     }
     pub async fn revoke_scoped_key(&mut self, id: Uuid) -> StorageResult<()> {

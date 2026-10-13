@@ -105,7 +105,7 @@ def evaluate(args, report):
         report["datasets"][dataset] = part
         for q in questions:
             hits = rows[q["id"]]["seed"]
-            keys = decode_hits(hits, corpus["batches"], q["user_id"])
+            keys = decode_hits(hits, corpus["batches"], q["user_id"], allow_legacy=True)
             logits, lengths, elapsed = reranker.predict(q["query"], hits)
             gold = [source_key(x) for x in q["required"]]
             rankings = {str(depth): rank_indices(logits, depth) for depth in (40, 100)}

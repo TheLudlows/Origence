@@ -1,6 +1,6 @@
 # 本地运维说明
 
-适用单宿主 SQLite/LanceDB/SQLite 图。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份安装](#显式启用记忆身份) · [AML](#aml-评测-namespace-与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
+适用单宿主 SQLite/LanceDB/SQLite 图。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份安装](#显式启用记忆身份) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
@@ -115,31 +115,31 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/db.rs`、PG 初始化/授权 SQL、Apalis 依赖及 PG 专用测试；新本地进程套件替代其核心应用验收。没有 PG 数据自动迁移功能，不应将 PG 数据目录当作 `OC_DATA_DIR`。
 
-## AML 评测 namespace 与批次任务
+## AML 适配启用与批次任务
 
-AML 使用独立评测新库，namespace/用户映射和权限见 [API](API.md#aml-用户-scope-库接口)。新库含 oc_aml_namespaces、oc_aml_users、oc_aml_adds；首次创建用户在同一 BEGIN IMMEDIATE 事务内写 workspace/映射/审计，并发复用、失败回滚，审计不保存外部 user_id/正文。
+仅使用独立新库。新 schema 不创建 oc_aml_namespaces、oc_aml_users、oc_aml_adds；发现旧 AML 表/视图或缺少新通用约束的库明确拒绝打开，不删除、自动升级、转换或静默补建。不得向业务库手工复制 DDL。正常同版本重启/停机备份恢复仍受支持；本次不扩展既有显式身份安装机制。
 
-| 既有库状态 | 处理 |
-| --- | --- |
-| 无映射表 | 原功能可用，AML 不可用；不自动安装，使用专用新库 |
-| 完整两张映射表、缺 Add 表 | scope 接口可用，Add 503；不自动补建 |
-| 部分映射表、同名 view 或不兼容 AML/Add 定义 | 拒绝打开，不自动修复 |
+1. 用现有 init 创建或配置明确的 root workspace。`OC_ENABLE_AML=true` / `serve --enable-aml` 显式启用路由，默认关闭。Compose 显式透传该变量；`.env` 中未设置时仍为 false。
+2. root admin 使用通用 `/admin/keys` 的 `allow_owned_workspaces:true` 或 `key-create <root UUID> --role writer --allow-owned-workspaces` 签发受信服务端 key；每次轮换必须再次显式授予。仅知道 user_id 或目标 UUID 不构成授权。
+3. root key 按 reader/writer 权限访问该 root 全部所属用户 workspace，不向终端用户分发；接入服务负责终端用户身份和作用域选择。
+4. 配置 embedding 后使用 Add；固定 raw-only 原文 vector，不启用摘要/抽取/图。每批来源、asset、原 job 及命令回执在一个事务内受理，消息解析/预分词与保存计划解码在 spawn_blocking、事务外运行，仍由既有单 Worker 串行 prepare/publish。
 
-不要向业务库手工复制 DDL；身份表的显式升级机制不变。同 workspace 新 key 可复用 namespace 映射及 Add receipt，但不会转移已有任务的 created_by。轮换时先排空旧 key 任务再撤销；撤销后旧派生 AuthContext 及待发布任务失去权限。
+轮换先排空原 key 未完成任务再撤销。新 key 可命中相同回执，但 created_by 不变；紧急撤销接受旧任务被中断，新 key 不能接管，也不能为已失去权限的原 creator 显式 retry。已发布数据按当前读权限、有效来源、版本和索引判断，不因读取 key 更换而失效。
 
-配置 embedding 后再启用 Add（环境变量沿用上文，库宿主可用 Models::configured 显式配置）。首版固定原文 vector，不调用摘要/抽取/图模型。每批正文与 receipt、资产、单个 aml_ingest job 在事务中一起落库；消息解析及预分词在 spawn_blocking、关系事务外执行，既有串行 Worker 等待完成后继续索引。没有新增解析进程或独立 Worker。超时/断线只终止观察，不取消同步闭包或持久任务，不提供硬时间/内存隔离保证。
+接受规格含 parser/version、chunking_version、raw_only 与 embedding profile，保存在原 job payload。同键换规格返回冲突；重启/恢复/retry 不采用新默认值覆盖，运行模型 profile 不匹配会失败。更换 root 或 request_id 不是规避内容冲突/权限限制的方法。
 
-Add 的 HTTP 等待上限为 25 分钟；上游模型每次调用沿用 45 秒上限。网关需允许此长连接，或使用相同 request_id/相同请求重试；不得换 ID 绕过超时。排队、模型调用都计入等待，单 Worker 和多次分块调用可能使大批次超过上限；这些输入上限不是吞吐/SLO 声明。优雅停止沿用等待当前 Worker 任务的语义，已有 Add 观察请求还可能等待到 25 分钟结束；强退后按原恢复机制继续持久工作。
+Add 等待上限仍为 25 分钟，上游模型单次调用仍为 45 秒；网关需允许长连接，或用相同 request_id/内容重放。队列等待也计入上限，输入上限不是吞吐/SLO 保证。超时/断线只结束观察，不取消 blocking 闭包或持久任务，无新增 Worker、自动重试、硬时间/内存隔离。优雅停止等待当前 Worker；已存在 Add 观察请求可能等待到 25 分钟结束。
 
-模型失败沿用既有 failed 状态，不自动增加模型重试；相同 Add 重发仍指向失败任务并返回 503。授权库宿主用 submit_aml_add 的 receipt.job_id，在 lookup_aml_user 返回的 scope 内调用 Service::job_action(...,"retry") 显式重试原任务。当前没有额外 AML HTTP job 管理入口，原生 namespace 的 /v1/jobs 不能跨 scope 读取它。输入失败需新 request_id/修正内容；临时存储故障仍由原 Worker 的有限 retry_wait 处理。重放不保证上游模型计费一次。
+模型失败仍为 failed；相同 Add 返回原失败任务并给出 503。合法库调用方用通用 receipt.job_id，在 lookup_owned_workspace 返回的 AuthContext 内调用 Service::job_action(...,"retry")；没有额外 AML job 管理 HTTP 入口，root 的 /v1/jobs 不跨 workspace 查询。临时存储故障沿用原 Worker retry_wait。显式 retry 的新 generation 可改变未发布 chunk ID，但保持 job/source/asset；同 generation 的恢复保持证据 ID。重放不保证上游计费一次。
 
-日志和审计不输出 AML 消息、query、options、外部用户 ID 或模型诊断；原文仍在来源/版本/任务发布计划中持久保存，墓碑不等于物理擦除。演练与清理步骤见 [AML_DRILL](AML_DRILL.md)，当前完成范围及正式配置/容量/清理/Smoke 缺口统一见 [STATUS](STATUS.md)。
+审计/日志不输出消息、query、options、外部 user_id 或模型诊断。原文仍在来源/版本/发布计划内持久保存，墓碑不等于物理擦除。演练、停机整库恢复与清理边界见 [AML_DRILL](AML_DRILL.md)，官方 Smoke/Full 与真实模型验收未由本次工程回归完成。
+
 
 ## 检索分段诊断
 
 设置 RUST_LOG=error,origence::search_timing=debug 可记录成功 Search 的 authorization_ms、embedding_ms、eligibility_ms、vector_ms、branches_ms、verification_ms、total_ms，以及 vector_batches/native_count/returned_count。日志不含 query、证据、用户/资产 ID、路径或凭据。默认 info 不输出这些 debug 事件。
 
-branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户映射查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。性能工具另测完整 HTTP 耗时。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
+branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户作用域派生/授权查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。性能工具另测完整 HTTP 耗时。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 
 本地实验命令及结果见[时间与性能诊断](../evals/aml/temporal-v1/README.md)。
 

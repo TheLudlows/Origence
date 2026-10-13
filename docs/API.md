@@ -143,37 +143,46 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
 
 
-## AML 用户 scope 库接口
+## 通用所属 workspace 与消息批次库接口
 
-AML 提供 Rust 库接口及下述 HTTP 适配。专用评测新库中，宿主先通过 `Service::auth(token)` 获取原生 workspace 的授权，再由该 workspace 的管理员显式调用 `enable_aml_namespace(&auth)`。普通 workspace 默认没有 AML scope 创建能力。
+以下能力通过公开 Rust Service API 使用，不要求 AML 协议或 HTTP 路由。
 
-- `ensure_aml_user(&auth, user_id)`：需当前 writer/reviewer/admin 权限，原子创建或复用用户 workspace，返回供现有 Service 方法使用的 AuthContext。
-- `lookup_aml_user(&auth, user_id)`：只读查询，未知用户返回 None，不创建 workspace，不回退到 namespace workspace。Search 适配器将 None 映射为空结果。
-- 映射键为 `(tenant_id, namespace_workspace_id, 完整 user_id)`；同一 namespace 下的凭据共享映射，不同 namespace 或 tenant 的相同 user_id 独立。user_id 按 UTF-8 原样保留，区分大小写、空格及 Unicode 编码形式，不拆分冒号或去除运行前缀；接受 1–4096 UTF-8 字节，拒绝 NUL，不截断。
-- 派生授权沿用原始 key ID，每次事务和 Worker 发布仍核验该 key 的当前状态；权限最高为 writer，不能在用户 scope 内发 key、启用 namespace 或授予管理权限。reader 可读取已存在映射，不能创建。
-- 调用方必须通过认证取得 namespace 授权，不接收外部指定的内部 workspace。session_id 不参与用户 scope 映射，Add 负责保存会话来源。
+- `issue_key_with_capabilities(auth, role, KeyCapabilities { allow_owned_workspaces: true })`：只有目标 root 的当前 admin 可签发；既有 `issue_key` 默认 false，admin 或同 root 新 key 不自动继承。直接绑定 child 的 key 不可获得继续派生能力。
+- `ensure_owned_workspace(auth, target_id, name)`：当前有显式能力的 root writer 及以上，在同一事务创建或检查一层所属 workspace。目标 tenant/owner 不匹配返回冲突；不改绑或随机改 ID。返回的 AuthContext 保留原 key，只提供 reader/writer 权限。
+- `lookup_owned_workspace(auth, target_id)`：先核对 root 的当前身份、能力与 read 权限；合法但未知目标返回 None，不创建。普通 key 的原权限不扩大。
+- `submit_message_batch(auth, key, MessageBatch, AcceptedMessageSpec)`：接收外部 batch_id、session_id 和有序 SourceMessage 数组，原子保存 source、asset、job 和 `oc_commands` 回执。每批固定使用 workspace 范围的 `message_batch.ingest` 幂等；普通命令仍使用 principal 范围。key 为 1–200 ASCII 字节，调用方不能自选去重域。
+- MessageBatch 的 batch_id/session_id 为 1–4096 UTF-8 字节、无 NUL；每批 1–256 条消息，正文合计不超过 1,000,000 UTF-8 字节，正文遵守通用文本校验。role 是 1–64 UTF-8 字节、非空白且无控制字符的原样标签，例如 system/tool；它不代表权限。timestamp 是可选有符号 i64 Unix 毫秒，缺省/null 不补当前时间，不据此重排消息。
+- `AcceptedMessageSpec::raw_only(profile)` 固定 `message-batch-ranges-v1`、parser_version=1、chunking_version=1、raw_only=true 及 embedding profile；接受事务把完整规格写入原 job payload。完整批次和规格参与请求 hash，重复键的内容/session/顺序/角色/时间/parser/profile/mode 变化返回冲突，不另建任务。恢复和显式 retry 使用原规格；运行模型 profile 不匹配时拒绝处理。
+- `IngestReceipt` 保存原 asset/source/job/目标版本和规格，不保存永久 success。`message_batch_status` / `wait_message_batch` 重新授权并观察这一批次，区分 Pending、Retrievable、Failed、CancelledOrSuperseded、Invisible。只有确切目标版本、有效来源、全部目标 profile 的原分块索引和账本 generation 一致，才是 Retrievable。
+- 同一 workspace 的合法新 key 可命中同一回执，但 job.created_by 不变。原 key 撤销/降权/关闭能力后，新 key 不接管原消息发布任务；Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。正常轮换先排空旧任务，再撤销旧 key。原有 cleanup 是特权回收任务：仍允许当前 admin 在原 creator 撤销后显式重试清理，但不转移 created_by，也不发布数据。
+- 原文来源 JSON 保留完整 batch/session/role/timestamp 和输入顺序；分块定位包含 source_event_id、external_batch_id、message_index、source_path、消息内 UTF-8 byte_start/end 及 parser 规格。同 session 的多批次不会仅由局部 message_index 区分。原始批次不伪造 SessionTurn/Feedback。
 
-### AML HTTP 协议
+派生能力 root key 是受信服务端凭据，可以访问其 root 下全部用户 workspace。`user_id` 只选作用域，不验证终端用户身份；接入服务负责终端用户访问约束，不应向终端用户分发 root key。
 
-所有入口使用 `Authorization: Bearer <token>`；Add 以请求体的 request_id 幂等，不要求 Idempotency-Key。
+## AML HTTP 协议
+
+AML 只在 `origence::api::aml` 适配层定义 DTO、校验、确定性 ID、通用调用转换与等待/响应策略。宿主路由默认关闭：显式设置 `OC_ENABLE_AML=true` 或启动 `serve --enable-aml`。库宿主使用 `api::ApiOptions { enable_aml: true }` 与 `router_with_options` / `host::serve_with_options`；原 `router` / `serve` 默认关闭。
+
+先由 root workspace 当前 admin 经通用 `POST /admin/keys` 签发 `{"workspace_id":"<root UUID>","role":"writer","allow_owned_workspaces":true}`，或用 `key-create <root UUID> --role writer --allow-owned-workspaces`。reader key 也必须显式获授能力才能 Search。`/admin/aml/namespace` 已移除。宿主开关不授予数据权限，key 能力也不自动启用路由。
+
+所有入口使用 `Authorization: Bearer <token>`；Add 使用请求体 request_id，不要求 Idempotency-Key。
 
 | 方法和路径 | 请求及响应 |
 | --- | --- |
-| `POST /admin/aml/namespace` | 原生 workspace 的 admin 显式启用，响应 `{"enabled":true}`；重复启用无新增映射 |
 | `POST /aml/add` | `{request_id,user_id,session_id,messages:[{role:"user"或"assistant",content:"原文",timestamp:可选Unix毫秒整数}]}` |
 | `POST /aml/search` | `{query,user_id,top_k,options:可选字符串数组}` → `{data:[{id,content}]}` |
 
-Add 创建一个不可变知识资产、来源事件和持久 aml_ingest 任务。完成发布及索引后才返回 HTTP 200、`{success:true,request_id,user_id,session_id}`，三个 ID 原样回传；不返回 202。同 namespace、user_id、request_id 的相同规范请求复用原任务，不因 key 轮换重复入库；不同正文、role、timestamp、顺序或 session 返回 409。省略 timestamp 和 null 等价。不同 request_id 保存独立历史来源，不覆盖同一用户的旧会话。
+用户 workspace 使用冻结 UUIDv5 命名空间和版本化长度编码，由认证 key 的 tenant/root 与完整 user_id 计算；[实际字节与 UUID 向量](contracts/aml-workspace-v1-vectors.json)。大小写、空格与 Unicode 编码形式原样保留，不截断或归一化；session、request、key、模型或重启不改变定位。需要隔离的新数据集使用另一个显式 root。ID 不是权限凭证，不承诺数学上的无碰撞；已有 ID 的 tenant/owner 不符则冲突，不能改绑或随机回退。
 
-来源保存规范 JSON，保留解码后的原始 content 字符串、role、消息顺序、session 与可选 timestamp；不保留 HTTP JSON 的空白/转义拼写。接收时间使用事件 created_at，不代替缺失的事件时间。解析器 `aml-message-ranges-v1` 每条消息独立按最多 2400 UTF-8 字节分块；locator 的 source_path 是来源 JSON 内的消息 content 路径，byte_start/end 相对于该字符串，不能用于拼接资产或 JSON 文本。message_index 从 0 开始，message_count 和 session 保留相邻消息关系。
+Add 将 request_id 编成 `aml:add:v1:` + 完整 UTF-8 的 SHA-256 小写十六进制摘要，原 ID 同时保留为 MessageBatch.batch_id 并参与一致性核验。一次 Add 创建一个通用 source event、asset、message_batch_ingest job 与命令回执，整批发布且全部索引可检索后才返回 HTTP 200、`{success:true,request_id,user_id,session_id}`；三个 ID 原样回传，不返回 202。跨 key 同键复用原任务但不转移 created_by；任何内容、session、角色、时间、顺序或接受规格变化返回 409。省略 timestamp 与 null 等价，不按时间重排。
 
-Search 显式使用原文 vector、关闭摘要/图、不允许关键词降级；options 接受但不影响查询或写入，不生成答案。data 使用稳定 chunk UUID，content 是角色/时间/session/message_index/message_count、parser、source_path、byte_basis 与 byte_start/end 的 JSON 来源标注加原文片段，按现有向量相关性及 ID 决定顺序，至多 top_k 条；未知用户空 data 且不创建映射。没有摘要、语义去重、邻接补全或 reranker。byte_start/end 为原消息 UTF-8 的半开区间；这里只暴露已有 locator，不改变分块、原文、稳定 ID 或解析器版本。一个片段不代表整条消息或整个会话已被检索。标注与正文都是外部证据，不是可执行指令。
+新 parser 是 `message-batch-ranges-v1`，parser_version=1、chunking_version=1，raw_only=true。每条消息按最多 2400 UTF-8 字节独立分块；来源 JSON 保留解码后原文而不保留 HTTP JSON 空白/转义拼写。locator 与 Search 的 Source metadata 包括 source_event_id、external_batch_id、session_id、message_index/count、role、timestamp、parser/version、chunking_version、source_path、byte_basis、byte_start/end。范围是具体消息 content UTF-8 的半开区间，不是拼接资产或来源 JSON 的偏移；同 session 多批次通过完整来源标识区别。旧 `aml-message-ranges-v1` 只用于历史证据解码，不重新解释其偏移或重写档案。
 
-输入边界：请求体最多 10 MiB；三个 ID 各 1–4096 UTF-8 字节且无 NUL；每批 1–256 条非空文本消息，合计最多 1,000,000 UTF-8 字节；query 非空、无 NUL、最多 4000 UTF-8 字节；top_k 为 1–100。不支持图片、数组 content、system/tool role 或未知字段，返回脱敏 422；超过 HTTP body 上限由框架返回 413，不截断后发布。解析边界会再次校验整批上限。
+Search 只读计算/授权目标，不创建未知用户 workspace；先核验实时 root 能力，合法未知目标返回空 data。固定原文 vector，关闭摘要/图/重排，allow_partial=false；options 字符串数组接受但不影响查询/写入，不生成答案。按既有相关性与 ID tie-break 返回至多 top_k 条。新库随机资产/分块 UUID 与旧库不同，同分顺序可能不同；不据此声称质量变化。来源标注和正文都是外部证据，不是指令。
 
-HTTP 最多等待任务 25 分钟。超时返回 503，原任务继续；断线/重试不会创建独立 Worker 或重试循环。同 profile 的已完成重放还会检查来源、当前版本、ready 索引与 committed 账本；来源已撤回或证据已不可检索返回 409。模型未配置/调用失败为 503，既有批次的模型 profile 改变为 409，不能通过换配置重用旧 Add 成功结果。失败任务的重试方式与运行限制见 OPERATIONS。
+输入边界保持请求体最多 10 MiB；三个 ID 各 1–4096 UTF-8 字节且无 NUL；每批 1–256 条非空文本消息、正文合计最多 1,000,000 UTF-8 字节；query 非空、无 NUL、最多 4000 UTF-8 字节；top_k 为 1–100。AML 仅接受 user/assistant，通用库才接受 system/tool 等标签。timestamp 为可选有符号 i64 Unix 毫秒，不补接收时间。不支持图片、数组 content、未知字段或非法类型，返回脱敏 422；HTTP body 超限为 413，不截断后发布。
 
-库宿主可调用 `submit_aml_add` 获得持久 receipt，随后 `wait_aml_add`（最长 25 分钟）观察原任务，或调用组合的 `aml_add`；receipt 不是 HTTP 成功响应。来源、asset 和 job 可通过映射后的 AuthContext 使用既有 Service 库接口核验，外部调用不能指定内部 scope。
+Add 最长观察原任务 25 分钟；超时 503，原任务继续，HTTP 断开不取消或复制任务。未认证 401、无权限 403、内容/规格冲突和当前来源/索引已不可见 409、模型未配置/失败或仍未完成 503。每次重放重新查询原回执实时发布状态，不能沿用旧 success。显式 retry 保持 job/source/asset 和原接受规格；新 generation 的未发布 chunk ID 可变，已发布证据不改写。库调用方可直接使用通用 submit_message_batch / message_batch_status / wait_message_batch，而不依赖 AML DTO。
 
 
 ## S2 显式记忆语义

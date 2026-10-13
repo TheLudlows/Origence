@@ -4,6 +4,7 @@
 //! native top-k. Every retained result still uses the existing complete current
 //! version / S2 support / transitive Learning visibility guard.
 
+use super::visibility::CURRENT_CHUNK_ROWS;
 use super::*;
 use crate::{
     context_retrieval::{
@@ -63,9 +64,9 @@ impl SqliteTx {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
-            "SELECT c.id,c.asset_id,c.search_terms,c.locator FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id AND a.current_version=c.version JOIN oc_versions v ON v.tenant_id=c.tenant_id AND v.workspace_id=c.workspace_id AND v.asset_id=c.asset_id AND v.version=c.version JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE c.tenant_id=? AND c.workspace_id=? AND a.kind=? AND NOT a.deleted AND e.state='active'",
-        )
+        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(&format!(
+            "SELECT c.id,c.asset_id,c.search_terms,c.locator {CURRENT_CHUNK_ROWS} AND a.kind=?"
+        ))
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(kind)

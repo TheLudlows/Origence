@@ -184,7 +184,6 @@ def evaluate(args, report):
         try:
             host.bootstrap()
             host.start()
-            host.call("/admin/aml/namespace", {})
             for batch in batches:
                 result, _ = host.call("/aml/add", batch)
                 if result != {"success": True, **{k: batch[k] for k in ("request_id", "user_id", "session_id")}}:

@@ -1,5 +1,3 @@
-pub mod aml;
-#[cfg(feature = "local-storage")]
 pub mod api;
 pub mod capture;
 #[cfg(feature = "local-storage")]
@@ -18,6 +16,7 @@ pub mod learning;
 pub mod mcp;
 pub mod memory_identity;
 pub mod memory_semantics;
+pub mod messages;
 pub mod models;
 pub mod parsing;
 #[cfg(feature = "local-storage")]
