@@ -12,7 +12,7 @@ read-only checkouts. Do not commit generated SQL evidence into the product.
 - Historical eight-slot implementation: `765d67190b02e01bcf78a756a5ae185b1027971c`.
 - Candidate: actual checked-out commit, supplied as its exact 40-character SHA.
 - Reviewed candidate `src/storage/sqlite/publication.rs` SHA256:
-  `1b835adee6b6c2c5c0402c0291c1ff24cc355bdce26cf5d1d7489191ec4c2557`.
+  `1d56bbfcbc28793a0f603b9ce881e792aae6687786fb15e2619b3638c6fc2053`.
 - Explicit mode: `reviewed_receipt_metadata_v1`; the old constants-only mode
   still rejects changed Rust flow. It is not repurposed to accept this algorithm.
 - The extractor verifies the candidate's actual Git HEAD and committed source

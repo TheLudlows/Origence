@@ -86,7 +86,10 @@ struct BatchPublicationRow {
 }
 
 impl BatchPublicationRow {
-    fn from_metadata(row: &native_turso::Row, distinct_chunk_ids: i64) -> native_turso::Result<Self> {
+    fn from_metadata(
+        row: &native_turso::Row,
+        distinct_chunk_ids: i64,
+    ) -> native_turso::Result<Self> {
         Ok(Self {
             operation: row.try_get("operation")?,
             state: row.try_get("state")?,
@@ -248,10 +251,18 @@ impl TursoTx {
         }
         // Validate each opaque native token before joining them into an array.
         // Empty or multiple values must not silently alter its membership.
-        let tokens: Vec<_> = metadata.chunks.iter().map(|chunk| chunk.id_json.as_str()).collect();
+        let tokens: Vec<_> = metadata
+            .chunks
+            .iter()
+            .map(|chunk| chunk.id_json.as_str())
+            .collect();
         let invalid: i64 = native_turso::query_scalar(
             "SELECT count(*) FROM json_each(?) WHERE NOT json_valid(value)",
-        ).bind(json!(tokens).to_string()).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        )
+        .bind(json!(tokens).to_string())
+        .fetch_one(&mut *self.tx)
+        .await
+        .map_err(turso_err)?;
         if invalid != 0 {
             return Err(invalid_plan());
         }
@@ -270,11 +281,12 @@ impl TursoTx {
         if metadata.chunks.is_empty() {
             return Ok(expected);
         }
-        let rows = native_turso::query("SELECT key,upper(replace(value,'-','')) AS id FROM json_each(?)")
-            .bind(metadata.ids_json())
-            .fetch_all(&mut *self.tx)
-            .await
-            .map_err(turso_err)?;
+        let rows =
+            native_turso::query("SELECT key,upper(replace(value,'-','')) AS id FROM json_each(?)")
+                .bind(metadata.ids_json())
+                .fetch_all(&mut *self.tx)
+                .await
+                .map_err(turso_err)?;
         for row in rows {
             let index: usize = row.try_get("key").map_err(turso_err)?;
             let id: Option<String> = row.try_get("id").map_err(turso_err)?;
@@ -648,8 +660,16 @@ mod tests {
             tx.publication_expected_chunks(&metadata).await.unwrap()["AB"],
             HashSet::from([1, 2])
         );
-        for plan in [r#"{}"#, r#"{"memories":[{}]}"#, r#"{"memories":[{"chunks":null}]}"#, r#"{"memories":[{"chunks":[]}]}"#] {
-            assert_eq!(tx.derive_receipt_metadata(plan).await.unwrap(), ReceiptMetadata::empty());
+        for plan in [
+            r#"{}"#,
+            r#"{"memories":[{}]}"#,
+            r#"{"memories":[{"chunks":null}]}"#,
+            r#"{"memories":[{"chunks":[]}]}"#,
+        ] {
+            assert_eq!(
+                tx.derive_receipt_metadata(plan).await.unwrap(),
+                ReceiptMetadata::empty()
+            );
         }
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
@@ -658,26 +678,59 @@ mod tests {
     #[tokio::test]
     async fn publication_metadata_requires_single_native_id_tokens_and_dimensions() {
         let (_dir, pool, mut tx, _) = database().await;
-        for token in ["", " ", "1,2", "null,\"injected\"", "\"unterminated", "not-json"] {
+        for token in [
+            "",
+            " ",
+            "1,2",
+            "null,\"injected\"",
+            "\"unterminated",
+            "not-json",
+        ] {
             let metadata = ReceiptMetadata {
                 format: RECEIPT_METADATA_FORMAT.into(),
-                chunks: vec![ReceiptChunk { id_json: token.into(), dimension: Some(1) }],
+                chunks: vec![ReceiptChunk {
+                    id_json: token.into(),
+                    dimension: Some(1),
+                }],
             };
             assert_invalid_plan(tx.publication_distinct_ids(&metadata).await.unwrap_err());
         }
         for token in ["null", "1", "1.0", "true", "{}", "[]", "\"a,b\"", " 1 "] {
             let metadata = ReceiptMetadata {
                 format: RECEIPT_METADATA_FORMAT.into(),
-                chunks: vec![ReceiptChunk { id_json: token.into(), dimension: None }],
+                chunks: vec![ReceiptChunk {
+                    id_json: token.into(),
+                    dimension: None,
+                }],
             };
-            assert_eq!(tx.publication_distinct_ids(&metadata).await.unwrap(), i64::from(token != "null"));
+            assert_eq!(
+                tx.publication_distinct_ids(&metadata).await.unwrap(),
+                i64::from(token != "null")
+            );
         }
-        let missing_dimension = json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[{"id_json":"null"}]}).to_string();
+        let missing_dimension =
+            json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[{"id_json":"null"}]}).to_string();
         assert_invalid_plan(ReceiptMetadata::decode(Some(&missing_dimension), 1).unwrap_err());
         let null_dimension = json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[{"id_json":"null","dimension":null}]}).to_string();
-        assert_eq!(ReceiptMetadata::decode(Some(&null_dimension), 1).unwrap().chunks[0].dimension, None);
-        for unrelated in [None, Some("null"), Some("7"), Some("{}"), Some("[]"), Some("1e999")] {
-            assert_eq!(ReceiptMetadata::decode(unrelated, 0).unwrap(), ReceiptMetadata::empty());
+        assert_eq!(
+            ReceiptMetadata::decode(Some(&null_dimension), 1)
+                .unwrap()
+                .chunks[0]
+                .dimension,
+            None
+        );
+        for unrelated in [
+            None,
+            Some("null"),
+            Some("7"),
+            Some("{}"),
+            Some("[]"),
+            Some("1e999"),
+        ] {
+            assert_eq!(
+                ReceiptMetadata::decode(unrelated, 0).unwrap(),
+                ReceiptMetadata::empty()
+            );
         }
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
@@ -692,15 +745,21 @@ mod tests {
     }
 
     fn assert_invalid_plan(error: StorageError) {
-        assert!(matches!(error, StorageError::Unavailable(message) if message == "invalid message publication plan"));
+        assert!(
+            matches!(error, StorageError::Unavailable(message) if message == "invalid message publication plan")
+        );
     }
 
     #[tokio::test]
     async fn publication_save_validates_and_reuses_same_generation_metadata() {
         let (_dir, pool, mut tx, receipt) = database().await;
         native_turso::query("INSERT INTO oc_jobs VALUES(?,?,?,'{}','message_batch_ingest',0)")
-            .bind(tx.scope.tenant_id).bind(tx.scope.workspace_id).bind(receipt.job_id)
-            .execute(&mut *tx.tx).await.unwrap();
+            .bind(tx.scope.tenant_id)
+            .bind(tx.scope.workspace_id)
+            .bind(receipt.job_id)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         let plan = json!({"generation":3,"memories":[{"chunks":[
             {"id":"a-b","embedding":[0]}, {"id":"AB","embedding":[0,0]},
             {"id":null}, {"id":1}, {"id":"1"}, {"id":true},
@@ -709,16 +768,31 @@ mod tests {
         ]}]});
         let mut forged_fresh = plan.clone();
         forged_fresh["receipt_metadata"] = json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[]});
-        assert_invalid_plan(tx.save_publication(receipt.job_id, &forged_fresh).await.unwrap_err());
+        assert_invalid_plan(
+            tx.save_publication(receipt.job_id, &forged_fresh)
+                .await
+                .unwrap_err(),
+        );
         tx.save_publication(receipt.job_id, &plan).await.unwrap();
         let prepared = saved_plan(&mut tx, receipt.job_id).await;
         let metadata = &prepared["receipt_metadata"];
         assert_eq!(metadata["format"], RECEIPT_METADATA_FORMAT);
         assert_eq!(metadata["chunks"].as_array().unwrap().len(), 9);
-        assert_eq!(metadata["chunks"][0], json!({"id_json":"\"a-b\"","dimension":1}));
-        assert_eq!(metadata["chunks"][2], json!({"id_json":"null","dimension":null}));
-        assert_eq!(metadata["chunks"][8], json!({"id_json":"\"encoded\"","dimension":3}));
-        tx.save_publication(receipt.job_id, &prepared).await.unwrap();
+        assert_eq!(
+            metadata["chunks"][0],
+            json!({"id_json":"\"a-b\"","dimension":1})
+        );
+        assert_eq!(
+            metadata["chunks"][2],
+            json!({"id_json":"null","dimension":null})
+        );
+        assert_eq!(
+            metadata["chunks"][8],
+            json!({"id_json":"\"encoded\"","dimension":3})
+        );
+        tx.save_publication(receipt.job_id, &prepared)
+            .await
+            .unwrap();
         assert_eq!(saved_plan(&mut tx, receipt.job_id).await, prepared);
         // An omitted caller field can only reuse the existing witness after
         // native validation; it must never replace the membership or dimension.
@@ -731,20 +805,34 @@ mod tests {
         let mut forged = prepared.clone();
         forged["receipt_metadata"]["chunks"][0]["id_json"] = json!("\"replacement\"");
         for invalid in [different_id, different_dimension, forged] {
-            assert_invalid_plan(tx.save_publication(receipt.job_id, &invalid).await.unwrap_err());
+            assert_invalid_plan(
+                tx.save_publication(receipt.job_id, &invalid)
+                    .await
+                    .unwrap_err(),
+            );
             assert_eq!(saved_plan(&mut tx, receipt.job_id).await, prepared);
         }
         // Missing current-generation metadata is corruption, not a backfill.
-        native_turso::query("UPDATE oc_jobs SET payload=json_remove(payload,'$.publication.receipt_metadata')")
-            .execute(&mut *tx.tx).await.unwrap();
-        assert_invalid_plan(tx.save_publication(receipt.job_id, &plan).await.unwrap_err());
+        native_turso::query(
+            "UPDATE oc_jobs SET payload=json_remove(payload,'$.publication.receipt_metadata')",
+        )
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+        assert_invalid_plan(
+            tx.save_publication(receipt.job_id, &plan)
+                .await
+                .unwrap_err(),
+        );
         assert_eq!(saved_plan(&mut tx, receipt.job_id).await, plan);
         // The worker does not reuse stale generations: ordinary reprepare may
         // replace the old plan without reviving its absent witness.
         let mut next_generation = plan.clone();
         next_generation["generation"] = json!(4);
         next_generation["memories"][0]["chunks"][0]["id"] = json!("next");
-        tx.save_publication(receipt.job_id, &next_generation).await.unwrap();
+        tx.save_publication(receipt.job_id, &next_generation)
+            .await
+            .unwrap();
         let next = saved_plan(&mut tx, receipt.job_id).await;
         assert_eq!(next["generation"], 4);
         assert_eq!(next["receipt_metadata"]["chunks"][0]["id_json"], "\"next\"");

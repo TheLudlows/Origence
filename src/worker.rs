@@ -970,7 +970,10 @@ mod tests {
         let publication: Publication = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(publication).unwrap(), value);
         let mut unprepared = value;
-        unprepared.as_object_mut().unwrap().remove("receipt_metadata");
+        unprepared
+            .as_object_mut()
+            .unwrap()
+            .remove("receipt_metadata");
         let publication: Publication = serde_json::from_value(unprepared.clone()).unwrap();
         assert!(publication.receipt_metadata.is_none());
         assert_eq!(serde_json::to_value(publication).unwrap(), unprepared);

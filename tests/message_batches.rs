@@ -419,7 +419,10 @@ async fn receipt_malformed_array_string_fails_save_and_rolls_back_payload() {
                 .await
                 .unwrap();
             tx.check_permission(Permission::Write).await.unwrap();
-            let error = tx.save_publication(receipt.job_id, &plan).await.unwrap_err();
+            let error = tx
+                .save_publication(receipt.job_id, &plan)
+                .await
+                .unwrap_err();
             assert!(
                 matches!(&error, StorageError::Backend(_)),
                 "{state}, {chunks}: {error:?}"

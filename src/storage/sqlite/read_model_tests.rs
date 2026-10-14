@@ -1261,7 +1261,9 @@ async fn visible_and_keyword_defer_payload_until_support_and_tokens_pass() {
         .await
         .unwrap();
     db::query("UPDATE oc_chunks SET content=x'02',locator=?")
-        .bind(json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string())
+        .bind(
+            json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string(),
+        )
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -1366,10 +1368,12 @@ async fn keyword_summary_keeps_native_aggregation_and_null_terms() {
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(70_003);
     seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
-    db::query("CREATE TABLE oc_summaries(tenant_id BLOB,workspace_id BLOB,chunk_id BLOB,search_terms)")
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "CREATE TABLE oc_summaries(tenant_id BLOB,workspace_id BLOB,chunk_id BLOB,search_terms)",
+    )
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert!(
         tx.keyword_hits("needle", true, None)
             .await
@@ -1428,7 +1432,9 @@ async fn selected_payload_waits_for_other_chunk_version_support() {
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())
         .bind(row.asset)
-        .bind(json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string())
+        .bind(
+            json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string(),
+        )
         .execute(&mut *tx.tx)
         .await
         .unwrap();

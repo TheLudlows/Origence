@@ -280,7 +280,6 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
             source_id: source,
             version: 1,
         },
-        search_terms: "numeric support".into(),
     };
     let mut tx = transaction(pool.begin().await.unwrap(), scope);
     assert!(tx.local_support_visibility(&[(asset, 1)]).await.unwrap()[&(asset, 1)]);
@@ -540,7 +539,7 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
 }
 
 #[tokio::test]
-async fn native_parser_short_circuit_matches_gated_support_projection() {
+async fn native_parser_gating_ignores_only_unconsumed_invalid_support() {
     let dir = tempfile::tempdir().unwrap();
     let pool = Pool::open(dir.path().join("parser-short-circuit.db"))
         .await
@@ -599,6 +598,18 @@ async fn native_parser_short_circuit_matches_gated_support_projection() {
             }
             .await;
             new_tx.rollback().await.unwrap();
+            if support == "[10000000000000000000000000000000]" {
+                // The old OR still evaluates this invalid native number. Plain
+                // and null parsers do not consume semantic support, so the new
+                // projection deliberately ignores it. Semantic rows still fail.
+                assert!(matches!(&old, Err(native_turso::Error::Native(_))));
+                if parser == "\"memory-semantics:v1\"" {
+                    assert!(matches!(&new, Err(native_turso::Error::Native(_))));
+                } else {
+                    assert!(matches!(new, Ok(true)), "{locator}: {new:?}");
+                }
+                continue;
+            }
             match (old, new) {
                 (Ok(old), Ok(new)) => assert_eq!(old, new, "{locator}"),
                 (Err(old), Err(new)) => {
@@ -612,7 +623,7 @@ async fn native_parser_short_circuit_matches_gated_support_projection() {
                     );
                 }
                 (old, new) => {
-                    panic!("native short-circuit mismatch for {locator}: old={old:?}, new={new:?}")
+                    panic!("native consumed-support mismatch for {locator}: old={old:?}, new={new:?}")
                 }
             }
         }

@@ -135,7 +135,6 @@ pub(super) async fn chunk_ids_for_sources(
 pub(super) struct CurrentChunk {
     pub hit: SearchHit,
     pub root: SourceVersion,
-    pub search_terms: String,
 }
 
 /// Current root visibility only. Callers apply local support and Learning as
@@ -198,7 +197,6 @@ pub(super) async fn current_chunks_measured(
                 source_id: source,
                 version,
             },
-            search_terms: row.try_get("search_terms").map_err(turso_err)?,
         });
     }
     Ok((chunks, raw.counts))
@@ -262,7 +260,9 @@ impl RawCurrentRows {
             asset_id: row.try_get("asset_id").map_err(turso_err)?,
             version: row.try_get("version").map_err(turso_err)?,
             kind: self.assets[&position].try_get("kind").map_err(turso_err)?,
-            title: self.versions[&position].try_get("title").map_err(turso_err)?,
+            title: self.versions[&position]
+                .try_get("title")
+                .map_err(turso_err)?,
             content: row.try_get("content").map_err(turso_err)?,
             locator,
             source_event_id,
@@ -393,7 +393,13 @@ pub(super) async fn current_rows(
         .filter_map(|(index, (request, row))| active.contains(&index).then_some((request, row)))
         .collect();
     let counts = [rows.len(), requests.len(), asset_count, version_count];
-    Ok(RawCurrentRows { rows, assets, versions, positions, counts })
+    Ok(RawCurrentRows {
+        rows,
+        assets,
+        versions,
+        positions,
+        counts,
+    })
 }
 
 // Root-only consumers must not decode asset kind, current version, or title.
@@ -746,9 +752,9 @@ impl TursoTx {
                 row.try_get::<Uuid>("asset_id").map_err(turso_err)?,
                 row.try_get::<i32>("version").map_err(turso_err)?,
             );
-            let position = *positions.get(&key).ok_or_else(|| {
-                StorageError::Backend("inconsistent support row position".into())
-            })?;
+            let position = *positions
+                .get(&key)
+                .ok_or_else(|| StorageError::Backend("inconsistent support row position".into()))?;
             let normalized: String = row.try_get("support_json").map_err(turso_err)?;
             members.extend(
                 support_members(&kind, &normalized)?

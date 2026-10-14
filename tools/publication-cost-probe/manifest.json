@@ -2,8 +2,8 @@
   "files": {
     "Cargo.toml": "2b1a0710591756cb4d169c01da7ae0ec5182884ee1be5388f561ab6783201ee2",
     "README-jsonb-history.md": "b27a21b187f8218f526718b8d500c17fde1d4b661cc4d2e3430a720d916ee4bd",
-    "README.md": "d5d9165b92b3b169b20d7c6842408be854b221fda8e80273d5e3bf9ae8c7ba79",
-    "extract_sql.py": "cf4be765ecf82a3172cdd2c3fe24fd969416cee3fc6d40cb0d1f44cf28b89669",
+    "README.md": "c0cf1a5203bb6c0450c6b422474487e878642782323fff4adbbad500b21ba51f",
+    "extract_sql.py": "dc7557f4e644af1a27e53f2f25eff3246a119c3e2de3d6ffa079085128445c66",
     "prepare_candidate.py": "09c4fd1dd569ba131f4d84ae8edc9b03fd0616e4cd514428240c7ebe234bd721",
     "production/main.rs": "10f2af98c8c3f8374587a5d2233ba46ea0e33246503c456f5b0822b516027aff",
     "production/prepare.py": "28c48886465c9fe8496f752fa39e0b5c9adbfab0d076bdc39988619ee067ef3a",
@@ -21,7 +21,7 @@
   },
   "candidate_native_status": "NOT_RUN",
   "python_preparation_tests": 24,
-  "reviewed_publication_sha256": "1b835adee6b6c2c5c0402c0291c1ff24cc355bdce26cf5d1d7489191ec4c2557",
+  "reviewed_publication_sha256": "1d56bbfcbc28793a0f603b9ce881e792aae6687786fb15e2619b3638c6fc2053",
   "source_commit_binding": "verified against actual Git HEAD and git show by extractor/production prepare at CI time",
   "historical_jsonb": "correctness gates retained; no new performance run"
 }

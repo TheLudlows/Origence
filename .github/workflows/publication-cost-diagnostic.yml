@@ -57,7 +57,7 @@ jobs:
           python3 -B -m unittest discover -s "$BENCH" -p 'test_*.py' -v
           python3 "$BENCH/prepare_candidate.py" --current-root _benchmark/current --output "$CANDIDATE" > "$EVIDENCE/candidate-generation.json"
           python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$CANDIDATE" --candidate-sha256 a69eacfefb60799ed015f72708bf782d3e16b6ccf9dfdfe00637511564f08f75 --candidate-commit "diagnostic-${{ github.sha }}" --output "$EVIDENCE/jsonb-history-evidence.json"
-          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$GITHUB_WORKSPACE" --candidate-sha256 1b835adee6b6c2c5c0402c0291c1ff24cc355bdce26cf5d1d7489191ec4c2557 --candidate-commit "${{ github.sha }}" --candidate-mode reviewed_receipt_metadata_v1 --output "$EVIDENCE/sql-evidence.json"
+          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$GITHUB_WORKSPACE" --candidate-sha256 1d56bbfcbc28793a0f603b9ce881e792aae6687786fb15e2619b3638c6fc2053 --candidate-commit "${{ github.sha }}" --candidate-mode reviewed_receipt_metadata_v1 --output "$EVIDENCE/sql-evidence.json"
           sha256sum "$CANDIDATE/src/storage/sqlite/publication.rs" > "$EVIDENCE/candidate-source.sha256"
           python3 "$BENCH/production/prepare.py" --checkout "$GITHUB_WORKSPACE" --label "${{ github.sha }}" --output "$PRODUCTION" > "$EVIDENCE/production-prepare.json"
           git rev-parse HEAD > "$EVIDENCE/bundle-commit.txt"
