@@ -23,7 +23,8 @@ const EXACT_OWNERS: &str = "SELECT artifact_id,(source_id=? AND version=? AND ar
 
 const DELETE_OWNERS: &str = "DELETE FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND rowid IN (?,?,?,?,?,?,?,?)";
 
-const DELETE_CHUNKS: &str = "DELETE FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND rowid IN (?,?,?,?,?,?,?,?)";
+const DELETE_CHUNKS: &str =
+    "DELETE FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND rowid IN (?,?,?,?,?,?,?,?)";
 
 const REMOVE_INDEXES: &str = "UPDATE oc_index_entries SET state='removed' WHERE tenant_id=? AND workspace_id=? AND rowid IN (?,?,?,?,?,?,?,?)";
 
@@ -40,7 +41,10 @@ fn keys(rows: &[native_turso::Row], columns: &[&str]) -> StorageResult<Vec<Vec<A
         .collect()
 }
 
-fn unmatched_rowids(rows: &[native_turso::Row], matched: &HashSet<usize>) -> StorageResult<Vec<i64>> {
+fn unmatched_rowids(
+    rows: &[native_turso::Row],
+    matched: &HashSet<usize>,
+) -> StorageResult<Vec<i64>> {
     rows.iter()
         .enumerate()
         .filter(|(index, _)| !matched.contains(index))
@@ -79,7 +83,10 @@ async fn mutate_rowids(
     Ok(changed)
 }
 
-pub(super) async fn detach_invalid_roots(conn: &mut Connection, scope: Scope) -> StorageResult<u64> {
+pub(super) async fn detach_invalid_roots(
+    conn: &mut Connection,
+    scope: Scope,
+) -> StorageResult<u64> {
     let owners = native_turso::query("SELECT rowid AS cleanup_rowid,source_id,version FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -107,11 +114,12 @@ pub(super) async fn detach_invalid_roots(conn: &mut Connection, scope: Scope) ->
         .into_iter()
         .map(|(index, _)| index)
         .collect();
-    let events: HashSet<_> = read_model::associate_query(conn, scope, ACTIVE_EVENTS, 1, &event_keys)
-        .await?
-        .into_iter()
-        .map(|(index, _)| index)
-        .collect();
+    let events: HashSet<_> =
+        read_model::associate_query(conn, scope, ACTIVE_EVENTS, 1, &event_keys)
+            .await?
+            .into_iter()
+            .map(|(index, _)| index)
+            .collect();
     let live: HashSet<_> = versions
         .iter()
         .enumerate()
@@ -128,21 +136,19 @@ pub(super) async fn detach_invalid_roots(conn: &mut Connection, scope: Scope) ->
     .await
 }
 
-pub(super) async fn detach_invalid_chunks(conn: &mut Connection, scope: Scope) -> StorageResult<u64> {
+pub(super) async fn detach_invalid_chunks(
+    conn: &mut Connection,
+    scope: Scope,
+) -> StorageResult<u64> {
     let owners = native_turso::query("SELECT rowid AS cleanup_rowid,chunk_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('chunk','summary')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
         .await
         .map_err(turso_err)?;
-    let chunks = read_model::associate_query(
-        conn,
-        scope,
-        OWNER_CHUNKS,
-        1,
-        &keys(&owners, &["chunk_id"])?,
-    )
-    .await?;
+    let chunks =
+        read_model::associate_query(conn, scope, OWNER_CHUNKS, 1, &keys(&owners, &["chunk_id"])?)
+            .await?;
     let asset_keys = chunks
         .iter()
         .map(|(_, row)| Ok(vec![row.try_get("asset_id").map_err(turso_err)?]))
@@ -191,24 +197,24 @@ pub(super) async fn unowned_native_artifacts(
         .collect()
 }
 
-pub(super) async fn remove_unowned_chunks(conn: &mut Connection, scope: Scope) -> StorageResult<u64> {
-    let chunks = native_turso::query("SELECT rowid AS cleanup_rowid,id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(turso_err)?;
-    let owned: HashSet<_> = read_model::associate_query(
-        conn,
-        scope,
-        CHUNK_OWNERS,
-        1,
-        &keys(&chunks, &["id"])?,
+pub(super) async fn remove_unowned_chunks(
+    conn: &mut Connection,
+    scope: Scope,
+) -> StorageResult<u64> {
+    let chunks = native_turso::query(
+        "SELECT rowid AS cleanup_rowid,id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?",
     )
-    .await?
-    .into_iter()
-    .map(|(index, _)| index)
-    .collect();
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let owned: HashSet<_> =
+        read_model::associate_query(conn, scope, CHUNK_OWNERS, 1, &keys(&chunks, &["id"])?)
+            .await?
+            .into_iter()
+            .map(|(index, _)| index)
+            .collect();
     let dead_keys: Vec<AssociationKey> = chunks
         .iter()
         .enumerate()
@@ -238,7 +244,10 @@ pub(super) async fn remove_unowned_chunks(conn: &mut Connection, scope: Scope) -
     .await
 }
 
-pub(super) async fn remove_missing_indexes(conn: &mut Connection, scope: Scope) -> StorageResult<u64> {
+pub(super) async fn remove_missing_indexes(
+    conn: &mut Connection,
+    scope: Scope,
+) -> StorageResult<u64> {
     let rows = native_turso::query("SELECT rowid AS cleanup_rowid,artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -266,7 +275,10 @@ pub(super) async fn remove_missing_indexes(conn: &mut Connection, scope: Scope) 
     .await
 }
 
-pub(super) async fn orphan_unowned_ledger(conn: &mut Connection, scope: Scope) -> StorageResult<u64> {
+pub(super) async fn orphan_unowned_ledger(
+    conn: &mut Connection,
+    scope: Scope,
+) -> StorageResult<u64> {
     let now = now_ms();
     let rows = native_turso::query("SELECT rowid AS cleanup_rowid,source_id,version,artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id)

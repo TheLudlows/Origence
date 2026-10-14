@@ -59,6 +59,8 @@ mod session;
 #[cfg(test)]
 mod session_read_tests;
 mod versions;
+#[cfg(test)]
+mod versions_tests;
 mod visibility;
 
 use crate::storage::Lifecycle;

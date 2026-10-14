@@ -1,6 +1,6 @@
 use super::*;
-use crate::storage::native_turso as db;
 use crate::storage::RelationalStore;
+use crate::storage::native_turso as db;
 
 #[derive(Clone, Copy)]
 struct Record {
@@ -161,13 +161,15 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
     assert!(native.is_empty());
     assert_eq!(entities, vec![shared]);
     assert_eq!(relations, vec![sole]);
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(old.source)
-        .execute(&store.pool)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(old.source)
+    .execute(&store.pool)
+    .await
+    .unwrap();
     let plan = store.cleanup_plan(scope).await.unwrap();
     assert_eq!(plan, (vec![old.chunk], vec![shared], Vec::new()));
     store.shutdown().await.unwrap();
@@ -180,34 +182,39 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
     assert_eq!(store.cleanup_plan(scope).await.unwrap(), plan);
     store.finish_cleanup(scope).await.unwrap();
     store.finish_cleanup(scope).await.unwrap();
-    let chunks: Vec<Uuid> = db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_all(&store.pool)
-        .await
-        .unwrap();
+    let chunks: Vec<Uuid> =
+        db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_all(&store.pool)
+            .await
+            .unwrap();
     assert_eq!(chunks, vec![new.chunk]);
-    let summaries: i64 = db::query_scalar("SELECT count(*) FROM oc_summaries WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_one(&store.pool)
-        .await
-        .unwrap();
+    let summaries: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_summaries WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
     assert_eq!(summaries, 0);
-    let versions: i64 = db::query_scalar("SELECT count(*) FROM oc_versions WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_one(&store.pool)
-        .await
-        .unwrap();
+    let versions: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_versions WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
     assert_eq!(versions, 2);
-    let source: String = db::query_scalar("SELECT content FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(old.source)
-        .fetch_one(&store.pool)
-        .await
-        .unwrap();
+    let source: String = db::query_scalar(
+        "SELECT content FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(old.source)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap();
     assert_eq!(source, "immutable source");
     let states: Vec<(Uuid, String)> = db::query_as("SELECT artifact_id,state FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? ORDER BY artifact_id")
         .bind(scope.tenant_id)
@@ -215,7 +222,10 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
         .fetch_all(&store.pool)
         .await
         .unwrap();
-    assert_eq!(states, vec![(old.chunk, "removed".into()), (new.chunk, "ready".into())]);
+    assert_eq!(
+        states,
+        vec![(old.chunk, "removed".into()), (new.chunk, "ready".into())]
+    );
     store.shutdown().await.unwrap();
 }
 
@@ -259,7 +269,14 @@ async fn maintenance_keeps_loose_chunk_gate_and_cross_type_ledger_owner_match() 
         .fetch_all(&store.pool)
         .await
         .unwrap();
-    assert_eq!(states, vec![(4, "committed".into()), (5, "committed".into()), (6, "orphan".into())]);
+    assert_eq!(
+        states,
+        vec![
+            (4, "committed".into()),
+            (5, "committed".into()),
+            (6, "orphan".into())
+        ]
+    );
     store.shutdown().await.unwrap();
 }
 
@@ -346,7 +363,12 @@ async fn raw_historical_matches_defer_artifact_decoding_until_unowned_output() {
     // Any one live historical asset suffices, without strict UUID decoding.
     assert_eq!(detach_invalid_roots(&mut tx, scope).await.unwrap(), 0);
     assert_eq!(detach_invalid_chunks(&mut tx, scope).await.unwrap(), 0);
-    assert!(unowned_native_artifacts(&mut tx, scope).await.unwrap().is_empty());
+    assert!(
+        unowned_native_artifacts(&mut tx, scope)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_artifact_owners SET chunk_id=NULL")
         .execute(&mut *tx)
         .await
@@ -415,23 +437,30 @@ async fn scoped_rowid_batches_report_actual_counts_repeat_and_rollback() {
     assert_eq!(detach_invalid_roots(&mut tx, scope).await.unwrap(), 129);
     assert_eq!(detach_invalid_roots(&mut tx, scope).await.unwrap(), 0);
     assert_eq!(detach_invalid_roots(&mut tx, other).await.unwrap(), 0);
-    assert_eq!(detach_invalid_roots(&mut tx, foreign_tenant).await.unwrap(), 0);
+    assert_eq!(
+        detach_invalid_roots(&mut tx, foreign_tenant).await.unwrap(),
+        0
+    );
     for here in [other, foreign_tenant] {
-        let retained: i64 = db::query_scalar("SELECT count(*) FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?")
-            .bind(here.tenant_id)
-            .bind(here.workspace_id)
-            .fetch_one(&mut *tx)
-            .await
-            .unwrap();
+        let retained: i64 = db::query_scalar(
+            "SELECT count(*) FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
+        )
+        .bind(here.tenant_id)
+        .bind(here.workspace_id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
         assert_eq!(retained, 129);
     }
     tx.rollback().await.unwrap();
-    let count: i64 = db::query_scalar("SELECT count(*) FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let count: i64 = db::query_scalar(
+        "SELECT count(*) FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 129);
     pool.shutdown().await.unwrap();
 }
@@ -495,10 +524,11 @@ async fn finish_helpers_preserve_dangling_summary_and_loose_owner_equivalence() 
     assert_eq!(summaries, vec![missing]);
     assert_eq!(remove_missing_indexes(&mut tx, scope).await.unwrap(), 2);
     assert_eq!(orphan_unowned_ledger(&mut tx, scope).await.unwrap(), 1);
-    let states: Vec<String> = db::query_scalar("SELECT state FROM oc_artifact_ledger ORDER BY version")
-        .fetch_all(&mut *tx)
-        .await
-        .unwrap();
+    let states: Vec<String> =
+        db::query_scalar("SELECT state FROM oc_artifact_ledger ORDER BY version")
+            .fetch_all(&mut *tx)
+            .await
+            .unwrap();
     assert_eq!(states, vec!["committed", "orphan"]);
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
@@ -507,7 +537,10 @@ async fn finish_helpers_preserve_dangling_summary_and_loose_owner_equivalence() 
 #[tokio::test]
 async fn empty_cleanup_still_prepares_original_relations() {
     let (_dir, pool, scope) = raw_database().await;
-    db::query("DROP TABLE oc_events").execute(&pool).await.unwrap();
+    db::query("DROP TABLE oc_events")
+        .execute(&pool)
+        .await
+        .unwrap();
     let mut tx = pool.begin().await.unwrap();
     assert!(matches!(
         detach_invalid_roots(&mut tx, scope).await,
