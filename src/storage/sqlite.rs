@@ -31,6 +31,8 @@ use uuid::Uuid;
 mod app;
 #[cfg(feature = "local-storage")]
 mod context;
+#[cfg(all(test, feature = "local-storage"))]
+mod context_route_tests;
 mod domain;
 #[cfg(feature = "local-storage")]
 mod full_text;

@@ -4,7 +4,7 @@
 //! native top-k. Every retained result still uses the existing complete current
 //! version / S2 support / transitive Learning visibility guard.
 
-use super::visibility::CURRENT_CHUNK_ROWS;
+use super::read_model::{self, AssociationKey};
 use super::*;
 use crate::{
     context_retrieval::{
@@ -24,37 +24,69 @@ impl TursoTx {
         asset: Uuid,
         route: ContextRoute,
     ) -> StorageResult<bool> {
-        let kind: Option<String> = native_turso::query_scalar(
-            "SELECT kind FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted AND current_version IS NOT NULL",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(asset)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
+        Ok(self.context_route_memberships(&[asset], route).await?
+            .get(&asset).copied().unwrap_or(false))
+    }
+
+    /// Route membership only. Root/support activity remains the caller's layer.
+    pub(super) async fn context_route_memberships(
+        &mut self,
+        assets: &[Uuid],
+        route: ContextRoute,
+    ) -> StorageResult<HashMap<Uuid, bool>> {
+        let assets = read_model::unique_ids(assets.iter().copied());
+        let mut result: HashMap<_, _> = assets.iter().copied().map(|asset| (asset, false)).collect();
         let expected = match route {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        if kind.as_deref() != Some(expected) {
-            return Ok(false);
+        let mut selected = Vec::new();
+        for batch in assets.chunks(read_model::READ_KEYS) {
+            let sql = format!("SELECT id,kind,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND NOT deleted AND current_version IS NOT NULL AND id IN ({})", vec!["?"; batch.len()].join(","));
+            let mut query = native_turso::query(&sql).bind(self.scope.tenant_id).bind(self.scope.workspace_id);
+            for asset in batch { query = query.bind(*asset); }
+            for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
+                let kind: String = row.try_get("kind").map_err(turso_err)?;
+                if kind == expected {
+                    selected.push((row.try_get::<Uuid>("id").map_err(turso_err)?, row));
+                }
+            }
         }
-        let is_learning = self.is_learning_asset(asset).await?;
+        let ids: Vec<_> = selected.iter().map(|(asset, _)| *asset).collect();
+        let learning = self.learning_route_membership(&ids).await?;
         if route != ContextRoute::Learning {
-            // Includes orphaned Learning sources, not just catalog membership.
-            return Ok(!is_learning);
+            for asset in ids { result.insert(asset, !learning.is_learning.contains(&asset)); }
+            return Ok(result);
         }
-        if !is_learning || !super::improve::available(&mut self.tx).await? {
-            return Ok(false);
+        if !ids.iter().any(|asset| learning.is_learning.contains(asset))
+            || !super::improve::available(&mut self.tx).await? {
+            return Ok(result);
         }
-        native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=? AND l.status='published')")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)
+        if !learning.catalog_present {
+            // An orphan history can make available=true even without the
+            // catalog table. The old final membership SELECT then failed;
+            // an empty Rust publication map must not turn that into false.
+            let _: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND status='published')")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        }
+        let mut keys = Vec::new();
+        let mut published = Vec::new();
+        for (asset, row) in selected {
+            if let Some(source) = learning.published_sources.get(&asset) {
+                keys.push(vec![row.try_get::<AssociationKey>("id").map_err(turso_err)?, row.try_get("current_version").map_err(turso_err)?, AssociationKey::from_uuid(*source)]);
+                published.push(asset);
+            }
+        }
+        for (index, _) in read_model::associate_rows(&mut self.tx, self.scope,
+            "oc_versions", "asset_id", read_model::MATCH_PUBLISHED_SELECT,
+            read_model::MATCH_PUBLISHED_WHERE, "1", 3, &keys).await? {
+            result.insert(published[index], true);
+        }
+        Ok(result)
     }
 
-    /// No candidate LIMIT here. Independent type filtering happens before the
-    /// lexical candidate cap or the native vector backend sees any identifiers.
+    /// Type and identity membership precede every candidate/native budget.
     pub(super) async fn context_route_rows(
         &mut self,
         route: ContextRoute,
@@ -64,36 +96,30 @@ impl TursoTx {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        let rows: Vec<(Uuid, Uuid, String, String)> = native_turso::query_as(&format!(
-            "SELECT c.id,c.asset_id,c.search_terms,c.locator {CURRENT_CHUNK_ROWS} AND a.kind=?"
-        ))
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(kind)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        let mut membership = HashMap::new();
+        let rows = read_model::context_current_chunk_rows(&mut self.tx, self.scope, kind).await?;
+        let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
+        let membership = self.context_route_memberships(&assets, route).await?;
+        let rows: Vec<_> = rows.into_iter().filter(|(_, asset, _, _)| membership.get(asset) == Some(&true)).collect();
+        let identity = identity.filter(|_| route == ContextRoute::Memory);
+        let identity_rows = if identity.is_some() {
+            let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
+            self.identity_rows_for_assets(&assets).await?
+        } else { HashMap::new() };
+        let mut decoded: HashMap<Uuid, Option<MemoryIdentity>> = HashMap::new();
         let mut result = Vec::new();
         for (id, asset, terms, locator) in rows {
-            let matches = if let Some(matches) = membership.get(&asset) {
-                *matches
-            } else {
-                let matches = self.context_route_matches(asset, route).await?;
-                membership.insert(asset, matches);
-                matches
-            };
-            if !matches {
-                continue;
-            }
-            if route == ContextRoute::Memory
-                && let Some(identity) = identity
-                && self.identity_for_asset(asset).await?.as_ref() != Some(identity)
-            {
-                let locator: Value = serde_json::from_str(&locator)
-                    .map_err(|_| StorageError::Unavailable("invalid chunk locator".into()))?;
-                if conflict_identity(&locator).as_ref() != Some(identity) {
-                    continue;
+            if let Some(identity) = identity {
+                if let std::collections::hash_map::Entry::Vacant(entry) = decoded.entry(asset) {
+                    let stored = identity_rows.get(&asset).map(|row| {
+                        let text: String = row.try_get("identity_json").map_err(turso_err)?;
+                        serde_json::from_str::<MemoryIdentity>(&text).map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))
+                    }).transpose()?;
+                    entry.insert(stored);
+                }
+                if decoded.get(&asset).and_then(Option::as_ref) != Some(identity) {
+                    let locator: Value = serde_json::from_str(&locator)
+                        .map_err(|_| StorageError::Unavailable("invalid chunk locator".into()))?;
+                    if conflict_identity(&locator).as_ref() != Some(identity) { continue; }
                 }
             }
             result.push((id, terms));

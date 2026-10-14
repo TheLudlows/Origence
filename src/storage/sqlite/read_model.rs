@@ -6,9 +6,15 @@ use std::collections::HashSet;
 
 /// Preserve native key types while associating rows. Decode domain fields only
 /// after the same predicates that filtered them in the original statement.
+#[derive(Clone)]
 pub(super) struct AssociationKey(turso::Value);
 
 impl AssociationKey {
+    #[cfg(feature = "local-storage")]
+    pub(super) fn from_uuid(value: Uuid) -> Self {
+        Self(turso::Value::Blob(value.as_bytes().to_vec()))
+    }
+
     pub(super) fn is_null(&self) -> bool {
         matches!(&self.0, turso::Value::Null)
     }
@@ -795,3 +801,115 @@ impl TursoTx {
 #[cfg(test)]
 #[path = "visibility/predicate_tests.rs"]
 mod json_tests;
+
+#[cfg(feature = "local-storage")]
+pub(super) const MATCH_CURRENT_SELECT: &str = "(id=? AND current_version=?) AS m0,(id=? AND current_version=?) AS m1,(id=? AND current_version=?) AS m2,(id=? AND current_version=?) AS m3,(id=? AND current_version=?) AS m4,(id=? AND current_version=?) AS m5,(id=? AND current_version=?) AS m6,(id=? AND current_version=?) AS m7";
+
+#[cfg(feature = "local-storage")]
+pub(super) const MATCH_CURRENT_WHERE: &str = "(id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?)";
+
+#[cfg(feature = "local-storage")]
+pub(super) const MATCH_VERSION_SELECT: &str = "(asset_id=? AND version=?) AS m0,(asset_id=? AND version=?) AS m1,(asset_id=? AND version=?) AS m2,(asset_id=? AND version=?) AS m3,(asset_id=? AND version=?) AS m4,(asset_id=? AND version=?) AS m5,(asset_id=? AND version=?) AS m6,(asset_id=? AND version=?) AS m7";
+
+#[cfg(feature = "local-storage")]
+pub(super) const MATCH_VERSION_WHERE: &str = "(asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?)";
+
+pub(super) const MATCH_EVENT_SELECT: &str = "(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7";
+
+pub(super) const MATCH_EVENT_WHERE: &str = "(id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?)";
+
+#[cfg(feature = "local-storage")]
+pub(super) const MATCH_PUBLISHED_SELECT: &str = "(asset_id=? AND version=? AND source_event_id=?) AS m0,(asset_id=? AND version=? AND source_event_id=?) AS m1,(asset_id=? AND version=? AND source_event_id=?) AS m2,(asset_id=? AND version=? AND source_event_id=?) AS m3,(asset_id=? AND version=? AND source_event_id=?) AS m4,(asset_id=? AND version=? AND source_event_id=?) AS m5,(asset_id=? AND version=? AND source_event_id=?) AS m6,(asset_id=? AND version=? AND source_event_id=?) AS m7";
+
+#[cfg(feature = "local-storage")]
+pub(super) const MATCH_PUBLISHED_WHERE: &str = "(asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?)";
+
+// B-domain raw association. A fixed eight-way projection keeps native SQL
+// affinity/equality without UUID decoding or a deeply nested generated tree.
+pub(super) const ASSOCIATION_KEYS: usize = 8;
+
+pub(super) async fn associate_rows(
+    conn: &mut Connection,
+    scope: Scope,
+    table: &str,
+    columns: &str,
+    projections: &str,
+    alternatives: &str,
+    gate: &str,
+    width: usize,
+    requests: &[Vec<AssociationKey>],
+) -> StorageResult<Vec<(usize, native_turso::Row)>> {
+    let sql = format!(
+        "SELECT {columns},{projections} FROM {table} WHERE tenant_id=? AND workspace_id=? AND ({gate}) AND ({alternatives})"
+    );
+    let mut result = Vec::new();
+    // Even an empty input prepares all original table/column references. A
+    // missing table must not be hidden by an empty earlier relation.
+    for batch_index in 0..requests.len().div_ceil(ASSOCIATION_KEYS).max(1) {
+        let start = batch_index * ASSOCIATION_KEYS;
+        let batch = &requests[start..(start + ASSOCIATION_KEYS).min(requests.len())];
+        let mut query = native_turso::query(&sql);
+        for slot in 0..ASSOCIATION_KEYS {
+            for key in 0..width {
+                query = query.bind(batch.get(slot).map_or_else(
+                    || AssociationKey(turso::Value::Null),
+                    |request| request[key].clone(),
+                ));
+            }
+        }
+        query = query.bind(scope.tenant_id).bind(scope.workspace_id);
+        for slot in 0..ASSOCIATION_KEYS {
+            for key in 0..width {
+                query = query.bind(batch.get(slot).map_or_else(
+                    || AssociationKey(turso::Value::Null),
+                    |request| request[key].clone(),
+                ));
+            }
+        }
+        for row in query.fetch_all(&mut *conn).await.map_err(turso_err)? {
+            for (slot, name) in ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7"]
+                .iter().take(batch.len()).enumerate()
+            {
+                if row.try_get::<Option<bool>>(*name).map_err(turso_err)? == Some(true) {
+                    result.push((
+                        batch_index * ASSOCIATION_KEYS + slot,
+                        native_turso::FromRow::from_row(&row).map_err(turso_err)?,
+                    ));
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+#[cfg(feature = "local-storage")]
+pub(super) async fn context_current_chunk_rows(
+    conn: &mut Connection,
+    scope: Scope,
+    kind: &str,
+) -> StorageResult<Vec<(Uuid, Uuid, String, String)>> {
+    // Keep rows native through every original SQL predicate. In particular an
+    // excluded historical/wrong-kind chunk must not decode malformed text/UUIDs.
+    let chunks = native_turso::query("SELECT id,asset_id,version,search_terms,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
+        .bind(scope.tenant_id).bind(scope.workspace_id)
+        .fetch_all(&mut *conn).await.map_err(turso_err)?;
+    let keys = chunks.iter().map(|row| {
+        Ok(vec![row.try_get("asset_id").map_err(turso_err)?, row.try_get("version").map_err(turso_err)?])
+    }).collect::<StorageResult<Vec<_>>>()?;
+    let gate = if kind == "memory" { "NOT deleted AND kind='memory'" } else { "NOT deleted AND kind='knowledge'" };
+    let matches = associate_rows(conn, scope, "oc_assets", "id", MATCH_CURRENT_SELECT, MATCH_CURRENT_WHERE, gate, 2, &keys).await?;
+    let matched: HashSet<_> = matches.into_iter().map(|(index, _)| index).collect();
+    let chunks: Vec<_> = chunks.into_iter().enumerate().filter_map(|(index, row)| matched.contains(&index).then_some(row)).collect();
+    let keys = chunks.iter().map(|row| {
+        Ok(vec![row.try_get("asset_id").map_err(turso_err)?, row.try_get("version").map_err(turso_err)?])
+    }).collect::<StorageResult<Vec<_>>>()?;
+    let versions = associate_rows(conn, scope, "oc_versions", "source_event_id", MATCH_VERSION_SELECT, MATCH_VERSION_WHERE, "1", 2, &keys).await?;
+    let keys = versions.iter().map(|(_, row)| {
+        Ok(vec![row.try_get("source_event_id").map_err(turso_err)?])
+    }).collect::<StorageResult<Vec<_>>>()?;
+    let events = associate_rows(conn, scope, "oc_events", "id", MATCH_EVENT_SELECT, MATCH_EVENT_WHERE, "state='active'", 1, &keys).await?;
+    let matched: HashSet<_> = events.into_iter().map(|(index, _)| versions[index].0).collect();
+    chunks.into_iter().enumerate().filter(|(index, _)| matched.contains(index)).map(|(_, row)| {
+        Ok((row.try_get("id").map_err(turso_err)?, row.try_get("asset_id").map_err(turso_err)?, row.try_get("search_terms").map_err(turso_err)?, row.try_get("locator").map_err(turso_err)?))
+    }).collect()
+}

@@ -50,8 +50,35 @@ class SqlRules(unittest.TestCase):
         ):
             with self.subTest(sql=sql): self.assertEqual(guard.sql_issues(sql), set())
 
-    def test_trigger_correlation_is_not_hidden_by_batch(self):
-        self.assert_bad("CREATE TRIGGER x BEFORE INSERT ON a BEGIN SELECT 1 FROM b WHERE b.id=NEW.id; END;")
+    def test_trigger_new_old_are_scalars_not_extra_relations(self):
+        for sql in (
+            "CREATE TRIGGER x BEFORE INSERT ON a WHEN EXISTS(SELECT 1 FROM a WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'x'); END;",
+            "CREATE TRIGGER x BEFORE INSERT ON a WHEN EXISTS(SELECT 1 FROM b WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'x'); END;",
+            "CREATE TRIGGER x AFTER UPDATE ON a BEGIN SELECT 1 FROM a WHERE id=OLD.id OR id=NEW.id; END;",
+            "CREATE TRIGGER x BEFORE DELETE ON a BEGIN SELECT 1 FROM b WHERE id=OLD.id; END;",
+            "CREATE TRIGGER x INSTEAD OF UPDATE ON a BEGIN UPDATE b SET value=NEW.value WHERE id=OLD.id; END;",
+            "CREATE TRIGGER x UPDATE OF value ON a BEGIN INSERT INTO b VALUES(NEW.value); END;",
+            "CREATE TEMP TRIGGER x AFTER UPDATE ON a WHEN EXISTS(SELECT 1 FROM b WHERE id=NEW.id) BEGIN UPDATE c SET value=NEW.value WHERE id=OLD.id; DELETE FROM d WHERE id=OLD.id; END;",
+            "CREATE TRIGGER x AFTER INSERT ON a BEGIN SELECT 'JOIN FROM a,b NEW.id'; SELECT 1 FROM b WHERE id=NEW.id; END; SELECT 1 FROM c;",
+        ):
+            with self.subTest(sql=sql): self.assertEqual(guard.sql_issues(sql), set())
+
+    def test_trigger_actual_associations_are_still_rejected(self):
+        for sql in (
+            "CREATE TRIGGER x BEFORE INSERT ON a WHEN EXISTS(SELECT 1 FROM a JOIN b ON a.id=b.id WHERE a.id=NEW.id) BEGIN SELECT 1; END;",
+            "CREATE TRIGGER x BEFORE INSERT ON a BEGIN SELECT 1 FROM a,b WHERE a.id=NEW.id; END;",
+            "CREATE TRIGGER x AFTER UPDATE ON a BEGIN SELECT 1 FROM b WHERE id=NEW.id AND EXISTS(SELECT 1 FROM c WHERE c.id=b.id); END;",
+            "CREATE TRIGGER x AFTER UPDATE ON a BEGIN SELECT 1 FROM b WHERE EXISTS(SELECT 1 FROM b x WHERE x.id=b.id); END;",
+            "CREATE TRIGGER x AFTER INSERT ON a BEGIN UPDATE b SET value=(SELECT value FROM c WHERE id=NEW.id); END;",
+            "CREATE TRIGGER x AFTER INSERT ON a BEGIN INSERT INTO b SELECT * FROM c WHERE id=NEW.id; END;",
+            "CREATE TRIGGER x AFTER INSERT ON a BEGIN SELECT 1; DELETE FROM b WHERE id IN (SELECT id FROM c); END;",
+            "CREATE TRIGGER x AFTER INSERT ON a WHEN EXISTS(SELECT 1 FROM b, c) BEGIN SELECT 1; END;",
+        ):
+            with self.subTest(sql=sql): self.assert_bad(sql)
+
+    def test_unrecognized_trigger_body_does_not_pass(self):
+        with self.assertRaises(guard.Unknown):
+            guard.sql_issues("CREATE TRIGGER x BEFORE INSERT ON a SELECT 1 FROM b;")
 
     def test_malformed_lexical_input_is_unknown(self):
         for sql in ("SELECT 'unterminated", "SELECT /* broken", "SELECT (1", "SELECT )"):

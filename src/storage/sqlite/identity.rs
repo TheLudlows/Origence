@@ -194,3 +194,22 @@ impl TursoTx {
         Ok((asset, None))
     }
 }
+
+#[cfg(feature = "local-storage")]
+impl TursoTx {
+    /// Only stored JSON rows, not an asset_view/current/semantic-status guard.
+    /// Callers decode in their existing traversal order after route filtering.
+    pub(super) async fn identity_rows_for_assets(
+        &mut self,
+        assets: &[Uuid],
+    ) -> StorageResult<HashMap<Uuid, native_turso::Row>> {
+        if assets.is_empty() || !identity_table_present(&mut self.tx).await? {
+            return Ok(HashMap::new());
+        }
+        super::read_model::rows_by_ids(&mut self.tx, self.scope,
+            "oc_memory_identities", "asset_id,identity_json", "asset_id", assets)
+            .await?.into_iter().map(|row| {
+                Ok((row.try_get("asset_id").map_err(turso_err)?, row))
+            }).collect()
+    }
+}

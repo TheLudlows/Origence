@@ -36,27 +36,22 @@ impl TursoTx {
     }
 
     async fn learning_record(&mut self, asset: Uuid) -> StorageResult<Option<LearningRecord>> {
-        let row: Option<(Uuid, Uuid, Uuid, String, Uuid)> = native_turso::query_as("SELECT id,source_event_id,session_id,status,improve_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
+        let row = native_turso::query("SELECT id,source_event_id,session_id,status,improve_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
             .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        let Some((id, source, session, status, improve)) = row else {
-            return Ok(None);
-        };
-        let run_status: Option<String> = native_turso::query_scalar(
-            "SELECT status FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(improve)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        let run_active = matches!(run_status.as_deref(), Some("accepted" | "publishing"));
+        let improve = row.as_ref().map(|row| row.try_get::<super::read_model::AssociationKey>("improve_id").map_err(turso_err)).transpose()?;
+        // The original selected a native EXISTS, not improve UUID or run status.
+        // Prepare this relation even when the catalog has no matching row.
+        let run_active: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND status IN ('accepted','publishing'))")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
+            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let Some(row) = row else { return Ok(None); };
+        let id = row.try_get("id").map_err(turso_err)?;
+        let source = row.try_get("source_event_id").map_err(turso_err)?;
+        let session = row.try_get("session_id").map_err(turso_err)?;
+        let status: String = row.try_get("status").map_err(turso_err)?;
         Ok(Some(LearningRecord {
-            id,
-            asset,
-            source,
-            session,
+            id, asset, source, session,
             published: status == "published",
             accepted: status == "accepted" && run_active,
         }))
@@ -72,65 +67,43 @@ impl TursoTx {
     /// Classify all history without one event lookup per version or loading an
     /// unbounded history at once. Retraction does not erase Learning identity.
     async fn learning_source_assets(&mut self, assets: &[Uuid]) -> StorageResult<HashSet<Uuid>> {
+        use super::read_model::{self, AssociationKey};
         let mut found = HashSet::new();
         for batch in assets.chunks(LEARNING_READ_BATCH) {
-            let placeholders = vec!["?"; batch.len()].join(",");
-            let mut cursor: Option<(Uuid, i64)> = None;
+            let mut cursor: Option<(Uuid, AssociationKey)> = None;
             loop {
+                let unresolved: Vec<_> = batch.iter().copied().filter(|asset| !found.contains(asset)).collect();
+                if unresolved.is_empty() { break; }
+                let placeholders = vec!["?"; unresolved.len()].join(",");
                 let continuation = if cursor.is_some() {
                     " AND (asset_id>? OR (asset_id=? AND version>?))"
-                } else {
-                    ""
-                };
+                } else { "" };
                 let sql = format!(
-                    "SELECT asset_id,version,source_event_id FROM oc_versions \
-                     WHERE tenant_id=? AND workspace_id=? AND asset_id IN ({placeholders})\
-                     {continuation} ORDER BY asset_id,version LIMIT {LEARNING_READ_BATCH}"
+                    "SELECT asset_id,version,source_event_id FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id IN ({placeholders}){continuation} ORDER BY asset_id,version LIMIT {LEARNING_READ_BATCH}"
                 );
-                let mut query = native_turso::query_as::<(Uuid, i64, Uuid)>(&sql)
-                    .bind(self.scope.tenant_id)
-                    .bind(self.scope.workspace_id);
-                for asset in batch {
-                    query = query.bind(*asset);
-                }
-                if let Some((asset, version)) = cursor {
-                    query = query.bind(asset).bind(asset).bind(version);
+                let mut query = native_turso::query(&sql)
+                    .bind(self.scope.tenant_id).bind(self.scope.workspace_id);
+                for asset in unresolved { query = query.bind(asset); }
+                if let Some((asset, version)) = &cursor {
+                    query = query.bind(*asset).bind(*asset).bind(version.clone());
                 }
                 let versions = query.fetch_all(&mut *self.tx).await.map_err(turso_err)?;
-                let Some((last_asset, last_version, _)) = versions.last() else {
-                    break;
-                };
-                cursor = Some((*last_asset, *last_version));
-                let mut sources: Vec<_> = versions.iter().map(|(_, _, source)| *source).collect();
-                sources.sort_unstable();
-                sources.dedup();
-                let placeholders = vec!["?"; sources.len()].join(",");
-                let sql = format!(
-                    "SELECT id FROM oc_events WHERE tenant_id=? AND workspace_id=? \
-                     AND kind='learning' AND id IN ({placeholders})"
-                );
-                let mut query = native_turso::query_scalar::<Uuid>(&sql)
-                    .bind(self.scope.tenant_id)
-                    .bind(self.scope.workspace_id);
-                for source in sources {
-                    query = query.bind(source);
+                if let Some(last) = versions.last() {
+                    // The old EXISTS never decoded historical version/source
+                    // domain types. Preserve native values for keyset/equality.
+                    cursor = Some((last.try_get("asset_id").map_err(turso_err)?, last.try_get("version").map_err(turso_err)?));
                 }
-                let learning_sources: HashSet<_> = query
-                    .fetch_all(&mut *self.tx)
-                    .await
-                    .map_err(turso_err)?
-                    .into_iter()
-                    .collect();
-                for (asset, _, source) in &versions {
-                    if learning_sources.contains(source) {
-                        found.insert(*asset);
-                    }
+                let keys = versions.iter().map(|row| {
+                    Ok(vec![row.try_get::<AssociationKey>("source_event_id").map_err(turso_err)?])
+                }).collect::<StorageResult<Vec<_>>>()?;
+                for (index, _) in read_model::associate_rows(&mut self.tx, self.scope,
+                    "oc_events", "id", read_model::MATCH_EVENT_SELECT,
+                    read_model::MATCH_EVENT_WHERE, "kind='learning'", 1, &keys).await? {
+                    // asset_id is filtered by the caller-owned UUID BLOB binds;
+                    // only this output association requires a domain UUID.
+                    found.insert(versions[index].try_get("asset_id").map_err(turso_err)?);
                 }
-                if versions.len() < LEARNING_READ_BATCH
-                    || batch.iter().all(|asset| found.contains(asset))
-                {
-                    break;
-                }
+                if versions.len() < LEARNING_READ_BATCH { break; }
             }
         }
         Ok(found)
@@ -882,5 +855,128 @@ mod tests {
         assert!(visible[&(asset, 4)]); // 63 Learning nodes plus one shared turn.
         tx.rollback().await.unwrap();
         store.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn learning_history_keeps_native_source_types_without_uuid_or_version_decoding() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = Pool::open(dir.path().join("raw-learning-history.db")).await.unwrap();
+        for sql in [
+            "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)",
+            "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,kind TEXT)",
+        ] { native_turso::query(sql).execute(&pool).await.unwrap(); }
+        let scope = Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() };
+        let mut tx = support_kind_transaction(&pool, scope).await;
+        let assets = [Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(3), Uuid::from_u128(4)];
+        for version in 1..=256_i64 {
+            native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,?,x'00')")
+                .bind(scope.tenant_id).bind(scope.workspace_id).bind(assets[0]).bind(version)
+                .execute(&mut *tx.tx).await.unwrap();
+        }
+        native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,'tail',x'01')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(assets[0]).execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("INSERT INTO oc_events VALUES(?,?,x'01','learning')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx.tx).await.unwrap();
+        // An unmatched short BLOB is not a UUID decoding error.
+        native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,0.5,x'02')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(assets[1]).execute(&mut *tx.tx).await.unwrap();
+        // Native numeric equality is not Rust Value variant equality.
+        native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,1,7.0)")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(assets[2]).execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("INSERT INTO oc_events VALUES(?,?,7,'learning')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,1,x'03')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(assets[3]).execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("INSERT INTO oc_events VALUES(?,?,x'03',x'6c6561726e696e67')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx.tx).await.unwrap();
+        assert_eq!(tx.learning_source_assets(&assets).await.unwrap(), HashSet::from([assets[0], assets[2]]));
+        assert!(!tx.has_learning_source_version(assets[1]).await.unwrap());
+        assert!(!tx.has_learning_source_version(assets[3]).await.unwrap());
+        tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn learning_record_keeps_raw_improve_key_and_native_exists_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = Pool::open(dir.path().join("raw-learning-run.db")).await.unwrap();
+        for sql in [
+            "CREATE TABLE oc_learnings(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,id BLOB,source_event_id BLOB,session_id BLOB,status TEXT,improve_id BLOB)",
+            "CREATE TABLE oc_improve_runs(tenant_id BLOB,workspace_id BLOB,improve_id BLOB,status TEXT)",
+        ] { native_turso::query(sql).execute(&pool).await.unwrap(); }
+        let scope = Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() };
+        let mut tx = support_kind_transaction(&pool, scope).await;
+        let asset = Uuid::new_v4();
+        native_turso::query("INSERT INTO oc_learnings VALUES(?,?,?,?,?,?,'accepted',x'01')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset).bind(Uuid::new_v4())
+            .bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("INSERT INTO oc_improve_runs VALUES(?,?,x'01','accepted')")
+            .bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx.tx).await.unwrap();
+        assert!(tx.learning_record(asset).await.unwrap().unwrap().accepted);
+        native_turso::query("UPDATE oc_improve_runs SET status=x'6163636570746564'")
+            .execute(&mut *tx.tx).await.unwrap();
+        assert!(!tx.learning_record(asset).await.unwrap().unwrap().accepted);
+        native_turso::query("UPDATE oc_learnings SET status='published'")
+            .execute(&mut *tx.tx).await.unwrap();
+        assert!(tx.learning_record(asset).await.unwrap().unwrap().published);
+        native_turso::query("DELETE FROM oc_learnings").execute(&mut *tx.tx).await.unwrap();
+        assert!(tx.learning_record(asset).await.unwrap().is_none());
+        native_turso::query("DROP TABLE oc_improve_runs").execute(&mut *tx.tx).await.unwrap();
+        assert!(matches!(tx.learning_record(asset).await, Err(StorageError::Backend(_))));
+        tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+
+}
+
+#[cfg(feature = "local-storage")]
+pub(super) struct LearningRouteMembership {
+    pub catalog_present: bool,
+    pub is_learning: HashSet<Uuid>,
+    pub published_sources: HashMap<Uuid, Uuid>,
+}
+
+#[cfg(feature = "local-storage")]
+impl TursoTx {
+    /// Classification only: no root activity, support closure or currentness.
+    /// Catalog loss and retraction do not turn historical Learning into Knowledge.
+    pub(super) async fn learning_route_membership(
+        &mut self,
+        assets: &[Uuid],
+    ) -> StorageResult<LearningRouteMembership> {
+        use super::read_model::{rows_by_ids, unique_ids};
+        let assets = unique_ids(assets.iter().copied());
+        let mut is_learning = HashSet::new();
+        let mut published_sources = HashMap::new();
+        let catalog_present = !assets.is_empty() && self.learning_catalog_present().await?;
+        if catalog_present {
+            let rows = rows_by_ids(&mut self.tx, self.scope, "oc_learnings",
+                "asset_id,id,source_event_id,session_id,status,improve_id", "asset_id", &assets).await?;
+            let improves = rows.iter().map(|row| row.try_get::<super::read_model::AssociationKey>("improve_id").map_err(turso_err)).collect::<StorageResult<Vec<_>>>()?;
+            // Classification does not consume the EXISTS result, but retains
+            // its native predicate and prepare/error behavior. No new strict
+            // improve-id UUID or run-status String decoding is permitted.
+            let mut values: Vec<_> = improves.into_iter().map(Some).collect();
+            if values.is_empty() { values.push(None); }
+            for batch in values.chunks(super::read_model::READ_KEYS) {
+                let sql = format!("SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id IN ({}) AND status IN ('accepted','publishing')", vec!["?"; batch.len()].join(","));
+                let mut query = native_turso::query(&sql).bind(self.scope.tenant_id).bind(self.scope.workspace_id);
+                for key in batch { query = query.bind(key.clone()); }
+                query.fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            }
+            for row in rows {
+                // Preserve exactly the original four selected domain fields.
+                let _: Uuid = row.try_get("id").map_err(turso_err)?;
+                let source: Uuid = row.try_get("source_event_id").map_err(turso_err)?;
+                let _: Uuid = row.try_get("session_id").map_err(turso_err)?;
+                let status: String = row.try_get("status").map_err(turso_err)?;
+                let asset: Uuid = row.try_get("asset_id").map_err(turso_err)?;
+                is_learning.insert(asset);
+                if status == "published" { published_sources.insert(asset, source); }
+            }
+        }
+        let ordinary: Vec<_> = assets.into_iter().filter(|asset| !is_learning.contains(asset)).collect();
+        is_learning.extend(self.learning_source_assets(&ordinary).await?);
+        Ok(LearningRouteMembership { catalog_present, is_learning, published_sources })
     }
 }

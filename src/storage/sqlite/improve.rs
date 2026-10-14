@@ -9,8 +9,15 @@ use crate::session::{ArchivedEvidence, FeedbackInput};
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
-    native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_improve_cursors','oc_improve_runs','oc_learnings','oc_learning_support')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='learning') OR EXISTS(SELECT 1 FROM oc_jobs WHERE operation='improve')")
-        .fetch_one(conn).await.map_err(turso_err)
+    // All three reads are intentional: an earlier true arm must not hide a
+    // missing-table/backend error that the original statement had to prepare.
+    let schema: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_improve_cursors','oc_improve_runs','oc_learnings','oc_learning_support'))")
+        .fetch_one(&mut *conn).await.map_err(turso_err)?;
+    let events: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE kind='learning')")
+        .fetch_one(&mut *conn).await.map_err(turso_err)?;
+    let jobs: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE operation='improve')")
+        .fetch_one(&mut *conn).await.map_err(turso_err)?;
+    Ok(schema || events || jobs)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(body: &str) -> StorageResult<T> {

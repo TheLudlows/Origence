@@ -32,9 +32,12 @@ BASELINE_REVISION = "1d5e0554b38e12df094a894f11a23fb26a117568"
 # Exact (relative path | enclosing function | SQL-call ordinal | fingerprint).
 # Frozen from the source snapshot above, not from the developer's git HEAD.
 BASELINE: frozenset[str] = frozenset({
-    # Fixed-main audit found 57 forbidden sites. The 20 converted sites were
-    # removed before the initial staged baseline; these 37 may only shrink.
-    'src/storage/native_turso.rs|pending_write_cancellation_rolls_back_before_pool_reuse#1|1|203d4f4c5e3b767739eaaf568fd5286e035a59cfcee2055ecf7c4bc462cec59e',
+    # The initial audit reported 57 sites; 20 real conversions preceded its
+    # staged 37-entry baseline. A later grammar correction removed 3 false
+    # positives: the same single-FROM workspace trigger at 3 schema includes.
+    # NEW/OLD fields are scalar row values, not a second scanned relation.
+    # Four A-domain queries were genuinely converted separately. Remaining
+    # entries may only shrink; this correction adds no SQL exception.
     'src/storage/sqlite/app.rs|cleanup_plan#1|2|5d2127f6ce15ff5b342e1ab7f80a95e9c8957415873a7c4a9148a8080b49ce6f',
     'src/storage/sqlite/app.rs|cleanup_plan#1|3|1b4ac56888cf7b66781327110626b087ae0cce4c1e11c1392e12e1cb848fc98b',
     'src/storage/sqlite/app.rs|cleanup_plan#1|4|fe27b47c9948bb670cf92d838bf5736ca9e8a1a7953356d7831114583db95a1b',
@@ -43,10 +46,7 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite/app.rs|finish_cleanup#1|4|0d66789ce1cb4092f659c51e680073d1b6783c61d016cd1d8cc6ff43546885c8',
     'src/storage/sqlite/app.rs|finish_cleanup#1|5|eb4b4694e43b6566b325ddd380034ea92ac4539406f866a4383fb84cb230f4a0',
     'src/storage/sqlite/context.rs|context_recent_turns#1|1|e1751d0818e09cf44dd87f7b213e23f673e0f0195d7f9edd2961a30eb321b21e',
-    'src/storage/sqlite/context.rs|context_route_matches#1|2|a23c480dbf3383cd887d3edeac011e214e2648b6b3d9797e65701e4e4f0bfaaa',
-    'src/storage/sqlite/context.rs|context_route_rows#1|1|6c5b26625a00431a7c61b785e0b20d14031ecd13601417ac51b8465b4835830b',
     'src/storage/sqlite/context.rs|context_session_turn#1|1|ed8bbdcea378f61a0d1149a659edf1d2abb224d5118d00635335a5d54365f313',
-    'src/storage/sqlite/improve.rs|available#1|1|8ab4fb47fb0b047c3b6606a5fb5e6e337a5fb97925e3ba744b198eadbaaf9c57',
     'src/storage/sqlite/improve.rs|cancel_improve_job#1|2|01c3c787e946ec697a9d79634176aac45b068641f7f6534f754b2731e16256b1',
     'src/storage/sqlite/improve.rs|create_learning#1|2|169f2c1154206421570f6d1d1503f175c2821739d6fa4588c74b9708378d9af4',
     'src/storage/sqlite/improve.rs|mark_learning_published#1|2|f6fd7099d471d0244882305ebab40d584d65141f0c244b0dc7bc23e8fbc5cdac',
@@ -55,7 +55,6 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite/ledger.rs|confirm_committed_inner#1|1|d0dd7b0070a300e86738725204b06b6927e435886a157be04cb3c78f4abde341',
     'src/storage/sqlite/publication.rs|message_batch_status#1|1|4c89fe74655d27b9c6f1315eb6cf8cc1800b5f092a9d12e116c8f0ac49fb228d',
     'src/storage/sqlite/publication.rs|message_batch_status#1|4|48b816c6f4eccaa268f69fb47427ef209bdd1eefe1f411c05d4072272338eedd',
-    'src/storage/sqlite/schema.rs|exec_schema#1|1|86bd66d6c0cdae4c46a84bf367e6637565ee5f7a09017006080ee0252caa3857',
     'src/storage/sqlite/session.rs|archive_evidence_local#1|3|42e128ffb4812c510506df64653924676b35c90675644982dc1894aa3446cb24',
     'src/storage/sqlite/session.rs|available#1|1|873183ba7ccd1a2d4c1160230c5eba01ac658d714250837890886702f35eb5c2',
     'src/storage/sqlite/session.rs|require_turn_visible_local#1|1|7aacc553c8eb890f48f0242f2210c97249f7c0a0f6602a24a38d24eada76a6ff',
@@ -66,7 +65,6 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite_graph.rs|upsert_relations#1|1|4b8385fc303bb4048a88ec42b5a26c4fb31c5d1d941eb8c4f1a7addc28465685',
     'tests/learning_loop.rs|learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budget#1|2|5e20718e801d2774448fb07ab6353ccc78ad98993480fa249c6033597496a670',
     'tests/message_batches.rs|live_receipt_status_requires_every_chunk_profile_generation_and_source#1|4|0f59e1cd6705b1fd4ed88552a19733b8f16c5d549038a34a7250b156f13cce94',
-    'tests/workspace_schema_rejection.rs|legacy_schema_is_rejected_before_wal_or_domain_schema_writes#1|1|6565dbf46968004a6f3c9869e7e78b1973fa8dc79b08f8d4249ee9a0f28f2cf0',
 })
 
 # These are SOURCE contracts, not permissions to execute forbidden SQL. The
@@ -727,25 +725,43 @@ def sql_issues(sql: str) -> set[str]:
     if not ts:
         return set()
     issues: set[str] = set()
-    # Each top-level/batch statement is separate. Trigger bodies retain their
-    # trigger target for NEW/OLD references, including statements after ';'.
+    # Each executable statement is separate. Trigger NEW/OLD fields are scalar
+    # values of the triggering row, not extra scanned relations. The trigger's
+    # declaration is not a query; WHEN and each body DML are checked separately.
     segments, start = [], 0
     for i, t in enumerate(ts):
         if t.text == ";" and t.kind == "punct":
             segments.append(ts[start:i]); start = i+1
     if start < len(ts):
         segments.append(ts[start:])
-    trigger_target = None
+    queries = []
     for segment in segments:
+        words = [t.text if t.kind == "word" else None for t in segment]
+        if words and words[0] == "create" and "trigger" in words[:4]:
+            # CREATE [TEMP|TEMPORARY] TRIGGER ... [WHEN expr] BEGIN statement;
+            # Ignore declaration operations such as INSTEAD OF UPDATE ON a.
+            # Neither that ON target nor NEW/OLD.column is a FROM relation.
+            depth, when, begin = 0, None, None
+            for i, token in enumerate(segment):
+                if token.kind == "punct" and token.text == "(": depth += 1
+                elif token.kind == "punct" and token.text == ")": depth -= 1
+                elif depth == 0 and token.kind == "word" and not (i and segment[i-1].text == "."):
+                    if token.text == "when" and when is None: when = i
+                    elif token.text == "begin":
+                        begin = i
+                        break
+            if begin is None:
+                raise Unknown("unsupported CREATE TRIGGER without BEGIN")
+            if when is not None: queries.append(segment[when+1:begin])
+            queries.append(segment[begin+1:])
+        else:
+            queries.append(segment)
+    for segment in queries:
         if not segment:
             continue
         words = [t.text if t.kind == "word" else None for t in segment]
         if "join" in words:
             issues.add("explicit JOIN")
-        if "trigger" in words and "on" in words:
-            on = words.index("on")
-            if on+1 < len(segment):
-                trigger_target = segment[on+1].text.lower()
         ctes = set()
         if words[0] == "with":
             depth = 0
@@ -792,14 +808,10 @@ def sql_issues(sql: str) -> set[str]:
             raise Unknown("unbalanced SQL parentheses")
         if any(n > 1 for n in cte_uses.values()):
             issues.add("reused CTE / self JOIN")
-        if trigger_target and refs and any(t.text in {"new", "old"} for t in segment if t.kind == "word"):
-            refs.append(trigger_target)
         if len(set(refs)) > 1:
             issues.add("cross-relation statement (including subquery/CTE)")
         elif len(refs) > 1:
             issues.add("self-relation statement (including subquery)")
-        if words[0] == "end":
-            trigger_target = None
     return issues
 
 
