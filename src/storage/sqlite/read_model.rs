@@ -462,13 +462,37 @@ pub(super) async fn live_root_rows(
         .collect())
 }
 
-#[cfg(feature = "local-storage")]
-pub(super) async fn current_chunk_roots(
+// Root-only raw projection used by native candidates; never reads hit payload.
+async fn current_root_rows(
     conn: &mut Connection,
     scope: Scope,
-    ids: &[Uuid],
-) -> StorageResult<HashMap<Uuid, SourceVersion>> {
-    let rows = rows_by_ids(conn, scope, "oc_chunks", "id,asset_id,version", "id", ids).await?;
+    ids: &[AssociationKey],
+    asset_filter: Option<Uuid>,
+) -> StorageResult<Vec<(native_turso::Row, native_turso::Row)>> {
+    let filter = asset_filter
+        .map(AssociationKey::from_uuid)
+        .unwrap_or(AssociationKey(turso::Value::Null));
+    let keys: Vec<_> = ids
+        .iter()
+        .map(|id| vec![id.clone(), filter.clone(), filter.clone()])
+        .collect();
+    // Scoped rowid only removes repeated matches of this same physical row
+    // inside this snapshot. Every business relationship is still native SQL.
+    let mut seen = HashSet::new();
+    let mut rows = Vec::new();
+    for (_, row) in associate_query(
+        conn,
+        scope,
+        "SELECT rowid AS read_rowid,id,asset_id,version,(id=? AND (? IS NULL OR asset_id=?)) AS m0,(id=? AND (? IS NULL OR asset_id=?)) AS m1,(id=? AND (? IS NULL OR asset_id=?)) AS m2,(id=? AND (? IS NULL OR asset_id=?)) AS m3,(id=? AND (? IS NULL OR asset_id=?)) AS m4,(id=? AND (? IS NULL OR asset_id=?)) AS m5,(id=? AND (? IS NULL OR asset_id=?)) AS m6,(id=? AND (? IS NULL OR asset_id=?)) AS m7 FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND 1 AND ((id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)) OR (id=? AND (? IS NULL OR asset_id=?)))",
+        3,
+        &keys,
+    )
+    .await?
+    {
+        if seen.insert(row.try_get::<i64>("read_rowid").map_err(turso_err)?) {
+            rows.push(row);
+        }
+    }
     let requests = rows
         .iter()
         .map(|row| {
@@ -487,15 +511,36 @@ pub(super) async fn current_chunk_roots(
     )
     .await?;
     let current: HashSet<_> = current.into_iter().map(|(index, _)| index).collect();
+    let mut roots: HashMap<_, _> = live_root_rows(conn, scope, &requests)
+        .await?
+        .into_iter()
+        .collect();
+    Ok(rows
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, row)| {
+            if current.contains(&index) {
+                roots.remove(&index).map(|root| (row, root))
+            } else {
+                None
+            }
+        })
+        .collect())
+}
+
+#[cfg(all(test, feature = "local-storage"))]
+pub(super) async fn current_chunk_roots(
+    conn: &mut Connection,
+    scope: Scope,
+    ids: &[Uuid],
+) -> StorageResult<HashMap<Uuid, SourceVersion>> {
+    let keys: Vec<_> = ids.iter().copied().map(AssociationKey::from_uuid).collect();
     let mut roots = HashMap::new();
-    for (index, root) in live_root_rows(conn, scope, &requests).await? {
-        if current.contains(&index) {
-            // Original SELECT: c.id, v.source_event_id, v.version.
-            let id = rows[index].try_get("id").map_err(turso_err)?;
-            let source_id = root.try_get("source_event_id").map_err(turso_err)?;
-            let version = root.try_get("version").map_err(turso_err)?;
-            roots.insert(id, SourceVersion { source_id, version });
-        }
+    for (row, root) in current_root_rows(conn, scope, &keys, None).await? {
+        roots.insert(row.try_get("id").map_err(turso_err)?, SourceVersion {
+            source_id: root.try_get("source_event_id").map_err(turso_err)?,
+            version: root.try_get("version").map_err(turso_err)?,
+        });
     }
     Ok(roots)
 }
@@ -621,36 +666,6 @@ impl TursoTx {
         self.evaluate_support_rows(rows, versions).await
     }
 
-    #[cfg(feature = "local-storage")]
-    pub(super) async fn local_chunk_support_visibility(
-        &mut self,
-        ids: &[Uuid],
-    ) -> StorageResult<HashMap<Uuid, bool>> {
-        let rows = rows_by_ids(
-            &mut self.tx,
-            self.scope,
-            "oc_chunks",
-            "id AS asset_id,version,json_extract(locator,'$.parser') IS 'memory-semantics:v1' AS semantic,CASE WHEN json_extract(locator,'$.parser') IS 'memory-semantics:v1' THEN json_type(locator,'$.support_sources') END AS support_type,CASE WHEN json_extract(locator,'$.parser') IS 'memory-semantics:v1' THEN json_quote(json_extract(locator,'$.support_sources')) END AS support_json",
-            "id",
-            ids,
-        )
-        .await?;
-        let mut keys = Vec::new();
-        for row in &rows {
-            keys.push((
-                row.try_get("asset_id").map_err(turso_err)?,
-                row.try_get("version").map_err(turso_err)?,
-            ));
-        }
-        Ok(self
-            .evaluate_support_rows(rows, &keys)
-            .await?
-            .visible
-            .into_iter()
-            .map(|((id, _), visible)| (id, visible))
-            .collect())
-    }
-
     pub(super) async fn local_current_positions(
         &mut self,
         raw: &RawCurrentRows,
@@ -660,6 +675,18 @@ impl TursoTx {
             .iter()
             .map(|index| Ok(vec![raw.rows[*index].try_get("id").map_err(turso_err)?]))
             .collect::<StorageResult<Vec<_>>>()?;
+        let allowed = self.local_support_positions(&requests).await?;
+        Ok(eligible
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, row)| allowed.contains(&index).then_some(row))
+            .collect())
+    }
+
+    async fn local_support_positions(
+        &mut self,
+        requests: &[Vec<AssociationKey>],
+    ) -> StorageResult<HashSet<usize>> {
         let rows = associate_rows(
             &mut self.tx,
             self.scope,
@@ -669,7 +696,7 @@ impl TursoTx {
             MATCH_EVENT_WHERE,
             "1",
             1,
-            &requests,
+            requests,
         )
         .await?;
         let mut members = Vec::new();
@@ -690,13 +717,12 @@ impl TursoTx {
                     .map(|value| (position, value)),
             );
         }
-        let result = self
-            .evaluate_support_members(members, eligible.len())
-            .await?;
-        Ok(eligible
+        let result = self.evaluate_support_members(members, requests.len()).await?;
+        Ok(result
+            .visible
             .into_iter()
             .enumerate()
-            .filter_map(|(index, row)| result.visible[index].then_some(row))
+            .filter_map(|(index, visible)| visible.then_some(index))
             .collect())
     }
 
@@ -1042,73 +1068,183 @@ impl TursoTx {
         Ok(identities)
     }
 
-    pub(super) async fn committed_publications(
+    async fn published_positions(
         &mut self,
-        ids: &[Uuid],
-        surface: &str,
-    ) -> StorageResult<HashSet<NativeHitKey>> {
-        let rows = rows_by_ids(
+        requests: &[Vec<AssociationKey>],
+    ) -> StorageResult<HashSet<usize>> {
+        Ok(associate_query(
             &mut self.tx,
             self.scope,
-            "oc_artifact_ledger",
-            "artifact_id,source_id,version,generation,surface,state",
-            "artifact_id",
-            ids,
+            "SELECT artifact_id,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m0,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m1,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m2,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m3,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m4,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m5,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m6,(artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) AS m7 FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND state='committed' AND ((artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?) OR (artifact_id=? AND source_id=? AND version=? AND generation=? AND surface=?))",
+            5,
+            requests,
         )
-        .await?;
-        let mut publications = HashSet::new();
-        for row in rows {
-            if row.try_get::<String>("state").map_err(turso_err)? == "committed"
-                && row.try_get::<String>("surface").map_err(turso_err)? == surface
-            {
-                publications.insert((
-                    row.try_get("artifact_id").map_err(turso_err)?,
-                    SourceVersion {
-                        source_id: row.try_get("source_id").map_err(turso_err)?,
-                        version: row.try_get("version").map_err(turso_err)?,
-                    },
-                    row.try_get("generation").map_err(turso_err)?,
-                ));
-            }
-        }
-        Ok(publications)
+        .await?.into_iter().map(|(index, _)| index).collect())
     }
 
-    pub(super) async fn ready_vector_publications(
+    pub(super) async fn index_candidate_ids(
+        &mut self,
+        ids: &[AssociationKey],
+        asset_filter: Option<Uuid>,
+        surface: &str,
+        generation: i64,
+    ) -> StorageResult<Vec<Uuid>> {
+        let rows = current_root_rows(&mut self.tx, self.scope, ids, asset_filter).await?;
+        let requests = rows.iter().map(|(row, root)| Ok(vec![
+            row.try_get("id").map_err(turso_err)?,
+            root.try_get("source_event_id").map_err(turso_err)?,
+            root.try_get("version").map_err(turso_err)?,
+            AssociationKey(turso::Value::Integer(generation)),
+            AssociationKey(turso::Value::Text(surface.to_owned())),
+        ])).collect::<StorageResult<Vec<_>>>()?;
+        let published = self.published_positions(&requests).await?;
+        let selected: Vec<_> = rows.into_iter().enumerate().filter_map(|(index, row)| published.contains(&index).then_some(row)).collect();
+        let requests = selected.iter().map(|(row, _)| Ok(vec![row.try_get("id").map_err(turso_err)?])).collect::<StorageResult<Vec<_>>>()?;
+        let local = self.local_support_positions(&requests).await?;
+        let mut candidates = Vec::new();
+        for (index, (row, _)) in selected.into_iter().enumerate() {
+            if local.contains(&index) {
+                let key: VersionKey = (row.try_get("asset_id").map_err(turso_err)?, row.try_get("version").map_err(turso_err)?);
+                candidates.push((row, key));
+            }
+        }
+        let versions: Vec<_> = candidates.iter().map(|(_, key)| *key).collect();
+        let visible = self.visible_version_keys(&versions).await?;
+        let mut ids = Vec::new();
+        for (row, key) in candidates {
+            if visible.contains(&key) {
+                ids.push(row.try_get("id").map_err(turso_err)?);
+            }
+        }
+        Ok(unique_ids(ids))
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(super) async fn supported_candidate_sources(
         &mut self,
         ids: &[Uuid],
-        profile: &str,
-        dimension: Option<usize>,
-    ) -> StorageResult<HashSet<(Uuid, i64)>> {
-        let rows = rows_by_ids(
+    ) -> StorageResult<HashMap<Uuid, SourceVersion>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let keys: Vec<_> = ids.iter().copied().map(AssociationKey::from_uuid).collect();
+        let rows = current_root_rows(&mut self.tx, self.scope, &keys, None).await?;
+        let requests = rows.iter().map(|(row, _)| Ok(vec![row.try_get("id").map_err(turso_err)?])).collect::<StorageResult<Vec<_>>>()?;
+        let local = self.local_support_positions(&requests).await?;
+        let mut roots = HashMap::new();
+        for (index, (row, root)) in rows.into_iter().enumerate() {
+            if local.contains(&index) {
+                roots.insert(row.try_get("id").map_err(turso_err)?, SourceVersion {
+                    source_id: root.try_get("source_event_id").map_err(turso_err)?,
+                    version: root.try_get("version").map_err(turso_err)?,
+                });
+            }
+        }
+        Ok(roots)
+    }
+
+    pub(super) async fn indexed_hits(
+        &mut self,
+        keys: &[NativeHitKey],
+        surface: &str,
+    ) -> StorageResult<HashMap<NativeHitKey, SearchHit>> {
+        let requests: Vec<_> = keys
+            .iter()
+            .map(|(id, source, generation)| {
+                vec![
+                    AssociationKey::from_uuid(*id),
+                    AssociationKey::from_uuid(source.source_id),
+                    AssociationKey(turso::Value::Integer(i64::from(source.version))),
+                    AssociationKey(turso::Value::Integer(*generation)),
+                    AssociationKey(turso::Value::Text(surface.to_owned())),
+                ]
+            })
+            .collect();
+        let published = self.published_positions(&requests).await?;
+        let keys: Vec<_> = keys
+            .iter()
+            .enumerate()
+            .filter_map(|(index, key)| published.contains(&index).then_some(*key))
+            .collect();
+        let ids = unique_ids(keys.iter().map(|key| key.0));
+        let raw = current_rows(&mut self.tx, self.scope, Some(&ids), None).await?;
+        let mut by_id: HashMap<Uuid, Vec<NativeHitKey>> = HashMap::new();
+        for key in keys {
+            by_id.entry(key.0).or_default().push(key);
+        }
+        let mut requests = Vec::new();
+        let mut positions = Vec::new();
+        for index in raw.eligible() {
+            let id: Uuid = raw.rows[index].try_get("id").map_err(turso_err)?;
+            for key in by_id.get(&id).into_iter().flatten() {
+                requests.push(vec![
+                    raw.rows[index].try_get("asset_id").map_err(turso_err)?,
+                    raw.rows[index].try_get("version").map_err(turso_err)?,
+                    AssociationKey::from_uuid(key.1.source_id),
+                    AssociationKey(turso::Value::Integer(i64::from(key.1.version))),
+                ]);
+                positions.push((index, *key));
+            }
+        }
+        let matching = associate_query(
             &mut self.tx,
             self.scope,
-            "oc_index_entries",
-            "artifact_id,field,model_id,dimension,generation,state",
-            "artifact_id",
-            ids,
+            "SELECT asset_id,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m0,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m1,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m2,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m3,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m4,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m5,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m6,(asset_id=? AND version=? AND source_event_id=? AND version=?) AS m7 FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND 1 AND ((asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?) OR (asset_id=? AND version=? AND source_event_id=? AND version=?))",
+            4,
+            &requests,
         )
         .await?;
-        let mut ready = HashSet::new();
-        for row in rows {
-            if row.try_get::<String>("state").map_err(turso_err)? != "ready"
-                || row.try_get::<String>("model_id").map_err(turso_err)? != profile
-            {
-                continue;
+        let matched: Vec<_> = matching
+            .into_iter()
+            .map(|(index, _)| positions[index])
+            .collect();
+        let requests = matched
+            .iter()
+            .map(|(index, _)| Ok(vec![raw.rows[*index].try_get("id").map_err(turso_err)?]))
+            .collect::<StorageResult<Vec<_>>>()?;
+        let local = self.local_support_positions(&requests).await?;
+        let mut selected = Vec::new();
+        for (index, (position, key)) in matched.into_iter().enumerate() {
+            if local.contains(&index) {
+                selected.push((position, key, raw.version_key(position)?));
             }
-            if let Some(dimension) = dimension
-                && (row.try_get::<String>("field").map_err(turso_err)? != "content"
-                    || row.try_get::<i64>("dimension").map_err(turso_err)? != dimension as i64)
-            {
-                continue;
-            }
-            ready.insert((
-                row.try_get("artifact_id").map_err(turso_err)?,
-                row.try_get("generation").map_err(turso_err)?,
-            ));
         }
-        Ok(ready)
+        let versions: Vec<_> = selected.iter().map(|(_, _, key)| *key).collect();
+        let visible = self.visible_version_keys(&versions).await?;
+        let mut hits = HashMap::new();
+        for (position, key, version) in selected {
+            if visible.contains(&version) {
+                hits.insert(key, raw.hit(position, 0.0)?);
+            }
+        }
+        Ok(hits)
     }
+
+    pub(super) async fn ready_vector_keys(
+        &mut self,
+        keys: &[NativeHitKey],
+        profile: &str,
+        dimension: Option<usize>,
+    ) -> StorageResult<Vec<NativeHitKey>> {
+        let requests: Vec<_> = keys.iter().map(|(id, _, generation)| vec![
+            AssociationKey::from_uuid(*id), AssociationKey(turso::Value::Text(profile.to_owned())),
+            AssociationKey(turso::Value::Integer(*generation)),
+            dimension.map(|value| AssociationKey(turso::Value::Integer(value as i64))).unwrap_or(AssociationKey(turso::Value::Null)),
+            dimension.map(|value| AssociationKey(turso::Value::Integer(value as i64))).unwrap_or(AssociationKey(turso::Value::Null)),
+        ]).collect();
+        let matching = associate_query(
+            &mut self.tx,
+            self.scope,
+            "SELECT artifact_id,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m0,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m1,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m2,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m3,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m4,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m5,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m6,(artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) AS m7 FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND state='ready' AND ((artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))) OR (artifact_id=? AND model_id=? AND generation=? AND (? IS NULL OR (field='content' AND dimension=?))))",
+            5,
+            &requests,
+        )
+        .await?;
+        let ready: HashSet<_> = matching.into_iter().map(|(index, _)| index).collect();
+        Ok(keys.iter().enumerate().filter_map(|(index, key)| ready.contains(&index).then_some(*key)).collect())
+    }
+
+
 }
 
 #[cfg(test)]

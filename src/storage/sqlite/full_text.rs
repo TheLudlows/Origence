@@ -1,10 +1,9 @@
 //! Authority checks for the derived Lance full-text surface. Single-table
 //! reads are associated inside one authority transaction before native ranking.
-use super::read_model::{NativeHitKey, current_chunk_roots, current_chunks, unique_ids};
+use super::read_model::{NativeHitKey, unique_ids};
 use super::*;
 use crate::storage::native_turso as db;
 use crate::types::SearchHit;
-use std::collections::HashSet;
 
 mod startup;
 
@@ -34,10 +33,7 @@ impl TursoTx {
         ids: &[Uuid],
     ) -> StorageResult<HashMap<Uuid, SourceVersion>> {
         let wanted = unique_ids(ids.iter().copied());
-        let mut sources = current_chunk_roots(&mut self.tx, self.scope, &wanted).await?;
-        let current_ids: Vec<_> = sources.keys().copied().collect();
-        let support = self.local_chunk_support_visibility(&current_ids).await?;
-        sources.retain(|id, _| support.get(id) == Some(&true));
+        let sources = self.supported_candidate_sources(&wanted).await?;
         if sources.len() != wanted.len() {
             return Err(StorageError::Unavailable(
                 "inconsistent authoritative candidates".into(),
@@ -57,49 +53,17 @@ impl TursoTx {
         generation: i64,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
-        let ids: Vec<Uuid> = db::query_scalar("SELECT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND generation=? AND surface='full_text' AND state='committed'")
+        let ids: Vec<read_model::AssociationKey> = db::query_scalar("SELECT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND generation=? AND surface='full_text' AND state='committed'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(generation)
             .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
-        let publications = self.committed_publications(&ids, "full_text").await?;
-        let mut chunks = current_chunks(&mut self.tx, self.scope, Some(&ids), asset_filter).await?;
-        chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
-        Ok(unique_ids(
-            self.guard_retrieval_chunks(chunks)
-                .await?
-                .into_iter()
-                .map(|chunk| chunk.hit.chunk_id),
-        ))
+        self.index_candidate_ids(&ids, asset_filter, "full_text", generation).await
     }
 
     pub(crate) async fn full_text_hits(
         &mut self,
         keys: &[NativeHitKey],
     ) -> StorageResult<HashMap<NativeHitKey, SearchHit>> {
-        let ids = unique_ids(keys.iter().map(|(id, _, _)| *id));
-        let publications = self.committed_publications(&ids, "full_text").await?;
-        let allowed: HashSet<_> = keys
-            .iter()
-            .filter(|key| publications.contains(*key))
-            .map(|(id, source, _)| (*id, *source))
-            .collect();
-        let mut chunks = current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
-        chunks.retain(|chunk| allowed.contains(&(chunk.hit.chunk_id, chunk.root)));
-        let chunks: HashMap<_, _> = self
-            .guard_retrieval_chunks(chunks)
-            .await?
-            .into_iter()
-            .map(|chunk| (chunk.hit.chunk_id, chunk))
-            .collect();
-        let mut hits = HashMap::new();
-        for key in keys {
-            if let Some(chunk) = chunks.get(&key.0)
-                && chunk.root == key.1
-                && publications.contains(key)
-            {
-                hits.insert(*key, chunk.hit.clone());
-            }
-        }
-        Ok(hits)
+        self.indexed_hits(keys, "full_text").await
     }
 
     pub async fn full_text_hit(
@@ -129,7 +93,7 @@ impl TursoTx {
         for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
             let start = batch_index * 8;
             let batch = &route_ids[start..(start + 8).min(route_ids.len())];
-            let mut query = db::query_scalar::<Uuid>(
+            let mut query = db::query_scalar::<read_model::AssociationKey>(
                 "SELECT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND generation=? AND surface='full_text' AND state='committed' AND artifact_id IN (?,?,?,?,?,?,?,?)",
             )
             .bind(self.scope.tenant_id)
@@ -140,14 +104,6 @@ impl TursoTx {
             }
             indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
         }
-        let publications = self.committed_publications(&indexed, "full_text").await?;
-        let mut chunks = current_chunks(&mut self.tx, self.scope, Some(&indexed), None).await?;
-        chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
-        Ok(unique_ids(
-            self.guard_retrieval_chunks(chunks)
-                .await?
-                .into_iter()
-                .map(|chunk| chunk.hit.chunk_id),
-        ))
+        self.index_candidate_ids(&indexed, None, "full_text", generation).await
     }
 }

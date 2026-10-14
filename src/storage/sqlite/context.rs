@@ -194,7 +194,7 @@ impl TursoTx {
         for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
             let start = batch_index * 8;
             let batch = &route_ids[start..(start + 8).min(route_ids.len())];
-            let mut query = native_turso::query_scalar::<Uuid>(
+            let mut query = native_turso::query_scalar::<read_model::AssociationKey>(
                 "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready' AND artifact_id IN (?,?,?,?,?,?,?,?)",
             )
             .bind(self.scope.tenant_id)
@@ -207,17 +207,7 @@ impl TursoTx {
             }
             indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
         }
-        let publications = self.committed_publications(&indexed, "vector").await?;
-        let mut chunks =
-            read_model::current_chunks(&mut self.tx, self.scope, Some(&indexed), None).await?;
-        chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
-        let ids = read_model::unique_ids(
-            self.guard_retrieval_chunks(chunks)
-                .await?
-                .into_iter()
-                .map(|chunk| chunk.hit.chunk_id),
-        );
-        Ok(ids)
+        self.index_candidate_ids(&indexed, None, "vector", generation).await
     }
 
     /// Exact bundle identity scope includes a current conflict's explicitly

@@ -1478,3 +1478,178 @@ async fn orphan_learning_hides_invalid_render_payload() {
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn index_candidates_do_not_consume_hit_payload() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(80_000);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    ready_index(&mut tx, row, "content", 11).await;
+    for surface in ["vector", "full_text"] {
+        publication(&mut tx, scope, row.key(11), surface, "committed", "chunk").await;
+    }
+    db::query("UPDATE oc_assets SET kind=x'04'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET title=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET content=x'02',search_terms=x'03'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.vector_candidates("profile", 3, 11, None).await.unwrap(),
+        vec![row.chunk]
+    );
+    assert_eq!(
+        tx.full_text_candidates(11, None).await.unwrap(),
+        vec![row.chunk]
+    );
+    assert!(matches!(
+        tx.full_text_hit(row.chunk, row.key(11).1, 11).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn hidden_index_metadata_and_payload_do_not_poison_hits() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let good = Record::new(80_001);
+    let hidden = Record::new(80_002);
+    for row in [good, hidden] {
+        seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+        ready_index(&mut tx, row, "content", 11).await;
+        for surface in ["vector", "full_text"] {
+            publication(&mut tx, scope, row.key(11), surface, "committed", "chunk").await;
+        }
+    }
+    db::query("UPDATE oc_versions SET title=x'01' WHERE asset_id=?")
+        .bind(hidden.asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_artifact_ledger SET state='pending' WHERE artifact_id=?")
+        .bind(hidden.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_artifact_ledger VALUES(?,?,?,'chunk',?,1,12,'vector',x'01')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(good.chunk)
+        .bind(good.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_index_entries VALUES(?,?,?,'summary',x'01',3,12,'ready')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(good.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let keys = [good.key(11), hidden.key(11)];
+    assert_eq!(tx.full_text_hits(&keys).await.unwrap().len(), 1);
+    assert_eq!(tx.vector_hits_exact(&keys, "profile", 3).await.unwrap().len(), 1);
+    db::query("UPDATE oc_artifact_ledger SET state='committed' WHERE artifact_id=?")
+        .bind(hidden.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    locator(&mut tx, hidden.chunk, &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string()).await;
+    assert_eq!(tx.full_text_hits(&keys).await.unwrap().len(), 1);
+    assert_eq!(tx.vector_hits_exact(&keys, "profile", 3).await.unwrap().len(), 1);
+    // The malformed candidate ID is not needed by the version guard. Another
+    // chunk hides the whole version before that output ID is decoded.
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'support',?,'support')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(hidden.asset)
+        .bind(json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string())
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    locator(&mut tx, hidden.chunk, "{}").await;
+    db::query("UPDATE oc_chunks SET id=x'31' WHERE id=?")
+        .bind(hidden.chunk).execute(&mut *tx.tx).await.unwrap();
+    db::query("UPDATE oc_artifact_ledger SET artifact_id=x'31' WHERE artifact_id=?")
+        .bind(hidden.chunk).execute(&mut *tx.tx).await.unwrap();
+    db::query("UPDATE oc_index_entries SET artifact_id=x'31' WHERE artifact_id=?")
+        .bind(hidden.chunk).execute(&mut *tx.tx).await.unwrap();
+    assert_eq!(tx.full_text_candidates(11, None).await.unwrap(), vec![good.chunk]);
+    assert_eq!(tx.vector_candidates("profile", 3, 11, None).await.unwrap(), vec![good.chunk]);
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_source_roots_apply_local_support_before_uuid_decode() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(80_003);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_events SET id=x'31'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET source_event_id=x'31'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    locator(&mut tx, row.chunk, &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string()).await;
+    assert!(matches!(
+        tx.native_candidate_sources(&[row.chunk]).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    assert!(tx.native_candidate_sources(&[]).await.unwrap().is_empty());
+    locator(&mut tx, row.chunk, "{}").await;
+    assert!(matches!(
+        tx.native_candidate_sources(&[row.chunk]).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn context_index_candidates_ignore_unconsumed_title_and_content() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(80_004);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    ready_index(&mut tx, row, "content", 11).await;
+    for surface in ["vector", "full_text"] {
+        publication(&mut tx, scope, row.key(11), surface, "committed", "chunk").await;
+    }
+    db::query("UPDATE oc_versions SET title=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET content=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let route = crate::context_retrieval::ContextRoute::Knowledge;
+    assert_eq!(
+        tx.context_vector_candidates("profile", 3, 11, route, None).await.unwrap(),
+        vec![row.chunk]
+    );
+    assert_eq!(
+        tx.context_full_text_candidates(11, route, None).await.unwrap(),
+        vec![row.chunk]
+    );
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}

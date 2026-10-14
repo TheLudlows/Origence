@@ -200,21 +200,13 @@ impl TursoTx {
         generation: i64,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
-        let ids: Vec<Uuid> = native_turso::query_scalar(
+        let ids: Vec<read_model::AssociationKey> = native_turso::query_scalar(
             "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready'",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
             .bind(profile).bind(dimension).bind(generation)
             .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
-        let publications = self.committed_publications(&ids, "vector").await?;
-        let mut chunks =
-            read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), asset_filter).await?;
-        chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
-        Ok(read_model::unique_ids(
-            self.guard_retrieval_chunks(chunks)
-                .await?
-                .into_iter()
-                .map(|chunk| chunk.hit.chunk_id),
-        ))
+        self.index_candidate_ids(&ids, asset_filter, "vector", generation)
+            .await
     }
 
     async fn vector_hits(
@@ -223,36 +215,8 @@ impl TursoTx {
         profile: &str,
         dimension: Option<usize>,
     ) -> StorageResult<HashMap<read_model::NativeHitKey, SearchHit>> {
-        let ids = read_model::unique_ids(keys.iter().map(|(id, _, _)| *id));
-        let ready = self
-            .ready_vector_publications(&ids, profile, dimension)
-            .await?;
-        let publications = self.committed_publications(&ids, "vector").await?;
-        let allowed: std::collections::HashSet<_> = keys
-            .iter()
-            .filter(|key| publications.contains(*key) && ready.contains(&(key.0, key.2)))
-            .map(|(id, source, _)| (*id, *source))
-            .collect();
-        let mut chunks =
-            read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
-        chunks.retain(|chunk| allowed.contains(&(chunk.hit.chunk_id, chunk.root)));
-        let chunks: HashMap<_, _> = self
-            .guard_retrieval_chunks(chunks)
-            .await?
-            .into_iter()
-            .map(|chunk| (chunk.hit.chunk_id, chunk))
-            .collect();
-        let mut hits = HashMap::new();
-        for key in keys {
-            if let Some(chunk) = chunks.get(&key.0)
-                && chunk.root == key.1
-                && publications.contains(key)
-                && ready.contains(&(key.0, key.2))
-            {
-                hits.insert(*key, chunk.hit.clone());
-            }
-        }
-        Ok(hits)
+        let ready = self.ready_vector_keys(keys, profile, dimension).await?;
+        self.indexed_hits(&ready, "vector").await
     }
 
     pub async fn vector_hit(
