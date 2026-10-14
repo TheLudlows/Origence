@@ -23,6 +23,7 @@ jobs:
           echo "BENCH=$RUNNER_TEMP/publication-cost" >> "$GITHUB_ENV"
           echo "EVIDENCE=$RUNNER_TEMP/publication-cost-evidence" >> "$GITHUB_ENV"
           echo "PRODUCTION=$RUNNER_TEMP/publication-production" >> "$GITHUB_ENV"
+          echo "CANDIDATE=$RUNNER_TEMP/publication-candidate" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -49,7 +50,9 @@ jobs:
           mkdir -p "$EVIDENCE"
           cp -R tools/publication-cost-probe "$BENCH"
           python3 -B -m unittest discover -s "$BENCH" -p 'test_*.py' -v
-          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --output "$EVIDENCE/sql-evidence.json"
+          python3 "$BENCH/prepare_candidate.py" --current-root _benchmark/current --output "$CANDIDATE" > "$EVIDENCE/candidate-generation.json"
+          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$CANDIDATE" --candidate-sha256 a69eacfefb60799ed015f72708bf782d3e16b6ccf9dfdfe00637511564f08f75 --candidate-commit "diagnostic-${{ github.event.pull_request.head.sha }}" --output "$EVIDENCE/sql-evidence.json"
+          sha256sum "$CANDIDATE/src/storage/sqlite/publication.rs" > "$EVIDENCE/candidate-source.sha256"
           python3 "$BENCH/production/prepare.py" --checkout _benchmark/current --label 765d6719 --output "$PRODUCTION" > "$EVIDENCE/production-prepare.json"
           git rev-parse HEAD > "$EVIDENCE/bundle-commit.txt"
           find "$BENCH" -type f -not -path '*/__pycache__/*' -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE/bundle-before-format.sha256"
@@ -87,11 +90,16 @@ jobs:
           cargo fmt --manifest-path "$PRODUCTION/Cargo.toml"
           diff -u tools/publication-cost-probe/src/main.rs "$BENCH/src/main.rs" > "$EVIDENCE/metadata-format.patch" || test $? -eq 1
           diff -u tools/publication-cost-probe/production/main.rs "$PRODUCTION/src/main.rs" > "$EVIDENCE/production-format.patch" || test $? -eq 1
-          sha256sum "$BENCH/src/main.rs" "$PRODUCTION/src/main.rs" > "$EVIDENCE/formatted-sources.sha256"
+          diff -u tools/publication-cost-probe/src/jsonb_tests.rs "$BENCH/src/jsonb_tests.rs" > "$EVIDENCE/candidate-tests-format.patch" || test $? -eq 1
+          sha256sum "$BENCH/src/main.rs" "$BENCH/src/jsonb_tests.rs" "$PRODUCTION/src/main.rs" > "$EVIDENCE/formatted-sources.sha256"
       - name: Lint isolated metadata harness
         id: lint_metadata
         continue-on-error: true
         run: cargo clippy --release --locked --manifest-path "$BENCH/Cargo.toml" --all-targets -j 2 -- -D warnings
+      - name: Check native candidate projection equivalence
+        env:
+          PUBLICATION_PROBE_SQL: ${{ runner.temp }}/publication-cost-evidence/sql-evidence.json
+        run: cargo test --release --locked --manifest-path "$BENCH/Cargo.toml" -j 2 -- --nocapture
       - name: Build and measure native metadata
         run: |
           set -euo pipefail
@@ -107,6 +115,7 @@ jobs:
           done
           test ! -f "$PRODUCTION/source-evidence.json" || cp "$PRODUCTION/source-evidence.json" "$EVIDENCE/production-build/"
           test ! -f "$BENCH/src/main.rs" || cp "$BENCH/src/main.rs" "$EVIDENCE/metadata-build/"
+          test ! -f "$BENCH/src/jsonb_tests.rs" || cp "$BENCH/src/jsonb_tests.rs" "$EVIDENCE/metadata-build/"
           test ! -f "$PRODUCTION/src/main.rs" || cp "$PRODUCTION/src/main.rs" "$EVIDENCE/production-build/"
       - name: Preserve metadata results before production compilation
         if: always()

@@ -163,7 +163,7 @@ fn median(values: &[f64]) -> f64 {
     let mut ordered = values.to_vec();
     ordered.sort_by(f64::total_cmp);
     let middle = ordered.len() / 2;
-    if ordered.len() % 2 == 0 { (ordered[middle - 1] + ordered[middle]) / 2.0 } else { ordered[middle] }
+    if ordered.len().is_multiple_of(2) { (ordered[middle - 1] + ordered[middle]) / 2.0 } else { ordered[middle] }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -219,3 +219,6 @@ async fn main() -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod jsonb_tests;

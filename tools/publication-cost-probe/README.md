@@ -5,8 +5,8 @@ This separately reviewed temporary diagnostic bundle is staged under
 Cargo workspace/build/run. It is not a product workspace member, application
 dependency, or no-JOIN lint exception. The historical `sql-evidence.json` is
 generated only in the temporary directory from fixed read-only checkouts and
-**must not be committed**. Current status: Python preparation checks passed;
-**Rust build, formatting, Clippy, and all native measurements NOT_RUN**.
+**must not be committed**. Each run records its actual build and native status in the preserved artifacts.
+The JSONB candidate described below has **not yet run** at this preparation point.
 
 ## Frozen comparison
 
@@ -106,7 +106,7 @@ python3 "$BENCH_DIR/production/prepare.py" \
   --output "$NEW_PRODUCTION_WORKSPACE"
 ```
 
-The 13 preparation tests (5 extraction and 8 lock/feature gates) are Python-only. It does not execute SQLite and is not
+The 17 preparation tests (5 extraction, 8 lock/feature gates and 4 candidate-generation checks) are Python-only. It does not execute SQLite and is not
 Turso performance evidence. All output paths must be new. The source checkouts
 are read-only inputs; generated Cargo locks belong to the external workspaces.
 
@@ -172,5 +172,61 @@ python3 "$BENCH_DIR/run_probe.py" --production \
   --input 765d6719 --output "$EVIDENCE/production-current"
 ```
 
-No native result exists at this preparation stage. The CPython SQLite proxy
-only identified a possible regression and is not an acceptance result.
+The CPython SQLite proxy only identified a possible regression and is not an
+acceptance result. Native baseline/current evidence and the subsequent candidate
+experiment are kept in separate run artifacts.
+
+## Benchmark-only JSONB candidate
+
+The first native comparison found a significant current metadata regression. The
+next experiment adds one constants-only candidate before considering any product
+patch. **This candidate is not installed in production publication.rs.** No schema,
+Rust loop, adapter, byte limit, or visibility rule changes in this experiment.
+
+`prepare_candidate.py` first verifies frozen765d publication.rs SHA256, then
+creates a **new temporary root** and replaces exactly the two constant literals.
+It materializes `jsonb(payload)` for the selected job once per eight-slot SQL
+statement. Complete paths and both native JSON parse layers remain. Explicit
+numbered parameters keep the original paths-first/scope-last binding contract.
+The generated full source is only in RUNNER_TEMP; never commit it under tools or
+product source. The generator exposes no extra replacements or algorithm flag.
+
+```sh
+python3 "$BENCH_DIR/prepare_candidate.py" \
+  --current-root "$CURRENT_765D_CHECKOUT" \
+  --output "$RUNNER_TEMP/publication-candidate"
+# Save candidate-generation.json. Generated source SHA256 must be:
+# a69eacfefb60799ed015f72708bf782d3e16b6ccf9dfdfe00637511564f08f75
+python3 "$BENCH_DIR/extract_sql.py" \
+  --baseline-root "$BASELINE_CHECKOUT" \
+  --current-root "$CURRENT_765D_CHECKOUT" \
+  --candidate-root "$RUNNER_TEMP/publication-candidate" \
+  --candidate-commit "diagnostic-$GITHUB_SHA" \
+  --candidate-sha256 a69eacfefb60799ed015f72708bf782d3e16b6ccf9dfdfe00637511564f08f75 \
+  --output "$EVIDENCE/three-variant-sql.json"
+export PUBLICATION_PROBE_SQL="$EVIDENCE/three-variant-sql.json"
+cargo test --release --locked --manifest-path "$BENCH_DIR/Cargo.toml" -j 2 -- --nocapture
+python3 "$BENCH_DIR/run_probe.py" \
+  --binary "$BENCH_DIR/target/release/origence-publication-native-bench" \
+  --input "$PUBLICATION_PROBE_SQL" --output "$EVIDENCE/three-variant-run"
+```
+
+Here `candidate-commit` is explicitly a **diagnostic generator reference**, not a
+claim that a product commit contains the generated implementation. The generated
+source hash, generator hash, frozen source hash and generation record establish
+its actual provenance. The existing extractor still checks that both candidate
+Rust helper bodies exactly equal 765d; the same benchmark binary runs all three
+variants with rotating order.
+
+The four native SDK tests require PUBLICATION_PROBE_SQL (missing input fails,
+never skips). They compare candidate projections with the original one-table,
+one-slot TEXT expressions and cover SQL/JSON NULL, duplicate keys, mixed native
+ID types, second parse of encoded strings and errors, distinct ID behavior,
+independent parameter bindings, scoped bad-payload decoys, and rollback.
+
+Candidate performance is not inferred from fewer parse calls: Turso0.8.2 JSON
+cache can still clone/compare large values, and eight-slot paging remains. Report
+200-chunk absolute median, the **observed 52 timed queries**, and ratio to historical
+metadata, alongside 50/100 and all samples. If a material regression remains,
+stop this constants-patch route rather than call it solved. Native candidate
+correctness and performance are NOT_RUN until the next artifact establishes them.

@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
         let mut ordered = timings.clone();
         ordered.sort_by(f64::total_cmp);
         let middle = ordered.len()/2;
-        let median = if ordered.len()%2 == 0 { (ordered[middle-1]+ordered[middle])/2.0 } else { ordered[middle] };
+        let median = if ordered.len().is_multiple_of(2) { (ordered[middle-1]+ordered[middle])/2.0 } else { ordered[middle] };
         let last = Uuid::from_u128(999 + count as u128);
         db::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE artifact_id=? AND surface='full_text'")
             .bind(last).execute(store.pool()).await?;
