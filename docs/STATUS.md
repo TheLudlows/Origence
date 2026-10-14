@@ -4,24 +4,29 @@
 
 ## PR #59：Windows 离线恢复与无 JOIN 查询（草稿待审）
 
-[PR #59](https://github.com/TheLudlows/Origence/pull/59) 各领域生产查询改写已完成：
-参数化单表批量读取，在原事务快照内用 Rust 关联，不以跨表 EXISTS/IN/CTE 替代 JOIN。
-权限、历史版本、source/version/generation/publication 校验和最终返回前复核继续保留。
-E 实现头 `f4f715fa` 的全仓有界检查为 927 SQL 输入、零关联债务、零 unknown，
-43 项 guard 测试通过；Linux 默认 180 lib + 228 integration 通过，Windows
-180 lib 与原离线恢复单例 1 通过，后续完整验证被 fmt 阻断。
+[PR #59](https://github.com/TheLudlows/Origence/pull/59) 将各领域关联查询改为参数化
+单表批量读取，在原事务快照内用 Rust 关联，不以跨表 EXISTS/IN/CTE 替代 JOIN。
+权限、历史版本、source/version/generation/publication 校验和最终返回前复核保留。
+后续审计收窄 Context/startup 的读取范围和各调用方投影，并补静态检查器反例。
+隐藏行或未消费的异常字段不应污染合法结果；选中必要非法字段仍安全报错，不保留
+多个坏值的首错顺序或旧 panic。有界静态检查不等于全程序证明。
 
-此前格式修正头 `60222e3660ca5a7b2de375bc4fd54d452d5e4a6c` 全部适用 CI 成功，
-Linux/Windows 默认均 177 lib + 225 integration。最终格式与文档归档头仍须
-单独验收，精确 head 及终态结果以 [PR #59 Checks](https://github.com/TheLudlows/Origence/pull/59/checks)
-和 PR 正文记录为准；阶段通过不代表后续提交通过，PR 仍为草稿未合入。
-分阶段失败与覆盖范围见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
+发布计划与轻量回执摘要同事务保存、同代重试复用；状态检查继续核对实际索引和
+发布账本。正分块已准备计划缺失/损坏摘要明确报无效，不自动补写或迁移。
+摘要依赖正常保存接口保证一致；直接改库只改重型计划，不会由状态查询重扫发现。
+原生读取和保存/重试成本已实测，见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
 
-Windows 主线程原 1 MiB 栈未扩大，原离线回归与断言保留并在多个阶段提交通过；
-这证明已测应用查询路径的修复，不代表 Turso parser 的通用栈溢出问题已解决。
-八槽批量限制的是关联请求数，不是字节或总内存上限；ID 元数据仍为 O(total ID bytes)，
-不复制完整 payload，也未新增输入大小限制。Issue #60/#61、schema 精简和命名清理
-不在本轮实施范围。
+`a50f4572` 的新增索引匹配曾重新触发 Windows 栈溢出；`f0fe2cc1` 将该查询改为
+4 槽浅匹配后，Windows 214 lib 与原离线单例 1 passed，含 100 请求/25 次实际查询
+回归；后续完整验证仍被一处格式差异阻断。最终图读取/格式/文档归档头另行验证，
+精确 head 和终态见 [PR #59 Checks](https://github.com/TheLudlows/Origence/pull/59/checks)
+与 PR 正文；阶段成功不外推为后续提交成功，仍为草稿未合入。
+
+Windows 主线程原 1 MiB 栈和原回归断言保留。这仅验证已测调用路径，不是 Turso
+parser 的通用栈安全证明。固定槽位（多数 8，向量就绪匹配 4）限制请求数，不是
+字节/总内存上限。状态检查不把完整向量计划读入 Rust；准备/重试仍承担序列化
+和校验成本，ID 元数据为 O(total ID bytes)，未新增输入上限。
+Issue #60/#61、schema 精简和命名清理不在本轮实施范围。
 
 ## Turso / LanceDB 正式接入（已合入）
 

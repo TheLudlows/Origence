@@ -1805,3 +1805,133 @@ async fn shallow_vector_readiness_batches_one_hundred_requests() {
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn graph_evidence_ignores_unconsumed_payload_and_stops_at_twenty() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    db::query("CREATE TABLE oc_artifact_owners(tenant_id BLOB,workspace_id BLOB,artifact_id BLOB,source_id BLOB,version INTEGER)")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let artifact = Uuid::new_v4();
+    let mut expected = Vec::new();
+    for index in 0..22 {
+        let row = Record::new(90_000 + index);
+        seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+        db::query("INSERT INTO oc_artifact_owners VALUES(?,?,?,?,1)")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(artifact)
+            .bind(row.source)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        publication(
+            &mut tx,
+            scope,
+            (artifact, row.key(11).1, 11),
+            "graph",
+            "committed",
+            "entity",
+        )
+        .await;
+        if index == 0 {
+            locator(
+                &mut tx,
+                row.chunk,
+                &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]})
+                    .to_string(),
+            )
+            .await;
+        } else if index == 21 {
+            // A local native extraction failure beyond the twenty visible
+            // evidence budget must not be evaluated by this read.
+            locator(
+                &mut tx,
+                row.chunk,
+                r#"{"parser":"memory-semantics:v1","support_sources":[10000000000000000000000000000000]}"#,
+            )
+            .await;
+        } else if expected.len() < 20 {
+            expected.push(row.chunk);
+        }
+    }
+    db::query("UPDATE oc_versions SET title=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET content=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let evidence = tx.graph_evidence(artifact).await.unwrap();
+    let actual: Vec<_> = evidence
+        .iter()
+        .map(|value| Uuid::parse_str(value["chunk_id"].as_str().unwrap()).unwrap())
+        .collect();
+    assert_eq!(actual, expected);
+    assert!(matches!(
+        tx.semantic_version_visible(Record::new(90_021).asset, 1)
+            .await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn graph_evidence_skips_invalid_historical_keys_before_decode() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(91_000);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    let artifact = Uuid::new_v4();
+    db::query("CREATE TABLE oc_artifact_owners(tenant_id BLOB,workspace_id BLOB,artifact_id BLOB,source_id BLOB,version INTEGER)")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_artifact_owners VALUES(?,?,?,?,1)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(artifact)
+        .bind(row.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    publication(
+        &mut tx,
+        scope,
+        (artifact, row.key(11).1, 11),
+        "graph",
+        "committed",
+        "entity",
+    )
+    .await;
+    db::query("INSERT INTO oc_assets VALUES(?,?,x'31','knowledge','old',2,0)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_versions VALUES(?,?,x'31',1,'old','old','hash',?,NULL)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_chunks VALUES(?,?,x'32',x'31',1,0,x'01','{}','old')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let evidence = tx.graph_evidence(artifact).await.unwrap();
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0]["chunk_id"], json!(row.chunk));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}

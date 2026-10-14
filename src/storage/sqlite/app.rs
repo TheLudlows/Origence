@@ -359,31 +359,9 @@ impl TursoTx {
         if roots.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = read_model::chunk_ids_for_sources(&mut self.tx, self.scope, &roots).await?;
-        let mut chunks =
-            read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
-        chunks.retain(|chunk| roots.contains(&(chunk.root.source_id, chunk.root.version)));
-        chunks.sort_by_key(|chunk| chunk.hit.chunk_id);
-        let mut candidates = chunks.into_iter();
-        let mut evidence = Vec::new();
-        while evidence.len() < 20 {
-            // Preserve the old visible-20 stop point. Hidden candidates may
-            // require another batch, but later candidates are not validated
-            // once the requested evidence is complete.
-            let batch: Vec<_> = candidates.by_ref().take(20 - evidence.len()).collect();
-            if batch.is_empty() {
-                break;
-            }
-            for chunk in self.guard_retrieval_chunks(batch).await? {
-                let h = chunk.hit;
-                evidence.push(
-                    json!({"asset_id":h.asset_id,"version":h.version,"chunk_id":h.chunk_id,
-                    "source_event_id":h.source_event_id,"locator":h.locator}),
-                );
-            }
-        }
-        Ok(evidence)
+        self.graph_rows_for_sources(&roots).await
     }
+
     pub async fn issue_scoped_key(&mut self, role: &str) -> StorageResult<IssuedKey> {
         self.issue_scoped_key_with_capabilities(role, KeyCapabilities::default())
             .await

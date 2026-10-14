@@ -103,42 +103,14 @@ async fn version_rows(
     Ok(rows)
 }
 
-pub(super) async fn chunk_ids_for_sources(
-    conn: &mut Connection,
-    scope: Scope,
-    roots: &HashSet<VersionKey>,
-) -> StorageResult<Vec<Uuid>> {
-    let sources = unique_ids(roots.iter().map(|(source, _)| *source));
-    let rows = rows_by_ids(
-        conn,
-        scope,
-        "oc_versions",
-        "asset_id,version,source_event_id",
-        "source_event_id",
-        &sources,
-    )
-    .await?;
-    let mut versions = Vec::new();
-    for row in rows {
-        let source = row.try_get("source_event_id").map_err(turso_err)?;
-        let version = row.try_get("version").map_err(turso_err)?;
-        if roots.contains(&(source, version)) {
-            versions.push((row.try_get("asset_id").map_err(turso_err)?, version));
-        }
-    }
-    let rows = version_rows(conn, scope, "oc_chunks", "id", &versions).await?;
-    rows.into_iter()
-        .map(|row| row.try_get("id").map_err(turso_err))
-        .collect()
-}
-
+#[cfg(test)]
 pub(super) struct CurrentChunk {
     pub hit: SearchHit,
-    pub root: SourceVersion,
 }
 
 /// Current root visibility only. Callers apply local support and Learning as
 /// separate batch layers; startup health intentionally only needs this layer.
+#[cfg(all(test, feature = "local-storage"))]
 pub(super) async fn current_chunks(
     conn: &mut Connection,
     scope: Scope,
@@ -152,6 +124,7 @@ pub(super) async fn current_chunks(
 
 // Counts are lengths of already-read sets, for native regression evidence.
 // No extra query or payload clone is performed to obtain them.
+#[cfg(all(test, feature = "local-storage"))]
 pub(super) async fn current_chunks_measured(
     conn: &mut Connection,
     scope: Scope,
@@ -193,10 +166,6 @@ pub(super) async fn current_chunks_measured(
                 source_event_id,
                 score: 0.0,
             },
-            root: SourceVersion {
-                source_id: source,
-                version,
-            },
         });
     }
     Ok((chunks, raw.counts))
@@ -209,6 +178,7 @@ pub(super) struct RawCurrentRows {
     assets: HashMap<usize, native_turso::Row>,
     versions: HashMap<usize, native_turso::Row>,
     positions: Vec<usize>,
+    #[cfg(all(test, feature = "local-storage"))]
     counts: [usize; 4],
 }
 
@@ -355,6 +325,7 @@ pub(super) async fn current_rows(
         &requests,
     )
     .await?;
+    #[cfg(all(test, feature = "local-storage"))]
     let asset_count = assets.len();
     let assets: HashMap<_, _> = assets.into_iter().collect();
     let versions = associate_rows(
@@ -369,6 +340,7 @@ pub(super) async fn current_rows(
         &requests,
     )
     .await?;
+    #[cfg(all(test, feature = "local-storage"))]
     let version_count = versions.len();
     let sources = versions
         .iter()
@@ -392,12 +364,14 @@ pub(super) async fn current_rows(
         .enumerate()
         .filter_map(|(index, (request, row))| active.contains(&index).then_some((request, row)))
         .collect();
+    #[cfg(all(test, feature = "local-storage"))]
     let counts = [rows.len(), requests.len(), asset_count, version_count];
     Ok(RawCurrentRows {
         rows,
         assets,
         versions,
         positions,
+        #[cfg(all(test, feature = "local-storage"))]
         counts,
     })
 }
@@ -918,6 +892,7 @@ impl TursoTx {
         }
     }
 
+    #[cfg(test)]
     pub(super) async fn guard_retrieval_chunks(
         &mut self,
         mut chunks: Vec<CurrentChunk>,
@@ -1071,6 +1046,132 @@ impl TursoTx {
             identities.insert(row.try_get("asset_id").map_err(turso_err)?, Some(identity));
         }
         Ok(identities)
+    }
+
+    pub(super) async fn graph_rows_for_sources(
+        &mut self,
+        roots: &HashSet<VersionKey>,
+    ) -> StorageResult<Vec<Value>> {
+        let requests: Vec<_> = roots
+            .iter()
+            .map(|(source, version)| {
+                vec![
+                    AssociationKey::from_uuid(*source),
+                    AssociationKey(turso::Value::Integer(i64::from(*version))),
+                ]
+            })
+            .collect();
+        let versions = associate_query(
+            &mut self.tx,
+            self.scope,
+            "SELECT asset_id,version,(source_event_id=? AND version=?) AS m0,(source_event_id=? AND version=?) AS m1,(source_event_id=? AND version=?) AS m2,(source_event_id=? AND version=?) AS m3,(source_event_id=? AND version=?) AS m4,(source_event_id=? AND version=?) AS m5,(source_event_id=? AND version=?) AS m6,(source_event_id=? AND version=?) AS m7 FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND ((source_event_id=? AND version=?) OR (source_event_id=? AND version=?) OR (source_event_id=? AND version=?) OR (source_event_id=? AND version=?) OR (source_event_id=? AND version=?) OR (source_event_id=? AND version=?) OR (source_event_id=? AND version=?) OR (source_event_id=? AND version=?))",
+            2,
+            &requests,
+        )
+        .await?;
+        let requests = versions
+            .into_iter()
+            .map(|(_, row)| {
+                Ok(vec![
+                    row.try_get("asset_id").map_err(turso_err)?,
+                    row.try_get("version").map_err(turso_err)?,
+                ])
+            })
+            .collect::<StorageResult<Vec<_>>>()?;
+        let chunks = associate_rows(
+            &mut self.tx,
+            self.scope,
+            "oc_chunks",
+            "id",
+            MATCH_VERSION_SELECT,
+            MATCH_VERSION_WHERE,
+            "1",
+            2,
+            &requests,
+        )
+        .await?;
+        let ids = chunks
+            .into_iter()
+            .map(|(_, row)| row.try_get("id").map_err(turso_err))
+            .collect::<StorageResult<Vec<AssociationKey>>>()?;
+        let current = current_root_rows(&mut self.tx, self.scope, &ids, None).await?;
+        let requests = current
+            .iter()
+            .map(|(row, _)| Ok(vec![row.try_get("id").map_err(turso_err)?]))
+            .collect::<StorageResult<Vec<_>>>()?;
+        let locators = associate_rows(
+            &mut self.tx,
+            self.scope,
+            "oc_chunks",
+            "locator,hex(id) AS order_key",
+            MATCH_EVENT_SELECT,
+            MATCH_EVENT_WHERE,
+            "1",
+            1,
+            &requests,
+        )
+        .await?;
+        let mut current: HashMap<_, _> = current.into_iter().enumerate().collect();
+        let mut rows = Vec::new();
+        for (index, locator) in locators {
+            if let Some((row, root)) = current.remove(&index) {
+                let order: String = locator.try_get("order_key").map_err(turso_err)?;
+                rows.push((order, row, root, locator));
+            }
+        }
+        // UUID BLOB byte order and its fixed-width uppercase hex order agree.
+        // This is only an ordering key, never a business-key equality substitute.
+        rows.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut candidates = rows.into_iter();
+        let mut evidence = Vec::new();
+        while evidence.len() < 20 {
+            let batch: Vec<_> = candidates.by_ref().take(20 - evidence.len()).collect();
+            if batch.is_empty() {
+                break;
+            }
+            let requests = batch
+                .iter()
+                .map(|(_, row, _, _)| Ok(vec![row.try_get("id").map_err(turso_err)?]))
+                .collect::<StorageResult<Vec<_>>>()?;
+            let local = self.local_support_positions(&requests).await?;
+            let batch: Vec<_> = batch
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, row)| local.contains(&index).then_some(row))
+                .collect();
+            let versions = batch
+                .iter()
+                .map(|(_, row, _, _)| {
+                    Ok((
+                        row.try_get("asset_id").map_err(turso_err)?,
+                        row.try_get("version").map_err(turso_err)?,
+                    ))
+                })
+                .collect::<StorageResult<Vec<VersionKey>>>()?;
+            let visible = self.visible_version_keys(&versions).await?;
+            for ((_, row, root, locator), (asset, version)) in batch.into_iter().zip(versions) {
+                if !visible.contains(&(asset, version)) {
+                    continue;
+                }
+                let text: String = locator.try_get("locator").map_err(turso_err)?;
+                let locator: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                let source_override = if locator["parser"] == crate::memory_semantics::PARSER {
+                    locator["source_event_id"]
+                        .as_str()
+                        .and_then(|value| Uuid::parse_str(value).ok())
+                } else {
+                    None
+                };
+                let source: Uuid = match source_override {
+                    Some(source) => source,
+                    None => root.try_get("source_event_id").map_err(turso_err)?,
+                };
+                let chunk: Uuid = row.try_get("id").map_err(turso_err)?;
+                evidence.push(json!({"asset_id":asset,"version":version,"chunk_id":chunk,
+                    "source_event_id":source,"locator":locator}));
+            }
+        }
+        Ok(evidence)
     }
 
     async fn published_positions(
@@ -1282,7 +1383,9 @@ impl TursoTx {
                     .bind(batch.get(slot).map(|key| key.0))
                     .bind(batch.get(slot).map(|key| key.2));
             }
-            query = query.bind(self.scope.tenant_id).bind(self.scope.workspace_id);
+            query = query
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id);
             for slot in 0..4 {
                 query = query.bind(batch.get(slot).map(|key| key.0));
             }

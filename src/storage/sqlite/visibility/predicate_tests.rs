@@ -276,10 +276,6 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
             source_event_id: source,
             score: 0.0,
         },
-        root: SourceVersion {
-            source_id: source,
-            version: 1,
-        },
     };
     let mut tx = transaction(pool.begin().await.unwrap(), scope);
     assert!(tx.local_support_visibility(&[(asset, 1)]).await.unwrap()[&(asset, 1)]);
