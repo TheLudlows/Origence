@@ -2,7 +2,9 @@ use crate::{
     error::{AppError, Result},
     parsing,
     service::{Service, decode, scope},
-    storage::{DomainTx, FullTextHit, FullTextQuery, Permission, SourceVersion, VectorHit, VectorQuery},
+    storage::{
+        DomainTx, FullTextHit, FullTextQuery, Permission, SourceVersion, VectorHit, VectorQuery,
+    },
     types::*,
 };
 use serde_json::{Value, json};

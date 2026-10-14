@@ -143,7 +143,8 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 offline,
                 "vector-compact requires --offline and a stopped host"
             );
-            let report = origence::storage::maintenance::compact_vectors(&data_dir, dry_run).await?;
+            let report =
+                origence::storage::maintenance::compact_vectors(&data_dir, dry_run).await?;
             println!("{}", serde_json::to_string(&report)?);
             Ok(())
         }),
