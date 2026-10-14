@@ -80,7 +80,7 @@ jobs:
           $psi.RedirectStandardOutput = $true
           $psi.RedirectStandardError = $true
           $psi.WorkingDirectory = $PWD.Path
-          $argsForCdb = @('-o', '-g', '-G', '-hd', '-y', $symbols, '-logo', $log, '-c', $startup, $env:ORIGENCE_TEST_EXE, 'local_app::local_host_api_cli_mcp_models_and_recovery', '--exact', '--nocapture')
+          $argsForCdb = @('-o', '-G', '-hd', '-y', $symbols, '-logo', $log, '-c', $startup, $env:ORIGENCE_TEST_EXE, 'local_app::local_host_api_cli_mcp_models_and_recovery', '--exact', '--nocapture')
           foreach ($arg in $argsForCdb) { $psi.ArgumentList.Add([string]$arg) }
           $p = [System.Diagnostics.Process]::Start($psi)
           $stdout = $p.StandardOutput.ReadToEndAsync()
