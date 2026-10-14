@@ -17,25 +17,6 @@ pub(super) const CURRENT_CHUNK_ROWS: &str = "FROM oc_chunks c JOIN oc_assets a O
 pub(super) const CHUNK_SUPPORT_ACTIVE: &str = "(json_extract(c.locator,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(c.locator,'$.support_sources') ss WHERE NOT EXISTS(SELECT 1 FROM oc_events se WHERE se.tenant_id=c.tenant_id AND se.workspace_id=c.workspace_id AND hex(se.id)=upper(replace(ss.value,'-','')) AND se.state='active')))";
 
 impl TursoTx {
-    /// Exact historical root plus complete local S2 support, without recursion or
-    /// writer-only session permission. The Learning DFS uses this same local layer.
-    pub(super) async fn require_active_version_local(
-        &mut self,
-        asset: Uuid,
-        version: i32,
-    ) -> StorageResult<Uuid> {
-        let root = self
-            .active_version_roots(&[(asset, version)])
-            .await?
-            .get(&(asset, version))
-            .copied()
-            .ok_or(StorageError::NotFound)?;
-        if !self.semantic_version_visible_local(asset, version).await? {
-            return Err(StorageError::NotFound);
-        }
-        Ok(root)
-    }
-
     pub(super) async fn semantic_version_visible_local(
         &mut self,
         asset: Uuid,

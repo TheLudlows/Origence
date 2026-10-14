@@ -7,6 +7,25 @@ use super::read_model::{NativeHitKey, current_chunks, rows_by_ids};
 use super::*;
 use crate::storage::native_turso as db;
 
+// Test-only composition of the production read primitives. Session archives
+// now use their batched guard, exercised directly in session_read_tests.
+async fn active_supported_version(
+    tx: &mut TursoTx,
+    asset: Uuid,
+    version: i32,
+) -> StorageResult<Uuid> {
+    let root = tx
+        .active_version_roots(&[(asset, version)])
+        .await?
+        .get(&(asset, version))
+        .copied()
+        .ok_or(StorageError::NotFound)?;
+    if !tx.semantic_version_visible_local(asset, version).await? {
+        return Err(StorageError::NotFound);
+    }
+    Ok(root)
+}
+
 #[derive(Clone, Copy)]
 struct Record {
     asset: Uuid,
@@ -354,11 +373,11 @@ async fn historical_roots_and_views_do_not_acquire_a_current_version_guard() {
     assert!(tx.semantic_version_visible(first.asset, 1).await.unwrap());
     assert!(tx.semantic_version_visible(first.asset, 99).await.unwrap());
     assert!(matches!(
-        tx.require_active_version_local(first.asset, 99).await,
+        active_supported_version(&mut tx, first.asset, 99).await,
         Err(StorageError::NotFound)
     ));
     assert_eq!(
-        tx.require_active_version_local(first.asset, 1)
+        active_supported_version(&mut tx, first.asset, 1)
             .await
             .unwrap(),
         first.source
@@ -405,7 +424,7 @@ async fn historical_roots_and_views_do_not_acquire_a_current_version_guard() {
     .await
     .unwrap();
     assert!(matches!(
-        tx.require_active_version_local(first.asset, 1).await,
+        active_supported_version(&mut tx, first.asset, 1).await,
         Err(StorageError::NotFound)
     ));
     assert!(matches!(

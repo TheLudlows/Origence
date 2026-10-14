@@ -6,7 +6,9 @@ use crate::storage::native_turso as db;
 
 async fn database() -> (tempfile::TempDir, Pool) {
     let dir = tempfile::tempdir().unwrap();
-    let pool = Pool::open(dir.path().join("session-reads.db")).await.unwrap();
+    let pool = Pool::open(dir.path().join("session-reads.db"))
+        .await
+        .unwrap();
     // Deliberately omit unrelated asset/version metadata. These local reads
     // need exact historical provenance, not title, kind, or current content.
     for sql in [
@@ -19,10 +21,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
         "CREATE TABLE oc_session_turns(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,source_event_id BLOB)",
         "CREATE TABLE oc_session_turn_evidence(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,evidence_ref_id BLOB,ordinal INTEGER,evidence TEXT)",
     ] {
-        db::query(sql)
-            .execute(&pool)
-            .await
-            .unwrap();
+        db::query(sql).execute(&pool).await.unwrap();
     }
     (dir, pool)
 }
@@ -138,8 +137,7 @@ async fn store_turn(tx: &mut TursoTx, evidence: &[ArchivedEvidence]) -> (Uuid, U
             .bind(turn)
             .bind(archived.evidence_ref_id)
             .bind(ordinal as i64)
-            .bind(serde_json::to_string(archived)
-            .unwrap())
+            .bind(serde_json::to_string(archived).unwrap())
             .execute(&mut *tx.tx)
             .await
             .unwrap();
@@ -168,14 +166,24 @@ async fn session_history_batches_preserve_64_ordered_historical_references() {
         evidence.push(seed(&mut tx, scope, index).await);
     }
     let (session, turn, root) = store_turn(&mut tx, &evidence).await;
-    assert_eq!(tx.require_turn_visible_local(session, turn).await.unwrap(), (root, evidence));
+    assert_eq!(
+        tx.require_turn_visible_local(session, turn).await.unwrap(),
+        (root, evidence)
+    );
     // No current-version predicate: current=2 above and NULL here both retain
     // exact version 1. The next read observes this same transaction's changes.
     db::query("UPDATE oc_assets SET current_version=NULL")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert_eq!(tx.require_turn_visible_local(session, turn).await.unwrap().1.len(), 64);
+    assert_eq!(
+        tx.require_turn_visible_local(session, turn)
+            .await
+            .unwrap()
+            .1
+            .len(),
+        64
+    );
     db::query("INSERT INTO oc_session_turn_evidence VALUES(?,?,?,?,?,64,'not JSON')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -234,13 +242,15 @@ async fn session_history_native_scope_and_exact_chunk_keys_are_required() {
         .await
         .unwrap();
     assert!(tx.require_turn_visible_local(session, turn).await.is_ok());
-    db::query("UPDATE oc_events SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(wanted.source_event_id)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(wanted.source_event_id)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert!(matches!(
         tx.require_turn_visible_local(session, turn).await,
         Err(StorageError::NotFound)
@@ -288,14 +298,20 @@ async fn session_empty_and_invalid_archives_do_not_prepare_evidence_tables() {
     let (_dir, pool) = database().await;
     let mut tx = transaction(&pool, scope()).await;
     let (session, turn, root) = store_turn(&mut tx, &[]).await;
-    for sql in ["DROP TABLE oc_assets", "DROP TABLE oc_versions", "DROP TABLE oc_chunks", "DROP TABLE oc_artifact_owners", "DROP TABLE oc_artifact_ledger"] {
-        db::query(sql)
-            .execute(&mut *tx.tx)
-            .await
-            .unwrap();
+    for sql in [
+        "DROP TABLE oc_assets",
+        "DROP TABLE oc_versions",
+        "DROP TABLE oc_chunks",
+        "DROP TABLE oc_artifact_owners",
+        "DROP TABLE oc_artifact_ledger",
+    ] {
+        db::query(sql).execute(&mut *tx.tx).await.unwrap();
     }
     // The local root requires active state, not the public session source kind.
-    assert_eq!(tx.require_turn_visible_local(session, turn).await.unwrap(), (root, vec![]));
+    assert_eq!(
+        tx.require_turn_visible_local(session, turn).await.unwrap(),
+        (root, vec![])
+    );
     let mut invalid = ArchivedEvidence {
         evidence_ref_id: Uuid::new_v4(),
         reference: reference(1),
@@ -333,7 +349,8 @@ async fn session_missing_chunk_and_false_support_do_not_prepare_owners() {
             .await
             .unwrap();
         assert!(matches!(
-            tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id).await,
+            tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
+                .await,
             Err(StorageError::NotFound)
         ));
         tx.tx.rollback().await.unwrap();
@@ -350,7 +367,11 @@ async fn session_graph_owner_and_committed_ledger_preserve_complete_keys() {
         let mut evidence = seed(&mut tx, scope, 1).await;
         evidence.reference.kind = kind;
         evidence.reference.id = Uuid::new_v4();
-        let artifact_type = if kind == EvidenceKind::Entity { "entity" } else { "relation" };
+        let artifact_type = if kind == EvidenceKind::Entity {
+            "entity"
+        } else {
+            "relation"
+        };
         db::query("INSERT INTO oc_artifact_owners VALUES(?,?,?,?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
@@ -374,7 +395,12 @@ async fn session_graph_owner_and_committed_ledger_preserve_complete_keys() {
             .unwrap();
         // Graph owner.chunk_id is deliberately non-NULL and not the chosen
         // chunk; generation is unrelated to any current publication counter.
-        assert_eq!(tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id).await.unwrap(), evidence);
+        assert_eq!(
+            tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
+                .await
+                .unwrap(),
+            evidence
+        );
         for sql in [
             "UPDATE oc_artifact_ledger SET state='pending'",
             "UPDATE oc_artifact_ledger SET state='withdrawn'",
@@ -390,7 +416,8 @@ async fn session_graph_owner_and_committed_ledger_preserve_complete_keys() {
             };
             query.execute(&mut *tx.tx).await.unwrap();
             assert!(matches!(
-                tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id).await,
+                tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
+                    .await,
                 Err(StorageError::NotFound)
             ));
         }
@@ -399,13 +426,20 @@ async fn session_graph_owner_and_committed_ledger_preserve_complete_keys() {
             .execute(&mut *tx.tx)
             .await
             .unwrap();
-        assert!(tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id).await.is_ok());
-        db::query("UPDATE oc_artifact_owners SET chunk_id=zeroblob(16) WHERE artifact_type='chunk'")
-            .execute(&mut *tx.tx)
-            .await
-            .unwrap();
+        assert!(
+            tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
+                .await
+                .is_ok()
+        );
+        db::query(
+            "UPDATE oc_artifact_owners SET chunk_id=zeroblob(16) WHERE artifact_type='chunk'",
+        )
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
         assert!(matches!(
-            tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id).await,
+            tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
+                .await,
             Err(StorageError::NotFound)
         ));
         tx.tx.rollback().await.unwrap();
@@ -432,15 +466,9 @@ async fn session_json_errors_remain_ordered_after_metadata_prefetch() {
         let (session, turn, _) = store_turn(&mut tx, &[first, second]).await;
         let result = tx.require_turn_visible_local(session, turn).await;
         if first_visible {
-            assert!(matches!(
-                result,
-                Err(StorageError::Backend(_))
-            ));
+            assert!(matches!(result, Err(StorageError::Backend(_))));
         } else {
-            assert!(matches!(
-                result,
-                Err(StorageError::NotFound)
-            ));
+            assert!(matches!(result, Err(StorageError::NotFound)));
         }
         // An engine JSON error interrupts this lease. Never issue another
         // statement on it before rollback; preserve the returned Backend.
@@ -467,17 +495,13 @@ async fn session_content_decoding_retains_member_before_root_order() {
             .execute(&mut *tx.tx)
             .await
             .unwrap();
-        let result = tx.archive_evidence_local(&evidence.reference, evidence.evidence_ref_id).await;
+        let result = tx
+            .archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
+            .await;
         if member_exists {
-            assert!(matches!(
-                result,
-                Err(StorageError::Backend(_))
-            ));
+            assert!(matches!(result, Err(StorageError::Backend(_))));
         } else {
-            assert!(matches!(
-                result,
-                Err(StorageError::NotFound)
-            ));
+            assert!(matches!(result, Err(StorageError::NotFound)));
         }
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
@@ -489,11 +513,11 @@ async fn session_available_retains_global_any_table_or_source_probe() {
     let (_dir, pool) = database().await;
     let mut conn = pool.acquire().await.unwrap();
     assert!(session::available(&mut conn).await.unwrap());
-    for sql in ["DROP TABLE oc_session_turns", "DROP TABLE oc_session_turn_evidence"] {
-        db::query(sql)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
+    for sql in [
+        "DROP TABLE oc_session_turns",
+        "DROP TABLE oc_session_turn_evidence",
+    ] {
+        db::query(sql).execute(&mut *conn).await.unwrap();
     }
     assert!(!session::available(&mut conn).await.unwrap());
     db::query("INSERT INTO oc_events VALUES(?,?,?,'withdrawn','session_turn','historical')")
