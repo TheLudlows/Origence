@@ -1,6 +1,8 @@
 //! Authority checks for the derived Lance full-text surface. Single-table
 //! reads are associated inside one authority transaction before native ranking.
-use super::read_model::{NativeHitKey, current_chunk_roots, current_chunks, rows_by_ids, unique_ids};
+use super::read_model::{
+    NativeHitKey, current_chunk_roots, current_chunks, rows_by_ids, unique_ids,
+};
 use super::*;
 use crate::storage::native_turso as db;
 use crate::types::SearchHit;
@@ -31,8 +33,11 @@ async fn current_publications(
     for (scope, keys) in scoped {
         let ids = unique_ids(keys.iter().map(|(id, _, _)| *id));
         let roots = current_chunk_roots(conn, scope, &ids).await?;
-        publications.extend(keys.into_iter().filter(|(id, source, _)| roots.get(id) == Some(source))
-            .map(|(id, _, generation)| (scope, id, generation)));
+        publications.extend(
+            keys.into_iter()
+                .filter(|(id, source, _)| roots.get(id) == Some(source))
+                .map(|(id, _, generation)| (scope, id, generation)),
+        );
     }
     Ok(publications)
 }
@@ -58,8 +63,16 @@ impl TursoStore {
         let mut profiles = BTreeSet::new();
         for (scope, keys) in scoped {
             let ids = unique_ids(keys.iter().map(|(id, _)| *id));
-            for row in rows_by_ids(&mut tx, scope, "oc_index_entries",
-                "artifact_id,field,model_id,dimension,generation,state", "artifact_id", &ids).await? {
+            for row in rows_by_ids(
+                &mut tx,
+                scope,
+                "oc_index_entries",
+                "artifact_id,field,model_id,dimension,generation,state",
+                "artifact_id",
+                &ids,
+            )
+            .await?
+            {
                 if row.try_get::<String>("field").map_err(turso_err)? != "content"
                     || row.try_get::<String>("state").map_err(turso_err)? != "ready"
                     || !keys.contains(&(
@@ -71,9 +84,14 @@ impl TursoStore {
                 }
                 let dimension: i64 = row.try_get("dimension").map_err(turso_err)?;
                 if !(1..=i64::from(i32::MAX)).contains(&dimension) {
-                    return Err(StorageError::Conflict("invalid committed vector dimension".into()));
+                    return Err(StorageError::Conflict(
+                        "invalid committed vector dimension".into(),
+                    ));
                 }
-                profiles.insert((row.try_get("model_id").map_err(turso_err)?, dimension as usize));
+                profiles.insert((
+                    row.try_get("model_id").map_err(turso_err)?,
+                    dimension as usize,
+                ));
             }
         }
         tx.rollback().await.map_err(turso_err)?;
@@ -93,7 +111,9 @@ impl TursoTx {
         let support = self.local_chunk_support_visibility(&current_ids).await?;
         sources.retain(|id, _| support.get(id) == Some(&true));
         if sources.len() != wanted.len() {
-            return Err(StorageError::Unavailable("inconsistent authoritative candidates".into()));
+            return Err(StorageError::Unavailable(
+                "inconsistent authoritative candidates".into(),
+            ));
         }
         Ok(sources)
     }
@@ -115,8 +135,12 @@ impl TursoTx {
         let publications = self.committed_publications(&ids, "full_text").await?;
         let mut chunks = current_chunks(&mut self.tx, self.scope, Some(&ids), asset_filter).await?;
         chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
-        Ok(unique_ids(self.guard_retrieval_chunks(chunks).await?
-            .into_iter().map(|chunk| chunk.hit.chunk_id)))
+        Ok(unique_ids(
+            self.guard_retrieval_chunks(chunks)
+                .await?
+                .into_iter()
+                .map(|chunk| chunk.hit.chunk_id),
+        ))
     }
 
     pub(crate) async fn full_text_hits(
@@ -125,16 +149,24 @@ impl TursoTx {
     ) -> StorageResult<HashMap<NativeHitKey, SearchHit>> {
         let ids = unique_ids(keys.iter().map(|(id, _, _)| *id));
         let publications = self.committed_publications(&ids, "full_text").await?;
-        let allowed: HashSet<_> = keys.iter().filter(|key| publications.contains(*key))
-            .map(|(id, source, _)| (*id, *source)).collect();
+        let allowed: HashSet<_> = keys
+            .iter()
+            .filter(|key| publications.contains(*key))
+            .map(|(id, source, _)| (*id, *source))
+            .collect();
         let mut chunks = current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
         chunks.retain(|chunk| allowed.contains(&(chunk.hit.chunk_id, chunk.root)));
-        let chunks: HashMap<_, _> = self.guard_retrieval_chunks(chunks).await?
-            .into_iter().map(|chunk| (chunk.hit.chunk_id, chunk)).collect();
+        let chunks: HashMap<_, _> = self
+            .guard_retrieval_chunks(chunks)
+            .await?
+            .into_iter()
+            .map(|chunk| (chunk.hit.chunk_id, chunk))
+            .collect();
         let mut hits = HashMap::new();
         for key in keys {
             if let Some(chunk) = chunks.get(&key.0)
-                && chunk.root == key.1 && publications.contains(key)
+                && chunk.root == key.1
+                && publications.contains(key)
             {
                 hits.insert(*key, chunk.hit.clone());
             }
@@ -159,8 +191,12 @@ impl TursoTx {
         route: crate::context_retrieval::ContextRoute,
         identity: Option<&crate::memory_identity::MemoryIdentity>,
     ) -> StorageResult<Vec<Uuid>> {
-        let route_ids: HashSet<_> = self.context_route_rows(route, identity).await?
-            .into_iter().map(|(id, _)| id).collect();
+        let route_ids: HashSet<_> = self
+            .context_route_rows(route, identity)
+            .await?
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         let mut ids = self.full_text_candidates(generation, None).await?;
         ids.retain(|id| route_ids.contains(id));
         Ok(ids)

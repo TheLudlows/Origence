@@ -53,6 +53,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native Turso authority contracts failed.' }
           & dumpbin /headers target/debug/origence.exe | Select-String 'stack'
       - name: Capture first-chance stack in the unchanged offline regression
+        # Preserve the original Windows regression result even if an independent
+        # library contract fails. The job still fails for that earlier failure.
+        if: ${{ !cancelled() && env.ORIGENCE_TEST_EXE != '' }}
         timeout-minutes: 8
         shell: pwsh
         run: |

@@ -232,7 +232,12 @@ async fn batched_reads_cross_id_and_version_boundaries_without_truncation() {
     assert!(tx.active_version_roots(&[]).await.unwrap().is_empty());
     assert!(tx.local_support_visibility(&[]).await.unwrap().is_empty());
     assert!(tx.full_text_hits(&[]).await.unwrap().is_empty());
-    assert!(tx.vector_hits_exact(&[], "profile", 3).await.unwrap().is_empty());
+    assert!(
+        tx.vector_hits_exact(&[], "profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(tx.native_candidate_sources(&[]).await.unwrap().is_empty());
     assert!(
         rows_by_ids(&mut tx.tx, scope, "oc_chunks", "id", "id", &[])
@@ -282,7 +287,15 @@ async fn same_ids_in_other_scopes_cannot_supply_missing_or_inactive_roots() {
         )
         .await;
         for row in [missing, inactive] {
-            publication(&mut tx, other, row.key(11), "full_text", "committed", "chunk").await;
+            publication(
+                &mut tx,
+                other,
+                row.key(11),
+                "full_text",
+                "committed",
+                "chunk",
+            )
+            .await;
         }
     }
     let ids = [missing.chunk, inactive.chunk];
@@ -327,43 +340,76 @@ async fn historical_roots_and_views_do_not_acquire_a_current_version_guard() {
         .await
         .unwrap();
     assert_eq!(roots.len(), 2);
-    assert!(tx.active_version_roots(&[(first.asset, 99)]).await.unwrap().is_empty());
-    assert!(tx.semantic_version_visible_local(first.asset, 99).await.unwrap());
+    assert!(
+        tx.active_version_roots(&[(first.asset, 99)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tx.semantic_version_visible_local(first.asset, 99)
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         tx.require_active_version_local(first.asset, 99).await,
         Err(StorageError::NotFound)
     ));
-    assert_eq!(tx.require_active_version_local(first.asset, 1).await.unwrap(), first.source);
+    assert_eq!(
+        tx.require_active_version_local(first.asset, 1)
+            .await
+            .unwrap(),
+        first.source
+    );
     let current = tx.visible_hits(&[first.chunk, second.chunk]).await.unwrap();
     assert_eq!(current.len(), 1);
     assert!(current.contains_key(&second.chunk));
-    assert_eq!(tx.asset_view_inner(first.asset, None).await.unwrap()["content"], "current");
-    assert_eq!(tx.asset_view_inner(first.asset, Some(1)).await.unwrap()["content"], "historical");
+    assert_eq!(
+        tx.asset_view_inner(first.asset, None).await.unwrap()["content"],
+        "current"
+    );
+    assert_eq!(
+        tx.asset_view_inner(first.asset, Some(1)).await.unwrap()["content"],
+        "historical"
+    );
     let restore = tx.restore_source_inner(first.asset, 1).await.unwrap();
     assert_eq!(restore["current_version"], 2);
     assert_eq!(restore["source_event_id"], first.source.to_string());
-    db::query("UPDATE oc_assets SET current_version=NULL WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(first.asset)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
-    assert!(matches!(tx.asset_view_inner(first.asset, None).await, Err(StorageError::NotFound)));
-    assert_eq!(tx.asset_view_inner(first.asset, Some(1)).await.unwrap()["content"], "historical");
+    db::query(
+        "UPDATE oc_assets SET current_version=NULL WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(first.asset)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
+    assert!(matches!(
+        tx.asset_view_inner(first.asset, None).await,
+        Err(StorageError::NotFound)
+    ));
+    assert_eq!(
+        tx.asset_view_inner(first.asset, Some(1)).await.unwrap()["content"],
+        "historical"
+    );
     assert!(tx.restore_source_inner(first.asset, 1).await.unwrap()["current_version"].is_null());
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(first.source)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(first.source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert!(matches!(
         tx.require_active_version_local(first.asset, 1).await,
         Err(StorageError::NotFound)
     ));
-    assert!(matches!(tx.restore_source_inner(first.asset, 1).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.restore_source_inner(first.asset, 1).await,
+        Err(StorageError::NotFound)
+    ));
     db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -371,8 +417,16 @@ async fn historical_roots_and_views_do_not_acquire_a_current_version_guard() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(tx.active_version_roots(&[(first.asset, 2)]).await.unwrap().is_empty());
-    assert!(matches!(tx.asset_view_inner(first.asset, Some(2)).await, Err(StorageError::NotFound)));
+    assert!(
+        tx.active_version_roots(&[(first.asset, 2)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        tx.asset_view_inner(first.asset, Some(2)).await,
+        Err(StorageError::NotFound)
+    ));
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -384,14 +438,19 @@ async fn repeated_reads_observe_writes_in_the_same_transaction() {
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(1);
     seed(&mut tx, scope, row, Some(1), Some("active"), "before").await;
-    assert_eq!(tx.visible_hits(&[row.chunk]).await.unwrap()[&row.chunk].content, "before");
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(row.source)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    assert_eq!(
+        tx.visible_hits(&[row.chunk]).await.unwrap()[&row.chunk].content,
+        "before"
+    );
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(row.source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert!(tx.visible_hits(&[row.chunk]).await.unwrap().is_empty());
     db::query("UPDATE oc_events SET state='active' WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(scope.tenant_id)
@@ -407,14 +466,19 @@ async fn repeated_reads_observe_writes_in_the_same_transaction() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert_eq!(tx.visible_hits(&[row.chunk]).await.unwrap()[&row.chunk].content, "after");
-    db::query("UPDATE oc_assets SET current_version=2 WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(row.asset)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    assert_eq!(
+        tx.visible_hits(&[row.chunk]).await.unwrap()[&row.chunk].content,
+        "after"
+    );
+    db::query(
+        "UPDATE oc_assets SET current_version=2 WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(row.asset)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert!(tx.visible_hits(&[row.chunk]).await.unwrap().is_empty());
     assert_eq!(
         tx.active_version_roots(&[(row.asset, 1)]).await.unwrap()[&(row.asset, 1)],
@@ -484,17 +548,38 @@ async fn native_hit_batches_require_exact_committed_publication_keys() {
         assert_eq!(hits.len(), 1);
         assert!(hits.contains_key(&good.key(11)));
     }
-    assert_eq!(tx.full_text_candidates(11, None).await.unwrap(), vec![good.chunk]);
-    assert_eq!(tx.vector_candidates("profile", 3, 11, None).await.unwrap(), vec![good.chunk]);
-    assert!(tx.vector_hits_exact(&[good.key(11)], "wrong-profile", 3).await.unwrap().is_empty());
-    assert!(tx.vector_hits_exact(&[good.key(11)], "profile", 4).await.unwrap().is_empty());
+    assert_eq!(
+        tx.full_text_candidates(11, None).await.unwrap(),
+        vec![good.chunk]
+    );
+    assert_eq!(
+        tx.vector_candidates("profile", 3, 11, None).await.unwrap(),
+        vec![good.chunk]
+    );
+    assert!(
+        tx.vector_hits_exact(&[good.key(11)], "wrong-profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tx.vector_hits_exact(&[good.key(11)], "profile", 4)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         tx.full_text_hits(&[records[4].key(12)])
             .await
             .unwrap()
             .contains_key(&records[4].key(12))
     );
-    assert!(tx.vector_hits_exact(&[records[4].key(12)], "profile", 3).await.unwrap().is_empty());
+    assert!(
+        tx.vector_hits_exact(&[records[4].key(12)], "profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_artifact_ledger SET state='pending' WHERE tenant_id=? AND workspace_id=? AND artifact_id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -503,7 +588,12 @@ async fn native_hit_batches_require_exact_committed_publication_keys() {
         .await
         .unwrap();
     assert!(tx.full_text_hits(&[good.key(11)]).await.unwrap().is_empty());
-    assert!(tx.vector_hits_exact(&[good.key(11)], "profile", 3).await.unwrap().is_empty());
+    assert!(
+        tx.vector_hits_exact(&[good.key(11)], "profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -515,13 +605,40 @@ async fn legacy_vector_ready_fields_are_distinct_from_exact_content_checks() {
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(1);
     seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
-    publication(&mut tx, scope, row.key(11), "vector", "committed", "summary").await;
+    publication(
+        &mut tx,
+        scope,
+        row.key(11),
+        "vector",
+        "committed",
+        "summary",
+    )
+    .await;
     ready_index(&mut tx, row, "summary", 11).await;
-    assert_eq!(tx.vector_candidates("profile", 3, 11, None).await.unwrap(), vec![row.chunk]);
-    assert!(tx.vector_hit(row.chunk, row.key(11).1, "profile", 11).await.unwrap().is_some());
-    assert!(tx.vector_hits_exact(&[row.key(11)], "profile", 3).await.unwrap().is_empty());
+    assert_eq!(
+        tx.vector_candidates("profile", 3, 11, None).await.unwrap(),
+        vec![row.chunk]
+    );
+    assert!(
+        tx.vector_hit(row.chunk, row.key(11).1, "profile", 11)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        tx.vector_hits_exact(&[row.key(11)], "profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     ready_index(&mut tx, row, "content", 11).await;
-    assert_eq!(tx.vector_hits_exact(&[row.key(11)], "profile", 3).await.unwrap().len(), 1);
+    assert_eq!(
+        tx.vector_hits_exact(&[row.key(11)], "profile", 3)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     db::query("UPDATE oc_index_entries SET state='removed' WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content'")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -529,7 +646,12 @@ async fn legacy_vector_ready_fields_are_distinct_from_exact_content_checks() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(tx.vector_hits_exact(&[row.key(11)], "profile", 3).await.unwrap().is_empty());
+    assert!(
+        tx.vector_hits_exact(&[row.key(11)], "profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -547,10 +669,13 @@ async fn native_sources_check_only_requested_chunks_without_publication_guards()
         .bind(scope.workspace_id)
         .bind(sibling)
         .bind(row.asset)
-        .bind(json!({
-            "parser": "memory-semantics:v1",
-            "support_sources": [Uuid::new_v4()],
-        }).to_string())
+        .bind(
+            json!({
+                "parser": "memory-semantics:v1",
+                "support_sources": [Uuid::new_v4()],
+            })
+            .to_string(),
+        )
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -563,7 +688,11 @@ async fn native_sources_check_only_requested_chunks_without_publication_guards()
             .unwrap(),
         expected
     );
-    assert!(!tx.semantic_version_visible_local(row.asset, 1).await.unwrap());
+    assert!(
+        !tx.semantic_version_visible_local(row.asset, 1)
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         tx.native_candidate_sources(&[row.chunk, sibling]).await,
         Err(StorageError::Unavailable(_))
@@ -577,6 +706,11 @@ async fn native_sources_check_only_requested_chunks_without_publication_guards()
         tx.semantic_version_visible_local(row.asset, 1).await,
         Err(StorageError::Backend(_))
     ));
+    // A native statement error leaves this lease interrupted until rollback.
+    // Isolate the next malformed-query case instead of writing on that lease.
+    tx.rollback().await.unwrap();
+    let mut tx = transaction(&pool, scope).await;
+    seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
     locator(&mut tx, row.chunk, "{").await;
     assert!(matches!(
         tx.native_candidate_sources(&[row.chunk]).await,

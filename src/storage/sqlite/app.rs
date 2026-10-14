@@ -212,10 +212,15 @@ impl TursoTx {
             .bind(profile).bind(dimension).bind(generation)
             .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         let publications = self.committed_publications(&ids, "vector").await?;
-        let mut chunks = read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), asset_filter).await?;
+        let mut chunks =
+            read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), asset_filter).await?;
         chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
-        Ok(read_model::unique_ids(self.guard_retrieval_chunks(chunks).await?
-            .into_iter().map(|chunk| chunk.hit.chunk_id)))
+        Ok(read_model::unique_ids(
+            self.guard_retrieval_chunks(chunks)
+                .await?
+                .into_iter()
+                .map(|chunk| chunk.hit.chunk_id),
+        ))
     }
 
     async fn vector_hits(
@@ -225,19 +230,29 @@ impl TursoTx {
         dimension: Option<usize>,
     ) -> StorageResult<HashMap<read_model::NativeHitKey, SearchHit>> {
         let ids = read_model::unique_ids(keys.iter().map(|(id, _, _)| *id));
-        let ready = self.ready_vector_publications(&ids, profile, dimension).await?;
+        let ready = self
+            .ready_vector_publications(&ids, profile, dimension)
+            .await?;
         let publications = self.committed_publications(&ids, "vector").await?;
-        let allowed: std::collections::HashSet<_> = keys.iter()
+        let allowed: std::collections::HashSet<_> = keys
+            .iter()
             .filter(|key| publications.contains(*key) && ready.contains(&(key.0, key.2)))
-            .map(|(id, source, _)| (*id, *source)).collect();
-        let mut chunks = read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
+            .map(|(id, source, _)| (*id, *source))
+            .collect();
+        let mut chunks =
+            read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
         chunks.retain(|chunk| allowed.contains(&(chunk.hit.chunk_id, chunk.root)));
-        let chunks: HashMap<_, _> = self.guard_retrieval_chunks(chunks).await?
-            .into_iter().map(|chunk| (chunk.hit.chunk_id, chunk)).collect();
+        let chunks: HashMap<_, _> = self
+            .guard_retrieval_chunks(chunks)
+            .await?
+            .into_iter()
+            .map(|chunk| (chunk.hit.chunk_id, chunk))
+            .collect();
         let mut hits = HashMap::new();
         for key in keys {
             if let Some(chunk) = chunks.get(&key.0)
-                && chunk.root == key.1 && publications.contains(key)
+                && chunk.root == key.1
+                && publications.contains(key)
                 && ready.contains(&(key.0, key.2))
             {
                 hits.insert(*key, chunk.hit.clone());
@@ -278,7 +293,10 @@ impl TursoTx {
         generation: i64,
     ) -> StorageResult<Option<SearchHit>> {
         let key = (id, source, generation);
-        Ok(self.vector_hits_exact(&[key], profile, dimension).await?.remove(&key))
+        Ok(self
+            .vector_hits_exact(&[key], profile, dimension)
+            .await?
+            .remove(&key))
     }
 
     pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
@@ -291,13 +309,16 @@ impl TursoTx {
         summaries: bool,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<SearchHit>> {
-        let chunks = read_model::current_chunks(&mut self.tx, self.scope, None, asset_filter).await?;
+        let chunks =
+            read_model::current_chunks(&mut self.tx, self.scope, None, asset_filter).await?;
         let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
         if words.is_empty() {
             // The old initial row query evaluated local JSON even for an empty
             // query, but did not traverse Learning until terms were nonempty.
-            let versions: Vec<_> = chunks.iter()
-                .map(|chunk| (chunk.hit.asset_id, chunk.hit.version)).collect();
+            let versions: Vec<_> = chunks
+                .iter()
+                .map(|chunk| (chunk.hit.asset_id, chunk.hit.version))
+                .collect();
             self.local_support_visibility(&versions).await?;
             return Ok(Vec::new());
         }
@@ -305,11 +326,23 @@ impl TursoTx {
         let mut summary_terms: HashMap<Uuid, String> = HashMap::new();
         if summaries {
             let ids: Vec<_> = chunks.iter().map(|chunk| chunk.hit.chunk_id).collect();
-            let rows = read_model::rows_by_ids(&mut self.tx, self.scope, "oc_summaries",
-                "chunk_id,CAST(search_terms AS TEXT) AS search_terms", "chunk_id", &ids).await?;
+            let rows = read_model::rows_by_ids(
+                &mut self.tx,
+                self.scope,
+                "oc_summaries",
+                "chunk_id,CAST(search_terms AS TEXT) AS search_terms",
+                "chunk_id",
+                &ids,
+            )
+            .await?;
             for row in rows {
-                if let Some(value) = row.try_get::<Option<String>>("search_terms").map_err(turso_err)? {
-                    let text = summary_terms.entry(row.try_get("chunk_id").map_err(turso_err)?).or_default();
+                if let Some(value) = row
+                    .try_get::<Option<String>>("search_terms")
+                    .map_err(turso_err)?
+                {
+                    let text = summary_terms
+                        .entry(row.try_get("chunk_id").map_err(turso_err)?)
+                        .or_default();
                     text.push(' ');
                     text.push_str(&value);
                 }
@@ -318,7 +351,9 @@ impl TursoTx {
         let mut hits = Vec::new();
         for mut chunk in chunks {
             let text = if summaries {
-                summary_terms.get(&chunk.hit.chunk_id).map_or("", String::as_str)
+                summary_terms
+                    .get(&chunk.hit.chunk_id)
+                    .map_or("", String::as_str)
             } else {
                 &chunk.search_terms
             };
@@ -328,14 +363,25 @@ impl TursoTx {
                 hits.push(chunk.hit);
             }
         }
-        hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.chunk_id.cmp(&b.chunk_id)));
+        hits.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then(a.chunk_id.cmp(&b.chunk_id))
+        });
         hits.truncate(100);
         Ok(hits)
     }
 
     pub async fn graph_evidence(&mut self, artifact: Uuid) -> StorageResult<Vec<Value>> {
-        let owners = read_model::rows_by_ids(&mut self.tx, self.scope, "oc_artifact_owners",
-            "source_id,version", "artifact_id", &[artifact]).await?;
+        let owners = read_model::rows_by_ids(
+            &mut self.tx,
+            self.scope,
+            "oc_artifact_owners",
+            "source_id,version",
+            "artifact_id",
+            &[artifact],
+        )
+        .await?;
         let owners: std::collections::HashSet<(Uuid, i32)> = owners
             .into_iter()
             .map(|row| {
@@ -345,8 +391,15 @@ impl TursoTx {
                 ))
             })
             .collect::<StorageResult<_>>()?;
-        let ledger = read_model::rows_by_ids(&mut self.tx, self.scope, "oc_artifact_ledger",
-            "source_id,version,surface,state", "artifact_id", &[artifact]).await?;
+        let ledger = read_model::rows_by_ids(
+            &mut self.tx,
+            self.scope,
+            "oc_artifact_ledger",
+            "source_id,version,surface,state",
+            "artifact_id",
+            &[artifact],
+        )
+        .await?;
         let mut roots = std::collections::HashSet::new();
         for row in ledger {
             if row.try_get::<String>("surface").map_err(turso_err)? == "graph"
@@ -365,7 +418,8 @@ impl TursoTx {
             return Ok(Vec::new());
         }
         let ids = read_model::chunk_ids_for_sources(&mut self.tx, self.scope, &roots).await?;
-        let mut chunks = read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
+        let mut chunks =
+            read_model::current_chunks(&mut self.tx, self.scope, Some(&ids), None).await?;
         chunks.retain(|chunk| roots.contains(&(chunk.root.source_id, chunk.root.version)));
         chunks.sort_by_key(|chunk| chunk.hit.chunk_id);
         let mut candidates = chunks.into_iter();
@@ -380,8 +434,10 @@ impl TursoTx {
             }
             for chunk in self.guard_retrieval_chunks(batch).await? {
                 let h = chunk.hit;
-                evidence.push(json!({"asset_id":h.asset_id,"version":h.version,"chunk_id":h.chunk_id,
-                    "source_event_id":h.source_event_id,"locator":h.locator}));
+                evidence.push(
+                    json!({"asset_id":h.asset_id,"version":h.version,"chunk_id":h.chunk_id,
+                    "source_event_id":h.source_event_id,"locator":h.locator}),
+                );
             }
         }
         Ok(evidence)

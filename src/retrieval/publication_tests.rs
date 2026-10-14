@@ -327,7 +327,11 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
 }
 
 impl Fixture {
-    async fn verify_response_hits(&self, hits: &[SearchHit], limit: usize) -> Result<Vec<SearchHit>> {
+    async fn verify_response_hits(
+        &self,
+        hits: &[SearchHit],
+        limit: usize,
+    ) -> Result<Vec<SearchHit>> {
         let mut tx = self.store.begin_read(self.auth.clone()).await?;
         tx.check_permission(Permission::Read).await?;
         let result = verify_search_hits(&mut tx, hits, limit, None).await;
@@ -358,7 +362,11 @@ async fn final_response_validation_stops_at_limit_and_continues_past_hidden_hits
     assert_eq!(selected[0].chunk_id, first.chunk_id);
     assert_eq!(selected[0].score, first.score);
     assert_eq!(
-        fixture.verify_response_hits(&hits, 2).await.unwrap_err().code(),
+        fixture
+            .verify_response_hits(&hits, 2)
+            .await
+            .unwrap_err()
+            .code(),
         "INTERNAL_ERROR"
     );
     // The limit never exempts a native participant from fresh validation.
@@ -373,7 +381,11 @@ async fn final_response_validation_stops_at_limit_and_continues_past_hidden_hits
     // A hidden first candidate must continue to the next rank, not silently
     // return an empty short page or hide the lower candidate's storage error.
     assert_eq!(
-        fixture.verify_response_hits(&hits, 1).await.unwrap_err().code(),
+        fixture
+            .verify_response_hits(&hits, 1)
+            .await
+            .unwrap_err()
+            .code(),
         "INTERNAL_ERROR"
     );
     fixture.store.shutdown().await.unwrap();
@@ -384,7 +396,12 @@ async fn final_response_validation_preserves_first_semantic_status_type_errors()
     let fixture = Fixture::new().await;
     let hit = fixture.ranked[0].hit.clone();
     let hits = vec![hit.clone()];
-    for status in [None, Some(Value::Null), Some(json!(7)), Some(json!("asserted"))] {
+    for status in [
+        None,
+        Some(Value::Null),
+        Some(json!(7)),
+        Some(json!("asserted")),
+    ] {
         let mut locator = json!({
             "parser":"memory-semantics:v1",
             "support_sources":[hit.source_event_id],

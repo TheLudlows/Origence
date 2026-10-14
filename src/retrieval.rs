@@ -240,7 +240,8 @@ impl Service {
                 let candidate = candidates
                     .get(&(native.id, native.source, generation))
                     .cloned();
-                if let Some(mut hit) = batch_native_candidate(native.id, candidate, &live_missing)? {
+                if let Some(mut hit) = batch_native_candidate(native.id, candidate, &live_missing)?
+                {
                     if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
                         return Err(AppError::Conflict(
                             "native retrieval identity changed".into(),
@@ -275,7 +276,9 @@ impl Service {
             .iter()
             .map(|(generation, native)| (native.id, native.source, *generation))
             .collect();
-        let candidates = tx.vector_hits_exact(&keys, profile, vector_dimension).await?;
+        let candidates = tx
+            .vector_hits_exact(&keys, profile, vector_dimension)
+            .await?;
         let missing: Vec<_> = keys
             .iter()
             .filter(|key| !candidates.contains_key(key))
@@ -631,12 +634,10 @@ pub(crate) async fn verify_native_candidates(
                 generation,
                 profile,
                 dimension,
-            } => {
-                vector_hits
-                    .get(&(profile.clone(), *dimension))
-                    .and_then(|hits| hits.get(&(id, *source, *generation)))
-                    .cloned()
-            }
+            } => vector_hits
+                .get(&(profile.clone(), *dimension))
+                .and_then(|hits| hits.get(&(id, *source, *generation)))
+                .cloned(),
         };
         if current.is_none() {
             missing.push(id);

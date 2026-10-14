@@ -63,7 +63,10 @@ impl TursoTx {
     }
 
     async fn has_learning_source_version(&mut self, asset: Uuid) -> StorageResult<bool> {
-        Ok(self.learning_source_assets(&[asset]).await?.contains(&asset))
+        Ok(self
+            .learning_source_assets(&[asset])
+            .await?
+            .contains(&asset))
     }
 
     /// Classify all history without one event lookup per version or loading an
@@ -591,7 +594,10 @@ mod tests {
             assert_eq!(visible[asset], *asset != orphan);
         }
         let source_sets = HashMap::from([
-            ((orphan, 1), vec![ordinary_source, learning_source, ordinary_source]),
+            (
+                (orphan, 1),
+                vec![ordinary_source, learning_source, ordinary_source],
+            ),
             ((assets[1], 1), vec![ordinary_source]),
         ]);
         let sources = tx.learning_source_sets_visible(&source_sets).await.unwrap();
@@ -599,9 +605,15 @@ mod tests {
         assert!(sources[&(assets[1], 1)]);
         assert!(!sources[&(orphan, 1)]);
         // Results are scoped to this read call, never cached across writes.
-        native_turso::query("UPDATE oc_events SET kind='memory' WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(tenant).bind(workspace).bind(learning_source)
-            .execute(&mut *tx.tx).await.unwrap();
+        native_turso::query(
+            "UPDATE oc_events SET kind='memory' WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(tenant)
+        .bind(workspace)
+        .bind(learning_source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
         assert!(tx.learning_assets_visible(&[orphan]).await.unwrap()[&orphan]);
         assert!(tx.learning_source_sets_visible(&source_sets).await.unwrap()[&(orphan, 1)]);
         tx.rollback().await.unwrap();
@@ -629,16 +641,25 @@ mod tests {
         let session = Uuid::new_v4();
         let turn = Uuid::new_v4();
         let feedback = Uuid::new_v4();
-        let turn_source = tx.create_event("session_turn", "fixture", None).await.unwrap();
+        let turn_source = tx
+            .create_event("session_turn", "fixture", None)
+            .await
+            .unwrap();
         native_turso::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,'fixture',?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
             .bind(turn_source).bind(principal).execute(&mut *tx.tx).await.unwrap();
         native_turso::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,'fixture','{}',0,1)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(principal).bind(feedback)
             .bind(session).bind(turn).execute(&mut *tx.tx).await.unwrap();
-        native_turso::query("INSERT INTO oc_improve_cursors(tenant_id,workspace_id,session_id) VALUES(?,?,?)")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(session)
-            .execute(&mut *tx.tx).await.unwrap();
+        native_turso::query(
+            "INSERT INTO oc_improve_cursors(tenant_id,workspace_id,session_id) VALUES(?,?,?)",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(session)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
         let mut sources = Vec::new();
         let mut improve = Uuid::nil();
         for index in 0..64 {
@@ -683,5 +704,4 @@ mod tests {
         tx.rollback().await.unwrap();
         store.shutdown().await.unwrap();
     }
-
 }

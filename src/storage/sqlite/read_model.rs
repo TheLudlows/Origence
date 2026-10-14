@@ -155,8 +155,14 @@ pub(super) async fn chunk_ids_for_sources(
 ) -> StorageResult<Vec<Uuid>> {
     let sources = unique_ids(roots.iter().map(|(source, _)| *source));
     let rows = rows_by_ids(
-        conn, scope, "oc_versions", "asset_id,version,source_event_id", "source_event_id", &sources,
-    ).await?;
+        conn,
+        scope,
+        "oc_versions",
+        "asset_id,version,source_event_id",
+        "source_event_id",
+        &sources,
+    )
+    .await?;
     let mut versions = Vec::new();
     for row in rows {
         let source = row.try_get("source_event_id").map_err(turso_err)?;
@@ -166,7 +172,9 @@ pub(super) async fn chunk_ids_for_sources(
         }
     }
     let rows = version_rows(conn, scope, "oc_chunks", "id", &versions).await?;
-    rows.into_iter().map(|row| row.try_get("id").map_err(turso_err)).collect()
+    rows.into_iter()
+        .map(|row| row.try_get("id").map_err(turso_err))
+        .collect()
 }
 
 pub(super) struct CurrentChunk {
@@ -187,11 +195,14 @@ pub(super) async fn current_chunks(
     let rows = if let Some(ids) = ids {
         rows_by_ids(conn, scope, "oc_chunks", columns, "id", ids).await?
     } else {
-        let mut sql = format!("SELECT {columns} FROM oc_chunks WHERE tenant_id=? AND workspace_id=?");
+        let mut sql =
+            format!("SELECT {columns} FROM oc_chunks WHERE tenant_id=? AND workspace_id=?");
         if asset_filter.is_some() {
             sql.push_str(" AND asset_id=?");
         }
-        let mut query = native_turso::query(&sql).bind(scope.tenant_id).bind(scope.workspace_id);
+        let mut query = native_turso::query(&sql)
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id);
         if let Some(asset) = asset_filter {
             query = query.bind(asset);
         }
@@ -205,7 +216,10 @@ pub(super) async fn current_chunks(
             selected.push((row, asset, version));
         }
     }
-    let versions: Vec<_> = selected.iter().map(|(_, asset, version)| (*asset, *version)).collect();
+    let versions: Vec<_> = selected
+        .iter()
+        .map(|(_, asset, version)| (*asset, *version))
+        .collect();
     let active = active_versions(conn, scope, &versions).await?;
     let mut chunks = Vec::new();
     for (row, asset, version) in selected {
@@ -238,7 +252,10 @@ pub(super) async fn current_chunks(
                 source_event_id,
                 score: 0.0,
             },
-            root: SourceVersion { source_id: active.source, version },
+            root: SourceVersion {
+                source_id: active.source,
+                version,
+            },
             search_terms: row.try_get("search_terms").map_err(turso_err)?,
         });
     }
@@ -260,14 +277,23 @@ pub(super) async fn current_chunk_roots(
             row.try_get::<i32>("version").map_err(turso_err)?,
         ));
     }
-    let versions: Vec<_> = chunks.iter().map(|(_, asset, version)| (*asset, *version)).collect();
+    let versions: Vec<_> = chunks
+        .iter()
+        .map(|(_, asset, version)| (*asset, *version))
+        .collect();
     let active = active_versions(conn, scope, &versions).await?;
     let mut roots = HashMap::new();
     for (id, asset, version) in chunks {
         if let Some(active) = active.get(&(asset, version))
             && active.current == Some(version)
         {
-            roots.insert(id, SourceVersion { source_id: active.source, version });
+            roots.insert(
+                id,
+                SourceVersion {
+                    source_id: active.source,
+                    version,
+                },
+            );
         }
     }
     Ok(roots)
@@ -281,10 +307,12 @@ struct LocalSupport {
 // The old native query decoded the entire source column as String before
 // parsing UUIDs. Delay both phases until local and asset Learning guards pass.
 fn strict_support_sources(rows: &[native_turso::Row]) -> StorageResult<Vec<Uuid>> {
-    let sources: Vec<String> = rows.iter()
+    let sources: Vec<String> = rows
+        .iter()
         .map(|row| row.try_get("raw_source").map_err(turso_err))
         .collect::<StorageResult<_>>()?;
-    sources.iter()
+    sources
+        .iter()
         .map(|source| Uuid::parse_str(source).map_err(|_| StorageError::NotFound))
         .collect()
 }
@@ -297,8 +325,8 @@ fn support_members(kind: &str, text: &str) -> StorageResult<Vec<String>> {
         StorageError::Backend("invalid normalized support JSON".into())
     }
     fn prefix(text: &str) -> StorageResult<usize> {
-        let mut values = serde_json::Deserializer::from_str(text)
-            .into_iter::<serde::de::IgnoredAny>();
+        let mut values =
+            serde_json::Deserializer::from_str(text).into_iter::<serde::de::IgnoredAny>();
         values.next().ok_or_else(invalid)?.map_err(|_| invalid())?;
         Ok(values.byte_offset())
     }
@@ -311,8 +339,11 @@ fn support_members(kind: &str, text: &str) -> StorageResult<Vec<String>> {
         }
         return Ok(vec![text.to_owned()]);
     }
-    let mut remaining = text.strip_prefix(start)
-        .and_then(|text| text.strip_suffix(end)).ok_or_else(invalid)?.trim();
+    let mut remaining = text
+        .strip_prefix(start)
+        .and_then(|text| text.strip_suffix(end))
+        .ok_or_else(invalid)?
+        .trim();
     let mut members = Vec::new();
     while !remaining.is_empty() {
         if object {
@@ -320,8 +351,11 @@ fn support_members(kind: &str, text: &str) -> StorageResult<Vec<String>> {
                 return Err(invalid());
             }
             let length = prefix(remaining)?;
-            remaining = remaining[length..].trim_start().strip_prefix(':')
-                .ok_or_else(invalid)?.trim_start();
+            remaining = remaining[length..]
+                .trim_start()
+                .strip_prefix(':')
+                .ok_or_else(invalid)?
+                .trim_start();
         }
         let length = prefix(remaining)?;
         members.push(remaining[..length].to_owned());
@@ -329,7 +363,10 @@ fn support_members(kind: &str, text: &str) -> StorageResult<Vec<String>> {
         if remaining.is_empty() {
             break;
         }
-        remaining = remaining.strip_prefix(',').ok_or_else(invalid)?.trim_start();
+        remaining = remaining
+            .strip_prefix(',')
+            .ok_or_else(invalid)?
+            .trim_start();
         if remaining.is_empty() {
             return Err(invalid());
         }
@@ -342,14 +379,14 @@ impl TursoTx {
         &mut self,
         versions: &[VersionKey],
     ) -> StorageResult<HashMap<VersionKey, Uuid>> {
-        Ok(active_versions(&mut self.tx, self.scope, versions).await?
-            .into_iter().map(|(key, version)| (key, version.source)).collect())
+        Ok(active_versions(&mut self.tx, self.scope, versions)
+            .await?
+            .into_iter()
+            .map(|(key, version)| (key, version.source))
+            .collect())
     }
 
-    async fn support_snapshot(
-        &mut self,
-        versions: &[VersionKey],
-    ) -> StorageResult<LocalSupport> {
+    async fn support_snapshot(&mut self, versions: &[VersionKey]) -> StorageResult<LocalSupport> {
         // Native extraction retains JSON5, SQL NULL and malformed JSON behavior.
         // Exact version predicates avoid evaluating unrelated historical JSON.
         let rows = version_rows(
@@ -383,8 +420,13 @@ impl TursoTx {
                 row.try_get("version").map_err(turso_err)?,
             ));
         }
-        Ok(self.evaluate_support_rows(rows, &keys).await?.visible.into_iter()
-            .map(|((id, _), visible)| (id, visible)).collect())
+        Ok(self
+            .evaluate_support_rows(rows, &keys)
+            .await?
+            .visible
+            .into_iter()
+            .map(|((id, _), visible)| (id, visible))
+            .collect())
     }
 
     async fn evaluate_support_rows(
@@ -398,7 +440,10 @@ impl TursoTx {
             if !row.try_get::<bool>("semantic").map_err(turso_err)? {
                 continue;
             }
-            let Some(kind) = row.try_get::<Option<String>>("support_type").map_err(turso_err)? else {
+            let Some(kind) = row
+                .try_get::<Option<String>>("support_type")
+                .map_err(turso_err)?
+            else {
                 continue;
             };
             let key = (
@@ -406,7 +451,11 @@ impl TursoTx {
                 row.try_get::<i32>("version").map_err(turso_err)?,
             );
             let normalized: String = row.try_get("support_json").map_err(turso_err)?;
-            members.extend(support_members(&kind, &normalized)?.into_iter().map(|value| (key, value)));
+            members.extend(
+                support_members(&kind, &normalized)?
+                    .into_iter()
+                    .map(|value| (key, value)),
+            );
         }
         let mut sources_by_version: HashMap<VersionKey, Vec<native_turso::Row>> = HashMap::new();
         let mut normalized = Vec::new();
@@ -421,9 +470,13 @@ impl TursoTx {
             .map_err(turso_err)?;
             for row in rows {
                 let position: i64 = row.try_get("key").map_err(turso_err)?;
-                let key = usize::try_from(position).ok().and_then(|index| batch.get(index))
+                let key = usize::try_from(position)
+                    .ok()
+                    .and_then(|index| batch.get(index))
                     .map(|(key, _)| *key)
-                    .ok_or_else(|| StorageError::Backend("invalid normalized support index".into()))?;
+                    .ok_or_else(|| {
+                        StorageError::Backend("invalid normalized support index".into())
+                    })?;
                 if let Some(source) = row.try_get::<Option<String>>("source").map_err(turso_err)? {
                     normalized.push((key, source));
                 } else {
@@ -434,7 +487,10 @@ impl TursoTx {
                 sources_by_version.entry(key).or_default().push(row);
             }
         }
-        let mut sources: Vec<_> = normalized.iter().map(|(_, source)| source.clone()).collect();
+        let mut sources: Vec<_> = normalized
+            .iter()
+            .map(|(_, source)| source.clone())
+            .collect();
         sources.sort_unstable();
         sources.dedup();
         let mut active = HashSet::new();
@@ -459,7 +515,10 @@ impl TursoTx {
                 visible.insert(key, false);
             }
         }
-        Ok(LocalSupport { visible, sources: sources_by_version })
+        Ok(LocalSupport {
+            visible,
+            sources: sources_by_version,
+        })
     }
 
     pub(super) async fn local_support_visibility(
@@ -488,9 +547,14 @@ impl TursoTx {
         if chunks.is_empty() {
             return Ok(chunks);
         }
-        let versions: Vec<_> = chunks.iter().map(|chunk| (chunk.hit.asset_id, chunk.hit.version)).collect();
+        let versions: Vec<_> = chunks
+            .iter()
+            .map(|chunk| (chunk.hit.asset_id, chunk.hit.version))
+            .collect();
         let local = self.support_snapshot(&versions).await?;
-        chunks.retain(|chunk| local.visible.get(&(chunk.hit.asset_id, chunk.hit.version)) == Some(&true));
+        chunks.retain(|chunk| {
+            local.visible.get(&(chunk.hit.asset_id, chunk.hit.version)) == Some(&true)
+        });
         let assets = unique_ids(chunks.iter().map(|chunk| chunk.hit.asset_id));
         let learning = self.learning_assets_visible(&assets).await?;
         chunks.retain(|chunk| learning.get(&chunk.hit.asset_id) == Some(&true));
@@ -506,13 +570,22 @@ impl TursoTx {
             version_sources.insert(key, strict_support_sources(rows)?);
         }
         let source_visibility = self.learning_source_sets_visible(&version_sources).await?;
-        chunks.retain(|chunk| source_visibility.get(&(chunk.hit.asset_id, chunk.hit.version)) == Some(&true));
+        chunks.retain(|chunk| {
+            source_visibility.get(&(chunk.hit.asset_id, chunk.hit.version)) == Some(&true)
+        });
         Ok(chunks)
     }
 
-    pub(crate) async fn visible_hits(&mut self, ids: &[Uuid]) -> StorageResult<HashMap<Uuid, SearchHit>> {
-        Ok(self.retrieval_chunks(Some(ids), None).await?.into_iter()
-            .map(|chunk| (chunk.hit.chunk_id, chunk.hit)).collect())
+    pub(crate) async fn visible_hits(
+        &mut self,
+        ids: &[Uuid],
+    ) -> StorageResult<HashMap<Uuid, SearchHit>> {
+        Ok(self
+            .retrieval_chunks(Some(ids), None)
+            .await?
+            .into_iter()
+            .map(|chunk| (chunk.hit.chunk_id, chunk.hit))
+            .collect())
     }
 
     /// Called after visible_hits in the same transaction; it only enriches
@@ -527,14 +600,22 @@ impl TursoTx {
             return Ok(identities);
         }
         let rows = rows_by_ids(
-            &mut self.tx, self.scope, "oc_assets", "id,current_version,NOT deleted AS undeleted", "id", assets,
-        ).await?;
+            &mut self.tx,
+            self.scope,
+            "oc_assets",
+            "id,current_version,NOT deleted AS undeleted",
+            "id",
+            assets,
+        )
+        .await?;
         let mut versions = Vec::new();
         for row in rows {
             if !row.try_get::<bool>("undeleted").map_err(turso_err)? {
                 return Err(StorageError::NotFound);
             }
-            let version = row.try_get::<Option<i32>>("current_version").map_err(turso_err)?
+            let version = row
+                .try_get::<Option<i32>>("current_version")
+                .map_err(turso_err)?
                 .ok_or(StorageError::NotFound)?;
             versions.push((row.try_get::<Uuid>("id").map_err(turso_err)?, version));
         }
@@ -554,9 +635,15 @@ impl TursoTx {
             if !row.try_get::<bool>("semantic").map_err(turso_err)? {
                 continue;
             }
-            let key = (row.try_get("asset_id").map_err(turso_err)?, row.try_get("version").map_err(turso_err)?);
+            let key = (
+                row.try_get("asset_id").map_err(turso_err)?,
+                row.try_get("version").map_err(turso_err)?,
+            );
             let ordinal: i64 = row.try_get("ordinal").map_err(turso_err)?;
-            if first.get(&key).is_none_or(|(previous, _)| ordinal < *previous) {
+            if first
+                .get(&key)
+                .is_none_or(|(previous, _)| ordinal < *previous)
+            {
                 first.insert(key, (ordinal, row));
             }
         }
@@ -567,8 +654,15 @@ impl TursoTx {
             return Ok(identities);
         }
         for row in rows_by_ids(
-            &mut self.tx, self.scope, "oc_memory_identities", "asset_id,identity_json", "asset_id", assets,
-        ).await? {
+            &mut self.tx,
+            self.scope,
+            "oc_memory_identities",
+            "asset_id,identity_json",
+            "asset_id",
+            assets,
+        )
+        .await?
+        {
             let value: String = row.try_get("identity_json").map_err(turso_err)?;
             let identity = serde_json::from_str(&value)
                 .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))?;
@@ -583,9 +677,14 @@ impl TursoTx {
         surface: &str,
     ) -> StorageResult<HashSet<NativeHitKey>> {
         let rows = rows_by_ids(
-            &mut self.tx, self.scope, "oc_artifact_ledger",
-            "artifact_id,source_id,version,generation,surface,state", "artifact_id", ids,
-        ).await?;
+            &mut self.tx,
+            self.scope,
+            "oc_artifact_ledger",
+            "artifact_id,source_id,version,generation,surface,state",
+            "artifact_id",
+            ids,
+        )
+        .await?;
         let mut publications = HashSet::new();
         for row in rows {
             if row.try_get::<String>("state").map_err(turso_err)? == "committed"
@@ -611,9 +710,14 @@ impl TursoTx {
         dimension: Option<usize>,
     ) -> StorageResult<HashSet<(Uuid, i64)>> {
         let rows = rows_by_ids(
-            &mut self.tx, self.scope, "oc_index_entries",
-            "artifact_id,field,model_id,dimension,generation,state", "artifact_id", ids,
-        ).await?;
+            &mut self.tx,
+            self.scope,
+            "oc_index_entries",
+            "artifact_id,field,model_id,dimension,generation,state",
+            "artifact_id",
+            ids,
+        )
+        .await?;
         let mut ready = HashSet::new();
         for row in rows {
             if row.try_get::<String>("state").map_err(turso_err)? != "ready"
@@ -634,7 +738,6 @@ impl TursoTx {
         }
         Ok(ready)
     }
-
 }
 
 #[cfg(test)]

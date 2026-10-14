@@ -2031,6 +2031,11 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
         .await
         .unwrap();
     for entry in &full_text {
+        // Match the worker's final publication transaction: startup cleanup
+        // retains native records only while their scoped chunk owner is live.
+        tx.register_owner(entry.source, "chunk", entry.id, Some(entry.id))
+            .await
+            .unwrap();
         tx.confirm_committed(ledger_key(entry)).await.unwrap();
     }
     tx.commit().await.unwrap();
