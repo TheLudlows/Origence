@@ -137,11 +137,13 @@ impl Service {
                 ));
             }
         }
-        for candidate in turns {
-            if let Some(mut fresh) = tx
-                .context_session_turn(candidate.session_id, candidate.turn_id)
-                .await?
-            {
+        let turn_keys: Vec<_> = turns
+            .iter()
+            .map(|candidate| (candidate.session_id, candidate.turn_id))
+            .collect();
+        let fresh_turns = tx.context_session_turns(&turn_keys).await?;
+        for (candidate, fresh) in turns.into_iter().zip(fresh_turns) {
+            if let Some(mut fresh) = fresh {
                 fresh.score = candidate.score;
                 items.push(session_item(fresh));
             } else {

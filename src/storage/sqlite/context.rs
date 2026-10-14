@@ -4,7 +4,7 @@
 //! native top-k. Every retained result still uses the existing complete current
 //! version / S2 support / transitive Learning visibility guard.
 
-use super::visibility::CURRENT_CHUNK_ROWS;
+use super::read_model::{self, AssociationKey};
 use super::*;
 use crate::{
     context_retrieval::{
@@ -18,43 +18,110 @@ use crate::{
 };
 use std::collections::HashSet;
 
+#[cfg(test)]
+#[path = "context_session_tests.rs"]
+mod session_tests;
+
+const RECENT_EVENTS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND state='active' AND kind='session_turn' AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
+
 impl TursoTx {
     pub(crate) async fn context_route_matches(
         &mut self,
         asset: Uuid,
         route: ContextRoute,
     ) -> StorageResult<bool> {
-        let kind: Option<String> = native_turso::query_scalar(
-            "SELECT kind FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted AND current_version IS NOT NULL",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(asset)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
+        Ok(self
+            .context_route_memberships(&[asset], route)
+            .await?
+            .get(&asset)
+            .copied()
+            .unwrap_or(false))
+    }
+
+    /// Route membership only. Root/support activity remains the caller's layer.
+    pub(super) async fn context_route_memberships(
+        &mut self,
+        assets: &[Uuid],
+        route: ContextRoute,
+    ) -> StorageResult<HashMap<Uuid, bool>> {
+        let assets = read_model::unique_ids(assets.iter().copied());
+        let mut result: HashMap<_, _> =
+            assets.iter().copied().map(|asset| (asset, false)).collect();
         let expected = match route {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        if kind.as_deref() != Some(expected) {
-            return Ok(false);
+        let mut selected = Vec::new();
+        for batch in assets.chunks(read_model::READ_KEYS) {
+            let sql = format!(
+                "SELECT id,kind,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND NOT deleted AND current_version IS NOT NULL AND id IN ({})",
+                vec!["?"; batch.len()].join(",")
+            );
+            let mut query = native_turso::query(&sql)
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id);
+            for asset in batch {
+                query = query.bind(*asset);
+            }
+            for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
+                let kind: String = row.try_get("kind").map_err(turso_err)?;
+                if kind == expected {
+                    selected.push((row.try_get::<Uuid>("id").map_err(turso_err)?, row));
+                }
+            }
         }
-        let is_learning = self.is_learning_asset(asset).await?;
+        let ids: Vec<_> = selected.iter().map(|(asset, _)| *asset).collect();
+        let learning = self.learning_route_membership(&ids).await?;
         if route != ContextRoute::Learning {
-            // Includes orphaned Learning sources, not just catalog membership.
-            return Ok(!is_learning);
+            for asset in ids {
+                result.insert(asset, !learning.is_learning.contains(&asset));
+            }
+            return Ok(result);
         }
-        if !is_learning || !super::improve::available(&mut self.tx).await? {
-            return Ok(false);
+        if !ids.iter().any(|asset| learning.is_learning.contains(asset))
+            || !super::improve::available(&mut self.tx).await?
+        {
+            return Ok(result);
         }
-        native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.asset_id=? AND l.status='published')")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)
+        if !learning.catalog_present {
+            // An orphan history can make available=true even without the
+            // catalog table. The old final membership SELECT then failed;
+            // an empty Rust publication map must not turn that into false.
+            let _: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND status='published')")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        }
+        let mut keys = Vec::new();
+        let mut published = Vec::new();
+        for (asset, row) in selected {
+            if let Some(source) = learning.published_sources.get(&asset) {
+                keys.push(vec![
+                    row.try_get::<AssociationKey>("id").map_err(turso_err)?,
+                    row.try_get("current_version").map_err(turso_err)?,
+                    AssociationKey::from_uuid(*source),
+                ]);
+                published.push(asset);
+            }
+        }
+        for (index, _) in read_model::associate_rows(
+            &mut self.tx,
+            self.scope,
+            "oc_versions",
+            "asset_id",
+            read_model::MATCH_PUBLISHED_SELECT,
+            read_model::MATCH_PUBLISHED_WHERE,
+            "1",
+            3,
+            &keys,
+        )
+        .await?
+        {
+            result.insert(published[index], true);
+        }
+        Ok(result)
     }
 
-    /// No candidate LIMIT here. Independent type filtering happens before the
-    /// lexical candidate cap or the native vector backend sees any identifiers.
+    /// Type and identity membership precede every candidate/native budget.
     pub(super) async fn context_route_rows(
         &mut self,
         route: ContextRoute,
@@ -64,36 +131,42 @@ impl TursoTx {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
-        let rows: Vec<(Uuid, Uuid, String, String)> = native_turso::query_as(&format!(
-            "SELECT c.id,c.asset_id,c.search_terms,c.locator {CURRENT_CHUNK_ROWS} AND a.kind=?"
-        ))
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(kind)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        let mut membership = HashMap::new();
+        let rows = read_model::context_current_chunk_rows(&mut self.tx, self.scope, kind).await?;
+        let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
+        let membership = self.context_route_memberships(&assets, route).await?;
+        let rows: Vec<_> = rows
+            .into_iter()
+            .filter(|(_, asset, _, _)| membership.get(asset) == Some(&true))
+            .collect();
+        let identity = identity.filter(|_| route == ContextRoute::Memory);
+        let identity_rows = if identity.is_some() {
+            let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
+            self.identity_rows_for_assets(&assets).await?
+        } else {
+            HashMap::new()
+        };
+        let mut decoded: HashMap<Uuid, Option<MemoryIdentity>> = HashMap::new();
         let mut result = Vec::new();
         for (id, asset, terms, locator) in rows {
-            let matches = if let Some(matches) = membership.get(&asset) {
-                *matches
-            } else {
-                let matches = self.context_route_matches(asset, route).await?;
-                membership.insert(asset, matches);
-                matches
-            };
-            if !matches {
-                continue;
-            }
-            if route == ContextRoute::Memory
-                && let Some(identity) = identity
-                && self.identity_for_asset(asset).await?.as_ref() != Some(identity)
-            {
-                let locator: Value = serde_json::from_str(&locator)
-                    .map_err(|_| StorageError::Unavailable("invalid chunk locator".into()))?;
-                if conflict_identity(&locator).as_ref() != Some(identity) {
-                    continue;
+            if let Some(identity) = identity {
+                if let std::collections::hash_map::Entry::Vacant(entry) = decoded.entry(asset) {
+                    let stored = identity_rows
+                        .get(&asset)
+                        .map(|row| {
+                            let text: String = row.try_get("identity_json").map_err(turso_err)?;
+                            serde_json::from_str::<MemoryIdentity>(&text).map_err(|_| {
+                                StorageError::Unavailable("invalid stored memory identity".into())
+                            })
+                        })
+                        .transpose()?;
+                    entry.insert(stored);
+                }
+                if decoded.get(&asset).and_then(Option::as_ref) != Some(identity) {
+                    let locator: Value = serde_json::from_str(&locator)
+                        .map_err(|_| StorageError::Unavailable("invalid chunk locator".into()))?;
+                    if conflict_identity(&locator).as_ref() != Some(identity) {
+                        continue;
+                    }
                 }
             }
             result.push((id, terms));
@@ -109,20 +182,33 @@ impl TursoTx {
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
     ) -> StorageResult<Vec<Uuid>> {
-        let route_ids: HashSet<_> = self
-            .context_route_rows(route, identity)
-            .await?
-            .into_iter()
-            .map(|(id, _)| id)
-            .collect();
-        // This existing shared helper has no top-k or LIMIT: it checks full
-        // visibility plus ready index generation and committed publication.
-        let mut ids = self
-            .vector_candidates(profile, dimension, generation, None)
-            .await?;
-        ids.retain(|id| route_ids.contains(id));
-        ids.sort_unstable();
-        Ok(ids)
+        let route_ids = read_model::unique_ids(
+            self.context_route_rows(route, identity)
+                .await?
+                .into_iter()
+                .map(|(id, _)| id),
+        );
+        // Apply the route/identity set before loading full chunk payloads and
+        // visibility closures. Native equality still filters index metadata.
+        let mut indexed = Vec::new();
+        for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
+            let start = batch_index * 8;
+            let batch = &route_ids[start..(start + 8).min(route_ids.len())];
+            let mut query = native_turso::query_scalar::<read_model::AssociationKey>(
+                "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready' AND artifact_id IN (?,?,?,?,?,?,?,?)",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(profile)
+            .bind(dimension)
+            .bind(generation);
+            for slot in 0..8 {
+                query = query.bind(batch.get(slot).copied());
+            }
+            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
+        }
+        self.index_candidate_ids(&indexed, None, "vector", generation)
+            .await
     }
 
     /// Exact bundle identity scope includes a current conflict's explicitly
@@ -257,48 +343,95 @@ impl TursoTx {
         })
     }
 
-    /// The reference is a real (session_id, turn_id, source_event_id) tuple,
-    /// never a fabricated chunk or asset version.
-    pub(crate) async fn context_session_turn(
+    /// One shared metadata readset, with per-turn JSON and closure decisions in
+    /// caller order. No state escapes this read call or its transaction.
+    pub(crate) async fn context_session_turns(
         &mut self,
-        session: Uuid,
-        turn: Uuid,
-    ) -> StorageResult<Option<ContextSessionTurn>> {
+        keys: &[(Uuid, Uuid)],
+    ) -> StorageResult<Vec<Option<ContextSessionTurn>>> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
         self.check_permission(Permission::Write).await?;
-        let (source_event_id, evidence) = match self.require_turn_visible_local(session, turn).await
-        {
-            Ok(value) => value,
-            Err(StorageError::NotFound) => return Ok(None),
-            Err(error) => return Err(error),
-        };
-        match self.require_archived_evidence_set_visible(&evidence).await {
-            Ok(()) => {}
-            Err(StorageError::NotFound) => return Ok(None),
-            Err(error) => return Err(error),
+        let mut batch = self.context_turn_metadata(keys).await?;
+        let mut turns = Vec::with_capacity(keys.len());
+        for index in 0..keys.len() {
+            turns.push(self.context_turn_from_metadata(&mut batch, index).await?);
         }
-        let row: Option<(String, i64)> = native_turso::query_as("SELECT e.content,t.created_at FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.id=? AND e.kind='session_turn' AND e.state='active'")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn).bind(source_event_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        let Some((body, created_at)) = row else {
-            return Ok(None);
-        };
-        #[derive(serde::Deserialize)]
-        struct Body {
-            question: String,
-            answer: String,
+        Ok(turns)
+    }
+
+    async fn recent_turn_keys(
+        &mut self,
+        session: Option<Uuid>,
+        exclude_session: Option<Uuid>,
+    ) -> StorageResult<Vec<(Uuid, Uuid)>> {
+        let mut selected = Vec::new();
+        let mut cursor: Option<(AssociationKey, AssociationKey, AssociationKey)> = None;
+        loop {
+            let sql = if cursor.is_some() {
+                "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) AND (created_at<? OR (created_at=? AND (session_id>? OR (session_id=? AND turn_id>?)))) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
+            } else {
+                "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
+            };
+            let mut query = native_turso::query(sql)
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(session)
+                .bind(session)
+                .bind(exclude_session)
+                .bind(exclude_session);
+            if let Some((created_at, session, turn)) = &cursor {
+                query = query
+                    .bind(created_at.clone())
+                    .bind(created_at.clone())
+                    .bind(session.clone())
+                    .bind(session.clone())
+                    .bind(turn.clone());
+            }
+            let rows = query.fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            let size = rows.len();
+            if let Some(last) = rows.last() {
+                cursor = Some((
+                    last.try_get("created_at").map_err(turso_err)?,
+                    last.try_get("session_id").map_err(turso_err)?,
+                    last.try_get("turn_id").map_err(turso_err)?,
+                ));
+            }
+            let keys = rows
+                .iter()
+                .map(|row| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
+                .collect::<StorageResult<Vec<_>>>()?;
+            // Even the empty first page prepares the event relation, as the
+            // original statement did. Domain keys are decoded only after gate.
+            let active: HashSet<_> =
+                read_model::associate_query(&mut self.tx, self.scope, RECENT_EVENTS, 1, &keys)
+                    .await?
+                    .into_iter()
+                    .map(|(index, _)| index)
+                    .collect();
+            for (index, row) in rows.into_iter().enumerate() {
+                if active.contains(&index) {
+                    selected.push(row);
+                    if selected.len() == SESSION_SCAN_LIMIT + 1 {
+                        break;
+                    }
+                }
+            }
+            if selected.len() == SESSION_SCAN_LIMIT + 1 || size < 128 {
+                break;
+            }
         }
-        let body: Body = serde_json::from_str(&body)
-            .map_err(|_| StorageError::Unavailable("invalid session record".into()))?;
-        Ok(Some(ContextSessionTurn {
-            session_id: session,
-            turn_id: turn,
-            source_event_id,
-            question: body.question,
-            answer: body.answer,
-            evidence,
-            created_at,
-            score: 0.0,
-        }))
+        // The original query decoded all 513 keys before inspecting any turn.
+        selected
+            .into_iter()
+            .map(|row| {
+                Ok((
+                    row.try_get("session_id").map_err(turso_err)?,
+                    row.try_get("turn_id").map_err(turso_err)?,
+                ))
+            })
+            .collect()
     }
 
     pub(crate) async fn context_recent_turns(
@@ -309,18 +442,14 @@ impl TursoTx {
         limit: usize,
     ) -> StorageResult<ContextSessionResult> {
         self.check_permission(Permission::Write).await?;
-        let rows: Vec<(Uuid, Uuid)> = native_turso::query_as("SELECT t.session_id,t.turn_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND e.state='active' AND e.kind='session_turn' AND (? IS NULL OR t.session_id=?) AND (? IS NULL OR t.session_id!=?) ORDER BY t.created_at DESC,t.session_id,t.turn_id LIMIT ?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-            .bind(session).bind(session).bind(exclude_session).bind(exclude_session)
-            .bind((SESSION_SCAN_LIMIT + 1) as i64)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let rows = self.recent_turn_keys(session, exclude_session).await?;
         let scan_exhausted = rows.len() > SESSION_SCAN_LIMIT;
         let words: HashSet<_> = terms.split_whitespace().collect();
         let mut turns = Vec::new();
-        let mut scanned = 0;
-        for (session, turn) in rows.into_iter().take(SESSION_SCAN_LIMIT) {
-            scanned += 1;
-            let Some(mut item) = self.context_session_turn(session, turn).await? else {
+        let scanned = rows.len().min(SESSION_SCAN_LIMIT);
+        let checked = self.context_session_turns(&rows[..scanned]).await?;
+        for item in checked {
+            let Some(mut item) = item else {
                 continue;
             };
             let text = crate::parsing::lexical(&format!("{}\n{}", item.question, item.answer));

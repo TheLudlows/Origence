@@ -31,11 +31,15 @@ use uuid::Uuid;
 mod app;
 #[cfg(feature = "local-storage")]
 mod context;
+#[cfg(all(test, feature = "local-storage"))]
+mod context_route_tests;
 mod domain;
 #[cfg(feature = "local-storage")]
 mod full_text;
 mod identity;
 mod improve;
+#[cfg(test)]
+mod job_improve_tests;
 mod job_queue;
 mod learning_visibility;
 mod ledger;
@@ -43,11 +47,20 @@ mod lifecycle;
 mod locking;
 mod provenance;
 mod publication;
+#[cfg(test)]
+mod publication_shape_tests;
+mod read_model;
+#[cfg(test)]
+mod read_model_tests;
 mod relational;
 mod schema;
 mod semantics;
 mod session;
+#[cfg(test)]
+mod session_read_tests;
 mod versions;
+#[cfg(test)]
+mod versions_tests;
 mod visibility;
 
 use crate::storage::Lifecycle;

@@ -6,12 +6,18 @@ use origence::{
     error::AppError,
     learning::ImproveInput,
     models::Models,
+    parsing,
     service::Service,
-    storage::{RelationalStore, Scope},
+    storage::{
+        DomainTx, FullTextEntry, FullTextQuery, LedgerEntry, LedgerKey, Permission,
+        RelationalStore, Scope, SourceVersion, Surface, VectorEntry, VectorQuery, VectorStore,
+        ledger_idempotency_key,
+    },
     types::AuthContext,
     worker,
 };
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -47,6 +53,7 @@ struct Fixture {
     fail_verify: Arc<AtomicBool>,
     fail_embed: Arc<AtomicBool>,
     requests: Arc<Mutex<Vec<Value>>>,
+    weaker_embedding_marker: Arc<Mutex<Option<String>>>,
 }
 
 impl Fixture {
@@ -55,14 +62,31 @@ impl Fixture {
     }
 }
 
-async fn embeddings(State(f): State<Fixture>) -> (StatusCode, Json<Value>) {
+async fn embeddings(
+    State(f): State<Fixture>,
+    Json(body): Json<Value>,
+) -> (StatusCode, Json<Value>) {
     f.embeddings.fetch_add(1, Ordering::SeqCst);
     if f.fail_embed.load(Ordering::SeqCst) {
         (StatusCode::SERVICE_UNAVAILABLE, Json(json!({})))
     } else {
+        let weaker = f
+            .weaker_embedding_marker
+            .lock()
+            .unwrap()
+            .as_deref()
+            .is_some_and(|marker| {
+                body["input"]
+                    .as_str()
+                    .is_some_and(|input| input.contains(marker))
+            });
         (
             StatusCode::OK,
-            Json(json!({"data":[{"embedding":[1.0,0.5,0.25]}]})),
+            Json(json!({"data":[{"embedding":if weaker {
+                [0.0, 1.0, 0.0]
+            } else {
+                [1.0, 0.5, 0.25]
+            }}]})),
         )
     }
 }
@@ -1481,42 +1505,427 @@ async fn learning_corrupt_over_limit_closure_rejects_the_whole_root_not_a_prefix
     .expect("bounded dependency traversal must terminate");
 }
 
+struct BudgetTemplate {
+    chunk: Uuid,
+    source: SourceVersion,
+    content: String,
+    locator: Value,
+    profile: String,
+    dimension: usize,
+    generation: i64,
+}
+
+async fn budget_template(s: &Service, a: &AuthContext, learning: &Value) -> BudgetTemplate {
+    let asset = id(learning, "asset_id");
+    let chunks: Vec<(Uuid, i32, String, String)> = db::query_as(
+        "SELECT id,version,content,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY ordinal",
+    )
+    .bind(a.tenant_id)
+    .bind(a.workspace_id)
+    .bind(asset)
+    .fetch_all(s.engine.relational().pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        chunks.len(),
+        1,
+        "budget fixture requires one original chunk"
+    );
+    let (chunk, version, content, locator) = chunks.into_iter().next().unwrap();
+    let ready: Vec<(String, usize, i64)> = db::query_as(
+        "SELECT model_id,dimension,generation FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content' AND state='ready'",
+    )
+    .bind(a.tenant_id)
+    .bind(a.workspace_id)
+    .bind(chunk)
+    .fetch_all(s.engine.relational().pool())
+    .await
+    .unwrap();
+    assert_eq!(ready.len(), 1);
+    let (profile, dimension, generation) = ready.into_iter().next().unwrap();
+    assert_eq!(s.models.profile.as_ref(), Some(&profile));
+    assert_eq!(dimension, 3);
+    let source = SourceVersion {
+        source_id: id(learning, "source_event_id"),
+        version,
+    };
+    let ledger: Vec<(String, Uuid, i32, i64, String)> = db::query_as(
+        "SELECT surface,source_id,version,generation,state FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND artifact_id=? ORDER BY surface",
+    )
+    .bind(a.tenant_id)
+    .bind(a.workspace_id)
+    .bind(chunk)
+    .fetch_all(s.engine.relational().pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        ledger,
+        [
+            (
+                String::from("full_text"),
+                source.source_id,
+                version,
+                generation,
+                String::from("committed"),
+            ),
+            (
+                String::from("vector"),
+                source.source_id,
+                version,
+                generation,
+                String::from("committed"),
+            ),
+        ]
+    );
+    BudgetTemplate {
+        chunk,
+        source,
+        content,
+        locator: serde_json::from_str(&locator).unwrap(),
+        profile,
+        dimension,
+        generation,
+    }
+}
+
+struct NativeBudgetFixture {
+    scope: Scope,
+    donor_ids: BTreeSet<Uuid>,
+    independent: Uuid,
+    hidden_source: SourceVersion,
+    independent_source: SourceVersion,
+    profile: String,
+    dimension: usize,
+    generation: i64,
+    embedding: Vec<f32>,
+    terms: String,
+}
+
+impl NativeBudgetFixture {
+    fn ids(&self) -> Vec<Uuid> {
+        self.donor_ids
+            .iter()
+            .copied()
+            .chain(std::iter::once(self.independent))
+            .collect()
+    }
+
+    fn key(&self, chunk: Uuid, surface: Surface) -> LedgerKey {
+        LedgerKey {
+            scope: self.scope,
+            source: self.hidden_source,
+            artifact_id: chunk,
+            surface,
+            generation: self.generation,
+        }
+    }
+}
+
+async fn publish_native_budget_fixture(
+    s: &Service,
+    a: &AuthContext,
+    token: &str,
+    hidden: &Value,
+    independent: &Value,
+) -> NativeBudgetFixture {
+    let template = budget_template(s, a, hidden).await;
+    let independent = budget_template(s, a, independent).await;
+    assert_eq!(template.profile, independent.profile);
+    assert_eq!(template.dimension, independent.dimension);
+    assert_eq!(template.generation, independent.generation);
+    let budget = NativeBudgetFixture {
+        scope: Scope {
+            tenant_id: a.tenant_id,
+            workspace_id: a.workspace_id,
+        },
+        donor_ids: (0..101).map(|_| Uuid::new_v4()).collect(),
+        independent: independent.chunk,
+        hidden_source: template.source,
+        independent_source: independent.source,
+        profile: template.profile,
+        dimension: template.dimension,
+        generation: template.generation,
+        embedding: s.models.embed("Rust").await.unwrap(),
+        terms: parsing::lexical("Rust"),
+    };
+    assert_eq!(budget.donor_ids.len(), 101);
+    // Amplify an actual source substring, retaining the Learning metadata while
+    // keeping the locator's byte/line range consistent with the shorter text.
+    let offset = template.content.find("Rust").unwrap();
+    let mut locator = template.locator;
+    assert_eq!(locator["parser"], "source-ranges-v1");
+    let start = locator["byte_start"].as_u64().unwrap() + offset as u64;
+    let line = locator["line_start"].as_u64().unwrap()
+        + template.content[..offset]
+            .bytes()
+            .filter(|b| *b == b'\n')
+            .count() as u64;
+    locator["byte_start"] = json!(start);
+    locator["byte_end"] = json!(start + 4);
+    locator["line_start"] = json!(line);
+    locator["line_end"] = json!(line);
+    let store = s.engine.relational();
+    let authorized = store.authenticate(token).await.unwrap();
+    let mut tx = store.begin(authorized.clone()).await.unwrap();
+    tx.check_permission(Permission::Write).await.unwrap();
+    for chunk in &budget.donor_ids {
+        for surface in [Surface::FullText, Surface::Vector] {
+            let key = budget.key(*chunk, surface);
+            tx.register_pending(LedgerEntry {
+                key,
+                artifact_type: "chunk".into(),
+                idempotency_key: ledger_idempotency_key(&key),
+            })
+            .await
+            .unwrap();
+        }
+    }
+    tx.commit().await.unwrap();
+    // Both native batches happen outside the authority transaction, matching
+    // the worker's pending -> native -> authoritative-publication boundary.
+    let vectors = budget
+        .donor_ids
+        .iter()
+        .map(|chunk| VectorEntry {
+            id: *chunk,
+            source: budget.hidden_source,
+            generation: budget.generation,
+            profile: budget.profile.clone(),
+            dimension: budget.dimension,
+            embedding: budget.embedding.clone(),
+        })
+        .collect();
+    s.engine
+        .vector()
+        .upsert(budget.scope, vectors)
+        .await
+        .unwrap();
+    let text = budget
+        .donor_ids
+        .iter()
+        .map(|chunk| FullTextEntry {
+            id: *chunk,
+            source: budget.hidden_source,
+            generation: budget.generation,
+            search_terms: budget.terms.clone(),
+        })
+        .collect();
+    s.engine
+        .vector()
+        .upsert_full_text(budget.scope, text)
+        .await
+        .unwrap();
+    let mut tx = store.begin(authorized).await.unwrap();
+    tx.check_permission(Permission::Write).await.unwrap();
+    tx.valid_targets(
+        Some(id(hidden, "asset_id")),
+        Some(budget.hidden_source.source_id),
+    )
+    .await
+    .unwrap();
+    for (index, chunk) in budget.donor_ids.iter().enumerate() {
+        tx.insert_chunk(
+            *chunk,
+            id(hidden, "asset_id"),
+            budget.hidden_source.version,
+            1000 + index as i32,
+            "Rust",
+            &locator,
+            &budget.terms,
+        )
+        .await
+        .unwrap();
+        tx.register_owner(budget.hidden_source, "chunk", *chunk, Some(*chunk))
+            .await
+            .unwrap();
+        tx.index_ready(*chunk, &budget.profile, budget.dimension, budget.generation)
+            .await
+            .unwrap();
+        for surface in [Surface::FullText, Surface::Vector] {
+            tx.confirm_committed(budget.key(*chunk, surface))
+                .await
+                .unwrap();
+        }
+    }
+    tx.commit().await.unwrap();
+    budget
+}
+
+async fn assert_budget_candidates(
+    s: &Service,
+    token: &str,
+    budget: &NativeBudgetFixture,
+    withdrawn: bool,
+) {
+    let store = s.engine.relational();
+    let mut tx = store
+        .begin_read(store.authenticate(token).await.unwrap())
+        .await
+        .unwrap();
+    tx.check_permission(Permission::Read).await.unwrap();
+    let fts = tx
+        .full_text_candidates(budget.generation, None)
+        .await
+        .unwrap();
+    let vector = tx
+        .vector_candidates(&budget.profile, budget.dimension, budget.generation, None)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    for candidates in [fts, vector] {
+        let ids: BTreeSet<_> = candidates.into_iter().collect();
+        assert!(ids.contains(&budget.independent));
+        for chunk in &budget.donor_ids {
+            assert_eq!(ids.contains(chunk), !withdrawn);
+        }
+    }
+    // Every donor is individually covered; aggregate counts alone could hide
+    // a missing row compensated by an extra row with the wrong publication key.
+    for chunk in &budget.donor_ids {
+        let ready: Vec<(String, usize, i64, String)> = db::query_as(
+            "SELECT model_id,dimension,generation,state FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content'",
+        )
+        .bind(budget.scope.tenant_id)
+        .bind(budget.scope.workspace_id)
+        .bind(*chunk)
+        .fetch_all(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            ready,
+            [(
+                budget.profile.clone(),
+                budget.dimension,
+                budget.generation,
+                String::from("ready"),
+            )]
+        );
+        let ledger: Vec<(String, Uuid, i32, i64, String)> = db::query_as(
+            "SELECT surface,source_id,version,generation,state FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND artifact_id=? ORDER BY surface",
+        )
+        .bind(budget.scope.tenant_id)
+        .bind(budget.scope.workspace_id)
+        .bind(*chunk)
+        .fetch_all(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            ledger,
+            [
+                (
+                    String::from("full_text"),
+                    budget.hidden_source.source_id,
+                    budget.hidden_source.version,
+                    budget.generation,
+                    String::from("committed"),
+                ),
+                (
+                    String::from("vector"),
+                    budget.hidden_source.source_id,
+                    budget.hidden_source.version,
+                    budget.generation,
+                    String::from("committed"),
+                ),
+            ]
+        );
+    }
+}
+
+async fn assert_native_budget(s: &Service, budget: &NativeBudgetFixture) {
+    let first = *budget.donor_ids.first().unwrap();
+    for (ids, limit) in [
+        (vec![first, budget.independent], 2),
+        (budget.ids(), 102),
+        (budget.ids(), 100),
+    ] {
+        let text = s
+            .engine
+            .vector()
+            .search_full_text(FullTextQuery {
+                scope: budget.scope,
+                artifact_ids: Some(ids.clone()),
+                generation: budget.generation,
+                search_terms: budget.terms.clone(),
+                limit,
+            })
+            .await
+            .unwrap();
+        let vector = s
+            .engine
+            .vector()
+            .search(VectorQuery {
+                scope: budget.scope,
+                artifact_ids: Some(ids.clone()),
+                generation: budget.generation,
+                profile: budget.profile.clone(),
+                dimension: budget.dimension,
+                embedding: budget.embedding.clone(),
+                limit,
+            })
+            .await
+            .unwrap();
+        for hits in [
+            text.into_iter()
+                .map(|hit| (hit.id, hit.source, hit.score))
+                .collect::<Vec<_>>(),
+            vector
+                .into_iter()
+                .map(|hit| (hit.id, hit.source, hit.score))
+                .collect::<Vec<_>>(),
+        ] {
+            assert_eq!(hits.len(), limit);
+            assert!(hits.iter().all(|(_, _, score)| score.is_finite()));
+            let found: BTreeSet<_> = hits.iter().map(|(id, _, _)| *id).collect();
+            assert_eq!(found.len(), limit);
+            for (id, source, _) in &hits {
+                assert_eq!(
+                    *source,
+                    if *id == budget.independent {
+                        budget.independent_source
+                    } else {
+                        budget.hidden_source
+                    }
+                );
+            }
+            if limit == 100 {
+                assert!(found.is_subset(&budget.donor_ids));
+                assert!(!found.contains(&budget.independent));
+            } else {
+                assert_eq!(found, ids.iter().copied().collect());
+            }
+            if limit == 2 {
+                let score = |id| hits.iter().find(|(hit, _, _)| *hit == id).unwrap().2;
+                assert!(score(first) > score(budget.independent));
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budget() {
     let (models, fixture, _model) = models().await;
     fixture.set_mode("unique_statement");
     let dir = tempfile::tempdir().unwrap();
     let s = Service::open(dir.path(), models).await.unwrap();
-    let (a, _) = provision(&s).await;
+    let (a, token) = provision(&s).await;
     let mut turns = Vec::new();
     let mut learnings = Vec::new();
-    for _ in 0..2 {
+    for index in 0..2 {
         let session = Uuid::new_v4();
         let turn = archive(&s, &a, session, vec![]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
+        if index == 1 {
+            *fixture.weaker_embedding_marker.lock().unwrap() =
+                Some(id(&turn, "turn_id").to_string());
+        }
         learnings.push(learn(&s, &a, session).await);
         turns.push(turn);
     }
     let hidden = &learnings[0];
     let independent = &learnings[1];
-    let original_chunk: Uuid =
-        db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal LIMIT 1")
-            .bind(id(hidden, "asset_id"))
-            .fetch_one(s.engine.relational().pool())
-            .await
-            .unwrap();
-    let mut tx = s.engine.relational().pool().begin().await.unwrap();
-    for ordinal in 1000..1101 {
-        let chunk = Uuid::new_v4();
-        // More than the branch's 100 candidates, each scoring above the visible
-        // independent Learning. This is bounded index-fixture amplification.
-        db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) SELECT tenant_id,workspace_id,?,asset_id,version,?,'Rust',locator,'rust' FROM oc_chunks WHERE id=?")
-            .bind(chunk).bind(ordinal).bind(original_chunk).execute(&mut *tx).await.unwrap();
-        db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,1,'chunk',?,?,0)")
-            .bind(a.tenant_id).bind(a.workspace_id).bind(id(hidden, "source_event_id"))
-            .bind(chunk).bind(chunk).execute(&mut *tx).await.unwrap();
-    }
-    tx.commit().await.unwrap();
+    let budget = publish_native_budget_fixture(&s, &a, &token, hidden, independent).await;
+    assert_budget_candidates(&s, &token, &budget, false).await;
+    assert_native_budget(&s, &budget).await;
     let request = json!({"query":"Rust","mode":"keyword","limit":1,
         "components":{"summaries":false,"graph":false}});
     let before = s
@@ -1537,6 +1946,14 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
         s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
         "pending"
     );
+    // Native records still fill the old unfiltered budget. Only the fresh
+    // transitive Learning guard may remove them before each branch's top-k.
+    assert_native_budget(&s, &budget).await;
+    assert_budget_candidates(&s, &token, &budget, true).await;
+    assert!(matches!(
+        s.learning(&a, id(hidden, "learning_id")).await,
+        Err(AppError::NotFound)
+    ));
     for mode in ["keyword", "vector", "hybrid"] {
         let mut request = request.clone();
         request["mode"] = json!(mode);

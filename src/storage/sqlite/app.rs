@@ -1,33 +1,8 @@
 //! Local application queries. SQL stays inside the native Turso adapter.
-use super::visibility::{CHUNK_SUPPORT_ACTIVE, CURRENT_CHUNK_ROWS};
 use super::*;
 use crate::types::SearchHit;
 
-const HIT: &str = "SELECT c.id, c.asset_id,c.version,a.kind,v.title,c.content,c.locator,v.source_event_id,c.search_terms";
-
-pub(super) fn hit(row: &native_turso::Row, score: f64) -> SearchHit {
-    let locator: Value = serde_json::from_str(row.get("locator")).unwrap_or(Value::Null);
-    let source_event_id = if locator["parser"] == crate::memory_semantics::PARSER {
-        locator["source_event_id"]
-            .as_str()
-            .and_then(|s| Uuid::parse_str(s).ok())
-            .unwrap_or_else(|| row.get("source_event_id"))
-    } else {
-        row.get("source_event_id")
-    };
-    SearchHit {
-        identity: None,
-        chunk_id: row.get("id"),
-        asset_id: row.get("asset_id"),
-        version: row.get("version"),
-        kind: row.get("kind"),
-        title: row.get("title"),
-        content: row.get("content"),
-        locator,
-        source_event_id,
-        score,
-    }
-}
+mod maintenance;
 
 impl TursoStore {
     pub(super) async fn begin_scoped(
@@ -107,10 +82,8 @@ impl TursoStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(turso_err)?;
-        // Historical versions retain owners while the asset and source remain valid.
-        let live = "EXISTS(SELECT 1 FROM oc_versions v JOIN oc_assets a ON a.tenant_id=v.tenant_id AND a.workspace_id=v.workspace_id AND a.id=v.asset_id JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE v.tenant_id=o.tenant_id AND v.workspace_id=o.workspace_id AND v.source_event_id=o.source_id AND v.version=o.version AND NOT a.deleted AND e.state='active')";
-        native_turso::query(&format!("DELETE FROM oc_artifact_owners AS o WHERE tenant_id=? AND workspace_id=? AND NOT {live}" )).bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
-        native_turso::query("DELETE FROM oc_artifact_owners AS o WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('chunk','summary') AND NOT EXISTS(SELECT 1 FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id WHERE c.tenant_id=o.tenant_id AND c.workspace_id=o.workspace_id AND c.id=o.chunk_id AND NOT a.deleted)").bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
+        maintenance::detach_invalid_roots(&mut tx, scope).await?;
+        maintenance::detach_invalid_chunks(&mut tx, scope).await?;
         // Maintenance is privileged but still uses the identical scoped,
         // fail-closed dependency guard as all user-visible Learning reads.
         let mut guarded = TursoTx {
@@ -122,7 +95,7 @@ impl TursoStore {
         };
         guarded.detach_unsupported_learning_owners().await?;
         let mut tx = guarded.tx;
-        let sources: Vec<Uuid> = native_turso::query_scalar("SELECT DISTINCT l.artifact_id FROM oc_artifact_ledger l WHERE l.tenant_id=? AND l.workspace_id=? AND l.surface IN ('vector','full_text') AND NOT EXISTS(SELECT 1 FROM oc_artifact_owners o WHERE o.tenant_id=l.tenant_id AND o.workspace_id=l.workspace_id AND o.artifact_id=l.artifact_id AND o.artifact_type='chunk')").bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&mut *tx).await.map_err(turso_err)?;
+        let sources = maintenance::unowned_native_artifacts(&mut tx, scope).await?;
         let rows: Vec<(String,Uuid)> = native_turso::query_as("SELECT DISTINCT artifact_type,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('entity','relation')").bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&mut *tx).await.map_err(turso_err)?;
         tx.commit().await.map_err(turso_err)?;
         let entities = rows
@@ -143,18 +116,9 @@ impl TursoStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(turso_err)?;
-        let invalid = "NOT EXISTS(SELECT 1 FROM oc_artifact_owners o WHERE o.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND o.artifact_id=c.id AND o.artifact_type='chunk')";
-        native_turso::query(&format!("DELETE FROM oc_summaries WHERE tenant_id=? AND workspace_id=? AND chunk_id IN (SELECT c.id FROM oc_chunks c WHERE c.tenant_id=? AND c.workspace_id=? AND {invalid})")).bind(scope.tenant_id).bind(scope.workspace_id).bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
-        native_turso::query(&format!(
-            "DELETE FROM oc_chunks AS c WHERE tenant_id=? AND workspace_id=? AND {invalid}"
-        ))
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(turso_err)?;
-        native_turso::query("UPDATE oc_index_entries SET state='removed' WHERE tenant_id=? AND workspace_id=? AND NOT EXISTS(SELECT 1 FROM oc_chunks c WHERE c.tenant_id=oc_index_entries.tenant_id AND c.workspace_id=oc_index_entries.workspace_id AND c.id=oc_index_entries.artifact_id)").bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
-        native_turso::query("UPDATE oc_artifact_ledger SET state='orphan',updated_at=? WHERE tenant_id=? AND workspace_id=? AND NOT EXISTS(SELECT 1 FROM oc_artifact_owners o WHERE o.tenant_id=oc_artifact_ledger.tenant_id AND o.workspace_id=oc_artifact_ledger.workspace_id AND o.source_id=oc_artifact_ledger.source_id AND o.version=oc_artifact_ledger.version AND o.artifact_id=oc_artifact_ledger.artifact_id)").bind(now_ms()).bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
+        maintenance::remove_unowned_chunks(&mut tx, scope).await?;
+        maintenance::remove_missing_indexes(&mut tx, scope).await?;
+        maintenance::orphan_unowned_ledger(&mut tx, scope).await?;
         tx.commit().await.map_err(turso_err)
     }
 }
@@ -173,11 +137,7 @@ impl TursoTx {
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
         let asset: Option<Uuid> = native_turso::query_scalar(
-            "SELECT i.asset_id FROM oc_memory_identities i
-             JOIN oc_assets a ON a.tenant_id=i.tenant_id
-                 AND a.workspace_id=i.workspace_id AND a.id=i.asset_id
-             WHERE i.tenant_id=? AND i.workspace_id=?
-                 AND i.identity_key=? AND a.kind='memory' AND NOT a.deleted",
+            "SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -185,6 +145,15 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
+        let asset = if let Some(id) = asset {
+            let live: Option<Uuid> = native_turso::query_scalar(
+                "SELECT id FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='memory' AND NOT deleted",
+            ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
+                .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            live
+        } else {
+            None
+        };
         if let Some(id) = asset
             && self.identity_for_asset(id).await?.as_ref() != Some(identity)
         {
@@ -201,6 +170,9 @@ impl TursoTx {
         Ok(json!({"kind":kind,"current_version":current_version,"deleted":deleted}))
     }
     pub async fn save_publication(&mut self, job: Uuid, plan: &Value) -> StorageResult<()> {
+        if self.save_message_publication_inner(job, plan).await? {
+            return Ok(());
+        }
         native_turso::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(turso_err)?;
         Ok(())
     }
@@ -228,47 +200,25 @@ impl TursoTx {
         generation: i64,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
-        let asset_clause = if asset_filter.is_some() {
-            " AND c.asset_id=?"
-        } else {
-            ""
-        };
-        let sql = format!(
-            "SELECT c.id,c.asset_id,c.version {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE}{asset_clause} AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.dimension=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')"
-        );
-        let query = native_turso::query_as::<(Uuid, Uuid, i32)>(&sql)
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id);
-        let query = if let Some(asset) = asset_filter {
-            query.bind(asset)
-        } else {
-            query
-        };
-        let rows = query
-            .bind(profile)
-            .bind(dimension as i64)
-            .bind(generation)
-            .bind(generation)
-            .fetch_all(&mut *self.tx)
+        let ids: Vec<read_model::AssociationKey> = native_turso::query_scalar(
+            "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready'",
+        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+            .bind(profile).bind(dimension).bind(generation)
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        self.index_candidate_ids(&ids, asset_filter, "vector", generation)
             .await
-            .map_err(turso_err)?;
-        let mut visibility = HashMap::new();
-        let mut candidates = Vec::new();
-        for (chunk, asset, version) in rows {
-            let visible = if let Some(visible) = visibility.get(&(asset, version)) {
-                *visible
-            } else {
-                let visible = self.semantic_version_visible(asset, version).await?;
-                visibility.insert((asset, version), visible);
-                visible
-            };
-            if visible {
-                candidates.push(chunk);
-            }
-        }
-        // The native backend receives only eligible IDs, before its top-k.
-        Ok(candidates)
     }
+
+    async fn vector_hits(
+        &mut self,
+        keys: &[read_model::NativeHitKey],
+        profile: &str,
+        dimension: Option<usize>,
+    ) -> StorageResult<HashMap<read_model::NativeHitKey, SearchHit>> {
+        let ready = self.ready_vector_keys(keys, profile, dimension).await?;
+        self.indexed_hits(&ready, "vector").await
+    }
+
     pub async fn vector_hit(
         &mut self,
         id: Uuid,
@@ -276,20 +226,21 @@ impl TursoTx {
         profile: &str,
         generation: i64,
     ) -> StorageResult<Option<SearchHit>> {
-        let row = native_turso::query(&format!("{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=? AND v.source_event_id=? AND v.version=? AND EXISTS(SELECT 1 FROM oc_index_entries i WHERE i.tenant_id=c.tenant_id AND i.workspace_id=c.workspace_id AND i.artifact_id=c.id AND i.model_id=? AND i.generation=? AND i.state='ready') AND EXISTS(SELECT 1 FROM oc_artifact_ledger l WHERE l.tenant_id=c.tenant_id AND l.workspace_id=c.workspace_id AND l.artifact_id=c.id AND l.source_id=v.source_event_id AND l.version=v.version AND l.generation=? AND l.surface='vector' AND l.state='committed')")).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(source.source_id).bind(source.version).bind(profile).bind(generation).bind(generation).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        let Some(row) = row else {
-            return Ok(None);
-        };
-        if !self
-            .semantic_version_visible(row.get("asset_id"), row.get("version"))
-            .await?
-        {
-            return Ok(None);
-        }
-        Ok(Some(hit(&row, 0.0)))
+        let key = (id, source, generation);
+        Ok(self.vector_hits(&[key], profile, None).await?.remove(&key))
     }
-    /// Exact vector publication check for native scores retained across read
-    /// snapshots. The public legacy helper has no dimension parameter.
+
+    /// Exact publication checks across native generations, loaded as one batch.
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn vector_hits_exact(
+        &mut self,
+        keys: &[read_model::NativeHitKey],
+        profile: &str,
+        dimension: usize,
+    ) -> StorageResult<HashMap<read_model::NativeHitKey, SearchHit>> {
+        self.vector_hits(keys, profile, Some(dimension)).await
+    }
+
     #[cfg(feature = "local-storage")]
     pub(crate) async fn vector_hit_exact(
         &mut self,
@@ -299,94 +250,59 @@ impl TursoTx {
         dimension: usize,
         generation: i64,
     ) -> StorageResult<Option<SearchHit>> {
-        let hit = self.vector_hit(id, source, profile, generation).await?;
-        if hit.is_none() {
-            return Ok(None);
-        }
-        let ready: bool = native_turso::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content' AND model_id=? AND dimension=? AND generation=? AND state='ready')",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(id)
-        .bind(profile)
-        .bind(dimension)
-        .bind(generation)
-        .fetch_one(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        Ok(if ready { hit } else { None })
-    }
-    pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
-        let row = native_turso::query(&format!(
-            "{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND c.id=?"
-        ))
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        let Some(row) = row else {
-            return Ok(None);
-        };
-        if !self
-            .semantic_version_visible(row.get("asset_id"), row.get("version"))
+        let key = (id, source, generation);
+        Ok(self
+            .vector_hits_exact(&[key], profile, dimension)
             .await?
-        {
-            return Ok(None);
-        }
-        Ok(Some(hit(&row, 0.0)))
+            .remove(&key))
     }
+
+    pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
+        Ok(self.visible_hits(&[id]).await?.remove(&id))
+    }
+
     pub async fn keyword_hits(
         &mut self,
         terms: &str,
         summaries: bool,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<SearchHit>> {
-        let select = if summaries {
-            "SELECT c.id,c.asset_id,c.version,a.kind,v.title,c.content,c.locator,v.source_event_id,(SELECT group_concat(s.search_terms,' ') FROM oc_summaries s WHERE s.tenant_id=c.tenant_id AND s.workspace_id=c.workspace_id AND s.chunk_id=c.id) search_terms"
+        let raw = read_model::current_rows(&mut self.tx, self.scope, None, asset_filter).await?;
+        let positions = self.local_current_positions(&raw).await?;
+        // The old initial query prepared/evaluated its summary projection even
+        // before the empty-query return. Keep native group_concat coercion/NULL.
+        let summary_terms = if summaries {
+            self.current_summary_terms(&raw, &positions).await?
         } else {
-            HIT
+            HashMap::new()
         };
-        let asset_clause = if asset_filter.is_some() {
-            " AND c.asset_id=?"
-        } else {
-            ""
-        };
-        let sql = format!("{select} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE}{asset_clause}");
-        let query = native_turso::query(&sql)
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id);
-        let query = if let Some(asset) = asset_filter {
-            query.bind(asset)
-        } else {
-            query
-        };
-        let rows = query.fetch_all(&mut *self.tx).await.map_err(turso_err)?;
         let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
         if words.is_empty() {
             return Ok(Vec::new());
         }
+        let keys = positions
+            .iter()
+            .map(|index| raw.version_key(*index))
+            .collect::<StorageResult<Vec<_>>>()?;
+        let visible = self.visible_version_keys(&keys).await?;
         let mut hits = Vec::new();
-        let mut visibility = HashMap::new();
-        for row in rows {
-            let key: (Uuid, i32) = (row.get("asset_id"), row.get("version"));
-            let visible = if let Some(visible) = visibility.get(&key) {
-                *visible
-            } else {
-                let visible = self.semantic_version_visible(key.0, key.1).await?;
-                visibility.insert(key, visible);
-                visible
-            };
-            if !visible {
+        for (index, key) in positions.into_iter().zip(keys) {
+            if !visible.contains(&key) {
                 continue;
             }
-            let text: Option<String> = row.get("search_terms");
+            let text: Option<String> = if summaries {
+                summary_terms
+                    .get(&index)
+                    .map(|row| row.try_get("search_terms").map_err(turso_err))
+                    .transpose()?
+                    .flatten()
+            } else {
+                raw.search_terms(index)?
+            };
             let tokens: std::collections::HashSet<_> =
                 text.as_deref().unwrap_or("").split_whitespace().collect();
             if words.is_subset(&tokens) {
-                hits.push(hit(&row, words.len() as f64 / tokens.len().max(1) as f64));
+                hits.push(raw.hit(index, words.len() as f64 / tokens.len().max(1) as f64)?);
             }
         }
         hits.sort_by(|a, b| {
@@ -397,30 +313,55 @@ impl TursoTx {
         hits.truncate(100);
         Ok(hits)
     }
+
     pub async fn graph_evidence(&mut self, artifact: Uuid) -> StorageResult<Vec<Value>> {
-        let rows = native_turso::query(&format!("{HIT} {CURRENT_CHUNK_ROWS} AND {CHUNK_SUPPORT_ACTIVE} AND EXISTS(SELECT 1 FROM oc_artifact_owners o JOIN oc_artifact_ledger l ON l.tenant_id=o.tenant_id AND l.workspace_id=o.workspace_id AND l.source_id=o.source_id AND l.version=o.version AND l.artifact_id=o.artifact_id AND l.surface='graph' AND l.state='committed' WHERE o.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND o.artifact_id=? AND o.source_id=v.source_event_id AND o.version=v.version) ORDER BY c.id")).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(artifact).fetch_all(&mut *self.tx).await.map_err(turso_err)?;
-        let mut evidence = Vec::new();
-        let mut visibility = HashMap::new();
-        for row in rows {
-            let key: (Uuid, i32) = (row.get("asset_id"), row.get("version"));
-            let visible = if let Some(visible) = visibility.get(&key) {
-                *visible
-            } else {
-                let visible = self.semantic_version_visible(key.0, key.1).await?;
-                visibility.insert(key, visible);
-                visible
-            };
-            if !visible {
-                continue;
-            }
-            let h = hit(&row, 0.0);
-            evidence.push(json!({"asset_id":h.asset_id,"version":h.version,"chunk_id":h.chunk_id,"source_event_id":h.source_event_id,"locator":h.locator}));
-            if evidence.len() == 20 {
-                break;
+        let owners = read_model::rows_by_ids(
+            &mut self.tx,
+            self.scope,
+            "oc_artifact_owners",
+            "source_id,version",
+            "artifact_id",
+            &[artifact],
+        )
+        .await?;
+        let owners: std::collections::HashSet<(Uuid, i32)> = owners
+            .into_iter()
+            .map(|row| {
+                Ok((
+                    row.try_get("source_id").map_err(turso_err)?,
+                    row.try_get("version").map_err(turso_err)?,
+                ))
+            })
+            .collect::<StorageResult<_>>()?;
+        let ledger = read_model::rows_by_ids(
+            &mut self.tx,
+            self.scope,
+            "oc_artifact_ledger",
+            "source_id,version,surface,state",
+            "artifact_id",
+            &[artifact],
+        )
+        .await?;
+        let mut roots = std::collections::HashSet::new();
+        for row in ledger {
+            if row.try_get::<String>("surface").map_err(turso_err)? == "graph"
+                && row.try_get::<String>("state").map_err(turso_err)? == "committed"
+            {
+                let key = (
+                    row.try_get("source_id").map_err(turso_err)?,
+                    row.try_get("version").map_err(turso_err)?,
+                );
+                if owners.contains(&key) {
+                    roots.insert(key);
+                }
             }
         }
-        Ok(evidence)
+        if roots.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.graph_rows_for_sources(&roots).await
     }
+
     pub async fn issue_scoped_key(&mut self, role: &str) -> StorageResult<IssuedKey> {
         self.issue_scoped_key_with_capabilities(role, KeyCapabilities::default())
             .await

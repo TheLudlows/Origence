@@ -163,23 +163,7 @@ impl TursoTx {
         asset: Uuid,
         version: i32,
     ) -> StorageResult<bool> {
-        if !self.semantic_version_visible_local(asset, version).await?
-            || !self.learning_asset_visible(asset).await?
-        {
-            return Ok(false);
-        }
-        let sources: Vec<String> = native_turso::query_scalar("SELECT DISTINCT ss.value FROM oc_chunks c, json_each(c.locator,'$.support_sources') ss WHERE c.tenant_id=? AND c.workspace_id=? AND c.asset_id=? AND c.version=? AND json_extract(c.locator,'$.parser')='memory-semantics:v1'")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(version)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
-        let sources = sources
-            .iter()
-            .map(|source| Uuid::parse_str(source).map_err(|_| StorageError::NotFound))
-            .collect::<StorageResult<Vec<_>>>()?;
-        match self.require_learning_sources_visible(&sources).await {
-            Ok(()) => Ok(true),
-            Err(StorageError::NotFound) => Ok(false),
-            Err(error) => Err(error),
-        }
+        self.semantic_version_support_visible(asset, version).await
     }
 }
 

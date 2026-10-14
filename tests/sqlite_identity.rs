@@ -337,3 +337,74 @@ async fn incomplete_database_is_rejected_without_implicit_repair() {
     assert_eq!(role, "admin");
     raw_pool.close().await;
 }
+
+#[tokio::test]
+async fn identity_binding_mismatch_precedes_tombstone_rejection() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (auth, scope) = provision(&store).await;
+    let requested = identity();
+    let mut tx = store.begin(auth.clone()).await.unwrap();
+    let (asset, version) = tx.identity_slot(&requested).await.unwrap();
+    assert_eq!(version, None);
+    tx.delete_asset(asset).await.unwrap();
+    tx.commit().await.unwrap();
+    let mut different = requested.clone();
+    different.subject.stable_id = "different".into();
+    db::query("UPDATE oc_memory_identities SET identity_json=? WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
+        .bind(serde_json::to_string(&different).unwrap())
+        .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset)
+        .execute(store.pool()).await.unwrap();
+    let mut tx = store.begin(auth).await.unwrap();
+    assert!(matches!(tx.identity_slot(&requested).await,
+        Err(StorageError::Conflict(message)) if message == "memory identity binding mismatch"));
+    tx.rollback().await.unwrap();
+    let count: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn non_memory_identity_binding_is_not_silently_repaired() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (auth, scope) = provision(&store).await;
+    let requested = identity();
+    let mut tx = store.begin(auth.clone()).await.unwrap();
+    let (asset, _) = tx.identity_slot(&requested).await.unwrap();
+    tx.commit().await.unwrap();
+    db::query(
+        "UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(asset)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let mut tx = store.begin(auth).await.unwrap();
+    // The original inner association did not select non-memory bindings.
+    // Creation then encounters the existing identity key and must roll back.
+    assert!(matches!(
+        tx.identity_slot(&requested).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    let assets: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(assets, 1);
+    let binding: Uuid = db::query_scalar("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
+        .bind(scope.tenant_id).bind(scope.workspace_id).bind(requested.key(scope).unwrap())
+        .fetch_one(store.pool()).await.unwrap();
+    assert_eq!(binding, asset);
+}

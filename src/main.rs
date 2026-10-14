@@ -5,10 +5,10 @@ use origence::{
     models::Models,
     service::Service,
     storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, TursoStore},
-    types::{ResolveInput, SearchInput},
+    types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
-use std::path::PathBuf;
+use std::{future::Future, path::PathBuf, pin::Pin};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -91,8 +91,15 @@ enum Command {
         version: Option<i32>,
     },
 }
+type CommandFuture<'a, T> = Pin<Box<dyn Future<Output = anyhow::Result<T>> + 'a>>;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    init_tracing()?;
+    dispatch(Cli::parse()).await
+}
+
+fn init_tracing() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
@@ -103,116 +110,147 @@ async fn main() -> anyhow::Result<()> {
                 .add_directive("pdf_oxide=off".parse()?),
         )
         .init();
-    let cli = Cli::parse();
-    if let Command::Serve { bind, enable_aml } = &cli.command {
-        let service = Service::open(&cli.data_dir, Models::from_env()?).await?;
-        let listener = tokio::net::TcpListener::bind(bind).await?;
-        println!(
-            "{}",
-            json!({"listening":listener.local_addr()?.to_string()})
-        );
-        return host::serve_with_options(
-            service,
-            listener,
-            origence::api::ApiOptions {
-                enable_aml: *enable_aml,
-            },
-            host::shutdown_signal(),
-        )
-        .await;
+    Ok(())
+}
+
+// Select and allocate one command future synchronously. Unrelated commands then
+// have separate poll functions instead of sharing the CLI's async stack frame.
+fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
+    let Cli {
+        data_dir,
+        server_url,
+        offline,
+        command,
+    } = cli;
+    match command {
+        Command::Serve { bind, enable_aml } => Box::pin(async move {
+            let service = Service::open(&data_dir, Models::from_env()?).await?;
+            let listener = tokio::net::TcpListener::bind(bind).await?;
+            println!(
+                "{}",
+                json!({"listening":listener.local_addr()?.to_string()})
+            );
+            host::serve_with_options(
+                service,
+                listener,
+                origence::api::ApiOptions { enable_aml },
+                host::shutdown_signal(),
+            )
+            .await
+        }),
+        Command::VectorCompact { dry_run } => Box::pin(async move {
+            anyhow::ensure!(
+                offline,
+                "vector-compact requires --offline and a stopped host"
+            );
+            let report =
+                origence::storage::maintenance::compact_vectors(&data_dir, dry_run).await?;
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(())
+        }),
+        Command::MemoryIdentityUpgrade { dry_run } => Box::pin(async move {
+            anyhow::ensure!(
+                offline,
+                "memory-identity-upgrade requires --offline and a stopped host"
+            );
+            let status =
+                TursoStore::upgrade_memory_identity(data_dir.join("context.db"), dry_run).await?;
+            println!(
+                "{}",
+                json!({"feature":"memory-identity-v1","status":status,"dry_run":dry_run})
+            );
+            Ok(())
+        }),
+        command @ (Command::WorkspaceCreate { .. }
+        | Command::KeyCreate { .. }
+        | Command::KeyRevoke { .. })
+            if offline =>
+        {
+            Box::pin(run_admin(data_dir, command))
+        }
+        command if offline => Box::pin(run_offline(data_dir, command)),
+        command => Box::pin(run_remote(server_url, command)),
     }
-    if let Command::VectorCompact { dry_run } = &cli.command {
-        anyhow::ensure!(
-            cli.offline,
-            "vector-compact requires --offline and a stopped host"
-        );
-        let report =
-            origence::storage::maintenance::compact_vectors(&cli.data_dir, *dry_run).await?;
-        println!("{}", serde_json::to_string(&report)?);
-        return Ok(());
-    }
-    if let Command::MemoryIdentityUpgrade { dry_run } = &cli.command {
-        anyhow::ensure!(
-            cli.offline,
-            "memory-identity-upgrade requires --offline and a stopped host"
-        );
-        let status =
-            TursoStore::upgrade_memory_identity(cli.data_dir.join("context.db"), *dry_run).await?;
-        println!(
-            "{}",
-            json!({"feature":"memory-identity-v1","status":status,"dry_run":dry_run})
-        );
-        return Ok(());
-    }
-    if cli.offline
-        && matches!(
-            cli.command,
-            Command::WorkspaceCreate { .. } | Command::KeyCreate { .. } | Command::KeyRevoke { .. }
-        )
-    {
-        tokio::fs::create_dir_all(&cli.data_dir).await?;
-        let store = TursoStore::open(cli.data_dir.join("context.db")).await?;
-        let result = match cli.command {
-            Command::WorkspaceCreate { name } => {
-                anyhow::ensure!(!name.trim().is_empty(), "name is required");
-                let scope = Scope {
-                    tenant_id: Uuid::new_v4(),
-                    workspace_id: Uuid::new_v4(),
-                };
-                store
-                    .create_workspace(scope.tenant_id, scope.workspace_id, &name)
-                    .await?;
-                let key = store.issue_key(scope, "admin").await?;
-                json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token})
-            }
-            Command::KeyCreate {
-                workspace_id,
-                role,
-                allow_owned_workspaces,
-            } => json!(
-                store
-                    .issue_key_with_capabilities(
-                        store.workspace_scope(workspace_id).await?,
-                        &role,
-                        KeyCapabilities {
-                            allow_owned_workspaces
-                        },
-                    )
-                    .await?
-            ),
-            Command::KeyRevoke { key_id } => {
-                store.revoke_key(key_id).await?;
-                json!({"key_id":key_id,"revoked":true})
-            }
-            _ => unreachable!(),
-        };
-        store.shutdown().await?;
-        println!("{result}");
-        return Ok(());
-    }
-    anyhow::ensure!(
-        !matches!(cli.command, Command::WorkspaceCreate { .. }),
-        "workspace-create requires --offline and a stopped host"
-    );
+}
+
+async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
+    tokio::fs::create_dir_all(&data_dir).await?;
+    let store = TursoStore::open(data_dir.join("context.db")).await?;
+    let result = match command {
+        Command::WorkspaceCreate { name } => {
+            anyhow::ensure!(!name.trim().is_empty(), "name is required");
+            let scope = Scope {
+                tenant_id: Uuid::new_v4(),
+                workspace_id: Uuid::new_v4(),
+            };
+            store
+                .create_workspace(scope.tenant_id, scope.workspace_id, &name)
+                .await?;
+            let key = store.issue_key(scope, "admin").await?;
+            json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token})
+        }
+        Command::KeyCreate {
+            workspace_id,
+            role,
+            allow_owned_workspaces,
+        } => json!(
+            store
+                .issue_key_with_capabilities(
+                    store.workspace_scope(workspace_id).await?,
+                    &role,
+                    KeyCapabilities {
+                        allow_owned_workspaces
+                    },
+                )
+                .await?
+        ),
+        Command::KeyRevoke { key_id } => {
+            store.revoke_key(key_id).await?;
+            json!({"key_id":key_id,"revoked":true})
+        }
+        _ => unreachable!(),
+    };
+    store.shutdown().await?;
+    println!("{result}");
+    Ok(())
+}
+
+async fn run_offline(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     let token =
         std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
-    if cli.offline {
-        let service = Service::open(&cli.data_dir, Models::from_env()?).await?;
-        let auth = service.auth(&token).await?;
-        let result = match cli.command {
-            Command::Mcp => {
-                mcp::run(service.clone(), token).await?;
-                None
-            }
-            Command::Search {
-                query,
-                mode,
-                limit,
-                allow_partial,
-            } => Some(
+    let service = Service::open(&data_dir, Models::from_env()?).await?;
+    let auth = service.auth(&token).await?;
+    let result = offline_command(&service, &auth, token, command).await?;
+    service.engine.shutdown().await?;
+    if let Some(v) = result {
+        println!("{v}");
+    }
+    Ok(())
+}
+
+// Search/resolve/MCP futures also remain independent: their construction and
+// serialization temporaries do not share run_offline's poll frame.
+fn offline_command<'a>(
+    service: &'a Service,
+    auth: &'a AuthContext,
+    token: String,
+    command: Command,
+) -> CommandFuture<'a, Option<serde_json::Value>> {
+    match command {
+        Command::Mcp => Box::pin(async move {
+            mcp::run(service.clone(), token).await?;
+            Ok(None)
+        }),
+        Command::Search {
+            query,
+            mode,
+            limit,
+            allow_partial,
+        } => Box::pin(async move {
+            Ok(Some(
                 service
                     .search(
-                        &auth,
+                        auth,
                         SearchInput {
                             components: Default::default(),
                             memory_identity: None,
@@ -223,16 +261,18 @@ async fn main() -> anyhow::Result<()> {
                         },
                     )
                     .await?,
-            ),
-            Command::Resolve {
-                query,
-                mode,
-                budget_tokens,
-                allow_partial,
-            } => Some(
+            ))
+        }),
+        Command::Resolve {
+            query,
+            mode,
+            budget_tokens,
+            allow_partial,
+        } => Box::pin(async move {
+            Ok(Some(
                 service
                     .resolve(
-                        &auth,
+                        auth,
                         ResolveInput {
                             components: Default::default(),
                             memory_identity: None,
@@ -243,20 +283,24 @@ async fn main() -> anyhow::Result<()> {
                         },
                     )
                     .await?,
-            ),
-            Command::Get { asset_id, version } => {
-                Some(service.get(&auth, asset_id, version).await?)
-            }
-            _ => unreachable!(),
-        };
-        service.engine.shutdown().await?;
-        if let Some(v) = result {
-            println!("{v}");
+            ))
+        }),
+        Command::Get { asset_id, version } => {
+            Box::pin(async move { Ok(Some(service.get(auth, asset_id, version).await?)) })
         }
-        return Ok(());
+        _ => unreachable!(),
     }
-    let client = HostClient::new(&cli.server_url, token)?;
-    let (method, path, body) = match cli.command {
+}
+
+async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !matches!(command, Command::WorkspaceCreate { .. }),
+        "workspace-create requires --offline and a stopped host"
+    );
+    let token =
+        std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
+    let client = HostClient::new(&server_url, token)?;
+    let (method, path, body) = match command {
         Command::Mcp => return mcp::run_remote(client).await,
         Command::Search {
             query,

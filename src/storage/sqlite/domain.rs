@@ -10,31 +10,48 @@ impl TursoTx {
     }
 
     async fn live_role_for_principal(&mut self, principal_id: Uuid) -> StorageResult<String> {
-        let key: Option<(String, Uuid)> = native_turso::query_as(
-            "SELECT k.role,k.workspace_id FROM oc_api_keys k \
-                 JOIN oc_workspaces target ON target.tenant_id=k.tenant_id AND target.id=? \
-                 JOIN oc_workspaces root ON root.tenant_id=k.tenant_id AND root.id=k.workspace_id \
-                 WHERE k.id=? AND k.tenant_id=? AND NOT k.revoked \
-                   AND (k.workspace_id=target.id OR \
-                       (k.allow_owned_workspaces=1 AND target.owner_workspace_id=k.workspace_id \
-                        AND root.owner_workspace_id IS NULL))",
+        let key: Option<(String, Uuid, bool)> = native_turso::query_as(
+            "SELECT role,workspace_id,allow_owned_workspaces=1 FROM oc_api_keys \
+             WHERE id=? AND tenant_id=? AND NOT revoked",
         )
-        .bind(self.scope.workspace_id)
         .bind(principal_id)
         .bind(self.scope.tenant_id)
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        match key {
-            Some((role, workspace)) if workspace == self.scope.workspace_id => Ok(role),
-            Some((role, _)) => Ok(if Permission::Write.granted_by(&role) {
-                "writer"
-            } else {
-                "reader"
-            }
-            .into()),
-            None => Err(StorageError::Forbidden),
+        let (role, workspace, allow_owned) = key.ok_or(StorageError::Forbidden)?;
+        // Both workspace rows come from the same transaction snapshot. Fetch
+        // the at-most-two identities together, never one query per result row.
+        let workspaces: Vec<(Uuid, Option<Uuid>)> = native_turso::query_as(
+            "SELECT id,owner_workspace_id FROM oc_workspaces \
+             WHERE tenant_id=? AND id IN (?,?)",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(workspace)
+        .fetch_all(&mut *self.tx)
+        .await
+        .map_err(turso_err)?;
+        let (_, target_owner) = workspaces
+            .iter()
+            .find(|(id, _)| *id == self.scope.workspace_id)
+            .ok_or(StorageError::Forbidden)?;
+        let (_, root_owner) = workspaces
+            .iter()
+            .find(|(id, _)| *id == workspace)
+            .ok_or(StorageError::Forbidden)?;
+        if workspace == self.scope.workspace_id {
+            return Ok(role);
         }
+        if !allow_owned || *target_owner != Some(workspace) || root_owner.is_some() {
+            return Err(StorageError::Forbidden);
+        }
+        Ok(if Permission::Write.granted_by(&role) {
+            "writer"
+        } else {
+            "reader"
+        }
+        .into())
     }
 }
 

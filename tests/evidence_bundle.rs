@@ -221,10 +221,13 @@ async fn counts(s: &Service) -> Vec<(String, i64)> {
     .unwrap();
     let mut result = Vec::new();
     for name in names {
-        let count = db::query_scalar::<i64>(&format!("SELECT count(*) FROM {name}"))
-            .fetch_one(pool)
-            .await
-            .unwrap();
+        let count = db::query_scalar::<i64>(&format!(
+            "SELECT count(*) FROM \"{}\"",
+            name.replace('"', "\"\"")
+        ))
+        .fetch_one(pool)
+        .await
+        .unwrap();
         result.push((name, count));
     }
     result

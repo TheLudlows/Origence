@@ -2,7 +2,9 @@ use crate::{
     error::{AppError, Result},
     parsing,
     service::{Service, decode, scope},
-    storage::{DomainTx, FullTextQuery, Permission, SourceVersion, VectorQuery},
+    storage::{
+        DomainTx, FullTextHit, FullTextQuery, Permission, SourceVersion, VectorHit, VectorQuery,
+    },
     types::*,
 };
 use serde_json::{Value, json};
@@ -21,6 +23,19 @@ impl Service {
     }
 
     async fn search_inner(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
+        // Separate poll bodies, not merely future storage: native SQL parsing
+        // must not share a stack with every ranking/response temporary.
+        match Box::pin(self.prepare_search(a, input)).await? {
+            SearchPreparation::Empty(value) => Ok(value),
+            SearchPreparation::Ready(prepared) => Box::pin(self.finish_search(a, *prepared)).await,
+        }
+    }
+
+    async fn prepare_search(
+        &self,
+        a: &AuthContext,
+        input: SearchInput,
+    ) -> Result<SearchPreparation> {
         if let Some(identity) = &input.memory_identity {
             identity
                 .validate()
@@ -45,17 +60,15 @@ impl Service {
         };
         authorized.rollback().await?;
         if input.memory_identity.is_some() && asset_filter.is_none() {
-            return Ok(json!({
-                "hits": [],
-                "memory_identity": input.memory_identity,
-                "requested_mode": input.mode,
-                "effective_mode": input.mode,
-                "warnings": [],
-                "embedding_profile": self.models.profile,
-                "active_components": {"summaries": false, "graph": false},
-                "retrieval_policy": "turso-lance-filtered-rrf60-v2",
-                "graph": {"entities": [], "relations": []}
-            }));
+            return Ok(SearchPreparation::Empty(search_response(
+                &input,
+                &self.models.profile,
+                &input.mode,
+                &[],
+                Vec::new(),
+                (false, false),
+                (Vec::new(), Vec::new()),
+            )));
         }
         let authorization_ms = started.elapsed().as_secs_f64() * 1000.0;
         let embedding_started = std::time::Instant::now();
@@ -158,6 +171,42 @@ impl Service {
                 }
             }
         }
+        Ok(SearchPreparation::Ready(Box::new(PreparedSearch {
+            input,
+            started,
+            asset_filter,
+            authorization_ms,
+            embedding_ms,
+            eligibility_ms,
+            vector_ms,
+            vector_batches,
+            vector_dimension,
+            warnings,
+            effective,
+            terms,
+            native_hits,
+            full_text_hits,
+        })))
+    }
+
+    async fn finish_search(&self, a: &AuthContext, prepared: PreparedSearch) -> Result<Value> {
+        let PreparedSearch {
+            input,
+            started,
+            asset_filter,
+            authorization_ms,
+            embedding_ms,
+            eligibility_ms,
+            vector_ms,
+            vector_batches,
+            vector_dimension,
+            warnings,
+            effective,
+            terms,
+            native_hits,
+            full_text_hits,
+        } = prepared;
+        let profile = self.models.profile.as_deref().unwrap_or("");
         let native_count = native_hits.len() + full_text_hits.len();
         let branches_started = std::time::Instant::now();
         let summaries_enabled =
@@ -176,11 +225,23 @@ impl Service {
         if effective != "vector" {
             let mut keyword = Vec::new();
             let mut seen = HashMap::new();
+            let keys: Vec<_> = full_text_hits
+                .iter()
+                .map(|(generation, native)| (native.id, native.source, *generation))
+                .collect();
+            let candidates = tx.full_text_hits(&keys).await?;
+            let missing: Vec<_> = keys
+                .iter()
+                .filter(|key| !candidates.contains_key(key))
+                .map(|key| key.0)
+                .collect();
+            let live_missing = tx.visible_hits(&missing).await?;
             for (generation, native) in full_text_hits {
-                let candidate = tx
-                    .full_text_hit(native.id, native.source, generation)
-                    .await?;
-                if let Some(mut hit) = live_native_candidate(&mut tx, native.id, candidate).await? {
+                let candidate = candidates
+                    .get(&(native.id, native.source, generation))
+                    .cloned();
+                if let Some(mut hit) = batch_native_candidate(native.id, candidate, &live_missing)?
+                {
                     if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
                         return Err(AppError::Conflict(
                             "native retrieval identity changed".into(),
@@ -211,17 +272,24 @@ impl Service {
         }
         let mut vectors = Vec::new();
         let mut seen_vectors = HashMap::new();
+        let keys: Vec<_> = native_hits
+            .iter()
+            .map(|(generation, native)| (native.id, native.source, *generation))
+            .collect();
+        let candidates = tx
+            .vector_hits_exact(&keys, profile, vector_dimension)
+            .await?;
+        let missing: Vec<_> = keys
+            .iter()
+            .filter(|key| !candidates.contains_key(key))
+            .map(|key| key.0)
+            .collect();
+        let live_missing = tx.visible_hits(&missing).await?;
         for (generation, native) in native_hits {
-            let candidate = tx
-                .vector_hit_exact(
-                    native.id,
-                    native.source,
-                    profile,
-                    vector_dimension,
-                    generation,
-                )
-                .await?;
-            if let Some(mut hit) = live_native_candidate(&mut tx, native.id, candidate).await? {
+            let candidate = candidates
+                .get(&(native.id, native.source, generation))
+                .cloned();
+            if let Some(mut hit) = batch_native_candidate(native.id, candidate, &live_missing)? {
                 if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
                     return Err(AppError::Conflict(
                         "native retrieval identity changed".into(),
@@ -339,32 +407,13 @@ impl Service {
         // Validate every native participant, including those below the final
         // response limit: its disappearance can change another hit's RRF rank.
         verify_native_candidates(&mut verify, &ranked_native).await?;
-        let mut current = Vec::new();
-        let mut identities = HashMap::new();
-        for h in hits {
-            if let Some(mut live) = verify.visible_hit(h.chunk_id).await? {
-                live.score = h.score;
-                if let std::collections::hash_map::Entry::Vacant(entry) =
-                    identities.entry(live.asset_id)
-                {
-                    let asset = verify.asset_view(live.asset_id, None).await?;
-                    let identity: Option<crate::memory_identity::MemoryIdentity> =
-                        decode(asset["identity"].clone())?;
-                    entry.insert(identity);
-                }
-                live.identity = identities[&live.asset_id].clone();
-                if !live.matches_identity(input.memory_identity.as_ref()) {
-                    return Err(AppError::Conflict(
-                        "native retrieval identity changed".into(),
-                    ));
-                }
-                current.push(live);
-                if current.len() == input.limit {
-                    break;
-                }
-            }
-        }
-        let hits = current;
+        let hits = verify_search_hits(
+            &mut verify,
+            &hits,
+            input.limit,
+            input.memory_identity.as_ref(),
+        )
+        .await?;
         let mut live_entities = Vec::new();
         for mut e in entities {
             let evidence = verify.graph_evidence(decode(e["id"].clone())?).await?;
@@ -410,9 +459,15 @@ impl Service {
             vector_batches, native_count, returned_count = hits.len(),
             "search completed"
         );
-        Ok(
-            json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":self.models.profile,"retrieval_policy":"turso-lance-filtered-rrf60-v2","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}}),
-        )
+        Ok(search_response(
+            &input,
+            &self.models.profile,
+            &effective,
+            &warnings,
+            hits,
+            (summaries_enabled, graph_enabled),
+            (entities, relations),
+        ))
     }
     pub async fn resolve(&self, a: &AuthContext, input: ResolveInput) -> Result<Value> {
         Box::pin(self.resolve_inner(a, input)).await
@@ -456,6 +511,48 @@ impl Service {
     }
 }
 
+enum SearchPreparation {
+    Empty(Value),
+    Ready(Box<PreparedSearch>),
+}
+
+// Phase handoff contains results only; no transaction crosses this boundary.
+struct PreparedSearch {
+    input: SearchInput,
+    started: std::time::Instant,
+    asset_filter: Option<Uuid>,
+    authorization_ms: f64,
+    embedding_ms: f64,
+    eligibility_ms: f64,
+    vector_ms: f64,
+    vector_batches: usize,
+    vector_dimension: usize,
+    warnings: Vec<&'static str>,
+    effective: String,
+    terms: String,
+    native_hits: Vec<(i64, VectorHit)>,
+    full_text_hits: Vec<(i64, FullTextHit)>,
+}
+
+// Serialize only after the authority transactions finish. Keeping these JSON
+// temporaries out of search_inner's poll frame leaves stack for native SQL
+// parsing on the default Windows main thread; boxing the future alone does not.
+fn search_response(
+    input: &SearchInput,
+    profile: &Option<String>,
+    effective: &str,
+    warnings: &[&str],
+    hits: Vec<Value>,
+    components: (bool, bool),
+    graph: (Vec<Value>, Vec<Value>),
+) -> Value {
+    let (summaries_enabled, graph_enabled) = components;
+    let (entities, relations) = graph;
+    json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":profile,"retrieval_policy":"turso-lance-filtered-rrf60-v2","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}})
+}
+
+type NativeCandidateKey = (Uuid, SourceVersion, i64);
+
 /// Exact authority that justified a native score. Kept private and retained
 /// until the response's final relational snapshot, never serialized to clients.
 #[derive(Clone, Debug)]
@@ -496,12 +593,12 @@ pub(crate) async fn verify_native_candidates(
     tx: &mut crate::storage::sqlite::TursoTx,
     candidates: &[NativeRankedCandidate],
 ) -> Result<()> {
+    let mut full_text = Vec::new();
+    let mut vectors: HashMap<(String, usize), Vec<NativeCandidateKey>> = HashMap::new();
     for candidate in candidates {
-        let original = &candidate.hit;
-        let current = match &candidate.proof {
+        match &candidate.proof {
             NativePublicationProof::FullText { source, generation } => {
-                tx.full_text_hit(original.chunk_id, *source, *generation)
-                    .await?
+                full_text.push((candidate.hit.chunk_id, *source, *generation));
             }
             NativePublicationProof::Vector {
                 source,
@@ -509,20 +606,116 @@ pub(crate) async fn verify_native_candidates(
                 profile,
                 dimension,
             } => {
-                tx.vector_hit_exact(original.chunk_id, *source, profile, *dimension, *generation)
-                    .await?
+                vectors
+                    .entry((profile.clone(), *dimension))
+                    .or_default()
+                    .push((candidate.hit.chunk_id, *source, *generation));
             }
+        }
+    }
+    let full_text_hits = tx.full_text_hits(&full_text).await?;
+    let mut vector_hits = HashMap::new();
+    for ((profile, dimension), keys) in vectors {
+        vector_hits.insert(
+            (profile.clone(), dimension),
+            tx.vector_hits_exact(&keys, &profile, dimension).await?,
+        );
+    }
+    let mut checked = Vec::new();
+    let mut missing = Vec::new();
+    for candidate in candidates {
+        let id = candidate.hit.chunk_id;
+        let current = match &candidate.proof {
+            NativePublicationProof::FullText { source, generation } => {
+                full_text_hits.get(&(id, *source, *generation)).cloned()
+            }
+            NativePublicationProof::Vector {
+                source,
+                generation,
+                profile,
+                dimension,
+            } => vector_hits
+                .get(&(profile.clone(), *dimension))
+                .and_then(|hits| hits.get(&(id, *source, *generation)))
+                .cloned(),
         };
-        let current = live_native_candidate(tx, original.chunk_id, current)
-            .await?
+        if current.is_none() {
+            missing.push(id);
+        }
+        checked.push(current);
+    }
+    let live_missing = tx.visible_hits(&missing).await?;
+    for (candidate, current) in candidates.iter().zip(checked) {
+        let current = batch_native_candidate(candidate.hit.chunk_id, current, &live_missing)?
             .ok_or_else(|| AppError::Unavailable("native retrieval became unavailable".into()))?;
-        if !same_evidence_identity(original, &current) {
+        if !same_evidence_identity(&candidate.hit, &current) {
             return Err(AppError::Conflict(
                 "native retrieval evidence changed".into(),
             ));
         }
     }
     Ok(())
+}
+
+/// Keep final response verification bounded by its original rank stop point.
+pub(crate) async fn verify_search_hits(
+    tx: &mut crate::storage::sqlite::TursoTx,
+    hits: &[SearchHit],
+    limit: usize,
+    identity: Option<&crate::memory_identity::MemoryIdentity>,
+) -> Result<Vec<SearchHit>> {
+    let mut current = Vec::new();
+    let mut cursor = 0;
+    // At most the remaining response capacity is inspected per batch. This
+    // preserves the old stop point for non-native Summary/Graph candidates:
+    // a malformed lower-ranked row must not invalidate an already-full page.
+    while cursor < hits.len() {
+        let capacity = limit.saturating_sub(current.len()).max(1);
+        let end = (cursor + capacity).min(hits.len());
+        let ids: Vec<_> = hits[cursor..end].iter().map(|hit| hit.chunk_id).collect();
+        let live_hits = tx.visible_hits(&ids).await?;
+        let mut selected = Vec::new();
+        for h in &hits[cursor..end] {
+            if let Some(mut live) = live_hits.get(&h.chunk_id).cloned() {
+                live.score = h.score;
+                selected.push(live);
+            }
+        }
+        let assets: Vec<_> = selected.iter().map(|hit| hit.asset_id).collect();
+        let identities = tx.retrieval_identities(&assets).await?;
+        for mut live in selected {
+            live.identity = identities.get(&live.asset_id).cloned().flatten();
+            if !live.matches_identity(identity) {
+                return Err(AppError::Conflict(
+                    "native retrieval identity changed".into(),
+                ));
+            }
+            current.push(live);
+        }
+        if current.len() == limit {
+            break;
+        }
+        cursor = end;
+    }
+    Ok(current)
+}
+
+fn batch_native_candidate(
+    id: Uuid,
+    candidate: Option<SearchHit>,
+    live_missing: &HashMap<Uuid, SearchHit>,
+) -> Result<Option<SearchHit>> {
+    if candidate.is_none() {
+        if live_missing.contains_key(&id) {
+            return Err(AppError::Conflict(
+                "native retrieval does not match live publication".into(),
+            ));
+        }
+        return Err(AppError::Unavailable(
+            "native retrieval became unavailable".into(),
+        ));
+    }
+    Ok(candidate)
 }
 
 /// Once a native candidate has participated in top-k, dropping it silently can

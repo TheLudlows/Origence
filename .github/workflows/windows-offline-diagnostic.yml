@@ -1,0 +1,127 @@
+name: Windows offline recovery diagnostic
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: windows-offline-diagnostic-${{ github.head_ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    if: github.head_ref == 'fix/windows-offline-recovery'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      # Same job name and toolchain/environment as main reuse its native cache.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: true
+          cache-on-failure: true
+      - name: Build original lifecycle regression and verify batched authority contracts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual Studio C++ tools missing.' }
+          & (Join-Path $vs 'Common7\Tools\Launch-VsDevShell.ps1') -Arch amd64 -HostArch amd64 | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Visual Studio setup failed.' }
+          $env:RUSTUP_TOOLCHAIN = '1.98.0-x86_64-pc-windows-msvc'
+          $env:CC = 'cl.exe'
+          $env:CXX = 'cl.exe'
+          if (-not $env:PROTOC -and -not (Get-Command protoc -ErrorAction SilentlyContinue)) {
+            $protoc = & cargo run --manifest-path tools/storage-probe/Cargo.toml --locked --no-default-features --features build-tools --bin probe-protoc --target-dir target/storage-probe -j 1
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot locate protoc.' }
+            $env:PROTOC = $protoc.Trim()
+          }
+          $build = & cargo test --locked --test local -j 1 --no-run --message-format=json
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed.' }
+          $testExe = $build | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'local' -and $_.executable } | Select-Object -Last 1 -ExpandProperty executable
+          if (-not $testExe) { throw 'Original local test executable missing.' }
+          "ORIGENCE_TEST_EXE=$testExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & cargo test --locked --lib -j 1 -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Native Turso authority contracts failed.' }
+          & dumpbin /headers target/debug/origence.exe | Select-String 'stack'
+      - name: Capture first-chance stack in the unchanged offline regression
+        # Preserve the original Windows regression result even if an independent
+        # library contract fails. The job still fails for that earlier failure.
+        if: ${{ !cancelled() && env.ORIGENCE_TEST_EXE != '' }}
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cdb = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Debuggers\x64\cdb.exe'
+          if (-not (Test-Path -LiteralPath $cdb)) {
+            $found = Get-Command cdb.exe -ErrorAction SilentlyContinue
+            if (-not $found) { throw 'CDB missing; stop before installing anything.' }
+            $cdb = $found.Source
+          }
+          Get-ChildItem target/debug/origence.pdb -ErrorAction SilentlyContinue | Select-Object Name,Length
+          # With -g, the initial command runs at the first real exception.
+          # The prior run proved this is first-chance c00000fd in the offline child.
+          $startup = '.echo ORIGENCE_SOV_BEGIN; .lastevent; knf 0x100; !teb; .echo ORIGENCE_SOV_END; sxd -c2 "gn" sov; gn'
+          $symbols = (Join-Path $PWD 'target\debug') + ';' + (Join-Path $PWD 'target\debug\deps')
+          $log = Join-Path $env:RUNNER_TEMP 'origence-cdb.log'
+          $psi = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = $cdb
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.WorkingDirectory = $PWD.Path
+          $argsForCdb = @('-o', '-g', '-G', '-hd', '-y', $symbols, '-logo', $log, '-c', $startup, $env:ORIGENCE_TEST_EXE, 'local_app::local_host_api_cli_mcp_models_and_recovery', '--exact', '--nocapture')
+          foreach ($arg in $argsForCdb) { $psi.ArgumentList.Add([string]$arg) }
+          $p = [System.Diagnostics.Process]::Start($psi)
+          $stdout = $p.StandardOutput.ReadToEndAsync()
+          $stderr = $p.StandardError.ReadToEndAsync()
+          if (-not $p.WaitForExit(300000)) {
+            try { $p.Kill($true) } catch {}
+            throw 'CDB timed out; this is not a completed regression result.'
+          }
+          Write-Host "CDB exit code: $($p.ExitCode)"
+          $captured = $stdout.GetAwaiter().GetResult() + $stderr.GetAwaiter().GetResult()
+          Write-Host $captured
+          $debuggerLog = Get-Content -LiteralPath $log -Raw
+          if ($captured -notmatch 'test result: ok\. 1 passed;' -or $debuggerLog -match 'ORIGENCE_SOV_BEGIN\r?\n') {
+            throw 'Original regression did not pass; inspect first-chance stack and original test result.'
+          }
+      - name: Validate all Windows lifecycle contracts after the original regression passes
+        shell: pwsh
+        run: ./tools/build.ps1 -Action Validate -Jobs 1
+      - name: Check Windows authority without native vector features
+        run: cargo check --locked --no-default-features --lib -j 1
+  source-contracts:
+    if: github.head_ref == 'fix/windows-offline-recovery'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt
+      - name: Check SQL construction guard
+        run: |
+          python3 -m unittest discover -s tools -p 'test_check_no_join_sql.py' -v
+          python3 tools/check_no_join_sql.py
+      - name: Capture canonical formatting without changing tested source
+        if: always()
+        run: |
+          cargo fmt --all
+          git diff --exit-code > "$RUNNER_TEMP/origence-format.patch"
+      - name: Preserve formatting correction
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-repair-format
+          path: ${{ runner.temp }}/origence-format.patch
+          if-no-files-found: ignore

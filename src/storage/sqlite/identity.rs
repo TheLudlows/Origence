@@ -115,10 +115,8 @@ impl TursoTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let existing: Option<(Uuid, Option<i32>, bool)> = native_turso::query_as(
-            "SELECT a.id,a.current_version,a.deleted FROM oc_memory_identities i \
-             JOIN oc_assets a ON a.tenant_id=i.tenant_id AND a.workspace_id=i.workspace_id AND a.id=i.asset_id \
-             WHERE i.tenant_id=? AND i.workspace_id=? AND i.identity_key=? AND a.kind='memory'",
+        let bound_asset: Option<read_model::AssociationKey> = native_turso::query_scalar(
+            "SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -126,6 +124,19 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
+        let existing: Option<(Uuid, Option<i32>, bool)> = if let Some(asset) = bound_asset {
+            native_turso::query_as(
+                "SELECT id,current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='memory'",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(asset)
+            .fetch_optional(&mut *self.tx)
+            .await
+            .map_err(turso_err)?
+        } else {
+            None
+        };
         if let Some((asset, version, deleted)) = existing {
             if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
                 return Err(StorageError::Conflict(
@@ -181,5 +192,31 @@ impl TursoTx {
         .await
         .map_err(turso_err)?;
         Ok((asset, None))
+    }
+}
+
+#[cfg(feature = "local-storage")]
+impl TursoTx {
+    /// Only stored JSON rows, not an asset_view/current/semantic-status guard.
+    /// Callers decode in their existing traversal order after route filtering.
+    pub(super) async fn identity_rows_for_assets(
+        &mut self,
+        assets: &[Uuid],
+    ) -> StorageResult<HashMap<Uuid, native_turso::Row>> {
+        if assets.is_empty() || !identity_table_present(&mut self.tx).await? {
+            return Ok(HashMap::new());
+        }
+        super::read_model::rows_by_ids(
+            &mut self.tx,
+            self.scope,
+            "oc_memory_identities",
+            "asset_id,identity_json",
+            "asset_id",
+            assets,
+        )
+        .await?
+        .into_iter()
+        .map(|row| Ok((row.try_get("asset_id").map_err(turso_err)?, row)))
+        .collect()
     }
 }

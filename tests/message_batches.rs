@@ -10,7 +10,7 @@ use origence::{
     },
     models::Models,
     service::Service,
-    storage::{RelationalStore, Scope},
+    storage::{AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, StorageError},
     types::{AuthContext, RetrievalComponents, SearchInput},
     worker,
 };
@@ -201,6 +201,381 @@ async fn payload(service: &Service, receipt: &IngestReceipt) -> Value {
         .await
         .unwrap();
     serde_json::from_str(&text).unwrap()
+}
+
+async fn storage_status(
+    service: &Service,
+    auth: &AuthContext,
+    receipt: &IngestReceipt,
+) -> Result<PublicationStatus, StorageError> {
+    let mut tx = service
+        .engine
+        .relational()
+        .begin(AuthorizedScope {
+            scope: Scope {
+                tenant_id: auth.tenant_id,
+                workspace_id: auth.workspace_id,
+            },
+            principal_id: auth.id,
+            role: auth.role.clone(),
+        })
+        .await
+        .unwrap();
+    let result = tx.message_batch_status(receipt).await;
+    tx.rollback().await.unwrap();
+    result
+}
+
+async fn replace_receipt_chunks(
+    service: &Service,
+    receipt: &IngestReceipt,
+    original: &Value,
+    state: &str,
+    chunks: Option<&Value>,
+) -> Value {
+    // Simulate a corrupt persisted plan while retaining the accepted receipt
+    // and real worker publication. No worker runs while these fixtures differ.
+    let mut changed = original.clone();
+    let memory = changed["publication"]["memories"][0]
+        .as_object_mut()
+        .unwrap();
+    if let Some(chunks) = chunks {
+        memory.insert("chunks".into(), chunks.clone());
+    } else {
+        memory.remove("chunks");
+    }
+    db::query("UPDATE oc_jobs SET state=?,payload=? WHERE id=?")
+        .bind(state)
+        .bind(changed.to_string())
+        .bind(receipt.job_id)
+        .execute(service.engine.relational().pool())
+        .await
+        .unwrap();
+    changed
+}
+
+#[tokio::test]
+async fn receipt_chunks_missing_null_and_arrays_keep_status_semantics() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "root-shapes", batch("root-shapes"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    let chunks = original["publication"]["memories"][0]["chunks"].clone();
+    let encoded_chunks = Value::Array(
+        chunks
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|chunk| Value::String(chunk.to_string()))
+            .collect(),
+    );
+    for (name, chunks, completed) in [
+        ("missing", None, PublicationStatus::Invisible),
+        ("null", Some(Value::Null), PublicationStatus::Invisible),
+        ("empty array", Some(json!([])), PublicationStatus::Invisible),
+        (
+            "publication array",
+            Some(chunks.clone()),
+            PublicationStatus::Retrievable,
+        ),
+        (
+            "encoded chunk array",
+            Some(encoded_chunks),
+            PublicationStatus::Retrievable,
+        ),
+    ] {
+        for state in ["pending", "completed"] {
+            let saved =
+                replace_receipt_chunks(&service, &receipt, &original, state, chunks.as_ref()).await;
+            let expected = if state == "pending" {
+                PublicationStatus::Pending
+            } else {
+                completed
+            };
+            assert_eq!(
+                storage_status(&service, &auth, &receipt).await.unwrap(),
+                expected,
+                "{state}, {name}: storage"
+            );
+            assert_eq!(
+                status(&service, &auth, &receipt).await,
+                expected,
+                "{state}, {name}: service"
+            );
+            assert_eq!(payload(&service, &receipt).await, saved);
+        }
+    }
+    replace_receipt_chunks(&service, &receipt, &original, "completed", Some(&chunks)).await;
+    assert_eq!(payload(&service, &receipt).await, original);
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Retrievable
+    );
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn receipt_non_array_chunks_fail_closed_with_safe_unavailable_error() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "bad-root", batch("bad-root"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    for (name, chunks) in [
+        ("empty object", json!({})),
+        ("object with invalid child", json!({"chunk": "not-json"})),
+        ("encoded object string", json!(r#"{"id":"encoded"}"#)),
+        ("invalid JSON string", json!("not-json")),
+        ("integer", json!(17)),
+        ("real", json!(1.5)),
+        ("true", json!(true)),
+        ("false", json!(false)),
+    ] {
+        for state in ["pending", "completed"] {
+            let saved =
+                replace_receipt_chunks(&service, &receipt, &original, state, Some(&chunks)).await;
+            let error = storage_status(&service, &auth, &receipt).await.unwrap_err();
+            assert!(
+                matches!(&error, StorageError::Unavailable(message)
+                    if message == "invalid message publication plan"),
+                "{state}, {name}: {error:?}"
+            );
+            let error = service
+                .message_batch_status(&auth, &receipt)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&error, AppError::Unavailable(message)
+                    if message == "local storage unavailable"),
+                "{state}, {name}: {error:?}"
+            );
+            assert_eq!(error.code(), "DEPENDENCY_UNAVAILABLE");
+            assert_eq!(error.safe_message(), "local storage unavailable");
+            assert_eq!(payload(&service, &receipt).await, saved);
+        }
+    }
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn receipt_malformed_array_string_fails_save_and_rolls_back_payload() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (token, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "bad-element", batch("bad-element"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    let first = original["publication"]["memories"][0]["chunks"][0].clone();
+    // Saving must project every native ID, including a malformed 33rd value
+    // after duplicate/null IDs, before replacing the durable publication.
+    let mut duplicate_prefix = vec![first.clone(); 32];
+    duplicate_prefix.push(json!("not-json"));
+    let mut null_prefix = vec![Value::Null; 32];
+    null_prefix.push(json!("not-json"));
+    let authorized = service
+        .engine
+        .relational()
+        .authenticate(&token)
+        .await
+        .unwrap();
+    for chunks in [
+        json!(["not-json"]),
+        json!([first, "not-json"]),
+        Value::Array(duplicate_prefix),
+        Value::Array(null_prefix),
+    ] {
+        let mut plan = original["publication"].clone();
+        plan["memories"][0]["chunks"] = chunks.clone();
+        for (state, expected) in [
+            ("pending", PublicationStatus::Pending),
+            ("failed", PublicationStatus::Failed),
+            ("completed", PublicationStatus::Retrievable),
+        ] {
+            db::query("UPDATE oc_jobs SET state=? WHERE id=?")
+                .bind(state)
+                .bind(receipt.job_id)
+                .execute(service.engine.relational().pool())
+                .await
+                .unwrap();
+            let mut tx = service
+                .engine
+                .relational()
+                .begin(authorized.clone())
+                .await
+                .unwrap();
+            tx.check_permission(Permission::Write).await.unwrap();
+            let error = tx
+                .save_publication(receipt.job_id, &plan)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&error, StorageError::Backend(_)),
+                "{state}, {chunks}: {error:?}"
+            );
+            tx.rollback().await.unwrap();
+            let error = AppError::from(error);
+            assert!(matches!(&error, AppError::Internal(_)));
+            assert_eq!(error.code(), "INTERNAL_ERROR");
+            assert_eq!(error.safe_message(), "internal operation failed");
+            assert_eq!(payload(&service, &receipt).await, original);
+            assert_eq!(
+                storage_status(&service, &auth, &receipt).await.unwrap(),
+                expected,
+                "{state}, {chunks}: rollback retains the original receipt witness"
+            );
+            assert_eq!(status(&service, &auth, &receipt).await, expected);
+        }
+    }
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn receipt_same_count_heavy_id_edit_keeps_durable_witness() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "heavy-only", batch("heavy-only"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Retrievable
+    );
+    let original = payload(&service, &receipt).await;
+    let mut chunks = original["publication"]["memories"][0]["chunks"].clone();
+    let original_id: Uuid = serde_json::from_value(chunks[0]["id"].clone()).unwrap();
+    chunks[0]["id"] = json!(Uuid::new_v4());
+    // Direct SQL bypasses save_publication. A same-count heavy-only edit leaves
+    // the durable receipt witness unchanged; status does not reproject the IDs.
+    let changed =
+        replace_receipt_chunks(&service, &receipt, &original, "completed", Some(&chunks)).await;
+    assert_ne!(changed, original);
+    assert_eq!(
+        changed["publication"]["receipt_metadata"],
+        original["publication"]["receipt_metadata"]
+    );
+    assert_eq!(
+        storage_status(&service, &auth, &receipt).await.unwrap(),
+        PublicationStatus::Retrievable
+    );
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Retrievable
+    );
+    assert_eq!(payload(&service, &receipt).await, changed);
+    // The old ID is still a live witness, not a cached success result.
+    db::query("UPDATE oc_index_entries SET state='removed' WHERE artifact_id=?")
+        .bind(original_id)
+        .execute(service.engine.relational().pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        storage_status(&service, &auth, &receipt).await.unwrap(),
+        PublicationStatus::Invisible
+    );
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Invisible
+    );
+    assert_eq!(payload(&service, &receipt).await, changed);
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn receipt_positive_plan_requires_valid_durable_metadata() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "bad-metadata", batch("bad-metadata"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    let count = original["publication"]["memories"][0]["chunks"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert!(count > 0);
+    assert_eq!(
+        original["publication"]["receipt_metadata"]["format"],
+        "message-receipt:v1"
+    );
+    assert_eq!(
+        original["publication"]["receipt_metadata"]["chunks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        count
+    );
+    let mut missing = original.clone();
+    missing["publication"]
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt_metadata");
+    let mut wrong_format = original.clone();
+    wrong_format["publication"]["receipt_metadata"]["format"] = json!("unsupported");
+    let mut wrong_count = original.clone();
+    wrong_count["publication"]["receipt_metadata"]["chunks"]
+        .as_array_mut()
+        .unwrap()
+        .pop()
+        .unwrap();
+    for (name, changed) in [
+        ("missing metadata", missing),
+        ("unknown format", wrong_format),
+        ("mismatched count", wrong_count),
+    ] {
+        // A positive prepared plan cannot bypass metadata validation just
+        // because its job is not completed. Status must not repair it either.
+        for state in ["pending", "failed", "completed"] {
+            db::query("UPDATE oc_jobs SET state=?,payload=? WHERE id=?")
+                .bind(state)
+                .bind(changed.to_string())
+                .bind(receipt.job_id)
+                .execute(service.engine.relational().pool())
+                .await
+                .unwrap();
+            let error = storage_status(&service, &auth, &receipt).await.unwrap_err();
+            assert!(
+                matches!(&error, StorageError::Unavailable(message)
+                    if message == "invalid message publication plan"),
+                "{state}, {name}: {error:?}"
+            );
+            let error = service
+                .message_batch_status(&auth, &receipt)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&error, AppError::Unavailable(message)
+                    if message == "local storage unavailable"),
+                "{state}, {name}: {error:?}"
+            );
+            assert_eq!(error.code(), "DEPENDENCY_UNAVAILABLE");
+            assert_eq!(error.safe_message(), "local storage unavailable");
+            assert_eq!(payload(&service, &receipt).await, changed);
+        }
+    }
+    service.engine.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -465,6 +840,8 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
     assert!(worker::process_next(&service).await.unwrap());
     assert_eq!(count(&service, "oc_versions").await, 0);
     let saved = payload(&service, &receipt).await;
+    let saved_metadata = saved["publication"]["receipt_metadata"].clone();
+    assert_eq!(saved_metadata["format"], json!("message-receipt:v1"));
     let accepted = saved["accepted_spec"].clone();
     let ids: Vec<_> = saved["publication"]["memories"][0]["chunks"]
         .as_array()
@@ -506,6 +883,10 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
     assert_eq!(
         status(&service, &auth, &receipt).await,
         PublicationStatus::Retrievable
+    );
+    assert_eq!(
+        payload(&service, &receipt).await["publication"]["receipt_metadata"],
+        saved_metadata
     );
     assert_eq!(models.calls.load(Ordering::SeqCst), calls);
     let actual: Vec<Uuid> =
@@ -674,7 +1055,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
         ),
         (
             "UPDATE oc_index_entries SET model_id='wrong' WHERE artifact_id=?",
-            "UPDATE oc_index_entries SET model_id=(SELECT json_extract(payload,'$.accepted_spec.embedding_profile') FROM oc_jobs WHERE operation='message_batch_ingest') WHERE artifact_id=?",
+            "UPDATE oc_index_entries SET model_id=? WHERE artifact_id=?",
         ),
         (
             "UPDATE oc_index_entries SET dimension=99 WHERE artifact_id=?",
@@ -723,7 +1104,13 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             assert!(hits.iter().all(|hit| hit["chunk_id"] != json!(chunk)));
             assert_eq!(payload(&service, &receipt).await, publication_before);
         }
-        db::query(restore_sql)
+        let restore = db::query(restore_sql);
+        let restore = if restore_sql.contains("model_id=?") {
+            restore.bind(&receipt.accepted_spec.embedding_profile)
+        } else {
+            restore
+        };
+        restore
             .bind(chunk)
             .execute(service.engine.relational().pool())
             .await
@@ -1110,6 +1497,8 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
             .is_empty()
     );
     let saved = payload(&service, &receipt).await;
+    let saved_metadata = saved["publication"]["receipt_metadata"].clone();
+    assert_eq!(saved_metadata["format"], json!("message-receipt:v1"));
     let expected: Vec<Value> = saved["publication"]["memories"][0]["chunks"]
         .as_array()
         .unwrap()
@@ -1144,6 +1533,10 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
     assert_eq!(
         status(&service, &auth, &receipt).await,
         PublicationStatus::Retrievable
+    );
+    assert_eq!(
+        payload(&service, &receipt).await["publication"]["receipt_metadata"],
+        saved_metadata
     );
     assert_eq!(models.calls.load(Ordering::SeqCst), calls);
     let actual: Vec<Uuid> =

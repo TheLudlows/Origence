@@ -9,8 +9,215 @@ use crate::session::{ArchivedEvidence, FeedbackInput};
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
-    native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_improve_cursors','oc_improve_runs','oc_learnings','oc_learning_support')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='learning') OR EXISTS(SELECT 1 FROM oc_jobs WHERE operation='improve')")
-        .fetch_one(conn).await.map_err(turso_err)
+    // All three reads are intentional: an earlier true arm must not hide a
+    // missing-table/backend error that the original statement had to prepare.
+    let schema: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_improve_cursors','oc_improve_runs','oc_learnings','oc_learning_support'))")
+        .fetch_one(&mut *conn).await.map_err(turso_err)?;
+    let events: bool =
+        native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE kind='learning')")
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(turso_err)?;
+    let jobs: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE operation='improve')",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    Ok(schema || events || jobs)
+}
+
+/// Metadata-only associations share the caller's existing transaction. Keep
+/// each relation's original predicates in SQL and combine only their results.
+pub(super) async fn learning_ingest_valid(
+    conn: &mut Connection,
+    scope: Scope,
+    asset: Uuid,
+    source: Uuid,
+    job: Uuid,
+) -> StorageResult<bool> {
+    let asset_valid: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='knowledge' AND deleted=0)",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(asset)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let source_valid: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='learning' AND state='active')",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let job_valid: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND source_event_id=? AND operation='ingest' AND cancel_requested=0 AND state IN ('pending','processing','retry_wait'))",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(job)
+    .bind(asset)
+    .bind(source)
+    .fetch_one(conn)
+    .await
+    .map_err(turso_err)?;
+    // Do not short-circuit relation preparation when a preceding EXISTS is false.
+    Ok(asset_valid && source_valid && job_valid)
+}
+
+pub(super) async fn learning_publication_ready(
+    conn: &mut Connection,
+    scope: Scope,
+    learning: Uuid,
+) -> StorageResult<bool> {
+    use super::read_model::AssociationKey;
+
+    let row = native_turso::query(
+        "SELECT asset_id,source_event_id,ingest_job_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(learning)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let key = |column| -> StorageResult<Option<AssociationKey>> {
+        row.as_ref()
+            .map(|row| row.try_get(column).map_err(turso_err))
+            .transpose()
+    };
+    let asset = key("asset_id")?;
+    let source = key("source_event_id")?;
+    let job = key("ingest_job_id")?;
+    let current: Option<AssociationKey> = native_turso::query_scalar(
+        "SELECT current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(asset.clone())
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let version_ready: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=? AND source_event_id=?)",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(asset.clone())
+    .bind(current.clone())
+    .bind(source)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let job_ready: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=? AND state='completed' AND outcome='published' AND cancel_requested=0)",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(job)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let chunk_ready: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?)",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(asset)
+    .bind(current)
+    .fetch_one(conn)
+    .await
+    .map_err(turso_err)?;
+    Ok(version_ready && job_ready && chunk_ready)
+}
+
+pub(super) async fn unfinished_learning_jobs(
+    conn: &mut Connection,
+    scope: Scope,
+    improve: Uuid,
+) -> StorageResult<Vec<Uuid>> {
+    use super::read_model::{self, AssociationKey};
+
+    let rows = native_turso::query(
+        "SELECT ingest_job_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND status!='published'",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(improve)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let keys = rows
+        .iter()
+        .map(|row| {
+            Ok(vec![
+                row.try_get::<AssociationKey>("ingest_job_id")
+                    .map_err(turso_err)?,
+            ])
+        })
+        .collect::<StorageResult<Vec<_>>>()?;
+    read_model::associate_rows(
+        conn,
+        scope,
+        "oc_jobs",
+        "id",
+        read_model::MATCH_EVENT_SELECT,
+        read_model::MATCH_EVENT_WHERE,
+        "state NOT IN ('completed','cancelled','superseded')",
+        1,
+        &keys,
+    )
+    .await?
+    .into_iter()
+    .map(|(_, row)| row.try_get("id").map_err(turso_err))
+    .collect()
+}
+
+pub(super) async fn cancelled_improve_job(
+    conn: &mut Connection,
+    scope: Scope,
+    job: Uuid,
+) -> StorageResult<bool> {
+    use super::read_model::AssociationKey;
+
+    let parent: bool = native_turso::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND job_id=? AND status='cancelled')",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(job)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let runs: Vec<AssociationKey> = native_turso::query_scalar(
+        "SELECT improve_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND ingest_job_id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(job)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(turso_err)?;
+    let mut child = false;
+    // The catalog's ingest_job_id is unique. Retaining every returned raw key
+    // also preserves EXISTS semantics for diagnostic fixtures without that key.
+    for index in 0..runs.len().max(1) {
+        let cancelled: bool = native_turso::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND status='cancelled')",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(runs.get(index).cloned())
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(turso_err)?;
+        child |= cancelled;
+    }
+    Ok(parent || child)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(body: &str) -> StorageResult<T> {
@@ -476,9 +683,8 @@ impl TursoTx {
                 "learning already registered; cancel run and request again".into(),
             ));
         }
-        let valid: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets a JOIN oc_events e ON e.tenant_id=a.tenant_id AND e.workspace_id=a.workspace_id JOIN oc_jobs j ON j.tenant_id=a.tenant_id AND j.workspace_id=a.workspace_id WHERE a.tenant_id=? AND a.workspace_id=? AND a.id=? AND a.kind='knowledge' AND a.deleted=0 AND e.id=? AND e.kind='learning' AND e.state='active' AND j.id=? AND j.asset_id=a.id AND j.source_event_id=e.id AND j.operation='ingest' AND j.cancel_requested=0 AND j.state IN ('pending','processing','retry_wait'))")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset).bind(source).bind(ingest_job)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let valid =
+            learning_ingest_valid(&mut self.tx, self.scope, asset, source, ingest_job).await?;
         if !valid {
             return Err(StorageError::Conflict(
                 "learning requires its registered knowledge ingestion".into(),
@@ -562,9 +768,7 @@ impl TursoTx {
         };
         self.guard_learning_publication(Some(asset), Some(source))
             .await?;
-        let ready: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings l JOIN oc_assets a ON a.tenant_id=l.tenant_id AND a.workspace_id=l.workspace_id AND a.id=l.asset_id JOIN oc_versions v ON v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id AND v.asset_id=a.id AND v.version=a.current_version AND v.source_event_id=l.source_event_id JOIN oc_jobs j ON j.tenant_id=l.tenant_id AND j.workspace_id=l.workspace_id AND j.id=l.ingest_job_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.id=? AND j.state='completed' AND j.outcome='published' AND j.cancel_requested=0 AND EXISTS(SELECT 1 FROM oc_chunks c WHERE c.tenant_id=a.tenant_id AND c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.version=a.current_version))")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let ready = learning_publication_ready(&mut self.tx, self.scope, id).await?;
         if !ready {
             return Err(StorageError::Conflict(
                 "learning ingestion has not completed publication".into(),
@@ -763,9 +967,7 @@ impl TursoTx {
         if !["accepted", "publishing"].contains(&status.as_str()) {
             return Ok(false);
         }
-        let children: Vec<Uuid> = native_turso::query_scalar("SELECT j.id FROM oc_learnings l JOIN oc_jobs j ON j.tenant_id=l.tenant_id AND j.workspace_id=l.workspace_id AND j.id=l.ingest_job_id WHERE l.tenant_id=? AND l.workspace_id=? AND l.improve_id=? AND l.status!='published' AND j.state NOT IN ('completed','cancelled','superseded')")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let children = unfinished_learning_jobs(&mut self.tx, self.scope, improve).await?;
         for child in children {
             self.set_job_action(child, "cancel").await?;
         }
@@ -785,9 +987,7 @@ impl TursoTx {
         if !available(&mut self.tx).await? {
             return Ok(());
         }
-        let cancelled: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_improve_runs r WHERE r.tenant_id=? AND r.workspace_id=? AND r.status='cancelled' AND (r.job_id=? OR EXISTS(SELECT 1 FROM oc_learnings l WHERE l.tenant_id=r.tenant_id AND l.workspace_id=r.workspace_id AND l.improve_id=r.improve_id AND l.ingest_job_id=?)))")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).bind(job)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let cancelled = cancelled_improve_job(&mut self.tx, self.scope, job).await?;
         if cancelled {
             return Err(StorageError::Conflict(
                 "cancelled improve runs require a new improve_id".into(),
