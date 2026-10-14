@@ -1345,12 +1345,7 @@ async fn summary_hits_keep_native_aggregation_and_null_terms() {
     .execute(&mut *tx.tx)
     .await
     .unwrap();
-    assert!(
-        tx.summary_hits("needle", None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(tx.summary_hits("needle", None).await.unwrap().is_empty());
     for sql in [
         "INSERT INTO oc_summaries VALUES(?,?,?,NULL)",
         "INSERT INTO oc_summaries VALUES(?,?,?,'needle')",
@@ -1385,12 +1380,7 @@ async fn summary_hits_keep_native_aggregation_and_null_terms() {
         .await
         .unwrap();
     assert!(tx.summary_hits("", None).await.unwrap().is_empty());
-    assert!(
-        tx.summary_hits("absent", None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(tx.summary_hits("absent", None).await.unwrap().is_empty());
     assert!(matches!(
         tx.summary_hits("needle", None).await,
         Err(StorageError::Backend(_))
