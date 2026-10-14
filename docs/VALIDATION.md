@@ -729,11 +729,11 @@ fmt/Clippy 阻断后的步骤均不视为运行或通过。
 | --- | --- | --- |
 | B `fc2e454c` | Windows 125 lib + 原例 1；剩 27 债 | Windows fmt 阻断；Linux Clippy items_after_test_module 阻断完整测试；后续修正 `a4cde5c7` |
 | C `7e364843` → `97b7b9e` | 前头 Windows 134 lib + 原例 1；修正头适用 CI 成功，Linux 134 + 225；剩 24 债 | 前头 Windows fmt / Linux dead_code 阻断；删除无生产调用 wrapper，未压制 lint |
-| D `25d382d4` | Linux 147 + 225；Windows 147 + 原例 1；剩 22 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
+| D `25d382d4` | Linux 147 + 225；Windows 147 + 原例 1；剩 22 债 | Windows 后续完整验证 fmt 阻断，Windows 无默认特性 check 未运行 |
 | F `ec1281d0` | Linux 154 + 225；Windows 重试 154 + 原例 1；剩 16 债 | Windows 首次官方工具链下载 TCP 10060 超时，未编译/测试；重试后续 fmt 阻断 |
-| G `e456b92c` | Linux 161 + 225；Windows 161 + 原例 1；剩 9 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
-| H `e9b28d82` | Linux 168 + 225；Windows 168 + 原例 1；剩 7 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
-| I `b538a3e1` | Linux 177 + 225；Windows 177 + 原例 1；剩 4 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
+| G `e456b92c` | Linux 161 + 225；Windows 161 + 原例 1；剩 9 债 | Windows 后续完整验证 fmt 阻断，Windows 无默认特性 check 未运行 |
+| H `e9b28d82` | Linux 168 + 225；Windows 168 + 原例 1；剩 7 债 | Windows 后续完整验证 fmt 阻断，Windows 无默认特性 check 未运行 |
+| I `b538a3e1` | Linux 177 + 225；Windows 177 + 原例 1；剩 4 债 | Windows 后续完整验证 fmt 阻断，Windows 无默认特性 check 未运行 |
 
 I 阶段原始运行：[38519881075](https://github.com/TheLudlows/Origence/actions/runs/38519881075)、
 [38519881083](https://github.com/TheLudlows/Origence/actions/runs/38519881083)。
@@ -746,10 +746,11 @@ I 阶段原始运行：[38519881075](https://github.com/TheLudlows/Origence/acti
 另行 guard 测试 43 通过。
 
 E 实现头 `f4f715fa` 完成最后 4 处关联改写（含测试 fixture），全仓 927 SQL 输入零债、零 unknown，
-43 项 guard 测试通过。新增 E 回归为 3 lib + 3 integration；Linux 运行
-[38523749953](https://github.com/TheLudlows/Origence/actions/runs/38523749953) 全部成功，默认 180 lib + 228 integration。Windows 运行
+43 项 guard 测试通过。新增 E 回归为 3 lib + 3 integration；[运行 38523749953](https://github.com/TheLudlows/Origence/actions/runs/38523749953)
+中的 `linux-native` job 全部步骤成功，默认 180 lib + 228 integration；该运行的
+`fast-check` 因 fmt 失败，不能称整个运行成功。Windows 运行
 [38523749817](https://github.com/TheLudlows/Origence/actions/runs/38523749817) 为 180 lib + 原离线单例 1 passed；后续 Validate 因 fmt 阻断，
-无默认特性未运行，不能称该头 Windows 全部验证通过。
+Windows 无默认特性 check 未运行，不能称该头 Windows 全部验证通过。
 
 最终格式修正与文档归档仍需其精确 head 的适用 Windows/Linux 检查通过。
 最新归档 head、运行链接及终态以 [PR #59 Checks](https://github.com/TheLudlows/Origence/pull/59/checks)
@@ -759,7 +760,7 @@ E 实现头 `f4f715fa` 完成最后 4 处关联改写（含测试 fixture），�
 ### 保留的合同与验证边界
 
 查询改为参数化单表读取，使用固定槽位批量和原生 SQLite/Turso 比较，在原事务
-快照内以 Rust 关联；不替换成跨表子查询、CTE 或新的逐项 metadata SQL。
+快照内以 Rust 关联；不替换成跨表子查询或 CTE。
 保留权限与 raw session writer 差别、current/historical 差别、缺文件处理、JSON
 错误消费顺序、历史多 owner、原生 NULL/类型比较及 source/version/generation/
 publication 校验。既有逐 version JSON/闭包验证成本并未全部消除。
