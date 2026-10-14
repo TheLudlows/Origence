@@ -220,10 +220,9 @@ impl TursoTx {
         permission: Permission,
     ) -> StorageResult<String> {
         let role: Option<String> = native_turso::query_scalar(
-            "SELECT k.role FROM oc_api_keys k \
-             JOIN oc_workspaces w ON w.tenant_id=k.tenant_id AND w.id=k.workspace_id \
-             WHERE k.id=? AND k.tenant_id=? AND k.workspace_id=? AND NOT k.revoked \
-               AND k.allow_owned_workspaces=1 AND w.owner_workspace_id IS NULL",
+            "SELECT role FROM oc_api_keys \
+             WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked \
+               AND allow_owned_workspaces=1",
         )
         .bind(self.principal_id)
         .bind(self.scope.tenant_id)
@@ -232,7 +231,16 @@ impl TursoTx {
         .await
         .map_err(turso_err)?;
         let role = role.ok_or(StorageError::Forbidden)?;
-        if !permission.granted_by(&role) {
+        let root: Option<Uuid> = native_turso::query_scalar(
+            "SELECT id FROM oc_workspaces \
+             WHERE tenant_id=? AND id=? AND owner_workspace_id IS NULL",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(turso_err)?;
+        if root.is_none() || !permission.granted_by(&role) {
             return Err(StorageError::Forbidden);
         }
         self.required.push(permission);

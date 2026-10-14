@@ -1,0 +1,587 @@
+//! Native-engine regression fixtures for the batched authority read model.
+//! These call internal reads directly; public authentication is covered by the
+//! existing domain tests. No previous multi-table SQL is used as an oracle.
+#![cfg(feature = "local-storage")]
+
+use super::read_model::{NativeHitKey, current_chunks, rows_by_ids};
+use super::*;
+use crate::storage::native_turso as db;
+
+#[derive(Clone, Copy)]
+struct Record {
+    asset: Uuid,
+    chunk: Uuid,
+    source: Uuid,
+    version: i32,
+}
+
+impl Record {
+    fn new(index: u128) -> Self {
+        Self {
+            asset: Uuid::from_u128(10_000 + index),
+            chunk: Uuid::from_u128(20_000 + index),
+            source: Uuid::from_u128(30_000 + index),
+            version: 1,
+        }
+    }
+
+    fn key(self, generation: i64) -> NativeHitKey {
+        (
+            self.chunk,
+            SourceVersion {
+                source_id: self.source,
+                version: self.version,
+            },
+            generation,
+        )
+    }
+}
+
+async fn database() -> (tempfile::TempDir, Pool) {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = Pool::open(dir.path().join("read-model.db")).await.unwrap();
+    // Preserve scoped keys and relevant columns. Unrelated authentication and
+    // publication tables are omitted; missing-root fixtures intentionally omit
+    // foreign keys so the fail-closed read path can be exercised directly.
+    for sql in [
+        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_artifact_ledger(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,artifact_id BLOB NOT NULL,artifact_type TEXT NOT NULL,source_id BLOB NOT NULL,version INTEGER NOT NULL,generation INTEGER NOT NULL,surface TEXT NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,source_id,version,artifact_id,surface,generation))",
+        "CREATE TABLE oc_index_entries(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,artifact_id BLOB NOT NULL,field TEXT NOT NULL,model_id TEXT NOT NULL,dimension INTEGER NOT NULL,generation INTEGER NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,artifact_id,field,model_id,generation))",
+    ] {
+        db::query(sql).execute(&pool).await.unwrap();
+    }
+    (dir, pool)
+}
+
+fn scope() -> Scope {
+    Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    }
+}
+
+async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
+    TursoTx {
+        tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
+        scope,
+        principal_id: Uuid::new_v4(),
+        required: Vec::new(),
+        command: None,
+    }
+}
+
+async fn seed(
+    tx: &mut TursoTx,
+    scope: Scope,
+    row: Record,
+    current: Option<i32>,
+    root_state: Option<&str>,
+    content: &str,
+) {
+    db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version) VALUES(?,?,?,'knowledge','asset title',?) ON CONFLICT(tenant_id,workspace_id,id) DO NOTHING")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.asset)
+        .bind(current)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    if let Some(state) = root_state {
+        db::query("INSERT INTO oc_events VALUES(?,?,?,?,'knowledge')")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(row.source)
+            .bind(state)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+    }
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version title',?,'hash',?,NULL)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.asset)
+        .bind(row.version)
+        .bind(content)
+        .bind(row.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,?,'{}','needle')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.chunk)
+        .bind(row.asset)
+        .bind(row.version)
+        .bind(content)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+}
+
+async fn publication(
+    tx: &mut TursoTx,
+    scope: Scope,
+    key: NativeHitKey,
+    surface: &str,
+    state: &str,
+    artifact_type: &str,
+) {
+    db::query("INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,?,?)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(key.0)
+        .bind(artifact_type)
+        .bind(key.1.source_id)
+        .bind(key.1.version)
+        .bind(key.2)
+        .bind(surface)
+        .bind(state)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+}
+
+async fn ready_index(tx: &mut TursoTx, row: Record, field: &str, generation: i64) {
+    db::query("INSERT INTO oc_index_entries VALUES(?,?,?,?,'profile',3,?,'ready')")
+        .bind(tx.scope.tenant_id)
+        .bind(tx.scope.workspace_id)
+        .bind(row.chunk)
+        .bind(field)
+        .bind(generation)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+}
+
+async fn locator(tx: &mut TursoTx, chunk: Uuid, value: &str) {
+    db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(value)
+        .bind(tx.scope.tenant_id)
+        .bind(tx.scope.workspace_id)
+        .bind(chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn batched_reads_cross_id_and_version_boundaries_without_truncation() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let records: Vec<_> = (0..130).map(Record::new).collect();
+    for row in &records {
+        seed(&mut tx, scope, *row, Some(1), Some("active"), "needle").await;
+        locator(
+            &mut tx,
+            row.chunk,
+            &json!({
+                "parser": "memory-semantics:v1",
+                "support_sources": [row.source],
+            })
+            .to_string(),
+        )
+        .await;
+        for surface in ["full_text", "vector"] {
+            publication(&mut tx, scope, row.key(11), surface, "committed", "chunk").await;
+        }
+        ready_index(&mut tx, *row, "content", 11).await;
+    }
+    // Unrequested historical JSON must not be evaluated by an exact-version
+    // batch, even when the asset also has an eligible current chunk.
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,999,0,'old','{','old')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(records[0].asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let mut ids: Vec<_> = records.iter().map(|row| row.chunk).collect();
+    ids.extend([records[0].chunk, records[128].chunk, records[0].chunk]);
+    let mut versions: Vec<_> = records.iter().map(|row| (row.asset, row.version)).collect();
+    versions.extend([
+        (records[0].asset, 1),
+        (records[32].asset, 1),
+        (records[128].asset, 1),
+    ]);
+    let mut keys: Vec<_> = records.iter().map(|row| row.key(11)).collect();
+    keys.push(records[128].key(11));
+    let hits = tx.visible_hits(&ids).await.unwrap();
+    let roots = tx.active_version_roots(&versions).await.unwrap();
+    let support = tx.local_support_visibility(&versions).await.unwrap();
+    let full_text = tx.full_text_hits(&keys).await.unwrap();
+    let vector = tx.vector_hits_exact(&keys, "profile", 3).await.unwrap();
+    assert_eq!(hits.len(), 130);
+    assert_eq!(roots.len(), 130);
+    assert_eq!(support.len(), 130);
+    assert_eq!(full_text.len(), 130);
+    assert_eq!(vector.len(), 130);
+    for row in records {
+        assert_eq!(hits[&row.chunk].asset_id, row.asset);
+        assert_eq!(hits[&row.chunk].source_event_id, row.source);
+        assert_eq!(roots[&(row.asset, row.version)], row.source);
+        assert!(support[&(row.asset, row.version)]);
+        assert_eq!(full_text[&row.key(11)].chunk_id, row.chunk);
+        assert_eq!(vector[&row.key(11)].chunk_id, row.chunk);
+    }
+    assert!(tx.visible_hits(&[]).await.unwrap().is_empty());
+    assert!(tx.active_version_roots(&[]).await.unwrap().is_empty());
+    assert!(tx.local_support_visibility(&[]).await.unwrap().is_empty());
+    assert!(tx.full_text_hits(&[]).await.unwrap().is_empty());
+    assert!(tx.vector_hits_exact(&[], "profile", 3).await.unwrap().is_empty());
+    assert!(tx.native_candidate_sources(&[]).await.unwrap().is_empty());
+    assert!(
+        rows_by_ids(&mut tx.tx, scope, "oc_chunks", "id", "id", &[])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn same_ids_in_other_scopes_cannot_supply_missing_or_inactive_roots() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let scopes = [
+        scope,
+        Scope {
+            workspace_id: Uuid::new_v4(),
+            ..scope
+        },
+        Scope {
+            tenant_id: Uuid::new_v4(),
+            ..scope
+        },
+    ];
+    let missing = Record::new(1);
+    let inactive = Record::new(2);
+    let mut tx = transaction(&pool, scope).await;
+    for (index, other) in scopes.into_iter().enumerate() {
+        seed(
+            &mut tx,
+            other,
+            missing,
+            Some(1),
+            (index != 0).then_some("active"),
+            "missing root",
+        )
+        .await;
+        seed(
+            &mut tx,
+            other,
+            inactive,
+            Some(1),
+            Some(if index == 0 { "retracted" } else { "active" }),
+            "inactive root",
+        )
+        .await;
+        for row in [missing, inactive] {
+            publication(&mut tx, other, row.key(11), "full_text", "committed", "chunk").await;
+        }
+    }
+    let ids = [missing.chunk, inactive.chunk];
+    assert!(tx.visible_hits(&ids).await.unwrap().is_empty());
+    assert!(
+        tx.active_version_roots(&[(missing.asset, 1), (inactive.asset, 1)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tx.full_text_hits(&[missing.key(11), inactive.key(11)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    for other in [scopes[1], scopes[2]] {
+        let chunks = current_chunks(&mut tx.tx, other, Some(&ids), None)
+            .await
+            .unwrap();
+        assert_eq!(chunks.len(), 2);
+    }
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn historical_roots_and_views_do_not_acquire_a_current_version_guard() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let first = Record::new(1);
+    let second = Record {
+        asset: first.asset,
+        version: 2,
+        ..Record::new(2)
+    };
+    seed(&mut tx, scope, first, Some(2), Some("active"), "historical").await;
+    seed(&mut tx, scope, second, Some(2), Some("active"), "current").await;
+    let roots = tx
+        .active_version_roots(&[(first.asset, 1), (first.asset, 2)])
+        .await
+        .unwrap();
+    assert_eq!(roots.len(), 2);
+    assert!(tx.active_version_roots(&[(first.asset, 99)]).await.unwrap().is_empty());
+    assert!(tx.semantic_version_visible_local(first.asset, 99).await.unwrap());
+    assert!(matches!(
+        tx.require_active_version_local(first.asset, 99).await,
+        Err(StorageError::NotFound)
+    ));
+    assert_eq!(tx.require_active_version_local(first.asset, 1).await.unwrap(), first.source);
+    let current = tx.visible_hits(&[first.chunk, second.chunk]).await.unwrap();
+    assert_eq!(current.len(), 1);
+    assert!(current.contains_key(&second.chunk));
+    assert_eq!(tx.asset_view_inner(first.asset, None).await.unwrap()["content"], "current");
+    assert_eq!(tx.asset_view_inner(first.asset, Some(1)).await.unwrap()["content"], "historical");
+    let restore = tx.restore_source_inner(first.asset, 1).await.unwrap();
+    assert_eq!(restore["current_version"], 2);
+    assert_eq!(restore["source_event_id"], first.source.to_string());
+    db::query("UPDATE oc_assets SET current_version=NULL WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(first.asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.asset_view_inner(first.asset, None).await, Err(StorageError::NotFound)));
+    assert_eq!(tx.asset_view_inner(first.asset, Some(1)).await.unwrap()["content"], "historical");
+    assert!(tx.restore_source_inner(first.asset, 1).await.unwrap()["current_version"].is_null());
+    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(first.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.require_active_version_local(first.asset, 1).await,
+        Err(StorageError::NotFound)
+    ));
+    assert!(matches!(tx.restore_source_inner(first.asset, 1).await, Err(StorageError::NotFound)));
+    db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(first.asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.active_version_roots(&[(first.asset, 2)]).await.unwrap().is_empty());
+    assert!(matches!(tx.asset_view_inner(first.asset, Some(2)).await, Err(StorageError::NotFound)));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn repeated_reads_observe_writes_in_the_same_transaction() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(1);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "before").await;
+    assert_eq!(tx.visible_hits(&[row.chunk]).await.unwrap()[&row.chunk].content, "before");
+    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hits(&[row.chunk]).await.unwrap().is_empty());
+    db::query("UPDATE oc_events SET state='active' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET content='after' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(tx.visible_hits(&[row.chunk]).await.unwrap()[&row.chunk].content, "after");
+    db::query("UPDATE oc_assets SET current_version=2 WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hits(&[row.chunk]).await.unwrap().is_empty());
+    assert_eq!(
+        tx.active_version_roots(&[(row.asset, 1)]).await.unwrap()[&(row.asset, 1)],
+        row.source
+    );
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_hit_batches_require_exact_committed_publication_keys() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let records: Vec<_> = (0..9).map(Record::new).collect();
+    let mut keys = Vec::new();
+    for (index, row) in records.iter().copied().enumerate() {
+        seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
+        ready_index(&mut tx, row, "content", 11).await;
+        keys.push(row.key(11));
+        if index == 1 {
+            continue; // No ledger entry.
+        }
+        let mut key = row.key(11);
+        let state = match index {
+            2 => {
+                key.1.source_id = Uuid::new_v4();
+                "committed"
+            }
+            3 => {
+                key.1.version = 2;
+                "committed"
+            }
+            4 => {
+                key.2 = 12;
+                "committed"
+            }
+            5 => "pending",
+            6 => "retry_wait",
+            7 => "orphan",
+            _ => "committed",
+        };
+        if index == 2 || index == 3 {
+            // Even a key matching the ledger cannot replace the chunk's root.
+            keys.push(key);
+        }
+        if index == 8 {
+            publication(&mut tx, scope, key, "graph", state, "summary").await;
+        } else {
+            for surface in ["full_text", "vector"] {
+                // The original native hit/candidate checks did not restrict type.
+                publication(&mut tx, scope, key, surface, state, "summary").await;
+            }
+        }
+    }
+    let good = records[0];
+    keys.push(good.key(11));
+    let mut wrong_source = good.key(11);
+    wrong_source.1.source_id = Uuid::new_v4();
+    let mut wrong_version = good.key(11);
+    wrong_version.1.version = 2;
+    keys.extend([wrong_source, wrong_version, good.key(12)]);
+    for hits in [
+        tx.full_text_hits(&keys).await.unwrap(),
+        tx.vector_hits_exact(&keys, "profile", 3).await.unwrap(),
+    ] {
+        assert_eq!(hits.len(), 1);
+        assert!(hits.contains_key(&good.key(11)));
+    }
+    assert_eq!(tx.full_text_candidates(11, None).await.unwrap(), vec![good.chunk]);
+    assert_eq!(tx.vector_candidates("profile", 3, 11, None).await.unwrap(), vec![good.chunk]);
+    assert!(tx.vector_hits_exact(&[good.key(11)], "wrong-profile", 3).await.unwrap().is_empty());
+    assert!(tx.vector_hits_exact(&[good.key(11)], "profile", 4).await.unwrap().is_empty());
+    assert!(
+        tx.full_text_hits(&[records[4].key(12)])
+            .await
+            .unwrap()
+            .contains_key(&records[4].key(12))
+    );
+    assert!(tx.vector_hits_exact(&[records[4].key(12)], "profile", 3).await.unwrap().is_empty());
+    db::query("UPDATE oc_artifact_ledger SET state='pending' WHERE tenant_id=? AND workspace_id=? AND artifact_id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(good.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.full_text_hits(&[good.key(11)]).await.unwrap().is_empty());
+    assert!(tx.vector_hits_exact(&[good.key(11)], "profile", 3).await.unwrap().is_empty());
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn legacy_vector_ready_fields_are_distinct_from_exact_content_checks() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(1);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
+    publication(&mut tx, scope, row.key(11), "vector", "committed", "summary").await;
+    ready_index(&mut tx, row, "summary", 11).await;
+    assert_eq!(tx.vector_candidates("profile", 3, 11, None).await.unwrap(), vec![row.chunk]);
+    assert!(tx.vector_hit(row.chunk, row.key(11).1, "profile", 11).await.unwrap().is_some());
+    assert!(tx.vector_hits_exact(&[row.key(11)], "profile", 3).await.unwrap().is_empty());
+    ready_index(&mut tx, row, "content", 11).await;
+    assert_eq!(tx.vector_hits_exact(&[row.key(11)], "profile", 3).await.unwrap().len(), 1);
+    db::query("UPDATE oc_index_entries SET state='removed' WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content'")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(row.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.vector_hits_exact(&[row.key(11)], "profile", 3).await.unwrap().is_empty());
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_sources_check_only_requested_chunks_without_publication_guards() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(1);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
+    let sibling = Uuid::new_v4();
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'sibling',?,'needle')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(sibling)
+        .bind(row.asset)
+        .bind(json!({
+            "parser": "memory-semantics:v1",
+            "support_sources": [Uuid::new_v4()],
+        }).to_string())
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    // No ledger exists, and another chunk makes the whole version invisible.
+    // This narrower helper must still return the requested chunk's active root.
+    let expected = HashMap::from([(row.chunk, row.key(11).1)]);
+    assert_eq!(
+        tx.native_candidate_sources(&[row.chunk, row.chunk])
+            .await
+            .unwrap(),
+        expected
+    );
+    assert!(!tx.semantic_version_visible_local(row.asset, 1).await.unwrap());
+    assert!(matches!(
+        tx.native_candidate_sources(&[row.chunk, sibling]).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    locator(&mut tx, sibling, "{").await;
+    assert_eq!(
+        tx.native_candidate_sources(&[row.chunk]).await.unwrap(),
+        expected
+    );
+    assert!(matches!(
+        tx.semantic_version_visible_local(row.asset, 1).await,
+        Err(StorageError::Backend(_))
+    ));
+    locator(&mut tx, row.chunk, "{").await;
+    assert!(matches!(
+        tx.native_candidate_sources(&[row.chunk]).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}

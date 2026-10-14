@@ -43,6 +43,9 @@ mod lifecycle;
 mod locking;
 mod provenance;
 mod publication;
+mod read_model;
+#[cfg(test)]
+mod read_model_tests;
 mod relational;
 mod schema;
 mod semantics;

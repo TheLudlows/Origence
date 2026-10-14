@@ -1955,3 +1955,121 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     assert!(!view.ready().await);
     assert!(!view.worker_running.load(Ordering::Acquire));
 }
+
+#[tokio::test]
+async fn offline_cli_search_crosses_authority_batch_boundaries() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "offline-batch")
+        .await
+        .unwrap();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let mut tx = store
+        .begin(store.authenticate(&admin.token).await.unwrap())
+        .await
+        .unwrap();
+    let mut full_text = Vec::new();
+    let mut expected = std::collections::HashMap::new();
+    // Distinct assets exercise both the 128-ID and 32-version authority batches.
+    // Use the same durable native publication protocol as the worker, without
+    // invoking a model or depending on the test executable's CLI behavior.
+    for index in 0..130 {
+        let (asset, _) = tx.slot(&format!("offline-batch-{index}")).await.unwrap();
+        let source = tx.create_event("memory", "approval", None).await.unwrap();
+        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+            .await
+            .unwrap();
+        let chunk = Uuid::new_v4();
+        tx.insert_chunk(chunk, asset, 1, 0, "approval", &json!({}), "approval")
+            .await
+            .unwrap();
+        tx.update_asset_version(asset, 1, None).await.unwrap();
+        full_text.push(FullTextEntry {
+            id: chunk,
+            source: SourceVersion {
+                source_id: source,
+                version: 1,
+            },
+            generation: 1,
+            search_terms: "approval".into(),
+        });
+        expected.insert(chunk, (asset, source));
+    }
+    let ledger_key = |entry: &FullTextEntry| LedgerKey {
+        scope,
+        source: entry.source,
+        artifact_id: entry.id,
+        surface: Surface::FullText,
+        generation: entry.generation,
+    };
+    for entry in &full_text {
+        let key = ledger_key(entry);
+        tx.register_pending(LedgerEntry {
+            key,
+            artifact_type: "chunk".into(),
+            idempotency_key: ledger_idempotency_key(&key),
+        })
+        .await
+        .unwrap();
+    }
+    tx.commit().await.unwrap();
+    service
+        .engine
+        .vector()
+        .upsert_full_text(scope, full_text.clone())
+        .await
+        .unwrap();
+    let mut tx = store
+        .begin(store.authenticate(&admin.token).await.unwrap())
+        .await
+        .unwrap();
+    for entry in &full_text {
+        tx.confirm_committed(ledger_key(entry)).await.unwrap();
+    }
+    tx.commit().await.unwrap();
+    assert_eq!(expected.len(), 130);
+    service.engine.shutdown().await.unwrap();
+    drop(service);
+
+    // A Rust test thread has a different stack budget. Run the actual binary
+    // after releasing every store handle so Windows exercises its default main
+    // thread stack through startup, SQL batches, native FTS and final authority.
+    let output = command(dir.path())
+        .env("OC_API_KEY", &reader.token)
+        .args(["--offline", "search", "approval", "--limit", "100"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "offline batch search: status={:?}, code={:?}, stdout={}, stderr={}",
+        output.status,
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["effective_mode"], "keyword");
+    assert_eq!(response["warnings"], json!([]));
+    let hits: Vec<SearchHit> = serde_json::from_value(response["hits"].clone()).unwrap();
+    assert_eq!(hits.len(), 100);
+    let mut seen = std::collections::HashSet::new();
+    for hit in hits {
+        let (asset, source) = expected.get(&hit.chunk_id).unwrap();
+        assert!(seen.insert(hit.chunk_id));
+        assert_eq!(hit.asset_id, *asset);
+        assert_eq!(hit.source_event_id, *source);
+        assert_eq!(hit.version, 1);
+        assert_eq!(hit.content, "approval");
+        assert!(hit.score.is_finite());
+    }
+}

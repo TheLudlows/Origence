@@ -325,3 +325,102 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
     }
     service.engine.shutdown().await.unwrap();
 }
+
+impl Fixture {
+    async fn verify_response_hits(&self, hits: &[SearchHit], limit: usize) -> Result<Vec<SearchHit>> {
+        let mut tx = self.store.begin_read(self.auth.clone()).await?;
+        tx.check_permission(Permission::Read).await?;
+        let result = verify_search_hits(&mut tx, hits, limit, None).await;
+        tx.rollback().await?;
+        result
+    }
+}
+
+#[tokio::test]
+async fn final_response_validation_stops_at_limit_and_continues_past_hidden_hits() {
+    let fixture = Fixture::new().await;
+    // These rank inputs exercise final Summary/Graph selection. Native branch
+    // participants additionally pass the all-candidate publication verifier.
+    let mut first = fixture.ranked[0].hit.clone();
+    let mut second = fixture.ranked[2].hit.clone();
+    first.score = 0.5;
+    second.score = 0.25;
+    let hits = vec![first.clone(), second.clone()];
+    db::query("UPDATE oc_chunks SET locator='{' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(fixture.auth.scope.tenant_id)
+        .bind(fixture.auth.scope.workspace_id)
+        .bind(second.chunk_id)
+        .execute(fixture.store.pool())
+        .await
+        .unwrap();
+    let selected = fixture.verify_response_hits(&hits, 1).await.unwrap();
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].chunk_id, first.chunk_id);
+    assert_eq!(selected[0].score, first.score);
+    assert_eq!(
+        fixture.verify_response_hits(&hits, 2).await.unwrap_err().code(),
+        "INTERNAL_ERROR"
+    );
+    // The limit never exempts a native participant from fresh validation.
+    assert_eq!(fixture.verify().await.unwrap_err().code(), "INTERNAL_ERROR");
+    db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(fixture.auth.scope.tenant_id)
+        .bind(fixture.auth.scope.workspace_id)
+        .bind(first.asset_id)
+        .execute(fixture.store.pool())
+        .await
+        .unwrap();
+    // A hidden first candidate must continue to the next rank, not silently
+    // return an empty short page or hide the lower candidate's storage error.
+    assert_eq!(
+        fixture.verify_response_hits(&hits, 1).await.unwrap_err().code(),
+        "INTERNAL_ERROR"
+    );
+    fixture.store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn final_response_validation_preserves_first_semantic_status_type_errors() {
+    let fixture = Fixture::new().await;
+    let hit = fixture.ranked[0].hit.clone();
+    let hits = vec![hit.clone()];
+    for status in [None, Some(Value::Null), Some(json!(7)), Some(json!("asserted"))] {
+        let mut locator = json!({
+            "parser":"memory-semantics:v1",
+            "support_sources":[hit.source_event_id],
+        });
+        if let Some(status) = &status {
+            locator["semantic_status"] = status.clone();
+        }
+        db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+            .bind(locator.to_string())
+            .bind(fixture.auth.scope.tenant_id)
+            .bind(fixture.auth.scope.workspace_id)
+            .bind(hit.chunk_id)
+            .execute(fixture.store.pool())
+            .await
+            .unwrap();
+        let result = fixture.verify_response_hits(&hits, 1).await;
+        if status.as_ref().is_some_and(Value::is_string) {
+            assert_eq!(result.unwrap()[0].chunk_id, hit.chunk_id);
+        } else {
+            assert_eq!(result.unwrap_err().code(), "INTERNAL_ERROR", "{status:?}");
+        }
+    }
+    // Only the first semantic row's status was decoded by the old contract.
+    // A later non-string status must not poison a valid first-row status.
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,1,1,'later',?,'later')")
+        .bind(fixture.auth.scope.tenant_id)
+        .bind(fixture.auth.scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(hit.asset_id)
+        .bind(json!({"parser":"memory-semantics:v1","support_sources":[hit.source_event_id],"semantic_status":7}).to_string())
+        .execute(fixture.store.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture.verify_response_hits(&hits, 1).await.unwrap()[0].chunk_id,
+        hit.chunk_id
+    );
+    fixture.store.shutdown().await.unwrap();
+}
