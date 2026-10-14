@@ -684,9 +684,20 @@ impl<T: FromRow + Send + 'static> Query<T> {
             let mut connection = executor.connection().await?;
             connection.check_ready()?;
             connection.interrupted = true;
+            let diagnostic = self.sql.starts_with("SELECT c.id,c.asset_id,c.version ")
+                && self.sql.contains("l.surface='full_text'");
+            if diagnostic {
+                eprintln!("offline diagnostic: candidate raw query before");
+            }
             let mut rows = connection.raw.query(self.sql, self.params?).await?;
+            if diagnostic {
+                eprintln!("offline diagnostic: candidate raw query after");
+            }
             let names = Arc::new(rows.column_names());
             let mut output = Vec::new();
+            if diagnostic {
+                eprintln!("offline diagnostic: candidate rows next before");
+            }
             while let Some(row) = rows.next().await? {
                 let values = (0..row.column_count())
                     .map(|index| row.get_value(index))
@@ -695,6 +706,9 @@ impl<T: FromRow + Send + 'static> Query<T> {
                     names: names.clone(),
                     values,
                 })?);
+            }
+            if diagnostic {
+                eprintln!("offline diagnostic: candidate rows next after");
             }
             drop(rows);
             connection.interrupted = false;
