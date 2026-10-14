@@ -623,7 +623,9 @@ async fn native_parser_gating_ignores_only_unconsumed_invalid_support() {
                     );
                 }
                 (old, new) => {
-                    panic!("native consumed-support mismatch for {locator}: old={old:?}, new={new:?}")
+                    panic!(
+                        "native consumed-support mismatch for {locator}: old={old:?}, new={new:?}"
+                    )
                 }
             }
         }

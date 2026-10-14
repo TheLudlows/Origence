@@ -1294,10 +1294,22 @@ async fn native_context_routes_filter_before_loading_other_route_content() {
             .unwrap(),
         vec![good.chunk]
     );
-    // The same malformed content remains an error when its route is requested.
-    assert!(matches!(
+    // Candidate IDs never consume content, including the requested route.
+    assert_eq!(
         tx.context_vector_candidates("profile", 2, 7, ContextRoute::Memory, None)
-            .await,
+            .await
+            .unwrap(),
+        vec![other.chunk]
+    );
+    assert_eq!(
+        tx.context_full_text_candidates(7, ContextRoute::Memory, None)
+            .await
+            .unwrap(),
+        vec![other.chunk]
+    );
+    // A selected full hit still safely rejects the invalid content.
+    assert!(matches!(
+        tx.visible_hit(other.chunk).await,
         Err(StorageError::Backend(_))
     ));
     tx.rollback().await.unwrap();

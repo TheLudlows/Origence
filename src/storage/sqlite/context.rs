@@ -207,7 +207,8 @@ impl TursoTx {
             }
             indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
         }
-        self.index_candidate_ids(&indexed, None, "vector", generation).await
+        self.index_candidate_ids(&indexed, None, "vector", generation)
+            .await
     }
 
     /// Exact bundle identity scope includes a current conflict's explicitly

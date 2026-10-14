@@ -1559,15 +1559,32 @@ async fn hidden_index_metadata_and_payload_do_not_poison_hits() {
         .unwrap();
     let keys = [good.key(11), hidden.key(11)];
     assert_eq!(tx.full_text_hits(&keys).await.unwrap().len(), 1);
-    assert_eq!(tx.vector_hits_exact(&keys, "profile", 3).await.unwrap().len(), 1);
+    assert_eq!(
+        tx.vector_hits_exact(&keys, "profile", 3)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     db::query("UPDATE oc_artifact_ledger SET state='committed' WHERE artifact_id=?")
         .bind(hidden.chunk)
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    locator(&mut tx, hidden.chunk, &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string()).await;
+    locator(
+        &mut tx,
+        hidden.chunk,
+        &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string(),
+    )
+    .await;
     assert_eq!(tx.full_text_hits(&keys).await.unwrap().len(), 1);
-    assert_eq!(tx.vector_hits_exact(&keys, "profile", 3).await.unwrap().len(), 1);
+    assert_eq!(
+        tx.vector_hits_exact(&keys, "profile", 3)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     // The malformed candidate ID is not needed by the version guard. Another
     // chunk hides the whole version before that output ID is decoded.
     db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'support',?,'support')")
@@ -1575,19 +1592,36 @@ async fn hidden_index_metadata_and_payload_do_not_poison_hits() {
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())
         .bind(hidden.asset)
-        .bind(json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string())
+        .bind(
+            json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string(),
+        )
         .execute(&mut *tx.tx)
         .await
         .unwrap();
     locator(&mut tx, hidden.chunk, "{}").await;
     db::query("UPDATE oc_chunks SET id=x'31' WHERE id=?")
-        .bind(hidden.chunk).execute(&mut *tx.tx).await.unwrap();
+        .bind(hidden.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     db::query("UPDATE oc_artifact_ledger SET artifact_id=x'31' WHERE artifact_id=?")
-        .bind(hidden.chunk).execute(&mut *tx.tx).await.unwrap();
+        .bind(hidden.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     db::query("UPDATE oc_index_entries SET artifact_id=x'31' WHERE artifact_id=?")
-        .bind(hidden.chunk).execute(&mut *tx.tx).await.unwrap();
-    assert_eq!(tx.full_text_candidates(11, None).await.unwrap(), vec![good.chunk]);
-    assert_eq!(tx.vector_candidates("profile", 3, 11, None).await.unwrap(), vec![good.chunk]);
+        .bind(hidden.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.full_text_candidates(11, None).await.unwrap(),
+        vec![good.chunk]
+    );
+    assert_eq!(
+        tx.vector_candidates("profile", 3, 11, None).await.unwrap(),
+        vec![good.chunk]
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1607,7 +1641,12 @@ async fn native_source_roots_apply_local_support_before_uuid_decode() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    locator(&mut tx, row.chunk, &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string()).await;
+    locator(
+        &mut tx,
+        row.chunk,
+        &json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string(),
+    )
+    .await;
     assert!(matches!(
         tx.native_candidate_sources(&[row.chunk]).await,
         Err(StorageError::Unavailable(_))
@@ -1643,13 +1682,126 @@ async fn context_index_candidates_ignore_unconsumed_title_and_content() {
         .unwrap();
     let route = crate::context_retrieval::ContextRoute::Knowledge;
     assert_eq!(
-        tx.context_vector_candidates("profile", 3, 11, route, None).await.unwrap(),
+        tx.context_vector_candidates("profile", 3, 11, route, None)
+            .await
+            .unwrap(),
         vec![row.chunk]
     );
     assert_eq!(
-        tx.context_full_text_candidates(11, route, None).await.unwrap(),
+        tx.context_full_text_candidates(11, route, None)
+            .await
+            .unwrap(),
         vec![row.chunk]
     );
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn shallow_vector_readiness_batches_one_hundred_requests() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let records: Vec<_> = (0..100).map(|index| Record::new(100_000 + index)).collect();
+    for row in &records {
+        ready_index(&mut tx, *row, "content", 11).await;
+    }
+    for index in [0, 99] {
+        db::query("UPDATE oc_index_entries SET generation=12 WHERE artifact_id=?")
+            .bind(records[index].chunk)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+    }
+    db::query("UPDATE oc_index_entries SET model_id='other' WHERE artifact_id=?")
+        .bind(records[3].chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_index_entries SET dimension=2 WHERE artifact_id=?")
+        .bind(records[4].chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_index_entries SET state='pending' WHERE artifact_id=?")
+        .bind(records[7].chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_index_entries SET field='summary' WHERE artifact_id=?")
+        .bind(records[8].chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let mut keys: Vec<_> = records.iter().map(|row| row.key(11)).collect();
+    keys[52] = keys[51]; // Duplicate straddles two four-request batches.
+    let expected: Vec<_> = keys
+        .iter()
+        .enumerate()
+        .filter_map(|(index, key)| (![0, 3, 4, 7, 8, 99].contains(&index)).then_some(*key))
+        .collect();
+    let (ready, queries, rows) = tx
+        .ready_vector_keys_with_testmetrics(&keys, "profile", Some(3))
+        .await
+        .unwrap();
+    assert_eq!(ready, expected);
+    assert_eq!(queries, 25);
+    assert_eq!(rows, 94);
+    // Same artifacts can retain many historical ready generations. None is
+    // requested by these batches, so they must not increase returned rows.
+    for generation in 20..28 {
+        ready_index(&mut tx, records[51], "content", generation).await;
+    }
+    let (after_history, history_queries, history_rows) = tx
+        .ready_vector_keys_with_testmetrics(&keys, "profile", Some(3))
+        .await
+        .unwrap();
+    assert_eq!(after_history, ready);
+    assert_eq!(history_queries, 25);
+    assert_eq!(history_rows, rows);
+    let expected: Vec<_> = keys
+        .iter()
+        .enumerate()
+        .filter_map(|(index, key)| (![0, 3, 7, 99].contains(&index)).then_some(*key))
+        .collect();
+    let (legacy, queries, legacy_rows) = tx
+        .ready_vector_keys_with_testmetrics(&keys, "profile", None)
+        .await
+        .unwrap();
+    assert_eq!(legacy, expected);
+    assert_eq!(queries, 25);
+    assert_eq!(legacy_rows, 96);
+    let (padded, queries, _) = tx
+        .ready_vector_keys_with_testmetrics(&keys[..5], "profile", Some(3))
+        .await
+        .unwrap();
+    assert_eq!(queries, 2);
+    assert_eq!(padded, vec![keys[1], keys[2]]);
+    let generations = [records[0].key(11), records[0].key(12)];
+    let (ready, queries, rows) = tx
+        .ready_vector_keys_with_testmetrics(&generations, "profile", Some(3))
+        .await
+        .unwrap();
+    assert_eq!(ready, vec![generations[1]]);
+    assert_eq!(queries, 1);
+    assert_eq!(rows, 1);
+    // Both IN lists allow these two cross-paired rows, but neither exact
+    // (artifact, generation) projection matches the corresponding request.
+    let crossed = [records[0].key(11), records[1].key(12)];
+    let (ready, queries, rows) = tx
+        .ready_vector_keys_with_testmetrics(&crossed, "profile", Some(3))
+        .await
+        .unwrap();
+    assert!(ready.is_empty());
+    assert_eq!(queries, 1);
+    assert_eq!(rows, 2);
+    let (empty, queries, empty_rows) = tx
+        .ready_vector_keys_with_testmetrics(&[], "profile", Some(3))
+        .await
+        .unwrap();
+    assert!(empty.is_empty());
+    assert_eq!(empty_rows, 0);
+    assert_eq!(queries, 1); // Preserve the original empty-input prepare contract.
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }

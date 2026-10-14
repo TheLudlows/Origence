@@ -56,7 +56,8 @@ impl TursoTx {
         let ids: Vec<read_model::AssociationKey> = db::query_scalar("SELECT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND generation=? AND surface='full_text' AND state='committed'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(generation)
             .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
-        self.index_candidate_ids(&ids, asset_filter, "full_text", generation).await
+        self.index_candidate_ids(&ids, asset_filter, "full_text", generation)
+            .await
     }
 
     pub(crate) async fn full_text_hits(
@@ -104,6 +105,7 @@ impl TursoTx {
             }
             indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
         }
-        self.index_candidate_ids(&indexed, None, "full_text", generation).await
+        self.index_candidate_ids(&indexed, None, "full_text", generation)
+            .await
     }
 }
