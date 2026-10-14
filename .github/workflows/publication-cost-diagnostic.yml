@@ -1,0 +1,133 @@
+name: Publication cost diagnostic
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: publication-cost-${{ github.head_ref }}
+  cancel-in-progress: true
+jobs:
+  native-cost:
+    if: github.head_ref == 'fix/windows-offline-recovery'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.0
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/publication-cost
+      BENCH: ${{ runner.temp }}/publication-cost
+      EVIDENCE: ${{ runner.temp }}/publication-cost-evidence
+      PRODUCTION: ${{ runner.temp }}/publication-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 1d5e0554b38e12df094a894f11a23fb26a117568
+          path: _benchmark/base
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 765d67190b02e01bcf78a756a5ae185b1027971c
+          path: _benchmark/current
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - name: Prepare isolated diagnostic and verify frozen inputs
+        run: |
+          set -euo pipefail
+          test "$(git -C _benchmark/base rev-parse HEAD)" = 1d5e0554b38e12df094a894f11a23fb26a117568
+          test "$(git -C _benchmark/current rev-parse HEAD)" = 765d67190b02e01bcf78a756a5ae185b1027971c
+          mkdir -p "$EVIDENCE"
+          cp -R tools/publication-cost-probe "$BENCH"
+          python3 -B -m unittest discover -s "$BENCH" -p 'test_*.py' -v
+          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --output "$EVIDENCE/sql-evidence.json"
+          python3 "$BENCH/production/prepare.py" --checkout _benchmark/current --label 765d6719 --output "$PRODUCTION" > "$EVIDENCE/production-prepare.json"
+          git rev-parse HEAD > "$EVIDENCE/bundle-commit.txt"
+          find "$BENCH" -type f -not -path '*/__pycache__/*' -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE/bundle-before-format.sha256"
+          rustc --version > "$EVIDENCE/toolchain.txt"
+          cargo --version >> "$EVIDENCE/toolchain.txt"
+          uname -a > "$EVIDENCE/runner.txt"
+          lscpu >> "$EVIDENCE/runner.txt"
+          free -b >> "$EVIDENCE/runner.txt"
+      - name: Generate real isolated locks and verify native versions
+        run: |
+          set -euo pipefail
+          for dir in "$BENCH" "$PRODUCTION"; do
+            cargo generate-lockfile --manifest-path "$dir/Cargo.toml"
+            for attempt in $(seq 1 16); do
+              package=$(python3 -c 'import sys,tomllib; p=tomllib.load(open(sys.argv[1],"rb"))["package"]; order={n:i for i,n in enumerate(["turso","turso_sync_sdk_kit","turso_sync_engine","turso_sdk_kit","turso_sdk_kit_macros","turso_core","turso_ext","turso_parser","turso_macros"])}; p.sort(key=lambda x:(order.get(x["name"],99),x["name"])); print(next((x["name"]+"@"+x["version"] for x in p if x["name"].startswith("turso") and x["version"]!="0.8.2"),""))' "$dir/Cargo.lock")
+              test -n "$package" || break
+              cargo update --manifest-path "$dir/Cargo.toml" -p "$package" --precise 0.8.2
+            done
+            cargo metadata --locked --manifest-path "$dir/Cargo.toml" --format-version 1 > "$dir/cargo-metadata.json"
+            cargo tree --locked --manifest-path "$dir/Cargo.toml" -e features > "$dir/cargo-features.txt"
+            python3 "$BENCH/verify_lock.py" "$dir/Cargo.lock" --metadata "$dir/cargo-metadata.json" > "$dir/lock-verification.json"
+          done
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            ${{ runner.temp }}/publication-cost -> ${{ github.workspace }}/target/publication-cost
+            ${{ runner.temp }}/publication-production -> ${{ github.workspace }}/target/publication-cost
+          key: publication-cost-turso-082
+          save-if: true
+          cache-on-failure: true
+      - name: Format only the isolated harness copies
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path "$BENCH/Cargo.toml"
+          cargo fmt --manifest-path "$PRODUCTION/Cargo.toml"
+          diff -u tools/publication-cost-probe/src/main.rs "$BENCH/src/main.rs" > "$EVIDENCE/metadata-format.patch" || test $? -eq 1
+          diff -u tools/publication-cost-probe/production/main.rs "$PRODUCTION/src/main.rs" > "$EVIDENCE/production-format.patch" || test $? -eq 1
+          sha256sum "$BENCH/src/main.rs" "$PRODUCTION/src/main.rs" > "$EVIDENCE/formatted-sources.sha256"
+      - name: Lint isolated metadata harness
+        id: lint_metadata
+        continue-on-error: true
+        run: cargo clippy --release --locked --manifest-path "$BENCH/Cargo.toml" --all-targets -j 2 -- -D warnings
+      - name: Build and measure native metadata
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --manifest-path "$BENCH/Cargo.toml" -j 2
+          python3 "$BENCH/run_probe.py" --binary "$CARGO_TARGET_DIR/release/origence-publication-native-bench" --input "$EVIDENCE/sql-evidence.json" --output "$EVIDENCE/metadata-run"
+      - name: Collect locks and source evidence
+        if: always()
+        run: |
+          mkdir -p "$EVIDENCE/metadata-build" "$EVIDENCE/production-build"
+          for file in Cargo.lock cargo-metadata.json cargo-features.txt lock-verification.json; do
+            test ! -f "$BENCH/$file" || cp "$BENCH/$file" "$EVIDENCE/metadata-build/"
+            test ! -f "$PRODUCTION/$file" || cp "$PRODUCTION/$file" "$EVIDENCE/production-build/"
+          done
+          test ! -f "$PRODUCTION/source-evidence.json" || cp "$PRODUCTION/source-evidence.json" "$EVIDENCE/production-build/"
+          test ! -f "$BENCH/src/main.rs" || cp "$BENCH/src/main.rs" "$EVIDENCE/metadata-build/"
+          test ! -f "$PRODUCTION/src/main.rs" || cp "$PRODUCTION/src/main.rs" "$EVIDENCE/production-build/"
+      - name: Preserve metadata results before production compilation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-cost-metadata
+          path: ${{ runner.temp }}/publication-cost-evidence
+          if-no-files-found: warn
+      - name: Lint actual authority harness
+        id: lint_production
+        continue-on-error: true
+        run: cargo clippy --release --locked --manifest-path "$PRODUCTION/Cargo.toml" --all-targets -j 2 -- -D warnings
+      - name: Build and measure actual authority calls
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --manifest-path "$PRODUCTION/Cargo.toml" -j 2
+          python3 "$BENCH/run_probe.py" --production --binary "$CARGO_TARGET_DIR/release/origence-publication-production-probe" --input 765d6719 --output "$EVIDENCE/production-current"
+      - name: Keep lint failures visible after diagnostic measurements
+        if: ${{ !cancelled() && (steps.lint_metadata.outcome == 'failure' || steps.lint_production.outcome == 'failure') }}
+        run: exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: publication-cost-native
+          path: ${{ runner.temp }}/publication-cost-evidence
+          if-no-files-found: error

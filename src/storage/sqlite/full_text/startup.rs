@@ -85,7 +85,11 @@ async fn match_rows(
             }
         }
         for row in query.fetch_all(&mut *conn).await.map_err(turso_err)? {
-            for (slot, name) in ["m0", "m1", "m2", "m3"].iter().take(batch.len()).enumerate() {
+            for (slot, name) in ["m0", "m1", "m2", "m3"]
+                .iter()
+                .take(batch.len())
+                .enumerate()
+            {
                 if row.try_get::<Option<bool>>(*name).map_err(turso_err)? == Some(true) {
                     result.push((start + slot, Row::from_row(&row).map_err(turso_err)?));
                 }
@@ -106,12 +110,26 @@ struct Pages {
 
 impl Pages {
     async fn next(&mut self, conn: &mut Connection, surface: &str) -> StorageResult<Vec<Row>> {
-        let generation = if surface == "vector" { "generation" } else { "NULL AS generation" };
-        let seek = if self.after.is_some() { "rowid>?" } else { "rowid>=?" };
-        let sql = format!("SELECT rowid AS startup_rowid,tenant_id,workspace_id,artifact_id,source_id,version,{generation} FROM oc_artifact_ledger WHERE {seek} AND artifact_type='chunk' AND surface=? AND state='committed' ORDER BY rowid LIMIT ?");
+        let generation = if surface == "vector" {
+            "generation"
+        } else {
+            "NULL AS generation"
+        };
+        let seek = if self.after.is_some() {
+            "rowid>?"
+        } else {
+            "rowid>=?"
+        };
+        let sql = format!(
+            "SELECT rowid AS startup_rowid,tenant_id,workspace_id,artifact_id,source_id,version,{generation} FROM oc_artifact_ledger WHERE {seek} AND artifact_type='chunk' AND surface=? AND state='committed' ORDER BY rowid LIMIT ?"
+        );
         let rows = db::query(&sql)
-            .bind(self.after.unwrap_or(i64::MIN)).bind(surface).bind(PAGE_SIZE)
-            .fetch_all(&mut *conn).await.map_err(turso_err)?;
+            .bind(self.after.unwrap_or(i64::MIN))
+            .bind(surface)
+            .bind(PAGE_SIZE)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(turso_err)?;
         if let Some(last) = rows.last() {
             self.after = Some(last.try_get("startup_rowid").map_err(turso_err)?);
         }
@@ -134,49 +152,87 @@ struct Publication {
 }
 
 fn publications(rows: &[Row]) -> StorageResult<Vec<Publication>> {
-    rows.iter().map(|row| Ok(Publication {
-        tenant: row.try_get("tenant_id").map_err(turso_err)?,
-        workspace: row.try_get("workspace_id").map_err(turso_err)?,
-        artifact: row.try_get("artifact_id").map_err(turso_err)?,
-        source: row.try_get("source_id").map_err(turso_err)?,
-        version: row.try_get("version").map_err(turso_err)?,
-        generation: row.try_get("generation").map_err(turso_err)?,
-    })).collect()
+    rows.iter()
+        .map(|row| {
+            Ok(Publication {
+                tenant: row.try_get("tenant_id").map_err(turso_err)?,
+                workspace: row.try_get("workspace_id").map_err(turso_err)?,
+                artifact: row.try_get("artifact_id").map_err(turso_err)?,
+                source: row.try_get("source_id").map_err(turso_err)?,
+                version: row.try_get("version").map_err(turso_err)?,
+                generation: row.try_get("generation").map_err(turso_err)?,
+            })
+        })
+        .collect()
 }
 
 async fn current_publications(
     conn: &mut Connection,
     publications: &[Publication],
 ) -> StorageResult<Vec<usize>> {
-    let requests: Vec<_> = publications.iter().map(|p| vec![
-        p.tenant.clone(), p.workspace.clone(), p.artifact.clone(), p.version.clone(),
-    ]).collect();
+    let requests: Vec<_> = publications
+        .iter()
+        .map(|p| {
+            vec![
+                p.tenant.clone(),
+                p.workspace.clone(),
+                p.artifact.clone(),
+                p.version.clone(),
+            ]
+        })
+        .collect();
     let chunks = match_rows(conn, CHUNKS, 4, &requests).await?;
     let mut selected = Vec::new();
     for (index, chunk) in chunks {
-        selected.push((index, chunk.try_get::<AssociationKey>("asset_id").map_err(turso_err)?));
+        selected.push((
+            index,
+            chunk
+                .try_get::<AssociationKey>("asset_id")
+                .map_err(turso_err)?,
+        ));
     }
-    let requests: Vec<_> = selected.iter().map(|(index, asset)| {
-        let p = &publications[*index];
-        vec![p.tenant.clone(), p.workspace.clone(), asset.clone(), p.version.clone()]
-    }).collect();
+    let requests: Vec<_> = selected
+        .iter()
+        .map(|(index, asset)| {
+            let p = &publications[*index];
+            vec![
+                p.tenant.clone(),
+                p.workspace.clone(),
+                asset.clone(),
+                p.version.clone(),
+            ]
+        })
+        .collect();
     let assets = match_rows(conn, ASSETS, 4, &requests).await?;
-    let requests: Vec<_> = assets.iter().map(|(index, _)| {
-        let (publication, asset) = &selected[*index];
-        let p = &publications[*publication];
-        vec![p.tenant.clone(), p.workspace.clone(), asset.clone(), p.version.clone(), p.source.clone()]
-    }).collect();
+    let requests: Vec<_> = assets
+        .iter()
+        .map(|(index, _)| {
+            let (publication, asset) = &selected[*index];
+            let p = &publications[*publication];
+            vec![
+                p.tenant.clone(),
+                p.workspace.clone(),
+                asset.clone(),
+                p.version.clone(),
+                p.source.clone(),
+            ]
+        })
+        .collect();
     let versions = match_rows(conn, VERSIONS, 5, &requests).await?;
-    let requests: Vec<_> = versions.iter().map(|(index, _)| {
-        let p = &publications[selected[assets[*index].0].0];
-        vec![p.tenant.clone(), p.workspace.clone(), p.source.clone()]
-    }).collect();
+    let requests: Vec<_> = versions
+        .iter()
+        .map(|(index, _)| {
+            let p = &publications[selected[assets[*index].0].0];
+            vec![p.tenant.clone(), p.workspace.clone(), p.source.clone()]
+        })
+        .collect();
     // Empty requests still prepare every relation named by the former single
     // statement, so an empty earlier table cannot conceal a missing schema.
     let events = match_rows(conn, EVENTS, 3, &requests).await?;
-    let mut current: Vec<_> = events.into_iter().map(|(index, _)| {
-        selected[assets[versions[index].0].0].0
-    }).collect();
+    let mut current: Vec<_> = events
+        .into_iter()
+        .map(|(index, _)| selected[assets[versions[index].0].0].0)
+        .collect();
     current.sort_unstable();
     current.dedup();
     Ok(current)
@@ -185,7 +241,10 @@ async fn current_publications(
 async fn full_text_in_pages(conn: &mut Connection, pages: &mut Pages) -> StorageResult<bool> {
     loop {
         let rows = pages.next(conn, "full_text").await?;
-        if !current_publications(conn, &publications(&rows)?).await?.is_empty() {
+        if !current_publications(conn, &publications(&rows)?)
+            .await?
+            .is_empty()
+        {
             return Ok(true);
         }
         if rows.len() < PAGE_SIZE {
@@ -207,10 +266,18 @@ async fn profiles_in_pages(
         let rows = pages.next(conn, "vector").await?;
         let publications = publications(&rows)?;
         let current = current_publications(conn, &publications).await?;
-        let requests: Vec<_> = current.into_iter().map(|index| {
-            let p = &publications[index];
-            vec![p.tenant.clone(), p.workspace.clone(), p.artifact.clone(), p.generation.clone()]
-        }).collect();
+        let requests: Vec<_> = current
+            .into_iter()
+            .map(|index| {
+                let p = &publications[index];
+                vec![
+                    p.tenant.clone(),
+                    p.workspace.clone(),
+                    p.artifact.clone(),
+                    p.generation.clone(),
+                ]
+            })
+            .collect();
         for (_, row) in match_rows(conn, INDEXES, 4, &requests).await? {
             profiles.insert((
                 row.try_get("model_id").map_err(turso_err)?,
@@ -223,12 +290,17 @@ async fn profiles_in_pages(
     }
     // Match the former fetch_all::<(String, i64)> phase: selected type errors
     // anywhere precede dimension validation; rejected index rows never decode.
-    profiles.into_iter().map(|(profile, dimension)| {
-        if !(1..=i64::from(i32::MAX)).contains(&dimension) {
-            return Err(StorageError::Conflict("invalid committed vector dimension".into()));
-        }
-        Ok((profile, dimension as usize))
-    }).collect()
+    profiles
+        .into_iter()
+        .map(|(profile, dimension)| {
+            if !(1..=i64::from(i32::MAX)).contains(&dimension) {
+                return Err(StorageError::Conflict(
+                    "invalid committed vector dimension".into(),
+                ));
+            }
+            Ok((profile, dimension as usize))
+        })
+        .collect()
 }
 
 pub(super) async fn vector_profiles(conn: &mut Connection) -> StorageResult<Vec<(String, usize)>> {

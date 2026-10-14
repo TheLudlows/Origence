@@ -1,8 +1,6 @@
 //! Authority checks for the derived Lance full-text surface. Single-table
 //! reads are associated inside one authority transaction before native ranking.
-use super::read_model::{
-    NativeHitKey, current_chunk_roots, current_chunks, unique_ids,
-};
+use super::read_model::{NativeHitKey, current_chunk_roots, current_chunks, unique_ids};
 use super::*;
 use crate::storage::native_turso as db;
 use crate::types::SearchHit;

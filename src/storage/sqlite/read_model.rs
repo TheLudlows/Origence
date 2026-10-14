@@ -897,7 +897,9 @@ pub(super) async fn context_current_chunk_rows(
     scope: Scope,
     kind: &str,
 ) -> StorageResult<Vec<(Uuid, Uuid, String, String)>> {
-    Ok(context_current_chunk_rows_measured(conn, scope, kind).await?.0)
+    Ok(context_current_chunk_rows_measured(conn, scope, kind)
+        .await?
+        .0)
 }
 
 #[cfg(feature = "local-storage")]

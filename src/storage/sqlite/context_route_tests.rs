@@ -1159,7 +1159,16 @@ async fn current_route_reads_only_current_payloads_once_across_key_batches() {
     let mut expected = HashSet::new();
     for index in 0..9 {
         let row = Record::new(20_000 + index);
-        seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+        seed(
+            &mut tx,
+            scope,
+            row,
+            "knowledge",
+            Some(1),
+            "active",
+            "knowledge",
+        )
+        .await;
         chunk(&mut tx, scope, row.asset, row.second_chunk(), 1, 1, "{}").await;
         expected.extend([row.chunk, row.second_chunk()]);
         // Historical payloads are large and deliberately invalid as text.
@@ -1176,13 +1185,10 @@ async fn current_route_reads_only_current_payloads_once_across_key_batches() {
                 .unwrap();
         }
     }
-    let (rows, counts) = super::read_model::context_current_chunk_rows_measured(
-        &mut tx.tx,
-        scope,
-        "knowledge",
-    )
-    .await
-    .unwrap();
+    let (rows, counts) =
+        super::read_model::context_current_chunk_rows_measured(&mut tx.tx, scope, "knowledge")
+            .await
+            .unwrap();
     assert_eq!(counts, [9, 9, 18]);
     assert_eq!(rows.len(), 18);
     assert_eq!(
@@ -1199,7 +1205,16 @@ async fn current_route_keeps_native_non_uuid_roots_and_text_versions() {
     let scope = scope();
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(30_000);
-    seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+    seed(
+        &mut tx,
+        scope,
+        row,
+        "knowledge",
+        Some(1),
+        "active",
+        "knowledge",
+    )
+    .await;
     db::query("UPDATE oc_assets SET current_version='revision-x'")
         .execute(&mut *tx.tx)
         .await
@@ -1216,13 +1231,10 @@ async fn current_route_keeps_native_non_uuid_roots_and_text_versions() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    let (rows, counts) = super::read_model::context_current_chunk_rows_measured(
-        &mut tx.tx,
-        scope,
-        "knowledge",
-    )
-    .await
-    .unwrap();
+    let (rows, counts) =
+        super::read_model::context_current_chunk_rows_measured(&mut tx.tx, scope, "knowledge")
+            .await
+            .unwrap();
     assert_eq!(counts, [1, 1, 1]);
     assert_eq!(rows[0].0, row.chunk);
     tx.rollback().await.unwrap();
@@ -1284,7 +1296,8 @@ async fn native_context_routes_filter_before_loading_other_route_content() {
     );
     // The same malformed content remains an error when its route is requested.
     assert!(matches!(
-        tx.context_vector_candidates("profile", 2, 7, ContextRoute::Memory, None).await,
+        tx.context_vector_candidates("profile", 2, 7, ContextRoute::Memory, None)
+            .await,
         Err(StorageError::Backend(_))
     ));
     tx.rollback().await.unwrap();
