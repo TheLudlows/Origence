@@ -803,12 +803,6 @@ impl TursoTx {
 mod json_tests;
 
 #[cfg(feature = "local-storage")]
-pub(super) const MATCH_CURRENT_SELECT: &str = "(id=? AND current_version=?) AS m0,(id=? AND current_version=?) AS m1,(id=? AND current_version=?) AS m2,(id=? AND current_version=?) AS m3,(id=? AND current_version=?) AS m4,(id=? AND current_version=?) AS m5,(id=? AND current_version=?) AS m6,(id=? AND current_version=?) AS m7";
-
-#[cfg(feature = "local-storage")]
-pub(super) const MATCH_CURRENT_WHERE: &str = "(id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?) OR (id=? AND current_version=?)";
-
-#[cfg(feature = "local-storage")]
 pub(super) const MATCH_VERSION_SELECT: &str = "(asset_id=? AND version=?) AS m0,(asset_id=? AND version=?) AS m1,(asset_id=? AND version=?) AS m2,(asset_id=? AND version=?) AS m3,(asset_id=? AND version=?) AS m4,(asset_id=? AND version=?) AS m5,(asset_id=? AND version=?) AS m6,(asset_id=? AND version=?) AS m7";
 
 #[cfg(feature = "local-storage")]
@@ -903,49 +897,35 @@ pub(super) async fn context_current_chunk_rows(
     scope: Scope,
     kind: &str,
 ) -> StorageResult<Vec<(Uuid, Uuid, String, String)>> {
-    // Keep rows native through every original SQL predicate. In particular an
-    // excluded historical/wrong-kind chunk must not decode malformed text/UUIDs.
-    let chunks = native_turso::query("SELECT id,asset_id,version,search_terms,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id)
-        .fetch_all(&mut *conn).await.map_err(turso_err)?;
-    let keys = chunks
+    Ok(context_current_chunk_rows_measured(conn, scope, kind).await?.0)
+}
+
+#[cfg(feature = "local-storage")]
+type ContextChunkRows = Vec<(Uuid, Uuid, String, String)>;
+
+// Local read-set metrics let regressions verify payload scope without timing
+// thresholds or an extra query. The counters do not affect query decisions.
+#[cfg(feature = "local-storage")]
+pub(super) async fn context_current_chunk_rows_measured(
+    conn: &mut Connection,
+    scope: Scope,
+    kind: &str,
+) -> StorageResult<(ContextChunkRows, [usize; 3])> {
+    // Start from the unique scoped asset key, not every historical chunk. Keep
+    // keys native until all current-version/root predicates have been applied.
+    let assets = native_turso::query("SELECT id,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND NOT deleted AND kind=? AND current_version IS NOT NULL")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(kind)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(turso_err)?;
+    let keys = assets
         .iter()
         .map(|row| {
             Ok(vec![
-                row.try_get("asset_id").map_err(turso_err)?,
-                row.try_get("version").map_err(turso_err)?,
-            ])
-        })
-        .collect::<StorageResult<Vec<_>>>()?;
-    let gate = if kind == "memory" {
-        "NOT deleted AND kind='memory'"
-    } else {
-        "NOT deleted AND kind='knowledge'"
-    };
-    let matches = associate_rows(
-        conn,
-        scope,
-        "oc_assets",
-        "id",
-        MATCH_CURRENT_SELECT,
-        MATCH_CURRENT_WHERE,
-        gate,
-        2,
-        &keys,
-    )
-    .await?;
-    let matched: HashSet<_> = matches.into_iter().map(|(index, _)| index).collect();
-    let chunks: Vec<_> = chunks
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, row)| matched.contains(&index).then_some(row))
-        .collect();
-    let keys = chunks
-        .iter()
-        .map(|row| {
-            Ok(vec![
-                row.try_get("asset_id").map_err(turso_err)?,
-                row.try_get("version").map_err(turso_err)?,
+                row.try_get("id").map_err(turso_err)?,
+                row.try_get("current_version").map_err(turso_err)?,
             ])
         })
         .collect::<StorageResult<Vec<_>>>()?;
@@ -961,7 +941,7 @@ pub(super) async fn context_current_chunk_rows(
         &keys,
     )
     .await?;
-    let keys = versions
+    let sources = versions
         .iter()
         .map(|(_, row)| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
         .collect::<StorageResult<Vec<_>>>()?;
@@ -974,24 +954,49 @@ pub(super) async fn context_current_chunk_rows(
         MATCH_EVENT_WHERE,
         "state='active'",
         1,
-        &keys,
+        &sources,
     )
     .await?;
+    let asset_count = assets.len();
+    let version_count = versions.len();
     let matched: HashSet<_> = events
         .into_iter()
         .map(|(index, _)| versions[index].0)
         .collect();
-    chunks
+    // This deduplicates only positions in the unique asset read set. Native
+    // SQL, not Rust key equality, decides every business-key association.
+    let keys: Vec<_> = keys
         .into_iter()
         .enumerate()
-        .filter(|(index, _)| matched.contains(index))
-        .map(|(_, row)| {
-            Ok((
+        .filter_map(|(index, keys)| matched.contains(&index).then_some(keys))
+        .collect();
+    let mut result = Vec::new();
+    for batch_index in 0..keys.len().div_ceil(ASSOCIATION_KEYS).max(1) {
+        let start = batch_index * ASSOCIATION_KEYS;
+        let batch = &keys[start..(start + ASSOCIATION_KEYS).min(keys.len())];
+        // A row belongs to one current asset key, so no per-request projection
+        // or cloning of search_terms/locator is needed. Historical payloads
+        // never enter the Rust read set. Empty input still prepares this table.
+        let mut query = native_turso::query("SELECT id,asset_id,search_terms,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND ((asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?))")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id);
+        for slot in 0..ASSOCIATION_KEYS {
+            for key in 0..2 {
+                query = query.bind(batch.get(slot).map_or_else(
+                    || AssociationKey(turso::Value::Null),
+                    |request| request[key].clone(),
+                ));
+            }
+        }
+        for row in query.fetch_all(&mut *conn).await.map_err(turso_err)? {
+            result.push((
                 row.try_get("id").map_err(turso_err)?,
                 row.try_get("asset_id").map_err(turso_err)?,
                 row.try_get("search_terms").map_err(turso_err)?,
                 row.try_get("locator").map_err(turso_err)?,
-            ))
-        })
-        .collect()
+            ));
+        }
+    }
+    let chunk_count = result.len();
+    Ok((result, [asset_count, version_count, chunk_count]))
 }

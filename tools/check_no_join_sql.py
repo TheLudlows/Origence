@@ -374,6 +374,30 @@ class Evaluator:
             # Never silently evaluate an initializer after later mutation.
             initialized = max((e[-1].end for e in binding.exprs if e), default=binding.position)
             between = [t for t in f.tokens if initialized < t.start < at]
+            # Macros may borrow a destination mutably without an explicit
+            # `&mut` token (notably write!/writeln!). Do not keep using its
+            # initializer after passing the SQL binding into an opaque macro.
+            for i, token in enumerate(f.tokens[:-2]):
+                if not (initialized < token.start < at):
+                    continue
+                if f.tokens[i+1].text != "!" or f.tokens[i+2].text not in {"(", "[", "{"}:
+                    continue
+                closing = f.match.get(i+2)
+                if closing is None:
+                    continue
+                args = split_top(f.tokens[i+3:closing])
+                for arg_index, arg in enumerate(args):
+                    # write! destinations can be expressions; other macros
+                    # fail closed when passed the binding directly. Nested
+                    # read-only calls such as assert_eq!(count(table), n) are
+                    # not direct mutation of the string-valued argument.
+                    direct = arg
+                    while len(direct) >= 2 and direct[0].text == "(" and pairs(direct).get(0) == len(direct)-1:
+                        direct = direct[1:-1]
+                    destination = token.text in {"write", "writeln"} and arg_index == 0
+                    if ((destination and any(t.text == short and t.kind == "id" for t in arg))
+                            or (len(direct) == 1 and direct[0].kind == "id" and direct[0].text == short)):
+                        result.unknown.add(f"SQL binding {name} passed to unsupported macro")
             for i, t in enumerate(between[:-2]):
                 if t.text == short and between[i+1].text in {"+=", "="}:
                     result.unknown.add(f"mutated binding {name}")
@@ -766,6 +790,12 @@ def sql_issues(sql: str) -> set[str]:
                 if j < len(segment) and segment[j].text == "or": j += 2
             elif kw == "into" and any(x in {"insert", "replace"} for x in words[:i]):
                 relation = True
+            if relation and j < len(segment) and segment[j].text == "(":
+                # A table group such as FROM (a,b) is legal SQL, but its commas
+                # are not at the outer FROM depth. Only modeled subqueries may
+                # enter this branch; all other grouped relations fail closed.
+                if j+1 >= len(segment) or segment[j+1].kind != "word" or segment[j+1].text not in {"select", "with"}:
+                    raise Unknown("unsupported parenthesized SQL relation")
             if relation and j < len(segment) and segment[j].kind in {"word", "quoted"}:
                 name = segment[j].text.lower()
                 if j+2 < len(segment) and segment[j+1].text == ".":

@@ -1,52 +1,20 @@
 //! Authority checks for the derived Lance full-text surface. Single-table
 //! reads are associated inside one authority transaction before native ranking.
 use super::read_model::{
-    NativeHitKey, current_chunk_roots, current_chunks, rows_by_ids, unique_ids,
+    NativeHitKey, current_chunk_roots, current_chunks, unique_ids,
 };
 use super::*;
 use crate::storage::native_turso as db;
 use crate::types::SearchHit;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
-async fn current_publications(
-    conn: &mut Connection,
-    surface: &str,
-) -> StorageResult<Vec<(Scope, Uuid, i64)>> {
-    let rows = db::query("SELECT tenant_id,workspace_id,artifact_id,source_id,version,generation FROM oc_artifact_ledger WHERE artifact_type='chunk' AND surface=? AND state='committed'")
-        .bind(surface).fetch_all(&mut *conn).await.map_err(turso_err)?;
-    let mut scoped: HashMap<Scope, Vec<NativeHitKey>> = HashMap::new();
-    for row in rows {
-        let scope = Scope {
-            tenant_id: row.try_get("tenant_id").map_err(turso_err)?,
-            workspace_id: row.try_get("workspace_id").map_err(turso_err)?,
-        };
-        scoped.entry(scope).or_default().push((
-            row.try_get("artifact_id").map_err(turso_err)?,
-            SourceVersion {
-                source_id: row.try_get("source_id").map_err(turso_err)?,
-                version: row.try_get("version").map_err(turso_err)?,
-            },
-            row.try_get("generation").map_err(turso_err)?,
-        ));
-    }
-    let mut publications = Vec::new();
-    for (scope, keys) in scoped {
-        let ids = unique_ids(keys.iter().map(|(id, _, _)| *id));
-        let roots = current_chunk_roots(conn, scope, &ids).await?;
-        publications.extend(
-            keys.into_iter()
-                .filter(|(id, source, _)| roots.get(id) == Some(source))
-                .map(|(id, _, generation)| (scope, id, generation)),
-        );
-    }
-    Ok(publications)
-}
+mod startup;
 
 impl TursoStore {
     /// Root-active current publication metadata, not a visibility decision.
     pub async fn has_committed_full_text(&self) -> StorageResult<bool> {
         let mut tx = self.pool.begin().await.map_err(turso_err)?;
-        let required = !current_publications(&mut tx, "full_text").await?.is_empty();
+        let required = startup::has_full_text(&mut tx).await?;
         tx.rollback().await.map_err(turso_err)?;
         Ok(required)
     }
@@ -55,47 +23,9 @@ impl TursoStore {
     /// do not prevent startup cleanup; no support graph is loaded here.
     pub async fn committed_vector_profiles(&self) -> StorageResult<Vec<(String, usize)>> {
         let mut tx = self.pool.begin().await.map_err(turso_err)?;
-        let publications = current_publications(&mut tx, "vector").await?;
-        let mut scoped: HashMap<Scope, HashSet<(Uuid, i64)>> = HashMap::new();
-        for (scope, id, generation) in publications {
-            scoped.entry(scope).or_default().insert((id, generation));
-        }
-        let mut profiles = BTreeSet::new();
-        for (scope, keys) in scoped {
-            let ids = unique_ids(keys.iter().map(|(id, _)| *id));
-            for row in rows_by_ids(
-                &mut tx,
-                scope,
-                "oc_index_entries",
-                "artifact_id,field,model_id,dimension,generation,state",
-                "artifact_id",
-                &ids,
-            )
-            .await?
-            {
-                if row.try_get::<String>("field").map_err(turso_err)? != "content"
-                    || row.try_get::<String>("state").map_err(turso_err)? != "ready"
-                    || !keys.contains(&(
-                        row.try_get("artifact_id").map_err(turso_err)?,
-                        row.try_get("generation").map_err(turso_err)?,
-                    ))
-                {
-                    continue;
-                }
-                let dimension: i64 = row.try_get("dimension").map_err(turso_err)?;
-                if !(1..=i64::from(i32::MAX)).contains(&dimension) {
-                    return Err(StorageError::Conflict(
-                        "invalid committed vector dimension".into(),
-                    ));
-                }
-                profiles.insert((
-                    row.try_get("model_id").map_err(turso_err)?,
-                    dimension as usize,
-                ));
-            }
-        }
+        let profiles = startup::vector_profiles(&mut tx).await?;
         tx.rollback().await.map_err(turso_err)?;
-        Ok(profiles.into_iter().collect())
+        Ok(profiles)
     }
 }
 
@@ -191,14 +121,35 @@ impl TursoTx {
         route: crate::context_retrieval::ContextRoute,
         identity: Option<&crate::memory_identity::MemoryIdentity>,
     ) -> StorageResult<Vec<Uuid>> {
-        let route_ids: HashSet<_> = self
-            .context_route_rows(route, identity)
-            .await?
-            .into_iter()
-            .map(|(id, _)| id)
-            .collect();
-        let mut ids = self.full_text_candidates(generation, None).await?;
-        ids.retain(|id| route_ids.contains(id));
-        Ok(ids)
+        let route_ids = unique_ids(
+            self.context_route_rows(route, identity)
+                .await?
+                .into_iter()
+                .map(|(id, _)| id),
+        );
+        let mut indexed = Vec::new();
+        for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
+            let start = batch_index * 8;
+            let batch = &route_ids[start..(start + 8).min(route_ids.len())];
+            let mut query = db::query_scalar::<Uuid>(
+                "SELECT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND generation=? AND surface='full_text' AND state='committed' AND artifact_id IN (?,?,?,?,?,?,?,?)",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(generation);
+            for slot in 0..8 {
+                query = query.bind(batch.get(slot).copied());
+            }
+            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
+        }
+        let publications = self.committed_publications(&indexed, "full_text").await?;
+        let mut chunks = current_chunks(&mut self.tx, self.scope, Some(&indexed), None).await?;
+        chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
+        Ok(unique_ids(
+            self.guard_retrieval_chunks(chunks)
+                .await?
+                .into_iter()
+                .map(|chunk| chunk.hit.chunk_id),
+        ))
     }
 }

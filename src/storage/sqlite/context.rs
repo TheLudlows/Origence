@@ -182,19 +182,41 @@ impl TursoTx {
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
     ) -> StorageResult<Vec<Uuid>> {
-        let route_ids: HashSet<_> = self
-            .context_route_rows(route, identity)
-            .await?
-            .into_iter()
-            .map(|(id, _)| id)
-            .collect();
-        // This existing shared helper has no top-k or LIMIT: it checks full
-        // visibility plus ready index generation and committed publication.
-        let mut ids = self
-            .vector_candidates(profile, dimension, generation, None)
-            .await?;
-        ids.retain(|id| route_ids.contains(id));
-        ids.sort_unstable();
+        let route_ids = read_model::unique_ids(
+            self.context_route_rows(route, identity)
+                .await?
+                .into_iter()
+                .map(|(id, _)| id),
+        );
+        // Apply the route/identity set before loading full chunk payloads and
+        // visibility closures. Native equality still filters index metadata.
+        let mut indexed = Vec::new();
+        for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
+            let start = batch_index * 8;
+            let batch = &route_ids[start..(start + 8).min(route_ids.len())];
+            let mut query = native_turso::query_scalar::<Uuid>(
+                "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready' AND artifact_id IN (?,?,?,?,?,?,?,?)",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(profile)
+            .bind(dimension)
+            .bind(generation);
+            for slot in 0..8 {
+                query = query.bind(batch.get(slot).copied());
+            }
+            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
+        }
+        let publications = self.committed_publications(&indexed, "vector").await?;
+        let mut chunks =
+            read_model::current_chunks(&mut self.tx, self.scope, Some(&indexed), None).await?;
+        chunks.retain(|chunk| publications.contains(&(chunk.hit.chunk_id, chunk.root, generation)));
+        let ids = read_model::unique_ids(
+            self.guard_retrieval_chunks(chunks)
+                .await?
+                .into_iter()
+                .map(|chunk| chunk.hit.chunk_id),
+        );
         Ok(ids)
     }
 

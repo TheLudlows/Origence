@@ -35,6 +35,17 @@ class SqlRules(unittest.TestCase):
         ):
             with self.subTest(sql=sql): self.assert_bad(sql)
 
+    def test_parenthesized_table_groups_fail_closed(self):
+        for sql in (
+            "SELECT * FROM (a,b) WHERE a.id=b.id",
+            "SELECT * FROM ((a,b))",
+            "SELECT * FROM (a)",
+            "SELECT * FROM (main.a, main.b)",
+        ):
+            with self.subTest(sql=sql), self.assertRaises(guard.Unknown):
+                guard.sql_issues(sql)
+        self.assertEqual(guard.sql_issues("SELECT * FROM (SELECT id FROM a)"), set())
+
     def test_quotes_comments_commas_and_single_relation_are_not_joins(self):
         for sql in (
             "SELECT 'JOIN FROM a,b', printf('%s,%s',x,y) FROM a /* JOIN b */ -- JOIN c\nWHERE id=?",
@@ -170,6 +181,29 @@ class RustInputs(unittest.TestCase):
         findings = self.scan('''fn run(input: &str) { let mut sql = "SELECT * FROM a".to_owned();
             sql.push_str(input); db::query(&sql); }''')
         self.assertTrue(findings[0].unresolved)
+
+    def test_macro_destination_mutation_is_unresolved(self):
+        for mutation in (
+            'write!(sql, " JOIN b ON a.id=b.id").unwrap();',
+            'writeln!(sql, " JOIN b ON a.id=b.id").unwrap();',
+            'std::write!(sql, " JOIN b ON a.id=b.id").unwrap();',
+            'opaque_mutator!(sql);',
+        ):
+            source = 'use std::fmt::Write; fn run() { let mut sql = "SELECT * FROM a".to_owned(); ' + mutation + ' db::query(&sql); }'
+            with self.subTest(mutation=mutation):
+                self.assertTrue(self.scan(source)[0].unresolved)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(guard.main(["--root", str(self.root)]), 2)
+
+    def test_macro_literal_matching_binding_name_is_not_mutation(self):
+        findings = self.scan('fn run() { let sql = "SELECT * FROM a".to_owned(); println!("sql"); db::query(&sql); }')
+        self.assertFalse(findings[0].unresolved)
+        self.assertFalse(findings[0].issues)
+
+    def test_parenthesized_from_is_unresolved_at_query_sink(self):
+        self.assertTrue(self.scan('fn run() { db::query("SELECT * FROM (a,b) WHERE a.id=b.id"); }')[0].unresolved)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(guard.main(["--root", str(self.root)]), 2)
 
     def test_finite_helper_and_certified_placeholder_repetition(self):
         findings = self.scan('''fn rows(table: &str, columns: &str, n: usize) {

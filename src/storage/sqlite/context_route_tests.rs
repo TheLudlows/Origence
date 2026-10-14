@@ -865,7 +865,7 @@ async fn missing_learning_catalog_keeps_historical_classification_and_backend_er
 
 #[tokio::test]
 async fn empty_route_chunks_do_not_hide_missing_association_tables() {
-    for missing in ["assets", "versions", "events"] {
+    for missing in ["assets", "versions", "events", "chunks"] {
         let (_dir, pool) = database().await;
         let mut tx = transaction(&pool, scope()).await;
         match missing {
@@ -883,6 +883,12 @@ async fn empty_route_chunks_do_not_hide_missing_association_tables() {
             }
             "events" => {
                 db::query("DROP TABLE oc_events")
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
+            "chunks" => {
+                db::query("DROP TABLE oc_chunks")
                     .execute(&mut *tx.tx)
                     .await
                     .unwrap();
@@ -1141,6 +1147,146 @@ async fn learning_membership_preserves_raw_improve_keys_and_native_status_predic
         assert!(!knowledge[asset]);
         assert_eq!(learning[asset], index % 2 == 0);
     }
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn current_route_reads_only_current_payloads_once_across_key_batches() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let mut expected = HashSet::new();
+    for index in 0..9 {
+        let row = Record::new(20_000 + index);
+        seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+        chunk(&mut tx, scope, row.asset, row.second_chunk(), 1, 1, "{}").await;
+        expected.extend([row.chunk, row.second_chunk()]);
+        // Historical payloads are large and deliberately invalid as text.
+        // They must neither decode nor enter the current payload read set.
+        for historical in 2..=130 {
+            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,'historical',zeroblob(4096),zeroblob(4096))")
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(Uuid::new_v4())
+                .bind(row.asset)
+                .bind(historical)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+        }
+    }
+    let (rows, counts) = super::read_model::context_current_chunk_rows_measured(
+        &mut tx.tx,
+        scope,
+        "knowledge",
+    )
+    .await
+    .unwrap();
+    assert_eq!(counts, [9, 9, 18]);
+    assert_eq!(rows.len(), 18);
+    assert_eq!(
+        rows.into_iter().map(|row| row.0).collect::<HashSet<_>>(),
+        expected
+    );
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn current_route_keeps_native_non_uuid_roots_and_text_versions() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(30_000);
+    seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+    db::query("UPDATE oc_assets SET current_version='revision-x'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET version='revision-x',source_event_id=x'31'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_events SET id=x'31'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET version='revision-x'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let (rows, counts) = super::read_model::context_current_chunk_rows_measured(
+        &mut tx.tx,
+        scope,
+        "knowledge",
+    )
+    .await
+    .unwrap();
+    assert_eq!(counts, [1, 1, 1]);
+    assert_eq!(rows[0].0, row.chunk);
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_context_routes_filter_before_loading_other_route_content() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    db::query("CREATE TABLE oc_index_entries(tenant_id BLOB,workspace_id BLOB,artifact_id BLOB,model_id TEXT,dimension INTEGER,generation INTEGER,state TEXT)")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,artifact_id BLOB,source_id BLOB,version INTEGER,generation INTEGER,surface TEXT,state TEXT)")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let good = Record::new(40_000);
+    let other = Record::new(40_001);
+    for (row, kind) in [(good, "knowledge"), (other, "memory")] {
+        seed(&mut tx, scope, row, kind, Some(1), "active", kind).await;
+        db::query("INSERT INTO oc_index_entries VALUES(?,?,?,'profile',2,7,'ready')")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(row.chunk)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        for surface in ["vector", "full_text"] {
+            db::query("INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,1,7,?,'committed')")
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(row.chunk)
+                .bind(row.source)
+                .bind(surface)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+        }
+    }
+    db::query("UPDATE oc_chunks SET content=zeroblob(65536) WHERE id=?")
+        .bind(other.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.context_vector_candidates("profile", 2, 7, ContextRoute::Knowledge, None)
+            .await
+            .unwrap(),
+        vec![good.chunk]
+    );
+    assert_eq!(
+        tx.context_full_text_candidates(7, ContextRoute::Knowledge, None)
+            .await
+            .unwrap(),
+        vec![good.chunk]
+    );
+    // The same malformed content remains an error when its route is requested.
+    assert!(matches!(
+        tx.context_vector_candidates("profile", 2, 7, ContextRoute::Memory, None).await,
+        Err(StorageError::Backend(_))
+    ));
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
