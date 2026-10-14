@@ -2,7 +2,7 @@
 //! verified, read-only external checkouts; no product SQL exception is added.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value as Json, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -40,9 +40,10 @@ fn report(value: Json) -> Result<()> {
 }
 
 #[derive(Default)]
-struct Counter { queries: usize, returned_text_bytes: usize }
+struct Counter { queries: usize, returned_text_bytes: usize, bound_text_bytes: usize }
 async fn query(conn: &Connection, sql: &str, params: Vec<Value>, counter: &mut Counter) -> Result<Vec<Vec<Value>>> {
     counter.queries += 1;
+    counter.bound_text_bytes += params.iter().map(|value| match value { Value::Text(value) => value.len(), _ => 0 }).sum::<usize>();
     let mut rows = conn.query(sql, params).await?;
     let mut output = Vec::new();
     while let Some(row) = rows.next().await? {
@@ -56,6 +57,14 @@ async fn query(conn: &Connection, sql: &str, params: Vec<Value>, counter: &mut C
     }
     Ok(output)
 }
+async fn execute(conn: &Connection, statement: &str, params: Vec<Value>, counter: &mut Counter) -> Result<()> {
+    counter.queries += 1;
+    counter.bound_text_bytes += params.iter().map(|value| match value { Value::Text(value) => value.len(), _ => 0 }).sum::<usize>();
+    conn.execute(statement, params).await?;
+    Ok(())
+}
+include!("receipt_runner.rs");
+
 fn one(mut rows: Vec<Vec<Value>>) -> Result<Vec<Value>> {
     ensure!(rows.len() == 1, "expected one metadata row");
     Ok(rows.remove(0))
@@ -68,7 +77,7 @@ fn sql<'a>(variant: &'a Json, key: &str) -> Result<&'a str> {
 struct Metadata {
     header: Vec<Json>,
     distinct: i64,
-    expected: BTreeMap<String, BTreeSet<i64>>,
+    expected: HashMap<String, HashSet<i64>>,
 }
 struct Sample {
     result: Metadata,
@@ -77,17 +86,28 @@ struct Sample {
     dimensions_ms: f64,
     queries: usize,
     returned_text_bytes: usize,
+    bound_text_bytes: usize,
 }
 
 async fn metadata(conn: &Connection, variant: &Json, count: usize) -> Result<Sample> {
     let mut counter = Counter::default();
     let start = Instant::now();
     let mut header = one(query(conn, sql(variant, "header_sql")?, scope_job(), &mut counter).await?)?;
-    ensure!(header.len() == 14, "header layout changed: {} columns", header.len());
-    let last = header.pop().context("missing final header column")?;
     let mode = sql(variant, "mode")?;
+    ensure!(header.len() == if mode == "reviewed_receipt_metadata_v1" { 15 } else { 14 }, "header layout changed: {} columns", header.len());
+    let summary = if mode == "reviewed_receipt_metadata_v1" {
+        let raw = header.pop().context("missing receipt_metadata")?;
+        let native_count = usize::try_from(optional_integer(&header[12])?.unwrap_or(0)).map_err(|_| invalid_plan())?;
+        ensure!(native_count == count, "fixture count mismatch");
+        Some(ReceiptMetadata::decode(optional_text(&raw)?, native_count)?)
+    } else { None };
+    let last = header.pop().context("missing final header column")?;
     let distinct = match mode {
         "historical_metadata" => integer(&last)?,
+        "reviewed_receipt_metadata_v1" => {
+            if !matches!(optional_text(&last)?, None | Some("null" | "array")) { return Err(invalid_plan().into()); }
+            receipt_distinct(conn, variant, summary.as_ref().context("receipt metadata")?, &mut counter).await?
+        }
         "eight_slots" => {
             ensure!(text(&last)? == "array", "normal fixture must be an array");
             ensure!(variant["slots"] == 8, "unreviewed slot count");
@@ -110,12 +130,14 @@ async fn metadata(conn: &Connection, variant: &Json, count: usize) -> Result<Sam
     };
     let id_phase_ms = start.elapsed().as_secs_f64() * 1000.0;
     let dimension_start = Instant::now();
-    let mut expected = BTreeMap::<String, BTreeSet<i64>>::new();
+    let mut expected = HashMap::<String, HashSet<i64>>::new();
     if mode == "historical_metadata" {
         for row in query(conn, sql(variant, "dimensions_sql")?, scope_job(), &mut counter).await? {
             ensure!(row.len() == 2, "historical projection layout changed");
             expected.entry(text(&row[0])?.to_owned()).or_default().insert(integer(&row[1])?);
         }
+    } else if mode == "reviewed_receipt_metadata_v1" {
+        expected = receipt_expected(conn, variant, summary.as_ref().context("receipt metadata")?, &mut counter).await?;
     } else {
         for offset in (0..count).step_by(8) {
             let mut params = Vec::new();
@@ -140,9 +162,9 @@ async fn metadata(conn: &Connection, variant: &Json, count: usize) -> Result<Sam
     let result = Metadata { header: header.iter().map(native_json).collect(), distinct, expected };
     let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
     ensure!(distinct == count as i64 && result.expected.len() == count, "metadata cardinality differs");
-    ensure!(result.expected.values().all(|set| set == &BTreeSet::from([DIMENSION as i64])), "wrong fixture dimensions");
-    ensure!(counter.queries == if mode == "historical_metadata" { 2 } else { 2 + 2 * count.div_ceil(8) }, "query count differs");
-    Ok(Sample { result, elapsed_ms, id_phase_ms, dimensions_ms, queries: counter.queries, returned_text_bytes: counter.returned_text_bytes })
+    ensure!(result.expected.values().all(|set| set == &HashSet::from([DIMENSION as i64])), "wrong fixture dimensions");
+    ensure!(counter.queries == match mode { "historical_metadata" => 2, "reviewed_receipt_metadata_v1" => 4, _ => 2 + 2 * count.div_ceil(8) }, "query count differs");
+    Ok(Sample { result, elapsed_ms, id_phase_ms, dimensions_ms, queries: counter.queries, returned_text_bytes: counter.returned_text_bytes, bound_text_bytes: counter.bound_text_bytes })
 }
 
 fn normal_payload(count: usize) -> String {
@@ -182,19 +204,26 @@ async fn main() -> Result<()> {
     let path = work.join("metadata.db");
     let database = turso::Builder::new_local(path.to_str().context("non-UTF8 fixture path")?).build().await?;
     let conn = database.connect()?;
-    conn.execute("CREATE TABLE oc_jobs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,operation TEXT,state TEXT,generation INTEGER,asset_id BLOB,source_event_id BLOB,payload TEXT,PRIMARY KEY(tenant_id,workspace_id,id))", Vec::<Value>::new()).await?;
+    conn.execute("CREATE TABLE oc_jobs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,operation TEXT,state TEXT,generation INTEGER,asset_id BLOB,source_event_id BLOB,payload TEXT,updated_at INTEGER,PRIMARY KEY(tenant_id,workspace_id,id))", Vec::<Value>::new()).await?;
     report(json!({"event":"configuration","engine":"native turso 0.8.2; verify resolved lock separately","os":std::env::consts::OS,"arch":std::env::consts::ARCH,"warmups":warmups,"repeats":repeats,"counts":COUNTS,"dimension":DIMENSION,"scope":"metadata only; excludes permissions, source/index/ledger checks, native adapter wrapping and transaction begin/commit","sql_evidence":bundle}))?;
     for count in COUNTS {
         let payload = normal_payload(count);
-        let payload_bytes = payload.len();
+        let original_payload_bytes = payload.len();
         conn.execute("DELETE FROM oc_jobs", Vec::<Value>::new()).await?;
         let mut params = scope_job();
-        params.extend([blob(4), blob(5), Value::Text(payload)]);
-        conn.execute("INSERT INTO oc_jobs VALUES(?,?,?,'message_batch_ingest','completed',1,?,?,?)", params).await?;
+        params.extend([blob(4), blob(5), Value::Text(payload.clone())]);
+        conn.execute("INSERT INTO oc_jobs VALUES(?,?,?,'message_batch_ingest','completed',1,?,?,?,1)", params).await?;
+        if let Some(variant) = variants.iter().find(|variant| variant["mode"] == "reviewed_receipt_metadata_v1") {
+            measure_saves(&conn, variant, &payload, count, warmups, repeats).await?;
+        }
+        // Every metadata variant reads the exact same persisted row including
+        // the lightweight summary. Its construction cost is reported above.
+        let size = one(query(&conn, "SELECT length(CAST(payload AS BLOB)) FROM oc_jobs", Vec::new(), &mut Counter::default()).await?)?;
+        let payload_bytes = integer(&size[0])?;
         let mut timings: Vec<Vec<f64>> = vec![Vec::new(); variants.len()];
         for round in 0..warmups + repeats {
             let mut results = Vec::new();
-            // Reverse order every round to expose order/cache effects.
+            // Rotate order every round to expose order/cache effects.
             let mut order: Vec<_> = (0..variants.len()).collect();
             order.rotate_left(round % variants.len());
             for index in order {
@@ -210,15 +239,18 @@ async fn main() -> Result<()> {
                 };
                 let warmup = round < warmups;
                 if !warmup { timings[index].push(sample.elapsed_ms); }
-                report(json!({"event":"sample","variant":variants[index]["label"],"chunks":count,"payload_bytes":payload_bytes,"round":round,"warmup":warmup,"elapsed_ms":sample.elapsed_ms,"id_phase_ms":sample.id_phase_ms,"dimensions_ms":sample.dimensions_ms,"sql_queries":sample.queries,"returned_text_bytes":sample.returned_text_bytes}))?;
+                report(json!({"event":"sample","variant":variants[index]["label"],"chunks":count,"payload_bytes":payload_bytes,"round":round,"warmup":warmup,"elapsed_ms":sample.elapsed_ms,"id_phase_ms":sample.id_phase_ms,"dimensions_ms":sample.dimensions_ms,"sql_queries":sample.queries,"returned_text_bytes":sample.returned_text_bytes,"bound_text_bytes":sample.bound_text_bytes}))?;
                 results.push(sample.result);
             }
             ensure!(results.iter().all(|result| result == &results[0]), "variant metadata differ at count {count}, round {round}");
         }
-        report(json!({"event":"summary","chunks":count,"dimension":DIMENSION,"payload_bytes":payload_bytes,"equal_results":true,"warmups":warmups,"repeats":repeats,"variants": variants.iter().zip(&timings).map(|(variant, samples)| json!({"label":variant["label"],"samples_ms":samples,"median_ms":median(samples)})).collect::<Vec<_>>()}))?;
+        report(json!({"event":"summary","chunks":count,"dimension":DIMENSION,"payload_bytes":payload_bytes,"original_payload_bytes":original_payload_bytes,"equal_results":true,"warmups":warmups,"repeats":repeats,"variants": variants.iter().zip(&timings).map(|(variant, samples)| json!({"label":variant["label"],"samples_ms":samples,"median_ms":median(samples)})).collect::<Vec<_>>()}))?;
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod jsonb_tests;
+
+#[cfg(test)]
+mod receipt_tests;

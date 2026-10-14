@@ -4,6 +4,68 @@ use super::*;
 use crate::messages::{AcceptedMessageSpec, IngestReceipt, PublicationStatus};
 use std::collections::HashSet;
 
+const RECEIPT_METADATA_FORMAT: &str = "message-receipt:v1";
+
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReceiptMetadata {
+    format: String,
+    chunks: Vec<ReceiptChunk>,
+}
+
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReceiptChunk {
+    // Keep native json_quote output as a token, not a Rust interpretation of ID.
+    id_json: String,
+    #[serde(deserialize_with = "receipt_dimension")]
+    dimension: Option<i64>,
+}
+
+fn receipt_dimension<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    serde::Deserialize::deserialize(deserializer)
+}
+
+fn invalid_plan() -> StorageError {
+    StorageError::Unavailable("invalid message publication plan".into())
+}
+
+impl ReceiptMetadata {
+    fn empty() -> Self {
+        Self {
+            format: RECEIPT_METADATA_FORMAT.into(),
+            chunks: Vec::new(),
+        }
+    }
+
+    fn decode(text: Option<&str>, count: usize) -> StorageResult<Self> {
+        // Missing/null/empty chunks retain their original zero-ID behavior.
+        if count == 0 {
+            return Ok(Self::empty());
+        }
+        let metadata: Self =
+            serde_json::from_str(text.ok_or_else(invalid_plan)?).map_err(|_| invalid_plan())?;
+        if metadata.format != RECEIPT_METADATA_FORMAT || metadata.chunks.len() != count {
+            return Err(invalid_plan());
+        }
+        Ok(metadata)
+    }
+
+    fn ids_json(&self) -> String {
+        format!(
+            "[{}]",
+            self.chunks
+                .iter()
+                .map(|chunk| chunk.id_json.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+}
+
 /// Project metadata without transferring the saved embedding arrays. Ordinary
 /// writer IDs are UUIDs; malformed ID values are not given a new byte limit.
 struct BatchPublicationRow {
@@ -24,10 +86,7 @@ struct BatchPublicationRow {
 }
 
 impl BatchPublicationRow {
-    fn from_metadata(
-        row: &native_turso::Row,
-        distinct_chunk_ids: i64,
-    ) -> native_turso::Result<Self> {
+    fn from_metadata(row: &native_turso::Row, distinct_chunk_ids: i64) -> native_turso::Result<Self> {
         Ok(Self {
             operation: row.try_get("operation")?,
             state: row.try_get("state")?,
@@ -66,7 +125,8 @@ impl TursoTx {
              json_extract(payload,'$.publication.memories[0].asset') AS publication_asset, \
              json_extract(payload,'$.publication.memories[0].version') AS publication_version, \
              json_array_length(payload,'$.publication.memories[0].chunks') AS chunk_count, \
-             json_type(payload,'$.publication.memories[0].chunks') AS chunk_type \
+             json_type(payload,'$.publication.memories[0].chunks') AS chunk_type, \
+             CASE WHEN json_array_length(payload,'$.publication.memories[0].chunks')>0 THEN json_quote(json_extract(payload,'$.publication.receipt_metadata')) END AS receipt_metadata \
              FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
@@ -82,13 +142,17 @@ impl TursoTx {
                 "invalid message publication plan".into(),
             ));
         }
-        // All ordinary-array IDs are evaluated before the original strict
-        // header decoding and early receipt/source/state returns. A late bad
-        // element must not be hidden by a duplicate, a NULL ID, or Pending.
+        // The immutable lightweight plan is saved atomically with the heavy
+        // publication. Validate all native ID tokens before early state returns;
+        // dimensions remain relevant only in the completed/visible branch.
         let count: Option<i64> = row.try_get("chunk_count").map_err(turso_err)?;
-        let distinct = self
-            .publication_distinct_ids(receipt.job_id, count.unwrap_or(0))
-            .await?;
+        let count = usize::try_from(count.unwrap_or(0)).map_err(|_| invalid_plan())?;
+        let metadata = ReceiptMetadata::decode(
+            row.try_get::<Option<&str>>("receipt_metadata")
+                .map_err(turso_err)?,
+            count,
+        )?;
+        let distinct = self.publication_distinct_ids(&metadata).await?;
         let row = BatchPublicationRow::from_metadata(&row, distinct).map_err(turso_err)?;
         let invalid =
             || StorageError::Conflict("receipt does not match accepted message batch".into());
@@ -150,9 +214,7 @@ impl TursoTx {
         {
             return Ok(PublicationStatus::Invisible);
         }
-        let expected = self
-            .publication_expected_chunks(receipt.job_id, chunk_count)
-            .await?;
+        let expected = self.publication_expected_chunks(&metadata).await?;
         let visible = self
             .publication_visible_count(receipt, &spec.embedding_profile, row.generation, &expected)
             .await?;
@@ -180,40 +242,21 @@ struct PublicationChunk {
 type ExpectedChunks = HashMap<String, HashSet<i64>>;
 
 impl TursoTx {
-    async fn publication_distinct_ids(&mut self, job: Uuid, count: i64) -> StorageResult<i64> {
-        let count = usize::try_from(count)
-            .map_err(|_| StorageError::Backend("invalid publication chunk count".into()))?;
-        if count == 0 {
+    async fn publication_distinct_ids(&mut self, metadata: &ReceiptMetadata) -> StorageResult<i64> {
+        if metadata.chunks.is_empty() {
             return Ok(0);
         }
-        // Only ID tokens cross the adapter. Slot count is bounded; malformed
-        // IDs can still be large, so this is O(total ID bytes), not a byte cap.
-        let mut metadata = String::from("[");
-        for start in (0..count).step_by(PUBLICATION_SLOTS) {
-            let mut query = native_turso::query(PUBLICATION_IDS);
-            for slot in 0..PUBLICATION_SLOTS {
-                query = query.bind(format!(
-                    "$.publication.memories[0].chunks[{}]",
-                    start + slot
-                ));
-            }
-            let row = query
-                .bind(self.scope.tenant_id)
-                .bind(self.scope.workspace_id)
-                .bind(job)
-                .fetch_one(&mut *self.tx)
-                .await
-                .map_err(turso_err)?;
-            for slot in 0..PUBLICATION_SLOTS.min(count - start) {
-                if start + slot != 0 {
-                    metadata.push(',');
-                }
-                metadata.push_str(row.try_get::<&str>(slot).map_err(turso_err)?);
-            }
+        // Validate each opaque native token before joining them into an array.
+        // Empty or multiple values must not silently alter its membership.
+        let tokens: Vec<_> = metadata.chunks.iter().map(|chunk| chunk.id_json.as_str()).collect();
+        let invalid: i64 = native_turso::query_scalar(
+            "SELECT count(*) FROM json_each(?) WHERE NOT json_valid(value)",
+        ).bind(json!(tokens).to_string()).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        if invalid != 0 {
+            return Err(invalid_plan());
         }
-        metadata.push(']');
         native_turso::query_scalar("SELECT count(DISTINCT value) FROM json_each(?)")
-            .bind(metadata)
+            .bind(metadata.ids_json())
             .fetch_one(&mut *self.tx)
             .await
             .map_err(turso_err)
@@ -221,36 +264,102 @@ impl TursoTx {
 
     async fn publication_expected_chunks(
         &mut self,
-        job: Uuid,
-        count: i64,
+        metadata: &ReceiptMetadata,
     ) -> StorageResult<ExpectedChunks> {
-        let count = usize::try_from(count)
-            .map_err(|_| StorageError::Backend("invalid publication chunk count".into()))?;
         let mut expected: ExpectedChunks = HashMap::new();
-        for start in (0..count).step_by(PUBLICATION_SLOTS) {
-            let mut query = native_turso::query(PUBLICATION_DIMENSIONS);
-            for slot in 0..PUBLICATION_SLOTS {
-                let path = format!("$.publication.memories[0].chunks[{}]", start + slot);
-                query = query.bind(&path).bind(path);
-            }
-            let row = query
-                .bind(self.scope.tenant_id)
-                .bind(self.scope.workspace_id)
-                .bind(job)
-                .fetch_one(&mut *self.tx)
-                .await
-                .map_err(turso_err)?;
-            for slot in 0..PUBLICATION_SLOTS.min(count - start) {
-                let id: Option<String> = row.try_get(slot * 2).map_err(turso_err)?;
-                let dimension: Option<i64> = row.try_get(slot * 2 + 1).map_err(turso_err)?;
-                if let (Some(id), Some(dimension)) = (id, dimension)
-                    && (1..=4096).contains(&dimension)
-                {
-                    expected.entry(id).or_default().insert(dimension);
-                }
+        if metadata.chunks.is_empty() {
+            return Ok(expected);
+        }
+        let rows = native_turso::query("SELECT key,upper(replace(value,'-','')) AS id FROM json_each(?)")
+            .bind(metadata.ids_json())
+            .fetch_all(&mut *self.tx)
+            .await
+            .map_err(turso_err)?;
+        for row in rows {
+            let index: usize = row.try_get("key").map_err(turso_err)?;
+            let id: Option<String> = row.try_get("id").map_err(turso_err)?;
+            let chunk = metadata.chunks.get(index).ok_or_else(invalid_plan)?;
+            if let (Some(id), Some(dimension)) = (id, chunk.dimension)
+                && (1..=4096).contains(&dimension)
+            {
+                expected.entry(id).or_default().insert(dimension);
             }
         }
         Ok(expected)
+    }
+
+    /// Message receipt membership is part of the durable plan, never a cache of
+    /// successful publication. Other operations retain their existing plan form.
+    pub(super) async fn save_message_publication_inner(
+        &mut self,
+        job: Uuid,
+        plan: &Value,
+    ) -> StorageResult<bool> {
+        // Bind the same in-memory plan used below; only lightweight saved
+        // metadata is read back from the job. Stale generations are prepared
+        // anew, while a current saved plan cannot acquire different membership.
+        let serialized = plan.to_string();
+        let saved: Option<(bool, Option<i64>, Option<String>)> = native_turso::query_as(
+            "SELECT json_extract(payload,'$.publication.generation') IS json_extract(?1,'$.generation'),json_array_length(payload,'$.publication.memories[0].chunks'),CASE WHEN json_array_length(payload,'$.publication.memories[0].chunks')>0 THEN json_quote(json_extract(payload,'$.publication.receipt_metadata')) END FROM oc_jobs WHERE tenant_id=?2 AND workspace_id=?3 AND id=?4 AND operation='message_batch_ingest'",
+        ).bind(&serialized).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let Some((same_generation, saved_count, saved_metadata)) = saved else {
+            return Ok(false);
+        };
+        let retained = if same_generation && saved_count.unwrap_or(0) > 0 {
+            let count = usize::try_from(saved_count.unwrap_or(0)).map_err(|_| invalid_plan())?;
+            Some(ReceiptMetadata::decode(saved_metadata.as_deref(), count)?)
+        } else {
+            None
+        };
+        // The extra native pass is charged to prepare/save, not repeated by
+        // every status poll. Native malformed-JSON errors remain backend errors.
+        let metadata = self.derive_receipt_metadata(&serialized).await?;
+        if retained.as_ref().is_some_and(|saved| saved != &metadata) {
+            return Err(invalid_plan());
+        }
+        let supplied = plan.get("receipt_metadata");
+        if let Some(supplied) = supplied {
+            let supplied: ReceiptMetadata =
+                serde_json::from_value(supplied.clone()).map_err(|_| invalid_plan())?;
+            if supplied != metadata {
+                return Err(invalid_plan());
+            }
+        }
+        let metadata_text = if retained.is_some() {
+            // A retry reuses the original field, even if its caller omitted it.
+            saved_metadata.ok_or_else(invalid_plan)?
+        } else if let Some(supplied) = supplied {
+            supplied.to_string()
+        } else {
+            serde_json::to_string(&metadata).map_err(|_| invalid_plan())?
+        };
+        native_turso::query(
+            "UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json_set(json(?),'$.receipt_metadata',json(?))),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?",
+        ).bind(serialized).bind(metadata_text).bind(now_ms())
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
+            .execute(&mut *self.tx).await.map_err(turso_err)?;
+        Ok(true)
+    }
+
+    async fn derive_receipt_metadata(&mut self, plan: &str) -> StorageResult<ReceiptMetadata> {
+        let (kind, count): (Option<String>, Option<i64>) = native_turso::query_as(
+            "SELECT json_type(?1,'$.memories[0].chunks'),json_array_length(?1,'$.memories[0].chunks')",
+        ).bind(plan).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        if !matches!(kind.as_deref(), None | Some("null" | "array")) {
+            return Err(invalid_plan());
+        }
+        let mut metadata = ReceiptMetadata::empty();
+        if count.unwrap_or(0) > 0 {
+            let rows: Vec<(String, Option<i64>)> = native_turso::query_as(
+                "SELECT json_quote(json_extract(value,'$.id')),json_array_length(value,'$.embedding') FROM json_each(?,'$.memories[0].chunks')",
+            ).bind(plan).fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            metadata.chunks = rows
+                .into_iter()
+                .map(|(id_json, dimension)| ReceiptChunk { id_json, dimension })
+                .collect();
+        }
+        Ok(metadata)
     }
 
     async fn publication_visible_count(
@@ -457,10 +566,6 @@ impl TursoTx {
     }
 }
 
-const PUBLICATION_IDS: &str = "SELECT json_quote(json_extract(json_extract(payload,?),'$.id')) AS i0,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i1,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i2,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i3,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i4,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i5,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i6,json_quote(json_extract(json_extract(payload,?),'$.id')) AS i7 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?";
-
-const PUBLICATION_DIMENSIONS: &str = "SELECT upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i0,json_array_length(json_extract(payload,?),'$.embedding') AS d0,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i1,json_array_length(json_extract(payload,?),'$.embedding') AS d1,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i2,json_array_length(json_extract(payload,?),'$.embedding') AS d2,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i3,json_array_length(json_extract(payload,?),'$.embedding') AS d3,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i4,json_array_length(json_extract(payload,?),'$.embedding') AS d4,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i5,json_array_length(json_extract(payload,?),'$.embedding') AS d5,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i6,json_array_length(json_extract(payload,?),'$.embedding') AS d6,upper(replace(json_extract(json_extract(payload,?),'$.id'),'-','')) AS i7,json_array_length(json_extract(payload,?),'$.embedding') AS d7 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?";
-
 const PUBLICATION_INDEX: &str = "SELECT (artifact_id=? AND dimension=?) AS m0,(artifact_id=? AND dimension=?) AS m1,(artifact_id=? AND dimension=?) AS m2,(artifact_id=? AND dimension=?) AS m3,(artifact_id=? AND dimension=?) AS m4,(artifact_id=? AND dimension=?) AS m5,(artifact_id=? AND dimension=?) AS m6,(artifact_id=? AND dimension=?) AS m7 FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND field='content' AND state='ready' AND model_id=? AND generation=? AND ((artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?) OR (artifact_id=? AND dimension=?))";
 
 const PUBLICATION_LEDGER: &str = "SELECT (artifact_id=?) AS m0,(artifact_id=?) AS m1,(artifact_id=?) AS m2,(artifact_id=?) AS m3,(artifact_id=?) AS m4,(artifact_id=?) AS m5,(artifact_id=?) AS m6,(artifact_id=?) AS m7 FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND source_id=? AND version=? AND generation=? AND surface=? AND artifact_type='chunk' AND state='committed' AND ((artifact_id=?) OR (artifact_id=?) OR (artifact_id=?) OR (artifact_id=?) OR (artifact_id=?) OR (artifact_id=?) OR (artifact_id=?) OR (artifact_id=?))";
@@ -475,7 +580,7 @@ mod tests {
             .await
             .unwrap();
         for sql in [
-            "CREATE TABLE oc_jobs(tenant_id BLOB,workspace_id BLOB,id BLOB,payload TEXT)",
+            "CREATE TABLE oc_jobs(tenant_id BLOB,workspace_id BLOB,id BLOB,payload TEXT,operation TEXT,updated_at INTEGER)",
             "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)",
             "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,locator TEXT)",
             "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
@@ -508,7 +613,7 @@ mod tests {
 
     #[tokio::test]
     async fn publication_metadata_preserves_ids_and_dimensions_at_batch_boundaries() {
-        let (_dir, pool, mut tx, receipt) = database().await;
+        let (_dir, pool, mut tx, _) = database().await;
         for count in [0usize, 7, 8, 9, 31, 32, 33, 127, 128, 129] {
             let chunks: Vec<_> = (0..count)
                 .map(|index| {
@@ -516,29 +621,14 @@ mod tests {
                     json!({"id":format!("id-{index}"),"embedding":vec![0; dimension]})
                 })
                 .collect();
-            let payload = json!({"publication":{"memories":[{"chunks":chunks}]}}).to_string();
-            native_turso::query("DELETE FROM oc_jobs")
-                .execute(&mut *tx.tx)
-                .await
-                .unwrap();
-            native_turso::query("INSERT INTO oc_jobs VALUES(?,?,?,?)")
-                .bind(tx.scope.tenant_id)
-                .bind(tx.scope.workspace_id)
-                .bind(receipt.job_id)
-                .bind(payload)
-                .execute(&mut *tx.tx)
-                .await
-                .unwrap();
+            let plan = json!({"memories":[{"chunks":chunks}]}).to_string();
+            let metadata = tx.derive_receipt_metadata(&plan).await.unwrap();
+            assert_eq!(metadata.chunks.len(), count);
             assert_eq!(
-                tx.publication_distinct_ids(receipt.job_id, count as i64)
-                    .await
-                    .unwrap(),
+                tx.publication_distinct_ids(&metadata).await.unwrap(),
                 count as i64
             );
-            let expected = tx
-                .publication_expected_chunks(receipt.job_id, count as i64)
-                .await
-                .unwrap();
+            let expected = tx.publication_expected_chunks(&metadata).await.unwrap();
             assert_eq!(expected.len(), count);
             for index in 0..count {
                 assert_eq!(
@@ -547,28 +637,117 @@ mod tests {
                 );
             }
         }
-        // Cross-page duplicates, NULL IDs and numeric/text identities retain
-        // native DISTINCT. Normalization must preserve every dimension witness.
+        // Duplicates, NULL IDs and numeric/text identities retain native
+        // DISTINCT. Normalization preserves every dimension witness.
         let chunks = r#"[{"id":"a-b","embedding":[0]},{"id":"AB","embedding":[0,0]},{"id":1},{"id":1.0},{"id":true},{"id":"1"},{"id":null},{},{"id":"a-b"}]"#;
-        native_turso::query("UPDATE oc_jobs SET payload=?")
-            .bind(format!(
-                "{{\"publication\":{{\"memories\":[{{\"chunks\":{chunks}}}]}}}}"
-            ))
-            .execute(&mut *tx.tx)
-            .await
-            .unwrap();
+        let plan = format!("{{\"memories\":[{{\"chunks\":{chunks}}}]}}");
+        let metadata = tx.derive_receipt_metadata(&plan).await.unwrap();
+        assert_eq!(metadata.chunks.len(), 9);
+        assert_eq!(tx.publication_distinct_ids(&metadata).await.unwrap(), 4);
         assert_eq!(
-            tx.publication_distinct_ids(receipt.job_id, 9)
-                .await
-                .unwrap(),
-            4
-        );
-        assert_eq!(
-            tx.publication_expected_chunks(receipt.job_id, 9)
-                .await
-                .unwrap()["AB"],
+            tx.publication_expected_chunks(&metadata).await.unwrap()["AB"],
             HashSet::from([1, 2])
         );
+        for plan in [r#"{}"#, r#"{"memories":[{}]}"#, r#"{"memories":[{"chunks":null}]}"#, r#"{"memories":[{"chunks":[]}]}"#] {
+            assert_eq!(tx.derive_receipt_metadata(plan).await.unwrap(), ReceiptMetadata::empty());
+        }
+        tx.tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn publication_metadata_requires_single_native_id_tokens_and_dimensions() {
+        let (_dir, pool, mut tx, _) = database().await;
+        for token in ["", " ", "1,2", "null,\"injected\"", "\"unterminated", "not-json"] {
+            let metadata = ReceiptMetadata {
+                format: RECEIPT_METADATA_FORMAT.into(),
+                chunks: vec![ReceiptChunk { id_json: token.into(), dimension: Some(1) }],
+            };
+            assert_invalid_plan(tx.publication_distinct_ids(&metadata).await.unwrap_err());
+        }
+        for token in ["null", "1", "1.0", "true", "{}", "[]", "\"a,b\"", " 1 "] {
+            let metadata = ReceiptMetadata {
+                format: RECEIPT_METADATA_FORMAT.into(),
+                chunks: vec![ReceiptChunk { id_json: token.into(), dimension: None }],
+            };
+            assert_eq!(tx.publication_distinct_ids(&metadata).await.unwrap(), i64::from(token != "null"));
+        }
+        let missing_dimension = json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[{"id_json":"null"}]}).to_string();
+        assert_invalid_plan(ReceiptMetadata::decode(Some(&missing_dimension), 1).unwrap_err());
+        let null_dimension = json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[{"id_json":"null","dimension":null}]}).to_string();
+        assert_eq!(ReceiptMetadata::decode(Some(&null_dimension), 1).unwrap().chunks[0].dimension, None);
+        for unrelated in [None, Some("null"), Some("7"), Some("{}"), Some("[]"), Some("1e999")] {
+            assert_eq!(ReceiptMetadata::decode(unrelated, 0).unwrap(), ReceiptMetadata::empty());
+        }
+        tx.tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+
+    async fn saved_plan(tx: &mut TursoTx, job: Uuid) -> Value {
+        let value: String = native_turso::query_scalar(
+            "SELECT json_extract(payload,'$.publication') FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+        ).bind(tx.scope.tenant_id).bind(tx.scope.workspace_id).bind(job)
+            .fetch_one(&mut *tx.tx).await.unwrap();
+        serde_json::from_str(&value).unwrap()
+    }
+
+    fn assert_invalid_plan(error: StorageError) {
+        assert!(matches!(error, StorageError::Unavailable(message) if message == "invalid message publication plan"));
+    }
+
+    #[tokio::test]
+    async fn publication_save_validates_and_reuses_same_generation_metadata() {
+        let (_dir, pool, mut tx, receipt) = database().await;
+        native_turso::query("INSERT INTO oc_jobs VALUES(?,?,?,'{}','message_batch_ingest',0)")
+            .bind(tx.scope.tenant_id).bind(tx.scope.workspace_id).bind(receipt.job_id)
+            .execute(&mut *tx.tx).await.unwrap();
+        let plan = json!({"generation":3,"memories":[{"chunks":[
+            {"id":"a-b","embedding":[0]}, {"id":"AB","embedding":[0,0]},
+            {"id":null}, {"id":1}, {"id":"1"}, {"id":true},
+            {"id":{"a":1}}, {"id":"{\"a\":1}"},
+            "{\"id\":\"encoded\",\"embedding\":[0,0,0]}"
+        ]}]});
+        let mut forged_fresh = plan.clone();
+        forged_fresh["receipt_metadata"] = json!({"format":RECEIPT_METADATA_FORMAT,"chunks":[]});
+        assert_invalid_plan(tx.save_publication(receipt.job_id, &forged_fresh).await.unwrap_err());
+        tx.save_publication(receipt.job_id, &plan).await.unwrap();
+        let prepared = saved_plan(&mut tx, receipt.job_id).await;
+        let metadata = &prepared["receipt_metadata"];
+        assert_eq!(metadata["format"], RECEIPT_METADATA_FORMAT);
+        assert_eq!(metadata["chunks"].as_array().unwrap().len(), 9);
+        assert_eq!(metadata["chunks"][0], json!({"id_json":"\"a-b\"","dimension":1}));
+        assert_eq!(metadata["chunks"][2], json!({"id_json":"null","dimension":null}));
+        assert_eq!(metadata["chunks"][8], json!({"id_json":"\"encoded\"","dimension":3}));
+        tx.save_publication(receipt.job_id, &prepared).await.unwrap();
+        assert_eq!(saved_plan(&mut tx, receipt.job_id).await, prepared);
+        // An omitted caller field can only reuse the existing witness after
+        // native validation; it must never replace the membership or dimension.
+        tx.save_publication(receipt.job_id, &plan).await.unwrap();
+        assert_eq!(saved_plan(&mut tx, receipt.job_id).await, prepared);
+        let mut different_id = plan.clone();
+        different_id["memories"][0]["chunks"][0]["id"] = json!("replacement");
+        let mut different_dimension = plan.clone();
+        different_dimension["memories"][0]["chunks"][0]["embedding"] = json!([0, 0]);
+        let mut forged = prepared.clone();
+        forged["receipt_metadata"]["chunks"][0]["id_json"] = json!("\"replacement\"");
+        for invalid in [different_id, different_dimension, forged] {
+            assert_invalid_plan(tx.save_publication(receipt.job_id, &invalid).await.unwrap_err());
+            assert_eq!(saved_plan(&mut tx, receipt.job_id).await, prepared);
+        }
+        // Missing current-generation metadata is corruption, not a backfill.
+        native_turso::query("UPDATE oc_jobs SET payload=json_remove(payload,'$.publication.receipt_metadata')")
+            .execute(&mut *tx.tx).await.unwrap();
+        assert_invalid_plan(tx.save_publication(receipt.job_id, &plan).await.unwrap_err());
+        assert_eq!(saved_plan(&mut tx, receipt.job_id).await, plan);
+        // The worker does not reuse stale generations: ordinary reprepare may
+        // replace the old plan without reviving its absent witness.
+        let mut next_generation = plan.clone();
+        next_generation["generation"] = json!(4);
+        next_generation["memories"][0]["chunks"][0]["id"] = json!("next");
+        tx.save_publication(receipt.job_id, &next_generation).await.unwrap();
+        let next = saved_plan(&mut tx, receipt.job_id).await;
+        assert_eq!(next["generation"], 4);
+        assert_eq!(next["receipt_metadata"]["chunks"][0]["id_json"], "\"next\"");
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }

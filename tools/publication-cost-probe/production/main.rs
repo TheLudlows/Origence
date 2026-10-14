@@ -26,7 +26,25 @@ async fn status(store: &TursoStore, auth: &AuthorizedScope, receipt: &IngestRece
     }
 }
 
-async fn seed(store: &TursoStore, count: usize) -> Result<(AuthorizedScope, IngestReceipt, usize)> {
+async fn save(store: &TursoStore, auth: &AuthorizedScope, receipt: &IngestReceipt, plan: &serde_json::Value) -> Result<()> {
+    let mut tx = store.begin(auth.clone()).await?;
+    match tx.save_publication(receipt.job_id, plan).await {
+        Ok(()) => { tx.commit().await?; Ok(()) }
+        Err(error) => { let _ = tx.rollback().await; Err(error.into()) }
+    }
+}
+async fn saved_receipt(store: &TursoStore, job: Uuid) -> Result<String> {
+    Ok(db::query_scalar("SELECT json_quote(json_extract(payload,'$.publication.receipt_metadata')) FROM oc_jobs WHERE id=?")
+        .bind(job).fetch_one(store.pool()).await?)
+}
+fn median(values: &[f64]) -> f64 {
+    let mut ordered = values.to_vec();
+    ordered.sort_by(f64::total_cmp);
+    let middle = ordered.len() / 2;
+    if ordered.len().is_multiple_of(2) { (ordered[middle - 1] + ordered[middle]) / 2.0 } else { ordered[middle] }
+}
+
+async fn seed(store: &TursoStore, count: usize) -> Result<(AuthorizedScope, IngestReceipt, serde_json::Value)> {
     let scope = Scope { tenant_id: Uuid::from_u128(1), workspace_id: Uuid::from_u128(2) };
     store.create_workspace(scope.tenant_id, scope.workspace_id, "publication fixture").await?;
     let key = store.issue_key(scope, "admin").await?;
@@ -47,18 +65,16 @@ async fn seed(store: &TursoStore, count: usize) -> Result<(AuthorizedScope, Inge
     // Large fixture construction/serialization is outside both the read timer
     // and every database transaction, on a blocking thread.
     let spec = receipt.accepted_spec.clone();
-    let payload = tokio::task::spawn_blocking(move || {
+    let (payload, plan) = tokio::task::spawn_blocking(move || {
         let chunks: Vec<_> = (0..count).map(|index| json!({
             "id":Uuid::from_u128(1000 + index as u128),
             "chunk":{"content":"a".repeat(2400),"locator":{"parser":"message-batch-ranges-v1","source_event_id":source,"message_index":index,"session_id":"fixture"}},
             "embedding":vec![0.012345679_f32;4096],"summary":"","search_terms":"fixture"
         })).collect();
-        json!({"schema_version":1,"expected_version":null,"accepted_spec":spec,
-            "publication":{"generation":1,"profile":"fixture","summary_model":null,"graph":null,
-                "memories":[{"asset":asset,"fact_key":null,"expected_version":null,"version":1,"chunks":chunks}]}
-        }).to_string()
+        let plan = json!({"generation":1,"profile":"fixture","summary_model":null,"graph":null,
+                "memories":[{"asset":asset,"fact_key":null,"expected_version":null,"version":1,"chunks":chunks}]});
+        (json!({"schema_version":1,"expected_version":null,"accepted_spec":spec}).to_string(), plan)
     }).await?;
-    let payload_bytes = payload.len();
     let mut tx = store.pool().begin_with("BEGIN IMMEDIATE").await?;
     db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,1,'fixture','fixture',?,'fixture',?,1)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset).bind(source).bind(auth.principal_id)
@@ -82,7 +98,7 @@ async fn seed(store: &TursoStore, count: usize) -> Result<(AuthorizedScope, Inge
         }
     }
     tx.commit().await?;
-    Ok((auth, receipt, payload_bytes))
+    Ok((auth, receipt, plan))
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -96,7 +112,33 @@ async fn main() -> Result<()> {
     std::fs::create_dir(&work).context("fixture directory must be new")?;
     for count in [50usize, 100, 200] {
         let store = TursoStore::open(work.join(format!("authority-{count}.db"))).await?;
-        let (auth, receipt, payload_bytes) = seed(&store, count).await?;
+        let (auth, receipt, plan) = seed(&store, count).await?;
+        let mut first_save_samples = Vec::new();
+        let mut replay_samples = Vec::new();
+        for round in 0..warmups + repeats {
+            db::query("UPDATE oc_jobs SET payload=json_remove(payload,'$.publication') WHERE id=?")
+                .bind(receipt.job_id).execute(store.pool()).await?;
+            let warmup = round < warmups;
+            let start = Instant::now();
+            save(&store, &auth, &receipt, &plan).await?;
+            let first_ms = start.elapsed().as_secs_f64() * 1000.0;
+            let before = saved_receipt(&store, receipt.job_id).await?;
+            let parsed: serde_json::Value = serde_json::from_str(&before)?;
+            ensure!(parsed["format"] == "message-receipt:v1" && parsed["chunks"].as_array().map(Vec::len) == Some(count), "actual save did not create receipt summary");
+            let mut retry_plan = plan.clone();
+            retry_plan["receipt_metadata"] = parsed;
+            let start = Instant::now();
+            save(&store, &auth, &receipt, &retry_plan).await?;
+            let replay_ms = start.elapsed().as_secs_f64() * 1000.0;
+            ensure!(before == saved_receipt(&store, receipt.job_id).await?, "actual replay changed saved receipt summary");
+            if !warmup { first_save_samples.push(first_ms); replay_samples.push(replay_ms); }
+            report(json!({"event":"production_save_sample","label":args[1],"chunks":count,"round":round,"warmup":warmup,"first_save_ms":first_ms,"replay_ms":replay_ms,"replay_equal":true,"sql_queries":null,"scope":"actual save_publication including begin/commit; fixture construction/reset excluded"}))?;
+        }
+        let mut changed = plan.clone();
+        changed["memories"][0]["chunks"][0]["id"] = json!(Uuid::from_u128(999999));
+        ensure!(save(&store, &auth, &receipt, &changed).await.is_err(), "same-generation replay accepted changed membership");
+        let payload_bytes: i64 = db::query_scalar("SELECT length(CAST(payload AS BLOB)) FROM oc_jobs WHERE id=?")
+            .bind(receipt.job_id).fetch_one(store.pool()).await?;
         let mut timings = Vec::new();
         for round in 0..warmups + repeats {
             let started = Instant::now();
@@ -106,10 +148,6 @@ async fn main() -> Result<()> {
             if !warmup { timings.push(elapsed_ms); }
             report(json!({"event":"production_sample","label":args[1],"chunks":count,"dimension":4096,"payload_bytes":payload_bytes,"round":round,"warmup":warmup,"elapsed_ms":elapsed_ms,"sql_queries":null,"sql_query_note":"not instrumented; exact public method including begin/commit and permission checks","status":"retrievable"}))?;
         }
-        let mut ordered = timings.clone();
-        ordered.sort_by(f64::total_cmp);
-        let middle = ordered.len()/2;
-        let median = if ordered.len().is_multiple_of(2) { (ordered[middle-1]+ordered[middle])/2.0 } else { ordered[middle] };
         let last = Uuid::from_u128(999 + count as u128);
         db::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE artifact_id=? AND surface='full_text'")
             .bind(last).execute(store.pool()).await?;
@@ -120,7 +158,7 @@ async fn main() -> Result<()> {
         db::query("UPDATE oc_events SET state='retracted' WHERE id=?")
             .bind(receipt.source_event_id).execute(store.pool()).await?;
         ensure!(status(&store, &auth, &receipt).await? == PublicationStatus::Invisible, "withdrawn source was exposed");
-        report(json!({"event":"production_summary","label":args[1],"chunks":count,"payload_bytes":payload_bytes,"samples_ms":timings,"median_ms":median,"warmups":warmups,"repeats":repeats,"missing_full_text":"PASS","source_withdrawal":"PASS","scope":"actual authority receipt API, excludes Service native availability gate, models and Lance"}))?;
+        report(json!({"event":"production_summary","label":args[1],"chunks":count,"payload_bytes":payload_bytes,"samples_ms":timings,"median_ms":median(&timings),"first_save_samples_ms":first_save_samples,"first_save_median_ms":median(&first_save_samples),"replay_samples_ms":replay_samples,"replay_median_ms":median(&replay_samples),"save_replay":"PASS","changed_membership_rejected":"PASS","warmups":warmups,"repeats":repeats,"missing_full_text":"PASS","source_withdrawal":"PASS","scope":"actual authority receipt API, excludes Service native availability gate, models and Lance"}))?;
         store.shutdown().await?;
     }
     Ok(())

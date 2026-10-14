@@ -7,7 +7,11 @@ Cargo in the output workspace before --locked measurements.
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from extract_sql import RECEIPT_V1_HASH, read_source, verify_candidate_commit
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--checkout', required=True)
@@ -16,6 +20,8 @@ p.add_argument('--output', required=True)
 args = p.parse_args()
 checkout = Path(args.checkout).resolve()
 assert (checkout / 'Cargo.toml').is_file()
+verify_candidate_commit(checkout, args.label, RECEIPT_V1_HASH)
+read_source(checkout, RECEIPT_V1_HASH)
 output = Path(args.output)
 output.mkdir()
 (output / 'src').mkdir()
@@ -37,7 +43,7 @@ origence = { path = CHECKOUT, default-features = false }
 debug = 0
 '''.replace('CHECKOUT', json.dumps(str(checkout)))
 (output / 'Cargo.toml').write_text(manifest)
-evidence = {'label': args.label, 'checkout': str(checkout), 'files': {}}
+evidence = {'source_commit': args.label, 'reviewed_publication_sha256': RECEIPT_V1_HASH, 'label': args.label, 'checkout': str(checkout), 'files': {}}
 files = [checkout / 'Cargo.toml', checkout / 'Cargo.lock']
 files.extend(sorted(p for p in (checkout / 'src').rglob('*') if p.is_file() and p.suffix in {'.rs', '.sql'}))
 for path in files:

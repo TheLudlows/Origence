@@ -6,7 +6,7 @@ const ORIGINAL: &str = "SELECT json_quote(json_extract(json_extract(payload,?1),
 type Slots = [(usize, usize); 8];
 
 fn candidate() -> Result<Json> {
-    let path = std::env::var_os("PUBLICATION_PROBE_SQL")
+    let path = std::env::var_os("PUBLICATION_PROBE_JSONB_SQL").or_else(|| std::env::var_os("PUBLICATION_PROBE_SQL"))
         .context("PUBLICATION_PROBE_SQL must name the extracted three-variant evidence")?;
     let bundle: Json = serde_json::from_slice(&std::fs::read(path)?)?;
     let variants = bundle["variants"].as_array().context("missing variants")?;

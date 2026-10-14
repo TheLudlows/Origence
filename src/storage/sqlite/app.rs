@@ -170,6 +170,9 @@ impl TursoTx {
         Ok(json!({"kind":kind,"current_version":current_version,"deleted":deleted}))
     }
     pub async fn save_publication(&mut self, job: Uuid, plan: &Value) -> StorageResult<()> {
+        if self.save_message_publication_inner(job, plan).await? {
+            return Ok(());
+        }
         native_turso::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(turso_err)?;
         Ok(())
     }

@@ -1,20 +1,20 @@
 name: Publication cost diagnostic
 on:
-  pull_request:
-    branches: [main]
-    # This diagnostic measures fixed historical sources, not arbitrary product edits.
-    # A future publication optimization must update the probe target explicitly.
+  push:
+    branches: [fix/windows-offline-recovery]
+    # Measure the exact branch candidate against fixed historical sources.
     paths:
       - tools/publication-cost-probe/**
+      - src/storage/sqlite/publication.rs
       - .github/workflows/publication-cost-diagnostic.yml
 permissions:
   contents: read
 concurrency:
-  group: publication-cost-${{ github.head_ref }}
+  group: publication-cost-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   native-cost:
-    if: github.head_ref == 'fix/windows-offline-recovery'
+    if: github.ref == 'refs/heads/fix/windows-offline-recovery'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -31,7 +31,7 @@ jobs:
           echo "CANDIDATE=$RUNNER_TEMP/publication-candidate" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
@@ -56,9 +56,10 @@ jobs:
           cp -R tools/publication-cost-probe "$BENCH"
           python3 -B -m unittest discover -s "$BENCH" -p 'test_*.py' -v
           python3 "$BENCH/prepare_candidate.py" --current-root _benchmark/current --output "$CANDIDATE" > "$EVIDENCE/candidate-generation.json"
-          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$CANDIDATE" --candidate-sha256 a69eacfefb60799ed015f72708bf782d3e16b6ccf9dfdfe00637511564f08f75 --candidate-commit "diagnostic-${{ github.event.pull_request.head.sha }}" --output "$EVIDENCE/sql-evidence.json"
+          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$CANDIDATE" --candidate-sha256 a69eacfefb60799ed015f72708bf782d3e16b6ccf9dfdfe00637511564f08f75 --candidate-commit "diagnostic-${{ github.sha }}" --output "$EVIDENCE/jsonb-history-evidence.json"
+          python3 "$BENCH/extract_sql.py" --baseline-root _benchmark/base --current-root _benchmark/current --candidate-root "$GITHUB_WORKSPACE" --candidate-sha256 1b835adee6b6c2c5c0402c0291c1ff24cc355bdce26cf5d1d7489191ec4c2557 --candidate-commit "${{ github.sha }}" --candidate-mode reviewed_receipt_metadata_v1 --output "$EVIDENCE/sql-evidence.json"
           sha256sum "$CANDIDATE/src/storage/sqlite/publication.rs" > "$EVIDENCE/candidate-source.sha256"
-          python3 "$BENCH/production/prepare.py" --checkout _benchmark/current --label 765d6719 --output "$PRODUCTION" > "$EVIDENCE/production-prepare.json"
+          python3 "$BENCH/production/prepare.py" --checkout "$GITHUB_WORKSPACE" --label "${{ github.sha }}" --output "$PRODUCTION" > "$EVIDENCE/production-prepare.json"
           git rev-parse HEAD > "$EVIDENCE/bundle-commit.txt"
           find "$BENCH" -type f -not -path '*/__pycache__/*' -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE/bundle-before-format.sha256"
           rustc --version > "$EVIDENCE/toolchain.txt"
@@ -96,7 +97,10 @@ jobs:
           diff -u tools/publication-cost-probe/src/main.rs "$BENCH/src/main.rs" > "$EVIDENCE/metadata-format.patch" || test $? -eq 1
           diff -u tools/publication-cost-probe/production/main.rs "$PRODUCTION/src/main.rs" > "$EVIDENCE/production-format.patch" || test $? -eq 1
           diff -u tools/publication-cost-probe/src/jsonb_tests.rs "$BENCH/src/jsonb_tests.rs" > "$EVIDENCE/candidate-tests-format.patch" || test $? -eq 1
-          sha256sum "$BENCH/src/main.rs" "$BENCH/src/jsonb_tests.rs" "$PRODUCTION/src/main.rs" > "$EVIDENCE/formatted-sources.sha256"
+          for file in receipt_runner.rs receipt_types.rs receipt_tests.rs; do
+            diff -u "tools/publication-cost-probe/src/$file" "$BENCH/src/$file" > "$EVIDENCE/$file-format.patch" || test $? -eq 1
+          done
+          sha256sum "$BENCH/src/"*.rs "$BENCH/src/jsonb_tests.rs" "$PRODUCTION/src/main.rs" > "$EVIDENCE/formatted-sources.sha256"
       - name: Lint isolated metadata harness
         id: lint_metadata
         continue-on-error: true
@@ -104,6 +108,7 @@ jobs:
       - name: Check native candidate projection equivalence
         env:
           PUBLICATION_PROBE_SQL: ${{ runner.temp }}/publication-cost-evidence/sql-evidence.json
+          PUBLICATION_PROBE_JSONB_SQL: ${{ runner.temp }}/publication-cost-evidence/jsonb-history-evidence.json
         run: cargo test --release --locked --manifest-path "$BENCH/Cargo.toml" -j 2 -- --nocapture
       - name: Build and measure native metadata
         run: |
@@ -121,6 +126,7 @@ jobs:
           test ! -f "$PRODUCTION/source-evidence.json" || cp "$PRODUCTION/source-evidence.json" "$EVIDENCE/production-build/"
           test ! -f "$BENCH/src/main.rs" || cp "$BENCH/src/main.rs" "$EVIDENCE/metadata-build/"
           test ! -f "$BENCH/src/jsonb_tests.rs" || cp "$BENCH/src/jsonb_tests.rs" "$EVIDENCE/metadata-build/"
+          test ! -d "$BENCH/src" || cp "$BENCH/src/"*.rs "$EVIDENCE/metadata-build/"
           test ! -f "$PRODUCTION/src/main.rs" || cp "$PRODUCTION/src/main.rs" "$EVIDENCE/production-build/"
       - name: Preserve metadata results before production compilation
         if: always()
@@ -137,7 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release --locked --manifest-path "$PRODUCTION/Cargo.toml" -j 2
-          python3 "$BENCH/run_probe.py" --production --binary "$CARGO_TARGET_DIR/release/origence-publication-production-probe" --input 765d6719 --output "$EVIDENCE/production-current"
+          python3 "$BENCH/run_probe.py" --production --binary "$CARGO_TARGET_DIR/release/origence-publication-production-probe" --input "${{ github.sha }}" --output "$EVIDENCE/production-candidate"
       - name: Keep lint failures visible after diagnostic measurements
         if: ${{ !cancelled() && (steps.lint_metadata.outcome == 'failure' || steps.lint_production.outcome == 'failure') }}
         run: exit 1

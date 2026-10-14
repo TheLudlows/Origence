@@ -41,6 +41,8 @@ struct Publication {
     summary_model: Option<String>,
     graph: Option<GraphExtraction>,
     memories: Vec<PublishedMemory>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    receipt_metadata: Option<Value>,
 }
 /// One asset's pending publication built before model IO, version still to be
 /// verified against the live asset at commit time.
@@ -469,7 +471,8 @@ async fn process_message_batch(
                 return Err(AppError::Invalid("invalid message publication plan".into()));
             }
             let memory = &publication.memories[0];
-            if memory.asset != asset
+            if (!memory.chunks.is_empty() && publication.receipt_metadata.is_none())
+                || memory.asset != asset
                 || memory.expected_version != expected
                 || memory.version != expected.unwrap_or(0) + 1
                 || memory.fact_key.is_some()
@@ -628,6 +631,7 @@ async fn prepare(
         summary_model: service.models.summary_model().map(str::to_owned),
         graph,
         memories,
+        receipt_metadata: None,
     })
 }
 fn source_for(claim: &ClaimedJob, version: i32) -> Result<SourceVersion> {
@@ -953,6 +957,23 @@ mod tests {
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn publication_roundtrip_keeps_receipt_metadata() {
+        let metadata = json!({"format":"message-receipt:v1","chunks":[
+            {"id_json":"\"chunk\"","dimension":4096},
+            {"id_json":"null","dimension":null}
+        ]});
+        let value = json!({"generation":3,"profile":"fixture","summary_model":null,
+            "graph":null,"memories":[],"receipt_metadata":metadata});
+        let publication: Publication = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(publication).unwrap(), value);
+        let mut unprepared = value;
+        unprepared.as_object_mut().unwrap().remove("receipt_metadata");
+        let publication: Publication = serde_json::from_value(unprepared.clone()).unwrap();
+        assert!(publication.receipt_metadata.is_none());
+        assert_eq!(serde_json::to_value(publication).unwrap(), unprepared);
     }
 
     #[test]

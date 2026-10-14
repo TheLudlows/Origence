@@ -55,9 +55,22 @@ if result['status'] == 'PASS':
             if args.production:
                 assert len(summary['samples_ms']) == args.repeats
                 assert summary['missing_full_text'] == summary['source_withdrawal'] == 'PASS'
+                assert summary['save_replay'] == summary['changed_membership_rejected'] == 'PASS'
+                assert len(summary['first_save_samples_ms']) == len(summary['replay_samples_ms']) == args.repeats
             else:
                 assert summary['equal_results'] is True
                 assert all(len(v['samples_ms']) == args.repeats for v in summary['variants'])
+        if not args.production:
+            evidence = json.loads(Path(args.input).read_text())
+            labels = [v['label'] for v in evidence['variants']]
+            assert all([v['label'] for v in summary['variants']] == labels for summary in summaries)
+            if any(v['mode'] == 'reviewed_receipt_metadata_v1' for v in evidence['variants']):
+                saves = [r for r in records if r.get('event') == 'save_summary']
+                assert [r['chunks'] for r in saves] == [50, 100, 200], 'incomplete save/retry matrix'
+                for save in saves:
+                    assert save['warmups'] == args.warmups and save['repeats'] == args.repeats
+                    assert [phase['phase'] for phase in save['phases']] == ['first_save', 'retry_validation']
+                    assert all(len(phase['samples_ms']) == args.repeats for phase in save['phases'])
         result['completed_counts'] = [50, 100, 200]
     except (ValueError, KeyError, AssertionError) as error:
         result = {'status': 'FAIL', 'validation_error': str(error), 'remaining': 'UNVERIFIED'}
