@@ -740,51 +740,121 @@ async fn event_projection_preserves_missing_deleted_and_foreign_file_semantics()
     db::query("INSERT INTO oc_events(tenant_id,workspace_id,id,state,kind,file_id) VALUES(?,?,?,'active','knowledge',?)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(source).bind(file)
         .execute(&mut *tx.tx).await.unwrap();
-    for foreign in [Scope { workspace_id: Uuid::new_v4(), ..scope }, Scope { tenant_id: Uuid::new_v4(), ..scope }] {
+    for foreign in [
+        Scope {
+            workspace_id: Uuid::new_v4(),
+            ..scope
+        },
+        Scope {
+            tenant_id: Uuid::new_v4(),
+            ..scope
+        },
+    ] {
         db::query("INSERT INTO oc_files VALUES(?,?,?,'foreign','text/plain',0)")
-            .bind(foreign.tenant_id).bind(foreign.workspace_id).bind(file)
-            .execute(&mut *tx.tx).await.unwrap();
+            .bind(foreign.tenant_id)
+            .bind(foreign.workspace_id)
+            .bind(file)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
     }
-    assert!(matches!(tx.event_view_inner(source).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.event_view_inner(source).await,
+        Err(StorageError::NotFound)
+    ));
     db::query("UPDATE oc_events SET content=? WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(vec![0xff_u8]).bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-        .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.event_view_inner(source).await, Err(StorageError::NotFound)));
-    db::query("UPDATE oc_events SET content='source' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(vec![0xff_u8])
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.event_view_inner(source).await,
+        Err(StorageError::NotFound)
+    ));
+    db::query(
+        "UPDATE oc_events SET content='source' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     let missing = tx.event_file_inner(source).await.unwrap();
     assert_eq!(missing["content"], "source");
     assert_eq!(missing["file_id"], file.to_string());
     assert!(missing["hash"].is_null());
     assert!(missing["media_type"].is_null());
     db::query("INSERT INTO oc_files VALUES(?,?,?,'local','text/plain',0)")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(file)
-        .execute(&mut *tx.tx).await.unwrap();
-    assert_eq!(tx.event_view_inner(source).await.unwrap()["content"], "source");
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(file)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.event_view_inner(source).await.unwrap()["content"],
+        "source"
+    );
     assert_eq!(tx.event_file_inner(source).await.unwrap()["hash"], "local");
     // Change only the file flag: event activity cannot mask the file predicate.
     db::query("UPDATE oc_files SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(file)
-        .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.event_view_inner(source).await, Err(StorageError::NotFound)));
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(file)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.event_view_inner(source).await,
+        Err(StorageError::NotFound)
+    ));
     assert_eq!(tx.event_file_inner(source).await.unwrap(), missing);
     db::query("UPDATE oc_events SET content=? WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(vec![0xff_u8]).bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-        .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.event_view_inner(source).await, Err(StorageError::NotFound)));
+        .bind(vec![0xff_u8])
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.event_view_inner(source).await,
+        Err(StorageError::NotFound)
+    ));
     for malformed in [vec![0x31_u8], Vec::new()] {
         db::query("UPDATE oc_events SET file_id=? WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(malformed).bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-            .execute(&mut *tx.tx).await.unwrap();
-        assert!(matches!(tx.event_view_inner(source).await, Err(StorageError::NotFound)));
+            .bind(malformed)
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(source)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        assert!(matches!(
+            tx.event_view_inner(source).await,
+            Err(StorageError::NotFound)
+        ));
     }
-    db::query("UPDATE oc_events SET content='source' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-        .execute(&mut *tx.tx).await.unwrap();
+    db::query(
+        "UPDATE oc_events SET content='source' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     db::query("UPDATE oc_events SET file_id=NULL WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     assert!(tx.event_view_inner(source).await.unwrap()["file_id"].is_null());
     assert!(tx.event_file_inner(source).await.unwrap()["file_id"].is_null());
     tx.rollback().await.unwrap();
@@ -804,7 +874,8 @@ async fn identity_kind_filter_precedes_native_key_decoding() {
     let identity: crate::memory_identity::MemoryIdentity = serde_json::from_value(json!({
         "subject":{"kind":"service","stable_id":"billing"},
         "predicate":"release.approval","context":{}
-    })).unwrap();
+    }))
+    .unwrap();
     let key = identity.key(scope).unwrap();
     let mut tx = transaction(&pool, scope).await;
     // Non-STRICT BLOB columns can hold a short key. A non-memory asset with
@@ -813,9 +884,14 @@ async fn identity_kind_filter_precedes_native_key_decoding() {
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(vec![0x31_u8])
         .execute(&mut *tx.tx).await.unwrap();
     db::query("INSERT INTO oc_memory_identities VALUES(?,?,?,?,?)")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(&key).bind(vec![0x31_u8])
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(&key)
+        .bind(vec![0x31_u8])
         .bind(serde_json::to_string(&identity).unwrap())
-        .execute(&mut *tx.tx).await.unwrap();
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key) VALUES(?,?,?,'memory','legacy',?)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::new_v4()).bind(&key)
         .execute(&mut *tx.tx).await.unwrap();

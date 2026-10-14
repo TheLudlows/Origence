@@ -116,19 +116,31 @@ async fn historical_event_file_retains_content_after_source_and_file_withdrawal(
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let auth = provision(&store, "admin").await;
     let mut tx = store.begin(auth).await.unwrap();
-    let bare = tx.create_event("knowledge", "bare source", None).await.unwrap();
+    let bare = tx
+        .create_event("knowledge", "bare source", None)
+        .await
+        .unwrap();
     let bare_file = tx.event_file(bare).await.unwrap();
     assert_eq!(bare_file["content"], "bare source");
     for key in ["file_id", "hash", "media_type"] {
         assert!(bare_file[key].is_null());
     }
-    let file = tx.insert_file("source.txt", "text/plain", "hash", 4).await.unwrap();
-    let source = tx.create_event("knowledge", "text", Some(file)).await.unwrap();
+    let file = tx
+        .insert_file("source.txt", "text/plain", "hash", 4)
+        .await
+        .unwrap();
+    let source = tx
+        .create_event("knowledge", "text", Some(file))
+        .await
+        .unwrap();
     let live = tx.event_file(source).await.unwrap();
     assert_eq!(live["hash"], "hash");
     assert_eq!(live["media_type"], "text/plain");
     tx.retract_event(source).await.unwrap();
-    assert!(matches!(tx.event_view(source).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.event_view(source).await,
+        Err(StorageError::NotFound)
+    ));
     assert_eq!(tx.event_file(source).await.unwrap(), live);
     tx.delete_file(file).await.unwrap();
     let removed = tx.event_file(source).await.unwrap();

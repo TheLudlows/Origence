@@ -345,9 +345,14 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         .fetch_all(&pool)
         .await
         .unwrap();
-    assert!(matches!(strict_support_sources(&rows), Err(StorageError::Backend(_))));
+    assert!(matches!(
+        strict_support_sources(&rows),
+        Err(StorageError::Backend(_))
+    ));
     native_turso::query("UPDATE oc_events SET state='active',kind='knowledge'")
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     let invalid_uuid = format!("-{}-", source.simple());
     for values in [
         json!([invalid_uuid, 31]),
@@ -356,7 +361,9 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     ] {
         native_turso::query("UPDATE oc_chunks SET locator=?")
             .bind(json!({"parser":"memory-semantics:v1","support_sources":values}).to_string())
-            .execute(&pool).await.unwrap();
+            .execute(&pool)
+            .await
+            .unwrap();
         let mut tx = transaction(pool.begin().await.unwrap(), scope);
         assert!(tx.local_support_visibility(&[(asset, 1)]).await.unwrap()[&(asset, 1)]);
         let result = tx.semantic_version_visible(asset, 1).await;
@@ -434,7 +441,9 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
 #[tokio::test]
 async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources() {
     let dir = tempfile::tempdir().unwrap();
-    let pool = Pool::open(dir.path().join("exact-support.db")).await.unwrap();
+    let pool = Pool::open(dir.path().join("exact-support.db"))
+        .await
+        .unwrap();
     for sql in [
         "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,locator TEXT)",
         "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT)",
@@ -442,13 +451,20 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
     ] {
         native_turso::query(sql).execute(&pool).await.unwrap();
     }
-    let scope = Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() };
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
     let asset = Uuid::new_v4();
     let sources: Vec<_> = (1..=130).map(Uuid::from_u128).collect();
     for source in &sources {
         native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(*source)
-            .execute(&pool).await.unwrap();
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(*source)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
     let mut repeated = sources.clone();
     repeated.push(sources[0]);
@@ -458,35 +474,67 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
         json!({"parser":"memory-semantics:v1","support_sources":[]}).to_string(),
         json!({"parser":"memory-semantics:v1","support_sources":{}}).to_string(),
         json!({"parser":"memory-semantics:v1","support_sources":sources[0]}).to_string(),
-        format!("{{parser:'memory-semantics:v1',support_sources:['{}',],}}", sources[0]),
-        format!(r#"{{"parser":"memory-semantics:v1","support_sources":{{"x":"{}","x":"{}"}}}}"#, sources[0], sources[1]),
+        format!(
+            "{{parser:'memory-semantics:v1',support_sources:['{}',],}}",
+            sources[0]
+        ),
+        format!(
+            r#"{{"parser":"memory-semantics:v1","support_sources":{{"x":"{}","x":"{}"}}}}"#,
+            sources[0], sources[1]
+        ),
     ];
     // Malformed unrelated history must not be evaluated by an exact read.
     locators.push("{".into());
     for (index, locator) in locators.iter().enumerate() {
         native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::new_v4())
-            .bind(asset).bind(index as i32 + 1).bind(locator)
-            .execute(&pool).await.unwrap();
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(Uuid::new_v4())
+            .bind(asset)
+            .bind(index as i32 + 1)
+            .bind(locator)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
     let mut tx = transaction(pool.begin().await.unwrap(), scope);
     for version in 1..=7 {
         assert!(tx.semantic_version_visible(asset, version).await.unwrap());
     }
     assert!(tx.semantic_version_visible(asset, 99).await.unwrap());
-    assert!(tx.semantic_version_visible(Uuid::new_v4(), 1).await.unwrap());
-    native_turso::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(sources[129])
-        .execute(&mut *tx.tx).await.unwrap();
+    assert!(
+        tx.semantic_version_visible(Uuid::new_v4(), 1)
+            .await
+            .unwrap()
+    );
+    native_turso::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(sources[129])
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert!(!tx.semantic_version_visible(asset, 1).await.unwrap());
     assert!(tx.semantic_version_visible(asset, 2).await.unwrap());
-    native_turso::query("UPDATE oc_events SET kind=? WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(vec![0xff_u8]).bind(scope.tenant_id).bind(scope.workspace_id).bind(sources[0])
-        .execute(&mut *tx.tx).await.unwrap();
+    native_turso::query(
+        "UPDATE oc_events SET kind=? WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(vec![0xff_u8])
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(sources[0])
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     // Local activity succeeds; exact source visibility still strictly decodes
     // the native event kind instead of treating a malformed kind as ordinary.
     assert!(tx.local_support_visibility(&[(asset, 5)]).await.unwrap()[&(asset, 5)]);
-    assert!(matches!(tx.semantic_version_visible(asset, 5).await, Err(StorageError::Backend(_))));
+    assert!(matches!(
+        tx.semantic_version_visible(asset, 5).await,
+        Err(StorageError::Backend(_))
+    ));
     tx.tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }

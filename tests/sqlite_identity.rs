@@ -359,9 +359,13 @@ async fn identity_binding_mismatch_precedes_tombstone_rejection() {
     assert!(matches!(tx.identity_slot(&requested).await,
         Err(StorageError::Conflict(message)) if message == "memory identity binding mismatch"));
     tx.rollback().await.unwrap();
-    let count: i64 = db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id)
-        .fetch_one(store.pool()).await.unwrap();
+    let count: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
     assert_eq!(count, 1);
 }
 
@@ -374,17 +378,30 @@ async fn non_memory_identity_binding_is_not_silently_repaired() {
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let (asset, _) = tx.identity_slot(&requested).await.unwrap();
     tx.commit().await.unwrap();
-    db::query("UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset)
-        .execute(store.pool()).await.unwrap();
+    db::query(
+        "UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(asset)
+    .execute(store.pool())
+    .await
+    .unwrap();
     let mut tx = store.begin(auth).await.unwrap();
     // The original inner association did not select non-memory bindings.
     // Creation then encounters the existing identity key and must roll back.
-    assert!(matches!(tx.identity_slot(&requested).await, Err(StorageError::Backend(_))));
+    assert!(matches!(
+        tx.identity_slot(&requested).await,
+        Err(StorageError::Backend(_))
+    ));
     tx.rollback().await.unwrap();
-    let assets: i64 = db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id)
-        .fetch_one(store.pool()).await.unwrap();
+    let assets: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
     assert_eq!(assets, 1);
     let binding: Uuid = db::query_scalar("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(requested.key(scope).unwrap())

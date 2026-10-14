@@ -566,7 +566,9 @@ mod tests {
     #[tokio::test]
     async fn learning_source_batches_keep_strict_kind_and_source_order() {
         let dir = tempfile::tempdir().unwrap();
-        let pool = Pool::open(dir.path().join("support-kind.db")).await.unwrap();
+        let pool = Pool::open(dir.path().join("support-kind.db"))
+            .await
+            .unwrap();
         // The production TEXT column also permits BLOB storage. A catalog is
         // deliberately absent in the first pass, then present but empty.
         for sql in [
