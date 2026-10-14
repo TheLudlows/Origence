@@ -64,14 +64,9 @@ jobs:
             $cdb = $found.Source
           }
           Get-ChildItem target/debug/origence.pdb -ErrorAction SilentlyContinue | Select-Object Name,Length
-          $armFile = Join-Path $env:RUNNER_TEMP 'origence-arm.cdb'
-          @'
-          sxe -c ".echo ORIGENCE_SOV_BEGIN; .catch { .lastevent }; .catch { knf 0x100 }; .catch { !teb }; .echo ORIGENCE_SOV_END; gn" -c2 ".echo ORIGENCE_SOV_SECOND; gn" sov
-          .echo ORIGENCE_SOV_ARMED
-          .lastevent
-          g
-          '@ | Set-Content -LiteralPath $armFile -Encoding ascii
-          $startup = 'sxe -c "|#s; $$><' + $armFile + '" cpr; $$><' + $armFile
+          # With -g, the initial command runs at the first real exception.
+          # The prior run proved this is first-chance c00000fd in the offline child.
+          $startup = '.echo ORIGENCE_SOV_BEGIN; .lastevent; knf 0x100; !teb; .echo ORIGENCE_SOV_END; sxd -c2 "gn" sov; gn'
           $symbols = (Join-Path $PWD 'target\debug') + ';' + (Join-Path $PWD 'target\debug\deps')
           $log = Join-Path $env:RUNNER_TEMP 'origence-cdb.log'
           $psi = [System.Diagnostics.ProcessStartInfo]::new()
@@ -80,7 +75,7 @@ jobs:
           $psi.RedirectStandardOutput = $true
           $psi.RedirectStandardError = $true
           $psi.WorkingDirectory = $PWD.Path
-          $argsForCdb = @('-o', '-G', '-hd', '-y', $symbols, '-logo', $log, '-c', $startup, $env:ORIGENCE_TEST_EXE, 'local_app::local_host_api_cli_mcp_models_and_recovery', '--exact', '--nocapture')
+          $argsForCdb = @('-o', '-g', '-G', '-hd', '-y', $symbols, '-logo', $log, '-c', $startup, $env:ORIGENCE_TEST_EXE, 'local_app::local_host_api_cli_mcp_models_and_recovery', '--exact', '--nocapture')
           foreach ($arg in $argsForCdb) { $psi.ArgumentList.Add([string]$arg) }
           $p = [System.Diagnostics.Process]::Start($psi)
           $stdout = $p.StandardOutput.ReadToEndAsync()
