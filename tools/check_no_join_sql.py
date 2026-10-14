@@ -45,8 +45,6 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite/app.rs|finish_cleanup#1|3|ed9b8a81947098f2ff92461ed37cd23f51985d4e1ccbd5a855f7f513e26a6ce7',
     'src/storage/sqlite/app.rs|finish_cleanup#1|4|0d66789ce1cb4092f659c51e680073d1b6783c61d016cd1d8cc6ff43546885c8',
     'src/storage/sqlite/app.rs|finish_cleanup#1|5|eb4b4694e43b6566b325ddd380034ea92ac4539406f866a4383fb84cb230f4a0',
-    'src/storage/sqlite/context.rs|context_recent_turns#1|1|e1751d0818e09cf44dd87f7b213e23f673e0f0195d7f9edd2961a30eb321b21e',
-    'src/storage/sqlite/context.rs|context_session_turn#1|1|ed8bbdcea378f61a0d1149a659edf1d2abb224d5118d00635335a5d54365f313',
     'src/storage/sqlite/improve.rs|cancel_improve_job#1|2|01c3c787e946ec697a9d79634176aac45b068641f7f6534f754b2731e16256b1',
     'src/storage/sqlite/improve.rs|create_learning#1|2|169f2c1154206421570f6d1d1503f175c2821739d6fa4588c74b9708378d9af4',
     'src/storage/sqlite/improve.rs|mark_learning_published#1|2|f6fd7099d471d0244882305ebab40d584d65141f0c244b0dc7bc23e8fbc5cdac',

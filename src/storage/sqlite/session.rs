@@ -6,6 +6,9 @@ use crate::session::{
 };
 use std::collections::HashSet;
 
+#[cfg(feature = "local-storage")]
+mod context_reads;
+
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {

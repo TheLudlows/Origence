@@ -18,6 +18,12 @@ use crate::{
 };
 use std::collections::HashSet;
 
+#[cfg(test)]
+#[path = "context_session_tests.rs"]
+mod session_tests;
+
+const RECENT_EVENTS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND state='active' AND kind='session_turn' AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
+
 impl TursoTx {
     pub(crate) async fn context_route_matches(
         &mut self,
@@ -324,48 +330,95 @@ impl TursoTx {
         })
     }
 
-    /// The reference is a real (session_id, turn_id, source_event_id) tuple,
-    /// never a fabricated chunk or asset version.
-    pub(crate) async fn context_session_turn(
+    /// One shared metadata readset, with per-turn JSON and closure decisions in
+    /// caller order. No state escapes this read call or its transaction.
+    pub(crate) async fn context_session_turns(
         &mut self,
-        session: Uuid,
-        turn: Uuid,
-    ) -> StorageResult<Option<ContextSessionTurn>> {
+        keys: &[(Uuid, Uuid)],
+    ) -> StorageResult<Vec<Option<ContextSessionTurn>>> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
         self.check_permission(Permission::Write).await?;
-        let (source_event_id, evidence) = match self.require_turn_visible_local(session, turn).await
-        {
-            Ok(value) => value,
-            Err(StorageError::NotFound) => return Ok(None),
-            Err(error) => return Err(error),
-        };
-        match self.require_archived_evidence_set_visible(&evidence).await {
-            Ok(()) => {}
-            Err(StorageError::NotFound) => return Ok(None),
-            Err(error) => return Err(error),
+        let mut batch = self.context_turn_metadata(keys).await?;
+        let mut turns = Vec::with_capacity(keys.len());
+        for index in 0..keys.len() {
+            turns.push(self.context_turn_from_metadata(&mut batch, index).await?);
         }
-        let row: Option<(String, i64)> = native_turso::query_as("SELECT e.content,t.created_at FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.id=? AND e.kind='session_turn' AND e.state='active'")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn).bind(source_event_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        let Some((body, created_at)) = row else {
-            return Ok(None);
-        };
-        #[derive(serde::Deserialize)]
-        struct Body {
-            question: String,
-            answer: String,
+        Ok(turns)
+    }
+
+    async fn recent_turn_keys(
+        &mut self,
+        session: Option<Uuid>,
+        exclude_session: Option<Uuid>,
+    ) -> StorageResult<Vec<(Uuid, Uuid)>> {
+        let mut selected = Vec::new();
+        let mut cursor: Option<(AssociationKey, AssociationKey, AssociationKey)> = None;
+        loop {
+            let sql = if cursor.is_some() {
+                "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) AND (created_at<? OR (created_at=? AND (session_id>? OR (session_id=? AND turn_id>?)))) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
+            } else {
+                "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
+            };
+            let mut query = native_turso::query(sql)
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(session)
+                .bind(session)
+                .bind(exclude_session)
+                .bind(exclude_session);
+            if let Some((created_at, session, turn)) = &cursor {
+                query = query
+                    .bind(created_at.clone())
+                    .bind(created_at.clone())
+                    .bind(session.clone())
+                    .bind(session.clone())
+                    .bind(turn.clone());
+            }
+            let rows = query.fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            let size = rows.len();
+            if let Some(last) = rows.last() {
+                cursor = Some((
+                    last.try_get("created_at").map_err(turso_err)?,
+                    last.try_get("session_id").map_err(turso_err)?,
+                    last.try_get("turn_id").map_err(turso_err)?,
+                ));
+            }
+            let keys = rows
+                .iter()
+                .map(|row| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
+                .collect::<StorageResult<Vec<_>>>()?;
+            // Even the empty first page prepares the event relation, as the
+            // original statement did. Domain keys are decoded only after gate.
+            let active: HashSet<_> =
+                read_model::associate_query(&mut self.tx, self.scope, RECENT_EVENTS, 1, &keys)
+                    .await?
+                    .into_iter()
+                    .map(|(index, _)| index)
+                    .collect();
+            for (index, row) in rows.into_iter().enumerate() {
+                if active.contains(&index) {
+                    selected.push(row);
+                    if selected.len() == SESSION_SCAN_LIMIT + 1 {
+                        break;
+                    }
+                }
+            }
+            if selected.len() == SESSION_SCAN_LIMIT + 1 || size < 128 {
+                break;
+            }
         }
-        let body: Body = serde_json::from_str(&body)
-            .map_err(|_| StorageError::Unavailable("invalid session record".into()))?;
-        Ok(Some(ContextSessionTurn {
-            session_id: session,
-            turn_id: turn,
-            source_event_id,
-            question: body.question,
-            answer: body.answer,
-            evidence,
-            created_at,
-            score: 0.0,
-        }))
+        // The original query decoded all 513 keys before inspecting any turn.
+        selected
+            .into_iter()
+            .map(|row| {
+                Ok((
+                    row.try_get("session_id").map_err(turso_err)?,
+                    row.try_get("turn_id").map_err(turso_err)?,
+                ))
+            })
+            .collect()
     }
 
     pub(crate) async fn context_recent_turns(
@@ -376,18 +429,14 @@ impl TursoTx {
         limit: usize,
     ) -> StorageResult<ContextSessionResult> {
         self.check_permission(Permission::Write).await?;
-        let rows: Vec<(Uuid, Uuid)> = native_turso::query_as("SELECT t.session_id,t.turn_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND e.state='active' AND e.kind='session_turn' AND (? IS NULL OR t.session_id=?) AND (? IS NULL OR t.session_id!=?) ORDER BY t.created_at DESC,t.session_id,t.turn_id LIMIT ?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-            .bind(session).bind(session).bind(exclude_session).bind(exclude_session)
-            .bind((SESSION_SCAN_LIMIT + 1) as i64)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let rows = self.recent_turn_keys(session, exclude_session).await?;
         let scan_exhausted = rows.len() > SESSION_SCAN_LIMIT;
         let words: HashSet<_> = terms.split_whitespace().collect();
         let mut turns = Vec::new();
-        let mut scanned = 0;
-        for (session, turn) in rows.into_iter().take(SESSION_SCAN_LIMIT) {
-            scanned += 1;
-            let Some(mut item) = self.context_session_turn(session, turn).await? else {
+        let scanned = rows.len().min(SESSION_SCAN_LIMIT);
+        let checked = self.context_session_turns(&rows[..scanned]).await?;
+        for item in checked {
+            let Some(mut item) = item else {
                 continue;
             };
             let text = crate::parsing::lexical(&format!("{}\n{}", item.question, item.answer));

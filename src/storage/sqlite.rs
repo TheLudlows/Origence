@@ -45,6 +45,8 @@ mod lifecycle;
 mod locking;
 mod provenance;
 mod publication;
+#[cfg(test)]
+mod publication_shape_tests;
 mod read_model;
 #[cfg(test)]
 mod read_model_tests;
