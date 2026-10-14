@@ -6,9 +6,6 @@ impl TursoTx {
         &mut self,
         asset: Uuid,
     ) -> StorageResult<Option<crate::memory_identity::MemoryIdentity>> {
-        if !identity_table_present(&mut self.tx).await? {
-            return Ok(None);
-        }
         let value: Option<String> = native_turso::query_scalar(
             "SELECT identity_json FROM oc_memory_identities WHERE tenant_id = ? AND workspace_id = ? AND asset_id = ?",
         )
@@ -76,11 +73,6 @@ impl TursoTx {
         &mut self,
         identity: &crate::memory_identity::MemoryIdentity,
     ) -> StorageResult<Value> {
-        if !identity_table_present(&mut self.tx).await? {
-            return Err(StorageError::Unavailable(
-                "memory identity storage unavailable".into(),
-            ));
-        }
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
@@ -107,11 +99,6 @@ impl TursoTx {
         &mut self,
         identity: &crate::memory_identity::MemoryIdentity,
     ) -> StorageResult<(Uuid, Option<i32>)> {
-        if !identity_table_present(&mut self.tx).await? {
-            return Err(StorageError::Unavailable(
-                "memory identity storage unavailable".into(),
-            ));
-        }
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
@@ -203,7 +190,7 @@ impl TursoTx {
         &mut self,
         assets: &[Uuid],
     ) -> StorageResult<HashMap<Uuid, native_turso::Row>> {
-        if assets.is_empty() || !identity_table_present(&mut self.tx).await? {
+        if assets.is_empty() {
             return Ok(HashMap::new());
         }
         super::read_model::rows_by_ids(

@@ -2,7 +2,7 @@
 
 更新：2026-10-14。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
-## PR #59：Windows 离线恢复与无 JOIN 查询（草稿待审）
+## PR #59：Windows 离线恢复与无 JOIN 查询（已合入）
 
 [PR #59](https://github.com/TheLudlows/Origence/pull/59) 将各领域关联查询改为参数化
 单表批量读取，在原事务快照内用 Rust 关联，不以跨表 EXISTS/IN/CTE 替代 JOIN。
@@ -16,17 +16,25 @@
 摘要依赖正常保存接口保证一致；直接改库只改重型计划，不会由状态查询重扫发现。
 原生读取和保存/重试成本已实测，见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
 
-`a50f4572` 的新增索引匹配曾重新触发 Windows 栈溢出；`f0fe2cc1` 将该查询改为
-4 槽浅匹配后，Windows 214 lib 与原离线单例 1 passed，含 100 请求/25 次实际查询
-回归；后续完整验证仍被一处格式差异阻断。最终图读取/格式/文档归档头另行验证，
-精确 head 和终态见 [PR #59 Checks](https://github.com/TheLudlows/Origence/pull/59/checks)
-与 PR 正文；阶段成功不外推为后续提交成功，仍为草稿未合入。
+PR #59 已合入 main `75c238ffa830d50840d4b84c2dce6d7d69a4793c`。
+[主干 CI 38554048610](https://github.com/TheLudlows/Origence/actions/runs/38554048610)
+已通过 Linux 和 Windows 全套门禁；分阶段实验与诊断记录保留在 VALIDATION。
 
 Windows 主线程原 1 MiB 栈和原回归断言保留。这仅验证已测调用路径，不是 Turso
 parser 的通用栈安全证明。固定槽位（多数 8，向量就绪匹配 4）限制请求数，不是
 字节/总内存上限。状态检查不把完整向量计划读入 Rust；准备/重试仍承担序列化
 和校验成本，ID 元数据为 O(total ID bytes)，未新增输入上限。
-Issue #60/#61、schema 精简和命名清理不在本轮实施范围。
+Issue #60 合表、schema 精简和公开命名清理仍不在本轮范围。
+
+## Issue #61：已确认裁剪（实施中）
+
+第一批删除空 record_source API，摘要读取收敛为 summary_hits；原文检索继续走
+Lance 全文路径。启动仍校验完整 schema，运行时不再把缺失 identity 表当作空结果。
+两份 #59 专用诊断 workflow 已移除，完整 publication 探针冻结于
+[归档说明](../archives/publication-cost-probe/ARCHIVE.md)。归档不是当前性能门禁。
+公开调用方需移除 record_source 调用，并将 keyword_hits(..., true, filter)
+改为 summary_hits(..., filter)；false 原文扫描入口不再提供。
+本批验证以精确 PR head 的 CI 为准，不把 #59 的通过结果外推。
 
 ## Turso / LanceDB 正式接入（已合入）
 
@@ -52,9 +60,11 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 
 ## 当前 CI 范围
 
-以下为 2026-10-12 配置记录；PR #59 另行实际运行 Windows 专项验证，其覆盖以精确 head 的记录为准。最终交审保留仅针对该分支启用的临时 workflow，待后续审查；本轮不实施 Issue #61 清理。
+常规 Windows 门禁仍只在 main 及本轮 refactor/issue61-cleanup PR 执行；
+后者复用同一 job 验证待合入代码，不扩大到其他 PR。#59 专用 CDB 调度与
+历史性能调度已归档停用，常规 CI 不提供等价持续性能比较。
 
-2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仍仅在主干运行。
+历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，当时 Windows 仅在主干运行；本轮分支例外见上段。
 
 Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及证据归档保持不变。不删除测试用例、Dockerfile、Compose、容器冒烟脚本或 macOS 本地构建能力；macOS 兼容性与容器构建/运行不再由日常 CI 自动验证。下文和 VALIDATION 中五项 CI 的记录保留为对应历史提交的证据，不代表当前覆盖范围。该配置调整的实际 CI 结果以相应提交的 Actions 记录为准。
 

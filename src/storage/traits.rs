@@ -9,7 +9,6 @@
 //! if let Some(cached) = tx.begin_command("memory.create", idem_key, req_hash).await? {
 //!     return cached;                                        // idempotent replay
 //! }
-//! tx.record_source(source_version).await?;
 //! tx.enqueue(work_item).await?;                             // same transaction
 //! tx.audit("memory.create", target, detail).await?;
 //! tx.finish_command(response).await?;
@@ -102,9 +101,6 @@ pub trait DomainTx {
             "job creator authorization unavailable".into(),
         ))
     }
-
-    /// Register a source version as the origin of this command's writes.
-    async fn record_source(&mut self, source: SourceVersion) -> StorageResult<()>;
 
     /// Register work on this same transaction. Business write and enqueue
     /// commit or roll back together; a consumer (not this method) claims it.

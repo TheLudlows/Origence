@@ -137,12 +137,6 @@ impl DomainTx for TursoTx {
         Ok(())
     }
 
-    async fn record_source(&mut self, _source: SourceVersion) -> StorageResult<()> {
-        // The domain operations that materialise a source (event/version) land
-        // with the full adapter; the envelope itself records nothing.
-        Ok(())
-    }
-
     async fn enqueue(&mut self, work: WorkItem) -> StorageResult<()> {
         self.enqueue_inner(work).await
     }

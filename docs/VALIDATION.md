@@ -849,3 +849,15 @@ Windows Validate 被一处 bind 链格式阻断，无默认特性检查未完成
 的 Linux 作业通过，默认 214 lib + 230 integration，fast-check 仍因同一格式失败。
 原主线程栈、调度与原离线回归断言未降低。最终图窄投影/格式/文档头仍需独立全 CI，
 结果以 PR 正文精确 head/run 为准，不沿用阶段通过结论。
+
+
+## Issue #61 第一批裁剪（2026-10-14，验证中）
+
+基线 main `75c238ffa830d50840d4b84c2dce6d7d69a4793c`。空 record_source、
+keyword_hits(false) 和六处 identity catalog 探测收口；保留真实 event/version
+来源及事务回滚、摘要多行 AND、完整 schema 启动拒绝。探针完整冻结归档，
+两个 #59 临时 workflow 删除。原 Windows 1 MiB 生命周期回归未改。
+
+本地 SQL guard 及其 47 项回归通过；无 Cargo/rustfmt，因此本地 Rust 构建、
+格式、Clippy、原生测试均 NOT_RUN。Linux/Windows 的最终验收以本 PR 精确
+提交的实际 CI 结果为准，尚未完成时不得称通过。

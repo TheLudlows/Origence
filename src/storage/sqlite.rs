@@ -76,7 +76,6 @@ use crate::storage::traits::{
 use locking::LockGuard;
 #[cfg(feature = "local-vector")]
 pub(super) use locking::lock_for_maintenance;
-use schema::identity_table_present;
 
 /// Result of the explicit, offline identity schema upgrade.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

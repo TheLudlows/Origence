@@ -87,14 +87,12 @@ async fn assert_visibility(
     let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert_eq!(tx.visible_hit(ids.chunk).await.unwrap().is_some(), visible);
     for filter in [None, Some(ids.asset)] {
-        for (terms, summaries) in [("needle", false), ("summary", true)] {
-            let hits = tx.keyword_hits(terms, summaries, filter).await.unwrap();
-            assert_eq!(hits.len(), usize::from(visible));
-            for hit in hits {
-                assert_eq!(hit.content, auth.scope.workspace_id.to_string());
-                assert_eq!(hit.source_event_id, ids.member);
-                assert_eq!(hit.version, 3);
-            }
+        let hits = tx.summary_hits("summary", filter).await.unwrap();
+        assert_eq!(hits.len(), usize::from(visible));
+        for hit in hits {
+            assert_eq!(hit.content, auth.scope.workspace_id.to_string());
+            assert_eq!(hit.source_event_id, ids.member);
+            assert_eq!(hit.version, 3);
         }
         assert_eq!(
             tx.vector_candidates("profile-visibility", 7, 11, filter)
@@ -186,7 +184,7 @@ async fn sqlite_visibility_binds_scope_filters_and_vector_publication_independen
         );
     }
     assert!(
-        tx.keyword_hits("needle", false, Some(Uuid::new_v4()))
+        tx.summary_hits("summary", Some(Uuid::new_v4()))
             .await
             .unwrap()
             .is_empty()
@@ -281,7 +279,7 @@ async fn sqlite_visibility_preserves_invalid_support_and_malformed_locator_resul
     tx.rollback().await.unwrap();
     let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert!(matches!(
-        tx.keyword_hits("needle", false, None).await,
+        tx.summary_hits("summary", None).await,
         Err(StorageError::Backend(_))
     ));
     tx.rollback().await.unwrap();

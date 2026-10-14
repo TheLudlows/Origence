@@ -130,9 +130,6 @@ impl TursoTx {
         &mut self,
         identity: &crate::memory_identity::MemoryIdentity,
     ) -> StorageResult<Option<Uuid>> {
-        if !identity_table_present(&mut self.tx).await? {
-            return Ok(None);
-        }
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
@@ -261,21 +258,14 @@ impl TursoTx {
         Ok(self.visible_hits(&[id]).await?.remove(&id))
     }
 
-    pub async fn keyword_hits(
+    pub async fn summary_hits(
         &mut self,
         terms: &str,
-        summaries: bool,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<SearchHit>> {
         let raw = read_model::current_rows(&mut self.tx, self.scope, None, asset_filter).await?;
         let positions = self.local_current_positions(&raw).await?;
-        // The old initial query prepared/evaluated its summary projection even
-        // before the empty-query return. Keep native group_concat coercion/NULL.
-        let summary_terms = if summaries {
-            self.current_summary_terms(&raw, &positions).await?
-        } else {
-            HashMap::new()
-        };
+        let summary_terms = self.current_summary_terms(&raw, &positions).await?;
         let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
         if words.is_empty() {
             return Ok(Vec::new());
@@ -290,15 +280,11 @@ impl TursoTx {
             if !visible.contains(&key) {
                 continue;
             }
-            let text: Option<String> = if summaries {
-                summary_terms
-                    .get(&index)
-                    .map(|row| row.try_get("search_terms").map_err(turso_err))
-                    .transpose()?
-                    .flatten()
-            } else {
-                raw.search_terms(index)?
-            };
+            let text: Option<String> = summary_terms
+                .get(&index)
+                .map(|row| row.try_get("search_terms").map_err(turso_err))
+                .transpose()?
+                .flatten();
             let tokens: std::collections::HashSet<_> =
                 text.as_deref().unwrap_or("").split_whitespace().collect();
             if words.is_subset(&tokens) {

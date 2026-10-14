@@ -28,7 +28,6 @@ struct MemDb {
     commands: HashMap<String, (String, Value)>,
     jobs: Vec<ClaimedJob>,
     audits: Vec<String>,
-    sources: Vec<SourceVersion>,
 }
 
 struct MemRelationalStore {
@@ -48,7 +47,6 @@ struct MemTx {
     response: Option<Value>,
     work: Vec<WorkItem>,
     audits: Vec<String>,
-    sources: Vec<SourceVersion>,
     required: Vec<Permission>,
 }
 
@@ -97,11 +95,6 @@ impl DomainTx for MemTx {
         self.idempotency_key = Some(idempotency_key.to_string());
         self.request_hash = Some(request_hash.to_string());
         Ok(None)
-    }
-
-    async fn record_source(&mut self, source: SourceVersion) -> StorageResult<()> {
-        self.sources.push(source);
-        Ok(())
     }
 
     async fn register_owner(
@@ -415,7 +408,6 @@ impl DomainTx for MemTx {
             });
         }
         db.audits.extend(self.audits);
-        db.sources.extend(self.sources);
         Ok(())
     }
 
@@ -446,7 +438,6 @@ impl RelationalStore for MemRelationalStore {
             response: None,
             work: Vec::new(),
             audits: Vec::new(),
-            sources: Vec::new(),
             required: Vec::new(),
         })
     }
@@ -671,20 +662,14 @@ async fn rollback_discards_enqueue() {
 }
 
 #[tokio::test]
-async fn commit_records_source_audit_and_enqueue() {
+async fn commit_records_audit_and_enqueue() {
     let (rel, queue, db) = setup();
     let auth = seed(&db, scope(), "writer");
-    let source = SourceVersion {
-        source_id: Uuid::new_v4(),
-        version: 1,
-    };
-
     let mut tx = rel.begin(auth.clone()).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     tx.begin_command("knowledge.capture", "capture-key", "hash")
         .await
         .unwrap();
-    tx.record_source(source).await.unwrap();
     tx.audit("capture", Uuid::new_v4(), json!({"chunks": 1}))
         .await
         .unwrap();
@@ -701,7 +686,6 @@ async fn commit_records_source_audit_and_enqueue() {
 
     {
         let db = db.lock().unwrap();
-        assert!(db.sources.contains(&source));
         assert_eq!(db.audits.len(), 1);
     }
     assert!(queue.claim_next().await.unwrap().is_some());
