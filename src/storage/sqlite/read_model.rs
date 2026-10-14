@@ -4,6 +4,28 @@ use super::*;
 use crate::types::SearchHit;
 use std::collections::HashSet;
 
+/// Preserve native key types while associating rows. Decode domain fields only
+/// after the same predicates that filtered them in the original statement.
+pub(super) struct AssociationKey(turso::Value);
+
+impl AssociationKey {
+    pub(super) fn is_null(&self) -> bool {
+        matches!(&self.0, turso::Value::Null)
+    }
+}
+
+impl native_turso::Decode<'_> for AssociationKey {
+    fn decode(value: &turso::Value) -> native_turso::Result<Self> {
+        Ok(Self(value.clone()))
+    }
+}
+
+impl native_turso::Encode for AssociationKey {
+    fn encode(self) -> native_turso::Result<turso::Value> {
+        Ok(self.0)
+    }
+}
+
 pub(super) const READ_KEYS: usize = 128;
 const VERSION_KEYS: usize = 32;
 pub(super) type VersionKey = (Uuid, i32);
@@ -526,6 +548,36 @@ impl TursoTx {
         versions: &[VersionKey],
     ) -> StorageResult<HashMap<VersionKey, bool>> {
         Ok(self.support_snapshot(versions).await?.visible)
+    }
+
+    /// Complete semantic support for an exact version, including historical
+    /// versions. This does not establish asset/root existence or currentness.
+    pub(super) async fn semantic_version_support_visible(
+        &mut self,
+        asset: Uuid,
+        version: i32,
+    ) -> StorageResult<bool> {
+        let key = (asset, version);
+        let local = self.support_snapshot(&[key]).await?;
+        let visible = local.visible.get(&key).copied().ok_or_else(|| {
+            StorageError::Unavailable("inconsistent local support visibility".into())
+        })?;
+        if !visible || !self.learning_asset_visible(asset).await? {
+            return Ok(false);
+        }
+        // Decode every native String before parsing any UUID. In particular,
+        // a later non-text value must not be hidden by an earlier bad UUID.
+        let rows = local.sources.get(&key).map_or(&[][..], Vec::as_slice);
+        let mut sources = strict_support_sources(rows)?;
+        let mut seen = HashSet::new();
+        sources.retain(|source| seen.insert(*source));
+        // Keep the exact source guard's strict native event-kind decoding.
+        // Source checks retain their existing order and error propagation.
+        match self.require_learning_sources_visible(&sources).await {
+            Ok(()) => Ok(true),
+            Err(StorageError::NotFound) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     pub(super) async fn retrieval_chunks(

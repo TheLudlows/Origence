@@ -159,11 +159,9 @@ impl TursoTx {
     }
 
     pub(super) async fn event_view_inner(&mut self, id: Uuid) -> StorageResult<Value> {
-        let row: Option<(Uuid, String, String, Option<Uuid>, i64)> = native_turso::query_as(
-            "SELECT e.id,e.kind,e.content,e.file_id,e.created_at FROM oc_events e \
-             LEFT JOIN oc_files f ON f.tenant_id=e.tenant_id AND f.workspace_id=e.workspace_id AND f.id=e.file_id \
-             WHERE e.tenant_id=? AND e.workspace_id=? AND e.id=? AND e.state='active' \
-             AND (e.file_id IS NULL OR f.deleted=0)",
+        let row = native_turso::query(
+            "SELECT id,kind,content,file_id,created_at FROM oc_events \
+             WHERE tenant_id=? AND workspace_id=? AND id=? AND state='active'",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -171,9 +169,31 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        let Some((event_id, kind, content, file_id, created_at)) = row else {
+        let Some(row) = row else {
             return Err(StorageError::NotFound);
         };
+        let file: read_model::AssociationKey = row.try_get("file_id").map_err(turso_err)?;
+        if !file.is_null() {
+            let exists: bool = native_turso::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM oc_files WHERE tenant_id=? AND workspace_id=? AND id=? AND deleted=0)",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(file)
+            .fetch_one(&mut *self.tx)
+            .await
+            .map_err(turso_err)?;
+            if !exists {
+                return Err(StorageError::NotFound);
+            }
+        }
+        // File visibility precedes all domain decoding, including malformed
+        // content and UUIDs in a row that the original predicate hid.
+        let event_id: Uuid = row.try_get("id").map_err(turso_err)?;
+        let kind: String = row.try_get("kind").map_err(turso_err)?;
+        let content: String = row.try_get("content").map_err(turso_err)?;
+        let file_id: Option<Uuid> = row.try_get("file_id").map_err(turso_err)?;
+        let created_at: i64 = row.try_get("created_at").map_err(turso_err)?;
         self.require_learning_source_visible(id).await?;
         if kind == "session_turn" {
             self.require_session_source_visible(id).await?;
@@ -203,11 +223,8 @@ impl TursoTx {
     }
 
     pub(super) async fn event_file_inner(&mut self, source: Uuid) -> StorageResult<Value> {
-        let row: Option<(String, Option<Uuid>, Option<String>, Option<String>)> = native_turso::query_as(
-            "SELECT e.content, e.file_id, f.hash, f.media_type \
-             FROM oc_events e \
-             LEFT JOIN oc_files f ON f.id = e.file_id AND f.tenant_id = e.tenant_id AND f.workspace_id = e.workspace_id AND NOT f.deleted \
-             WHERE e.id = ? AND e.tenant_id = ? AND e.workspace_id = ?",
+        let row: Option<(String, Option<Uuid>)> = native_turso::query_as(
+            "SELECT content,file_id FROM oc_events WHERE id=? AND tenant_id=? AND workspace_id=?",
         )
         .bind(source)
         .bind(self.scope.tenant_id)
@@ -215,9 +232,25 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        let Some((content, file_id, hash, media_type)) = row else {
+        let Some((content, file_id)) = row else {
             return Err(StorageError::NotFound);
         };
+        // Unlike event_view, historical file reads retain the event and its
+        // original file_id when the file is absent/deleted; metadata is NULL.
+        let file: Option<(Option<String>, Option<String>)> = if let Some(file) = file_id {
+            native_turso::query_as(
+                "SELECT hash,media_type FROM oc_files WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(file)
+            .fetch_optional(&mut *self.tx)
+            .await
+            .map_err(turso_err)?
+        } else {
+            None
+        };
+        let (hash, media_type) = file.unwrap_or((None, None));
         Ok(json!({
             "content": content,
             "file_id": file_id,
