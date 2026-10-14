@@ -336,31 +336,29 @@ impl TursoTx {
         let asset_keys = chunks
             .iter()
             .map(|row| {
-                Ok(vec![row
-                    .try_get::<AssociationKey>("asset_id")
-                    .map_err(turso_err)?])
+                Ok(vec![
+                    row.try_get::<AssociationKey>("asset_id")
+                        .map_err(turso_err)?,
+                ])
             })
             .collect::<StorageResult<Vec<_>>>()?;
         let version_keys = chunks
             .iter()
             .map(|row| {
                 Ok(vec![
-                    row.try_get::<AssociationKey>("asset_id").map_err(turso_err)?,
-                    row.try_get::<AssociationKey>("version").map_err(turso_err)?,
+                    row.try_get::<AssociationKey>("asset_id")
+                        .map_err(turso_err)?,
+                    row.try_get::<AssociationKey>("version")
+                        .map_err(turso_err)?,
                 ])
             })
             .collect::<StorageResult<Vec<_>>>()?;
-        let mut removed: HashSet<_> = read_model::associate_query(
-            &mut self.tx,
-            self.scope,
-            DELETED_ASSETS,
-            1,
-            &asset_keys,
-        )
-        .await?
-        .into_iter()
-        .map(|(index, _)| index)
-        .collect();
+        let mut removed: HashSet<_> =
+            read_model::associate_query(&mut self.tx, self.scope, DELETED_ASSETS, 1, &asset_keys)
+                .await?
+                .into_iter()
+                .map(|(index, _)| index)
+                .collect();
         let versions = read_model::associate_query(
             &mut self.tx,
             self.scope,
@@ -372,9 +370,10 @@ impl TursoTx {
         let source_keys = versions
             .iter()
             .map(|(_, row)| {
-                Ok(vec![row
-                    .try_get::<AssociationKey>("source_event_id")
-                    .map_err(turso_err)?])
+                Ok(vec![
+                    row.try_get::<AssociationKey>("source_event_id")
+                        .map_err(turso_err)?,
+                ])
             })
             .collect::<StorageResult<Vec<_>>>()?;
         let events = read_model::associate_query(

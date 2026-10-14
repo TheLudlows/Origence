@@ -41,9 +41,6 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite/ledger.rs|confirm_committed_inner#1|1|d0dd7b0070a300e86738725204b06b6927e435886a157be04cb3c78f4abde341',
     'src/storage/sqlite/publication.rs|message_batch_status#1|1|4c89fe74655d27b9c6f1315eb6cf8cc1800b5f092a9d12e116c8f0ac49fb228d',
     'src/storage/sqlite/publication.rs|message_batch_status#1|4|48b816c6f4eccaa268f69fb47427ef209bdd1eefe1f411c05d4072272338eedd',
-    'src/storage/sqlite_graph.rs|snapshot#1|2|8bf6785986170bfc71289e2a2bac5f0596fd6a007ed6da03939302d87b873d26',
-    'src/storage/sqlite_graph.rs|traverse#1|1|f509d280a082f0218cbe0ce684f111a78e92577347e87a0640a2b0a1e58123a3',
-    'src/storage/sqlite_graph.rs|upsert_relations#1|1|4b8385fc303bb4048a88ec42b5a26c4fb31c5d1d941eb8c4f1a7addc28465685',
     'tests/message_batches.rs|live_receipt_status_requires_every_chunk_profile_generation_and_source#1|4|0f59e1cd6705b1fd4ed88552a19733b8f16c5d549038a34a7250b156f13cce94',
 })
 

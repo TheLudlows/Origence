@@ -98,13 +98,15 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(source)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     tx.insert_version_inner(asset, 6, "body", "hash", source, None, None)
         .await
         .unwrap();
@@ -116,7 +118,13 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
         .await
         .unwrap();
     assert_eq!(rows.len(), 6);
-    for (index, expected) in [(0, "inherited"), (1, ""), (2, "explicit"), (4, ""), (5, "42")] {
+    for (index, expected) in [
+        (0, "inherited"),
+        (1, ""),
+        (2, "explicit"),
+        (4, ""),
+        (5, "42"),
+    ] {
         assert_eq!(rows[index].get::<String>("title"), expected);
         assert_eq!(rows[index].get::<String>("storage_type"), "text");
     }
@@ -165,7 +173,9 @@ async fn version_insert_retains_native_missing_row_constraints() {
 #[tokio::test]
 async fn explicit_title_still_prepares_the_asset_table() {
     let dir = tempfile::tempdir().unwrap();
-    let pool = Pool::open(dir.path().join("missing-assets.db")).await.unwrap();
+    let pool = Pool::open(dir.path().join("missing-assets.db"))
+        .await
+        .unwrap();
     db::query("CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,content TEXT,content_hash TEXT,source_event_id BLOB,restored_from INTEGER,title TEXT NOT NULL,created_by BLOB,created_at INTEGER)")
         .execute(&pool).await.unwrap();
     let scope = Scope {
@@ -276,9 +286,17 @@ async fn cleanup_keeps_exact_history_scope_counts_and_rollback() {
         .await
         .unwrap();
     for (version, source, id) in [(1, old_source, old_chunk), (2, new_source, new_chunk)] {
-        tx.insert_version_inner(asset, version, "immutable version", "hash", source, None, None)
-            .await
-            .unwrap();
+        tx.insert_version_inner(
+            asset,
+            version,
+            "immutable version",
+            "hash",
+            source,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
         chunk(&mut tx, asset, version, id).await;
     }
     // More than two association and mutation batches. Every chunk matches
@@ -287,9 +305,17 @@ async fn cleanup_keeps_exact_history_scope_counts_and_rollback() {
         let dead_asset = Uuid::from_u128(100 + index);
         let dead_source = Uuid::from_u128(200 + index);
         seed_root(&mut tx.tx, scope, dead_asset, dead_source, "dead").await;
-        tx.insert_version_inner(dead_asset, 1, "immutable version", "hash", dead_source, None, None)
-            .await
-            .unwrap();
+        tx.insert_version_inner(
+            dead_asset,
+            1,
+            "immutable version",
+            "hash",
+            dead_source,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
         chunk(&mut tx, dead_asset, 1, Uuid::from_u128(300 + index)).await;
     }
     db::query("UPDATE oc_assets SET deleted=2 WHERE tenant_id=? AND workspace_id=? AND id<>?")
@@ -299,13 +325,15 @@ async fn cleanup_keeps_exact_history_scope_counts_and_rollback() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id<>?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(old_source)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id<>?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(old_source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     tx.tx.commit().await.unwrap();
     let mut other = transaction(&store.pool, foreign).await;
     other
@@ -318,29 +346,33 @@ async fn cleanup_keeps_exact_history_scope_counts_and_rollback() {
     let mut tx = transaction(&store.pool, scope).await;
     assert_eq!(tx.cleanup_derived_chunks_inner().await.unwrap(), 18);
     assert_eq!(tx.cleanup_derived_chunks_inner().await.unwrap(), 0);
-    let retained: Vec<Uuid> = db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_all(&mut *tx.tx)
-        .await
-        .unwrap();
+    let retained: Vec<Uuid> =
+        db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_all(&mut *tx.tx)
+            .await
+            .unwrap();
     assert_eq!(retained, vec![old_chunk]);
     // A write in this same transaction changes the next cleanup result.
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(old_source)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(old_source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     assert_eq!(tx.cleanup_derived_chunks_inner().await.unwrap(), 1);
     tx.tx.rollback().await.unwrap();
-    let count: i64 = db::query_scalar("SELECT COUNT(*) FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_one(&store.pool)
-        .await
-        .unwrap();
+    let count: i64 =
+        db::query_scalar("SELECT COUNT(*) FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
     assert_eq!(count, 19);
     let mut tx = transaction(&store.pool, scope).await;
     assert_eq!(tx.cleanup_derived_chunks_inner().await.unwrap(), 18);
@@ -357,12 +389,13 @@ async fn cleanup_keeps_exact_history_scope_counts_and_rollback() {
             .unwrap();
         assert_eq!(count, 19);
     }
-    let foreign_chunks: Vec<Uuid> = db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
-        .bind(foreign.tenant_id)
-        .bind(foreign.workspace_id)
-        .fetch_all(&store.pool)
-        .await
-        .unwrap();
+    let foreign_chunks: Vec<Uuid> =
+        db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
+            .bind(foreign.tenant_id)
+            .bind(foreign.workspace_id)
+            .fetch_all(&store.pool)
+            .await
+            .unwrap();
     assert_eq!(foreign_chunks, vec![new_chunk]);
     store.shutdown().await.unwrap();
 }
@@ -439,12 +472,14 @@ async fn cleanup_preserves_native_raw_matches_and_missing_associations() {
     }
     assert_eq!(tx.cleanup_derived_chunks_inner().await.unwrap(), 4);
     assert_eq!(tx.cleanup_derived_chunks_inner().await.unwrap(), 0);
-    let remaining: Vec<String> = db::query_scalar("SELECT marker FROM oc_chunks WHERE tenant_id=? AND workspace_id=? ORDER BY marker")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_all(&mut *tx.tx)
-        .await
-        .unwrap();
+    let remaining: Vec<String> = db::query_scalar(
+        "SELECT marker FROM oc_chunks WHERE tenant_id=? AND workspace_id=? ORDER BY marker",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .fetch_all(&mut *tx.tx)
+    .await
+    .unwrap();
     assert_eq!(
         remaining,
         vec![
@@ -468,10 +503,22 @@ async fn cleanup_empty_input_still_prepares_all_relations() {
         let dir = tempfile::tempdir().unwrap();
         let pool = Pool::open(dir.path().join("missing.db")).await.unwrap();
         for (table, sql) in [
-            ("oc_assets", "CREATE TABLE oc_assets(tenant_id BLOB,workspace_id BLOB,id BLOB,deleted INTEGER)"),
-            ("oc_versions", "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)"),
-            ("oc_events", "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)"),
-            ("oc_chunks", "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER)"),
+            (
+                "oc_assets",
+                "CREATE TABLE oc_assets(tenant_id BLOB,workspace_id BLOB,id BLOB,deleted INTEGER)",
+            ),
+            (
+                "oc_versions",
+                "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)",
+            ),
+            (
+                "oc_events",
+                "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
+            ),
+            (
+                "oc_chunks",
+                "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER)",
+            ),
         ] {
             if table != missing {
                 db::query(sql).execute(&pool).await.unwrap();
@@ -524,10 +571,7 @@ async fn cleanup_does_not_bypass_summary_foreign_keys() {
         "SELECT COUNT(*) FROM oc_chunks",
         "SELECT COUNT(*) FROM oc_summaries",
     ] {
-        let count: i64 = db::query_scalar(sql)
-            .fetch_one(&store.pool)
-            .await
-            .unwrap();
+        let count: i64 = db::query_scalar(sql).fetch_one(&store.pool).await.unwrap();
         assert_eq!(count, 1);
     }
     store.shutdown().await.unwrap();
