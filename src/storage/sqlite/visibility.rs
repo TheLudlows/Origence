@@ -12,8 +12,11 @@ pub(super) const CURRENT_CHUNK_ROWS: &str = "FROM oc_chunks c JOIN oc_assets a O
 
 /// Local S2 snapshot sources only. Preserve native Turso JSON behavior, including
 /// missing/empty support arrays; stricter Learning provenance is a separate layer.
+/// Keep the local anti-join one level deep: nested correlated NOT EXISTS
+/// overflows native Turso 0.8.2 query creation on the Windows main stack.
+/// oc_events.id is NOT NULL, so an unmatched row means a missing active source.
 /// This predicate has no parameters and requires the fixed chunk alias c.
-pub(super) const CHUNK_SUPPORT_ACTIVE: &str = "(json_extract(c.locator,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(c.locator,'$.support_sources') ss WHERE NOT EXISTS(SELECT 1 FROM oc_events se WHERE se.tenant_id=c.tenant_id AND se.workspace_id=c.workspace_id AND hex(se.id)=upper(replace(ss.value,'-','')) AND se.state='active')))";
+pub(super) const CHUNK_SUPPORT_ACTIVE: &str = "(json_extract(c.locator,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(c.locator,'$.support_sources') ss LEFT JOIN oc_events se ON se.tenant_id=c.tenant_id AND se.workspace_id=c.workspace_id AND hex(se.id)=upper(replace(ss.value,'-','')) AND se.state='active' WHERE se.id IS NULL))";
 
 /// Active asset/version root, selecting exact history when a version is supplied.
 /// Bind optional version, asset, tenant, workspace, in that order. No S2 member
@@ -64,3 +67,7 @@ impl TursoTx {
         Ok(!missing)
     }
 }
+
+#[cfg(test)]
+#[path = "visibility/predicate_tests.rs"]
+mod predicate_tests;

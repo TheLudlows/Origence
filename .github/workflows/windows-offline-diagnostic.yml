@@ -46,6 +46,8 @@ jobs:
           }
           & cargo test --locked --test local -j 1 --no-run
           if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed.' }
+          & cargo test --locked --lib -j 1 visibility::predicate_tests -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Native Turso support-predicate equivalence failed.' }
           & dumpbin /headers target/debug/origence.exe | Select-String 'stack'
           & cargo test --locked --test local -j 1 local_app::local_host_api_cli_mcp_models_and_recovery -- --exact --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Original lifecycle regression failed; inspect captured process status and output.' }
