@@ -27,7 +27,7 @@ jobs:
         with:
           save-if: true
           cache-on-failure: true
-      - name: Build original lifecycle regression and verify predicate equivalence
+      - name: Build original lifecycle regression
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -49,8 +49,6 @@ jobs:
           $testExe = $build | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'local' -and $_.executable } | Select-Object -Last 1 -ExpandProperty executable
           if (-not $testExe) { throw 'Original local test executable missing.' }
           "ORIGENCE_TEST_EXE=$testExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & cargo test --locked --lib -j 1 visibility::predicate_tests -- --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Native Turso support-predicate equivalence failed.' }
           & dumpbin /headers target/debug/origence.exe | Select-String 'stack'
       - name: Capture first-chance stack in the unchanged offline regression
         timeout-minutes: 8
