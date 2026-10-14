@@ -300,58 +300,42 @@ impl TursoTx {
         summaries: bool,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<SearchHit>> {
-        let chunks =
-            read_model::current_chunks(&mut self.tx, self.scope, None, asset_filter).await?;
+        let raw = read_model::current_rows(&mut self.tx, self.scope, None, asset_filter).await?;
+        let positions = self.local_current_positions(&raw).await?;
+        // The old initial query prepared/evaluated its summary projection even
+        // before the empty-query return. Keep native group_concat coercion/NULL.
+        let summary_terms = if summaries {
+            self.current_summary_terms(&raw, &positions).await?
+        } else {
+            HashMap::new()
+        };
         let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
         if words.is_empty() {
-            // The old initial row query evaluated local JSON even for an empty
-            // query, but did not traverse Learning until terms were nonempty.
-            let versions: Vec<_> = chunks
-                .iter()
-                .map(|chunk| (chunk.hit.asset_id, chunk.hit.version))
-                .collect();
-            self.local_support_visibility(&versions).await?;
             return Ok(Vec::new());
         }
-        let chunks = self.guard_retrieval_chunks(chunks).await?;
-        let mut summary_terms: HashMap<Uuid, String> = HashMap::new();
-        if summaries {
-            let ids: Vec<_> = chunks.iter().map(|chunk| chunk.hit.chunk_id).collect();
-            let rows = read_model::rows_by_ids(
-                &mut self.tx,
-                self.scope,
-                "oc_summaries",
-                "chunk_id,CAST(search_terms AS TEXT) AS search_terms",
-                "chunk_id",
-                &ids,
-            )
-            .await?;
-            for row in rows {
-                if let Some(value) = row
-                    .try_get::<Option<String>>("search_terms")
-                    .map_err(turso_err)?
-                {
-                    let text = summary_terms
-                        .entry(row.try_get("chunk_id").map_err(turso_err)?)
-                        .or_default();
-                    text.push(' ');
-                    text.push_str(&value);
-                }
-            }
-        }
+        let keys = positions
+            .iter()
+            .map(|index| raw.version_key(*index))
+            .collect::<StorageResult<Vec<_>>>()?;
+        let visible = self.visible_version_keys(&keys).await?;
         let mut hits = Vec::new();
-        for mut chunk in chunks {
-            let text = if summaries {
+        for (index, key) in positions.into_iter().zip(keys) {
+            if !visible.contains(&key) {
+                continue;
+            }
+            let text: Option<String> = if summaries {
                 summary_terms
-                    .get(&chunk.hit.chunk_id)
-                    .map_or("", String::as_str)
+                    .get(&index)
+                    .map(|row| row.try_get("search_terms").map_err(turso_err))
+                    .transpose()?
+                    .flatten()
             } else {
-                &chunk.search_terms
+                raw.search_terms(index)?
             };
-            let tokens: std::collections::HashSet<_> = text.split_whitespace().collect();
+            let tokens: std::collections::HashSet<_> =
+                text.as_deref().unwrap_or("").split_whitespace().collect();
             if words.is_subset(&tokens) {
-                chunk.hit.score = words.len() as f64 / tokens.len().max(1) as f64;
-                hits.push(chunk.hit);
+                hits.push(raw.hit(index, words.len() as f64 / tokens.len().max(1) as f64)?);
             }
         }
         hits.sort_by(|a, b| {

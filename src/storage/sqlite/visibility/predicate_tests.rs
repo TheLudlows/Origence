@@ -538,3 +538,84 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
     tx.tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn native_parser_short_circuit_matches_gated_support_projection() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = Pool::open(dir.path().join("parser-short-circuit.db"))
+        .await
+        .unwrap();
+    // A single known active source is sufficient for this bounded expression
+    // oracle. General source scope/visibility remains covered by other tests.
+    let active = "00000000000000000000000000000001";
+    for parser in ["\"plain\"", "null", "\"memory-semantics:v1\""] {
+        for support in [
+            "[9e999]",
+            "[10000000000000000000000000000000]",
+            "[]",
+            "null",
+        ] {
+            let locator = format!("{{\"parser\":{parser},\"support_sources\":{support}}}");
+            let mut old_tx = pool.begin().await.unwrap();
+            let old = native_turso::query_scalar::<i64>(
+                "SELECT 1 WHERE json_extract(?,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(?,'$.support_sources') WHERE upper(replace(value,'-','')) != ? OR value IS NULL)",
+            )
+            .bind(locator.as_str())
+            .bind(locator.as_str())
+            .bind(active)
+            .fetch_optional(&mut *old_tx)
+            .await
+            .map(|row| row.is_some());
+            old_tx.rollback().await.unwrap();
+            // Independent lease: a native expression failure must not make
+            // the comparison pass merely because the first query autoaborted.
+            let mut new_tx = pool.begin().await.unwrap();
+            let new: native_turso::Result<bool> = async {
+                let (semantic, kind, normalized): (bool, Option<String>, Option<String>) = native_turso::query_as(
+                    "SELECT json_extract(?,'$.parser') IS 'memory-semantics:v1',CASE WHEN json_extract(?,'$.parser') IS 'memory-semantics:v1' THEN json_type(?,'$.support_sources') END,CASE WHEN json_extract(?,'$.parser') IS 'memory-semantics:v1' THEN json_quote(json_extract(?,'$.support_sources')) END",
+                )
+                .bind(locator.as_str())
+                .bind(locator.as_str())
+                .bind(locator.as_str())
+                .bind(locator.as_str())
+                .bind(locator.as_str())
+                .fetch_one(&mut *new_tx)
+                .await?;
+                if !semantic {
+                    assert!(kind.is_none());
+                    assert!(normalized.is_none());
+                    return Ok(true);
+                }
+                if kind.is_none() {
+                    return Ok(true);
+                }
+                let values: Vec<Option<String>> = native_turso::query_scalar(
+                    "SELECT upper(replace(value,'-','')) FROM json_each(?)",
+                )
+                .bind(normalized)
+                .fetch_all(&mut *new_tx)
+                .await?;
+                Ok(values.iter().all(|source| source.as_deref() == Some(active)))
+            }
+            .await;
+            new_tx.rollback().await.unwrap();
+            match (old, new) {
+                (Ok(old), Ok(new)) => assert_eq!(old, new, "{locator}"),
+                (Err(old), Err(new)) => {
+                    assert!(
+                        matches!(&old, native_turso::Error::Native(_)),
+                        "{locator}: {old}"
+                    );
+                    assert!(
+                        matches!(&new, native_turso::Error::Native(_)),
+                        "{locator}: {new}"
+                    );
+                }
+                (old, new) => {
+                    panic!("native short-circuit mismatch for {locator}: old={old:?}, new={new:?}")
+                }
+            }
+        }
+    }
+    pool.shutdown().await.unwrap();
+}

@@ -943,8 +943,16 @@ async fn root_only_reads_do_not_decode_render_fields_or_historical_current() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert_eq!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap()[&(row.asset, 1)], row.source);
-    assert!(super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk]).await.unwrap().is_empty());
+    assert_eq!(
+        tx.active_version_roots(&[(row.asset, 1)]).await.unwrap()[&(row.asset, 1)],
+        row.source
+    );
+    assert!(
+        super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -960,33 +968,61 @@ async fn raw_root_predicates_hide_bad_keys_until_the_projection_is_consumed() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap().is_empty());
+    assert!(
+        tx.active_version_roots(&[(row.asset, 1)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_events SET id=x'31',state=x'02'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap().is_empty());
+    assert!(
+        tx.active_version_roots(&[(row.asset, 1)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_events SET state='active'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(matches!(tx.active_version_roots(&[(row.asset, 1)]).await, Err(StorageError::Backend(_))));
+    assert!(matches!(
+        tx.active_version_roots(&[(row.asset, 1)]).await,
+        Err(StorageError::Backend(_))
+    ));
     // A noncurrent row must be hidden before that malformed root UUID decodes.
     db::query("UPDATE oc_assets SET current_version=2")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk]).await.unwrap().is_empty());
+    assert!(
+        super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_assets SET deleted=1")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap().is_empty());
+    assert!(
+        tx.active_version_roots(&[(row.asset, 1)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_chunks SET asset_id=x'ff',version=x'fe'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk]).await.unwrap().is_empty());
+    assert!(
+        super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1002,8 +1038,14 @@ async fn explicit_history_ignores_invalid_current_and_hidden_kind() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert_eq!(tx.asset_view_inner(row.asset, Some(1)).await.unwrap()["content"], "body");
-    assert!(matches!(tx.asset_view_inner(row.asset, None).await, Err(StorageError::NotFound)));
+    assert_eq!(
+        tx.asset_view_inner(row.asset, Some(1)).await.unwrap()["content"],
+        "body"
+    );
+    assert!(matches!(
+        tx.asset_view_inner(row.asset, None).await,
+        Err(StorageError::NotFound)
+    ));
     db::query("UPDATE oc_assets SET kind=x'02'")
         .execute(&mut *tx.tx)
         .await
@@ -1012,12 +1054,18 @@ async fn explicit_history_ignores_invalid_current_and_hidden_kind() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(matches!(tx.asset_view_inner(row.asset, Some(1)).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.asset_view_inner(row.asset, Some(1)).await,
+        Err(StorageError::NotFound)
+    ));
     db::query("UPDATE oc_events SET state='active'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(matches!(tx.asset_view_inner(row.asset, Some(1)).await, Err(StorageError::Backend(_))));
+    assert!(matches!(
+        tx.asset_view_inner(row.asset, Some(1)).await,
+        Err(StorageError::Backend(_))
+    ));
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1073,11 +1121,14 @@ async fn current_chunks_native_filters_precede_typed_payloads() {
             .execute(&mut *tx.tx)
             .await
             .unwrap();
-        db::query(sql)
-            .execute(&mut *tx.tx)
-            .await
-            .unwrap();
-        assert!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await.unwrap().is_empty(), "{hidden}");
+        db::query(sql).execute(&mut *tx.tx).await.unwrap();
+        assert!(
+            current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None)
+                .await
+                .unwrap()
+                .is_empty(),
+            "{hidden}"
+        );
         tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }
@@ -1094,13 +1145,26 @@ async fn current_chunks_keep_selected_errors_and_hide_unmatched_raw_keys() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(matches!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await, Err(StorageError::Backend(_))));
-    assert!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), Some(Uuid::new_v4())).await.unwrap().is_empty());
+    assert!(matches!(
+        current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await,
+        Err(StorageError::Backend(_))
+    ));
+    assert!(
+        current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), Some(Uuid::new_v4()))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     db::query("UPDATE oc_chunks SET asset_id=x'ff',version=x'fe'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await.unwrap().is_empty());
+    assert!(
+        current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1129,9 +1193,10 @@ async fn current_chunk_metadata_is_read_once_per_native_version_request() {
             ids.push(id);
         }
     }
-    let (chunks, counts) = super::read_model::current_chunks_measured(&mut tx.tx, scope, Some(&ids), None)
-        .await
-        .unwrap();
+    let (chunks, counts) =
+        super::read_model::current_chunks_measured(&mut tx.tx, scope, Some(&ids), None)
+            .await
+            .unwrap();
     assert_eq!(chunks.len(), 153);
     assert_eq!(counts, [153, 9, 9, 9]);
     tx.rollback().await.unwrap();
@@ -1169,11 +1234,241 @@ async fn raw_request_compression_keeps_distinct_storage_types() {
             .await
             .unwrap();
     }
-    let (chunks, counts) = super::read_model::current_chunks_measured(&mut tx.tx, scope, None, None)
-        .await
-        .unwrap();
+    let (chunks, counts) =
+        super::read_model::current_chunks_measured(&mut tx.tx, scope, None, None)
+            .await
+            .unwrap();
     assert!(chunks.is_empty());
     assert_eq!(counts, [4, 4, 0, 0]);
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn visible_and_keyword_defer_payload_until_support_and_tokens_pass() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(70_000);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_chunks SET locator='{\"parser\":\"plain\",\"support_sources\":[9e999]}'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hit(row.chunk).await.unwrap().is_some());
+    db::query("UPDATE oc_versions SET title=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET content=x'02',locator=?")
+        .bind(json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string())
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hit(row.chunk).await.unwrap().is_none());
+    assert!(
+        tx.keyword_hits("needle", false, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    db::query("UPDATE oc_chunks SET locator='{}'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.keyword_hits("", false, None).await.unwrap().is_empty());
+    assert!(
+        tx.keyword_hits("absent", false, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        tx.keyword_hits("needle", false, None).await,
+        Err(StorageError::Backend(_))
+    ));
+    assert!(matches!(
+        tx.visible_hit(row.chunk).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn visible_hit_uses_semantic_source_override_before_root_uuid_fallback() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(70_001);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_events SET id=x'31'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET source_event_id=x'31'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let override_source = Uuid::new_v4();
+    db::query("UPDATE oc_chunks SET locator=?")
+        .bind(json!({"parser":"memory-semantics:v1","source_event_id":override_source,"support_sources":[]}).to_string())
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.visible_hit(row.chunk)
+            .await
+            .unwrap()
+            .unwrap()
+            .source_event_id,
+        override_source
+    );
+    db::query("UPDATE oc_chunks SET locator='{}'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.visible_hit(row.chunk).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn keyword_empty_query_keeps_native_json_and_summary_prepare_errors() {
+    for summaries in [false, true] {
+        let (_dir, pool) = database().await;
+        let scope = scope();
+        let mut tx = transaction(&pool, scope).await;
+        if !summaries {
+            let row = Record::new(70_002);
+            seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+            db::query("UPDATE oc_chunks SET locator='{'")
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+        }
+        assert!(matches!(
+            tx.keyword_hits("", summaries, None).await,
+            Err(StorageError::Backend(_))
+        ));
+        tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn keyword_summary_keeps_native_aggregation_and_null_terms() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(70_003);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("CREATE TABLE oc_summaries(tenant_id BLOB,workspace_id BLOB,chunk_id BLOB,search_terms)")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(
+        tx.keyword_hits("needle", true, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    for sql in [
+        "INSERT INTO oc_summaries VALUES(?,?,?,NULL)",
+        "INSERT INTO oc_summaries VALUES(?,?,?,'needle')",
+        "INSERT INTO oc_summaries VALUES(?,?,?,12)",
+    ] {
+        db::query(sql)
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(row.chunk)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+    }
+    let hits = tx.keyword_hits("needle 12", true, None).await.unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].score, 1.0);
+    assert!(
+        tx.keyword_hits("needle absent", true, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // Hit rendering never consumes terms; the keyword route does.
+    db::query("UPDATE oc_chunks SET search_terms=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hit(row.chunk).await.unwrap().is_some());
+    assert!(matches!(
+        tx.keyword_hits("needle", false, None).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn selected_payload_waits_for_other_chunk_version_support() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(70_004);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_versions SET title=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'other',?,'other')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(row.asset)
+        .bind(json!({"parser":"memory-semantics:v1","support_sources":[Uuid::new_v4()]}).to_string())
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hit(row.chunk).await.unwrap().is_none());
+    assert!(
+        tx.keyword_hits("needle", false, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn orphan_learning_hides_invalid_render_payload() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(70_005);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_events SET kind='learning'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET title=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_chunks SET content=x'02',search_terms=x'03'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.visible_hit(row.chunk).await.unwrap().is_none());
+    assert!(
+        tx.keyword_hits("needle", false, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }

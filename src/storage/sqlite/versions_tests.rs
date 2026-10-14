@@ -585,7 +585,6 @@ async fn restore_preserves_selected_tuple_order_after_root_filtering() {
     let source = Uuid::new_v4();
     seed_root(&mut tx.tx, scope, asset, source, "title").await;
     tx.insert_version_inner(asset, 1, "body", "hash", source, None, Some("title"))
-
         .await
         .unwrap();
     db::query("UPDATE oc_assets SET current_version=x'01' WHERE id=?")
@@ -607,7 +606,10 @@ async fn restore_preserves_selected_tuple_order_after_root_filtering() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(matches!(tx.restore_source_inner(asset, 1).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.restore_source_inner(asset, 1).await,
+        Err(StorageError::NotFound)
+    ));
     db::query("UPDATE oc_events SET state='active' WHERE id=?")
         .bind(source)
         .execute(&mut *tx.tx)

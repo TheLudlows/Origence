@@ -63,7 +63,8 @@ impl TursoTx {
         let asset_row = asset_row.ok_or(StorageError::NotFound)?;
         let root = roots.first().ok_or(StorageError::NotFound)?;
         // Original tuple order, only after native undeleted/active filtering.
-        let current_version: Option<i32> = asset_row.try_get("current_version").map_err(turso_err)?;
+        let current_version: Option<i32> =
+            asset_row.try_get("current_version").map_err(turso_err)?;
         let source_event_id: Uuid = root.1.try_get("source_event_id").map_err(turso_err)?;
         let title: String = title_row.try_get("title").map_err(turso_err)?;
         Ok(json!({
@@ -101,8 +102,14 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        let requested = asset.as_ref().map(|row| row.try_get::<AssociationKey>("requested_version").map_err(turso_err))
-            .transpose()?.unwrap_or_else(|| AssociationKey::from_optional_i32(None));
+        let requested = asset
+            .as_ref()
+            .map(|row| {
+                row.try_get::<AssociationKey>("requested_version")
+                    .map_err(turso_err)
+            })
+            .transpose()?
+            .unwrap_or_else(|| AssociationKey::from_optional_i32(None));
         let requests = vec![vec![AssociationKey::from_uuid(id), requested.clone()]];
         let roots = read_model::live_root_rows(&mut self.tx, self.scope, &requests).await?;
         let row = native_turso::query(
