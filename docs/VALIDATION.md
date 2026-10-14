@@ -698,3 +698,82 @@ SLO、维护中断/磁盘不足、任意断电与在线跨库备份仍不在本�
 最后归档只更新当前状态、实施/验证记录并移除临时 preparation workflow，不改
 运行源代码、依赖锁或测试。归档精确 head 的适用 CI 仍须通过，结果在草稿
 [PR #58](https://github.com/TheLudlows/Origence/pull/58) 保留；不自动合入。
+
+
+## PR #59：无 JOIN 分阶段验证
+
+2026-10-14，基于 main `1d5e0554b38e12df094a894f11a23fb26a117568` 分阶段提交，
+保持 PR 待验收，不在中间阶段合入。历史失败不删除、不改记为通过。
+
+### 原故障与首批闭环
+
+Windows 原 `local_app::local_host_api_cli_mcp_models_and_recovery` 曾在宿主终止后
+离线 search 失败；调试日志记录 `0xc00000fd` / `-1073741571`，栈含 Turso parser。
+该进程中止不是一般断言失败。修复保持 Windows 主线程原 1 MiB 栈和原用例断言，
+按应用查询路径拆分关联；没有通过扩大线程栈、跳过用例或替换断言消除故障。
+这不是 Turso parser 任意输入/复杂 SQL 的通用修复，也不是完整调用链栈上限证明。
+
+首批 `3969f811c09b854fa5fd322572991cbe8afabf2d` 的
+[正式 CI 38504115746](https://github.com/TheLudlows/Origence/actions/runs/38504115746) 与
+[Windows 验证 38504115832](https://github.com/TheLudlows/Origence/actions/runs/38504115832)
+均成功：Linux/Windows 默认各 107 lib + 222 integration，原离线单例 1 passed；
+无默认特性 83 lib + 99 integration。该时点仍有 37 处冻结关联债务，不能称全仓无 JOIN。
+后续发现的异常 event.kind 严格解码差异由后续阶段修复，首批通过不掩盖此限制。
+
+### 分领域记录
+
+以下计数只归属所列已测 head。Windows“原例”指上述未改的离线恢复用例。
+fmt/Clippy 阻断后的步骤均不视为运行或通过。
+
+| 阶段 / head | 已确认结果 | 失败或未运行边界 |
+| --- | --- | --- |
+| B `fc2e454c` | Windows 125 lib + 原例 1；剩 27 债 | Windows fmt 阻断；Linux Clippy items_after_test_module 阻断完整测试；后续修正 `a4cde5c7` |
+| C `7e364843` → `97b7b9e` | 前头 Windows 134 lib + 原例 1；修正头适用 CI 成功，Linux 134 + 225；剩 24 债 | 前头 Windows fmt / Linux dead_code 阻断；删除无生产调用 wrapper，未压制 lint |
+| D `25d382d4` | Linux 147 + 225；Windows 147 + 原例 1；剩 22 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
+| F `ec1281d0` | Linux 154 + 225；Windows 重试 154 + 原例 1；剩 16 债 | Windows 首次官方工具链下载 TCP 10060 超时，未编译/测试；重试后续 fmt 阻断 |
+| G `e456b92c` | Linux 161 + 225；Windows 161 + 原例 1；剩 9 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
+| H `e9b28d82` | Linux 168 + 225；Windows 168 + 原例 1；剩 7 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
+| I `b538a3e1` | Linux 177 + 225；Windows 177 + 原例 1；剩 4 债 | Windows 后续完整验证 fmt 阻断，无默认特性未运行 |
+
+I 阶段原始运行：[38519881075](https://github.com/TheLudlows/Origence/actions/runs/38519881075)、
+[38519881083](https://github.com/TheLudlows/Origence/actions/runs/38519881083)。
+格式修正头 `60222e3660ca5a7b2de375bc4fd54d452d5e4a6c` 的
+[普通 CI 38520951077](https://github.com/TheLudlows/Origence/actions/runs/38520951077) 与
+[Windows 38520951080](https://github.com/TheLudlows/Origence/actions/runs/38520951080)
+全部适用检查终态成功。Linux/Windows 默认均 177 lib + 225 integration，Windows
+原离线单例 1 passed；Linux 无默认特性 132 lib + 102 integration。Windows 无默认
+特性仅运行 `cargo check --lib`，不是测试通过。Python 两组 100 + 42 通过，
+另行 guard 测试 43 通过。
+
+E 实现头 `f4f715fa` 完成最后 4 处关联改写（含测试 fixture），全仓 927 SQL 输入零债、零 unknown，
+43 项 guard 测试通过。新增 E 回归为 3 lib + 3 integration；Linux 运行
+[38523749953](https://github.com/TheLudlows/Origence/actions/runs/38523749953) 全部成功，默认 180 lib + 228 integration。Windows 运行
+[38523749817](https://github.com/TheLudlows/Origence/actions/runs/38523749817) 为 180 lib + 原离线单例 1 passed；后续 Validate 因 fmt 阻断，
+无默认特性未运行，不能称该头 Windows 全部验证通过。
+
+最终格式修正与文档归档仍需其精确 head 的适用 Windows/Linux 检查通过。
+最新归档 head、运行链接及终态以 [PR #59 Checks](https://github.com/TheLudlows/Origence/pull/59/checks)
+和 PR 正文精确记录为准，不将已知阶段计数移记到未来提交。
+交审保留 branch-gated 临时 workflow，后续另行审查，不在本轮按 Issue #61 删除。
+
+### 保留的合同与验证边界
+
+查询改为参数化单表读取，使用固定槽位批量和原生 SQLite/Turso 比较，在原事务
+快照内以 Rust 关联；不替换成跨表子查询、CTE 或新的逐项 metadata SQL。
+保留权限与 raw session writer 差别、current/historical 差别、缺文件处理、JSON
+错误消费顺序、历史多 owner、原生 NULL/类型比较及 source/version/generation/
+publication 校验。既有逐 version JSON/闭包验证成本并未全部消除。
+
+八槽限制是每批关系请求数，不是 payload 字节或总内存预算；ID 元数据为
+O(total ID bytes)，没有复制完整 payload 或添加新的输入大小上限。
+E 阶段允许对 publication plan 的异常 chunks 根类型明确返回
+`Unavailable("invalid message publication plan")`；正常数组、缺失及 null 的 pending
+行为保留，异常根类型即使处于 pending 也明确报错。此项不能扩张为其他异常形状的
+通用改约，也不涉及 Issue #60/#61、schema 精简或暂停的命名清理。
+
+`tools/check_no_join_sql.py` 检查展开后的应用 SQL，包含测试和真实执行 sink；
+冻结 baseline 只能缩减，最终接受需零债且零 unresolved。它是有界静态回归检查，
+不是 Rust 编译器、全程序证明或原生 parser 安全证明；固定槽位和静态展开上限
+不提供通用内存/性能保证。Python 检查、独立代码审查与实际 Windows/Linux 测试
+分别提供证据，不能互相替代。真实模型、生产 SLO、任意断电与在线跨库备份验收
+不因本轮查询改写而自动完成。

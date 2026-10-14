@@ -1,15 +1,36 @@
 # Origence · 当前状态
 
-更新：2026-10-13。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-14。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
-## Turso / LanceDB 正式接入（工程 CI 通过，草稿待审）
+## PR #59：Windows 离线恢复与无 JOIN 查询（草稿待审）
+
+[PR #59](https://github.com/TheLudlows/Origence/pull/59) 各领域生产查询改写已完成：
+参数化单表批量读取，在原事务快照内用 Rust 关联，不以跨表 EXISTS/IN/CTE 替代 JOIN。
+权限、历史版本、source/version/generation/publication 校验和最终返回前复核继续保留。
+E 实现头 `f4f715fa` 的全仓有界检查为 927 SQL 输入、零关联债务、零 unknown，
+43 项 guard 测试通过；Linux 默认 180 lib + 228 integration 通过，Windows
+180 lib 与原离线恢复单例 1 通过，后续完整验证被 fmt 阻断。
+
+此前格式修正头 `60222e3660ca5a7b2de375bc4fd54d452d5e4a6c` 全部适用 CI 成功，
+Linux/Windows 默认均 177 lib + 225 integration。最终格式与文档归档头仍须
+单独验收，精确 head 及终态结果以 [PR #59 Checks](https://github.com/TheLudlows/Origence/pull/59/checks)
+和 PR 正文记录为准；阶段通过不代表后续提交通过，PR 仍为草稿未合入。
+分阶段失败与覆盖范围见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
+
+Windows 主线程原 1 MiB 栈未扩大，原离线回归与断言保留并在多个阶段提交通过；
+这证明已测应用查询路径的修复，不代表 Turso parser 的通用栈溢出问题已解决。
+八槽批量限制的是关联请求数，不是字节或总内存上限；ID 元数据仍为 O(total ID bytes)，
+不复制完整 payload，也未新增输入大小限制。Issue #60/#61、schema 精简和命名清理
+不在本轮实施范围。
+
+## Turso / LanceDB 正式接入（已合入）
 
 [PR #58](https://github.com/TheLudlows/Origence/pull/58) 基于恢复后的主干
 `86fac48`，接入 Turso Database 0.8.2 Rust 引擎权威存储与 LanceDB 0.40.0
 原生 chunk 全文/向量检索。实现提交 `b50e8748` 的[工程 CI](https://github.com/TheLudlows/Origence/actions/runs/38405514854)
 全部适用作业通过：无默认特性 78 + 99、默认特性 93 + 221 项 Rust 测试，
-HTTP/MCP、受控模型进程恢复及 keyword 种子评估均完成。PR 保持草稿未合入；
-归档后精确 head 的 CI 以 PR 为准。真实模型质量、生产 SLO 与任意断电保证
+HTTP/MCP、受控模型进程恢复及 keyword 种子评估均完成。PR #58 已合入 main
+`1d5e0554b38e12df094a894f11a23fb26a117568`。真实模型质量、生产 SLO 与任意断电保证
 未验收。范围、发布协议与检查见
 [实施合同](superpowers/plans/2026-10-13-turso-lance-integration.md)。
 
@@ -25,6 +46,8 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 真实模型、官方 Smoke/Full 与真实评测导入保持 NOT_RUN；不扩大旧库迁移范围，不修改历史实验结论。
 
 ## 当前 CI 范围
+
+以下为 2026-10-12 配置记录；PR #59 另行实际运行 Windows 专项验证，其覆盖以精确 head 的记录为准。最终交审保留仅针对该分支启用的临时 workflow，待后续审查；本轮不实施 Issue #61 清理。
 
 2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仍仅在主干运行。
 

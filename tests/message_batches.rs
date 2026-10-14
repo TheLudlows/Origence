@@ -291,14 +291,8 @@ async fn receipt_chunks_missing_null_and_arrays_keep_status_semantics() {
         ),
     ] {
         for state in ["pending", "completed"] {
-            let saved = replace_receipt_chunks(
-                &service,
-                &receipt,
-                &original,
-                state,
-                chunks.as_ref(),
-            )
-            .await;
+            let saved =
+                replace_receipt_chunks(&service, &receipt, &original, state, chunks.as_ref()).await;
             let expected = if state == "pending" {
                 PublicationStatus::Pending
             } else {
@@ -349,14 +343,8 @@ async fn receipt_non_array_chunks_fail_closed_with_safe_unavailable_error() {
         ("false", json!(false)),
     ] {
         for state in ["pending", "completed"] {
-            let saved = replace_receipt_chunks(
-                &service,
-                &receipt,
-                &original,
-                state,
-                Some(&chunks),
-            )
-            .await;
+            let saved =
+                replace_receipt_chunks(&service, &receipt, &original, state, Some(&chunks)).await;
             let error = storage_status(&service, &auth, &receipt).await.unwrap_err();
             assert!(
                 matches!(&error, StorageError::Unavailable(message)
@@ -406,14 +394,8 @@ async fn receipt_malformed_array_string_keeps_native_backend_error() {
         Value::Array(null_prefix),
     ] {
         for state in ["pending", "failed", "completed"] {
-            let saved = replace_receipt_chunks(
-                &service,
-                &receipt,
-                &original,
-                state,
-                Some(&chunks),
-            )
-            .await;
+            let saved =
+                replace_receipt_chunks(&service, &receipt, &original, state, Some(&chunks)).await;
             let error = storage_status(&service, &auth, &receipt).await.unwrap_err();
             assert!(
                 matches!(&error, StorageError::Backend(_)),

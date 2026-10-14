@@ -203,63 +203,118 @@ mod tests {
     #[tokio::test]
     async fn confirm_committed_keeps_missing_source_noop_and_exact_retry_fields() {
         let dir = tempfile::tempdir().unwrap();
-        let pool = Pool::open(dir.path().join("ledger-confirm.db")).await.unwrap();
+        let pool = Pool::open(dir.path().join("ledger-confirm.db"))
+            .await
+            .unwrap();
         for sql in [
             "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
             "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_id BLOB,surface TEXT,generation INTEGER,state TEXT,updated_at INTEGER,attempt INTEGER,last_error TEXT,next_retry_at INTEGER)",
         ] {
             native_turso::query(sql).execute(&pool).await.unwrap();
         }
-        let scope = Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() };
+        let scope = Scope {
+            tenant_id: Uuid::new_v4(),
+            workspace_id: Uuid::new_v4(),
+        };
         let mut tx = TursoTx {
-            tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(), scope,
-            principal_id: Uuid::new_v4(), required: Vec::new(), command: None,
+            tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
+            scope,
+            principal_id: Uuid::new_v4(),
+            required: Vec::new(),
+            command: None,
         };
         let key = LedgerKey {
-            scope, source: SourceVersion { source_id: Uuid::new_v4(), version: 2 },
-            artifact_id: Uuid::new_v4(), surface: Surface::Vector, generation: 3,
+            scope,
+            source: SourceVersion {
+                source_id: Uuid::new_v4(),
+                version: 2,
+            },
+            artifact_id: Uuid::new_v4(),
+            surface: Surface::Vector,
+            generation: 3,
         };
-        native_turso::query("INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,'retry_wait',1,4,'keep',123)")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(key.source.source_id).bind(key.source.version)
-            .bind(key.artifact_id).bind(key.surface.as_str()).bind(key.generation)
-            .execute(&mut *tx.tx).await.unwrap();
+        native_turso::query(
+            "INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,'retry_wait',1,4,'keep',123)",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(key.source.source_id)
+        .bind(key.source.version)
+        .bind(key.artifact_id)
+        .bind(key.surface.as_str())
+        .bind(key.generation)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
         // Missing and withdrawn sources remain successful no-ops.
         tx.confirm_committed_inner(key).await.unwrap();
         native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'retracted')")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(key.source.source_id)
-            .execute(&mut *tx.tx).await.unwrap();
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(key.source.source_id)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
         let before: (String, i64, i64, String, i64) = native_turso::query_as(
             "SELECT state,updated_at,attempt,last_error,next_retry_at FROM oc_artifact_ledger",
-        ).fetch_one(&mut *tx.tx).await.unwrap();
+        )
+        .fetch_one(&mut *tx.tx)
+        .await
+        .unwrap();
         assert_eq!(before, ("retry_wait".into(), 1, 4, "keep".into(), 123));
-        native_turso::query("UPDATE oc_events SET state='active'").execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("UPDATE oc_events SET state='active'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         let mut wrong = key;
         wrong.generation += 1;
         tx.confirm_committed_inner(wrong).await.unwrap();
         let unchanged: String = native_turso::query_scalar("SELECT state FROM oc_artifact_ledger")
-            .fetch_one(&mut *tx.tx).await.unwrap();
+            .fetch_one(&mut *tx.tx)
+            .await
+            .unwrap();
         assert_eq!(unchanged, "retry_wait");
         tx.confirm_committed_inner(key).await.unwrap();
         let after: (String, i64, String, i64) = native_turso::query_as(
             "SELECT state,attempt,last_error,next_retry_at FROM oc_artifact_ledger",
-        ).fetch_one(&mut *tx.tx).await.unwrap();
+        )
+        .fetch_one(&mut *tx.tx)
+        .await
+        .unwrap();
         assert_eq!(after, ("committed".into(), 4, "keep".into(), 123));
-        native_turso::query("UPDATE oc_artifact_ledger SET state='orphan'").execute(&mut *tx.tx).await.unwrap();
+        native_turso::query("UPDATE oc_artifact_ledger SET state='orphan'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
         let state: String = native_turso::query_scalar("SELECT state FROM oc_artifact_ledger")
-            .fetch_one(&mut *tx.tx).await.unwrap();
+            .fetch_one(&mut *tx.tx)
+            .await
+            .unwrap();
         assert_eq!(state, "orphan");
         wrong.scope.workspace_id = Uuid::new_v4();
-        assert!(matches!(tx.confirm_committed_inner(wrong).await, Err(StorageError::Forbidden)));
+        assert!(matches!(
+            tx.confirm_committed_inner(wrong).await,
+            Err(StorageError::Forbidden)
+        ));
         tx.tx.rollback().await.unwrap();
         // An absent source must not bypass preparing the ledger statement.
-        native_turso::query("DROP TABLE oc_artifact_ledger").execute(&pool).await.unwrap();
+        native_turso::query("DROP TABLE oc_artifact_ledger")
+            .execute(&pool)
+            .await
+            .unwrap();
         let mut tx = TursoTx {
-            tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(), scope,
-            principal_id: Uuid::new_v4(), required: Vec::new(), command: None,
+            tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
+            scope,
+            principal_id: Uuid::new_v4(),
+            required: Vec::new(),
+            command: None,
         };
-        assert!(matches!(tx.confirm_committed_inner(key).await, Err(StorageError::Backend(_))));
+        assert!(matches!(
+            tx.confirm_committed_inner(key).await,
+            Err(StorageError::Backend(_))
+        ));
         drop(tx);
         pool.shutdown().await.unwrap();
     }

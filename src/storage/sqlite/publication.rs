@@ -24,7 +24,10 @@ struct BatchPublicationRow {
 }
 
 impl BatchPublicationRow {
-    fn from_metadata(row: &native_turso::Row, distinct_chunk_ids: i64) -> native_turso::Result<Self> {
+    fn from_metadata(
+        row: &native_turso::Row,
+        distinct_chunk_ids: i64,
+    ) -> native_turso::Result<Self> {
         Ok(Self {
             operation: row.try_get("operation")?,
             state: row.try_get("state")?,
@@ -66,8 +69,12 @@ impl TursoTx {
              json_type(payload,'$.publication.memories[0].chunks') AS chunk_type \
              FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
-        .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.job_id)
-        .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(receipt.job_id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(turso_err)?;
         let row = row.ok_or(StorageError::NotFound)?;
         let kind: Option<&str> = row.try_get("chunk_type").map_err(turso_err)?;
         if !matches!(kind, None | Some("null" | "array")) {
@@ -79,7 +86,9 @@ impl TursoTx {
         // header decoding and early receipt/source/state returns. A late bad
         // element must not be hidden by a duplicate, a NULL ID, or Pending.
         let count: Option<i64> = row.try_get("chunk_count").map_err(turso_err)?;
-        let distinct = self.publication_distinct_ids(receipt.job_id, count.unwrap_or(0)).await?;
+        let distinct = self
+            .publication_distinct_ids(receipt.job_id, count.unwrap_or(0))
+            .await?;
         let row = BatchPublicationRow::from_metadata(&row, distinct).map_err(turso_err)?;
         let invalid =
             || StorageError::Conflict("receipt does not match accepted message batch".into());
@@ -141,8 +150,12 @@ impl TursoTx {
         {
             return Ok(PublicationStatus::Invisible);
         }
-        let expected = self.publication_expected_chunks(receipt.job_id, chunk_count).await?;
-        let visible = self.publication_visible_count(receipt, &spec.embedding_profile, row.generation, &expected).await?;
+        let expected = self
+            .publication_expected_chunks(receipt.job_id, chunk_count)
+            .await?;
+        let visible = self
+            .publication_visible_count(receipt, &spec.embedding_profile, row.generation, &expected)
+            .await?;
         let count: i64 = native_turso::query_scalar(
             "SELECT count(*) FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.asset_id).bind(receipt.target_version)
@@ -179,10 +192,18 @@ impl TursoTx {
         for start in (0..count).step_by(PUBLICATION_SLOTS) {
             let mut query = native_turso::query(PUBLICATION_IDS);
             for slot in 0..PUBLICATION_SLOTS {
-                query = query.bind(format!("$.publication.memories[0].chunks[{}]", start + slot));
+                query = query.bind(format!(
+                    "$.publication.memories[0].chunks[{}]",
+                    start + slot
+                ));
             }
-            let row = query.bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+            let row = query
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(job)
+                .fetch_one(&mut *self.tx)
+                .await
+                .map_err(turso_err)?;
             for slot in 0..PUBLICATION_SLOTS.min(count - start) {
                 if start + slot != 0 {
                     metadata.push(',');
@@ -192,10 +213,17 @@ impl TursoTx {
         }
         metadata.push(']');
         native_turso::query_scalar("SELECT count(DISTINCT value) FROM json_each(?)")
-            .bind(metadata).fetch_one(&mut *self.tx).await.map_err(turso_err)
+            .bind(metadata)
+            .fetch_one(&mut *self.tx)
+            .await
+            .map_err(turso_err)
     }
 
-    async fn publication_expected_chunks(&mut self, job: Uuid, count: i64) -> StorageResult<ExpectedChunks> {
+    async fn publication_expected_chunks(
+        &mut self,
+        job: Uuid,
+        count: i64,
+    ) -> StorageResult<ExpectedChunks> {
         let count = usize::try_from(count)
             .map_err(|_| StorageError::Backend("invalid publication chunk count".into()))?;
         let mut expected: ExpectedChunks = HashMap::new();
@@ -205,8 +233,13 @@ impl TursoTx {
                 let path = format!("$.publication.memories[0].chunks[{}]", start + slot);
                 query = query.bind(&path).bind(path);
             }
-            let row = query.bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+            let row = query
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(job)
+                .fetch_one(&mut *self.tx)
+                .await
+                .map_err(turso_err)?;
             for slot in 0..PUBLICATION_SLOTS.min(count - start) {
                 let id: Option<String> = row.try_get(slot * 2).map_err(turso_err)?;
                 let dimension: Option<i64> = row.try_get(slot * 2 + 1).map_err(turso_err)?;
@@ -260,37 +293,60 @@ impl TursoTx {
                 }
             }
         }
-        let indexed = self.publication_index_matches(&requests, profile, generation).await?;
-        let vector = self.publication_ledger_matches(&chunks, receipt, generation, "vector").await?;
-        let full_text = self.publication_ledger_matches(&chunks, receipt, generation, "full_text").await?;
+        let indexed = self
+            .publication_index_matches(&requests, profile, generation)
+            .await?;
+        let vector = self
+            .publication_ledger_matches(&chunks, receipt, generation, "vector")
+            .await?;
+        let full_text = self
+            .publication_ledger_matches(&chunks, receipt, generation, "full_text")
+            .await?;
         Ok((0..chunks.len())
-            .filter(|index| indexed.contains(index) && vector.contains(index) && full_text.contains(index))
+            .filter(|index| {
+                indexed.contains(index) && vector.contains(index) && full_text.contains(index)
+            })
             .count() as i64)
     }
 
-    async fn publication_chunk_support(&mut self, rows: &[native_turso::Row]) -> StorageResult<Vec<bool>> {
+    async fn publication_chunk_support(
+        &mut self,
+        rows: &[native_turso::Row],
+    ) -> StorageResult<Vec<bool>> {
         let mut visible = vec![true; rows.len()];
         let mut members = Vec::new();
         for (index, row) in rows.iter().enumerate() {
             if !row.try_get::<bool>("semantic").map_err(turso_err)? {
                 continue;
             }
-            let Some(kind) = row.try_get::<Option<&str>>("support_type").map_err(turso_err)? else {
+            let Some(kind) = row
+                .try_get::<Option<&str>>("support_type")
+                .map_err(turso_err)?
+            else {
                 continue;
             };
             let text: &str = row.try_get("support_json").map_err(turso_err)?;
-            members.extend(support_members(kind, text)?.into_iter().map(|value| (index, value)));
+            members.extend(
+                support_members(kind, text)?
+                    .into_iter()
+                    .map(|value| (index, value)),
+            );
         }
         let mut normalized = Vec::new();
         for batch in members.chunks(READ_KEYS) {
             let values: Vec<_> = batch.iter().map(|(_, value)| value.as_str()).collect();
-            let rows = native_turso::query("SELECT key,upper(replace(value,'-','')) AS source FROM json_each(?)")
-                .bind(format!("[{}]", values.join(",")))
-                .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            let rows = native_turso::query(
+                "SELECT key,upper(replace(value,'-','')) AS source FROM json_each(?)",
+            )
+            .bind(format!("[{}]", values.join(",")))
+            .fetch_all(&mut *self.tx)
+            .await
+            .map_err(turso_err)?;
             for row in rows {
                 let offset: usize = row.try_get("key").map_err(turso_err)?;
-                let index = batch.get(offset).map(|(index, _)| *index)
-                    .ok_or_else(|| StorageError::Backend("invalid normalized support index".into()))?;
+                let index = batch.get(offset).map(|(index, _)| *index).ok_or_else(|| {
+                    StorageError::Backend("invalid normalized support index".into())
+                })?;
                 if let Some(source) = row.try_get::<Option<String>>("source").map_err(turso_err)? {
                     normalized.push((index, source));
                 } else {
@@ -298,7 +354,10 @@ impl TursoTx {
                 }
             }
         }
-        let mut sources: Vec<_> = normalized.iter().map(|(_, source)| source.clone()).collect();
+        let mut sources: Vec<_> = normalized
+            .iter()
+            .map(|(_, source)| source.clone())
+            .collect();
         sources.sort_unstable();
         sources.dedup();
         let mut active = HashSet::new();
@@ -308,7 +367,8 @@ impl TursoTx {
                 vec!["?"; batch.len()].join(","),
             );
             let mut query = native_turso::query_scalar::<String>(&sql)
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id);
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id);
             for source in batch {
                 query = query.bind(source);
             }
@@ -335,13 +395,18 @@ impl TursoTx {
             let batch = &requests[start..(start + PUBLICATION_SLOTS).min(requests.len())];
             let mut query = native_turso::query(PUBLICATION_INDEX);
             for slot in 0..PUBLICATION_SLOTS {
-                query = query.bind(batch.get(slot).map(|(_, id, _)| id.clone()))
+                query = query
+                    .bind(batch.get(slot).map(|(_, id, _)| id.clone()))
                     .bind(batch.get(slot).map(|(_, _, dimension)| *dimension));
             }
-            query = query.bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-                .bind(profile).bind(generation);
+            query = query
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(profile)
+                .bind(generation);
             for slot in 0..PUBLICATION_SLOTS {
-                query = query.bind(batch.get(slot).map(|(_, id, _)| id.clone()))
+                query = query
+                    .bind(batch.get(slot).map(|(_, id, _)| id.clone()))
                     .bind(batch.get(slot).map(|(_, _, dimension)| *dimension));
             }
             for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
@@ -370,8 +435,13 @@ impl TursoTx {
             for slot in 0..PUBLICATION_SLOTS {
                 query = query.bind(batch.get(slot).map(|chunk| chunk.id.clone()));
             }
-            query = query.bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-                .bind(receipt.source_event_id).bind(receipt.target_version).bind(generation).bind(surface);
+            query = query
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(receipt.source_event_id)
+                .bind(receipt.target_version)
+                .bind(generation)
+                .bind(surface);
             for slot in 0..PUBLICATION_SLOTS {
                 query = query.bind(batch.get(slot).map(|chunk| chunk.id.clone()));
             }
@@ -401,7 +471,9 @@ mod tests {
 
     async fn database() -> (tempfile::TempDir, Pool, TursoTx, IngestReceipt) {
         let dir = tempfile::tempdir().unwrap();
-        let pool = Pool::open(dir.path().join("publication-batches.db")).await.unwrap();
+        let pool = Pool::open(dir.path().join("publication-batches.db"))
+            .await
+            .unwrap();
         for sql in [
             "CREATE TABLE oc_jobs(tenant_id BLOB,workspace_id BLOB,id BLOB,payload TEXT)",
             "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)",
@@ -414,13 +486,21 @@ mod tests {
         }
         let tx = TursoTx {
             tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
-            scope: Scope { tenant_id: Uuid::new_v4(), workspace_id: Uuid::new_v4() },
-            principal_id: Uuid::new_v4(), required: Vec::new(), command: None,
+            scope: Scope {
+                tenant_id: Uuid::new_v4(),
+                workspace_id: Uuid::new_v4(),
+            },
+            principal_id: Uuid::new_v4(),
+            required: Vec::new(),
+            command: None,
         };
         let receipt = IngestReceipt {
-            batch_id: "batch".into(), session_id: "session".into(),
-            asset_id: Uuid::new_v4(), source_event_id: Uuid::new_v4(),
-            job_id: Uuid::new_v4(), target_version: 1,
+            batch_id: "batch".into(),
+            session_id: "session".into(),
+            asset_id: Uuid::new_v4(),
+            source_event_id: Uuid::new_v4(),
+            job_id: Uuid::new_v4(),
+            target_version: 1,
             accepted_spec: AcceptedMessageSpec::raw_only("fixture"),
         };
         (dir, pool, tx, receipt)
@@ -430,30 +510,65 @@ mod tests {
     async fn publication_metadata_preserves_ids_and_dimensions_at_batch_boundaries() {
         let (_dir, pool, mut tx, receipt) = database().await;
         for count in [0usize, 7, 8, 9, 31, 32, 33, 127, 128, 129] {
-            let chunks: Vec<_> = (0..count).map(|index| {
-                let dimension = if index == 0 { 4096 } else { 1 };
-                json!({"id":format!("id-{index}"),"embedding":vec![0; dimension]})
-            }).collect();
+            let chunks: Vec<_> = (0..count)
+                .map(|index| {
+                    let dimension = if index == 0 { 4096 } else { 1 };
+                    json!({"id":format!("id-{index}"),"embedding":vec![0; dimension]})
+                })
+                .collect();
             let payload = json!({"publication":{"memories":[{"chunks":chunks}]}}).to_string();
-            native_turso::query("DELETE FROM oc_jobs").execute(&mut *tx.tx).await.unwrap();
+            native_turso::query("DELETE FROM oc_jobs")
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
             native_turso::query("INSERT INTO oc_jobs VALUES(?,?,?,?)")
-                .bind(tx.scope.tenant_id).bind(tx.scope.workspace_id).bind(receipt.job_id).bind(payload)
-                .execute(&mut *tx.tx).await.unwrap();
-            assert_eq!(tx.publication_distinct_ids(receipt.job_id, count as i64).await.unwrap(), count as i64);
-            let expected = tx.publication_expected_chunks(receipt.job_id, count as i64).await.unwrap();
+                .bind(tx.scope.tenant_id)
+                .bind(tx.scope.workspace_id)
+                .bind(receipt.job_id)
+                .bind(payload)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+            assert_eq!(
+                tx.publication_distinct_ids(receipt.job_id, count as i64)
+                    .await
+                    .unwrap(),
+                count as i64
+            );
+            let expected = tx
+                .publication_expected_chunks(receipt.job_id, count as i64)
+                .await
+                .unwrap();
             assert_eq!(expected.len(), count);
             for index in 0..count {
-                assert_eq!(expected[&format!("ID{index}")], HashSet::from([if index == 0 { 4096 } else { 1 }]));
+                assert_eq!(
+                    expected[&format!("ID{index}")],
+                    HashSet::from([if index == 0 { 4096 } else { 1 }])
+                );
             }
         }
         // Cross-page duplicates, NULL IDs and numeric/text identities retain
         // native DISTINCT. Normalization must preserve every dimension witness.
         let chunks = r#"[{"id":"a-b","embedding":[0]},{"id":"AB","embedding":[0,0]},{"id":1},{"id":1.0},{"id":true},{"id":"1"},{"id":null},{},{"id":"a-b"}]"#;
         native_turso::query("UPDATE oc_jobs SET payload=?")
-            .bind(format!("{{\"publication\":{{\"memories\":[{{\"chunks\":{chunks}}}]}}}}"))
-            .execute(&mut *tx.tx).await.unwrap();
-        assert_eq!(tx.publication_distinct_ids(receipt.job_id, 9).await.unwrap(), 4);
-        assert_eq!(tx.publication_expected_chunks(receipt.job_id, 9).await.unwrap()["AB"], HashSet::from([1, 2]));
+            .bind(format!(
+                "{{\"publication\":{{\"memories\":[{{\"chunks\":{chunks}}}]}}}}"
+            ))
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        assert_eq!(
+            tx.publication_distinct_ids(receipt.job_id, 9)
+                .await
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            tx.publication_expected_chunks(receipt.job_id, 9)
+                .await
+                .unwrap()["AB"],
+            HashSet::from([1, 2])
+        );
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }
@@ -463,13 +578,22 @@ mod tests {
         let (_dir, pool, mut tx, receipt) = database().await;
         let scope = tx.scope;
         native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,?,?)")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(receipt.asset_id)
-            .bind(receipt.target_version).bind(receipt.source_event_id)
-            .execute(&mut *tx.tx).await.unwrap();
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(receipt.asset_id)
+            .bind(receipt.target_version)
+            .bind(receipt.source_event_id)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         let support = Uuid::new_v4();
         native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active')")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(support)
-            .execute(&mut *tx.tx).await.unwrap();
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(support)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         let mut expected = HashMap::new();
         // Short BLOBs are legal native keys in the old count predicate. They
         // must not acquire a UUID decoder while joining these scoped witnesses.
@@ -478,36 +602,93 @@ mod tests {
             expected.insert(format!("{index:04X}"), HashSet::from([1, 2]));
             let locator = if index == 0 {
                 json!({"parser":"memory-semantics:v1","support_sources":[support],"semantic_status":7}).to_string()
-            } else { "{}".into() };
+            } else {
+                "{}".into()
+            };
             native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(&id).bind(receipt.asset_id)
-                .bind(receipt.target_version).bind(locator).execute(&mut *tx.tx).await.unwrap();
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(&id)
+                .bind(receipt.asset_id)
+                .bind(receipt.target_version)
+                .bind(locator)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
             for _ in 0..2 {
-                native_turso::query("INSERT INTO oc_index_entries VALUES(?,?,?,'content','fixture',2,3,'ready')")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(&id)
-                    .execute(&mut *tx.tx).await.unwrap();
+                native_turso::query(
+                    "INSERT INTO oc_index_entries VALUES(?,?,?,'content','fixture',2,3,'ready')",
+                )
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(&id)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
             }
             for surface in ["vector", "full_text"] {
-                native_turso::query("INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,'chunk',?,?,3,'committed')")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(receipt.source_event_id)
-                    .bind(receipt.target_version).bind(&id).bind(surface)
-                    .execute(&mut *tx.tx).await.unwrap();
+                native_turso::query(
+                    "INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,'chunk',?,?,3,'committed')",
+                )
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(receipt.source_event_id)
+                .bind(receipt.target_version)
+                .bind(&id)
+                .bind(surface)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
             }
         }
-        assert_eq!(tx.publication_visible_count(&receipt, "fixture", 3, &expected).await.unwrap(), 129);
-        native_turso::query("UPDATE oc_events SET state='retracted' WHERE id=?").bind(support)
-            .execute(&mut *tx.tx).await.unwrap();
+        assert_eq!(
+            tx.publication_visible_count(&receipt, "fixture", 3, &expected)
+                .await
+                .unwrap(),
+            129
+        );
+        native_turso::query("UPDATE oc_events SET state='retracted' WHERE id=?")
+            .bind(support)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         // Only the unsupported chunk disappears, not the whole version.
-        assert_eq!(tx.publication_visible_count(&receipt, "fixture", 3, &expected).await.unwrap(), 128);
+        assert_eq!(
+            tx.publication_visible_count(&receipt, "fixture", 3, &expected)
+                .await
+                .unwrap(),
+            128
+        );
         native_turso::query("UPDATE oc_artifact_ledger SET generation=4 WHERE artifact_id=? AND surface='full_text'")
             .bind(vec![0u8, 1]).execute(&mut *tx.tx).await.unwrap();
-        assert_eq!(tx.publication_visible_count(&receipt, "fixture", 3, &expected).await.unwrap(), 127);
-        assert_eq!(tx.publication_visible_count(&receipt, "fixture", 4, &expected).await.unwrap(), 0);
+        assert_eq!(
+            tx.publication_visible_count(&receipt, "fixture", 3, &expected)
+                .await
+                .unwrap(),
+            127
+        );
+        assert_eq!(
+            tx.publication_visible_count(&receipt, "fixture", 4, &expected)
+                .await
+                .unwrap(),
+            0
+        );
         // A foreign root hides all chunks before malformed locator extraction.
-        native_turso::query("UPDATE oc_versions SET source_event_id=?").bind(Uuid::new_v4())
-            .execute(&mut *tx.tx).await.unwrap();
-        native_turso::query("UPDATE oc_chunks SET locator='{'").execute(&mut *tx.tx).await.unwrap();
-        assert_eq!(tx.publication_visible_count(&receipt, "fixture", 3, &expected).await.unwrap(), 0);
+        native_turso::query("UPDATE oc_versions SET source_event_id=?")
+            .bind(Uuid::new_v4())
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        native_turso::query("UPDATE oc_chunks SET locator='{'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        assert_eq!(
+            tx.publication_visible_count(&receipt, "fixture", 3, &expected)
+                .await
+                .unwrap(),
+            0
+        );
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }
