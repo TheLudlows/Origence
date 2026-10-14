@@ -38,13 +38,6 @@ BASELINE: frozenset[str] = frozenset({
     # NEW/OLD fields are scalar row values, not a second scanned relation.
     # Four A-domain queries were genuinely converted separately. Remaining
     # entries may only shrink; this correction adds no SQL exception.
-    'src/storage/sqlite/app.rs|cleanup_plan#1|2|5d2127f6ce15ff5b342e1ab7f80a95e9c8957415873a7c4a9148a8080b49ce6f',
-    'src/storage/sqlite/app.rs|cleanup_plan#1|3|1b4ac56888cf7b66781327110626b087ae0cce4c1e11c1392e12e1cb848fc98b',
-    'src/storage/sqlite/app.rs|cleanup_plan#1|4|fe27b47c9948bb670cf92d838bf5736ca9e8a1a7953356d7831114583db95a1b',
-    'src/storage/sqlite/app.rs|finish_cleanup#1|2|981d636eb0d7b19161b2886793b77610fcb713a84030874fd48ae91a2e94222b',
-    'src/storage/sqlite/app.rs|finish_cleanup#1|3|ed9b8a81947098f2ff92461ed37cd23f51985d4e1ccbd5a855f7f513e26a6ce7',
-    'src/storage/sqlite/app.rs|finish_cleanup#1|4|0d66789ce1cb4092f659c51e680073d1b6783c61d016cd1d8cc6ff43546885c8',
-    'src/storage/sqlite/app.rs|finish_cleanup#1|5|eb4b4694e43b6566b325ddd380034ea92ac4539406f866a4383fb84cb230f4a0',
     'src/storage/sqlite/ledger.rs|confirm_committed_inner#1|1|d0dd7b0070a300e86738725204b06b6927e435886a157be04cb3c78f4abde341',
     'src/storage/sqlite/publication.rs|message_batch_status#1|1|4c89fe74655d27b9c6f1315eb6cf8cc1800b5f092a9d12e116c8f0ac49fb228d',
     'src/storage/sqlite/publication.rs|message_batch_status#1|4|48b816c6f4eccaa268f69fb47427ef209bdd1eefe1f411c05d4072272338eedd',

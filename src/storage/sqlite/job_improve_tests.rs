@@ -136,7 +136,13 @@ async fn job_cancellation_preserves_scope_fences_and_other_fields() {
     let mut tx = transaction(&pool, scope).await;
     let mut expected = Vec::new();
     for (state_index, state) in [
-        "pending", "processing", "failed", "retry_wait", "completed", "cancelled", "superseded",
+        "pending",
+        "processing",
+        "failed",
+        "retry_wait",
+        "completed",
+        "cancelled",
+        "superseded",
     ]
     .into_iter()
     .enumerate()
@@ -180,13 +186,15 @@ async fn job_cancellation_preserves_scope_fences_and_other_fields() {
     expected.push((cleanup.job, "pending", false));
     let foreign = Record::new(0);
     seed(&mut tx.tx, other, foreign).await;
-    db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(other.tenant_id)
-        .bind(other.workspace_id)
-        .bind(foreign.source)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(other.tenant_id)
+    .bind(other.workspace_id)
+    .bind(foreign.source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     let missing = Record::new(102);
     seed(&mut tx.tx, scope, missing).await;
     db::query("UPDATE oc_jobs SET asset_id=NULL,source_event_id=? WHERE id=?")
@@ -214,22 +222,27 @@ async fn job_cancellation_preserves_scope_fences_and_other_fields() {
         assert_eq!(actual.1, i64::from(cancelled));
         assert_eq!(actual.2, if cancelled { 8 } else { 7 });
         assert_eq!((actual.3, actual.4, actual.7), (3, 2, 99));
-        assert_eq!((actual.5.as_str(), actual.6.as_str()), ("old-outcome", "old-error"));
+        assert_eq!(
+            (actual.5.as_str(), actual.6.as_str()),
+            ("old-outcome", "old-error")
+        );
         assert_eq!(actual.8 == 123, !cancelled);
     }
-    let state: String = db::query_scalar("SELECT state FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(other.tenant_id)
-        .bind(other.workspace_id)
-        .bind(foreign.job)
-        .fetch_one(&mut *tx.tx)
-        .await
-        .unwrap();
+    let state: String =
+        db::query_scalar("SELECT state FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?")
+            .bind(other.tenant_id)
+            .bind(other.workspace_id)
+            .bind(foreign.job)
+            .fetch_one(&mut *tx.tx)
+            .await
+            .unwrap();
     assert_eq!(state, "pending");
     tx.tx.rollback().await.unwrap();
-    let changed: i64 = db::query_scalar("SELECT count(*) FROM oc_jobs WHERE run_token<>7 OR updated_at<>123")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let changed: i64 =
+        db::query_scalar("SELECT count(*) FROM oc_jobs WHERE run_token<>7 OR updated_at<>123")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(changed, 0, "all cancellation writes roll back together");
     pool.shutdown().await.unwrap();
 }
@@ -258,10 +271,11 @@ async fn job_cancellation_uses_raw_keys_and_sql_truth() {
         .await
         .unwrap();
     tx.cancel_affected_jobs_inner().await.unwrap();
-    let rows: Vec<(String, String, i64)> = db::query_as("SELECT id,state,run_token FROM oc_jobs ORDER BY id")
-        .fetch_all(&mut *tx.tx)
-        .await
-        .unwrap();
+    let rows: Vec<(String, String, i64)> =
+        db::query_as("SELECT id,state,run_token FROM oc_jobs ORDER BY id")
+            .fetch_all(&mut *tx.tx)
+            .await
+            .unwrap();
     assert_eq!(
         rows,
         [
@@ -382,7 +396,13 @@ async fn learning_child_cancellation_filters_before_uuid_decode() {
     let improve = Uuid::new_v4();
     let mut expected = Vec::new();
     for (index, state) in [
-        "pending", "processing", "failed", "retry_wait", "completed", "cancelled", "superseded",
+        "pending",
+        "processing",
+        "failed",
+        "retry_wait",
+        "completed",
+        "cancelled",
+        "superseded",
     ]
     .into_iter()
     .enumerate()
@@ -486,17 +506,29 @@ async fn learning_retry_checks_parent_child_and_native_run_keys() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(cancelled_improve_job(&mut tx.tx, scope, r.job).await.unwrap());
+    assert!(
+        cancelled_improve_job(&mut tx.tx, scope, r.job)
+            .await
+            .unwrap()
+    );
     db::query("UPDATE oc_learnings SET improve_id=x'7261772d72756e'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(!cancelled_improve_job(&mut tx.tx, scope, r.job).await.unwrap());
+    assert!(
+        !cancelled_improve_job(&mut tx.tx, scope, r.job)
+            .await
+            .unwrap()
+    );
     db::query("UPDATE oc_improve_runs SET status='completed'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(!cancelled_improve_job(&mut tx.tx, scope, parent).await.unwrap());
+    assert!(
+        !cancelled_improve_job(&mut tx.tx, scope, parent)
+            .await
+            .unwrap()
+    );
     tx.tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }

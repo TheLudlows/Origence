@@ -1526,7 +1526,11 @@ async fn budget_template(s: &Service, a: &AuthContext, learning: &Value) -> Budg
     .fetch_all(s.engine.relational().pool())
     .await
     .unwrap();
-    assert_eq!(chunks.len(), 1, "budget fixture requires one original chunk");
+    assert_eq!(
+        chunks.len(),
+        1,
+        "budget fixture requires one original chunk"
+    );
     let (chunk, version, content, locator) = chunks.into_iter().next().unwrap();
     let ready: Vec<(String, usize, i64)> = db::query_as(
         "SELECT model_id,dimension,generation FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content' AND state='ready'",
@@ -1691,7 +1695,11 @@ async fn publish_native_budget_fixture(
             embedding: budget.embedding.clone(),
         })
         .collect();
-    s.engine.vector().upsert(budget.scope, vectors).await.unwrap();
+    s.engine
+        .vector()
+        .upsert(budget.scope, vectors)
+        .await
+        .unwrap();
     let text = budget
         .donor_ids
         .iter()
@@ -1755,7 +1763,10 @@ async fn assert_budget_candidates(
         .await
         .unwrap();
     tx.check_permission(Permission::Read).await.unwrap();
-    let fts = tx.full_text_candidates(budget.generation, None).await.unwrap();
+    let fts = tx
+        .full_text_candidates(budget.generation, None)
+        .await
+        .unwrap();
     let vector = tx
         .vector_candidates(&budget.profile, budget.dimension, budget.generation, None)
         .await

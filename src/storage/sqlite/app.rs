@@ -2,6 +2,8 @@
 use super::*;
 use crate::types::SearchHit;
 
+mod maintenance;
+
 impl TursoStore {
     pub(super) async fn begin_scoped(
         &self,
@@ -80,10 +82,8 @@ impl TursoStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(turso_err)?;
-        // Historical versions retain owners while the asset and source remain valid.
-        let live = "EXISTS(SELECT 1 FROM oc_versions v JOIN oc_assets a ON a.tenant_id=v.tenant_id AND a.workspace_id=v.workspace_id AND a.id=v.asset_id JOIN oc_events e ON e.tenant_id=v.tenant_id AND e.workspace_id=v.workspace_id AND e.id=v.source_event_id WHERE v.tenant_id=o.tenant_id AND v.workspace_id=o.workspace_id AND v.source_event_id=o.source_id AND v.version=o.version AND NOT a.deleted AND e.state='active')";
-        native_turso::query(&format!("DELETE FROM oc_artifact_owners AS o WHERE tenant_id=? AND workspace_id=? AND NOT {live}" )).bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
-        native_turso::query("DELETE FROM oc_artifact_owners AS o WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('chunk','summary') AND NOT EXISTS(SELECT 1 FROM oc_chunks c JOIN oc_assets a ON a.tenant_id=c.tenant_id AND a.workspace_id=c.workspace_id AND a.id=c.asset_id WHERE c.tenant_id=o.tenant_id AND c.workspace_id=o.workspace_id AND c.id=o.chunk_id AND NOT a.deleted)").bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
+        maintenance::detach_invalid_roots(&mut tx, scope).await?;
+        maintenance::detach_invalid_chunks(&mut tx, scope).await?;
         // Maintenance is privileged but still uses the identical scoped,
         // fail-closed dependency guard as all user-visible Learning reads.
         let mut guarded = TursoTx {
@@ -95,7 +95,7 @@ impl TursoStore {
         };
         guarded.detach_unsupported_learning_owners().await?;
         let mut tx = guarded.tx;
-        let sources: Vec<Uuid> = native_turso::query_scalar("SELECT DISTINCT l.artifact_id FROM oc_artifact_ledger l WHERE l.tenant_id=? AND l.workspace_id=? AND l.surface IN ('vector','full_text') AND NOT EXISTS(SELECT 1 FROM oc_artifact_owners o WHERE o.tenant_id=l.tenant_id AND o.workspace_id=l.workspace_id AND o.artifact_id=l.artifact_id AND o.artifact_type='chunk')").bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&mut *tx).await.map_err(turso_err)?;
+        let sources = maintenance::unowned_native_artifacts(&mut tx, scope).await?;
         let rows: Vec<(String,Uuid)> = native_turso::query_as("SELECT DISTINCT artifact_type,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('entity','relation')").bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&mut *tx).await.map_err(turso_err)?;
         tx.commit().await.map_err(turso_err)?;
         let entities = rows
@@ -116,18 +116,9 @@ impl TursoStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(turso_err)?;
-        let invalid = "NOT EXISTS(SELECT 1 FROM oc_artifact_owners o WHERE o.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND o.artifact_id=c.id AND o.artifact_type='chunk')";
-        native_turso::query(&format!("DELETE FROM oc_summaries WHERE tenant_id=? AND workspace_id=? AND chunk_id IN (SELECT c.id FROM oc_chunks c WHERE c.tenant_id=? AND c.workspace_id=? AND {invalid})")).bind(scope.tenant_id).bind(scope.workspace_id).bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
-        native_turso::query(&format!(
-            "DELETE FROM oc_chunks AS c WHERE tenant_id=? AND workspace_id=? AND {invalid}"
-        ))
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(turso_err)?;
-        native_turso::query("UPDATE oc_index_entries SET state='removed' WHERE tenant_id=? AND workspace_id=? AND NOT EXISTS(SELECT 1 FROM oc_chunks c WHERE c.tenant_id=oc_index_entries.tenant_id AND c.workspace_id=oc_index_entries.workspace_id AND c.id=oc_index_entries.artifact_id)").bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
-        native_turso::query("UPDATE oc_artifact_ledger SET state='orphan',updated_at=? WHERE tenant_id=? AND workspace_id=? AND NOT EXISTS(SELECT 1 FROM oc_artifact_owners o WHERE o.tenant_id=oc_artifact_ledger.tenant_id AND o.workspace_id=oc_artifact_ledger.workspace_id AND o.source_id=oc_artifact_ledger.source_id AND o.version=oc_artifact_ledger.version AND o.artifact_id=oc_artifact_ledger.artifact_id)").bind(now_ms()).bind(scope.tenant_id).bind(scope.workspace_id).execute(&mut *tx).await.map_err(turso_err)?;
+        maintenance::remove_unowned_chunks(&mut tx, scope).await?;
+        maintenance::remove_missing_indexes(&mut tx, scope).await?;
+        maintenance::orphan_unowned_ledger(&mut tx, scope).await?;
         tx.commit().await.map_err(turso_err)
     }
 }

@@ -182,7 +182,8 @@ impl TursoTx {
         let mut source_keys = Vec::with_capacity(jobs.len());
         for row in &jobs {
             asset_keys.push(vec![
-                row.try_get::<AssociationKey>("asset_id").map_err(turso_err)?,
+                row.try_get::<AssociationKey>("asset_id")
+                    .map_err(turso_err)?,
             ]);
             source_keys.push(vec![
                 row.try_get::<AssociationKey>("source_event_id")
