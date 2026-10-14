@@ -199,13 +199,12 @@ async fn traverse_ids(
     from_uid: &str,
     hops: usize,
 ) -> StorageResult<BTreeSet<String>> {
-    let source_exists: bool = native_turso::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM oc_graph_entities WHERE uid=?)",
-    )
-    .bind(from_uid)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(turso_err)?;
+    let source_exists: bool =
+        native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_graph_entities WHERE uid=?)")
+            .bind(from_uid)
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(turso_err)?;
     let mut frontier = if source_exists {
         vec![GraphKey(turso::Value::Text(from_uid.to_owned()))]
     } else {
@@ -394,8 +393,8 @@ impl GraphStore for TursoGraphStore {
             .fetch_all(&mut *tx)
             .await
             .map_err(turso_err)?;
-            let present = endpoints.iter().any(|(head, _)| *head)
-                && endpoints.iter().any(|(_, tail)| *tail);
+            let present =
+                endpoints.iter().any(|(head, _)| *head) && endpoints.iter().any(|(_, tail)| *tail);
             // No FROM source: the only relation is the insertion target. The
             // false gate remains a no-op while preparing all original columns
             // and the conflict key even when an endpoint is absent.
