@@ -861,3 +861,39 @@ keyword_hits(false) 和六处 identity catalog 探测收口；保留真实 event
 本地 SQL guard 及其 47 项回归通过；无 Cargo/rustfmt，因此本地 Rust 构建、
 格式、Clippy、原生测试均 NOT_RUN。Linux/Windows 的最终验收以本 PR 精确
 提交的实际 CI 结果为准，尚未完成时不得称通过。
+
+
+## Issue #61 第二批接口收口（2026-10-14，验证中）
+
+删除六个旧 trait 方法及专属实现/mock，保留 register_owner、
+register_pending、confirm_committed、retry_delay、owners/ledger；有效共享
+owner、撤回、scope、同版本重开、FK 顺序回归保留在当前 maintenance 路径。
+新增当前 fail_job 的 claim fence、固定延迟、预算终止及 ledger 不被改写测试；
+finish_cleanup 新增失败原子回滚和 orphan 结算不改写重试元数据的覆盖。
+不声称旧 ledger failure 与 fail_job 完全同义，不保留旧坏值首错排序。
+
+移除后端 Capabilities 声明，KeyCapabilities 与 max_hops 实际限制未改。
+SQL guard 的 lancedb.rs 整文件源码绑定因只删除 Capabilities 导入/方法而刷新：
+旧 fd13d098719af04ed33ff12dcd0cf75a11c5f132b7c9bcabe066ced855f66343，
+新 db68bf43a036b04ca8cac6dfb925068687c76634159e37fb0f63d7f1be9605fd。
+独审确认 scoped_filter 定义、调用及类型逐字未改，ann.rs、full_text.rs、
+scope.rs 字节和绑定值保持原样；无新增允许路径/站点，47 个 guard 测试保留。
+这是当前源码安全契约更新，未改任何历史实验 freeze。
+
+identity-check / check_memory_identity(path) 保持现有库只读、独占锁、格式
+与完整 schema 检查；删除无效 dry_run 和假升级状态，保留身份/权限/来源/版本
+回归并验证成功和失败检查不改写数据库字节。
+
+本机无 Cargo/rustfmt，Rust 格式、Clippy、构建及行为测试依赖精确提交 CI；
+第二批尚未发布时不得将第一批通过结果归属为第二批验收。
+
+
+### 第一批精确头验收
+
+第一批 `4139e4a55916ae9fdf1977f25d6a9b0fcc94ae69` 的
+[CI 38587438901](https://github.com/TheLudlows/Origence/actions/runs/38587438901)
+三个作业全部通过：Linux/Windows 各 216 lib + 230 integration；无默认特性
+139 lib + 102 integration；格式、Clippy、SQL guard、HTTP/MCP、受控进程
+恢复与 keyword 评估通过。实际 PR merge tree 与该 head tree
+`37ea1cb9f359d01c4156e6a6ea7b197c5f355635` 完全一致。
+该结果只属于第一批；不外推至第二批或之后提交。

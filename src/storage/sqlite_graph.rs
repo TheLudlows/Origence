@@ -15,7 +15,6 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::graph::{entity_id, relation_id};
-use crate::storage::capabilities::Capabilities;
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::scope::{Scope, SourceVersion};
 use crate::storage::traits::{GraphStore, Lifecycle};
@@ -313,15 +312,6 @@ impl TursoGraphStore {
 }
 
 impl GraphStore for TursoGraphStore {
-    fn capabilities(&self) -> Capabilities {
-        Capabilities {
-            filtered_ann: false,
-            exact_search: false,
-            max_hops: self.max_hops,
-            shared_source_delete: false,
-        }
-    }
-
     async fn upsert_entities(
         &self,
         scope: Scope,

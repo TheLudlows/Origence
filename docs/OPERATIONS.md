@@ -88,18 +88,20 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。S1 结果和限制见 [VALIDATION](VALIDATION.md)，运行入口见 [评估说明](../evals/README.md)。
 
-## 显式启用记忆身份
+## 离线记忆身份检查
 
-原生 Turso 新库始终包含完整身份 schema。历史命令名
-`memory-identity-upgrade` 保留为离线同版本检查，不创建或修复任何表。
+原生 Turso 新库始终包含完整身份 schema。`identity-check` 对已有数据库执行
+只读同版本检查，包括格式标记和完整 authority schema，不创建或修复任何表。
 
 1. 正常停止宿主及所有离线客户端，备份整个数据目录。
-2. 执行 `origence --data-dir DATA_DIR --offline memory-identity-upgrade --dry-run`。
-3. 合法同版本库输出 `already_enabled`；去掉 `--dry-run` 结果相同。
+2. 执行 `origence --data-dir DATA_DIR --offline identity-check`。
+3. 合法同版本库输出 `{"feature":"memory-identity-v1","valid":true}`；检查失败以非零状态退出。
 
 缺文件、缺表、未标记旧库、弱约束或同名视图占用均拒绝，不安装、不转换。
-命令不加载模型、LanceDB、图或 Blob；依赖 OS 目录权限并要求独占锁。
-不存在的 context.db 不会被新建。历史 `required`/`enabled` 安装状态不再是当前行为。
+命令不加载模型、LanceDB、图或 Blob；依赖 OS 目录权限并要求独占路径锁。
+不存在的 context.db 不会被新建。旧 `memory-identity-upgrade` 命令与其
+`--dry-run` 参数已移除；只读检查没有升级状态或写入模式。
+库调用方改用 `TursoStore::check_memory_identity(path)`，成功返回 `()`。
 
 ## 失败与恢复
 
@@ -187,7 +189,7 @@ origence --data-dir <已有数据目录> --offline vector-compact
 
 ## S2 语义目录与发布边界
 
-S2 只对新建数据库安装 oc_memory_properties；旧库开机不 ALTER，不接管旧 fact_key 或既有 identity。缺表旧库可继续使用原功能，S2 注册/写入不可用。现有身份安装命令只安装 I1，不能用于启用 S2；旧库迁移/导入暂未提供，勿手工补表后宣称已验收升级。
+S2 只对新建数据库安装 oc_memory_properties；旧库开机不 ALTER，不接管旧 fact_key 或既有 identity。当前启动要求完整同版本 schema，缺表或不兼容库拒绝打开。离线 identity-check 只检查完整当前 schema，不安装 I1 或 S2；旧库迁移/导入暂未提供，勿手工补表后宣称已验收升级。
 
 注册属性为管理员显式操作，定义不可变。必须在分配该属性的首个身份之前完成注册。当前阶段不支持修改已注册的属性定义，也不为此开发迁移方案；只有明确调整需求后才另行设计，不允许改表绕过约束。
 
@@ -220,8 +222,8 @@ semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿
 - 新建库写入引擎/角色/schema 格式标记。既有非空文件只读检查后才可写开；
   不兼容或缺对象的库拒绝打开，不安装缺表、不迁移、不覆盖。旧名称类型别名
   仅保留调用兼容，不表示继续使用 SQLite 引擎。
-- memory-identity-upgrade 历史命令仅保留离线同版本检查；有效新库报告
-  already_enabled，缺表/未标记库拒绝。它不再提供旧库安装或迁移能力。
+- identity-check 执行离线只读同版本检查；有效库报告 valid=true，
+  缺表/未标记库拒绝。不提供旧库安装、修复或迁移能力。
 - 每个连接池最多五个租借；未提交或取消的连接归还前完成一次异步 rollback。
   清理保留连接额度与宿主 OS 锁，失败弃连接并使池不可用；shutdown 等清理结束。
   这不是硬时限：没有新增业务 worker/重试循环，也没有宣称强制终止文件 IO。

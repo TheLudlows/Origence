@@ -1,8 +1,7 @@
-//! The historical identity command inspects the current format without repair.
+//! The identity check inspects the current format read-only without repair.
 use origence::storage::native_turso as db;
 use origence::storage::{
-    DomainTx, Lifecycle, Permission, RelationalStore, Scope, StorageError,
-    sqlite::{MemoryIdentityUpgrade, SqliteStore},
+    DomainTx, Lifecycle, Permission, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -38,13 +37,10 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
     store.shutdown().await.unwrap();
     drop(store);
 
-    for dry_run in [true, false, false] {
-        assert_eq!(
-            SqliteStore::upgrade_memory_identity(&path, dry_run)
-                .await
-                .unwrap(),
-            MemoryIdentityUpgrade::AlreadyEnabled
-        );
+    let bytes = std::fs::read(&path).unwrap();
+    for _ in 0..2 {
+        SqliteStore::check_memory_identity(&path).await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
     let store = SqliteStore::open(&path).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
@@ -90,17 +86,11 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
 }
 
 #[tokio::test]
-async fn missing_database_is_not_created_by_upgrade() {
+async fn missing_database_is_not_created_by_check() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("missing/context.db");
-    for dry_run in [true, false] {
-        assert!(
-            SqliteStore::upgrade_memory_identity(&path, dry_run)
-                .await
-                .is_err()
-        );
-        assert!(!path.parent().unwrap().exists());
-    }
+    assert!(SqliteStore::check_memory_identity(&path).await.is_err());
+    assert!(!path.parent().unwrap().exists());
 }
 
 #[tokio::test]
@@ -112,12 +102,12 @@ async fn unmarked_nonempty_database_is_rejected_without_installing_a_format() {
         .execute(&raw).await.unwrap();
     raw.shutdown().await.unwrap();
     drop(raw);
-    for dry_run in [true, false] {
-        assert!(matches!(
-            SqliteStore::upgrade_memory_identity(&path, dry_run).await,
-            Err(StorageError::Unavailable(_))
-        ));
-    }
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(matches!(
+        SqliteStore::check_memory_identity(&path).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
     assert!(matches!(
         SqliteStore::open(&path).await,
         Err(StorageError::Unavailable(_))
@@ -138,22 +128,17 @@ async fn unmarked_nonempty_database_is_rejected_without_installing_a_format() {
 }
 
 #[tokio::test]
-async fn open_store_blocks_upgrade_in_the_same_process() {
+async fn open_store_blocks_check_in_the_same_process() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("oc.db");
     let store = SqliteStore::open(&path).await.unwrap();
     assert!(matches!(
-        SqliteStore::upgrade_memory_identity(&path, false).await,
+        SqliteStore::check_memory_identity(&path).await,
         Err(StorageError::Conflict(_))
     ));
     store.shutdown().await.unwrap();
     drop(store);
-    assert_eq!(
-        SqliteStore::upgrade_memory_identity(&path, false)
-            .await
-            .unwrap(),
-        MemoryIdentityUpgrade::AlreadyEnabled
-    );
+    SqliteStore::check_memory_identity(&path).await.unwrap();
 }
 
 #[tokio::test]
@@ -184,12 +169,12 @@ async fn incomplete_or_incompatible_identity_schema_is_not_repaired() {
         ));
         store.shutdown().await.unwrap();
         drop(store);
-        for dry_run in [true, false] {
-            assert!(matches!(
-                SqliteStore::upgrade_memory_identity(&path, dry_run).await,
-                Err(StorageError::Unavailable(_))
-            ));
-        }
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(matches!(
+            SqliteStore::check_memory_identity(&path).await,
+            Err(StorageError::Unavailable(_))
+        ));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
         assert!(matches!(
             SqliteStore::open(&path).await,
             Err(StorageError::Unavailable(_))
@@ -217,33 +202,29 @@ async fn incompatible_base_is_not_repaired() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("oc.db");
     let store = SqliteStore::open(&path).await.unwrap();
-    db::query("DROP TABLE oc_memory_identities")
-        .execute(store.pool())
-        .await
-        .unwrap();
     db::query("ALTER TABLE oc_events RENAME COLUMN content TO incompatible_content")
         .execute(store.pool())
         .await
         .unwrap();
     store.shutdown().await.unwrap();
     drop(store);
-    for dry_run in [true, false] {
-        assert!(matches!(
-            SqliteStore::upgrade_memory_identity(&path, dry_run).await,
-            Err(StorageError::Unavailable(_))
-        ));
-    }
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(matches!(
+        SqliteStore::check_memory_identity(&path).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
     assert!(matches!(
         SqliteStore::open(&path).await,
         Err(StorageError::Unavailable(_))
     ));
     let raw = db::Pool::open_read_only(&path).await.unwrap();
-    let missing: i64 =
+    let identities: i64 =
         db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'")
             .fetch_one(&raw)
             .await
             .unwrap();
-    assert_eq!(missing, 0);
+    assert_eq!(identities, 1);
     let schema: String = db::query_scalar("SELECT sql FROM sqlite_master WHERE name='oc_events'")
         .fetch_one(&raw)
         .await

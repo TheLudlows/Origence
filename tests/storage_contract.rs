@@ -109,18 +109,6 @@ impl DomainTx for MemTx {
         ))
     }
 
-    async fn detach_owners(&mut self, _source: SourceVersion) -> StorageResult<u64> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no owner rows".into(),
-        ))
-    }
-
-    async fn owned_artifacts(&mut self) -> StorageResult<Value> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no owner rows".into(),
-        ))
-    }
-
     async fn register_pending(&mut self, _entry: LedgerEntry) -> StorageResult<()> {
         Err(StorageError::Unavailable(
             "in-memory double has no ledger".into(),
@@ -128,18 +116,6 @@ impl DomainTx for MemTx {
     }
 
     async fn confirm_committed(&mut self, _key: LedgerKey) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no ledger".into(),
-        ))
-    }
-
-    async fn fail_retryable(&mut self, _key: LedgerKey, _error: &str) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no ledger".into(),
-        ))
-    }
-
-    async fn fail_permanent(&mut self, _key: LedgerKey, _error: &str) -> StorageResult<()> {
         Err(StorageError::Unavailable(
             "in-memory double has no ledger".into(),
         ))
@@ -350,11 +326,6 @@ impl DomainTx for MemTx {
             "in-memory double has no domain rows".into(),
         ))
     }
-    async fn cleanup_derived_chunks(&mut self) -> StorageResult<u64> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
     async fn settle_completed(
         &mut self,
         _job: Uuid,
@@ -365,19 +336,6 @@ impl DomainTx for MemTx {
             "in-memory double has no domain rows".into(),
         ))
     }
-    async fn settle_failed(
-        &mut self,
-        _job: Uuid,
-        _generation: i64,
-        _run_token: i64,
-        _state: &str,
-        _error_code: &str,
-    ) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
-
     async fn commit(mut self) -> StorageResult<()> {
         for &permission in &self.required {
             if !permission.granted_by(&self.role()?) {

@@ -28,7 +28,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::storage::capabilities::{
-    Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery,
+    FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery,
 };
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::scope::{Scope, SourceVersion};
@@ -414,15 +414,6 @@ impl LanceDbStore {
 }
 
 impl VectorStore for LanceDbStore {
-    fn capabilities(&self) -> Capabilities {
-        Capabilities {
-            filtered_ann: true,
-            exact_search: true,
-            max_hops: 0,
-            shared_source_delete: false,
-        }
-    }
-
     async fn upsert(&self, scope: Scope, entries: Vec<VectorEntry>) -> StorageResult<()> {
         if entries.is_empty() {
             return Ok(());

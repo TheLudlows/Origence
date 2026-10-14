@@ -34,7 +34,16 @@ Lance 全文路径。启动仍校验完整 schema，运行时不再把缺失 ide
 [归档说明](../archives/publication-cost-probe/ARCHIVE.md)。归档不是当前性能门禁。
 公开调用方需移除 record_source 调用，并将 keyword_hits(..., true, filter)
 改为 summary_hits(..., filter)；false 原文扫描入口不再提供。
-本批验证以精确 PR head 的 CI 为准，不把 #59 的通过结果外推。
+第一批 4139e4a 的 Linux/Windows CI 已通过，详见 VALIDATION；
+[PR #62](https://github.com/TheLudlows/Origence/pull/62) 继续保持草稿，
+后续批次仍需各自精确 head 验证，不将第一批结果外推。
+
+第二批移除六个无产品调用的旧存储方法及无消费者的后端 Capabilities；
+共享 owner 清理走 cleanup_plan/finish_cleanup，失败作业走 fail_job。
+旧 ledger failure 和作业重试不视为同一语义；retry_delay、owners/ledger
+与 register_pending/confirm_committed 保留。KeyCapabilities 鉴权和真实图跳数
+限制不变。离线身份入口改为 identity-check，仅检查已有库，详见
+[操作说明](OPERATIONS.md#离线记忆身份检查)。第二批等待独审及精确提交 CI。
 
 ## Turso / LanceDB 正式接入（已合入）
 

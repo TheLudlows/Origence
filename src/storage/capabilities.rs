@@ -1,4 +1,4 @@
-//! Vendor-neutral value types and capability declarations.
+//! Vendor-neutral storage query and value types.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -8,24 +8,6 @@ use crate::storage::scope::{Scope, SourceVersion};
 /// A single dense embedding. `Vec<f32>` keeps the storage layer independent of
 /// `pgvector::Vector`; adapters convert at the boundary.
 pub type Embedding = Vec<f32>;
-
-/// Declared capabilities of a backend (A2.7). Defaults are the conservative
-/// "not supported" state; an adapter overrides only what it actually
-/// implements. Capability loss must never weaken tenant/workspace or
-/// source-validity isolation — those cannot be degraded.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Capabilities {
-    /// Filtered approximate-nearest-neighbour search.
-    pub filtered_ann: bool,
-    /// Exact (brute-force) scoped search.
-    pub exact_search: bool,
-    /// Maximum graph traversal hops (0 = no traversal).
-    pub max_hops: usize,
-    /// Native shared-source delete: removing one owner does not delete a
-    /// shared object. When false, semantics come from the relational ledger
-    /// instead (A2.6/A2.7).
-    pub shared_source_delete: bool,
-}
 
 /// A vector query. Carries scope plus the exact profile/dimension/generation
 /// that produced the vectors — never a bare vector (A2.2).

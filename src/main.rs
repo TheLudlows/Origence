@@ -56,10 +56,7 @@ enum Command {
         key_id: Uuid,
     },
     /// Offline inspection of the current Turso identity schema; never migrates a database.
-    MemoryIdentityUpgrade {
-        #[arg(long)]
-        dry_run: bool,
-    },
+    IdentityCheck,
     /// Compact existing local vector files; requires a stopped host. Never prunes history.
     VectorCompact {
         #[arg(long)]
@@ -148,16 +145,15 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{}", serde_json::to_string(&report)?);
             Ok(())
         }),
-        Command::MemoryIdentityUpgrade { dry_run } => Box::pin(async move {
+        Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(
                 offline,
-                "memory-identity-upgrade requires --offline and a stopped host"
+                "identity-check requires --offline and a stopped host"
             );
-            let status =
-                TursoStore::upgrade_memory_identity(data_dir.join("context.db"), dry_run).await?;
+            TursoStore::check_memory_identity(data_dir.join("context.db")).await?;
             println!(
                 "{}",
-                json!({"feature":"memory-identity-v1","status":status,"dry_run":dry_run})
+                json!({"feature":"memory-identity-v1","valid":true})
             );
             Ok(())
         }),

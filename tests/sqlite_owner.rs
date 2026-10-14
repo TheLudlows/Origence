@@ -1,7 +1,7 @@
-//! Provenance owner tests (M3): register, shared owners, detach, ownership.
+//! Provenance owners through the two-phase cleanup path.
 
 use origence::storage::{
-    AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion,
+    AuthorizedScope, DomainTx, Lifecycle, Permission, RelationalStore, Scope, SourceVersion,
     sqlite::SqliteStore,
 };
 use uuid::Uuid;
@@ -31,57 +31,56 @@ async fn begin_write(
 }
 
 #[tokio::test]
-async fn detaching_a_source_drops_its_sole_artifacts_but_retains_shared() {
+async fn cleanup_plan_retains_shared_owners_after_source_retraction() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let auth = provision(&store).await;
-
-    let s1 = SourceVersion {
-        source_id: Uuid::new_v4(),
-        version: 1,
-    };
-    let s2 = SourceVersion {
-        source_id: Uuid::new_v4(),
-        version: 1,
-    };
     let shared = Uuid::new_v4();
     let sole = Uuid::new_v4();
-
-    // s1 and s2 both own `shared`; only s1 owns `sole`.
-    {
-        let mut tx = begin_write(&store, &auth).await;
-        tx.register_owner(s1, "entity", shared, None).await.unwrap();
-        tx.register_owner(s1, "entity", sole, None).await.unwrap();
-        tx.commit().await.unwrap();
+    let mut tx = begin_write(&store, &auth).await;
+    let mut sources = Vec::new();
+    for title in ["first", "second"] {
+        let source_id = tx.create_event("knowledge", title, None).await.unwrap();
+        let asset = tx.insert_knowledge_asset(title).await.unwrap();
+        tx.insert_version(asset, 1, title, "hash", source_id, None, None)
+            .await
+            .unwrap();
+        let source = SourceVersion {
+            source_id,
+            version: 1,
+        };
+        tx.register_owner(source, "entity", shared, None)
+            .await
+            .unwrap();
+        sources.push(source);
     }
-    {
-        let mut tx = begin_write(&store, &auth).await;
-        tx.register_owner(s2, "entity", shared, None).await.unwrap();
-        tx.commit().await.unwrap();
+    tx.register_owner(sources[0], "entity", sole, None)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let (_, mut entities, relations) = store.cleanup_plan(auth.scope).await.unwrap();
+    entities.sort();
+    let mut expected = vec![shared, sole];
+    expected.sort();
+    assert_eq!(entities, expected);
+    assert!(relations.is_empty());
+    let mut tx = begin_write(&store, &auth).await;
+    tx.retract_event(sources[0].source_id).await.unwrap();
+    tx.commit().await.unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            store.cleanup_plan(auth.scope).await.unwrap(),
+            (Vec::new(), vec![shared], Vec::new())
+        );
     }
-
-    // Detaching s1 removes exactly its two owner rows. (The write must be
-    // committed: dropping a `SqliteTx` without `commit` rolls it back.)
-    let removed = {
-        let mut tx = begin_write(&store, &auth).await;
-        let removed = tx.detach_owners(s1).await.unwrap();
-        tx.commit().await.unwrap();
-        removed
-    };
-    assert_eq!(removed, 2);
-
-    // `shared` is still owned (by s2) and stays; `sole` has no owner left and
-    // is gone from the owned set (M4 will diff this against the graph store to reap it).
-    let owned = {
-        let mut tx = begin_write(&store, &auth).await;
-        tx.owned_artifacts().await.unwrap()
-    };
-    let entities: Vec<String> = owned["entities"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
-    assert!(entities.contains(&shared.to_string()));
-    assert!(!entities.contains(&sole.to_string()));
+    let owners: Vec<Uuid> = origence::storage::native_turso::query_scalar(
+        "SELECT source_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
+    )
+    .bind(auth.scope.tenant_id)
+    .bind(auth.scope.workspace_id)
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(owners, vec![sources[1].source_id]);
+    store.shutdown().await.unwrap();
 }

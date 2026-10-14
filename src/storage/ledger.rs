@@ -44,9 +44,6 @@ impl LedgerState {
     }
 }
 
-/// Retry budget before a write is abandoned as an orphan (A2.6).
-pub const MAX_LEDGER_ATTEMPTS: i32 = 5;
-
 /// A pending write left this long without confirm is abandoned by reconcile.
 pub const LEDGER_PENDING_TIMEOUT_MS: i64 = 5 * 60 * 1000;
 

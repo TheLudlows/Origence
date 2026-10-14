@@ -569,3 +569,67 @@ async fn empty_finish_prepares_summary_mutation_and_owner_relation() {
         pool.shutdown().await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retry_metadata() {
+    let (_dir, store, scope) = database().await;
+    let row = Record::new(500);
+    let mut tx = store.pool.begin().await.unwrap();
+    seed(&mut tx, scope, row).await;
+    index(&mut tx, scope, row.chunk).await;
+    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,text,search_terms) VALUES(?,?,?,?,'summary','summary')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(row.chunk)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    for generation in 1..=3 {
+        ledger(&mut tx, scope, row, row.chunk, "vector", generation).await;
+    }
+    db::query("UPDATE oc_artifact_ledger SET state=CASE generation WHEN 1 THEN 'pending' WHEN 2 THEN 'retry_wait' ELSE 'committed' END,attempt=4,last_error='keep',next_retry_at=123")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    db::query("CREATE TRIGGER fail_cleanup BEFORE UPDATE ON oc_artifact_ledger BEGIN SELECT RAISE(ABORT,'fixture cleanup failure'); END")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    assert!(matches!(
+        store.finish_cleanup(scope).await,
+        Err(StorageError::Backend(_))
+    ));
+    for sql in [
+        "SELECT count(*) FROM oc_chunks",
+        "SELECT count(*) FROM oc_summaries",
+    ] {
+        let count: i64 = db::query_scalar(sql).fetch_one(&store.pool).await.unwrap();
+        assert_eq!(count, 1);
+    }
+    let state: String = db::query_scalar("SELECT state FROM oc_index_entries")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+    assert_eq!(state, "ready");
+    let states: Vec<String> =
+        db::query_scalar("SELECT state FROM oc_artifact_ledger ORDER BY generation")
+            .fetch_all(&store.pool)
+            .await
+            .unwrap();
+    assert_eq!(states, vec!["pending", "retry_wait", "committed"]);
+    db::query("DROP TRIGGER fail_cleanup")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    store.finish_cleanup(scope).await.unwrap();
+    let states: Vec<(String, i32, String, i64)> = db::query_as(
+        "SELECT state,attempt,last_error,next_retry_at FROM oc_artifact_ledger ORDER BY generation",
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+    assert_eq!(states, vec![("orphan".into(), 4, "keep".into(), 123); 3]);
+    store.shutdown().await.unwrap();
+}
