@@ -348,7 +348,7 @@ fn strict_support_sources(rows: &[native_turso::Row]) -> StorageResult<Vec<Uuid>
 // Member boundaries are read by serde's lossless IgnoredAny deserializer.
 // Do not materialize a Value: that collapses duplicate object keys and rejects
 // native-valid out-of-range numbers. Native JSON remains the semantic oracle.
-fn support_members(kind: &str, text: &str) -> StorageResult<Vec<String>> {
+pub(super) fn support_members(kind: &str, text: &str) -> StorageResult<Vec<String>> {
     fn invalid() -> StorageError {
         StorageError::Backend("invalid normalized support JSON".into())
     }

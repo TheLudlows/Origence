@@ -10,10 +10,9 @@ Unsupported construction is UNRESOLVED (exit 2), never a successful audit. All
 cfg branches are checked. SQL in Markdown/comments is historical evidence, not
 an execution input. No SQL or application code is executed by this tool.
 
-Default mode permits only fingerprinted debt from main 1d5e055. It says DEBT,
-not JOIN-free. --zero PATH [PATH ...] ignores that debt for the exact paths.
-There is deliberately no --bless/update-baseline option. Delete obsolete entries
-as their sites are fixed; never add entries to accommodate new application SQL.
+Default mode requires zero debt; the historical main 1d5e055 baseline is empty.
+--zero PATH [PATH ...] narrows the report to exact paths. There is deliberately
+no --bless/update-baseline option. Never add execution exceptions for new SQL.
 """
 from __future__ import annotations
 
@@ -31,18 +30,12 @@ from pathlib import Path
 BASELINE_REVISION = "1d5e0554b38e12df094a894f11a23fb26a117568"
 # Exact (relative path | enclosing function | SQL-call ordinal | fingerprint).
 # Frozen from the source snapshot above, not from the developer's git HEAD.
-BASELINE: frozenset[str] = frozenset({
-    # The initial audit reported 57 sites; 20 real conversions preceded its
-    # staged 37-entry baseline. A later grammar correction removed 3 false
-    # positives: the same single-FROM workspace trigger at 3 schema includes.
-    # NEW/OLD fields are scalar row values, not a second scanned relation.
-    # Four A-domain queries were genuinely converted separately. Remaining
-    # entries may only shrink; this correction adds no SQL exception.
-    'src/storage/sqlite/ledger.rs|confirm_committed_inner#1|1|d0dd7b0070a300e86738725204b06b6927e435886a157be04cb3c78f4abde341',
-    'src/storage/sqlite/publication.rs|message_batch_status#1|1|4c89fe74655d27b9c6f1315eb6cf8cc1800b5f092a9d12e116c8f0ac49fb228d',
-    'src/storage/sqlite/publication.rs|message_batch_status#1|4|48b816c6f4eccaa268f69fb47427ef209bdd1eefe1f411c05d4072272338eedd',
-    'tests/message_batches.rs|live_receipt_status_requires_every_chunk_profile_generation_and_source#1|4|0f59e1cd6705b1fd4ed88552a19733b8f16c5d549038a34a7250b156f13cce94',
-})
+# Historical staged audit: 57 reported sites, 20 conversions before the
+# 37-entry baseline, then 3 trigger false positives corrected independently.
+# All remaining real associations have been rewritten. Keep this set empty;
+# historical SQL and failed CI remain evidence, never execution exceptions.
+BASELINE: frozenset[str] = frozenset()
+
 
 # These are SOURCE contracts, not permissions to execute forbidden SQL. The
 # native adapter forwards already-audited query/raw_sql constructor inputs.

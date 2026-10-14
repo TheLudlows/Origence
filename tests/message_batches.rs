@@ -10,7 +10,7 @@ use origence::{
     },
     models::Models,
     service::Service,
-    storage::{RelationalStore, Scope},
+    storage::{AuthorizedScope, DomainTx, RelationalStore, Scope, StorageError},
     types::{AuthContext, RetrievalComponents, SearchInput},
     worker,
 };
@@ -201,6 +201,245 @@ async fn payload(service: &Service, receipt: &IngestReceipt) -> Value {
         .await
         .unwrap();
     serde_json::from_str(&text).unwrap()
+}
+
+async fn storage_status(
+    service: &Service,
+    auth: &AuthContext,
+    receipt: &IngestReceipt,
+) -> Result<PublicationStatus, StorageError> {
+    let mut tx = service
+        .engine
+        .relational()
+        .begin(AuthorizedScope {
+            scope: Scope {
+                tenant_id: auth.tenant_id,
+                workspace_id: auth.workspace_id,
+            },
+            principal_id: auth.id,
+            role: auth.role.clone(),
+        })
+        .await
+        .unwrap();
+    let result = tx.message_batch_status(receipt).await;
+    tx.rollback().await.unwrap();
+    result
+}
+
+async fn replace_receipt_chunks(
+    service: &Service,
+    receipt: &IngestReceipt,
+    original: &Value,
+    state: &str,
+    chunks: Option<&Value>,
+) -> Value {
+    // Simulate a corrupt persisted plan while retaining the accepted receipt
+    // and real worker publication. No worker runs while these fixtures differ.
+    let mut changed = original.clone();
+    let memory = changed["publication"]["memories"][0]
+        .as_object_mut()
+        .unwrap();
+    if let Some(chunks) = chunks {
+        memory.insert("chunks".into(), chunks.clone());
+    } else {
+        memory.remove("chunks");
+    }
+    db::query("UPDATE oc_jobs SET state=?,payload=? WHERE id=?")
+        .bind(state)
+        .bind(changed.to_string())
+        .bind(receipt.job_id)
+        .execute(service.engine.relational().pool())
+        .await
+        .unwrap();
+    changed
+}
+
+#[tokio::test]
+async fn receipt_chunks_missing_null_and_arrays_keep_status_semantics() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "root-shapes", batch("root-shapes"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    let chunks = original["publication"]["memories"][0]["chunks"].clone();
+    let encoded_chunks = Value::Array(
+        chunks
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|chunk| Value::String(chunk.to_string()))
+            .collect(),
+    );
+    for (name, chunks, completed) in [
+        ("missing", None, PublicationStatus::Invisible),
+        ("null", Some(Value::Null), PublicationStatus::Invisible),
+        ("empty array", Some(json!([])), PublicationStatus::Invisible),
+        (
+            "publication array",
+            Some(chunks.clone()),
+            PublicationStatus::Retrievable,
+        ),
+        (
+            "encoded chunk array",
+            Some(encoded_chunks),
+            PublicationStatus::Retrievable,
+        ),
+    ] {
+        for state in ["pending", "completed"] {
+            let saved = replace_receipt_chunks(
+                &service,
+                &receipt,
+                &original,
+                state,
+                chunks.as_ref(),
+            )
+            .await;
+            let expected = if state == "pending" {
+                PublicationStatus::Pending
+            } else {
+                completed
+            };
+            assert_eq!(
+                storage_status(&service, &auth, &receipt).await.unwrap(),
+                expected,
+                "{state}, {name}: storage"
+            );
+            assert_eq!(
+                status(&service, &auth, &receipt).await,
+                expected,
+                "{state}, {name}: service"
+            );
+            assert_eq!(payload(&service, &receipt).await, saved);
+        }
+    }
+    replace_receipt_chunks(&service, &receipt, &original, "completed", Some(&chunks)).await;
+    assert_eq!(payload(&service, &receipt).await, original);
+    assert_eq!(
+        status(&service, &auth, &receipt).await,
+        PublicationStatus::Retrievable
+    );
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn receipt_non_array_chunks_fail_closed_with_safe_unavailable_error() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "bad-root", batch("bad-root"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    for (name, chunks) in [
+        ("empty object", json!({})),
+        ("object with invalid child", json!({"chunk": "not-json"})),
+        ("encoded object string", json!(r#"{"id":"encoded"}"#)),
+        ("invalid JSON string", json!("not-json")),
+        ("integer", json!(17)),
+        ("real", json!(1.5)),
+        ("true", json!(true)),
+        ("false", json!(false)),
+    ] {
+        for state in ["pending", "completed"] {
+            let saved = replace_receipt_chunks(
+                &service,
+                &receipt,
+                &original,
+                state,
+                Some(&chunks),
+            )
+            .await;
+            let error = storage_status(&service, &auth, &receipt).await.unwrap_err();
+            assert!(
+                matches!(&error, StorageError::Unavailable(message)
+                    if message == "invalid message publication plan"),
+                "{state}, {name}: {error:?}"
+            );
+            let error = service
+                .message_batch_status(&auth, &receipt)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&error, AppError::Unavailable(message)
+                    if message == "local storage unavailable"),
+                "{state}, {name}: {error:?}"
+            );
+            assert_eq!(error.code(), "DEPENDENCY_UNAVAILABLE");
+            assert_eq!(error.safe_message(), "local storage unavailable");
+            assert_eq!(payload(&service, &receipt).await, saved);
+        }
+    }
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn receipt_malformed_array_string_keeps_native_backend_error() {
+    let models = ModelServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let (_, auth) = provision(&service).await;
+    let receipt = service
+        .submit_message_batch(&auth, "bad-element", batch("bad-element"), models.spec())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    let original = payload(&service, &receipt).await;
+    let first = original["publication"]["memories"][0]["chunks"][0].clone();
+    // Native projection must reach later pages even when duplicate/null IDs
+    // already make completed readiness impossible. The malformed value is 33rd.
+    let mut duplicate_prefix = vec![first.clone(); 32];
+    duplicate_prefix.push(json!("not-json"));
+    let mut null_prefix = vec![Value::Null; 32];
+    null_prefix.push(json!("not-json"));
+    for chunks in [
+        json!(["not-json"]),
+        json!([first, "not-json"]),
+        Value::Array(duplicate_prefix),
+        Value::Array(null_prefix),
+    ] {
+        for state in ["pending", "failed", "completed"] {
+            let saved = replace_receipt_chunks(
+                &service,
+                &receipt,
+                &original,
+                state,
+                Some(&chunks),
+            )
+            .await;
+            let error = storage_status(&service, &auth, &receipt).await.unwrap_err();
+            assert!(
+                matches!(&error, StorageError::Backend(_)),
+                "{state}, {chunks}: {error:?}"
+            );
+            let mut forged = receipt.clone();
+            forged.accepted_spec.embedding_profile = "forged-profile".into();
+            let error = storage_status(&service, &auth, &forged).await.unwrap_err();
+            assert!(
+                matches!(&error, StorageError::Backend(_)),
+                "{state}, {chunks}: native error precedes forged receipt conflict: {error:?}"
+            );
+            let error = service
+                .message_batch_status(&auth, &receipt)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&error, AppError::Internal(_)),
+                "{state}, {chunks}: {error:?}"
+            );
+            assert_eq!(error.code(), "INTERNAL_ERROR");
+            assert_eq!(error.safe_message(), "internal operation failed");
+            assert_eq!(payload(&service, &receipt).await, saved);
+        }
+    }
+    service.engine.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -674,7 +913,7 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
         ),
         (
             "UPDATE oc_index_entries SET model_id='wrong' WHERE artifact_id=?",
-            "UPDATE oc_index_entries SET model_id=(SELECT json_extract(payload,'$.accepted_spec.embedding_profile') FROM oc_jobs WHERE operation='message_batch_ingest') WHERE artifact_id=?",
+            "UPDATE oc_index_entries SET model_id=? WHERE artifact_id=?",
         ),
         (
             "UPDATE oc_index_entries SET dimension=99 WHERE artifact_id=?",
@@ -723,7 +962,13 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
             assert!(hits.iter().all(|hit| hit["chunk_id"] != json!(chunk)));
             assert_eq!(payload(&service, &receipt).await, publication_before);
         }
-        db::query(restore_sql)
+        let restore = db::query(restore_sql);
+        let restore = if restore_sql.contains("model_id=?") {
+            restore.bind(&receipt.accepted_spec.embedding_profile)
+        } else {
+            restore
+        };
+        restore
             .bind(chunk)
             .execute(service.engine.relational().pool())
             .await
