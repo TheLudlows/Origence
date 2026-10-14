@@ -196,7 +196,11 @@ fn ids(rows: Vec<(Uuid, String)>) -> HashSet<Uuid> {
             id
         })
         .collect();
-    assert_eq!(result.len(), count, "route rows must preserve distinct chunks");
+    assert_eq!(
+        result.len(),
+        count,
+        "route rows must preserve distinct chunks"
+    );
     result
 }
 
@@ -212,16 +216,36 @@ async fn route_rows_cross_32_and_128_asset_boundaries_without_losing_chunks() {
     for index in 0..130 {
         let row = Record::new(index);
         assets.push(row.asset);
-        seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+        seed(
+            &mut tx,
+            scope,
+            row,
+            "knowledge",
+            Some(1),
+            "active",
+            "knowledge",
+        )
+        .await;
         chunk(&mut tx, scope, row.asset, row.second_chunk(), 1, 1, "{}").await;
         knowledge.extend([row.chunk, row.second_chunk()]);
         let row = Record::new(1_000 + index);
         assets.push(row.asset);
         seed(&mut tx, scope, row, "memory", Some(1), "active", "memory").await;
         // Stored identity is sufficient even for unnormalized semantic status.
-        let locator = json!({"parser": crate::memory_semantics::PARSER, "semantic_status": "proposed"}).to_string();
+        let locator =
+            json!({"parser": crate::memory_semantics::PARSER, "semantic_status": "proposed"})
+                .to_string();
         set_locator(&mut tx, row.chunk, &locator).await;
-        chunk(&mut tx, scope, row.asset, row.second_chunk(), 1, 1, &locator).await;
+        chunk(
+            &mut tx,
+            scope,
+            row.asset,
+            row.second_chunk(),
+            1,
+            1,
+            &locator,
+        )
+        .await;
         binding(&mut tx, scope, row.asset, &wanted).await;
         memory.extend([row.chunk, row.second_chunk()]);
     }
@@ -231,11 +255,31 @@ async fn route_rows_cross_32_and_128_asset_boundaries_without_losing_chunks() {
         let row = Record::new(1_000 + index);
         chunk(&mut tx, scope, row.asset, Uuid::new_v4(), 99, 0, "{").await;
     }
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Knowledge, None).await.unwrap()), knowledge);
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap()), memory);
-    assert!(tx.context_route_rows(ContextRoute::Learning, None).await.unwrap().is_empty());
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()),
+        knowledge
+    );
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Memory, Some(&wanted))
+            .await
+            .unwrap()),
+        memory
+    );
+    assert!(
+        tx.context_route_rows(ContextRoute::Learning, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assets.extend([Record::new(0).asset, Record::new(128).asset]);
-    let membership = tx.context_route_memberships(&assets, ContextRoute::Memory).await.unwrap();
+    let membership = tx
+        .context_route_memberships(&assets, ContextRoute::Memory)
+        .await
+        .unwrap();
     assert_eq!(membership.len(), 260);
     for index in 0..130 {
         assert!(!membership[&Record::new(index).asset]);
@@ -245,9 +289,25 @@ async fn route_rows_cross_32_and_128_asset_boundaries_without_losing_chunks() {
     }
     // Re-read after in-transaction catalog writes: no cached ordinary route
     // membership survives, and every published source tuple crosses the batches.
-    assert!(tx.context_route_rows(ContextRoute::Knowledge, None).await.unwrap().is_empty());
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Learning, None).await.unwrap()), knowledge);
-    assert!(tx.context_route_memberships(&[], ContextRoute::Memory).await.unwrap().is_empty());
+    assert!(
+        tx.context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Learning, None)
+            .await
+            .unwrap()),
+        knowledge
+    );
+    assert!(
+        tx.context_route_memberships(&[], ContextRoute::Memory)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -266,11 +326,24 @@ async fn routes_keep_registered_and_historical_learning_separate_from_ordinary_k
             _ => ("knowledge", "active"),
         };
         let current = if index == 11 { None } else { Some(1) };
-        seed(&mut tx, scope, *row, "knowledge", current, root_state, root_kind).await;
+        seed(
+            &mut tx,
+            scope,
+            *row,
+            "knowledge",
+            current,
+            root_state,
+            root_kind,
+        )
+        .await;
     }
     db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(rows[10].asset)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(rows[10].asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     registration(&mut tx, scope, rows[1], rows[1].source, "accepted").await;
     registration(&mut tx, scope, rows[2], rows[2].source, "published").await;
     registration(&mut tx, scope, rows[9], rows[9].source, "published").await;
@@ -280,29 +353,87 @@ async fn routes_keep_registered_and_historical_learning_separate_from_ordinary_k
     for index in [3, 5] {
         let source = Uuid::new_v4();
         db::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(source)
-            .execute(&mut *tx.tx).await.unwrap();
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(source)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         version(&mut tx, scope, rows[index].asset, 2, source).await;
-        chunk(&mut tx, scope, rows[index].asset, rows[index].second_chunk(), 2, 0, "{}").await;
-        db::query("UPDATE oc_assets SET current_version=2 WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(scope.tenant_id).bind(scope.workspace_id).bind(rows[index].asset)
-            .execute(&mut *tx.tx).await.unwrap();
+        chunk(
+            &mut tx,
+            scope,
+            rows[index].asset,
+            rows[index].second_chunk(),
+            2,
+            0,
+            "{}",
+        )
+        .await;
+        db::query(
+            "UPDATE oc_assets SET current_version=2 WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(rows[index].asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     }
     // A registration in another workspace cannot capture an ordinary asset.
-    let foreign = Scope { workspace_id: Uuid::new_v4(), ..scope };
+    let foreign = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
     registration(&mut tx, foreign, rows[6], rows[6].source, "published").await;
     // A same-id foreign Learning event cannot classify this scope's source.
     db::query("INSERT INTO oc_events VALUES(?,?,?,'active','learning')")
-        .bind(foreign.tenant_id).bind(foreign.workspace_id).bind(rows[8].source)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(foreign.tenant_id)
+        .bind(foreign.workspace_id)
+        .bind(rows[8].source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     for (index, row) in rows.iter().enumerate() {
-        assert_eq!(tx.context_route_matches(row.asset, ContextRoute::Knowledge).await.unwrap(), matches!(index, 0 | 6 | 7 | 8), "Knowledge {index}");
-        assert_eq!(tx.context_route_matches(row.asset, ContextRoute::Learning).await.unwrap(), matches!(index, 2 | 9), "Learning {index}");
-        assert!(!tx.context_route_matches(row.asset, ContextRoute::Memory).await.unwrap());
+        assert_eq!(
+            tx.context_route_matches(row.asset, ContextRoute::Knowledge)
+                .await
+                .unwrap(),
+            matches!(index, 0 | 6 | 7 | 8),
+            "Knowledge {index}"
+        );
+        assert_eq!(
+            tx.context_route_matches(row.asset, ContextRoute::Learning)
+                .await
+                .unwrap(),
+            matches!(index, 2 | 9),
+            "Learning {index}"
+        );
+        assert!(
+            !tx.context_route_matches(row.asset, ContextRoute::Memory)
+                .await
+                .unwrap()
+        );
     }
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Knowledge, None).await.unwrap()), HashSet::from([rows[0].chunk, rows[6].chunk, rows[8].chunk]));
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Learning, None).await.unwrap()), HashSet::from([rows[2].chunk]));
-    assert!(!tx.context_route_matches(Uuid::new_v4(), ContextRoute::Knowledge).await.unwrap());
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()),
+        HashSet::from([rows[0].chunk, rows[6].chunk, rows[8].chunk])
+    );
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Learning, None)
+            .await
+            .unwrap()),
+        HashSet::from([rows[2].chunk])
+    );
+    assert!(
+        !tx.context_route_matches(Uuid::new_v4(), ContextRoute::Knowledge)
+            .await
+            .unwrap()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -315,32 +446,104 @@ async fn identity_fast_path_skips_locator_json_only_when_identity_filter_does_no
     let memory = Record::new(0);
     let knowledge = Record::new(1);
     let wanted = identity("Atlas");
-    seed(&mut tx, scope, memory, "memory", Some(1), "active", "memory").await;
-    seed(&mut tx, scope, knowledge, "knowledge", Some(1), "active", "knowledge").await;
+    seed(
+        &mut tx,
+        scope,
+        memory,
+        "memory",
+        Some(1),
+        "active",
+        "memory",
+    )
+    .await;
+    seed(
+        &mut tx,
+        scope,
+        knowledge,
+        "knowledge",
+        Some(1),
+        "active",
+        "knowledge",
+    )
+    .await;
     set_locator(&mut tx, memory.chunk, "{").await;
     set_locator(&mut tx, knowledge.chunk, "{").await;
     binding(&mut tx, scope, memory.asset, &wanted).await;
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap()), HashSet::from([memory.chunk]));
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Memory, None).await.unwrap()), HashSet::from([memory.chunk]));
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Knowledge, Some(&wanted)).await.unwrap()), HashSet::from([knowledge.chunk]));
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Memory, Some(&wanted))
+            .await
+            .unwrap()),
+        HashSet::from([memory.chunk])
+    );
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Memory, None)
+            .await
+            .unwrap()),
+        HashSet::from([memory.chunk])
+    );
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, Some(&wanted))
+            .await
+            .unwrap()),
+        HashSet::from([knowledge.chunk])
+    );
     // The raw identity read must not run a semantic_status or JSON validity guard.
-    set_locator(&mut tx, memory.chunk, &json!({"parser": crate::memory_semantics::PARSER, "semantic_status": 7}).to_string()).await;
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap()), HashSet::from([memory.chunk]));
+    set_locator(
+        &mut tx,
+        memory.chunk,
+        &json!({"parser": crate::memory_semantics::PARSER, "semantic_status": 7}).to_string(),
+    )
+    .await;
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Memory, Some(&wanted))
+            .await
+            .unwrap()),
+        HashSet::from([memory.chunk])
+    );
     set_locator(&mut tx, memory.chunk, "{").await;
-    db::query("DELETE FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(memory.asset)
-        .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await, Err(StorageError::Unavailable(_))));
+    db::query(
+        "DELETE FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND asset_id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(memory.asset)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
+    assert!(matches!(
+        tx.context_route_rows(ContextRoute::Memory, Some(&wanted))
+            .await,
+        Err(StorageError::Unavailable(_))
+    ));
     binding(&mut tx, scope, memory.asset, &identity("Other")).await;
-    assert!(matches!(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await, Err(StorageError::Unavailable(_))));
+    assert!(matches!(
+        tx.context_route_rows(ContextRoute::Memory, Some(&wanted))
+            .await,
+        Err(StorageError::Unavailable(_))
+    ));
     let conflict = json!({"parser": crate::memory_semantics::PARSER, "semantic_status": "conflict", "suggested_identity": wanted});
     set_locator(&mut tx, memory.chunk, &conflict.to_string()).await;
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap()), HashSet::from([memory.chunk]));
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Memory, Some(&wanted))
+            .await
+            .unwrap()),
+        HashSet::from([memory.chunk])
+    );
     for status in ["confirmed", "proposed", "ambiguous", "negated"] {
         let mut locator = conflict.clone();
         locator["semantic_status"] = json!(status);
         set_locator(&mut tx, memory.chunk, &locator.to_string()).await;
-        assert!(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap().is_empty());
+        assert!(
+            tx.context_route_rows(ContextRoute::Memory, Some(&wanted))
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
@@ -352,7 +555,16 @@ async fn root_kind_and_current_filters_exclude_bad_payloads_before_decoding() {
     let scope = scope();
     let mut tx = transaction(&pool, scope).await;
     let good = Record::new(0);
-    seed(&mut tx, scope, good, "knowledge", Some(1), "active", "knowledge").await;
+    seed(
+        &mut tx,
+        scope,
+        good,
+        "knowledge",
+        Some(1),
+        "active",
+        "knowledge",
+    )
+    .await;
     for index in 1..=6 {
         let row = Record::new(index);
         let kind = if index == 3 { "memory" } else { "knowledge" };
@@ -360,39 +572,74 @@ async fn root_kind_and_current_filters_exclude_bad_payloads_before_decoding() {
         let state = if index == 1 { "retracted" } else { "active" };
         seed(&mut tx, scope, row, kind, current, state, kind).await;
         if index == 4 {
-            db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset)
-                .execute(&mut *tx.tx).await.unwrap();
+            db::query(
+                "UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?",
+            )
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(row.asset)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         }
         if index == 5 {
-            db::query("DELETE FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset)
-                .execute(&mut *tx.tx).await.unwrap();
+            db::query(
+                "DELETE FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=?",
+            )
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(row.asset)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         }
         if index == 6 {
             db::query("DELETE FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.source)
-                .execute(&mut *tx.tx).await.unwrap();
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(row.source)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
         }
         db::query("UPDATE oc_chunks SET id=?,locator=x'01',search_terms=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(vec![index as u8]).bind(scope.tenant_id).bind(scope.workspace_id).bind(row.chunk)
             .execute(&mut *tx.tx).await.unwrap();
     }
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Knowledge, None).await.unwrap()), HashSet::from([good.chunk]));
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()),
+        HashSet::from([good.chunk])
+    );
     // Once the same malformed fields belong to a matching tuple, decoding is
     // required and must fail rather than silently dropping the candidate.
     db::query("UPDATE oc_chunks SET locator=x'01' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
-        .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.context_route_rows(ContextRoute::Knowledge, None).await, Err(StorageError::Backend(_))));
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(good.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.context_route_rows(ContextRoute::Knowledge, None).await,
+        Err(StorageError::Backend(_))
+    ));
     db::query("UPDATE oc_chunks SET locator='{}',search_terms=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
         .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.context_route_rows(ContextRoute::Knowledge, None).await, Err(StorageError::Backend(_))));
+    assert!(matches!(
+        tx.context_route_rows(ContextRoute::Knowledge, None).await,
+        Err(StorageError::Backend(_))
+    ));
     db::query("UPDATE oc_chunks SET search_terms='needle',id=x'ff' WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
         .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(tx.context_route_rows(ContextRoute::Knowledge, None).await, Err(StorageError::Backend(_))));
+    assert!(matches!(
+        tx.context_route_rows(ContextRoute::Knowledge, None).await,
+        Err(StorageError::Backend(_))
+    ));
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -407,11 +654,23 @@ async fn raw_identity_batches_do_not_add_current_or_semantic_guards() {
     let records: Vec<_> = (0..130).map(Record::new).collect();
     for (index, row) in records.iter().enumerate() {
         let current = if index % 2 == 0 { None } else { Some(2) };
-        seed(&mut tx, scope, *row, "memory", current, "retracted", "memory").await;
+        seed(
+            &mut tx,
+            scope,
+            *row,
+            "memory",
+            current,
+            "retracted",
+            "memory",
+        )
+        .await;
         set_locator(&mut tx, row.chunk, "{").await;
         binding(&mut tx, scope, row.asset, &wanted).await;
     }
-    let foreign = Scope { tenant_id: Uuid::new_v4(), ..scope };
+    let foreign = Scope {
+        tenant_id: Uuid::new_v4(),
+        ..scope
+    };
     binding(&mut tx, foreign, records[128].asset, &identity("Other")).await;
     let missing = Uuid::new_v4();
     let mut assets: Vec<_> = records.iter().map(|row| row.asset).collect();
@@ -420,11 +679,24 @@ async fn raw_identity_batches_do_not_add_current_or_semantic_guards() {
     assert_eq!(found.len(), 130);
     assert!(!found.contains_key(&missing));
     for row in records {
-        assert_eq!(found[&row.asset].try_get::<String>("identity_json").unwrap(), body);
+        assert_eq!(
+            found[&row.asset]
+                .try_get::<String>("identity_json")
+                .unwrap(),
+            body
+        );
     }
     assert!(tx.identity_rows_for_assets(&[]).await.unwrap().is_empty());
-    db::query("DROP TABLE oc_memory_identities").execute(&mut *tx.tx).await.unwrap();
-    assert!(tx.identity_rows_for_assets(&assets).await.unwrap().is_empty());
+    db::query("DROP TABLE oc_memory_identities")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(
+        tx.identity_rows_for_assets(&assets)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -435,23 +707,71 @@ async fn improve_availability_preserves_each_independent_signal() {
     // pools provide the same native engine without changing production schema.
     for signal in 0..=6 {
         let dir = tempfile::tempdir().unwrap();
-        let pool = Pool::open(dir.path().join("availability.db")).await.unwrap();
+        let pool = Pool::open(dir.path().join("availability.db"))
+            .await
+            .unwrap();
         let mut conn = pool.acquire().await.unwrap();
-        db::query("CREATE TABLE oc_events(kind TEXT NOT NULL)").execute(&mut *conn).await.unwrap();
-        db::query("CREATE TABLE oc_jobs(operation TEXT NOT NULL)").execute(&mut *conn).await.unwrap();
-        db::query("INSERT INTO oc_events VALUES('knowledge')").execute(&mut *conn).await.unwrap();
-        db::query("INSERT INTO oc_jobs VALUES('ingest')").execute(&mut *conn).await.unwrap();
+        db::query("CREATE TABLE oc_events(kind TEXT NOT NULL)")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        db::query("CREATE TABLE oc_jobs(operation TEXT NOT NULL)")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        db::query("INSERT INTO oc_events VALUES('knowledge')")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        db::query("INSERT INTO oc_jobs VALUES('ingest')")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
         match signal {
-            0 => {},
-            1 => { db::query("CREATE TABLE oc_improve_cursors(id INTEGER)").execute(&mut *conn).await.unwrap(); },
-            2 => { db::query("CREATE TABLE oc_improve_runs(id INTEGER)").execute(&mut *conn).await.unwrap(); },
-            3 => { db::query("CREATE TABLE oc_learnings(id INTEGER)").execute(&mut *conn).await.unwrap(); },
-            4 => { db::query("CREATE TABLE oc_learning_support(id INTEGER)").execute(&mut *conn).await.unwrap(); },
-            5 => { db::query("INSERT INTO oc_events VALUES('learning')").execute(&mut *conn).await.unwrap(); },
-            6 => { db::query("INSERT INTO oc_jobs VALUES('improve')").execute(&mut *conn).await.unwrap(); },
+            0 => {}
+            1 => {
+                db::query("CREATE TABLE oc_improve_cursors(id INTEGER)")
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
+            2 => {
+                db::query("CREATE TABLE oc_improve_runs(id INTEGER)")
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
+            3 => {
+                db::query("CREATE TABLE oc_learnings(id INTEGER)")
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
+            4 => {
+                db::query("CREATE TABLE oc_learning_support(id INTEGER)")
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
+            5 => {
+                db::query("INSERT INTO oc_events VALUES('learning')")
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
+            6 => {
+                db::query("INSERT INTO oc_jobs VALUES('improve')")
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
             _ => unreachable!(),
         }
-        assert_eq!(super::improve::available(&mut conn).await.unwrap(), signal != 0, "signal {signal}");
+        assert_eq!(
+            super::improve::available(&mut conn).await.unwrap(),
+            signal != 0,
+            "signal {signal}"
+        );
         drop(conn);
         pool.shutdown().await.unwrap();
     }
@@ -461,16 +781,33 @@ async fn improve_availability_preserves_each_independent_signal() {
 async fn improve_availability_does_not_hide_backend_errors_after_a_true_signal() {
     for missing in ["events", "jobs"] {
         let dir = tempfile::tempdir().unwrap();
-        let pool = Pool::open(dir.path().join("missing-availability-table.db")).await.unwrap();
+        let pool = Pool::open(dir.path().join("missing-availability-table.db"))
+            .await
+            .unwrap();
         let mut conn = pool.acquire().await.unwrap();
-        db::query("CREATE TABLE oc_learnings(id INTEGER)").execute(&mut *conn).await.unwrap();
+        db::query("CREATE TABLE oc_learnings(id INTEGER)")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
         if missing == "events" {
-            db::query("CREATE TABLE oc_jobs(operation TEXT NOT NULL)").execute(&mut *conn).await.unwrap();
+            db::query("CREATE TABLE oc_jobs(operation TEXT NOT NULL)")
+                .execute(&mut *conn)
+                .await
+                .unwrap();
         } else {
-            db::query("CREATE TABLE oc_events(kind TEXT NOT NULL)").execute(&mut *conn).await.unwrap();
-            db::query("INSERT INTO oc_events VALUES('learning')").execute(&mut *conn).await.unwrap();
+            db::query("CREATE TABLE oc_events(kind TEXT NOT NULL)")
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+            db::query("INSERT INTO oc_events VALUES('learning')")
+                .execute(&mut *conn)
+                .await
+                .unwrap();
         }
-        assert!(matches!(super::improve::available(&mut conn).await, Err(StorageError::Backend(_))));
+        assert!(matches!(
+            super::improve::available(&mut conn).await,
+            Err(StorageError::Backend(_))
+        ));
         drop(conn);
         pool.shutdown().await.unwrap();
     }
@@ -482,17 +819,46 @@ async fn missing_learning_catalog_keeps_historical_classification_and_backend_er
     let scope = scope();
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(0);
-    seed(&mut tx, scope, row, "knowledge", Some(2), "retracted", "learning").await;
+    seed(
+        &mut tx,
+        scope,
+        row,
+        "knowledge",
+        Some(2),
+        "retracted",
+        "learning",
+    )
+    .await;
     let current_source = Uuid::new_v4();
     db::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(current_source)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(current_source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     version(&mut tx, scope, row.asset, 2, current_source).await;
     chunk(&mut tx, scope, row.asset, row.second_chunk(), 2, 0, "{}").await;
-    db::query("DROP TABLE oc_learnings").execute(&mut *tx.tx).await.unwrap();
-    assert!(!tx.context_route_matches(row.asset, ContextRoute::Knowledge).await.unwrap());
-    assert!(tx.context_route_rows(ContextRoute::Knowledge, None).await.unwrap().is_empty());
-    assert!(matches!(tx.context_route_matches(row.asset, ContextRoute::Learning).await, Err(StorageError::Backend(_))));
+    db::query("DROP TABLE oc_learnings")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(
+        !tx.context_route_matches(row.asset, ContextRoute::Knowledge)
+            .await
+            .unwrap()
+    );
+    assert!(
+        tx.context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        tx.context_route_matches(row.asset, ContextRoute::Learning)
+            .await,
+        Err(StorageError::Backend(_))
+    ));
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -503,12 +869,33 @@ async fn empty_route_chunks_do_not_hide_missing_association_tables() {
         let (_dir, pool) = database().await;
         let mut tx = transaction(&pool, scope()).await;
         match missing {
-            "assets" => { db::query("DROP TABLE oc_assets").execute(&mut *tx.tx).await.unwrap(); },
-            "versions" => { db::query("DROP TABLE oc_versions").execute(&mut *tx.tx).await.unwrap(); },
-            "events" => { db::query("DROP TABLE oc_events").execute(&mut *tx.tx).await.unwrap(); },
+            "assets" => {
+                db::query("DROP TABLE oc_assets")
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
+            "versions" => {
+                db::query("DROP TABLE oc_versions")
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
+            "events" => {
+                db::query("DROP TABLE oc_events")
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
             _ => unreachable!(),
         }
-        assert!(matches!(tx.context_route_rows(ContextRoute::Knowledge, None).await, Err(StorageError::Backend(_))), "missing {missing}");
+        assert!(
+            matches!(
+                tx.context_route_rows(ContextRoute::Knowledge, None).await,
+                Err(StorageError::Backend(_))
+            ),
+            "missing {missing}"
+        );
         tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }
@@ -522,8 +909,26 @@ async fn learning_history_ignores_unmatched_raw_sources_across_page_boundaries()
     let first = Record::new(0);
     let later = Record::new(1);
     assert!(first.asset < later.asset);
-    seed(&mut tx, scope, first, "knowledge", Some(1), "active", "learning").await;
-    seed(&mut tx, scope, later, "knowledge", Some(1), "active", "knowledge").await;
+    seed(
+        &mut tx,
+        scope,
+        first,
+        "knowledge",
+        Some(1),
+        "active",
+        "learning",
+    )
+    .await;
+    seed(
+        &mut tx,
+        scope,
+        later,
+        "knowledge",
+        Some(1),
+        "active",
+        "knowledge",
+    )
+    .await;
     for number in 2..=256 {
         version(&mut tx, scope, first.asset, number, later.source).await;
     }
@@ -531,18 +936,37 @@ async fn learning_history_ignores_unmatched_raw_sources_across_page_boundaries()
         version(&mut tx, scope, later.asset, number, later.source).await;
     }
     db::query("INSERT INTO oc_versions VALUES(?,?,?,257,'version','content','hash',x'01',NULL)")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(first.asset)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(first.asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     db::query("INSERT INTO oc_versions VALUES(?,?,?,256,'version','content','hash',x'02',NULL)")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(later.asset)
-        .execute(&mut *tx.tx).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(later.asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     // Fixed-main classification was a native existence predicate. Unmatched
     // short BLOB sources are ordinary keys, including at page boundaries.
     assert!(tx.is_learning_asset(first.asset).await.unwrap());
     assert!(!tx.is_learning_asset(later.asset).await.unwrap());
-    assert!(!tx.context_route_matches(first.asset, ContextRoute::Knowledge).await.unwrap());
-    assert!(tx.context_route_matches(later.asset, ContextRoute::Knowledge).await.unwrap());
-    let membership = tx.context_route_memberships(&[first.asset, later.asset], ContextRoute::Knowledge).await.unwrap();
+    assert!(
+        !tx.context_route_matches(first.asset, ContextRoute::Knowledge)
+            .await
+            .unwrap()
+    );
+    assert!(
+        tx.context_route_matches(later.asset, ContextRoute::Knowledge)
+            .await
+            .unwrap()
+    );
+    let membership = tx
+        .context_route_memberships(&[first.asset, later.asset], ContextRoute::Knowledge)
+        .await
+        .unwrap();
     assert_eq!(membership.len(), 2);
     assert!(!membership[&first.asset]);
     assert!(membership[&later.asset]);
@@ -558,12 +982,25 @@ async fn learning_history_uses_native_raw_source_and_version_keys() {
     let mut assets = Vec::new();
     for index in 0..8 {
         let row = Record::new(index);
-        seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+        seed(
+            &mut tx,
+            scope,
+            row,
+            "knowledge",
+            Some(1),
+            "active",
+            "knowledge",
+        )
+        .await;
         let raw_source = vec![index as u8 + 1];
         if index < 4 {
             db::query("INSERT INTO oc_events VALUES(?,?,?,'retracted','learning')")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(raw_source.clone())
-                .execute(&mut *tx.tx).await.unwrap();
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(raw_source.clone())
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
         }
         // These are valid native values in this non-STRICT INTEGER column.
         // Historical classification does not project a domain i32 or UUID.
@@ -572,32 +1009,57 @@ async fn learning_history_uses_native_raw_source_and_version_keys() {
                 db::query("INSERT INTO oc_versions VALUES(?,?,?,2147483648,'version','content','hash',?,NULL)")
                     .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
                     .execute(&mut *tx.tx).await.unwrap();
-            },
+            }
             1 => {
-                db::query("INSERT INTO oc_versions VALUES(?,?,?,2.5,'version','content','hash',?,NULL)")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
-                    .execute(&mut *tx.tx).await.unwrap();
-            },
+                db::query(
+                    "INSERT INTO oc_versions VALUES(?,?,?,2.5,'version','content','hash',?,NULL)",
+                )
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(row.asset)
+                .bind(raw_source)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+            }
             2 => {
                 db::query("INSERT INTO oc_versions VALUES(?,?,?,'historical-version','version','content','hash',?,NULL)")
                     .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
                     .execute(&mut *tx.tx).await.unwrap();
-            },
+            }
             3 => {
-                db::query("INSERT INTO oc_versions VALUES(?,?,?,x'08','version','content','hash',?,NULL)")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
-                    .execute(&mut *tx.tx).await.unwrap();
-            },
+                db::query(
+                    "INSERT INTO oc_versions VALUES(?,?,?,x'08','version','content','hash',?,NULL)",
+                )
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(row.asset)
+                .bind(raw_source)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+            }
             _ => unreachable!(),
         }
         assets.push(row.asset);
     }
-    let membership = tx.context_route_memberships(&assets, ContextRoute::Knowledge).await.unwrap();
+    let membership = tx
+        .context_route_memberships(&assets, ContextRoute::Knowledge)
+        .await
+        .unwrap();
     for (index, asset) in assets.iter().enumerate() {
         assert_eq!(membership[asset], index >= 4);
         assert_eq!(tx.is_learning_asset(*asset).await.unwrap(), index < 4);
     }
-    assert_eq!(ids(tx.context_route_rows(ContextRoute::Knowledge, None).await.unwrap()), (4..8).map(|index| Record::new(index).chunk).collect::<HashSet<_>>());
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()),
+        (4..8)
+            .map(|index| Record::new(index).chunk)
+            .collect::<HashSet<_>>()
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -611,8 +1073,24 @@ async fn learning_membership_preserves_raw_improve_keys_and_native_status_predic
     for index in 0..6 {
         let row = Record::new(index);
         let published = index % 2 == 0;
-        seed(&mut tx, scope, row, "knowledge", Some(1), "active", "learning").await;
-        registration(&mut tx, scope, row, row.source, if published { "published" } else { "accepted" }).await;
+        seed(
+            &mut tx,
+            scope,
+            row,
+            "knowledge",
+            Some(1),
+            "active",
+            "learning",
+        )
+        .await;
+        registration(
+            &mut tx,
+            scope,
+            row,
+            row.source,
+            if published { "published" } else { "accepted" },
+        )
+        .await;
         let raw_improve = vec![index as u8 + 1];
         db::query("UPDATE oc_learnings SET improve_id=? WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
             .bind(raw_improve.clone()).bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset)
@@ -620,27 +1098,45 @@ async fn learning_membership_preserves_raw_improve_keys_and_native_status_predic
         match index / 2 {
             0 => {
                 db::query("INSERT INTO oc_improve_runs VALUES(?,?,?,'accepted')")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(raw_improve)
-                    .execute(&mut *tx.tx).await.unwrap();
-            },
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(raw_improve)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
             1 => {
                 db::query("INSERT INTO oc_improve_runs VALUES(?,?,?,'publishing')")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(raw_improve)
-                    .execute(&mut *tx.tx).await.unwrap();
-            },
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(raw_improve)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
             2 => {
                 db::query("INSERT INTO oc_improve_runs VALUES(?,?,?,x'01')")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(raw_improve)
-                    .execute(&mut *tx.tx).await.unwrap();
-            },
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(raw_improve)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
             _ => unreachable!(),
         }
         assets.push(row.asset);
     }
     // Improve IDs and run statuses only participate in native SQL equality
     // and EXISTS. Neither becomes a newly decoded UUID or String here.
-    let knowledge = tx.context_route_memberships(&assets, ContextRoute::Knowledge).await.unwrap();
-    let learning = tx.context_route_memberships(&assets, ContextRoute::Learning).await.unwrap();
+    let knowledge = tx
+        .context_route_memberships(&assets, ContextRoute::Knowledge)
+        .await
+        .unwrap();
+    let learning = tx
+        .context_route_memberships(&assets, ContextRoute::Learning)
+        .await
+        .unwrap();
     for (index, asset) in assets.iter().enumerate() {
         assert!(!knowledge[asset]);
         assert_eq!(learning[asset], index % 2 == 0);

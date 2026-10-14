@@ -24,8 +24,12 @@ impl TursoTx {
         asset: Uuid,
         route: ContextRoute,
     ) -> StorageResult<bool> {
-        Ok(self.context_route_memberships(&[asset], route).await?
-            .get(&asset).copied().unwrap_or(false))
+        Ok(self
+            .context_route_memberships(&[asset], route)
+            .await?
+            .get(&asset)
+            .copied()
+            .unwrap_or(false))
     }
 
     /// Route membership only. Root/support activity remains the caller's layer.
@@ -35,16 +39,24 @@ impl TursoTx {
         route: ContextRoute,
     ) -> StorageResult<HashMap<Uuid, bool>> {
         let assets = read_model::unique_ids(assets.iter().copied());
-        let mut result: HashMap<_, _> = assets.iter().copied().map(|asset| (asset, false)).collect();
+        let mut result: HashMap<_, _> =
+            assets.iter().copied().map(|asset| (asset, false)).collect();
         let expected = match route {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
         let mut selected = Vec::new();
         for batch in assets.chunks(read_model::READ_KEYS) {
-            let sql = format!("SELECT id,kind,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND NOT deleted AND current_version IS NOT NULL AND id IN ({})", vec!["?"; batch.len()].join(","));
-            let mut query = native_turso::query(&sql).bind(self.scope.tenant_id).bind(self.scope.workspace_id);
-            for asset in batch { query = query.bind(*asset); }
+            let sql = format!(
+                "SELECT id,kind,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND NOT deleted AND current_version IS NOT NULL AND id IN ({})",
+                vec!["?"; batch.len()].join(",")
+            );
+            let mut query = native_turso::query(&sql)
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id);
+            for asset in batch {
+                query = query.bind(*asset);
+            }
             for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
                 let kind: String = row.try_get("kind").map_err(turso_err)?;
                 if kind == expected {
@@ -55,11 +67,14 @@ impl TursoTx {
         let ids: Vec<_> = selected.iter().map(|(asset, _)| *asset).collect();
         let learning = self.learning_route_membership(&ids).await?;
         if route != ContextRoute::Learning {
-            for asset in ids { result.insert(asset, !learning.is_learning.contains(&asset)); }
+            for asset in ids {
+                result.insert(asset, !learning.is_learning.contains(&asset));
+            }
             return Ok(result);
         }
         if !ids.iter().any(|asset| learning.is_learning.contains(asset))
-            || !super::improve::available(&mut self.tx).await? {
+            || !super::improve::available(&mut self.tx).await?
+        {
             return Ok(result);
         }
         if !learning.catalog_present {
@@ -74,13 +89,27 @@ impl TursoTx {
         let mut published = Vec::new();
         for (asset, row) in selected {
             if let Some(source) = learning.published_sources.get(&asset) {
-                keys.push(vec![row.try_get::<AssociationKey>("id").map_err(turso_err)?, row.try_get("current_version").map_err(turso_err)?, AssociationKey::from_uuid(*source)]);
+                keys.push(vec![
+                    row.try_get::<AssociationKey>("id").map_err(turso_err)?,
+                    row.try_get("current_version").map_err(turso_err)?,
+                    AssociationKey::from_uuid(*source),
+                ]);
                 published.push(asset);
             }
         }
-        for (index, _) in read_model::associate_rows(&mut self.tx, self.scope,
-            "oc_versions", "asset_id", read_model::MATCH_PUBLISHED_SELECT,
-            read_model::MATCH_PUBLISHED_WHERE, "1", 3, &keys).await? {
+        for (index, _) in read_model::associate_rows(
+            &mut self.tx,
+            self.scope,
+            "oc_versions",
+            "asset_id",
+            read_model::MATCH_PUBLISHED_SELECT,
+            read_model::MATCH_PUBLISHED_WHERE,
+            "1",
+            3,
+            &keys,
+        )
+        .await?
+        {
             result.insert(published[index], true);
         }
         Ok(result)
@@ -99,27 +128,39 @@ impl TursoTx {
         let rows = read_model::context_current_chunk_rows(&mut self.tx, self.scope, kind).await?;
         let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
         let membership = self.context_route_memberships(&assets, route).await?;
-        let rows: Vec<_> = rows.into_iter().filter(|(_, asset, _, _)| membership.get(asset) == Some(&true)).collect();
+        let rows: Vec<_> = rows
+            .into_iter()
+            .filter(|(_, asset, _, _)| membership.get(asset) == Some(&true))
+            .collect();
         let identity = identity.filter(|_| route == ContextRoute::Memory);
         let identity_rows = if identity.is_some() {
             let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
             self.identity_rows_for_assets(&assets).await?
-        } else { HashMap::new() };
+        } else {
+            HashMap::new()
+        };
         let mut decoded: HashMap<Uuid, Option<MemoryIdentity>> = HashMap::new();
         let mut result = Vec::new();
         for (id, asset, terms, locator) in rows {
             if let Some(identity) = identity {
                 if let std::collections::hash_map::Entry::Vacant(entry) = decoded.entry(asset) {
-                    let stored = identity_rows.get(&asset).map(|row| {
-                        let text: String = row.try_get("identity_json").map_err(turso_err)?;
-                        serde_json::from_str::<MemoryIdentity>(&text).map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))
-                    }).transpose()?;
+                    let stored = identity_rows
+                        .get(&asset)
+                        .map(|row| {
+                            let text: String = row.try_get("identity_json").map_err(turso_err)?;
+                            serde_json::from_str::<MemoryIdentity>(&text).map_err(|_| {
+                                StorageError::Unavailable("invalid stored memory identity".into())
+                            })
+                        })
+                        .transpose()?;
                     entry.insert(stored);
                 }
                 if decoded.get(&asset).and_then(Option::as_ref) != Some(identity) {
                     let locator: Value = serde_json::from_str(&locator)
                         .map_err(|_| StorageError::Unavailable("invalid chunk locator".into()))?;
-                    if conflict_identity(&locator).as_ref() != Some(identity) { continue; }
+                    if conflict_identity(&locator).as_ref() != Some(identity) {
+                        continue;
+                    }
                 }
             }
             result.push((id, terms));

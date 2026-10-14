@@ -816,7 +816,8 @@ pub(super) const MATCH_VERSION_WHERE: &str = "(asset_id=? AND version=?) OR (ass
 
 pub(super) const MATCH_EVENT_SELECT: &str = "(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7";
 
-pub(super) const MATCH_EVENT_WHERE: &str = "(id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?)";
+pub(super) const MATCH_EVENT_WHERE: &str =
+    "(id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?)";
 
 #[cfg(feature = "local-storage")]
 pub(super) const MATCH_PUBLISHED_SELECT: &str = "(asset_id=? AND version=? AND source_event_id=?) AS m0,(asset_id=? AND version=? AND source_event_id=?) AS m1,(asset_id=? AND version=? AND source_event_id=?) AS m2,(asset_id=? AND version=? AND source_event_id=?) AS m3,(asset_id=? AND version=? AND source_event_id=?) AS m4,(asset_id=? AND version=? AND source_event_id=?) AS m5,(asset_id=? AND version=? AND source_event_id=?) AS m6,(asset_id=? AND version=? AND source_event_id=?) AS m7";
@@ -868,7 +869,9 @@ pub(super) async fn associate_rows(
         }
         for row in query.fetch_all(&mut *conn).await.map_err(turso_err)? {
             for (slot, name) in ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7"]
-                .iter().take(batch.len()).enumerate()
+                .iter()
+                .take(batch.len())
+                .enumerate()
             {
                 if row.try_get::<Option<bool>>(*name).map_err(turso_err)? == Some(true) {
                     result.push((
@@ -893,23 +896,90 @@ pub(super) async fn context_current_chunk_rows(
     let chunks = native_turso::query("SELECT id,asset_id,version,search_terms,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id)
         .fetch_all(&mut *conn).await.map_err(turso_err)?;
-    let keys = chunks.iter().map(|row| {
-        Ok(vec![row.try_get("asset_id").map_err(turso_err)?, row.try_get("version").map_err(turso_err)?])
-    }).collect::<StorageResult<Vec<_>>>()?;
-    let gate = if kind == "memory" { "NOT deleted AND kind='memory'" } else { "NOT deleted AND kind='knowledge'" };
-    let matches = associate_rows(conn, scope, "oc_assets", "id", MATCH_CURRENT_SELECT, MATCH_CURRENT_WHERE, gate, 2, &keys).await?;
+    let keys = chunks
+        .iter()
+        .map(|row| {
+            Ok(vec![
+                row.try_get("asset_id").map_err(turso_err)?,
+                row.try_get("version").map_err(turso_err)?,
+            ])
+        })
+        .collect::<StorageResult<Vec<_>>>()?;
+    let gate = if kind == "memory" {
+        "NOT deleted AND kind='memory'"
+    } else {
+        "NOT deleted AND kind='knowledge'"
+    };
+    let matches = associate_rows(
+        conn,
+        scope,
+        "oc_assets",
+        "id",
+        MATCH_CURRENT_SELECT,
+        MATCH_CURRENT_WHERE,
+        gate,
+        2,
+        &keys,
+    )
+    .await?;
     let matched: HashSet<_> = matches.into_iter().map(|(index, _)| index).collect();
-    let chunks: Vec<_> = chunks.into_iter().enumerate().filter_map(|(index, row)| matched.contains(&index).then_some(row)).collect();
-    let keys = chunks.iter().map(|row| {
-        Ok(vec![row.try_get("asset_id").map_err(turso_err)?, row.try_get("version").map_err(turso_err)?])
-    }).collect::<StorageResult<Vec<_>>>()?;
-    let versions = associate_rows(conn, scope, "oc_versions", "source_event_id", MATCH_VERSION_SELECT, MATCH_VERSION_WHERE, "1", 2, &keys).await?;
-    let keys = versions.iter().map(|(_, row)| {
-        Ok(vec![row.try_get("source_event_id").map_err(turso_err)?])
-    }).collect::<StorageResult<Vec<_>>>()?;
-    let events = associate_rows(conn, scope, "oc_events", "id", MATCH_EVENT_SELECT, MATCH_EVENT_WHERE, "state='active'", 1, &keys).await?;
-    let matched: HashSet<_> = events.into_iter().map(|(index, _)| versions[index].0).collect();
-    chunks.into_iter().enumerate().filter(|(index, _)| matched.contains(index)).map(|(_, row)| {
-        Ok((row.try_get("id").map_err(turso_err)?, row.try_get("asset_id").map_err(turso_err)?, row.try_get("search_terms").map_err(turso_err)?, row.try_get("locator").map_err(turso_err)?))
-    }).collect()
+    let chunks: Vec<_> = chunks
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, row)| matched.contains(&index).then_some(row))
+        .collect();
+    let keys = chunks
+        .iter()
+        .map(|row| {
+            Ok(vec![
+                row.try_get("asset_id").map_err(turso_err)?,
+                row.try_get("version").map_err(turso_err)?,
+            ])
+        })
+        .collect::<StorageResult<Vec<_>>>()?;
+    let versions = associate_rows(
+        conn,
+        scope,
+        "oc_versions",
+        "source_event_id",
+        MATCH_VERSION_SELECT,
+        MATCH_VERSION_WHERE,
+        "1",
+        2,
+        &keys,
+    )
+    .await?;
+    let keys = versions
+        .iter()
+        .map(|(_, row)| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
+        .collect::<StorageResult<Vec<_>>>()?;
+    let events = associate_rows(
+        conn,
+        scope,
+        "oc_events",
+        "id",
+        MATCH_EVENT_SELECT,
+        MATCH_EVENT_WHERE,
+        "state='active'",
+        1,
+        &keys,
+    )
+    .await?;
+    let matched: HashSet<_> = events
+        .into_iter()
+        .map(|(index, _)| versions[index].0)
+        .collect();
+    chunks
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| matched.contains(index))
+        .map(|(_, row)| {
+            Ok((
+                row.try_get("id").map_err(turso_err)?,
+                row.try_get("asset_id").map_err(turso_err)?,
+                row.try_get("search_terms").map_err(turso_err)?,
+                row.try_get("locator").map_err(turso_err)?,
+            ))
+        })
+        .collect()
 }
