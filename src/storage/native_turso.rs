@@ -689,7 +689,14 @@ impl<T: FromRow + Send + 'static> Query<T> {
             if diagnostic {
                 eprintln!("offline diagnostic: candidate raw query before");
             }
-            let mut rows = connection.raw.query(self.sql, self.params?).await?;
+            let query_future = connection.raw.query(self.sql, self.params?);
+            if diagnostic {
+                eprintln!(
+                    "offline diagnostic: candidate raw future constructed, bytes={}",
+                    std::mem::size_of_val(&query_future)
+                );
+            }
+            let mut rows = query_future.await?;
             if diagnostic {
                 eprintln!("offline diagnostic: candidate raw query after");
             }

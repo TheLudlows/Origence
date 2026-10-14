@@ -11,7 +11,9 @@ type Scope = (Uuid, Uuid);
 
 async fn database() -> (tempfile::TempDir, db::Pool) {
     let dir = tempfile::tempdir().unwrap();
-    let pool = db::Pool::open(dir.path().join("predicate.db")).await.unwrap();
+    let pool = db::Pool::open(dir.path().join("predicate.db"))
+        .await
+        .unwrap();
     for sql in [
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,current_version INTEGER NOT NULL,deleted INTEGER NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -77,9 +79,8 @@ async fn support_predicate_preserves_native_json_values_and_errors() {
     event(&pool, scope, active, "active").await;
     event(&pool, scope, inactive, "withdrawn").await;
     chunk(&pool, scope, id, Uuid::new_v4(), 1, None).await;
-    let semantic = |sources| {
-        json!({"parser":"memory-semantics:v1","support_sources":sources}).to_string()
-    };
+    let semantic =
+        |sources| json!({"parser":"memory-semantics:v1","support_sources":sources}).to_string();
     let cases = vec![
         ("SQL null", None, Some(true)),
         ("JSON null", Some("null".into()), Some(true)),
@@ -108,7 +109,10 @@ async fn support_predicate_preserves_native_json_values_and_errors() {
         ),
         (
             "uppercase unhyphenated member",
-            Some(semantic(json!([active.simple().to_string().to_uppercase()]))),
+            Some(semantic(json!([active
+                .simple()
+                .to_string()
+                .to_uppercase()]))),
             Some(true),
         ),
         (
@@ -137,13 +141,21 @@ async fn support_predicate_preserves_native_json_values_and_errors() {
         ("string support", Some(semantic(json!(active))), None),
         ("number support", Some(semantic(json!(17))), None),
         ("boolean support", Some(semantic(json!(true))), None),
-        ("object support", Some(semantic(json!({"member":active}))), None),
+        (
+            "object support",
+            Some(semantic(json!({"member":active}))),
+            None,
+        ),
         ("empty object support", Some(semantic(json!({}))), None),
         ("null member", Some(semantic(json!([null]))), None),
         ("number member", Some(semantic(json!([17]))), None),
         ("boolean member", Some(semantic(json!([true]))), None),
         ("object member", Some(semantic(json!([{}]))), None),
-        ("nested array member", Some(semantic(json!([[active]]))), None),
+        (
+            "nested array member",
+            Some(semantic(json!([[active]]))),
+            None,
+        ),
         (
             "matching then invalid member",
             Some(semantic(json!([active, "invalid"]))),
@@ -286,13 +298,15 @@ async fn support_predicate_preserves_scope_and_current_root_guards() {
         .execute(&pool)
         .await
         .unwrap();
-    db::query("UPDATE oc_events SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.0)
-        .bind(scope.1)
-        .bind(root)
-        .execute(&pool)
-        .await
-        .unwrap();
+    db::query(
+        "UPDATE oc_events SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.0)
+    .bind(scope.1)
+    .bind(root)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert_current_ids(&pool, scope, &[]).await;
     assert_current_ids(&pool, scopes[1], &[first]).await;
     assert_current_ids(&pool, scopes[2], &[first]).await;
