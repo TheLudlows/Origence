@@ -151,10 +151,7 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 "identity-check requires --offline and a stopped host"
             );
             TursoStore::check_memory_identity(data_dir.join("context.db")).await?;
-            println!(
-                "{}",
-                json!({"feature":"memory-identity-v1","valid":true})
-            );
+            println!("{}", json!({"feature":"memory-identity-v1","valid":true}));
             Ok(())
         }),
         command @ (Command::WorkspaceCreate { .. }

@@ -211,7 +211,9 @@ async fn job_failures_are_fenced_and_retry_attempts_belong_to_claims() {
     let job_id = Uuid::new_v4();
     let e = entry(auth.scope, Uuid::new_v4(), Uuid::new_v4());
     let mut tx = begin_write(&store, &auth).await;
-    tx.begin_command("capture", "failure", "hash").await.unwrap();
+    tx.begin_command("capture", "failure", "hash")
+        .await
+        .unwrap();
     tx.enqueue(WorkItem {
         job_id,
         kind: "publish".into(),
@@ -250,13 +252,12 @@ async fn job_failures_are_fenced_and_retry_attempts_belong_to_claims() {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
-        let row: (String, i32, String, Option<i64>) = db::query_as(
-            "SELECT state,attempt,error_code,next_retry_at FROM oc_jobs WHERE id=?",
-        )
-        .bind(job_id)
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
+        let row: (String, i32, String, Option<i64>) =
+            db::query_as("SELECT state,attempt,error_code,next_retry_at FROM oc_jobs WHERE id=?")
+                .bind(job_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
         assert_eq!(row.1, attempt);
         assert_eq!(row.2, "INTERNAL_ERROR");
         if attempt < 5 {
@@ -270,13 +271,12 @@ async fn job_failures_are_fenced_and_retry_attempts_belong_to_claims() {
             .fail_job(&claim, "superseded", "STALE", false)
             .await
             .unwrap();
-        let unchanged: (String, i32, String, Option<i64>) = db::query_as(
-            "SELECT state,attempt,error_code,next_retry_at FROM oc_jobs WHERE id=?",
-        )
-        .bind(job_id)
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
+        let unchanged: (String, i32, String, Option<i64>) =
+            db::query_as("SELECT state,attempt,error_code,next_retry_at FROM oc_jobs WHERE id=?")
+                .bind(job_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
         assert_eq!(unchanged, row);
         assert_eq!(ledger_state(&store, &e.key).await, "pending");
         db::query("UPDATE oc_jobs SET next_retry_at=0 WHERE id=? AND state='retry_wait'")
@@ -305,13 +305,12 @@ async fn job_failures_are_fenced_and_retry_attempts_belong_to_claims() {
             .fail_job(&claim, state, "TERMINAL", false)
             .await
             .unwrap();
-        let terminal: (String, i32, Option<i64>) = db::query_as(
-            "SELECT state,attempt,next_retry_at FROM oc_jobs WHERE id=?",
-        )
-        .bind(job_id)
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
+        let terminal: (String, i32, Option<i64>) =
+            db::query_as("SELECT state,attempt,next_retry_at FROM oc_jobs WHERE id=?")
+                .bind(job_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
         assert_eq!(terminal, (state.into(), 1, None));
     }
     store.shutdown().await.unwrap();
