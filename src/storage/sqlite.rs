@@ -52,6 +52,8 @@ mod relational;
 mod schema;
 mod semantics;
 mod session;
+#[cfg(test)]
+mod session_read_tests;
 mod versions;
 mod visibility;
 

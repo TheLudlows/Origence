@@ -1,5 +1,7 @@
 //! Immutable, relational-only archives. No native artifacts or background jobs.
+use super::read_model::{self, AssociationKey};
 use super::*;
+use std::collections::HashSet;
 use crate::session::{
     ArchivedEvidence, EvidenceKind, FeedbackInput, FeedbackTarget, SessionTurnInput, UsedEvidence,
 };
@@ -7,8 +9,13 @@ use crate::session::{
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
-    native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback')) OR EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
-        .fetch_one(conn).await.map_err(turso_err)
+    let tables: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback'))")
+        .fetch_one(&mut *conn).await.map_err(turso_err)?;
+    // Evaluate both original relations, including their prepare errors. This
+    // is the existing global presence probe, not a complete schema validator.
+    let sources: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
+        .fetch_one(conn).await.map_err(turso_err)?;
+    Ok(tables || sources)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
@@ -17,6 +24,52 @@ fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
 fn encode<T: serde::Serialize>(value: &T) -> StorageResult<String> {
     serde_json::to_string(value)
         .map_err(|_| StorageError::Unavailable("invalid session record".into()))
+}
+
+// Complete fixed templates share the native eight-request binder. Each reads
+// one scoped relation; the largest statement has 50 bind parameters.
+const ARCHIVE_ASSETS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND (NOT deleted) AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
+
+const ARCHIVE_VERSIONS: &str = "SELECT source_event_id,(asset_id=? AND version=?) AS m0,(asset_id=? AND version=?) AS m1,(asset_id=? AND version=?) AS m2,(asset_id=? AND version=?) AS m3,(asset_id=? AND version=?) AS m4,(asset_id=? AND version=?) AS m5,(asset_id=? AND version=?) AS m6,(asset_id=? AND version=?) AS m7 FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND (1) AND ((asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?))";
+
+const ARCHIVE_ROOTS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND (state='active') AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
+
+const ARCHIVE_CHUNKS: &str = "SELECT locator,(id=? AND asset_id=? AND version=?) AS m0,(id=? AND asset_id=? AND version=?) AS m1,(id=? AND asset_id=? AND version=?) AS m2,(id=? AND asset_id=? AND version=?) AS m3,(id=? AND asset_id=? AND version=?) AS m4,(id=? AND asset_id=? AND version=?) AS m5,(id=? AND asset_id=? AND version=?) AS m6,(id=? AND asset_id=? AND version=?) AS m7 FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND (1) AND ((id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?) OR (id=? AND asset_id=? AND version=?))";
+
+const ARCHIVE_CHUNK_OWNERS: &str = "SELECT artifact_id,(source_id=? AND version=? AND artifact_id=?) AS m0,(source_id=? AND version=? AND artifact_id=?) AS m1,(source_id=? AND version=? AND artifact_id=?) AS m2,(source_id=? AND version=? AND artifact_id=?) AS m3,(source_id=? AND version=? AND artifact_id=?) AS m4,(source_id=? AND version=? AND artifact_id=?) AS m5,(source_id=? AND version=? AND artifact_id=?) AS m6,(source_id=? AND version=? AND artifact_id=?) AS m7 FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND (artifact_type='chunk' AND artifact_id=chunk_id) AND ((source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?))";
+
+const ARCHIVE_ENTITY_OWNERS: &str = "SELECT artifact_id,(source_id=? AND version=? AND artifact_id=?) AS m0,(source_id=? AND version=? AND artifact_id=?) AS m1,(source_id=? AND version=? AND artifact_id=?) AS m2,(source_id=? AND version=? AND artifact_id=?) AS m3,(source_id=? AND version=? AND artifact_id=?) AS m4,(source_id=? AND version=? AND artifact_id=?) AS m5,(source_id=? AND version=? AND artifact_id=?) AS m6,(source_id=? AND version=? AND artifact_id=?) AS m7 FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND (artifact_type='entity') AND ((source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?))";
+
+const ARCHIVE_RELATION_OWNERS: &str = "SELECT artifact_id,(source_id=? AND version=? AND artifact_id=?) AS m0,(source_id=? AND version=? AND artifact_id=?) AS m1,(source_id=? AND version=? AND artifact_id=?) AS m2,(source_id=? AND version=? AND artifact_id=?) AS m3,(source_id=? AND version=? AND artifact_id=?) AS m4,(source_id=? AND version=? AND artifact_id=?) AS m5,(source_id=? AND version=? AND artifact_id=?) AS m6,(source_id=? AND version=? AND artifact_id=?) AS m7 FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND (artifact_type='relation') AND ((source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?))";
+
+const ARCHIVE_ENTITY_LEDGER: &str = "SELECT artifact_id,(source_id=? AND version=? AND artifact_id=?) AS m0,(source_id=? AND version=? AND artifact_id=?) AS m1,(source_id=? AND version=? AND artifact_id=?) AS m2,(source_id=? AND version=? AND artifact_id=?) AS m3,(source_id=? AND version=? AND artifact_id=?) AS m4,(source_id=? AND version=? AND artifact_id=?) AS m5,(source_id=? AND version=? AND artifact_id=?) AS m6,(source_id=? AND version=? AND artifact_id=?) AS m7 FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND (artifact_type='entity' AND surface='graph' AND state='committed') AND ((source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?))";
+
+const ARCHIVE_RELATION_LEDGER: &str = "SELECT artifact_id,(source_id=? AND version=? AND artifact_id=?) AS m0,(source_id=? AND version=? AND artifact_id=?) AS m1,(source_id=? AND version=? AND artifact_id=?) AS m2,(source_id=? AND version=? AND artifact_id=?) AS m3,(source_id=? AND version=? AND artifact_id=?) AS m4,(source_id=? AND version=? AND artifact_id=?) AS m5,(source_id=? AND version=? AND artifact_id=?) AS m6,(source_id=? AND version=? AND artifact_id=?) AS m7 FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND (artifact_type='relation' AND surface='graph' AND state='committed') AND ((source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?))";
+
+fn association_key(value: impl native_turso::Encode) -> StorageResult<AssociationKey> {
+    let value = native_turso::Encode::encode(value).map_err(turso_err)?;
+    native_turso::Decode::decode(&value).map_err(turso_err)
+}
+
+#[derive(Default)]
+struct ArchiveRow {
+    root: Option<native_turso::Row>,
+    chunk: Option<native_turso::Row>,
+    chunk_owned: bool,
+    graph_owned: bool,
+}
+
+/// One read-call snapshot; never retained across a write or another transaction.
+struct ArchiveReadBatch {
+    references: Vec<UsedEvidence>,
+    rows: Vec<ArchiveRow>,
+    roots_loaded: bool,
+    chunks_loaded: bool,
+    owners_loaded: bool,
+    graph_loaded: bool,
+    contents_loaded: bool,
+    contents: HashMap<Uuid, native_turso::Row>,
+    support: HashMap<(Uuid, i32), bool>,
 }
 
 impl TursoTx {
@@ -29,65 +82,223 @@ impl TursoTx {
         Ok(())
     }
 
-    /// Exact historical version, with complete S2 support. Never use current-only retrieval.
-    pub(super) async fn archive_evidence_local(
+    /// Each relation is loaded only after the current reference reaches its
+    /// original read boundary. In particular, missing chunks and invalid local
+    /// support must not prepare owner/ledger statements. Raw rows defer decoding
+    /// until consumption; native JSON guards remain in reference order.
+    fn archive_metadata(references: &[UsedEvidence]) -> ArchiveReadBatch {
+        ArchiveReadBatch {
+            references: references.to_vec(),
+            rows: references.iter().map(|_| ArchiveRow::default()).collect(),
+            roots_loaded: false,
+            chunks_loaded: false,
+            owners_loaded: false,
+            graph_loaded: false,
+            contents_loaded: false,
+            contents: HashMap::new(),
+            support: HashMap::new(),
+        }
+    }
+
+    async fn archive_roots(&mut self, batch: &mut ArchiveReadBatch) -> StorageResult<()> {
+        if batch.roots_loaded || batch.references.is_empty() {
+            return Ok(());
+        }
+        let keys = batch.references.iter().map(|reference| {
+            Ok(vec![association_key(reference.asset_id)?])
+        }).collect::<StorageResult<Vec<_>>>()?;
+        let assets: HashSet<_> = read_model::associate_query(
+            &mut self.tx, self.scope, ARCHIVE_ASSETS, 1, &keys,
+        ).await?.into_iter().map(|(index, _)| index).collect();
+        let keys = batch.references.iter().map(|reference| {
+            Ok(vec![association_key(reference.asset_id)?, association_key(reference.asset_version)?])
+        }).collect::<StorageResult<Vec<_>>>()?;
+        let versions: Vec<_> = read_model::associate_query(
+            &mut self.tx, self.scope, ARCHIVE_VERSIONS, 2, &keys,
+        ).await?.into_iter().filter(|(index, _)| assets.contains(index)).collect();
+        let keys = versions.iter().map(|(_, row)| {
+            Ok(vec![row.try_get("source_event_id").map_err(turso_err)?])
+        }).collect::<StorageResult<Vec<_>>>()?;
+        // No current-version or source-kind predicate belongs to this layer.
+        let active: HashSet<_> = read_model::associate_query(
+            &mut self.tx, self.scope, ARCHIVE_ROOTS, 1, &keys,
+        ).await?.into_iter().map(|(index, _)| index).collect();
+        for (index, (request, row)) in versions.into_iter().enumerate() {
+            if active.contains(&index) && batch.rows[request].root.is_none() {
+                batch.rows[request].root = Some(row);
+            }
+        }
+        batch.roots_loaded = true;
+        Ok(())
+    }
+
+    async fn archive_chunks(&mut self, batch: &mut ArchiveReadBatch) -> StorageResult<()> {
+        if batch.chunks_loaded {
+            return Ok(());
+        }
+        let selected: Vec<_> = batch.rows.iter().enumerate()
+            .filter_map(|(index, row)| row.root.is_some().then_some(index)).collect();
+        if !selected.is_empty() {
+            let keys = selected.iter().map(|index| {
+                let reference = &batch.references[*index];
+                Ok(vec![association_key(reference.chunk_id)?, association_key(reference.asset_id)?, association_key(reference.asset_version)?])
+            }).collect::<StorageResult<Vec<_>>>()?;
+            for (index, row) in read_model::associate_query(
+                &mut self.tx, self.scope, ARCHIVE_CHUNKS, 3, &keys,
+            ).await? {
+                batch.rows[selected[index]].chunk.get_or_insert(row);
+            }
+        }
+        batch.chunks_loaded = true;
+        Ok(())
+    }
+
+    async fn archive_owners(&mut self, batch: &mut ArchiveReadBatch) -> StorageResult<()> {
+        if batch.owners_loaded {
+            return Ok(());
+        }
+        let selected: Vec<_> = batch.rows.iter().enumerate()
+            .filter_map(|(index, row)| (row.root.is_some() && row.chunk.is_some()).then_some(index)).collect();
+        if !selected.is_empty() {
+            let keys = selected.iter().map(|index| {
+                let reference = &batch.references[*index];
+                let root = batch.rows[*index].root.as_ref().ok_or(StorageError::NotFound)?;
+                Ok(vec![root.try_get("source_event_id").map_err(turso_err)?, association_key(reference.asset_version)?, association_key(reference.chunk_id)?])
+            }).collect::<StorageResult<Vec<_>>>()?;
+            // artifact_id is already equal to the requested chunk UUID, so the
+            // native artifact_id=chunk_id gate retains both original owner keys.
+            for (index, _) in read_model::associate_query(
+                &mut self.tx, self.scope, ARCHIVE_CHUNK_OWNERS, 3, &keys,
+            ).await? {
+                batch.rows[selected[index]].chunk_owned = true;
+            }
+        }
+        batch.owners_loaded = true;
+        Ok(())
+    }
+
+    async fn archive_graph(&mut self, batch: &mut ArchiveReadBatch) -> StorageResult<()> {
+        if batch.graph_loaded {
+            return Ok(());
+        }
+        for (kind, owner_sql, ledger_sql) in [
+            (EvidenceKind::Entity, ARCHIVE_ENTITY_OWNERS, ARCHIVE_ENTITY_LEDGER),
+            (EvidenceKind::Relation, ARCHIVE_RELATION_OWNERS, ARCHIVE_RELATION_LEDGER),
+        ] {
+            let selected: Vec<_> = batch.references.iter().enumerate()
+                .filter_map(|(index, reference)| (reference.kind == kind && batch.rows[index].chunk_owned).then_some(index)).collect();
+            if selected.is_empty() {
+                continue;
+            }
+            let keys = selected.iter().map(|index| {
+                let reference = &batch.references[*index];
+                let root = batch.rows[*index].root.as_ref().ok_or(StorageError::NotFound)?;
+                Ok(vec![root.try_get("source_event_id").map_err(turso_err)?, association_key(reference.asset_version)?, association_key(reference.id)?])
+            }).collect::<StorageResult<Vec<_>>>()?;
+            let owned: HashSet<_> = read_model::associate_query(
+                &mut self.tx, self.scope, owner_sql, 3, &keys,
+            ).await?.into_iter().map(|(index, _)| index).collect();
+            // The old graph predicate constrained neither generation nor the
+            // graph owner's chunk_id; intersect its complete native key only.
+            for (index, _) in read_model::associate_query(
+                &mut self.tx, self.scope, ledger_sql, 3, &keys,
+            ).await? {
+                batch.rows[selected[index]].graph_owned = owned.contains(&index);
+            }
+        }
+        batch.graph_loaded = true;
+        Ok(())
+    }
+
+    async fn archive_contents(&mut self, batch: &mut ArchiveReadBatch) -> StorageResult<()> {
+        if batch.contents_loaded {
+            return Ok(());
+        }
+        let mut sources = Vec::new();
+        for row in &batch.rows {
+            if let Some(root) = &row.root
+                && let Ok(source) = root.try_get::<Uuid>("source_event_id")
+            {
+                sources.push(source);
+            }
+            // These are prefetch hints, never visibility decisions. Strict
+            // locator/provenance decoding still occurs at the original boundary.
+            if let Some(chunk) = &row.chunk
+                && let Ok(text) = chunk.try_get::<String>("locator")
+                && let Ok(locator) = decode::<Value>(&text)
+                && locator["parser"] == crate::memory_semantics::PARSER
+                && let Ok(source) = serde_json::from_value::<Uuid>(locator["source_event_id"].clone())
+            {
+                sources.push(source);
+            }
+        }
+        if !sources.is_empty() {
+            for row in read_model::rows_by_ids(
+                &mut self.tx, self.scope, "oc_events", "id,content,state='active' AS active", "id", &sources,
+            ).await? {
+                if row.try_get::<Option<bool>>("active").map_err(turso_err)? == Some(true) {
+                    batch.contents.insert(row.try_get("id").map_err(turso_err)?, row);
+                }
+            }
+        }
+        batch.contents_loaded = true;
+        Ok(())
+    }
+
+    async fn archive_from_batch(
         &mut self,
+        batch: &mut ArchiveReadBatch,
+        index: usize,
         reference: &UsedEvidence,
         evidence_ref_id: Uuid,
     ) -> StorageResult<ArchivedEvidence> {
-        reference
-            .validate()
-            .map_err(StorageError::InvalidArgument)?;
-        // This local check is deliberately nonrecursive. The shared Learning
-        // guard walks the complete dependency graph after exact provenance has
-        // been checked, including for reader-visible published Learnings.
-        let root = self
-            .require_active_version_local(reference.asset_id, reference.asset_version)
-            .await?;
-        let locator: Option<String> = native_turso::query_scalar("SELECT locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND version=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(reference.chunk_id)
-            .bind(reference.asset_id).bind(reference.asset_version).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        let locator: Value = decode(&locator.ok_or(StorageError::NotFound)?)?;
-        let chunk_owned: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND source_id=? AND version=? AND artifact_type='chunk' AND artifact_id=? AND chunk_id=?)")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(root).bind(reference.asset_version)
-            .bind(reference.chunk_id).bind(reference.chunk_id).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
-        if !chunk_owned {
+        reference.validate().map_err(StorageError::InvalidArgument)?;
+        self.archive_roots(batch).await?;
+        let root: Uuid = batch.rows[index].root.as_ref().ok_or(StorageError::NotFound)?
+            .try_get("source_event_id").map_err(turso_err)?;
+        let version = (reference.asset_id, reference.asset_version);
+        let supported = if let Some(supported) = batch.support.get(&version) {
+            *supported
+        } else {
+            let supported = self.semantic_version_visible_local(version.0, version.1).await?;
+            batch.support.insert(version, supported);
+            supported
+        };
+        if !supported {
+            return Err(StorageError::NotFound);
+        }
+        self.archive_chunks(batch).await?;
+        let locator: String = batch.rows[index].chunk.as_ref().ok_or(StorageError::NotFound)?
+            .try_get("locator").map_err(turso_err)?;
+        let locator: Value = decode(&locator)?;
+        self.archive_owners(batch).await?;
+        if !batch.rows[index].chunk_owned {
             return Err(StorageError::NotFound);
         }
         if reference.kind != EvidenceKind::Chunk {
-            let kind = match reference.kind {
-                EvidenceKind::Entity => "entity",
-                EvidenceKind::Relation => "relation",
-                EvidenceKind::Chunk => unreachable!(),
-            };
-            // Existing graph ownership is source/version-level (chunk_id is NULL).
-            // Require the caller's chosen chunk to belong to that same exact support.
-            let owned: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_artifact_owners o JOIN oc_artifact_ledger l ON l.tenant_id=o.tenant_id AND l.workspace_id=o.workspace_id AND l.source_id=o.source_id AND l.version=o.version AND l.artifact_type=o.artifact_type AND l.artifact_id=o.artifact_id WHERE o.tenant_id=? AND o.workspace_id=? AND o.source_id=? AND o.version=? AND o.artifact_type=? AND o.artifact_id=? AND l.surface='graph' AND l.state='committed')")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(root).bind(reference.asset_version)
-                .bind(kind).bind(reference.id).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
-            if !owned {
+            self.archive_graph(batch).await?;
+            if !batch.rows[index].graph_owned {
                 return Err(StorageError::NotFound);
             }
         }
-        let (source_event_id, source_version) =
-            if locator["parser"] == crate::memory_semantics::PARSER {
-                let source: Uuid = serde_json::from_value(locator["source_event_id"].clone())
-                    .map_err(|_| StorageError::Unavailable("invalid semantic provenance".into()))?;
-                let version: i32 = serde_json::from_value(locator["source_version"].clone())
-                    .map_err(|_| StorageError::Unavailable("invalid semantic provenance".into()))?;
-                if version <= 0 {
-                    return Err(StorageError::Unavailable(
-                        "invalid semantic provenance".into(),
-                    ));
-                }
-                (source, version)
-            } else {
-                (root, reference.asset_version)
-            };
-        if self.event_content(source_event_id, true).await?.is_none()
-            || self.event_content(root, true).await?.is_none()
-        {
-            return Err(StorageError::NotFound);
+        let (source_event_id, source_version) = if locator["parser"] == crate::memory_semantics::PARSER {
+            let source: Uuid = serde_json::from_value(locator["source_event_id"].clone())
+                .map_err(|_| StorageError::Unavailable("invalid semantic provenance".into()))?;
+            let version: i32 = serde_json::from_value(locator["source_version"].clone())
+                .map_err(|_| StorageError::Unavailable("invalid semantic provenance".into()))?;
+            if version <= 0 {
+                return Err(StorageError::Unavailable("invalid semantic provenance".into()));
+            }
+            (source, version)
+        } else {
+            (root, reference.asset_version)
+        };
+        self.archive_contents(batch).await?;
+        for source in [source_event_id, root] {
+            // event_content(..., true) decoded String even though only its
+            // existence was used. Keep that error, in member-then-root order.
+            batch.contents.get(&source).ok_or(StorageError::NotFound)?
+                .try_get::<String>("content").map_err(turso_err)?;
         }
         Ok(ArchivedEvidence {
             evidence_ref_id,
@@ -97,6 +308,17 @@ impl TursoTx {
             version_source_event_id: root,
             locator,
         })
+    }
+
+    /// Exact historical provenance, without the public writer or Learning guard.
+    pub(super) async fn archive_evidence_local(
+        &mut self,
+        reference: &UsedEvidence,
+        evidence_ref_id: Uuid,
+    ) -> StorageResult<ArchivedEvidence> {
+        reference.validate().map_err(StorageError::InvalidArgument)?;
+        let mut batch = Self::archive_metadata(std::slice::from_ref(reference));
+        self.archive_from_batch(&mut batch, 0, reference, evidence_ref_id).await
     }
 
     async fn turn_evidence(
@@ -134,15 +356,27 @@ impl TursoTx {
         turn: Uuid,
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_sessions().await?;
-        let source: Option<Uuid> = native_turso::query_scalar("SELECT t.source_event_id FROM oc_session_turns t JOIN oc_events e ON e.tenant_id=t.tenant_id AND e.workspace_id=t.workspace_id AND e.id=t.source_event_id WHERE t.tenant_id=? AND t.workspace_id=? AND t.session_id=? AND t.turn_id=? AND e.state='active'")
+        let turn_row = native_turso::query("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        let source = source.ok_or(StorageError::NotFound)?;
+        let keys = turn_row.as_ref().map(|row| -> StorageResult<Vec<AssociationKey>> {
+            Ok(vec![row.try_get("source_event_id").map_err(turso_err)?])
+        }).transpose()?.into_iter().collect::<Vec<_>>();
+        let active = read_model::associate_query(
+            &mut self.tx, self.scope, ARCHIVE_ROOTS, 1, &keys,
+        ).await?;
+        if active.is_empty() {
+            return Err(StorageError::NotFound);
+        }
+        let source = turn_row.ok_or(StorageError::NotFound)?
+            .try_get("source_event_id").map_err(turso_err)?;
         let archived = self.turn_evidence(session, turn).await?;
-        for evidence in &archived {
-            let current = self
-                .archive_evidence_local(&evidence.reference, evidence.evidence_ref_id)
-                .await?;
+        let references: Vec<_> = archived.iter().map(|evidence| evidence.reference.clone()).collect();
+        let mut batch = Self::archive_metadata(&references);
+        for (index, evidence) in archived.iter().enumerate() {
+            let current = self.archive_from_batch(
+                &mut batch, index, &evidence.reference, evidence.evidence_ref_id,
+            ).await?;
             if current != *evidence {
                 return Err(StorageError::NotFound);
             }
@@ -197,8 +431,15 @@ impl TursoTx {
             source
         } else {
             let mut evidence = Vec::new();
-            for reference in &input.used_evidence {
-                evidence.push(self.archive_evidence(reference, Uuid::new_v4()).await?);
+            if input.used_evidence.len() == 1 {
+                evidence.push(self.archive_evidence(&input.used_evidence[0], Uuid::new_v4()).await?);
+            } else {
+                let mut batch = Self::archive_metadata(&input.used_evidence);
+                for (index, reference) in input.used_evidence.iter().enumerate() {
+                    let item = self.archive_from_batch(&mut batch, index, reference, Uuid::new_v4()).await?;
+                    self.require_archived_evidence_visible(&item).await?;
+                    evidence.push(item);
+                }
             }
             // Enforce the closure bound over the whole turn, not separately
             // for each reference before writing an unreadable archive.

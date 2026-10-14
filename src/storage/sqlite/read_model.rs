@@ -843,13 +843,25 @@ pub(super) async fn associate_rows(
     let sql = format!(
         "SELECT {columns},{projections} FROM {table} WHERE tenant_id=? AND workspace_id=? AND ({gate}) AND ({alternatives})"
     );
+    associate_query(conn, scope, &sql, width, requests).await
+}
+
+/// Execute a complete fixed association statement using the shared native
+/// matcher. Separate full templates avoid multiplying unrelated SQL fragments.
+pub(super) async fn associate_query(
+    conn: &mut Connection,
+    scope: Scope,
+    sql: &str,
+    width: usize,
+    requests: &[Vec<AssociationKey>],
+) -> StorageResult<Vec<(usize, native_turso::Row)>> {
     let mut result = Vec::new();
     // Even an empty input prepares all original table/column references. A
     // missing table must not be hidden by an empty earlier relation.
     for batch_index in 0..requests.len().div_ceil(ASSOCIATION_KEYS).max(1) {
         let start = batch_index * ASSOCIATION_KEYS;
         let batch = &requests[start..(start + ASSOCIATION_KEYS).min(requests.len())];
-        let mut query = native_turso::query(&sql);
+        let mut query = native_turso::query(sql);
         for slot in 0..ASSOCIATION_KEYS {
             for key in 0..width {
                 query = query.bind(batch.get(slot).map_or_else(
