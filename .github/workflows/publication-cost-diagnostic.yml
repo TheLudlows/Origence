@@ -17,10 +17,12 @@ jobs:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/publication-cost
-      BENCH: ${{ runner.temp }}/publication-cost
-      EVIDENCE: ${{ runner.temp }}/publication-cost-evidence
-      PRODUCTION: ${{ runner.temp }}/publication-production
     steps:
+      - name: Set isolated paths after the runner starts
+        run: |
+          echo "BENCH=$RUNNER_TEMP/publication-cost" >> "$GITHUB_ENV"
+          echo "EVIDENCE=$RUNNER_TEMP/publication-cost-evidence" >> "$GITHUB_ENV"
+          echo "PRODUCTION=$RUNNER_TEMP/publication-production" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
