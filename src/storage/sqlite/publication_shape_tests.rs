@@ -98,6 +98,7 @@ async fn receipt_json_invalid_element_errors_before_state_interpretation() {
     for chunks in [
         r#""not-json""#,
         r#"{"a":"not-json"}"#,
+        r#"{"a":"not-json","a":{"id":"later"}}"#,
         r#"["not-json"]"#,
         r#"[{"id":"same"},{"id":"same"},"not-json"]"#,
         r#"[{"id":null},"not-json"]"#,
@@ -125,20 +126,22 @@ async fn receipt_json_invalid_element_errors_before_state_interpretation() {
 async fn receipt_json_distinct_uses_native_value_types_before_normalization() {
     let (_dir, pool) = database().await;
     for (chunks, expected) in [
-        (r#"[{"id":1},{"id":1.0},{"id":true},{"id":"1"},{"id":null},{}]"#, 2),
+        (
+            r#"[{"id":1},{"id":1.0},{"id":true},{"id":"1"},{"id":null},{}]"#,
+            2,
+        ),
         (r#"[{"id":0},{"id":-0.0},{"id":false},{"id":"0"}]"#, 2),
         (r#"[{"id":{"a":1}},{"id":"{\"a\":1}"}]"#, 1),
         (r#"[{"id":[1,2]},{"id":"[1,2]"}]"#, 1),
         (r#"[{"id":{"a":1,"b":2}},{"id":{"b":2,"a":1}}]"#, 2),
         (r#"[{"id":"a-b"},{"id":"AB"},{"id":"a-b"}]"#, 2),
     ] {
-        let actual: i64 = db::query_scalar(
-            "SELECT count(DISTINCT json_extract(value,'$.id')) FROM json_each(?)",
-        )
-        .bind(chunks)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let actual: i64 =
+            db::query_scalar("SELECT count(DISTINCT json_extract(value,'$.id')) FROM json_each(?)")
+                .bind(chunks)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(actual, expected, "{chunks}");
     }
     let normalized: i64 = db::query_scalar(
@@ -148,7 +151,10 @@ async fn receipt_json_distinct_uses_native_value_types_before_normalization() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(normalized, 1, "normalization must not define raw distinctness");
+    assert_eq!(
+        normalized, 1,
+        "normalization must not define raw distinctness"
+    );
     pool.shutdown().await.unwrap();
 }
 
@@ -201,7 +207,17 @@ async fn receipt_json_embedding_dimension_is_only_native_array_length() {
     .unwrap();
     assert_eq!(
         dimensions,
-        [None, Some(0), Some(0), Some(0), Some(0), Some(0), Some(0), Some(0), Some(3)]
+        [
+            None,
+            Some(0),
+            Some(0),
+            Some(0),
+            Some(0),
+            Some(0),
+            Some(0),
+            Some(0),
+            Some(3)
+        ]
     );
     for length in [0usize, 1, 4096, 4097] {
         let chunks = serde_json::json!([{"id":"chunk","embedding":vec![0; length]}]).to_string();
@@ -226,20 +242,18 @@ async fn receipt_json_quoted_id_metadata_retains_native_distinct_on_fixtures() {
         r#"[{"id":9007199254740993},{"id":9007199254740992.0},{"id":9223372036854775807},{"id":-9223372036854775808},{"id":1e300},{"id":-1e300},{"id":5e-324},{"id":1e-999}]"#,
         r#"[{"id":"a-b"},{"id":"AB"},{"id":"a-b"}]"#,
     ] {
-        let expected: i64 = db::query_scalar(
-            "SELECT count(DISTINCT json_extract(value,'$.id')) FROM json_each(?)",
-        )
-        .bind(chunks)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        let tokens: Vec<String> = db::query_scalar(
-            "SELECT json_quote(json_extract(value,'$.id')) FROM json_each(?)",
-        )
-        .bind(chunks)
-        .fetch_all(&pool)
-        .await
-        .unwrap();
+        let expected: i64 =
+            db::query_scalar("SELECT count(DISTINCT json_extract(value,'$.id')) FROM json_each(?)")
+                .bind(chunks)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let tokens: Vec<String> =
+            db::query_scalar("SELECT json_quote(json_extract(value,'$.id')) FROM json_each(?)")
+                .bind(chunks)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
         // Preserve native tokens verbatim: no serde map, UUID decoding, or
         // String conversion of the original ID values before native DISTINCT.
         let metadata = format!("[{}]", tokens.join(","));

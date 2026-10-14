@@ -166,18 +166,80 @@ impl TursoTx {
     }
 
     pub(super) async fn cancel_affected_jobs_inner(&mut self) -> StorageResult<()> {
-        native_turso::query(
-            "UPDATE oc_jobs SET state = 'cancelled', cancel_requested = 1, run_token = run_token + 1, updated_at = ? \
-             WHERE tenant_id = ? AND workspace_id = ? AND operation <> 'cleanup' AND state IN ('pending', 'processing', 'failed', 'retry_wait') \
-               AND (EXISTS(SELECT 1 FROM oc_assets a WHERE a.id = oc_jobs.asset_id AND a.tenant_id = oc_jobs.tenant_id AND a.workspace_id = oc_jobs.workspace_id AND a.deleted) \
-                 OR EXISTS(SELECT 1 FROM oc_events e WHERE e.id = oc_jobs.source_event_id AND e.tenant_id = oc_jobs.tenant_id AND e.workspace_id = oc_jobs.workspace_id AND e.state = 'retracted'))",
+        use super::read_model::{self, AssociationKey};
+
+        let now = now_ms();
+        let jobs = native_turso::query(
+            "SELECT id,asset_id,source_event_id FROM oc_jobs WHERE tenant_id=? AND workspace_id=? \
+             AND operation<>'cleanup' AND state IN ('pending','processing','failed','retry_wait')",
         )
-        .bind(now_ms())
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
-        .execute(&mut *self.tx)
+        .fetch_all(&mut *self.tx)
         .await
         .map_err(turso_err)?;
+        let mut asset_keys = Vec::with_capacity(jobs.len());
+        let mut source_keys = Vec::with_capacity(jobs.len());
+        for row in &jobs {
+            asset_keys.push(vec![
+                row.try_get::<AssociationKey>("asset_id").map_err(turso_err)?,
+            ]);
+            source_keys.push(vec![
+                row.try_get::<AssociationKey>("source_event_id")
+                    .map_err(turso_err)?,
+            ]);
+        }
+        let assets = read_model::associate_rows(
+            &mut self.tx,
+            self.scope,
+            "oc_assets",
+            "id",
+            read_model::MATCH_EVENT_SELECT,
+            read_model::MATCH_EVENT_WHERE,
+            "deleted",
+            1,
+            &asset_keys,
+        )
+        .await?;
+        let sources = read_model::associate_rows(
+            &mut self.tx,
+            self.scope,
+            "oc_events",
+            "id",
+            read_model::MATCH_EVENT_SELECT,
+            read_model::MATCH_EVENT_WHERE,
+            "state='retracted'",
+            1,
+            &source_keys,
+        )
+        .await?;
+        let affected: std::collections::HashSet<_> = assets
+            .into_iter()
+            .chain(sources)
+            .map(|(index, _)| index)
+            .collect();
+        let targets = jobs
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| affected.contains(index))
+            .map(|(_, row)| row.try_get::<AssociationKey>("id").map_err(turso_err))
+            .collect::<StorageResult<Vec<_>>>()?;
+        // Prepare the mutation even with no targets. Raw keys retain native
+        // equality; the original UPDATE never decoded a job UUID or target.
+        for index in 0..targets.len().max(1) {
+            native_turso::query(
+                "UPDATE oc_jobs SET state='cancelled',cancel_requested=1,run_token=run_token+1,updated_at=? \
+                 WHERE tenant_id=? AND workspace_id=? AND id=? AND operation<>'cleanup' \
+                 AND state IN ('pending','processing','failed','retry_wait')",
+            )
+            .bind(now)
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(targets.get(index).cloned())
+            .execute(&mut *self.tx)
+            .await
+            .map_err(turso_err)?;
+        }
         Ok(())
     }
 

@@ -45,11 +45,6 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite/app.rs|finish_cleanup#1|3|ed9b8a81947098f2ff92461ed37cd23f51985d4e1ccbd5a855f7f513e26a6ce7',
     'src/storage/sqlite/app.rs|finish_cleanup#1|4|0d66789ce1cb4092f659c51e680073d1b6783c61d016cd1d8cc6ff43546885c8',
     'src/storage/sqlite/app.rs|finish_cleanup#1|5|eb4b4694e43b6566b325ddd380034ea92ac4539406f866a4383fb84cb230f4a0',
-    'src/storage/sqlite/improve.rs|cancel_improve_job#1|2|01c3c787e946ec697a9d79634176aac45b068641f7f6534f754b2731e16256b1',
-    'src/storage/sqlite/improve.rs|create_learning#1|2|169f2c1154206421570f6d1d1503f175c2821739d6fa4588c74b9708378d9af4',
-    'src/storage/sqlite/improve.rs|mark_learning_published#1|2|f6fd7099d471d0244882305ebab40d584d65141f0c244b0dc7bc23e8fbc5cdac',
-    'src/storage/sqlite/improve.rs|require_improve_job_retry_allowed#1|1|dce646566d147e597a6e824997247f23a4c95b980208b9c152353e0134728a80',
-    'src/storage/sqlite/job_queue.rs|cancel_affected_jobs_inner#1|1|3efd8dd6087082d832aa31c9c65cb47cf10dc4ba057bbb500f3e934121e2f7af',
     'src/storage/sqlite/ledger.rs|confirm_committed_inner#1|1|d0dd7b0070a300e86738725204b06b6927e435886a157be04cb3c78f4abde341',
     'src/storage/sqlite/publication.rs|message_batch_status#1|1|4c89fe74655d27b9c6f1315eb6cf8cc1800b5f092a9d12e116c8f0ac49fb228d',
     'src/storage/sqlite/publication.rs|message_batch_status#1|4|48b816c6f4eccaa268f69fb47427ef209bdd1eefe1f411c05d4072272338eedd',
@@ -58,7 +53,6 @@ BASELINE: frozenset[str] = frozenset({
     'src/storage/sqlite_graph.rs|snapshot#1|2|8bf6785986170bfc71289e2a2bac5f0596fd6a007ed6da03939302d87b873d26',
     'src/storage/sqlite_graph.rs|traverse#1|1|f509d280a082f0218cbe0ce684f111a78e92577347e87a0640a2b0a1e58123a3',
     'src/storage/sqlite_graph.rs|upsert_relations#1|1|4b8385fc303bb4048a88ec42b5a26c4fb31c5d1d941eb8c4f1a7addc28465685',
-    'tests/learning_loop.rs|learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budget#1|2|5e20718e801d2774448fb07ab6353ccc78ad98993480fa249c6033597496a670',
     'tests/message_batches.rs|live_receipt_status_requires_every_chunk_profile_generation_and_source#1|4|0f59e1cd6705b1fd4ed88552a19733b8f16c5d549038a34a7250b156f13cce94',
 })
 

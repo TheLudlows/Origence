@@ -39,6 +39,8 @@ mod full_text;
 mod identity;
 mod improve;
 mod job_queue;
+#[cfg(test)]
+mod job_improve_tests;
 mod learning_visibility;
 mod ledger;
 mod lifecycle;

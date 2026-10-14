@@ -45,13 +45,10 @@ impl TursoTx {
         };
         let requests = keys
             .iter()
-            .map(|(session, turn)| {
-                Ok(vec![association_key(*session)?, association_key(*turn)?])
-            })
+            .map(|(session, turn)| Ok(vec![association_key(*session)?, association_key(*turn)?]))
             .collect::<StorageResult<Vec<_>>>()?;
         for (index, row) in
-            read_model::associate_query(&mut self.tx, self.scope, TURN_ROWS, 2, &requests)
-                .await?
+            read_model::associate_query(&mut self.tx, self.scope, TURN_ROWS, 2, &requests).await?
         {
             batch.rows[index].turn.get_or_insert(row);
         }
@@ -66,8 +63,7 @@ impl TursoTx {
             })
             .collect::<StorageResult<Vec<_>>>()?;
         for (index, row) in
-            read_model::associate_query(&mut self.tx, self.scope, TURN_EVENTS, 1, &requests)
-                .await?
+            read_model::associate_query(&mut self.tx, self.scope, TURN_EVENTS, 1, &requests).await?
         {
             batch.rows[index].event.get_or_insert(row);
         }
@@ -97,14 +93,9 @@ impl TursoTx {
                     ])
                 })
                 .collect::<StorageResult<Vec<_>>>()?;
-            let rows = read_model::associate_query(
-                &mut self.tx,
-                self.scope,
-                TURN_EVIDENCE,
-                4,
-                &requests,
-            )
-            .await?;
+            let rows =
+                read_model::associate_query(&mut self.tx, self.scope, TURN_EVIDENCE, 4, &requests)
+                    .await?;
             // A full global page may contain no row for one request. Only an
             // empty eight-key page proves all its remaining requests exhausted.
             let mut groups = HashSet::new();
@@ -152,13 +143,10 @@ impl TursoTx {
         let requests = batch
             .keys
             .iter()
-            .map(|(session, turn)| {
-                Ok(vec![association_key(*session)?, association_key(*turn)?])
-            })
+            .map(|(session, turn)| Ok(vec![association_key(*session)?, association_key(*turn)?]))
             .collect::<StorageResult<Vec<_>>>()?;
         for (index, row) in
-            read_model::associate_query(&mut self.tx, self.scope, TURN_DATES, 2, &requests)
-                .await?
+            read_model::associate_query(&mut self.tx, self.scope, TURN_DATES, 2, &requests).await?
         {
             batch.rows[index].date.get_or_insert(row);
         }
@@ -173,8 +161,7 @@ impl TursoTx {
             })
             .collect::<StorageResult<Vec<_>>>()?;
         for (index, row) in
-            read_model::associate_query(&mut self.tx, self.scope, TURN_BODIES, 1, &requests)
-                .await?
+            read_model::associate_query(&mut self.tx, self.scope, TURN_BODIES, 1, &requests).await?
         {
             batch.rows[index].body.get_or_insert(row);
         }

@@ -21,13 +21,7 @@ async fn database() -> (tempfile::TempDir, TursoStore, AuthorizedScope) {
     (dir, store, auth)
 }
 
-async fn turn(
-    tx: &mut TursoTx,
-    session: Uuid,
-    id: Uuid,
-    created: i64,
-    kind: &str,
-) -> Uuid {
+async fn turn(tx: &mut TursoTx, session: Uuid, id: Uuid, created: i64, kind: &str) -> Uuid {
     let source = tx
         .create_event_inner(kind, r#"{"question":"needle","answer":"answer"}"#, None)
         .await
@@ -57,13 +51,7 @@ async fn body(tx: &mut TursoTx, source: Uuid, value: &str) {
         .unwrap();
 }
 
-async fn evidence(
-    tx: &mut TursoTx,
-    session: Uuid,
-    turn: Uuid,
-    ordinal: i64,
-    value: &str,
-) {
+async fn evidence(tx: &mut TursoTx, session: Uuid, turn: Uuid, ordinal: i64, value: &str) {
     db::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,?,?)")
         .bind(tx.scope.tenant_id)
         .bind(tx.scope.workspace_id)
@@ -119,7 +107,11 @@ async fn recent_filters_sources_before_window_and_preserves_tie_order() {
     assert_eq!(result.scanned, 2);
     assert!(!result.scan_exhausted);
     assert_eq!(
-        result.turns.iter().map(|turn| turn.turn_id).collect::<Vec<_>>(),
+        result
+            .turns
+            .iter()
+            .map(|turn| turn.turn_id)
+            .collect::<Vec<_>>(),
         vec![first, second]
     );
     let empty = tx
@@ -207,12 +199,22 @@ async fn context_turn_batch_preserves_wrong_kind_and_evidence_decode_order() {
         Err(StorageError::Unavailable(_))
     ));
     // Recent excludes the wrong-kind turn before opening its archive JSON.
-    assert_eq!(tx.context_recent_turns("needle", None, None, 2).await.unwrap().turns.len(), 1);
+    assert_eq!(
+        tx.context_recent_turns("needle", None, None, 2)
+            .await
+            .unwrap()
+            .turns
+            .len(),
+        1
+    );
     for ordinal in 0..65 {
         evidence(&mut tx, session, second, ordinal, "not JSON").await;
     }
     // All text decodes successfully, then 65 fails closed before JSON parsing.
-    let result = tx.context_session_turns(&[(session, second)]).await.unwrap();
+    let result = tx
+        .context_session_turns(&[(session, second)])
+        .await
+        .unwrap();
     assert!(result[0].is_none());
     db::query("UPDATE oc_session_turn_evidence SET evidence=? WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND ordinal=64")
         .bind(vec![0xff_u8])
@@ -240,7 +242,8 @@ async fn empty_context_turn_batch_does_not_require_writer() {
     let mut tx = store.begin(reader).await.unwrap();
     assert!(tx.context_session_turns(&[]).await.unwrap().is_empty());
     assert!(matches!(
-        tx.context_session_turns(&[(Uuid::new_v4(), Uuid::new_v4())]).await,
+        tx.context_session_turns(&[(Uuid::new_v4(), Uuid::new_v4())])
+            .await,
         Err(StorageError::Forbidden)
     ));
     tx.rollback().await.unwrap();
@@ -250,7 +253,9 @@ async fn empty_context_turn_batch_does_not_require_writer() {
 #[tokio::test]
 async fn hidden_turns_do_not_prepare_final_body_or_timestamp_columns() {
     let dir = tempfile::tempdir().unwrap();
-    let pool = Pool::open(dir.path().join("missing-final-columns.db")).await.unwrap();
+    let pool = Pool::open(dir.path().join("missing-final-columns.db"))
+        .await
+        .unwrap();
     for sql in [
         "CREATE TABLE oc_session_turns(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,source_event_id BLOB)",
         "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT)",
@@ -289,8 +294,16 @@ async fn hidden_turns_do_not_prepare_final_body_or_timestamp_columns() {
         command: None,
     };
     let mut batch = tx.context_turn_metadata(&[(session, turn)]).await.unwrap();
-    assert!(tx.context_turn_from_metadata(&mut batch, 0).await.unwrap().is_none());
-    db::query("UPDATE oc_events SET state='active'").execute(&mut *tx.tx).await.unwrap();
+    assert!(
+        tx.context_turn_from_metadata(&mut batch, 0)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    db::query("UPDATE oc_events SET state='active'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     for ordinal in 0..65_i64 {
         db::query("INSERT INTO oc_session_turn_evidence VALUES(?,?,?,?,?,'bad JSON')")
             .bind(scope.tenant_id)
@@ -303,7 +316,12 @@ async fn hidden_turns_do_not_prepare_final_body_or_timestamp_columns() {
             .unwrap();
     }
     let mut batch = tx.context_turn_metadata(&[(session, turn)]).await.unwrap();
-    assert!(tx.context_turn_from_metadata(&mut batch, 0).await.unwrap().is_none());
+    assert!(
+        tx.context_turn_from_metadata(&mut batch, 0)
+            .await
+            .unwrap()
+            .is_none()
+    );
     tx.tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -334,11 +352,12 @@ async fn body_decode_follows_native_content_then_timestamp_then_json_order() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(matches!(tx.event_view_inner(source).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.event_view_inner(source).await,
+        Err(StorageError::NotFound)
+    ));
     // Context's session projection has no public event-file predicate.
-    assert!(
-        tx.context_session_turns(&[(session, id)]).await.unwrap()[0].is_some()
-    );
+    assert!(tx.context_session_turns(&[(session, id)]).await.unwrap()[0].is_some());
     body(&mut tx, source, "bad JSON").await;
     db::query("UPDATE oc_session_turns SET created_at='not an integer' WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
         .bind(tx.scope.tenant_id)
