@@ -25,7 +25,9 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 ## Documentation
 
-[API](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md) · [Roadmap](docs/superpowers/plans/2026-10-09-next-stage-roadmap.md)
+[Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
+
+The index separates current contracts and operations from version-specific validation and historical research. Archived AML experiments are documented in [the research archive](archives/aml-research/README.md); they are not current execution or quality gates.
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md).
 

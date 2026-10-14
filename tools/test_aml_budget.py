@@ -1,6 +1,6 @@
 import unittest
 from aml_budget import Budget, checked_order
-from aml_budget_eval import question_payload
+from aml_artifacts import question_payload
 from aml_drill import DrillError
 from aml_public import adapt, timestamp
 

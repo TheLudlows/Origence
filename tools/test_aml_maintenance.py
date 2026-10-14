@@ -2,7 +2,7 @@
 import copy
 import unittest
 from aml_drill import DrillError
-from aml_maintenance_scale import PHASES
+from aml_artifacts import PHASES
 from aml_maintenance_verify import validate_receipts, validate_schedule
 
 

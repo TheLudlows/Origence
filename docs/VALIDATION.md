@@ -1,6 +1,8 @@
-# Origence · 当前验收摘要
+# Origence · 验收与历史证据
 
-本页记录当前验收结果。CI 通过、测试通过与产品效果分别判断。
+本页按原记录保留各阶段、精确提交与运行 ID 的验收证据。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
+
+本轮入口：[Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档与文档收口](#issue-61-第三批归档与文档收口2026-10-14验证中)。运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md#issue-61rust-库与-cli-破坏性变更)。
 
 ## 2026-10-12 第四阶段：显式 Improve → Learning
 
@@ -897,3 +899,41 @@ identity-check / check_memory_identity(path) 保持现有库只读、独占锁�
 恢复与 keyword 评估通过。实际 PR merge tree 与该 head tree
 `37ea1cb9f359d01c4156e6a6ea7b197c5f355635` 完全一致。
 该结果只属于第一批；不外推至第二批或之后提交。
+
+
+### 第二批精确头验收
+
+第二批 `44b74835928321482ca62fac0d16c716e0bb732b` 的
+[CI 38591327253](https://github.com/TheLudlows/Origence/actions/runs/38591327253)
+三个作业全部通过：Linux/Windows 默认特性各 213 lib + 231 integration；
+Linux 无默认特性 136 lib + 102 integration；Windows 无默认特性为
+`cargo check --locked --no-default-features --lib -j 1`，不记作测试运行。
+结果只属于该精确 head，不替代后续 AML 归档、文档改动或最终 PR head 的验收。
+本节是追加证据，前文当时的“验证中”及第一批记录保留，不重标历史结果。
+
+## Issue #61 第三批归档与文档收口（2026-10-14，验证中）
+
+实施基线为第二批 head `44b74835928321482ca62fac0d16c716e0bb732b`。
+AML 研究执行器及其完整本地依赖移至 [archives/aml-research](../archives/aml-research/README.md)，
+归档来源与逐文件校验见该目录 manifest；当前工具保留协议/恢复回归、必要数据 helper
+与离线工件核验。README/docs 入口、STATUS、API、OPERATIONS 与本页分别负责导航、
+当前进度、接口契约/破坏性变更、运行步骤/边界、精确版本证据；既有历史记录不删除或改写。
+
+`evals/` 的 freeze、哈希、分数、报告与原始工件保持原样。离线核验的源码输入须由
+`--source-root` 显式指定与 freeze 匹配的历史源码树；可使用冻结基线
+`2b7b6a67300d9e96eca8be0de282d308b8ded576`，具体命令见[归档说明](../archives/aml-research/README.md)。
+当前 checkout 或移动后的归档目录不能冒充历史源码根，也不将重新计算的当前结果写回旧 freeze。
+
+本环境缺少完整外部历史工件和对应 tokenizer，未执行完整历史工件审计或真实模型实验。
+第三批格式、Clippy、构建与原生 Linux/Windows 行为验收仍待其精确 head CI；
+第二批绿色结果不是本批通过证据。已执行的本地检查如下：
+
+- tools unittest：113 项（104 项原有 + 9 项新增），保持原有 2 项依赖实际宿主的跳过，其余通过；未删除原有用例。
+- evals unittest：42 项通过。SQL guard 检查 1062 处执行点，零违规/零未解析；其 47 项回归通过。
+- 归档中的 18 份 Python 原件及 1 份 research requirements，共 19 份文件，Git blob ID 与 SHA-256 均与归档来源 `44b74835928321482ca62fac0d16c716e0bb732b` 精确一致。
+- 指定历史源码 `2b7b6a67300d9e96eca8be0de282d308b8ded576` 后，budget 的 9 项、temporal 的 9 项源码哈希全部匹配；maintenance runner 的历史哈希也匹配对应 plan/run。此项仅核验源码，不是完整工件审计。
+- 离线 diagnosis 通过。完整 budget/temporal/maintenance 工件审计仍为 NOT_RUN：本地缺少所需公开语料，budget 另缺 tokenizer 依赖/模型文件，maintenance 大型响应归档本地不可用。缺少输入不是已验证的工件损坏，也不以 helper/unit 测试冒充完整审计。
+
+本地文档检查：六份当前文档的 161 个相对链接/锚点全部解析成功；未发现尾随空白。
+本页原有各阶段验收正文与整理前逐字一致，仅调整页头导航并追加本批证据。
+该检查不执行归档研究入口，不代替完整历史工件审计或原生行为测试。

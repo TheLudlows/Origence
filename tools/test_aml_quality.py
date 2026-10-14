@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 import tempfile
 from unittest.mock import patch
-import aml_quality
+from aml_report import write_report
 from aml_drill import DrillError
 from aml_quality import decode_hits, score
 
@@ -27,11 +27,12 @@ class QualityTests(unittest.TestCase):
     def test_failed_run_preserves_partial_evidence_without_success_summary(self):
         with tempfile.TemporaryDirectory() as folder:
             report = Path(folder) / "report.json"
-            def fail(args, result):
+            def fail(result):
                 result["queries"] = [{"id": "completed-before-failure"}]
                 raise RuntimeError("private provider diagnostic")
-            with patch("sys.argv", ["aml_quality", "--binary", "unused", "--report", str(report)]), patch.object(aml_quality, "evaluate", side_effect=fail), patch("builtins.print"):
-                self.assertEqual(aml_quality.main(), 1)
+            with patch("urllib.request.urlopen") as request:
+                self.assertEqual(write_report(report, {"status": "running"}, fail), 1)
+                request.assert_not_called()
                 artifact = json.loads(report.read_text(encoding="utf-8"))
                 self.assertEqual(artifact["status"], "failed")
                 self.assertEqual(artifact["error"], "evaluation_failed")
@@ -39,7 +40,7 @@ class QualityTests(unittest.TestCase):
                 self.assertNotIn("summary", artifact)
                 original = report.read_bytes()
                 with self.assertRaises(FileExistsError):
-                    aml_quality.main()
+                    write_report(report, {"status": "running"}, fail)
                 self.assertEqual(report.read_bytes(), original)
 
     def test_v2_frozen_source_disjoint_splits_and_labels(self):

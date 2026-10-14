@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 from aml_drill import DrillError
-from aml_experiment import Chat, PLAN, balanced_pool, evidence_payload, fuse, parse_queries, select
+from aml_experiment import RecordedChat, PLAN, balanced_pool, evidence_payload, fuse, parse_queries, select
 
 
 class ExperimentTests(unittest.TestCase):
@@ -42,30 +42,33 @@ class ExperimentTests(unittest.TestCase):
     def test_chat_budgets_and_invalid_output_fail_closed(self):
         env = {"AML_CHAT_BASE_URL": "https://example.invalid/v1", "AML_CHAT_API_KEY": "secret", "AML_CHAT_MODEL": "fixture"}
         report = {}
-        chat = Chat(env, report)
+        chat = RecordedChat(env, report)
         self.assertNotIn("secret", str(report))
-        with patch("aml_experiment.request") as request:
+        with patch("urllib.request.urlopen") as request:
             with self.assertRaisesRegex(DrillError, "chat_budget_exceeded"):
-                chat.call("plan", "q", PLAN, {"question": "x" * 40000})
+                chat.record("plan", "q", PLAN, {"question": "x" * 40000}, {})
             request.assert_not_called()
         for result in [{"choices": [{"finish_reason": "length", "message": {"content": "{}"}}]},
                        {"choices": [{"finish_reason": "stop", "message": {"content": "private malformed text"}}]}]:
-            with patch("aml_experiment.request", return_value=result):
+            with patch("urllib.request.urlopen") as request:
                 with self.assertRaises(DrillError) as raised:
-                    chat.call("plan", "q", PLAN, {"question": "test"})
+                    chat.record("plan", "q", PLAN, {"question": "test"}, result)
                 self.assertNotIn("private", str(raised.exception))
-        with patch("aml_experiment.request", return_value={"choices": [{"finish_reason": "stop", "message": {"content": '[{"indices":[0]}]'}}]}):
-            self.assertEqual(chat.call("rank", "q", PLAN, {}), {"indices": [0]})
+                request.assert_not_called()
+        with patch("urllib.request.urlopen") as request:
+            response = {"choices": [{"finish_reason": "stop", "message": {"content": '[{"indices":[0]}]'}}]}
+            self.assertEqual(chat.record("rank", "q", PLAN, {}, response), {"indices": [0]})
+            request.assert_not_called()
         chat.calls[:] = [{}] * 60
-        with patch("aml_experiment.request") as request:
+        with patch("urllib.request.urlopen") as request:
             with self.assertRaisesRegex(DrillError, "chat_budget_exceeded"):
-                chat.call("plan", "q", PLAN, {})
+                chat.record("plan", "q", PLAN, {}, {})
             request.assert_not_called()
 
     def test_rejects_chat_credentials_in_url(self):
         for base in ["http://external.invalid", "https://u:p@example.invalid", "https://example.invalid?key=secret"]:
             with self.assertRaises(DrillError):
-                Chat({"AML_CHAT_BASE_URL": base, "AML_CHAT_API_KEY": "secret", "AML_CHAT_MODEL": "fixture"}, {})
+                RecordedChat({"AML_CHAT_BASE_URL": base, "AML_CHAT_API_KEY": "secret", "AML_CHAT_MODEL": "fixture"}, {})
 
 
 if __name__ == "__main__":

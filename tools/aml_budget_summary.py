@@ -2,7 +2,7 @@
 import json
 import random
 from collections import defaultdict
-from aml_budget_eval import ARMS, OUT, load_data, load_artifact
+from aml_artifacts import ARMS, OUT, load_data, load_artifact
 from aml_drill import percentiles
 
 

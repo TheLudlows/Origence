@@ -1,20 +1,20 @@
 """Rebuild model inputs and derived metrics without making calls."""
+import argparse
+from pathlib import Path
 import hashlib
 import json
 from aml_answer import validate_answer
-from aml_budget_eval import load_data, read
+from aml_artifacts import ROOT, TEMPORAL_OUT as OUT, load_data, read, verify_frozen_files
 from aml_evidence import decode_fragments, source_index
 from aml_quality import digest
 from aml_temporal import payload, support_result
-from aml_temporal_eval import ROOT, OUT
 
 
-def verify():
+def verify(source_root=None):
     freeze, report = read(OUT / "freeze.json"), read(OUT / "run.json")
     assert report["status"] == "completed"
     assert report["freeze_sha256"] == digest(OUT / "freeze.json")
-    for name, expected in freeze["files"].items():
-        assert digest(ROOT / name) == expected, name
+    verify_frozen_files(freeze["files"], source_root)
     corpus, _ = load_data("public")
     questions = {q["id"]: q for q in corpus["questions"]}
     original = {r["id"]: r["hits"] for r in read(ROOT / "evals/aml/budget-v1/public-prepare.json.gz")["rows"]}
@@ -58,8 +58,12 @@ def verify():
 
 
 if __name__ == "__main__":
-    value = verify()
-    with open(OUT / "audit.json", "x", encoding="utf-8", newline="\n") as stream:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-root", type=Path, help="Exact historical source tree for tools/ hashes; no fallback")
+    parser.add_argument("--output", type=Path, default=OUT / "audit.json")
+    args = parser.parse_args()
+    value = verify(args.source_root)
+    with open(args.output, "x", encoding="utf-8", newline="\n") as stream:
         json.dump(value, stream, indent=2)
         stream.write("\n")
     print(json.dumps(value))

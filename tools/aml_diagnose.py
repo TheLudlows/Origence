@@ -8,6 +8,7 @@ from pathlib import Path
 import time
 from aml_answer import ANSWER, assess, validate_answer
 from aml_drill import DrillError
+from aml_report import write_report
 from aml_quality import decode_hits, digest, source_key, stream_digest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -187,16 +188,9 @@ def main():
               "started_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
               "limitations": ["observed pipeline losses, not causal proof or full semantic accuracy",
                               "frozen old synthetic data; not unseen validation", "no model calls or production behavior changes"]}
-    with open(args.report, "x", encoding="utf-8") as stream:
-        try:
-            report["datasets"] = {dataset: diagnose(dataset) for dataset in DATASETS}
-            report["status"] = "completed"
-        except DrillError as error:
-            report.update(status="failed", error=str(error))
-        except Exception:
-            report.update(status="failed", error="diagnosis_failed")
-        json.dump(report, stream, ensure_ascii=False, indent=2)
-        stream.write("\n")
+    def collect(result):
+        result["datasets"] = {dataset: diagnose(dataset) for dataset in DATASETS}
+    write_report(args.report, report, collect, error_code="diagnosis_failed")
     print(json.dumps({"status": report["status"], "error": report.get("error")}))
     return 0 if report["status"] == "completed" else 1
 

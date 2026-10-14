@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from aml_cross_encoder import MODEL_FILES, MODEL_ID, REVISION, check_lengths, rank_indices, verify_model
 from aml_drill import DrillError
-from aml_cross_encoder_answer import selected_candidates
+from aml_cross_encoder import selected_candidates
 
 
 class CrossEncoderTests(unittest.TestCase):

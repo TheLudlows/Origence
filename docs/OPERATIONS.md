@@ -1,19 +1,26 @@
 # 本地运维说明
 
-适用单宿主原生 Turso/LanceDB/Turso 图；存储接入 PR #58 已合入，查询改写 PR #59 仍为草稿待审；不代表生产容量或任意断电验收。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份检查](#显式启用记忆身份) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
+适用单宿主原生 Turso/LanceDB/Turso 图；存储接入 PR #58 与查询改写 PR #59 已合入。PR #59 主干为 `75c238ffa830d50840d4b84c2dce6d7d69a4793c`，不代表生产容量或任意断电验收。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份检查](#离线记忆身份检查) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
-当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#当前阶段范围)。历史身份命令现在只执行同版本检查；旧基线说明仅供识别安全边界，不提供升级或安装。
+当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#当前阶段范围)。当前身份入口为只读 `identity-check`，旧升级命令已移除；旧基线说明仅供识别安全边界，不提供升级或安装。
 
 同版本运行中的持久化、重启/重试恢复和备份恢复要求不变。不兼容 schema 仍应拒绝打开；使用新目录不意味着可以删除、覆盖或静默转换旧数据，原始来源和备份继续按既有要求保留。
 
 ## PR #59 查询与恢复边界
 
-本轮关联查询分步改为同一事务内的单表批量读取与 Rust 关联；不改变来源、版本、
-发布状态及权限的权威边界。Windows 原离线恢复回归已在多个阶段 head 通过，
-主线程原 1 MiB 栈未扩大；最新精确 head 的验收见 PR #59 Checks，不能据此认为任意 Turso SQL
-解析路径均无栈风险。故障与完整结果见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
+关联查询采用同一事务快照内的参数化单表批量读取与 Rust 关联，不以跨表
+EXISTS/IN/CTE 替代 JOIN。权限、历史版本、source/version/generation/publication
+校验和最终返回前复核保留；Context/startup 的读取范围和调用方投影按所需数据收窄。
+隐藏行或未消费的异常字段不应污染合法结果；选中必要非法字段仍安全报错，不保留
+多个坏值的首错顺序或旧 panic。有界 SQL 静态检查不等于全程序证明。
+
+Windows 原离线恢复回归和主线程原 1 MiB 栈保留。PR #59 已合入的精确主干
+[CI 38554048610](https://github.com/TheLudlows/Origence/actions/runs/38554048610)
+通过 Linux/Windows 门禁；该结果仅证明已测调用路径，不证明任意 Turso SQL
+解析路径均无栈风险。分阶段故障、原生读取与保存/重试实测见
+[VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
 
 固定槽位（多数 8，向量就绪匹配 4）限制请求数，不是字节/总内存预算。
 状态检查不把完整向量计划读入 Rust；准备及重试仍承担计划序列化和原生校验成本，
@@ -163,7 +170,7 @@ Add 等待上限仍为 25 分钟，上游模型单次调用仍为 45 秒；网�
 
 branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户作用域派生/授权查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。性能工具另测完整 HTTP 耗时。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 
-本地实验命令及结果见[时间与性能诊断](../evals/aml/temporal-v1/README.md)。
+历史实验结果见[时间与性能诊断](../evals/aml/temporal-v1/README.md)；当时的执行器及依赖见[研究归档](../archives/aml-research/README.md)，不能把报告中的旧命令当作当前运行步骤。
 
 ## 显式停机压实向量文件
 
@@ -213,9 +220,9 @@ semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿
 取消和撤权阻止发布，不能保证已经发送的远程模型调用停止；spawn_blocking 不是硬取消。优雅停机继续等待当前作业，沿用原恢复/清理语义；本轮未增加进程隔离或硬截止时间。job 的空 memories 或 duplicate 结果是合法完成；superseded 需重读版本再提交新请求。工程验证使用确定性 loopback 模型桩，不等于真实模型分类或 Agent 效果验收。
 
 
-## Turso / LanceDB 接入分支的运行边界
+## Turso / LanceDB 运行边界
 
-本节描述 PR #58 的新后端；实际验证状态以 VALIDATION 与精确 head CI 为准。
+本节描述已合入的 Turso/LanceDB 后端；实际验证状态以 VALIDATION 与精确 head CI 为准。
 
 - 权威数据库使用原生 Rust Turso 0.8.2，不使用 SQLx SQLite 或 libSQL。
   数据目录仍包含 context.db、graph.db、vectors 与 blobs；原文 Blob 不改动。

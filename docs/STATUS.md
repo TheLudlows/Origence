@@ -4,46 +4,37 @@
 
 ## PR #59：Windows 离线恢复与无 JOIN 查询（已合入）
 
-[PR #59](https://github.com/TheLudlows/Origence/pull/59) 将各领域关联查询改为参数化
-单表批量读取，在原事务快照内用 Rust 关联，不以跨表 EXISTS/IN/CTE 替代 JOIN。
-权限、历史版本、source/version/generation/publication 校验和最终返回前复核保留。
-后续审计收窄 Context/startup 的读取范围和各调用方投影，并补静态检查器反例。
-隐藏行或未消费的异常字段不应污染合法结果；选中必要非法字段仍安全报错，不保留
-多个坏值的首错顺序或旧 panic。有界静态检查不等于全程序证明。
-
-发布计划与轻量回执摘要同事务保存、同代重试复用；状态检查继续核对实际索引和
-发布账本。正分块已准备计划缺失/损坏摘要明确报无效，不自动补写或迁移。
-摘要依赖正常保存接口保证一致；直接改库只改重型计划，不会由状态查询重扫发现。
-原生读取和保存/重试成本已实测，见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
+[PR #59](https://github.com/TheLudlows/Origence/pull/59) 已完成无 JOIN 查询、
+Windows 离线恢复与轻量回执摘要收口。当前查询、栈/内存、发布摘要与恢复边界
+统一见 [OPERATIONS](OPERATIONS.md#pr-59-查询与恢复边界)，分阶段故障与
+原生读取、保存/重试实测见 [VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
 
 PR #59 已合入 main `75c238ffa830d50840d4b84c2dce6d7d69a4793c`。
 [主干 CI 38554048610](https://github.com/TheLudlows/Origence/actions/runs/38554048610)
 已通过 Linux 和 Windows 全套门禁；分阶段实验与诊断记录保留在 VALIDATION。
 
-Windows 主线程原 1 MiB 栈和原回归断言保留。这仅验证已测调用路径，不是 Turso
-parser 的通用栈安全证明。固定槽位（多数 8，向量就绪匹配 4）限制请求数，不是
-字节/总内存上限。状态检查不把完整向量计划读入 Rust；准备/重试仍承担序列化
-和校验成本，ID 元数据为 O(total ID bytes)，未新增输入上限。
 Issue #60 合表、schema 精简和公开命名清理仍不在本轮范围。
 
 ## Issue #61：已确认裁剪（实施中）
 
-第一批删除空 record_source API，摘要读取收敛为 summary_hits；原文检索继续走
-Lance 全文路径。启动仍校验完整 schema，运行时不再把缺失 identity 表当作空结果。
-两份 #59 专用诊断 workflow 已移除，完整 publication 探针冻结于
-[归档说明](../archives/publication-cost-probe/ARCHIVE.md)。归档不是当前性能门禁。
-公开调用方需移除 record_source 调用，并将 keyword_hits(..., true, filter)
-改为 summary_hits(..., filter)；false 原文扫描入口不再提供。
+第一批删除空来源接口、收窄摘要读取与 schema 检查入口；两个 #59 专用
+诊断 workflow 已移除，完整 publication 探针冻结于
+[归档说明](../archives/publication-cost-probe/ARCHIVE.md)，不作为当前性能门禁。
+公开 Rust/CLI 的删除与替换统一见 [API 变更](API.md#issue-61rust-库与-cli-破坏性变更)。
 第一批 4139e4a 的 Linux/Windows CI 已通过，详见 VALIDATION；
 [PR #62](https://github.com/TheLudlows/Origence/pull/62) 继续保持草稿，
 后续批次仍需各自精确 head 验证，不将第一批结果外推。
 
-第二批移除六个无产品调用的旧存储方法及无消费者的后端 Capabilities；
-共享 owner 清理走 cleanup_plan/finish_cleanup，失败作业走 fail_job。
-旧 ledger failure 和作业重试不视为同一语义；retry_delay、owners/ledger
-与 register_pending/confirm_committed 保留。KeyCapabilities 鉴权和真实图跳数
-限制不变。离线身份入口改为 identity-check，仅检查已有库，详见
-[操作说明](OPERATIONS.md#离线记忆身份检查)。第二批等待独审及精确提交 CI。
+第二批移除六个旧存储方法与无消费者的后端 Capabilities，保留现有清理、
+作业重试、owner/ledger 及 KeyCapabilities 鉴权契约；离线身份入口收敛为只读
+identity-check。第二批精确 head `44b74835928321482ca62fac0d16c716e0bb732b`
+的 [CI 38591327253](https://github.com/TheLudlows/Origence/actions/runs/38591327253)
+已通过；测试计数与范围见 [VALIDATION](VALIDATION.md#第二批精确头验收)。
+
+第三批将 AML 研究执行器及完整本地依赖收至
+[archives/aml-research](../archives/aml-research/README.md)，当前 tools 保留协议/恢复
+客户端、必要 helper 与离线核验；文档按入口、状态、接口、操作、验收分工。
+历史 freeze、报告及结果不重写。第三批仍需独立审查与精确 head CI，不能沿用第二批通过结论。
 
 ## Turso / LanceDB 正式接入（已合入）
 
@@ -134,7 +125,7 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 
 ## 本轮实验已结束
 
-2026-10-11 按用户确认收尾。冻结结论：正式 AML Search 保持原文 vector；重排、时间辅助及同模型核验留实验层；显式离线压实已交付，不增加自动维护。相关代码与工件经 PR #33–#35 合入 main 2b7b6a6，该提交[五项 CI](https://github.com/TheLudlows/Origence/actions/runs/38138182208)全部成功；[收尾核对](evidence/2026-10-11-experiment-closeout.json)记录 78 项哈希检查全部通过。历史报告中的“下一步”保留为当时记录，后续任务以路线图为准。
+2026-10-11 按用户确认收尾。冻结结论：正式 AML Search 保持原文 vector；重排、时间辅助及同模型核验留实验层；显式离线压实已交付，不增加自动维护。相关代码与工件经 PR #33–#35 合入 main 2b7b6a6，该提交[五项 CI](https://github.com/TheLudlows/Origence/actions/runs/38138182208)全部成功；[收尾核对](evidence/2026-10-11-experiment-closeout.json)记录 78 项哈希检查全部通过。历史报告中的“下一步”保留为当时记录，后续任务以路线图为准。研究执行器现收至[完整依赖归档](../archives/aml-research/README.md)，历史 freeze 与结果继续保留在原 eval 路径。
 
 本轮完成不等于生产可靠性、独立质量或官方 AML 验收完成。实验进程已结束，执行记录确认临时库已清理；不重跑已观察题来宣称新质量收益。
 

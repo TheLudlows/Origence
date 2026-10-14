@@ -1,10 +1,20 @@
-# Origence HTTP API v1
+# Origence API 与库接口
 
-适用本地宿主原生 Turso/LanceDB/Turso 图（当前接入验证进度见 STATUS）。本文只描述已实现行为；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)。
+适用本地宿主原生 Turso/LanceDB/Turso 图。本文负责 HTTP v1 与公开库接口契约及调用方变更；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
-按需阅读：[接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
+按需阅读：[库接口变更](#issue-61rust-库与-cli-破坏性变更) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
 
 所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。修改接口还需 1–200 个 ASCII 字符的 `Idempotency-Key`；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
+
+## Issue #61：Rust 库与 CLI 破坏性变更
+
+以下是公开 Rust 接口及离线 CLI 的删除/改名，不提供兼容包装；不是旧数据库迁移。对应提交与验收见 [VALIDATION](VALIDATION.md#第二批精确头验收)。HTTP 请求/响应仍按本文各节契约使用。
+
+- 删除无实际持久化作用的 `DomainTx::record_source`。调用方移除该空调用；真实来源仍由事件、资产版本及 owner/账本的现有事务路径保存，不能因此省略来源写入或核验。
+- `TursoTx::keyword_hits(terms, true, asset_filter)` 改为 `summary_hits(terms, asset_filter)`，不再接受 `summaries` 布尔参数；保留同 chunk 跨摘要行聚合后的 AND 语义。`keyword_hits(..., false, ...)` 的关系库原文扫描入口删除；产品原文 keyword 检索继续走 LanceDB 原生全文路径。
+- 删除六个旧 `DomainTx` 方法：`cleanup_derived_chunks`、`settle_failed`、`detach_owners`、`owned_artifacts`、`fail_retryable`、`fail_permanent`，以及专属实现/mock。当前共享 owner 清理由 `cleanup_plan` / `finish_cleanup` 执行，作业失败由 `fail_job` 处理；这些是现有产品路径，不是六个旧方法的一一语义替代，尤其旧 ledger failure 不等于作业重试。`register_owner`、`register_pending`、`confirm_committed`、`retry_delay` 和 owners/ledger 契约保留。
+- 删除后端声明类型 `Capabilities` 及 `VectorStore::capabilities()` / `GraphStore::capabilities()`；调用方和自定义实现须移除对应声明。鉴权类型 `KeyCapabilities`、显式 `allow_owned_workspaces` 和图查询实际 `max_hops` 限制保留，不能因名称相似一并删除。
+- 删除 `TursoStore::upgrade_memory_identity(path, dry_run)`、`MemoryIdentityUpgrade` 及 CLI `memory-identity-upgrade --dry-run`。库调用方改用 `TursoStore::check_memory_identity(path) -> StorageResult<()>`；CLI 改用 `--offline identity-check`。该入口对已有数据库执行只读、独占锁下的完整同版本 schema 检查，不创建、安装或修复表；成功表示检查有效，不表示完成升级。输出与安全步骤见[离线记忆身份检查](OPERATIONS.md#离线记忆身份检查)。
 
 ## 角色
 
@@ -80,7 +90,7 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 返回 hits 含 asset_id/version/chunk_id/source_event_id/locator/score。locator 给出原文 UTF-8 字节区间、行号，PDF 另有页号。只取当前已发布版本，显式历史版本走 get。
 
-向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐、ANN 或 reranker。
+向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐或 reranker；向量查询按固定条件选择 ANN 或 exact，边界见 [OPERATIONS](OPERATIONS.md#turso--lancedb-运行边界)。
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
 
@@ -106,13 +116,13 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 
 资产读取增加 `identity` 字段；旧记忆/知识为 null。身份绑定资产且不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的资产，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
 
-lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何资产/来源/任务；缺身份表为 503。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
+lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何资产/来源/任务。缺失身份表不是合法的未命中或空结果。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
 
-新建库含 oc_memory_identities；旧库缺表时原接口可用，新身份入口 503。启动不自动升级，安装步骤见 [OPERATIONS](OPERATIONS.md#显式启用记忆身份)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索，CLI 默认不带该过滤。
+新建库始终包含完整身份 schema；启动拒绝缺表或不兼容库，不提供缺表时仅开放旧接口的降级模式，也不自动安装或升级。只读检查步骤见 [OPERATIONS](OPERATIONS.md#离线记忆身份检查)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索，CLI 默认不带该过滤。
 
 ## 单身份 capture
 
-`/v1/captures/identified` 接受与显式记忆写入相同的 `{identity,content}`；content 是待抽取原文。身份完全来自调用方，scope 来自 key，模型不能指定主体、属性、条件或 workspace。受理时记录当前 expected_version，抽取期间发生其他发布会沿现有版本治理 supersede，不能覆盖较新版本。未配置抽取模型或旧库未安装身份表时返回 503。
+`/v1/captures/identified` 接受与显式记忆写入相同的 `{identity,content}`；content 是待抽取原文。身份完全来自调用方，scope 来自 key，模型不能指定主体、属性、条件或 workspace。受理时记录当前 expected_version，抽取期间发生其他发布会沿现有版本治理 supersede，不能覆盖较新版本。未配置抽取模型时返回 503；缺失身份 schema 的库在启动时拒绝打开。
 
 模型输出必须提供原文精确 quote 和 UTF-8 byte_start/byte_end，服务器校验边界和内容一致；发布正文就是该原文片段，search locator 的 source_span=true 标明区间指向来源原文。重复相同 quote 合并；多个不同 quote 视为单身份歧义，任务 failed/INVALID_ARGUMENT，不更新版本。零片段完成且 result.memories=[]，受理时预留的资产可能仍无已发布版本。来源事件保留原始输入。
 
@@ -132,7 +142,7 @@ resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normali
 
 ## 精确身份检索过滤
 
-search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,context:{}}`，省略时沿用混合检索。启用后只保留当前 scope 内完整身份精确相同的 memory；排除旧未识别记忆、知识块和图扩展。字段在模型调用前校验，不接受别名/语义近似/部分条件匹配；未知字段拒绝，非法身份 422，未命中为空结果。身份不替代鉴权，结果仍受当前版本、来源和墓碑规则约束。旧库缺身份表不会自动升级，没有显式绑定则不匹配。
+search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,context:{}}`，省略时沿用混合检索。启用后只保留当前 scope 内完整身份精确相同的 memory；排除旧未识别记忆、知识块和图扩展。字段在模型调用前校验，不接受别名/语义近似/部分条件匹配；未知字段拒绝，非法身份 422，未命中为空结果。身份不替代鉴权，结果仍受当前版本、来源和墓碑规则约束。完整当前 schema 中没有显式绑定则不匹配；缺失身份表属于存储错误，不作为空结果返回，也不自动升级。
 
 完整身份先定位授权资产，keyword/vector 候选限定于该资产后排序和截断，最终重新校验版本、来源、墓碑及权限。无身份查询仍有各分支候选上限；身份限定不保证语义召回。只需定位当前资产时用 lookup。响应回显 memory_identity，resolve 透传过滤；HTTP/MCP 支持，CLI 默认不带过滤。
 
