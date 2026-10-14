@@ -49,3 +49,8 @@ jobs:
           & dumpbin /headers target/debug/origence.exe | Select-String 'stack'
           & cargo test --locked --test local -j 1 local_app::local_host_api_cli_mcp_models_and_recovery -- --exact --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Original lifecycle regression failed; inspect captured process status and output.' }
+      - name: Validate all Windows lifecycle contracts after the original regression passes
+        shell: pwsh
+        run: ./tools/build.ps1 -Action Validate -Jobs 1
+      - name: Check Windows authority without native vector features
+        run: cargo check --locked --no-default-features --lib -j 1
