@@ -35,15 +35,7 @@ impl TursoTx {
         asset: Uuid,
         version: i32,
     ) -> StorageResult<Value> {
-        // Restoration reads the requested historical root, even when it is no
-        // longer current. Local S2/Learning checks remain the caller's concern.
-        let source_event_id = self
-            .active_version_roots(&[(asset, version)])
-            .await?
-            .get(&(asset, version))
-            .copied()
-            .ok_or(StorageError::NotFound)?;
-        let current_version: Option<i32> = native_turso::query_scalar(
+        let asset_row = native_turso::query(
             "SELECT current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
         )
         .bind(self.scope.tenant_id)
@@ -51,20 +43,29 @@ impl TursoTx {
         .bind(asset)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?
-        .ok_or(StorageError::NotFound)?;
-        let title: String = native_turso::query_scalar(
-            "SELECT title FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=? AND source_event_id=?",
+        .map_err(turso_err)?;
+        let requests = vec![vec![
+            AssociationKey::from_uuid(asset),
+            AssociationKey::from_optional_i32(Some(version)),
+        ]];
+        let roots = read_model::live_root_rows(&mut self.tx, self.scope, &requests).await?;
+        let title_row = native_turso::query(
+            "SELECT title FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(asset)
         .bind(version)
-        .bind(source_event_id)
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?
         .ok_or(StorageError::NotFound)?;
+        let asset_row = asset_row.ok_or(StorageError::NotFound)?;
+        let root = roots.first().ok_or(StorageError::NotFound)?;
+        // Original tuple order, only after native undeleted/active filtering.
+        let current_version: Option<i32> = asset_row.try_get("current_version").map_err(turso_err)?;
+        let source_event_id: Uuid = root.1.try_get("source_event_id").map_err(turso_err)?;
+        let title: String = title_row.try_get("title").map_err(turso_err)?;
         Ok(json!({
             "current_version": current_version,
             "source_event_id": source_event_id,
@@ -90,39 +91,43 @@ impl TursoTx {
         id: Uuid,
         version: Option<i32>,
     ) -> StorageResult<Value> {
-        let asset: Option<(String, Option<i32>)> = native_turso::query_as(
-            "SELECT kind,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
+        let asset = native_turso::query(
+            "SELECT id,kind,COALESCE(?,current_version) AS requested_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
         )
+        .bind(version)
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(id)
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        let Some((kind, current_version)) = asset else {
-            return Err(StorageError::NotFound);
-        };
-        let asset_id = id;
-        let v = version.or(current_version).ok_or(StorageError::NotFound)?;
-        let source_event_id = self
-            .active_version_roots(&[(asset_id, v)])
-            .await?
-            .get(&(asset_id, v))
-            .copied()
-            .ok_or(StorageError::NotFound)?;
-        let (title, content, restored_from, content_hash): (String, String, Option<i32>, String) =
-            native_turso::query_as(
-                "SELECT title,content,restored_from,content_hash FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=? AND source_event_id=?",
-            )
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(asset_id)
-            .bind(v)
-            .bind(source_event_id)
-            .fetch_optional(&mut *self.tx)
-            .await
-            .map_err(turso_err)?
-            .ok_or(StorageError::NotFound)?;
+        let requested = asset.as_ref().map(|row| row.try_get::<AssociationKey>("requested_version").map_err(turso_err))
+            .transpose()?.unwrap_or_else(|| AssociationKey::from_optional_i32(None));
+        let requests = vec![vec![AssociationKey::from_uuid(id), requested.clone()]];
+        let roots = read_model::live_root_rows(&mut self.tx, self.scope, &requests).await?;
+        let row = native_turso::query(
+            "SELECT title,version,content,restored_from,content_hash FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(id)
+        .bind(requested)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(turso_err)?
+        .ok_or(StorageError::NotFound)?;
+        let asset = asset.ok_or(StorageError::NotFound)?;
+        let root = roots.first().ok_or(StorageError::NotFound)?;
+        // Explicit history never decodes current_version. Preserve the old
+        // selected tuple's field order after all native root predicates.
+        let asset_id: Uuid = asset.try_get("id").map_err(turso_err)?;
+        let kind: String = asset.try_get("kind").map_err(turso_err)?;
+        let title: String = row.try_get("title").map_err(turso_err)?;
+        let v: i32 = row.try_get("version").map_err(turso_err)?;
+        let content: String = row.try_get("content").map_err(turso_err)?;
+        let source_event_id: Uuid = root.1.try_get("source_event_id").map_err(turso_err)?;
+        let restored_from: Option<i32> = row.try_get("restored_from").map_err(turso_err)?;
+        let content_hash: String = row.try_get("content_hash").map_err(turso_err)?;
         self.require_learning_asset_visible(asset_id).await?;
         let semantic_status = self.semantic_version_status(asset_id, v).await?;
         let semantic_chunks = if semantic_status.is_some() {

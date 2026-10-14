@@ -2,6 +2,11 @@ name: Publication cost diagnostic
 on:
   pull_request:
     branches: [main]
+    # This diagnostic measures fixed historical sources, not arbitrary product edits.
+    # A future publication optimization must update the probe target explicitly.
+    paths:
+      - tools/publication-cost-probe/**
+      - .github/workflows/publication-cost-diagnostic.yml
 permissions:
   contents: read
 concurrency:

@@ -919,3 +919,261 @@ async fn identity_kind_filter_precedes_native_key_decoding() {
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn root_only_reads_do_not_decode_render_fields_or_historical_current() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(50_000);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_assets SET kind=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET title=x'02',content=x'03'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let roots = super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk])
+        .await
+        .unwrap();
+    assert_eq!(roots[&row.chunk].source_id, row.source);
+    db::query("UPDATE oc_assets SET current_version=x'04'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap()[&(row.asset, 1)], row.source);
+    assert!(super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk]).await.unwrap().is_empty());
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn raw_root_predicates_hide_bad_keys_until_the_projection_is_consumed() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(50_001);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_versions SET source_event_id=x'31',title=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap().is_empty());
+    db::query("UPDATE oc_events SET id=x'31',state=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap().is_empty());
+    db::query("UPDATE oc_events SET state='active'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.active_version_roots(&[(row.asset, 1)]).await, Err(StorageError::Backend(_))));
+    // A noncurrent row must be hidden before that malformed root UUID decodes.
+    db::query("UPDATE oc_assets SET current_version=2")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk]).await.unwrap().is_empty());
+    db::query("UPDATE oc_assets SET deleted=1")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.active_version_roots(&[(row.asset, 1)]).await.unwrap().is_empty());
+    db::query("UPDATE oc_chunks SET asset_id=x'ff',version=x'fe'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(super::read_model::current_chunk_roots(&mut tx.tx, scope, &[row.chunk]).await.unwrap().is_empty());
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn explicit_history_ignores_invalid_current_and_hidden_kind() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(50_002);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_assets SET current_version=x'01'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(tx.asset_view_inner(row.asset, Some(1)).await.unwrap()["content"], "body");
+    assert!(matches!(tx.asset_view_inner(row.asset, None).await, Err(StorageError::NotFound)));
+    db::query("UPDATE oc_assets SET kind=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_events SET state='retracted'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.asset_view_inner(row.asset, Some(1)).await, Err(StorageError::NotFound)));
+    db::query("UPDATE oc_events SET state='active'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.asset_view_inner(row.asset, Some(1)).await, Err(StorageError::Backend(_))));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn empty_history_still_prepares_the_original_projection() {
+    for restore in [false, true] {
+        let (_dir, pool) = database().await;
+        db::query("DROP TABLE oc_versions")
+            .execute(&pool)
+            .await
+            .unwrap();
+        db::query("CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut tx = transaction(&pool, scope()).await;
+        let absent = Uuid::new_v4();
+        let result = if restore {
+            tx.restore_source_inner(absent, 1).await
+        } else {
+            tx.asset_view_inner(absent, Some(1)).await
+        };
+        assert!(matches!(result, Err(StorageError::Backend(_))));
+        tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn current_chunks_native_filters_precede_typed_payloads() {
+    for (hidden, sql) in [
+        ("deleted", "UPDATE oc_assets SET deleted=1"),
+        ("inactive", "UPDATE oc_events SET state='retracted'"),
+        ("missing", "DELETE FROM oc_events"),
+        ("superseded", "UPDATE oc_assets SET current_version=2"),
+        ("state_blob", "UPDATE oc_events SET state=x'03'"),
+    ] {
+        let (_dir, pool) = database().await;
+        let scope = scope();
+        let mut tx = transaction(&pool, scope).await;
+        let row = Record::new(60_000);
+        seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+        db::query("UPDATE oc_assets SET kind=x'01'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        db::query("UPDATE oc_versions SET title=x'02'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        db::query("UPDATE oc_chunks SET content=x'04',locator=x'05'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        db::query(sql)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+        assert!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await.unwrap().is_empty(), "{hidden}");
+        tx.rollback().await.unwrap();
+        pool.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn current_chunks_keep_selected_errors_and_hide_unmatched_raw_keys() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(60_001);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_versions SET title=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await, Err(StorageError::Backend(_))));
+    assert!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), Some(Uuid::new_v4())).await.unwrap().is_empty());
+    db::query("UPDATE oc_chunks SET asset_id=x'ff',version=x'fe'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(current_chunks(&mut tx.tx, scope, Some(&[row.chunk]), None).await.unwrap().is_empty());
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn current_chunk_metadata_is_read_once_per_native_version_request() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let mut ids = Vec::new();
+    for index in 0..9 {
+        let row = Record::new(61_000 + index);
+        seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+        ids.push(row.chunk);
+        for ordinal in 1..17 {
+            let id = Uuid::new_v4();
+            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,?,'body','{}','needle')")
+                .bind(scope.tenant_id)
+                .bind(scope.workspace_id)
+                .bind(id)
+                .bind(row.asset)
+                .bind(ordinal)
+                .execute(&mut *tx.tx)
+                .await
+                .unwrap();
+            ids.push(id);
+        }
+    }
+    let (chunks, counts) = super::read_model::current_chunks_measured(&mut tx.tx, scope, Some(&ids), None)
+        .await
+        .unwrap();
+    assert_eq!(chunks.len(), 153);
+    assert_eq!(counts, [153, 9, 9, 9]);
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn raw_request_compression_keeps_distinct_storage_types() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    db::query("DROP TABLE oc_chunks")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    // No affinity on version: preserve integer/real/text/blob as distinct
+    // storage values even where native equality may later match some of them.
+    db::query("CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version,content TEXT,locator TEXT,search_terms TEXT)")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    let asset = Uuid::new_v4();
+    for sql in [
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,1,'body','{}','needle')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,1.0,'body','{}','needle')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,'1','body','{}','needle')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,x'31','body','{}','needle')",
+    ] {
+        db::query(sql)
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(Uuid::new_v4())
+            .bind(asset)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
+    }
+    let (chunks, counts) = super::read_model::current_chunks_measured(&mut tx.tx, scope, None, None)
+        .await
+        .unwrap();
+    assert!(chunks.is_empty());
+    assert_eq!(counts, [4, 4, 0, 0]);
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}

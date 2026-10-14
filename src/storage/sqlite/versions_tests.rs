@@ -576,3 +576,52 @@ async fn cleanup_does_not_bypass_summary_foreign_keys() {
     }
     store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn restore_preserves_selected_tuple_order_after_root_filtering() {
+    let (_dir, store, scope) = database().await;
+    let mut tx = transaction(&store.pool, scope).await;
+    let asset = Uuid::new_v4();
+    let source = Uuid::new_v4();
+    seed_root(&mut tx.tx, scope, asset, source, "title").await;
+    tx.insert_version_inner(asset, 1, "body", "hash", source, None, Some("title"))
+
+        .await
+        .unwrap();
+    db::query("UPDATE oc_assets SET current_version=x'01' WHERE id=?")
+        .bind(asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_versions SET title=x'02' WHERE asset_id=?")
+        .bind(asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    match tx.restore_source_inner(asset, 1).await {
+        Err(StorageError::Backend(message)) => assert!(message.contains("expected integer")),
+        result => panic!("unexpected restore result: {result:?}"),
+    }
+    db::query("UPDATE oc_events SET state='retracted' WHERE id=?")
+        .bind(source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.restore_source_inner(asset, 1).await, Err(StorageError::NotFound)));
+    db::query("UPDATE oc_events SET state='active' WHERE id=?")
+        .bind(source)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_assets SET current_version=NULL WHERE id=?")
+        .bind(asset)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    match tx.restore_source_inner(asset, 1).await {
+        Err(StorageError::Backend(message)) => assert!(message.contains("expected text")),
+        result => panic!("unexpected restore result: {result:?}"),
+    }
+    tx.tx.rollback().await.unwrap();
+    store.shutdown().await.unwrap();
+}
