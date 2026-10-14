@@ -27,7 +27,7 @@ jobs:
         with:
           save-if: true
           cache-on-failure: true
-      - name: Reproduce original offline lifecycle test with process diagnostics
+      - name: Build original lifecycle regression and verify predicate equivalence
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -44,13 +44,58 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Cannot locate protoc.' }
             $env:PROTOC = $protoc.Trim()
           }
-          & cargo test --locked --test local -j 1 --no-run
+          $build = & cargo test --locked --test local -j 1 --no-run --message-format=json
           if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed.' }
+          $testExe = $build | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'local' -and $_.executable } | Select-Object -Last 1 -ExpandProperty executable
+          if (-not $testExe) { throw 'Original local test executable missing.' }
+          "ORIGENCE_TEST_EXE=$testExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           & cargo test --locked --lib -j 1 visibility::predicate_tests -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Native Turso support-predicate equivalence failed.' }
           & dumpbin /headers target/debug/origence.exe | Select-String 'stack'
-          & cargo test --locked --test local -j 1 local_app::local_host_api_cli_mcp_models_and_recovery -- --exact --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Original lifecycle regression failed; inspect captured process status and output.' }
+      - name: Capture first-chance stack in the unchanged offline regression
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cdb = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Debuggers\x64\cdb.exe'
+          if (-not (Test-Path -LiteralPath $cdb)) {
+            $found = Get-Command cdb.exe -ErrorAction SilentlyContinue
+            if (-not $found) { throw 'CDB missing; stop before installing anything.' }
+            $cdb = $found.Source
+          }
+          Get-ChildItem target/debug/origence.pdb -ErrorAction SilentlyContinue | Select-Object Name,Length
+          $armFile = Join-Path $env:RUNNER_TEMP 'origence-arm.cdb'
+          @'
+          sxe -c ".echo ORIGENCE_SOV_BEGIN; .catch { .lastevent }; .catch { knf 0x100 }; .catch { !teb }; .echo ORIGENCE_SOV_END; gn" -c2 ".echo ORIGENCE_SOV_SECOND; gn" sov
+          .echo ORIGENCE_SOV_ARMED
+          .lastevent
+          g
+          '@ | Set-Content -LiteralPath $armFile -Encoding ascii
+          $startup = 'sxe -c "|#s; $$><' + $armFile + '" cpr; $$><' + $armFile
+          $symbols = (Join-Path $PWD 'target\debug') + ';' + (Join-Path $PWD 'target\debug\deps')
+          $log = Join-Path $env:RUNNER_TEMP 'origence-cdb.log'
+          $psi = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = $cdb
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.WorkingDirectory = $PWD.Path
+          $argsForCdb = @('-o', '-g', '-G', '-hd', '-y', $symbols, '-logo', $log, '-c', $startup, $env:ORIGENCE_TEST_EXE, 'local_app::local_host_api_cli_mcp_models_and_recovery', '--exact', '--nocapture')
+          foreach ($arg in $argsForCdb) { $psi.ArgumentList.Add([string]$arg) }
+          $p = [System.Diagnostics.Process]::Start($psi)
+          $stdout = $p.StandardOutput.ReadToEndAsync()
+          $stderr = $p.StandardError.ReadToEndAsync()
+          if (-not $p.WaitForExit(300000)) {
+            try { $p.Kill($true) } catch {}
+            throw 'CDB timed out; this is not a completed regression result.'
+          }
+          Write-Host "CDB exit code: $($p.ExitCode)"
+          $captured = $stdout.GetAwaiter().GetResult() + $stderr.GetAwaiter().GetResult()
+          Write-Host $captured
+          $debuggerLog = Get-Content -LiteralPath $log -Raw
+          if ($captured -notmatch 'test result: ok\. 1 passed;' -or $debuggerLog -match 'ORIGENCE_SOV_BEGIN\r?\n') {
+            throw 'Original regression did not pass; inspect first-chance stack and original test result.'
+          }
       - name: Validate all Windows lifecycle contracts after the original regression passes
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1
