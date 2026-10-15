@@ -684,14 +684,28 @@ async fn raw_identity_batches_do_not_add_current_or_semantic_guards() {
     .await;
     binding(&mut tx, foreign, records[128].asset, &identity("Other")).await;
     let legacy = Record::new(130);
-    seed(&mut tx, scope, legacy, "memory", None, "retracted", "memory").await;
+    seed(
+        &mut tx,
+        scope,
+        legacy,
+        "memory",
+        None,
+        "retracted",
+        "memory",
+    )
+    .await;
     let missing = Uuid::new_v4();
     let mut assets: Vec<_> = records.iter().map(|row| row.asset).collect();
     assets.extend([records[0].asset, records[128].asset, legacy.asset, missing]);
     let found = tx.identity_rows_for_assets(&assets).await.unwrap();
     assert_eq!(found.len(), 131);
     for column in ["identity_key", "identity_json"] {
-        assert_eq!(found[&legacy.asset].try_get::<Option<String>>(column).unwrap(), None);
+        assert_eq!(
+            found[&legacy.asset]
+                .try_get::<Option<String>>(column)
+                .unwrap(),
+            None
+        );
     }
     assert!(!found.contains_key(&missing));
     for row in records {
@@ -1335,7 +1349,16 @@ async fn route_membership_precedes_merged_identity_corruption_decoding() {
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(140_000);
     let wanted = identity("Atlas");
-    seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+    seed(
+        &mut tx,
+        scope,
+        row,
+        "knowledge",
+        Some(1),
+        "active",
+        "knowledge",
+    )
+    .await;
     // Deliberately omit production CHECK constraints to test read ordering.
     for sql in [
         "UPDATE oc_assets SET identity_key='bad',identity_json='{'",
@@ -1344,22 +1367,45 @@ async fn route_membership_precedes_merged_identity_corruption_decoding() {
     ] {
         db::query(sql).execute(&mut *tx.tx).await.unwrap();
         // Batch fetching stays raw, even when the nullable pair is corrupt.
-        assert_eq!(tx.identity_rows_for_assets(&[row.asset]).await.unwrap().len(), 1);
-        assert!(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap().is_empty());
         assert_eq!(
-            ids(tx.context_route_rows(ContextRoute::Knowledge, Some(&wanted)).await.unwrap()),
+            tx.identity_rows_for_assets(&[row.asset])
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            tx.context_route_rows(ContextRoute::Memory, Some(&wanted))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            ids(tx
+                .context_route_rows(ContextRoute::Knowledge, Some(&wanted))
+                .await
+                .unwrap()),
             HashSet::from([row.chunk])
         );
-        db::query("UPDATE oc_assets SET kind='memory'").execute(&mut *tx.tx).await.unwrap();
+        db::query("UPDATE oc_assets SET kind='memory'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         assert!(matches!(
-            tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await,
+            tx.context_route_rows(ContextRoute::Memory, Some(&wanted))
+                .await,
             Err(StorageError::Unavailable(_))
         ));
-        db::query("UPDATE oc_assets SET kind='knowledge'").execute(&mut *tx.tx).await.unwrap();
+        db::query("UPDATE oc_assets SET kind='knowledge'")
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
     }
     binding(&mut tx, scope, row.asset, &wanted).await;
     db::query("UPDATE oc_assets SET kind='memory',identity_key='wrong-canonical-key'")
-        .execute(&mut *tx.tx).await.unwrap();
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     assert!(matches!(
         tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await,
         Err(StorageError::Unavailable(message)) if message == "memory identity binding mismatch"

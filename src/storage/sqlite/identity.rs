@@ -13,13 +13,17 @@ pub(super) fn identity_body(
         (None, None) => Ok(None),
         (Some(key), Some(body)) => {
             if row.try_get::<String>("kind").map_err(turso_err)? != "memory" {
-                return Err(StorageError::Unavailable("memory identity binding mismatch".into()));
+                return Err(StorageError::Unavailable(
+                    "memory identity binding mismatch".into(),
+                ));
             }
             let identity = serde_json::from_str(&body)
                 .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))?;
             Ok(Some((key, identity)))
         }
-        _ => Err(StorageError::Unavailable("memory identity binding mismatch".into())),
+        _ => Err(StorageError::Unavailable(
+            "memory identity binding mismatch".into(),
+        )),
     }
 }
 
@@ -29,10 +33,13 @@ pub(super) fn checked_identity(
 ) -> StorageResult<Option<MemoryIdentity>> {
     identity_body(row)?
         .map(|(key, identity)| {
-            let expected = identity.key(scope)
+            let expected = identity
+                .key(scope)
                 .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))?;
             if key != expected {
-                return Err(StorageError::Unavailable("memory identity binding mismatch".into()));
+                return Err(StorageError::Unavailable(
+                    "memory identity binding mismatch".into(),
+                ));
             }
             Ok(identity)
         })

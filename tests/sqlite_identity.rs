@@ -359,8 +359,12 @@ async fn identity_binding_mismatch_precedes_tombstone_rejection() {
     different.subject.stable_id = "different".into();
     db::query("UPDATE oc_assets SET identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(serde_json::to_string(&different).unwrap())
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset)
-        .execute(store.pool()).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(asset)
+        .execute(store.pool())
+        .await
+        .unwrap();
     let mut tx = store.begin(auth).await.unwrap();
     assert!(matches!(tx.identity_slot(&requested).await,
         Err(StorageError::Conflict(message)) if message == "memory identity binding mismatch"));
@@ -384,15 +388,17 @@ async fn non_memory_identity_binding_is_rejected_at_write() {
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let (asset, _) = tx.identity_slot(&requested).await.unwrap();
     tx.commit().await.unwrap();
-    assert!(db::query(
-        "UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?",
-    )
-    .bind(scope.tenant_id)
-    .bind(scope.workspace_id)
-    .bind(asset)
-    .execute(store.pool())
-    .await
-    .is_err());
+    assert!(
+        db::query(
+            "UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(asset)
+        .execute(store.pool())
+        .await
+        .is_err()
+    );
     let mut tx = store.begin(auth).await.unwrap();
     assert_eq!(tx.identity_slot(&requested).await.unwrap(), (asset, None));
     tx.rollback().await.unwrap();
@@ -404,9 +410,15 @@ async fn non_memory_identity_binding_is_rejected_at_write() {
             .await
             .unwrap();
     assert_eq!(assets, 1);
-    let binding: Uuid = db::query_scalar("SELECT id FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(requested.key(scope).unwrap())
-        .fetch_one(store.pool()).await.unwrap();
+    let binding: Uuid = db::query_scalar(
+        "SELECT id FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(requested.key(scope).unwrap())
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
     assert_eq!(binding, asset);
 }
 
@@ -419,8 +431,14 @@ async fn merged_identity_constraints_cover_null_pairs_kinds_and_tombstones() {
         tenant_id: scope.tenant_id,
         workspace_id: Uuid::new_v4(),
     };
-    store.create_workspace(other_scope.tenant_id, other_scope.workspace_id, "other workspace")
-        .await.unwrap();
+    store
+        .create_workspace(
+            other_scope.tenant_id,
+            other_scope.workspace_id,
+            "other workspace",
+        )
+        .await
+        .unwrap();
     let body = serde_json::to_string(&identity()).unwrap();
     for (kind, key, value, accepted) in [
         ("memory", None, None, true),
@@ -428,7 +446,12 @@ async fn merged_identity_constraints_cover_null_pairs_kinds_and_tombstones() {
         ("knowledge", None, None, true),
         ("memory", Some("key-only"), None, false),
         ("memory", None, Some(body.as_str()), false),
-        ("knowledge", Some("knowledge-key"), Some(body.as_str()), false),
+        (
+            "knowledge",
+            Some("knowledge-key"),
+            Some(body.as_str()),
+            false,
+        ),
         ("memory", Some("reserved"), Some(body.as_str()), true),
     ] {
         let result = db::query(
@@ -473,12 +496,11 @@ async fn merged_identity_constraints_cover_null_pairs_kinds_and_tombstones() {
     .execute(store.pool())
     .await
     .unwrap();
-    let obsolete: i64 = db::query_scalar(
-        "SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'",
-    )
-    .fetch_one(store.pool())
-    .await
-    .unwrap();
+    let obsolete: i64 =
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
     assert_eq!(obsolete, 0);
 }
 
@@ -492,7 +514,10 @@ async fn selected_identity_reads_fail_closed_on_corrupt_body_or_key() {
     let body = serde_json::to_string(&requested).unwrap();
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let (asset, _) = tx.identity_slot(&requested).await.unwrap();
-    let source = tx.create_event("identified", "approval", None).await.unwrap();
+    let source = tx
+        .create_event("identified", "approval", None)
+        .await
+        .unwrap();
     tx.insert_version(asset, 1, "approval", "hash", source, None, None)
         .await
         .unwrap();
@@ -559,12 +584,23 @@ async fn same_format_backup_reopens_with_identity_history_sources_and_tombstones
     deleted_identity.subject.stable_id = "deleted".into();
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let (asset, _) = tx.identity_slot(&requested).await.unwrap();
-    let source = tx.create_event("identified", "original source", None).await.unwrap();
+    let source = tx
+        .create_event("identified", "original source", None)
+        .await
+        .unwrap();
     for version in [1, 2, 3] {
         let restored_from = (version == 3).then_some(1);
-        tx.insert_version(asset, version, "approval", "hash", source, restored_from, None)
-            .await
-            .unwrap();
+        tx.insert_version(
+            asset,
+            version,
+            "approval",
+            "hash",
+            source,
+            restored_from,
+            None,
+        )
+        .await
+        .unwrap();
         tx.update_asset_version(asset, version, None).await.unwrap();
     }
     let (deleted, _) = tx.identity_slot(&deleted_identity).await.unwrap();
@@ -580,28 +616,40 @@ async fn same_format_backup_reopens_with_identity_history_sources_and_tombstones
         std::fs::copy(entry.path(), backup.path().join(entry.file_name())).unwrap();
     }
     let restored_path = backup.path().join("oc.db");
-    SqliteStore::check_memory_identity(&restored_path).await.unwrap();
+    SqliteStore::check_memory_identity(&restored_path)
+        .await
+        .unwrap();
     let store = SqliteStore::open(&restored_path).await.unwrap();
     let mut tx = store.begin(auth).await.unwrap();
-    assert_eq!(tx.identity_slot(&requested).await.unwrap(), (asset, Some(3)));
+    assert_eq!(
+        tx.identity_slot(&requested).await.unwrap(),
+        (asset, Some(3))
+    );
     for version in [1, 2, 3] {
         let view = tx.asset_view(asset, Some(version)).await.unwrap();
         assert_eq!(view["identity"], serde_json::to_value(&requested).unwrap());
         assert_eq!(view["source_event_id"], source.to_string());
     }
-    assert_eq!(tx.event_content(source, true).await.unwrap().as_deref(), Some("original source"));
+    assert_eq!(
+        tx.event_content(source, true).await.unwrap().as_deref(),
+        Some("original source")
+    );
     let restore = tx.restore_source(asset, 1).await.unwrap();
     assert_eq!(restore["current_version"], 3);
     assert_eq!(restore["source_event_id"], source.to_string());
-    assert!(matches!(tx.restore_source(deleted, 1).await, Err(StorageError::NotFound)));
+    assert!(matches!(
+        tx.restore_source(deleted, 1).await,
+        Err(StorageError::NotFound)
+    ));
     assert!(matches!(tx.identity_slot(&deleted_identity).await,
         Err(StorageError::Conflict(message)) if message == "memory identity asset was deleted"));
     tx.rollback().await.unwrap();
-    let restored_from: i32 = db::query_scalar("SELECT restored_from FROM oc_versions WHERE asset_id=? AND version=3")
-        .bind(asset)
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
+    let restored_from: i32 =
+        db::query_scalar("SELECT restored_from FROM oc_versions WHERE asset_id=? AND version=3")
+            .bind(asset)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
     assert_eq!(restored_from, 1);
     store.shutdown().await.unwrap();
 }
@@ -622,9 +670,14 @@ async fn deleted_legacy_collision_does_not_allocate_a_replacement() {
         Err(StorageError::Conflict(message)) if message == "memory identity conflicts with a legacy fact slot"));
     tx.rollback().await.unwrap();
     let count: i64 = db::query_scalar("SELECT count(*) FROM oc_assets")
-        .fetch_one(store.pool()).await.unwrap();
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
     assert_eq!(count, 1);
     let binding: Option<String> = db::query_scalar("SELECT identity_key FROM oc_assets WHERE id=?")
-        .bind(asset).fetch_one(store.pool()).await.unwrap();
+        .bind(asset)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
     assert_eq!(binding, None);
 }

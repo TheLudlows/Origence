@@ -58,10 +58,19 @@ struct Input {
     json: String,
 }
 #[derive(Default)]
-struct Counts { reads: usize, writes: usize }
+struct Counts {
+    reads: usize,
+    writes: usize,
+}
 
-async fn operation(tx: &mut db::Transaction, scope: Scope, input: &Input,
-                   merged: bool, phase: &str, counts: &mut Counts) {
+async fn operation(
+    tx: &mut db::Transaction,
+    scope: Scope,
+    input: &Input,
+    merged: bool,
+    phase: &str,
+    counts: &mut Counts,
+) {
     counts.reads += 1;
     let row = if merged {
         db::query("SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'")
@@ -92,7 +101,10 @@ async fn operation(tx: &mut db::Transaction, scope: Scope, input: &Input,
                 .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset)
                 .fetch_one(&mut **tx).await.unwrap()
         };
-        assert_eq!(serde_json::from_str::<MemoryIdentity>(&json).unwrap(), input.identity);
+        assert_eq!(
+            serde_json::from_str::<MemoryIdentity>(&json).unwrap(),
+            input.identity
+        );
         return;
     }
     assert_eq!(phase, "create");
@@ -108,7 +120,11 @@ async fn operation(tx: &mut db::Transaction, scope: Scope, input: &Input,
         db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at) VALUES (?,?,?,'memory',?,?,?)")
     }.bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
         .bind(&input.identity.predicate).bind(&input.key).bind(1_i64);
-    let insert = if merged { insert.bind(&input.key).bind(&input.json) } else { insert };
+    let insert = if merged {
+        insert.bind(&input.key).bind(&input.json)
+    } else {
+        insert
+    };
     insert.execute(&mut **tx).await.unwrap();
     if !merged {
         counts.writes += 1;
@@ -130,27 +146,47 @@ async fn bytes(path: &Path) -> u64 {
 #[tokio::test]
 #[ignore = "manual native layout measurement; no performance thresholds"]
 async fn identity_layout_before_after() {
-    println!("identity_layout config engine=turso-0.8.2 declared_rust=1.98.0 os={} arch={} debug_assertions={} native_defaults=true key_hashing=excluded canonical_revalidation=excluded", std::env::consts::OS, std::env::consts::ARCH, cfg!(debug_assertions));
+    println!(
+        "identity_layout config engine=turso-0.8.2 declared_rust=1.98.0 os={} arch={} debug_assertions={} native_defaults=true key_hashing=excluded canonical_revalidation=excluded",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        cfg!(debug_assertions)
+    );
     // Record `rustc --version --verbose` alongside this command in CI; the actual
     // compiler version is not embedded by the crate and must not be guessed.
-    let scope = Scope { tenant_id: Uuid::from_u128(1), workspace_id: Uuid::from_u128(2) };
+    let scope = Scope {
+        tenant_id: Uuid::from_u128(1),
+        workspace_id: Uuid::from_u128(2),
+    };
     for n in [1_000, 10_000] {
-        let inputs: Vec<_> = (0..n).map(|i| {
-            let identity = MemoryIdentity {
-                subject: MemorySubject { kind: SubjectKind::Service, stable_id: format!("service-{i:05}") },
-                predicate: "release.approval".into(),
-                context: BTreeMap::from([("environment".into(), "production".into())]),
-            };
-            Input { asset: Uuid::from_u128(i as u128 + 100), key: identity.key(scope).unwrap(),
-                    json: serde_json::to_string(&identity).unwrap(), identity }
-        }).collect();
+        let inputs: Vec<_> = (0..n)
+            .map(|i| {
+                let identity = MemoryIdentity {
+                    subject: MemorySubject {
+                        kind: SubjectKind::Service,
+                        stable_id: format!("service-{i:05}"),
+                    },
+                    predicate: "release.approval".into(),
+                    context: BTreeMap::from([("environment".into(), "production".into())]),
+                };
+                Input {
+                    asset: Uuid::from_u128(i as u128 + 100),
+                    key: identity.key(scope).unwrap(),
+                    json: serde_json::to_string(&identity).unwrap(),
+                    identity,
+                }
+            })
+            .collect();
         for merged in [false, true] {
             let layout = if merged { "after" } else { "before" };
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("identity.db");
             let pool = db::Pool::open(&path).await.unwrap();
             db::raw_sql(WORKSPACES).execute(&pool).await.unwrap();
-            db::raw_sql(if merged { AFTER } else { BEFORE }).execute(&pool).await.unwrap();
+            db::raw_sql(if merged { AFTER } else { BEFORE })
+                .execute(&pool)
+                .await
+                .unwrap();
             db::query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES (?,?,'benchmark',1)")
                 .bind(scope.tenant_id).bind(scope.workspace_id).execute(&pool).await.unwrap();
             for phase in ["create", "reuse", "lookup_binding"] {
@@ -158,27 +194,43 @@ async fn identity_layout_before_after() {
                 let started = Instant::now();
                 for batch in inputs.chunks(100) {
                     let mut tx = pool.begin().await.unwrap();
-                    for input in batch { operation(&mut tx, scope, input, merged, phase, &mut counts).await; }
+                    for input in batch {
+                        operation(&mut tx, scope, input, merged, phase, &mut counts).await;
+                    }
                     tx.commit().await.unwrap();
                 }
                 let elapsed = started.elapsed();
                 let (reads, writes) = match (merged, phase) {
-                    (false, "create") => (2, 2), (true, "create") => (2, 1),
-                    (false, "reuse") => (3, 0), (false, _) => (2, 0), (true, _) => (1, 0),
+                    (false, "create") => (2, 2),
+                    (true, "create") => (2, 1),
+                    (false, "reuse") => (3, 0),
+                    (false, _) => (2, 0),
+                    (true, _) => (1, 0),
                 };
                 assert_eq!((counts.reads, counts.writes), (n * reads, n * writes));
-                println!("identity_layout layout={layout} n={n} phase={phase} batch=100 reads={} writes={} transactions={} elapsed_us={}",
-                    counts.reads, counts.writes, n / 100, elapsed.as_micros());
+                println!(
+                    "identity_layout layout={layout} n={n} phase={phase} batch=100 reads={} writes={} transactions={} elapsed_us={}",
+                    counts.reads,
+                    counts.writes,
+                    n / 100,
+                    elapsed.as_micros()
+                );
             }
             let count: i64 = db::query_scalar("SELECT COUNT(*) FROM oc_assets")
-                .fetch_one(&pool).await.unwrap();
+                .fetch_one(&pool)
+                .await
+                .unwrap();
             assert_eq!(count, n as i64);
             pool.shutdown().await.unwrap();
             drop(pool);
             let db_bytes = bytes(&path).await;
             let wal_bytes = bytes(&dir.path().join("identity.db-wal")).await;
             let shm_bytes = bytes(&dir.path().join("identity.db-shm")).await;
-            println!("identity_layout layout={layout} n={n} phase=after_shutdown db_bytes={db_bytes} wal_bytes={wal_bytes} shm_bytes={shm_bytes} db_wal_bytes={} total_bytes={}", db_bytes + wal_bytes, db_bytes + wal_bytes + shm_bytes);
+            println!(
+                "identity_layout layout={layout} n={n} phase=after_shutdown db_bytes={db_bytes} wal_bytes={wal_bytes} shm_bytes={shm_bytes} db_wal_bytes={} total_bytes={}",
+                db_bytes + wal_bytes,
+                db_bytes + wal_bytes + shm_bytes
+            );
         }
     }
 }
