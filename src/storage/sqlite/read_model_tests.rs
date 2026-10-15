@@ -65,6 +65,9 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // CHECK constraints are omitted to retain corrupt and wrong-kind fixtures.
     for sql in [
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
+        // Non-unique only in this permissive corruption fixture; production
+        // admission requires the exact unique partial identity index.
+        "CREATE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key) WHERE identity_key IS NOT NULL",
         "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",

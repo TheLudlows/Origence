@@ -107,3 +107,13 @@ first timed samples. Diagnostic size includes two extra tombstone-validation
 updates, so do not compare its WAL size directly with earlier layout measurements.
 Only this bounded query diagnostic is currently selected by the CI measurement
 step. A promising fixture result still requires production correctness review.
+
+
+The identity-slot SELECT explicitly selects `oc_memory_identity_slot` and repeats
+its non-null predicate after native diagnostics showed a scope-prefix fact-index
+plan. Exact schema admission already guarantees that partial unique index. Keep
+kind/scope filters and mismatch-before-tombstone handling unchanged; no runtime
+fallback on index loss. The extra predicate is redundant for validated keys;
+only the combined predicate/hint was tested, so its necessity for hint support is
+not asserted. This is a targeted access-path choice for Turso 0.8.2, not a generic
+query hint policy or an optimization of every identity read method.

@@ -314,13 +314,23 @@ enum IdentityProbe {
 
 fn identity_probe(merged: bool, probe: IdentityProbe) -> db::Query {
     if !merged {
-        db::query("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
+        db::query(
+            "SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
+        )
     } else {
         match probe {
-            IdentityProbe::Historical => db::query("SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'"),
-            IdentityProbe::Original => db::query("SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'"),
-            IdentityProbe::ExplicitNotNull => db::query("SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL"),
-            IdentityProbe::ForcedIdentityIndex => db::query("SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets INDEXED BY oc_memory_identity_slot WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL"),
+            IdentityProbe::Historical => db::query(
+                "SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'",
+            ),
+            IdentityProbe::Original => db::query(
+                "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'",
+            ),
+            IdentityProbe::ExplicitNotNull => db::query(
+                "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL",
+            ),
+            IdentityProbe::ForcedIdentityIndex => db::query(
+                "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets INDEXED BY oc_memory_identity_slot WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL",
+            ),
         }
     }
 }
@@ -656,9 +666,15 @@ async fn run_creation_diagnostics(query_variants: bool) {
 async fn verify_query_results(pool: &db::Pool, scope: Scope, input: &Input, probe: IdentityProbe) {
     for deleted in [false, true] {
         if deleted {
-            db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
-                .execute(pool).await.unwrap();
+            db::query(
+                "UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?",
+            )
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(input.asset)
+            .execute(pool)
+            .await
+            .unwrap();
         }
         let row = identity_probe(true, probe)
             .bind(scope.tenant_id)
@@ -694,6 +710,10 @@ async fn verify_query_results(pool: &db::Pool, scope: Scope, input: &Input, prob
     }
     // Restore logical contents; diagnostic size includes these two extra writes.
     db::query("UPDATE oc_assets SET deleted=0 WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
-        .execute(pool).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(input.asset)
+        .execute(pool)
+        .await
+        .unwrap();
 }

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 30237)
-Total output lines: 1062
-
 # Origence · 验收与历史证据
 
 本页按原记录保留各阶段、精确提交与运行 ID 的验收证据。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
@@ -371,7 +368,11 @@ PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝
 ## 当前 CI 与实现验收
 
 - **SQLite 图替换**：PR #23 已合入 main `9c292a99aec658ba924d5b82c1a86f229ad4d115`。main run [38032343493](https://github.com/TheLudlows/Origence/actions/runs/38032343493) 五个作业全部成功；Linux、Windows、macOS 均为 lib 28/local 89，包含 13 项图回归；Docker Smoke 成功。逐 job 证据见 [主干证据](evidence/2026-10-10-sqlite-graph-main.json)。
-- **S1 实验代码 PR #24**：run [38034197676](https://github.com/TheLudlows/Origence/actions/runs/38034197676) 的 …237 tokens truncated…I。
+- **S1 实验代码 PR #24**：run [38034197676](https://github.com/TheLudlows/Origence/actions/runs/38034197676) 的 Linux/MSRV 与 fast-check 两个实际作业成功，默认 lib 29/local 89、轻量 lib 28/local 72、Python 9、Clippy/fmt/build/HTTP smoke 通过；Windows/macOS/container 按 main-only 策略跳过。该 PR 运行不能单独证明这些平台已验收。精确计数见 [CI 静态证据](evidence/2026-10-10-s1-pr24-ci.json)。
+- **S0 身份过滤**：跨平台 main run [37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) 五作业成功，属于 PR #23 合入前代码；只作为 S0 正确性证据。
+- **PDF 解析**：`pdf_oxide 0.3.78` 保留页码、UTF-8 来源范围和整份失败策略；取消/隔离边界见 [OPERATIONS](OPERATIONS.md#pdf-解析)。
+
+整理后的本地文档链接检查与 `git diff --check` 通过。Rust 1.98.0 `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -j 2 -- -D warnings` 已在前一轮通过；本轮只改文档，未重跑代码测试或远端 CI。
 
 ## 2026-10-11 当前文档精简
 
@@ -1059,3 +1060,47 @@ fact collision则使用完整scope/fact_key覆盖索引。计划在1k建库完�
 下一测试仍只改fixture SELECT：原查询、显式identity_key IS NOT NULL、该谓词
 加INDEXED BY身份索引；生产DDL/约束及返回语义保持，先核计划与边界结果，再比较
 相同分阶段时间。强制索引仅作诊断，不能未经验证直接成为生产方案。
+
+
+### 等价查询路径诊断（85a21005）与最小修复
+
+[CI 38678537293](https://github.com/TheLudlows/Origence/actions/runs/38678537293)
+的 native identity-layout job 116237566198 成功，测量114.35秒。
+fast-check/Windows 因三处rustfmt格式失败，整轮不是通过；随后按真实Rust1.98
+输出仅调整等价排版。原始[查询、阶段与计划行](evidence/issue60-identity-query-85a21005.txt)
+保留，不能用原生基准通过替代功能门禁。
+
+完整生产DDL、六字段投影与全部约束固定，仅改变SELECT，10k两轮（秒）：
+
+| 查询 | 总创建 | identity miss |
+|---|---|---|
+| 原生产查询 | 26.261058 / 26.128000 | 24.208089 / 24.099817 |
+| 加显式IS NOT NULL | 26.439306 / 26.290508 | 24.378090 / 24.240430 |
+| 上述谓词 + INDEXED BY身份索引 | 2.727091 / 2.733739 | 0.847135 / 0.848831 |
+
+1k三轮原查询0.459–0.465秒，强制身份索引0.248–0.257秒。空库及10k填充后
+计划均确认前两者选fact索引scope前缀，第三者使用完整scope/identity_key。
+该受控对照支持访问路径是本fixture的主要瓶颈；不是约束本身的成本，亦不是
+合表必然导致变慢。原、新布局未都作同等查询优化，不能据此断言优化合表
+在任何等优化历史布局上更快。精确生产方法仍以功能回归验证，非端到端性能承诺。
+
+最小生产改动仅identity_slot_inner查询增加已验证的INDEXED BY及显式非空谓词。
+完整schema admission保证精确partial unique索引存在；缺失或错误定义仍拒绝，
+运行中被外部删除则报错，不回退扫描。已验证key非空，保持scope/kind/投影/绑定、
+坏body先于tombstone错误及全部事务边界。显式非空重申partial索引适用条件；
+没有单独测试“只有hint没有非空”，不声称该谓词是引擎支持hint的必要条件。
+仅此查询选定访问路径，不扩至lookup/candidate等未测方法。
+
+宽松坏数据unit fixture增加同名非唯一partial索引，以保留故意重复/非memory
+损坏数据；生产schema不变，legacy collision Conflict断言不放宽。既有创建、
+复用、版本/隔离、tombstone、错误顺序、索引缺失与恢复回归继续运行。
+修复后的精确head完整CI与原生复验待执行；不以旧头通过替代。
+
+### 验证文档完整性修复
+
+本轮恢复上传时发现，先前通过终端读取大型VALIDATION文档的输出被截断，
+造成85a21005远程文档含输出截断占位内容。现从本地完整版本恢复历史全文，
+保留各次失败与成功记录；代码与CI原始日志未受该文档传输缺陷影响。
+逐文件比较本地455个已跟踪文件与该头远程blob SHA，仅VALIDATION不一致；
+本轮每个修改文件均以本地完整字节Git blob SHA核对上传结果，不再依赖
+单次终端输出或仅搜索截断标记判断完整性。

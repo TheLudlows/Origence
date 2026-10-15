@@ -148,9 +148,13 @@ impl TursoTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
+        // Exact schema admission guarantees this scoped identity index. Turso
+        // 0.8.2 otherwise chooses the fact-slot scope prefix for this query.
+        // State the partial-index predicate explicitly; canonical keys are non-null.
         let existing = native_turso::query(
             "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets \
-             WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'",
+             INDEXED BY oc_memory_identity_slot WHERE tenant_id=? AND workspace_id=? \
+             AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
