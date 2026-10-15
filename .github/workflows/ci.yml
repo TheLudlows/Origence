@@ -41,7 +41,7 @@ jobs:
   identity-layout:
     if: github.head_ref == 'refactor/issue60-identity'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       CARGO_PROFILE_RELEASE_DEBUG: 0
       CARGO_INCREMENTAL: 0
@@ -55,10 +55,11 @@ jobs:
           save-if: ${{ github.event_name == 'pull_request' }}
           cache-on-failure: true
       - name: Build isolated release measurement
-        timeout-minutes: 10
+        timeout-minutes: 26
         run: |
           rustc --version --verbose | tee identity-layout-environment.txt
-          cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_before_after --no-run
+          set -o pipefail
+          timeout --kill-after=30s 25m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_before_after --no-run 2>&1 | tee identity-layout-build.txt
       - name: Bounded native identity layout comparison
         timeout-minutes: 8
         run: |
