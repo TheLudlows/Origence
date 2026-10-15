@@ -97,7 +97,9 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 ## 离线记忆身份检查
 
-原生 Turso 新库始终包含完整身份 schema。`identity-check` 对已有数据库执行
+原生 Turso 新库始终包含完整身份 schema。#60 将身份列并入 oc_assets，删除身份独立表；旧布局只读检查失败，不迁移、不修复。删除资产仍保留身份占位，同版本备份恢复需使用完整当前格式。详见[身份布局合同](contracts/identity-asset-layout.md)。
+
+`identity-check` 对已有数据库执行
 只读同版本检查，包括格式标记和完整 authority schema，不创建或修复任何表。
 
 1. 正常停止宿主及所有离线客户端，备份整个数据目录。

@@ -63,6 +63,12 @@ async fn reuse_publish_and_isolate_identity() {
     different.subject.stable_id = "shipping".into();
     assert_ne!(tx.identity_slot(&different).await.unwrap().0, asset);
     different = i.clone();
+    different.subject.kind = SubjectKind::Team;
+    assert_ne!(tx.identity_slot(&different).await.unwrap().0, asset);
+    different = i.clone();
+    different.predicate = "release.review".into();
+    assert_ne!(tx.identity_slot(&different).await.unwrap().0, asset);
+    different = i.clone();
     different
         .context
         .insert("environment".into(), "staging".into());
@@ -156,7 +162,7 @@ async fn missing_lookup_does_not_allocate_a_slot() {
     store.shutdown().await.unwrap();
     let raw_pool = db::Pool::open(&path).await.unwrap();
     let mut conn = raw_pool.acquire().await.unwrap();
-    for table in ["oc_assets", "oc_memory_identities", "oc_events", "oc_jobs"] {
+    for table in ["oc_assets", "oc_events", "oc_jobs"] {
         let count: i64 = db::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
             .fetch_one(&mut *conn)
             .await
@@ -299,7 +305,7 @@ async fn incomplete_database_is_rejected_without_implicit_repair() {
         .unwrap();
     let (asset, _) = tx.slot("legacy.fact").await.unwrap();
     tx.commit().await.unwrap();
-    db::query("DROP TABLE oc_memory_identities")
+    db::query("DROP INDEX oc_memory_identity_slot")
         .execute(store.pool())
         .await
         .unwrap();
@@ -311,7 +317,7 @@ async fn incomplete_database_is_rejected_without_implicit_repair() {
     ));
     let raw_pool = db::Pool::open_read_only(&path).await.unwrap();
     let exists: bool = db::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_memory_identities')",
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_memory_identity_slot')",
     )
     .fetch_one(&raw_pool)
     .await
@@ -351,10 +357,14 @@ async fn identity_binding_mismatch_precedes_tombstone_rejection() {
     tx.commit().await.unwrap();
     let mut different = requested.clone();
     different.subject.stable_id = "different".into();
-    db::query("UPDATE oc_memory_identities SET identity_json=? WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
+    db::query("UPDATE oc_assets SET identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(serde_json::to_string(&different).unwrap())
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset)
-        .execute(store.pool()).await.unwrap();
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(asset)
+        .execute(store.pool())
+        .await
+        .unwrap();
     let mut tx = store.begin(auth).await.unwrap();
     assert!(matches!(tx.identity_slot(&requested).await,
         Err(StorageError::Conflict(message)) if message == "memory identity binding mismatch"));
@@ -370,7 +380,7 @@ async fn identity_binding_mismatch_precedes_tombstone_rejection() {
 }
 
 #[tokio::test]
-async fn non_memory_identity_binding_is_not_silently_repaired() {
+async fn non_memory_identity_binding_is_rejected_at_write() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let (auth, scope) = provision(&store).await;
@@ -378,22 +388,19 @@ async fn non_memory_identity_binding_is_not_silently_repaired() {
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let (asset, _) = tx.identity_slot(&requested).await.unwrap();
     tx.commit().await.unwrap();
-    db::query(
-        "UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?",
-    )
-    .bind(scope.tenant_id)
-    .bind(scope.workspace_id)
-    .bind(asset)
-    .execute(store.pool())
-    .await
-    .unwrap();
+    assert!(
+        db::query(
+            "UPDATE oc_assets SET kind='knowledge' WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(asset)
+        .execute(store.pool())
+        .await
+        .is_err()
+    );
     let mut tx = store.begin(auth).await.unwrap();
-    // The original inner association did not select non-memory bindings.
-    // Creation then encounters the existing identity key and must roll back.
-    assert!(matches!(
-        tx.identity_slot(&requested).await,
-        Err(StorageError::Backend(_))
-    ));
+    assert_eq!(tx.identity_slot(&requested).await.unwrap(), (asset, None));
     tx.rollback().await.unwrap();
     let assets: i64 =
         db::query_scalar("SELECT count(*) FROM oc_assets WHERE tenant_id=? AND workspace_id=?")
@@ -403,8 +410,274 @@ async fn non_memory_identity_binding_is_not_silently_repaired() {
             .await
             .unwrap();
     assert_eq!(assets, 1);
-    let binding: Uuid = db::query_scalar("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(requested.key(scope).unwrap())
-        .fetch_one(store.pool()).await.unwrap();
+    let binding: Uuid = db::query_scalar(
+        "SELECT id FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(requested.key(scope).unwrap())
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
     assert_eq!(binding, asset);
+}
+
+#[tokio::test]
+async fn merged_identity_constraints_cover_null_pairs_kinds_and_tombstones() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (_, scope) = provision(&store).await;
+    let other_scope = Scope {
+        tenant_id: scope.tenant_id,
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(
+            other_scope.tenant_id,
+            other_scope.workspace_id,
+            "other workspace",
+        )
+        .await
+        .unwrap();
+    let body = serde_json::to_string(&identity()).unwrap();
+    for (kind, key, value, accepted) in [
+        ("memory", None, None, true),
+        ("memory", None, None, true),
+        ("knowledge", None, None, true),
+        ("memory", Some("key-only"), None, false),
+        ("memory", None, Some(body.as_str()), false),
+        (
+            "knowledge",
+            Some("knowledge-key"),
+            Some(body.as_str()),
+            false,
+        ),
+        ("memory", Some("reserved"), Some(body.as_str()), true),
+    ] {
+        let result = db::query(
+            "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,identity_key,identity_json,created_at) VALUES(?,?,?,?,?,?,?,1)",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(kind)
+        .bind("constraint fixture")
+        .bind(key)
+        .bind(value)
+        .execute(store.pool())
+        .await;
+        assert_eq!(result.is_ok(), accepted, "kind={kind}, key={key:?}");
+    }
+    for deleted in [false, true] {
+        db::query("UPDATE oc_assets SET deleted=? WHERE identity_key='reserved'")
+            .bind(deleted)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        // Distinct fact keys (both NULL) ensure the identity index is responsible.
+        assert!(db::query(
+            "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,identity_key,identity_json,created_at) VALUES(?,?,?,'memory','duplicate','reserved',?,1)",
+        )
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(&body)
+        .execute(store.pool())
+        .await
+        .is_err());
+    }
+    db::query(
+        "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,identity_key,identity_json,created_at) VALUES(?,?,?,'memory','other scope','reserved',?,1)",
+    )
+    .bind(other_scope.tenant_id)
+    .bind(other_scope.workspace_id)
+    .bind(Uuid::new_v4())
+    .bind(&body)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let obsolete: i64 =
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(obsolete, 0);
+}
+
+#[tokio::test]
+async fn selected_identity_reads_fail_closed_on_corrupt_body_or_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (auth, scope) = provision(&store).await;
+    let requested = identity();
+    let key = requested.key(scope).unwrap();
+    let body = serde_json::to_string(&requested).unwrap();
+    let mut tx = store.begin(auth.clone()).await.unwrap();
+    let (asset, _) = tx.identity_slot(&requested).await.unwrap();
+    let source = tx
+        .create_event("identified", "approval", None)
+        .await
+        .unwrap();
+    tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        .await
+        .unwrap();
+    tx.update_asset_version(asset, 1, None).await.unwrap();
+    tx.commit().await.unwrap();
+    let mut different = requested.clone();
+    different.subject.stable_id = "different".into();
+    let mut invalid = requested.clone();
+    invalid.subject.stable_id.clear();
+    for (stored_key, stored_body) in [
+        (key.as_str(), "{".to_string()),
+        (key.as_str(), serde_json::to_string(&invalid).unwrap()),
+        (key.as_str(), serde_json::to_string(&different).unwrap()),
+        ("wrong-key", body.clone()),
+    ] {
+        db::query("UPDATE oc_assets SET identity_key=?,identity_json=? WHERE id=?")
+            .bind(stored_key)
+            .bind(&stored_body)
+            .bind(asset)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        let mut tx = store.begin(auth.clone()).await.unwrap();
+        assert!(matches!(
+            tx.asset_view(asset, None).await,
+            Err(StorageError::Unavailable(_))
+        ));
+        if stored_key == key {
+            assert!(matches!(
+                tx.identity_view(&requested).await,
+                Err(StorageError::Unavailable(_))
+            ));
+            assert!(matches!(
+                tx.identity_candidate_asset(&requested).await,
+                Err(StorageError::Unavailable(_))
+            ));
+        }
+        tx.rollback().await.unwrap();
+    }
+    db::query("UPDATE oc_assets SET identity_key=?,identity_json='{',deleted=1 WHERE id=?")
+        .bind(&key)
+        .bind(asset)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let mut tx = store.begin(auth).await.unwrap();
+    // Candidate filtering hides a tombstone before decoding its corrupt body.
+    assert_eq!(tx.identity_candidate_asset(&requested).await.unwrap(), None);
+    assert!(matches!(
+        tx.identity_view(&requested).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn same_format_backup_reopens_with_identity_history_sources_and_tombstones() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("oc.db");
+    let store = SqliteStore::open(&path).await.unwrap();
+    let (auth, _) = provision(&store).await;
+    let requested = identity();
+    let mut deleted_identity = requested.clone();
+    deleted_identity.subject.stable_id = "deleted".into();
+    let mut tx = store.begin(auth.clone()).await.unwrap();
+    let (asset, _) = tx.identity_slot(&requested).await.unwrap();
+    let source = tx
+        .create_event("identified", "original source", None)
+        .await
+        .unwrap();
+    for version in [1, 2, 3] {
+        let restored_from = (version == 3).then_some(1);
+        tx.insert_version(
+            asset,
+            version,
+            "approval",
+            "hash",
+            source,
+            restored_from,
+            None,
+        )
+        .await
+        .unwrap();
+        tx.update_asset_version(asset, version, None).await.unwrap();
+    }
+    let (deleted, _) = tx.identity_slot(&deleted_identity).await.unwrap();
+    tx.delete_asset(deleted).await.unwrap();
+    tx.commit().await.unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
+    let backup = tempfile::tempdir().unwrap();
+    // Copy the entire quiescent directory, including any native sidecars.
+    for entry in std::fs::read_dir(dir.path()).unwrap() {
+        let entry = entry.unwrap();
+        assert!(entry.file_type().unwrap().is_file());
+        std::fs::copy(entry.path(), backup.path().join(entry.file_name())).unwrap();
+    }
+    let restored_path = backup.path().join("oc.db");
+    SqliteStore::check_memory_identity(&restored_path)
+        .await
+        .unwrap();
+    let store = SqliteStore::open(&restored_path).await.unwrap();
+    let mut tx = store.begin(auth).await.unwrap();
+    assert_eq!(
+        tx.identity_slot(&requested).await.unwrap(),
+        (asset, Some(3))
+    );
+    for version in [1, 2, 3] {
+        let view = tx.asset_view(asset, Some(version)).await.unwrap();
+        assert_eq!(view["identity"], serde_json::to_value(&requested).unwrap());
+        assert_eq!(view["source_event_id"], source.to_string());
+    }
+    assert_eq!(
+        tx.event_content(source, true).await.unwrap().as_deref(),
+        Some("original source")
+    );
+    let restore = tx.restore_source(asset, 1).await.unwrap();
+    assert_eq!(restore["current_version"], 3);
+    assert_eq!(restore["source_event_id"], source.to_string());
+    assert!(matches!(
+        tx.restore_source(deleted, 1).await,
+        Err(StorageError::NotFound)
+    ));
+    assert!(matches!(tx.identity_slot(&deleted_identity).await,
+        Err(StorageError::Conflict(message)) if message == "memory identity asset was deleted"));
+    tx.rollback().await.unwrap();
+    let restored_from: i32 =
+        db::query_scalar("SELECT restored_from FROM oc_versions WHERE asset_id=? AND version=3")
+            .bind(asset)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(restored_from, 1);
+    store.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn deleted_legacy_collision_does_not_allocate_a_replacement() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let (auth, scope) = provision(&store).await;
+    let requested = identity();
+    let key = requested.key(scope).unwrap();
+    let mut tx = store.begin(auth.clone()).await.unwrap();
+    let (asset, _) = tx.slot(&key).await.unwrap();
+    tx.delete_asset(asset).await.unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = store.begin(auth).await.unwrap();
+    assert!(matches!(tx.identity_slot(&requested).await,
+        Err(StorageError::Conflict(message)) if message == "memory identity conflicts with a legacy fact slot"));
+    tx.rollback().await.unwrap();
+    let count: i64 = db::query_scalar("SELECT count(*) FROM oc_assets")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    let binding: Option<String> = db::query_scalar("SELECT identity_key FROM oc_assets WHERE id=?")
+        .bind(asset)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(binding, None);
 }

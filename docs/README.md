@@ -23,6 +23,8 @@
 | [依赖审计](DEPENDENCY_AUDIT.md) | 安全保留项 | 按审计版本处理，不把旧报告视为持续通过 |
 | [验收记录](VALIDATION.md) | 查询具体测试与 CI | 按章节日期、代码 SHA 和运行 ID 查证；记录正文及工件保留，不作为日常进度页 |
 
+当前存储布局与精简决策见[身份存储合同](contracts/identity-asset-layout.md)、[全字段盘点](contracts/storage-field-audit-2026-10-15.md)及[索引/账本保留理由](contracts/index-ledger-audit-2026-10-15.md)。
+
 ## 历史研究快读
 
 下表是阅读导航，不把历史建议升级为已实现能力；引用、公式、图源和分析正文保留在原文。

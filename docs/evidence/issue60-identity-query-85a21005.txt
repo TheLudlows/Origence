@@ -1,0 +1,179 @@
+Source: https://github.com/TheLudlows/Origence/actions/runs/38678537293/job/116237566198
+Head: 85a21005280bf6ef8c6efa985cf735f78a1d8ef5
+Extraction of raw diagnostic/progress/plan/completion lines; not full log.
+Artifact: https://github.com/TheLudlows/Origence/actions/runs/38678537293/artifacts/11947662355
+Whole CI not green: fast-check/Windows failed formatting. Benchmark job succeeded.
+
+2026-10-15T03:56:32.6488831Z     Finished `release` profile [optimized] target(s) in 3m 17s
+2026-10-15T03:56:33.0230085Z     Finished `release` profile [optimized] target(s) in 0.29s
+2026-10-15T03:56:33.0390574Z identity_creation_suite query_variants=true
+2026-10-15T03:56:33.0392270Z identity_creation config engine=turso-0.8.2 os=linux arch=x86_64 debug_assertions=false batch=100 key_hashing=excluded canonical_revalidation=excluded check_ablation=fixture_only
+2026-10-15T03:56:33.0496441Z identity_creation_plan layout=query_original stage=identity_miss status=ok rows=1
+2026-10-15T03:56:33.0497969Z identity_creation_plan layout=query_original stage=identity_miss detail="SEARCH oc_assets USING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=?)"
+2026-10-15T03:56:33.0499486Z identity_creation_plan layout=query_original stage=fact_collision status=ok rows=2
+2026-10-15T03:56:33.0501182Z identity_creation_plan layout=query_original stage=fact_collision detail="SEARCH oc_assets USING COVERING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=? AND fact_key=?)"
+2026-10-15T03:56:33.0503013Z identity_creation_plan layout=query_original stage=fact_collision detail="SCAN CONSTANT ROW"
+2026-10-15T03:56:33.0504166Z identity_creation_plan layout=query_original stage=assets_insert status=ok rows=0
+2026-10-15T03:56:33.0505524Z identity_creation_progress layout=query_original n=1000 round=0 position=0 phase=start
+2026-10-15T03:56:33.5102822Z identity_creation_progress layout=query_original n=1000 round=0 committed_batches=10 elapsed_us=460277
+2026-10-15T03:56:33.5105751Z identity_creation layout=query_original n=1000 round=0 position=0 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=460284 identity_miss_us=282642 fact_collision_us=66632 assets_insert_us=104103 identity_insert_us=0 begin_us=109 commit_us=6406
+2026-10-15T03:56:33.5133027Z identity_creation_progress layout=query_original n=1000 round=0 phase=shutdown
+2026-10-15T03:56:33.5135410Z identity_creation_size layout=query_original n=1000 round=0 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:33.5193013Z identity_creation_plan layout=query_explicit_not_null stage=identity_miss status=ok rows=1
+2026-10-15T03:56:33.5194571Z identity_creation_plan layout=query_explicit_not_null stage=identity_miss detail="SEARCH oc_assets USING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=?)"
+2026-10-15T03:56:33.5195864Z identity_creation_plan layout=query_explicit_not_null stage=fact_collision status=ok rows=2
+2026-10-15T03:56:33.5196900Z identity_creation_plan layout=query_explicit_not_null stage=fact_collision detail="SEARCH oc_assets USING COVERING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=? AND fact_key=?)"
+2026-10-15T03:56:33.5197961Z identity_creation_plan layout=query_explicit_not_null stage=fact_collision detail="SCAN CONSTANT ROW"
+2026-10-15T03:56:33.5198653Z identity_creation_plan layout=query_explicit_not_null stage=assets_insert status=ok rows=0
+2026-10-15T03:56:33.5199327Z identity_creation_progress layout=query_explicit_not_null n=1000 round=0 position=1 phase=start
+2026-10-15T03:56:33.9841884Z identity_creation_progress layout=query_explicit_not_null n=1000 round=0 committed_batches=10 elapsed_us=464565
+2026-10-15T03:56:33.9843865Z identity_creation layout=query_explicit_not_null n=1000 round=0 position=1 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=464575 identity_miss_us=287554 fact_collision_us=66390 assets_insert_us=103672 identity_insert_us=0 begin_us=111 commit_us=6470
+2026-10-15T03:56:33.9869792Z identity_creation_progress layout=query_explicit_not_null n=1000 round=0 phase=shutdown
+2026-10-15T03:56:33.9872465Z identity_creation_size layout=query_explicit_not_null n=1000 round=0 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:33.9921173Z identity_creation_plan layout=query_forced_identity_index stage=identity_miss status=ok rows=1
+2026-10-15T03:56:33.9922511Z identity_creation_plan layout=query_forced_identity_index stage=identity_miss detail="SEARCH oc_assets USING INDEX oc_memory_identity_slot (tenant_id=? AND workspace_id=? AND identity_key=?)"
+2026-10-15T03:56:33.9924198Z identity_creation_plan layout=query_forced_identity_index stage=fact_collision status=ok rows=2
+2026-10-15T03:56:33.9925727Z identity_creation_plan layout=query_forced_identity_index stage=fact_collision detail="SEARCH oc_assets USING COVERING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=? AND fact_key=?)"
+2026-10-15T03:56:33.9926792Z identity_creation_plan layout=query_forced_identity_index stage=fact_collision detail="SCAN CONSTANT ROW"
+2026-10-15T03:56:33.9927518Z identity_creation_plan layout=query_forced_identity_index stage=assets_insert status=ok rows=0
+2026-10-15T03:56:33.9928207Z identity_creation_progress layout=query_forced_identity_index n=1000 round=0 position=2 phase=start
+2026-10-15T03:56:34.2407329Z identity_creation_progress layout=query_forced_identity_index n=1000 round=0 committed_batches=10 elapsed_us=248284
+2026-10-15T03:56:34.2409431Z identity_creation layout=query_forced_identity_index n=1000 round=0 position=2 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=248294 identity_miss_us=80436 fact_collision_us=61674 assets_insert_us=99237 identity_insert_us=0 begin_us=110 commit_us=6469
+2026-10-15T03:56:34.2422208Z identity_creation_progress layout=query_forced_identity_index n=1000 round=0 phase=shutdown
+2026-10-15T03:56:34.2424538Z identity_creation_size layout=query_forced_identity_index n=1000 round=0 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:34.2470193Z identity_creation_progress layout=query_explicit_not_null n=1000 round=1 position=0 phase=start
+2026-10-15T03:56:34.7359131Z identity_creation_progress layout=query_explicit_not_null n=1000 round=1 committed_batches=10 elapsed_us=488818
+2026-10-15T03:56:34.7361915Z identity_creation layout=query_explicit_not_null n=1000 round=1 position=0 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=488828 identity_miss_us=304462 fact_collision_us=68934 assets_insert_us=107978 identity_insert_us=0 begin_us=118 commit_us=6950
+2026-10-15T03:56:34.7390992Z identity_creation_progress layout=query_explicit_not_null n=1000 round=1 phase=shutdown
+2026-10-15T03:56:34.7393519Z identity_creation_size layout=query_explicit_not_null n=1000 round=1 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:34.7443125Z identity_creation_progress layout=query_forced_identity_index n=1000 round=1 position=1 phase=start
+2026-10-15T03:56:35.0017666Z identity_creation_progress layout=query_forced_identity_index n=1000 round=1 committed_batches=10 elapsed_us=257428
+2026-10-15T03:56:35.0020772Z identity_creation layout=query_forced_identity_index n=1000 round=1 position=1 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=257438 identity_miss_us=84103 fact_collision_us=63346 assets_insert_us=103037 identity_insert_us=0 begin_us=105 commit_us=6469
+2026-10-15T03:56:35.0034135Z identity_creation_progress layout=query_forced_identity_index n=1000 round=1 phase=shutdown
+2026-10-15T03:56:35.0036628Z identity_creation_size layout=query_forced_identity_index n=1000 round=1 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:35.0089406Z identity_creation_progress layout=query_original n=1000 round=1 position=2 phase=start
+2026-10-15T03:56:35.4684223Z identity_creation_progress layout=query_original n=1000 round=1 committed_batches=10 elapsed_us=459462
+2026-10-15T03:56:35.4686828Z identity_creation layout=query_original n=1000 round=1 position=2 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=459469 identity_miss_us=284155 fact_collision_us=65226 assets_insert_us=103193 identity_insert_us=0 begin_us=106 commit_us=6418
+2026-10-15T03:56:35.4712609Z identity_creation_progress layout=query_original n=1000 round=1 phase=shutdown
+2026-10-15T03:56:35.4722449Z identity_creation_size layout=query_original n=1000 round=1 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:35.4762184Z identity_creation_progress layout=query_forced_identity_index n=1000 round=2 position=0 phase=start
+2026-10-15T03:56:35.7259090Z identity_creation_progress layout=query_forced_identity_index n=1000 round=2 committed_batches=10 elapsed_us=249639
+2026-10-15T03:56:35.7261902Z identity_creation layout=query_forced_identity_index n=1000 round=2 position=0 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=249648 identity_miss_us=81000 fact_collision_us=62221 assets_insert_us=99307 identity_insert_us=0 begin_us=108 commit_us=6621
+2026-10-15T03:56:35.7273280Z identity_creation_progress layout=query_forced_identity_index n=1000 round=2 phase=shutdown
+2026-10-15T03:56:35.7275833Z identity_creation_size layout=query_forced_identity_index n=1000 round=2 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:35.7327756Z identity_creation_progress layout=query_original n=1000 round=2 position=1 phase=start
+2026-10-15T03:56:36.1980863Z identity_creation_progress layout=query_original n=1000 round=2 committed_batches=10 elapsed_us=465271
+2026-10-15T03:56:36.1983610Z identity_creation layout=query_original n=1000 round=2 position=1 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=465279 identity_miss_us=286501 fact_collision_us=66846 assets_insert_us=104786 identity_insert_us=0 begin_us=103 commit_us=6649
+2026-10-15T03:56:36.2009541Z identity_creation_progress layout=query_original n=1000 round=2 phase=shutdown
+2026-10-15T03:56:36.2012311Z identity_creation_size layout=query_original n=1000 round=2 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:36.2059359Z identity_creation_progress layout=query_explicit_not_null n=1000 round=2 position=2 phase=start
+2026-10-15T03:56:36.6672071Z identity_creation_progress layout=query_explicit_not_null n=1000 round=2 committed_batches=10 elapsed_us=461222
+2026-10-15T03:56:36.6674160Z identity_creation layout=query_explicit_not_null n=1000 round=2 position=2 identity_miss_ops=1000 fact_collision_ops=1000 assets_insert_ops=1000 identity_insert_ops=0 reads=2000 writes=1000 transactions=10 total_us=461229 identity_miss_us=285709 fact_collision_us=65520 assets_insert_us=102647 identity_insert_us=0 begin_us=102 commit_us=6877
+2026-10-15T03:56:36.6700365Z identity_creation_progress layout=query_explicit_not_null n=1000 round=2 phase=shutdown
+2026-10-15T03:56:36.6702858Z identity_creation_size layout=query_explicit_not_null n=1000 round=2 db_bytes=4096 wal_bytes=2484392
+2026-10-15T03:56:36.6922205Z identity_creation_progress layout=query_original n=10000 round=0 position=0 phase=start
+2026-10-15T03:56:37.1454880Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=10 elapsed_us=453222
+2026-10-15T03:56:38.0265964Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=20 elapsed_us=1334304
+2026-10-15T03:56:39.3539432Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=30 elapsed_us=2661631
+2026-10-15T03:56:41.1323851Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=40 elapsed_us=4440036
+2026-10-15T03:56:43.3523400Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=50 elapsed_us=6660039
+2026-10-15T03:56:46.2284102Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=60 elapsed_us=9536081
+2026-10-15T03:56:49.6367684Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=70 elapsed_us=12944464
+2026-10-15T03:56:53.5688142Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=80 elapsed_us=16876509
+2026-10-15T03:56:57.9992372Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=90 elapsed_us=21306938
+2026-10-15T03:57:02.9533948Z identity_creation_progress layout=query_original n=10000 round=0 committed_batches=100 elapsed_us=26261048
+2026-10-15T03:57:02.9538010Z identity_creation layout=query_original n=10000 round=0 position=0 identity_miss_ops=10000 fact_collision_ops=10000 assets_insert_ops=10000 identity_insert_ops=0 reads=20000 writes=10000 transactions=100 total_us=26261058 identity_miss_us=24208089 fact_collision_us=730886 assets_insert_us=1132936 identity_insert_us=0 begin_us=1626 commit_us=183531
+2026-10-15T03:57:02.9707221Z identity_creation_progress layout=query_original n=10000 round=0 phase=shutdown
+2026-10-15T03:57:02.9714256Z identity_creation_size layout=query_original n=10000 round=0 db_bytes=7458816 wal_bytes=3600912
+2026-10-15T03:57:02.9715279Z identity_creation_plan_context layout=query_original populated_rows=10000
+2026-10-15T03:57:02.9745242Z identity_creation_plan layout=query_original stage=identity_miss status=ok rows=1
+2026-10-15T03:57:02.9746747Z identity_creation_plan layout=query_original stage=identity_miss detail="SEARCH oc_assets USING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=?)"
+2026-10-15T03:57:02.9753836Z identity_creation_plan layout=query_original stage=fact_collision status=ok rows=2
+2026-10-15T03:57:02.9755633Z identity_creation_plan layout=query_original stage=fact_collision detail="SEARCH oc_assets USING COVERING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=? AND fact_key=?)"
+2026-10-15T03:57:02.9757260Z identity_creation_plan layout=query_original stage=fact_collision detail="SCAN CONSTANT ROW"
+2026-10-15T03:57:02.9758085Z identity_creation_plan layout=query_original stage=assets_insert status=ok rows=0
+2026-10-15T03:57:02.9800058Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 position=1 phase=start
+2026-10-15T03:57:03.4410437Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=10 elapsed_us=460985
+2026-10-15T03:57:04.3287503Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=20 elapsed_us=1348685
+2026-10-15T03:57:05.6658909Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=30 elapsed_us=2685816
+2026-10-15T03:57:07.4446955Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=40 elapsed_us=4464621
+2026-10-15T03:57:09.6715562Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=50 elapsed_us=6691433
+2026-10-15T03:57:12.5546096Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=60 elapsed_us=9574450
+2026-10-15T03:57:15.9782071Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=70 elapsed_us=12998126
+2026-10-15T03:57:19.9370005Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=80 elapsed_us=16956914
+2026-10-15T03:57:24.4218383Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=90 elapsed_us=21441729
+2026-10-15T03:57:29.4193694Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 committed_batches=100 elapsed_us=26439295
+2026-10-15T03:57:29.4196168Z identity_creation layout=query_explicit_not_null n=10000 round=0 position=1 identity_miss_ops=10000 fact_collision_ops=10000 assets_insert_ops=10000 identity_insert_ops=0 reads=20000 writes=10000 transactions=100 total_us=26439306 identity_miss_us=24378090 fact_collision_us=737805 assets_insert_us=1136176 identity_insert_us=0 begin_us=1459 commit_us=181806
+2026-10-15T03:57:29.4362542Z identity_creation_progress layout=query_explicit_not_null n=10000 round=0 phase=shutdown
+2026-10-15T03:57:29.4369873Z identity_creation_size layout=query_explicit_not_null n=10000 round=0 db_bytes=7458816 wal_bytes=3600912
+2026-10-15T03:57:29.4370618Z identity_creation_plan_context layout=query_explicit_not_null populated_rows=10000
+2026-10-15T03:57:29.4392136Z identity_creation_plan layout=query_explicit_not_null stage=identity_miss status=ok rows=1
+2026-10-15T03:57:29.4393275Z identity_creation_plan layout=query_explicit_not_null stage=identity_miss detail="SEARCH oc_assets USING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=?)"
+2026-10-15T03:57:29.4396634Z identity_creation_plan layout=query_explicit_not_null stage=fact_collision status=ok rows=2
+2026-10-15T03:57:29.4397729Z identity_creation_plan layout=query_explicit_not_null stage=fact_collision detail="SEARCH oc_assets USING COVERING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=? AND fact_key=?)"
+2026-10-15T03:57:29.4398838Z identity_creation_plan layout=query_explicit_not_null stage=fact_collision detail="SCAN CONSTANT ROW"
+2026-10-15T03:57:29.4399577Z identity_creation_plan layout=query_explicit_not_null stage=assets_insert status=ok rows=0
+2026-10-15T03:57:29.4456069Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 position=2 phase=start
+2026-10-15T03:57:29.6985828Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=10 elapsed_us=252917
+2026-10-15T03:57:29.9571899Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=20 elapsed_us=511548
+2026-10-15T03:57:30.2236547Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=30 elapsed_us=778022
+2026-10-15T03:57:30.4910777Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=40 elapsed_us=1045440
+2026-10-15T03:57:30.7627454Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=50 elapsed_us=1317124
+2026-10-15T03:57:31.0392746Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=60 elapsed_us=1593661
+2026-10-15T03:57:31.3192114Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=70 elapsed_us=1873628
+2026-10-15T03:57:31.5998493Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=80 elapsed_us=2154204
+2026-10-15T03:57:31.8877991Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=90 elapsed_us=2442212
+2026-10-15T03:57:32.1727703Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 committed_batches=100 elapsed_us=2727083
+2026-10-15T03:57:32.1730650Z identity_creation layout=query_forced_identity_index n=10000 round=0 position=2 identity_miss_ops=10000 fact_collision_ops=10000 assets_insert_ops=10000 identity_insert_ops=0 reads=20000 writes=10000 transactions=100 total_us=2727091 identity_miss_us=847135 fact_collision_us=651316 assets_insert_us=1047601 identity_insert_us=0 begin_us=1357 commit_us=175916
+2026-10-15T03:57:32.1748360Z identity_creation_progress layout=query_forced_identity_index n=10000 round=0 phase=shutdown
+2026-10-15T03:57:32.1753276Z identity_creation_size layout=query_forced_identity_index n=10000 round=0 db_bytes=7458816 wal_bytes=3600912
+2026-10-15T03:57:32.1754744Z identity_creation_plan_context layout=query_forced_identity_index populated_rows=10000
+2026-10-15T03:57:32.1770651Z identity_creation_plan layout=query_forced_identity_index stage=identity_miss status=ok rows=1
+2026-10-15T03:57:32.1772565Z identity_creation_plan layout=query_forced_identity_index stage=identity_miss detail="SEARCH oc_assets USING INDEX oc_memory_identity_slot (tenant_id=? AND workspace_id=? AND identity_key=?)"
+2026-10-15T03:57:32.1776353Z identity_creation_plan layout=query_forced_identity_index stage=fact_collision status=ok rows=2
+2026-10-15T03:57:32.1778196Z identity_creation_plan layout=query_forced_identity_index stage=fact_collision detail="SEARCH oc_assets USING COVERING INDEX oc_memory_fact_slot (tenant_id=? AND workspace_id=? AND fact_key=?)"
+2026-10-15T03:57:32.1780070Z identity_creation_plan layout=query_forced_identity_index stage=fact_collision detail="SCAN CONSTANT ROW"
+2026-10-15T03:57:32.1781331Z identity_creation_plan layout=query_forced_identity_index stage=assets_insert status=ok rows=0
+2026-10-15T03:57:32.1831412Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 position=0 phase=start
+2026-10-15T03:57:32.4343932Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=10 elapsed_us=251185
+2026-10-15T03:57:32.6951246Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=20 elapsed_us=511935
+2026-10-15T03:57:32.9665480Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=30 elapsed_us=783313
+2026-10-15T03:57:33.2341713Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=40 elapsed_us=1051000
+2026-10-15T03:57:33.5064200Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=50 elapsed_us=1323250
+2026-10-15T03:57:33.7843944Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=60 elapsed_us=1601213
+2026-10-15T03:57:34.0633935Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=70 elapsed_us=1880218
+2026-10-15T03:57:34.3419406Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=80 elapsed_us=2158777
+2026-10-15T03:57:34.6303511Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=90 elapsed_us=2447209
+2026-10-15T03:57:34.9169197Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 committed_batches=100 elapsed_us=2733729
+2026-10-15T03:57:34.9171106Z identity_creation layout=query_forced_identity_index n=10000 round=1 position=0 identity_miss_ops=10000 fact_collision_ops=10000 assets_insert_ops=10000 identity_insert_ops=0 reads=20000 writes=10000 transactions=100 total_us=2733739 identity_miss_us=848831 fact_collision_us=650845 assets_insert_us=1052313 identity_insert_us=0 begin_us=1369 commit_us=176659
+2026-10-15T03:57:34.9186865Z identity_creation_progress layout=query_forced_identity_index n=10000 round=1 phase=shutdown
+2026-10-15T03:57:34.9191467Z identity_creation_size layout=query_forced_identity_index n=10000 round=1 db_bytes=7458816 wal_bytes=3600912
+2026-10-15T03:57:34.9243018Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 position=1 phase=start
+2026-10-15T03:57:35.3878186Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=10 elapsed_us=463444
+2026-10-15T03:57:36.2766040Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=20 elapsed_us=1352185
+2026-10-15T03:57:37.6155981Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=30 elapsed_us=2691212
+2026-10-15T03:57:39.3989867Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=40 elapsed_us=4474560
+2026-10-15T03:57:41.6301246Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=50 elapsed_us=6705690
+2026-10-15T03:57:44.5184468Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=60 elapsed_us=9594035
+2026-10-15T03:57:47.9456599Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=70 elapsed_us=13021252
+2026-10-15T03:57:51.8926787Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=80 elapsed_us=16968286
+2026-10-15T03:57:56.3154602Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=90 elapsed_us=21391043
+2026-10-15T03:58:01.2149144Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 committed_batches=100 elapsed_us=26290495
+2026-10-15T03:58:01.2152081Z identity_creation layout=query_explicit_not_null n=10000 round=1 position=1 identity_miss_ops=10000 fact_collision_ops=10000 assets_insert_ops=10000 identity_insert_ops=0 reads=20000 writes=10000 transactions=100 total_us=26290508 identity_miss_us=24240430 fact_collision_us=735299 assets_insert_us=1131568 identity_insert_us=0 begin_us=1579 commit_us=177671
+2026-10-15T03:58:01.2315022Z identity_creation_progress layout=query_explicit_not_null n=10000 round=1 phase=shutdown
+2026-10-15T03:58:01.2323286Z identity_creation_size layout=query_explicit_not_null n=10000 round=1 db_bytes=7458816 wal_bytes=3600912
+2026-10-15T03:58:01.2379136Z identity_creation_progress layout=query_original n=10000 round=1 position=2 phase=start
+2026-10-15T03:58:01.6913820Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=10 elapsed_us=453440
+2026-10-15T03:58:02.5728679Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=20 elapsed_us=1334911
+2026-10-15T03:58:03.8984729Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=30 elapsed_us=2660492
+2026-10-15T03:58:05.6655418Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=40 elapsed_us=4427574
+2026-10-15T03:58:07.8752255Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=50 elapsed_us=6637296
+2026-10-15T03:58:10.7283849Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=60 elapsed_us=9490418
+2026-10-15T03:58:14.1258777Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=70 elapsed_us=12887918
+2026-10-15T03:58:18.0604803Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=80 elapsed_us=16822480
+2026-10-15T03:58:22.4709265Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=90 elapsed_us=21232921
+2026-10-15T03:58:27.3659865Z identity_creation_progress layout=query_original n=10000 round=1 committed_batches=100 elapsed_us=26127990
+2026-10-15T03:58:27.3662701Z identity_creation layout=query_original n=10000 round=1 position=2 identity_miss_ops=10000 fact_collision_ops=10000 assets_insert_ops=10000 identity_insert_ops=0 reads=20000 writes=10000 transactions=100 total_us=26128000 identity_miss_us=24099817 fact_collision_us=725035 assets_insert_us=1123143 identity_insert_us=0 begin_us=1427 commit_us=174576
+2026-10-15T03:58:27.3826101Z identity_creation_progress layout=query_original n=10000 round=1 phase=shutdown
+2026-10-15T03:58:27.3834045Z identity_creation_size layout=query_original n=10000 round=1 db_bytes=7458816 wal_bytes=3600912
+2026-10-15T03:58:27.3873833Z test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 111 filtered out; finished in 114.35s

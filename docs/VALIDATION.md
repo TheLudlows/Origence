@@ -937,3 +937,209 @@ AML 研究执行器及其完整本地依赖移至 [archives/aml-research](../arc
 本地文档检查：六份当前文档的 161 个相对链接/锚点全部解析成功；未发现尾随空白。
 本页原有各阶段验收正文与整理前逐字一致，仅调整页头导航并追加本批证据。
 该检查不执行归档研究入口，不代替完整历史工件审计或原生行为测试。
+
+
+## Issue #60 第一批：身份合表
+
+基线 main `4c0862e80ccfb8b403268170c06d391239790d2b`。实现范围与
+微基准边界见[身份存储合同](contracts/identity-asset-layout.md)。
+
+本地环境没有 cargo/rustc/rustfmt，Rust 编译、格式、Clippy、原生测试与
+性能测试尚未运行；Linux/Windows 结果等待本批精确提交 CI。静态检查不能
+替代原生执行，也不沿用旧提交的通过结果。
+
+基线本地执行：no-JOIN 有界检查 1062 inputs、47 项 checker 单元测试；
+tools Python 113 项（2 跳过），evals Python 42 项通过。它们是改动前基线，
+不是最终实现验收。最终 head、原始测量与跨平台结果在确认后追加。
+
+### 首轮执行与测量边界
+
+实现 `da59fa55` 的 CI 38668157170 在 fast-check/Windows 的 rustfmt
+检查失败，不能称为 Rust 测试通过；随后仅按 Rust 1.98 输出应用47处
+token等价格式修改。
+
+格式后实现 `fca098e7ec89ab0d9748832279bfcac72d376e50` 的
+[CI 38668569849](https://github.com/TheLudlows/Origence/actions/runs/38668569849)：
+Linux native 全套成功，包括 Clippy、216项库测试、238项集成测试（基准
+单独忽略）、HTTP/MCP、受控进程恢复及关键词评估。fast-check 的无默认
+特性136项库测试、109项集成测试通过；其后的原生布局基准因既定30分钟
+job上限取消，故 fast-check 整体不是通过，后续Python步骤未执行。
+Windows job 116206187165 亦完成成功，包括原生验证及无 Lance 的 authority 检查。
+
+[debug测量原始行](evidence/issue60-identity-layout-debug-fca098e7.txt)保留
+首轮事实。1k行：创建旧5.588166s／新7.841706s（更慢），复用
+28.621334s／11.686636s，绑定lookup 17.404110s／11.710922s；
+停库DB+WAL为2,838,688／2,480,248字节，不代表压实后的数据库尺寸。
+10k旧创建338.824476s，之后旧布局reuse从02:08:01至取消未完成；
+新布局10k未运行。不能从局部读取收益声称整体性能提升。
+
+后续测量保留1k/10k数据规模和完整创建，reuse/lookup各限定最多1,000个
+均匀样本；二者在同一release可执行文件中运行，记录每阶段及每10批提交
+进度，放入独立20分钟job（构建最多10分钟，测量命令7分钟并留工件上传
+时间），不加长原fast-check上限。debug与release数据不得混作直接对照。
+新测量与精确最终头结果待执行，初轮超时不改写为通过。
+
+
+### 独立 release 构建预算
+
+`888f9acd5814bca6ae8bdd203e19ee5c04e575a7` 的
+[CI 38671905476](https://github.com/TheLudlows/Origence/actions/runs/38671905476)
+独立基准 job 116216741185 在冷 release 构建阶段超时，测量没有开始。
+依赖编译约7分54秒，02:44:55开始编译origence；02:47:14达到原10分钟
+构建上限。此失败与先前debug测量运行超时不同，不能作为运行性能证据。
+缓存保存也失败（编译子进程仍修改target导致tar退出1）。
+
+据此仅调整编译预算：独立job35分钟，编译命令25分钟/步骤26分钟，
+GNU timeout保留30秒强杀宽限以清理进程组；测量仍固定7分钟/步骤8分钟。
+构建输出也保留工件。不改变两布局的编译配置、数据规模或测量算法；
+此预算调整本身不代表性能通过。
+
+该头的 fast-check、Linux native、Windows 三项功能验证均成功；独立布局
+基准仍为构建超时失败，整轮CI不能称全绿。
+
+
+### 首次完整 release 对照（ad8ab727）
+
+[CI 38673296988](https://github.com/TheLudlows/Origence/actions/runs/38673296988)
+在 head `ad8ab727cf3778729be46b3f865ffe4f06052eef` 四项 job 全部成功：
+fast-check、Linux native、Windows、identity-layout。GitHub merge ref
+`1859dc899657f75048af85aa597be6e98fb8bcfd` 与 head 的 tree 都为
+`fbfd29930f76dc77e71e0dca800fc9008f1d6232`，main 仍是 `4c0862e8`。
+冷 release 构建11分03秒，测量73.96秒，未超过7分钟运行上限。
+[原始测量行](evidence/issue60-identity-layout-release-ad8ab727.txt)与
+[原始工件](https://github.com/TheLudlows/Origence/actions/runs/38673296988/artifacts/11945820917)
+保留环境、构建和测量结果。
+
+| 数据集/阶段 | 旧布局秒 | 新布局秒 |
+|---|---:|---:|
+| 1k create（1k操作） | 0.357005 | 0.451673 |
+| 1k reuse（1k操作） | 1.155132 | 0.460553 |
+| 1k binding lookup（1k操作） | 0.699401 | 0.460980 |
+| 10k create（10k操作） | 14.353148 | 26.539850 |
+| 10k reuse（1k均匀样本） | 11.959848 | 4.998808 |
+| 10k binding lookup（1k均匀样本） | 7.473771 | 4.994607 |
+
+1k创建慢26.5%，10k慢84.9%；10k停库DB+WAL为11,147,192→11,051,488字节，
+不是压实后稳态尺寸。减少SQL次数不等于整体加速。功能通过，性能取舍仍未接受。
+
+旧/新DDL并非约束完全等价：新布局增加paired-null/memory-only CHECK，
+资产行更宽，唯一索引/FK结构也改变。计时包括SQL约束检查、JSON读取解析、
+提交及进度输出，但不含输入key/JSON构造和canonical重算。原fixture CHECK
+非空分支的条件顺序与生产不同；历史数字不重写。无执行计划/profile/消融时，
+不能将回退归因于单一约束、索引或合表。固定次序单样本也有噪声限制。
+
+经确认继续定位：仅增加ignored诊断fixture，新after使用生产精确CHECK顺序，
+其无新增CHECK变体只用于隔离成本、不作为生产候选；交替重复测量创建各阶段，
+并尝试记录执行计划。不改生产约束，不据静态推测给出性能原因。新诊断结果待CI。
+
+
+### 创建阶段/CHECK 消融（183e9398）
+
+[CI 38677085702](https://github.com/TheLudlows/Origence/actions/runs/38677085702)
+的 fast-check、Linux、Windows、identity-layout 四个 job 全部成功；
+identity-layout job 116233033555 release增量构建3分24秒，诊断140.46秒。
+[原始阶段、计划与进度行](evidence/issue60-identity-creation-183e9398.txt)保留全部
+1k三轮/10k两轮结果。以下为10k正序/逆序两轮（秒）：
+
+| fixture | 总创建 | identity miss | assets insert |
+|---|---|---|---|
+| 旧布局 | 14.320567 / 14.312924 | 12.060185 / 12.076598 | 0.827270 / 0.817714 |
+| 精确生产CHECK合表 | 26.891802 / 26.993154 | 24.762397 / 24.872053 | 1.181712 / 1.172173 |
+| 仅去新增CHECK合表 | 27.095197 / 26.935301 | 25.105781 / 24.939272 | 1.037942 / 1.041211 |
+
+回退主要集中在identity miss查询；去CHECK没有改善整体创建时间，故新增约束
+不是这轮主要回退来源。CHECK影响写入阶段的约0.14秒不能解释约12.6秒总差值。
+旧identity insert另耗约0.48秒；fact collision约0.73–0.75秒，commit约0.20秒。
+
+原生EXPLAIN QUERY PLAN：旧identity查询选择身份表asset唯一索引、仅用scope前缀；
+新两变体选择oc_memory_fact_slot、仅用scope前缀，未用identity_key等值约束索引。
+fact collision则使用完整scope/fact_key覆盖索引。计划在1k建库完成后采集，
+使用已有key，展示相同SQL的规划而非实际miss逐条轨迹；INSERT计划零行不代表零成本。
+此证据支持查找路径是主要瓶颈，不足以宣称任何普适引擎缺陷或布局必然变慢。
+
+下一测试仍只改fixture SELECT：原查询、显式identity_key IS NOT NULL、该谓词
+加INDEXED BY身份索引；生产DDL/约束及返回语义保持，先核计划与边界结果，再比较
+相同分阶段时间。强制索引仅作诊断，不能未经验证直接成为生产方案。
+
+
+### 等价查询路径诊断（85a21005）与最小修复
+
+[CI 38678537293](https://github.com/TheLudlows/Origence/actions/runs/38678537293)
+的 native identity-layout job 116237566198 成功，测量114.35秒。
+fast-check/Windows 因三处rustfmt格式失败，整轮不是通过；随后按真实Rust1.98
+输出仅调整等价排版。原始[查询、阶段与计划行](evidence/issue60-identity-query-85a21005.txt)
+保留，不能用原生基准通过替代功能门禁。
+
+完整生产DDL、六字段投影与全部约束固定，仅改变SELECT，10k两轮（秒）：
+
+| 查询 | 总创建 | identity miss |
+|---|---|---|
+| 原生产查询 | 26.261058 / 26.128000 | 24.208089 / 24.099817 |
+| 加显式IS NOT NULL | 26.439306 / 26.290508 | 24.378090 / 24.240430 |
+| 上述谓词 + INDEXED BY身份索引 | 2.727091 / 2.733739 | 0.847135 / 0.848831 |
+
+1k三轮原查询0.459–0.465秒，强制身份索引0.248–0.257秒。空库及10k填充后
+计划均确认前两者选fact索引scope前缀，第三者使用完整scope/identity_key。
+该受控对照支持访问路径是本fixture的主要瓶颈；不是约束本身的成本，亦不是
+合表必然导致变慢。原、新布局未都作同等查询优化，不能据此断言优化合表
+在任何等优化历史布局上更快。精确生产方法仍以功能回归验证，非端到端性能承诺。
+
+最小生产改动仅identity_slot_inner查询增加已验证的INDEXED BY及显式非空谓词。
+完整schema admission保证精确partial unique索引存在；缺失或错误定义仍拒绝，
+运行中被外部删除则报错，不回退扫描。已验证key非空，保持scope/kind/投影/绑定、
+坏body先于tombstone错误及全部事务边界。显式非空重申partial索引适用条件；
+没有单独测试“只有hint没有非空”，不声称该谓词是引擎支持hint的必要条件。
+仅此查询选定访问路径，不扩至lookup/candidate等未测方法。
+
+宽松坏数据unit fixture增加同名非唯一partial索引，以保留故意重复/非memory
+损坏数据；生产schema不变，legacy collision Conflict断言不放宽。既有创建、
+复用、版本/隔离、tombstone、错误顺序、索引缺失与恢复回归继续运行。
+修复后的精确head完整CI与原生复验待执行；不以旧头通过替代。
+
+### 验证文档完整性修复
+
+本轮恢复上传时发现，先前通过终端读取大型VALIDATION文档的输出被截断，
+造成85a21005远程文档含输出截断占位内容。现从本地完整版本恢复历史全文，
+保留各次失败与成功记录；代码与CI原始日志未受该文档传输缺陷影响。
+逐文件比较本地455个已跟踪文件与该头远程blob SHA，仅VALIDATION不一致；
+本轮每个修改文件均以本地完整字节Git blob SHA核对上传结果，不再依赖
+单次终端输出或仅搜索截断标记判断完整性。
+
+
+### 第二批：账本未维护字段（待精确头执行）
+
+全链路核查确认oc_artifact_ledger.attempt/last_error不参与当前生产DTO、发布、
+可见性、重发或恢复决策；旧设计及测试确实保留人为写入值，经确认取消该约定并
+删除两列。不是将ledger重试责任迁到job；现行job attempt/错误码、next_retry_at、
+generation/run_token、完整ledger主键与状态判断全部保留。公开pool()直接SQL访问
+被删列不兼容；LedgerEntry.idempotency_key/Serde/helper明确暂不变。
+
+调整确认/清理/恢复fixtures时保留错generation、无来源、no-op、重复注册、回滚、
+到期retry_wait及next_retry_at保留断言；增加已删列旧布局只读检查和打开拒绝回归，
+验证原schema/数据不被修改。不修改冻结归档DDL。字段盘点仍是指定旧main基线，
+不将其改写为新schema。待独审及新精确提交Linux/Windows门禁，不沿用身份批通过。
+
+### 身份修复完整验收与第二批格式检查
+
+身份修复 head `aa1ebb501892205b195004fff0c357f7176458ea` 的
+[CI 38691175438](https://github.com/TheLudlows/Origence/actions/runs/38691175438)
+四个job全部成功（fast-check、Linux native、Windows、identity-layout）。真实
+identity_slot方法的创建/复用、坏数据顺序、tombstone、权限与恢复回归随全套执行。
+同头原生重复fixture的10k创建：原查询26.636623/26.176131秒，选身份索引
+2.724988/2.744707秒；完整测量115秒，原始工件见
+[11952301181](https://github.com/TheLudlows/Origence/actions/runs/38691175438/artifacts/11952301181)。
+性能范围仍是隔离的查询创建fixture，不是全部生产端点时延。
+
+第二批head `5300eba89d6ae7508b2f86de0f94a1c6db5f2dad` 的
+[CI 38693470838](https://github.com/TheLudlows/Origence/actions/runs/38693470838)
+fast-check/Windows被Rust1.98格式检查拦下，不能称通过。随后对三个测试文件
+应用真实formatter输出的5处token等价排版；SQL与行为不改，需新head完整CI。
+
+
+第二批格式修正head `948d3ec75af8038c547b9ba9f85dc73b6f2ce3ad` 的
+[CI 38694688166](https://github.com/TheLudlows/Origence/actions/runs/38694688166)
+Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目录文件快照时
+读到仍被宿主OS排他锁持有的`.lock`文件，报Windows error33，其余238项集成通过，
+整体不能称成功。修正测试仅快照DB/WAL/SHM文件，缺失sidecar允许不存在，其他读取
+错误仍失败；保留在线check与停库open/offline拒绝、原数据及持久文件逐字节比较。
+不改生产锁或schema拒绝行为，需新精确head跨平台验证。

@@ -152,13 +152,9 @@ impl TursoTx {
                 if let std::collections::hash_map::Entry::Vacant(entry) = decoded.entry(asset) {
                     let stored = identity_rows
                         .get(&asset)
-                        .map(|row| {
-                            let text: String = row.try_get("identity_json").map_err(turso_err)?;
-                            serde_json::from_str::<MemoryIdentity>(&text).map_err(|_| {
-                                StorageError::Unavailable("invalid stored memory identity".into())
-                            })
-                        })
-                        .transpose()?;
+                        .map(|row| super::identity::checked_identity(self.scope, row))
+                        .transpose()?
+                        .flatten();
                     entry.insert(stored);
                 }
                 if decoded.get(&asset).and_then(Option::as_ref) != Some(identity) {

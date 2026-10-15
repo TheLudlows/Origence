@@ -1,4 +1,4 @@
--- Base schema for a NEW native Turso database; identity schema is applied in the same transaction (A2.3).
+-- Base schema for a NEW native Turso database, including asset-level identities.
 --
 -- Encodings are fixed here (A5):
 --   UUID        -> BLOB (16 bytes, native adapter UUID encoding)
@@ -78,11 +78,17 @@ CREATE TABLE oc_assets (
     kind TEXT NOT NULL CHECK (kind IN ('memory','knowledge')),
     title TEXT NOT NULL, fact_key TEXT, current_version INTEGER,
     deleted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+    identity_key TEXT, identity_json TEXT,
+    CHECK ((identity_key IS NULL AND identity_json IS NULL) OR
+           (identity_key IS NOT NULL AND identity_json IS NOT NULL AND kind = 'memory')),
     PRIMARY KEY (tenant_id, workspace_id, id),
     FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id)
 );
 CREATE UNIQUE INDEX oc_memory_fact_slot ON oc_assets(tenant_id, workspace_id, fact_key)
 WHERE kind = 'memory';
+-- Tombstones retain their identity slot; deletion must not release this key.
+CREATE UNIQUE INDEX oc_memory_identity_slot ON oc_assets(tenant_id, workspace_id, identity_key)
+WHERE identity_key IS NOT NULL;
 
 CREATE TABLE oc_versions (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, asset_id BLOB NOT NULL,
@@ -181,8 +187,6 @@ CREATE TABLE oc_artifact_ledger (
     generation INTEGER NOT NULL DEFAULT 1,
     idempotency_key TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','committed','retry_wait','orphan')),
-    attempt INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT,
     next_retry_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,

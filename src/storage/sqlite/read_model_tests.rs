@@ -61,10 +61,13 @@ async fn database() -> (tempfile::TempDir, Pool) {
     let pool = Pool::open(dir.path().join("read-model.db")).await.unwrap();
     // Preserve scoped keys and relevant columns. Unrelated authentication and
     // publication tables are omitted; missing-root fixtures intentionally omit
-    // foreign keys so the fail-closed read path can be exercised directly.
+    // foreign keys so the fail-closed read path can be exercised directly. Identity
+    // CHECK constraints are omitted to retain corrupt and wrong-kind fixtures.
     for sql in [
-        "CREATE TABLE oc_memory_identities(tenant_id BLOB,workspace_id BLOB,identity_key TEXT,asset_id BLOB,identity_json TEXT)",
-        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
+        // Non-unique only in this permissive corruption fixture; production
+        // admission requires the exact unique partial identity index.
+        "CREATE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key) WHERE identity_key IS NOT NULL",
         "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -901,12 +904,12 @@ async fn identity_kind_filter_precedes_native_key_decoding() {
     db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title) VALUES(?,?,?,'knowledge','not memory')")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(vec![0x31_u8])
         .execute(&mut *tx.tx).await.unwrap();
-    db::query("INSERT INTO oc_memory_identities VALUES(?,?,?,?,?)")
+    db::query("UPDATE oc_assets SET identity_key=?,identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(&key)
+        .bind(serde_json::to_string(&identity).unwrap())
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
-        .bind(&key)
         .bind(vec![0x31_u8])
-        .bind(serde_json::to_string(&identity).unwrap())
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -1871,7 +1874,7 @@ async fn graph_evidence_skips_invalid_historical_keys_before_decode() {
         "entity",
     )
     .await;
-    db::query("INSERT INTO oc_assets VALUES(?,?,x'31','knowledge','old',2,0)")
+    db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,deleted) VALUES(?,?,x'31','knowledge','old',2,0)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .execute(&mut *tx.tx)
@@ -1893,6 +1896,135 @@ async fn graph_evidence_skips_invalid_historical_keys_before_decode() {
     let evidence = tx.graph_evidence(artifact).await.unwrap();
     assert_eq!(evidence.len(), 1);
     assert_eq!(evidence[0]["chunk_id"], json!(row.chunk));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn retrieval_identities_batch_nullable_bindings_and_scope() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let identity: crate::memory_identity::MemoryIdentity = serde_json::from_value(json!({
+        "subject":{"kind":"service","stable_id":"billing"},
+        "predicate":"release.approval","context":{}
+    }))
+    .unwrap();
+    let records: Vec<_> = (0..130).map(|index| Record::new(150_000 + index)).collect();
+    for (index, row) in records.iter().enumerate() {
+        seed(&mut tx, scope, *row, Some(1), Some("active"), "body").await;
+        if index % 2 == 0 {
+            db::query("UPDATE oc_assets SET kind='memory',identity_key=?,identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+                .bind(identity.key(scope).unwrap())
+                .bind(serde_json::to_string(&identity).unwrap())
+                .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset)
+                .execute(&mut *tx.tx).await.unwrap();
+        }
+    }
+    let foreign = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    seed(
+        &mut tx,
+        foreign,
+        records[128],
+        Some(1),
+        Some("active"),
+        "foreign",
+    )
+    .await;
+    db::query("UPDATE oc_assets SET identity_key='bad',identity_json='{' WHERE tenant_id=? AND workspace_id=?")
+        .bind(foreign.tenant_id).bind(foreign.workspace_id)
+        .execute(&mut *tx.tx).await.unwrap();
+    let mut assets: Vec<_> = records.iter().map(|row| row.asset).collect();
+    assets.extend([records[0].asset, records[128].asset]);
+    let found = tx.retrieval_identities(&assets).await.unwrap();
+    assert_eq!(found.len(), 130);
+    for (index, row) in records.iter().enumerate() {
+        assert_eq!(
+            found[&row.asset].as_ref(),
+            (index % 2 == 0).then_some(&identity)
+        );
+    }
+    assert!(tx.retrieval_identities(&[]).await.unwrap().is_empty());
+    assets.push(Uuid::new_v4());
+    assert!(matches!(
+        tx.retrieval_identities(&assets).await,
+        Err(StorageError::NotFound)
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn retrieval_identity_decoding_follows_visibility_and_first_semantic_status() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(160_000);
+    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
+    db::query("UPDATE oc_assets SET kind='memory',identity_key='bad',identity_json='{'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("UPDATE oc_assets SET deleted=1")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.retrieval_identities(&[row.asset]).await,
+        Err(StorageError::NotFound)
+    ));
+    db::query("UPDATE oc_assets SET deleted=0,current_version=NULL")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.retrieval_identities(&[row.asset]).await,
+        Err(StorageError::NotFound)
+    ));
+    db::query("UPDATE oc_assets SET current_version=1")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    locator(
+        &mut tx,
+        row.chunk,
+        r#"{"parser":"memory-semantics:v1","semantic_status":7}"#,
+    )
+    .await;
+    assert!(matches!(
+        tx.retrieval_identities(&[row.asset]).await,
+        Err(StorageError::Backend(_))
+    ));
+    locator(
+        &mut tx,
+        row.chunk,
+        r#"{"parser":"memory-semantics:v1","semantic_status":"confirmed"}"#,
+    )
+    .await;
+    assert!(matches!(
+        tx.retrieval_identities(&[row.asset]).await,
+        Err(StorageError::Unavailable(_))
+    ));
+    db::query("UPDATE oc_assets SET identity_key=NULL,identity_json=NULL")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'later',?,'later')")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(row.asset)
+        .bind(r#"{"parser":"memory-semantics:v1","semantic_status":7}"#)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.retrieval_identities(&[row.asset]).await.unwrap()[&row.asset],
+        None
+    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }

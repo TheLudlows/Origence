@@ -971,17 +971,17 @@ impl TursoTx {
         if identities.is_empty() {
             return Ok(identities);
         }
-        let rows = rows_by_ids(
+        let asset_rows = rows_by_ids(
             &mut self.tx,
             self.scope,
             "oc_assets",
-            "id,current_version,NOT deleted AS undeleted",
+            "id,current_version,NOT deleted AS undeleted,kind,identity_key,identity_json",
             "id",
             assets,
         )
         .await?;
         let mut versions = Vec::new();
-        for row in rows {
+        for row in &asset_rows {
             if !row.try_get::<bool>("undeleted").map_err(turso_err)? {
                 return Err(StorageError::NotFound);
             }
@@ -1023,20 +1023,9 @@ impl TursoTx {
         for (_, row) in first.into_values() {
             let _: String = row.try_get("status").map_err(turso_err)?;
         }
-        for row in rows_by_ids(
-            &mut self.tx,
-            self.scope,
-            "oc_memory_identities",
-            "asset_id,identity_json",
-            "asset_id",
-            assets,
-        )
-        .await?
-        {
-            let value: String = row.try_get("identity_json").map_err(turso_err)?;
-            let identity = serde_json::from_str(&value)
-                .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))?;
-            identities.insert(row.try_get("asset_id").map_err(turso_err)?, Some(identity));
+        for row in asset_rows {
+            let identity = super::identity::checked_identity(self.scope, &row)?;
+            identities.insert(row.try_get("id").map_err(turso_err)?, identity);
         }
         Ok(identities)
     }

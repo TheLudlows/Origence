@@ -61,7 +61,7 @@ impl TursoTx {
             };
         }
         // Registration cannot silently reinterpret any previously allocated identity.
-        let occupied: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND json_extract(identity_json,'$.predicate')=?)")
+        let occupied: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND json_extract(identity_json,'$.predicate')=?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(&property.predicate)
             .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if occupied {

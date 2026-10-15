@@ -56,17 +56,21 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
 
     let stuck = entry(auth.scope, uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
     let due = entry(auth.scope, uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+    let future = entry(auth.scope, uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+    let unscheduled = entry(auth.scope, uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
 
     {
         let mut tx = begin_write(&store, &auth).await;
         tx.register_pending(stuck.clone()).await.unwrap();
         tx.register_pending(due.clone()).await.unwrap();
+        tx.register_pending(future.clone()).await.unwrap();
+        tx.register_pending(unscheduled.clone()).await.unwrap();
         tx.commit().await.unwrap();
     }
 
     // Make `stuck` look abandoned and `due` already past its retry time.
     db::query(
-        "UPDATE oc_artifact_ledger SET state = 'retry_wait', next_retry_at = 0, attempt = 1 \
+        "UPDATE oc_artifact_ledger SET state = 'retry_wait', next_retry_at = 0 \
          WHERE artifact_id = ?",
     )
     .bind(due.key.artifact_id)
@@ -79,6 +83,19 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
         .await
         .unwrap();
 
+    for (artifact, deadline) in [
+        (future.key.artifact_id, Some(i64::MAX)),
+        (unscheduled.key.artifact_id, None),
+    ] {
+        db::query(
+            "UPDATE oc_artifact_ledger SET state='retry_wait',next_retry_at=? WHERE artifact_id=?",
+        )
+        .bind(deadline)
+        .bind(artifact)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    }
     let report = store.reconcile_ledger().await.unwrap();
     assert_eq!(report["orphaned"].as_i64().unwrap(), 1);
     assert_eq!(report["requeued"].as_i64().unwrap(), 1);
@@ -98,6 +115,24 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
             .await
             .unwrap();
     assert_eq!(due_state, "pending");
+    for (artifact, deadline) in [
+        (due.key.artifact_id, Some(0)),
+        (future.key.artifact_id, Some(i64::MAX)),
+        (unscheduled.key.artifact_id, None),
+    ] {
+        let row: (String, Option<i64>) =
+            db::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger WHERE artifact_id=?")
+                .bind(artifact)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        let state = if artifact == due.key.artifact_id {
+            "pending"
+        } else {
+            "retry_wait"
+        };
+        assert_eq!(row, (state.into(), deadline));
+    }
 }
 
 #[tokio::test]
