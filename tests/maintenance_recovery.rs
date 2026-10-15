@@ -238,7 +238,11 @@ async fn interrupted(
         tokio::time::timeout(Duration::from_secs(120), fixture::check(root, &value))
             .await
             .expect("diagnostic post-operation oracle exceeded 120 seconds");
-        fs::write(evidence.join("diagnostic-oracle.txt"), b"full oracle passed").unwrap();
+        fs::write(
+            evidence.join("diagnostic-oracle.txt"),
+            b"full oracle passed",
+        )
+        .unwrap();
         eprintln!("DIAGNOSTIC: post-operation full oracle passed; fault evidence still required");
     }
     assert!(
@@ -327,11 +331,11 @@ async fn native_io_failure_matrix() {
     for (scenario, point, suffix, after_writes) in cases {
         for mode in ["pause", "enospc"] {
             let label = format!("{scenario}-{mode}-{point}");
-            if let Ok(selected) = std::env::var("OC_MAINTENANCE_DIAGNOSTIC_CASE") {
-                if label != selected {
-                    eprintln!("DIAGNOSTIC: {label} NOT_RUN");
-                    continue;
-                }
+            if let Ok(selected) = std::env::var("OC_MAINTENANCE_DIAGNOSTIC_CASE")
+                && label != selected
+            {
+                eprintln!("DIAGNOSTIC: {label} NOT_RUN");
+                continue;
             }
             eprintln!("maintenance case start {label}");
             let root = temp.join(&label);
