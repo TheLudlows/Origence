@@ -137,12 +137,6 @@ impl DomainTx for TursoTx {
         Ok(())
     }
 
-    async fn record_source(&mut self, _source: SourceVersion) -> StorageResult<()> {
-        // The domain operations that materialise a source (event/version) land
-        // with the full adapter; the envelope itself records nothing.
-        Ok(())
-    }
-
     async fn enqueue(&mut self, work: WorkItem) -> StorageResult<()> {
         self.enqueue_inner(work).await
     }
@@ -388,10 +382,6 @@ impl DomainTx for TursoTx {
         self.active_job_inner(job, generation, run_token).await
     }
 
-    async fn cleanup_derived_chunks(&mut self) -> StorageResult<u64> {
-        self.cleanup_derived_chunks_inner().await
-    }
-
     async fn register_owner(
         &mut self,
         source: SourceVersion,
@@ -403,28 +393,12 @@ impl DomainTx for TursoTx {
             .await
     }
 
-    async fn detach_owners(&mut self, source: SourceVersion) -> StorageResult<u64> {
-        self.detach_owners_inner(source).await
-    }
-
-    async fn owned_artifacts(&mut self) -> StorageResult<Value> {
-        self.owned_artifacts_inner().await
-    }
-
     async fn register_pending(&mut self, entry: LedgerEntry) -> StorageResult<()> {
         self.register_pending_inner(entry).await
     }
 
     async fn confirm_committed(&mut self, key: LedgerKey) -> StorageResult<()> {
         self.confirm_committed_inner(key).await
-    }
-
-    async fn fail_retryable(&mut self, key: LedgerKey, error: &str) -> StorageResult<()> {
-        self.fail_retryable_inner(key, error).await
-    }
-
-    async fn fail_permanent(&mut self, key: LedgerKey, error: &str) -> StorageResult<()> {
-        self.fail_permanent_inner(key, error).await
     }
 
     async fn settle_completed(
@@ -434,18 +408,6 @@ impl DomainTx for TursoTx {
         result: &Value,
     ) -> StorageResult<()> {
         self.settle_completed_inner(job, outcome, result).await
-    }
-
-    async fn settle_failed(
-        &mut self,
-        job: Uuid,
-        generation: i64,
-        run_token: i64,
-        state: &str,
-        error_code: &str,
-    ) -> StorageResult<()> {
-        self.settle_failed_inner(job, generation, run_token, state, error_code)
-            .await
     }
 
     async fn commit(mut self) -> StorageResult<()> {

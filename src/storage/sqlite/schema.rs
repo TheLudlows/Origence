@@ -59,8 +59,3 @@ pub(super) async fn check_conn(conn: &mut Connection) -> StorageResult<()> {
     .await
     .map_err(turso_err)
 }
-
-pub(super) async fn identity_table_present(conn: &mut Connection) -> StorageResult<bool> {
-    native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_memory_identities')")
-        .fetch_one(conn).await.map_err(turso_err)
-}

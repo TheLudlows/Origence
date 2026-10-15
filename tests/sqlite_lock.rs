@@ -58,7 +58,7 @@ async fn lock_is_exclusive_across_processes() {
     );
 
     assert!(matches!(
-        SqliteStore::upgrade_memory_identity(&path, false).await,
+        SqliteStore::check_memory_identity(&path).await,
         Err(StorageError::Conflict(_))
     ));
 

@@ -821,11 +821,11 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
         .await
         .unwrap();
     tx.check_permission(Permission::Read).await.unwrap();
-    let direct = tx.keyword_hits("alpha beta", true, None).await.unwrap();
+    let direct = tx.summary_hits("alpha beta", None).await.unwrap();
     assert_eq!(direct.len(), 1);
     assert_eq!(direct[0].chunk_id, chunks[0]);
     assert!(
-        tx.keyword_hits("alpha beta absent", true, None)
+        tx.summary_hits("alpha beta absent", None)
             .await
             .unwrap()
             .is_empty()

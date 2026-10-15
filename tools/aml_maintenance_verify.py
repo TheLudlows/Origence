@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 from aml_drill import DrillError
 from aml_evidence import decode_fragments, source_index
-from aml_maintenance_scale import PHASES, payload_hash
+from aml_artifacts import PHASES, payload_hash, source_path
 from aml_public import load_public
 from aml_quality import digest
 
@@ -55,14 +55,14 @@ def distribution(values):
             "p95": values[math.ceil(len(values) * .95) - 1], "min": values[0], "max": values[-1]}
 
 
-def verify(directory):
+def verify(directory, source_root=None):
     plan = json.loads((directory / "plan.json").read_text(encoding="utf-8"))
     report = json.loads((directory / "run.json").read_text(encoding="utf-8"))
     require(report["status"] == "completed" and report["temporary_tree_removed"], "run_incomplete")
     require(report["exact_payload_order_match"] and report["source_scope_verified"], "runtime_checks_missing")
     require(report["users"] == 32 and report["batches"] == 1524 and report["messages"] == 15685
             and report["appended_batches"] == 256, "fixture_counts_changed")
-    require(plan["runner_sha256"] == report["runner_sha256"] == digest(ROOT / "tools/aml_maintenance_scale.py"), "runner_hash_changed")
+    require(plan["runner_sha256"] == report["runner_sha256"] == digest(source_path("tools/aml_maintenance_scale.py", source_root)), "runner_hash_changed")
     require(plan["binary_sha256"] == report["binary_sha256"], "binary_link_changed")
     require(plan["public_preparation_sha256"] == report["public_preparation_sha256"] == digest(ROOT / "evals/aml/public/preparation.json"), "public_freeze_changed")
     require(report["responses_sha256"] == digest(directory / "responses.json.gz"), "response_archive_changed")
@@ -103,10 +103,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--source-root", type=Path, help="Exact historical source tree for runner hash; no fallback")
     args = parser.parse_args()
     with args.output.open("x", encoding="utf-8", newline="\n") as output:
         try:
-            result = verify(args.directory)
+            result = verify(args.directory, args.source_root)
         except DrillError as error:
             result = {"status": "failed", "error": str(error)}
         except Exception:

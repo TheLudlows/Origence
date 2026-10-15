@@ -51,12 +51,9 @@ impl TursoStore {
         Ok(store)
     }
 
-    /// Historical API retained only for same-version inspection. Native Turso
-    /// databases always contain identity support; incompatible files are rejected.
-    pub async fn upgrade_memory_identity(
-        path: impl AsRef<Path>,
-        _dry_run: bool,
-    ) -> StorageResult<MemoryIdentityUpgrade> {
+    /// Inspect the complete same-version authority schema read-only, including identity.
+    /// Requires an existing database and an exclusive path lock; never creates or repairs it.
+    pub async fn check_memory_identity(path: impl AsRef<Path>) -> StorageResult<()> {
         let path = tokio::fs::canonicalize(path.as_ref()).await?;
         let (lock, opening) = acquire_path_lock(&path, false)?;
         let lock = std::sync::Arc::new(lock);
@@ -68,8 +65,7 @@ impl TursoStore {
             native_turso::check_format(&mut conn, "authority")
                 .await
                 .map_err(turso_err)?;
-            check_conn(&mut conn).await?;
-            Ok(MemoryIdentityUpgrade::AlreadyEnabled)
+            check_conn(&mut conn).await
         }
         .await;
         pool.close().await;

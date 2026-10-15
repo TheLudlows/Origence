@@ -371,30 +371,4 @@ impl TursoTx {
         .map_err(turso_err)?;
         Ok(())
     }
-
-    pub(super) async fn settle_failed_inner(
-        &mut self,
-        job: Uuid,
-        generation: i64,
-        run_token: i64,
-        state: &str,
-        error_code: &str,
-    ) -> StorageResult<()> {
-        native_turso::query(
-            "UPDATE oc_jobs SET state = ?, error_code = ?, updated_at = ? \
-             WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND generation = ? AND run_token = ? AND state = 'processing'",
-        )
-        .bind(state)
-        .bind(error_code)
-        .bind(now_ms())
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(job)
-        .bind(generation)
-        .bind(run_token)
-        .execute(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        Ok(())
-    }
 }

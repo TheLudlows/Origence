@@ -61,8 +61,8 @@ impl<T: Lifecycle> Lifecycle for std::sync::Arc<T> {
 }
 
 pub use capabilities::{
-    BlobKey, Capabilities, Embedding, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry,
-    VectorHit, VectorQuery,
+    BlobKey, Embedding, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit,
+    VectorQuery,
 };
 pub use error::{StorageError, StorageResult};
 #[cfg(feature = "local-vector")]

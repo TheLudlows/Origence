@@ -1,0 +1,2 @@
+# Optional offline budget verification only; no model inference runtime.
+tokenizers==0.22.2

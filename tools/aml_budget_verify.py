@@ -1,8 +1,9 @@
 """Offline integrity audit of completed frozen experiment artifacts; no model calls."""
+import argparse
 from pathlib import Path
 from aml_answer import validate_answer
 from aml_budget import Budget, checked_order
-from aml_budget_eval import ROOT, OUT, ARMS, load_data, load_artifact, validate_rows, metrics, verify_freeze
+from aml_artifacts import ROOT, OUT, ARMS, load_data, load_artifact, validate_rows, metrics, verify_freeze
 from aml_cross_encoder import rank_indices
 from aml_evidence import source_index, decode_fragments
 from aml_experiment import select
@@ -10,8 +11,8 @@ from aml_quality import digest
 import json
 
 
-def verify(dataset):
-    verify_freeze()
+def verify(dataset, source_root=None):
+    verify_freeze(source_root)
     corpus, labels = load_data(dataset)
     reports = {}
     for stage, arm in [("retrieve", None), ("prepare", None), ("rank", "chat"), ("rank", "bge"),
@@ -72,8 +73,12 @@ def verify(dataset):
 
 
 if __name__ == "__main__":
-    result = [verify(dataset) for dataset in ("v4", "public")]
-    with open(OUT / "integrity-audit.json", "x", encoding="utf-8") as stream:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-root", type=Path, help="Exact historical source tree for tools/ hashes; no fallback")
+    parser.add_argument("--output", type=Path, default=OUT / "integrity-audit.json")
+    args = parser.parse_args()
+    result = [verify(dataset, args.source_root) for dataset in ("v4", "public")]
+    with open(args.output, "x", encoding="utf-8") as stream:
         json.dump(result, stream, ensure_ascii=False, indent=2)
         stream.write("\n")
     print(json.dumps(result))

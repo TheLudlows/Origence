@@ -155,6 +155,15 @@ async fn rollback_discards_writes() {
         let mut tx = store.begin(p.auth.clone()).await.unwrap();
         tx.check_permission(Permission::Write).await.unwrap();
         tx.begin_command("memory.create", "k1", "h1").await.unwrap();
+        let asset = tx.insert_knowledge_asset("Rolled back").await.unwrap();
+        let source = tx
+            .create_event("knowledge", "source bytes", None)
+            .await
+            .unwrap();
+        tx.insert_version(asset, 1, "source bytes", "hash", source, None, None)
+            .await
+            .unwrap();
+        tx.update_asset_version(asset, 1, None).await.unwrap();
         tx.enqueue(WorkItem {
             job_id: Uuid::new_v4(),
             kind: "publish".into(),
@@ -173,6 +182,19 @@ async fn rollback_discards_writes() {
         .await
         .unwrap();
     assert_eq!(command_count, 0);
+    let assets: i64 = db::query_scalar("SELECT count(*) FROM oc_assets")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    let events: i64 = db::query_scalar("SELECT count(*) FROM oc_events")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    let versions: i64 = db::query_scalar("SELECT count(*) FROM oc_versions")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!((assets, events, versions), (0, 0, 0));
 }
 
 #[tokio::test]

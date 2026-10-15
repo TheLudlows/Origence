@@ -63,6 +63,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // publication tables are omitted; missing-root fixtures intentionally omit
     // foreign keys so the fail-closed read path can be exercised directly.
     for sql in [
+        "CREATE TABLE oc_memory_identities(tenant_id BLOB,workspace_id BLOB,identity_key TEXT,asset_id BLOB,identity_json TEXT)",
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -883,12 +884,10 @@ async fn event_projection_preserves_missing_deleted_and_foreign_file_semantics()
 #[tokio::test]
 async fn identity_kind_filter_precedes_native_key_decoding() {
     let (_dir, pool) = database().await;
-    for sql in [
-        "ALTER TABLE oc_assets ADD COLUMN fact_key TEXT",
-        "CREATE TABLE oc_memory_identities(tenant_id BLOB,workspace_id BLOB,identity_key TEXT,asset_id BLOB,identity_json TEXT)",
-    ] {
-        db::query(sql).execute(&pool).await.unwrap();
-    }
+    db::query("ALTER TABLE oc_assets ADD COLUMN fact_key TEXT")
+        .execute(&pool)
+        .await
+        .unwrap();
     let scope = scope();
     let identity: crate::memory_identity::MemoryIdentity = serde_json::from_value(json!({
         "subject":{"kind":"service","stable_id":"billing"},
@@ -1245,7 +1244,7 @@ async fn raw_request_compression_keeps_distinct_storage_types() {
 }
 
 #[tokio::test]
-async fn visible_and_keyword_defer_payload_until_support_and_tokens_pass() {
+async fn visible_hit_defers_payload_until_support_passes() {
     let (_dir, pool) = database().await;
     let scope = scope();
     let mut tx = transaction(&pool, scope).await;
@@ -1268,27 +1267,10 @@ async fn visible_and_keyword_defer_payload_until_support_and_tokens_pass() {
         .await
         .unwrap();
     assert!(tx.visible_hit(row.chunk).await.unwrap().is_none());
-    assert!(
-        tx.keyword_hits("needle", false, None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
     db::query("UPDATE oc_chunks SET locator='{}'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(tx.keyword_hits("", false, None).await.unwrap().is_empty());
-    assert!(
-        tx.keyword_hits("absent", false, None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    assert!(matches!(
-        tx.keyword_hits("needle", false, None).await,
-        Err(StorageError::Backend(_))
-    ));
     assert!(matches!(
         tx.visible_hit(row.chunk).await,
         Err(StorageError::Backend(_))
@@ -1339,30 +1321,19 @@ async fn visible_hit_uses_semantic_source_override_before_root_uuid_fallback() {
 }
 
 #[tokio::test]
-async fn keyword_empty_query_keeps_native_json_and_summary_prepare_errors() {
-    for summaries in [false, true] {
-        let (_dir, pool) = database().await;
-        let scope = scope();
-        let mut tx = transaction(&pool, scope).await;
-        if !summaries {
-            let row = Record::new(70_002);
-            seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
-            db::query("UPDATE oc_chunks SET locator='{'")
-                .execute(&mut *tx.tx)
-                .await
-                .unwrap();
-        }
-        assert!(matches!(
-            tx.keyword_hits("", summaries, None).await,
-            Err(StorageError::Backend(_))
-        ));
-        tx.rollback().await.unwrap();
-        pool.shutdown().await.unwrap();
-    }
+async fn summary_empty_query_rejects_missing_summary_schema() {
+    let (_dir, pool) = database().await;
+    let mut tx = transaction(&pool, scope()).await;
+    assert!(matches!(
+        tx.summary_hits("", None).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
 }
 
 #[tokio::test]
-async fn keyword_summary_keeps_native_aggregation_and_null_terms() {
+async fn summary_hits_keep_native_aggregation_and_null_terms() {
     let (_dir, pool) = database().await;
     let scope = scope();
     let mut tx = transaction(&pool, scope).await;
@@ -1374,12 +1345,7 @@ async fn keyword_summary_keeps_native_aggregation_and_null_terms() {
     .execute(&mut *tx.tx)
     .await
     .unwrap();
-    assert!(
-        tx.keyword_hits("needle", true, None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(tx.summary_hits("needle", None).await.unwrap().is_empty());
     for sql in [
         "INSERT INTO oc_summaries VALUES(?,?,?,NULL)",
         "INSERT INTO oc_summaries VALUES(?,?,?,'needle')",
@@ -1393,23 +1359,30 @@ async fn keyword_summary_keeps_native_aggregation_and_null_terms() {
             .await
             .unwrap();
     }
-    let hits = tx.keyword_hits("needle 12", true, None).await.unwrap();
+    let hits = tx.summary_hits("needle 12", None).await.unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].score, 1.0);
     assert!(
-        tx.keyword_hits("needle absent", true, None)
+        tx.summary_hits("needle absent", None)
             .await
             .unwrap()
             .is_empty()
     );
-    // Hit rendering never consumes terms; the keyword route does.
+    // Summary retrieval and hit rendering do not consume raw chunk terms.
     db::query("UPDATE oc_chunks SET search_terms=x'01'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
     assert!(tx.visible_hit(row.chunk).await.unwrap().is_some());
+    assert_eq!(tx.summary_hits("needle", None).await.unwrap().len(), 1);
+    db::query("UPDATE oc_chunks SET content=x'02'")
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(tx.summary_hits("", None).await.unwrap().is_empty());
+    assert!(tx.summary_hits("absent", None).await.unwrap().is_empty());
     assert!(matches!(
-        tx.keyword_hits("needle", false, None).await,
+        tx.summary_hits("needle", None).await,
         Err(StorageError::Backend(_))
     ));
     tx.rollback().await.unwrap();
@@ -1439,12 +1412,6 @@ async fn selected_payload_waits_for_other_chunk_version_support() {
         .await
         .unwrap();
     assert!(tx.visible_hit(row.chunk).await.unwrap().is_none());
-    assert!(
-        tx.keyword_hits("needle", false, None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1469,12 +1436,6 @@ async fn orphan_learning_hides_invalid_render_payload() {
         .await
         .unwrap();
     assert!(tx.visible_hit(row.chunk).await.unwrap().is_none());
-    assert!(
-        tx.keyword_hits("needle", false, None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }

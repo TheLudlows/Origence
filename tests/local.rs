@@ -1,7 +1,7 @@
 // One integration executable avoids repeatedly linking the native engines.
 mod aml_protocol;
 mod evidence_bundle;
-mod identity_upgrade_cli;
+mod identity_check_cli;
 mod identity_vector_regression;
 mod initialization;
 mod lancedb_native_search;
@@ -23,7 +23,7 @@ mod sqlite_domain;
 mod sqlite_evidence;
 mod sqlite_graph_store;
 mod sqlite_identity;
-mod sqlite_identity_upgrade;
+mod sqlite_identity_check;
 mod sqlite_ledger;
 mod sqlite_lock;
 mod sqlite_owner;

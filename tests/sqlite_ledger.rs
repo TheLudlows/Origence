@@ -1,12 +1,12 @@
 //! Ledger type unit tests (M3): surface/state encoding and deterministic keys.
 
 use origence::storage::ledger::{
-    LedgerEntry, LedgerKey, LedgerState, MAX_LEDGER_ATTEMPTS, Surface, ledger_idempotency_key,
+    LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key,
 };
 use origence::storage::native_turso as db;
 use origence::storage::{
-    AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion, StorageError,
-    sqlite::SqliteStore,
+    AuthorizedScope, DomainTx, Lifecycle, Permission, RelationalStore, Scope, SourceVersion,
+    StorageError, sqlite::SqliteStore,
 };
 use uuid::Uuid;
 
@@ -176,38 +176,6 @@ async fn confirm_is_a_noop_when_source_is_retracted() {
 }
 
 #[tokio::test]
-async fn retryable_then_permanent_orphans() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let auth = provision(&store).await;
-    // fail_retryable/fail_permanent do not re-check the source, so a random
-    // (non-existent) source id is fine here.
-    let e = entry(auth.scope, uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
-
-    {
-        let mut tx = begin_write(&store, &auth).await;
-        tx.register_pending(e.clone()).await.unwrap();
-        tx.commit().await.unwrap();
-    }
-
-    // First failure is retryable.
-    {
-        let mut tx = begin_write(&store, &auth).await;
-        tx.fail_retryable(e.key, "boom").await.unwrap();
-        tx.commit().await.unwrap();
-    }
-    assert_eq!(ledger_state(&store, &e.key).await, "retry_wait");
-
-    // Exhaust the budget to orphan.
-    for _ in 0..MAX_LEDGER_ATTEMPTS {
-        let mut tx = begin_write(&store, &auth).await;
-        tx.fail_retryable(e.key, "boom").await.unwrap();
-        tx.commit().await.unwrap();
-    }
-    assert_eq!(ledger_state(&store, &e.key).await, "orphan");
-}
-
-#[tokio::test]
 async fn ledger_methods_reject_a_mismatched_scope() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
@@ -229,13 +197,121 @@ async fn ledger_methods_reject_a_mismatched_scope() {
             tx.confirm_committed(e.key).await,
             Err(StorageError::Forbidden)
         ));
-        assert!(matches!(
-            tx.fail_retryable(e.key, "boom").await,
-            Err(StorageError::Forbidden)
-        ));
-        assert!(matches!(
-            tx.fail_permanent(e.key, "boom").await,
-            Err(StorageError::Forbidden)
-        ));
     }
+}
+
+#[tokio::test]
+async fn job_failures_are_fenced_and_retry_attempts_belong_to_claims() {
+    use origence::storage::{JobQueue, WorkItem};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("jobs.db")).await.unwrap();
+    let auth = provision(&store).await;
+    let job_id = Uuid::new_v4();
+    let e = entry(auth.scope, Uuid::new_v4(), Uuid::new_v4());
+    let mut tx = begin_write(&store, &auth).await;
+    tx.begin_command("capture", "failure", "hash")
+        .await
+        .unwrap();
+    tx.enqueue(WorkItem {
+        job_id,
+        kind: "publish".into(),
+        payload: serde_json::Value::Null,
+        asset: None,
+        source: None,
+    })
+    .await
+    .unwrap();
+    tx.register_pending(e.clone()).await.unwrap();
+    tx.commit().await.unwrap();
+    for attempt in 1..=5 {
+        let claim = store.claim_next().await.unwrap().unwrap();
+        for field in 0..4 {
+            let mut stale = claim.clone();
+            match field {
+                0 => stale.scope.workspace_id = Uuid::new_v4(),
+                1 => stale.job_id = Uuid::new_v4(),
+                2 => stale.generation += 1,
+                _ => stale.run_token += 1,
+            }
+            store
+                .fail_job(&stale, "failed", "STALE", false)
+                .await
+                .unwrap();
+        }
+        let before = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        store
+            .fail_job(&claim, "failed", "INTERNAL_ERROR", true)
+            .await
+            .unwrap();
+        let after = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        let row: (String, i32, String, Option<i64>) =
+            db::query_as("SELECT state,attempt,error_code,next_retry_at FROM oc_jobs WHERE id=?")
+                .bind(job_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(row.1, attempt);
+        assert_eq!(row.2, "INTERNAL_ERROR");
+        if attempt < 5 {
+            assert_eq!(row.0, "retry_wait");
+            assert!((before + 2000..=after + 2000).contains(&row.3.unwrap()));
+        } else {
+            assert_eq!(row.0, "failed");
+            assert_eq!(row.3, None);
+        }
+        store
+            .fail_job(&claim, "superseded", "STALE", false)
+            .await
+            .unwrap();
+        let unchanged: (String, i32, String, Option<i64>) =
+            db::query_as("SELECT state,attempt,error_code,next_retry_at FROM oc_jobs WHERE id=?")
+                .bind(job_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(unchanged, row);
+        assert_eq!(ledger_state(&store, &e.key).await, "pending");
+        db::query("UPDATE oc_jobs SET next_retry_at=0 WHERE id=? AND state='retry_wait'")
+            .bind(job_id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+    }
+    assert!(store.claim_next().await.unwrap().is_none());
+    for state in ["failed", "superseded"] {
+        let job_id = Uuid::new_v4();
+        let mut tx = begin_write(&store, &auth).await;
+        tx.begin_command("capture", state, "hash").await.unwrap();
+        tx.enqueue(WorkItem {
+            job_id,
+            kind: "publish".into(),
+            payload: serde_json::Value::Null,
+            asset: None,
+            source: None,
+        })
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let claim = store.claim_next().await.unwrap().unwrap();
+        store
+            .fail_job(&claim, state, "TERMINAL", false)
+            .await
+            .unwrap();
+        let terminal: (String, i32, Option<i64>) =
+            db::query_as("SELECT state,attempt,next_retry_at FROM oc_jobs WHERE id=?")
+                .bind(job_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(terminal, (state.into(), 1, None));
+    }
+    store.shutdown().await.unwrap();
 }

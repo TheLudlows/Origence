@@ -28,7 +28,6 @@ struct MemDb {
     commands: HashMap<String, (String, Value)>,
     jobs: Vec<ClaimedJob>,
     audits: Vec<String>,
-    sources: Vec<SourceVersion>,
 }
 
 struct MemRelationalStore {
@@ -48,7 +47,6 @@ struct MemTx {
     response: Option<Value>,
     work: Vec<WorkItem>,
     audits: Vec<String>,
-    sources: Vec<SourceVersion>,
     required: Vec<Permission>,
 }
 
@@ -99,11 +97,6 @@ impl DomainTx for MemTx {
         Ok(None)
     }
 
-    async fn record_source(&mut self, source: SourceVersion) -> StorageResult<()> {
-        self.sources.push(source);
-        Ok(())
-    }
-
     async fn register_owner(
         &mut self,
         _source: SourceVersion,
@@ -116,18 +109,6 @@ impl DomainTx for MemTx {
         ))
     }
 
-    async fn detach_owners(&mut self, _source: SourceVersion) -> StorageResult<u64> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no owner rows".into(),
-        ))
-    }
-
-    async fn owned_artifacts(&mut self) -> StorageResult<Value> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no owner rows".into(),
-        ))
-    }
-
     async fn register_pending(&mut self, _entry: LedgerEntry) -> StorageResult<()> {
         Err(StorageError::Unavailable(
             "in-memory double has no ledger".into(),
@@ -135,18 +116,6 @@ impl DomainTx for MemTx {
     }
 
     async fn confirm_committed(&mut self, _key: LedgerKey) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no ledger".into(),
-        ))
-    }
-
-    async fn fail_retryable(&mut self, _key: LedgerKey, _error: &str) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no ledger".into(),
-        ))
-    }
-
-    async fn fail_permanent(&mut self, _key: LedgerKey, _error: &str) -> StorageResult<()> {
         Err(StorageError::Unavailable(
             "in-memory double has no ledger".into(),
         ))
@@ -357,11 +326,6 @@ impl DomainTx for MemTx {
             "in-memory double has no domain rows".into(),
         ))
     }
-    async fn cleanup_derived_chunks(&mut self) -> StorageResult<u64> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
     async fn settle_completed(
         &mut self,
         _job: Uuid,
@@ -372,19 +336,6 @@ impl DomainTx for MemTx {
             "in-memory double has no domain rows".into(),
         ))
     }
-    async fn settle_failed(
-        &mut self,
-        _job: Uuid,
-        _generation: i64,
-        _run_token: i64,
-        _state: &str,
-        _error_code: &str,
-    ) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "in-memory double has no domain rows".into(),
-        ))
-    }
-
     async fn commit(mut self) -> StorageResult<()> {
         for &permission in &self.required {
             if !permission.granted_by(&self.role()?) {
@@ -415,7 +366,6 @@ impl DomainTx for MemTx {
             });
         }
         db.audits.extend(self.audits);
-        db.sources.extend(self.sources);
         Ok(())
     }
 
@@ -446,7 +396,6 @@ impl RelationalStore for MemRelationalStore {
             response: None,
             work: Vec::new(),
             audits: Vec::new(),
-            sources: Vec::new(),
             required: Vec::new(),
         })
     }
@@ -671,20 +620,14 @@ async fn rollback_discards_enqueue() {
 }
 
 #[tokio::test]
-async fn commit_records_source_audit_and_enqueue() {
+async fn commit_records_audit_and_enqueue() {
     let (rel, queue, db) = setup();
     let auth = seed(&db, scope(), "writer");
-    let source = SourceVersion {
-        source_id: Uuid::new_v4(),
-        version: 1,
-    };
-
     let mut tx = rel.begin(auth.clone()).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     tx.begin_command("knowledge.capture", "capture-key", "hash")
         .await
         .unwrap();
-    tx.record_source(source).await.unwrap();
     tx.audit("capture", Uuid::new_v4(), json!({"chunks": 1}))
         .await
         .unwrap();
@@ -701,7 +644,6 @@ async fn commit_records_source_audit_and_enqueue() {
 
     {
         let db = db.lock().unwrap();
-        assert!(db.sources.contains(&source));
         assert_eq!(db.audits.len(), 1);
     }
     assert!(queue.claim_next().await.unwrap().is_some());

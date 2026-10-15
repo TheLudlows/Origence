@@ -65,9 +65,7 @@ mod visibility;
 
 use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
-use crate::storage::ledger::{
-    LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey, MAX_LEDGER_ATTEMPTS,
-};
+use crate::storage::ledger::{LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey};
 use crate::storage::scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
 use crate::storage::traits::{
     ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, RelationalStore, WorkItem,
@@ -76,16 +74,6 @@ use crate::storage::traits::{
 use locking::LockGuard;
 #[cfg(feature = "local-vector")]
 pub(super) use locking::lock_for_maintenance;
-use schema::identity_table_present;
-
-/// Result of the explicit, offline identity schema upgrade.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MemoryIdentityUpgrade {
-    Required,
-    Enabled,
-    AlreadyEnabled,
-}
 
 /// The local relational store backed by a single native Turso database file.
 pub struct TursoStore {

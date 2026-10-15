@@ -202,10 +202,6 @@ impl RawCurrentRows {
         ))
     }
 
-    pub(super) fn search_terms(&self, index: usize) -> StorageResult<Option<String>> {
-        self.rows[index].try_get("search_terms").map_err(turso_err)
-    }
-
     pub(super) fn hit(&self, index: usize, score: f64) -> StorageResult<SearchHit> {
         let row = &self.rows[index];
         let position = self.positions[index];
@@ -1026,9 +1022,6 @@ impl TursoTx {
         }
         for (_, row) in first.into_values() {
             let _: String = row.try_get("status").map_err(turso_err)?;
-        }
-        if !identity_table_present(&mut self.tx).await? {
-            return Ok(identities);
         }
         for row in rows_by_ids(
             &mut self.tx,

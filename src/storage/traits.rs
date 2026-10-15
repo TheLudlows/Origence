@@ -9,7 +9,6 @@
 //! if let Some(cached) = tx.begin_command("memory.create", idem_key, req_hash).await? {
 //!     return cached;                                        // idempotent replay
 //! }
-//! tx.record_source(source_version).await?;
 //! tx.enqueue(work_item).await?;                             // same transaction
 //! tx.audit("memory.create", target, detail).await?;
 //! tx.finish_command(response).await?;
@@ -33,8 +32,7 @@ use uuid::Uuid;
 use crate::storage::ledger::{LedgerEntry, LedgerKey};
 use crate::storage::{
     capabilities::{
-        BlobKey, Capabilities, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit,
-        VectorQuery,
+        BlobKey, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery,
     },
     error::{StorageError, StorageResult},
     scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion},
@@ -102,9 +100,6 @@ pub trait DomainTx {
             "job creator authorization unavailable".into(),
         ))
     }
-
-    /// Register a source version as the origin of this command's writes.
-    async fn record_source(&mut self, source: SourceVersion) -> StorageResult<()>;
 
     /// Register work on this same transaction. Business write and enqueue
     /// commit or roll back together; a consumer (not this method) claims it.
@@ -299,25 +294,12 @@ pub trait DomainTx {
         run_token: i64,
     ) -> StorageResult<bool>;
 
-    /// Delete derived chunks of deleted/retracted sources; returns rows removed.
-    async fn cleanup_derived_chunks(&mut self) -> StorageResult<u64>;
-
     /// Mark a job `completed` with its outcome and result.
     async fn settle_completed(
         &mut self,
         job: Uuid,
         outcome: &str,
         result: &Value,
-    ) -> StorageResult<()>;
-
-    /// Mark a processing job `superseded`/`failed` with an error code.
-    async fn settle_failed(
-        &mut self,
-        job: Uuid,
-        generation: i64,
-        run_token: i64,
-        state: &str,
-        error_code: &str,
     ) -> StorageResult<()>;
 
     // -- provenance (M3) -----------------------------------------------------
@@ -332,16 +314,6 @@ pub trait DomainTx {
         chunk_id: Option<Uuid>,
     ) -> StorageResult<()>;
 
-    /// Remove every owner row for `source`, returning rows removed. Called
-    /// when a source is retracted so derived artifacts can be reaped.
-    async fn detach_owners(&mut self, source: SourceVersion) -> StorageResult<u64>;
-
-    /// The currently-owned entity/relation ids, as
-    /// `{"relations": [..], "entities": [..]}`. The graph adapter (M4) diffs
-    /// this against its own rows to find orphans (graph-core G4); artifacts
-    /// shared with another source stay in this set.
-    async fn owned_artifacts(&mut self) -> StorageResult<Value>;
-
     // -- cross-store ledger (M3) ---------------------------------------------
 
     /// Register a pending cross-store write on this transaction (A2.6 step 1).
@@ -353,13 +325,6 @@ pub trait DomainTx {
     /// the entry is already committed, the source is retracted, or its
     /// generation changed.
     async fn confirm_committed(&mut self, key: LedgerKey) -> StorageResult<()>;
-
-    /// Record a retryable external-write failure; becomes `orphan` after the
-    /// retry budget is exhausted (A2.6).
-    async fn fail_retryable(&mut self, key: LedgerKey, error: &str) -> StorageResult<()>;
-
-    /// Record a permanent external-write failure as `orphan` (A2.6).
-    async fn fail_permanent(&mut self, key: LedgerKey, error: &str) -> StorageResult<()>;
 
     /// Commit all registered writes atomically, re-verifying recorded
     /// permissions against the live role first.
@@ -483,9 +448,6 @@ pub trait JobQueue {
 /// Vector storage. Every query carries scope + profile + dimension +
 /// generation; writes carry scope + source version (A2.2).
 pub trait VectorStore {
-    /// Declared capabilities (A2.7).
-    fn capabilities(&self) -> Capabilities;
-
     /// Idempotently write entries for `scope` / profile / generation (A2.2).
     async fn upsert(&self, scope: Scope, entries: Vec<VectorEntry>) -> StorageResult<()>;
 
@@ -523,9 +485,6 @@ pub trait VectorStore {
 /// Graph storage. Entity/relation writes carry scope + source version; queries
 /// declare the max traversal they need (A2.2, A2.7).
 pub trait GraphStore {
-    /// Declared capabilities (A2.7).
-    fn capabilities(&self) -> Capabilities;
-
     /// Write entities originating from a source version.
     async fn upsert_entities(
         &self,
@@ -551,7 +510,7 @@ pub trait GraphStore {
 
     /// Return every entity/relation id currently stored for `scope`, as
     /// `{"entities": [..], "relations": [..]}`. graph-core G4 diffs this
-    /// against `owned_artifacts()` to find orphans (A2.6).
+    /// against the retained owner IDs from `cleanup_plan` to find orphans (A2.6).
     async fn list_ids(&self, scope: Scope) -> StorageResult<Value>;
 
     /// Delete the given entity/relation ids (already diffed to orphans by the

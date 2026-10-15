@@ -323,7 +323,7 @@ impl Service {
         }
         let (mut entities, mut relations) = (Vec::new(), Vec::new());
         if summaries_enabled {
-            branches.push(tx.keyword_hits(&terms, true, asset_filter).await?);
+            branches.push(tx.summary_hits(&terms, asset_filter).await?);
         }
         if let Some(graph) = graph {
             let all_entities: Vec<Value> = decode(graph["entities"].clone())?;

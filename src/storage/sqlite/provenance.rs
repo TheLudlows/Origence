@@ -284,48 +284,4 @@ impl TursoTx {
         .map_err(turso_err)?;
         Ok(())
     }
-
-    pub(super) async fn detach_owners_inner(
-        &mut self,
-        source: SourceVersion,
-    ) -> StorageResult<u64> {
-        let res = native_turso::query(
-            "DELETE FROM oc_artifact_owners \
-             WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(source.source_id)
-        .bind(source.version)
-        .execute(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        Ok(res.rows_affected())
-    }
-
-    pub(super) async fn owned_artifacts_inner(&mut self) -> StorageResult<Value> {
-        // Return the current owner set grouped by artifact. M4 diffs this
-        // against its graph rows to find orphans (graph-core G4); M3 itself does
-        // not store entity/relation bodies.
-        let owned: Vec<(String, Uuid)> = native_turso::query_as(
-            "SELECT artifact_type, artifact_id FROM oc_artifact_owners \
-             WHERE tenant_id = ? AND workspace_id = ? \
-               AND artifact_type IN ('entity','relation')",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        let mut relations = Vec::new();
-        let mut entities = Vec::new();
-        for (kind, id) in owned {
-            match kind.as_str() {
-                "relation" => relations.push(id),
-                "entity" => entities.push(id),
-                _ => {}
-            }
-        }
-        Ok(json!({ "relations": relations, "entities": entities }))
-    }
 }

@@ -103,7 +103,8 @@ jobs:
           path: ${{ runner.temp }}/origence-keyword-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: ignore
   windows:
-    if: github.ref == 'refs/heads/main'
+    # Reuse the normal Windows gates for the authorized #61 cleanup candidate.
+    if: github.ref == 'refs/heads/main' || github.head_ref == 'refactor/issue61-cleanup'
     runs-on: windows-latest
     timeout-minutes: 120
     env:

@@ -51,7 +51,7 @@ NATIVE_FORWARD_SITES = {("begin_with#1", 1), ("query#1", 1), ("execute#1", 1),
 FILTER_SOURCE_SHAS = {
     "src/storage/lancedb/ann.rs": "a0f9f2aeb7384d91438cbdd1e6bd237bd85d9cd517f6cfd585d60a1e8d1c40cc",
     "src/storage/lancedb/full_text.rs": "137349feb1f39e5bdb7595369fbce8d194dbf333796c1e79149173e6a553ddc0",
-    "src/storage/lancedb.rs": "fd13d098719af04ed33ff12dcd0cf75a11c5f132b7c9bcabe066ced855f66343",
+    "src/storage/lancedb.rs": "db68bf43a036b04ca8cac6dfb925068687c76634159e37fb0f63d7f1be9605fd",
     "src/storage/scope.rs": "98b958abaa15c09528abc260dfc8877ba6e0c83bb739100737745ff26f37cb87",
 }
 

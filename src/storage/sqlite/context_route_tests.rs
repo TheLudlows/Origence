@@ -691,12 +691,8 @@ async fn raw_identity_batches_do_not_add_current_or_semantic_guards() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    assert!(
-        tx.identity_rows_for_assets(&assets)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(tx.identity_rows_for_assets(&assets).await.is_err());
+    assert!(tx.identity_rows_for_assets(&[]).await.unwrap().is_empty());
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
