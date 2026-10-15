@@ -2,7 +2,6 @@
 mod aml_protocol;
 mod evidence_bundle;
 mod identity_check_cli;
-mod identity_layout_benchmark;
 mod identity_vector_regression;
 mod initialization;
 mod lancedb_native_search;

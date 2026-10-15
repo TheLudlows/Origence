@@ -2,7 +2,25 @@
 
 本页按原记录保留各阶段、精确提交与运行 ID 的验收证据。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
-本轮入口：[Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档与文档收口](#issue-61-第三批归档与文档收口2026-10-14验证中)。运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md#issue-61rust-库与-cli-破坏性变更)。
+## 最新合入与验证索引（2026-10-15）
+
+- [PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head `22c646988d9fd997f0978b6920e8d41977b6d4f3` 的 [CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574) 四项作业全部通过：fast-check、Linux native、Windows、identity-layout。身份索引修复、账本两列精简及 Windows 文件快照修正已完成该精确 head 验证。
+- PR #63 已合入 main `53de265bf6b018fa3c26502511c2fd8705d2bea2`，[主干 CI 38700118381](https://github.com/TheLudlows/Origence/actions/runs/38700118381) 适用门禁通过。[PR #62](https://github.com/TheLudlows/Origence/pull/62) 三批裁剪此前已合入 `4c0862e80ccfb8b403268170c06d391239790d2b`；此主干结果不改写各批原始验证记录。
+- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仅登记为后续验收，均为 **NOT_RUN**。真实 Agent 效果、官方 AML Smoke/Full、完整历史工件审计亦未由上述 CI 验收。
+
+历史过程：[Issue #60 身份合表](#issue-60-第一批身份合表) · [身份修复与账本验证](#身份修复完整验收与第二批格式检查) · [Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档](#issue-61-第三批归档与文档收口2026-10-14验证中)。以下正文、失败结果、原始证据与链接保持不变；运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md)。
+
+## 2026-10-15 合入后整理（待精确头验证）
+
+身份测量 fixture 原样迁至非默认 `manual-diagnostics` 特性的独立测试目标；
+移除专用测量 job 与 #60/#61 Windows 分支例外，保留 Windows main-only 策略。
+本次整理的 Rust 格式、Clippy、Linux 原生测试与手工测量尚待精确 head 验证；
+Windows 本地未运行且不在 PR 门禁中。上方已合入 head 的成功结果不代替本候选验收。
+
+本地检查：SQL guard 识别 1142 个执行输入，零违规/零未解析；tools Python 共
+113 项（2 项既有宿主依赖跳过），evals Python 42 项通过。Python 套件在随后 Rust
+测试调整前运行，其 Python 源码未变。`git diff --check` 与五份文档 142 个相对链接/
+锚点检查通过；本页历史验收正文与身份诊断历史段落逐字保持不变。未执行本候选 Rust/CI。
 
 ## 2026-10-12 第四阶段：显式 Improve → Learning
 

@@ -44,6 +44,8 @@ tempfile = "3"
 default = ["local-storage"]
 local-vector = ["dep:lancedb", "dep:lance", "dep:arrow-array", "dep:arrow-schema"]
 local-storage = ["local-vector"]
+# Historical fixture diagnostics are opt-in and are not production acceptance.
+manual-diagnostics = []
 
 [profile.release]
 lto = "thin"
@@ -52,6 +54,11 @@ strip = true
 [[test]]
 name = "local"
 path = "tests/local.rs"
+
+[[test]]
+name = "identity-layout"
+path = "tests/manual/identity_layout_benchmark.rs"
+required-features = ["manual-diagnostics"]
 
 [[bin]]
 name = "origence"

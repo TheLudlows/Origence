@@ -1,5 +1,5 @@
 //! Historical layout microbenchmark, never a production old-schema opening path.
-//! Run: cargo test --locked --release --no-default-features --test local identity_layout_benchmark::identity_layout_before_after -- --ignored --exact --nocapture
+//! Run: cargo test --locked --release --no-default-features --features manual-diagnostics --test identity-layout identity_layout_before_after -- --ignored --exact --nocapture
 //! Single writer, 100 operations/transaction, native defaults. All rows are created;
 //! reuse/lookup sample at most 1,000 evenly spaced keys at each dataset size.
 //! Counts cover explicit workload SELECT/INSERT statements only, not BEGIN/COMMIT,

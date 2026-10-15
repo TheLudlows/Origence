@@ -1,11 +1,13 @@
 # Asset-level identity storage (#60, first batch)
 
-Baseline: main `4c0862e80ccfb8b403268170c06d391239790d2b`.
-This batch implements the identity merge only. The [complete baseline field
-inventory](storage-field-audit-2026-10-15.md) records retention decisions;
+Historical first-batch baseline: main `4c0862e80ccfb8b403268170c06d391239790d2b`.
+That batch implements the identity merge only. The [complete baseline field
+inventory](storage-field-audit-2026-10-15.md) records its retention decisions;
 [index/ledger analysis](index-ledger-audit-2026-10-15.md) explains why those two
-relations remain separate. Unread ledger fields remain review candidates, not
-approved deletions. No migration, old-schema fallback, or automatic repair is added.
+relations remain separate. Unread ledger fields were review candidates at that
+baseline; the subsequent approved `attempt`/`last_error` deletion is documented in
+[the final API contract](../API.md#issue-60账本两列精简). The original audits are unchanged.
+No migration, old-schema fallback, or automatic repair is added.
 
 ## Persisted model
 
@@ -68,6 +70,23 @@ schema/index/column admission, old-layout read-only rejection and backup/history
 preservation. Existing service/public-library/HTTP/semantic/recovery suites remain
 required. Actual execution evidence is recorded in [VALIDATION](../VALIDATION.md).
 
+## Current manual measurement entry point
+
+The unchanged fixtures now live in `tests/manual/identity_layout_benchmark.rs`,
+as the explicit `identity-layout` test target behind the nondefault
+`manual-diagnostics` feature. Ordinary `--all-targets` without that feature skips
+this target; the dedicated CI measurement job is retired. Run the query diagnostic
+explicitly when needed:
+
+```sh
+cargo test --locked --release --no-default-features --features manual-diagnostics --test identity-layout identity_layout_query_diagnostics -- --ignored --exact --nocapture
+```
+
+## Historical first-batch measurements
+
+The following experiment setup, module paths and dedicated CI references describe
+the original investigation; they are retained with its evidence, not current CI.
+
 The ignored `identity_layout_benchmark::identity_layout_before_after` test uses
 isolated historical/merged native Turso fixtures, never a production old-schema
 path. It measures 1k/10k identical inputs, 100 operations per transaction,
@@ -108,6 +127,8 @@ updates, so do not compare its WAL size directly with earlier layout measurement
 Only this bounded query diagnostic is currently selected by the CI measurement
 step. A promising fixture result still requires production correctness review.
 
+
+## Current identity-slot access path
 
 The identity-slot SELECT explicitly selects `oc_memory_identity_slot` and repeats
 its non-null predicate after native diagnostics showed a scope-prefix fact-index

@@ -3,8 +3,8 @@
 
 use origence::storage::native_turso as db;
 use origence::storage::{
-    AuthorizedScope, DomainTx, IssuedKey, JobFinish, JobQueue, Permission, RelationalStore, Scope,
-    StorageError, WorkItem, sqlite::SqliteStore,
+    AuthorizedScope, DomainTx, IssuedKey, JobFinish, JobQueue, Lifecycle, Permission,
+    RelationalStore, Scope, StorageError, WorkItem, sqlite::SqliteStore,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -63,6 +63,7 @@ async fn transaction_commits_enqueue_audit_and_command() {
 
     {
         let mut tx = store.begin(p.auth.clone()).await.unwrap();
+        assert_eq!(tx.scope(), p.scope);
         tx.check_permission(Permission::Write).await.unwrap();
         assert!(
             tx.begin_command("memory.create", "k1", "h1")
@@ -90,9 +91,49 @@ async fn transaction_commits_enqueue_audit_and_command() {
     assert_eq!(claimed.job_id, job_id);
     assert_eq!(claimed.scope, p.scope);
     assert_eq!(claimed.kind, "publish");
+    assert_eq!(claimed.payload, json!({"a": 1}));
     assert_eq!(claimed.generation, 1);
     assert_eq!(claimed.run_token, 1);
-    store.settle(claimed, JobFinish::Completed).await.unwrap();
+    assert_eq!(
+        job_state(&store, p.scope, job_id).await,
+        ("processing".into(), None, 1, 1)
+    );
+
+    // Each fence is required independently; a stale claim cannot settle work.
+    let mut stale_generation = claimed.clone();
+    stale_generation.generation += 1;
+    assert!(matches!(
+        store.settle(stale_generation, JobFinish::Failed).await,
+        Err(StorageError::Conflict(_))
+    ));
+    let mut stale_run = claimed.clone();
+    stale_run.run_token += 1;
+    assert!(matches!(
+        store.settle(stale_run, JobFinish::Failed).await,
+        Err(StorageError::Conflict(_))
+    ));
+    assert_eq!(
+        job_state(&store, p.scope, job_id).await,
+        ("processing".into(), None, 1, 1)
+    );
+    store
+        .settle(claimed.clone(), JobFinish::Completed)
+        .await
+        .unwrap();
+    assert!(matches!(
+        store.settle(claimed, JobFinish::Failed).await,
+        Err(StorageError::Conflict(_))
+    ));
+
+    // An empty queue alone also describes an unacknowledged processing job.
+    // Reopen and inspect the persisted row so removing settle cannot pass.
+    store.shutdown().await.unwrap();
+    drop(store);
+    let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    assert_eq!(
+        job_state(&store, p.scope, job_id).await,
+        ("completed".into(), Some("ok".into()), 1, 1)
+    );
     assert!(store.claim_next().await.unwrap().is_none());
 
     let audit_count: i64 = db::query_scalar("SELECT count(*) FROM oc_audit")
@@ -102,11 +143,29 @@ async fn transaction_commits_enqueue_audit_and_command() {
     assert_eq!(audit_count, 1);
 }
 
+async fn job_state(
+    store: &SqliteStore,
+    scope: Scope,
+    job_id: Uuid,
+) -> (String, Option<String>, i64, i64) {
+    db::query_as(
+        "SELECT state, outcome, generation, run_token FROM oc_jobs \
+         WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(job_id)
+    .fetch_one(store.pool())
+    .await
+    .unwrap()
+}
+
 #[tokio::test]
 async fn idempotent_replay_caches_response() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let p = provision(&store, "acme").await;
+    let job_id = Uuid::new_v4();
 
     {
         let mut tx = store.begin(p.auth.clone()).await.unwrap();
@@ -117,6 +176,15 @@ async fn idempotent_replay_caches_response() {
                 .unwrap()
                 .is_none()
         );
+        tx.enqueue(WorkItem {
+            job_id,
+            kind: "publish".into(),
+            payload: json!(null),
+            asset: None,
+            source: None,
+        })
+        .await
+        .unwrap();
         tx.finish_command(json!({"asset_id": "cached"}))
             .await
             .unwrap();
@@ -143,6 +211,14 @@ async fn idempotent_replay_caches_response() {
         Err(StorageError::Conflict(_))
     ));
     clash.rollback().await.unwrap();
+
+    assert_eq!(store.claim_next().await.unwrap().unwrap().job_id, job_id);
+    assert!(store.claim_next().await.unwrap().is_none());
+    let jobs: i64 = db::query_scalar("SELECT count(*) FROM oc_jobs")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(jobs, 1);
 }
 
 #[tokio::test]
@@ -173,6 +249,10 @@ async fn rollback_discards_writes() {
         })
         .await
         .unwrap();
+        tx.audit("memory.create", asset, json!({"rolled_back": true}))
+            .await
+            .unwrap();
+        tx.finish_command(json!({"asset_id": asset})).await.unwrap();
         tx.rollback().await.unwrap();
     }
 
@@ -182,6 +262,11 @@ async fn rollback_discards_writes() {
         .await
         .unwrap();
     assert_eq!(command_count, 0);
+    let audits: i64 = db::query_scalar("SELECT count(*) FROM oc_audit")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(audits, 0);
     let assets: i64 = db::query_scalar("SELECT count(*) FROM oc_assets")
         .fetch_one(store.pool())
         .await
