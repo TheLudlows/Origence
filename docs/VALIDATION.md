@@ -6,7 +6,7 @@
 
 - [PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head `22c646988d9fd997f0978b6920e8d41977b6d4f3` 的 [CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574) 四项作业全部通过：fast-check、Linux native、Windows、identity-layout。身份索引修复、账本两列精简及 Windows 文件快照修正已完成该精确 head 验证。
 - PR #63 已合入 main `53de265bf6b018fa3c26502511c2fd8705d2bea2`，[主干 CI 38700118381](https://github.com/TheLudlows/Origence/actions/runs/38700118381) 适用门禁通过。[PR #62](https://github.com/TheLudlows/Origence/pull/62) 三批裁剪此前已合入 `4c0862e80ccfb8b403268170c06d391239790d2b`；此主干结果不改写各批原始验证记录。
-- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仅登记为后续验收，均为 **NOT_RUN**。真实 Agent 效果、官方 AML Smoke/Full、完整历史工件审计亦未由上述 CI 验收。
+- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仍为 **NOT_RUN**；#65 已准备第一批受控写入故障矩阵，见本文对应小节。真实 Agent 效果、官方 AML Smoke/Full、完整历史工件审计亦未由上述 CI 验收。
 
 历史过程：[Issue #60 身份合表](#issue-60-第一批身份合表) · [身份修复与账本验证](#身份修复完整验收与第二批格式检查) · [Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档](#issue-61-第三批归档与文档收口2026-10-14验证中)。以下正文、失败结果、原始证据与链接保持不变；运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md)。
 
@@ -1173,3 +1173,68 @@ Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目�
 整体不能称成功。修正测试仅快照DB/WAL/SHM文件，缺失sidecar允许不存在，其他读取
 错误仍失败；保留在线check与停库open/offline拒绝、原数据及持久文件逐字节比较。
 不改生产锁或schema拒绝行为，需新精确head跨平台验证。
+
+## Issue #65：受控原生写入故障矩阵（待原生执行）
+
+冻结基线 main `a2c7950fdaa6d5bdf2f0ee2ca5ee7bf8855f1f25`，Cargo.lock SHA-256
+`caa58c68e874cfad1aa249dc91b55361aa9e6edbb6c8b0f4be9bdda94aacec01`。
+本节是第一批测试设计及准备记录，**不是 #65 完成结论**；后续结果必须记录
+实际测试 head、平台和 CI 工件，不能把基线 CI 当本次通过。
+
+实际入口冻结：发布 adapter 的 merge/upsert 后逐个确保四个 BTree，向量达到
+4096 行时首次建立 IVF_FLAT（L2、64 分区），FTS 使用既有 tokenizer；已经存在
+的索引不会因追加自动刷新。来源删除/更新走既有 adapter。显式 vector-compact
+按排序逐向量表独立 Compact，跳过 FTS；无独立刷新/重建、All/Prune 或历史清理
+产品入口，本次不新增这些能力。
+
+### 约定矩阵与停止条件
+
+复用 local 集成测试进程。每例使用同版本合成库的独立完整副本，无模型调用。
+- 4 个不完整索引准备：向量 BTree、FTS BTree、ANN、FTS。只在测试准备中删除
+  指定索引，保留其余已提交索引；经现有公开 adapter 重试，拦截目标表 `_indices`
+  下首次原生输出写。它们验证显式 adapter 重试，不冒充首次发布、job 自动恢复
+  或新的线上修复入口。路径能证明 index 输出写，不能单凭路径断言内部具体函数。
+- Compact 第二张排序向量表：首次 data 写、一次成功匹配写之后、首次 `_versions`
+  manifest 文件写前。必须证明第一张表版本前进、行数不变且碎片实际减少；
+  第二张表尚未发布新版本，FTS 版本不变。
+- 上述 7 点各运行整进程 SIGSTOP 后 SIGKILL 与持续模拟 ENOSPC，共 14 个单元。
+  首写与后续写分开记载；manifest 写前不等于原子 rename、fsync 或断电窗口。
+
+Linux-only LD_PRELOAD helper 只作用显式指定、含 sentinel 的临时库路径，
+marker 位于库外；拦截 libc write/pwrite/pwrite64/writev，在目标写实际进入时
+记录路径、系统调用、已成功匹配写次数、PID、模式和 errno。暂停整个子进程后
+验证排他锁仍持有，再 kill；出错/死亡后验证锁可重获。ENOSPC 是受控 errno=28
+注入，**不耗尽真实磁盘**。direct syscall、mmap、io_uring 不覆盖；若未获得
+匹配 marker、未观察到停止状态、超时或原生操作错误地成功，测试失败，不能
+改用 sleep 杀进程或跳过断言来宣称通过。
+
+Oracle 在任何重试前比较完整 authority 22 个业务关系的所有列、Blob 原字节，
+以及全部原生行/向量浮点位模式/重复数和维护前 Lance 历史快照。FTS 不完整时
+在显式重试前须明确拒绝；ANN 缺失可合法退回 exact，重试后须确认 ANN 存在，
+避免把 exact fallback 算成 ANN 验证。然后复制整个
+已停止的中断库（逐文件比对），在原库及恢复副本各显式重试两次并重开，核对
+当前版本、旧版本历史内容、有效 UTF-8 byte locator、来源撤回、generation、
+两个 profile、同 tenant 的另一 workspace 隔离、原生全文、ANN 64 分区检查、
+未索引尾部的 exact 读取和最终 authority 复核。先检查原生行再重写，避免测试
+自己的 upsert 把丢失数据补回后掩盖错误。ANN 不要求近似检索与 exact 排序相同。
+
+### 当前结果与未覆盖项
+
+本地云 workspace：Linux x86_64 6.18.44，overlayfs 4096-byte block，gcc 14.2.0；
+无 Rust/Cargo。shim 自测 6/6 PASS（含严格编译告警、路径隔离、前/后写、停杀与
+ENOSPC）；tools Python 119 项通过、2 项需 binary 的既有测试跳过；evals Python
+42 项通过；无 JOIN guard 1164 个输入解析通过。以上均不是 Lance 故障恢复结果。
+Rust 编译/格式/Clippy、14 单元原生矩阵、Linux 真实 Lance 路径覆盖及 Windows
+本次行为均 **NOT_RUN**。既有全套成功、受控发布恢复及备份记录仍保留原精确 head。
+
+CI 的 linux-native 增加一个 30 分钟上限的显式 ignored-test 调用和
+maintenance-recovery-linux 工件：head/lock/toolchain/OS/filesystem、原始子进程
+日志、marker、退出状态、前后版本/布局/索引元数据及每例结果；断言失败保留
+合成库复现副本，成功例及时删除临时库。缺失 PASS 文件
+不表示通过，失败后的剩余单元仍 NOT_RUN。无全盘、网络存储或付费模型实验。
+
+本批尚不覆盖：真正首次发布中断、未提交 publication/job/receipt 的重放、维护
+中来源变更/删除、失效 Learning 复活、跨 tenant 非空数据、非空 graph、Windows
+原生中断/磁盘不足、authority 磁盘不足、任意提交点/断电、自动修复和跨版本迁移。
+完整目录恢复只证明本合成 fixture，不外推为任意生产数据整库验收。#65 保持打开；
+本批失败须保留可复现证据，同 head 修复复验或明确不通过，不能以 API 成功替代。

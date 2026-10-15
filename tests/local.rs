@@ -10,6 +10,8 @@ mod learning_loop;
 mod local_app;
 mod local_blob;
 mod local_ledger;
+mod maintenance_fixture;
+mod maintenance_recovery;
 mod message_batches;
 mod owned_workspace_service;
 mod owned_workspaces;
