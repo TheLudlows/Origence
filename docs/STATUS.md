@@ -87,7 +87,8 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 已合入的 #60/#61 分支例外与身份测量专用 job 已移除；身份诊断保留为
 [显式手工目标](contracts/identity-asset-layout.md#current-manual-measurement-entry-point)。
 #59 专用 CDB 与历史性能调度仍停用，常规 CI 不提供持续性能比较。
-本次整理尚待精确 head CI；先前绿色结果不代表本候选已通过，PR 不执行 Windows。
+本次整理的精确 head 检查见 [PR #66](https://github.com/TheLudlows/Origence/pull/66)；
+不同提交的结果不相互外推，PR 不执行 Windows。
 
 历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仅在主干运行；后续 #60/#61 临时分支例外现已收回。
 
