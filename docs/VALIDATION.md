@@ -1268,3 +1268,25 @@ job 原180分钟不变；seed600秒、child/每次retry/每次check120秒，失�
 （ddb7b2b，优化seed诊断66.52s，artifact11969112552，常规CI绿）。两个seed诊断均14格
 NOT_RUN。38733853324（a29635d）被新增诊断代码fmt/Clippy拦截、未执行；修正后即上述
 3bba425复现。所有诊断绿色均不替代完整矩阵验收，原始失败工件仍保留。
+
+
+### 最小生产修复：待本提交完整回归
+
+按批准仅 vendor 官方 registry 的 lance-io 13.0.0，保留全部 53 个发布文件
+（44 个 src）及完整 Apache-2.0 LICENSE。归档 SHA-256、上游提交和唯一源码
+差异见 [溯源](../vendor/lance-io/ORIGENCE_PATCH.md)。仅回补 LocalWriter shutdown
+的错误传播：底层 flush 失败时先 Poisoned，再返回原始错误，禁止后续 shutdown
+提交部分输出。未引入上游整 PR；不改变存储格式、原子提交路径或写缓冲界限。
+
+根 Cargo.lock 的 732 个 package name/version 身份完全保留，只去掉 lance-io
+的 registry source/checksum，并给 origence 增加默认 features 关闭的既有可选节点
+直接边，以复用现有 local 集成测试。vendor 自带 lock 仅保留来源，不控制根构建。
+未引入该 crate 的上游 dev 依赖闭包。Docker context 显式包含 vendor；fmt 门槛
+覆盖 origence 全部 targets，避免 `--all` 递归重排第三方源码。
+
+新增两项 public-API 回归：真实只读文件句柄写入在 shutdown flush 时失败，
+确认临时文件清理、最终文件不存在、重复 shutdown/write 继续报错；另核对成功
+shutdown 的完整字节和大小。这不是手动构造 Poisoned，也不依赖 Linux shim。
+当前仅完成静态核对和 shim 8 项自测；Rust 编译、两项新回归、常规测试与完整
+14 格仍须本提交真实 CI，不能沿用历史通过结果。Windows 未运行，旧损坏数据
+不会由本补丁自动修复，#65 仍保持打开。

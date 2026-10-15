@@ -28,7 +28,8 @@ jobs:
           cache-on-failure: true
       - name: Check repository SQL has no joins or unresolved inputs
         run: python3 tools/check_no_join_sql.py
-      - run: cargo fmt --all -- --check
+      # Check all Origence targets without reformatting vendored upstream code.
+      - run: cargo fmt --package origence -- --check
       # Check the Turso authority layer before the full Lance vector backend.
       - name: Authority-only Clippy (without Lance)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings

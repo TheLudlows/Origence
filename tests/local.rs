@@ -10,6 +10,7 @@ mod learning_loop;
 mod local_app;
 mod local_blob;
 mod local_ledger;
+mod local_writer_recovery;
 mod maintenance_fixture;
 mod maintenance_recovery;
 mod message_batches;
