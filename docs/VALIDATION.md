@@ -1238,3 +1238,10 @@ maintenance-recovery-linux 工件：head/lock/toolchain/OS/filesystem、原始�
 原生中断/磁盘不足、authority 磁盘不足、任意提交点/断电、自动修复和跨版本迁移。
 完整目录恢复只证明本合成 fixture，不外推为任意生产数据整库验收。#65 保持打开；
 本批失败须保留可复现证据，同 head 修复复验或明确不通过，不能以 API 成功替代。
+
+首轮 draft PR #67 head `d79e76988cad7d1d645d1245545240ab7e535470`，
+[CI 38720045737](https://github.com/TheLudlows/Origence/actions/runs/38720045737)：
+fast-check 在新测试的 Rustfmt 检查失败；Linux native 的 8 项身份单测通过后，
+Clippy 因测试 open_table 参数的不必要借用退出 101，完整测试与 14 格均未运行。
+应用真实 Rust 1.98 formatter 的 49 处排版，并移除该不必要借用；不弱化断言，
+待新精确 head 全套复验。Windows 按既有 PR 策略跳过。
