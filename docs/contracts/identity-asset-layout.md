@@ -96,3 +96,14 @@ existing historical before/after measurement is retained unchanged. CI explicitl
 runs the creation diagnostic while investigating the measured regression; the
 7-minute measurement limit remains unchanged. Production changes require evidence
 and separate review; functional CI success does not accept the performance tradeoff.
+
+
+The subsequent `identity_layout_query_diagnostics` keeps the production DDL in
+all fixtures and compares the original six-column production SELECT, an explicit
+redundant identity-key non-null predicate, and that predicate with a forced
+identity index. Existing/missing/wrong-scope/tombstone results are checked outside
+timing. Unsupported syntax fails without fallback; plans are collected before
+first timed samples. Diagnostic size includes two extra tombstone-validation
+updates, so do not compare its WAL size directly with earlier layout measurements.
+Only this bounded query diagnostic is currently selected by the CI measurement
+step. A promising fixture result still requires production correctness review.

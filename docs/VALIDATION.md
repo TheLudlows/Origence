@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 30237)
+Total output lines: 1062
+
 # Origence · 验收与历史证据
 
 本页按原记录保留各阶段、精确提交与运行 ID 的验收证据。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
@@ -368,11 +371,7 @@ PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝
 ## 当前 CI 与实现验收
 
 - **SQLite 图替换**：PR #23 已合入 main `9c292a99aec658ba924d5b82c1a86f229ad4d115`。main run [38032343493](https://github.com/TheLudlows/Origence/actions/runs/38032343493) 五个作业全部成功；Linux、Windows、macOS 均为 lib 28/local 89，包含 13 项图回归；Docker Smoke 成功。逐 job 证据见 [主干证据](evidence/2026-10-10-sqlite-graph-main.json)。
-- **S1 实验代码 PR #24**：run [38034197676](https://github.com/TheLudlows/Origence/actions/runs/38034197676) 的 Linux/MSRV 与 fast-check 两个实际作业成功，默认 lib 29/local 89、轻量 lib 28/local 72、Python 9、Clippy/fmt/build/HTTP smoke 通过；Windows/macOS/container 按 main-only 策略跳过。该 PR 运行不能单独证明这些平台已验收。精确计数见 [CI 静态证据](evidence/2026-10-10-s1-pr24-ci.json)。
-- **S0 身份过滤**：跨平台 main run [37918105081](https://github.com/TheLudlows/Origence/actions/runs/37918105081) 五作业成功，属于 PR #23 合入前代码；只作为 S0 正确性证据。
-- **PDF 解析**：`pdf_oxide 0.3.78` 保留页码、UTF-8 来源范围和整份失败策略；取消/隔离边界见 [OPERATIONS](OPERATIONS.md#pdf-解析)。
-
-整理后的本地文档链接检查与 `git diff --check` 通过。Rust 1.98.0 `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -j 2 -- -D warnings` 已在前一轮通过；本轮只改文档，未重跑代码测试或远端 CI。
+- **S1 实验代码 PR #24**：run [38034197676](https://github.com/TheLudlows/Origence/actions/runs/38034197676) 的 …237 tokens truncated…I。
 
 ## 2026-10-11 当前文档精简
 
@@ -1031,3 +1030,32 @@ fast-check、Linux native、Windows、identity-layout。GitHub merge ref
 经确认继续定位：仅增加ignored诊断fixture，新after使用生产精确CHECK顺序，
 其无新增CHECK变体只用于隔离成本、不作为生产候选；交替重复测量创建各阶段，
 并尝试记录执行计划。不改生产约束，不据静态推测给出性能原因。新诊断结果待CI。
+
+
+### 创建阶段/CHECK 消融（183e9398）
+
+[CI 38677085702](https://github.com/TheLudlows/Origence/actions/runs/38677085702)
+的 fast-check、Linux、Windows、identity-layout 四个 job 全部成功；
+identity-layout job 116233033555 release增量构建3分24秒，诊断140.46秒。
+[原始阶段、计划与进度行](evidence/issue60-identity-creation-183e9398.txt)保留全部
+1k三轮/10k两轮结果。以下为10k正序/逆序两轮（秒）：
+
+| fixture | 总创建 | identity miss | assets insert |
+|---|---|---|---|
+| 旧布局 | 14.320567 / 14.312924 | 12.060185 / 12.076598 | 0.827270 / 0.817714 |
+| 精确生产CHECK合表 | 26.891802 / 26.993154 | 24.762397 / 24.872053 | 1.181712 / 1.172173 |
+| 仅去新增CHECK合表 | 27.095197 / 26.935301 | 25.105781 / 24.939272 | 1.037942 / 1.041211 |
+
+回退主要集中在identity miss查询；去CHECK没有改善整体创建时间，故新增约束
+不是这轮主要回退来源。CHECK影响写入阶段的约0.14秒不能解释约12.6秒总差值。
+旧identity insert另耗约0.48秒；fact collision约0.73–0.75秒，commit约0.20秒。
+
+原生EXPLAIN QUERY PLAN：旧identity查询选择身份表asset唯一索引、仅用scope前缀；
+新两变体选择oc_memory_fact_slot、仅用scope前缀，未用identity_key等值约束索引。
+fact collision则使用完整scope/fact_key覆盖索引。计划在1k建库完成后采集，
+使用已有key，展示相同SQL的规划而非实际miss逐条轨迹；INSERT计划零行不代表零成本。
+此证据支持查找路径是主要瓶颈，不足以宣称任何普适引擎缺陷或布局必然变慢。
+
+下一测试仍只改fixture SELECT：原查询、显式identity_key IS NOT NULL、该谓词
+加INDEXED BY身份索引；生产DDL/约束及返回语义保持，先核计划与边界结果，再比较
+相同分阶段时间。强制索引仅作诊断，不能未经验证直接成为生产方案。

@@ -304,20 +304,43 @@ struct CreationTimes {
     commit: std::time::Duration,
 }
 
+#[derive(Clone, Copy)]
+enum IdentityProbe {
+    Historical,
+    Original,
+    ExplicitNotNull,
+    ForcedIdentityIndex,
+}
+
+fn identity_probe(merged: bool, probe: IdentityProbe) -> db::Query {
+    if !merged {
+        db::query("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
+    } else {
+        match probe {
+            IdentityProbe::Historical => db::query("SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'"),
+            IdentityProbe::Original => db::query("SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'"),
+            IdentityProbe::ExplicitNotNull => db::query("SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL"),
+            IdentityProbe::ForcedIdentityIndex => db::query("SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets INDEXED BY oc_memory_identity_slot WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL"),
+        }
+    }
+}
+
 async fn timed_creation(
     tx: &mut db::Transaction,
     scope: Scope,
     input: &Input,
     merged: bool,
+    probe: IdentityProbe,
     times: &mut CreationTimes,
 ) {
     let started = Instant::now();
-    let row = if merged {
-        db::query("SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'")
-    } else {
-        db::query("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
-    }.bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key)
-        .fetch_optional(&mut **tx).await.unwrap();
+    let row = identity_probe(merged, probe)
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(&input.key)
+        .fetch_optional(&mut **tx)
+        .await
+        .unwrap();
     times.identity_miss += started.elapsed();
     assert!(row.is_none());
     let started = Instant::now();
@@ -350,9 +373,16 @@ async fn timed_creation(
     }
 }
 
-// Reopen after measured work and shutdown. Unsupported EXPLAIN/decode/cleanup
+// Use a separate pool outside measurement. Unsupported EXPLAIN/decode/cleanup
 // errors are explicit diagnostics, never substituted for successful plan output.
-async fn creation_plans(path: &Path, scope: Scope, input: &Input, merged: bool, layout: &str) {
+async fn creation_plans(
+    path: &Path,
+    scope: Scope,
+    input: &Input,
+    merged: bool,
+    layout: &str,
+    probe: IdentityProbe,
+) {
     let pool = match db::Pool::open(path).await {
         Ok(pool) => pool,
         Err(error) => {
@@ -361,7 +391,12 @@ async fn creation_plans(path: &Path, scope: Scope, input: &Input, merged: bool, 
         }
     };
     let identity = if merged {
-        db::query("EXPLAIN QUERY PLAN SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'")
+        match probe {
+            IdentityProbe::Historical => db::query("EXPLAIN QUERY PLAN SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'"),
+            IdentityProbe::Original => db::query("EXPLAIN QUERY PLAN SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'"),
+            IdentityProbe::ExplicitNotNull => db::query("EXPLAIN QUERY PLAN SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL"),
+            IdentityProbe::ForcedIdentityIndex => db::query("EXPLAIN QUERY PLAN SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets INDEXED BY oc_memory_identity_slot WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL"),
+        }
     } else {
         db::query("EXPLAIN QUERY PLAN SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
     }.bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key);
@@ -430,6 +465,23 @@ async fn creation_plans(path: &Path, scope: Scope, input: &Input, merged: bool, 
 #[tokio::test]
 #[ignore = "manual repeated creation/CHECK ablation diagnosis; fixtures only"]
 async fn identity_layout_creation_diagnostics() {
+    run_creation_diagnostics(false).await;
+}
+
+/// Same creation workload and stage clocks, with identical production schema in
+/// every variant. Explicit IS NOT NULL is redundant for identity_key=?; the
+/// forced variant adds only INDEXED BY to that predicate. No deleted filter.
+/// Unsupported hints fail explicitly during untimed empty-database preflight;
+/// they never silently fall back. Plans are emitted before first timed samples.
+/// Run with --release --test local identity_layout_benchmark::identity_layout_query_diagnostics -- --ignored --exact --nocapture.
+#[tokio::test]
+#[ignore = "manual query-plan diagnosis; no production query changes"]
+async fn identity_layout_query_diagnostics() {
+    run_creation_diagnostics(true).await;
+}
+
+async fn run_creation_diagnostics(query_variants: bool) {
+    println!("identity_creation_suite query_variants={query_variants}");
     println!(
         "identity_creation config engine=turso-0.8.2 os={} arch={} debug_assertions={} batch=100 key_hashing=excluded canonical_revalidation=excluded check_ablation=fixture_only",
         std::env::consts::OS,
@@ -472,17 +524,31 @@ async fn identity_layout_creation_diagnostics() {
                 [2, 1, 0]
             };
             for (position, variant) in order.into_iter().enumerate() {
-                let layout = match variant {
-                    0 => "before",
-                    1 => "after_production_check",
-                    _ => "after_no_identity_check",
+                let (layout, probe) = if query_variants {
+                    match variant {
+                        0 => ("query_original", IdentityProbe::Original),
+                        1 => ("query_explicit_not_null", IdentityProbe::ExplicitNotNull),
+                        _ => (
+                            "query_forced_identity_index",
+                            IdentityProbe::ForcedIdentityIndex,
+                        ),
+                    }
+                } else {
+                    let layout = match variant {
+                        0 => "before",
+                        1 => "after_production_check",
+                        _ => "after_no_identity_check",
+                    };
+                    (layout, IdentityProbe::Historical)
                 };
-                let merged = variant != 0;
+                let merged = query_variants || variant != 0;
                 let dir = tempfile::tempdir().unwrap();
                 let path = dir.path().join("creation.db");
                 let pool = db::Pool::open(&path).await.unwrap();
                 db::raw_sql(WORKSPACES).execute(&pool).await.unwrap();
-                db::raw_sql(if variant == 0 {
+                db::raw_sql(if query_variants {
+                    AFTER_PRODUCTION_CHECK
+                } else if variant == 0 {
                     BEFORE
                 } else if variant == 1 {
                     AFTER_PRODUCTION_CHECK
@@ -494,6 +560,23 @@ async fn identity_layout_creation_diagnostics() {
                 .unwrap();
                 db::query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES (?,?,'benchmark',1)")
                     .bind(scope.tenant_id).bind(scope.workspace_id).execute(&pool).await.unwrap();
+                if query_variants {
+                    // Fail here with the variant label if native syntax/index
+                    // selection is unsupported, before recording any timing.
+                    let preflight = identity_probe(true, probe)
+                        .bind(scope.tenant_id)
+                        .bind(scope.workspace_id)
+                        .bind(&inputs[0].key)
+                        .fetch_optional(&pool)
+                        .await;
+                    match preflight {
+                        Ok(row) => assert!(row.is_none()),
+                        Err(error) => panic!("query preflight layout={layout}: {error}"),
+                    }
+                    if n == 1_000 && round == 0 {
+                        creation_plans(&path, scope, &inputs[0], true, layout, probe).await;
+                    }
+                }
                 println!(
                     "identity_creation_progress layout={layout} n={n} round={round} position={position} phase=start"
                 );
@@ -504,7 +587,7 @@ async fn identity_layout_creation_diagnostics() {
                     let mut tx = pool.begin().await.unwrap();
                     times.begin += started.elapsed();
                     for input in batch {
-                        timed_creation(&mut tx, scope, input, merged, &mut times).await;
+                        timed_creation(&mut tx, scope, input, merged, probe, &mut times).await;
                     }
                     let started = Instant::now();
                     tx.commit().await.unwrap();
@@ -537,6 +620,9 @@ async fn identity_layout_creation_diagnostics() {
                     .await
                     .unwrap();
                 assert_eq!(count, n as i64);
+                if query_variants {
+                    verify_query_results(&pool, scope, &inputs[0], probe).await;
+                }
                 if !merged {
                     let count: i64 = db::query_scalar("SELECT COUNT(*) FROM oc_memory_identities")
                         .fetch_one(&pool)
@@ -554,10 +640,60 @@ async fn identity_layout_creation_diagnostics() {
                 println!(
                     "identity_creation_size layout={layout} n={n} round={round} db_bytes={db_bytes} wal_bytes={wal_bytes}"
                 );
-                if n == 1_000 && round == 0 {
-                    creation_plans(&path, scope, &inputs[0], merged, layout).await;
+                if round == 0
+                    && ((!query_variants && n == 1_000) || (query_variants && n == 10_000))
+                {
+                    println!("identity_creation_plan_context layout={layout} populated_rows={n}");
+                    creation_plans(&path, scope, &inputs[0], merged, layout, probe).await;
                 }
             }
         }
     }
+}
+
+// Outside all measurements. Each variant must retain the exact row, complete
+// identity and tombstone; missing keys and a different scope return no row.
+async fn verify_query_results(pool: &db::Pool, scope: Scope, input: &Input, probe: IdentityProbe) {
+    for deleted in [false, true] {
+        if deleted {
+            db::query("UPDATE oc_assets SET deleted=1 WHERE tenant_id=? AND workspace_id=? AND id=?")
+                .bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
+                .execute(pool).await.unwrap();
+        }
+        let row = identity_probe(true, probe)
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(&input.key)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        assert_eq!(row.get::<Uuid>("id"), input.asset);
+        assert_eq!(row.get::<bool>("deleted"), deleted);
+        assert_eq!(row.get::<Option<i32>>("current_version"), None);
+        assert_eq!(row.get::<String>("identity_json"), input.json);
+        assert_eq!(row.get::<String>("identity_key"), input.key);
+        assert_eq!(row.get::<String>("kind"), "memory");
+    }
+    for (tenant, workspace, key) in [
+        (
+            scope.tenant_id,
+            scope.workspace_id,
+            format!("{}-absent", input.key),
+        ),
+        (scope.tenant_id, Uuid::from_u128(999), input.key.clone()),
+        (Uuid::from_u128(999), scope.workspace_id, input.key.clone()),
+    ] {
+        let row = identity_probe(true, probe)
+            .bind(tenant)
+            .bind(workspace)
+            .bind(key)
+            .fetch_optional(pool)
+            .await
+            .unwrap();
+        assert!(row.is_none());
+    }
+    // Restore logical contents; diagnostic size includes these two extra writes.
+    db::query("UPDATE oc_assets SET deleted=0 WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
+        .execute(pool).await.unwrap();
 }

@@ -59,12 +59,12 @@ jobs:
         run: |
           rustc --version --verbose | tee identity-layout-environment.txt
           set -o pipefail
-          timeout --kill-after=30s 25m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_creation_diagnostics --no-run 2>&1 | tee identity-layout-build.txt
+          timeout --kill-after=30s 25m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_query_diagnostics --no-run 2>&1 | tee identity-layout-build.txt
       - name: Bounded native identity layout comparison
         timeout-minutes: 8
         run: |
           set -o pipefail
-          timeout --kill-after=30s 7m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_creation_diagnostics -- --ignored --exact --nocapture 2>&1 | tee identity-layout.txt
+          timeout --kill-after=30s 7m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_query_diagnostics -- --ignored --exact --nocapture 2>&1 | tee identity-layout.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
