@@ -288,11 +288,6 @@ async fn native_io_failure_matrix() {
     let value = tokio::time::timeout(Duration::from_secs(600), fixture::seed(&baseline))
         .await
         .expect("fixture seed/check exceeded 600 seconds; this is a harness timeout");
-    // Temporary diagnostic only; remove before the acceptance matrix run.
-    if std::env::var_os("OC_MAINTENANCE_DIAGNOSTIC_SEED_ONLY").is_some() {
-        eprintln!("DIAGNOSTIC ONLY: seed/check complete; all 14 fault cases NOT_RUN");
-        return;
-    }
     let initial_indices = index_metadata(&baseline).await;
     fs::write(
         baseline.join("fixture.json"),
@@ -320,6 +315,7 @@ async fn native_io_failure_matrix() {
     for (scenario, point, suffix, after_writes) in cases {
         for mode in ["pause", "enospc"] {
             let label = format!("{scenario}-{mode}-{point}");
+            eprintln!("maintenance case start {label}");
             let root = temp.join(&label);
             copy_tree(&baseline, &root);
             let table = prepare(&root, scenario, &value).await;
@@ -352,6 +348,7 @@ async fn native_io_failure_matrix() {
                 &directory,
             )
             .await;
+            eprintln!("maintenance case {label}: fault observed; pre-retry oracles start");
             fixture::assert_authority(&root, &value).await;
             fixture::assert_native(&root, &value).await;
             if scenario.starts_with("fts") {
@@ -406,14 +403,31 @@ async fn native_io_failure_matrix() {
             fixture::assert_authority(&restored, &value).await;
             fixture::assert_native(&restored, &value).await;
             for directory_root in [&root, &restored] {
-                for _ in 0..2 {
-                    operation(directory_root, scenario, &value).await.unwrap();
-                    fixture::check(directory_root, &value).await;
+                for retry in 1..=2 {
+                    let progress = format!("root={} retry={retry}", directory_root.display());
+                    fs::write(directory.join("progress.txt"), &progress).unwrap();
+                    eprintln!("maintenance case {label}: {progress} operation start");
+                    tokio::time::timeout(
+                        Duration::from_secs(120),
+                        operation(directory_root, scenario, &value),
+                    )
+                    .await
+                    .expect("maintenance retry exceeded 120 seconds")
+                    .unwrap();
+                    eprintln!("maintenance case {label}: {progress} oracle start");
+                    tokio::time::timeout(
+                        Duration::from_secs(120),
+                        fixture::check(directory_root, &value),
+                    )
+                    .await
+                    .expect("recovery oracle exceeded 120 seconds");
+                    eprintln!("maintenance case {label}: {progress} complete");
                 }
             }
             fs::write(directory.join("result.json"), json!({"status":"PASS", "scenario":scenario,
                 "mode":mode, "point":point, "successful_matching_writes_before_fault":after_writes, "retries":2,
                 "restored_interrupted_directory":true}).to_string()).unwrap();
+            eprintln!("maintenance case PASS {label}");
             fs::remove_dir_all(&root).unwrap();
             fs::remove_dir_all(&restored).unwrap();
         }

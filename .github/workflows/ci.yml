@@ -74,10 +74,9 @@ jobs:
       - name: Build maintenance fixture (test-only optimized Turso interpreter)
         timeout-minutes: 45
         run: cargo test --locked --test local --no-run -j 2 --config 'profile.test.package.turso_core.opt-level=2' --config 'profile.test.package.turso_core.debug-assertions=true' --config 'profile.test.package.turso_core.overflow-checks=true'
-      - name: Maintenance fixture diagnostic only (14 fault cases NOT_RUN)
-        timeout-minutes: 30
+      - name: Controlled maintenance native-write recovery (all 14 synthetic fault cases)
+        timeout-minutes: 75
         env:
-          OC_MAINTENANCE_DIAGNOSTIC_SEED_ONLY: "1"
           OC_MAINTENANCE_SHIM: ${{ runner.temp }}/maintenance-io-fault.so
           OC_MAINTENANCE_EVIDENCE: ${{ runner.temp }}/maintenance-recovery
         run: |
