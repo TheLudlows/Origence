@@ -951,3 +951,30 @@ AML 研究执行器及其完整本地依赖移至 [archives/aml-research](../arc
 基线本地执行：no-JOIN 有界检查 1062 inputs、47 项 checker 单元测试；
 tools Python 113 项（2 跳过），evals Python 42 项通过。它们是改动前基线，
 不是最终实现验收。最终 head、原始测量与跨平台结果在确认后追加。
+
+### 首轮执行与测量边界
+
+实现 `da59fa55` 的 CI 38668157170 在 fast-check/Windows 的 rustfmt
+检查失败，不能称为 Rust 测试通过；随后仅按 Rust 1.98 输出应用47处
+token等价格式修改。
+
+格式后实现 `fca098e7ec89ab0d9748832279bfcac72d376e50` 的
+[CI 38668569849](https://github.com/TheLudlows/Origence/actions/runs/38668569849)：
+Linux native 全套成功，包括 Clippy、216项库测试、238项集成测试（基准
+单独忽略）、HTTP/MCP、受控进程恢复及关键词评估。fast-check 的无默认
+特性136项库测试、109项集成测试通过；其后的原生布局基准因既定30分钟
+job上限取消，故 fast-check 整体不是通过，后续Python步骤未执行。
+Windows job 116206187165 亦完成成功，包括原生验证及无 Lance 的 authority 检查。
+
+[debug测量原始行](evidence/issue60-identity-layout-debug-fca098e7.txt)保留
+首轮事实。1k行：创建旧5.588166s／新7.841706s（更慢），复用
+28.621334s／11.686636s，绑定lookup 17.404110s／11.710922s；
+停库DB+WAL为2,838,688／2,480,248字节，不代表压实后的数据库尺寸。
+10k旧创建338.824476s，之后旧布局reuse从02:08:01至取消未完成；
+新布局10k未运行。不能从局部读取收益声称整体性能提升。
+
+后续测量保留1k/10k数据规模和完整创建，reuse/lookup各限定最多1,000个
+均匀样本；二者在同一release可执行文件中运行，记录每阶段及每10批提交
+进度，放入独立20分钟job（构建最多10分钟，测量命令7分钟并留工件上传
+时间），不加长原fast-check上限。debug与release数据不得混作直接对照。
+新测量与精确最终头结果待执行，初轮超时不改写为通过。

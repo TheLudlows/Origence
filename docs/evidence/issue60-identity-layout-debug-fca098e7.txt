@@ -1,0 +1,16 @@
+# Extracted measurement lines from CI 38668569849 job 116206187262
+# Head fca098e7ec89ab0d9748832279bfcac72d376e50; native Turso 0.8.2 / Rust 1.98.0
+# Unoptimized test profile; job cancelled at existing 30-minute timeout.
+# 1k both layouts complete; 10k before/reuse incomplete, after not reached.
+# Full job log: https://github.com/TheLudlows/Origence/actions/runs/38668569849/job/116206187262
+2026-10-15T02:00:59.2956883Z identity_layout config engine=turso-0.8.2 declared_rust=1.98.0 os=linux arch=x86_64 debug_assertions=true native_defaults=true key_hashing=excluded canonical_revalidation=excluded
+2026-10-15T02:01:04.9263406Z identity_layout layout=before n=1000 phase=create batch=100 reads=2000 writes=2000 transactions=10 elapsed_us=5588166
+2026-10-15T02:01:33.5477807Z identity_layout layout=before n=1000 phase=reuse batch=100 reads=3000 writes=0 transactions=10 elapsed_us=28621334
+2026-10-15T02:01:50.9518857Z identity_layout layout=before n=1000 phase=lookup_binding batch=100 reads=2000 writes=0 transactions=10 elapsed_us=17404110
+2026-10-15T02:01:50.9529840Z identity_layout layout=before n=1000 phase=after_shutdown db_bytes=4096 wal_bytes=2834592 shm_bytes=0 db_wal_bytes=2838688 total_bytes=2838688
+2026-10-15T02:01:58.8072385Z identity_layout layout=after n=1000 phase=create batch=100 reads=2000 writes=1000 transactions=10 elapsed_us=7841706
+2026-10-15T02:02:10.4939466Z identity_layout layout=after n=1000 phase=reuse batch=100 reads=1000 writes=0 transactions=10 elapsed_us=11686636
+2026-10-15T02:02:22.2048505Z identity_layout layout=after n=1000 phase=lookup_binding batch=100 reads=1000 writes=0 transactions=10 elapsed_us=11710922
+2026-10-15T02:02:22.2060056Z identity_layout layout=after n=1000 phase=after_shutdown db_bytes=4096 wal_bytes=2476152 shm_bytes=0 db_wal_bytes=2480248 total_bytes=2480248
+2026-10-15T02:08:01.3100599Z identity_layout layout=before n=10000 phase=create batch=100 reads=20000 writes=20000 transactions=100 elapsed_us=338824476
+2026-10-15T02:29:57.7433674Z ##[error]The operation was canceled.

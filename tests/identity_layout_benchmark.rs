@@ -1,8 +1,10 @@
 //! Historical layout microbenchmark, never a production old-schema opening path.
-//! Run: cargo test --locked --no-default-features --test local identity_layout_benchmark::identity_layout_before_after -- --ignored --exact --nocapture
-//! Single writer, warm sequential keys, 100 operations/transaction, native defaults.
+//! Run: cargo test --locked --release --no-default-features --test local identity_layout_benchmark::identity_layout_before_after -- --ignored --exact --nocapture
+//! Single writer, 100 operations/transaction, native defaults. All rows are created;
+//! reuse/lookup sample at most 1,000 evenly spaced keys at each dataset size.
 //! Counts cover explicit workload SELECT/INSERT statements only, not BEGIN/COMMIT,
-//! adapter PRAGMAs, constraints, or setup. Timings include commits and JSON decoding;
+//! adapter PRAGMAs, constraints, or setup. Timings include commits, JSON decoding,
+//! and progress logging after every ten committed batches;
 //! input generation/key hashing is outside timing, including new-path canonical
 //! stored-key revalidation. This is not per-request fsync latency. lookup_binding excludes the
 //! common asset_view/version/source/publication path. One before/after sample per
@@ -190,14 +192,32 @@ async fn identity_layout_before_after() {
             db::query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES (?,?,'benchmark',1)")
                 .bind(scope.tenant_id).bind(scope.workspace_id).execute(&pool).await.unwrap();
             for phase in ["create", "reuse", "lookup_binding"] {
+                let stride = if phase == "create" {
+                    1
+                } else {
+                    (n / 1_000).max(1)
+                };
+                let selected: Vec<_> = inputs.iter().step_by(stride).collect();
+                let operations = selected.len();
+                let transactions = operations.div_ceil(100);
+                println!(
+                    "identity_layout_progress layout={layout} n={n} phase={phase} start operations={operations} transactions={transactions} stride={stride}"
+                );
                 let mut counts = Counts::default();
                 let started = Instant::now();
-                for batch in inputs.chunks(100) {
+                for (index, batch) in selected.chunks(100).enumerate() {
                     let mut tx = pool.begin().await.unwrap();
                     for input in batch {
                         operation(&mut tx, scope, input, merged, phase, &mut counts).await;
                     }
                     tx.commit().await.unwrap();
+                    if (index + 1) % 10 == 0 || index + 1 == transactions {
+                        println!(
+                            "identity_layout_progress layout={layout} n={n} phase={phase} committed_batches={} elapsed_us={}",
+                            index + 1,
+                            started.elapsed().as_micros()
+                        );
+                    }
                 }
                 let elapsed = started.elapsed();
                 let (reads, writes) = match (merged, phase) {
@@ -207,12 +227,15 @@ async fn identity_layout_before_after() {
                     (false, _) => (2, 0),
                     (true, _) => (1, 0),
                 };
-                assert_eq!((counts.reads, counts.writes), (n * reads, n * writes));
+                assert_eq!(
+                    (counts.reads, counts.writes),
+                    (operations * reads, operations * writes)
+                );
                 println!(
-                    "identity_layout layout={layout} n={n} phase={phase} batch=100 reads={} writes={} transactions={} elapsed_us={}",
+                    "identity_layout layout={layout} n={n} phase={phase} operations={operations} stride={stride} batch=100 reads={} writes={} transactions={} elapsed_us={}",
                     counts.reads,
                     counts.writes,
-                    n / 100,
+                    transactions,
                     elapsed.as_micros()
                 );
             }
@@ -221,6 +244,7 @@ async fn identity_layout_before_after() {
                 .await
                 .unwrap();
             assert_eq!(count, n as i64);
+            println!("identity_layout_progress layout={layout} n={n} phase=shutdown start");
             pool.shutdown().await.unwrap();
             drop(pool);
             let db_bytes = bytes(&path).await;

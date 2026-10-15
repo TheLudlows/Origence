@@ -34,22 +34,42 @@ jobs:
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
       - name: Full test suite without default features
         run: cargo test --locked --no-default-features -j 2 --no-fail-fast
-      - name: Native identity layout comparison (diagnostic, no timing thresholds)
-        if: github.head_ref == 'refactor/issue60-identity'
-        run: |
-          rustc --version --verbose
-          set -o pipefail
-          cargo test --locked --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_before_after -- --ignored --exact --nocapture 2>&1 | tee identity-layout.txt
-      - uses: actions/upload-artifact@v4
-        if: always() && github.head_ref == 'refactor/issue60-identity'
-        with:
-          name: identity-layout-${{ github.sha }}
-          path: identity-layout.txt
-          if-no-files-found: ignore
       - name: AML drill client tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
         run: python3 -m unittest discover -s evals -p 'test_*.py' -v
+  identity-layout:
+    if: github.head_ref == 'refactor/issue60-identity'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'pull_request' }}
+          cache-on-failure: true
+      - name: Build isolated release measurement
+        timeout-minutes: 10
+        run: |
+          rustc --version --verbose | tee identity-layout-environment.txt
+          cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_before_after --no-run
+      - name: Bounded native identity layout comparison
+        timeout-minutes: 8
+        run: |
+          set -o pipefail
+          timeout --kill-after=30s 7m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_before_after -- --ignored --exact --nocapture 2>&1 | tee identity-layout.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: identity-layout-${{ github.sha }}
+          path: identity-layout*.txt
+          if-no-files-found: ignore
   linux-native:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -115,7 +135,7 @@ jobs:
           path: ${{ runner.temp }}/origence-keyword-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: ignore
   windows:
-    # Reuse the normal Windows gates for the authorized #61 cleanup candidate.
+    # Reuse normal Windows gates for the explicitly scoped cleanup/storage candidates.
     if: github.ref == 'refs/heads/main' || github.head_ref == 'refactor/issue61-cleanup' || github.head_ref == 'refactor/issue60-identity'
     runs-on: windows-latest
     timeout-minutes: 120

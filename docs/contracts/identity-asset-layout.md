@@ -71,8 +71,11 @@ required. Actual execution evidence is recorded in [VALIDATION](../VALIDATION.md
 The ignored `identity_layout_benchmark::identity_layout_before_after` test uses
 isolated historical/merged native Turso fixtures, never a production old-schema
 path. It measures 1k/10k identical inputs, 100 operations per transaction,
-creation/reuse/binding-lookup explicit statement counts, timings and post-shutdown
-DB/WAL/SHM bytes. Both variants run in the same executable/configuration.
+creation for all rows, reuse/binding-lookup over at most 1,000 evenly spaced keys,
+explicit statement counts, timings and post-shutdown
+DB/WAL/SHM bytes. Both variants run in the same release executable/configuration. Phase/batch progress
+is printed, with logging overhead included in timing. The measurement has an
+independent bounded CI job; it does not extend the fast-check path.
 
 Expected statement counts per operation are create 2 reads + 2 writes → 2 reads
 + 1 write, reuse 3 reads → 1, and binding lookup 2 reads → 1. These are layout-path
