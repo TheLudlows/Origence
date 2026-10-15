@@ -212,7 +212,10 @@ pub(super) async fn seed(root: &Path) -> Fixture {
         tx.update_asset_version(asset, version, None).await.unwrap();
     }
     tx.commit().await.unwrap();
-    eprintln!("maintenance fixture seed authority ready elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture seed authority ready elapsed={:?}",
+        started.elapsed()
+    );
     // Build with 4096 current rows, then append uncovered fragments. Both profiles
     // have a real IVF index; the last 64 current chunks are not in that index.
     for profile in &fixture.profiles {
@@ -239,7 +242,10 @@ pub(super) async fn seed(root: &Path) -> Fixture {
         .upsert_full_text(scope, fixture.full_text[4097..].to_vec())
         .await
         .unwrap();
-    eprintln!("maintenance fixture seed native setup ready elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture seed native setup ready elapsed={:?}",
+        started.elapsed()
+    );
     let mut tx = store.begin(auth).await.unwrap();
     for key in ledger {
         tx.confirm_committed(key).await.unwrap();
@@ -268,13 +274,22 @@ pub(super) async fn seed(root: &Path) -> Fixture {
     store.shutdown().await.unwrap();
     drop(native);
     drop(store);
-    eprintln!("maintenance fixture seed adapters closed elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture seed adapters closed elapsed={:?}",
+        started.elapsed()
+    );
     fixture.authority = authority_snapshot(root).await;
     fixture.native = native_snapshot(root, None).await;
     fixture.native_versions = versions(root).await;
-    eprintln!("maintenance fixture seed baseline captured elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture seed baseline captured elapsed={:?}",
+        started.elapsed()
+    );
     check(root, &fixture).await;
-    eprintln!("maintenance fixture seed complete elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture seed complete elapsed={:?}",
+        started.elapsed()
+    );
     fixture
 }
 
@@ -379,13 +394,19 @@ pub(super) async fn check(root: &Path, fixture: &Fixture) {
             started.elapsed()
         );
     }
-    eprintln!("maintenance fixture check FTS candidates start elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture check FTS candidates start elapsed={:?}",
+        started.elapsed()
+    );
     let mut text_candidates = tx.full_text_candidates(1, None).await.unwrap();
     text_candidates.sort();
     assert_eq!(text_candidates, expected);
     tx.commit().await.unwrap();
 
-    eprintln!("maintenance fixture check candidates complete elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture check candidates complete elapsed={:?}",
+        started.elapsed()
+    );
     // Independent native IO happens only after releasing the authority snapshot.
     let selected = fixture.current[ROWS - 1]; // uncovered append fragment
     let mut vector_hits = Vec::new();
@@ -445,13 +466,17 @@ pub(super) async fn check(root: &Path, fixture: &Fixture) {
     assert_eq!(text_hits.len(), 1);
     assert_eq!(text_hits[0].id, selected);
 
-    eprintln!("maintenance fixture check native searches complete elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture check native searches complete elapsed={:?}",
+        started.elapsed()
+    );
     // Revalidate exact returned source/version/generation in a fresh snapshot.
     let mut tx = store.begin_read(auth).await.unwrap();
     for (profile, hits) in vector_hits {
         eprintln!(
             "maintenance fixture check authority hits start profile={profile} count={} elapsed={:?}",
-            hits.len(), started.elapsed()
+            hits.len(),
+            started.elapsed()
         );
         for hit in hits {
             assert!(fixture.current.contains(&hit.id));
@@ -514,7 +539,10 @@ pub(super) async fn check(root: &Path, fixture: &Fixture) {
             .is_none()
     );
     tx.commit().await.unwrap();
-    eprintln!("maintenance fixture check authority hits complete elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture check authority hits complete elapsed={:?}",
+        started.elapsed()
+    );
     // A valid principal from another scope must not inherit a native candidate.
     let other_auth = store.authenticate(&fixture.other_token).await.unwrap();
     let other = other_auth.scope;
@@ -547,7 +575,10 @@ pub(super) async fn check(root: &Path, fixture: &Fixture) {
     );
     native.shutdown().await.unwrap();
     store.shutdown().await.unwrap();
-    eprintln!("maintenance fixture check complete elapsed={:?}", started.elapsed());
+    eprintln!(
+        "maintenance fixture check complete elapsed={:?}",
+        started.elapsed()
+    );
 }
 
 async fn native_snapshot(root: &Path, versions: Option<&BTreeMap<String, u64>>) -> Value {
