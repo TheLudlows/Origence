@@ -84,3 +84,15 @@ Input hashing/new rendering hash checks are excluded, so timings are not a full
 API performance claim. Fixed-order single samples carry cache/order noise; there
 are no timing thresholds or production SLO claims. CI retains raw output as an
 artifact for the exact tested revision.
+
+
+The follow-up ignored `identity_layout_creation_diagnostics` experiment isolates
+creation stages and the added paired-null/memory-only CHECK in test fixtures.
+Its merged fixture preserves the production CHECK condition order; the fixture
+without that added CHECK is diagnostic only, never a proposed production schema.
+Repeated reordered runs reduce fixed-order bias without claiming statistical
+confidence. Query-plan output is diagnostic and outside timed creation. The
+existing historical before/after measurement is retained unchanged. CI explicitly
+runs the creation diagnostic while investigating the measured regression; the
+7-minute measurement limit remains unchanged. Production changes require evidence
+and separate review; functional CI success does not accept the performance tradeoff.

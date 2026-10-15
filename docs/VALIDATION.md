@@ -996,3 +996,38 @@ GNU timeout保留30秒强杀宽限以清理进程组；测量仍固定7分钟/�
 
 该头的 fast-check、Linux native、Windows 三项功能验证均成功；独立布局
 基准仍为构建超时失败，整轮CI不能称全绿。
+
+
+### 首次完整 release 对照（ad8ab727）
+
+[CI 38673296988](https://github.com/TheLudlows/Origence/actions/runs/38673296988)
+在 head `ad8ab727cf3778729be46b3f865ffe4f06052eef` 四项 job 全部成功：
+fast-check、Linux native、Windows、identity-layout。GitHub merge ref
+`1859dc899657f75048af85aa597be6e98fb8bcfd` 与 head 的 tree 都为
+`fbfd29930f76dc77e71e0dca800fc9008f1d6232`，main 仍是 `4c0862e8`。
+冷 release 构建11分03秒，测量73.96秒，未超过7分钟运行上限。
+[原始测量行](evidence/issue60-identity-layout-release-ad8ab727.txt)与
+[原始工件](https://github.com/TheLudlows/Origence/actions/runs/38673296988/artifacts/11945820917)
+保留环境、构建和测量结果。
+
+| 数据集/阶段 | 旧布局秒 | 新布局秒 |
+|---|---:|---:|
+| 1k create（1k操作） | 0.357005 | 0.451673 |
+| 1k reuse（1k操作） | 1.155132 | 0.460553 |
+| 1k binding lookup（1k操作） | 0.699401 | 0.460980 |
+| 10k create（10k操作） | 14.353148 | 26.539850 |
+| 10k reuse（1k均匀样本） | 11.959848 | 4.998808 |
+| 10k binding lookup（1k均匀样本） | 7.473771 | 4.994607 |
+
+1k创建慢26.5%，10k慢84.9%；10k停库DB+WAL为11,147,192→11,051,488字节，
+不是压实后稳态尺寸。减少SQL次数不等于整体加速。功能通过，性能取舍仍未接受。
+
+旧/新DDL并非约束完全等价：新布局增加paired-null/memory-only CHECK，
+资产行更宽，唯一索引/FK结构也改变。计时包括SQL约束检查、JSON读取解析、
+提交及进度输出，但不含输入key/JSON构造和canonical重算。原fixture CHECK
+非空分支的条件顺序与生产不同；历史数字不重写。无执行计划/profile/消融时，
+不能将回退归因于单一约束、索引或合表。固定次序单样本也有噪声限制。
+
+经确认继续定位：仅增加ignored诊断fixture，新after使用生产精确CHECK顺序，
+其无新增CHECK变体只用于隔离成本、不作为生产候选；交替重复测量创建各阶段，
+并尝试记录执行计划。不改生产约束，不据静态推测给出性能原因。新诊断结果待CI。

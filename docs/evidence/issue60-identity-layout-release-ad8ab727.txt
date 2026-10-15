@@ -1,0 +1,72 @@
+Source: https://github.com/TheLudlows/Origence/actions/runs/38673296988/job/116221126608
+Head: ad8ab727cf3778729be46b3f865ffe4f06052eef
+Tested merge ref: 1859dc899657f75048af85aa597be6e98fb8bcfd (same tree as head)
+Extraction of raw environment, measurement/progress and completion lines; not full log.
+Artifact: https://github.com/TheLudlows/Origence/actions/runs/38673296988/artifacts/11945820917
+
+2026-10-15T03:03:55.6049995Z     Finished `release` profile [optimized] target(s) in 11m 03s
+2026-10-15T03:03:56.1053587Z     Finished `release` profile [optimized] target(s) in 0.31s
+2026-10-15T03:03:56.1230660Z identity_layout config engine=turso-0.8.2 declared_rust=1.98.0 os=linux arch=x86_64 debug_assertions=false native_defaults=true key_hashing=excluded canonical_revalidation=excluded
+2026-10-15T03:03:56.1311987Z identity_layout_progress layout=before n=1000 phase=create start operations=1000 transactions=10 stride=1
+2026-10-15T03:03:56.4883139Z identity_layout_progress layout=before n=1000 phase=create committed_batches=10 elapsed_us=356993
+2026-10-15T03:03:56.4884728Z identity_layout layout=before n=1000 phase=create operations=1000 stride=1 batch=100 reads=2000 writes=2000 transactions=10 elapsed_us=357005
+2026-10-15T03:03:56.4885913Z identity_layout_progress layout=before n=1000 phase=reuse start operations=1000 transactions=10 stride=1
+2026-10-15T03:03:57.6434717Z identity_layout_progress layout=before n=1000 phase=reuse committed_batches=10 elapsed_us=1155117
+2026-10-15T03:03:57.6435861Z identity_layout layout=before n=1000 phase=reuse operations=1000 stride=1 batch=100 reads=3000 writes=0 transactions=10 elapsed_us=1155132
+2026-10-15T03:03:57.6437005Z identity_layout_progress layout=before n=1000 phase=lookup_binding start operations=1000 transactions=10 stride=1
+2026-10-15T03:03:58.3428642Z identity_layout_progress layout=before n=1000 phase=lookup_binding committed_batches=10 elapsed_us=699389
+2026-10-15T03:03:58.3429871Z identity_layout layout=before n=1000 phase=lookup_binding operations=1000 stride=1 batch=100 reads=2000 writes=0 transactions=10 elapsed_us=699401
+2026-10-15T03:03:58.3430893Z identity_layout_progress layout=before n=1000 phase=shutdown start
+2026-10-15T03:03:58.3433483Z identity_layout layout=before n=1000 phase=after_shutdown db_bytes=4096 wal_bytes=2834592 shm_bytes=0 db_wal_bytes=2838688 total_bytes=2838688
+2026-10-15T03:03:58.3487467Z identity_layout_progress layout=after n=1000 phase=create start operations=1000 transactions=10 stride=1
+2026-10-15T03:03:58.8005308Z identity_layout_progress layout=after n=1000 phase=create committed_batches=10 elapsed_us=451650
+2026-10-15T03:03:58.8006791Z identity_layout layout=after n=1000 phase=create operations=1000 stride=1 batch=100 reads=2000 writes=1000 transactions=10 elapsed_us=451673
+2026-10-15T03:03:58.8007958Z identity_layout_progress layout=after n=1000 phase=reuse start operations=1000 transactions=10 stride=1
+2026-10-15T03:03:59.2610835Z identity_layout_progress layout=after n=1000 phase=reuse committed_batches=10 elapsed_us=460541
+2026-10-15T03:03:59.2611940Z identity_layout layout=after n=1000 phase=reuse operations=1000 stride=1 batch=100 reads=1000 writes=0 transactions=10 elapsed_us=460553
+2026-10-15T03:03:59.2613331Z identity_layout_progress layout=after n=1000 phase=lookup_binding start operations=1000 transactions=10 stride=1
+2026-10-15T03:03:59.7220732Z identity_layout_progress layout=after n=1000 phase=lookup_binding committed_batches=10 elapsed_us=460968
+2026-10-15T03:03:59.7222525Z identity_layout layout=after n=1000 phase=lookup_binding operations=1000 stride=1 batch=100 reads=1000 writes=0 transactions=10 elapsed_us=460980
+2026-10-15T03:03:59.7225864Z identity_layout_progress layout=after n=1000 phase=shutdown start
+2026-10-15T03:03:59.7226925Z identity_layout layout=after n=1000 phase=after_shutdown db_bytes=4096 wal_bytes=2476152 shm_bytes=0 db_wal_bytes=2480248 total_bytes=2480248
+2026-10-15T03:03:59.7493486Z identity_layout_progress layout=before n=10000 phase=create start operations=10000 transactions=100 stride=1
+2026-10-15T03:04:00.1049893Z identity_layout_progress layout=before n=10000 phase=create committed_batches=10 elapsed_us=355542
+2026-10-15T03:04:00.6988461Z identity_layout_progress layout=before n=10000 phase=create committed_batches=20 elapsed_us=949444
+2026-10-15T03:04:01.5363890Z identity_layout_progress layout=before n=10000 phase=create committed_batches=30 elapsed_us=1786917
+2026-10-15T03:04:02.6143170Z identity_layout_progress layout=before n=10000 phase=create committed_batches=40 elapsed_us=2864834
+2026-10-15T03:04:03.9265162Z identity_layout_progress layout=before n=10000 phase=create committed_batches=50 elapsed_us=4177038
+2026-10-15T03:04:05.4728106Z identity_layout_progress layout=before n=10000 phase=create committed_batches=60 elapsed_us=5723362
+2026-10-15T03:04:07.2521301Z identity_layout_progress layout=before n=10000 phase=create committed_batches=70 elapsed_us=7502693
+2026-10-15T03:04:09.2935128Z identity_layout_progress layout=before n=10000 phase=create committed_batches=80 elapsed_us=9544035
+2026-10-15T03:04:11.5760556Z identity_layout_progress layout=before n=10000 phase=create committed_batches=90 elapsed_us=11826610
+2026-10-15T03:04:14.1026307Z identity_layout_progress layout=before n=10000 phase=create committed_batches=100 elapsed_us=14353127
+2026-10-15T03:04:14.1027659Z identity_layout layout=before n=10000 phase=create operations=10000 stride=1 batch=100 reads=20000 writes=20000 transactions=100 elapsed_us=14353148
+2026-10-15T03:04:14.1028835Z identity_layout_progress layout=before n=10000 phase=reuse start operations=1000 transactions=10 stride=10
+2026-10-15T03:04:26.0624811Z identity_layout_progress layout=before n=10000 phase=reuse committed_batches=10 elapsed_us=11959835
+2026-10-15T03:04:26.0626809Z identity_layout layout=before n=10000 phase=reuse operations=1000 stride=10 batch=100 reads=3000 writes=0 transactions=10 elapsed_us=11959848
+2026-10-15T03:04:26.0628711Z identity_layout_progress layout=before n=10000 phase=lookup_binding start operations=1000 transactions=10 stride=10
+2026-10-15T03:04:33.5363227Z identity_layout_progress layout=before n=10000 phase=lookup_binding committed_batches=10 elapsed_us=7473757
+2026-10-15T03:04:33.5364599Z identity_layout layout=before n=10000 phase=lookup_binding operations=1000 stride=10 batch=100 reads=2000 writes=0 transactions=10 elapsed_us=7473771
+2026-10-15T03:04:33.5366061Z identity_layout_progress layout=before n=10000 phase=shutdown start
+2026-10-15T03:04:33.5377345Z identity_layout layout=before n=10000 phase=after_shutdown db_bytes=8704000 wal_bytes=2443192 shm_bytes=0 db_wal_bytes=11147192 total_bytes=11147192
+2026-10-15T03:04:33.5439495Z identity_layout_progress layout=after n=10000 phase=create start operations=10000 transactions=100 stride=1
+2026-10-15T03:04:33.9944412Z identity_layout_progress layout=after n=10000 phase=create committed_batches=10 elapsed_us=450447
+2026-10-15T03:04:34.8838660Z identity_layout_progress layout=after n=10000 phase=create committed_batches=20 elapsed_us=1339796
+2026-10-15T03:04:36.2302715Z identity_layout_progress layout=after n=10000 phase=create committed_batches=30 elapsed_us=2686220
+2026-10-15T03:04:38.0310750Z identity_layout_progress layout=after n=10000 phase=create committed_batches=40 elapsed_us=4487051
+2026-10-15T03:04:40.2867030Z identity_layout_progress layout=after n=10000 phase=create committed_batches=50 elapsed_us=6742677
+2026-10-15T03:04:43.2090479Z identity_layout_progress layout=after n=10000 phase=create committed_batches=60 elapsed_us=9665029
+2026-10-15T03:04:46.6918350Z identity_layout_progress layout=after n=10000 phase=create committed_batches=70 elapsed_us=13147785
+2026-10-15T03:04:50.6437740Z identity_layout_progress layout=after n=10000 phase=create committed_batches=80 elapsed_us=17099753
+2026-10-15T03:04:55.1148658Z identity_layout_progress layout=after n=10000 phase=create committed_batches=90 elapsed_us=21570847
+2026-10-15T03:05:00.0839149Z identity_layout_progress layout=after n=10000 phase=create committed_batches=100 elapsed_us=26539836
+2026-10-15T03:05:00.0840719Z identity_layout layout=after n=10000 phase=create operations=10000 stride=1 batch=100 reads=20000 writes=10000 transactions=100 elapsed_us=26539850
+2026-10-15T03:05:00.0842286Z identity_layout_progress layout=after n=10000 phase=reuse start operations=1000 transactions=10 stride=10
+2026-10-15T03:05:05.0827182Z identity_layout_progress layout=after n=10000 phase=reuse committed_batches=10 elapsed_us=4998794
+2026-10-15T03:05:05.0828416Z identity_layout layout=after n=10000 phase=reuse operations=1000 stride=10 batch=100 reads=1000 writes=0 transactions=10 elapsed_us=4998808
+2026-10-15T03:05:05.0829659Z identity_layout_progress layout=after n=10000 phase=lookup_binding start operations=1000 transactions=10 stride=10
+2026-10-15T03:05:10.0773851Z identity_layout_progress layout=after n=10000 phase=lookup_binding committed_batches=10 elapsed_us=4994592
+2026-10-15T03:05:10.0775243Z identity_layout layout=after n=10000 phase=lookup_binding operations=1000 stride=10 batch=100 reads=1000 writes=0 transactions=10 elapsed_us=4994607
+2026-10-15T03:05:10.0778387Z identity_layout_progress layout=after n=10000 phase=shutdown start
+2026-10-15T03:05:10.0786048Z identity_layout layout=after n=10000 phase=after_shutdown db_bytes=7458816 wal_bytes=3592672 shm_bytes=0 db_wal_bytes=11051488 total_bytes=11051488
+2026-10-15T03:05:10.0826284Z test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 109 filtered out; finished in 73.96s

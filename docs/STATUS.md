@@ -10,8 +10,10 @@
 [身份存储合同](contracts/identity-asset-layout.md)包含范围、错误与测试边界，
 [字段清单](contracts/storage-field-audit-2026-10-15.md)保留完整基线盘点。
 [index/ledger](contracts/index-ledger-audit-2026-10-15.md)因键、状态和清理生命周期
-不同，本轮不合并；其他字段候选仍需单独审查。Rust/跨平台验收尚待本批精确
-head CI，不能沿用 #61 通过结果。
+不同，本轮不合并；其他字段候选仍需单独审查。PR #63 的 ad8ab727 功能及
+原生测量 CI 已全绿，但创建性能回退（1k +26.5%、10k +84.9%）；保留草稿，
+继续以测试fixture消融和分阶段测量定位原因，尚未接受该性能取舍。
+证据及边界见 [VALIDATION](VALIDATION.md)。
 
 ## PR #59：Windows 离线恢复与无 JOIN 查询（已合入）
 

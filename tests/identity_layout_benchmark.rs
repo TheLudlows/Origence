@@ -258,3 +258,306 @@ async fn identity_layout_before_after() {
         }
     }
 }
+
+// Exact production SQL, including paired CHECK operand order. Keep the original
+// AFTER fixture above unchanged so earlier measurements remain reproducible.
+const AFTER_PRODUCTION_CHECK: &str = "CREATE TABLE oc_assets (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('memory','knowledge')),
+    title TEXT NOT NULL, fact_key TEXT, current_version INTEGER,
+    deleted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+    identity_key TEXT, identity_json TEXT,
+    CHECK ((identity_key IS NULL AND identity_json IS NULL) OR
+           (identity_key IS NOT NULL AND identity_json IS NOT NULL AND kind = 'memory')),
+    PRIMARY KEY (tenant_id, workspace_id, id),
+    FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id)
+);
+CREATE UNIQUE INDEX oc_memory_fact_slot ON oc_assets(tenant_id, workspace_id, fact_key)
+WHERE kind = 'memory';
+-- Tombstones retain their identity slot; deletion must not release this key.
+CREATE UNIQUE INDEX oc_memory_identity_slot ON oc_assets(tenant_id, workspace_id, identity_key)
+WHERE identity_key IS NOT NULL;";
+
+// Diagnostic-only ablation: deliberately invalid as a production schema choice.
+// Only the newly added paired identity CHECK differs from AFTER_PRODUCTION_CHECK;
+// retain its columns, kind CHECK, primary key, both unique indexes, and workspace FK.
+const AFTER_NO_IDENTITY_CHECK: &str = "CREATE TABLE oc_assets (
+ tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
+ kind TEXT NOT NULL CHECK (kind IN ('memory','knowledge')),
+ title TEXT NOT NULL, fact_key TEXT, current_version INTEGER,
+ deleted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+ identity_key TEXT, identity_json TEXT,
+ PRIMARY KEY (tenant_id,workspace_id,id),
+ FOREIGN KEY (tenant_id,workspace_id) REFERENCES oc_workspaces(tenant_id,id));
+ CREATE UNIQUE INDEX oc_memory_fact_slot ON oc_assets(tenant_id,workspace_id,fact_key)
+ WHERE kind='memory';
+ CREATE UNIQUE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key)
+ WHERE identity_key IS NOT NULL;";
+
+#[derive(Default)]
+struct CreationTimes {
+    identity_miss: std::time::Duration,
+    fact_collision: std::time::Duration,
+    assets_insert: std::time::Duration,
+    identity_insert: std::time::Duration,
+    begin: std::time::Duration,
+    commit: std::time::Duration,
+}
+
+async fn timed_creation(
+    tx: &mut db::Transaction,
+    scope: Scope,
+    input: &Input,
+    merged: bool,
+    times: &mut CreationTimes,
+) {
+    let started = Instant::now();
+    let row = if merged {
+        db::query("SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'")
+    } else {
+        db::query("SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
+    }.bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key)
+        .fetch_optional(&mut **tx).await.unwrap();
+    times.identity_miss += started.elapsed();
+    assert!(row.is_none());
+    let started = Instant::now();
+    let collision: bool = db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?)")
+        .bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key)
+        .fetch_one(&mut **tx).await.unwrap();
+    times.fact_collision += started.elapsed();
+    assert!(!collision);
+    let started = Instant::now();
+    let insert = if merged {
+        db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at,identity_key,identity_json) VALUES (?,?,?,'memory',?,?,?,?,?)")
+    } else {
+        db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at) VALUES (?,?,?,'memory',?,?,?)")
+    }.bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
+        .bind(&input.identity.predicate).bind(&input.key).bind(1_i64);
+    let insert = if merged {
+        insert.bind(&input.key).bind(&input.json)
+    } else {
+        insert
+    };
+    insert.execute(&mut **tx).await.unwrap();
+    times.assets_insert += started.elapsed();
+    if !merged {
+        let started = Instant::now();
+        db::query("INSERT INTO oc_memory_identities(tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at) VALUES (?,?,?,?,?,?)")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key)
+            .bind(input.asset).bind(&input.json).bind(1_i64)
+            .execute(&mut **tx).await.unwrap();
+        times.identity_insert += started.elapsed();
+    }
+}
+
+// Reopen after measured work and shutdown. Unsupported EXPLAIN/decode/cleanup
+// errors are explicit diagnostics, never substituted for successful plan output.
+async fn creation_plans(path: &Path, scope: Scope, input: &Input, merged: bool, layout: &str) {
+    let pool = match db::Pool::open(path).await {
+        Ok(pool) => pool,
+        Err(error) => {
+            println!("identity_creation_plan layout={layout} status=open_error error={error}");
+            return;
+        }
+    };
+    let identity = if merged {
+        db::query("EXPLAIN QUERY PLAN SELECT id,current_version,deleted,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'")
+    } else {
+        db::query("EXPLAIN QUERY PLAN SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?")
+    }.bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key);
+    let collision = db::query("EXPLAIN QUERY PLAN SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?)")
+        .bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key);
+    let assets = if merged {
+        db::query("EXPLAIN QUERY PLAN INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at,identity_key,identity_json) VALUES (?,?,?,'memory',?,?,?,?,?)")
+    } else {
+        db::query("EXPLAIN QUERY PLAN INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at) VALUES (?,?,?,'memory',?,?,?)")
+    }.bind(scope.tenant_id).bind(scope.workspace_id).bind(input.asset)
+        .bind(&input.identity.predicate).bind(&input.key).bind(1_i64);
+    let assets = if merged {
+        assets.bind(&input.key).bind(&input.json)
+    } else {
+        assets
+    };
+    let mut queries = vec![
+        ("identity_miss", identity),
+        ("fact_collision", collision),
+        ("assets_insert", assets),
+    ];
+    if !merged {
+        queries.push(("identity_insert", db::query("EXPLAIN QUERY PLAN INSERT INTO oc_memory_identities(tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at) VALUES (?,?,?,?,?,?)")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(&input.key)
+            .bind(input.asset).bind(&input.json).bind(1_i64)));
+    }
+    for (stage, query) in queries {
+        match query.fetch_all(&pool).await {
+            Ok(rows) => {
+                println!(
+                    "identity_creation_plan layout={layout} stage={stage} status=ok rows={}",
+                    rows.len()
+                );
+                for row in rows {
+                    match row.try_get::<String>(3_usize) {
+                        Ok(detail) => println!(
+                            "identity_creation_plan layout={layout} stage={stage} detail={detail:?}"
+                        ),
+                        Err(error) => println!(
+                            "identity_creation_plan layout={layout} stage={stage} status=decode_error error={error}"
+                        ),
+                    }
+                }
+            }
+            Err(error) => println!(
+                "identity_creation_plan layout={layout} stage={stage} status=unsupported_or_error error={error}"
+            ),
+        }
+    }
+    if let Err(error) = pool.shutdown().await {
+        println!("identity_creation_plan layout={layout} status=shutdown_error error={error}");
+    }
+}
+
+/// Run separately from the original benchmark, in release mode, with --exact:
+/// cargo test --locked --release --no-default-features --test local identity_layout_benchmark::identity_layout_creation_diagnostics -- --ignored --exact --nocapture
+/// Creation only; unchanged 100-operation transactions. Three cyclic orders at
+/// 1k, forward/reverse at 10k. The 10k order cannot fully balance three variants.
+/// Stage clocks include query construction/binding/await, not input hashing or
+/// JSON encoding. Total additionally includes assertions, clocks and progress.
+/// Plans run once per variant after its first 1k sample, outside all timing.
+/// Only after_production_check versus after_no_identity_check isolates one CHECK
+/// in the execution path, not necessarily its expression-evaluation cost. Before
+/// versus either after still combines row width, index and FK layout differences.
+/// No performance assertions; no conclusion about production constraint removal.
+#[tokio::test]
+#[ignore = "manual repeated creation/CHECK ablation diagnosis; fixtures only"]
+async fn identity_layout_creation_diagnostics() {
+    println!(
+        "identity_creation config engine=turso-0.8.2 os={} arch={} debug_assertions={} batch=100 key_hashing=excluded canonical_revalidation=excluded check_ablation=fixture_only",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        cfg!(debug_assertions)
+    );
+    let scope = Scope {
+        tenant_id: Uuid::from_u128(1),
+        workspace_id: Uuid::from_u128(2),
+    };
+    for (n, rounds) in [(1_000, 3), (10_000, 2)] {
+        let inputs: Vec<_> = (0..n)
+            .map(|i| {
+                let identity = MemoryIdentity {
+                    subject: MemorySubject {
+                        kind: SubjectKind::Service,
+                        stable_id: format!("service-{i:05}"),
+                    },
+                    predicate: "release.approval".into(),
+                    context: BTreeMap::from([("environment".into(), "production".into())]),
+                };
+                Input {
+                    asset: Uuid::from_u128(i as u128 + 100),
+                    key: identity.key(scope).unwrap(),
+                    json: serde_json::to_string(&identity).unwrap(),
+                    identity,
+                }
+            })
+            .collect();
+        for round in 0..rounds {
+            let order = if n == 1_000 {
+                match round {
+                    0 => [0, 1, 2],
+                    1 => [1, 2, 0],
+                    _ => [2, 0, 1],
+                }
+            } else if round == 0 {
+                [0, 1, 2]
+            } else {
+                [2, 1, 0]
+            };
+            for (position, variant) in order.into_iter().enumerate() {
+                let layout = match variant {
+                    0 => "before",
+                    1 => "after_production_check",
+                    _ => "after_no_identity_check",
+                };
+                let merged = variant != 0;
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("creation.db");
+                let pool = db::Pool::open(&path).await.unwrap();
+                db::raw_sql(WORKSPACES).execute(&pool).await.unwrap();
+                db::raw_sql(if variant == 0 {
+                    BEFORE
+                } else if variant == 1 {
+                    AFTER_PRODUCTION_CHECK
+                } else {
+                    AFTER_NO_IDENTITY_CHECK
+                })
+                .execute(&pool)
+                .await
+                .unwrap();
+                db::query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES (?,?,'benchmark',1)")
+                    .bind(scope.tenant_id).bind(scope.workspace_id).execute(&pool).await.unwrap();
+                println!(
+                    "identity_creation_progress layout={layout} n={n} round={round} position={position} phase=start"
+                );
+                let mut times = CreationTimes::default();
+                let total = Instant::now();
+                for (batch_index, batch) in inputs.chunks(100).enumerate() {
+                    let started = Instant::now();
+                    let mut tx = pool.begin().await.unwrap();
+                    times.begin += started.elapsed();
+                    for input in batch {
+                        timed_creation(&mut tx, scope, input, merged, &mut times).await;
+                    }
+                    let started = Instant::now();
+                    tx.commit().await.unwrap();
+                    times.commit += started.elapsed();
+                    if (batch_index + 1) % 10 == 0 {
+                        println!(
+                            "identity_creation_progress layout={layout} n={n} round={round} committed_batches={} elapsed_us={}",
+                            batch_index + 1,
+                            total.elapsed().as_micros()
+                        );
+                    }
+                }
+                let total = total.elapsed();
+                println!(
+                    "identity_creation layout={layout} n={n} round={round} position={position} identity_miss_ops={n} fact_collision_ops={n} assets_insert_ops={n} identity_insert_ops={} reads={} writes={} transactions={} total_us={} identity_miss_us={} fact_collision_us={} assets_insert_us={} identity_insert_us={} begin_us={} commit_us={}",
+                    if merged { 0 } else { n },
+                    n * 2,
+                    n * if merged { 1 } else { 2 },
+                    n / 100,
+                    total.as_micros(),
+                    times.identity_miss.as_micros(),
+                    times.fact_collision.as_micros(),
+                    times.assets_insert.as_micros(),
+                    times.identity_insert.as_micros(),
+                    times.begin.as_micros(),
+                    times.commit.as_micros()
+                );
+                let count: i64 = db::query_scalar("SELECT COUNT(*) FROM oc_assets")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(count, n as i64);
+                if !merged {
+                    let count: i64 = db::query_scalar("SELECT COUNT(*) FROM oc_memory_identities")
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap();
+                    assert_eq!(count, n as i64);
+                }
+                println!(
+                    "identity_creation_progress layout={layout} n={n} round={round} phase=shutdown"
+                );
+                pool.shutdown().await.unwrap();
+                drop(pool);
+                let db_bytes = bytes(&path).await;
+                let wal_bytes = bytes(&dir.path().join("creation.db-wal")).await;
+                println!(
+                    "identity_creation_size layout={layout} n={n} round={round} db_bytes={db_bytes} wal_bytes={wal_bytes}"
+                );
+                if n == 1_000 && round == 0 {
+                    creation_plans(&path, scope, &inputs[0], merged, layout).await;
+                }
+            }
+        }
+    }
+}
