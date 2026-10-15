@@ -16,6 +16,7 @@ WRITER = r'''
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -29,7 +30,16 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 3; i++) {
         errno = 0;
         struct iovec v = {.iov_base = "x", .iov_len = 1};
-        ssize_t n = !strcmp(argv[4], "pwrite") ? pwrite(fd, "x", 1, i) :
+        size_t count = strstr(argv[4], "zero") && i == 1 ? 0 : 1;
+        struct iovec zero_v[2] = {{.iov_base = "x", .iov_len = 0}, {.iov_base = "x", .iov_len = 0}};
+        struct iovec multi[2] = {v, v};
+        struct iovec overflow[2] = {{.iov_base = "x", .iov_len = SIZE_MAX}, v};
+        ssize_t n = !strcmp(argv[4], "multi-writev") ? writev(fd, multi, 2) :
+                    !strcmp(argv[4], "overflow-writev") && i == 1 ? writev(fd, overflow, 2) :
+                    !strcmp(argv[4], "zero-writev") ? writev(fd, count ? &v : zero_v, count ? 1 : 2) :
+                    !strcmp(argv[4], "zero-pwrite") ? pwrite(fd, "x", count, i) :
+                    !strcmp(argv[4], "zero-write") ? write(fd, "x", count) :
+                    !strcmp(argv[4], "pwrite") ? pwrite(fd, "x", 1, i) :
                     !strcmp(argv[4], "pwrite64") ? pwrite64(fd, "x", 1, i) :
                     !strcmp(argv[4], "writev") ? writev(fd, &v, 1) : write(fd, "x", 1);
         printf("%ld:%d\n", (long)n, errno);
@@ -99,7 +109,29 @@ class MaintenanceIoFaultTests(unittest.TestCase):
                 marker = self.marker.read_text()
                 self.assertIn("successful_matching_writes=1\n", marker)
                 self.assertIn("relative_path=/data/part.lance\n", marker)
+                self.assertIn("requested_bytes=1\n", marker)
                 self.marker.unlink()
+
+    def test_zero_byte_calls_neither_trigger_nor_count_as_payload(self):
+        for operation in ("zero-write", "zero-pwrite", "zero-writev"):
+            with self.subTest(operation=operation):
+                result = self.run_writer(self.environment(), operation)
+                self.assertEqual(result.stdout.splitlines(), ["1:0", "0:0", f"-1:{errno.ENOSPC}"])
+                self.assertEqual(self.target.read_bytes(), b"x")
+                marker = self.marker.read_text()
+                self.assertIn("successful_matching_writes=1\n", marker)
+                self.assertIn("requested_bytes=1\n", marker)
+                self.marker.unlink()
+
+    def test_writev_sums_requested_bytes_without_overflow(self):
+        result = self.run_writer(self.environment(), "multi-writev")
+        self.assertEqual(result.stdout.splitlines(), ["2:0", f"-1:{errno.ENOSPC}", f"-1:{errno.ENOSPC}"])
+        self.assertIn("requested_bytes=2\n", self.marker.read_text())
+        self.marker.unlink()
+        result = self.run_writer(self.environment(), "overflow-writev")
+        self.assertEqual(result.stdout.splitlines(), ["1:0", f"-1:{errno.EINVAL}", f"-1:{errno.ENOSPC}"])
+        self.assertIn("successful_matching_writes=1\n", self.marker.read_text())
+        self.assertIn("requested_bytes=1\n", self.marker.read_text())
 
     def test_pause_stops_whole_process_before_next_write_then_kill(self):
         with subprocess.Popen(self.command(), env=self.environment("pause"),

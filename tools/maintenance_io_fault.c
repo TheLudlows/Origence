@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -73,12 +74,12 @@ static void configure(void) {
 }
 
 /* Caller holds lock. Only the marker uses raw open/write syscalls. */
-static int record_marker(const char *path, const char *operation) {
+static int record_marker(const char *path, const char *operation, size_t requested) {
     char text[PATH_MAX + 256];
     int n = snprintf(text, sizeof(text),
-        "mode=%s\nsyscall=%s\nrelative_path=%s\nsuccessful_matching_writes=%llu\npid=%ld\nerrno=%d\n",
+        "mode=%s\nsyscall=%s\nrelative_path=%s\nsuccessful_matching_writes=%llu\npid=%ld\nerrno=%d\nrequested_bytes=%zu\n",
         paused ? "pause" : "enospc", operation, path + root_len,
-        completed, (long)getpid(), paused ? 0 : ENOSPC);
+        completed, (long)getpid(), paused ? 0 : ENOSPC, requested);
     if (n < 0 || n >= (int)sizeof(text)) return 0;
     int fd = syscall(SYS_openat, AT_FDCWD, marker,
                      O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
@@ -120,10 +121,32 @@ static ssize_t controlled(int fd, const void *data, size_t size, off_t offset, i
         errno = saved_errno;
         return perform(fd, data, size, offset, kind);
     }
+    /* Zero-byte calls are not payload writes. Invalid/overflowing writev
+     * arguments go to the kernel unchanged, without creating fault evidence. */
+    size_t requested = size;
+    if (kind == 2) {
+        requested = 0;
+        if (size > IOV_MAX || (size && !data)) {
+            errno = saved_errno;
+            return perform(fd, data, size, offset, kind);
+        }
+        const struct iovec *iov = data;
+        for (size_t i = 0; i < size; i++) {
+            if (iov[i].iov_len > SIZE_MAX - requested) {
+                errno = saved_errno;
+                return perform(fd, data, size, offset, kind);
+            }
+            requested += iov[i].iov_len;
+        }
+    }
+    if (!requested) {
+        errno = saved_errno;
+        return perform(fd, data, size, offset, kind);
+    }
     pthread_mutex_lock(&lock);
     if (enabled && completed >= after) {
         if (!fired) {
-            if (record_marker(path, kind == 1 ? "pwrite64" : kind == 2 ? "writev" : "write")) fired = 1;
+            if (record_marker(path, kind == 1 ? "pwrite64" : kind == 2 ? "writev" : "write", requested)) fired = 1;
             else enabled = 0;
         }
         if (fired) {

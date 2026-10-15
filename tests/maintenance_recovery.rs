@@ -230,9 +230,20 @@ async fn interrupted(
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     };
+    // Temporary single-case diagnosis: observe data before rejecting the fault
+    // evidence or error-return expectation. This does not turn a miss into PASS.
+    if std::env::var_os("OC_MAINTENANCE_DIAGNOSTIC_CASE").is_some() {
+        let value: Fixture =
+            serde_json::from_slice(&fs::read(root.join("fixture.json")).unwrap()).unwrap();
+        tokio::time::timeout(Duration::from_secs(120), fixture::check(root, &value))
+            .await
+            .expect("diagnostic post-operation oracle exceeded 120 seconds");
+        fs::write(evidence.join("diagnostic-oracle.txt"), b"full oracle passed").unwrap();
+        eprintln!("DIAGNOSTIC: post-operation full oracle passed; fault evidence still required");
+    }
     assert!(
         marker.exists(),
-        "no native-write evidence; this is NOT a covered interruption"
+        "no positive-length native-write evidence; this is NOT a covered interruption"
     );
     let marker_text = fs::read_to_string(&marker).unwrap();
     let fields: BTreeMap<_, _> = marker_text
@@ -241,6 +252,7 @@ async fn interrupted(
         .collect();
     assert_eq!(fields["mode"], mode);
     assert_eq!(fields["pid"], child.0.id().to_string());
+    assert!(fields["requested_bytes"].parse::<usize>().unwrap() > 0);
     assert_eq!(fields["successful_matching_writes"], after.to_string());
     assert!(fields["relative_path"].contains(match_path));
     assert_eq!(fields["errno"], if mode == "enospc" { "28" } else { "0" });
@@ -315,6 +327,12 @@ async fn native_io_failure_matrix() {
     for (scenario, point, suffix, after_writes) in cases {
         for mode in ["pause", "enospc"] {
             let label = format!("{scenario}-{mode}-{point}");
+            if let Ok(selected) = std::env::var("OC_MAINTENANCE_DIAGNOSTIC_CASE") {
+                if label != selected {
+                    eprintln!("DIAGNOSTIC: {label} NOT_RUN");
+                    continue;
+                }
+            }
             eprintln!("maintenance case start {label}");
             let root = temp.join(&label);
             copy_tree(&baseline, &root);
