@@ -117,10 +117,16 @@ CREATE INDEX oc_ledger_state ON oc_artifact_ledger(state, next_retry_at);
     let path = dir.path().join("old-ledger.db");
     let snapshot = || {
         let mut files = std::collections::BTreeMap::new();
-        for entry in std::fs::read_dir(dir.path()).unwrap() {
-            let entry = entry.unwrap();
-            if entry.file_type().unwrap().is_file() {
-                files.insert(entry.file_name(), std::fs::read(entry.path()).unwrap());
+        // The host .lock file is intentionally held with an OS-exclusive lock;
+        // Windows forbids reading it while the store is open. Snapshot only the
+        // persistent database and native sidecars, never suppress their errors.
+        for name in ["old-ledger.db", "old-ledger.db-wal", "old-ledger.db-shm"] {
+            match std::fs::read(dir.path().join(name)) {
+                Ok(bytes) => {
+                    files.insert(name, bytes);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => panic!("snapshot {name}: {error}"),
             }
         }
         files

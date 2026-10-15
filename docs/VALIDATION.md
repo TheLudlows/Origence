@@ -1134,3 +1134,12 @@ identity_slot方法的创建/复用、坏数据顺序、tombstone、权限与恢
 [CI 38693470838](https://github.com/TheLudlows/Origence/actions/runs/38693470838)
 fast-check/Windows被Rust1.98格式检查拦下，不能称通过。随后对三个测试文件
 应用真实formatter输出的5处token等价排版；SQL与行为不改，需新head完整CI。
+
+
+第二批格式修正head `948d3ec75af8038c547b9ba9f85dc73b6f2ce3ad` 的
+[CI 38694688166](https://github.com/TheLudlows/Origence/actions/runs/38694688166)
+Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目录文件快照时
+读到仍被宿主OS排他锁持有的`.lock`文件，报Windows error33，其余238项集成通过，
+整体不能称成功。修正测试仅快照DB/WAL/SHM文件，缺失sidecar允许不存在，其他读取
+错误仍失败；保留在线check与停库open/offline拒绝、原数据及持久文件逐字节比较。
+不改生产锁或schema拒绝行为，需新精确head跨平台验证。
