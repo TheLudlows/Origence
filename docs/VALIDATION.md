@@ -1118,3 +1118,19 @@ generation/run_token、完整ledger主键与状态判断全部保留。公开poo
 到期retry_wait及next_retry_at保留断言；增加已删列旧布局只读检查和打开拒绝回归，
 验证原schema/数据不被修改。不修改冻结归档DDL。字段盘点仍是指定旧main基线，
 不将其改写为新schema。待独审及新精确提交Linux/Windows门禁，不沿用身份批通过。
+
+### 身份修复完整验收与第二批格式检查
+
+身份修复 head `aa1ebb501892205b195004fff0c357f7176458ea` 的
+[CI 38691175438](https://github.com/TheLudlows/Origence/actions/runs/38691175438)
+四个job全部成功（fast-check、Linux native、Windows、identity-layout）。真实
+identity_slot方法的创建/复用、坏数据顺序、tombstone、权限与恢复回归随全套执行。
+同头原生重复fixture的10k创建：原查询26.636623/26.176131秒，选身份索引
+2.724988/2.744707秒；完整测量115秒，原始工件见
+[11952301181](https://github.com/TheLudlows/Origence/actions/runs/38691175438/artifacts/11952301181)。
+性能范围仍是隔离的查询创建fixture，不是全部生产端点时延。
+
+第二批head `5300eba89d6ae7508b2f86de0f94a1c6db5f2dad` 的
+[CI 38693470838](https://github.com/TheLudlows/Origence/actions/runs/38693470838)
+fast-check/Windows被Rust1.98格式检查拦下，不能称通过。随后对三个测试文件
+应用真实formatter输出的5处token等价排版；SQL与行为不改，需新head完整CI。

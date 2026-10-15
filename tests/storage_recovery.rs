@@ -87,12 +87,14 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
         (future.key.artifact_id, Some(i64::MAX)),
         (unscheduled.key.artifact_id, None),
     ] {
-        db::query("UPDATE oc_artifact_ledger SET state='retry_wait',next_retry_at=? WHERE artifact_id=?")
-            .bind(deadline)
-            .bind(artifact)
-            .execute(store.pool())
-            .await
-            .unwrap();
+        db::query(
+            "UPDATE oc_artifact_ledger SET state='retry_wait',next_retry_at=? WHERE artifact_id=?",
+        )
+        .bind(deadline)
+        .bind(artifact)
+        .execute(store.pool())
+        .await
+        .unwrap();
     }
     let report = store.reconcile_ledger().await.unwrap();
     assert_eq!(report["orphaned"].as_i64().unwrap(), 1);
@@ -118,13 +120,12 @@ async fn reconcile_orphans_stuck_pending_and_requeues_due_retry_wait() {
         (future.key.artifact_id, Some(i64::MAX)),
         (unscheduled.key.artifact_id, None),
     ] {
-        let row: (String, Option<i64>) = db::query_as(
-            "SELECT state,next_retry_at FROM oc_artifact_ledger WHERE artifact_id=?",
-        )
-        .bind(artifact)
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
+        let row: (String, Option<i64>) =
+            db::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger WHERE artifact_id=?")
+                .bind(artifact)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
         let state = if artifact == due.key.artifact_id {
             "pending"
         } else {

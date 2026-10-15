@@ -624,12 +624,11 @@ async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retr
         .await
         .unwrap();
     store.finish_cleanup(scope).await.unwrap();
-    let states: Vec<(String, i64)> = db::query_as(
-        "SELECT state,next_retry_at FROM oc_artifact_ledger ORDER BY generation",
-    )
-    .fetch_all(&store.pool)
-    .await
-    .unwrap();
+    let states: Vec<(String, i64)> =
+        db::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger ORDER BY generation")
+            .fetch_all(&store.pool)
+            .await
+            .unwrap();
     assert_eq!(states, vec![("orphan".into(), 123); 3]);
     store.shutdown().await.unwrap();
 }

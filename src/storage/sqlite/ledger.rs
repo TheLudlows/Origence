@@ -155,12 +155,11 @@ mod tests {
             .await
             .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
-        let before: (String, i64, i64) = native_turso::query_as(
-            "SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger",
-        )
-        .fetch_one(&mut *tx.tx)
-        .await
-        .unwrap();
+        let before: (String, i64, i64) =
+            native_turso::query_as("SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger")
+                .fetch_one(&mut *tx.tx)
+                .await
+                .unwrap();
         assert_eq!(before, ("retry_wait".into(), 1, 123));
         native_turso::query("UPDATE oc_events SET state='active'")
             .execute(&mut *tx.tx)
@@ -169,12 +168,11 @@ mod tests {
         let mut wrong = key;
         wrong.generation += 1;
         tx.confirm_committed_inner(wrong).await.unwrap();
-        let unchanged: (String, i64, i64) = native_turso::query_as(
-            "SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger",
-        )
-        .fetch_one(&mut *tx.tx)
-        .await
-        .unwrap();
+        let unchanged: (String, i64, i64) =
+            native_turso::query_as("SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger")
+                .fetch_one(&mut *tx.tx)
+                .await
+                .unwrap();
         assert_eq!(unchanged, before);
         tx.confirm_committed_inner(key).await.unwrap();
         let after: (String, i64) =
