@@ -170,7 +170,7 @@ async fn interrupted(
     after: usize,
     shim: &Path,
     evidence: &Path,
-) {
+) -> std::process::ExitStatus {
     fs::write(
         root.join(".maintenance-io-fault-ok"),
         b"synthetic-test-only",
@@ -230,21 +230,6 @@ async fn interrupted(
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     };
-    // Temporary single-case diagnosis: observe data before rejecting the fault
-    // evidence or error-return expectation. This does not turn a miss into PASS.
-    if std::env::var_os("OC_MAINTENANCE_DIAGNOSTIC_CASE").is_some() {
-        let value: Fixture =
-            serde_json::from_slice(&fs::read(root.join("fixture.json")).unwrap()).unwrap();
-        tokio::time::timeout(Duration::from_secs(120), fixture::check(root, &value))
-            .await
-            .expect("diagnostic post-operation oracle exceeded 120 seconds");
-        fs::write(
-            evidence.join("diagnostic-oracle.txt"),
-            b"full oracle passed",
-        )
-        .unwrap();
-        eprintln!("DIAGNOSTIC: post-operation full oracle passed; fault evidence still required");
-    }
     assert!(
         marker.exists(),
         "no positive-length native-write evidence; this is NOT a covered interruption"
@@ -271,7 +256,6 @@ async fn interrupted(
             "controller must terminate the stopped child with SIGKILL"
         );
     }
-    assert_eq!(status.success(), mode == "enospc");
     fs::write(evidence.join("exit.txt"), format!("{status:?}\n")).unwrap();
     if root.join("operation-result.json").exists() {
         fs::copy(
@@ -283,6 +267,7 @@ async fn interrupted(
     // Both normal error return and hard death must release the exclusive lock.
     let reopened = SqliteStore::open(root.join("context.db")).await.unwrap();
     reopened.shutdown().await.unwrap();
+    status
 }
 
 #[tokio::test]
@@ -331,12 +316,6 @@ async fn native_io_failure_matrix() {
     for (scenario, point, suffix, after_writes) in cases {
         for mode in ["pause", "enospc"] {
             let label = format!("{scenario}-{mode}-{point}");
-            if let Ok(selected) = std::env::var("OC_MAINTENANCE_DIAGNOSTIC_CASE")
-                && !selected.split(',').any(|item| label == item)
-            {
-                eprintln!("DIAGNOSTIC: {label} NOT_RUN");
-                continue;
-            }
             eprintln!("maintenance case start {label}");
             let root = temp.join(&label);
             copy_tree(&baseline, &root);
@@ -360,7 +339,7 @@ async fn native_io_failure_matrix() {
             )
             .unwrap();
             let layout_before = compact_vectors(&root, true).await.unwrap();
-            interrupted(
+            let status = interrupted(
                 &root,
                 scenario,
                 &format!("{table}.lance/{suffix}/"),
@@ -373,6 +352,9 @@ async fn native_io_failure_matrix() {
             eprintln!("maintenance case {label}: fault observed; pre-retry oracles start");
             fixture::assert_authority(&root, &value).await;
             fixture::assert_native(&root, &value).await;
+            // Preserve the stronger data oracle even if the child rejects an
+            // unexpected successful API return after a real native write error.
+            assert_eq!(status.success(), mode == "enospc");
             if scenario.starts_with("fts") {
                 let native = LanceDbStore::open(root.join("vectors")).await.unwrap();
                 assert!(

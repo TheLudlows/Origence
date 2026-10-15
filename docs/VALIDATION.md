@@ -1174,94 +1174,97 @@ Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目�
 错误仍失败；保留在线check与停库open/offline拒绝、原数据及持久文件逐字节比较。
 不改生产锁或schema拒绝行为，需新精确head跨平台验证。
 
-## Issue #65：受控原生写入故障矩阵（待原生执行）
+## Issue #65：受控原生写入故障矩阵（阻断）
 
-冻结基线 main `a2c7950fdaa6d5bdf2f0ee2ca5ee7bf8855f1f25`，Cargo.lock SHA-256
+**未验收，不应合入为成功恢复保证。** [草稿 PR #67](https://github.com/TheLudlows/Origence/pull/67)
+只改测试、CI 和文档，未改生产代码、依赖或迁移策略。冻结基线 main
+`a2c7950fdaa6d5bdf2f0ee2ca5ee7bf8855f1f25`，Cargo.lock SHA-256
 `caa58c68e874cfad1aa249dc91b55361aa9e6edbb6c8b0f4be9bdda94aacec01`。
-本节是第一批测试设计及准备记录，**不是 #65 完成结论**；后续结果必须记录
-实际测试 head、平台和 CI 工件，不能把基线 CI 当本次通过。
 
-实际入口冻结：发布 adapter 的 merge/upsert 后逐个确保四个 BTree，向量达到
-4096 行时首次建立 IVF_FLAT（L2、64 分区），FTS 使用既有 tokenizer；已经存在
-的索引不会因追加自动刷新。来源删除/更新走既有 adapter。显式 vector-compact
-按排序逐向量表独立 Compact，跳过 FTS；无独立刷新/重建、All/Prune 或历史清理
-产品入口，本次不新增这些能力。
+### 已确认缺陷
 
-### 约定矩阵与停止条件
+[正长度复现 run 38734552786](https://github.com/TheLudlows/Origence/actions/runs/38734552786)
+的 head `3bba425c04d58116ae49f5f10d313428cedf6ea9`，
+[原始工件 11973426310](https://github.com/TheLudlows/Origence/actions/runs/38734552786/artifacts/11973426310)：
+- compact 第二张向量表，先完成一次匹配写，再对 1222-byte `write` 持续注入 errno 28。
+  PID 4939，目标 `vec_381c75e02fc00caf69127ec9e3a5a64d.lance/data/.tmpCjEXTy`。
+  这是正长度原生输出写，不是空写、API 前后注入或真实填满磁盘。
+- `operation-result.json` 为 `returned_success=true,error=null`；重试前 authority
+  全量快照通过，native 全量读取报 `UnexpectedEof: failed to fill whole buffer`。
+- 已提交 version 11 manifest `18446744073709551604.manifest` 引用
+  `011101110101100000101010af2f104a9eb6763645b9a8e58b.lance`；文件仅 6784 bytes，
+  缺少正常 `LANC` footer。失败发生在恢复副本和显式 retry 前，不能声称该格已恢复。
+- 上游 [Lance v13.0.0 LocalWriter::poll_shutdown](https://github.com/lance-format/lance/blob/v13.0.0/rust/lance-io/src/object_writer.rs#L760-L800)
+  只判断 inner shutdown 是否 Pending，遗漏 Ready(Err) 后仍 persist 临时文件，
+  与错误写入、成功返回、坏文件被提交的观测链吻合。此处尚无生产修复。
 
-复用 local 集成测试进程。每例使用同版本合成库的独立完整副本，无模型调用。
-- 4 个不完整索引准备：向量 BTree、FTS BTree、ANN、FTS。只在测试准备中删除
-  指定索引，保留其余已提交索引；经现有公开 adapter 重试，拦截目标表 `_indices`
-  下首次原生输出写。它们验证显式 adapter 重试，不冒充首次发布、job 自动恢复
-  或新的线上修复入口。路径能证明 index 输出写，不能单凭路径断言内部具体函数。
-- Compact 第二张排序向量表：首次 data 写、一次成功匹配写之后、首次 `_versions`
-  manifest 文件写前。必须证明第一张表版本前进、行数不变且碎片实际减少；
-  第二张表尚未发布新版本，FTS 版本不变。
-- 上述 7 点各运行整进程 SIGSTOP 后 SIGKILL 与持续模拟 ENOSPC，共 14 个单元。
-  首写与后续写分开记载；manifest 写前不等于原子 rename、fsync 或断电窗口。
+复现入口为 CI 中的 `maintenance_recovery::native_io_failure_matrix` ignored test；
+该单格诊断使用临时 selector，其他 13 格 NOT_RUN。收尾版本删除所有诊断 selector，
+恢复完整 14 格，并保留失败回归；native 数据 oracle 先于 child 返回状态断言执行。
+新的完整运行必须按自己的精确 head 判定，不能拼接不同 head 的绿色结果。
 
-Linux-only LD_PRELOAD helper 只作用显式指定、含 sentinel 的临时库路径，
-marker 位于库外；拦截 libc write/pwrite/pwrite64/writev，在目标写实际进入时
-记录路径、系统调用、已成功匹配写次数、PID、模式和 errno。暂停整个子进程后
-验证排他锁仍持有，再 kill；出错/死亡后验证锁可重获。ENOSPC 是受控 errno=28
-注入，**不耗尽真实磁盘**。direct syscall、mmap、io_uring 不覆盖；若未获得
-匹配 marker、未观察到停止状态、超时或原生操作错误地成功，测试失败，不能
-改用 sleep 杀进程或跳过断言来宣称通过。
+### 场景及实际执行证据
 
-Oracle 在任何重试前比较完整 authority 22 个业务关系的所有列、Blob 原字节，
-以及全部原生行/向量浮点位模式/重复数和维护前 Lance 历史快照。FTS 不完整时
-在显式重试前须明确拒绝；ANN 缺失可合法退回 exact，重试后须确认 ANN 存在，
-避免把 exact fallback 算成 ANN 验证。然后复制整个
-已停止的中断库（逐文件比对），在原库及恢复副本各显式重试两次并重开，核对
-当前版本、旧版本历史内容、有效 UTF-8 byte locator、来源撤回、generation、
-两个 profile、同 tenant 的另一 workspace 隔离、原生全文、ANN 64 分区检查、
-未索引尾部的 exact 读取和最终 authority 复核。先检查原生行再重写，避免测试
-自己的 upsert 把丢失数据补回后掩盖错误。ANN 不要求近似检索与 exact 排序相同。
+| 场景（每项 pause/SIGKILL 与持续模拟 ENOSPC） | 结果来源 |
+|---|---|
+| vector BTree / FTS BTree / ANN / FTS 首个 `_indices` 输出写，8 格 | 38f504f：8 PASS |
+| compact 第二表首个 data 写，2 格 | 38f504f：2 PASS |
+| compact 第二表一次成功写后的 data 写，2 格 | 38f504f：pause PASS、ENOSPC FAIL；3bba425 正长度复现确认不可读 |
+| compact 第二表首个 manifest 写，2 格 | 8d5d234：2 PASS；其他 12 格该轮 NOT_RUN |
 
-### 当前结果与未覆盖项
+- 全矩阵 head `38f504f978aa1372f4f9d6280618366dad493d17`，
+  [run 38729614608](https://github.com/TheLudlows/Origence/actions/runs/38729614608)，
+  [artifact 11970927797](https://github.com/TheLudlows/Origence/actions/runs/38729614608/artifacts/11970927797)：
+  1262.88s，11 PASS / 1 FAIL / 2 NOT_RUN。旧 marker 未记录请求长度，不能用它追认
+  具体 payload 大小；上述 1222-byte 新复现补足证据。成功格原库和恢复副本各 retry 两次。
+- manifest head `8d5d234a74967430d1f27fc01b7ceb70bbe46f0f`，
+  [run 38736460774](https://github.com/TheLudlows/Origence/actions/runs/38736460774)，
+  [artifact 11974910488](https://github.com/TheLudlows/Origence/actions/runs/38736460774/artifacts/11974910488)：
+  两格均拦截 1668-byte `_versions/...manifest#1` write；pause PID 4916、状态 T、exit9，
+  ENOSPC PID 4990、errno28、child exit0。八轮 original/restored retry+完整 oracle 通过。
+  跨轮共有 13 个成功场景和 1 个确认缺陷，**不是某个 head 的 14/14 验收通过**。
 
-本地云 workspace：Linux x86_64 6.18.44，overlayfs 4096-byte block，gcc 14.2.0；
-无 Rust/Cargo。shim 自测 6/6 PASS（含严格编译告警、路径隔离、前/后写、停杀与
-ENOSPC）；tools Python 119 项通过、2 项需 binary 的既有测试跳过；evals Python
-42 项通过；无 JOIN guard 1164 个输入解析通过。以上均不是 Lance 故障恢复结果。
-Rust 编译/格式/Clippy、14 单元原生矩阵、Linux 真实 Lance 路径覆盖及 Windows
-本次行为均 **NOT_RUN**。既有全套成功、受控发布恢复及备份记录仍保留原精确 head。
+### 测试契约与边界
 
-CI 的 linux-native 增加一个 30 分钟上限的显式 ignored-test 调用和
-maintenance-recovery-linux 工件：head/lock/toolchain/OS/filesystem、原始子进程
-日志、marker、退出状态、前后版本/布局/索引元数据及每例结果；断言失败保留
-合成库复现副本，成功例及时删除临时库。缺失 PASS 文件
-不表示通过，失败后的剩余单元仍 NOT_RUN。无全盘、网络存储或付费模型实验。
+复用 local 集成测试进程，每例使用同版本合成临时库的独立完整副本，不调用模型。
+索引场景在测试准备中仅删除指定索引，经现有公开 adapter upsert 重试；不是首次发布、
+job 自动恢复或新的线上修复 API。显式 Compact 按排序逐向量表独立提交，跳过 FTS，
+不刷新/删除索引、不运行 All/Prune、不清理历史。必须证明第一表版本前进、碎片减少且
+行数不变，故障第二表尚未发布，FTS 未变。manifest 写前不等于 rename/fsync/断电窗口。
 
-本批尚不覆盖：真正首次发布中断、未提交 publication/job/receipt 的重放、维护
-中来源变更/删除、失效 Learning 复活、跨 tenant 非空数据、非空 graph、Windows
-原生中断/磁盘不足、authority 磁盘不足、任意提交点/断电、自动修复和跨版本迁移。
-完整目录恢复只证明本合成 fixture，不外推为任意生产数据整库验收。#65 保持打开；
-本批失败须保留可复现证据，同 head 修复复验或明确不通过，不能以 API 成功替代。
+Linux-only LD_PRELOAD helper 仅作用有 sentinel 的临时根目录，marker 必须新建在库外。
+只拦截 libc write/pwrite/pwrite64/writev 的正长度请求，记录 requested_bytes、路径、
+系统调用、先前成功写次数、PID、模式及 errno；writev 长度求和防溢出。零长度写放行，
+direct syscall/mmap/io_uring 不覆盖。pause 需确认整进程 T 状态、排他锁仍在，再 SIGKILL；
+死亡或返回后确认锁释放。未命中、超时或数据断言失败均不能算 PASS。
 
-首轮 draft PR #67 head `d79e76988cad7d1d645d1245545240ab7e535470`，
-[CI 38720045737](https://github.com/TheLudlows/Origence/actions/runs/38720045737)：
-fast-check 在新测试的 Rustfmt 检查失败；Linux native 的 8 项身份单测通过后，
-Clippy 因测试 open_table 参数的不必要借用退出 101，完整测试与 14 格均未运行。
-应用真实 Rust 1.98 formatter 的 49 处排版，并移除该不必要借用；不弱化断言，
-待新精确 head 全套复验。Windows 按既有 PR 策略跳过。
+在任何 retry 前比较 authority 全部 22 个业务关系的所有列、Blob 原字节、全部原生行、
+浮点 bit pattern、重复数及维护前历史快照。FTS 不完整须 fail closed；ANN 缺失可合法
+exact fallback，retry 后必须确认 ANN 存在，避免假称 ANN 覆盖。随后完整复制已停止库并
+逐文件核对，original/restored 各 retry 两次，检查当前/旧版本、来源撤回、generation、
+两个 profile、有效 UTF-8 locator、同 tenant 另一 workspace、ANN/exact/FTS 可见性。
+先读完整 native 行再 upsert，避免测试自己的重写掩盖数据丢失。
 
-### Issue #65 diagnostic follow-up (not acceptance)
+本批不覆盖首次 publication/job/receipt 重放、维护中来源变更、非空 Learning/graph、
+跨 tenant 非空数据、Windows 在途/ENOSPC、authority 磁盘不足、网络存储、任意断电窗口、
+自动修复或跨版本迁移。恢复副本只证明本合成 fixture。#64 未推进，#65 保持打开。
 
-Run `38720764905` at `d0accba2985adb053be03bad0049c5452d4c3424` passed formatting, Clippy and the ordinary native suite, but the maintenance step hit its 30-minute limit. Compilation took 0.42 seconds. The first vector-scalar pause case recorded a matching native `write`, a stopped child and SIGKILL; both original/restored target tables reached version 14. No case wrote its final PASS record: 0/14 completed, the other 13 cases were not reached. Artifact `11968535525` retains the evidence. This is not evidence of recovery correctness or a demonstrated product deadlock.
+### 构建、预算及历史诊断
 
-The temporary diagnostic run executes the same seed and full check with phase timing and a 600-second harness timeout, then explicitly marks all 14 fault cases NOT_RUN. Its CI success is diagnostic success only. Remove the seed-only environment switch before acceptance; no oracle assertions were removed.
+云 workspace 无 Rust/Cargo，本地 gcc 严格告警构建和 shim 8 项自测通过；tools Python
+119 项通过/2 项需 binary 的既有测试跳过，evals 42 项通过，无 JOIN guard 1164 输入通过。
+真实 Rust 1.98.0/Linux 测试走上述 CI；Windows 按既有 PR 策略跳过。
 
-Diagnostic run `38725801242` (`b64281925a19dd8c7a8c97d9163cbdabdea119af`, artifact `11968890326`) completed seed/check in 478.08 seconds. Full check took 427.62 seconds: vector candidate queries 104.40/104.15 seconds, FTS candidates 104.59 seconds, and two 101-hit authority loops 55.47/55.25 seconds. Authority/native snapshots took 1.37 seconds, native queries about 1.1 seconds, and shutdown 0.002 seconds. This establishes expensive repeated authority reads in this unoptimized test configuration, not a recovery deadlock. All 14 fault cases were NOT_RUN.
+未优化 check 实测 427.62s：两次 vector_candidates 各约104s、FTS candidates 104.59s，
+202 次逐 hit 重验约111s；完整快照1.37s、native 查询1.1s、shutdown0.002s。重复 authority
+读取是独立性能发现，不是恢复死锁。只为维护测试调用启用 turso_core opt-level=2，显式
+保留 debug assertions/overflow checks，相同 SQL/API/断言降至53.01s；普通 Clippy/测试
+和生产配置不变。这不是生产性能修复或端到端基准。优化编译单独45分钟，矩阵75分钟，
+job 原180分钟不变；seed600秒、child/每次retry/每次check120秒，失败保留合成目录。
 
-The next diagnostic compiles only the maintenance test invocation with `profile.test.package.turso_core.opt-level=2`, explicitly preserving debug assertions and overflow checks. The ordinary Clippy/test gates and production profiles are unchanged. Build time is separated from the matrix timer. All SQL/API calls, assertions, fixture rows and retry counts remain unchanged. This is a test-runtime experiment, not a product performance fix or end-to-end benchmark.
-
-Optimized diagnostic run `38727852052` (`ddb7b2bd7b17f150973ebc4e6c4b65d7f50a598d`, artifact `11969112552`) passed ordinary CI and the seed-only diagnostic: seed/check 66.52 seconds, full check 53.01 seconds; vector candidates 12.41/12.38 seconds, FTS candidates 12.69 seconds, two authority-hit loops 6.84/6.79 seconds. Its 14 fault cases were still NOT_RUN. The measured 56 recovery checks alone require about 49.5 minutes. The full matrix now has a justified 75-minute step budget within the unchanged 180-minute Linux job; each retry and recovery check has its own 120-second timeout and progress logging. The temporary seed-only switch and code branch are removed. Full-matrix acceptance remains pending its own exact-head run; prior diagnostic green is not acceptance.
-
-Full-matrix run `38729614608` (`38f504f978aa1372f4f9d6280618366dad493d17`, artifact `11970927797`) completed in 1262.88 seconds with 11 PASS, 1 FAIL, 2 NOT_RUN. All output-first cases plus compact/output-later/pause passed full original/restored two-retry checks. Compact/output-later/ENOSPC recorded a matching write after one successful write, but the operation returned success and the child error-propagation assertion failed. Manifest-write cases were not reached. The earlier marker omitted requested byte length, so it cannot establish that this failing injection blocked positive-length output rather than an empty/optional write. No data-corruption conclusion follows from this error-return assertion alone.
-
-The next single-case diagnostic records requested bytes, ignores zero-length writes, and checks the full post-operation oracle before rejecting missing fault evidence or an unexpected success. The other 13 cases are explicitly NOT_RUN on this diagnostic head; earlier PASS records do not establish its acceptance. The diagnostic selector is temporary and must be removed before the next full matrix.
-
-Positive-length single-case run `38734552786` (`3bba425c04d58116ae49f5f10d313428cedf6ea9`, artifact `11973426310`) confirmed a real native-read failure. A 1222-byte `write` after one successful matching write received persistent simulated ENOSPC; the maintenance API returned success. Before retry, the authority oracle passed, then native snapshot failed with `UnexpectedEof: failed to fill whole buffer`. The second table's committed version 11 references a 6784-byte data file without a valid Lance footer. No real disk exhaustion or user data was involved. Lance v13.0.0 `rust/lance-io/src/object_writer.rs:760–800` ignores a Ready(Err) from inner poll_shutdown before persisting the temporary file, matching the observed failure chain. Production code/dependencies remain unchanged; issue #65 is BLOCKED, not accepted.
-
-The next diagnostic runs only the two previously unreached compact/manifest-write modes. The known compact/data-output-later ENOSPC defect is unresolved; the other twelve cases are NOT_RUN on that head. Any manifest diagnostic success must not be represented as a full-matrix pass.
+历史可追溯运行：38720045737（d79e769，fmt/Clippy未过，矩阵未运行）；38720764905
+（d0accba，常规测试过，原30分钟矩阵超时，artifact11968535525，0格完成）；
+38725801242（b642819，seed诊断478.08s，artifact11968890326）；38727852052
+（ddb7b2b，优化seed诊断66.52s，artifact11969112552，常规CI绿）。两个seed诊断均14格
+NOT_RUN。38733853324（a29635d）被新增诊断代码fmt/Clippy拦截、未执行；修正后即上述
+3bba425复现。所有诊断绿色均不替代完整矩阵验收，原始失败工件仍保留。
