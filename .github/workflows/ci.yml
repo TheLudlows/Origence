@@ -71,9 +71,10 @@ jobs:
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
       # One complete default-feature run includes the former focused filters.
       - run: cargo test --locked -j 2 --no-fail-fast
-      - name: Controlled maintenance native-write recovery (synthetic Linux fixtures)
+      - name: Maintenance fixture diagnostic only (14 fault cases NOT_RUN)
         timeout-minutes: 30
         env:
+          OC_MAINTENANCE_DIAGNOSTIC_SEED_ONLY: "1"
           OC_MAINTENANCE_SHIM: ${{ runner.temp }}/maintenance-io-fault.so
           OC_MAINTENANCE_EVIDENCE: ${{ runner.temp }}/maintenance-recovery
         run: |

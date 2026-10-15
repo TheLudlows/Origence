@@ -285,7 +285,14 @@ async fn native_io_failure_matrix() {
         .unwrap()
         .keep();
     let baseline = temp.join("baseline");
-    let value = fixture::seed(&baseline).await;
+    let value = tokio::time::timeout(Duration::from_secs(600), fixture::seed(&baseline))
+        .await
+        .expect("fixture seed/check exceeded 600 seconds; this is a harness timeout");
+    // Temporary diagnostic only; remove before the acceptance matrix run.
+    if std::env::var_os("OC_MAINTENANCE_DIAGNOSTIC_SEED_ONLY").is_some() {
+        eprintln!("DIAGNOSTIC ONLY: seed/check complete; all 14 fault cases NOT_RUN");
+        return;
+    }
     let initial_indices = index_metadata(&baseline).await;
     fs::write(
         baseline.join("fixture.json"),

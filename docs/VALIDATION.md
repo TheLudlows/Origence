@@ -1245,3 +1245,9 @@ fast-check 在新测试的 Rustfmt 检查失败；Linux native 的 8 项身份�
 Clippy 因测试 open_table 参数的不必要借用退出 101，完整测试与 14 格均未运行。
 应用真实 Rust 1.98 formatter 的 49 处排版，并移除该不必要借用；不弱化断言，
 待新精确 head 全套复验。Windows 按既有 PR 策略跳过。
+
+### Issue #65 diagnostic follow-up (not acceptance)
+
+Run `38720764905` at `d0accba2985adb053be03bad0049c5452d4c3424` passed formatting, Clippy and the ordinary native suite, but the maintenance step hit its 30-minute limit. Compilation took 0.42 seconds. The first vector-scalar pause case recorded a matching native `write`, a stopped child and SIGKILL; both original/restored target tables reached version 14. No case wrote its final PASS record: 0/14 completed, the other 13 cases were not reached. Artifact `11968535525` retains the evidence. This is not evidence of recovery correctness or a demonstrated product deadlock.
+
+The temporary diagnostic run executes the same seed and full check with phase timing and a 600-second harness timeout, then explicitly marks all 14 fault cases NOT_RUN. Its CI success is diagnostic success only. Remove the seed-only environment switch before acceptance; no oracle assertions were removed.
