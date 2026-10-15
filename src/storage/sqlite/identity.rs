@@ -1,13 +1,51 @@
-//! Legacy fact slots and exact structured identity bindings.
+//! Legacy fact slots and asset-level structured identity bindings.
 use super::*;
+use crate::memory_identity::MemoryIdentity;
+
+/// Decode only at the caller's existing visibility/route boundary. The schema
+/// enforces the pair and memory kind; recheck them for corrupt/custom fixtures.
+pub(super) fn identity_body(
+    row: &native_turso::Row,
+) -> StorageResult<Option<(String, MemoryIdentity)>> {
+    let key: Option<String> = row.try_get("identity_key").map_err(turso_err)?;
+    let body: Option<String> = row.try_get("identity_json").map_err(turso_err)?;
+    match (key, body) {
+        (None, None) => Ok(None),
+        (Some(key), Some(body)) => {
+            if row.try_get::<String>("kind").map_err(turso_err)? != "memory" {
+                return Err(StorageError::Unavailable("memory identity binding mismatch".into()));
+            }
+            let identity = serde_json::from_str(&body)
+                .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))?;
+            Ok(Some((key, identity)))
+        }
+        _ => Err(StorageError::Unavailable("memory identity binding mismatch".into())),
+    }
+}
+
+pub(super) fn checked_identity(
+    scope: Scope,
+    row: &native_turso::Row,
+) -> StorageResult<Option<MemoryIdentity>> {
+    identity_body(row)?
+        .map(|(key, identity)| {
+            let expected = identity.key(scope)
+                .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))?;
+            if key != expected {
+                return Err(StorageError::Unavailable("memory identity binding mismatch".into()));
+            }
+            Ok(identity)
+        })
+        .transpose()
+}
 
 impl TursoTx {
     pub(super) async fn identity_for_asset(
         &mut self,
         asset: Uuid,
-    ) -> StorageResult<Option<crate::memory_identity::MemoryIdentity>> {
-        let value: Option<String> = native_turso::query_scalar(
-            "SELECT identity_json FROM oc_memory_identities WHERE tenant_id = ? AND workspace_id = ? AND asset_id = ?",
+    ) -> StorageResult<Option<MemoryIdentity>> {
+        let row = native_turso::query(
+            "SELECT kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -15,23 +53,18 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        value
-            .map(|value| {
-                serde_json::from_str(&value)
-                    .map_err(|_| StorageError::Unavailable("invalid stored memory identity".into()))
-            })
+        row.map(|row| checked_identity(self.scope, &row))
             .transpose()
+            .map(Option::flatten)
     }
-}
 
-impl TursoTx {
     pub(super) async fn slot_inner(
         &mut self,
         fact_key: &str,
     ) -> StorageResult<(Uuid, Option<i32>)> {
-        let existing: Option<(Uuid, Option<i32>, bool)> = native_turso::query_as(
-            "SELECT id, current_version, deleted FROM oc_assets \
-             WHERE tenant_id = ? AND workspace_id = ? AND kind = 'memory' AND fact_key = ?",
+        let existing = native_turso::query(
+            "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets \
+             WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -39,8 +72,13 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        if let Some((id, version, deleted)) = existing {
-            if self.identity_for_asset(id).await?.is_some() {
+        if let Some(row) = existing {
+            let id = row.try_get("id").map_err(turso_err)?;
+            let version = row.try_get("current_version").map_err(turso_err)?;
+            let deleted: bool = row.try_get("deleted").map_err(turso_err)?;
+            // This endpoint never renders or reuses structured identities. Keep
+            // its established conflict before tombstone/hash checks.
+            if identity_body(&row)?.is_some() {
                 return Err(StorageError::Conflict(
                     "structured memory identity requires the identified memory endpoint".into(),
                 ));
@@ -71,13 +109,13 @@ impl TursoTx {
 
     pub(super) async fn identity_view_inner(
         &mut self,
-        identity: &crate::memory_identity::MemoryIdentity,
+        identity: &MemoryIdentity,
     ) -> StorageResult<Value> {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let asset: Option<Uuid> = native_turso::query_scalar(
-            "SELECT asset_id FROM oc_memory_identities \
+        let row = native_turso::query(
+            "SELECT id,kind,identity_key,identity_json FROM oc_assets \
              WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
         )
         .bind(self.scope.tenant_id)
@@ -85,9 +123,10 @@ impl TursoTx {
         .bind(key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
-        let asset = asset.ok_or(StorageError::NotFound)?;
-        if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
+        .map_err(turso_err)?
+        .ok_or(StorageError::NotFound)?;
+        let asset = row.try_get("id").map_err(turso_err)?;
+        if checked_identity(self.scope, &row)?.as_ref() != Some(identity) {
             return Err(StorageError::Unavailable(
                 "memory identity binding mismatch".into(),
             ));
@@ -97,13 +136,14 @@ impl TursoTx {
 
     pub(super) async fn identity_slot_inner(
         &mut self,
-        identity: &crate::memory_identity::MemoryIdentity,
+        identity: &MemoryIdentity,
     ) -> StorageResult<(Uuid, Option<i32>)> {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let bound_asset: Option<read_model::AssociationKey> = native_turso::query_scalar(
-            "SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
+        let existing = native_turso::query(
+            "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets \
+             WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory'",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -111,21 +151,14 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        let existing: Option<(Uuid, Option<i32>, bool)> = if let Some(asset) = bound_asset {
-            native_turso::query_as(
-                "SELECT id,current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='memory'",
-            )
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(asset)
-            .fetch_optional(&mut *self.tx)
-            .await
-            .map_err(turso_err)?
-        } else {
-            None
-        };
-        if let Some((asset, version, deleted)) = existing {
-            if self.identity_for_asset(asset).await?.as_ref() != Some(identity) {
+        if let Some(row) = existing {
+            let asset = row.try_get("id").map_err(turso_err)?;
+            let version = row.try_get("current_version").map_err(turso_err)?;
+            let deleted: bool = row.try_get("deleted").map_err(turso_err)?;
+            // The requested identity is validated and selected by its canonical
+            // key. Comparing the body establishes key/body agreement while
+            // preserving Conflict before the tombstone check.
+            if identity_body(&row)?.as_ref().map(|(_, body)| body) != Some(identity) {
                 return Err(StorageError::Conflict(
                     "memory identity binding mismatch".into(),
                 ));
@@ -152,8 +185,10 @@ impl TursoTx {
             ));
         }
         let asset = Uuid::new_v4();
+        let encoded = serde_json::to_string(identity)
+            .map_err(|_| StorageError::Unavailable("memory identity encoding failed".into()))?;
         native_turso::query(
-            "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at) VALUES (?,?,?,'memory',?,?,?)",
+            "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at,identity_key,identity_json) VALUES (?,?,?,'memory',?,?,?,?,?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -161,20 +196,8 @@ impl TursoTx {
         .bind(&identity.predicate)
         .bind(&key)
         .bind(now_ms())
-        .execute(&mut *self.tx)
-        .await
-        .map_err(turso_err)?;
-        let encoded = serde_json::to_string(identity)
-            .map_err(|_| StorageError::Unavailable("memory identity encoding failed".into()))?;
-        native_turso::query(
-            "INSERT INTO oc_memory_identities(tenant_id,workspace_id,identity_key,asset_id,identity_json,created_at) VALUES (?,?,?,?,?,?)",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
         .bind(&key)
-        .bind(asset)
         .bind(encoded)
-        .bind(now_ms())
         .execute(&mut *self.tx)
         .await
         .map_err(turso_err)?;
@@ -184,8 +207,8 @@ impl TursoTx {
 
 #[cfg(feature = "local-storage")]
 impl TursoTx {
-    /// Only stored JSON rows, not an asset_view/current/semantic-status guard.
-    /// Callers decode in their existing traversal order after route filtering.
+    /// Raw asset identity columns, including unidentified assets. No current or
+    /// semantic-status guard: consumers decode after their route filtering.
     pub(super) async fn identity_rows_for_assets(
         &mut self,
         assets: &[Uuid],
@@ -196,14 +219,14 @@ impl TursoTx {
         super::read_model::rows_by_ids(
             &mut self.tx,
             self.scope,
-            "oc_memory_identities",
-            "asset_id,identity_json",
-            "asset_id",
+            "oc_assets",
+            "id,kind,identity_key,identity_json",
+            "id",
             assets,
         )
         .await?
         .into_iter()
-        .map(|row| Ok((row.try_get("asset_id").map_err(turso_err)?, row)))
+        .map(|row| Ok((row.try_get("id").map_err(turso_err)?, row)))
         .collect()
     }
 }

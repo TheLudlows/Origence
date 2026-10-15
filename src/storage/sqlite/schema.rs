@@ -2,7 +2,6 @@
 use super::*;
 
 const SCHEMA: &str = include_str!("../sqlite-schema.sql");
-pub(super) const IDENTITY_SCHEMA: &str = include_str!("../memory-identity-schema.sql");
 
 pub(super) async fn reject_legacy_aml_schema(conn: &mut Connection) -> StorageResult<()> {
     let exists: bool = native_turso::query_scalar(
@@ -31,7 +30,6 @@ pub(super) async fn schema_present(conn: &mut Connection) -> StorageResult<bool>
 pub(super) async fn exec_schema(conn: &mut Connection) -> StorageResult<()> {
     for schema in [
         SCHEMA,
-        IDENTITY_SCHEMA,
         semantics::SCHEMA,
         session::SCHEMA,
         improve::SCHEMA,
@@ -50,7 +48,6 @@ pub(super) async fn check_conn(conn: &mut Connection) -> StorageResult<()> {
         conn,
         &[
             SCHEMA,
-            IDENTITY_SCHEMA,
             semantics::SCHEMA,
             session::SCHEMA,
             improve::SCHEMA,

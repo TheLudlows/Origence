@@ -1,6 +1,17 @@
 # Origence · 当前状态
 
-更新：2026-10-14。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-15。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+
+## Issue #60：身份合表（草稿验证中）
+
+第一批将一对一身份映射并入资产，保留身份占位、旧 fact_key 冲突、权限、
+来源撤回和恢复约束；经确认加强坏数据拒绝。当前 authority 23 + graph 3
+共 26 张物理关系表。旧 schema 明确拒绝，不迁移、不自动修复。
+[身份存储合同](contracts/identity-asset-layout.md)包含范围、错误与测试边界，
+[字段清单](contracts/storage-field-audit-2026-10-15.md)保留完整基线盘点。
+[index/ledger](contracts/index-ledger-audit-2026-10-15.md)因键、状态和清理生命周期
+不同，本轮不合并；其他字段候选仍需单独审查。Rust/跨平台验收尚待本批精确
+head CI，不能沿用 #61 通过结果。
 
 ## PR #59：Windows 离线恢复与无 JOIN 查询（已合入）
 
@@ -15,7 +26,9 @@ PR #59 已合入 main `75c238ffa830d50840d4b84c2dce6d7d69a4793c`。
 
 Issue #60 合表、schema 精简和公开命名清理仍不在本轮范围。
 
-## Issue #61：已确认裁剪（实施中）
+## Issue #61：已确认裁剪（已合入）
+
+PR #62 已合入 main `4c0862e80ccfb8b403268170c06d391239790d2b`；以下分批记录保留为历史验证过程。
 
 第一批删除空来源接口、收窄摘要读取与 schema 检查入口；两个 #59 专用
 诊断 workflow 已移除，完整 publication 探针冻结于
@@ -60,7 +73,7 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 
 ## 当前 CI 范围
 
-常规 Windows 门禁仍只在 main 及本轮 refactor/issue61-cleanup PR 执行；
+常规 Windows 门禁在 main 及明确列出的 refactor/issue61-cleanup、refactor/issue60-identity PR 执行；
 后者复用同一 job 验证待合入代码，不扩大到其他 PR。#59 专用 CDB 调度与
 历史性能调度已归档停用，常规 CI 不提供等价持续性能比较。
 

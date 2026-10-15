@@ -34,6 +34,18 @@ jobs:
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
       - name: Full test suite without default features
         run: cargo test --locked --no-default-features -j 2 --no-fail-fast
+      - name: Native identity layout comparison (diagnostic, no timing thresholds)
+        if: github.head_ref == 'refactor/issue60-identity'
+        run: |
+          rustc --version --verbose
+          set -o pipefail
+          cargo test --locked --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_before_after -- --ignored --exact --nocapture 2>&1 | tee identity-layout.txt
+      - uses: actions/upload-artifact@v4
+        if: always() && github.head_ref == 'refactor/issue60-identity'
+        with:
+          name: identity-layout-${{ github.sha }}
+          path: identity-layout.txt
+          if-no-files-found: ignore
       - name: AML drill client tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
@@ -104,7 +116,7 @@ jobs:
           if-no-files-found: ignore
   windows:
     # Reuse the normal Windows gates for the authorized #61 cleanup candidate.
-    if: github.ref == 'refs/heads/main' || github.head_ref == 'refactor/issue61-cleanup'
+    if: github.ref == 'refs/heads/main' || github.head_ref == 'refactor/issue61-cleanup' || github.head_ref == 'refactor/issue60-identity'
     runs-on: windows-latest
     timeout-minutes: 120
     env:

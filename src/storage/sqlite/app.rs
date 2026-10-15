@@ -133,8 +133,8 @@ impl TursoTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let asset: Option<Uuid> = native_turso::query_scalar(
-            "SELECT asset_id FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
+        let row = native_turso::query(
+            "SELECT id,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND NOT deleted",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -142,23 +142,16 @@ impl TursoTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(turso_err)?;
-        let asset = if let Some(id) = asset {
-            let live: Option<Uuid> = native_turso::query_scalar(
-                "SELECT id FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='memory' AND NOT deleted",
-            ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
-                .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-            live
-        } else {
-            None
+        let Some(row) = row else {
+            return Ok(None);
         };
-        if let Some(id) = asset
-            && self.identity_for_asset(id).await?.as_ref() != Some(identity)
-        {
+        let asset = row.try_get("id").map_err(turso_err)?;
+        if identity::checked_identity(self.scope, &row)?.as_ref() != Some(identity) {
             return Err(StorageError::Unavailable(
                 "memory identity binding mismatch".into(),
             ));
         }
-        Ok(asset)
+        Ok(Some(asset))
     }
 
     pub async fn asset_metadata(&mut self, id: Uuid) -> StorageResult<Value> {

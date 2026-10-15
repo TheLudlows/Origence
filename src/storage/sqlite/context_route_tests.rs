@@ -51,16 +51,16 @@ async fn database() -> (tempfile::TempDir, Pool) {
         .await
         .unwrap();
     // No foreign keys: missing relations and malformed historical keys are
-    // intentional fixtures for predicate-before-decode behavior.
+    // intentional fixtures for predicate-before-decode behavior. Identity columns
+    // also omit production constraints so corrupt bindings remain testable.
     for sql in [
-        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_learnings(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,source_event_id BLOB NOT NULL,status TEXT NOT NULL,session_id BLOB NOT NULL,improve_id BLOB NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_improve_runs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,improve_id BLOB NOT NULL,status TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,improve_id))",
         "CREATE TABLE oc_jobs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,operation TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_memory_identities(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,identity_json TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,asset_id))",
     ] {
         db::query(sql).execute(&pool).await.unwrap();
     }
@@ -86,7 +86,7 @@ async fn seed(
     root_state: &str,
     root_kind: &str,
 ) {
-    db::query("INSERT INTO oc_assets VALUES(?,?,?,?,'asset',?,0)")
+    db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,deleted) VALUES(?,?,?,?,'asset',?,0)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.asset)
@@ -166,11 +166,12 @@ async fn registration(tx: &mut TursoTx, scope: Scope, row: Record, source: Uuid,
 }
 
 async fn binding(tx: &mut TursoTx, scope: Scope, asset: Uuid, identity: &MemoryIdentity) {
-    db::query("INSERT INTO oc_memory_identities VALUES(?,?,?,?) ON CONFLICT(tenant_id,workspace_id,asset_id) DO UPDATE SET identity_json=excluded.identity_json")
+    db::query("UPDATE oc_assets SET identity_key=?,identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(identity.key(scope).unwrap())
+        .bind(serde_json::to_string(identity).unwrap())
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(asset)
-        .bind(serde_json::to_string(identity).unwrap())
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -506,7 +507,7 @@ async fn identity_fast_path_skips_locator_json_only_when_identity_filter_does_no
     );
     set_locator(&mut tx, memory.chunk, "{").await;
     db::query(
-        "DELETE FROM oc_memory_identities WHERE tenant_id=? AND workspace_id=? AND asset_id=?",
+        "UPDATE oc_assets SET identity_key=NULL,identity_json=NULL WHERE tenant_id=? AND workspace_id=? AND id=?",
     )
     .bind(scope.tenant_id)
     .bind(scope.workspace_id)
@@ -671,12 +672,27 @@ async fn raw_identity_batches_do_not_add_current_or_semantic_guards() {
         tenant_id: Uuid::new_v4(),
         ..scope
     };
+    seed(
+        &mut tx,
+        foreign,
+        records[128],
+        "memory",
+        Some(1),
+        "active",
+        "memory",
+    )
+    .await;
     binding(&mut tx, foreign, records[128].asset, &identity("Other")).await;
+    let legacy = Record::new(130);
+    seed(&mut tx, scope, legacy, "memory", None, "retracted", "memory").await;
     let missing = Uuid::new_v4();
     let mut assets: Vec<_> = records.iter().map(|row| row.asset).collect();
-    assets.extend([records[0].asset, records[128].asset, missing]);
+    assets.extend([records[0].asset, records[128].asset, legacy.asset, missing]);
     let found = tx.identity_rows_for_assets(&assets).await.unwrap();
-    assert_eq!(found.len(), 130);
+    assert_eq!(found.len(), 131);
+    for column in ["identity_key", "identity_json"] {
+        assert_eq!(found[&legacy.asset].try_get::<Option<String>>(column).unwrap(), None);
+    }
     assert!(!found.contains_key(&missing));
     for row in records {
         assert_eq!(
@@ -687,7 +703,7 @@ async fn raw_identity_batches_do_not_add_current_or_semantic_guards() {
         );
     }
     assert!(tx.identity_rows_for_assets(&[]).await.unwrap().is_empty());
-    db::query("DROP TABLE oc_memory_identities")
+    db::query("ALTER TABLE oc_assets RENAME COLUMN identity_json TO missing_identity_json")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -1307,6 +1323,46 @@ async fn native_context_routes_filter_before_loading_other_route_content() {
     assert!(matches!(
         tx.visible_hit(other.chunk).await,
         Err(StorageError::Backend(_))
+    ));
+    tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn route_membership_precedes_merged_identity_corruption_decoding() {
+    let (_dir, pool) = database().await;
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let row = Record::new(140_000);
+    let wanted = identity("Atlas");
+    seed(&mut tx, scope, row, "knowledge", Some(1), "active", "knowledge").await;
+    // Deliberately omit production CHECK constraints to test read ordering.
+    for sql in [
+        "UPDATE oc_assets SET identity_key='bad',identity_json='{'",
+        "UPDATE oc_assets SET identity_key=NULL,identity_json='{}'",
+        "UPDATE oc_assets SET identity_key='bad',identity_json=NULL",
+    ] {
+        db::query(sql).execute(&mut *tx.tx).await.unwrap();
+        // Batch fetching stays raw, even when the nullable pair is corrupt.
+        assert_eq!(tx.identity_rows_for_assets(&[row.asset]).await.unwrap().len(), 1);
+        assert!(tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await.unwrap().is_empty());
+        assert_eq!(
+            ids(tx.context_route_rows(ContextRoute::Knowledge, Some(&wanted)).await.unwrap()),
+            HashSet::from([row.chunk])
+        );
+        db::query("UPDATE oc_assets SET kind='memory'").execute(&mut *tx.tx).await.unwrap();
+        assert!(matches!(
+            tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await,
+            Err(StorageError::Unavailable(_))
+        ));
+        db::query("UPDATE oc_assets SET kind='knowledge'").execute(&mut *tx.tx).await.unwrap();
+    }
+    binding(&mut tx, scope, row.asset, &wanted).await;
+    db::query("UPDATE oc_assets SET kind='memory',identity_key='wrong-canonical-key'")
+        .execute(&mut *tx.tx).await.unwrap();
+    assert!(matches!(
+        tx.context_route_rows(ContextRoute::Memory, Some(&wanted)).await,
+        Err(StorageError::Unavailable(message)) if message == "memory identity binding mismatch"
     ));
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();

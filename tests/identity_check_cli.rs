@@ -49,7 +49,7 @@ async fn cli_requires_offline_and_does_not_initialize_native_engines() {
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
     let store = SqliteStore::open(&path).await.unwrap();
-    db::query("DROP TABLE oc_memory_identities")
+    db::query("DROP INDEX oc_memory_identity_slot")
         .execute(store.pool())
         .await
         .unwrap();
@@ -64,7 +64,7 @@ async fn cli_requires_offline_and_does_not_initialize_native_engines() {
     assert_eq!(std::fs::read(&path).unwrap(), bytes);
     let raw = db::Pool::open_read_only(&path).await.unwrap();
     let count: i64 =
-        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identities'")
+        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_memory_identity_slot'")
             .fetch_one(&raw)
             .await
             .unwrap();
