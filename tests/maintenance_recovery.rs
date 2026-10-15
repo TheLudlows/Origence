@@ -332,7 +332,7 @@ async fn native_io_failure_matrix() {
         for mode in ["pause", "enospc"] {
             let label = format!("{scenario}-{mode}-{point}");
             if let Ok(selected) = std::env::var("OC_MAINTENANCE_DIAGNOSTIC_CASE")
-                && label != selected
+                && !selected.split(',').any(|item| label == item)
             {
                 eprintln!("DIAGNOSTIC: {label} NOT_RUN");
                 continue;
