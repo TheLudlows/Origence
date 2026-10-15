@@ -16,6 +16,12 @@
 - 删除后端声明类型 `Capabilities` 及 `VectorStore::capabilities()` / `GraphStore::capabilities()`；调用方和自定义实现须移除对应声明。鉴权类型 `KeyCapabilities`、显式 `allow_owned_workspaces` 和图查询实际 `max_hops` 限制保留，不能因名称相似一并删除。
 - 删除 `TursoStore::upgrade_memory_identity(path, dry_run)`、`MemoryIdentityUpgrade` 及 CLI `memory-identity-upgrade --dry-run`。库调用方改用 `TursoStore::check_memory_identity(path) -> StorageResult<()>`；CLI 改用 `--offline identity-check`。该入口对已有数据库执行只读、独占锁下的完整同版本 schema 检查，不创建、安装或修复表；成功表示检查有效，不表示完成升级。输出与安全步骤见[离线记忆身份检查](OPERATIONS.md#离线记忆身份检查)。
 
+## Issue #60：账本两列精简
+
+`oc_artifact_ledger.attempt` 与 `last_error` 删除，取消旧设计中保留账本级尝试数/错误文本的存储约定。它们未参与当前发布、可见性或恢复决策；这不意味着直接 SQL 调用方兼容，使用公开 `pool()` 读取这两列的查询需移除相应投影/写入。
+
+作业队列自己的尝试数、错误信息、重试上限与 generation/run_token fencing 保留；账本 `next_retry_at`、状态、时间戳与完整复合主键不变。`LedgerEntry.idempotency_key`、公开格式化 helper 及 Serde 形状本批不变。旧两列布局被完整 schema 检查拒绝，不自动迁移、删除或修复；同版本备份恢复保持原约束。
+
 ## 角色
 
 | 角色 | 权限 |

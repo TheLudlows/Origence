@@ -187,8 +187,6 @@ CREATE TABLE oc_artifact_ledger (
     generation INTEGER NOT NULL DEFAULT 1,
     idempotency_key TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','committed','retry_wait','orphan')),
-    attempt INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT,
     next_retry_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,

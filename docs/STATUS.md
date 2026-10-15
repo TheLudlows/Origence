@@ -16,6 +16,10 @@
 最小修复只为该查询选择现有身份索引，生产约束不变；等待修复精确头完整验证。
 证据及边界见 [VALIDATION](VALIDATION.md)。
 
+第二批按确认范围删除账本 attempt/last_error 并取消其旧存储约定，保留job重试、
+账本next_retry_at与公开idempotency_key。直接SQL列访问有破坏性变化；旧格式拒绝，
+不迁移、不修复。范围见 [API](API.md#issue-60账本两列精简)，精确CI待本批执行。
+
 ## PR #59：Windows 离线恢复与无 JOIN 查询（已合入）
 
 [PR #59](https://github.com/TheLudlows/Origence/pull/59) 已完成无 JOIN 查询、

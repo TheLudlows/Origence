@@ -413,7 +413,9 @@ SQLite 写事务从开始就使用 IMMEDIATE，不能先 BEGIN 再嵌套 BEGIN�
 
 ### A2.6 跨存储一致性
 
-产物账本位于关系库，主键包含 scope、对象/来源版本、存储面和 generation；记录 pending、retry_wait、committed、orphan、attempt、last_error、next_retry_at。
+产物账本位于关系库，主键包含 scope、对象/来源版本、存储面和 generation；记录 pending、retry_wait、committed、orphan 状态及 next_retry_at。
+
+#60 第二批取消未被当前实现维护的账本级 attempt/last_error 存储约定，并删除这两列；作业队列自身的 attempt、错误信息及重试/fencing 不变。此为明确的结构契约调整，直接读取被删列的 SQL 不兼容；不提供旧库迁移。账本的 idempotency_key 公开接口本批保留。
 
 1. 业务事务登记目标版本、作业、待写产物与幂等键。
 2. Worker 对外部存储执行确定性 ID 的幂等写入。

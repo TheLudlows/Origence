@@ -100,14 +100,14 @@ mod tests {
     use crate::storage::ledger::Surface;
 
     #[tokio::test]
-    async fn confirm_committed_keeps_missing_source_noop_and_exact_retry_fields() {
+    async fn confirm_committed_keeps_missing_source_noop_and_retry_deadline() {
         let dir = tempfile::tempdir().unwrap();
         let pool = Pool::open(dir.path().join("ledger-confirm.db"))
             .await
             .unwrap();
         for sql in [
             "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
-            "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_id BLOB,surface TEXT,generation INTEGER,state TEXT,updated_at INTEGER,attempt INTEGER,last_error TEXT,next_retry_at INTEGER)",
+            "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_id BLOB,surface TEXT,generation INTEGER,state TEXT,updated_at INTEGER,next_retry_at INTEGER)",
         ] {
             native_turso::query(sql).execute(&pool).await.unwrap();
         }
@@ -133,7 +133,7 @@ mod tests {
             generation: 3,
         };
         native_turso::query(
-            "INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,'retry_wait',1,4,'keep',123)",
+            "INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,'retry_wait',1,123)",
         )
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -155,13 +155,13 @@ mod tests {
             .await
             .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
-        let before: (String, i64, i64, String, i64) = native_turso::query_as(
-            "SELECT state,updated_at,attempt,last_error,next_retry_at FROM oc_artifact_ledger",
+        let before: (String, i64, i64) = native_turso::query_as(
+            "SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger",
         )
         .fetch_one(&mut *tx.tx)
         .await
         .unwrap();
-        assert_eq!(before, ("retry_wait".into(), 1, 4, "keep".into(), 123));
+        assert_eq!(before, ("retry_wait".into(), 1, 123));
         native_turso::query("UPDATE oc_events SET state='active'")
             .execute(&mut *tx.tx)
             .await
@@ -169,29 +169,31 @@ mod tests {
         let mut wrong = key;
         wrong.generation += 1;
         tx.confirm_committed_inner(wrong).await.unwrap();
-        let unchanged: String = native_turso::query_scalar("SELECT state FROM oc_artifact_ledger")
-            .fetch_one(&mut *tx.tx)
-            .await
-            .unwrap();
-        assert_eq!(unchanged, "retry_wait");
-        tx.confirm_committed_inner(key).await.unwrap();
-        let after: (String, i64, String, i64) = native_turso::query_as(
-            "SELECT state,attempt,last_error,next_retry_at FROM oc_artifact_ledger",
+        let unchanged: (String, i64, i64) = native_turso::query_as(
+            "SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger",
         )
         .fetch_one(&mut *tx.tx)
         .await
         .unwrap();
-        assert_eq!(after, ("committed".into(), 4, "keep".into(), 123));
+        assert_eq!(unchanged, before);
+        tx.confirm_committed_inner(key).await.unwrap();
+        let after: (String, i64) =
+            native_turso::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger")
+                .fetch_one(&mut *tx.tx)
+                .await
+                .unwrap();
+        assert_eq!(after, ("committed".into(), 123));
         native_turso::query("UPDATE oc_artifact_ledger SET state='orphan'")
             .execute(&mut *tx.tx)
             .await
             .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
-        let state: String = native_turso::query_scalar("SELECT state FROM oc_artifact_ledger")
-            .fetch_one(&mut *tx.tx)
-            .await
-            .unwrap();
-        assert_eq!(state, "orphan");
+        let state: (String, i64) =
+            native_turso::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger")
+                .fetch_one(&mut *tx.tx)
+                .await
+                .unwrap();
+        assert_eq!(state, ("orphan".into(), 123));
         wrong.scope.workspace_id = Uuid::new_v4();
         assert!(matches!(
             tx.confirm_committed_inner(wrong).await,

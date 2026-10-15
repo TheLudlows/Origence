@@ -1104,3 +1104,17 @@ fast-check/Windows 因三处rustfmt格式失败，整轮不是通过；随后按
 逐文件比较本地455个已跟踪文件与该头远程blob SHA，仅VALIDATION不一致；
 本轮每个修改文件均以本地完整字节Git blob SHA核对上传结果，不再依赖
 单次终端输出或仅搜索截断标记判断完整性。
+
+
+### 第二批：账本未维护字段（待精确头执行）
+
+全链路核查确认oc_artifact_ledger.attempt/last_error不参与当前生产DTO、发布、
+可见性、重发或恢复决策；旧设计及测试确实保留人为写入值，经确认取消该约定并
+删除两列。不是将ledger重试责任迁到job；现行job attempt/错误码、next_retry_at、
+generation/run_token、完整ledger主键与状态判断全部保留。公开pool()直接SQL访问
+被删列不兼容；LedgerEntry.idempotency_key/Serde/helper明确暂不变。
+
+调整确认/清理/恢复fixtures时保留错generation、无来源、no-op、重复注册、回滚、
+到期retry_wait及next_retry_at保留断言；增加已删列旧布局只读检查和打开拒绝回归，
+验证原schema/数据不被修改。不修改冻结归档DDL。字段盘点仍是指定旧main基线，
+不将其改写为新schema。待独审及新精确提交Linux/Windows门禁，不沿用身份批通过。
