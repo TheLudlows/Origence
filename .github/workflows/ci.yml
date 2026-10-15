@@ -38,39 +38,6 @@ jobs:
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
         run: python3 -m unittest discover -s evals -p 'test_*.py' -v
-  identity-layout:
-    if: github.head_ref == 'refactor/issue60-identity'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    env:
-      CARGO_PROFILE_RELEASE_DEBUG: 0
-      CARGO_INCREMENTAL: 0
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.98.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.event_name == 'pull_request' }}
-          cache-on-failure: true
-      - name: Build isolated release measurement
-        timeout-minutes: 26
-        run: |
-          rustc --version --verbose | tee identity-layout-environment.txt
-          set -o pipefail
-          timeout --kill-after=30s 25m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_query_diagnostics --no-run 2>&1 | tee identity-layout-build.txt
-      - name: Bounded native identity layout comparison
-        timeout-minutes: 8
-        run: |
-          set -o pipefail
-          timeout --kill-after=30s 7m cargo test --locked --release --no-default-features --test local -j 2 identity_layout_benchmark::identity_layout_query_diagnostics -- --ignored --exact --nocapture 2>&1 | tee identity-layout.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: identity-layout-${{ github.sha }}
-          path: identity-layout*.txt
-          if-no-files-found: ignore
   linux-native:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -102,18 +69,7 @@ jobs:
         run: cargo test --locked --no-default-features --lib memory_identity -j 2
       # Keep link memory pressure bounded.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
-      - name: Focused native storage, publication, and visibility contracts
-        run: |
-          # Integration modules share one executable (autotests = false).
-          status=0
-          cargo test --locked --lib -j 2 future_sizes -- --nocapture || status=1
-          cargo test --locked --lib -j 2 storage::lancedb::ann::tests || status=1
-          cargo test --locked --lib -j 2 final_native_validation_ || status=1
-          cargo test --locked --lib -j 2 storage::native_turso::tests || status=1
-          for filter in production_storage:: lancedb_native_search:: sqlite_ initialization:: storage_recovery:: semantic_memory:: semantic_capture:: session_feedback:: learning_loop:: evidence_bundle::; do
-            cargo test --locked --test local -j 2 "$filter" || status=1
-          done
-          exit "$status"
+      # One complete default-feature run includes the former focused filters.
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Debug build and no-model HTTP smoke
         run: |
@@ -136,8 +92,8 @@ jobs:
           path: ${{ runner.temp }}/origence-keyword-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: ignore
   windows:
-    # Reuse normal Windows gates for the explicitly scoped cleanup/storage candidates.
-    if: github.ref == 'refs/heads/main' || github.head_ref == 'refactor/issue61-cleanup' || github.head_ref == 'refactor/issue60-identity'
+    # Keep the established main-only Windows policy.
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 120
     env:

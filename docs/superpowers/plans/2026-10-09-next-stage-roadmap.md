@@ -1,6 +1,6 @@
 # Origence · 后续实施路线图
 
-> 本文只保留当前未完成工作和验收条件。完整架构见[平台设计规格](../specs/2026-09-22-memory-knowledge-platform-design.md)，身份与上下文契约见[I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md)。当前进度见 [STATUS](../../STATUS.md)，实际证据见 [VALIDATION](../../VALIDATION.md)。
+> 本文维护实现状态与尚未完成的验收条件；勾选表示工程实现，不代表真实模型效果验收。完整架构见[平台设计规格](../specs/2026-09-22-memory-knowledge-platform-design.md)，身份与上下文契约见[I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md)。当前进度见 [STATUS](../../STATUS.md)，实际证据见 [VALIDATION](../../VALIDATION.md)。
 
 ## AML API 收敛工程
 
@@ -14,7 +14,7 @@
 
 ## 执行顺序
 
-**S2 显式语义与 S3 受控对话提取首个切片已交付；下一步 S3 会话反馈与经验闭环 → S4 统一上下文及真实 Agent 验证。** S0 已验收，S1 工程实验已完成；新增 200 题独立复核、拒答及真实任务效果仍待验收。结果统一见 [STATUS](../../STATUS.md)，此处不重复历史数字。
+**S2 显式语义、S3 会话反馈与显式经验闭环、S4 统一上下文及 Agent 框架均已交付；真实 Agent 效果仍为 NOT_RUN。** S0 已验收，S1 工程实验已完成；新增 200 题独立复核、拒答及真实任务效果仍待验收。结果统一见 [STATUS](../../STATUS.md)，此处不重复历史数字。
 
 [AML 专项](../../AGENT_MEMORY_LEADERBOARD.md)已完成 Add/Search 与跨 session 历史检索，并复用共享底座；它不等于 S3 的反馈学习闭环，也不以完整 S2–S4 为首轮参榜前置。
 
@@ -31,24 +31,24 @@
 
 ### S3：P1 Session → Feedback → Improve → Learning 最小闭环
 
-已完成前置切片：[受控对话提取 → S2 写入](2026-10-11-s3-semantic-capture.md)，含原文校验、明确覆盖授权、原子发布与计划恢复。该接口不等于下面的会话反馈/经验闭环。后续遵循上面的当前阶段范围。
+[受控对话提取 → S2 写入](2026-10-11-s3-semantic-capture.md)及下列会话反馈/经验闭环均已实现；后者范围见 [Improve/Learning 契约](2026-10-12-s3-improve-learning.md)。工程回归使用确定性模型桩，后续遵循上面的当前阶段范围。
 
-- [ ] `SessionTurn`：保存 session/turn、问答、**实际使用**的 evidence ID/source_version（不是仅检索候选），安全范围和幂等键。
-- [ ] `Feedback`：针对 turn/证据的幂等反馈；不重复计入权重。
-- [ ] `Improve`：显式触发并记录 stage_run/watermark/重试结果；首版只做经验提案、核验、发布，不实现设计中的全部八阶段。
-- [ ] `Learning`：保存 statement、why、条件和来源 turn/guidance，接受的经验走既有 add/cognify，避免递归 improve。
-- [ ] 第二个会话能准确检索学习经验，撤销支持来源后退出召回；所有新表/接口遵守 tenant/workspace 权限，仅面向新库。
+- [x] `SessionTurn`：保存 session/turn、问答、**实际使用**的 evidence ID/source_version（不是仅检索候选），安全范围和幂等键。
+- [x] `Feedback`：针对 turn/证据的幂等反馈；不重复记录、不自动调权。
+- [x] `Improve`：显式触发并持久化 run、水位与重试结果；只做经验提案、核验、发布，不实现设计中的全部八阶段。
+- [x] `Learning`：保存 statement、why、条件及支持 turn/feedback，接受的经验走普通 Ingest 发布，不递归 improve、不新增 Guidance 生命周期。
+- [x] 工程回归覆盖跨会话检索学习经验、支持撤回后退出召回及失败/重试去重；所有新表/接口遵守 tenant/workspace 权限，仅面向新库。
 
-**验收**：实际 Agent 交互从归档 → 反馈 → 显式提升 → 带证据经验发布 → 跨会话复用形成完整可重复流程；失败/重试不制造重复经验或失效事实。
+**待验收（NOT_RUN）**：真实 Agent 交互从归档 → 反馈 → 显式提升 → 带证据经验发布 → 跨会话复用的质量与实际收益；工程桩不代替独立效果证据。
 
 ### S4：统一上下文与真实 Agent 效果（P1 完成）
 
-- [ ] 基于既有 SearchHit/resolve 引入统一 EvidenceBundle：scope、当前有效性、来源版本、类型、评分、预算。
-- [ ] 分路召回当前记忆、会话、知识原文、条件化 Learning；相互矛盾的有效证据保留并明确标记，不用文本相似去重不同结论。
-- [ ] 根据任务裁剪上下文并保留完整引用；Guidance 是外部数据，不能被提升为系统指令。
-- [ ] 对比无记忆 Agent、简单 Hybrid、金标准证据输入，测任务完成、引用支持率、成本与延迟。
+- [x] 基于既有 SearchHit/resolve 引入统一 EvidenceBundle：scope、当前有效性、来源版本、类型、评分、预算。
+- [x] 分路召回当前记忆、会话、知识原文、条件化 Learning；标记明确单值身份冲突，不推断普通文本矛盾、不按文本相似合并证据；会话默认关闭且召回有界。
+- [x] 按显式 UTF-8 字节预算裁剪上下文并保留完整引用；Guidance 是外部数据，不能被提升为系统指令。
+- [ ] 使用真实模型对比无记忆 Agent、简单 Hybrid、EvidenceBundle、非部署金标准证据输入，测任务完成、引用支持率、成本与延迟（NOT_RUN）。
 
-**验收**：安全治理不回归，跨会话任务的可复现改进有实证而非功能数量。
+**待验收**：安全治理不回归，跨会话任务的可复现改进有实证而非功能数量；[S4 契约](2026-10-12-s4-evidence-bundle.md)与确定性框架回归不构成真实 Agent 效果验收。
 
 ### P2 暂不启动的大型事项
 
@@ -56,11 +56,11 @@
 
 ## 质量与可靠性保障
 
-当前实验已收尾，S2 显式契约与 S3 受控提取首个切片已交付，下一开发项为 S3 会话反馈与经验闭环。每个实现切片继续执行 Rust 1.98.0 格式、Clippy 与相关回归；依赖审计和锁生命周期问题按实际风险处理。历史证据见 [VALIDATION](../../VALIDATION.md)，安全与溯源不能由平均质量分抵消。
+当前实验已收尾，S2–S4 工程实现已交付，真实 Agent 质量与后续可靠性验收仍待执行。每个实现切片继续执行 Rust 1.98.0 格式、Clippy 与相关回归；依赖审计和锁生命周期问题按实际风险处理。历史证据见 [VALIDATION](../../VALIDATION.md)，安全与溯源不能由平均质量分抵消。
 
 ### 后续验收及启动条件
 
-以下未完成项不计作本轮实验尾项，也不因收尾标为已验收。
+以下未完成项不计作本轮实验尾项，也不因收尾标为已验收。[Issue #64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复已登记，均为 NOT_RUN。
 
 | 编号 | 待办 | 启动条件与通过要求 |
 | --- | --- | --- |

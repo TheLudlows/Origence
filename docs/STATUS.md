@@ -2,7 +2,7 @@
 
 更新：2026-10-15。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
-## Issue #60：身份合表（草稿验证中）
+## Issue #60：身份合表与账本精简（已合入）
 
 第一批将一对一身份映射并入资产，保留身份占位、旧 fact_key 冲突、权限、
 来源撤回和恢复约束；经确认加强坏数据拒绝。当前 authority 23 + graph 3
@@ -10,15 +10,17 @@
 [身份存储合同](contracts/identity-asset-layout.md)包含范围、错误与测试边界，
 [字段清单](contracts/storage-field-audit-2026-10-15.md)保留完整基线盘点。
 [index/ledger](contracts/index-ledger-audit-2026-10-15.md)因键、状态和清理生命周期
-不同，本轮不合并；其他字段候选仍需单独审查。PR #63 的 ad8ab727 功能及
-原生测量 CI 已全绿，但创建性能回退（1k +26.5%、10k +84.9%）；保留草稿，
-已由约束消融/执行计划/等价查询对照定位至身份查重的索引访问路径。
-最小修复只为该查询选择现有身份索引，生产约束不变；等待修复精确头完整验证。
-证据及边界见 [VALIDATION](VALIDATION.md)。
+不同，本轮不合并；其他字段候选仍需单独审查。创建回退已定位至身份查重的索引
+访问路径，并仅为该查询选择现有身份索引，生产约束不变。第二批已删除账本
+attempt/last_error 并取消其旧存储约定，保留 job 重试、账本 next_retry_at 与公开
+idempotency_key；直接 SQL 列访问有破坏性变化，见 [API](API.md#issue-60账本两列精简)。
 
-第二批按确认范围删除账本 attempt/last_error 并取消其旧存储约定，保留job重试、
-账本next_retry_at与公开idempotency_key。直接SQL列访问有破坏性变化；旧格式拒绝，
-不迁移、不修复。范围见 [API](API.md#issue-60账本两列精简)，精确CI待本批执行。
+[PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head
+`22c646988d9fd997f0978b6920e8d41977b6d4f3` 的
+[CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574)
+四项作业通过，已合入 main `53de265bf6b018fa3c26502511c2fd8705d2bea2`；
+[主干 CI 38700118381](https://github.com/TheLudlows/Origence/actions/runs/38700118381)
+适用门禁通过。完整失败、修复及测量边界见 [VALIDATION](VALIDATION.md#最新合入与验证索引2026-10-15)。
 
 ## PR #59：Windows 离线恢复与无 JOIN 查询（已合入）
 
@@ -31,7 +33,7 @@ PR #59 已合入 main `75c238ffa830d50840d4b84c2dce6d7d69a4793c`。
 [主干 CI 38554048610](https://github.com/TheLudlows/Origence/actions/runs/38554048610)
 已通过 Linux 和 Windows 全套门禁；分阶段实验与诊断记录保留在 VALIDATION。
 
-Issue #60 合表、schema 精简和公开命名清理仍不在本轮范围。
+上述 PR #59 不包含 Issue #60 合表、schema 精简或公开命名清理。
 
 ## Issue #61：已确认裁剪（已合入）
 
@@ -42,8 +44,8 @@ PR #62 已合入 main `4c0862e80ccfb8b403268170c06d391239790d2b`；以下分批�
 [归档说明](../archives/publication-cost-probe/ARCHIVE.md)，不作为当前性能门禁。
 公开 Rust/CLI 的删除与替换统一见 [API 变更](API.md#issue-61rust-库与-cli-破坏性变更)。
 第一批 4139e4a 的 Linux/Windows CI 已通过，详见 VALIDATION；
-[PR #62](https://github.com/TheLudlows/Origence/pull/62) 继续保持草稿，
-后续批次仍需各自精确 head 验证，不将第一批结果外推。
+[PR #62](https://github.com/TheLudlows/Origence/pull/62) 已完成三批合入，
+各批历史结果仍只属于对应精确 head。
 
 第二批移除六个旧存储方法与无消费者的后端 Capabilities，保留现有清理、
 作业重试、owner/ledger 及 KeyCapabilities 鉴权契约；离线身份入口收敛为只读
@@ -54,7 +56,8 @@ identity-check。第二批精确 head `44b74835928321482ca62fac0d16c716e0bb732b`
 第三批将 AML 研究执行器及完整本地依赖收至
 [archives/aml-research](../archives/aml-research/README.md)，当前 tools 保留协议/恢复
 客户端、必要 helper 与离线核验；文档按入口、状态、接口、操作、验收分工。
-历史 freeze、报告及结果不重写。第三批仍需独立审查与精确 head CI，不能沿用第二批通过结论。
+历史 freeze、报告及结果不重写。第三批随 PR #62 合入；当前主干验证与尚未执行的
+完整历史工件审计分别见 [VALIDATION](VALIDATION.md#最新合入与验证索引2026-10-15)。
 
 ## Turso / LanceDB 正式接入（已合入）
 
@@ -80,13 +83,16 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 
 ## 当前 CI 范围
 
-常规 Windows 门禁在 main 及明确列出的 refactor/issue61-cleanup、refactor/issue60-identity PR 执行；
-后者复用同一 job 验证待合入代码，不扩大到其他 PR。#59 专用 CDB 调度与
-历史性能调度已归档停用，常规 CI 不提供等价持续性能比较。
+常规 PR 执行 fast-check、linux-native；Windows 仅在 main 执行。
+已合入的 #60/#61 分支例外与身份测量专用 job 已移除；身份诊断保留为
+[显式手工目标](contracts/identity-asset-layout.md#current-manual-measurement-entry-point)。
+#59 专用 CDB 与历史性能调度仍停用，常规 CI 不提供持续性能比较。
+本次整理的精确 head 检查见 [PR #66](https://github.com/TheLudlows/Origence/pull/66)；
+不同提交的结果不相互外推，PR 不执行 Windows。
 
-历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，当时 Windows 仅在主干运行；本轮分支例外见上段。
+历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仅在主干运行；后续 #60/#61 临时分支例外现已收回。
 
-Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及证据归档保持不变。不删除测试用例、Dockerfile、Compose、容器冒烟脚本或 macOS 本地构建能力；macOS 兼容性与容器构建/运行不再由日常 CI 自动验证。下文和 VALIDATION 中五项 CI 的记录保留为对应历史提交的证据，不代表当前覆盖范围。该配置调整的实际 CI 结果以相应提交的 Actions 记录为准。
+该次 2026-10-12 配置调整保留 Linux 原生测试、HTTP 冒烟、AML 进程恢复、关键词检索评估及证据归档，未删除测试用例、Dockerfile、Compose、容器冒烟脚本或 macOS 本地构建能力；macOS 兼容性与容器构建/运行不再由日常 CI 自动验证。下文和 VALIDATION 中五项 CI 的记录保留为对应历史提交的证据，不代表当前覆盖范围。该配置调整的实际 CI 结果以相应提交的 Actions 记录为准。
 
 ## 当前阶段范围
 
@@ -166,8 +172,8 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 
 ## 下一步
 
-- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning 已实现；S4 统一上下文与 Agent 框架已实现，工程记录见 PR #44，当前验证 Turso 权威存储与 LanceDB 原生检索接入及跨库恢复，依赖风险单独处理；随后进行有授权且可复现的真实 Agent 对照，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
-- **可靠性与质量待办**：维护故障、持续容量、冷启动与标签复核已移入[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，不继续延长本轮实验；依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
+- **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning、S4 统一上下文与 Agent 框架，以及 Turso/LanceDB 接入均已实现并合入；真实 Agent 对照仍为 NOT_RUN，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
+- **可靠性与质量待办**：[Issue #64](https://github.com/TheLudlows/Origence/issues/64) 检索召回、延迟及资源验收和 [Issue #65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复验收均仅登记，状态 NOT_RUN；其余持续容量、冷启动与标签复核见[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 - **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 
 完整 SaaS、分布式及新增后端按实际需求另行立项。设计、实现、工程测试与产品效果分别判断。
