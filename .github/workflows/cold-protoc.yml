@@ -13,7 +13,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     env:
-      CARGO_TARGET_DIR: ${{ runner.temp }}/origence-cold-${{ github.run_id }}-${{ github.run_attempt }}
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_INCREMENTAL: 0
       PROTOC: __origence_no_external_protoc__
@@ -29,6 +28,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake make g++
       # Deliberately no cache restore: the native build directory must start empty.
       - name: Direct Cargo build with no external protoc
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/origence-cold-${{ github.run_id }}-${{ github.run_attempt }}
         shell: bash
         run: |
           set -euo pipefail
