@@ -97,9 +97,18 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 但恢复旧 target 缓存且未重编译 lance-datafusion，不能作为完整冷构建证明。
 主干及后续 [草稿 PR #69](https://github.com/TheLudlows/Origence/pull/69) 的 `cb851b1`
 均遇 Linux 缺少 protoc；主干 Windows 另有 protobuf/Abseil CRT 失败。
-`3e6906b` 已补 feature，真实 Cargo 锁文件生成成功且无包升级；携旧锁中间 head
-的普通 CI 已失败，不能作为修复验收。Windows 修复与临时双平台冷构建验证尚待发布及核验，详见
-[精确提交与失败记录](VALIDATION.md#pr-69评估目录整理历史工具移除与冷构建修复验证中)。
+`3e6906b` 补齐 feature 后由真实 Cargo 更新锁文件，无包升级；旧锁中间 head
+的失败保留在 [精确记录](VALIDATION.md#pr-69评估目录整理历史工具移除与冷构建修复验证中)。
+
+修复 head `ab8b4f0c39d11417647dbbc235368934de00a6d1` 的
+[Linux/Windows 冷构建](https://github.com/TheLudlows/Origence/actions/runs/38870633268)
+均通过：全新 target、无缓存恢复、无效外部 PROTOC，源码 protoc 与
+lance-datafusion 的 feature 已核实。Windows 仅验证完整构建，未跑全套测试。
+同 head [普通 CI](https://github.com/TheLudlows/Origence/actions/runs/38870633381)
+的全部适用检查通过，包括默认/无默认测试、严格 Clippy、14/14 维护场景及
+HTTP/MCP/关键词冒烟。本次收尾移除临时冷构建 workflow；正常 Windows 仍仅
+在 main 执行，收尾 head 仍须通过自身普通 CI。详见
+[精确验收证据](VALIDATION.md#pr-69实现-head-冷构建与普通-ci-通过)。
 
 历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仅在主干运行；后续 #60/#61 临时分支例外现已收回。
 

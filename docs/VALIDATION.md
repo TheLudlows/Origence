@@ -100,9 +100,40 @@ S1/S4 的功能、输入数据和质量结论不变，包括已确认保留的�
 - PR #69 初始 head `cb851b1` 的 [CI 38867393422](https://github.com/TheLudlows/Origence/actions/runs/38867393422) 同样在 Linux 缺少 protoc 处失败；目录整理的本地检查不替代原生构建。
 - feature 补齐 head `3e6906bcf6d79eb87411ff77d18eaafa9d0687e2` 的 [真实 Cargo 锁文件作业 38868653971](https://github.com/TheLudlows/Origence/actions/runs/38868653971) 成功，锁文件仅新增两条依赖边，无包升级。该携旧锁的中间 head 的 [普通 CI 38868653848](https://github.com/TheLudlows/Origence/actions/runs/38868653848) 已失败，具体错误尚未从日志独立核验；不能作为更新锁后的修复验收，也不能以锁文件生成成功宣称全套通过。
 
-Windows 修复与临时 Linux/Windows 冷构建作业尚待发布、运行及核验；当前没有
-新精确 head 的双平台冷构建成功证据。`4508bee` 的旧缓存成功结果不能替代它，
-目录变更也不证明新的真实模型效果、生产性能或 Windows 验收。
+### PR #69：实现 head 冷构建与普通 CI 通过
+
+临时 workflow 首版 [run 38870474196](https://github.com/TheLudlows/Origence/actions/runs/38870474196)
+因 job 级环境变量引用不可用的 runner context 被拒绝，未启动 job；不是编译失败。
+将该引用移至 step 级后，精确 head
+`ab8b4f0c39d11417647dbbc235368934de00a6d1` 的
+[冷构建 run 38870633268](https://github.com/TheLudlows/Origence/actions/runs/38870633268)
+在 Linux 与 Windows 均成功。
+
+两平台均使用 Rust/Cargo 1.98.0，显式断言全新 target 目录不存在，不恢复构建缓存，
+将外部 PROTOC 设为无效值，并执行 `cargo build --locked -j 1 -vv`。
+环境记录中的 Cargo.lock SHA-256 均为
+`9dbafd4005645794663627661abb76fe414539416c096cbf3514070c787eec3a`。
+日志确认 protobuf-src 从源码构建并安装 protoc，lance-datafusion 的 build script
+及库均启用 protoc feature。Linux 完整构建 25 分 59 秒，Windows 39 分 57 秒，
+均 exit 0；这次补足了 `4508bee` 旧 target 缓存结果未证明的冷构建路径。
+
+原始环境与完整构建日志已核验：
+- [Linux artifact 12034491341](https://github.com/TheLudlows/Origence/actions/runs/38870633268/artifacts/12034491341)，ZIP SHA-256：`fd24ba6b70cea207b1de7175061f00908d3557d068e784518830640cc353f69f`。
+- [Windows artifact 12035320461](https://github.com/TheLudlows/Origence/actions/runs/38870633268/artifacts/12035320461)，ZIP SHA-256：`a6dbab92431a23010f4e5f3ac42224c90250b838da70a8289e8da87ecca9ffa0`。
+
+同 head 的 [普通 CI 38870633381](https://github.com/TheLudlows/Origence/actions/runs/38870633381)
+全部适用检查成功：fmt、默认/无默认严格 Clippy、无默认 129 项库测试 + 105 项
+集成、默认 209 项库测试 + 233 项集成，以及 8 + 42 项 Python 测试均通过。
+默认套件忽略的维护矩阵随后显式执行，14/14 场景 PASS；HTTP/MCP 冒烟通过，
+keyword 种子评估 24 cases、errors/resolve_errors 均为 0。
+
+- [维护 artifact 12035671008](https://github.com/TheLudlows/Origence/actions/runs/38870633381/artifacts/12035671008)，ZIP SHA-256：`6dfeefce72e269668d9ffbc8cf3c68734611f22c78df5fb03157097fb485daeb`。
+- [检索 artifact 12035213243](https://github.com/TheLudlows/Origence/actions/runs/38870633381/artifacts/12035213243)，ZIP SHA-256：`c05b60c6b2fdb2e77ce79dc5c7ff037a074fb1f207df21402dc1ca3cdd421a13`。
+
+冷构建 job 只执行构建，不等于 Windows 全套测试通过，也不证明真实模型效果、
+生产性能或任意断电恢复。本次收尾移除临时冷构建 workflow，正常 Windows
+仍仅在 main 执行；收尾 head 仍须通过自身普通 CI，不能沿用上述实现 head 的
+结果提前记为已通过。
 
 ## 2026-10-15 合入后整理（本地准备与精确头验证）
 
