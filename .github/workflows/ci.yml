@@ -142,6 +142,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
+          # Exclude pre-toolchain CMake caches, including fallback restores.
+          prefix-key: v1-rust-protobuf-msvc
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       - name: Build tools, lint, and all local lifecycle tests
