@@ -6,7 +6,7 @@
 
 - [PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head `22c646988d9fd997f0978b6920e8d41977b6d4f3` 的 [CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574) 四项作业全部通过：fast-check、Linux native、Windows、identity-layout。身份索引修复、账本两列精简及 Windows 文件快照修正已完成该精确 head 验证。
 - PR #63 已合入 main `53de265bf6b018fa3c26502511c2fd8705d2bea2`，[主干 CI 38700118381](https://github.com/TheLudlows/Origence/actions/runs/38700118381) 适用门禁通过。[PR #62](https://github.com/TheLudlows/Origence/pull/62) 三批裁剪此前已合入 `4c0862e80ccfb8b403268170c06d391239790d2b`；此主干结果不改写各批原始验证记录。
-- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仅登记为后续验收，均为 **NOT_RUN**。真实 Agent 效果、官方 AML Smoke/Full、完整历史工件审计亦未由上述 CI 验收。
+- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仍为 **NOT_RUN**；#65 已准备第一批受控写入故障矩阵，见本文对应小节。真实 Agent 效果、官方 AML Smoke/Full、完整历史工件审计亦未由上述 CI 验收。
 
 历史过程：[Issue #60 身份合表](#issue-60-第一批身份合表) · [身份修复与账本验证](#身份修复完整验收与第二批格式检查) · [Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档](#issue-61-第三批归档与文档收口2026-10-14验证中)。以下正文、失败结果、原始证据与链接保持不变；运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md)。
 
@@ -1173,3 +1173,132 @@ Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目�
 整体不能称成功。修正测试仅快照DB/WAL/SHM文件，缺失sidecar允许不存在，其他读取
 错误仍失败；保留在线check与停库open/offline拒绝、原数据及持久文件逐字节比较。
 不改生产锁或schema拒绝行为，需新精确head跨平台验证。
+
+<a id="issue-65受控原生写入故障矩阵阻断"></a>
+## Issue #65：受控原生写入故障矩阵与最小修复
+
+**限定 Linux 14 格已通过；#65 全范围仍未验收。** [PR #67](https://github.com/TheLudlows/Origence/pull/67)
+包含受控故障测试、CI、文档，以及单个 lance-io 13.0.0 的最小 shutdown 修复；
+没有迁移策略变更。修复实现 head `9963e3bfb3555ab86835e70633ad2b513b06f307` 的
+[CI 38757606804](https://github.com/TheLudlows/Origence/actions/runs/38757606804) 全部适用检查通过，
+[工件 11988328985](https://github.com/TheLudlows/Origence/actions/runs/38757606804/artifacts/11988328985)
+已逐项核验：14/14 PASS、全部正长度 write 命中、7 次进程 T 状态后 SIGKILL exit9、
+7 次持续模拟 errno28，以及原库/恢复副本各两次重试与完整 oracle，共 56 次完成。
+原失败的 compact-enospc-output-later 本次 PID5953、先成功一次写、请求1222 bytes，
+恢复检查通过。矩阵耗时2989.94秒；两项 LocalWriter 回归和后续 HTTP/MCP/AML/retrieval
+检查均通过。Windows 按既有 PR 策略跳过；后续提交或 main 检查须按各自精确 head 判定。
+
+以下保留未修复版本的历史证据。冻结基线 main
+`a2c7950fdaa6d5bdf2f0ee2ca5ee7bf8855f1f25` 的旧 Cargo.lock SHA-256 为
+`caa58c68e874cfad1aa249dc91b55361aa9e6edbb6c8b0f4be9bdda94aacec01`。
+
+### 历史已确认缺陷（修复前）
+
+[正长度复现 run 38734552786](https://github.com/TheLudlows/Origence/actions/runs/38734552786)
+的 head `3bba425c04d58116ae49f5f10d313428cedf6ea9`，
+[原始工件 11973426310](https://github.com/TheLudlows/Origence/actions/runs/38734552786/artifacts/11973426310)：
+- compact 第二张向量表，先完成一次匹配写，再对 1222-byte `write` 持续注入 errno 28。
+  PID 4939，目标 `vec_381c75e02fc00caf69127ec9e3a5a64d.lance/data/.tmpCjEXTy`。
+  这是正长度原生输出写，不是空写、API 前后注入或真实填满磁盘。
+- `operation-result.json` 为 `returned_success=true,error=null`；重试前 authority
+  全量快照通过，native 全量读取报 `UnexpectedEof: failed to fill whole buffer`。
+- 已提交 version 11 manifest `18446744073709551604.manifest` 引用
+  `011101110101100000101010af2f104a9eb6763645b9a8e58b.lance`；文件仅 6784 bytes，
+  缺少正常 `LANC` footer。失败发生在恢复副本和显式 retry 前，不能声称该格已恢复。
+- 上游 [Lance v13.0.0 LocalWriter::poll_shutdown](https://github.com/lance-format/lance/blob/v13.0.0/rust/lance-io/src/object_writer.rs#L760-L800)
+  只判断 inner shutdown 是否 Pending，遗漏 Ready(Err) 后仍 persist 临时文件，
+  与错误写入、成功返回、坏文件被提交的观测链吻合。该复现版本尚无生产修复；后续最小回补及验证见下文。
+
+复现入口为 CI 中的 `maintenance_recovery::native_io_failure_matrix` ignored test；
+该单格诊断使用临时 selector，其他 13 格 NOT_RUN。收尾版本删除所有诊断 selector，
+恢复完整 14 格，并保留失败回归；native 数据 oracle 先于 child 返回状态断言执行。
+新的完整运行必须按自己的精确 head 判定，不能拼接不同 head 的绿色结果。
+
+### 历史场景及实际执行证据（修复前）
+
+| 场景（每项 pause/SIGKILL 与持续模拟 ENOSPC） | 结果来源 |
+|---|---|
+| vector BTree / FTS BTree / ANN / FTS 首个 `_indices` 输出写，8 格 | 38f504f：8 PASS |
+| compact 第二表首个 data 写，2 格 | 38f504f：2 PASS |
+| compact 第二表一次成功写后的 data 写，2 格 | 38f504f：pause PASS、ENOSPC FAIL；3bba425 正长度复现确认不可读 |
+| compact 第二表首个 manifest 写，2 格 | 8d5d234：2 PASS；其他 12 格该轮 NOT_RUN |
+
+- 全矩阵 head `38f504f978aa1372f4f9d6280618366dad493d17`，
+  [run 38729614608](https://github.com/TheLudlows/Origence/actions/runs/38729614608)，
+  [artifact 11970927797](https://github.com/TheLudlows/Origence/actions/runs/38729614608/artifacts/11970927797)：
+  1262.88s，11 PASS / 1 FAIL / 2 NOT_RUN。旧 marker 未记录请求长度，不能用它追认
+  具体 payload 大小；上述 1222-byte 新复现补足证据。成功格原库和恢复副本各 retry 两次。
+- manifest head `8d5d234a74967430d1f27fc01b7ceb70bbe46f0f`，
+  [run 38736460774](https://github.com/TheLudlows/Origence/actions/runs/38736460774)，
+  [artifact 11974910488](https://github.com/TheLudlows/Origence/actions/runs/38736460774/artifacts/11974910488)：
+  两格均拦截 1668-byte `_versions/...manifest#1` write；pause PID 4916、状态 T、exit9，
+  ENOSPC PID 4990、errno28、child exit0。八轮 original/restored retry+完整 oracle 通过。
+  跨轮共有 13 个成功场景和 1 个确认缺陷，**不是某个 head 的 14/14 验收通过**。
+
+### 测试契约与边界
+
+复用 local 集成测试进程，每例使用同版本合成临时库的独立完整副本，不调用模型。
+索引场景在测试准备中仅删除指定索引，经现有公开 adapter upsert 重试；不是首次发布、
+job 自动恢复或新的线上修复 API。显式 Compact 按排序逐向量表独立提交，跳过 FTS，
+不刷新/删除索引、不运行 All/Prune、不清理历史。必须证明第一表版本前进、碎片减少且
+行数不变，故障第二表尚未发布，FTS 未变。manifest 写前不等于 rename/fsync/断电窗口。
+
+Linux-only LD_PRELOAD helper 仅作用有 sentinel 的临时根目录，marker 必须新建在库外。
+只拦截 libc write/pwrite/pwrite64/writev 的正长度请求，记录 requested_bytes、路径、
+系统调用、先前成功写次数、PID、模式及 errno；writev 长度求和防溢出。零长度写放行，
+direct syscall/mmap/io_uring 不覆盖。pause 需确认整进程 T 状态、排他锁仍在，再 SIGKILL；
+死亡或返回后确认锁释放。未命中、超时或数据断言失败均不能算 PASS。
+
+在任何 retry 前比较 authority 全部 22 个业务关系的所有列、Blob 原字节、全部原生行、
+浮点 bit pattern、重复数及维护前历史快照。FTS 不完整须 fail closed；ANN 缺失可合法
+exact fallback，retry 后必须确认 ANN 存在，避免假称 ANN 覆盖。随后完整复制已停止库并
+逐文件核对，original/restored 各 retry 两次，检查当前/旧版本、来源撤回、generation、
+两个 profile、有效 UTF-8 locator、同 tenant 另一 workspace、ANN/exact/FTS 可见性。
+先读完整 native 行再 upsert，避免测试自己的重写掩盖数据丢失。
+
+本批不覆盖首次 publication/job/receipt 重放、维护中来源变更、非空 Learning/graph、
+跨 tenant 非空数据、Windows 在途/ENOSPC、authority 磁盘不足、网络存储、任意断电窗口、
+自动修复或跨版本迁移。恢复副本只证明本合成 fixture。#64 未推进，#65 保持打开。
+
+### 构建、预算及历史诊断
+
+云 workspace 无 Rust/Cargo，本地 gcc 严格告警构建和 shim 8 项自测通过；tools Python
+119 项通过/2 项需 binary 的既有测试跳过，evals 42 项通过，无 JOIN guard 1164 输入通过。
+真实 Rust 1.98.0/Linux 测试走上述 CI；Windows 按既有 PR 策略跳过。
+
+未优化 check 实测 427.62s：两次 vector_candidates 各约104s、FTS candidates 104.59s，
+202 次逐 hit 重验约111s；完整快照1.37s、native 查询1.1s、shutdown0.002s。重复 authority
+读取是独立性能发现，不是恢复死锁。只为维护测试调用启用 turso_core opt-level=2，显式
+保留 debug assertions/overflow checks，相同 SQL/API/断言降至53.01s；普通 Clippy/测试
+和生产配置不变。这不是生产性能修复或端到端基准。优化编译单独45分钟，矩阵75分钟，
+job 原180分钟不变；seed600秒、child/每次retry/每次check120秒，失败保留合成目录。
+
+历史可追溯运行：38720045737（d79e769，fmt/Clippy未过，矩阵未运行）；38720764905
+（d0accba，常规测试过，原30分钟矩阵超时，artifact11968535525，0格完成）；
+38725801242（b642819，seed诊断478.08s，artifact11968890326）；38727852052
+（ddb7b2b，优化seed诊断66.52s，artifact11969112552，常规CI绿）。两个seed诊断均14格
+NOT_RUN。38733853324（a29635d）被新增诊断代码fmt/Clippy拦截、未执行；修正后即上述
+3bba425复现。所有诊断绿色均不替代完整矩阵验收，原始失败工件仍保留。
+
+
+### 最小生产修复：实现 head 完整回归通过
+
+按批准仅 vendor 官方 registry 的 lance-io 13.0.0，保留全部 53 个发布文件
+（44 个 src）及完整 Apache-2.0 LICENSE。归档 SHA-256、上游提交和唯一源码
+差异见 [溯源](../vendor/lance-io/ORIGENCE_PATCH.md)。仅回补 LocalWriter shutdown
+的错误传播：底层 flush 失败时先 Poisoned，再返回原始错误，禁止后续 shutdown
+提交部分输出。未引入上游整 PR；不改变存储格式、原子提交路径或写缓冲界限。
+
+根 Cargo.lock 的 732 个 package name/version 身份完全保留，只去掉 lance-io
+的 registry source/checksum，并给 origence 增加默认 features 关闭的既有可选节点
+直接边，以复用现有 local 集成测试。vendor 自带 lock 仅保留来源，不控制根构建。
+未引入该 crate 的上游 dev 依赖闭包。Docker context 显式包含 vendor；fmt 门槛
+覆盖 origence 全部 targets，避免 `--all` 递归重排第三方源码。
+
+新增两项 public-API 回归：真实只读文件句柄写入在 shutdown flush 时失败，
+确认临时文件清理、最终文件不存在、重复 shutdown/write 继续报错；另核对成功
+shutdown 的完整字节和大小。这不是手动构造 Poisoned，也不依赖 Linux shim。
+实现 head `9963e3bfb3555ab86835e70633ad2b513b06f307` 的真实 Linux CI 已完成
+Rust 编译、两项新回归、常规测试与完整14格，结果和原始工件见本节开头。
+这不替代后续提交的 CI，也不是任意写入窗口或断电保证。Windows 本轮未运行，
+旧损坏数据不会由本补丁自动修复，#65 仍保持打开。

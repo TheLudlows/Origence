@@ -28,7 +28,8 @@ jobs:
           cache-on-failure: true
       - name: Check repository SQL has no joins or unresolved inputs
         run: python3 tools/check_no_join_sql.py
-      - run: cargo fmt --all -- --check
+      # Check all Origence targets without reformatting vendored upstream code.
+      - run: cargo fmt --package origence -- --check
       # Check the Turso authority layer before the full Lance vector backend.
       - name: Authority-only Clippy (without Lance)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
@@ -71,6 +72,34 @@ jobs:
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
       # One complete default-feature run includes the former focused filters.
       - run: cargo test --locked -j 2 --no-fail-fast
+      - name: Build maintenance fixture (test-only optimized Turso interpreter)
+        timeout-minutes: 45
+        run: cargo test --locked --test local --no-run -j 2 --config 'profile.test.package.turso_core.opt-level=2' --config 'profile.test.package.turso_core.debug-assertions=true' --config 'profile.test.package.turso_core.overflow-checks=true'
+      - name: Controlled maintenance native-write recovery (all 14 synthetic fault cases)
+        timeout-minutes: 75
+        env:
+          OC_MAINTENANCE_SHIM: ${{ runner.temp }}/maintenance-io-fault.so
+          OC_MAINTENANCE_EVIDENCE: ${{ runner.temp }}/maintenance-recovery
+        run: |
+          mkdir -p "$OC_MAINTENANCE_EVIDENCE"
+          {
+            git rev-parse HEAD
+            sha256sum Cargo.lock
+            rustc --version --verbose
+            echo "matrix-only turso_core: opt-level=2 debug-assertions=true overflow-checks=true"
+            uname -a
+            stat -f -c 'filesystem=%T block_size=%S' "$RUNNER_TEMP"
+          } > "$OC_MAINTENANCE_EVIDENCE/environment.txt"
+          gcc -Wall -Wextra -Werror -shared -fPIC -pthread tools/maintenance_io_fault.c -o "$OC_MAINTENANCE_SHIM"
+          set -o pipefail
+          cargo test --locked --test local -j 2 --config 'profile.test.package.turso_core.opt-level=2' --config 'profile.test.package.turso_core.debug-assertions=true' --config 'profile.test.package.turso_core.overflow-checks=true' maintenance_recovery::native_io_failure_matrix -- --ignored --exact --nocapture 2>&1 | tee "$OC_MAINTENANCE_EVIDENCE/matrix.log"
+      - name: Preserve maintenance interruption evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maintenance-recovery-linux
+          path: ${{ runner.temp }}/maintenance-recovery/
+          if-no-files-found: ignore
       - name: Debug build and no-model HTTP smoke
         run: |
           cargo build --locked -j 2
