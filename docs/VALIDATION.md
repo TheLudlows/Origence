@@ -10,7 +10,7 @@
 
 历史过程：[Issue #60 身份合表](#issue-60-第一批身份合表) · [身份修复与账本验证](#身份修复完整验收与第二批格式检查) · [Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档](#issue-61-第三批归档与文档收口2026-10-14历史记录)。非 AML 的失败记录与历史证据继续保留；运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md)。
 
-## 2026-10-16 移除 AML 专项测试与实验设施（本地未发布）
+## 2026-10-16 移除 AML 专项测试与实验设施（PR #68）
 
 按本轮确认范围移除 AML 专用 Rust 测试、Python 客户端/演练/评估/工件核验、
 fixtures、历史实验报告及研究执行器归档，并删除 CI 中的 AML 进程恢复步骤。
@@ -32,9 +32,27 @@ fixtures、历史实验报告及研究执行器归档，并删除 CI 中的 AML 
 - `git diff --check` 通过；文档链接检查未发现本轮新增的断链或锚点失效。
 
 本环境没有 Rust 工具链；Rust fmt、Clippy、编译、默认/无默认测试、真实 HTTP/MCP
-及原生维护故障矩阵均为本轮 **NOT_RUN**。没有新远端 CI、提交、推送或 PR。
+及原生维护故障矩阵在本地准备阶段均为 **NOT_RUN**；后续远端验证见下文。
 本轮删除验证设施会减少 AML 专项自动化保障，不是 AML 产品功能删除，也不证明
 生产行为已通过新一轮验收。
+
+## PR #68：protoc 源码构建与真实锁文件准备
+
+[草稿 PR #68](https://github.com/TheLudlows/Origence/pull/68) 同时启用 Lance 13.0.0
+的 `protoc` feature，删除旧 storage-probe helper，改用 CMake/Make/C++ 构建工具。
+生产 AML API 与维护故障矩阵/vendor 修复保留，Windows 仍仅在 main 执行。
+
+初始 head `e6cf9e7d8f33e3587e902d38eaba6f5c28599a76` 的
+[临时锁文件作业](https://github.com/TheLudlows/Origence/actions/runs/38860349394)
+使用真实 Rust/Cargo 1.98.0 执行 `cargo update --workspace`。取回的 artifact
+SHA-256 为 `074b9177ebf445ddd9adc4818d18bb3e3b2fe505449fa50c3961cdda8af7f460`。
+锁文件仅新增 cmake 0.1.58、protobuf-src 2.1.1+27.1，并给五个既有 Lance 包
+加入 protobuf-src 依赖；既有包的版本、来源与 checksum 未改。临时 workflow
+随该真实锁文件纳入而删除，正常 `--locked` 门禁从未绕过或放宽。
+
+初始旧锁文件的门禁结果不作为最终构建验收。完整 Rust fmt/Clippy/默认与无默认
+测试、原生维护与 HTTP/MCP 检查仍以 PR 的最新精确 head 为准；本条记录写入时
+尚待完成。PR 不执行 Windows，Docker/PowerShell 亦未由本次 CI 验证。
 
 ## 2026-10-15 合入后整理（本地准备与精确头验证）
 
