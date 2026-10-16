@@ -1,0 +1,4 @@
+[env]
+# Preserve an existing toolchain environment variable (Cargo defaults to force=false).
+# cmake-rs also gives user target-qualified toolchain variables precedence.
+CMAKE_TOOLCHAIN_FILE = { value = "tools/cmake/protobuf-msvc.cmake", relative = true, force = false }

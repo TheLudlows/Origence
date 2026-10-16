@@ -48,8 +48,8 @@ From the repository root (Python standard library only):
 
 ```sh
 python3 -m unittest discover -s evals -p 'test_*.py' -v
-python3 tools/s4_agent.py --mode plan --output target/s4-plan
-python3 tools/s4_agent.py --mode fixture --output target/s4-fixture
+python3 evals/agent/runner.py --mode plan --output target/s4-plan
+python3 evals/agent/runner.py --mode fixture --output target/s4-fixture
 ```
 
 Output directories must not already exist. `plan` explicitly writes `NOT_RUN`.
@@ -58,7 +58,7 @@ it validates plumbing, bounds, scoring and archival only. The fixture's numeric
 metrics are intentionally not described as Agent or product quality.
 
 The existing `evals/local_models.py` maps JSON-object chat to graph extraction. Do
-not modify or use that chat route for S4. `tools/s4_local_chat.py` is a separate,
+not modify or use that chat route for S4. `evals/agent/local_chat.py` is a separate,
 generic JSON-schema chat adapter with unchanged system/user messages, constrained
 real generation, greedy CPU inference, no cache, no remote-code trust, and existing
 local safetensor snapshots only. Optional runtime packages follow the repository's
@@ -120,11 +120,11 @@ Minimal binding shape (use real verified coordinates/hashes, never these placeho
 After those prerequisites and approval, the explicit local-only commands are:
 
 ```sh
-S4_ALLOW_LOCAL_MODEL_CALLS=true python3 tools/s4_local_chat.py \
+S4_ALLOW_LOCAL_MODEL_CALLS=true python3 evals/agent/local_chat.py \
   --allow-local-inference --model-path /approved/existing/snapshot \
   --model MODEL --revision REVISION --port 8099
 
-S4_ALLOW_LOCAL_MODEL_CALLS=true python3 tools/s4_agent.py --mode live \
+S4_ALLOW_LOCAL_MODEL_CALLS=true python3 evals/agent/runner.py --mode live \
   --allow-local-model-calls --chat-url http://127.0.0.1:8099 \
   --model MODEL --model-revision REVISION --origence-url http://127.0.0.1:8080 \
   --bindings /approved/synthetic-bindings.json --output target/s4-live-new-run

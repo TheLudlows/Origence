@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--run',required=True)
-parser.add_argument('--dataset',default='evals/s1/v2')
+parser.add_argument('--dataset',default='evals/retrieval/v2')
 args=parser.parse_args()
 root=Path(args.run)
 dataset=Path(args.dataset)

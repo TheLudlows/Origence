@@ -91,9 +91,9 @@ Response JSON outside `rendered_context` is not charged to the context budget.
 
 ## Independent Agent evidence
 
-The new `evals/s4` data and `tools/s4_*` harness are separate from AML and its
-observed questions. Four arms share model, prompts, tool permissions, model-call
-limits and context budget: no memory, simple hybrid (summary/graph disabled),
+The `evals/agent` data, `evals/agent/runner.py`, and
+`evals/agent/local_chat.py` harness are separate from AML and its observed questions.
+Four arms share model, prompts, tool permissions, model-call limits and context budget: no memory, simple hybrid (summary/graph disabled),
 EvidenceBundle, and explicitly nondeployable gold diagnostic. A bounded
 model/tool loop records raw actions, observations, final answer, citations,
 errors, assigned-task denominators, token usage, latency and unknown costs as
