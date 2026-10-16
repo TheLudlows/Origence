@@ -142,7 +142,7 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、全文/向量、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
-不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。已完成本地专用测试库的停机整库备份恢复，生产备份恢复及断电仍待验收，范围见 [AML_DRILL](AML_DRILL.md)。逻辑删除保留原文，备份也包含原文。
+不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。
 
 PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/db.rs`、PG 初始化/授权 SQL、Apalis 依赖及 PG 专用测试；新本地进程套件替代其核心应用验收。没有 PG 数据自动迁移功能，不应将 PG 数据目录当作 `OC_DATA_DIR`。
 
@@ -163,16 +163,14 @@ Add 等待上限仍为 25 分钟，上游模型单次调用仍为 45 秒；网�
 
 模型失败仍为 failed；相同 Add 返回原失败任务并给出 503。合法库调用方用通用 receipt.job_id，在 lookup_owned_workspace 返回的 AuthContext 内调用 Service::job_action(...,"retry")；没有额外 AML job 管理 HTTP 入口，root 的 /v1/jobs 不跨 workspace 查询。临时存储故障沿用原 Worker retry_wait。显式 retry 的新 generation 可改变未发布 chunk ID，但保持 job/source/asset；同 generation 的恢复保持证据 ID。重放不保证上游计费一次。
 
-审计/日志不输出消息、query、options、外部 user_id 或模型诊断。原文仍在来源/版本/发布计划内持久保存，墓碑不等于物理擦除。演练、停机整库恢复与清理边界见 [AML_DRILL](AML_DRILL.md)，官方 Smoke/Full 与真实模型验收未由本次工程回归完成。
+审计/日志不输出消息、query、options、外部 user_id 或模型诊断。原文仍在来源/版本/发布计划内持久保存，墓碑不等于物理擦除。停机整库备份边界见[备份与旧基线](#备份与旧基线)；删除来源、工作目录或备份不证明介质物理擦除，副本及模型供应商的保留边界需单独管理。官方 Smoke/Full 与真实模型质量尚未验收。
 
 
 ## 检索分段诊断
 
 设置 RUST_LOG=error,origence::search_timing=debug 可记录成功 Search 的 authorization_ms、embedding_ms、eligibility_ms、vector_ms、branches_ms、verification_ms、total_ms，以及 vector_batches/native_count/returned_count。日志不含 query、证据、用户/资产 ID、路径或凭据。默认 info 不输出这些 debug 事件。
 
-branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户作用域派生/授权查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。性能工具另测完整 HTTP 耗时。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
-
-历史实验结果见[时间与性能诊断](../evals/aml/temporal-v1/README.md)；当时的执行器及依赖见[研究归档](../archives/aml-research/README.md)，不能把报告中的旧命令当作当前运行步骤。
+branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户作用域派生/授权查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。完整 HTTP 耗时须另行测量。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 
 ## 显式停机压实向量文件
 
@@ -191,7 +189,7 @@ origence --data-dir <已有数据目录> --offline vector-compact
 
 每次只处理一个表，使用两个库级压实任务，目标每片 4096 行。Lance 保留索引覆盖边界，已索引与未索引数据不能合并，因此小表也可能保留多个片段；维护不隐式刷新索引。这个目标不是硬内存上限；没有硬超时或硬取消保证。维护需要额外磁盘空间并占用 IO/CPU；保留历史文件意味着它不是磁盘回收或物理擦除。强退/断电中的维护恢复尚未独立验收，不承诺任意断电安全。需要结束维护时应优先等待命令完成，再启动宿主。Worker、上传/解析的取消和关闭保证没有改变。
 
-成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。[完整库与追加写入对照](../evals/aml/maintenance-scale-v1/README.md)验证再次维护可恢复性能，但不据此设置固定维护周期；多 profile 正确性与单 profile 真实模型性能分别验收。实测、被拒绝的列投影方案及范围见[向量性能对照](../evals/aml/vector-perf-v1/README.md)。
+成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。历史维护对照记录见 [VALIDATION](VALIDATION.md#2026-10-11-完整公开库持续写入与再次压实)，不据此设置固定维护周期；多 profile 正确性与单 profile 真实模型性能分别验收。
 
 更细的成功查询计时可设置 RUST_LOG=error,origence::search_timing=debug,origence::vector_timing=debug：vector_timing 提供 list_ms/open_ms/prepare_ms/execute_ms/collect_ms/decode_ms/total_ms 和 returned_count。execute 含规划/启动，collect 含流执行与读取，不应把它全部当作物理磁盘等待。日志不含查询、scope 或过滤表达式。
 

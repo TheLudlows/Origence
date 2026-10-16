@@ -4,7 +4,6 @@
 # Keep executable tests/runners counted and diffs visible; this does not
 # configure standalone line counters such as cloc or tokei.
 evals/**/*.jsonl linguist-detectable=false
-evals/aml/**/*.json linguist-detectable=false
 evals/s1/**/manifest.json linguist-detectable=false
 evals/s1/results/**/*.json linguist-detectable=false
 evals/s4/cases.json linguist-detectable=false
@@ -14,6 +13,4 @@ evals/s4/freeze.json linguist-detectable=false
 
 # Frozen result archives and historical source snapshots, not active runners.
 evals/**/*.gz linguist-detectable=false
-evals/aml/diagnosis/source-at-oracle/*.py.txt linguist-detectable=false
-evals/aml/experiments/*/runner.py.txt linguist-detectable=false
 docs/evidence/**/*.json linguist-detectable=false

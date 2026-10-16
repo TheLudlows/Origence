@@ -1,14 +1,40 @@
 # Origence · 验收与历史证据
 
-本页按原记录保留各阶段、精确提交与运行 ID 的验收证据。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
+本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
 ## 最新合入与验证索引（2026-10-15）
 
 - [PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head `22c646988d9fd997f0978b6920e8d41977b6d4f3` 的 [CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574) 四项作业全部通过：fast-check、Linux native、Windows、identity-layout。身份索引修复、账本两列精简及 Windows 文件快照修正已完成该精确 head 验证。
 - PR #63 已合入 main `53de265bf6b018fa3c26502511c2fd8705d2bea2`，[主干 CI 38700118381](https://github.com/TheLudlows/Origence/actions/runs/38700118381) 适用门禁通过。[PR #62](https://github.com/TheLudlows/Origence/pull/62) 三批裁剪此前已合入 `4c0862e80ccfb8b403268170c06d391239790d2b`；此主干结果不改写各批原始验证记录。
-- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仍为 **NOT_RUN**；#65 已准备第一批受控写入故障矩阵，见本文对应小节。真实 Agent 效果、官方 AML Smoke/Full、完整历史工件审计亦未由上述 CI 验收。
+- [Issue #52](https://github.com/TheLudlows/Origence/issues/52)、[#60](https://github.com/TheLudlows/Origence/issues/60)、[#61](https://github.com/TheLudlows/Origence/issues/61) 已关闭。[#64](https://github.com/TheLudlows/Origence/issues/64) 检索召回/延迟/资源与 [#65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复仍为 **NOT_RUN**；#65 已准备第一批受控写入故障矩阵，见本文对应小节。真实 Agent 效果、官方 AML Smoke/Full亦未由上述 CI 验收。
 
-历史过程：[Issue #60 身份合表](#issue-60-第一批身份合表) · [身份修复与账本验证](#身份修复完整验收与第二批格式检查) · [Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档](#issue-61-第三批归档与文档收口2026-10-14验证中)。以下正文、失败结果、原始证据与链接保持不变；运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md)。
+历史过程：[Issue #60 身份合表](#issue-60-第一批身份合表) · [身份修复与账本验证](#身份修复完整验收与第二批格式检查) · [Issue #61 第一批](#issue-61-第一批裁剪2026-10-14验证中) · [第二批精确头验收](#第二批精确头验收) · [第三批归档](#issue-61-第三批归档与文档收口2026-10-14历史记录)。非 AML 的失败记录与历史证据继续保留；运行步骤见 [OPERATIONS](OPERATIONS.md)，接口变更见 [API](API.md)。
+
+## 2026-10-16 移除 AML 专项测试与实验设施（本地未发布）
+
+按本轮确认范围移除 AML 专用 Rust 测试、Python 客户端/演练/评估/工件核验、
+fixtures、历史实验报告及研究执行器归档，并删除 CI 中的 AML 进程恢复步骤。
+普通 Python 工具测试继续运行；S1/S4、HTTP/MCP、通用存储/消息批次/权限/恢复、
+身份与 PR #67 维护故障矩阵保留。文档删除失效命令与链接，不把历史 CI 计数
+作为当前测试覆盖。生产 Add/Search、默认关闭开关及 DTO/ID/授权/发布行为未改变。
+
+保留 `workspace_schema_rejection` 中的旧 `oc_aml_*` 表哨兵：它验证通用存储只
+接受新 schema，并在发现不兼容旧库时只读拒绝、保留原字节。该保护不是 AML
+协议/评测工具，也不增加旧库迁移或自动修复支持。专项 HTTP 协议、确定性 ID、
+进程强退和停服备份的 AML 专属回归现已移除，不能用保留的通用测试宣称这些
+端到端场景仍有相同覆盖。
+
+本地执行结果：
+
+- `python3 -B -m unittest discover -s tools -p 'test_*.py' -q`：55 passed。
+- `python3 -B -m unittest discover -s evals -p 'test_*.py' -q`：42 passed，包含 S4 的 33 项框架回归；无真实模型调用。
+- `python3 -B tools/check_no_join_sql.py`：1147 个执行输入全部解析，零 JOIN/关联查询债务。
+- `git diff --check` 通过；文档链接检查未发现本轮新增的断链或锚点失效。
+
+本环境没有 Rust 工具链；Rust fmt、Clippy、编译、默认/无默认测试、真实 HTTP/MCP
+及原生维护故障矩阵均为本轮 **NOT_RUN**。没有新远端 CI、提交、推送或 PR。
+本轮删除验证设施会减少 AML 专项自动化保障，不是 AML 产品功能删除，也不证明
+生产行为已通过新一轮验收。
 
 ## 2026-10-15 合入后整理（本地准备与精确头验证）
 
@@ -124,11 +150,11 @@ Windows 按 main-only 策略 skipped，不能算已通过。六个旧 mock 测�
 
 ## 2026-10-11 完整公开库、持续写入与再次压实
 
-[计划与报告](../evals/aml/maintenance-scale-v1/README.md)、[原始记录](../evals/aml/maintenance-scale-v1/run.json)、[独立审计](../evals/aml/maintenance-scale-v1/audit.json)。真实本地 BGE-M3、32 用户/1524 批/15685 条消息，经实际 Add/Search 与停机 CLI 完成基线、压实、重启、外部四用户追加 256 批和再次压实。168 次 Search / 16800 个返回项无错误，完整响应 data/排序等值、原文字节/parser/范围/归属检查及维护行数/版本记录全部通过；完整压缩响应已保留，临时树已清理，无聊天调用。
+本节保留共享维护能力的历史测量；相应 AML 专项执行器与报告已移除。真实本地 BGE-M3、32 用户/1524 批/15685 条消息，经实际 Add/Search 与停机 CLI 完成基线、压实、重启、外部四用户追加 256 批和再次压实。168 次 Search / 16800 个返回项无错误，完整响应 data/排序等值、原文字节/parser/范围/归属检查及维护行数/版本记录全部通过；临时树已清理，无聊天调用。
 
 HTTP p50 / p95：基线 5516.40 / 8026.00 ms；压实 714.51 / 846.79；重启 708.84 / 827.37；追加完成 1524.36 / 1904.78；再次压实 781.30 / 1041.05。每阶段 32 条、nearest-rank，另有追加期间 8 条；保留全部首请求，压实相关阶段最大值仍约 1.93–1.98 秒。17823 行、1524 → 8 碎片，第一次维护 2745.22 ms；追加后 18079 行、264 → 8 碎片，第二次 760.49 ms，两次行数均保持。
 
-python -W error::ResourceWarning tools/aml_maintenance_verify.py --directory evals/aml/maintenance-scale-v1 --output evals/aml/maintenance-scale-v1/audit.json 退出码 0、passed，无模型调用。入库前段与本地回归重叠，不作吞吐量结论；本地测试在 Search 开始前已结束。公开历史有重叠，内容归属不能独立识别相同原文跨用户来源；跨 scope 的不同值和复用 ID 隔离由库与既有 HTTP 回归补充。无新语义质量、长期 SLO、多 profile 实际模型性能、维护中断、断电或磁盘不足验收。
+当时离线工件核验通过，无模型调用。入库前段与本地回归重叠，不作吞吐量结论；本地测试在 Search 开始前已结束。公开历史有重叠，内容归属不能独立识别相同原文跨用户来源；跨 scope 的不同值和复用 ID 隔离由库与既有 HTTP 回归补充。无新语义质量、长期 SLO、多 profile 实际模型性能、维护中断、断电或磁盘不足验收。
 
 ## 2026-10-11 容器输入修复主干验收
 
@@ -140,9 +166,9 @@ PR #34 合入 main 5b4bd94008d833b04078975bef2d122fd09d5001；[run 38135583388](
 
 ## 2026-10-11 多 profile 重复维护回归
 
-在 cc4ee55 生产实现上新增三维度 profile、四个 tenant/workspace scope、两代数据的三轮更新/删除/追加/压实回归；192 行，288 次库查询，维护前独立预期检查与维护后完整 NativeHit 等值检查通过。生产 Rust、依赖和 Cargo.lock 未改。完整公开库 HTTP 实验与复核结果见[本轮报告](../evals/aml/maintenance-scale-v1/README.md)，与确定性库测试分别判断。
+在 cc4ee55 生产实现上新增三维度 profile、四个 tenant/workspace scope、两代数据的三轮更新/删除/追加/压实回归；192 行，288 次库查询，维护前独立预期检查与维护后完整 NativeHit 等值检查通过。生产 Rust、依赖和 Cargo.lock 未改。完整公开库 HTTP 实验与确定性库测试分别判断；上节保留历史测量。
 
-Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（8.41 秒）；cargo test --offline --locked --lib -j 2 为 32 passed（1.19 秒）；cargo test --offline --locked --test local -j 2 为 111 passed（137.63 秒）。新增测试单独为 1 passed / 110 filtered（129.83 秒）。Python 3.13.11 设置 AML_TEST_BINARY：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 49 passed / 0 skipped（4.727 秒）。没有压实中断、断电或生产 SLO 验收。
+Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（8.41 秒）；cargo test --offline --locked --lib -j 2 为 32 passed（1.19 秒）；cargo test --offline --locked --test local -j 2 为 111 passed（137.63 秒）。新增测试单独为 1 passed / 110 filtered（129.83 秒）。当时 Python 3.13.11 的专项工具回归为 49 passed / 0 skipped（4.727 秒）；该专项套件现已移除。没有压实中断、断电或生产 SLO 验收。
 
 ## 2026-10-11 PR #33 主干 CI 与容器输入修复
 
@@ -156,136 +182,17 @@ main cc4ee554a9cf097e1ddea49a8330f9db39593b6d 的 [run 38122931813](https://gith
 
 ## 2026-10-11 向量碎片定位与显式停机维护
 
-基于 main 6a609d3。[报告](../evals/aml/vector-perf-v1/README.md)、[工件清单](../evals/aml/vector-perf-v1/manifest.json)。只新增聚合后端计时、显式离线压实库 API / CLI，以及维护锁非重入保护；精确检索、权限、排序、原文、parser、Worker 和现有取消/隔离保证不变。新增命令逐表提交、保留旧版本，无跨表原子性、硬超时或硬内存保证；[运维边界](OPERATIONS.md#显式停机压实向量文件)。未执行用户业务库维护。
+基于 main 6a609d3；本节保留共享向量维护能力的历史测量。只新增聚合后端计时、显式离线压实库 API / CLI，以及维护锁非重入保护；精确检索、权限、排序、原文、parser、Worker 和现有取消/隔离保证不变。新增命令逐表提交、保留旧版本，无跨表原子性、硬超时或硬内存保证；[运维边界](OPERATIONS.md#显式停机压实向量文件)。未执行用户业务库维护。
 
 - Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（11.92 秒）；cargo test --offline --locked --lib -j 2 为 32 passed（1.17 秒）；cargo test --offline --locked --test local -j 2 为 110 passed（27.07 秒）。覆盖跨连接更新/删除可见性、同/跨进程维护互斥、dry-run、重复维护、旧版本可读、全表预检查拒绝未知表。未带 --offline 的 CLI 正确拒绝。
-- Python 3.13.11，AML_TEST_BINARY 已设置：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 44 passed / 0 skipped（4.754 秒）。
-- 列投影候选：同库基线/候选/基线复测共 24 次真实 Search，结果全等；HTTP p50 2203/2230/2215 ms，无收益，撤回候选并保存两份源码快照。
+- 当时 Python 3.13.11 专项工具回归为 44 passed / 0 skipped（4.754 秒）；该专项套件现已移除。
+- 列投影候选：同库基线/候选/基线复测共 24 次真实 Search，结果全等；HTTP p50 2203/2230/2215 ms，无收益，当时撤回候选。
 - 原生布局对照：1075 行、559 → 1 碎片，Compact 372.97 ms；压实前/后/重开共 24 次查询全部 ID/source/score/顺序一致，约 2.02–2.09 秒降到 0.41–0.44 秒。这是合成向量存储测量。
 - 最终真实 CLI / HTTP 对照：本地 BGE-M3，公开 46 批/502 消息加 512 外部批次，基线/dry-run/压实/重开各 8 次，共 32 次。CLI 活跃宿主拒绝通过；停机压实 2272.10 ms，558 → 1 碎片、1087 行不变；HTTP p50 2247.79 / 2215.76 / 644.13 / 623.94 ms，p95 2348.88 / 3985.38 / 1848.29 / 1779.17 ms。nearest-rank，包含首请求；完整响应 data、顺序、字节和 scope 校验通过。三个实验临时库均清理，无聊天调用。
 - 限制：单个已观察历史、重复查询、debug 构建，未重跑完整 32 用户库；无维护期间强退/断电/磁盘不足、多 profile 压力或生产 SLO 验收。不能把局部改善当全库成绩或质量提升。
 - 上一 main 6a609d3 的 [run 38117103321](https://github.com/TheLudlows/Origence/actions/runs/38117103321) 已成功；不是本次实现提交的 CI，新 PR 验证另记。
 
-## 2026-10-11 时间与裁判消融、Search 分段定位
-
-基于 main 737e209；[报告](../evals/aml/temporal-v1/README.md)、[冻结](../evals/aml/temporal-v1/freeze.json)、[输入/引用审计](../evals/aml/temporal-v1/audit.json)。10 道已观察时间题三臂与 12 个支持校准反例双臂，共 54 次调用 / 53,719 个供应商报告 token，无执行错误、无重试。新日期旁注不改变证据字节；新支持分类仍存在错误放行。旧 supported 字段与新支持分类器分别为 8/12、11/12，与旧 correct AND supported 联合判断不可混为同一指标；旧联合判断这批负例为 0 错误放行。所有新结论只作诊断，不改历史分数或宣称质量验收。
-
-Rust 仅新增不含内容/ID 的聚合 debug 计时。真实 BGE-M3、最大已观察历史 46 批/502 消息先后在两个隔离宿主测量：单历史 HTTP 611–760 ms；追加其他四个用户 512 批单消息后 2143–2312 ms，额外成本集中在向量阶段。16 次 Search 原文/范围和宿主内重复 ID 均通过，两份临时库均清理。尚未复现完整 32 用户库或区分向量后端内部开销；不是优化或 SLO 验收。精确二进制/脚本哈希及首版执行器快照在报告目录。
-
-- Rust 1.98.0：cargo fmt -- --check 通过；cargo clippy --offline --locked --all-targets -j 2 -- -D warnings 通过（9.20 秒）；cargo test --offline --locked --lib -j 2 为 31 passed（1.25 秒）；cargo test --offline --locked --test local aml_ -j 2 为 10 passed / 98 filtered（17.54 秒）。构建完成 35.05 秒。
-- Python 3.13.11，AML_TEST_BINARY 已设置：python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py 为 44 passed / 0 skipped（4.607 秒），新增毫秒精度、负 epoch、闰日、缺失/非法时间、负日期差、UTF-8 原文不变与无效裁判输出检查。
-- python tools/aml_temporal_verify.py 离线重建 30 份输入与引用、核验 24 份校准字段及冻结哈希，passed；54 次调用输入合计 191,501 UTF-8 字节。
-- 前一轮 main 737e209 的 [run 38114714602](https://github.com/TheLudlows/Origence/actions/runs/38114714602) 五个作业全部成功，[记录](../evals/aml/temporal-v1/previous-main-ci.json)；它不是本轮改动的 CI。新 PR CI 在提交后核对。
-
-## 2026-10-11 同预算实验完成与方案决定
-
-[完整报告](../evals/aml/budget-v1/README.md)已完成既定四步。v4 32 题和公开 32 题的 16 份阶段工件原文、范围、排序、预算、引用及关联哈希均复验通过；共 320 次聊天调用 / 477,289 个供应商报告 token，无执行错误，无自动重试，两个临时宿主目录均清理。公开 1,524 批/15,685 条消息的 Add/Search 阶段耗时 30.45 分钟，Search p50/p95 5143.35/5289.27 ms；不是生产容量或 SLO 验收。
-
-公开自动受支持成功 vector/chat/BGE 22/32、22/32、21/32；可答成功 19/29、19/29、18/29，3/3 无答案均拒答。BGE−chat 的 10 分组区间为 −16 到 +25 个百分点。v4 自动原始计数保留，但题意/标签及裁判歧义使安全门槛无法验收。审计记录同模型裁判错误拦截、错误放行及参考日期冲突，不事后改题、剔除失败或重算分数。因此三种实验组件均不新增接入生产流程。
-
-新增聚类统计回归后，Python 3.13.11 `python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py`：41 passed / 0 skipped，4.752 秒（AML_TEST_BINARY 已设置）。`tools/aml_budget_verify.py` 在项目 GPU venv 下对两组各 32 题/8 工件检查全部通过；验证本身没有模型调用。Rust 实现自上节已通过的 head 2044d5a 后未改动，不重复测试来替代实际证据。最终 PR CI 另核对，不把较早 CI 冒充最终提交验收。
-
-## 2026-10-11 PR #31 实现提交 CI
-
-[run 38112578905](https://github.com/TheLudlows/Origence/actions/runs/38112578905) 对 head `2044d5a6751f095595b1bd01fc5c930a268e364d` 成功，实际合并预览 checkout `63111bd`。fast-check 轻量 lib 30/local 86，Python 工具 39 passed/1 skipped（共 40），既有 evals 9 passed；Linux 默认 lib 31/local 108、身份回归 8、Clippy/build/HTTP smoke/强退恢复成功。Windows/macOS/container 按 main-only 策略跳过。[精确记录](evidence/2026-10-11-aml-pr31-ci.json)。此前 main `072ad2c` 的 [run 38110941638](https://github.com/TheLudlows/Origence/actions/runs/38110941638) 五个作业均已成功；不把它当作本轮新改动的三平台验证。
-
-## 2026-10-11 AML 长消息来源与同预算评测
-
-基于 main `072ad2c`。Search 只增加已有 locator 的 parser/source_path/byte_basis/byte_start/end/message_count 标注；原文、分块算法、稳定 ID、解析器版本、Worker、超时/取消/隔离保证不变。新严格评测解码器检查原消息 UTF-8 半开区间、用户 scope 和元数据；片段命中不当作完整消息覆盖。
-
-- Rust 1.98.0：`cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过，8.27 秒；`cargo test --offline --locked --lib -j 2` 为 31 passed，1.18 秒；`cargo test --offline --locked --test local aml_ -j 2` 为 10 passed / 98 filtered，17.71 秒。真实 HTTP Add/Search 回归覆盖跨块中文、emoji、组合字符及范围连续性。
-- Python 3.13.11 设置 AML_TEST_BINARY：`python -W error::ResourceWarning -m unittest discover -s tools -p test_aml_*.py` 为 40 passed / 0 skipped，7.583 秒，含实际强退恢复。新增范围篡改、UTF-8 内部偏移、缺中间块、用户隔离、前缀预算、公开标签隔离和共享历史分组回归。初次测试夹具仅有两块，无法构造“缺中间块”；扩大夹具到三块以上后通过，不影响实现/数据。
-- 受测宿主已 build，二进制与执行器/输入哈希写入[执行冻结](../evals/aml/budget-v1/freeze.json)。固定 32 道 v4 及 32 道公开题，不根据结果改变题目、预算或提示词；运行结果见[本轮报告](../evals/aml/budget-v1/README.md)。本节写入时评测仍在执行，暂无最终质量或新 CI 结论。
-
-## 2026-10-11 PR #30 远端 CI
-
-[run 38110406726](https://github.com/TheLudlows/Origence/actions/runs/38110406726) 对实现 head `c7bc20192bd7d4b8839ba6954f57688376f80aa9` 成功，实际 checkout 为合并预览 `6007c93660b599973b440042f91ac3df4ad7e7a5`。fast-check 轻量 lib 30/local 86、fmt/Clippy、Python 工具 33 passed/1 skipped、既有 evals 9 passed；Linux 默认 lib 31/local 108、身份回归 8、Clippy/build/HTTP smoke/处理中强退恢复通过。Windows/macOS/container 按 main-only 策略跳过，不能称三平台主干已验收。[精确记录](evidence/2026-10-11-aml-pr30-ci.json)。
-
-本次追记仅增加 CI 文档和[公开数据准备清单](../evals/aml/public/README.md)：固定发布版文件已校验，32 道 test-only ID 预选，未运行模型或修改受测实现。
-
-## 2026-10-11 AML 失败归因、正确证据与本地专用重排
-
-基于 main `de17218125cccd83e6cce3b5c39340fc5ae3bd52`。新增离线诊断、oracle、cross-encoder 和其 Answer 对照工具；共享 SHA-256 改为等价的 1 MiB 分块读取以兼容现有 GPU Python 3.10。正式 Rust Search/Add、依赖、Worker、超时/取消/隔离保证未改变。[完整报告](../evals/aml/diagnosis/README.md)、[命令及工件哈希](../evals/aml/diagnosis/manifest.json)。
-
-- 离线核对 35 题、三个检索/回答策略；原文、用户、引用、输入关联哈希与重算指标一致。只重排 3 个可答失败含 2 个 top-40 裁剪、1 个 top-100 缺失。首次压缩归档关联检查失败保留，修复验证压缩前字节，不改历史报告。
-- 正确证据诊断 28 次聊天调用 / 8735 token，旧代理为 12/12 和 16/16；7 道无答案排除。逐题复核发现严格小于被弱化等边界问题，不能宣称语义全对或可靠拒答。
-- 固定官方 BGE-reranker-v2-m3 文件、大小与 SHA-256，RTX 5060 / float16 / batch 8 完成 35 题、3500 对。相同 40 候选 Recall@5 为 75.00%/83.33%，低于历史聊天重排的 91.67%/95.83%。100 对推理 p50 298.18/299.05 ms，p95 887.32/303.75 ms；开发含首次推理，模型加载另计 3319.31 ms。GPU allocated 峰值 1164659200 bytes，不是总进程或端到端指标。
-- 追加固定 Answer 比较 35 次 / 21420 token：专用重排可答代理 8/12、12/16，无答案拒答 3/3、4/4；仍低于聊天重排可答成绩，暂不替换。本轮共 63 次聊天调用、30155 个供应商报告 token；这是分开的两个受限运行，均未超过单运行 60 次上限，无自动重试。
-- 保留 Python 3.10 哈希 API 启动失败、继承 SciPy 二进制不兼容导入失败及修复说明。依赖修复仅在 target 下的项目 venv；模型/缓存不进入 Git。原 helper 快照保留 Oracle 受测代码，模型/提示词/标签不因环境修复调整。
-- [v4 成对数据](../evals/aml/v4/README.md)32 题 / 16 对 / 188 短消息冻结，尚未运行模型，执行配置仍待冻结；预运行时间戳修正前快照保留。无独立人工复核、真实长历史或公开 LongMemEval 新成绩。
-- Rust 1.98.0 `cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过，1.27 秒。无 Rust 实现修改，未重复全量 Rust 测试。
-- Python 3.13.11 设置 AML_TEST_BINARY 后，`python -W error::ResourceWarning -m unittest discover -s tools -p test_*.py -v`：34 passed / 0 skipped / 0 failed，4.680 秒，含实际宿主处理中强退恢复。Python 3.10 的初版 6 项诊断回归也通过；GPU 实验实际完成。
-- `git diff --check` 通过；当时 34 个变更文件的凭据/编码扫描无问题，82 个本地文档链接存在。模型权重已验证被 gitignore 排除；后续新增的本清单/链接再核对。远端 CI 未在此记录中宣称通过。
-
-## 2026-10-11 AML 检索方案调研与决策
-
-基于 main `de17218125cccd83e6cce3b5c39340fc5ae3bd52`，复核既有 Cognee/演进取舍/效果评估文档、当前 AML Search 和 Python 实验实现，并核对官方重排模型、Graphiti、Cognee BEAM 报告、上下文充分性研究及 AML 公开合同。结果见 [阶段决策](AML_RETRIEVAL_DECISION.md)。采用两阶段检索主线，专用/聊天重排待同预算比较；充分性和答案核验单独消融，不改变平台 Answer 边界。
-
-本轮仅新增决策文档并更新 STATUS、索引及本记录；没有改 Rust/Python 实现、依赖、数据或历史实验工件，没有下载新模型或新增模型调用。`git diff --check` 通过；决策/STATUS/索引的 34 个本地链接全部存在，三份文件 UTF-8 解码无替代字符且使用 LF，本节新增决策链接也已核对。未运行 fmt、Clippy 或测试：本轮无实现变更，既有验收记录不作为新策略通过的证据。文档中的待执行实验、模型表现、独立复核和生产接入均未标为已完成。
-
-## 2026-10-11 PR #29 远端 CI
-
-[run 38101081592](https://github.com/TheLudlows/Origence/actions/runs/38101081592) 对实现 head `30ec9364b830472b4b70c635facd2477e6bfae64` 通过，实际 checkout 为合并预览 `7b472a3cf56a7c837dd8a397b6571748ac2fd967`。Linux/MSRV 默认 lib 31/local 108、Clippy、build、HTTP smoke、处理中强退恢复和关键词种子评估通过；fast-check 轻量 lib 30/local 86、fmt/Clippy、工具测试 19 passed/1 skipped（恢复另在 Linux 实跑）、既有评估 9 passed。
-
-Windows/macOS/container 按 main-only 策略跳过，不能据此称三平台主干验收完成。精确 job/step/checkout 见 [CI 工件](evidence/2026-10-11-aml-pr29-ci.json)。本记录仅新增文档证据，不改变以上受测实现。
-
-## 2026-10-11 受限重排/查询扩展与引用式 Answer 对照
-
-基于 02edd6c，新增纯 Python 实验工具、单元测试、合成 v3 数据及工件。业务 Rust、CLI/API 行为、依赖和 Cargo.lock 均未改变；独立宿主复用现有演练 Host，退出回收自身进程和临时数据，不新增业务 worker 或重试循环。受测宿主仍为 main 85454bf，SHA-256 见报告。
-
-- [开发和新主题完整结果](../evals/aml/experiments/results/README.md)保留五个成功运行的逐题原始响应、用量、模型配置、失败分析；[运行清单](../evals/aml/experiments/results/manifest.json)记录精确命令、硬件和模型 digest。检索开发集 15 题/45 次聊天调用（120770 token）；新主题 20 题/60 次（157467 token）。真实本地 BGE-M3 1024 维，聊天 qwen3.8-flash，显式关闭额外推理、JSON 模式、温度 0。
-- 开发集 vector/只重排/扩展重排 Recall@5 为 79.17%/91.67%/95.83%，完整证据覆盖 66.67%/83.33%/91.67%。新主题为 63.54%/95.83%/97.92%，完整覆盖 56.25%/93.75%/93.75%。扩展加 RRF 单独使用反而退化，未推广。新主题只重排和扩展重排检索 p95 为 1554.85/3913.75 ms；均校验原文、metadata、用户范围，独立临时树清理通过。
-- Answer 代理的可答题“参考短语匹配且引用全部必要来源”：开发集 vector/只重排/扩展重排 8/12、10/12、10/12，无答案拒答 3/3、2/3、2/3；新主题为 9/16、15/16、15/16，无答案均 4/4。开发双臂 Answer 30 次调用/13851 token，追加只重排 15 次/4863 token，新主题三臂 60 次/25711 token。只重排答题比较是在看到检索结果后追加的探索性分析。
-- 初始单题策略失败、两次 60 秒请求失败、两次对象格式失败、新主题两次包装格式中断全部保留在 experiments 下各独立目录。未改测试题、标签或检索提示词来修复中断，仅接受有界索引列表/索引对象/单层已知对象包装；正文若存在必须逐字匹配，始终从原候选返回证据。新主题结果属于冻结策略的修复后重跑，不能宣称一次无故障的未见验收。
-- 每运行最多 60 次聊天调用、单请求 40000 UTF-8 字节输入、总输入 1200000 字节、单次输出上限 2048 token、60 秒请求超时，无自动重试；超时不保证供应商硬停止。使用已授权网关且只发送合成内容；模型/host 凭据未写入仓库。额外诊断用量见 [diagnostics](../evals/aml/experiments/diagnostics.json)，无 usage 的失败请求不视为免费，未推算货币费用。
-- Rust 1.98.0：`cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过（1.30 秒）。无 Rust 实现修改，不重复全量 Rust 测试。
-- 设置 `AML_TEST_BINARY=target/debug/origence.exe`，`python -W error::ResourceWarning -m unittest discover -s tools -p test_*.py -v` 最终 20 passed/0 failed，4.420 秒；覆盖查询/模型调用预算边界、索引/原文/对象包装、拒答与引用、冻结 hash，包含既有真实进程恢复。`git diff --check`、变更文档本地链接/凭据扫描和压缩工件核对通过。远端 CI 另记。
-
-决策与限制：仅交付实验工具，暂不接入核心 Search；较便宜的只重排作为下一轮候选，但开发集仍把工单号当作序列号、混淆相似活动温度并降低拒答率。数据均由同一 agent 编写，未独立人工复核；短语代理不验证所有语义、数值边界或附加陈述，不等于官方 Eval。没有生产延迟/SLO、完整长上下文、真实企业语料或注入安全保证。后续优先实体/事实类型区分与保守拒答，服务和域名后置。
-
-## 2026-10-11 AML v2 冻结长历史与近似干扰基线
-
-基于 08b606c，新建合成 v2 数据与冻结配置，评测器新增显式 `--dataset v2` 和按 split 汇总；默认 v1 不变，旧原始工件不改写。Rust 实现与依赖未改变。
-
-- `python tools/aml_quality.py --dataset v2 --binary target/debug/origence.exe --report target/aml-quality-v2-1791679172382.json`：退出码 0，32 批 Add/30 次 Search 完成，512 条短消息、原文 UTF-8 69049 字节。所有命中均通过用户、来源、原文和 metadata 检查，临时树已清理。
-- 开发 12 可答/3 无答案，Recall@5 79.17%、全部必要证据覆盖 66.67%；留出 11 可答/4 无答案，对应 83.33%/72.73%。合计 7/7 无答案有候选，两个可答题在 top-100 仍缺必要来源；[结果及失败表](../evals/aml/results/local-v2/README.md)保存精确指标、来源排名、原始响应压缩包和机器/模型清单。没有运行后调参或改标签。
-- Rust 1.98.0 `cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过（1.11 秒）。Rust 未改，不重复全量代码测试。
-- 设置 `AML_TEST_BINARY=target/debug/origence.exe`，`python -W error::ResourceWarning -m unittest discover -s tools -p test_*.py -v`：10 passed/0 failed，4.391 秒。新增冻结语料 hash、开发/留出用户与来源不交叉、标签完整性检查；既有真实宿主恢复与评测失败工件测试通过。
-- `git diff --check`、变更文档本地链接/凭据扫描、工件与冻结语料/runner hash 核对通过；未运行本轮远端 CI。
-
-边界：数据由同一 agent 编写，留出仅保证来源/用户分离，没有独立人工复核，存在共同风格与题型偏差；无 streaming、长消息分块、Answer/Eval、正式 AML 成绩或生产容量保证。无答案有候选不等于答错。两版语料不同，不拿分数变化当算法改进实验；后续若根据已观察留出题调整实现，需要新的未见测试集。
-
-## 2026-10-11 AML 本地质量 v1 与 64 用户演练
-
-基于分支 codex/aml-local-first 的 33f4937 新增 Python 评测器、合成语料、测试及文档；Rust 实现、Cargo.lock 未改变，实际宿主来自 main 85454bf，二进制 SHA-256 记录在每份工件。
-
-- `python tools/aml_quality.py --binary target/debug/origence.exe --report target/aml-quality-1791678668955.json`：退出码 0，20 次检索完成。2 用户/16 会话/144 条短消息，16 可答题 Recall@5 和全部必要证据覆盖率为 100%，4/4 无答案返回候选；每个响应的用户范围、来源序号、role/timestamp 和完整原文核对通过。临时树已清理。原始响应、哈希、命令、模型 digest 和硬件见 [v1 结果](../evals/aml/results/local-v1/README.md)。
-- `python tools/aml_drill.py --binary target/debug/origence.exe --users 64 --concurrency 8 --rounds 5 --report target/aml-capacity-1791678724785.json`：退出码 0；128 Add/320 Search，全部 7 项协议/隔离/幂等/恢复检查通过。Add p50/p95 1278.21/1714.81 ms、Search 1386.41/1613.23 ms；重启 1950.81 ms、停机整库复制恢复 1936.86 ms。临时树含备份清理成功。[原始演练工件](evidence/2026-10-11-aml-bge-m3-64-users.json)。
-- Rust 1.98.0：`cargo fmt --all -- --check` 通过；`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过（3.95 秒）。没有 Rust 实现修改，不重复全量 Rust 测试。
-- 设置 `AML_TEST_BINARY=target/debug/origence.exe`，`python -W error::ResourceWarning -m unittest discover -s tools -p test_*.py -v`：9 passed、0 failed，4.325 秒。覆盖多跳部分命中/重复候选、无答案分母隔离、跨用户/原文破坏拒绝、失败报告脱敏/保留部分结果/禁止覆盖，以及既有真实进程恢复。既有 CI 通配发现新测试，无工作流变更。
-- `python -m unittest discover -s evals -p test_*.py -v`：7 passed/2 skipped/0 failed，0.016 秒；两项 POSIX shebang fixture 在 Windows 跳过。文档本地链接、凭据扫描、工件哈希核对和 `git diff --check` 通过。未运行本轮远端 CI。
-
-局限：语料为自行编写且未独立人工复核的开发集，两个用户共享 10 个题型模板，只有短消息和重复日常干扰；无留出集、完整长上下文、Answer/Eval 或官方 AML 得分。无答案非空只说明召回候选，不能推断回答错误。并发演练不是长期容量/SLO/内存或断电验收；不同运行的并发、规模与缓存状态不同，不把延迟差异归因为单一瓶颈。已有历史工件未改写。
-
-## 2026-10-11 本地优先 AML 演练
-
-基于已合入 main 的 PR #28（`85454bf69e673af4411b2bdd7874942aabf92682`），本轮仅更新文档与新增证据，未修改实现或依赖。
-
-- 本地 Ollama `bge-m3`、1024 维；执行 `python tools/aml_drill.py --binary target/debug/origence.exe --users 16 --concurrency 4 --rounds 5 --report target/aml-local-first-1791677443798.json`，退出码 0。模型环境设置见 [本地运行步骤](AML_DRILL.md)。
-- 16 用户、32 Add、80 Search；用户隔离、跨 session、未知用户、稳定证据 ID、幂等、发布后重启和停止宿主后整库复制恢复均通过，临时树已清理。Add p50/p95 为 592.85/1922.98 ms，Search p50/p95 为 357.38/491.22 ms；重启/恢复验证为 1711.34/1709.71 ms。计数和延迟不包含额外预检/重放验证调用。
-- [原始报告](evidence/2026-10-11-aml-bge-m3-local-first.json)记录二进制 SHA-256、模型配置及边界。该合成协议演练不产生语义排序分数，不等于官方 Smoke、长期负载或生产 SLO。
-- 核对[官方公开仓库 README](https://github.com/AML-memory/agent-memory-leaderboard/blob/1b8142bfe0f20f1c5218d6b554aa0012de34e504/README.md)及该提交文件树：正式 Smoke 由 AML 平台编排，需平台 AML Key 与公网可访问的 Add/Search；公开代码未包含完整离线 Smoke runner、评测数据与标签。官网/API guide 本次请求返回 HTTP 522，未宣称已复核其最新全文。本地模拟继续进行，服务器/域名后置。
-- 文档本地链接、凭据扫描和 `git diff --check` 通过。本轮无代码变更，不重跑 Rust fmt/Clippy/测试，沿用下列历史验收；未运行新远端 CI。
-
-## 2026-10-11 PR #28 CI 与依赖审计
-
-[run 38096774752](https://github.com/TheLudlows/Origence/actions/runs/38096774752) 的两个实际作业通过：
-head `035aa12f83fd46665636d436caf0a7e0b9a98aa3`，实际 checkout 为合并预览
-`f7d72fc673df9e604eb7f7db510e2ee497964f38`。Linux/MSRV 默认 lib 31/local 108、
-Clippy、build、HTTP smoke、处理中进程强退恢复和关键词种子评估通过；fast-check
-轻量 lib 30/local 86、fmt/Clippy、Python 客户端 4 passed/1 skipped（恢复用例在 Linux
-另跑）、既有 Python 评估 9 passed。Windows/macOS/container 按 main-only 策略跳过，
-不能据此宣称新版本三平台 main 验收。精确 job/checkout 证据见 [CI 工件](evidence/2026-10-11-aml-pr28-ci.json)。
+## 2026-10-11 依赖审计
 
 RustSec cargo-audit 0.22.2 审计 719 个锁文件依赖，数据库提交
 `7eebec69c352c7191b1f13eb95dd510eeca5d1de`；退出码 1，2 vulnerability、
@@ -294,94 +201,6 @@ RustSec cargo-audit 0.22.2 审计 719 个锁文件依赖，数据库提交
 本轮没有升级依赖；当前 stdio 不使用 rmcp 公告涉及的 HTTP 传输，rsa 未在当前
 激活依赖树中，lru 上游缓存的具体调用已检查但不作为安全证明。
 
-本段及附带证据仅文档更新，不改变以上受测代码；历史记录不改写。
-
-## 2026-10-11 AML 处理中恢复与整库备份（后续切片）
-
-继续在 `7b8d7719117f0b8c6ada4acdb5493ac64141278f` 上仅修改演练工具、Python 测试、CI 和文档。
-
-- 设置 `AML_TEST_BINARY=target/debug/origence.exe` 后执行 `python -W error::ResourceWarning -m unittest discover -s tools -p 'test_*.py' -v`：5 passed，0 failed，4.384 秒，无 ResourceWarning。
-- 固定模型请求阻塞时强退真实宿主：确认原 job 为 processing、版本数为 0；重启并重试同一 Add 后，receipt/job ID 不变、仅 1 个 completed job、1 个版本和 2 个完整消息 chunk，重复请求及稳定证据 ID 验证通过。
-- [真实 BGE-M3 备份恢复演练](evidence/2026-10-11-aml-bge-m3-backup-drill.json)：8 用户、16 Add、24 Search，停止宿主后复制完整数据树，恢复到独立副本后原 receipt 与证据 ID 保持不变。重启验证 1727.83 ms、副本恢复验证 1741.41 ms；这两个计时都包括启动、重放和检索。数据树及测试备份均清理，target/aml-drills 为空。
-- 初版测试的 Python sqlite3 context manager 只退出事务而未关闭连接，造成 Windows 临时目录清理失败；使用 contextlib.closing 显式关闭后通过。另关闭 urllib HTTPError 响应句柄，消除资源警告。失败残留仅为该测试自建合成目录，核对绝对路径后已清理。
-- 没有变更 Rust 实现或依赖；沿用下面完整 Rust 验收，不重复运行无关编译。`git diff --check` 与改动文档本地链接/凭据扫描通过。
-
-Linux CI 新增这一真实进程恢复用例；无 binary 的 fast-check 跳过它。仍未测试原生存储写入中间的进程死亡、断电、长期满负载、生产快照或供应商保留。备份采用宿主进程已退出后的完整文件树，不能推广为在线跨库快照保证。历史演练工件保持不变。
-
-## 2026-10-11 AML 检索分支与运行演练
-
-基于 main `9bfc51b0406c0b83ddf0be61e167e980f0e68f79` 的 AML 本地变更，整理到
-`codex/aml-readiness`；本段为本地验收，远端 CI 另记。Windows x86_64 MSVC，
-声明 Rust/Cargo 1.98.0，离线锁定依赖；Cargo.lock 未变。
-
-- `cargo fmt --all -- --check`：通过。
-- `cargo clippy --offline --locked --all-targets -j 2 -- -D warnings`：通过，2.46 秒。
-- `cargo test --offline --locked -j 2 --no-fail-fast`：lib 31/local 108 通过，0 failed；main/doc-tests 0。编译 35.48 秒，执行 1.16/23.21 秒。
-- `cargo test --offline --locked --no-default-features -j 2 --no-fail-fast`：lib 30/local 86 通过，0 failed；doc-tests 0。编译 7.38 秒，执行 1.15/2.25 秒。
-- `python -m unittest discover -s tools -p 'test_*.py'`：4 passed，0 failed，覆盖向量形状/数值、HTTPS 与嵌入凭据拒绝、错误脱敏/重定向拒绝和分位数。
-- `python -m unittest discover -s evals -p 'test_*.py'`：9 项中 7 passed、2 skipped（未设置可执行文件的既有集成用例），0 failed。
-- `git diff --check`、变更文件凭据扫描和文档本地链接检查：通过。
-
-新增公开库 API 回归通过真实 SQLite/LanceDB/SQLite 图验证 AML 派生 scope 的关键词、
-向量、摘要、图及 resolve 组合、跨用户重复请求和 key 撤销。模型夹具固定向量；摘要
-独有词项的得分变化证明分支参与，图实体/边及来源证据保持用户范围。首轮新增测试
-失败于按原大小写匹配规范化图名称，修正为大小写归一后的检查后完整重跑通过。
-
-[固定向量演练](evidence/2026-10-11-aml-fixture-drill.json)覆盖 4 用户、8 Add、8 Search；
-[真实本地 BGE-M3 演练](evidence/2026-10-11-aml-bge-m3-drill.json)覆盖 8 用户、16 Add、24 Search，
-1024 维，模型 digest 和实际二进制 SHA-256 记录在工件中。后者 Add p50/p95 为
-278.23/1708.15 ms，Search p50/p95 为 276.71/444.52 ms；两次演练均通过跨 session、
-未知用户、用户隔离、稳定 ID、幂等及发布后强退重启，自己创建的临时树清理后不存在。
-报告计数是计时主体，额外预检/验证/重放调用不计入分位数。
-
-用户提供的远端模型网关 `/v1/models` 返回 200，公布 16 个聊天模型，没有公布
-embedding 模型；`qwen3.8-flash` 最小聊天请求返回 200、有效 content，usage 为
-prompt 65/completion 27/total 92。只使用合成提示，不在仓库保存网关凭据、完整地址或
-回复正文。这不证明网关完全不支持 embeddings；仍需可用模型名与维度。
-本地 BGE-M3 是既有开发环境，不能替代正式参赛模型或组别确认。
-
-限制：本轮没有语义排序分数、长时间 Full 负载、峰值内存/费用、公网 HTTPS、网关
-长连接、发布中强杀、断电、备份恢复或供应商保留验证；临时目录删除不等于物理擦除。
-演练工具及专用部署/清理步骤见 [AML_DRILL](AML_DRILL.md)。原生测试需要进程，但库实现
-没有新增 subprocess；演练脚本只启动独立待测应用，退出时终止并回收自己创建的宿主。
-PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝 Bypass；最终直接使用
-已安装工具链和缓存完成全部检查，没有修改策略或运行该脚本。
-
-## 2026-10-10 AML Add/Search 最小闭环
-
-继续基于 `9bfc51b0406c0b83ddf0be61e167e980f0e68f79` 的本地工作区，包含上一切片的 scope 变更；未提交、未运行远端 CI。Windows x86_64 MSVC，Rust/Cargo 1.98.0，使用安装在 D:\Rust 的声明工具链、本地依赖缓存与 vendored protoc；Cargo.lock 和依赖未变。
-
-- `cargo fmt --all -- --check`：通过。
-- `cargo clippy --offline --locked --all-targets -j 2 -- -D warnings`：通过，11.62 秒。
-- `cargo test --offline --locked -j 2 --no-fail-fast`：通过；lib 31 / local 107，0 failed；main/doc-tests 0。编译 51.36 秒，lib 执行 1.14 秒、local 25.78 秒。
-- `cargo test --offline --locked --no-default-features -j 2 --no-fail-fast`：通过；lib 30 / local 86，0 failed；doc-tests 0。编译 18.86 秒，lib 执行 1.14 秒、local 2.23 秒。
-- `git diff --check`：通过；13 个新增/相关文件的 UTF-8、行尾空白及文档本地链接检查通过。
-- 首轮 `cargo test --offline --locked -j 2 aml_ -- --nocapture` 为 lib 2 通过、local 6 通过/2 失败：测试错误地预期非法输入为 400，并预期模型失败自动 retry；按既有 422 与显式 job retry 契约修正测试，以上完整回归已覆盖并通过。实现额外收紧 Add 成功检查，要求向量索引对应 committed 账本。
-
-新增 6 项测试（parser 2、AML HTTP/Service 3、scope-only 旧 schema 1）。公开库 API 验证消息边界、多语言/emoji/组合字符、原文重建与消息局部 UTF-8 区间；空/超限/多模态/非法 JSON 整批拒绝。真实 loopback HTTP + 单 Worker + SQLite/LanceDB 验证管理员启用、同步 Add 响应、立即 vector Search、相反事实用户隔离、跨 session 召回、未知用户只读空结果、长 ID、top_k、稳定结果 ID、重复请求及内容冲突、reader/未认证拒绝、脱敏错误与模型不可用不降级。
-
-库层回归验证并发相同 Add 仅一任务、等待超时和丢弃观察 future 不取消持久任务、排队任务重开宿主后复用原 receipt/key 轮换、原文来源/locator、profile 改变及来源撤回不重放虚假成功。模型 fixture 在第二条消息 embedding 失败，整批没有版本或 chunks；显式重试原 job 后完整发布一次。上一 scope-only 数据库仍可映射但不自动安装 Add 表，缺失 Add 功能明确不可用，不兼容表定义拒绝检查。
-
-边界：模型为固定向量的测试服务，不能据此判断语义排序/召回质量、真实参赛配置或吞吐。重启用例覆盖已落库排队任务；未新增 AML 专用的发布中强杀/断电测试，既有保存发布计划恢复回归仍通过。断线用例通过丢弃库观察 future 模拟，未注入真实 TCP 半关闭。未实际等待 25 分钟或测试网关长连接。A2 摘要/图等全部分支专项验收、真实模型验证、部署容量、物理清除和官方 Smoke 未完成。旧库不自动迁移，需专用评测新库。历史证据保持不变。
-
-## 2026-10-10 AML 用户 scope 库接口
-
-基于 `9bfc51b0406c0b83ddf0be61e167e980f0e68f79` 的本地工作区变更；未提交、未运行远端 CI。Windows x86_64 MSVC，声明工具链 Rust/Cargo 1.98.0；使用已安装工具链与本地依赖缓存（Cargo `--offline --locked`），未更改 Cargo.lock 或依赖。
-
-- `cargo fmt --all -- --check`：通过。
-- `cargo clippy --offline --locked --all-targets -j 2 -- -D warnings`：通过。首轮发现测试中未使用的 Lifecycle 导入，移除后重跑通过。
-- `cargo test --offline --locked --no-default-features --test local aml_scope -j 2`：4 passed / 0 failed。
-- 上一命令生成的 `target/debug/deps/local-81113c4df62aa8b5.exe` 无过滤运行：85 passed / 0 failed，2.29 秒，覆盖轻量存储、权限、身份、图、PDF 等回归。
-- `cargo test --offline --locked -j 2 --no-fail-fast`：通过，lib 29 / local 103（含新增 AML 5 项），0 failed；main/doc-tests 均为 0 项。首次默认功能编译 13 分 08 秒，lib 执行 1.15 秒，local 执行 25.83 秒。
-- `git diff --check`：通过；新增/修改文档 UTF-8 与行尾空白检查通过。
-
-新增存储用例验证：显式管理员启用、并发首次创建唯一、Unicode/空格/大小写/运行前缀原样区分、同 tenant 不同 namespace 及跨 tenant 隔离、未知用户不分配、不接受伪造 scope/role、reader 不创建、派生 scope 不扩权、凭据撤销、事务中途失败无孤立 workspace、重开映射不变、旧库不自动升级及异常 schema 拒绝。Service 集成回归另覆盖原文上传 → durable job → keyword search、相反事实及跨会话来源、跨用户文件/资产/job 不可见、密钥轮换和撤销后待发布任务失败，已在本轮默认功能测试通过。
-
-边界：这是 A2 的库接口切片。AML Add/Search HTTP 适配、批次幂等及同步完成、真实模型 vector/hybrid/摘要/图的 AML 全分支端到端验收、部署容量、物理清理和官方 Smoke 尚未完成；不将本地测试视为完整 A2 或参榜验收。历史 S0/S1 证据保持不变。
-
-## 2026-10-10 参榜准备文档
-
-新增 [AML 专项准备计划](AGENT_MEMORY_LEADERBOARD.md)，并补充文档索引及路线图入口。核对当期官方规则与 S1 v2 工件；专项任务仍为待实施。本轮涉及的四份文档经本地文件链接存在性、UTF-8 解码与替换字符、行尾空白检查通过，`git diff --check` 通过。仅修改文档，未重跑 Rust fmt、Clippy、代码测试或远端 CI，不代表 AML 接口、部署或正式评测已验收。
 
 ## S1 v2 检索实验
 
@@ -418,16 +237,14 @@ PowerShell 开发环境初始化脚本受本机策略限制，自动审批拒绝
 
 检查：本轮九份文档 108 个本地链接（含 39 个锚点）、全仓库 Markdown 的 85 处相关引用通过；九份文件严格 UTF-8 解码、替换字符和行尾空白检查通过；git diff --check 退出码 0。原 VALIDATION 字节前缀完整保留，仅追加本条。仅文档变更，未运行 Rust fmt、Clippy、代码测试或新 CI，不新增运行时/产品效果验收。
 
-## 2026-10-11 本轮实验收尾与最终实验主干 CI
+## 2026-10-11 共享维护收尾主干 CI（历史记录）
 
-用户确认结束本轮实验；正式 Search 保持原文 vector，重排/时间辅助/核验留实验层，离线压实已交付。PR #33–#35 的最终实验主干为 2b7b6a67300d9e96eca8be0de282d308b8ded576；[run 38138182208](https://github.com/TheLudlows/Origence/actions/runs/38138182208) completed/success，fast-check、Linux、Windows、macOS、container 五项全部成功。只记录 API 返回的作业结果，不新增未读取日志的测试计数；本记录不代表后续文档提交的 CI。
-
-[收尾证据](evidence/2026-10-11-experiment-closeout.json)：同预算 28、时间诊断 12、早期向量性能 13 份报告目录工件及完整库 manifest 全部 25 项，合计 78 项 SHA-256 核对通过。前三份旧 manifest 只核对报告目录内工件，不把旧源码 hash 与当前代码混用。本次无模型调用、无重新评分，不改历史报告、分数或实验工件。
-
-维护故障、磁盘空间、持续容量、冷启动、独立标签复核及生产数据清理移至产品路线图的 R1–R4/Q1，明确启动条件；收尾不豁免正式参榜与生产验收。文档整理一并提交，当前开发入口切回 S2。
-
-收尾文档本地检查：13 份 Markdown 严格 UTF-8、替换字符与行尾空白通过，190 个本地链接（含 47 个锚点）有效，git diff --check 退出码 0；src/tests/tools/evals/Cargo.toml/Cargo.lock 无差异。仅文档与收尾证据变更，不重复本地 Rust fmt/Clippy/代码测试；本次 PR CI 单独核对。
-
+PR #33–#35 的最终主干为 `2b7b6a67300d9e96eca8be0de282d308b8ded576`；
+[run 38138182208](https://github.com/TheLudlows/Origence/actions/runs/38138182208)
+completed/success，fast-check、Linux、Windows、macOS、container 五项全部成功。
+只保留当时 API 返回的作业结果，不新增未读取日志的测试计数，不外推至后续
+文档提交或当前覆盖。显式离线压实已交付，未增加自动维护；维护故障、磁盘空间、
+持续容量、冷启动及生产清理仍须按各自范围独立验收。
 
 ## 2026-10-12 — S4 EvidenceBundle 工程实现与独立 Agent 框架
 
@@ -572,12 +389,11 @@ P1/P2 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的 [CI 38233936996
 
 P3 一次切换 API 并移除旧专用路径，当前代码仍待其最终 head 的完整 CI；P1/P2 的通过结果不替代 P3 验收。当前云端仍无 Rust/Cargo，Rust、native、真实宿主/CLI 测试的本地执行均 NOT_RUN。
 
-- 本地 Python tools：56 run，54 passed、2 skipped（受控进程强退恢复与新增停服整库备份恢复，缺少 AML_TEST_BINARY）；evals 42 passed。包含下层边界、当前 parser 严格解码、多批次 session 不歧义及显式历史 decoder 回归；冻结 eval/report 数据未改写。
+- 本地 Python tools：56 run，54 passed、2 skipped（受控进程强退恢复与新增停服整库备份恢复，缺少受测宿主二进制）；evals 42 passed。包含下层边界、当前 parser 严格解码、多批次 session 不歧义及显式历史 decoder 回归；冻结 eval/report 数据未改写。
 - 独立源码审查核对 default-off 路由、认证 root 派生/能力、只读未知 Search、删除下层 AML 表/任务/DTO、旧 schema 无写入拒绝、历史工具显式解码；无剩余阻断项。它不是 Rust/native 执行证据或 GitHub maintainer approval。
 - 补强 T13：真实 LanceDB 临时表路径故障，要求持久 retry_wait、无部分可见版本/分块，修复测试自己的阻塞文件后复用原同 generation 的计划/证据 ID，不重复 embedding。生产代码没有新增故障开关或 Worker。
 - 补强 T14：同一个受控 loopback 模型、新建临时库发布多语种多块批次，确认进程已退出后复制完整数据树，恢复到另一个新目录；先检索再重放，核对原回执/job/creator/source/asset/version/chunk/locator，不修改原目录/备份。Host.stop 使用已记录的进程 kill，不宣称优雅退出、在线快照或断电保证。
 - 补强 T15：撤回后真实 HTTP Add 重放返回 409 且原回执及领域 ID 不变。独立审查另发现 ready 索引的 dimension 失配应与 vector Search 一样不可见；现从 materialized saved-chunk CTE 一次投影维度，匹配同 chunk/index 的有效维度，并保持 profile/generation/ledger/数量检查，无 native 每次轮询探测。SQLite-only 2×2 和 200×4096 fixture 通过正常/错维度/恢复/撤回/非法维度，约 0.13–0.23 秒；此项不替代 Rust/native 回归。
-- T01–T02 固定跨语言字节/ID；T03 并发 workspace/batch；T04–T07 所属关系、reader/普通 key、跨 root/tenant、递归、撤销/降权/能力关闭与 I/O 后复核；T08–T10 creator 不转移、全部内容/规格冲突、普通命令 principal 隔离；T11–T12 精确批次消息 UTF-8 locator 和非 AML system/tool；T16 既有 history/S2/S3/Session/Learning/Bundle；T17 新库无 AML 表和旧库原字节保留拒绝；T19 同 generation ID 恢复、显式 retry 规格/回执稳定、已发布任务不重写；T20 下层源码/DDL边界均有已注册测试。T18 需本次最终 default/no-default/HTTP/MCP/CLI CI 证明。
 
 真实 provider、真实评测导入、官方 Smoke/Full 与产品质量结论均 **NOT_RUN**。本次验收只覆盖固定合成/受控模型工程行为；不更改历史实验结果、不扩展迁移或生产级验收。最终精确 head、适用 CI 与主干结果在完成后补记。
 
@@ -941,33 +757,17 @@ Linux 无默认特性 136 lib + 102 integration；Windows 无默认特性为
 结果只属于该精确 head，不替代后续 AML 归档、文档改动或最终 PR head 的验收。
 本节是追加证据，前文当时的“验证中”及第一批记录保留，不重标历史结果。
 
-## Issue #61 第三批归档与文档收口（2026-10-14，验证中）
+## Issue #61 第三批归档与文档收口（2026-10-14，历史记录）
 
 实施基线为第二批 head `44b74835928321482ca62fac0d16c716e0bb732b`。
-AML 研究执行器及其完整本地依赖移至 [archives/aml-research](../archives/aml-research/README.md)，
-归档来源与逐文件校验见该目录 manifest；当前工具保留协议/恢复回归、必要数据 helper
-与离线工件核验。README/docs 入口、STATUS、API、OPERATIONS 与本页分别负责导航、
-当前进度、接口契约/破坏性变更、运行步骤/边界、精确版本证据；既有历史记录不删除或改写。
+该批曾归档 AML 研究执行器并整理 README/docs 分工，随后随 PR #62 合入。
+这些 AML 专项归档、工具、fixtures 与报告现已移除，不再提供执行或审计入口。
 
-`evals/` 的 freeze、哈希、分数、报告与原始工件保持原样。离线核验的源码输入须由
-`--source-root` 显式指定与 freeze 匹配的历史源码树；可使用冻结基线
-`2b7b6a67300d9e96eca8be0de282d308b8ded576`，具体命令见[归档说明](../archives/aml-research/README.md)。
-当前 checkout 或移动后的归档目录不能冒充历史源码根，也不将重新计算的当前结果写回旧 freeze。
-
-本环境缺少完整外部历史工件和对应 tokenizer，未执行完整历史工件审计或真实模型实验。
-第三批格式、Clippy、构建与原生 Linux/Windows 行为验收仍待其精确 head CI；
-第二批绿色结果不是本批通过证据。已执行的本地检查如下：
-
-- tools unittest：113 项（104 项原有 + 9 项新增），保持原有 2 项依赖实际宿主的跳过，其余通过；未删除原有用例。
-- evals unittest：42 项通过。SQL guard 检查 1062 处执行点，零违规/零未解析；其 47 项回归通过。
-- 归档中的 18 份 Python 原件及 1 份 research requirements，共 19 份文件，Git blob ID 与 SHA-256 均与归档来源 `44b74835928321482ca62fac0d16c716e0bb732b` 精确一致。
-- 指定历史源码 `2b7b6a67300d9e96eca8be0de282d308b8ded576` 后，budget 的 9 项、temporal 的 9 项源码哈希全部匹配；maintenance runner 的历史哈希也匹配对应 plan/run。此项仅核验源码，不是完整工件审计。
-- 离线 diagnosis 通过。完整 budget/temporal/maintenance 工件审计仍为 NOT_RUN：本地缺少所需公开语料，budget 另缺 tokenizer 依赖/模型文件，maintenance 大型响应归档本地不可用。缺少输入不是已验证的工件损坏，也不以 helper/unit 测试冒充完整审计。
-
-本地文档检查：六份当前文档的 161 个相对链接/锚点全部解析成功；未发现尾随空白。
-本页原有各阶段验收正文与整理前逐字一致，仅调整页头导航并追加本批证据。
-该检查不执行归档研究入口，不代替完整历史工件审计或原生行为测试。
-
+当时本地 tools unittest 为 113 项（2 项依赖实际宿主跳过），evals unittest
+为 42 项通过。SQL guard 检查 1062 处执行点，零违规/零未解析，其 47 项回归通过。
+六份文档的 161 个相对链接/锚点检查通过，未发现尾随空白。
+本环境当时没有完整外部工件和 tokenizer，完整历史工件审计及真实模型实验未运行；
+本地结果不代替该批精确 head 的原生行为 CI，也不代表当前仍保留同等专项覆盖。
 
 ## Issue #60 第一批：身份合表
 

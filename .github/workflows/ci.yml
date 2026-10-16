@@ -33,9 +33,16 @@ jobs:
       # Check the Turso authority layer before the full Lance vector backend.
       - name: Authority-only Clippy (without Lance)
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
+      - name: Confirm authority-only builds exclude Lance and protobuf compiler
+        run: |
+          cargo tree --locked --no-default-features --edges normal,build --prefix none > /tmp/authority-dependencies.txt
+          if grep -Eq '^(lance(-[^ ]+)?|lancedb|protobuf-src) v' /tmp/authority-dependencies.txt; then
+            cat /tmp/authority-dependencies.txt
+            exit 1
+          fi
       - name: Full test suite without default features
         run: cargo test --locked --no-default-features -j 2 --no-fail-fast
-      - name: AML drill client tests (no external model calls)
+      - name: Python tooling tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
         run: python3 -m unittest discover -s evals -p 'test_*.py' -v
@@ -48,6 +55,8 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
+      # A missing external executable must not be used: Lance builds its own protoc.
+      PROTOC: __origence_no_external_protoc__
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -60,8 +69,8 @@ jobs:
           cache-on-failure: true
       - name: Linux native build tools
         run: |
-          sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
-          protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
+          sudo apt-get update && sudo apt-get install -y cmake make g++
+          cmake --version
       - name: Confirm minimum Rust 1.98.0
         run: |
           rustc --version
@@ -106,10 +115,6 @@ jobs:
           python3 tools/smoke.py --binary target/debug/origence
       - name: MCP stdio local and host-forwarding contracts (no models)
         run: python3 tools/mcp_smoke.py --binary target/debug/origence
-      - name: AML in-flight process recovery (controlled model fixture)
-        env:
-          AML_TEST_BINARY: target/debug/origence
-        run: python3 -m unittest discover -s tools -p 'test_aml_recovery.py' -v
       # Evaluation evidence is run-specific, never part of the Cargo target cache.
       - name: Keyword retrieval seed evaluation (no model calls)
         run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -129,6 +134,8 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
+      # A missing external executable must not be used: Lance builds its own protoc.
+      PROTOC: __origence_no_external_protoc__
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

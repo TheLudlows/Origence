@@ -13,7 +13,15 @@ Origence is a Rust-based foundation for agent memory and knowledge. It provides 
 
 ## Quick start
 
-Requires Rust **1.98.0** and native build tools (a C/C++ compiler and Protobuf).
+Requires Rust **1.98.0**, a C/C++ compiler, CMake, and a native build tool
+(Make on Linux or Visual Studio C++ Build Tools on Windows). Cargo automatically
+builds the protobuf compiler from source through Lance; no separate `protoc`
+installation or `PROTOC` setup is needed. The first native build is slower; Cargo
+caches the result for subsequent builds. On Windows, use an x64 MSVC developer
+shell or `./tools/build.ps1 -Action Build`, which initializes that shell.
+
+`cargo build --locked --no-default-features --lib` skips Lance and the protobuf
+compiler for authority-only library development.
 
 ```sh
 cargo build --locked
@@ -27,7 +35,7 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 [Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
-The index separates current contracts and operations from version-specific validation and historical research. Archived AML experiments are documented in [the research archive](archives/aml-research/README.md); they are not current execution or quality gates.
+The index separates current contracts and operations from version-specific validation and historical research. AML production endpoints remain documented in the API; AML-specific test and experiment facilities have been removed.
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md).
 

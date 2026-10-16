@@ -1,9 +1,7 @@
-# SQLite/LanceDB require a C/C++ compiler and protoc at build time.
+# Turso/LanceDB need native build tools; Lance builds protoc from source.
 FROM rust:1.98.0-bookworm AS build-inputs
-RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends cmake make g++ \
     && rm -rf /var/lib/apt/lists/*
-RUN test -f /usr/include/google/protobuf/empty.proto \
-    && protoc --proto_path=/usr/include --descriptor_set_out=/tmp/protobuf-check.pb google/protobuf/empty.proto
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
