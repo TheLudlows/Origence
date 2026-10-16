@@ -11,9 +11,9 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'tools'))
-import s4_agent as s4
-import s4_local_chat as local
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import runner as s4
+import local_chat as local
 
 
 class ScriptModel:
@@ -309,7 +309,11 @@ class S4Tests(unittest.TestCase):
             output=Path(tmp)/'plan'
             self.assertEqual(s4.main(['--output',str(output)]),0)
             self.assertEqual(json.loads((output/'summary.json').read_text())['status'],'NOT_RUN')
-            self.assertEqual(json.loads((output/'manifest.json').read_text())['live_model_status'],'NOT_RUN')
+            manifest=json.loads((output/'manifest.json').read_text())
+            self.assertEqual(manifest['live_model_status'],'NOT_RUN')
+            self.assertEqual(manifest['code_sha256'], {
+                name: s4.sha((s4.DATA/name).read_bytes())
+                for name in ('local_chat.py','runner.py')})
             with self.assertRaises(SystemExit),contextlib.redirect_stderr(io.StringIO()):s4.main(['--output',str(output)])
 
     def test_live_disabled_before_network(self):

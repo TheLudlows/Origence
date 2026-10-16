@@ -8,7 +8,7 @@ from test_run import RUN
 
 class S1Dataset(unittest.TestCase):
     def test_frozen_hashes_provenance_and_source_disjoint_holdout(self):
-        root = Path(__file__).parent / 's1' / 'v2'
+        root = Path(__file__).parent / 'retrieval' / 'v2'
         manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
         for name, digest in manifest['sha256'].items():
             self.assertEqual(hashlib.sha256((root / name).read_bytes()).hexdigest(), digest)

@@ -24,12 +24,13 @@ fixtures、历史实验报告及研究执行器归档，并删除 CI 中的 AML 
 进程强退和停服备份的 AML 专属回归现已移除，不能用保留的通用测试宣称这些
 端到端场景仍有相同覆盖。
 
-本地执行结果：
+第一批删除后的本地准备结果（下文 `4508bee` 精确 head CI 另行核验；
+不含后续目录整理及 SQL guard 撤除）：
 
 - `python3 -B -m unittest discover -s tools -p 'test_*.py' -q`：55 passed。
 - `python3 -B -m unittest discover -s evals -p 'test_*.py' -q`：42 passed，包含 S4 的 33 项框架回归；无真实模型调用。
-- `python3 -B tools/check_no_join_sql.py`：1147 个执行输入全部解析，零 JOIN/关联查询债务。
-- `git diff --check` 通过；文档链接检查未发现本轮新增的断链或锚点失效。
+- 当时的 SQL guard：1147 个执行输入全部解析，零 JOIN/关联查询债务；该自动检查与其测试随后撤除，不能作为当前运行命令或新 head 验收。
+- `git diff --check` 通过；初次本地文档检查通过。后续将本节标题改为 PR #68 时遗漏了 STATUS 的锚点更新，独立复查已发现并修正；最终文档检查以最新提交为准。
 
 本环境没有 Rust 工具链；Rust fmt、Clippy、编译、默认/无默认测试、真实 HTTP/MCP
 及原生维护故障矩阵在本地准备阶段均为 **NOT_RUN**；后续远端验证见下文。
@@ -50,9 +51,48 @@ SHA-256 为 `074b9177ebf445ddd9adc4818d18bb3e3b2fe505449fa50c3961cdda8af7f460`�
 加入 protobuf-src 依赖；既有包的版本、来源与 checksum 未改。临时 workflow
 随该真实锁文件纳入而删除，正常 `--locked` 门禁从未绕过或放宽。
 
-初始旧锁文件的门禁结果不作为最终构建验收。完整 Rust fmt/Clippy/默认与无默认
-测试、原生维护与 HTTP/MCP 检查仍以 PR 的最新精确 head 为准；本条记录写入时
-尚待完成。PR 不执行 Windows，Docker/PowerShell 亦未由本次 CI 验证。
+实现 head `4508beeb93fbaff311c1e1f4c4a6e0eeb3e02564` 的
+[CI 38860629798](https://github.com/TheLudlows/Origence/actions/runs/38860629798)
+已完成并成功：fmt、默认/无默认严格 Clippy、无默认 129 项库测试 + 105 项集成，
+默认 209 项库测试 + 233 项集成通过。默认套件中忽略的维护矩阵随后显式执行，
+14/14 受控故障场景通过；HTTP/MCP 冒烟与关键词种子评估成功。Python 55 + 42
+项通过。authority-only 依赖树确认不含 Lance/protobuf-src；Linux native 在无效
+外部 PROTOC 配置下完成构建，验证了本轮源码构建路径。
+
+维护工件 SHA-256 为 `3464a35d65a4fd4f48f0acb95306ade2ac829475d76cf7a03b28f0b8b174eb96`，
+检索工件为 `634554c4f3c97cace0739fe504997845f31f98c950ff54e4a5c06696861959c0`。
+这不是任意断电、长期容量或真实模型质量验收。初始旧锁文件失败不作为最终构建
+结论；后续文档收口提交仍需按各自精确 head 通过门禁，不沿用该结果作为新提交
+的已运行证据。PR 不执行 Windows，Docker/PowerShell 亦未由本次 CI 验证。
+
+## PR #68：评估目录整理与历史工具移除（待精确头 CI）
+
+在已通过 CI 的 `4508beeb93fbaff311c1e1f4c4a6e0eeb3e02564` 之后，
+按确认范围将 `evals/s1` 移为 `evals/retrieval`、`evals/s4` 移为 `evals/agent`，
+Agent 执行器与本地聊天适配分别移至 `evals/agent/runner.py` 和
+`evals/agent/local_chat.py`。运行说明、默认路径、测试导入与 CI 引用随之更新；
+S1/S4 的功能、输入数据和质量结论不变，包括已确认保留的七个 S1 历史文件。
+历史 JSON/JSONL、压缩结果及冻结 hash 保持原字节；其中旧路径与源码 hash
+属于原实验提交，不通过改写历史工件来冒充本次迁移后的新验证。
+
+剩余 publication-cost-probe 归档目录已从工作树删除，原始归档说明、文件及
+清单仍可从 [4508bee 历史目录](https://github.com/TheLudlows/Origence/tree/4508beeb93fbaff311c1e1f4c4a6e0eeb3e02564/archives/publication-cost-probe)
+查阅。历史测量、失败与成功结论不改写；历史工件的可下载性与运行复现仍须另验。
+
+自动禁 JOIN 检查脚本、其测试及 CI 步骤按确认范围撤除。SQL 禁 JOIN 编码约束、
+同事务单表读取与 Rust 关联、权限/来源/版本校验和人工审查要求继续保留，
+见 [AGENTS](../AGENTS.md#sql-query-constraints)。本页旧 guard 的计数、命令和
+通过结果仅描述各自历史 head，不能视为当前自动保障。
+
+迁移后的本地检查：
+
+- `python3 -B -m unittest discover -s tools -p 'test_*.py' -q`：8 项通过。
+- `python3 -B -m unittest discover -s evals -p 'test_*.py' -q`：42 项通过，含 33 项 Agent 框架回归。
+- `evals/agent/runner.py` 的 plan/fixture CLI 均成功；fixture 的 40/40 行完成且零 error，无模型调用。
+- 31 个本地可读冻结/历史数据 blob 逐字节相同，包含未改写的 `freeze.json`；远端压缩工件按原 Git blob SHA 移动，不重压缩或重写。
+
+本轮整理的新提交尚待精确 head CI；上方 `4508bee` 的成功结果不能替代本轮验证。
+目录变更不证明新的真实模型效果、生产性能或 Windows 验收。
 
 ## 2026-10-15 合入后整理（本地准备与精确头验证）
 
@@ -230,7 +270,7 @@ RustSec cargo-audit 0.22.2 审计 719 个锁文件依赖，数据库提交
 | vector | 97.57% | 98.61% | 12/12 |
 | hybrid-all | 94.79% | 95.66% | 12/12 |
 
-摘要相对纯原文 Recall 变化为 0；加图下降 2.78 个百分点。详细开发/留出分数、排名、延迟、usage、费用、逐题审计和模型 hash 见[完整 S1 报告](../evals/s1/results/local-77d43a8-v2/README.md)。新增 200 题尚未独立人工复核；单轮 CPU 延迟不是负载测试，留出集结果不能代表生产质量。CPU 成本未定价。
+摘要相对纯原文 Recall 变化为 0；加图下降 2.78 个百分点。详细开发/留出分数、排名、延迟、usage、费用、逐题审计和模型 hash 见[完整 S1 报告](../evals/retrieval/results/local-77d43a8-v2/README.md)。新增 200 题尚未独立人工复核；单轮 CPU 延迟不是负载测试，留出集结果不能代表生产质量。CPU 成本未定价。
 
 ## 当前 CI 与实现验收
 
@@ -284,7 +324,7 @@ Agent 框架。具体范围与非目标见 [S4 契约](superpowers/plans/2026-10
 S4 Python 框架：`python3 -m unittest discover -s evals -p 'test_*.py' -q` 的
 33 项 S4 单测通过（无模型/网络调用）；冻结 10 个新合成任务的四组 fixture 共
 40/40 有界交互循环完成。原始轨迹、全部任务分母、未知成本、输入/代码配置哈希
-和限制见 [S4 框架记录](../evals/s4/README.md)。原始结果已本地保留，公开结果工件
+和限制见 [S4 框架记录](../evals/agent/README.md)。原始结果已本地保留，公开结果工件
 等待明确发布授权，暂未随本 PR 上传；这些数字仅为框架执行记录，不是产品检索/真实 Agent 质量分数。
 
 工程 PR：[PR #44](https://github.com/TheLudlows/Origence/pull/44)。初始 head
@@ -641,7 +681,7 @@ E 阶段允许对 publication plan 的异常 chunks 根类型明确返回
 行为保留，异常根类型即使处于 pending 也明确报错。此项不能扩张为其他异常形状的
 通用改约，也不涉及 Issue #60/#61、schema 精简或暂停的命名清理。
 
-`tools/check_no_join_sql.py` 检查展开后的应用 SQL，包含测试和真实执行 sink；
+历史 PR #59 的 `tools/check_no_join_sql.py` 曾检查展开后的应用 SQL，包含测试和真实执行 sink；
 冻结 baseline 只能缩减，最终接受需零债且零 unresolved。它是有界静态回归检查，
 不是 Rust 编译器、全程序证明或原生 parser 安全证明；固定槽位和静态展开上限
 不提供通用内存/性能保证。Python 检查、独立代码审查与实际 Windows/Linux 测试

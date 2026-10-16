@@ -52,7 +52,7 @@ python3 -m venv /tmp/origence-model-env
 cargo build --locked -j 2
 HF_HUB_DISABLE_XET=1 /tmp/origence-model-env/bin/python evals/local_experiment.py \
   --binary target/debug/origence --model-dir /tmp/origence-models \
-  --download-models --dataset evals/s1/v2 --commit "$(git rev-parse HEAD)" \
+  --download-models --dataset evals/retrieval/v2 --commit "$(git rev-parse HEAD)" \
   --output /tmp/origence-s1-v2-run
 ```
 

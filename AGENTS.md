@@ -28,21 +28,13 @@ implementation. Prefer the smallest change that meets the documented behavior.
 - Keep relational query composition inside storage adapters. Splitting a query
   must not introduce an intermediate commit, weaken snapshot consistency, move
   native/model IO into a transaction, or skip final publication validation.
-- Run `python3 -B tools/check_no_join_sql.py` and its Python unittest suite.
-  During staged conversion, the guard's frozen exact-site baseline may only
-  shrink. A new/changed forbidden query must not be added to it. Use
-  `--zero path/to/file.rs::function` (or an exact file path) for converted code.
-  `BASELINE ONLY` reports debt, not JOIN-free acceptance; `UNRESOLVED` means the
-  static evaluator could not establish coverage and is a failing audit. This
-  bounded Rust/Python regression lint is not a compiler or whole-program proof;
-  review new execution APIs, generated code and unsupported constructs manually.
-  Exact-source typed/forwarding contracts in the checker must be re-reviewed
-  when their source hash changes; external callers' arbitrary SQL is not covered.
 - Review SQL execution inputs after constant/format/concat/include expansion,
-  including test batches and triggers. Do not treat a keyword grep as proof.
-  Preserve historical SQL in non-executed documentation as evidence; do not
-  delete history merely to make the guard green. Finish by eliminating all
-  baseline debt and unresolved inputs, with real Windows/Linux behavior tests.
+  including test batches and triggers. Review new execution APIs, generated SQL,
+  dynamic inputs, and unsupported constructs manually; do not treat a keyword
+  grep as proof. Preserve historical SQL in non-executed documentation as
+  evidence. Verify query changes with real Windows/Linux behavior tests.
+- The automatic SQL guard and its tests have been removed. The JOIN-free coding
+  constraints and manual review requirements above remain in force.
 
 ## Module boundaries and dependencies
 

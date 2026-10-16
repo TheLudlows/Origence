@@ -67,8 +67,8 @@ BGE-small-zh-v1.5（512 维、CLS/L2、对称无指令）与 Qwen2.5-0.5B-Instru
 [原始结果压缩包](raw-results.tar.gz) 保留全部逐题 search/resolve、六配置 manifest/summary、imports、离线投影提示与双阶段原始输出、usage、模型/运行元数据、24 题复跑；[SHA-256 清单](sha256.json) 核对内部每个文件及压缩包。无 API key，无企业数据。解压后可运行：
 
 ```sh
-tar -xzf evals/s1/results/local-77d43a8-v2/raw-results.tar.gz -C /tmp
-python3 evals/audit_s1.py --run /tmp/run --dataset evals/s1/v2
+tar -xzf evals/retrieval/results/local-77d43a8-v2/raw-results.tar.gz -C /tmp
+python3 evals/audit_s1.py --run /tmp/run --dataset evals/retrieval/v2
 ```
 
 完整模型重跑命令与安装方式见冻结数据 README；原始确切命令和依赖 freeze 见 environment。重复生成可能受 CPU/依赖浮点细节影响，不声称跨硬件逐位相同。

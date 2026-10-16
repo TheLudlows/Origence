@@ -40,8 +40,9 @@ PR #59 已合入 main `75c238ffa830d50840d4b84c2dce6d7d69a4793c`。
 PR #62 已合入 main `4c0862e80ccfb8b403268170c06d391239790d2b`；以下分批记录保留为历史验证过程。
 
 第一批删除空来源接口、收窄摘要读取与 schema 检查入口；两个 #59 专用
-诊断 workflow 已移除，完整 publication 探针冻结于
-[归档说明](../archives/publication-cost-probe/ARCHIVE.md)，不作为当前性能门禁。
+诊断 workflow 已移除，完整 publication 探针的
+[历史归档说明](https://github.com/TheLudlows/Origence/blob/4508beeb93fbaff311c1e1f4c4a6e0eeb3e02564/archives/publication-cost-probe/ARCHIVE.md)
+保留在固定提交中；归档目录现已从工作树删除，不作为当前性能门禁。
 公开 Rust/CLI 的删除与替换统一见 [API 变更](API.md#issue-61rust-库与-cli-破坏性变更)。
 第一批 4139e4a 的 Linux/Windows CI 已通过，详见 VALIDATION；
 [PR #62](https://github.com/TheLudlows/Origence/pull/62) 已完成三批合入，
@@ -87,7 +88,7 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 [显式手工目标](contracts/identity-asset-layout.md#current-manual-measurement-entry-point)。
 #59 专用 CDB 与历史性能调度仍停用，常规 CI 不提供持续性能比较。
 2026-10-15 整理的精确 head 检查见 [PR #66](https://github.com/TheLudlows/Origence/pull/66)；
-不同提交的结果不相互外推，PR 不执行 Windows。AML 专项测试、进程恢复步骤和离线工件核验已从当前 CI 移除；生产适配仍保留，通用及非 AML 验证继续独立运行。本轮仅完成本地 Python/静态检查，Rust 与原生行为未重跑，详见 [本轮清理验证](VALIDATION.md#2026-10-16-移除-aml-专项测试与实验设施本地未发布)。
+不同提交的结果不相互外推，PR 不执行 Windows。AML 专项测试、进程恢复步骤和离线工件核验已从当前 CI 移除；生产适配仍保留，通用及非 AML 验证继续独立运行。实现 head `4508bee` 的 Linux/fast-check 已通过，包含源码 protoc、Rust 全测试与14场景维护恢复；后续目录整理与自动 SQL guard 撤除尚待新精确 head CI，不能沿用该结果；SQL 禁 JOIN 编码约束与人工审查继续保留。详见 [本轮清理验证](VALIDATION.md#2026-10-16-移除-aml-专项测试与实验设施pr-68)。
 
 历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仅在主干运行；后续 #60/#61 临时分支例外现已收回。
 
@@ -154,7 +155,7 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 
 | 验证 | 已得到的结论 | 不能据此宣称 |
 | --- | --- | --- |
-| [S0 验收](VALIDATION.md)、[S1 产品检索](../evals/s1/results/local-77d43a8-v2/README.md) | 身份候选过滤已验收；36 篇/300 题六配置实验完成，摘要未见增益，图降低召回 | 新增 200 题尚未独立人工复核；无答案处理与真实 Agent 效果未验收 |
+| [S0 验收](VALIDATION.md)、[S1 产品检索](../evals/retrieval/results/local-77d43a8-v2/README.md) | 身份候选过滤已验收；36 篇/300 题六配置实验完成，摘要未见增益，图降低召回 | 新增 200 题尚未独立人工复核；无答案处理与真实 Agent 效果未验收 |
 
 维护与恢复的历史测量继续保留在 [VALIDATION](VALIDATION.md#2026-10-11-完整公开库持续写入与再次压实)，不作为当前持续性能保证。
 

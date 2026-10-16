@@ -34,4 +34,6 @@
 
 AML 的生产 API 与授权合同继续保留；专用测试、实验、fixture 和报告已移除，不再作为当前 CI 或操作入口。
 
+非 AML 评估入口现为 [retrieval（S1）](../evals/retrieval/README.md) 与 [agent（S4）](../evals/agent/README.md)。历史数据及冻结 hash 保留，目录整理不构成新质量验收。自动禁 JOIN 检查及其测试已撤除，[SQL 编码与人工审查约束](../AGENTS.md#sql-query-constraints)仍保留。
+
 当前行为以代码和 API 为准，进度以 STATUS 为准，目标以设计规格为准，验收以对应版本的记录为准。状态页只保留结论；接口细节、运行步骤和实验数字分别维护在各自文档中。历史研究与实验不代表当前已交付能力。

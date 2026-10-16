@@ -4,12 +4,12 @@
 # Keep executable tests/runners counted and diffs visible; this does not
 # configure standalone line counters such as cloc or tokei.
 evals/**/*.jsonl linguist-detectable=false
-evals/s1/**/manifest.json linguist-detectable=false
-evals/s1/results/**/*.json linguist-detectable=false
-evals/s4/cases.json linguist-detectable=false
-evals/s4/corpus.json linguist-detectable=false
-evals/s4/labels.json linguist-detectable=false
-evals/s4/freeze.json linguist-detectable=false
+evals/retrieval/**/manifest.json linguist-detectable=false
+evals/retrieval/results/**/*.json linguist-detectable=false
+evals/agent/cases.json linguist-detectable=false
+evals/agent/corpus.json linguist-detectable=false
+evals/agent/labels.json linguist-detectable=false
+evals/agent/freeze.json linguist-detectable=false
 
 # Frozen result archives and historical source snapshots, not active runners.
 evals/**/*.gz linguist-detectable=false

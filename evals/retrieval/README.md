@@ -24,7 +24,7 @@ The runner currently scores document-level evidence. It does not score exact cla
 Build the release binary, then run the keyword baseline with the documented adapter. Vector/hybrid require an explicitly enabled embedding service and should record its model, version, dimension, and cost. Never treat a fixed-vector S0 regression model as a semantic-quality result.
 
 ```sh
-python3 evals/run.py --binary target/release/origence --corpus evals/s1/corpus.jsonl --cases evals/s1/cases.jsonl --mode keyword --k 5 --commit 47d1375 --output target/evals/s1-v1-keyword
+python3 evals/run.py --binary target/release/origence --corpus evals/retrieval/corpus.jsonl --cases evals/retrieval/cases.jsonl --mode keyword --k 5 --commit 47d1375 --output target/evals/retrieval-v1-keyword
 ```
 
 The output directory must not already exist. Retain the manifest, per-question results, imports, and summary together.

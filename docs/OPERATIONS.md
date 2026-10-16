@@ -14,7 +14,8 @@
 EXISTS/IN/CTE 替代 JOIN。权限、历史版本、source/version/generation/publication
 校验和最终返回前复核保留；Context/startup 的读取范围和调用方投影按所需数据收窄。
 隐藏行或未消费的异常字段不应污染合法结果；选中必要非法字段仍安全报错，不保留
-多个坏值的首错顺序或旧 panic。有界 SQL 静态检查不等于全程序证明。
+多个坏值的首错顺序或旧 panic。自动 SQL guard 及其测试已撤除，禁 JOIN 编码约束
+与人工审核要求仍按 [AGENTS](../AGENTS.md#sql-query-constraints) 执行；历史静态检查不等于全程序证明。
 
 Windows 原离线恢复回归和主线程原 1 MiB 栈保留。PR #59 已合入的精确主干
 [CI 38554048610](https://github.com/TheLudlows/Origence/actions/runs/38554048610)

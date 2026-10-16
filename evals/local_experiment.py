@@ -19,7 +19,7 @@ import urllib.request
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True)
-    parser.add_argument('--dataset', default=str(Path(__file__).parent / 's1' / 'v2'))
+    parser.add_argument('--dataset', default=str(Path(__file__).parent / 'retrieval' / 'v2'))
     parser.add_argument('--model-dir', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--commit', required=True)
