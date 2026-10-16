@@ -1,5 +1,4 @@
 // One integration executable avoids repeatedly linking the native engines.
-mod aml_protocol;
 mod evidence_bundle;
 mod identity_check_cli;
 mod identity_vector_regression;

@@ -6,7 +6,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $buildRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $buildOldPath = $env:PATH
-$buildOldProtoc = $env:PROTOC
 $buildOldToolchain = $env:RUSTUP_TOOLCHAIN
 Push-Location $buildRoot
 try {
@@ -30,10 +29,9 @@ try {
     $env:RUSTUP_TOOLCHAIN = $buildMsvcToolchain
     $env:CC = 'cl.exe'
     $env:CXX = 'cl.exe'
-    if (-not $env:PROTOC -and -not (Get-Command protoc -ErrorAction SilentlyContinue)) {
-        $buildProtoc = & cargo run --manifest-path tools/storage-probe/Cargo.toml --locked --no-default-features --features build-tools --bin probe-protoc --target-dir target/storage-probe -j $Jobs
-        if ($LASTEXITCODE -ne 0) { throw 'Cannot locate protoc.' }
-        $env:PROTOC = $buildProtoc.Trim()
+    # Lance builds protoc from source; only the native build toolchain is needed.
+    if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+        throw 'Install CMake (or the Visual Studio C++ CMake tools component).'
     }
     if ($Action -eq 'Validate') {
         & cargo fmt --all -- --check
@@ -52,7 +50,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Cargo $Action failed." }
 } finally {
     $env:PATH = $buildOldPath
-    $env:PROTOC = $buildOldProtoc
     $env:RUSTUP_TOOLCHAIN = $buildOldToolchain
     Pop-Location
 }

@@ -1,6 +1,6 @@
 # Origence · 当前状态
 
-更新：2026-10-15。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-10-16。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
 ## Issue #60：身份合表与账本精简（已合入）
 
@@ -53,11 +53,10 @@ identity-check。第二批精确 head `44b74835928321482ca62fac0d16c716e0bb732b`
 的 [CI 38591327253](https://github.com/TheLudlows/Origence/actions/runs/38591327253)
 已通过；测试计数与范围见 [VALIDATION](VALIDATION.md#第二批精确头验收)。
 
-第三批将 AML 研究执行器及完整本地依赖收至
-[archives/aml-research](../archives/aml-research/README.md)，当前 tools 保留协议/恢复
-客户端、必要 helper 与离线核验；文档按入口、状态、接口、操作、验收分工。
-历史 freeze、报告及结果不重写。第三批随 PR #62 合入；当前主干验证与尚未执行的
-完整历史工件审计分别见 [VALIDATION](VALIDATION.md#最新合入与验证索引2026-10-15)。
+第三批曾整理研究执行器与文档，随 PR #62 合入。AML 专项工具、测试、fixtures、
+归档研究执行器及实验报告现已移除；此项不删除生产 AML Add/Search 适配、
+通用 MessageBatch/授权能力或非 AML 的 S1/S4 与维护恢复验证。
+各批历史 CI 仅描述其精确 head，不代表当前保留相同测试覆盖。
 
 ## Turso / LanceDB 正式接入（已合入）
 
@@ -75,11 +74,11 @@ Summary 保持权威文本按同 chunk 跨行聚合后的 AND 语义，不使用
 
 ## AML API 收敛（Issue #48）
 
-[执行契约](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md)已冻结并包含真实 UUIDv5 输入字节/ID 向量。[P1/P2 PR #50](https://github.com/TheLudlows/Origence/pull/50) 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的独立审查无阻断项，[适用 PR CI](https://github.com/TheLudlows/Origence/actions/runs/38233936996) 全通过。通用一层所属 workspace、显式默认关闭的 key 能力、workspace 批次幂等、不可变接受规格、MessageBatch 及实时发布状态可被非 AML 库调用方复用。
+[执行契约](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md)保留固定 UUIDv5 命名空间与完整输入编码合同。[P1/P2 PR #50](https://github.com/TheLudlows/Origence/pull/50) 最终 head `95917b89811a259ccfa944cb21422344c8472992` 的独立审查无阻断项，[适用 PR CI](https://github.com/TheLudlows/Origence/actions/runs/38233936996) 全通过。通用一层所属 workspace、显式默认关闭的 key 能力、workspace 批次幂等、不可变接受规格、MessageBatch 及实时发布状态可被非 AML 库调用方复用。
 
 P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同一 Worker/发布链并删除专表、专用任务与旧授权路径。AML 路由默认关闭；受信后端显式启用并授予 root key 能力。旧 schema 被拒绝，不删除或转换。[P3 PR #51](https://github.com/TheLudlows/Origence/pull/51) 实现 head `9c49231704430ea685e6e30661088442e1e62833` 的独立审查无阻断项，[适用 PR CI](https://github.com/TheLudlows/Origence/actions/runs/38236518092) 全通过，包括原生写失败、进程恢复及停服整库备份恢复。后续文档/部署配置提交同样以 PR 的精确 head 检查为合入门禁；完整记录见 VALIDATION。
 
-真实模型、官方 Smoke/Full 与真实评测导入保持 NOT_RUN；不扩大旧库迁移范围，不修改历史实验结论。
+真实模型、官方 Smoke/Full 与真实评测导入未验收；不扩大旧库迁移范围。
 
 ## 当前 CI 范围
 
@@ -87,8 +86,8 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 已合入的 #60/#61 分支例外与身份测量专用 job 已移除；身份诊断保留为
 [显式手工目标](contracts/identity-asset-layout.md#current-manual-measurement-entry-point)。
 #59 专用 CDB 与历史性能调度仍停用，常规 CI 不提供持续性能比较。
-本次整理的精确 head 检查见 [PR #66](https://github.com/TheLudlows/Origence/pull/66)；
-不同提交的结果不相互外推，PR 不执行 Windows。
+2026-10-15 整理的精确 head 检查见 [PR #66](https://github.com/TheLudlows/Origence/pull/66)；
+不同提交的结果不相互外推，PR 不执行 Windows。AML 专项测试、进程恢复步骤和离线工件核验已从当前 CI 移除；生产适配仍保留，通用及非 AML 验证继续独立运行。本轮仅完成本地 Python/静态检查，Rust 与原生行为未重跑，详见 [本轮清理验证](VALIDATION.md#2026-10-16-移除-aml-专项测试与实验设施本地未发布)。
 
 历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仅在主干运行；后续 #60/#61 临时分支例外现已收回。
 
@@ -119,7 +118,7 @@ Add/Search 的协议只保留在 API：认证 tenant/root 与完整 user_id 通�
 
 Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规格和精确批次/消息范围，复用单 Worker 整批发布，全部索引可检索后才确认成功。同一用户多个 session 共同检索，session_id 只标记来源。跨 key 重放复用原回执但不转移任务 creator；撤销旧 key 不允许新 key 接管未完成任务。Search 对未知用户只读返回空，不创建 workspace。
 
-正式 AML Search 保持原文 vector，关闭摘要/图，不生成 Answer。聊天重排、本地 BGE reranker、时间辅助与同模型核验留在实验层。新来源 parser 为 message-batch-ranges-v1，带来源事件/批次/版本信息；历史 parser/报告不改写。跨 session 历史检索不等于反馈学习，真实模型质量、正式组别/模型、持续容量/清理验收、官方 Smoke/Full 尚未完成。服务器和域名按用户要求后置，剩余任务见 [AML 计划](AGENT_MEMORY_LEADERBOARD.md)。
+正式 AML Search 保持原文 vector，关闭摘要/图，不生成 Answer。新来源 parser 为 message-batch-ranges-v1，带来源事件/批次/版本信息；历史 parser 的来源字节语义不重新解释。跨 session 历史检索不等于反馈学习，真实模型质量、正式组别/模型、持续容量/清理验收、官方 Smoke/Full 尚未完成。AML 专项测试与实验设施已经移除；后续正式质量验收需另行确定范围。
 
 ## S2 显式语义契约
 
@@ -149,14 +148,6 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 
 条件不可由模型扩大，每个检索片段保留条件和支持；本切片仅对 Learning 禁用 summary/graph，防止脱离适用范围的转述。整轮次证据与有界传递支持在读取、索引及发布时统一核验，来源撤回先隐藏再清理；普通更新/恢复不能绕过。没有新 Worker、provider、迁移、自动触发、排序改权或 Guidance 生命周期。该阶段当时尚未交付 S4 EvidenceBundle；其工程实现见第五阶段，独立真实质量仍未验收。详见 [实施契约](superpowers/plans/2026-10-12-s3-improve-learning.md)、API 与本提交 VALIDATION；该阶段已由 [PR #43](https://github.com/TheLudlows/Origence/pull/43) 合入 main `55b5d879`，其最终 head 的 PR CI 与独立审查通过；不替代 S4 CI。
 
-## 本轮实验已结束
-
-2026-10-11 按用户确认收尾。冻结结论：正式 AML Search 保持原文 vector；重排、时间辅助及同模型核验留实验层；显式离线压实已交付，不增加自动维护。相关代码与工件经 PR #33–#35 合入 main 2b7b6a6，该提交[五项 CI](https://github.com/TheLudlows/Origence/actions/runs/38138182208)全部成功；[收尾核对](evidence/2026-10-11-experiment-closeout.json)记录 78 项哈希检查全部通过。历史报告中的“下一步”保留为当时记录，后续任务以路线图为准。研究执行器现收至[完整依赖归档](../archives/aml-research/README.md)，历史 freeze 与结果继续保留在原 eval 路径。
-
-本轮完成不等于生产可靠性、独立质量或官方 AML 验收完成。实验进程已结束，执行记录确认临时库已清理；不重跑已观察题来宣称新质量收益。
-
-收尾文档经 [PR #36](https://github.com/TheLudlows/Origence/pull/36) 合入 main `db939960`；其 head `582d6be2` 的 [PR CI](https://github.com/TheLudlows/Origence/actions/runs/38142952091) 成功，fast-check、Linux 通过，Windows/macOS/container 按 main-only 策略跳过。
-
 ## 当前证据与结论
 
 2026-10-12 核验：第一阶段收口已由 [PR #39](https://github.com/TheLudlows/Origence/pull/39) 合入 main `7a20540cfadf94199d2787415c619de2aaba9721`；[CI run 38194107923](https://github.com/TheLudlows/Origence/actions/runs/38194107923) 的 fast-check、Linux、Windows、macOS、container 五项均成功。该结果不替代后续提交的 CI。
@@ -164,17 +155,13 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 | 验证 | 已得到的结论 | 不能据此宣称 |
 | --- | --- | --- |
 | [S0 验收](VALIDATION.md)、[S1 产品检索](../evals/s1/results/local-77d43a8-v2/README.md) | 身份候选过滤已验收；36 篇/300 题六配置实验完成，摘要未见增益，图降低召回 | 新增 200 题尚未独立人工复核；无答案处理与真实 Agent 效果未验收 |
-| [AML 本地演练](AML_DRILL.md) | 真实 BGE-M3 协议、64 用户并发、跨 session、重启和停机备份恢复完成；固定模型处理中强退恢复通过 | 官方 Smoke、长期容量或断电保证 |
-| [同预算质量实验](../evals/aml/budget-v1/README.md)、[时间诊断](../evals/aml/temporal-v1/README.md) | 重排尚无稳定质量优势；发现标签歧义、时间问题和裁判错判，继续留实验层 | 当前 64 题已被观察，不能作为未见验收或官方分数 |
-| [完整库维护](../evals/aml/maintenance-scale-v1/README.md) | 32 用户、15,685 条消息；168 次 Search 完整响应/排序/原文字节复核通过；压实后延迟改善，追加后再次维护有效 | 冷启动尾部仍在；无长期 SLO、维护中断/磁盘不足或实际多模型性能验收 |
 
-早期 [查询扩展](../evals/aml/experiments/results/README.md)、[重排诊断](../evals/aml/diagnosis/README.md)及[向量后端定位](../evals/aml/vector-perf-v1/README.md)保留为历史依据；原始分数和工件不改写。容器缺 examples 的问题已修复，具体提交与验收见 VALIDATION。
+维护与恢复的历史测量继续保留在 [VALIDATION](VALIDATION.md#2026-10-11-完整公开库持续写入与再次压实)，不作为当前持续性能保证。
 
 ## 下一步
 
 - **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning、S4 统一上下文与 Agent 框架，以及 Turso/LanceDB 接入均已实现并合入；真实 Agent 对照仍为 NOT_RUN，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
 - **可靠性与质量待办**：[Issue #64](https://github.com/TheLudlows/Origence/issues/64) 检索召回、延迟及资源验收和 [Issue #65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复验收尚未完成；#64 仍仅登记，#65 的受控故障测试曾发现阻断缺陷：压实尾部正长度写遭持续模拟 ENOSPC 时可能返回成功并提交不可读的 Lance 文件；现已通过单个 lance-io 13.0.0 的 shutdown 错误传播回补修复；实现 head `9963e3b` 的 [CI 38757606804](https://github.com/TheLudlows/Origence/actions/runs/38757606804) 已核验 Linux 14/14 场景及 56 次原库/恢复副本重试与完整数据核对通过；这不代表 #65 全范围验收完成，见 [证据与边界](VALIDATION.md#issue-65受控原生写入故障矩阵阻断)；其余持续容量、冷启动与标签复核见[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
-- **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 
 完整 SaaS、分布式及新增后端按实际需求另行立项。设计、实现、工程测试与产品效果分别判断。
 

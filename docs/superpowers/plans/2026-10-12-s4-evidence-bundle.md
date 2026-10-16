@@ -4,8 +4,8 @@
 
 This is an additive read-only context layer. `Service::evidence_bundle`, HTTP
 `POST /v1/context`, and MCP `context_bundle` share one request and response.
-Existing search/resolve, storage backends, migrations, publishers, workers and
-AML experiments are unchanged. Guidance remains external evidence, not a new
+Existing search/resolve, storage backends, migrations, publishers and workers
+are unchanged. Guidance remains external evidence, not a new
 lifecycle. Current-stage databases are fresh databases per AGENTS.md.
 
 Engineering coverage and Agent effectiveness are separate gates. Fixtures prove

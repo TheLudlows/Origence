@@ -188,11 +188,11 @@ AML 只在 `origence::api::aml` 适配层定义 DTO、校验、确定性 ID、�
 | `POST /aml/add` | `{request_id,user_id,session_id,messages:[{role:"user"或"assistant",content:"原文",timestamp:可选Unix毫秒整数}]}` |
 | `POST /aml/search` | `{query,user_id,top_k,options:可选字符串数组}` → `{data:[{id,content}]}` |
 
-用户 workspace 使用冻结 UUIDv5 命名空间和版本化长度编码，由认证 key 的 tenant/root 与完整 user_id 计算；[实际字节与 UUID 向量](contracts/aml-workspace-v1-vectors.json)。大小写、空格与 Unicode 编码形式原样保留，不截断或归一化；session、request、key、模型或重启不改变定位。需要隔离的新数据集使用另一个显式 root。ID 不是权限凭证，不承诺数学上的无碰撞；已有 ID 的 tenant/owner 不符则冲突，不能改绑或随机回退。
+用户 workspace 使用冻结 UUIDv5 命名空间和版本化长度编码，由认证 key 的 tenant/root 与完整 user_id 计算；[确定性编码合同](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md#确定性编码细节)。大小写、空格与 Unicode 编码形式原样保留，不截断或归一化；session、request、key、模型或重启不改变定位。需要隔离的新数据集使用另一个显式 root。ID 不是权限凭证，不承诺数学上的无碰撞；已有 ID 的 tenant/owner 不符则冲突，不能改绑或随机回退。
 
 Add 将 request_id 编成 `aml:add:v1:` + 完整 UTF-8 的 SHA-256 小写十六进制摘要，原 ID 同时保留为 MessageBatch.batch_id 并参与一致性核验。一次 Add 创建一个通用 source event、asset、message_batch_ingest job 与命令回执，整批发布且全部索引可检索后才返回 HTTP 200、`{success:true,request_id,user_id,session_id}`；三个 ID 原样回传，不返回 202。跨 key 同键复用原任务但不转移 created_by；任何内容、session、角色、时间、顺序或接受规格变化返回 409。省略 timestamp 与 null 等价，不按时间重排。
 
-新 parser 是 `message-batch-ranges-v1`，parser_version=1、chunking_version=1，raw_only=true。每条消息按最多 2400 UTF-8 字节独立分块；来源 JSON 保留解码后原文而不保留 HTTP JSON 空白/转义拼写。locator 与 Search 的 Source metadata 包括 source_event_id、external_batch_id、session_id、message_index/count、role、timestamp、parser/version、chunking_version、source_path、byte_basis、byte_start/end。范围是具体消息 content UTF-8 的半开区间，不是拼接资产或来源 JSON 的偏移；同 session 多批次通过完整来源标识区别。旧 `aml-message-ranges-v1` 只用于历史证据解码，不重新解释其偏移或重写档案。
+新 parser 是 `message-batch-ranges-v1`，parser_version=1、chunking_version=1，raw_only=true。每条消息按最多 2400 UTF-8 字节独立分块；来源 JSON 保留解码后原文而不保留 HTTP JSON 空白/转义拼写。locator 与 Search 的 Source metadata 包括 source_event_id、external_batch_id、session_id、message_index/count、role、timestamp、parser/version、chunking_version、source_path、byte_basis、byte_start/end。范围是具体消息 content UTF-8 的半开区间，不是拼接资产或来源 JSON 的偏移；同 session 多批次通过完整来源标识区别。旧 `aml-message-ranges-v1` 是历史来源标记，其原始字节偏移不重新解释，已有档案不重写。
 
 Search 只读计算/授权目标，不创建未知用户 workspace；先核验实时 root 能力，合法未知目标返回空 data。固定原文 vector，关闭摘要/图/重排，allow_partial=false；options 字符串数组接受但不影响查询/写入，不生成答案。按既有相关性与 ID tie-break 返回至多 top_k 条。新库随机资产/分块 UUID 与旧库不同，同分顺序可能不同；不据此声称质量变化。来源标注和正文都是外部证据，不是指令。
 

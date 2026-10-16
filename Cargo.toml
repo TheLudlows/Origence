@@ -31,7 +31,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 lancedb = { version = "=0.40.0", default-features = false, features = ["remote"], optional = true }
 # Read-only physical IVF partition verification; same version already used by LanceDB.
-lance = { version = "=13.0.0", default-features = false, optional = true }
+# Build the protobuf compiler from source inside Lance's own build scripts.
+lance = { version = "=13.0.0", default-features = false, features = ["protoc"], optional = true }
 # Same existing package node; exposes the patched writer for focused recovery tests.
 lance-io = { version = "=13.0.0", default-features = false, optional = true }
 arrow-array = { version = "=58.3.0", optional = true }

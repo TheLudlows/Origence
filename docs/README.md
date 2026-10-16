@@ -1,17 +1,15 @@
 # Origence · 文档入口
 
-先读 [当前状态](STATUS.md)，了解已实现能力与限制；再按下表进入唯一负责该类内容的文档。产品路线图和专项计划记录目标与启动条件，不替代当前状态或精确版本验收。
+先读 [当前状态](STATUS.md)，了解已实现能力与限制；再按下表进入唯一负责该类内容的文档。产品路线图记录目标与启动条件，不替代当前状态或精确版本验收。
 
 | 你要做什么 | 入口 | 内容边界 |
 | --- | --- | --- |
 | 安装、启动 | [项目 README](../README.md) | 快速开始 |
 | 了解产品进度 | [STATUS](STATUS.md) | 当前能力、缺口、下一步 |
 | 推进产品开发 | [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md) | S2 → S3 → S4 的任务与验收 |
-| 准备 AML 打榜 | [AML 计划](AGENT_MEMORY_LEADERBOARD.md) | 参榜剩余工作与进入条件 |
 | 调用接口 | [API](API.md) | HTTP/库接口、权限、版本、错误与破坏性变更 |
-| 运行、恢复、维护 | [OPERATIONS](OPERATIONS.md) | 当前命令、步骤和查询/恢复边界；AML 演练记录按其版本查阅 |
+| 运行、恢复、维护 | [OPERATIONS](OPERATIONS.md) | 当前命令、步骤和查询/恢复边界 |
 | 核验结果 | [VALIDATION](VALIDATION.md)、[评估入口](../evals/README.md) | 精确版本、测试、CI 与原始工件，不外推到新提交 |
-| 查阅 AML 历史实验 | [研究执行器归档](../archives/aml-research/README.md)、[AML 本地演练](AML_DRILL.md) | 完整执行器依赖、来源清单、冻结验证与当时记录；不作为当前运行入口 |
 
 ## 设计与验收：按需深入
 
@@ -21,7 +19,7 @@
 | [身份与上下文规格](superpowers/specs/2026-10-08-memory-identity-and-context.md) | S2/S4 语义设计 | 身份、冲突、条件与证据预算；已实现接口链接到 API |
 | [效果评估标准](Origence_效果评估与对比标准.md) | 定义怎么测 | 先治理门槛，再受控检索/生命周期/真实 Agent 三类对照 |
 | [依赖审计](DEPENDENCY_AUDIT.md) | 安全保留项 | 按审计版本处理，不把旧报告视为持续通过 |
-| [验收记录](VALIDATION.md) | 查询具体测试与 CI | 按章节日期、代码 SHA 和运行 ID 查证；记录正文及工件保留，不作为日常进度页 |
+| [验收记录](VALIDATION.md) | 查询具体测试与 CI | 按章节日期、代码 SHA 和运行 ID 查证；保留非 AML 专项历史证据，不作为日常进度页 |
 
 当前存储布局与精简决策见[身份存储合同](contracts/identity-asset-layout.md)、[全字段盘点](contracts/storage-field-audit-2026-10-15.md)及[索引/账本保留理由](contracts/index-ledger-audit-2026-10-15.md)。
 
@@ -32,9 +30,8 @@
 | 研究 | 提炼结论 | 现在如何使用 |
 | --- | --- | --- |
 | [演进取舍 v2](Origence_演进取舍与现有规划对比_v2.0.md) | 保持 S1–S4，补可靠会话输入与诊断；重排先实验，自动 Wiki/Skill 等暂缓 | 保留为建议稿，正式实施范围看产品路线图 |
-| [AML 检索决策](AML_RETRIEVAL_DECISION.md) | 区分召回、排序、证据充分性和答案支持，采用同预算消融 | 当时计划已有后续实验，最新结论看 STATUS |
 | [Serverless 旧方案](agent_memory_knowledgebase_serverless.md) | 权威数据与派生索引、逻辑租户与物理资源分别管理 | 分片/弹性扩展留 P2，不能作为当前部署步骤 |
 
-AML 当前客户端、协议/恢复回归与离线工件核验保留在 `tools/`；研究执行器及其完整本地依赖保存在 `archives/aml-research/`。归档清单和历史源码核验方式见[归档说明](../archives/aml-research/README.md)。`evals/` 中的 freeze、分数、哈希与原始报告不因工具归档而重写，也不将旧报告重新标为当前版本结果。
+AML 的生产 API 与授权合同继续保留；专用测试、实验、fixture 和报告已移除，不再作为当前 CI 或操作入口。
 
 当前行为以代码和 API 为准，进度以 STATUS 为准，目标以设计规格为准，验收以对应版本的记录为准。状态页只保留结论；接口细节、运行步骤和实验数字分别维护在各自文档中。历史研究与实验不代表当前已交付能力。
