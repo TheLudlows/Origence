@@ -88,7 +88,18 @@ P3 已将 AML DTO、ID 派生、等待与响应转换集中到 API，切换同�
 [显式手工目标](contracts/identity-asset-layout.md#current-manual-measurement-entry-point)。
 #59 专用 CDB 与历史性能调度仍停用，常规 CI 不提供持续性能比较。
 2026-10-15 整理的精确 head 检查见 [PR #66](https://github.com/TheLudlows/Origence/pull/66)；
-不同提交的结果不相互外推，PR 不执行 Windows。AML 专项测试、进程恢复步骤和离线工件核验已从当前 CI 移除；生产适配仍保留，通用及非 AML 验证继续独立运行。实现 head `4508bee` 的 Linux/fast-check 已通过，包含源码 protoc、Rust 全测试与14场景维护恢复；后续目录整理与自动 SQL guard 撤除尚待新精确 head CI，不能沿用该结果；SQL 禁 JOIN 编码约束与人工审查继续保留。详见 [本轮清理验证](VALIDATION.md#2026-10-16-移除-aml-专项测试与实验设施pr-68)。
+不同提交的结果不相互外推。AML 专项测试、进程恢复步骤和离线工件核验已移除；
+生产适配、通用及非 AML 验证仍保留。SQL 自动 guard 已撤除，禁 JOIN 编码约束与
+人工审查继续保留，见 [清理记录](VALIDATION.md#2026-10-16-移除-aml-专项测试与实验设施pr-68)。
+
+[PR #68](https://github.com/TheLudlows/Origence/pull/68) 已于 2026-10-16 07:03:08 UTC
+合入 main `1222a20`，文件树与 `4508bee` 相同。`4508bee` 的 CI 确实通过，
+但恢复旧 target 缓存且未重编译 lance-datafusion，不能作为完整冷构建证明。
+主干及后续 [草稿 PR #69](https://github.com/TheLudlows/Origence/pull/69) 的 `cb851b1`
+均遇 Linux 缺少 protoc；主干 Windows 另有 protobuf/Abseil CRT 失败。
+`3e6906b` 已补 feature，真实 Cargo 锁文件生成成功且无包升级；携旧锁中间 head
+的普通 CI 已失败，不能作为修复验收。Windows 修复与临时双平台冷构建验证尚待发布及核验，详见
+[精确提交与失败记录](VALIDATION.md#pr-69评估目录整理历史工具移除与冷构建修复验证中)。
 
 历史配置：2026-10-12 按用户要求取消 macOS 和 Docker 自动 CI：移除 `macos`、`container` Job，以及 `fast-check` 中的 Docker 构建上下文检查。PR 保留 `fast-check`、`linux-native`；main 在此基础上保留 `windows`，Windows 仅在主干运行；后续 #60/#61 临时分支例外现已收回。
 

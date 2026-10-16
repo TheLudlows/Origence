@@ -19,6 +19,10 @@ builds the protobuf compiler from source through Lance; no separate `protoc`
 installation or `PROTOC` setup is needed. The first native build is slower; Cargo
 caches the result for subsequent builds. On Windows, use an x64 MSVC developer
 shell or `./tools/build.ps1 -Action Build`, which initializes that shell.
+The repository Cargo configuration keeps protobuf and Abseil on the same MSVC
+runtime for native Windows x64 builds. Existing generic or target-specific
+CMake toolchain environment variables take precedence. If supplying a custom
+Windows toolchain, include `tools/cmake/protobuf-msvc.cmake` from that toolchain.
 
 `cargo build --locked --no-default-features --lib` skips Lance and the protobuf
 compiler for authority-only library development.

@@ -39,9 +39,11 @@ fixtures、历史实验报告及研究执行器归档，并删除 CI 中的 AML 
 
 ## PR #68：protoc 源码构建与真实锁文件准备
 
-[草稿 PR #68](https://github.com/TheLudlows/Origence/pull/68) 同时启用 Lance 13.0.0
-的 `protoc` feature，删除旧 storage-probe helper，改用 CMake/Make/C++ 构建工具。
-生产 AML API 与维护故障矩阵/vendor 修复保留，Windows 仍仅在 main 执行。
+[PR #68](https://github.com/TheLudlows/Origence/pull/68) 启用 Lance 13.0.0 的
+`protoc` feature，删除旧 storage-probe helper，改用 CMake/Make/C++ 构建工具。
+该 PR 于 2026-10-16 07:03:08 UTC 合入 main
+`1222a20b3be80a176bc4f8830cb2f0b43e8361ee`，文件树与 `4508bee` 相同。
+生产 AML API 与维护故障矩阵/vendor 修复保留；当时 Windows 仅在 main 执行。
 
 初始 head `e6cf9e7d8f33e3587e902d38eaba6f5c28599a76` 的
 [临时锁文件作业](https://github.com/TheLudlows/Origence/actions/runs/38860349394)
@@ -56,18 +58,19 @@ SHA-256 为 `074b9177ebf445ddd9adc4818d18bb3e3b2fe505449fa50c3961cdda8af7f460`�
 已完成并成功：fmt、默认/无默认严格 Clippy、无默认 129 项库测试 + 105 项集成，
 默认 209 项库测试 + 233 项集成通过。默认套件中忽略的维护矩阵随后显式执行，
 14/14 受控故障场景通过；HTTP/MCP 冒烟与关键词种子评估成功。Python 55 + 42
-项通过。authority-only 依赖树确认不含 Lance/protobuf-src；Linux native 在无效
-外部 PROTOC 配置下完成构建，验证了本轮源码构建路径。
+项通过。authority-only 依赖树确认不含 Lance/protobuf-src。该次 Linux native
+虽在无效外部 PROTOC 配置下成功，却恢复了旧 target 缓存，未重新编译
+`lance-datafusion`；因此不能证明完整依赖链的冷构建源码 protoc 路径。
 
 维护工件 SHA-256 为 `3464a35d65a4fd4f48f0acb95306ade2ac829475d76cf7a03b28f0b8b174eb96`，
 检索工件为 `634554c4f3c97cace0739fe504997845f31f98c950ff54e4a5c06696861959c0`。
-这不是任意断电、长期容量或真实模型质量验收。初始旧锁文件失败不作为最终构建
-结论；后续文档收口提交仍需按各自精确 head 通过门禁，不沿用该结果作为新提交
-的已运行证据。PR 不执行 Windows，Docker/PowerShell 亦未由本次 CI 验证。
+上述成功不证明任意断电、长期容量、真实模型质量或冷构建通过；不能替代后续
+精确 head 验证。该次 PR CI 未执行 Windows，Docker/PowerShell 亦未验证。
+合入后的主干冷构建失败及补齐进度见下节。
 
-## PR #68：评估目录整理与历史工具移除（待精确头 CI）
+## PR #69：评估目录整理、历史工具移除与冷构建修复（验证中）
 
-在已通过 CI 的 `4508beeb93fbaff311c1e1f4c4a6e0eeb3e02564` 之后，
+[草稿 PR #69](https://github.com/TheLudlows/Origence/pull/69) 接续已合入的 PR #68，
 按确认范围将 `evals/s1` 移为 `evals/retrieval`、`evals/s4` 移为 `evals/agent`，
 Agent 执行器与本地聊天适配分别移至 `evals/agent/runner.py` 和
 `evals/agent/local_chat.py`。运行说明、默认路径、测试导入与 CI 引用随之更新；
@@ -91,8 +94,15 @@ S1/S4 的功能、输入数据和质量结论不变，包括已确认保留的�
 - `evals/agent/runner.py` 的 plan/fixture CLI 均成功；fixture 的 40/40 行完成且零 error，无模型调用。
 - 31 个本地可读冻结/历史数据 blob 逐字节相同，包含未改写的 `freeze.json`；远端压缩工件按原 Git blob SHA 移动，不重压缩或重写。
 
-本轮整理的新提交尚待精确 head CI；上方 `4508bee` 的成功结果不能替代本轮验证。
-目录变更不证明新的真实模型效果、生产性能或 Windows 验收。
+冷构建暴露的失败与后续准备：
+
+- main `1222a20` 的 [CI 38864773646](https://github.com/TheLudlows/Origence/actions/runs/38864773646)：Linux 在 `lance-datafusion` 缺少 protoc 时失败；Windows 另有 protobuf/Abseil CRT 失败，均不能称通过。
+- PR #69 初始 head `cb851b1` 的 [CI 38867393422](https://github.com/TheLudlows/Origence/actions/runs/38867393422) 同样在 Linux 缺少 protoc 处失败；目录整理的本地检查不替代原生构建。
+- feature 补齐 head `3e6906bcf6d79eb87411ff77d18eaafa9d0687e2` 的 [真实 Cargo 锁文件作业 38868653971](https://github.com/TheLudlows/Origence/actions/runs/38868653971) 成功，锁文件仅新增两条依赖边，无包升级。该携旧锁的中间 head 的 [普通 CI 38868653848](https://github.com/TheLudlows/Origence/actions/runs/38868653848) 已失败，具体错误尚未从日志独立核验；不能作为更新锁后的修复验收，也不能以锁文件生成成功宣称全套通过。
+
+Windows 修复与临时 Linux/Windows 冷构建作业尚待发布、运行及核验；当前没有
+新精确 head 的双平台冷构建成功证据。`4508bee` 的旧缓存成功结果不能替代它，
+目录变更也不证明新的真实模型效果、生产性能或 Windows 验收。
 
 ## 2026-10-15 合入后整理（本地准备与精确头验证）
 

@@ -1,0 +1,56 @@
+name: Temporary source protoc cold build
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  cold-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    env:
+      CARGO_TARGET_DIR: ${{ runner.temp }}/origence-cold-${{ github.run_id }}-${{ github.run_attempt }}
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_INCREMENTAL: 0
+      PROTOC: __origence_no_external_protoc__
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+      - name: Linux native tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake make g++
+      # Deliberately no cache restore: the native build directory must start empty.
+      - name: Direct Cargo build with no external protoc
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cold-evidence"
+          test ! -e "$CARGO_TARGET_DIR"
+          {
+            git rev-parse HEAD
+            rustc --version --verbose
+            cargo --version
+            cmake --version
+            echo "CARGO_TARGET_DIR=$CARGO_TARGET_DIR"
+            echo "PROTOC=$PROTOC"
+            sha256sum Cargo.lock
+          } > "$RUNNER_TEMP/cold-evidence/environment.txt"
+          if [ "$RUNNER_OS" = Windows ]; then
+            rustc --version --verbose | grep -Fx 'host: x86_64-pc-windows-msvc'
+          fi
+          cargo build --locked -j 1 -vv 2>&1 | tee "$RUNNER_TEMP/cold-evidence/build.log"
+      - name: Preserve cold build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-protoc-cold-${{ runner.os }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/cold-evidence/
+          if-no-files-found: error

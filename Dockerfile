@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends cmake make g++ 
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
+COPY tools/cmake ./tools/cmake
 COPY src ./src
 COPY tests ./tests
 COPY examples ./examples
