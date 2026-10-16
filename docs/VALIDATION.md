@@ -1174,14 +1174,25 @@ Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目�
 错误仍失败；保留在线check与停库open/offline拒绝、原数据及持久文件逐字节比较。
 不改生产锁或schema拒绝行为，需新精确head跨平台验证。
 
-## Issue #65：受控原生写入故障矩阵（阻断）
+<a id="issue-65受控原生写入故障矩阵阻断"></a>
+## Issue #65：受控原生写入故障矩阵与最小修复
 
-**未验收，不应合入为成功恢复保证。** [草稿 PR #67](https://github.com/TheLudlows/Origence/pull/67)
-只改测试、CI 和文档，未改生产代码、依赖或迁移策略。冻结基线 main
-`a2c7950fdaa6d5bdf2f0ee2ca5ee7bf8855f1f25`，Cargo.lock SHA-256
+**限定 Linux 14 格已通过；#65 全范围仍未验收。** [PR #67](https://github.com/TheLudlows/Origence/pull/67)
+包含受控故障测试、CI、文档，以及单个 lance-io 13.0.0 的最小 shutdown 修复；
+没有迁移策略变更。修复实现 head `9963e3bfb3555ab86835e70633ad2b513b06f307` 的
+[CI 38757606804](https://github.com/TheLudlows/Origence/actions/runs/38757606804) 全部适用检查通过，
+[工件 11988328985](https://github.com/TheLudlows/Origence/actions/runs/38757606804/artifacts/11988328985)
+已逐项核验：14/14 PASS、全部正长度 write 命中、7 次进程 T 状态后 SIGKILL exit9、
+7 次持续模拟 errno28，以及原库/恢复副本各两次重试与完整 oracle，共 56 次完成。
+原失败的 compact-enospc-output-later 本次 PID5953、先成功一次写、请求1222 bytes，
+恢复检查通过。矩阵耗时2989.94秒；两项 LocalWriter 回归和后续 HTTP/MCP/AML/retrieval
+检查均通过。Windows 按既有 PR 策略跳过；后续提交或 main 检查须按各自精确 head 判定。
+
+以下保留未修复版本的历史证据。冻结基线 main
+`a2c7950fdaa6d5bdf2f0ee2ca5ee7bf8855f1f25` 的旧 Cargo.lock SHA-256 为
 `caa58c68e874cfad1aa249dc91b55361aa9e6edbb6c8b0f4be9bdda94aacec01`。
 
-### 已确认缺陷
+### 历史已确认缺陷（修复前）
 
 [正长度复现 run 38734552786](https://github.com/TheLudlows/Origence/actions/runs/38734552786)
 的 head `3bba425c04d58116ae49f5f10d313428cedf6ea9`，
@@ -1196,14 +1207,14 @@ Linux、fast-check及原生基准成功；Windows新旧ledger布局测试在目�
   缺少正常 `LANC` footer。失败发生在恢复副本和显式 retry 前，不能声称该格已恢复。
 - 上游 [Lance v13.0.0 LocalWriter::poll_shutdown](https://github.com/lance-format/lance/blob/v13.0.0/rust/lance-io/src/object_writer.rs#L760-L800)
   只判断 inner shutdown 是否 Pending，遗漏 Ready(Err) 后仍 persist 临时文件，
-  与错误写入、成功返回、坏文件被提交的观测链吻合。此处尚无生产修复。
+  与错误写入、成功返回、坏文件被提交的观测链吻合。该复现版本尚无生产修复；后续最小回补及验证见下文。
 
 复现入口为 CI 中的 `maintenance_recovery::native_io_failure_matrix` ignored test；
 该单格诊断使用临时 selector，其他 13 格 NOT_RUN。收尾版本删除所有诊断 selector，
 恢复完整 14 格，并保留失败回归；native 数据 oracle 先于 child 返回状态断言执行。
 新的完整运行必须按自己的精确 head 判定，不能拼接不同 head 的绿色结果。
 
-### 场景及实际执行证据
+### 历史场景及实际执行证据（修复前）
 
 | 场景（每项 pause/SIGKILL 与持续模拟 ENOSPC） | 结果来源 |
 |---|---|
@@ -1270,7 +1281,7 @@ NOT_RUN。38733853324（a29635d）被新增诊断代码fmt/Clippy拦截、未执
 3bba425复现。所有诊断绿色均不替代完整矩阵验收，原始失败工件仍保留。
 
 
-### 最小生产修复：待本提交完整回归
+### 最小生产修复：实现 head 完整回归通过
 
 按批准仅 vendor 官方 registry 的 lance-io 13.0.0，保留全部 53 个发布文件
 （44 个 src）及完整 Apache-2.0 LICENSE。归档 SHA-256、上游提交和唯一源码
@@ -1287,6 +1298,7 @@ NOT_RUN。38733853324（a29635d）被新增诊断代码fmt/Clippy拦截、未执
 新增两项 public-API 回归：真实只读文件句柄写入在 shutdown flush 时失败，
 确认临时文件清理、最终文件不存在、重复 shutdown/write 继续报错；另核对成功
 shutdown 的完整字节和大小。这不是手动构造 Poisoned，也不依赖 Linux shim。
-当前仅完成静态核对和 shim 8 项自测；Rust 编译、两项新回归、常规测试与完整
-14 格仍须本提交真实 CI，不能沿用历史通过结果。Windows 未运行，旧损坏数据
-不会由本补丁自动修复，#65 仍保持打开。
+实现 head `9963e3bfb3555ab86835e70633ad2b513b06f307` 的真实 Linux CI 已完成
+Rust 编译、两项新回归、常规测试与完整14格，结果和原始工件见本节开头。
+这不替代后续提交的 CI，也不是任意写入窗口或断电保证。Windows 本轮未运行，
+旧损坏数据不会由本补丁自动修复，#65 仍保持打开。

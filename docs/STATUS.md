@@ -173,7 +173,7 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 ## 下一步
 
 - **产品主线**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning、S4 统一上下文与 Agent 框架，以及 Turso/LanceDB 接入均已实现并合入；真实 Agent 对照仍为 NOT_RUN，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
-- **可靠性与质量待办**：[Issue #64](https://github.com/TheLudlows/Origence/issues/64) 检索召回、延迟及资源验收和 [Issue #65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复验收尚未完成；#64 仍仅登记，#65 的受控故障测试已发现阻断缺陷：压实尾部正长度写遭持续模拟 ENOSPC 时可能返回成功并提交不可读的 Lance 文件；跨轮 13 个场景通过、1 个确认失败；现按批准引入单个 lance-io 13.0.0 源码回补 shutdown 错误传播，修复后完整 CI 待验证，尚不是同一 head 全矩阵通过，见 [证据与边界](VALIDATION.md#issue-65受控原生写入故障矩阵阻断)；其余持续容量、冷启动与标签复核见[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
+- **可靠性与质量待办**：[Issue #64](https://github.com/TheLudlows/Origence/issues/64) 检索召回、延迟及资源验收和 [Issue #65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复验收尚未完成；#64 仍仅登记，#65 的受控故障测试曾发现阻断缺陷：压实尾部正长度写遭持续模拟 ENOSPC 时可能返回成功并提交不可读的 Lance 文件；现已通过单个 lance-io 13.0.0 的 shutdown 错误传播回补修复；实现 head `9963e3b` 的 [CI 38757606804](https://github.com/TheLudlows/Origence/actions/runs/38757606804) 已核验 Linux 14/14 场景及 56 次原库/恢复副本重试与完整数据核对通过；这不代表 #65 全范围验收完成，见 [证据与边界](VALIDATION.md#issue-65受控原生写入故障矩阵阻断)；其余持续容量、冷启动与标签复核见[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 - **AML 专项**：当前实验收尾，保留[正式参榜门槛](AGENT_MEMORY_LEADERBOARD.md)；准备提交时再启动相应验收，服务器和域名继续后置。
 
 完整 SaaS、分布式及新增后端按实际需求另行立项。设计、实现、工程测试与产品效果分别判断。
