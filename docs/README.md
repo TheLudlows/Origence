@@ -3,6 +3,7 @@
 产品方向为企业内部 Agent 数据底座，首批客户端已确认为 Claude Code 与 Codex。
 记忆、知识、Skill 与运行时状态统一纳入上下文，可观测性贯穿其供给与使用过程。
 目标会话按用户 API key 私有隔离；正式沉淀的长期记忆、事实、Skill 和知识在 workspace 内复用。
+平台会话提供归档/查询；工作现场恢复不在范围。Skill 通过选定审阅包批准共享，执行权限继续由客户端和业务工具控制。
 Skill 从记忆与 Agent 执行经验提炼，候选内容、依据与变更供用户审视，再按获准版本分发复用。
 精简[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)明确全文与向量统一 AnySeek；
 当前只接入可选 AnySeek 全文，向量仍在 LanceDB，替换待实施。Turso 保留权威数据和来源。
