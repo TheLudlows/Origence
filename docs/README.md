@@ -3,15 +3,15 @@
 产品方向为企业内部 Agent 数据底座，首批客户端已确认为 Claude Code 与 Codex。
 记忆、知识、Skill 与运行时状态统一纳入上下文，可观测性贯穿其供给与使用过程。
 Skill 从记忆与 Agent 执行经验提炼，候选内容、依据与变更供用户审视，再按获准版本分发复用。
-完整[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
-当前可选 AnySeek 全文已接入，Turso 继续负责权威数据和来源。规划、当前代码与实际验收分开记录。
+精简[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)明确全文与向量统一 AnySeek；
+当前只接入可选 AnySeek 全文，向量仍在 LanceDB，替换待实施。Turso 保留权威数据和来源。
 
 | 目的 | 唯一入口 |
 | --- | --- |
 | 快速构建/启动 | [项目 README](../README.md) |
-| 目标架构、上下文分类与待确认决策 | [企业 Agent 数据底座规划（待确认）](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) |
+| 首版核心范围、架构与验收 | [企业 Agent 数据底座精简规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) |
 | 当前能力、缺口、下一步 | [STATUS](STATUS.md) |
-| 前序 AnySeek 接入切片与剩余验收 | [AnySeek / Claude Code 实施记录](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) |
+| 前序 AnySeek 全文接入的工程事实 | [AnySeek / Claude Code 实施记录](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) |
 | 当前实现架构、数据归属与不变量 | [平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) |
 | HTTP/MCP/库接口 | [API](API.md) |
 | 配置、部署、恢复与 Claude Code 接入 | [OPERATIONS](OPERATIONS.md) |

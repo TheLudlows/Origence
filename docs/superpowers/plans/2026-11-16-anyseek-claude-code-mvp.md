@@ -1,92 +1,37 @@
-# Origence · AnySeek / Claude Code 前序接入切片
+# Origence · AnySeek / Claude Code 前序接入记录
 
-更新：2026-11-16。本文负责范围、职责和剩余验收；当前实现见 [STATUS](../../STATUS.md)，
-架构见[平台设计](../specs/2026-09-22-memory-knowledge-platform-design.md)，精确结果见 [VALIDATION](../../VALIDATION.md)。
+更新：2026-11-16。本文只保留前序全文接入的工程事实，现状见 [STATUS](../../STATUS.md)。
+首版功能与后续顺序统一见[精简架构规划](../specs/2026-11-16-agent-data-foundation-architecture.md)：
+首批客户端为 Claude Code/Codex，全文和向量统一 AnySeek，Skill 从记忆/执行经验沉淀并供用户审视。
 
-范围说明：本文保留此前仅 Claude Code 的检索接入切片与验收记录，**不再定义完整产品范围**。
-用户已确认首批客户端为 Claude Code 与 Codex，面向研发和业务团队；Skill 版本分发与运行追溯纳入目标能力。
-目标架构统一管理记忆、知识、Skill 等上下文，可观测性贯穿上下文的供给与使用。
-完整[架构规划（待确认）](../specs/2026-11-16-agent-data-foundation-architecture.md)提出后续 P0–P3，
-确认后据此拆合同。下文历史范围与勾选不表示 Codex、Skill 或 Run 已实现。
+## 已完成的接入切片
 
-## 产品范围
+此前先以 Claude Code 配置和标准只读 MCP 验证 AnySeek 全文接入；
+向量仍在 LanceDB，权威状态、图与原始 Blob 保留原职责。这是当时的实现状态，不是目标存储分工。
 
-本接入切片原定面向企业内部多个 Agent，先以 Claude Code 验证标准只读 MCP。
-首个建议场景：开发者结合本地代码与公司规范、接口文档、设计决策完成开发任务并提供引用。
-真实试点项目与数据源尚待选定。数据可分散，访问规则、来源和上下文接口统一。
+- [x] 核对既有 MCP、Turso/LanceDB/Blob 与 AnySeek HTTP 合同。
+- [x] 接入可选 AnySeek 全文，沿用发布账本、单 Worker 和持久重试。
+- [x] 固定作用域、来源/版本/generation、词项匹配与安全错误，候选过滤后仍做权威复核。
+- [x] 用稳定 group/record 和保存的 epoch 完成组写入、清理、响应丢失确认与原计划恢复。
+- [x] 持久绑定 endpoint/collection，拒绝隐式更换后端或损坏绑定。
+- [x] 通过公开 Service、真实 AnySeek、HTTP/stdio MCP 的搜索、引用、更新/历史、撤销和重开验证。
+- [x] 提供 Claude Code MCP 配置示例。
+- [ ] 真实 Claude Code 客户端验收尚未完成，已纳入双客户端统一验收。
 
-## 两仓职责
+四个现有工具为 `context_search/context_get/context_resolve/context_bundle`。
+协议 fixture 不能代替真实客户端或任务收益。精确版本、测试和限制只在 [VALIDATION](../../VALIDATION.md)维护。
 
-| 工作 | Origence | AnySeek |
-| --- | --- | --- |
-| 数据接入 | 连接业务来源、解析/切块、原文保存、模型/embedding | 保存调用方提交的普通 Record，维护索引 |
-| 身份与权限 | 认证员工/Agent、派生可信 scope、文档权限和最终复核 | 执行通用 metadata 过滤；同 Tenant key 不提供员工 ACL |
-| 检索与上下文 | 选择候选、维护业务版本/来源、组装引用与预算、MCP 接入 | 全文/向量/混合候选与排序；M1 只使用全文 |
-| 生命周期 | 发布计划、账本、墓碑/撤回、原计划重试与清理 | 稳定 Record/group 身份、条件更新、幂等回执和后端恢复 |
+## 已固定的两仓边界
 
-AnySeek 不接管员工授权决策、来源依赖、记忆策略或 MCP 产品协议。
-当前固定真实 fixture 为 [AnySeek 6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)。
-接口形状、编码和边界在 [API](../../API.md)维护；部署步骤在 [OPERATIONS](../../OPERATIONS.md#anyseek-全文与-claude-code)维护。
+Origence 管理权限、来源、版本、解析/embedding、发布与引用；AnySeek 保存标准 Record 并提供检索候选。
+AnySeek Tenant key 只由宿主持有，不替代员工或文档权限。当前切片只调用全文，目标的向量接入仍待实现。
 
-## M0：范围与基线（完成）
+固定真实 fixture 为 [AnySeek 6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)。
+接口与编码见 [API](../../API.md#anyseek-全文适配m1-首个切片)，
+部署与恢复见 [OPERATIONS](../../OPERATIONS.md#anyseek-全文与-claude-code)，当前不变量见[平台设计](../specs/2026-09-22-memory-knowledge-platform-design.md)。
 
-- [x] 当时确认企业内部多 Agent 方向，先验证 Claude Code；后续已扩为双客户端，见文首范围说明。
-- [x] 核对现有四个 MCP 工具、Turso/LanceDB/Blob 和 AnySeek HTTP 能力。
-- [x] 统一职责、设计与验收入口，避免重复实现检索服务或 MCP 协议。
+## 后续工作入口
 
-## M1：AnySeek 全文与 Claude Code 最小闭环
-
-- [x] 显式选择全文后端，保留权威数据、向量、图、Blob 和单 Worker。
-- [x] 固定作用域/分块/版本映射与词项匹配；存储失败不伪装为空召回。
-- [x] 通过 group replace、保存 epoch 和原有队列实现写入、清理、响应丢失确认及原计划恢复。
-- [x] 持久绑定目录的 AnySeek endpoint/collection，拒绝隐式更换后端和损坏绑定。
-- [x] 以独立新库/合成文本验证公开 Service、真实 AnySeek、HTTP/stdio MCP 与有效引用。
-- [x] 提供 Claude Code MCP 配置和运行说明。
-- [ ] 在真实 Claude Code 客户端验证工具发现、搜索、读取、引用和错误恢复。
-
-M1 的工程切片已实现；真实 MCP fixture 不代替最后一项客户端验收。
-常用工具为 `context_search/context_get`；现有 `context_resolve/context_bundle` 继续保留。
-
-## M2：内部受控试点
-
-- [ ] 选定一个项目和一到两个数据源，配置仓库/workspace/知识源关联。
-- [ ] 实现员工身份映射、个人 key 和可信授权范围；差异权限文档混存前通过 ACL 传递/读取复核。
-- [ ] 实现来源更新、删除与权限收缩同步，核验缓存和跨 Agent 复用范围。
-- [ ] 验证跨 workspace、伪造项目/过滤条件、撤销 key 均不能扩大访问。
-- [ ] 根据实际需要接入 AnySeek 向量/hybrid，保持 profile/dimension 和来源隔离。
-- [ ] 补后端 metadata 可观测性：当前 info 未返回 tokenizer/stop_words 或凭据 Tenant 等价证明；部署须按固定配置验证。
-
-初始可限定同权限项目 workspace；这种试点不能表述为企业身份/文档 ACL 已完成。
-项目关联仅缩小检索范围，不授予访问权。AnySeek key 只由 Origence 宿主持有。
-
-## M3：真实开发任务验收
-
-- [ ] 冻结开发任务，比较 Claude Code 原有工作方式与接入 Origence 后的表现。
-- [ ] 检查任务完成、引用是否支持代码决策、更新版本是否正确、无资料时是否明确缺失。
-- [ ] 记录延迟、调用量、成本和体验，基于基线确定目标与优化顺序。
-- [ ] 将模型/客户端/源版本、最终代码 SHA 和结果绑定，fixture 不证明真实任务收益。
-
-指标口径见[效果评估标准](../../Origence_效果评估与对比标准.md)。
-
-## 可靠性与启动条件
-
-| 编号 | 工作 | 启动条件与边界 |
-| --- | --- | --- |
-| R1 | 索引/压实中断、空间不足、重开重试 | 正式使用维护或改变维护实现前；原受控故障证据不等于 #65 全范围或任意断电通过 |
-| R2 | 持续读写、限流、资源与恢复 | 内部正式负载/生产前；记录排队、p95/p99、错误、内存/磁盘与恢复 |
-| R3 | 冷启动尾延迟 | 有明确延迟目标或观察到问题时；保留首请求、同库同题对照 |
-| Q1 | 标签与裁判复核 | 提出质量结论或接入重排前；冻结新留出集，旧题只作回归 |
-| R4 | 备份、清理与保留 | 正式数据进入前；整目录含绑定文件，并按 AnySeek 自身规则备份；没有跨系统在线一致快照 |
-
-#64/#65 当前进度见 STATUS，实际版本证据见 VALIDATION。
-企业源权限、真实开发收益和生产 SLO 分别设门槛，不用平均质量分抵消越权或错误证据。
-
-## 完成标准与后置范围
-
-员工在 Claude Code 中执行依赖内部知识的开发任务，能在授权范围内搜索、读取当前有效正文、
-完成修改并给出可核验引用；更新、删除、撤权和重开保持该保证。
-
-Codex、Skill 与运行追溯已转入新目标规划，不再列为完整产品的后置范围。
-新业务图谱、通用 Agent 编排、自动共享记忆和完整 SaaS 控制面仍后置。
-既有记忆/会话/Bundle 能力保留其合同。当前只面向新建数据库；旧库升级与迁移不列为待办。
-本切片剩余验收需纳入新规划统一拆分，更新 STATUS 与精确验收；设计不重复维护接口表、操作步骤或历史数字。
+本记录不另行维护产品路线图，原 M2/M3 的功能枚举由精简规划取代。
+全文/向量统一、真实双客户端、Skill 沉淀与最小运行追溯按新规划拆分；
+现有验证证据与领域合同保留，不把未执行项算作通过。
