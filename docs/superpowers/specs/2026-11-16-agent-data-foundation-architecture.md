@@ -1,9 +1,10 @@
 # Origence · 企业 Agent 数据底座架构规划
 
-版本：v0.2 · 2026-11-16 · **待产品确认，尚未实施的目标架构**。
+版本：v0.3 · 2026-11-16 · **待产品确认，尚未实施的目标架构**。
 
 本版按已确认的概念层级修订：**上下文包含记忆、知识、Skill，以及任务状态、业务状态、工具结果等；
 可观测性贯穿这些上下文的供给与使用过程。** 后续部署、作者工作流与交付细节仍待确认。
+v0.3 在总体架构中显式绘制 Agent 可观测性，并在第 8.1 节展开证据来源与追溯流向。
 
 本文是本次产品范围与目标架构的唯一评审入口。已确认的方向、建议采用的设计和现有代码分别标注；
 确认本文后，再将阶段交付拆成实现合同。当前实现以[平台设计](2026-09-22-memory-knowledge-platform-design.md)、
@@ -55,7 +56,7 @@ flowchart TB
     CX[Codex] --> CA
     CA --> MCP[MCP：检索、读取与上下文]
     CA --> SD[Skill：原生格式分发与版本回执]
-    CA --> EV[运行事件：按客户端能力采集]
+    CA -. 按客户端能力采集 .-> EV[Run、Skill 加载、工具与结果事件]
     MCP --> AUTH[身份认证、授权与项目范围]
     SD --> AUTH
     EV --> AUTH
@@ -75,9 +76,17 @@ flowchart TB
     AUTH --> SKILL
     AUTH --> STATE
     AUTH --> CTX
-    AUTH --> RUN[Run 与证据服务]
-    CTX -. 交付证据 .-> RUN
-    SKILL -. 分发与加载回执 .-> RUN
+    subgraph OBS[Agent 可观测性：贯穿上下文与任务执行]
+        ING[事件接收：脱敏、幂等与采集覆盖]
+        RUN[Run / Step：上下文、Skill、工具与结果证据链]
+        TRACE[受控查询与导出：任务追溯、反馈和覆盖缺口]
+        ING --> RUN
+        RUN --> TRACE
+    end
+    AUTH --> ING
+    AUTH --> TRACE
+    CTX -. 记忆与知识候选、快照与交付 .-> ING
+    SKILL -. Skill 版本与分发记录 .-> ING
     MEM --> CORE[资产目录、版本、来源、策略、反馈]
     STATE --> CORE
     CTX --> CORE
@@ -95,6 +104,9 @@ flowchart TB
 ```
 
 图中 Skill 服务、Run 服务、上下文快照和客户端采集属于目标能力；当前 MCP 与既有知识/记忆模型继续复用。
+实线表示业务/存储调用，虚线表示观测证据流；客户端事件经身份与权限校验后进入观测层。
+Origence 记录自身检索、快照与 Skill 分发；客户端按实际能力上报加载、工具调用、引用和任务结果。
+观测层关联这些记录并展示覆盖缺口，具体证据入口见第 8.1 节。Skill 分发记录不能代替客户端加载回执。
 所有检索候选返回前仍由权威库复核，不以索引记录或客户端声明直接决定访问权限。
 
 ### 2.1 Origence 与 AnySeek 分工
@@ -325,6 +337,31 @@ Skill 可声明工具前提，不能通过包内容赋予数据库权限、读�
 ## 8. Agent 可观测性与证据语义
 
 ### 8.1 记录什么，以及能证明什么
+
+下图将服务端观测、客户端上报和人工/测试验证分别接入同一证据链。所有外部上报均鉴权，
+记录报告方与采集能力；查询结果同样鉴权。虚线表示证据提交，实线表示接收后的关联与查询。
+
+```mermaid
+flowchart LR
+    DATA[Origence：记忆与知识候选、输入快照与交付]
+    DIST[Origence：Skill 版本与分发]
+    CLIENT[Claude Code / Codex 适配器：加载、工具、引用与结果]
+    CHECK[人工或测试：结果验证与反馈]
+    subgraph OBSERVABILITY[Agent 可观测性]
+        RECEIVE[鉴权接收：报告方、幂等、脱敏与覆盖声明]
+        LINK[Run / Step / Event：关联上下文版本、Skill、工具与结果]
+        COVER[覆盖状态：服务端观测、客户端自报、未知与缺口]
+        VIEW[受控任务追溯与证据导出]
+        RECEIVE --> LINK
+        LINK --> COVER
+        LINK --> VIEW
+        COVER --> VIEW
+    end
+    DATA -. 服务端观测 .-> RECEIVE
+    DIST -. 服务端观测 .-> RECEIVE
+    CLIENT -. 按实际能力上报 .-> RECEIVE
+    CHECK -. 独立验证证据 .-> RECEIVE
+```
 
 建议证据关系使用以下状态，并保留来源是服务端观测还是客户端自报：
 
