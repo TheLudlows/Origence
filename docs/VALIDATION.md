@@ -2,6 +2,48 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：代码检视、启动绑定与文档收敛
+
+检视基线 `db434ae48fd20e7a8f54e44999a7592457390323`；修复及文档收敛对应
+[`e5438689ca2d6df3f4d4672497f372f266c575eb`](https://github.com/TheLudlows/Origence/commit/e5438689ca2d6df3f4d4672497f372f266c575eb)。
+覆盖 AnySeek 配置/请求/候选核对/组写入清理、组合适配器、Service 启动、原发布计划与真实回归，
+并逐项核对活动设计和进度。该范围不是对所有历史代码、第三方引擎或生产负载的完整审计。
+
+**已复现并修复 P1：全文后端选择缺少目录绑定。** 原代码可对已发布本地全文的目录选择
+AnySeek 并完成初始化，随后查询因投影缺失而失败，还可能继续把新发布写到另一后端。
+新增真实 Service 用例在原代码下为 5 PASS + 1 FAIL，明确捕获该问题。
+
+修复在 authority 独占锁内、远端 IO 前校验选择：拒绝对已发布本地全文直接选择 AnySeek；
+AnySeek 首次健康检查成功后，原子保存不含 key 的 endpoint/collection 绑定。
+重开拒绝漏配/改目标/损坏绑定，原后端仍能读取原数据。读取上限 4 KiB，暂存文件先同步，
+Unix 另同步父目录；不把这些操作宣称为任意断电或跨系统原子保证。
+未增加 SQL、表、迁移、Worker 或新的重试循环。
+
+本地使用 Rust 1.98.0、原锁文件和固定 AnySeek `6614bbf`，最终结果：
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo fmt --package origence -- --check` | PASS |
+| 默认/无默认 `cargo clippy --locked ... --all-targets -j 2 -- -D warnings` | 两套 PASS |
+| 默认 `cargo test --locked -j 2 --no-fail-fast` | 209 库 + 233 local + 2 配置/错误契约 PASS；6 个真实用例和 1 个原有诊断在常规入口忽略 |
+| 无默认 `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 129 库 + 105 local + 2 配置/错误契约 PASS；3 个真实用例在常规入口忽略 |
+| `tools/anyseek_smoke.py --anyseek-binary PATH --cargo-tests --binary target/debug/origence` | 真实 6/6 PASS；HTTP/stdio MCP 搜索、读取、引用、更新/历史、撤销和重开 PASS |
+| `tools/mcp_smoke.py --binary target/debug/origence` | 原有宿主转发/离线、四工具、协议/安全错误、key 撤销和重开 PASS |
+| 全仓 Markdown 与差异检查 | 25 篇文档、166 个本地文件目标和 46 个锚点通过；`git diff --cached --check` PASS |
+
+锁文件未改变。新增真实用例同时检查绑定不含 key、目标不匹配时提前拒绝、匹配配置可重开、
+坏绑定保持失败，以及原本地数据仍可读取。真实 Claude Code、Windows、Docker、任意断电、
+生产容量/性能和企业身份/ACL 本轮本地仍为 NOT_RUN。
+
+文档收敛：平台设计按现有 Turso/组合检索/AnySeek/单 Worker 重写；身份规格移除已撤下的
+离线安装与旧身份表描述；STATUS 只保留当前能力/缺口；M1–M3 吸收仍有效的可靠性待办。
+删除重复 S2–S4 路线图、已完成 Turso/Lance 接入计划、旧 Serverless 方案和演进比较研究稿。
+仍有效的 S2/S3/S4/AML 合同、依赖审计与原始 evidence 保留；旧文档可从基线 Git 历史查阅。
+本节以外的历史验收正文/工件未重写，字段盘点只更新冻结合同引用。
+
+远端对旧 head `db434ae` 的 fast-check 已成功、Linux 当时进入维护故障矩阵；该结果不属于本轮修复。
+最终 PR head 的 CI 单独判定，不用本地结果或旧 run 冒充当前 CI。
+
 ## 2026-11-16：M1 AnySeek 全文与真实 Service / HTTP / MCP
 
 实现源码对应提交 [`9694deb85c1860355005fee9d5e38a19d8a0023c`](https://github.com/TheLudlows/Origence/commit/9694deb85c1860355005fee9d5e38a19d8a0023c)，
