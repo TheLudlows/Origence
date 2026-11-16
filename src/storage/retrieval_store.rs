@@ -6,6 +6,8 @@ use super::{
 use std::{collections::HashMap, path::Path};
 use uuid::Uuid;
 
+pub(crate) mod binding;
+
 pub struct RetrievalStore {
     local: LanceDbStore,
     lexical: Option<AnySeekFullTextStore>,

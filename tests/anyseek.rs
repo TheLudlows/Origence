@@ -324,6 +324,118 @@ mod service_contract {
     }
 
     #[tokio::test]
+    #[ignore = "requires real AnySeek; rejects silently changing the data directory's lexical backend"]
+    async fn anyseek_backend_selection_is_bound_before_serving_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let local = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let (token, auth) = provision(&local).await;
+        local
+            .knowledge(
+                &auth,
+                "binding-first",
+                serde_json::from_value(
+                    json!({"title":"binding","format":"text","content":"pinned backend evidence"}),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(worker::process_next(&local).await.unwrap());
+        local.engine.shutdown().await.unwrap();
+        drop(local);
+        let rejected = match Service::open_with_anyseek(
+            dir.path(),
+            Models::disabled(),
+            Some(config()),
+        )
+        .await
+        {
+            Ok(service) => {
+                service.engine.shutdown().await.unwrap();
+                false
+            }
+            Err(error) => {
+                assert_eq!(error.code(), "VERSION_OR_IDEMPOTENCY_CONFLICT");
+                true
+            }
+        };
+        assert!(
+            rejected,
+            "published LanceDB data must not silently select a different lexical backend"
+        );
+        let local = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let auth = local.auth(&token).await.unwrap();
+        let input =
+            serde_json::from_value(json!({"query":"pinned backend","mode":"keyword"})).unwrap();
+        assert!(
+            !local.search(&auth, input).await.unwrap()["hits"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        local.engine.shutdown().await.unwrap();
+        drop(local);
+
+        let remote_dir = tempfile::tempdir().unwrap();
+        let remote =
+            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), Some(config()))
+                .await
+                .unwrap();
+        remote.engine.shutdown().await.unwrap();
+        drop(remote);
+        let binding = tokio::fs::read_to_string(remote_dir.path().join("full-text-backend.json"))
+            .await
+            .unwrap();
+        assert!(!binding.contains(&std::env::var("OC_ANYSEEK_API_KEY").unwrap()));
+        for selection in [
+            None,
+            Some(
+                AnySeekConfig::new(
+                    &std::env::var("OC_ANYSEEK_URL").unwrap(),
+                    &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+                    "different-collection",
+                )
+                .unwrap(),
+            ),
+        ] {
+            let rejected =
+                match Service::open_with_anyseek(remote_dir.path(), Models::disabled(), selection)
+                    .await
+                {
+                    Ok(service) => {
+                        service.engine.shutdown().await.unwrap();
+                        false
+                    }
+                    Err(error) => {
+                        assert_eq!(error.code(), "VERSION_OR_IDEMPOTENCY_CONFLICT");
+                        true
+                    }
+                };
+            assert!(
+                rejected,
+                "a bound AnySeek directory must reject changed selection before backend IO"
+            );
+        }
+        let remote =
+            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), Some(config()))
+                .await
+                .unwrap();
+        remote.engine.shutdown().await.unwrap();
+        drop(remote);
+        tokio::fs::write(
+            remote_dir.path().join("full-text-backend.json"),
+            b"malformed",
+        )
+        .await
+        .unwrap();
+        assert!(
+            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), Some(config()))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
     #[ignore = "requires real AnySeek; verifies pending publication recovery after a lost write response"]
     async fn anyseek_pending_publication_reopens_with_its_saved_epoch() {
         let (base, posts, proxy) = lost_write_proxy().await;

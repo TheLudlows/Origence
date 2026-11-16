@@ -42,6 +42,11 @@ pub struct AnySeekConfig {
 }
 
 impl AnySeekConfig {
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn binding_identity(&self) -> Value {
+        json!({"format":"origence-full-text-backend-v1","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection})
+    }
+
     /// CLI configuration. Libraries pass an explicit config instead of reading
     /// process environment; absent selection retains the existing backend.
     pub fn from_env() -> StorageResult<Option<Self>> {

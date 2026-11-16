@@ -65,6 +65,14 @@ impl Service {
             .await
             .map_err(anyhow::Error::from)?;
         let relational = Arc::new(TursoStore::open(dir.join("context.db")).await?);
+        let published = if anyseek.is_some() {
+            relational.has_committed_full_text().await?
+        } else {
+            false
+        };
+        let binding =
+            crate::storage::retrieval_store::binding::prepare(&dir, anyseek.as_ref(), published)
+                .await?;
         let graph = TursoGraphStore::open_with_authority(dir.join("graph.db"), &relational).await?;
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
@@ -74,6 +82,7 @@ impl Service {
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;
+        crate::storage::retrieval_store::binding::commit(&dir, binding).await?;
         let service = Self {
             engine,
             models,

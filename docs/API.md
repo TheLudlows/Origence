@@ -14,6 +14,11 @@
 AnySeek 全文；直接使用 `LanceDbStore` 的库调用不变。模型、Blob、图、Turso 和单 Worker
 仍在原有路径内；此切片没有将向量、记忆治理或全部存储替换为 AnySeek。
 
+全文选择受目录绑定约束。AnySeek 只能初始化未绑定且没有已发布全文的目录；成功后将
+格式、backend、endpoint/collection 写入 `full-text-backend.json`，不保存凭据。
+后续选择不匹配或绑定损坏时拒绝启动；后端/目标不匹配为版本/配置冲突，不隐式转换索引。
+本地默认目录不因该功能新建绑定；同版本备份恢复须携带 AnySeek 绑定文件。
+
 HTTP、MCP 请求形状和四个工具名称不变。AnySeek 仅返回候选，正文和引用仍从
 Origence 权威数据读取。查询先按 tenant/workspace、generation 和已授权 chunk IDs
 过滤，对全部候选分批核对来源/缺失/重复，再检索并执行原有最终可见性检查。

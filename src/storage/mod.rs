@@ -29,7 +29,7 @@ pub mod local_blob;
 pub mod maintenance;
 pub mod native_turso;
 #[cfg(feature = "local-storage")]
-mod retrieval_store;
+pub(crate) mod retrieval_store;
 pub mod scope;
 pub mod sqlite;
 pub mod sqlite_graph;

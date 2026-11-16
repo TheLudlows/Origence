@@ -4,7 +4,7 @@
 
 ## 当前阶段范围
 
-当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#当前阶段范围)。当前身份入口为只读 `identity-check`，旧升级命令已移除；旧基线说明仅供识别安全边界，不提供升级或安装。
+当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#范围与证据)。当前身份入口为只读 `identity-check`，旧升级命令已移除；旧基线说明仅供识别安全边界，不提供升级或安装。
 
 同版本运行中的持久化、重启/重试恢复和备份恢复要求不变。不兼容 schema 仍应拒绝打开；使用新目录不意味着可以删除、覆盖或静默转换旧数据，原始来源和备份继续按既有要求保留。
 
@@ -43,6 +43,7 @@ MessageBatch 发布计划与轻量回执摘要原子保存，同代重试复用�
 | --- | --- |
 | `context.db` 及原生 Turso WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
+| `full-text-backend.json` | AnySeek 目录的格式、endpoint/collection 绑定；不含 key，随整目录备份 |
 | `vectors/` | 按模型 profile 分表的 LanceDB 向量及 chunk_terms_v1 全文表 |
 | `graph.db` 及原生 Turso WAL | Turso 图实体、关系与遍历投影 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
@@ -106,6 +107,11 @@ export OC_ANYSEEK_COLLECTION=origence-lexical
 `OC_ANYSEEK_URL` 只接受没有路径/凭据/query/fragment 的 HTTPS origin；loopback 可用 HTTP。
 普通集合名遵守 AnySeek 的小写标识规则。未知后端选择、缺配置或后端错误均明确拒绝。
 宿主不自动创建 Tenant、签发 key、重建丢失索引或切换已有库的检索数据。
+AnySeek 初始化成功后保存目录绑定；已有本地全文发布不能直接改用 AnySeek。
+已绑定目录在打开远端服务前检查 backend、endpoint/collection 和绑定完整性；
+更换地址/集合或漏配 `OC_FULL_TEXT_BACKEND` 均拒绝启动。原地址/集合下的凭据轮换不改绑定，
+仍须通过服务认证与索引检查。绑定有界读取 4 KiB，暂存同步后原子发布，Unix 另同步父目录；
+残留暂存文件不作为有效配置，不自动修复损坏绑定。备份恢复包含该文件，并保持后端目标一致。
 远端 key 仅由宿主持有；AnySeek 同 Tenant 的普通 key 不提供员工文档权限。
 Compose 已传递这些变量；容器中的 loopback 指容器自身，远端服务应使用可达 HTTPS origin。
 
