@@ -225,7 +225,7 @@ AML 只在 `origence::api::aml` 适配层定义 DTO、校验、确定性 ID、�
 | `POST /aml/add` | `{request_id,user_id,session_id,messages:[{role:"user"或"assistant",content:"原文",timestamp:可选Unix毫秒整数}]}` |
 | `POST /aml/search` | `{query,user_id,top_k,options:可选字符串数组}` → `{data:[{id,content}]}` |
 
-用户 workspace 使用冻结 UUIDv5 命名空间和版本化长度编码，由认证 key 的 tenant/root 与完整 user_id 计算；[确定性编码合同](superpowers/plans/2026-10-12-aml-api-adapter-refactor.md#确定性编码细节)。大小写、空格与 Unicode 编码形式原样保留，不截断或归一化；session、request、key、模型或重启不改变定位。需要隔离的新数据集使用另一个显式 root。ID 不是权限凭证，不承诺数学上的无碰撞；已有 ID 的 tenant/owner 不符则冲突，不能改绑或随机回退。
+用户 workspace 使用冻结 UUIDv5 命名空间和版本化长度编码，由认证 key 的 tenant/root 与完整 user_id 计算；[确定性编码合同](contracts/aml-adapter.md#确定性编码细节)。大小写、空格与 Unicode 编码形式原样保留，不截断或归一化；session、request、key、模型或重启不改变定位。需要隔离的新数据集使用另一个显式 root。ID 不是权限凭证，不承诺数学上的无碰撞；已有 ID 的 tenant/owner 不符则冲突，不能改绑或随机回退。
 
 Add 将 request_id 编成 `aml:add:v1:` + 完整 UTF-8 的 SHA-256 小写十六进制摘要，原 ID 同时保留为 MessageBatch.batch_id 并参与一致性核验。一次 Add 创建一个通用 source event、asset、message_batch_ingest job 与命令回执，整批发布且全部索引可检索后才返回 HTTP 200、`{success:true,request_id,user_id,session_id}`；三个 ID 原样回传，不返回 202。跨 key 同键复用原任务但不转移 created_by；任何内容、session、角色、时间、顺序或接受规格变化返回 409。省略 timestamp 与 null 等价，不按时间重排。
 
@@ -425,5 +425,5 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 或声称此类引用已完整归档。Learning 发布给 reader 的引用只有支持标识/范围，
 不返回支撑轮次的原始问答或 quote。
 
-详见 [S4 实施契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)。真实 Agent
+详见 [S4 实施契约](contracts/evidence-bundle.md)。真实 Agent
 对照需独立执行；fixture 仅验证工具/模型交互框架，不是任务收益结果。

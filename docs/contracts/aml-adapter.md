@@ -2,7 +2,7 @@
 
 原始设计日期：2026-10-12；本次文档整理：2026-10-16。
 
-本文保留 [Issue #48](https://github.com/TheLudlows/Origence/issues/48) 的生产设计合同。实现已随 PR #50/#51 合入；当前接口与操作分别以 [API](../../API.md#aml-http-协议) 和 [OPERATIONS](../../OPERATIONS.md#aml-适配启用与批次任务) 为准。原执行计划中的专项测试矩阵、测试向量与执行命令已移除；本页不宣称当前 AML 专项验证覆盖。
+本文保留 [Issue #48](https://github.com/TheLudlows/Origence/issues/48) 的生产设计合同。实现已随 PR #50/#51 合入；当前接口与操作分别以 [API](../API.md#aml-http-协议) 和 [OPERATIONS](../OPERATIONS.md#aml-适配启用与批次任务) 为准。原执行计划中的专项测试矩阵、测试向量与执行命令已移除；本页不宣称当前 AML 专项验证覆盖。
 
 ## 目标与范围
 

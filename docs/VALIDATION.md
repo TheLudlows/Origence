@@ -2,6 +2,167 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：文档按职责归档与路径整理（仅文档）
+
+基线为 `8f05484b144d388bb9527f14ed8a4ae2e07aab3a`，入口见[文档索引](README.md)。
+迁移并规范命名 10 篇文档：设计进入 design，领域规则进入 contracts，接入记录进入 implementation，检视进入 reviews。
+同步全部活动相对链接、源码/工件链接和裸路径引用，移除原目录；保留 A1–A6 与显式锚点。
+修正 semantic-capture 中 STATUS 指向 VALIDATION 的语义错误链接，并收敛现行设计中的旧排期引用。
+历史验证只调整随迁移变化的相对链接；原文事实、提交/运行 ID、原始 evidence 工件和固定 SHA 的历史 URL 保留。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 27 篇文档、193 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 结构与内容 | 10 篇迁移完整，旧目录不存在；活动引用使用新路径，历史验证链接变换后正文保持一致 |
+| Rust 检查与运行验证 | NOT_RUN：仅 Markdown 路径与导航整理，无代码/配置/依赖变化 |
+
+## 2026-11-16：四项审阅处理决定纳入 v0.8（仅文档）
+
+基线为 `9a00ab1b674988b2aa93d6286db6449b17389de2`。
+按用户逐项答复更新[首版规划](design/agent-data-foundation.md)：
+独立新 key 与获授权密钥轮换分开，凭据撤销不自动删除会话；平台会话仅归档/查询，工作现场恢复移出范围。
+私有经验通过选定审阅包共享，批准绑定完整待发布工件与依据摘要、目标范围；审阅依据不默认公开。
+Skill 发布与工具执行授权分离，首版只分发文本/参考资料和允许的元数据，不接入执行扩展。
+同步检视处理状态、身份目标说明、进度与入口。R5–R7 保持单列建议，既有持久化/作业恢复合同继续有效。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 27 篇文档、192 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅 Markdown；历史验证正文保持原样，无代码/配置/依赖变化 |
+| Rust 检查、密钥轮换/隔离、审阅发布与客户端验证 | NOT_RUN：仅确认设计边界，相关新能力尚待实现 |
+
+## 2026-11-16：v0.7 架构检视与行业参考（仅文档）
+
+审阅基线为 `5989040d2b714c948bd8bbf6f2bf4665032456be` 的架构 v0.7，
+新增[检视记录](reviews/2026-11-16-agent-data-foundation-review.md)，列出四项实现前边界和三项合同/验收改进。
+查阅 LangGraph/LangMem、Letta 当前 Skills/Shared memory、Agent Skills 标准、Claude Code/Codex Skills、
+Langfuse/LangSmith 官方资料；产品文档不作为 Origence 的实际能力或质量证明。
+核对既有语义/评估合同与 MCP/会话入口，建议单列，已确认的 key→会话、workspace 资产和人工发布规则保留。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 27 篇文档、191 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅审阅及入口说明；历史验证正文保持原样，无代码/配置/依赖变化 |
+| Rust、真实客户端/AnySeek、权限与模型效果验证 | NOT_RUN：文档评审，不将官方产品描述或静态核对写成运行验收 |
+
+## 2026-11-16：用户 key 私有会话与 workspace 资产归属 v0.7（仅文档）
+
+基线为 `7cb746deb60584e4c08efa9c1ba2caafcc4bf57b`。
+按用户补充更新[架构规划](design/agent-data-foundation.md)：
+同一 workspace 的相同用户 API key 绑定同一私有会话，跨客户端复用；需独立会话的 Agent 使用不同 key。
+长期记忆/事实、知识和已发布 Skill 归 workspace；原始会话、Run/临时态与候选不因沉淀而公开。
+补充候选审阅的受控交付、检索/来源/观测的隐私边界，以及同 key/跨 key/跨 workspace 验收。
+核对 `session.rs`、`sessions.rs`、存储 session 读路径和认证类型：当前为 workspace/writer 访问，
+新 key→会话绑定与私有隔离明确记为待实现；未宣称现有 created_by 字段提供私有授权。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、183 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅 Markdown；旧验证正文保持原样，无代码/配置/依赖变化 |
+| Rust 检查、会话隔离、真实客户端与沉淀发布 | NOT_RUN：仅目标归属规则修订，新隔离能力尚待实施 |
+
+## 2026-11-16：首版部署、Skill 发布与试点方向确认 v0.6（仅文档）
+
+基线为 `6dbfa15cbc49bc0a39197c487ca553665d0d3ab8`。
+按用户答复更新[架构规划](design/agent-data-foundation.md)：
+首版内网部署、Claude Code/Codex 本地 CLI；Skill 必须由有发布权用户批准后发布；试点覆盖研发与业务。
+原待确认项改为已确认决定，具体任务/数据源/负责人留作试点准备，不虚构已选定对象。
+同步状态与目标链接说明，规划规则和实际代码能力仍分别记录。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、182 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅 Markdown；旧验证正文保持原样，无代码/配置/依赖变化 |
+| Rust 检查、部署/客户端和 Skill 发布能力 | NOT_RUN：仅记录已确认决策，不能作为能力实现的证明 |
+
+## 2026-11-16：统一 AnySeek 与首版范围精简 v0.5（仅文档）
+
+基线为 `1080ca8f8e3fb2e0b21db89b2a2216719ecba70d`。
+按用户确认将[目标规划](design/agent-data-foundation.md)的全文/向量检索统一到 AnySeek，
+683 行收敛为 176 行，保留上下文管理/供给、经验到可审视 Skill、最小运行追溯。
+图谱、Git 协作、复杂控制面等扩展从首版规划省略；身份/来源/版本与撤回作为基本正确性保留。
+进度页和前序切片同步精简，统一后续顺序与验收入口；现有向量仍用 LanceDB 的事实继续明确记录。
+核对现有检索入口和既有合同；AnySeek 向量接入、LanceDB 移除与新增领域能力未在本轮实现。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、181 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅 Markdown；旧验证正文保持原样，当前实现/接口/运行合同保留真实边界 |
+| Rust 检查、向量替换、真实客户端与部署 | NOT_RUN：仅规划与进度文档调整，无代码/配置/依赖变化 |
+
+## 2026-11-16：记忆/执行经验到 Skill 审视与复用 v0.4（仅文档）
+
+基线为 `072ecfdfb23b1b946dca3d04fb9cc8ff53a779af`。
+按用户明确的 Skill 来源与审视方向修订[架构规划](design/agent-data-foundation.md)：
+总体图和专项图包含记忆/执行经验证据、提炼、候选、用户审视、版本发布与运行反馈；
+补充候选/审阅模型、用户可读内容与依据、失败/反例、差异、修改/驳回/批准、来源撤回和修订绑定。
+Git 调整为可选协作载体，Skill 提炼与可审视候选纳入首阶段；默认用户确认后发布明确标为建议。
+核对现有 `learning.rs`、Improve 入口与领域合同，既有 Learning 不作为 Skill 提炼已实现的证明。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、181 个本地目标、47 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅架构规划、入口/状态与本节；旧验证正文保持原样，无代码/配置/依赖变化 |
+| Rust 检查、提炼模型效果、用户审阅交互与客户端 | NOT_RUN：仅目标设计修订，新增能力仍待实现和验收 |
+
+## 2026-11-16：可观测性架构图补充 v0.3（仅文档）
+
+基线为 `d58cbcfeaced6d56587e8607314d4518037594f1`。
+[架构规划](design/agent-data-foundation.md)总体图显式增加 Agent 可观测性分组，
+标出事件接收、Run/Step 证据链、受控追溯查询与覆盖缺口；第 8.1 节新增证据流图，
+分别画出平台观测、客户端上报、人工/测试验证的来源与流向。
+平台 Skill 分发和客户端实际加载分开记录；工具/结果只在客户端支持采集或显式提交时进入证据链。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、180 个本地目标、47 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅架构规划与本节；历史验证正文保持原样，无代码/配置/依赖变化 |
+| Rust 检查、实际事件采集与部署 | NOT_RUN：仅目标架构图与说明修订，不代表观测能力已实现 |
+
+## 2026-11-16：上下文概念层级修订 v0.2（仅文档）
+
+基线为架构草案 v0.1 提交 `d3b42322b9c5e1a2a8cc1c06d4188f16c2923173`。
+按用户纠正更新[架构规划](design/agent-data-foundation.md)：
+上下文是包含记忆、知识、Skill 与运行时状态的总概念，资产管理和运行时供给属于其中不同职责，
+Agent 可观测性贯穿其生命周期。同步定位、层级树、架构图、数据分类、交付快照、阶段验收和入口/状态说明。
+分类中分别列出记忆、知识、Skill；Skill 原生分发与 MCP 读取共同属于上下文供给，加载仍由独立事件证明。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、179 个本地目标、47 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅 Markdown；旧验证正文保持原样，v0.1 的分类记录仅描述当时草案 |
+| Rust 检查、真实客户端、AnySeek 与部署 | NOT_RUN：概念与规划文档修订，无代码、配置、依赖或锁文件变化 |
+
+v0.2 目标架构的其余设计仍待确认；本轮不新增运行能力。
+
+## 2026-11-16：企业 Agent 数据底座架构规划（仅文档）
+
+核对基线为已合入 PR #71 的 main `17fa39582aefb2c53165fae62bf8c41de4aab34c`。
+本轮新增[目标架构草案](design/agent-data-foundation.md)，
+记录研发/业务团队、Claude Code/Codex、四项能力与上下文十类数据，以及建议的 P0–P3 验收。
+同步文档入口、当前状态、现有设计与前序切片的范围说明，区分已确认方向、待确认设计和当前实现。
+核对 `src/mcp.rs`、`src/session.rs`、`src/evidence.rs`、模块入口及既有 API/设计合同；
+不把 MCP fixture、SessionTurn 或 EvidenceBundle 表述为完整客户端、Run 或快照能力。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、177 个本地目标、47 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 变更范围 | 仅 README/docs Markdown；无代码、配置、依赖或锁文件变化 |
+| Rust fmt / Clippy / 测试、真实客户端、AnySeek 与部署 | NOT_RUN：仅文档规划，不将历史工程验证外推为规划验收 |
+
+草案 v0.1 待产品确认；Skill、通用 Run/事件、任务快照和双真实客户端验收仍未完成。
+此节之外的历史验证记录与工件保持原样。
+
 ## 2026-11-16：代码检视、启动绑定与文档收敛
 
 检视基线 `db434ae48fd20e7a8f54e44999a7592457390323`；修复及文档收敛对应
@@ -93,7 +254,7 @@ CI 已添加固定版本真实 AnySeek 的构建与这组 Service/HTTP/MCP 检�
 
 ## 2026-11-16：AnySeek / Claude Code 第一版范围与静态核对
 
-本轮仅修改文档，记录[第一版实施计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)，
+本轮仅修改文档，记录[第一版实施计划](implementation/2026-11-16-anyseek-integration.md)，
 并同步文档入口、STATUS 和既有路线图。基线为 Origence
 `8de5817a3adf857f6224e248a57f62990ff55a8f` 与 AnySeek
 `6614bbf29bad0041c65738831bc1a16da4c69660`；后者按远端固定版本核对，
@@ -317,7 +478,7 @@ Windows 按 main-only 策略 skipped，不能算已通过。六个旧 mock 测�
 
 ## 2026-10-11 S3 首个切片：受控对话提取 → S2
 
-按用户确认的三项串行完成纯库提取契约、S2 写入/持久 Worker 接入及端到端验证；只面向新库，不开发升级。基线 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf，包含上一节所记 S2 的未提交工作区改动。[实施契约](superpowers/plans/2026-10-11-s3-semantic-capture.md)、[完整命令输出与 19 个最终源码/测试文件哈希](evidence/2026-10-11-s3-semantic-capture-validation.json)。新增公开库 API 与 POST /v1/captures/semantic；调用方限定完整身份/版本和单值覆盖授权，模型生成 operation/value/quote 后复用同一个 S2 路由函数。未增加依赖、表、CLI 隐藏协议、Worker 或升级路径。
+按用户确认的三项串行完成纯库提取契约、S2 写入/持久 Worker 接入及端到端验证；只面向新库，不开发升级。基线 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf，包含上一节所记 S2 的未提交工作区改动。[实施契约](contracts/semantic-capture.md)、[完整命令输出与 19 个最终源码/测试文件哈希](evidence/2026-10-11-s3-semantic-capture-validation.json)。新增公开库 API 与 POST /v1/captures/semantic；调用方限定完整身份/版本和单值覆盖授权，模型生成 operation/value/quote 后复用同一个 S2 路由函数。未增加依赖、表、CLI 隐藏协议、Worker 或升级路径。
 
 实际工具链 rustc 1.98.0 (88d9e12ae 2026-08-18)，Windows MSVC。统一 exec 启动器不可用，使用本地 Node/PowerShell 调用已安装工具链；所有 Cargo 命令串行、offline/locked。复核发现共用模型响应的外层 JSON 解析仍在异步线程，已改为 await spawn_blocking；内层模型候选解析/校验与分词也在事务外等待 blocking 工作，不增加硬取消保证。修正后重新运行完整矩阵，最终全部退出 0：
 
@@ -339,7 +500,7 @@ Windows 按 main-only 策略 skipped，不能算已通过。六个旧 mock 测�
 
 ## 2026-10-11 S2 显式记忆语义：三个任务串行交付
 
-基于本地 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf 的未提交工作区改动，按属性目录 → 写入规则 → 完整路径验收串行完成。[实施契约](superpowers/plans/2026-10-11-s2-memory-semantics.md)、[完整命令/输出/最终源码哈希](evidence/2026-10-11-s2-local-validation.json)。新增 workspace 管理员属性目录、单值/多值及必需条件；显式 semantic 入口复用命令幂等和单 Worker；重复不增版本、单值更新、多值补充、冲突/否定/提议/歧义的独立未归一化证据已覆盖。未修改依赖、Cargo.lock、身份 v1 编码、原有解析器或 CLI 分工。
+基于本地 HEAD db939960b5ada880ca56c5a0968b7256af57f3cf 的未提交工作区改动，按属性目录 → 写入规则 → 完整路径验收串行完成。[实施契约](contracts/memory-semantics.md)、[完整命令/输出/最终源码哈希](evidence/2026-10-11-s2-local-validation.json)。新增 workspace 管理员属性目录、单值/多值及必需条件；显式 semantic 入口复用命令幂等和单 Worker；重复不增版本、单值更新、多值补充、冲突/否定/提议/歧义的独立未归一化证据已覆盖。未修改依赖、Cargo.lock、身份 v1 编码、原有解析器或 CLI 分工。
 
 实际工具链 rustc 1.98.0 (88d9e12ae 2026-08-18)，Windows MSVC；使用本地 Node/PowerShell 启动已安装工具链（统一 exec 启动器不可用）。下列命令串行执行，最终均退出 0：
 
@@ -463,7 +624,7 @@ completed/success，fast-check、Linux、Windows、macOS、container 五项全�
 基线：Improve/Learning [PR #43](https://github.com/TheLudlows/Origence/pull/43)
 已合入 main `55b5d8792445058fa0bb6e948a853b73f5c632da`。新增只读上下文、独立路由、
 完整可见性复核、条件/冲突/UTF-8 预算回归，以及独立冻结合成数据和有界模型/工具
-Agent 框架。具体范围与非目标见 [S4 契约](superpowers/plans/2026-10-12-s4-evidence-bundle.md)。
+Agent 框架。具体范围与非目标见 [S4 契约](contracts/evidence-bundle.md)。
 
 当前云执行器未安装 Cargo/rustfmt，故本地 Rust fmt/Clippy/测试 **NOT_RUN**；
 不得将静态检查或 fixture 当作 Rust 验收。新增关系型查询已用五份权威 fresh-schema

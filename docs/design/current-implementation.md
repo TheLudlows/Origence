@@ -1,15 +1,20 @@
 # Origence · 当前平台设计
 
-更新：2026-11-16。本文负责当前架构与不变量；接口见 [API](../../API.md)，运行与恢复见
-[OPERATIONS](../../OPERATIONS.md)，进度见 [STATUS](../../STATUS.md)，验收见 [VALIDATION](../../VALIDATION.md)。
-原路径和 A1–A6 编号保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
+更新：2026-11-16。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
+[OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
+A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
+统一上下文（包含记忆、知识、Skill 等）和双客户端的目标设计另见[首版架构规划](agent-data-foundation.md)，
+本文继续描述已实现架构，不把 Skill/Run/快照等规划能力计为现状。
+目标全文/向量检索已确定统一使用 AnySeek；下文 LanceDB 与图投影描述仅记录当前实现，不定义首版目标范围。
+目标会话按用户 API key 私有隔离、沉淀资产在 workspace 内复用；当前 SessionTurn 仍按 workspace/writer 访问，尚未实现该会话边界。
 
 ## 1. 产品边界
 
-Origence 为企业内部 Agent 提供受权限控制、可追溯的知识与上下文。第一版客户端为
-Claude Code，使用既有只读 MCP。当前提供显式知识/记忆写入、检索、上下文及受控会话学习，
+Origence 为企业内部 Agent 提供受权限控制、可追溯的记忆与知识等上下文。现有接入切片提供
+Claude Code 配置与只读 MCP；目标首批客户端已扩为 Claude Code 和 Codex，两者真实客户端均待验收。
+当前提供显式知识/记忆写入、检索、上下文组装及受控会话学习，
 企业身份、文档 ACL、项目自动关联和真实开发任务效果仍待验收。
-产品顺序统一见 [M1–M3](../plans/2026-11-16-anyseek-claude-code-mvp.md)。
+前序检索切片见[实施记录](../implementation/2026-11-16-anyseek-integration.md)；首版范围以精简规划为准。
 
 ## 2. 当前架构
 
@@ -121,7 +126,7 @@ AnySeek 用一组 Record 原子替换一个不可变发布的分块；新业务�
 
 AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序不承诺与 LanceDB 相同。
 每个发布最多 64 块、编码后请求 2 MiB；超限整份拒绝。候选、响应、超时和解析限制见
-[API](../../API.md#anyseek-全文适配m1-首个切片)与 [OPERATIONS](../../OPERATIONS.md#anyseek-全文与-claude-code)，不在设计重复维护数值。
+[API](../API.md#anyseek-全文适配m1-首个切片)与 [OPERATIONS](../OPERATIONS.md#anyseek-全文与-claude-code)，不在设计重复维护数值。
 AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定配置。全库相关性、容量和延迟未验收。
 
 <a id="storage-acceptance"></a>
@@ -129,12 +134,12 @@ AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定�
 
 工程回归、真实引擎/stdio MCP、真实 Claude Code 客户端、真实任务效果分别记录。
 旧版本通过不外推到当前 head。治理隔离和来源有效性不能由平均质量分抵消。
-验收入口与精确结果统一在 [VALIDATION](../../VALIDATION.md)，当前缺口统一在 STATUS/M1–M3。
+验收入口与精确结果统一在 [VALIDATION](../VALIDATION.md)，当前缺口统一在 STATUS。
 
 ## A3. 身份、会话与条件经验
 
 显式记忆身份由 scope + subject + predicate + 规范 context 决定，语义相似不授予覆盖权。
-单值/多值、冲突证据和整快照来源撤回见 [身份规格](2026-10-08-memory-identity-and-context.md)。
+单值/多值、冲突证据和整快照来源撤回见 [身份规格](../contracts/memory-identity-and-context.md)。
 SessionTurn 显式归档实际使用的证据；Feedback 幂等但不自动调权。
 Improve 显式提案、核验并经普通知识发布 Learning，保留适用条件和完整支持闭包。
 它不等于自动学习所有交互，也没有独立 Guidance 生命周期。
@@ -150,13 +155,13 @@ EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字
 
 ## A5. 数据模型与约束来源
 
-物理字段与保留理由以[身份布局](../../contracts/identity-asset-layout.md)、
-[字段盘点](../../contracts/storage-field-audit-2026-10-15.md)和[索引/账本理由](../../contracts/index-ledger-audit-2026-10-15.md)为准。
-本设计不重复 DDL。所有新查询遵守 [AGENTS](../../../AGENTS.md) 的无 JOIN、事务和来源约束。
+物理字段与保留理由以[身份布局](../contracts/identity-asset-layout.md)、
+[字段盘点](../contracts/storage-field-audit-2026-10-15.md)和[索引/账本理由](../contracts/index-ledger-audit-2026-10-15.md)为准。
+本设计不重复 DDL。所有新查询遵守 [AGENTS](../../AGENTS.md) 的无 JOIN、事务和来源约束。
 原文保留、同版本备份恢复、持久化与重试仍是要求；旧库升级与数据迁移不在当前范围。
 
 ## A6. 协议边界
 
 HTTP 与库 DTO 统一见 API；MCP 保持 `context_search`、`context_get`、`context_resolve`、
 `context_bundle`。CLI/MCP 宿主转发不直接打开运行中的数据目录。
-[Claude Code 配置示例](../../../examples/claude-code.mcp.json)只提供接入配置，不证明客户端或任务质量已验收。
+[Claude Code 配置示例](../../examples/claude-code.mcp.json)只提供接入配置，不证明客户端或任务质量已验收。

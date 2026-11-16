@@ -39,6 +39,13 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 [Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
+The proposed [enterprise Agent data foundation architecture](docs/design/agent-data-foundation.md)
+treats memory, knowledge, Skills, and runtime state as context, with unified context delivery and run evidence for Claude Code and Codex.
+Private sessions are bound to authenticated user API keys; long-term memories, facts, Skills, and knowledge belong to a workspace.
+Planned Skills are distilled from memory and Agent experience into proposals with supporting evidence for user review, revision, and publication.
+The target uses AnySeek for both full-text and vector retrieval; the current vector path still uses LanceDB and needs replacement.
+The MVP deployment and Skill approval decisions are confirmed; planned capabilities are separate from the features implemented today.
+
 The Claude Code MVP reuses the existing read-only MCP tools with an optional AnySeek
 lexical backend. See [setup and limits](docs/OPERATIONS.md#anyseek-全文与-claude-code)
 and the [MCP configuration example](examples/claude-code.mcp.json).

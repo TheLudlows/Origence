@@ -83,7 +83,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## AnySeek 全文与 Claude Code
 
-这是 [M1](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) 的可选全文切片，
+这是 [M1](implementation/2026-11-16-anyseek-integration.md) 的可选全文切片，
 当前默认仍为 LanceDB。配置作用于宿主；MCP 客户端只连接 Origence，并使用个人 reader key。
 库调用方使用 `Service::open_with_anyseek` 显式传入配置，`Service::open` 不读取这些变量。
 
