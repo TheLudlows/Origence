@@ -1,17 +1,20 @@
 # Origence · 当前状态
 
-更新：2026-11-16（AnySeek 全文首个切片实现与验证中；精确结果见 VALIDATION）。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
+更新：2026-11-16（AnySeek 全文首个切片本地验证通过；精确结果见 VALIDATION）。**P0、S2 显式语义、S3 受控对话提取与 SessionTurn/幂等 Feedback 已实现；显式 Improve/Learning 最小闭环已合入；S4 EvidenceBundle 与独立 Agent 框架已实现，工程 CI/审查以 [PR #44](https://github.com/TheLudlows/Origence/pull/44) 的最终 head 记录为准，真实模型对照 NOT_RUN。** 当前适合本地开发和验证，未完成生产级验收。
 
 ## 当前产品主线：AnySeek + Claude Code
 
 已确认面向企业内部多 Agent，第一版仅支持 Claude Code；范围、两仓分工及启动条件见
 [第一版实施计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)。现有只读 MCP
-与宿主转发继续复用。**已增加可选 AnySeek 全文投影，真实引擎的 HTTP/stdio MCP 搜索、读取、更新、历史、撤销与重开已在本地验证；公开 Service 故障恢复及工程门禁正在收口，真实 Claude Code 客户端联调 NOT_RUN**。
+与宿主转发继续复用。**可选 AnySeek 全文投影已实现；5 项真实引擎测试、公开 Service 原计划恢复、HTTP/stdio MCP、默认/无默认测试和严格 Clippy 本地通过。真实 Claude Code 客户端联调 NOT_RUN**。
 
 当前默认仍是 LanceDB；选择 AnySeek 时，Turso 权威数据、原始 Blob、图、向量和单 Worker
 保持原职责。配置、64 块/2 MiB 发布边界和 Claude Code 示例见 [OPERATIONS](OPERATIONS.md#anyseek-全文与-claude-code)。
 企业身份、文档 ACL 与项目关联仍需补齐；已有 workspace/key 不能表述为员工权限体系。
 内部试点与第一版完成须分别通过计划中的门槛，精确验证统一登记在 [VALIDATION](VALIDATION.md)。
+
+实现提交为 [`9694deb`](https://github.com/TheLudlows/Origence/commit/9694deb85c1860355005fee9d5e38a19d8a0023c)。
+后续文档提交不改变已测实现，远端 CI 按其实际 head 判断；本地通过不代表生产或真实任务收益验收。
 
 ## Issue #60：身份合表与账本精简（已合入）
 
@@ -192,7 +195,7 @@ Add 转为通用 MessageBatch，保存不可变批次、消息原文、接受规
 
 ## 下一步
 
-- **当前产品主线**：[AnySeek / Claude Code 第一版](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)M1 可选全文切片已实现，工程验证中；长期面向企业内部多个 Agent，第一版仅 Claude Code，真实客户端验收 NOT_RUN。
+- **当前产品主线**：[AnySeek / Claude Code 第一版](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)M1 可选全文切片已实现并完成本地工程/真实引擎 MCP 验证；长期面向企业内部多个 Agent，第一版仅 Claude Code，真实客户端验收 NOT_RUN。
 - **既有能力与效果验收**：S2、S3、SessionTurn/Feedback、显式 Improve → Learning、S4 统一上下文与 Agent 框架，以及 Turso/LanceDB 接入均已实现并合入；真实 Agent 对照仍为 NOT_RUN，不能用 fixture 代替；验收条件见 [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md)。
 - **可靠性与质量待办**：[Issue #64](https://github.com/TheLudlows/Origence/issues/64) 检索召回、延迟及资源验收和 [Issue #65](https://github.com/TheLudlows/Origence/issues/65) 索引/压实维护中断恢复验收尚未完成；#64 仍仅登记，#65 的受控故障测试曾发现阻断缺陷：压实尾部正长度写遭持续模拟 ENOSPC 时可能返回成功并提交不可读的 Lance 文件；现已通过单个 lance-io 13.0.0 的 shutdown 错误传播回补修复；实现 head `9963e3b` 的 [CI 38757606804](https://github.com/TheLudlows/Origence/actions/runs/38757606804) 已核验 Linux 14/14 场景及 56 次原库/恢复副本重试与完整数据核对通过；这不代表 #65 全范围验收完成，见 [证据与边界](VALIDATION.md#issue-65受控原生写入故障矩阵阻断)；其余持续容量、冷启动与标签复核见[后续验收及启动条件](superpowers/plans/2026-10-09-next-stage-roadmap.md#后续验收及启动条件)，依赖保留项见 [审计](DEPENDENCY_AUDIT.md)。
 

@@ -2,6 +2,53 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：M1 AnySeek 全文与真实 Service / HTTP / MCP
+
+实现源码对应提交 [`9694deb85c1860355005fee9d5e38a19d8a0023c`](https://github.com/TheLudlows/Origence/commit/9694deb85c1860355005fee9d5e38a19d8a0023c)，
+基于范围文档 `2f6d270`。本地测试后提交的实现文件与所测文件逐个 Git blob 相同；
+后续验收记录/进度文档提交不修改实现。远端 CI 必须另按最终 head 查看，不把本地通过写成 CI 通过。
+
+环境：Linux x86_64；Origence 为项目声明的 Rust 1.98.0
+`88d9e12ae 2026-08-18`，CMake 4.4.5，默认/无默认特性均检查。
+Cargo.lock 未改变，SHA-256 为
+`9dbafd4005645794663627661abb76fe414539416c096cbf3514070c787eec3a`。
+真实 AnySeek fixture 固定到 `6614bbf29bad0041c65738831bc1a16da4c69660`，
+用 Rust 1.99.1、`--locked --no-default-features --bin anyseek_server` 构建。
+该外部服务工具链不改变 Origence 的 MSRV。
+
+最终本地结果：
+
+| 检查 | 命令/范围 | 结果 |
+| --- | --- | --- |
+| 格式 | `cargo fmt --package origence -- --check` | PASS |
+| 无默认严格 Clippy | `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings` | PASS |
+| 默认严格 Clippy | `cargo clippy --locked --all-targets -j 2 -- -D warnings` | PASS |
+| 无默认全套 | `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 129 库 + 105 local + 2 AnySeek 配置/安全错误契约通过；3 个真实引擎用例在常规入口忽略 |
+| 默认全套 | `cargo test --locked -j 2 --no-fail-fast` | 209 库 + 233 local + 2 AnySeek 配置/安全错误契约通过；5 个真实引擎用例、1 个原有诊断在常规入口忽略 |
+| 真实引擎与公开库 | `tools/anyseek_smoke.py --anyseek-binary PATH --cargo-tests --binary target/debug/origence` | 显式执行 5 个真实用例，5/5 通过 |
+| 真实 HTTP/stdio MCP | 同上；无真实模型调用 | 搜索、原文、来源定位、版本更新、历史读取、key 撤销、Origence 重开通过 |
+| 既有 HTTP 冒烟 | `python3 tools/smoke.py --binary target/debug/origence` | PASS |
+| 既有 MCP 契约 | `python3 tools/mcp_smoke.py --binary target/debug/origence` | 宿主转发/离线、协议协商、四工具、错误与撤销、EOF/reopen 均通过 |
+| Python 工具 | `python3 -B -m unittest discover -s tools -p 'test_*.py' -q`；新工具语法检查 | 8/8 通过；`py_compile` PASS |
+| 文档与配置 | staged diff 空白、Markdown UTF-8/围栏与 112 个相对文件链接、MCP JSON、workflow/Compose YAML 解析 | PASS；文件链接检查不验证所有锚点或外部 URL |
+
+5 个真实用例覆盖：候选范围在 top-k 前过滤、AND/中文词项、缺失与重复/错误来源拒绝、
+组成员部分清理和重复清理、64 块上限、写入已提交但响应丢失后的只读确认、
+公开 Service 的入库/读取/workspace 隔离/删除/重开，以及丢失响应后保持原 epoch、
+经清理/CAS 重建原发布计划。HTTP/MCP 使用独立临时数据、Tenant/key/collection，
+强制 AnySeek local 后端；不把后台传输回执或 MCP fixture 当成模型质量证据。
+
+初轮发现并修复：环境缺 CMake 导致原生构建失败，补齐后重建通过；临时 AnySeek 依赖
+错误原来直接结算 failed，新增显式可重试分类，保持 HTTP 503 并复用原队列；
+另修正测试里 UUID 的 BLOB 绑定。上述失败之后重新执行了真实 5/5、MCP 与两套完整 Rust 回归。
+生产没有新增重试循环、Worker、SQL 执行入口或 SQL 查询。新测试查询仅单表读取作业 payload，
+绑定 UUID；按 AGENTS 人工核对，未新增 JOIN 或关联子查询。
+
+CI 已添加固定版本真实 AnySeek 的构建与这组 Service/HTTP/MCP 检查，Windows 的 main-only
+策略不变。完整维护故障矩阵、Windows、Docker、真实 S3、断电、持续容量、真实 Claude Code
+客户端、企业身份/文档 ACL 和真实开发任务质量本轮本地均为 **NOT_RUN**；不能用普通回归
+替代这些验收。默认向量仍为 LanceDB，企业试点与 M2/M3 继续按计划推进。
+
 ## 2026-11-16：AnySeek / Claude Code 第一版范围与静态核对
 
 本轮仅修改文档，记录[第一版实施计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)，

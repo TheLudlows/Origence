@@ -1,6 +1,6 @@
 # Origence · 基于 AnySeek 的 Claude Code 第一版
 
-日期：2026-11-16。状态：产品范围和仓库基线已确认；M1 可选 AnySeek 全文切片已实现，工程验证中；真实 Claude Code 客户端尚未联调。
+日期：2026-11-16。状态：M1 可选 AnySeek 全文切片已实现，并通过本地真实引擎、公开 Service、HTTP/stdio MCP 与工程回归；真实 Claude Code 客户端尚未联调。
 
 本文记录新的产品主线、两仓职责、实施顺序和验收条件。当前运行行为仍以
 [API](../../API.md)、[OPERATIONS](../../OPERATIONS.md)和代码为准；实现进度见
@@ -18,6 +18,8 @@
 通过 Origence 查找规范、按需读取原文，再修改代码并说明所依据的资料。
 
 ## 已核对的仓库基线
+
+下表保留规划开始时的固定版本；M1 后续实现进度以本文实施清单、STATUS 和 VALIDATION 为准。
 
 | 项目 | 固定版本 | 已有能力及边界 |
 | --- | --- | --- |
@@ -130,9 +132,11 @@ M0 的勾选只表示范围和静态核对完成，不表示运行测试或适�
 - [x] 用独立新库和合成 Markdown/文本，跑通公开 Service 及 HTTP/stdio MCP 的 ingest → search → get → 引用。
 - [ ] 基于现有 stdio 宿主转发给出 Claude Code 配置，使用真实客户端验证工具调用。
 
-**现在可以开始 M1 开发。** 架构和职责边界已足以启动第一项合同及适配工作；
-真实客户端验收另需可用的 Claude Code 环境。开发数据使用公开或合成资料，
-无需等待企业数据源或 SSO；未跑通 AnySeek 链路前，不能称为“已基于 AnySeek”。
+**M1 首个全文切片已完成本地验证。** 实际接口、作用域/分块映射、词项编码、
+64 块/2 MiB 上限与恢复合同见 [API](../../API.md)，配置和 Claude Code 示例见
+[OPERATIONS](../../OPERATIONS.md#anyseek-全文与-claude-code)，精确结果见 [VALIDATION](../../VALIDATION.md)。
+下一项是在可用的真实 Claude Code 环境完成客户端联调；工程与 stdio MCP 测试不替代该验收，
+企业试点及真实开发任务仍按 M2/M3 推进。
 
 ### M2：内部受控试点
 
