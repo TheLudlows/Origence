@@ -2,6 +2,30 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：AnySeek / Claude Code 第一版范围与静态核对
+
+本轮仅修改文档，记录[第一版实施计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)，
+并同步文档入口、STATUS 和既有路线图。基线为 Origence
+`8de5817a3adf857f6224e248a57f62990ff55a8f` 与 AnySeek
+`6614bbf29bad0041c65738831bc1a16da4c69660`；后者按远端固定版本核对，
+不能用本地较旧的 AnySeek checkout 代替。
+
+静态核对范围：Origence 的 `src/mcp.rs`、`src/client.rs`、`src/service.rs`、
+`src/retrieval.rs`、`src/storage/mod.rs`、`src/storage/capabilities.rs`、
+全文适配及当前 API/运行文档；AnySeek 固定版本的 HTTP 服务指南、功能边界和
+Record 契约。确认现有四个只读 MCP 工具与宿主转发、具体 LanceDB 绑定、
+AnySeek 普通 key 的 Tenant 范围以及已合入的 group replace HTTP 合同。
+
+本地文档检查通过：`git diff --cached --check`、五个变更文档的 UTF-8 与
+Markdown 围栏检查，以及仓库内相对文件链接存在性检查。文件链接检查不构成
+全部锚点或外部 URL 可达性验证。未新增测试、依赖、运行配置或实现代码。
+
+本轮 Rust fmt/严格 Clippy/编译与运行回归均为 **NOT_RUN**：只修改文档，且环境
+现有工具链为 1.99.1/stable，未安装项目声明的 1.98.0。AnySeek 适配、HTTP/MCP
+运行联调、真实 Claude Code、企业身份/文档 ACL 和真实任务效果均为 **NOT_RUN**。
+适用 PR CI 以本次精确 head 的实际结果为准，不沿用历史通过记录，不将本轮
+静态核对写成引擎或产品验收。
+
 ## 最新合入与验证索引（2026-10-15）
 
 - [PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head `22c646988d9fd997f0978b6920e8d41977b6d4f3` 的 [CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574) 四项作业全部通过：fast-check、Linux native、Windows、identity-layout。身份索引修复、账本两列精简及 Windows 文件快照修正已完成该精确 head 验证。

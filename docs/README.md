@@ -2,11 +2,14 @@
 
 先读 [当前状态](STATUS.md)，了解已实现能力与限制；再按下表进入唯一负责该类内容的文档。产品路线图记录目标与启动条件，不替代当前状态或精确版本验收。
 
+当前新增产品主线是[基于 AnySeek 的 Claude Code 第一版](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)：面向企业内部多 Agent，第一版只接 Claude Code，优先复用现有 MCP 并接入 AnySeek。该计划区分仓库现状、两边职责、适配任务和试点门槛，不表示后端已切换。
+
 | 你要做什么 | 入口 | 内容边界 |
 | --- | --- | --- |
 | 安装、启动 | [项目 README](../README.md) | 快速开始 |
 | 了解产品进度 | [STATUS](STATUS.md) | 当前能力、缺口、下一步 |
-| 推进产品开发 | [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md) | S2 → S3 → S4 的任务与验收 |
+| 推进当前产品主线 | [AnySeek / Claude Code 第一版](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) | 新范围、仓库基线、两边职责、M1–M3 与验收 |
+| 核对既有能力与待验收项 | [产品路线图](superpowers/plans/2026-10-09-next-stage-roadmap.md) | S2 → S3 → S4 与可靠性任务；接入当前主线 |
 | 调用接口 | [API](API.md) | HTTP/库接口、权限、版本、错误与破坏性变更 |
 | 运行、恢复、维护 | [OPERATIONS](OPERATIONS.md) | 当前命令、步骤和查询/恢复边界 |
 | 核验结果 | [VALIDATION](VALIDATION.md)、[评估入口](../evals/README.md) | 精确版本、测试、CI 与原始工件，不外推到新提交 |

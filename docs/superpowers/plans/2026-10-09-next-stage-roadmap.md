@@ -2,6 +2,14 @@
 
 > 本文维护实现状态与尚未完成的验收条件；勾选表示工程实现，不代表真实模型效果验收。完整架构见[平台设计规格](../specs/2026-09-22-memory-knowledge-platform-design.md)，身份与上下文契约见[I1–I4 规格](../specs/2026-10-08-memory-identity-and-context.md)。当前进度见 [STATUS](../../STATUS.md)，实际证据见 [VALIDATION](../../VALIDATION.md)。
 
+## 2026-11-16 产品范围调整
+
+当前新增主线为[基于 AnySeek 的 Claude Code 第一版](2026-11-16-anyseek-claude-code-mvp.md)：
+长期面向企业内部多 Agent，第一版仅接 Claude Code，复用已有只读 MCP，逐步将检索
+接入 AnySeek；Turso 权威数据、来源保存、发布账本与单 Worker 继续承担现有职责。
+新主线的两仓分工、M1–M3 和启动条件统一在该计划维护；下文保留 S2–S4 的实现与
+验收记录，不将尚未实现的后端切换、企业身份或文档 ACL 标为已交付。
+
 ## AML API 收敛工程
 
 [Issue #48 的冻结契约](2026-10-12-aml-api-adapter-refactor.md)将外部协议收敛到 API，复用通用一层所属 workspace、显式 key 能力和 MessageBatch/回执/发布状态；不新增 AML 存储模型、第二个 Worker 或旧库迁移。最终适用 CI/审查记录见 VALIDATION；不据此扩展真实模型、官方评测或产品质量结论。
@@ -52,7 +60,11 @@
 
 ### P2 暂不启动的大型事项
 
-新增独立数据库后端/分布式 Serverless、完整 SaaS 控制面、OIDC/ACL、配额计费、复杂 GraphCompletion、有效时间（valid_from/to/as_of）、ANN 与重排的规模化优化，均根据后续指标和客户需求立项，不作为 S0–S4 的前置条件。
+2026-11-16 已将 AnySeek 检索适配及企业内部试点所需的身份/权限范围纳入
+[当前第一版计划](2026-11-16-anyseek-claude-code-mvp.md)，不再按本节旧优先级整体后置；
+具体企业 SSO 方式按试点需求选择，存在差异文档权限时必须先验收授权隔离。
+分布式 Serverless、完整 SaaS 控制面、配额计费、复杂 GraphCompletion、
+有效时间（valid_from/to/as_of）、ANN 与重排的规模化优化继续按实际指标和需求立项。
 
 ## 质量与可靠性保障
 
