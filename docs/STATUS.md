@@ -1,9 +1,11 @@
 # Origence · 当前进度
 
 更新：2026-11-16。实现核对基线为已合入 PR #71 的 main `17fa39582aefb2c53165fae62bf8c41de4aab34c`。
-[精简架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) v0.5 明确：
+[精简架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) v0.6 明确：
 上下文包含记忆、知识、Skill 与任务状态；Skill 从记忆和 Agent 经历沉淀，供用户审视；
 **目标全文与向量检索统一 AnySeek**，运行追溯贯穿整个闭环。规划变更不代表代码已完成替换。
+已确认首版内网部署、两客户端本地 CLI 接入，Skill 经有发布权用户批准后发布，试点覆盖研发/业务。
+具体任务、数据源与负责人在试点准备时落实。
 
 ## 当前实现与核心差距
 

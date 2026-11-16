@@ -43,7 +43,7 @@ The proposed [enterprise Agent data foundation architecture](docs/superpowers/sp
 treats memory, knowledge, Skills, and runtime state as context, with unified context delivery and run evidence for Claude Code and Codex.
 Planned Skills are distilled from memory and Agent experience into proposals with supporting evidence for user review, revision, and publication.
 The target uses AnySeek for both full-text and vector retrieval; the current vector path still uses LanceDB and needs replacement.
-It is pending product confirmation; planned capabilities are separate from the features implemented today.
+The MVP deployment and Skill approval decisions are confirmed; planned capabilities are separate from the features implemented today.
 
 The Claude Code MVP reuses the existing read-only MCP tools with an optional AnySeek
 lexical backend. See [setup and limits](docs/OPERATIONS.md#anyseek-全文与-claude-code)

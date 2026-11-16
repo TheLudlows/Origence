@@ -3,7 +3,7 @@
 更新：2026-11-16。本文负责当前架构与不变量；接口见 [API](../../API.md)，运行与恢复见
 [OPERATIONS](../../OPERATIONS.md)，进度见 [STATUS](../../STATUS.md)，验收见 [VALIDATION](../../VALIDATION.md)。
 原路径和 A1–A6 编号保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
-统一上下文（包含记忆、知识、Skill 等）和双客户端的目标设计另见[架构规划（待确认）](2026-11-16-agent-data-foundation-architecture.md)，
+统一上下文（包含记忆、知识、Skill 等）和双客户端的目标设计另见[首版架构规划](2026-11-16-agent-data-foundation-architecture.md)，
 本文继续描述已实现架构，不把 Skill/Run/快照等规划能力计为现状。
 目标全文/向量检索已确定统一使用 AnySeek；下文 LanceDB 与图投影描述仅记录当前实现，不定义首版目标范围。
 
