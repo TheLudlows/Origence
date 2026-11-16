@@ -6,6 +6,7 @@
 统一上下文（包含记忆、知识、Skill 等）和双客户端的目标设计另见[首版架构规划](2026-11-16-agent-data-foundation-architecture.md)，
 本文继续描述已实现架构，不把 Skill/Run/快照等规划能力计为现状。
 目标全文/向量检索已确定统一使用 AnySeek；下文 LanceDB 与图投影描述仅记录当前实现，不定义首版目标范围。
+目标会话按用户 API key 私有隔离、沉淀资产在 workspace 内复用；当前 SessionTurn 仍按 workspace/writer 访问，尚未实现该会话边界。
 
 ## 1. 产品边界
 

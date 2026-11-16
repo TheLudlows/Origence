@@ -4,6 +4,15 @@
 接口见 [API](../../API.md)。包含记忆、知识、Skill 等的统一上下文目标规划见[数据底座架构](2026-11-16-agent-data-foundation-architecture.md)，
 本文的显式身份、条件和现有语义合同继续有效。
 
+## 目标会话与 workspace 归属（待实现）
+
+同一 workspace 中同一个用户 API key 绑定唯一私有会话，Claude Code/Codex 使用相同 key 时继续同一会话。
+需要独立会话的 Agent 使用不同 key；归属取认证后的稳定 key ID，调用者传入的会话/角色字段不授权切换。
+原始会话、临时上下文、Run、快照与未发布候选私有；正式沉淀的长期记忆/事实、知识与 Skill 归 workspace。
+沉淀创建共享资产正文与受控来源关联，原始会话不公开；Skill 仍须经有发布权用户批准。
+workspace 成员权限不等于读取他人私有会话，观测查询和来源跳转遵守同样的隔离。
+当前 SessionTurn 仍按 workspace/writer 访问，尚无 key→唯一会话绑定；下文现有合同不证明新边界已实现。
+
 ## 身份与更新权
 
 | 字段 | 规则 |

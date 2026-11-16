@@ -2,6 +2,23 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：用户 key 私有会话与 workspace 资产归属 v0.7（仅文档）
+
+基线为 `7cb746deb60584e4c08efa9c1ba2caafcc4bf57b`。
+按用户补充更新[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)：
+同一 workspace 的相同用户 API key 绑定同一私有会话，跨客户端复用；需独立会话的 Agent 使用不同 key。
+长期记忆/事实、知识和已发布 Skill 归 workspace；原始会话、Run/临时态与候选不因沉淀而公开。
+补充候选审阅的受控交付、检索/来源/观测的隐私边界，以及同 key/跨 key/跨 workspace 验收。
+核对 `session.rs`、`sessions.rs`、存储 session 读路径和认证类型：当前为 workspace/writer 访问，
+新 key→会话绑定与私有隔离明确记为待实现；未宣称现有 created_by 字段提供私有授权。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、183 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅 Markdown；旧验证正文保持原样，无代码/配置/依赖变化 |
+| Rust 检查、会话隔离、真实客户端与沉淀发布 | NOT_RUN：仅目标归属规则修订，新隔离能力尚待实施 |
+
 ## 2026-11-16：首版部署、Skill 发布与试点方向确认 v0.6（仅文档）
 
 基线为 `6dbfa15cbc49bc0a39197c487ca553665d0d3ab8`。
