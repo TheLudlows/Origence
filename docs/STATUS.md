@@ -4,7 +4,7 @@
 核对基线为 `17fa39582aefb2c53165fae62bf8c41de4aab34c`。
 产品方向已确认为服务研发与业务团队的企业内部 Agent 数据底座，首批客户端为 Claude Code 与 Codex。
 完整[目标架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
-包含上下文、内部知识、Skill 管理和运行追溯，新增能力不计为已实现。
+上下文包含记忆、知识、Skill 与运行时状态，运行追溯贯穿其供给与使用；新增能力不计为已实现。
 
 ## 已实现与边界
 
@@ -37,7 +37,7 @@ MCP fixture 通过不等于真实 Claude Code/Codex 客户端或目标产品整�
 
 1. 评审目标架构的待确认决策；选择研发/业务各一个任务、负责人和初始数据源。
 2. 核验 Claude Code/Codex 的 MCP、原生 Skill 加载和事件采集能力，明确版本与覆盖限制。
-3. 确认上下文快照、Skill 发布和 Run 证据的最小合同，再按规划实施四项能力的最小闭环。
+3. 确认上下文快照、Skill 发布和 Run 证据的最小合同，再贯通记忆/知识/Skill 等上下文的管理、供给与追溯。
 4. 试点数据接入前落实员工身份、文档权限、保留策略和源更新/删除同步；冻结任务建立收益基线。
 
 目标阶段与验收见[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md#14-交付阶段与验收)，

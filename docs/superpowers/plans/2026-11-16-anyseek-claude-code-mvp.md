@@ -5,6 +5,7 @@
 
 范围说明：本文保留此前仅 Claude Code 的检索接入切片与验收记录，**不再定义完整产品范围**。
 用户已确认首批客户端为 Claude Code 与 Codex，面向研发和业务团队；Skill 版本分发与运行追溯纳入目标能力。
+目标架构统一管理记忆、知识、Skill 等上下文，可观测性贯穿上下文的供给与使用。
 完整[架构规划（待确认）](../specs/2026-11-16-agent-data-foundation-architecture.md)提出后续 P0–P3，
 确认后据此拆合同。下文历史范围与勾选不表示 Codex、Skill 或 Run 已实现。
 

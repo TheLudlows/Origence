@@ -1,7 +1,8 @@
 # Origence · 文档入口
 
 产品方向为企业内部 Agent 数据底座，首批客户端已确认为 Claude Code 与 Codex。
-四项能力的完整[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
+记忆、知识、Skill 与运行时状态统一纳入上下文，可观测性贯穿其供给与使用过程。
+完整[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
 当前可选 AnySeek 全文已接入，Turso 继续负责权威数据和来源。规划、当前代码与实际验收分开记录。
 
 | 目的 | 唯一入口 |

@@ -1,7 +1,7 @@
 # Origence · 记忆身份与上下文规则
 
 更新：2026-11-16。本文负责领域规则；进度见 [STATUS](../../STATUS.md)，
-接口见 [API](../../API.md)。更广义的任务上下文目标规划见[数据底座架构（待确认）](2026-11-16-agent-data-foundation-architecture.md)，
+接口见 [API](../../API.md)。包含记忆、知识、Skill 等的统一上下文目标规划见[数据底座架构（待确认）](2026-11-16-agent-data-foundation-architecture.md)，
 本文的显式身份、条件和现有语义合同继续有效。
 
 ## 身份与更新权
