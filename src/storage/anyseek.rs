@@ -1,0 +1,651 @@
+//! Bounded HTTP full-text projection. Origence remains the visibility authority.
+//!
+//! A publication is immutable and uses one bounded Record group. Its UTC retry
+//! epoch is saved in the ordinary publication plan before network IO. Each
+//! application token is encoded as one SHA-256 word so engine query syntax and
+//! a second tokenizer cannot reinterpret Origence's conjunctive lexical input.
+
+use super::{
+    FullTextEntry, FullTextHit, FullTextQuery, Scope, SourceVersion, StorageError, StorageResult,
+    hash,
+};
+use reqwest::{Method, StatusCode, Url, header::HeaderValue};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use uuid::Uuid;
+
+const FORMAT: &str = "origence-lexical-sha256-v1";
+const MAX_GROUP: usize = 64;
+const MAX_RESPONSE: usize = 8 * 1024 * 1024;
+const MAX_REQUEST: usize = 2 * 1024 * 1024;
+const MAX_CANDIDATES: usize = 10_000;
+const META: &[&str] = &[
+    "format",
+    "tenant",
+    "workspace",
+    "chunk_id",
+    "source_id",
+    "source_version",
+    "generation",
+    "publication",
+];
+
+/// Server-owned connection details. Credentials are deliberately not Debug.
+pub struct AnySeekConfig {
+    base: Url,
+    key: HeaderValue,
+    collection: String,
+}
+
+impl AnySeekConfig {
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn binding_identity(&self) -> Value {
+        json!({"format":"origence-full-text-backend-v1","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection})
+    }
+
+    /// CLI configuration. Libraries pass an explicit config instead of reading
+    /// process environment; absent selection retains the existing backend.
+    pub fn from_env() -> StorageResult<Option<Self>> {
+        match std::env::var("OC_FULL_TEXT_BACKEND").as_deref() {
+            Err(std::env::VarError::NotPresent) | Ok("lancedb") => Ok(None),
+            Ok("anyseek") => {
+                let get = |name| {
+                    std::env::var(name).map_err(|_| {
+                        invalid("AnySeek URL, tenant key, and collection are required")
+                    })
+                };
+                Self::new(
+                    &get("OC_ANYSEEK_URL")?,
+                    &get("OC_ANYSEEK_API_KEY")?,
+                    &get("OC_ANYSEEK_COLLECTION")?,
+                )
+                .map(Some)
+            }
+            _ => Err(invalid("OC_FULL_TEXT_BACKEND must be lancedb or anyseek")),
+        }
+    }
+
+    /// Require HTTPS except on loopback; do not accept URL credentials or paths.
+    pub fn new(base: &str, key: &str, collection: &str) -> StorageResult<Self> {
+        let base = Url::parse(base).map_err(|_| invalid("invalid AnySeek URL"))?;
+        let local = matches!(
+            base.host_str(),
+            Some("localhost" | "127.0.0.1" | "[::1]" | "::1")
+        );
+        if base.host_str().is_none()
+            || (base.scheme() != "https" && !(local && base.scheme() == "http"))
+            || !base.username().is_empty()
+            || base.password().is_some()
+            || base.query().is_some()
+            || base.fragment().is_some()
+            || base.path() != "/"
+        {
+            return Err(invalid(
+                "AnySeek URL requires HTTPS (HTTP on loopback) and an origin without credentials",
+            ));
+        }
+        if collection.is_empty()
+            || collection.len() > 63
+            || !collection.as_bytes()[0].is_ascii_lowercase()
+            || !collection
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+        {
+            return Err(invalid("invalid AnySeek collection ID"));
+        }
+        if key.is_empty() {
+            return Err(invalid("AnySeek tenant key is required"));
+        }
+        let mut key =
+            HeaderValue::from_str(key).map_err(|_| invalid("invalid AnySeek tenant key"))?;
+        key.set_sensitive(true);
+        Ok(Self {
+            base,
+            key,
+            collection: collection.into(),
+        })
+    }
+}
+
+/// Immutable lexical publication records stored behind a trusted service key.
+pub struct AnySeekFullTextStore {
+    config: AnySeekConfig,
+    http: reqwest::Client,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct Document {
+    format: String,
+    tenant: Uuid,
+    workspace: Uuid,
+    chunk_id: Uuid,
+    source_id: Uuid,
+    source_version: String,
+    generation: String,
+    publication: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    terms: Option<String>,
+}
+
+fn invalid(message: &'static str) -> StorageError {
+    StorageError::InvalidArgument(message)
+}
+fn unavailable() -> StorageError {
+    StorageError::Unavailable("AnySeek full-text unavailable".into())
+}
+fn transient() -> StorageError {
+    StorageError::TransientUnavailable("AnySeek transport unavailable".into())
+}
+fn inconsistent() -> StorageError {
+    StorageError::Conflict("AnySeek publication identity mismatch".into())
+}
+
+/// Current UTC day, used once when preparing a durable publication operation.
+pub fn operation_epoch() -> StorageResult<u64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| unavailable())?
+        .as_secs()
+        / 86400)
+}
+
+fn encode_terms(terms: &str, budget: usize) -> StorageResult<String> {
+    let mut encoded = String::new();
+    for word in terms.split_whitespace() {
+        if encoded.len().saturating_add(66) > budget {
+            return Err(invalid("AnySeek encoded terms exceed request budget"));
+        }
+        if !encoded.is_empty() {
+            encoded.push(' ');
+        }
+        encoded.push('t');
+        encoded.push_str(&hash(word));
+    }
+    Ok(encoded)
+}
+
+fn filter(field: &str, values: impl IntoIterator<Item = String>) -> Value {
+    json!({"String":{"field":field,"filter":values.into_iter().collect::<Vec<_>>()}})
+}
+
+fn scope_filters(scope: Scope) -> Vec<Value> {
+    vec![
+        filter("format", [FORMAT.into()]),
+        filter("tenant", [scope.tenant_id.to_string()]),
+        filter("workspace", [scope.workspace_id.to_string()]),
+    ]
+}
+
+fn record_id(doc: &Document) -> String {
+    format!(
+        "c{}",
+        hash(format!(
+            "{}:{}:{}:{}:{}:{}",
+            doc.tenant,
+            doc.workspace,
+            doc.chunk_id,
+            doc.source_id,
+            doc.source_version,
+            doc.generation
+        ))
+    )
+}
+
+fn decode_record(value: &Value, scope: Scope) -> StorageResult<(String, Document)> {
+    let doc: Document =
+        serde_json::from_value(value["document"].clone()).map_err(|_| inconsistent())?;
+    if doc.format != FORMAT
+        || doc.tenant != scope.tenant_id
+        || doc.workspace != scope.workspace_id
+        || value["record_id"].as_str() != Some(record_id(&doc).as_str())
+        || doc
+            .source_version
+            .parse::<i32>()
+            .ok()
+            .filter(|v| *v > 0)
+            .is_none()
+        || doc
+            .generation
+            .parse::<i64>()
+            .ok()
+            .filter(|v| *v > 0)
+            .is_none()
+    {
+        return Err(inconsistent());
+    }
+    Ok((record_id(&doc), doc))
+}
+
+impl AnySeekFullTextStore {
+    /// Construct a bounded client. The collection must be provisioned separately.
+    pub fn new(config: AnySeekConfig) -> StorageResult<Self> {
+        let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|_| unavailable())?;
+        Ok(Self { config, http })
+    }
+
+    /// Exact collection configuration for a fresh dedicated lexical projection.
+    pub fn collection_config() -> Value {
+        let mut schema: Vec<Value> = META.iter().map(|field| json!({"field":field,"field_type":"String","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0})).collect();
+        schema.push(json!({"field":"terms","field_type":"Text","store":true,"index_lexical":true,"index_vector":false,"filterable":false,"boost":1.0}));
+        json!({"index_name":FORMAT,"tokenizer":"TantivySimpleV1","text_normalization":"None","stop_words":"None","schema":schema})
+    }
+
+    async fn request(
+        &self,
+        method: Method,
+        suffix: &str,
+        body: Option<Value>,
+    ) -> StorageResult<(StatusCode, Value)> {
+        let url = self
+            .config
+            .base
+            .join(&format!(
+                "/api/v1/index/{}{}",
+                self.config.collection, suffix
+            ))
+            .map_err(|_| unavailable())?;
+        let mut request = self
+            .http
+            .request(method, url)
+            .header("apikey", self.config.key.clone());
+        if let Some(body) = body {
+            let bytes = tokio::task::spawn_blocking(move || serde_json::to_vec(&body))
+                .await
+                .map_err(|_| unavailable())?
+                .map_err(|_| unavailable())?;
+            if bytes.len() > MAX_REQUEST {
+                return Err(invalid("AnySeek request exceeds 2 MiB"));
+            }
+            request = request
+                .header("Content-Type", "application/json")
+                .body(bytes);
+        }
+        let mut response = request.send().await.map_err(|_| transient())?;
+        let status = response.status();
+        if status.is_server_error()
+            || status == StatusCode::TOO_MANY_REQUESTS
+            || status == StatusCode::REQUEST_TIMEOUT
+        {
+            return Err(transient());
+        }
+        // Never expose a backend body, URL, key, or parser diagnostic.
+        if !status.is_success() {
+            return Ok((status, Value::Null));
+        }
+        let mut bytes = Vec::new();
+        while let Some(part) = response.chunk().await.map_err(|_| transient())? {
+            if part.len() > MAX_RESPONSE.saturating_sub(bytes.len()) {
+                return Err(unavailable());
+            }
+            bytes.extend_from_slice(&part);
+        }
+        let value = tokio::task::spawn_blocking(move || serde_json::from_slice(&bytes))
+            .await
+            .map_err(|_| unavailable())?
+            .map_err(|_| unavailable())?;
+        Ok((status, value))
+    }
+
+    /// Validate the observable schema without creating or repairing a collection.
+    pub async fn check(&self) -> StorageResult<()> {
+        let (status, info) = self.request(Method::GET, "", None).await?;
+        if !status.is_success() {
+            return Err(unavailable());
+        }
+        let expected = Self::collection_config();
+        if info["schema"] != expected["schema"]
+            || info["name"] != FORMAT
+            || info["text_normalization"] != "None"
+            || !info["vector_dimensions"].is_null()
+        {
+            return Err(StorageError::Conflict(
+                "incompatible AnySeek lexical collection".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn query(
+        &self,
+        filters: Vec<Value>,
+        query: &str,
+        length: usize,
+        offset: usize,
+        all_fields: bool,
+    ) -> StorageResult<Value> {
+        let fields: Vec<&str> = if all_fields {
+            Vec::new()
+        } else {
+            META.to_vec()
+        };
+        let (status, result) = self.request(Method::POST, "/query", Some(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
+        if !status.is_success() {
+            return Err(unavailable());
+        }
+        if !result["hits"].is_array() || result["count_total"].as_u64().is_none() {
+            return Err(unavailable());
+        }
+        Ok(result)
+    }
+
+    async fn group_version(&self, group: &str) -> StorageResult<Option<u64>> {
+        // Group IDs are generated lowercase hex, never caller-provided paths.
+        if group.len() != 65
+            || !group.starts_with('p')
+            || !group[1..].bytes().all(|c| c.is_ascii_hexdigit())
+        {
+            return Err(inconsistent());
+        }
+        let (status, result) = self
+            .request(Method::GET, &format!("/group?group_id={group}"), None)
+            .await?;
+        if status == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() || result["group_id"] != group {
+            return Err(unavailable());
+        }
+        result["group_version"]
+            .as_u64()
+            .filter(|v| *v > 0)
+            .map(Some)
+            .ok_or_else(unavailable)
+    }
+
+    async fn group_records(&self, scope: Scope, group: &str) -> StorageResult<Vec<Value>> {
+        let mut filters = scope_filters(scope);
+        filters.push(filter("publication", [group.into()]));
+        let result = self.query(filters, "", MAX_GROUP + 1, 0, true).await?;
+        if result["count_total"].as_u64().unwrap() > MAX_GROUP as u64 {
+            return Err(inconsistent());
+        }
+        let hits = result["hits"].as_array().unwrap();
+        if result["count_total"].as_u64() != Some(hits.len() as u64) {
+            return Err(unavailable());
+        }
+        let mut rows = Vec::new();
+        let mut seen = HashSet::new();
+        for hit in hits {
+            let (id, doc) = decode_record(&hit["record"], scope)?;
+            if doc.publication != group || doc.terms.is_none() || !seen.insert(id.clone()) {
+                return Err(inconsistent());
+            }
+            rows.push(json!({"record_id":id,"document":doc}));
+        }
+        rows.sort_by(|a, b| a["record_id"].as_str().cmp(&b["record_id"].as_str()));
+        Ok(rows)
+    }
+
+    /// Publish one immutable <=64-chunk group using the saved operation epoch.
+    pub async fn upsert(
+        &self,
+        scope: Scope,
+        entries: Vec<FullTextEntry>,
+        epoch: u64,
+    ) -> StorageResult<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        if entries.len() > MAX_GROUP {
+            return Err(invalid("AnySeek publication exceeds 64 chunks"));
+        }
+        let (group, records, digest) = tokio::task::spawn_blocking(move || -> StorageResult<_> {
+            let mut docs = BTreeMap::new();
+            let mut remaining = MAX_REQUEST;
+            for entry in entries {
+                if entry.source.version <= 0 || entry.generation <= 0 {
+                    return Err(invalid("invalid full-text publication version"));
+                }
+                let terms = encode_terms(&entry.search_terms, remaining)?;
+                remaining -= terms.len();
+                let doc = Document {
+                    format: FORMAT.into(),
+                    tenant: scope.tenant_id,
+                    workspace: scope.workspace_id,
+                    chunk_id: entry.id,
+                    source_id: entry.source.source_id,
+                    source_version: entry.source.version.to_string(),
+                    generation: entry.generation.to_string(),
+                    publication: String::new(),
+                    terms: Some(terms),
+                };
+                let id = record_id(&doc);
+                if let Some(old) = docs.insert(id, doc.clone())
+                    && old != doc
+                {
+                    return Err(inconsistent());
+                }
+            }
+            let group = format!(
+                "p{}",
+                hash(docs.keys().cloned().collect::<Vec<_>>().join(":"))
+            );
+            let records: Vec<Value> = docs
+                .into_iter()
+                .map(|(id, mut doc)| {
+                    doc.publication = group.clone();
+                    json!({"record_id":id,"document":doc})
+                })
+                .collect();
+            let digest = hash(serde_json::to_vec(&records).map_err(|_| unavailable())?);
+            Ok((group, records, digest))
+        })
+        .await
+        .map_err(|_| unavailable())??;
+        // A matching group settles a lost response without a new write. Startup
+        // cleanup may have cleared an uncommitted projection; its active job
+        // can rebuild the empty group under a new CAS and the saved epoch.
+        let expected_version = if let Some(version) = self.group_version(&group).await? {
+            let current = self.group_records(scope, &group).await?;
+            if self.group_version(&group).await? != Some(version) {
+                return Err(unavailable());
+            }
+            if current == records {
+                return Ok(());
+            }
+            if !current.is_empty() {
+                return Err(inconsistent());
+            }
+            version
+        } else {
+            0
+        };
+        let next_version = expected_version.checked_add(1).ok_or_else(inconsistent)?;
+        let nonce = format!("origence:{}", hash(format!("{expected_version}:{digest}")));
+        let request = json!({"operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,"expected_group_version":expected_version,"records":records});
+        let (status, result) = self
+            .request(Method::POST, "/group/replace", Some(request))
+            .await?;
+        if !status.is_success() {
+            return Err(unavailable());
+        }
+        if result["atomic"] != true
+            || result["operation_id"]["epoch"] != epoch
+            || result["operation_id"]["nonce"] != nonce
+            || result["receipt"]["group_id"] != group
+            || result["receipt"]["group_version"].as_u64() != Some(next_version)
+            || result["receipt"]["record_count"].as_u64() != Some(records.len() as u64)
+        {
+            return Err(inconsistent());
+        }
+        Ok(())
+    }
+
+    /// Preflight every eligible identity before ranking, then recheck each hit.
+    /// The caller must still perform final live authority/permission checks.
+    pub async fn search(
+        &self,
+        mut query: FullTextQuery,
+        expected: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<FullTextHit>> {
+        let ids = query
+            .artifact_ids
+            .as_mut()
+            .ok_or_else(|| invalid("AnySeek requires authorized candidate IDs"))?;
+        ids.sort();
+        ids.dedup();
+        if ids.len() > MAX_CANDIDATES || query.limit > 100 {
+            return Err(invalid("AnySeek candidate budget exceeded"));
+        }
+        if ids.is_empty() || query.limit == 0 || query.search_terms.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        for batch in ids.chunks(MAX_GROUP) {
+            let mut filters = scope_filters(query.scope);
+            filters.push(filter("generation", [query.generation.to_string()]));
+            filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
+            let result = self.query(filters, "", batch.len() + 1, 0, false).await?;
+            let hits = result["hits"].as_array().unwrap();
+            if result["count_total"].as_u64() != Some(batch.len() as u64)
+                || hits.len() != batch.len()
+            {
+                return Err(unavailable());
+            }
+            let mut seen = HashSet::new();
+            for hit in hits {
+                let (_, doc) = decode_record(&hit["record"], query.scope)?;
+                if batch.binary_search(&doc.chunk_id).is_err()
+                    || !seen.insert(doc.chunk_id)
+                    || doc.generation != query.generation.to_string()
+                    || expected.get(&doc.chunk_id)
+                        != Some(&SourceVersion {
+                            source_id: doc.source_id,
+                            version: doc.source_version.parse().map_err(|_| inconsistent())?,
+                        })
+                {
+                    return Err(inconsistent());
+                }
+            }
+        }
+        let mut filters = scope_filters(query.scope);
+        filters.push(filter("generation", [query.generation.to_string()]));
+        filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
+        let result = self
+            .query(
+                filters,
+                &encode_terms(&query.search_terms, MAX_REQUEST)?,
+                query.limit,
+                0,
+                false,
+            )
+            .await?;
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        let hits = result["hits"].as_array().unwrap();
+        if hits.len() > query.limit {
+            return Err(inconsistent());
+        }
+        for hit in hits {
+            let (_, doc) = decode_record(&hit["record"], query.scope)?;
+            let source = SourceVersion {
+                source_id: doc.source_id,
+                version: doc.source_version.parse().map_err(|_| inconsistent())?,
+            };
+            let score = hit["score"]
+                .as_f64()
+                .map(|s| s as f32)
+                .filter(|s| s.is_finite())
+                .ok_or_else(inconsistent)?;
+            if ids.binary_search(&doc.chunk_id).is_err()
+                || !seen.insert(doc.chunk_id)
+                || doc.generation != query.generation.to_string()
+                || expected.get(&doc.chunk_id) != Some(&source)
+            {
+                return Err(inconsistent());
+            }
+            out.push(FullTextHit {
+                id: doc.chunk_id,
+                source,
+                score,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Reconcile orphan removal against a current group version. A lost cleanup
+    /// response is resolved by reading current membership before another CAS.
+    pub async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()> {
+        let ids: HashSet<Uuid> = ids.into_iter().collect();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let wanted: Vec<_> = ids.iter().copied().collect();
+        let mut groups = HashSet::new();
+        for batch in wanted.chunks(MAX_GROUP) {
+            let mut filters = scope_filters(scope);
+            filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
+            let mut offset = 0;
+            loop {
+                let result = self
+                    .query(filters.clone(), "", MAX_GROUP, offset, false)
+                    .await?;
+                let count = result["count_total"].as_u64().unwrap();
+                if count > MAX_CANDIDATES as u64 {
+                    return Err(unavailable());
+                }
+                let hits = result["hits"].as_array().unwrap();
+                for hit in hits {
+                    let (_, doc) = decode_record(&hit["record"], scope)?;
+                    if !ids.contains(&doc.chunk_id) {
+                        return Err(inconsistent());
+                    }
+                    groups.insert(doc.publication);
+                }
+                offset += hits.len();
+                if offset as u64 >= count {
+                    break;
+                }
+                if hits.is_empty() {
+                    return Err(unavailable());
+                }
+            }
+        }
+        for group in groups {
+            let version = self.group_version(&group).await?.ok_or_else(inconsistent)?;
+            let next_version = version.checked_add(1).ok_or_else(inconsistent)?;
+            let rows = self.group_records(scope, &group).await?;
+            if self.group_version(&group).await? != Some(version) {
+                return Err(unavailable());
+            }
+            let retained: Vec<_> = rows
+                .iter()
+                .filter(|row| {
+                    serde_json::from_value::<Uuid>(row["document"]["chunk_id"].clone())
+                        .is_ok_and(|id| !ids.contains(&id))
+                })
+                .cloned()
+                .collect();
+            if retained.len() == rows.len() {
+                continue;
+            }
+            let nonce = format!(
+                "cleanup:{}",
+                hash(
+                    serde_json::to_vec(&json!([group, version, retained]))
+                        .map_err(|_| unavailable())?
+                )
+            );
+            let (status,result)=self.request(Method::POST,"/group/replace",Some(json!({"operation_id":{"epoch":operation_epoch()?,"nonce":nonce},"group_id":group,"expected_group_version":version,"records":retained}))).await?;
+            if !status.is_success() {
+                return Err(unavailable());
+            }
+            if result["atomic"] != true
+                || result["receipt"]["group_id"] != group
+                || result["receipt"]["group_version"].as_u64() != Some(next_version)
+                || result["receipt"]["record_count"].as_u64() != Some(retained.len() as u64)
+            {
+                return Err(inconsistent());
+            }
+        }
+        Ok(())
+    }
+}

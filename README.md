@@ -7,7 +7,7 @@ Origence is a Rust-based foundation for agent memory and knowledge. It provides 
 ## Features
 
 - **Memory & Knowledge** — Store structured memories and ingest documents.
-- **Retrieval** — Native LanceDB full-text/vector search and graph-enhanced evidence.
+- **Retrieval** — LanceDB full-text/vector search, optional AnySeek full-text projection, and graph-enhanced evidence.
 - **Storage** — Native Rust Turso authority, local LanceDB indexes, and original blobs.
 - **Governance** — Workspace isolation, versioning, provenance, and revocation.
 
@@ -38,6 +38,10 @@ Use the workspace token returned by `workspace-create` to access the API.
 ## Documentation
 
 [Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
+
+The Claude Code MVP reuses the existing read-only MCP tools with an optional AnySeek
+lexical backend. See [setup and limits](docs/OPERATIONS.md#anyseek-全文与-claude-code)
+and the [MCP configuration example](examples/claude-code.mcp.json).
 
 The index separates current contracts and operations from version-specific validation and historical research. AML production endpoints remain documented in the API; AML-specific test and experiment facilities have been removed.
 

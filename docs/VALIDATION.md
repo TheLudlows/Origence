@@ -2,6 +2,119 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：代码检视、启动绑定与文档收敛
+
+检视基线 `db434ae48fd20e7a8f54e44999a7592457390323`；修复及文档收敛对应
+[`e5438689ca2d6df3f4d4672497f372f266c575eb`](https://github.com/TheLudlows/Origence/commit/e5438689ca2d6df3f4d4672497f372f266c575eb)。
+覆盖 AnySeek 配置/请求/候选核对/组写入清理、组合适配器、Service 启动、原发布计划与真实回归，
+并逐项核对活动设计和进度。该范围不是对所有历史代码、第三方引擎或生产负载的完整审计。
+
+**已复现并修复 P1：全文后端选择缺少目录绑定。** 原代码可对已发布本地全文的目录选择
+AnySeek 并完成初始化，随后查询因投影缺失而失败，还可能继续把新发布写到另一后端。
+新增真实 Service 用例在原代码下为 5 PASS + 1 FAIL，明确捕获该问题。
+
+修复在 authority 独占锁内、远端 IO 前校验选择：拒绝对已发布本地全文直接选择 AnySeek；
+AnySeek 首次健康检查成功后，原子保存不含 key 的 endpoint/collection 绑定。
+重开拒绝漏配/改目标/损坏绑定，原后端仍能读取原数据。读取上限 4 KiB，暂存文件先同步，
+Unix 另同步父目录；不把这些操作宣称为任意断电或跨系统原子保证。
+未增加 SQL、表、迁移、Worker 或新的重试循环。
+
+本地使用 Rust 1.98.0、原锁文件和固定 AnySeek `6614bbf`，最终结果：
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo fmt --package origence -- --check` | PASS |
+| 默认/无默认 `cargo clippy --locked ... --all-targets -j 2 -- -D warnings` | 两套 PASS |
+| 默认 `cargo test --locked -j 2 --no-fail-fast` | 209 库 + 233 local + 2 配置/错误契约 PASS；6 个真实用例和 1 个原有诊断在常规入口忽略 |
+| 无默认 `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 129 库 + 105 local + 2 配置/错误契约 PASS；3 个真实用例在常规入口忽略 |
+| `tools/anyseek_smoke.py --anyseek-binary PATH --cargo-tests --binary target/debug/origence` | 真实 6/6 PASS；HTTP/stdio MCP 搜索、读取、引用、更新/历史、撤销和重开 PASS |
+| `tools/mcp_smoke.py --binary target/debug/origence` | 原有宿主转发/离线、四工具、协议/安全错误、key 撤销和重开 PASS |
+| 全仓 Markdown 与差异检查 | 25 篇文档、166 个本地文件目标和 46 个锚点通过；`git diff --cached --check` PASS |
+
+锁文件未改变。新增真实用例同时检查绑定不含 key、目标不匹配时提前拒绝、匹配配置可重开、
+坏绑定保持失败，以及原本地数据仍可读取。真实 Claude Code、Windows、Docker、任意断电、
+生产容量/性能和企业身份/ACL 本轮本地仍为 NOT_RUN。
+
+文档收敛：平台设计按现有 Turso/组合检索/AnySeek/单 Worker 重写；身份规格移除已撤下的
+离线安装与旧身份表描述；STATUS 只保留当前能力/缺口；M1–M3 吸收仍有效的可靠性待办。
+删除重复 S2–S4 路线图、已完成 Turso/Lance 接入计划、旧 Serverless 方案和演进比较研究稿。
+仍有效的 S2/S3/S4/AML 合同、依赖审计与原始 evidence 保留；旧文档可从基线 Git 历史查阅。
+本节以外的历史验收正文/工件未重写，字段盘点只更新冻结合同引用。
+
+远端对旧 head `db434ae` 的 fast-check 已成功、Linux 当时进入维护故障矩阵；该结果不属于本轮修复。
+最终 PR head 的 CI 单独判定，不用本地结果或旧 run 冒充当前 CI。
+
+## 2026-11-16：M1 AnySeek 全文与真实 Service / HTTP / MCP
+
+实现源码对应提交 [`9694deb85c1860355005fee9d5e38a19d8a0023c`](https://github.com/TheLudlows/Origence/commit/9694deb85c1860355005fee9d5e38a19d8a0023c)，
+基于范围文档 `2f6d270`。本地测试后提交的实现文件与所测文件逐个 Git blob 相同；
+后续验收记录/进度文档提交不修改实现。远端 CI 必须另按最终 head 查看，不把本地通过写成 CI 通过。
+
+环境：Linux x86_64；Origence 为项目声明的 Rust 1.98.0
+`88d9e12ae 2026-08-18`，CMake 4.4.5，默认/无默认特性均检查。
+Cargo.lock 未改变，SHA-256 为
+`9dbafd4005645794663627661abb76fe414539416c096cbf3514070c787eec3a`。
+真实 AnySeek fixture 固定到 `6614bbf29bad0041c65738831bc1a16da4c69660`，
+用 Rust 1.99.1、`--locked --no-default-features --bin anyseek_server` 构建。
+该外部服务工具链不改变 Origence 的 MSRV。
+
+最终本地结果：
+
+| 检查 | 命令/范围 | 结果 |
+| --- | --- | --- |
+| 格式 | `cargo fmt --package origence -- --check` | PASS |
+| 无默认严格 Clippy | `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings` | PASS |
+| 默认严格 Clippy | `cargo clippy --locked --all-targets -j 2 -- -D warnings` | PASS |
+| 无默认全套 | `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 129 库 + 105 local + 2 AnySeek 配置/安全错误契约通过；3 个真实引擎用例在常规入口忽略 |
+| 默认全套 | `cargo test --locked -j 2 --no-fail-fast` | 209 库 + 233 local + 2 AnySeek 配置/安全错误契约通过；5 个真实引擎用例、1 个原有诊断在常规入口忽略 |
+| 真实引擎与公开库 | `tools/anyseek_smoke.py --anyseek-binary PATH --cargo-tests --binary target/debug/origence` | 显式执行 5 个真实用例，5/5 通过 |
+| 真实 HTTP/stdio MCP | 同上；无真实模型调用 | 搜索、原文、来源定位、版本更新、历史读取、key 撤销、Origence 重开通过 |
+| 既有 HTTP 冒烟 | `python3 tools/smoke.py --binary target/debug/origence` | PASS |
+| 既有 MCP 契约 | `python3 tools/mcp_smoke.py --binary target/debug/origence` | 宿主转发/离线、协议协商、四工具、错误与撤销、EOF/reopen 均通过 |
+| Python 工具 | `python3 -B -m unittest discover -s tools -p 'test_*.py' -q`；新工具语法检查 | 8/8 通过；`py_compile` PASS |
+| 文档与配置 | staged diff 空白、Markdown UTF-8/围栏与 112 个相对文件链接、MCP JSON、workflow/Compose YAML 解析 | PASS；文件链接检查不验证所有锚点或外部 URL |
+
+5 个真实用例覆盖：候选范围在 top-k 前过滤、AND/中文词项、缺失与重复/错误来源拒绝、
+组成员部分清理和重复清理、64 块上限、写入已提交但响应丢失后的只读确认、
+公开 Service 的入库/读取/workspace 隔离/删除/重开，以及丢失响应后保持原 epoch、
+经清理/CAS 重建原发布计划。HTTP/MCP 使用独立临时数据、Tenant/key/collection，
+强制 AnySeek local 后端；不把后台传输回执或 MCP fixture 当成模型质量证据。
+
+初轮发现并修复：环境缺 CMake 导致原生构建失败，补齐后重建通过；临时 AnySeek 依赖
+错误原来直接结算 failed，新增显式可重试分类，保持 HTTP 503 并复用原队列；
+另修正测试里 UUID 的 BLOB 绑定。上述失败之后重新执行了真实 5/5、MCP 与两套完整 Rust 回归。
+生产没有新增重试循环、Worker、SQL 执行入口或 SQL 查询。新测试查询仅单表读取作业 payload，
+绑定 UUID；按 AGENTS 人工核对，未新增 JOIN 或关联子查询。
+
+CI 已添加固定版本真实 AnySeek 的构建与这组 Service/HTTP/MCP 检查，Windows 的 main-only
+策略不变。完整维护故障矩阵、Windows、Docker、真实 S3、断电、持续容量、真实 Claude Code
+客户端、企业身份/文档 ACL 和真实开发任务质量本轮本地均为 **NOT_RUN**；不能用普通回归
+替代这些验收。默认向量仍为 LanceDB，企业试点与 M2/M3 继续按计划推进。
+
+## 2026-11-16：AnySeek / Claude Code 第一版范围与静态核对
+
+本轮仅修改文档，记录[第一版实施计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)，
+并同步文档入口、STATUS 和既有路线图。基线为 Origence
+`8de5817a3adf857f6224e248a57f62990ff55a8f` 与 AnySeek
+`6614bbf29bad0041c65738831bc1a16da4c69660`；后者按远端固定版本核对，
+不能用本地较旧的 AnySeek checkout 代替。
+
+静态核对范围：Origence 的 `src/mcp.rs`、`src/client.rs`、`src/service.rs`、
+`src/retrieval.rs`、`src/storage/mod.rs`、`src/storage/capabilities.rs`、
+全文适配及当前 API/运行文档；AnySeek 固定版本的 HTTP 服务指南、功能边界和
+Record 契约。确认现有四个只读 MCP 工具与宿主转发、具体 LanceDB 绑定、
+AnySeek 普通 key 的 Tenant 范围以及已合入的 group replace HTTP 合同。
+
+本地文档检查通过：`git diff --cached --check`、五个变更文档的 UTF-8 与
+Markdown 围栏检查，以及仓库内相对文件链接存在性检查。文件链接检查不构成
+全部锚点或外部 URL 可达性验证。未新增测试、依赖、运行配置或实现代码。
+
+本轮 Rust fmt/严格 Clippy/编译与运行回归均为 **NOT_RUN**：只修改文档，且环境
+现有工具链为 1.99.1/stable，未安装项目声明的 1.98.0。AnySeek 适配、HTTP/MCP
+运行联调、真实 Claude Code、企业身份/文档 ACL 和真实任务效果均为 **NOT_RUN**。
+适用 PR CI 以本次精确 head 的实际结果为准，不沿用历史通过记录，不将本轮
+静态核对写成引擎或产品验收。
+
 ## 最新合入与验证索引（2026-10-15）
 
 - [PR #63](https://github.com/TheLudlows/Origence/pull/63) 最终 head `22c646988d9fd997f0978b6920e8d41977b6d4f3` 的 [CI 38696372574](https://github.com/TheLudlows/Origence/actions/runs/38696372574) 四项作业全部通过：fast-check、Linux native、Windows、identity-layout。身份索引修复、账本两列精简及 Windows 文件快照修正已完成该精确 head 验证。

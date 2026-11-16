@@ -21,4 +21,4 @@
 
 ## 交付结果
 
-三个步骤已完成：纯库测试 3 项、端到端 7 项；默认 lib 38/local 127、无默认特性 lib 36/local 89 全通过，格式及两套严格 Clippy 通过。精确命令、夹具修正和最终源码哈希见 [VALIDATION](../../VALIDATION.md) 与 [证据](../../evidence/2026-10-11-s3-semantic-capture-validation.json)。实现经 [PR #37](https://github.com/TheLudlows/Origence/pull/37) 合入 main `daf25b1f`；head `a0ec23d1` 的 [PR CI run 38150659736](https://github.com/TheLudlows/Origence/actions/runs/38150659736) 成功，fast-check、Linux 通过，Windows/macOS/container 按 main-only 策略跳过。这些是该实现的历史工程验证，不替代后续提交 CI，也不代表真实模型语义质量验收；当前 main 状态见 [STATUS](../../STATUS.md#当前证据与结论)。
+三个步骤已完成：纯库测试 3 项、端到端 7 项；默认 lib 38/local 127、无默认特性 lib 36/local 89 全通过，格式及两套严格 Clippy 通过。精确命令、夹具修正和最终源码哈希见 [VALIDATION](../../VALIDATION.md) 与 [证据](../../evidence/2026-10-11-s3-semantic-capture-validation.json)。实现经 [PR #37](https://github.com/TheLudlows/Origence/pull/37) 合入 main `daf25b1f`；head `a0ec23d1` 的 [PR CI run 38150659736](https://github.com/TheLudlows/Origence/actions/runs/38150659736) 成功，fast-check、Linux 通过，Windows/macOS/container 按 main-only 策略跳过。这些是该实现的历史工程验证，不替代后续提交 CI，也不代表真实模型语义质量验收；当前 main 状态见 [STATUS](../../VALIDATION.md)。

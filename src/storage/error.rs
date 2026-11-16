@@ -19,6 +19,9 @@ pub enum StorageError {
     Forbidden,
     #[error("{0}")]
     Unavailable(String),
+    /// A transient dependency failure eligible for the existing durable retry.
+    #[error("{0}")]
+    TransientUnavailable(String),
     #[error("storage engine is not initialized")]
     NotInitialized,
     #[error("backend error: {0}")]
