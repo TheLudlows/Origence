@@ -2,6 +2,21 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：v0.7 架构检视与行业参考（仅文档）
+
+审阅基线为 `5989040d2b714c948bd8bbf6f2bf4665032456be` 的架构 v0.7，
+新增[检视记录](superpowers/reviews/2026-11-16-agent-data-foundation-review.md)，列出四项实现前边界和三项合同/验收改进。
+查阅 LangGraph/LangMem、Letta 当前 Skills/Shared memory、Agent Skills 标准、Claude Code/Codex Skills、
+Langfuse/LangSmith 官方资料；产品文档不作为 Origence 的实际能力或质量证明。
+核对既有语义/评估合同与 MCP/会话入口，建议单列，已确认的 key→会话、workspace 资产和人工发布规则保留。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 27 篇文档、191 个本地目标、48 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 范围与历史 | 仅审阅及入口说明；历史验证正文保持原样，无代码/配置/依赖变化 |
+| Rust、真实客户端/AnySeek、权限与模型效果验证 | NOT_RUN：文档评审，不将官方产品描述或静态核对写成运行验收 |
+
 ## 2026-11-16：用户 key 私有会话与 workspace 资产归属 v0.7（仅文档）
 
 基线为 `7cb746deb60584e4c08efa9c1ba2caafcc4bf57b`。

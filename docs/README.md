@@ -11,6 +11,7 @@ Skill 从记忆与 Agent 执行经验提炼，候选内容、依据与变更供�
 | --- | --- |
 | 快速构建/启动 | [项目 README](../README.md) |
 | 首版核心范围、架构与验收 | [企业 Agent 数据底座精简规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) |
+| 架构边界检视与官方产品参考 | [架构检视记录](superpowers/reviews/2026-11-16-agent-data-foundation-review.md) |
 | 当前能力、缺口、下一步 | [STATUS](STATUS.md) |
 | 前序 AnySeek 全文接入的工程事实 | [AnySeek / Claude Code 实施记录](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) |
 | 当前实现架构、数据归属与不变量 | [平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) |

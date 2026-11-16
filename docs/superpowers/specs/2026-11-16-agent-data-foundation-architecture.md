@@ -5,6 +5,7 @@
 本文描述首版目标；当前实现见 [STATUS](../../STATUS.md)，已实现架构与接口分别见
 [平台设计](2026-09-22-memory-knowledge-platform-design.md)和 [API](../../API.md)。
 本版收敛首版能力，**全文与向量检索统一使用 AnySeek**。
+本稿的边界歧义与行业参考见[架构检视记录](../reviews/2026-11-16-agent-data-foundation-review.md)；其中建议尚未自动改写已确认决定。
 
 ## 1. 定位与首版范围
 
