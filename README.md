@@ -39,6 +39,10 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 [Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
+The proposed [enterprise Agent data foundation architecture](docs/superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)
+covers context, internal knowledge, Skill versioning/distribution, and run evidence for Claude Code and Codex.
+It is pending product confirmation; planned capabilities are separate from the features implemented today.
+
 The Claude Code MVP reuses the existing read-only MCP tools with an optional AnySeek
 lexical backend. See [setup and limits](docs/OPERATIONS.md#anyseek-全文与-claude-code)
 and the [MCP configuration example](examples/claude-code.mcp.json).

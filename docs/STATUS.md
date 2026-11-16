@@ -1,7 +1,10 @@
 # Origence · 当前进度
 
-更新：2026-11-16。当前工作见 [PR #71](https://github.com/TheLudlows/Origence/pull/71)，尚未合入 main。
-产品主线是企业内部 Agent 的统一知识与上下文；第一版只接 Claude Code。
+更新：2026-11-16。[PR #71](https://github.com/TheLudlows/Origence/pull/71) 已合入 main，
+核对基线为 `17fa39582aefb2c53165fae62bf8c41de4aab34c`。
+产品方向已确认为服务研发与业务团队的企业内部 Agent 数据底座，首批客户端为 Claude Code 与 Codex。
+完整[目标架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
+包含上下文、内部知识、Skill 管理和运行追溯，新增能力不计为已实现。
 
 ## 已实现与边界
 
@@ -9,9 +12,10 @@
 | --- | --- | --- |
 | 数据与来源 | 文本/Markdown/PDF、原始 Blob、不可变版本/locator、Turso authority | 新数据源连接和持续同步按试点需求接入 |
 | 检索 | 默认 LanceDB 全文/向量；可选 AnySeek 全文；候选前置过滤与最终权威复核 | AnySeek 向量接入、真实语料相关性/容量/延迟验收 |
-| 接入 | HTTP/CLI、四个只读 stdio MCP 工具、宿主转发、Claude Code 配置示例 | 真实 Claude Code 客户端及开发任务验证 |
+| 接入 | HTTP/CLI、四个只读 stdio MCP 工具、宿主转发、Claude Code 配置示例 | Claude Code 与 Codex 的真实客户端验证、Codex 配置与能力核对 |
 | 身份与语义 | 显式 MemoryIdentity、单值/多值规则、受控提取、冲突证据 | 自动身份/别名匹配、真实模型语义质量 |
 | 会话与经验 | 显式 SessionTurn/Feedback、Improve → Learning、带来源的 EvidenceBundle | 真实 Agent 收益；session 引用回填既有 used_evidence 尚不支持 |
+| 目标新增能力 | 现有 Bundle/会话/反馈可复用 | 任务上下文快照、Skill 注册/发布/分发、Run/事件/工具/结果证据链均待设计实施 |
 | 治理与恢复 | tenant/workspace、角色/key、撤回/墓碑、发布账本、原计划重试、同版本重开 | 企业身份、文档 ACL、项目范围映射、生产恢复/容量与新依赖图审计 |
 
 ## M1：AnySeek 全文首个切片
@@ -26,16 +30,18 @@ AnySeek 目录将 endpoint/collection 绑定到 `full-text-backend.json`，在�
 
 真实 AnySeek 的公开库/Service/HTTP/MCP 验证覆盖原计划恢复、隔离、更新、历史、
 撤销和重开；新增启动绑定用例后为 6 项真实用例。精确源码、实际检查和未执行项只在
-[VALIDATION](VALIDATION.md) 维护，远端 CI 以当前 PR head 为准。
-MCP fixture 通过不等于真实 Claude Code 客户端或第一版整体完成。
+[VALIDATION](VALIDATION.md) 维护，远端 CI 按具体提交核验。
+MCP fixture 通过不等于真实 Claude Code/Codex 客户端或目标产品整体完成。
 
 ## 下一步
 
-1. 完成真实 Claude Code 的工具发现、搜索、读取与引用联调。
-2. 确定试点项目和一到两个数据源，落实员工身份、差异文档权限和源更新/删除同步。
-3. 用冻结开发任务评估任务完成、引用支持、成本和延迟；先建立基线，再定优化目标。
+1. 评审目标架构的待确认决策；选择研发/业务各一个任务、负责人和初始数据源。
+2. 核验 Claude Code/Codex 的 MCP、原生 Skill 加载和事件采集能力，明确版本与覆盖限制。
+3. 确认上下文快照、Skill 发布和 Run 证据的最小合同，再按规划实施四项能力的最小闭环。
+4. 试点数据接入前落实员工身份、文档权限、保留策略和源更新/删除同步；冻结任务建立收益基线。
 
-详细职责与 M1–M3 验收条件统一见[实施计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)。
+目标阶段与验收见[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md#14-交付阶段与验收)，
+前序 M1–M3 检索切片见[实施记录](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)，不再作为完整产品范围。
 [Issue #64](https://github.com/TheLudlows/Origence/issues/64) 的相关性/延迟/资源与
 [Issue #65](https://github.com/TheLudlows/Origence/issues/65) 的维护恢复全范围尚未验收；
 已有精确版本的受控故障证据不代表生产容量或任意断电保证。

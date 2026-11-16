@@ -2,6 +2,25 @@
 
 本页保留非 AML 专项的各阶段、精确提交与运行 ID 验收证据。AML 专项测试、实验报告、fixtures 与执行入口已于 2026-10-16 清理；混合记录中的历史 CI 事实仅属于当时提交，不表示当前仍有同等 AML 覆盖。历史正文中的“当前”“进行中”“待验收”属于该阶段，不是最新项目状态；最新进度见 [STATUS](STATUS.md)。CI 通过、测试通过与产品效果分别判断，不将旧结果外推到新 head。
 
+## 2026-11-16：企业 Agent 数据底座架构规划（仅文档）
+
+核对基线为已合入 PR #71 的 main `17fa39582aefb2c53165fae62bf8c41de4aab34c`。
+本轮新增[目标架构草案](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)，
+记录研发/业务团队、Claude Code/Codex、四项能力与上下文十类数据，以及建议的 P0–P3 验收。
+同步文档入口、当前状态、现有设计与前序切片的范围说明，区分已确认方向、待确认设计和当前实现。
+核对 `src/mcp.rs`、`src/session.rs`、`src/evidence.rs`、模块入口及既有 API/设计合同；
+不把 MCP fixture、SessionTurn 或 EvidenceBundle 表述为完整客户端、Run 或快照能力。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| Markdown 本地目标/锚点、UTF-8 与围栏 | 26 篇文档、177 个本地目标、47 个锚点 PASS |
+| `git diff --cached --check` | PASS |
+| 变更范围 | 仅 README/docs Markdown；无代码、配置、依赖或锁文件变化 |
+| Rust fmt / Clippy / 测试、真实客户端、AnySeek 与部署 | NOT_RUN：仅文档规划，不将历史工程验证外推为规划验收 |
+
+草案 v0.1 待产品确认；Skill、通用 Run/事件、任务快照和双真实客户端验收仍未完成。
+此节之外的历史验证记录与工件保持原样。
+
 ## 2026-11-16：代码检视、启动绑定与文档收敛
 
 检视基线 `db434ae48fd20e7a8f54e44999a7592457390323`；修复及文档收敛对应

@@ -3,13 +3,16 @@
 更新：2026-11-16。本文负责当前架构与不变量；接口见 [API](../../API.md)，运行与恢复见
 [OPERATIONS](../../OPERATIONS.md)，进度见 [STATUS](../../STATUS.md)，验收见 [VALIDATION](../../VALIDATION.md)。
 原路径和 A1–A6 编号保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
+四项能力和双客户端的目标设计另见[架构规划（待确认）](2026-11-16-agent-data-foundation-architecture.md)，
+本文继续描述已实现架构，不把 Skill/Run/快照等规划能力计为现状。
 
 ## 1. 产品边界
 
-Origence 为企业内部 Agent 提供受权限控制、可追溯的知识与上下文。第一版客户端为
-Claude Code，使用既有只读 MCP。当前提供显式知识/记忆写入、检索、上下文及受控会话学习，
+Origence 为企业内部 Agent 提供受权限控制、可追溯的知识与上下文。现有接入切片提供
+Claude Code 配置与只读 MCP；目标首批客户端已扩为 Claude Code 和 Codex，两者真实客户端均待验收。
+当前提供显式知识/记忆写入、检索、上下文及受控会话学习，
 企业身份、文档 ACL、项目自动关联和真实开发任务效果仍待验收。
-产品顺序统一见 [M1–M3](../plans/2026-11-16-anyseek-claude-code-mvp.md)。
+前序检索切片见 [M1–M3 实施记录](../plans/2026-11-16-anyseek-claude-code-mvp.md)；后续完整范围以待确认规划为准。
 
 ## 2. 当前架构
 

@@ -1,14 +1,16 @@
 # Origence · 文档入口
 
-第一版面向企业内部 Claude Code：可选 AnySeek 全文已接入，Turso 继续负责权威数据和来源。
-当前代码、客户端验收与企业试点进度分开记录。
+产品方向为企业内部 Agent 数据底座，首批客户端已确认为 Claude Code 与 Codex。
+四项能力的完整[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
+当前可选 AnySeek 全文已接入，Turso 继续负责权威数据和来源。规划、当前代码与实际验收分开记录。
 
 | 目的 | 唯一入口 |
 | --- | --- |
 | 快速构建/启动 | [项目 README](../README.md) |
+| 目标架构、上下文分类与待确认决策 | [企业 Agent 数据底座规划（待确认）](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) |
 | 当前能力、缺口、下一步 | [STATUS](STATUS.md) |
-| M1–M3 分工与验收 | [AnySeek / Claude Code 计划](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) |
-| 架构、数据归属与不变量 | [平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) |
+| 前序 AnySeek 接入切片与剩余验收 | [AnySeek / Claude Code 实施记录](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) |
+| 当前实现架构、数据归属与不变量 | [平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md) |
 | HTTP/MCP/库接口 | [API](API.md) |
 | 配置、部署、恢复与 Claude Code 接入 | [OPERATIONS](OPERATIONS.md) |
 | 精确测试/CI/历史失败证据 | [VALIDATION](VALIDATION.md)、[评估入口](../evals/README.md) |
