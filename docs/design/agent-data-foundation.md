@@ -2,8 +2,8 @@
 
 版本：v0.8 · 2026-11-16 · **首版关键决策已确认，目标能力尚待实现**。
 
-本文描述首版目标；当前实现见 [STATUS](../../STATUS.md)，已实现架构与接口分别见
-[平台设计](2026-09-22-memory-knowledge-platform-design.md)和 [API](../../API.md)。
+本文描述首版目标；当前实现见 [STATUS](../STATUS.md)，已实现架构与接口分别见
+[平台设计](current-implementation.md)和 [API](../API.md)。
 本版收敛首版能力，**全文与向量检索统一使用 AnySeek**。
 边界检视与行业参考见[检视记录](../reviews/2026-11-16-agent-data-foundation-review.md)；四项处理决定已按用户确认纳入本版，其余建议单列。
 
@@ -205,7 +205,7 @@ Skill 还需核验候选修改后批准失效、支持来源失效后的读取/�
 **当前差距**：代码仍是可选 AnySeek 全文、LanceDB 向量；AnySeek 向量接入与 LanceDB 移除尚未实施。
 既有 Bundle、SessionTurn、Feedback 和 Learning 可以复用；Skill 提炼/审视/发布、通用 Run 和两真实客户端验收仍待完成。
 当前 SessionTurn 仍按 workspace 和 writer 权限访问，尚无 key→唯一会话绑定，不满足本节目标私有边界。
-精确进度和历史证据分别保留在 [STATUS](../../STATUS.md)与 [VALIDATION](../../VALIDATION.md)。
+精确进度和历史证据分别保留在 [STATUS](../STATUS.md)与 [VALIDATION](../VALIDATION.md)。
 
 ## 8. 已确认决定与试点准备
 

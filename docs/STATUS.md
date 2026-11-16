@@ -1,13 +1,13 @@
 # Origence · 当前进度
 
 更新：2026-11-16。实现核对基线为已合入 PR #71 的 main `17fa39582aefb2c53165fae62bf8c41de4aab34c`。
-[精简架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md) v0.8 明确：
+[精简架构规划](design/agent-data-foundation.md) v0.8 明确：
 上下文包含记忆、知识、Skill 与任务状态；Skill 从记忆和 Agent 经历沉淀，供用户审视；
 **目标全文与向量检索统一 AnySeek**，运行追溯贯穿整个闭环。规划变更不代表代码已完成替换。
 已确认首版内网部署、两客户端本地 CLI 接入，Skill 经有发布权用户批准后发布，试点覆盖研发/业务。
 具体任务、数据源与负责人在试点准备时落实。
 已确认同一用户 API key 共用同一私有会话，长期记忆/事实/Skill/知识归 workspace；原始会话不随沉淀公开。
-[架构检视](superpowers/reviews/2026-11-16-agent-data-foundation-review.md)的四项处理已确认：独立新 key 与授权轮换分开、
+[架构检视](reviews/2026-11-16-agent-data-foundation-review.md)的四项处理已确认：独立新 key 与授权轮换分开、
 会话仅归档/查询、以选定审阅包共享、Skill 发布与执行授权分离。工作现场恢复不在首版范围。
 
 ## 当前实现与核心差距
@@ -31,8 +31,8 @@ AnySeek 全文接入及目录后端绑定已有公开库、真实后端和 HTTP/
 2. 贯通运行依据、Skill 候选、用户审视与版本发布，验证研发/业务各一个 Skill 的复用。
 3. 补齐任务上下文清单和 Run 追溯，让用户能核验依据、工具、结果与采集缺口。
 
-顺序与验收统一见[规划第 7 节](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md#7-实施顺序与验收)；
-前序切片仅作[工程记录](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md)。
+顺序与验收统一见[规划第 7 节](design/agent-data-foundation.md#7-实施顺序与验收)；
+前序切片仅作[工程记录](implementation/2026-11-16-anyseek-integration.md)。
 
 ## 范围与证据
 
@@ -40,4 +40,4 @@ AnySeek 全文接入及目录后端绑定已有公开库、真实后端和 HTTP/
 实现只面向新建数据库，不提供旧库升级/迁移；保留同版本恢复与来源持久化，不能覆盖或删除既有数据。
 实际客户端、Skill 提炼质量、负载/收益与恢复分别验收；
 [#64](https://github.com/TheLudlows/Origence/issues/64)/[#65](https://github.com/TheLudlows/Origence/issues/65) 的完整质量/负载与维护恢复结论仍未完成。
-当前实现架构见[平台设计](superpowers/specs/2026-09-22-memory-knowledge-platform-design.md)，运行见 [OPERATIONS](OPERATIONS.md)。
+当前实现架构见[平台设计](design/current-implementation.md)，运行见 [OPERATIONS](OPERATIONS.md)。

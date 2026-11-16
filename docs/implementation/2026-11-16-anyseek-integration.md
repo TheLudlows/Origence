@@ -1,7 +1,7 @@
 # Origence · AnySeek / Claude Code 前序接入记录
 
-更新：2026-11-16。本文只保留前序全文接入的工程事实，现状见 [STATUS](../../STATUS.md)。
-首版功能与后续顺序统一见[精简架构规划](../specs/2026-11-16-agent-data-foundation-architecture.md)：
+更新：2026-11-16。本文只保留前序全文接入的工程事实，现状见 [STATUS](../STATUS.md)。
+首版功能与后续顺序统一见[精简架构规划](../design/agent-data-foundation.md)：
 首批客户端为 Claude Code/Codex，全文和向量统一 AnySeek，Skill 从记忆/执行经验沉淀并供用户审视。
 
 ## 已完成的接入切片
@@ -19,7 +19,7 @@
 - [ ] 真实 Claude Code 客户端验收尚未完成，已纳入双客户端统一验收。
 
 四个现有工具为 `context_search/context_get/context_resolve/context_bundle`。
-协议 fixture 不能代替真实客户端或任务收益。精确版本、测试和限制只在 [VALIDATION](../../VALIDATION.md)维护。
+协议 fixture 不能代替真实客户端或任务收益。精确版本、测试和限制只在 [VALIDATION](../VALIDATION.md)维护。
 
 ## 已固定的两仓边界
 
@@ -27,8 +27,8 @@ Origence 管理权限、来源、版本、解析/embedding、发布与引用；A
 AnySeek Tenant key 只由宿主持有，不替代员工或文档权限。当前切片只调用全文，目标的向量接入仍待实现。
 
 固定真实 fixture 为 [AnySeek 6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)。
-接口与编码见 [API](../../API.md#anyseek-全文适配m1-首个切片)，
-部署与恢复见 [OPERATIONS](../../OPERATIONS.md#anyseek-全文与-claude-code)，当前不变量见[平台设计](../specs/2026-09-22-memory-knowledge-platform-design.md)。
+接口与编码见 [API](../API.md#anyseek-全文适配m1-首个切片)，
+部署与恢复见 [OPERATIONS](../OPERATIONS.md#anyseek-全文与-claude-code)，当前不变量见[平台设计](../design/current-implementation.md)。
 
 ## 后续工作入口
 

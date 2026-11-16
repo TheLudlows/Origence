@@ -39,7 +39,7 @@ Use the workspace token returned by `workspace-create` to access the API.
 
 [Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
-The proposed [enterprise Agent data foundation architecture](docs/superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)
+The proposed [enterprise Agent data foundation architecture](docs/design/agent-data-foundation.md)
 treats memory, knowledge, Skills, and runtime state as context, with unified context delivery and run evidence for Claude Code and Codex.
 Private sessions are bound to authenticated user API keys; long-term memories, facts, Skills, and knowledge belong to a workspace.
 Planned Skills are distilled from memory and Agent experience into proposals with supporting evidence for user review, revision, and publication.

@@ -1,7 +1,7 @@
 # Origence · 记忆身份与上下文规则
 
-更新：2026-11-16。本文负责领域规则；进度见 [STATUS](../../STATUS.md)，
-接口见 [API](../../API.md)。包含记忆、知识、Skill 等的统一上下文目标规划见[数据底座架构](2026-11-16-agent-data-foundation-architecture.md)，
+更新：2026-11-16。本文负责领域规则；进度见 [STATUS](../STATUS.md)，
+接口见 [API](../API.md)。包含记忆、知识、Skill 等的统一上下文目标规划见[数据底座架构](../design/agent-data-foundation.md)，
 本文的显式身份、条件和现有语义合同继续有效。
 
 ## 目标会话与 workspace 归属（待实现）
@@ -27,10 +27,10 @@ workspace 成员权限不等于读取他人私有会话，观测查询和来源�
 | source/evidence | 原始事件、版本、精确 quote/locator 与 parser 标记 |
 | expected_version | 并发写条件，不证明真值、适用期或来源权威性 |
 
-[MemoryIdentity](../../../src/memory_identity.rs) 以固定 JSON tuple 编码版本、scope、subject、
+[MemoryIdentity](../../src/memory_identity.rs) 以固定 JSON tuple 编码版本、scope、subject、
 predicate、排序后的 context，再 SHA-256，前缀 `memory-identity:v1:`。
 不折叠大小写或 Unicode，不把正文、principal 和版本条件加入身份。
-Turso 将身份字段并入 `oc_assets`；物理规则见[身份布局](../../contracts/identity-asset-layout.md)。
+Turso 将身份字段并入 `oc_assets`；物理规则见[身份布局](identity-asset-layout.md)。
 当前没有离线身份表安装、旧身份自动归并或旧库转换流程。
 
 ## S2 与受控提取
@@ -44,8 +44,8 @@ Turso 将身份字段并入 `oc_assets`；物理规则见[身份布局](../../co
 
 精确 lookup/search 先在授权 scope 内按完整身份限定候选，不创建资产或锁定后续更新。
 候选限制在 top-k 前执行，返回前复核当前版本、来源、墓碑和权限。
-完整操作与提取规则分别见 [S2](../plans/2026-10-11-s2-memory-semantics.md)和
-[semantic capture](../plans/2026-10-11-s3-semantic-capture.md)。
+完整操作与提取规则分别见 [S2](memory-semantics.md)和
+[semantic capture](semantic-capture.md)。
 
 ## 会话与 Learning
 
@@ -64,4 +64,4 @@ memory、knowledge、Learning 分路召回并独立预算；session 默认关闭
 
 Session-turn 引用不能回填现有 chunk/entity/relation 的 used_evidence 合同。
 这些预算、冲突和归档边界已实现；真实 Agent 收益与通用事实核验尚未验收。
-精确行为见 [S4 合同](../plans/2026-10-12-s4-evidence-bundle.md)和 API。
+精确行为见 [S4 合同](evidence-bundle.md)和 API。
