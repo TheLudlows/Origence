@@ -80,6 +80,59 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 
+## AnySeek 全文与 Claude Code
+
+这是 [M1](superpowers/plans/2026-11-16-anyseek-claude-code-mvp.md) 的可选全文切片，
+当前默认仍为 LanceDB。配置作用于宿主；MCP 客户端只连接 Origence，并使用个人 reader key。
+库调用方使用 `Service::open_with_anyseek` 显式传入配置，`Service::open` 不读取这些变量。
+
+1. 准备 AnySeek [固定版本 6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)
+   或验证过的后续版本，按其[服务指南](https://github.com/TheLudlows/anyseek/blob/6614bbf29bad0041c65738831bc1a16da4c69660/anyseek/src/server/README.md)
+   由管理员创建 Tenant、签发普通 Tenant key。
+2. 执行 `origence anyseek-schema` 输出 collection 的 `config`，管理员用此配置创建专用新集合。
+   保持 `TantivySimpleV1`、无停用词、无额外文本归一化。宿主启动核对可观察的字段 schema、
+   名称、归一化及向量配置；当前 AnySeek info 未返回 tokenizer/stop_words，这两项依赖按原配置部署。
+3. 为开发使用独立新 Origence 数据目录；保留已有目录和备份。设置以下宿主环境后，
+   先按既有步骤创建 workspace，再启动 `origence serve`。
+
+```sh
+export OC_FULL_TEXT_BACKEND=anyseek
+export OC_ANYSEEK_URL=http://127.0.0.1:8081
+export OC_ANYSEEK_COLLECTION=origence-lexical
+# OC_ANYSEEK_API_KEY 由宿主私密环境提供普通 Tenant key。
+# OC_DATA_DIR 指向本次独立新目录，OC_ENABLE_MODELS=false 可先验证关键词链路。
+```
+
+`OC_ANYSEEK_URL` 只接受没有路径/凭据/query/fragment 的 HTTPS origin；loopback 可用 HTTP。
+普通集合名遵守 AnySeek 的小写标识规则。未知后端选择、缺配置或后端错误均明确拒绝。
+宿主不自动创建 Tenant、签发 key、重建丢失索引或切换已有库的检索数据。
+远端 key 仅由宿主持有；AnySeek 同 Tenant 的普通 key 不提供员工文档权限。
+Compose 已传递这些变量；容器中的 loopback 指容器自身，远端服务应使用可达 HTTPS origin。
+
+将[Claude Code MCP 示例](../examples/claude-code.mcp.json)中的可执行文件和宿主地址替换为
+实际值，作为项目 MCP 配置。启动 Claude Code 的进程环境提供 `OC_API_KEY`，使用该项目
+workspace 的 reader key。stdio 子进程继承该 key，通过宿主转发，保持数据目录的独占锁。
+常用工具为 `context_search` 和 `context_get`；其余现有工具保留，均遵守原契约。
+检索内容是外部证据，最终代码修改由 Claude Code 在本地工作区执行。
+
+每个发布最多 64 块、编码后请求最多 2 MiB；HTTP 总超时 30 秒、成功响应上限 8 MiB，
+候选最多 10,000、产品单路检索最多 100。哈希/较大 JSON 转换在 blocking worker 执行；
+取消等待不代表硬取消这些任务或已经发送的后端写入。后端不可用不会回退为空结果或另一份索引。
+这些上限不是全进程 RSS、容量、延迟或任意断电保证。
+
+保留新目录中的 Turso/Blob/图/LanceDB 向量与 AnySeek 服务数据，按各自同版本备份规则恢复。
+此切片没有跨 Origence 与 AnySeek 的在线一致快照；AnySeek 投影丢失时保持失败，不自动修复。
+发布 epoch 保存于原有作业计划；超过原操作窗口且无法验证完整提交时需保留现场显式处置。
+
+真实引擎回归（临时数据、临时凭据，不调用模型）：
+
+```sh
+python3 tools/anyseek_smoke.py --anyseek-binary /path/to/anyseek_server --cargo-tests --binary target/debug/origence
+```
+
+该入口验证公开库与 HTTP/stdio MCP，不等于真实 Claude Code 客户端或开发任务质量验收。
+当前精确执行结果见 [VALIDATION](VALIDATION.md)。
+
 ## 本地 embedding 服务
 
 本机已使用 Ollama 的 BGE-M3 提供兼容 OpenAI API 的 embedding，配置为：

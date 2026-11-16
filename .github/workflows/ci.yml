@@ -113,6 +113,25 @@ jobs:
           python3 tools/smoke.py --binary target/debug/origence
       - name: MCP stdio local and host-forwarding contracts (no models)
         run: python3 tools/mcp_smoke.py --binary target/debug/origence
+      - name: Fetch the pinned real AnySeek fixture
+        uses: actions/checkout@v4
+        with:
+          repository: TheLudlows/anyseek
+          ref: 6614bbf29bad0041c65738831bc1a16da4c69660
+          path: .anyseek-fixture
+          sparse-checkout: |
+            anyseek
+            .cargo
+      - name: Install the external AnySeek fixture toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: Build the real AnySeek service
+        env:
+          RUSTUP_TOOLCHAIN: 1.99.1
+        run: cargo build --locked --manifest-path .anyseek-fixture/Cargo.toml --no-default-features --bin anyseek_server -j 2
+      - name: AnySeek public library, HTTP and MCP contracts (no models)
+        run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --cargo-tests --binary target/debug/origence
       # Evaluation evidence is run-specific, never part of the Cargo target cache.
       - name: Keyword retrieval seed evaluation (no model calls)
         run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"

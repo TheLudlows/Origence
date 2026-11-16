@@ -61,6 +61,10 @@ name = "local"
 path = "tests/local.rs"
 
 [[test]]
+name = "anyseek"
+path = "tests/anyseek.rs"
+
+[[test]]
 name = "identity-layout"
 path = "tests/manual/identity_layout_benchmark.rs"
 required-features = ["manual-diagnostics"]

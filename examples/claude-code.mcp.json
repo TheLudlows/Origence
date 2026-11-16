@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "origence": {
+      "type": "stdio",
+      "command": "/absolute/path/to/origence",
+      "args": ["--server-url", "http://127.0.0.1:8080", "mcp"]
+    }
+  }
+}

@@ -31,6 +31,8 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Print the exact configuration for a fresh AnySeek lexical collection.
+    AnyseekSchema,
     /// Run the HTTP API and its single durable worker in one process.
     #[command(alias = "api")]
     Serve {
@@ -120,8 +122,20 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
         command,
     } = cli;
     match command {
+        Command::AnyseekSchema => Box::pin(async {
+            println!(
+                "{}",
+                origence::storage::anyseek::AnySeekFullTextStore::collection_config()
+            );
+            Ok(())
+        }),
         Command::Serve { bind, enable_aml } => Box::pin(async move {
-            let service = Service::open(&data_dir, Models::from_env()?).await?;
+            let service = Service::open_with_anyseek(
+                &data_dir,
+                Models::from_env()?,
+                origence::storage::anyseek::AnySeekConfig::from_env()?,
+            )
+            .await?;
             let listener = tokio::net::TcpListener::bind(bind).await?;
             println!(
                 "{}",
@@ -211,7 +225,12 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
 async fn run_offline(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     let token =
         std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
-    let service = Service::open(&data_dir, Models::from_env()?).await?;
+    let service = Service::open_with_anyseek(
+        &data_dir,
+        Models::from_env()?,
+        origence::storage::anyseek::AnySeekConfig::from_env()?,
+    )
+    .await?;
     let auth = service.auth(&token).await?;
     let result = offline_command(&service, &auth, token, command).await?;
     service.engine.shutdown().await?;

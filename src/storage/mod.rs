@@ -18,6 +18,7 @@
 //! [`JobQueue`] is the consumer side (claim/ack/retry) and never enqueues on a
 //! second connection.
 
+pub mod anyseek;
 pub mod capabilities;
 pub mod error;
 #[cfg(feature = "local-vector")]
@@ -27,6 +28,8 @@ pub mod local_blob;
 #[cfg(feature = "local-vector")]
 pub mod maintenance;
 pub mod native_turso;
+#[cfg(feature = "local-storage")]
+mod retrieval_store;
 pub mod scope;
 pub mod sqlite;
 pub mod sqlite_graph;
@@ -43,7 +46,7 @@ pub fn hash(bytes: impl AsRef<[u8]>) -> String {
 pub type LocalEngine = StorageEngine<
     std::sync::Arc<sqlite::TursoStore>,
     std::sync::Arc<sqlite::TursoStore>,
-    LanceDbStore,
+    RetrievalStore,
     TursoGraphStore,
     local_blob::LocalBlobStore,
 >;
@@ -68,6 +71,8 @@ pub use error::{StorageError, StorageResult};
 #[cfg(feature = "local-vector")]
 pub use lancedb::LanceDbStore;
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
+#[cfg(feature = "local-storage")]
+pub use retrieval_store::RetrievalStore;
 pub use scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
 pub use sqlite::{SqliteStore, TursoStore};
 pub use sqlite_graph::{SqliteGraphStore, TursoGraphStore};

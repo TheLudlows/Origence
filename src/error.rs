@@ -18,6 +18,9 @@ impl From<crate::storage::StorageError> for AppError {
             S::Unavailable(_) | S::NotInitialized => {
                 Self::Unavailable("local storage unavailable".into())
             }
+            S::TransientUnavailable(_) => {
+                Self::RetryableUnavailable("retrieval dependency temporarily unavailable".into())
+            }
             error => Self::Internal(anyhow::Error::new(error)),
         }
     }
@@ -37,6 +40,8 @@ pub enum AppError {
     Conflict(String),
     #[error("{0}")]
     Unavailable(String),
+    #[error("{0}")]
+    RetryableUnavailable(String),
     #[error(transparent)]
     Database(#[from] crate::storage::native_turso::Error),
     #[error(transparent)]
@@ -51,7 +56,7 @@ impl AppError {
             Self::Forbidden => "FORBIDDEN",
             Self::NotFound => "NOT_FOUND",
             Self::Conflict(_) => "VERSION_OR_IDEMPOTENCY_CONFLICT",
-            Self::Unavailable(_) => "DEPENDENCY_UNAVAILABLE",
+            Self::Unavailable(_) | Self::RetryableUnavailable(_) => "DEPENDENCY_UNAVAILABLE",
             Self::Database(_) | Self::Internal(_) => "INTERNAL_ERROR",
         }
     }
@@ -71,7 +76,7 @@ impl IntoResponse for AppError {
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Unavailable(_) | Self::RetryableUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         // Do not log SQL bind arguments, document content or bearer tokens.

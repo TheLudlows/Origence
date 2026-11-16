@@ -48,6 +48,16 @@ pub(crate) fn authorized(a: &AuthContext) -> AuthorizedScope {
 }
 impl Service {
     pub async fn open(dir: impl AsRef<Path>, models: Models) -> Result<Self> {
+        Self::open_with_anyseek(dir, models, None).await
+    }
+
+    /// Select the lexical projection while retaining the existing authority,
+    /// vector backend, single worker, and final publication checks.
+    pub async fn open_with_anyseek(
+        dir: impl AsRef<Path>,
+        models: Models,
+        anyseek: Option<crate::storage::anyseek::AnySeekConfig>,
+    ) -> Result<Self> {
         tokio::fs::create_dir_all(dir.as_ref())
             .await
             .map_err(anyhow::Error::from)?;
@@ -59,7 +69,7 @@ impl Service {
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
-            LanceDbStore::open(dir.join("vectors")).await?,
+            RetrievalStore::open(dir.join("vectors"), anyseek).await?,
             graph,
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));

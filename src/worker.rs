@@ -43,6 +43,8 @@ struct Publication {
     memories: Vec<PublishedMemory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     receipt_metadata: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    full_text_operation_epoch: Option<u64>,
 }
 /// One asset's pending publication built before model IO, version still to be
 /// verified against the live asset at commit time.
@@ -177,7 +179,10 @@ async fn process_next_inner(service: &Service) -> Result<bool> {
     };
     let result = process_claim(service, &mut claim).await;
     if let Err(error) = result {
-        let retry = matches!(error, AppError::Database(_) | AppError::Internal(_));
+        let retry = matches!(
+            error,
+            AppError::Database(_) | AppError::Internal(_) | AppError::RetryableUnavailable(_)
+        );
         let state = if matches!(error, AppError::Conflict(_)) {
             "superseded"
         } else {
@@ -632,6 +637,7 @@ async fn prepare(
         graph,
         memories,
         receipt_metadata: None,
+        full_text_operation_epoch: None,
     })
 }
 fn source_for(claim: &ClaimedJob, version: i32) -> Result<SourceVersion> {
@@ -720,8 +726,11 @@ async fn publish_prepared(
     service: &Service,
     claim: &ClaimedJob,
     payload: &JobPayload,
-    publication: Publication,
+    mut publication: Publication,
 ) -> Result<()> {
+    if service.engine.vector().uses_anyseek() && publication.full_text_operation_epoch.is_none() {
+        publication.full_text_operation_epoch = Some(crate::storage::anyseek::operation_epoch()?);
+    }
     let a = auth(claim);
     let entries = ledger(claim, &publication)?;
     let mut tx = service.write(&a, permission(payload)).await?;
@@ -763,7 +772,11 @@ async fn publish_prepared(
     service
         .engine
         .vector()
-        .upsert_full_text(claim.scope, full_text)
+        .upsert_publication_full_text(
+            claim.scope,
+            full_text,
+            publication.full_text_operation_epoch,
+        )
         .await?;
     if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
         let source = source_for(claim, first.version)?;

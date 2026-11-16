@@ -1,6 +1,6 @@
 # Origence · 基于 AnySeek 的 Claude Code 第一版
 
-日期：2026-11-16。状态：产品范围已确认，仓库基线已核对；AnySeek 适配和真实 Claude Code 联调尚未实施。
+日期：2026-11-16。状态：产品范围和仓库基线已确认；M1 可选 AnySeek 全文切片已实现，工程验证中；真实 Claude Code 客户端尚未联调。
 
 本文记录新的产品主线、两仓职责、实施顺序和验收条件。当前运行行为仍以
 [API](../../API.md)、[OPERATIONS](../../OPERATIONS.md)和代码为准；实现进度见
@@ -124,10 +124,10 @@ M0 的勾选只表示范围和静态核对完成，不表示运行测试或适�
 
 ### M1：AnySeek 全文与 Claude Code 最小闭环
 
-- [ ] 固定 collection schema、作用域/ID 映射、预分词匹配和错误转换合同。
-- [ ] 收敛后端选择，完成全文写入/清理/搜索适配，保持关系权威和发布检查。
-- [ ] 接入 group replace 与持久回执；覆盖未知结果、超限、冲突和重启恢复。
-- [ ] 用独立新库和一组已授权的 Markdown/文本，跑通 ingest → search → get → 引用。
+- [x] 固定 collection schema、作用域/ID 映射、预分词匹配和错误转换合同。
+- [x] 收敛后端选择，完成全文写入/清理/搜索适配，保持关系权威和发布检查。
+- [x] 接入 group replace 与持久发布 epoch；以真实引擎覆盖丢失响应、64 块上限、身份冲突和原计划重开恢复。
+- [x] 用独立新库和合成 Markdown/文本，跑通公开 Service 及 HTTP/stdio MCP 的 ingest → search → get → 引用。
 - [ ] 基于现有 stdio 宿主转发给出 Claude Code 配置，使用真实客户端验证工具调用。
 
 **现在可以开始 M1 开发。** 架构和职责边界已足以启动第一项合同及适配工作；

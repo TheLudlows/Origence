@@ -1,10 +1,40 @@
 # Origence API 与库接口
 
-适用本地宿主原生 Turso/LanceDB/Turso 图。本文负责 HTTP v1 与公开库接口契约及调用方变更；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
+适用本地宿主 Turso 权威数据、LanceDB 向量/Turso 图，以及可选 AnySeek 全文投影。本文负责 HTTP v1 与公开库接口契约及调用方变更；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
 按需阅读：[库接口变更](#issue-61rust-库与-cli-破坏性变更) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
 
 所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。修改接口还需 1–200 个 ASCII 字符的 `Idempotency-Key`；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
+
+## AnySeek 全文适配：M1 首个切片
+
+`Service::open(dir, models)` 保持现有默认后端；新增
+`Service::open_with_anyseek(dir, models, Option<AnySeekConfig>)` 供库调用方显式选择全文投影。
+`LocalEngine` 的检索适配类型改为 `RetrievalStore`，组合既有 LanceDB 向量与可选
+AnySeek 全文；直接使用 `LanceDbStore` 的库调用不变。模型、Blob、图、Turso 和单 Worker
+仍在原有路径内；此切片没有将向量、记忆治理或全部存储替换为 AnySeek。
+
+HTTP、MCP 请求形状和四个工具名称不变。AnySeek 仅返回候选，正文和引用仍从
+Origence 权威数据读取。查询先按 tenant/workspace、generation 和已授权 chunk IDs
+过滤，对全部候选分批核对来源/缺失/重复，再检索并执行原有最终可见性检查。
+存储失败、缺失索引和身份冲突均明确失败，不当作空召回。
+
+全文投影使用 `origence-lexical-sha256-v1` 契约：Origence 预分词后，把每个词项编码为
+一个固定长度 SHA-256 词项，保留词项出现次数与 AND 匹配，避免 AnySeek 查询语法和
+二次分词改变含义。BM25 分数和排序不承诺与 LanceDB 相同。资产/标题/locator 在
+Origence 中关联，AnySeek 元数据保存 chunk、来源版本、generation 和作用域。
+
+每个不可变发布最多 64 个 chunk，编码后的完整 HTTP 请求最多 2 MiB；超限返回输入
+错误，不能拆批后声称整份原子发布。group ID 和 Record ID 由完整发布身份确定，
+新业务版本使用独立组，当前可见版本由原有权威事务切换。
+发布计划在外部 IO 前保存 `full_text_operation_epoch`，请求 nonce 确定性派生。
+丢失响应时先核对当前完整组，不更换身份猜测补写；未决且超过原操作窗口的写入保持失败。
+启动清理可能清空尚未发布的组；仍有效的作业在保存的 epoch 和新 CAS 下重建。
+孤儿删除读取当前组版本及完整成员后条件替换，重试先确认当前成员，保留同组其他对象。
+
+`AnySeekFullTextStore` 的公开库接口接受显式 epoch 和授权候选来源，供非 AML 调用方
+验证；配置的 `RetrievalStore` 拒绝缺少持久发布上下文的直接全文写入，以及缺少权威来源
+集合的直接全文查询。部署和 Claude Code 配置见 [OPERATIONS](OPERATIONS.md#anyseek-全文与-claude-code)。
 
 ## Issue #61：Rust 库与 CLI 破坏性变更
 
@@ -100,7 +130,7 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
 
-原文关键词使用 LanceDB 原生 BM25，对 Jieba 预分词字段做显式 whitespace/AND 匹配（查询词项全部出现），限定当前 scope、发布代与完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。原生候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
+原文关键词默认使用 LanceDB 原生 BM25，对 Jieba 预分词字段做显式 whitespace/AND 匹配（查询词项全部出现）；可选 AnySeek 遵循上面的词项编码合同。两者均限定当前 scope、发布代与完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
 search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默认均为 true，仅 hybrid 且未限定 memory_identity 时启用。可独立关闭摘要、图分支做同库消融，原文 keyword/vector 分支始终保留；省略 components 保持旧行为。响应 `active_components` 表示实际启用的分支（不代表已有产物或命中）。resolve 沿用相同开关和现有来源/字节预算检查；HTTP 与 MCP 共用此契约。
 
