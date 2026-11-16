@@ -5,6 +5,7 @@
 产品方向已确认为服务研发与业务团队的企业内部 Agent 数据底座，首批客户端为 Claude Code 与 Codex。
 完整[目标架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md)待确认；
 上下文包含记忆、知识、Skill 与运行时状态，运行追溯贯穿其供给与使用；新增能力不计为已实现。
+Skill 的目标来源已确认为记忆与 Agent 执行经验，候选及其依据供用户审视；默认审阅后发布是待确认设计。
 
 ## 已实现与边界
 
@@ -15,7 +16,7 @@
 | 接入 | HTTP/CLI、四个只读 stdio MCP 工具、宿主转发、Claude Code 配置示例 | Claude Code 与 Codex 的真实客户端验证、Codex 配置与能力核对 |
 | 身份与语义 | 显式 MemoryIdentity、单值/多值规则、受控提取、冲突证据 | 自动身份/别名匹配、真实模型语义质量 |
 | 会话与经验 | 显式 SessionTurn/Feedback、Improve → Learning、带来源的 EvidenceBundle | 真实 Agent 收益；session 引用回填既有 used_evidence 尚不支持 |
-| 目标新增能力 | 现有 Bundle/会话/反馈可复用 | 任务上下文快照、Skill 注册/发布/分发、Run/事件/工具/结果证据链均待设计实施 |
+| 目标新增能力 | 现有 Bundle/会话/反馈可复用 | 任务快照、记忆/经验到 Skill 候选与用户审视、版本发布/分发、Run 证据链均待设计实施 |
 | 治理与恢复 | tenant/workspace、角色/key、撤回/墓碑、发布账本、原计划重试、同版本重开 | 企业身份、文档 ACL、项目范围映射、生产恢复/容量与新依赖图审计 |
 
 ## M1：AnySeek 全文首个切片
@@ -37,7 +38,7 @@ MCP fixture 通过不等于真实 Claude Code/Codex 客户端或目标产品整�
 
 1. 评审目标架构的待确认决策；选择研发/业务各一个任务、负责人和初始数据源。
 2. 核验 Claude Code/Codex 的 MCP、原生 Skill 加载和事件采集能力，明确版本与覆盖限制。
-3. 确认上下文快照、Skill 发布和 Run 证据的最小合同，再贯通记忆/知识/Skill 等上下文的管理、供给与追溯。
+3. 确认上下文快照、执行经验、Skill 候选/审阅发布和 Run 证据的最小合同，再贯通上下文管理、经验沉淀、供给与追溯。
 4. 试点数据接入前落实员工身份、文档权限、保留策略和源更新/删除同步；冻结任务建立收益基线。
 
 目标阶段与验收见[架构规划](superpowers/specs/2026-11-16-agent-data-foundation-architecture.md#14-交付阶段与验收)，
