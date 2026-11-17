@@ -77,6 +77,28 @@ def mcp_contract(binary, env, directory):
     with Host(binary, env, token, forbidden) as host:
         old = "AnySeek smoke policy requires token approval."
         asset = host.publish(old)
+        run_id = str(uuid.uuid4())
+        host.request("/v1/runs", {"run_id": run_id, "summary": "Verify retrieval diagnostics"})
+        preparation_request = {"event_id": str(uuid.uuid4()), "context": {"query": "token approval"}}
+        prepared = host.request(f"/v1/runs/{run_id}/context", preparation_request)
+        observations = prepared["bundle"]["retrieval"]["requests"]
+        require(observations and any(item["mode"] == "lexical" for item in observations),
+                "real Run preparation omitted retrieval observations")
+        for item in observations:
+            backend = item["backend"]
+            require(item["backend_request_id"] == backend["request_id"], "backend correlation differs")
+            require(backend["analysis_fingerprint"] == item["checked_config"]["analysis_fingerprint"],
+                    "backend analysis differs from admitted configuration")
+            require(backend["format_version"] == 2 and
+                    backend["embedding_space_sha256"] == item["checked_config"]["embedding_space_sha256"],
+                    "backend embedding space differs from admitted configuration")
+            require(backend["index_progress"]["sampling"] == "after_query_not_atomic_with_result",
+                    "index progress lost its sampling boundary")
+        require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
+                "real Run retry changed recorded preparation observations")
+        recorded = host.request(f"/v1/runs/{run_id}")["events"]
+        require(recorded[0]["report"]["retrieval"] == prepared["bundle"]["retrieval"],
+                "real Run trace lost observations")
         reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})
         mcp_env = dict(env, OC_API_KEY=reader["token"])
         with Mcp([binary, "--server-url", host.base, "mcp"], mcp_env, forbidden + [reader["token"]]) as client:
@@ -86,6 +108,8 @@ def mcp_contract(binary, env, directory):
             require(found["hits"][0]["locator"], "MCP search omitted source locator")
             require(client.tool("context_get", {"asset_id": asset})["content"] == old, "MCP get lost source content")
             require(host.publish("AnySeek smoke policy now requires token review.") == asset, "update changed asset ID")
+            require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
+                    "updated corpus changed an existing preparation receipt")
             require(client.tool("context_search", {"query": "approval"})["hits"] == [], "superseded version remained searchable")
             require(client.tool("context_get", {"asset_id": asset, "version": 1})["content"] == old, "historical source changed")
             host.request("/admin/keys/" + reader["key_id"], method="DELETE")
@@ -93,12 +117,15 @@ def mcp_contract(binary, env, directory):
             client.shutdown()
     # Reopen the same authorities and projection with a fresh MCP process.
     with Host(binary, env, token, forbidden) as host:
+        require(host.request(f"/v1/runs/{run_id}")["events"] == recorded, "reopen changed recorded Run observations")
+        require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
+                "reopen changed the private preparation snapshot")
         with Mcp([binary, "--server-url", host.base, "mcp"], env, forbidden) as client:
             client.initialize("2025-03-26", "2025-03-26")
             require(client.tool("context_search", {"query": "token review"})["hits"][0]["asset_id"] == asset,
                     "reopen lost AnySeek publication")
             client.shutdown()
-    print("PASS: real AnySeek -> Origence HTTP/stdio MCP search, read, citations, update, history, key revocation and reopen", flush=True)
+    print("PASS: real AnySeek -> Origence HTTP/stdio MCP search, read, citations, update, history, key revocation and reopen; Run diagnostic correlation, retry and durability", flush=True)
 
 
 def main():
@@ -139,7 +166,7 @@ def main():
                 call(base, "/api/v1/tenants", master, {"operation_id": operation(), "tenant_id": "origence"})
                 call(base, "/api/v1/apikey", master, {"operation_id": operation(), "tenant_id": "origence", "key_id": "origence", "apikey_base64": key})
                 call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-lexical", "config": schema()})
-                call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-vector", "config": schema(2)})
+                call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-vector", "embedding_space_id": "real-fixture:v1", "config": schema(2)})
                 env.update(OC_ANYSEEK_VECTOR_COLLECTION="origence-vector", OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base,
                            OC_ANYSEEK_API_KEY=key, OC_ANYSEEK_COLLECTION="origence-lexical")
                 env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key,

@@ -207,6 +207,7 @@ async fn lost_write_proxy() -> (
                 .await
                 .unwrap();
             let status = response.status();
+            let response_headers = response.headers().clone();
             let body = response.bytes().await.unwrap();
             if path.ends_with("/group/replace") {
                 posts.fetch_add(1, Ordering::SeqCst);
@@ -217,10 +218,16 @@ async fn lost_write_proxy() -> (
                         .unwrap();
                 }
             }
-            Response::builder()
+            let mut response = Response::builder()
                 .status(status)
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap();
+            for name in ["x-anyseek-request-id", "x-anyseek-error-code"] {
+                if let Some(value) = response_headers.get(name) {
+                    response.headers_mut().insert(name, value.clone());
+                }
+            }
+            response
         }
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -540,6 +547,7 @@ mod service_contract {
 async fn combined_projection_replay_vector_scope_cleanup_and_unavailability() {
     use origence::storage::{VectorEntry, VectorQuery};
     let peer = support::AnySeekFixture::start(Some(2));
+    peer.bind_profile(Some("test-profile".into()));
     let store = AnySeekFullTextStore::new(
         peer.config()
             .with_embedding("test-profile".into(), 2)

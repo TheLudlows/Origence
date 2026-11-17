@@ -1,10 +1,10 @@
 # Origence · 当前进度
 
 更新：2026-11-17。本变更已同步 main
-[`dcde761`](https://github.com/TheLudlows/Origence/commit/dcde761ba11b34d88ce5da5f9025a22076571dfa)
-（已合入 PR #74 / #75），Node.js 管理界面与 CI 夹具修复见
-[PR #77](https://github.com/TheLudlows/Origence/pull/77)。产品边界见[架构规划](design/agent-data-foundation.md)。
-**核心 API 与首版 UI 路径已实现；当前 PR 本地检查通过，真实浏览器、双客户端和企业任务尚未完成验收。**
+[`44e06df`](https://github.com/TheLudlows/Origence/commit/44e06df95cccc723f128dfcb4bda826d869ad5db)
+（已合入 [PR #77](https://github.com/TheLudlows/Origence/pull/77) 的 Node.js 管理界面与 CI 优化），
+继续补齐检索配置、诊断与私有 Run 重放。产品边界见[架构规划](design/agent-data-foundation.md)。
+**核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -14,11 +14,20 @@
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 | Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
 
-## 当前阻塞与下一步
+## 检索配置与诊断
 
-1. PR #77 基线 CI #360 的三个 Node/Linux job 已通过，Windows 按 main-only 策略跳过；本次去重、固定夹具缓存及新增真实 UI 门禁的远端结果见 PR，完整证据见 VALIDATION，历史失败记录保留。
-2. 完成 UI 真实浏览器布局、键盘/触屏、无障碍及 Windows 验证；预览 relay 故障仍需解决。
-3. 通过 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
+当前切片基于 main `44e06df`：核对分析配置与 embedding 空间并持久绑定摘要；
+Search/Context 返回有界查询诊断，Run 准备路径保存成功与失败观察。
+成功准备的重放在核验原权限和来源后读取私有快照，不再依赖模型或 AnySeek；
+查询诊断 v2 逐次核对 embedding 空间摘要，阻断启动后的空间变化。
+最近 128 次尝试和明确省略数不构成完整客户端采集或跨存储快照。字段见 [API](API.md#检索诊断)。
+CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检出共用诊断 v2 后端的精确 SHA。
+最终检查与真实 AnySeek 联调结果统一记录到 VALIDATION，历史 CI 结果按原提交保留。
+
+## 下一步
+
+1. 完成 UI 真实浏览器布局、键盘/触屏、无障碍及 Windows 验证；预览 relay 故障仍需解决。
+2. 通过合并后的 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
 
 精确测试结果、CI 运行及诊断限制见 [VALIDATION](VALIDATION.md)。
 Skill 的 API 审批和目录导出不等于真实用户审阅、客户端加载或任务收益验收。

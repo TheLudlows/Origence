@@ -34,3 +34,6 @@ mod sqlite_visibility;
 mod storage_contract;
 mod storage_recovery;
 mod workspace_schema_rejection;
+
+#[cfg(feature = "local-storage")]
+mod retrieval_diagnostics;

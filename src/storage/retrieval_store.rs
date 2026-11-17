@@ -11,6 +11,9 @@ pub struct RetrievalStore {
     remote: AnySeekFullTextStore,
 }
 impl RetrievalStore {
+    pub(crate) fn checked_analysis_fingerprint(&self) -> StorageResult<&str> {
+        self.remote.checked_analysis_fingerprint()
+    }
     pub async fn open(anyseek: AnySeekConfig) -> StorageResult<Self> {
         Ok(Self {
             remote: AnySeekFullTextStore::new(anyseek)?,

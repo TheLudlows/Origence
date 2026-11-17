@@ -1,9 +1,84 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。代码基线：main
-[`0a1a56c1da74e78be0118782b04a3f5a37251060`](https://github.com/TheLudlows/Origence/commit/0a1a56c1da74e78be0118782b04a3f5a37251060)。
-除单列的 #74 结果外，本文记录的是该基线的 Linux / Rust 1.98.0 检查。
+核验日期：2026-11-17。本次已同步 main
+[`44e06df`](https://github.com/TheLudlows/Origence/commit/44e06df95cccc723f128dfcb4bda826d869ad5db)，
+最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：PR #78 同步 main 与冲突处理
+
+将 main `44e06df`（含 PR #77 管理界面）合入检索诊断分支 `0bf9748`。
+解决 CI、STATUS 和测试入口三处冲突；保留 Node UI 构建、真实 UI 门禁及固定夹具缓存，
+缓存 key 与检出共用 AnySeek `d813b915b7f12e7139ca316adc15699688493196`。
+同时保留目录测试与检索诊断测试、Run 列表接口与私有准备重放逻辑。
+
+| 检查 | 结果 |
+| --- | --- |
+| Rust 默认全套测试 | PASS：lib 214、协议 4、集成 202 |
+| Rust 无默认特性全套测试 | PASS：lib 136、协议 2、集成 92 |
+| 两种特性集严格 Clippy、格式及默认构建 | PASS：Rust 1.98.0，all-targets / -D warnings |
+| Node UI `npm ci --ignore-scripts`、`npm test` | PASS：Node 24.19.0，构建及 15 项测试 |
+| Python tools / evals | PASS：11 / 42 项 |
+| 真实 Node UI → Origence → AnySeek | PASS：入库、目录、历史、检索、上下文、私有 Run 隔离和来源撤回 |
+| 真实 AnySeek 合同及 HTTP/stdio MCP | PASS：8 项合同，Run 诊断、原结果重试、语料更新及重开 |
+
+全部使用隔离临时数据，Node 仅通过 HTTP 访问服务。未修改主干 UI 源码、原始 evidence、
+依赖锁文件或冻结评估结果。本地 Linux 检查不代表真实浏览器布局、Windows、生产容量或模型效果验收。
+
+## 2026-11-17：重试与 embedding 空间复核修复
+
+基于 Origence `3d74879`，后端为 AnySeek
+[`d813b91`](https://github.com/TheLudlows/anyseek/commit/d813b915b7f12e7139ca316adc15699688493196)。
+Linux；Origence Rust 1.98.0，AnySeek Rust 1.99.1。
+
+- 成功准备保存私有 bundle 快照，在检索前核对事件和请求摘要；重放及并发提交复核当前
+  key/归属、精确历史引用和传递依赖。Run 读取/前缀同步补齐普通资产的完整来源核验，
+  避免只核验 Learning 依赖。分页 trace 不复制内部快照。
+- 查询诊断 v2 逐次核对当前 embedding 空间 SHA256；相同维度和分析摘要不能替代该校验。
+- 真实隔离复现：首次 200，后端 query 改为 503 后，同 ID 重放仍为 200、响应完全相同，
+  Run 只有一条事件且重放未访问后端；替换为不同空间集合后，向量查询从原来的 200 变为 503。
+
+| 检查 | 结果 |
+| --- | --- |
+| 默认全套 `cargo test --locked -j 2 --no-fail-fast` | PASS：lib 214、协议 4、集成 201 |
+| 无默认特性全套测试 | PASS：lib 136、协议 2、集成 92；命令另带 --no-default-features |
+| 两种特性集严格 Clippy、默认构建与格式 | PASS：all-targets / -D warnings，Rust 1.98.0 |
+| 定向 HTTP/存储回归 | PASS：后端故障时重放、重开、不同请求冲突、并发先成功后失败、跨 key/撤销隔离、资产撤回阻断重放/trace/前缀、空间变化拒绝 |
+| 真实 AnySeek 合同与 HTTP/stdio MCP | PASS：8 项合同及更新语料/重开后原上下文和回执不变 |
+| Python tools / evals | PASS：8 / 42 项 |
+
+新增 SQL 均为带 scope/run/event 条件的单表查询；引用关联复用现有存储适配器，
+来源检查与重放处于同一事务，无模型或 AnySeek IO。历史 evidence、依赖及冻结评估工件保持不变。
+本轮不声明 Windows、生产性能、真实模型效果、真实 S3 或断电验收；此前 CI 结果仅属于各自 SHA。
+
+## 2026-11-17：检索配置、诊断与私有 Run 初次验证
+
+基于 main `dcde761`，真实引擎为 AnySeek
+[`88ab7c1`](https://github.com/TheLudlows/anyseek/commit/88ab7c154d1345c646b02a56b4dcc82e73995d0d)。
+本地 Linux，Origence 使用 Rust 1.98.0，AnySeek 使用 Rust 1.99.1。
+
+| 检查 | 结果 |
+| --- | --- |
+| 默认测试 `cargo test --locked --no-fail-fast` | PASS：lib 214、协议 4、集成 201；8 项真实后端测试单独运行 |
+| 无默认特性全套测试 | PASS：lib 136、协议 2、集成 92；5 项真实后端测试按该特性集忽略 |
+| 默认 / 无默认 `cargo clippy --locked --all-targets -- -D warnings` | PASS；无默认命令另带 --no-default-features |
+| 真实 AnySeek 合同 | PASS：8 项，包含全文/向量/图、重放、未知写入、清理及恢复 |
+| 真实 HTTP/stdio MCP、Run | PASS：配置核对、请求关联、准备记录、幂等回执、重开后诊断不变 |
+| MCP 完整冒烟 | PASS：宿主转发/离线协议、schema、安全错误、撤权、EOF 和重开 |
+| Python tools / evals | PASS：8 / 42 项 |
+
+新增定向回归覆盖：相同维度不同 embedding 空间拒绝、分析摘要重开核对且不覆盖绑定、
+并发请求隔离与 128 条上限、成功/失败 Run 诊断、同 ID 重放保留原观察、畸形诊断丢弃、
+私有读取隔离及同版本重开。旧上下文确定性断言只排除本次新增的请求标识/耗时，
+其余内容、引用、冲突和预算仍完整比较。
+
+本次修正测试辅助模块的特性门控、仅本地使用的图核验方法门控，以及 MCP 空 object
+schema 的 properties 缺省读取；未为绕过测试放宽权限、来源、索引或发布校验。
+绑定格式 v4 仅面向新目录，旧绑定明确拒绝，不自动转换已有数据。
+
+服务端进度在查询后另采样；诊断不证明跨系统事务、已交付或模型已使用。
+真实引擎合同使用隔离测试数据，不代表真实 embedding 质量、Claude Code/Codex 任务收益、
+Windows、生产容量、真实 S3 或断电验收。历史段落按各自提交保留。
 
 ## 2026-11-17：移除独立 Turso 图存储
 
@@ -63,7 +138,7 @@ MCP 失败位置为 [schema_object](../tools/mcp_smoke.py#L299)。诊断运行�
 **该诊断未修改仓库脚本，不计为原始冒烟通过，也不证明真实 Claude Code/Codex 任务已验收。**
 无默认特性失败位置为 [Service 导入](../tests/support/mod.rs#L12)；本地与 CI 一致。
 
-## main CI
+## 历史 main CI（0a1a56c）
 
 [Origence CI · run 43998026090](https://github.com/TheLudlows/Origence/actions/runs/43998026090)
 对应上述精确 main 提交，总体 **FAIL**。
@@ -90,7 +165,7 @@ MCP 失败位置为 [schema_object](../tools/mcp_smoke.py#L299)。诊断运行�
 仓库 evidence 目录内的既有原始工件保持不变。历史结果只属于其标明的提交/后端，
 旧文中的“当前”“进行中”“待验收”不作为现在的状态。
 
-## 本次文档整理检查
+## 历史文档整理检查（PR #75）
 
 仅修改 Markdown；实现源码、配置、依赖、原始 evidence 与冻结评估结果保持不变。
 历史文章通过上述固定 Git 版本保留，不改写其原始验证事实。

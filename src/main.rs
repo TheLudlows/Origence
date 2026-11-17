@@ -36,6 +36,9 @@ enum Command {
     AnyseekSchema {
         #[arg(long)]
         dimensions: Option<usize>,
+        /// Include the configured embedding space alongside the collection config.
+        #[arg(long)]
+        with_space: bool,
     },
     /// Run the HTTP API and its single durable worker in one process.
     #[command(alias = "api")]
@@ -134,15 +137,32 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
         command,
     } = cli;
     match command {
-        Command::AnyseekSchema { dimensions } => {
-            Box::pin(async move {
-                println!(
-                "{}",
-                match dimensions { Some(d) => origence::storage::anyseek::AnySeekFullTextStore::vector_collection_config(d)?, None => origence::storage::anyseek::AnySeekFullTextStore::collection_config() }
-            );
-                Ok(())
-            })
-        }
+        Command::AnyseekSchema {
+            dimensions,
+            with_space,
+        } => Box::pin(async move {
+            let models = with_space.then(Models::from_env).transpose()?;
+            let configured_dimension = models
+                .as_ref()
+                .and_then(|m| m.profile.as_ref().map(|_| m.embedding_dimension()));
+            if with_space && dimensions.is_some() && dimensions != configured_dimension {
+                anyhow::bail!("dimensions must match the configured embedding model");
+            }
+            let dimension = dimensions.or(configured_dimension);
+            let config = match dimension {
+                Some(d) => {
+                    origence::storage::anyseek::AnySeekFullTextStore::vector_collection_config(d)?
+                }
+                None => origence::storage::anyseek::AnySeekFullTextStore::collection_config(),
+            };
+            let output = if let Some(models) = models {
+                json!({"config":config,"embedding_space_id":models.profile})
+            } else {
+                config
+            };
+            println!("{output}");
+            Ok(())
+        }),
         Command::Serve { bind, enable_aml } => Box::pin(async move {
             let service = Service::open_with_anyseek(
                 &data_dir,
