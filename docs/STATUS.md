@@ -1,10 +1,13 @@
 # Origence · 当前进度
 
-更新：2026-11-17。本变更已同步 main
-[`3d474d9`](https://github.com/TheLudlows/Origence/commit/3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe)
-（已合入 [PR #77](https://github.com/TheLudlows/Origence/pull/77) 的 Node.js 管理界面与 CI 优化），
-继续补齐检索配置、诊断与私有 Run 重放。产品边界见[架构规划](design/agent-data-foundation.md)。
-**核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
+更新：2026-11-17。当前本地切片基于 main
+`593e8fa71d7c354587cffdd1aae7c4b2e2d2a554`（#77/#78/#79/#80 已合入）。
+产品边界见[架构规划](design/agent-data-foundation.md)。
+**#76 仍未完成：五页首版与部分真实浏览器验收已完成，生产计量、完整无障碍、双客户端及企业任务仍缺。**
+本地 checkpoint `78d39f5` 修复窄屏表格溢出、小屏退出入口、粗指针按钮尺寸与 PDF
+来源文本限制提示；50 个布局组合和真实 PDF 下载通过，随后 320px 固定版本/撤回/隔离
+定向回归通过。逐项验收边界与缺失后端合同见 [VALIDATION](VALIDATION.md)。
+本切片尚未推送，也没有新的 CI 结果。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -12,9 +15,9 @@
 | 私有会话 | 逻辑 key 绑定唯一平台归档，独立 key 隔离，授权轮换与撤销 | Claude Code / Codex 同 key 跨客户端真实任务验证 |
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
-| Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
+| Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 完整无障碍/实体设备验收、生产计量与部署 |
 
-## 检索模块拆分（PR #79，未合并）
+## 检索模块拆分（PR #79，已合并）
 
 已同步 main `3d474d9`（含 #77 UI、#78 诊断）。已核验分路的排序/融合位于
 `retrieval::rank`，最终发布及返回复核由 Turso 事务方法负责；Search 与 EvidenceBundle
@@ -39,7 +42,7 @@ CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检�
 
 ## 下一步
 
-1. 完成 UI 真实浏览器布局、键盘/触屏、无障碍及 Windows 验证；预览 relay 故障仍需解决。
+1. 在已有 localhost Chromium 证据上补齐完整键盘/辅助技术、实体触屏和 Windows 验证；聚合计量、告警、资产→Run 反查及 PDF 可核验页内文本仍需后端合同。
 2. 通过合并后的 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
 
 精确测试结果、CI 运行及诊断限制见 [VALIDATION](VALIDATION.md)。
