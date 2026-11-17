@@ -664,3 +664,60 @@ Windows and full combined CI were not run locally. GitHub results must be checke
 on the new pushed HEAD; the old separate PR green runs and the earlier temporary
 combination tree are not evidence that this new HEAD passed remote CI. No complete
 #76/native Claude Code/Codex task or production acceptance is claimed.
+
+## 2026-11-17 · Windows-native development launcher (local)
+
+Independent branch based on main `c70a1aaa0b3cb75872109406dc17b1b461d1f771`
+(includes SQLite #81 and reverse references #83); no older feature branches included.
+`tools/start-dev.ps1` targets foreground PowerShell 7.4+ and prebuilt native executables.
+It requires already provisioned separate data directories, ordinary Tenant key and
+collection; no startup provisioning, migrations, directory creation, overwrite,
+remote writes, secret arguments or persistent logs. Loopback only, models disabled.
+AnySeek readiness reads the authorized collection metadata; Origence's own full
+backend admission and /health/ready gate the optional UI. Startup/HTTP/grace waits
+are bounded. Only owned Process handles are stopped; no process-name/port killing.
+
+Commands and results:
+
+- PowerShell 7.4.6 Linux parser check of start-dev.ps1: passed. Initial pwsh startup
+  could not create its default cache on the read-only home; XDG_CACHE_HOME,
+  XDG_CONFIG_HOME and XDG_DATA_HOME were set to disposable paths for validation.
+- `ORIGENCE_TEST_PWSH=/path/to/pwsh python3 -m unittest discover -s tools -p test_start_dev.py -v`:
+  7 passed on Linux pwsh. Fake HTTP subprocesses verify ready/API/UI ordering,
+  early exit, not-ready timeout, auth denial, redirect refusal, missing-data refusal,
+  occupied-port noninterference, owned-process cleanup, spaced argument paths,
+  credential separation and suppression of deliberately secret-bearing child output.
+  These are process/HTTP contract fixtures, not real backend or Windows results.
+- `python3 -m unittest discover -s tools -p 'test_*.py'`: 11 passed, 7 opt-in launcher
+  cases skipped without ORIGENCE_TEST_PWSH. No CI scope/configuration changed.
+- `cargo build --locked`, `cargo clippy --locked --all-targets -- -D warnings`,
+  `cargo fmt --all -- --check`, `git diff --check`: passed under Rust 1.98.0.
+- `npm ci --ignore-scripts --prefix ui` (disposable cache), `npm --prefix ui run build`:
+  passed with Node 24.22.1.
+
+Real local validation used pwsh 7.4.6 on Linux, actual AnySeek built at
+`d813b915b7f12e7139ca316adc15699688493196`, Origence rebuilt from this worktree,
+and the built Node UI. A separate fixture explicitly created a temporary Tenant,
+ordinary key/collection and offline workspace, stopped bootstrap AnySeek, then
+invoked the unmodified launcher with paths containing spaces. Twice it observed
+all readiness gates, authenticated /v1/whoami retaining the same workspace, UI
+HTTP 200, group SIGINT shutdown without force warnings, closed ports and retained
+context.db; the second start reused the first data. Captured parent output was
+checked not to contain master secret, master key, ordinary key or workspace token.
+No production data, paid model/provider calls, Windows emulation or WSL was used.
+The local real-service harness is external to the repository; the reproducible
+manual setup/commands and Windows checklist are in WINDOWS-DEV.md.
+
+Validation found and corrected a PowerShell case-insensitive variable collision
+that replaced the component display name with an environment variable name.
+The real bootstrap fixture also initially precreated an empty AnySeek directory:
+the pinned engine interpreted that as recovery and exited. Documentation now uses
+an absent path for explicit first initialization, while the launcher requires an
+existing nonempty initialized directory. No automatic repair was added.
+
+Not executed: native Windows/MSVC/Windows Terminal Ctrl+C, ready-stage interruption
+on Windows, Windows process-reuse races, production recovery or power-loss tests.
+Shared-console Ctrl+C is best effort until verified there. If signal delivery fails
+or grace expires, owned-process termination is explicitly a forced stop; closing
+or killing the parent terminal may bypass finally and leave children alive. The
+launcher is not a production service supervisor. No remote PR/push/deployment.

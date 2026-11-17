@@ -70,3 +70,5 @@ see [current status](docs/STATUS.md) and [validation](docs/VALIDATION.md).
 Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent comparison](evals/agent/README.md).
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md). The JOIN-free SQL constraint remains in force; its former automatic guard and tests have been removed.
+
+Windows native development (no WSL): [one-command launcher and separate first-time setup](docs/WINDOWS-DEV.md).
