@@ -252,7 +252,9 @@ pub(super) async fn assert_evidence_budget(
 #[tokio::test]
 async fn semantic_single_duplicate_update_conflict_and_uncertain_provenance() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     property(&s, &a, "database.engine", "single").await;
     let first = submit(&s, &a, input("database.engine", "PostgreSQL", "assert", 0)).await;
@@ -320,7 +322,9 @@ async fn semantic_single_duplicate_update_conflict_and_uncertain_provenance() {
 #[tokio::test]
 async fn semantic_set_union_keeps_original_sources_and_rebuilds_after_withdrawal() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     property(&s, &a, "service.languages", "multi").await;
     let first = submit(&s, &a, input("service.languages", "Rust", "assert", 0)).await;
@@ -440,7 +444,9 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     let dir = tempfile::tempdir().unwrap();
     let models =
         Models::configured(model, "fixture".into(), Some("fixture".into()), None, 3).unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     let (other, other_token) = provision(&s).await;
     let reader = s
@@ -796,7 +802,9 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
 async fn semantic_concurrent_versions_recover_claim_and_retry_cancelled_job() {
     use origence::storage::JobQueue;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     property(&s, &a, "database.engine", "single").await;
     let x = input("database.engine", "Rust", "assert", 0);
@@ -812,7 +820,9 @@ async fn semantic_concurrent_versions_recover_claim_and_retry_cancelled_job() {
     assert_eq!(claim.kind, "semantic_publish");
     s.engine.relational().pool().close().await;
     drop(s);
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let a = s.auth(&token).await.unwrap();
     assert!(worker::process_next(&s).await.unwrap());
     assert!(worker::process_next(&s).await.unwrap());
@@ -852,7 +862,9 @@ async fn semantic_concurrent_versions_recover_claim_and_retry_cancelled_job() {
 #[tokio::test]
 async fn semantic_guards_limits_legacy_bypass_and_conflicting_batch() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let request = input("database.engine", "Rust", "assert", 0);
     assert!(matches!(
@@ -980,7 +992,9 @@ async fn semantic_guards_limits_legacy_bypass_and_conflicting_batch() {
 #[tokio::test]
 async fn semantic_source_withdrawal_during_pending_union_cannot_publish() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     property(&s, &a, "service.languages", "multi").await;
     let first = submit(&s, &a, input("service.languages", "Rust", "assert", 0)).await;

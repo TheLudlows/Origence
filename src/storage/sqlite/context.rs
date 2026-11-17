@@ -309,24 +309,27 @@ impl TursoTx {
     }
 
     async fn context_learning(&mut self, asset: Uuid) -> StorageResult<ContextLearning> {
-        // Candidate's visible_hit has already checked the complete transitive
-        // support closure. Do not call the writer-only raw session API here.
+        // visible_hit already verifies the complete support closure. Published
+        // Learning remains a workspace asset; private support pointers are
+        // included only for the key that owns the underlying archive.
         let (learning_id, improve_id, session_id, body): (Uuid, Uuid, Uuid, String) =
             native_turso::query_as("SELECT id,improve_id,session_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND status='published'")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
                 .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let own_archive = self.bound_private_session().await? == Some(session_id);
         let candidate: LearningCandidate = serde_json::from_str(&body)
             .map_err(|_| StorageError::Unavailable("invalid learning record".into()))?;
         Ok(ContextLearning {
             learning_id,
-            improve_id,
-            session_id,
+            improve_id: own_archive.then_some(improve_id),
+            session_id: own_archive.then_some(session_id),
             statement: candidate.statement,
             why: candidate.why,
             conditions: candidate.conditions,
             supports: candidate
                 .supports
                 .into_iter()
+                .filter(|_| own_archive)
                 .map(|support| ContextLearningSupport {
                     turn_id: support.turn_id,
                     field: support.field,
@@ -349,6 +352,10 @@ impl TursoTx {
             return Ok(Vec::new());
         }
         self.check_permission(Permission::Write).await?;
+        let bound = self.bound_private_session().await?;
+        if keys.iter().any(|(session, _)| Some(*session) != bound) {
+            return Err(StorageError::NotFound);
+        }
         let mut batch = self.context_turn_metadata(keys).await?;
         let mut turns = Vec::with_capacity(keys.len());
         for index in 0..keys.len() {
@@ -362,6 +369,13 @@ impl TursoTx {
         session: Option<Uuid>,
         exclude_session: Option<Uuid>,
     ) -> StorageResult<Vec<(Uuid, Uuid)>> {
+        let Some(bound) = self.bound_private_session().await? else {
+            return Ok(Vec::new());
+        };
+        if session.is_some_and(|id| id != bound) {
+            return Err(StorageError::NotFound);
+        }
+        let session = Some(bound);
         let mut selected = Vec::new();
         let mut cursor: Option<(AssociationKey, AssociationKey, AssociationKey)> = None;
         loop {

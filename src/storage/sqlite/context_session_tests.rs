@@ -69,7 +69,7 @@ async fn evidence(tx: &mut TursoTx, session: Uuid, turn: Uuid, ordinal: i64, val
 async fn recent_filters_sources_before_window_and_preserves_tie_order() {
     let (_dir, store, auth) = database().await;
     let mut tx = store.begin(auth).await.unwrap();
-    let session = Uuid::from_u128(1);
+    let session = tx.private_session_id().await.unwrap();
     for index in 1..=514 {
         let kind = if index % 3 == 0 {
             "knowledge"
@@ -127,7 +127,7 @@ async fn recent_filters_sources_before_window_and_preserves_tie_order() {
 async fn recent_decodes_lookahead_keys_but_not_body_and_checks_after_result_limit() {
     let (_dir, store, auth) = database().await;
     let mut tx = store.begin(auth).await.unwrap();
-    let session = Uuid::from_u128(1);
+    let session = tx.private_session_id().await.unwrap();
     let mut sources = Vec::new();
     for index in 1..=513 {
         sources.push(turn(&mut tx, session, Uuid::from_u128(index), 1, "session_turn").await);
@@ -187,7 +187,7 @@ async fn recent_decodes_lookahead_keys_but_not_body_and_checks_after_result_limi
 async fn context_turn_batch_preserves_wrong_kind_and_evidence_decode_order() {
     let (_dir, store, auth) = database().await;
     let mut tx = store.begin(auth).await.unwrap();
-    let session = Uuid::new_v4();
+    let session = tx.private_session_id().await.unwrap();
     let first = Uuid::new_v4();
     let second = Uuid::new_v4();
     turn(&mut tx, session, first, 1, "knowledge").await;
@@ -330,7 +330,7 @@ async fn hidden_turns_do_not_prepare_final_body_or_timestamp_columns() {
 async fn body_decode_follows_native_content_then_timestamp_then_json_order() {
     let (_dir, store, auth) = database().await;
     let mut tx = store.begin(auth).await.unwrap();
-    let session = Uuid::new_v4();
+    let session = tx.private_session_id().await.unwrap();
     let id = Uuid::new_v4();
     let source = turn(&mut tx, session, id, 1, "session_turn").await;
     let file = tx
@@ -391,7 +391,7 @@ async fn body_decode_follows_native_content_then_timestamp_then_json_order() {
 async fn evidence_pages_keep_each_turns_65_row_window_across_batch_boundaries() {
     let (_dir, store, auth) = database().await;
     let mut tx = store.begin(auth).await.unwrap();
-    let session = Uuid::new_v4();
+    let session = tx.private_session_id().await.unwrap();
     let mut keys = Vec::new();
     for index in 1..=9 {
         let id = Uuid::from_u128(index);

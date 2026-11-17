@@ -619,7 +619,7 @@ async fn incompatible_owner_constraints_are_rejected_without_repair() {
 #[cfg(feature = "local-storage")]
 mod retry_tests {
     use super::*;
-    use origence::{error::AppError, models::Models, service::Service, types::KnowledgeInput};
+    use origence::{error::AppError, models::Models, types::KnowledgeInput};
 
     fn input() -> KnowledgeInput {
         KnowledgeInput {
@@ -635,7 +635,9 @@ mod retry_tests {
     #[tokio::test]
     async fn live_creator_allows_reviewer_retry_without_transferring_identity() {
         let dir = tempfile::tempdir().unwrap();
-        let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let service = crate::support::open_service(dir.path(), Models::disabled())
+            .await
+            .unwrap();
         let store = service.engine.relational();
         let (admin, _) = root(store, Uuid::new_v4()).await;
         let (writer, writer_token) = issue(store, &admin, "writer", false).await;
@@ -674,7 +676,9 @@ mod retry_tests {
     #[tokio::test]
     async fn cleanup_retry_requires_current_admin_but_not_the_revoked_deleting_key() {
         let dir = tempfile::tempdir().unwrap();
-        let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let service = crate::support::open_service(dir.path(), Models::disabled())
+            .await
+            .unwrap();
         let store = service.engine.relational();
         let (creator, creator_token) = root(store, Uuid::new_v4()).await;
         let (_, admin_token) = issue(store, &creator, "admin", false).await;
@@ -748,7 +752,9 @@ mod retry_tests {
     #[tokio::test]
     async fn direct_child_admin_cannot_retry_a_revoked_root_creator() {
         let dir = tempfile::tempdir().unwrap();
-        let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let service = crate::support::open_service(dir.path(), Models::disabled())
+            .await
+            .unwrap();
         let store = service.engine.relational();
         let (admin, _) = root(store, Uuid::new_v4()).await;
         let (writer, writer_token) = issue(store, &admin, "writer", true).await;

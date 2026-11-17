@@ -26,14 +26,14 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
-      # Check all Origence targets without reformatting vendored upstream code.
+      # Check all Origence targets with the declared formatter.
       - run: cargo fmt --package origence -- --check
-      # Check the Turso authority layer before the full Lance vector backend.
-      - name: Authority-only Clippy (without Lance)
+      # Check the Turso authority layer independently of host features.
+      - name: Authority-only Clippy
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
-      - name: Confirm authority-only builds exclude Lance and protobuf compiler
+      - name: Confirm every feature set excludes the retired Lance backend
         run: |
-          cargo tree --locked --no-default-features --edges normal,build --prefix none > /tmp/authority-dependencies.txt
+          cargo tree --locked --all-features --edges normal,build --prefix none > /tmp/authority-dependencies.txt
           if grep -Eq '^(lance(-[^ ]+)?|lancedb|protobuf-src) v' /tmp/authority-dependencies.txt; then
             cat /tmp/authority-dependencies.txt
             exit 1
@@ -53,8 +53,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
-      # A missing external executable must not be used: Lance builds its own protoc.
-      PROTOC: __origence_no_external_protoc__
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -67,8 +65,7 @@ jobs:
           cache-on-failure: true
       - name: Linux native build tools
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake make g++
-          cmake --version
+          sudo apt-get update && sudo apt-get install -y make g++
       - name: Confirm minimum Rust 1.98.0
         run: |
           rustc --version
@@ -79,40 +76,8 @@ jobs:
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
       # One complete default-feature run includes the former focused filters.
       - run: cargo test --locked -j 2 --no-fail-fast
-      - name: Build maintenance fixture (test-only optimized Turso interpreter)
-        timeout-minutes: 45
-        run: cargo test --locked --test local --no-run -j 2 --config 'profile.test.package.turso_core.opt-level=2' --config 'profile.test.package.turso_core.debug-assertions=true' --config 'profile.test.package.turso_core.overflow-checks=true'
-      - name: Controlled maintenance native-write recovery (all 14 synthetic fault cases)
-        timeout-minutes: 75
-        env:
-          OC_MAINTENANCE_SHIM: ${{ runner.temp }}/maintenance-io-fault.so
-          OC_MAINTENANCE_EVIDENCE: ${{ runner.temp }}/maintenance-recovery
-        run: |
-          mkdir -p "$OC_MAINTENANCE_EVIDENCE"
-          {
-            git rev-parse HEAD
-            sha256sum Cargo.lock
-            rustc --version --verbose
-            echo "matrix-only turso_core: opt-level=2 debug-assertions=true overflow-checks=true"
-            uname -a
-            stat -f -c 'filesystem=%T block_size=%S' "$RUNNER_TEMP"
-          } > "$OC_MAINTENANCE_EVIDENCE/environment.txt"
-          gcc -Wall -Wextra -Werror -shared -fPIC -pthread tools/maintenance_io_fault.c -o "$OC_MAINTENANCE_SHIM"
-          set -o pipefail
-          cargo test --locked --test local -j 2 --config 'profile.test.package.turso_core.opt-level=2' --config 'profile.test.package.turso_core.debug-assertions=true' --config 'profile.test.package.turso_core.overflow-checks=true' maintenance_recovery::native_io_failure_matrix -- --ignored --exact --nocapture 2>&1 | tee "$OC_MAINTENANCE_EVIDENCE/matrix.log"
-      - name: Preserve maintenance interruption evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: maintenance-recovery-linux
-          path: ${{ runner.temp }}/maintenance-recovery/
-          if-no-files-found: ignore
-      - name: Debug build and no-model HTTP smoke
-        run: |
-          cargo build --locked -j 2
-          python3 tools/smoke.py --binary target/debug/origence
-      - name: MCP stdio local and host-forwarding contracts (no models)
-        run: python3 tools/mcp_smoke.py --binary target/debug/origence
+      - name: Debug build
+        run: cargo build --locked -j 2
       - name: Fetch the pinned real AnySeek fixture
         uses: actions/checkout@v4
         with:
@@ -130,11 +95,15 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: 1.99.1
         run: cargo build --locked --manifest-path .anyseek-fixture/Cargo.toml --no-default-features --bin anyseek_server -j 2
+      - name: No-model HTTP smoke against a fresh AnySeek fixture
+        run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 tools/smoke.py --binary target/debug/origence
+      - name: MCP stdio local and host-forwarding contracts (no models)
+        run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary target/debug/origence
       - name: AnySeek public library, HTTP and MCP contracts (no models)
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --cargo-tests --binary target/debug/origence
       # Evaluation evidence is run-specific, never part of the Cargo target cache.
       - name: Keyword retrieval seed evaluation (no model calls)
-        run: python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+        run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Preserve synthetic retrieval evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -151,8 +120,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_INCREMENTAL: 0
-      # A missing external executable must not be used: Lance builds its own protoc.
-      PROTOC: __origence_no_external_protoc__
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -161,13 +128,13 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          # Exclude pre-toolchain CMake caches, including fallback restores.
-          prefix-key: v1-rust-protobuf-msvc
+          # Do not restore the retired native backend dependency cache.
+          prefix-key: v2-anyseek
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       - name: Build tools, lint, and all local lifecycle tests
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1
-      - name: Authority contracts without Lance
+      - name: Authority contracts without host features
         run: cargo check --locked --no-default-features --lib -j 1
 

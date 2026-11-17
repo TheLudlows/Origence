@@ -45,6 +45,7 @@ mod learning_visibility;
 mod ledger;
 mod lifecycle;
 mod locking;
+mod private_session;
 mod provenance;
 mod publication;
 #[cfg(test)]
@@ -53,11 +54,15 @@ mod read_model;
 #[cfg(test)]
 mod read_model_tests;
 mod relational;
+mod runs;
 mod schema;
 mod semantics;
 mod session;
 #[cfg(test)]
 mod session_read_tests;
+mod skill;
+#[cfg(test)]
+mod skill_tests;
 mod versions;
 #[cfg(test)]
 mod versions_tests;
@@ -72,7 +77,7 @@ use crate::storage::traits::{
 };
 
 use locking::LockGuard;
-#[cfg(feature = "local-vector")]
+#[cfg(all(test, feature = "local-storage"))]
 pub(super) use locking::lock_for_maintenance;
 
 /// The local relational store backed by a single native Turso database file.
@@ -85,7 +90,7 @@ pub struct TursoStore {
 }
 
 /// Holds the existing host lock without opening/initializing an application store.
-#[cfg(feature = "local-vector")]
+#[cfg(test)]
 pub(super) struct MaintenanceLock {
     _guard: std::sync::Arc<LockGuard>,
 }

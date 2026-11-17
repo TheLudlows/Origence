@@ -4,7 +4,6 @@ use origence::storage::native_turso as db;
 use origence::{
     error::AppError,
     models::Models,
-    service::Service,
     storage::{KeyCapabilities, RelationalStore, Scope},
     types::{KnowledgeInput, SearchInput},
     worker,
@@ -29,7 +28,9 @@ fn query() -> SearchInput {
 #[tokio::test]
 async fn upload_worker_search_and_revocation_use_owned_workspaces() {
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -238,7 +239,9 @@ async fn owned_workspaces_isolate_summary_graph_and_repeated_queries() {
         2,
     )
     .unwrap();
-    let service = Service::open(dir.path(), models).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),

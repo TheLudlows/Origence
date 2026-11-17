@@ -10,7 +10,7 @@ use origence::{
     service::Service,
     storage::{
         DomainTx, FullTextEntry, FullTextQuery, LedgerEntry, LedgerKey, Permission,
-        RelationalStore, Scope, SourceVersion, Surface, VectorEntry, VectorQuery, VectorStore,
+        RelationalStore, Scope, SourceVersion, Surface, VectorEntry, VectorQuery,
         ledger_idempotency_key,
     },
     types::AuthContext,
@@ -453,11 +453,13 @@ async fn assert_hidden(s: &Service, a: &AuthContext, learning: &Value) {
 async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     let original = publish(&s, &a).await;
     let hits = search(&s, &a, "keyword").await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![evidence(&hits["hits"][0])]).await;
     let feedback_id = Uuid::new_v4();
     feedback(&s, &a, &turn, feedback_id).await;
@@ -537,12 +539,12 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
     ] {
         assert!(matches!(raw, Err(AppError::Forbidden)), "{raw:?}");
     }
-    assert_eq!(
-        s.learning(&reader, id(&learning, "learning_id"))
-            .await
-            .unwrap(),
-        learning
-    );
+    assert!(matches!(
+        s.learning(&reader, id(&learning, "learning_id")).await,
+        Err(AppError::NotFound)
+    ));
+    // Published search projections remain workspace assets; private learning
+    // detail (including source archive identity) is not a shared read API.
     for mode in ["keyword", "vector", "hybrid"] {
         let found = search(&s, &reader, mode).await;
         assert_eq!(found["effective_mode"], mode);
@@ -583,10 +585,15 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
         assert!(rendered.contains(source["citation"].as_str().unwrap()));
         assert!(rendered.contains(CONDITION));
         if mode == "keyword" {
-            let other_session = Uuid::new_v4();
-            let reused = archive(&s, &a, other_session, vec![evidence(hit)]).await;
+            let other = role(&s, &a, "writer").await;
+            let other_session = id(&s.private_session(&other).await.unwrap(), "session_id");
+            assert!(matches!(
+                s.session_turn(&other, session, id(&turn, "turn_id")).await,
+                Err(AppError::NotFound)
+            ));
+            let reused = archive(&s, &other, other_session, vec![evidence(hit)]).await;
             let view = s
-                .session_turn(&a, other_session, id(&reused, "turn_id"))
+                .session_turn(&other, other_session, id(&reused, "turn_id"))
                 .await
                 .unwrap();
             assert_eq!(
@@ -626,14 +633,23 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
 async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let writer = role(&s, &a, "writer").await;
-    let session = Uuid::new_v4();
-    let first = archive(&s, &a, session, vec![]).await;
-    let second = archive(&s, &a, session, vec![]).await;
+    let original = role(&s, &a, "writer").await;
+    let session = id(&s.private_session(&original).await.unwrap(), "session_id");
+    let first = archive(&s, &original, session, vec![]).await;
+    let second = archive(&s, &original, session, vec![]).await;
     let shared_id = Uuid::new_v4();
-    feedback(&s, &a, &first, shared_id).await;
+    feedback(&s, &original, &first, shared_id).await;
+    // Authorized rotation changes principal ID, not private-session ownership.
+    let rotated = s.rotate_key(&a, original.id).await.unwrap();
+    let writer = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
+    assert_eq!(
+        id(&s.private_session(&writer).await.unwrap(), "session_id"),
+        session
+    );
     feedback(&s, &writer, &second, shared_id).await;
     db::query("UPDATE oc_feedback SET created_at=42")
         .execute(s.engine.relational().pool())
@@ -641,7 +657,7 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
         .unwrap();
     let first_id = Uuid::new_v4();
     let receipt = s
-        .improve(&a, "bounded", session, improve_input(first_id, 1))
+        .improve(&writer, "bounded", session, improve_input(first_id, 1))
         .await
         .unwrap();
     assert_eq!(receipt["feedback_count"], 1);
@@ -657,7 +673,7 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
     ));
     // Late feedback may have an earlier wall clock. It must still be selected by
     // the next run and must not change the already-frozen first snapshot.
-    feedback(&s, &a, &second, Uuid::new_v4()).await;
+    feedback(&s, &writer, &second, Uuid::new_v4()).await;
     db::query("UPDATE oc_feedback SET created_at=1 WHERE feedback_sequence=3")
         .execute(s.engine.relational().pool())
         .await
@@ -666,7 +682,10 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
     let first_snapshot = snapshot(&s, first_id).await;
     assert_eq!(first_snapshot["items"].as_array().unwrap().len(), 1);
     assert_eq!(first_snapshot["items"][0]["sequence"], 1);
-    assert_eq!(first_snapshot["items"][0]["principal_id"], json!(a.id));
+    assert_eq!(
+        first_snapshot["items"][0]["principal_id"],
+        json!(original.id)
+    );
     let next = improve(&s, &writer, session).await;
     assert_eq!(next["feedback_count"], 2);
     assert_eq!(next["watermark_before"], 1);
@@ -693,9 +712,11 @@ async fn learning_helpful_feedback_is_not_proof_of_an_unsupported_claim() {
     let (models, fixture, _model) = models().await;
     fixture.set_mode("unsupported");
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let receipt = improve(&s, &a, session).await;
@@ -724,9 +745,11 @@ async fn learning_invalid_proposals_fail_closed_without_consuming_feedback() {
         let (models, fixture, _model) = models().await;
         fixture.set_mode(mode);
         let dir = tempfile::tempdir().unwrap();
-        let s = Service::open(dir.path(), models).await.unwrap();
+        let s = crate::support::open_service(dir.path(), models)
+            .await
+            .unwrap();
         let (a, _) = provision(&s).await;
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn = archive(&s, &a, session, vec![]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
         let receipt = improve(&s, &a, session).await;
@@ -760,9 +783,11 @@ async fn learning_model_failure_and_restart_reuse_durable_proposal_and_verificat
     let (models, fixture, _model) = models().await;
     fixture.fail_proposal.store(true, Ordering::SeqCst);
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models.clone()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models.clone())
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let receipt = improve(&s, &a, session).await;
@@ -781,7 +806,9 @@ async fn learning_model_failure_and_restart_reuse_durable_proposal_and_verificat
     fixture.fail_embed.store(true, Ordering::SeqCst);
     s.engine.relational().pool().close().await;
     drop(s);
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let a = s.auth(&token).await.unwrap();
     s.job_action(&a, "retry-verify", job_id, "retry")
         .await
@@ -834,9 +861,11 @@ async fn learning_invalid_verification_retries_without_regenerating_a_valid_prop
         let (models, fixture, _model) = models().await;
         fixture.set_mode(mode);
         let dir = tempfile::tempdir().unwrap();
-        let s = Service::open(dir.path(), models).await.unwrap();
+        let s = crate::support::open_service(dir.path(), models)
+            .await
+            .unwrap();
         let (a, _) = provision(&s).await;
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn = archive(&s, &a, session, vec![]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
         let receipt = improve(&s, &a, session).await;
@@ -865,9 +894,11 @@ async fn learning_invalid_verification_retries_without_regenerating_a_valid_prop
 async fn learning_child_retry_reuses_saved_embeddings_after_publication_transaction_failure() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let receipt = improve(&s, &a, session).await;
@@ -931,9 +962,11 @@ async fn learning_partial_publication_cancel_preserves_published_children_and_re
     let (models, fixture, _model) = models().await;
     fixture.set_mode("two_candidates");
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let receipt = improve(&s, &a, session).await;
@@ -1003,16 +1036,19 @@ async fn learning_partial_publication_cancel_preserves_published_children_and_re
 async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publications() {
     let (models, _, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let first_session = Uuid::new_v4();
-    let second_session = Uuid::new_v4();
-    for session in [first_session, second_session] {
-        let turn = archive(&s, &a, session, vec![]).await;
-        feedback(&s, &a, &turn, Uuid::new_v4()).await;
+    let first_session = id(&s.private_session(&a).await.unwrap(), "session_id");
+    let other = role(&s, &a, "writer").await;
+    let second_session = id(&s.private_session(&other).await.unwrap(), "session_id");
+    for (actor, session) in [(&a, first_session), (&other, second_session)] {
+        let turn = archive(&s, actor, session, vec![]).await;
+        feedback(&s, actor, &turn, Uuid::new_v4()).await;
     }
     let first = improve(&s, &a, first_session).await;
-    let second = improve(&s, &a, second_session).await;
+    let second = improve(&s, &other, second_session).await;
     // Make queue ordering explicit; no wall-clock sleep or millisecond tie is
     // allowed to accidentally publish the first child before the second parent.
     for (receipt, created_at) in [(&first, 1_i64), (&second, 2_i64)] {
@@ -1026,10 +1062,13 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
     assert!(worker::process_next(&s).await.unwrap());
     assert!(worker::process_next(&s).await.unwrap());
     assert_eq!(
-        s.job(&a, id(&second, "job_id")).await.unwrap()["state"],
+        s.job(&other, id(&second, "job_id")).await.unwrap()["state"],
         "superseded"
     );
-    let conflicted = s.improvement(&a, id(&second, "improve_id")).await.unwrap();
+    let conflicted = s
+        .improvement(&other, id(&second, "improve_id"))
+        .await
+        .unwrap();
     assert_eq!(conflicted["learnings"], json!([]));
     assert_eq!(conflicted["verification_saved"], true);
     assert_eq!(count(&s, "oc_assets").await, 1);
@@ -1041,7 +1080,7 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
             .await
             .unwrap();
     assert_eq!(cursor, 0);
-    s.job_action(&a, "cancel-duplicate", id(&second, "job_id"), "cancel")
+    s.job_action(&other, "cancel-duplicate", id(&second, "job_id"), "cancel")
         .await
         .unwrap();
     drain(&s).await;
@@ -1049,10 +1088,13 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
         s.improvement(&a, id(&first, "improve_id")).await.unwrap()["status"],
         "completed"
     );
-    let retried = improve(&s, &a, second_session).await;
+    let retried = improve(&s, &other, second_session).await;
     assert_eq!(retried["feedback_count"], 1);
     drain(&s).await;
-    let finished = s.improvement(&a, id(&retried, "improve_id")).await.unwrap();
+    let finished = s
+        .improvement(&other, id(&retried, "improve_id"))
+        .await
+        .unwrap();
     assert_eq!(finished["status"], "completed");
     assert_eq!(finished["duplicate_count"], 1);
     assert_eq!(finished["learnings"], json!([]));
@@ -1063,7 +1105,9 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
 async fn learning_withdrawn_unquoted_member_invalidates_the_whole_supporting_snapshot() {
     let (models, _, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     s.register_memory_property(
         &a,
@@ -1097,7 +1141,7 @@ async fn learning_withdrawn_unquoted_member_invalidates_the_whole_supporting_sna
         .iter()
         .find(|hit| hit["locator"]["semantic_value"] == "Python")
         .unwrap();
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![evidence(hit)]).await;
     let archived = s
         .session_turn(&a, session, id(&turn, "turn_id"))
@@ -1144,11 +1188,13 @@ async fn learning_source_archive_or_asset_withdrawal_hides_every_read_before_cle
     ] {
         let (models, _, _model) = models().await;
         let dir = tempfile::tempdir().unwrap();
-        let s = Service::open(dir.path(), models).await.unwrap();
+        let s = crate::support::open_service(dir.path(), models)
+            .await
+            .unwrap();
         let (a, _) = provision(&s).await;
         let original = publish(&s, &a).await;
         let hits = search(&s, &a, "keyword").await;
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn = archive(&s, &a, session, vec![evidence(&hits["hits"][0])]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
         let learning = learn(&s, &a, session).await;
@@ -1176,11 +1222,13 @@ async fn learning_source_archive_or_asset_withdrawal_hides_every_read_before_cle
 async fn learning_transitive_withdrawal_survives_cleanup_and_restart() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models.clone()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models.clone())
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     let original = publish(&s, &a).await;
     let hits = search(&s, &a, "keyword").await;
-    let first_session = Uuid::new_v4();
+    let first_session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, first_session, vec![evidence(&hits["hits"][0])]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let first = learn(&s, &a, first_session).await;
@@ -1191,7 +1239,7 @@ async fn learning_transitive_withdrawal_survives_cleanup_and_restart() {
         .iter()
         .find(|hit| hit["asset_id"] == first["asset_id"])
         .unwrap();
-    let second_session = Uuid::new_v4();
+    let second_session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let downstream = archive(&s, &a, second_session, vec![evidence(used)]).await;
     feedback(&s, &a, &downstream, Uuid::new_v4()).await;
     fixture.set_mode("second_statement");
@@ -1224,7 +1272,9 @@ async fn learning_transitive_withdrawal_survives_cleanup_and_restart() {
     drain(&s).await;
     s.engine.relational().pool().close().await;
     drop(s);
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let a = s.auth(&token).await.unwrap();
     assert_hidden(&s, &a, &first).await;
     assert_hidden(&s, &a, &second).await;
@@ -1234,9 +1284,11 @@ async fn learning_transitive_withdrawal_survives_cleanup_and_restart() {
 async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_snapshot() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let hidden = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &hidden, Uuid::new_v4()).await;
     let visible = archive(&s, &a, session, vec![]).await;
@@ -1279,13 +1331,15 @@ async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_sn
 async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
     let (models, _, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let (foreign, _) = provision(&s).await;
     let (sibling, _) = provision_scope(&s, a.tenant_id, Uuid::new_v4()).await;
     let reader = role(&s, &a, "reader").await;
     let writer = role(&s, &a, "writer").await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let before = count(&s, "oc_jobs").await;
@@ -1357,12 +1411,10 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
         s.improvement(&reader, id(&learned, "improve_id")).await,
         Err(AppError::Forbidden)
     ));
-    assert_eq!(
-        s.learning(&writer, id(&learned, "learning_id"))
-            .await
-            .unwrap(),
-        learned
-    );
+    assert!(matches!(
+        s.learning(&writer, id(&learned, "learning_id")).await,
+        Err(AppError::NotFound)
+    ));
     s.revoke_key(&a, writer.id).await.unwrap();
     assert!(matches!(
         s.learning(&writer, id(&learned, "learning_id")).await,
@@ -1380,7 +1432,7 @@ async fn dependency_fixture(s: &Service, a: &AuthContext, learning: &Value) -> V
     .fetch_one(s.engine.relational().pool())
     .await
     .unwrap();
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(a).await.unwrap(), "session_id");
     let donor = archive(
         s,
         a,
@@ -1407,12 +1459,14 @@ async fn learning_corrupt_cycle_fails_closed_without_hiding_independent_learning
     let (models, fixture, _model) = models().await;
     fixture.set_mode("unique_statement");
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let mut turns = Vec::new();
     let mut learnings = Vec::new();
     for _ in 0..3 {
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn = archive(&s, &a, session, vec![]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
         learnings.push(learn(&s, &a, session).await);
@@ -1453,14 +1507,16 @@ async fn learning_corrupt_over_limit_closure_rejects_the_whole_root_not_a_prefix
     let (models, fixture, _model) = models().await;
     fixture.set_mode("unique_statement");
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let mut turns = Vec::new();
     let mut learnings = Vec::new();
     // The closure budget counts Learning nodes and distinct supporting turns.
     // 33 independently published objects give 66 nodes after linking below.
     for _ in 0..33 {
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn = archive(&s, &a, session, vec![]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
         learnings.push(learn(&s, &a, session).await);
@@ -1695,8 +1751,7 @@ async fn publish_native_budget_fixture(
             embedding: budget.embedding.clone(),
         })
         .collect();
-    s.engine
-        .vector()
+    crate::support::projection(s)
         .upsert(budget.scope, vectors)
         .await
         .unwrap();
@@ -1710,8 +1765,7 @@ async fn publish_native_budget_fixture(
             search_terms: budget.terms.clone(),
         })
         .collect();
-    s.engine
-        .vector()
+    crate::support::projection(s)
         .upsert_full_text(budget.scope, text)
         .await
         .unwrap();
@@ -1838,9 +1892,7 @@ async fn assert_native_budget(s: &Service, budget: &NativeBudgetFixture) {
         (budget.ids(), 102),
         (budget.ids(), 100),
     ] {
-        let text = s
-            .engine
-            .vector()
+        let text = crate::support::projection(s)
             .search_full_text(FullTextQuery {
                 scope: budget.scope,
                 artifact_ids: Some(ids.clone()),
@@ -1850,9 +1902,7 @@ async fn assert_native_budget(s: &Service, budget: &NativeBudgetFixture) {
             })
             .await
             .unwrap();
-        let vector = s
-            .engine
-            .vector()
+        let vector = crate::support::projection(s)
             .search(VectorQuery {
                 scope: budget.scope,
                 artifact_ids: Some(ids.clone()),
@@ -1906,12 +1956,14 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
     let (models, fixture, _model) = models().await;
     fixture.set_mode("unique_statement");
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     let mut turns = Vec::new();
     let mut learnings = Vec::new();
     for index in 0..2 {
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn = archive(&s, &a, session, vec![]).await;
         feedback(&s, &a, &turn, Uuid::new_v4()).await;
         if index == 1 {
@@ -1984,9 +2036,11 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
 async fn learning_oversized_first_snapshot_rolls_back_without_consuming_feedback() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = s
         .archive_turn(
             &a,
@@ -2038,9 +2092,11 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
     let (models, fixture, _model) = models().await;
     fixture.set_mode("verification_overflow");
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = s
         .archive_turn(
             &a,
@@ -2080,11 +2136,13 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
 async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_withdrawal() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let original = publish(&s, &a).await;
     let found = search(&s, &a, "keyword").await;
-    let first_session = Uuid::new_v4();
+    let first_session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let first_turn = archive(&s, &a, first_session, vec![evidence(&found["hits"][0])]).await;
     let feedback_id = Uuid::new_v4();
     feedback(&s, &a, &first_turn, feedback_id).await;
@@ -2108,7 +2166,7 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
             request["mode"] = json!(mode);
             request["applicability_context"] = conditions.clone();
             let result = s
-                .evidence_bundle(&reader, serde_json::from_value(request).unwrap())
+                .evidence_bundle(&a, serde_json::from_value(request.clone()).unwrap())
                 .await
                 .unwrap();
             assert_eq!(result.effective_mode, mode);
@@ -2128,7 +2186,7 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
             assert!(result.validity.contains("not_factual_truth"));
             let metadata = item.learning.as_ref().unwrap();
             assert_eq!(metadata.learning_id, id(&first_learning, "learning_id"));
-            assert_eq!(metadata.session_id, first_session);
+            assert_eq!(metadata.session_id, Some(first_session));
             assert_eq!(metadata.conditions, [CONDITION]);
             assert_eq!(metadata.statement, STATEMENT);
             assert!(!metadata.why.is_empty());
@@ -2176,16 +2234,44 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
             limited["applicability_context"] = conditions;
             limited["budget"] = json!(result.used_bytes - 1);
             let omitted = s
-                .evidence_bundle(&reader, serde_json::from_value(limited).unwrap())
+                .evidence_bundle(&a, serde_json::from_value(limited).unwrap())
                 .await
                 .unwrap();
             assert!(omitted.items.is_empty());
             assert!(omitted.rendered_context.is_empty());
+            let shared = s
+                .evidence_bundle(&reader, serde_json::from_value(request).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(shared.items.len(), 1);
+            let shared_item = &shared.items[0];
+            let shared_learning = shared_item.learning.as_ref().unwrap();
+            assert_eq!(shared_learning.learning_id, metadata.learning_id);
+            assert_eq!(shared_item.applicability, item.applicability);
+            assert!(shared_learning.session_id.is_none());
+            assert!(shared_learning.improve_id.is_none());
+            assert!(shared_learning.supports.is_empty());
+            assert!(!shared.rendered_context.contains(&first_session.to_string()));
+            assert!(
+                !shared
+                    .rendered_context
+                    .contains(&support.turn_id.to_string())
+            );
+            assert!(
+                !shared
+                    .rendered_context
+                    .contains(&support.feedback_id.to_string())
+            );
+            assert!(
+                !shared
+                    .rendered_context
+                    .contains(&support.principal_id.to_string())
+            );
         }
     }
-    // A second session can archive exactly the returned chunk and Learn from
+    // A later private turn can archive exactly the returned chunk and Learn from
     // it. The second Learning depends transitively on the first raw source.
-    let second_session = Uuid::new_v4();
+    let second_session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let second_turn = archive(&s, &a, second_session, vec![roundtrip.unwrap()]).await;
     feedback(&s, &a, &second_turn, Uuid::new_v4()).await;
     fixture.set_mode("second_statement");

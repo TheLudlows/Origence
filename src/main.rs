@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use origence::{
     client::HostClient,
+    client_skill::{SkillClient, export_skill},
     host, mcp,
     models::Models,
     service::Service,
@@ -32,7 +33,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Print the exact configuration for a fresh AnySeek lexical collection.
-    AnyseekSchema,
+    AnyseekSchema {
+        #[arg(long)]
+        dimensions: Option<usize>,
+    },
     /// Run the HTTP API and its single durable worker in one process.
     #[command(alias = "api")]
     Serve {
@@ -59,13 +63,21 @@ enum Command {
     },
     /// Offline inspection of the current Turso identity schema; never migrates a database.
     IdentityCheck,
-    /// Compact existing local vector files; requires a stopped host. Never prunes history.
-    VectorCompact {
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Read-only stdio MCP; forwards to the running host by default.
+    /// Stdio MCP for shared retrieval and explicit private archives.
     Mcp,
+    /// Export one approved Skill copy into a Claude Code or Codex project.
+    SkillExport {
+        #[arg(long, value_enum)]
+        client: SkillClient,
+        #[arg(long)]
+        project: PathBuf,
+        #[arg(long)]
+        tenant_id: Uuid,
+        #[arg(long)]
+        workspace_id: Uuid,
+        skill_id: Uuid,
+        version: u32,
+    },
     Search {
         query: String,
         #[arg(long, default_value = "keyword")]
@@ -122,13 +134,15 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
         command,
     } = cli;
     match command {
-        Command::AnyseekSchema => Box::pin(async {
-            println!(
+        Command::AnyseekSchema { dimensions } => {
+            Box::pin(async move {
+                println!(
                 "{}",
-                origence::storage::anyseek::AnySeekFullTextStore::collection_config()
+                match dimensions { Some(d) => origence::storage::anyseek::AnySeekFullTextStore::vector_collection_config(d)?, None => origence::storage::anyseek::AnySeekFullTextStore::collection_config() }
             );
-            Ok(())
-        }),
+                Ok(())
+            })
+        }
         Command::Serve { bind, enable_aml } => Box::pin(async move {
             let service = Service::open_with_anyseek(
                 &data_dir,
@@ -149,16 +163,6 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             )
             .await
         }),
-        Command::VectorCompact { dry_run } => Box::pin(async move {
-            anyhow::ensure!(
-                offline,
-                "vector-compact requires --offline and a stopped host"
-            );
-            let report =
-                origence::storage::maintenance::compact_vectors(&data_dir, dry_run).await?;
-            println!("{}", serde_json::to_string(&report)?);
-            Ok(())
-        }),
         Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(
                 offline,
@@ -174,6 +178,9 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             if offline =>
         {
             Box::pin(run_admin(data_dir, command))
+        }
+        Command::SkillExport { .. } if offline => {
+            Box::pin(async { anyhow::bail!("skill-export requires an online Origence host") })
         }
         command if offline => Box::pin(run_offline(data_dir, command)),
         command => Box::pin(run_remote(server_url, command)),
@@ -314,6 +321,32 @@ async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> 
     let client = HostClient::new(&server_url, token)?;
     let (method, path, body) = match command {
         Command::Mcp => return mcp::run_remote(client).await,
+        Command::SkillExport {
+            client: target,
+            project,
+            tenant_id,
+            workspace_id,
+            skill_id,
+            version,
+        } => {
+            let path = export_skill(
+                &client,
+                target,
+                &project,
+                Scope {
+                    tenant_id,
+                    workspace_id,
+                },
+                skill_id,
+                version,
+            )
+            .await?;
+            println!(
+                "{}",
+                json!({"skill_id":skill_id,"version":version,"path":path,"exported":true})
+            );
+            return Ok(());
+        }
         Command::Search {
             query,
             mode,

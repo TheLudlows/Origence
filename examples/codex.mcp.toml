@@ -1,0 +1,4 @@
+[mcp_servers.origence]
+command = "/absolute/path/to/origence"
+args = ["--server-url", "http://127.0.0.1:8080", "mcp"]
+env_vars = ["OC_API_KEY"]

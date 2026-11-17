@@ -29,17 +29,6 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
-lancedb = { version = "=0.40.0", default-features = false, features = ["remote"], optional = true }
-# Read-only physical IVF partition verification; same version already used by LanceDB.
-# Build the protobuf compiler from source inside Lance's own build scripts.
-lance = { version = "=13.0.0", default-features = false, features = ["protoc"], optional = true }
-# Lance 13 does not forward its protoc feature to this existing dependency.
-lance-datafusion = { version = "=13.0.0", default-features = false, features = ["protoc"], optional = true }
-# Same existing package node; exposes the patched writer for focused recovery tests.
-lance-io = { version = "=13.0.0", default-features = false, optional = true }
-arrow-array = { version = "=58.3.0", optional = true }
-arrow-schema = { version = "=58.3.0", optional = true }
-
 [dev-dependencies]
 # Deterministic Pending cancellation coverage; production uses no VFS test feature.
 turso = { version = "=0.8.2", default-features = false, features = ["io_memory_yield"] }
@@ -47,8 +36,7 @@ tempfile = "3"
 
 [features]
 default = ["local-storage"]
-local-vector = ["dep:lancedb", "dep:lance", "dep:lance-datafusion", "dep:lance-io", "dep:arrow-array", "dep:arrow-schema"]
-local-storage = ["local-vector"]
+local-storage = []
 # Historical fixture diagnostics are opt-in and are not production acceptance.
 manual-diagnostics = []
 
@@ -73,11 +61,3 @@ required-features = ["manual-diagnostics"]
 name = "origence"
 path = "src/main.rs"
 required-features = ["local-storage"]
-
-[[example]]
-name = "vector_layout_probe"
-required-features = ["local-vector"]
-
-[patch.crates-io]
-# Exact 13.0.0 source with shutdown error propagation; see vendored provenance.
-lance-io = { path = "vendor/lance-io" }

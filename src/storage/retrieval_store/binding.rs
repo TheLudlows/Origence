@@ -7,20 +7,20 @@ const FILE: &str = "full-text-backend.json";
 const MAX_BYTES: usize = 4096;
 
 fn mismatch() -> StorageError {
-    StorageError::Conflict("full-text backend differs from the data directory binding".into())
+    StorageError::Conflict("retrieval backend differs from the data directory binding".into())
 }
 fn unavailable() -> StorageError {
-    StorageError::Unavailable("full-text backend binding unavailable".into())
+    StorageError::Unavailable("retrieval backend binding unavailable".into())
 }
 
 /// Validate before opening the remote backend. A missing binding must never
 /// reinterpret already-published local full-text as a remote projection.
 pub(crate) async fn prepare(
     dir: &Path,
-    selected: Option<&AnySeekConfig>,
+    selected: &AnySeekConfig,
     published_full_text: bool,
 ) -> StorageResult<Option<Vec<u8>>> {
-    let expected = selected.map(AnySeekConfig::binding_identity);
+    let expected = selected.binding_identity();
     match tokio::fs::File::open(dir.join(FILE)).await {
         Ok(file) => {
             let mut bytes = Vec::new();
@@ -33,15 +33,12 @@ pub(crate) async fn prepare(
             }
             let saved: serde_json::Value =
                 serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
-            if expected.as_ref() != Some(&saved) {
+            if expected != saved {
                 return Err(mismatch());
             }
             Ok(None)
         }
         Err(error) if error.kind() == ErrorKind::NotFound => {
-            let Some(expected) = expected else {
-                return Ok(None);
-            };
             if published_full_text {
                 return Err(mismatch());
             }

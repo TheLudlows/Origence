@@ -1,4 +1,4 @@
-//! Bounded HTTP full-text projection. Origence remains the visibility authority.
+//! Bounded unified HTTP lexical/vector projection. Origence remains the visibility authority.
 //!
 //! A publication is immutable and uses one bounded Record group. Its UTC retry
 //! epoch is saved in the ordinary publication plan before network IO. Each
@@ -7,7 +7,7 @@
 
 use super::{
     FullTextEntry, FullTextHit, FullTextQuery, Scope, SourceVersion, StorageError, StorageResult,
-    hash,
+    VectorEntry, VectorHit, VectorQuery, hash,
 };
 use reqwest::{Method, StatusCode, Url, header::HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use std::{
 };
 use uuid::Uuid;
 
-const FORMAT: &str = "origence-lexical-sha256-v1";
+const FORMAT: &str = "origence-search-sha256-v2";
 const MAX_GROUP: usize = 64;
 const MAX_RESPONSE: usize = 8 * 1024 * 1024;
 const MAX_REQUEST: usize = 2 * 1024 * 1024;
@@ -32,6 +32,8 @@ const META: &[&str] = &[
     "source_version",
     "generation",
     "publication",
+    "profile",
+    "dimension",
 ];
 
 /// Server-owned connection details. Credentials are deliberately not Debug.
@@ -39,20 +41,20 @@ pub struct AnySeekConfig {
     base: Url,
     key: HeaderValue,
     collection: String,
+    embedding: Option<(String, usize)>,
 }
 
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-full-text-backend-v1","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection})
+        json!({"format":"origence-search-backend-v2","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection,"embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
-    /// process environment; absent selection retains the existing backend.
-    pub fn from_env() -> StorageResult<Option<Self>> {
+    /// process environment; AnySeek connection details are required.
+    pub fn from_env() -> StorageResult<Self> {
         match std::env::var("OC_FULL_TEXT_BACKEND").as_deref() {
-            Err(std::env::VarError::NotPresent) | Ok("lancedb") => Ok(None),
-            Ok("anyseek") => {
+            Err(std::env::VarError::NotPresent) | Ok("anyseek") => {
                 let get = |name| {
                     std::env::var(name).map_err(|_| {
                         invalid("AnySeek URL, tenant key, and collection are required")
@@ -63,10 +65,25 @@ impl AnySeekConfig {
                     &get("OC_ANYSEEK_API_KEY")?,
                     &get("OC_ANYSEEK_COLLECTION")?,
                 )
-                .map(Some)
             }
-            _ => Err(invalid("OC_FULL_TEXT_BACKEND must be lancedb or anyseek")),
+            _ => Err(invalid("only the AnySeek retrieval backend is supported")),
         }
+    }
+
+    /// Pin the externally generated embedding space and dimension for this collection.
+    pub fn with_embedding(mut self, profile: String, dimension: usize) -> StorageResult<Self> {
+        if profile.is_empty() || !(1..=4096).contains(&dimension) {
+            return Err(invalid("invalid embedding profile or dimension"));
+        }
+        if self
+            .embedding
+            .as_ref()
+            .is_some_and(|old| old != &(profile.clone(), dimension))
+        {
+            return Err(invalid("embedding profile is already pinned"));
+        }
+        self.embedding = Some((profile, dimension));
+        Ok(self)
     }
 
     /// Require HTTPS except on loopback; do not accept URL credentials or paths.
@@ -107,17 +124,18 @@ impl AnySeekConfig {
             base,
             key,
             collection: collection.into(),
+            embedding: None,
         })
     }
 }
 
-/// Immutable lexical publication records stored behind a trusted service key.
+/// Immutable lexical/vector publications stored behind a trusted service key.
 pub struct AnySeekFullTextStore {
     config: AnySeekConfig,
     http: reqwest::Client,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct Document {
     format: String,
@@ -130,13 +148,19 @@ struct Document {
     publication: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     terms: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dimension: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vector: Option<Vec<f32>>,
 }
 
 fn invalid(message: &'static str) -> StorageError {
     StorageError::InvalidArgument(message)
 }
 fn unavailable() -> StorageError {
-    StorageError::Unavailable("AnySeek full-text unavailable".into())
+    StorageError::Unavailable("AnySeek retrieval unavailable".into())
 }
 fn transient() -> StorageError {
     StorageError::TransientUnavailable("AnySeek transport unavailable".into())
@@ -239,6 +263,23 @@ impl AnySeekFullTextStore {
         json!({"index_name":FORMAT,"tokenizer":"TantivySimpleV1","text_normalization":"None","stop_words":"None","schema":schema})
     }
 
+    /// Unified collection schema, with vectors generated by the caller's fixed profile.
+    pub fn vector_collection_config(dimension: usize) -> StorageResult<Value> {
+        if !(1..=4096).contains(&dimension) {
+            return Err(invalid("invalid embedding dimension"));
+        }
+        let mut config = Self::collection_config();
+        config["schema"].as_array_mut().unwrap().push(json!({"field":"vector","field_type":"Json","store":true,"index_lexical":false,"index_vector":true,"filterable":false,"boost":1.0}));
+        config["vector"] = json!({"dimensions":dimension});
+        Ok(config)
+    }
+    pub async fn check_vector(&self, profile: &str, dimension: usize) -> StorageResult<()> {
+        if self.config.embedding.as_ref() != Some(&(profile.to_owned(), dimension)) {
+            return Err(inconsistent());
+        }
+        self.check().await
+    }
+
     async fn request(
         &self,
         method: Method,
@@ -301,14 +342,22 @@ impl AnySeekFullTextStore {
         if !status.is_success() {
             return Err(unavailable());
         }
-        let expected = Self::collection_config();
+        let expected = match &self.config.embedding {
+            Some((_, d)) => Self::vector_collection_config(*d)?,
+            None => Self::collection_config(),
+        };
         if info["schema"] != expected["schema"]
             || info["name"] != FORMAT
             || info["text_normalization"] != "None"
-            || !info["vector_dimensions"].is_null()
+            || info["vector_dimensions"]
+                != self
+                    .config
+                    .embedding
+                    .as_ref()
+                    .map_or(Value::Null, |(_, d)| json!(d))
         {
             return Err(StorageError::Conflict(
-                "incompatible AnySeek lexical collection".into(),
+                "incompatible AnySeek retrieval collection".into(),
             ));
         }
         Ok(())
@@ -392,8 +441,35 @@ impl AnySeekFullTextStore {
         entries: Vec<FullTextEntry>,
         epoch: u64,
     ) -> StorageResult<()> {
+        self.upsert_combined(scope, entries, Vec::new(), epoch)
+            .await
+    }
+
+    /// Publish lexical and optional vector data together under the durable retry identity.
+    pub async fn upsert_combined(
+        &self,
+        scope: Scope,
+        entries: Vec<FullTextEntry>,
+        vectors: Vec<VectorEntry>,
+        epoch: u64,
+    ) -> StorageResult<()> {
+        let mut vector_map = HashMap::new();
+        for vector in vectors {
+            if self.config.embedding.as_ref() != Some(&(vector.profile.clone(), vector.dimension))
+                || vector.embedding.len() != vector.dimension
+                || vector.embedding.iter().any(|v| !v.is_finite())
+                || vector.embedding.iter().all(|v| *v == 0.0)
+                || vector_map.insert(vector.id, vector).is_some()
+            {
+                return Err(invalid("invalid publication embedding"));
+            }
+        }
         if entries.is_empty() {
-            return Ok(());
+            return if vector_map.is_empty() {
+                Ok(())
+            } else {
+                Err(inconsistent())
+            };
         }
         if entries.len() > MAX_GROUP {
             return Err(invalid("AnySeek publication exceeds 64 chunks"));
@@ -407,6 +483,13 @@ impl AnySeekFullTextStore {
                 }
                 let terms = encode_terms(&entry.search_terms, remaining)?;
                 remaining -= terms.len();
+                let vector = vector_map.remove(&entry.id);
+                if vector
+                    .as_ref()
+                    .is_some_and(|v| v.source != entry.source || v.generation != entry.generation)
+                {
+                    return Err(inconsistent());
+                }
                 let doc = Document {
                     format: FORMAT.into(),
                     tenant: scope.tenant_id,
@@ -417,6 +500,9 @@ impl AnySeekFullTextStore {
                     generation: entry.generation.to_string(),
                     publication: String::new(),
                     terms: Some(terms),
+                    profile: vector.as_ref().map(|v| v.profile.clone()),
+                    dimension: vector.as_ref().map(|v| v.dimension.to_string()),
+                    vector: vector.map(|v| v.embedding),
                 };
                 let id = record_id(&doc);
                 if let Some(old) = docs.insert(id, doc.clone())
@@ -424,6 +510,9 @@ impl AnySeekFullTextStore {
                 {
                     return Err(inconsistent());
                 }
+            }
+            if !vector_map.is_empty() {
+                return Err(inconsistent());
             }
             let group = format!(
                 "p{}",
@@ -571,6 +660,106 @@ impl AnySeekFullTextStore {
         Ok(out)
     }
 
+    /// Vector candidates from the same scoped, versioned projection as lexical search.
+    pub async fn search_vector(
+        &self,
+        mut query: VectorQuery,
+        expected: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<VectorHit>> {
+        if self.config.embedding.as_ref() != Some(&(query.profile.clone(), query.dimension))
+            || query.embedding.len() != query.dimension
+            || query.embedding.iter().any(|v| !v.is_finite())
+            || query.embedding.iter().all(|v| *v == 0.0)
+        {
+            return Err(invalid("invalid query embedding"));
+        }
+        let ids = query
+            .artifact_ids
+            .as_mut()
+            .ok_or_else(|| invalid("AnySeek requires authorized candidate IDs"))?;
+        ids.sort();
+        ids.dedup();
+        if ids.len() > MAX_CANDIDATES || query.limit > 100 {
+            return Err(invalid("AnySeek candidate budget exceeded"));
+        }
+        if ids.is_empty() || query.limit == 0 {
+            return Ok(Vec::new());
+        }
+        for batch in ids.chunks(MAX_GROUP) {
+            let mut filters = scope_filters(query.scope);
+            filters.push(filter("generation", [query.generation.to_string()]));
+            filters.push(filter("profile", [query.profile.clone()]));
+            filters.push(filter("dimension", [query.dimension.to_string()]));
+            filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
+            let result = self.query(filters, "", batch.len() + 1, 0, false).await?;
+            let hits = result["hits"].as_array().unwrap();
+            if result["count_total"].as_u64() != Some(batch.len() as u64)
+                || hits.len() != batch.len()
+            {
+                return Err(unavailable());
+            }
+            let mut seen = HashSet::new();
+            for hit in hits {
+                let (_, doc) = decode_record(&hit["record"], query.scope)?;
+                if batch.binary_search(&doc.chunk_id).is_err()
+                    || !seen.insert(doc.chunk_id)
+                    || doc.generation != query.generation.to_string()
+                    || doc.profile.as_deref() != Some(query.profile.as_str())
+                    || doc.dimension.as_deref() != Some(query.dimension.to_string().as_str())
+                    || expected.get(&doc.chunk_id)
+                        != Some(&SourceVersion {
+                            source_id: doc.source_id,
+                            version: doc.source_version.parse().map_err(|_| inconsistent())?,
+                        })
+                {
+                    return Err(inconsistent());
+                }
+            }
+        }
+        let mut filters = scope_filters(query.scope);
+        filters.push(filter("generation", [query.generation.to_string()]));
+        filters.push(filter("profile", [query.profile.clone()]));
+        filters.push(filter("dimension", [query.dimension.to_string()]));
+        filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
+        let (status, result) = self.request(Method::POST, "/query", Some(json!({"query_vector":query.embedding,"all":true,"filter":filters,"fields":META,"length":query.limit,"count":true}))).await?;
+        if !status.is_success() || !result["hits"].is_array() {
+            return Err(unavailable());
+        }
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        let hits = result["hits"].as_array().unwrap();
+        if hits.len() > query.limit {
+            return Err(inconsistent());
+        }
+        for hit in hits {
+            let (_, doc) = decode_record(&hit["record"], query.scope)?;
+            let source = SourceVersion {
+                source_id: doc.source_id,
+                version: doc.source_version.parse().map_err(|_| inconsistent())?,
+            };
+            let score = hit["score"]
+                .as_f64()
+                .map(|s| s as f32)
+                .filter(|s| s.is_finite())
+                .ok_or_else(inconsistent)?;
+            if ids.binary_search(&doc.chunk_id).is_err()
+                || !seen.insert(doc.chunk_id)
+                || doc.generation != query.generation.to_string()
+                || doc.profile.as_deref() != Some(query.profile.as_str())
+                || doc.dimension.as_deref() != Some(query.dimension.to_string().as_str())
+                || expected.get(&doc.chunk_id) != Some(&source)
+            {
+                return Err(inconsistent());
+            }
+            out.push(VectorHit {
+                id: doc.chunk_id,
+                source,
+                score,
+            });
+        }
+        Ok(out)
+    }
+
     /// Reconcile orphan removal against a current group version. A lost cleanup
     /// response is resolved by reading current membership before another CAS.
     pub async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()> {
@@ -647,5 +836,95 @@ impl AnySeekFullTextStore {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod unified_tests {
+    use super::*;
+    fn store() -> AnySeekFullTextStore {
+        AnySeekFullTextStore::new(
+            AnySeekConfig::new("http://127.0.0.1:1", "test", "test")
+                .unwrap()
+                .with_embedding("fixed-profile".into(), 2)
+                .unwrap(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn unified_schema_and_binding_pin_embedding_space() {
+        let config = AnySeekFullTextStore::vector_collection_config(2).unwrap();
+        assert_eq!(config["vector"]["dimensions"], 2);
+        assert!(
+            config["schema"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f["field"] == "vector" && f["index_vector"] == true)
+        );
+        assert!(AnySeekFullTextStore::vector_collection_config(0).is_err());
+        assert!(
+            AnySeekConfig::new("http://127.0.0.1:1", "key", "test")
+                .unwrap()
+                .with_embedding(String::new(), 2)
+                .is_err()
+        );
+        #[cfg(feature = "local-storage")]
+        assert_eq!(
+            store().config.binding_identity()["embedding"],
+            json!(["fixed-profile", 2])
+        );
+    }
+    #[tokio::test]
+    async fn vector_validation_rejects_before_transport() {
+        let scope = Scope {
+            tenant_id: Uuid::new_v4(),
+            workspace_id: Uuid::new_v4(),
+        };
+        let source = SourceVersion {
+            source_id: Uuid::new_v4(),
+            version: 1,
+        };
+        for embedding in [vec![0.0, 0.0], vec![f32::NAN, 1.0], vec![1.0]] {
+            let entry = VectorEntry {
+                id: Uuid::new_v4(),
+                embedding: embedding.clone(),
+                profile: "fixed-profile".into(),
+                dimension: 2,
+                generation: 1,
+                source,
+            };
+            assert!(matches!(
+                store().upsert_combined(scope, vec![], vec![entry], 0).await,
+                Err(StorageError::InvalidArgument(_))
+            ));
+            let query = VectorQuery {
+                scope,
+                artifact_ids: Some(vec![]),
+                profile: "fixed-profile".into(),
+                dimension: 2,
+                generation: 1,
+                embedding,
+                limit: 10,
+            };
+            assert!(matches!(
+                store().search_vector(query, &HashMap::new()).await,
+                Err(StorageError::InvalidArgument(_))
+            ));
+        }
+        let orphan = VectorEntry {
+            id: Uuid::new_v4(),
+            embedding: vec![1.0, 0.0],
+            profile: "fixed-profile".into(),
+            dimension: 2,
+            generation: 1,
+            source,
+        };
+        assert!(matches!(
+            store()
+                .upsert_combined(scope, vec![], vec![orphan], 0)
+                .await,
+            Err(StorageError::Conflict(_))
+        ));
     }
 }

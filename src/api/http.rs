@@ -33,6 +33,8 @@ pub fn router_with_options(service: Service, options: ApiOptions) -> Router {
         )
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
+        .route("/v1/session", get(private_session))
+        .route("/admin/keys/{id}/rotate", post(rotate_key))
         .route("/admin/keys", post(issue_key))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/admin/memory-properties", post(register_memory_property))
@@ -75,6 +77,7 @@ pub fn router_with_options(service: Service, options: ApiOptions) -> Router {
         router
     };
     router
+        .merge(super::foundation::routes())
         .layer(DefaultBodyLimit::max(crate::parsing::MAX_FILE))
         .with_state(service)
 }
@@ -89,7 +92,7 @@ fn key(h: &HeaderMap) -> Result<&str> {
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| AppError::Invalid("Idempotency-Key is required for mutations".into()))
 }
-async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
+pub(super) async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
     s.auth(token(h)?).await
 }
 async fn ready(State(s): State<Service>) -> impl IntoResponse {
@@ -436,4 +439,15 @@ async fn context_bundle(
     Json(input): Json<crate::evidence::EvidenceInput>,
 ) -> Result<Json<crate::evidence::EvidenceBundle>> {
     Ok(Json(s.evidence_bundle(&auth(&s, &h).await?, input).await?))
+}
+
+async fn private_session(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
+    Ok(Json(s.private_session(&auth(&s, &h).await?).await?))
+}
+async fn rotate_key(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    Ok(Json(s.rotate_key(&auth(&s, &h).await?, id).await?))
 }

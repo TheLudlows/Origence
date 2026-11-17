@@ -258,7 +258,9 @@ async fn replace_receipt_chunks(
 async fn receipt_chunks_missing_null_and_arrays_keep_status_semantics() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "root-shapes", batch("root-shapes"), models.spec())
@@ -324,7 +326,9 @@ async fn receipt_chunks_missing_null_and_arrays_keep_status_semantics() {
 async fn receipt_non_array_chunks_fail_closed_with_safe_unavailable_error() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "bad-root", batch("bad-root"), models.spec())
@@ -372,7 +376,9 @@ async fn receipt_non_array_chunks_fail_closed_with_safe_unavailable_error() {
 async fn receipt_malformed_array_string_fails_save_and_rolls_back_payload() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (token, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "bad-element", batch("bad-element"), models.spec())
@@ -448,7 +454,9 @@ async fn receipt_malformed_array_string_fails_save_and_rolls_back_payload() {
 async fn receipt_same_count_heavy_id_edit_keeps_durable_witness() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "heavy-only", batch("heavy-only"), models.spec())
@@ -503,7 +511,9 @@ async fn receipt_same_count_heavy_id_edit_keeps_durable_witness() {
 async fn receipt_positive_plan_requires_valid_durable_metadata() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "bad-metadata", batch("bad-metadata"), models.spec())
@@ -582,7 +592,9 @@ async fn receipt_positive_plan_requires_valid_durable_metadata() {
 async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let (_, other) = provision(&service).await;
     let mut receipts = Vec::new();
@@ -674,7 +686,9 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
 async fn workspace_replay_preserves_creator_and_all_spec_input_conflicts() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let replacement = service.issue_key(&auth, "admin").await.unwrap();
     let other = service
@@ -767,7 +781,9 @@ async fn model_failure_is_atomic_and_explicit_retry_retains_original_receipt_spe
     let models = ModelServer::start().await;
     models.fail_from.store(2, Ordering::SeqCst);
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "retry", batch("retry"), models.spec())
@@ -828,7 +844,9 @@ async fn model_failure_is_atomic_and_explicit_retry_retains_original_receipt_spe
 async fn prepared_publication_recovers_same_generation_without_model_reexecution() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (token, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "recover", batch("recover"), models.spec())
@@ -866,7 +884,9 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
         .unwrap();
     service.engine.shutdown().await.unwrap();
     drop(service);
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let auth = service.auth(&token).await.unwrap();
     assert_eq!(
         service
@@ -906,7 +926,9 @@ async fn prepared_publication_recovers_same_generation_without_model_reexecution
 async fn changed_worker_configuration_fails_without_replacing_accepted_spec() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (token, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(
@@ -921,7 +943,16 @@ async fn changed_worker_configuration_fails_without_replacing_accepted_spec() {
     drop(service);
     let mut changed = models.models();
     changed.profile = Some("changed-profile".into());
-    let service = Service::open(dir.path(), changed).await.unwrap();
+    // A changed embedding profile cannot reopen the pinned AnySeek collection.
+    assert!(matches!(
+        crate::support::open_service(dir.path(), changed.clone()).await,
+        Err(AppError::Conflict(_))
+    ));
+    let mut service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
+    // Also retain the worker boundary regression for an in-process model change.
+    service.models = changed;
     let auth = service.auth(&token).await.unwrap();
     assert!(matches!(
         service
@@ -947,7 +978,9 @@ async fn changed_worker_configuration_fails_without_replacing_accepted_spec() {
     assert_eq!(count(&service, "oc_jobs").await, 1);
     service.engine.shutdown().await.unwrap();
     drop(service);
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let auth = service.auth(&token).await.unwrap();
     service
         .job_action(&auth, "retry-original", receipt.job_id, "retry")
@@ -965,7 +998,9 @@ async fn changed_worker_configuration_fails_without_replacing_accepted_spec() {
 async fn revoked_creator_cannot_publish_or_transfer_work_through_replay() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let replacement = service.issue_key(&auth, "admin").await.unwrap();
     let rotated = service
@@ -1030,7 +1065,9 @@ async fn revoked_creator_cannot_publish_or_transfer_work_through_replay() {
 async fn live_receipt_status_requires_every_chunk_profile_generation_and_source() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "visibility", batch("visibility"), models.spec())
@@ -1178,7 +1215,9 @@ async fn live_receipt_status_requires_every_chunk_profile_generation_and_source(
 async fn service_and_worker_reject_unbounded_source_and_cancelled_status_is_terminal() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     for invalid_role in ["".to_owned(), "tool\n".into(), "x".repeat(65)] {
         let mut input = batch("invalid");
@@ -1237,7 +1276,9 @@ async fn service_and_worker_reject_unbounded_source_and_cancelled_status_is_term
 async fn source_withdrawal_during_model_io_prevents_the_entire_publication() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(&auth, "withdraw", batch("withdraw"), models.spec())
@@ -1278,7 +1319,9 @@ async fn owned_writer_capability_and_role_are_rechecked_after_embedding_io() {
     ] {
         let models = ModelServer::start().await;
         let dir = tempfile::tempdir().unwrap();
-        let service = Service::open(dir.path(), models.models()).await.unwrap();
+        let service = crate::support::open_service(dir.path(), models.models())
+            .await
+            .unwrap();
         let (_, root) = provision(&service).await;
         let key = service
             .issue_key_with_capabilities(
@@ -1363,7 +1406,9 @@ async fn owned_writer_capability_and_role_are_rechecked_after_embedding_io() {
 async fn owned_reader_search_rechecks_capability_after_query_embedding_io() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, root) = provision(&service).await;
     let writer_key = service
         .issue_key_with_capabilities(
@@ -1447,22 +1492,13 @@ async fn owned_reader_search_rechecks_capability_after_query_embedding_io() {
 async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original_plan() {
     let models = ModelServer::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
-    let (_, auth) = provision(&service).await;
-    let spec = models.spec();
-    // The public local vector adapter stores each profile at this documented
-    // name. Occupy its new table-directory path with a test-owned regular file:
-    // embeddings still succeed, but the real LanceDB upsert cannot create/open
-    // its dataset. No fake Worker, relational trigger or production fault hook.
-    let profile_hash = origence::storage::hash(&spec.embedding_profile);
-    let blocked = dir
-        .path()
-        .join("vectors")
-        .join(format!("vec_{}.lance", &profile_hash[..32]));
-    assert!(!blocked.exists());
-    tokio::fs::write(&blocked, b"test-owned native table obstruction")
+    let service = crate::support::open_service(dir.path(), models.models())
         .await
         .unwrap();
+    let (_, auth) = provision(&service).await;
+    let spec = models.spec();
+    let remote = crate::support::fixture(dir.path(), Some(2));
+    remote.reject_writes(true);
     let receipt = service
         .submit_message_batch(&auth, "native-write", batch("native-write"), spec.clone())
         .await
@@ -1471,10 +1507,13 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
     // Depending on native directory enumeration, orphan cleanup can encounter
     // the same intentionally broken dataset after the job is already settled.
     // Both outcomes still have to prove the durable retry state below.
-    assert!(matches!(processed, Ok(true) | Err(AppError::Internal(_))));
+    assert!(matches!(
+        processed,
+        Ok(true) | Err(AppError::Unavailable(_))
+    ));
     let job = service.job(&auth, receipt.job_id).await.unwrap();
     assert_eq!(job["state"], "retry_wait");
-    assert_eq!(job["error_code"], "INTERNAL_ERROR");
+    assert_eq!(job["error_code"], "DEPENDENCY_UNAVAILABLE");
     assert_eq!(job["generation"], 1);
     assert_eq!(
         status(&service, &auth, &receipt).await,
@@ -1518,8 +1557,7 @@ async fn native_vector_write_failure_keeps_batch_invisible_and_recovers_original
     );
     // Repair only this known test-created obstruction, then simulate elapsed
     // backoff without changing the production recovery or scheduling policy.
-    assert!(tokio::fs::metadata(&blocked).await.unwrap().is_file());
-    tokio::fs::remove_file(&blocked).await.unwrap();
+    remote.reject_writes(false);
     assert_eq!(
         db::query("UPDATE oc_jobs SET next_retry_at=0 WHERE id=? AND state='retry_wait'")
             .bind(receipt.job_id)

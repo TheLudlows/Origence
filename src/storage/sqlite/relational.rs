@@ -83,9 +83,10 @@ impl RelationalStore for TursoStore {
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         native_turso::query(
-            "INSERT INTO oc_api_keys(id, tenant_id, workspace_id, token_hash, role, allow_owned_workspaces, revoked, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+            "INSERT INTO oc_api_keys(id, logical_key_id, tenant_id, workspace_id, token_hash, role, allow_owned_workspaces, revoked, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
         )
+        .bind(key_id)
         .bind(key_id)
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)

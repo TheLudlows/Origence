@@ -1,9 +1,9 @@
-//! Production Turso + LanceDB publication contracts, through non-AML callers.
+//! Real Turso publication contracts with an AnySeek HTTP protocol fixture, through non-AML callers.
 //!
 //! Existing message-batch tests cover vector failures and authority failures.
 //! These tests cover the new full-text surface, its authority boundary, and the
-//! retrieval behavior that must survive the backend replacement. All model IO
-//! is a deterministic localhost fixture; no model quality is evaluated.
+//! retrieval behavior that must survive the backend replacement. All model/index IO
+//! uses deterministic localhost fixtures; no model quality or native ranking is evaluated.
 #![cfg(feature = "local-storage")]
 
 use axum::{Json, Router, routing::post};
@@ -17,14 +17,13 @@ use origence::{
     service::Service,
     storage::{
         AuthorizedScope, DomainTx, FullTextEntry, FullTextQuery, LedgerEntry, LedgerKey,
-        Permission, RelationalStore, Scope, SourceVersion, Surface, VectorEntry, VectorStore,
+        Permission, RelationalStore, Scope, SourceVersion, Surface, VectorEntry,
         ledger_idempotency_key, native_turso,
     },
     types::{AuthContext, RetrievalComponents, SearchInput},
     worker,
 };
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
@@ -235,9 +234,7 @@ fn entries(receipt: &IngestReceipt, payload: &Value) -> Vec<FullTextEntry> {
 }
 
 async fn native_ids(service: &Service, auth: &AuthContext, generation: i64) -> BTreeSet<Uuid> {
-    service
-        .engine
-        .vector()
+    crate::support::projection(service)
         .search_full_text(FullTextQuery {
             scope: scope(auth),
             artifact_ids: None,
@@ -275,15 +272,13 @@ async fn publish(
 async fn full_text_write_failure_restarts_the_original_plan_without_partial_publication() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
-    let (token, auth) = provision(&service).await;
-    // A real native IO failure, after vector preparation, with no production
-    // fault hook. This is the adapter's fixed full-text dataset name.
-    let obstruction = dir.path().join("vectors/chunk_terms_v1.lance");
-    assert!(!obstruction.exists());
-    tokio::fs::write(&obstruction, b"test-owned full-text obstruction")
+    let service = crate::support::open_service(dir.path(), models.models())
         .await
         .unwrap();
+    let (token, auth) = provision(&service).await;
+    // Reject actual adapter HTTP writes; no production worker fault hook.
+    let remote = crate::support::fixture(dir.path(), Some(2));
+    remote.reject_writes(true);
     let input = batch(
         "full-text-restart",
         &["Atlas 中文🙂 first", "Atlas café second"],
@@ -296,12 +291,12 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     // durable job state below must be settled in either case.
     assert!(matches!(
         worker::process_next(&service).await,
-        Ok(true) | Err(AppError::Internal(_))
+        Ok(true) | Err(AppError::Unavailable(_))
     ));
     let job = service.job(&auth, receipt.job_id).await.unwrap();
     assert_eq!(job["state"], "retry_wait");
     assert_eq!(job["generation"], 1);
-    assert_eq!(job["error_code"], "INTERNAL_ERROR");
+    assert_eq!(job["error_code"], "DEPENDENCY_UNAVAILABLE");
     assert_eq!(
         service.message_batch_status(&auth, &receipt).await.unwrap(),
         PublicationStatus::Pending
@@ -339,8 +334,7 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
         receipt
     );
     let calls = models.embeddings.load(Ordering::SeqCst);
-    assert!(tokio::fs::metadata(&obstruction).await.unwrap().is_file());
-    tokio::fs::remove_file(&obstruction).await.unwrap();
+    remote.reject_writes(false);
     // Model a due retry abandoned in processing. Production scheduling and
     // recovery policy stay unchanged; only this fixture's clock/state moves.
     assert_eq!(
@@ -357,7 +351,9 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     service.engine.shutdown().await.unwrap();
     drop(service);
 
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let auth = service.auth(&token).await.unwrap();
     assert_eq!(payload(&service, &receipt).await, saved);
     assert!(worker::process_next(&service).await.unwrap());
@@ -438,7 +434,9 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
 async fn withdrawn_source_is_hidden_before_cleanup_and_cannot_be_resurrected_by_native_rows() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (token, auth) = provision(&service).await;
     let (_, other) = provision(&service).await;
     let receipt = publish(
@@ -466,17 +464,13 @@ async fn withdrawn_source_is_hidden_before_cleanup_and_cannot_be_resurrected_by_
     );
     assert!(worker::process_next(&service).await.unwrap());
     assert!(native_ids(&service, &auth, 1).await.is_empty());
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope(&auth), indexed.clone())
         .await
         .unwrap();
     // A residual/replayed index record is never permission to publish. Reusing
     // every native ID in another scope also cannot lend it relational authority.
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope(&other), indexed)
         .await
         .unwrap();
@@ -502,7 +496,9 @@ async fn withdrawn_source_is_hidden_before_cleanup_and_cannot_be_resurrected_by_
     );
     service.engine.shutdown().await.unwrap();
     drop(service);
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let auth = service.auth(&token).await.unwrap();
     assert_invisible(&service, &auth).await;
     assert_eq!(
@@ -516,7 +512,9 @@ async fn withdrawn_source_is_hidden_before_cleanup_and_cannot_be_resurrected_by_
 async fn native_replays_vote_once_and_conflicting_committed_generations_fail_closed() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = publish(&service, &auth, &models, "rrf", "Atlas single evidence").await;
     let entry = entries(&receipt, &payload(&service, &receipt).await).remove(0);
@@ -532,15 +530,11 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
         json!(["keyword", "vector"])
     );
     for _ in 0..2 {
-        service
-            .engine
-            .vector()
+        crate::support::projection(&service)
             .upsert_full_text(scope(&auth), vec![entry.clone()])
             .await
             .unwrap();
-        service
-            .engine
-            .vector()
+        crate::support::projection(&service)
             .upsert(
                 scope(&auth),
                 vec![VectorEntry {
@@ -555,9 +549,7 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
             .await
             .unwrap();
     }
-    let native = service
-        .engine
-        .vector()
+    let native = crate::support::projection(&service)
         .search_full_text(FullTextQuery {
             scope: scope(&auth),
             artifact_ids: Some(vec![entry.id]),
@@ -586,9 +578,7 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
     // corrupted source within an eligible generation, it is not queried at all.
     let mut uncommitted = entry.clone();
     uncommitted.generation = 2;
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope(&auth), vec![uncommitted.clone()])
         .await
         .unwrap();
@@ -601,7 +591,7 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
         embedding: vec![1.0, 0.5],
     }];
     // If this candidate passes validation, its 1.0 would replace the only
-    // legitimate score of 0.5 and make this boundary failure observable.
+    // legitimate cosine score of 2.25 / sqrt(5.3125) and make this boundary failure observable.
     vectors.push(VectorEntry {
         id: entry.id,
         source: entry.source,
@@ -610,21 +600,20 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
         dimension: 2,
         embedding: vec![2.0, 0.5],
     });
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert(scope(&auth), vectors)
         .await
         .unwrap();
+    let expected_cosine = 2.25_f64 / 5.3125_f64.sqrt();
     let vectors = service
         .search(&auth, query("Atlas", "vector", false))
         .await
         .unwrap();
     assert_eq!(vectors["hits"].as_array().unwrap().len(), 1);
-    assert!((vectors["hits"][0]["score"].as_f64().unwrap() - 0.5).abs() < 1e-6);
+    assert!((vectors["hits"][0]["score"].as_f64().unwrap() - expected_cosine).abs() < 1e-6);
     let vectors = context(&service, &auth, "Atlas", "vector").await;
     assert_eq!(vectors["items"].as_array().unwrap().len(), 1);
-    assert!((vectors["items"][0]["score"].as_f64().unwrap() - 0.5).abs() < 1e-6);
+    assert!((vectors["items"][0]["score"].as_f64().unwrap() - expected_cosine).abs() < 1e-6);
     assert_eq!(
         service
             .search(&auth, query("Atlas", "hybrid", false))
@@ -702,7 +691,9 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
 async fn completed_receipt_requires_every_exact_full_text_ledger_member() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(
@@ -779,7 +770,9 @@ fn scores(result: &Value) -> BTreeMap<Uuid, f64> {
 async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakage() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let mut chunks = Vec::new();
     for (id, text) in [
@@ -891,7 +884,9 @@ async fn assert_storage_mismatch(service: &Service, auth: &AuthContext) {
 async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budget() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = service
         .submit_message_batch(
@@ -915,37 +910,27 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
     };
     // A total row count is insufficient: one absent eligible chunk plus one
     // wrong-source copy of another chunk still equals two physical rows.
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .delete_objects(scope(&auth), vec![originals[1].id])
         .await
         .unwrap();
     let mut wrong = originals[0].clone();
     wrong.source.source_id = Uuid::new_v4();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope(&auth), vec![wrong.clone()])
         .await
         .unwrap();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert(scope(&auth), vec![vector(&wrong)])
         .await
         .unwrap();
     assert_storage_mismatch(&service, &auth).await;
 
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope(&auth), vec![originals[1].clone()])
         .await
         .unwrap();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert(scope(&auth), vec![vector(&originals[1])])
         .await
         .unwrap();
@@ -961,15 +946,11 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
             ..originals[0].clone()
         })
         .collect();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope(&auth), residuals.clone())
         .await
         .unwrap();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert(scope(&auth), residuals.iter().map(&vector).collect())
         .await
         .unwrap();
@@ -978,9 +959,7 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
     // replacement carries the wrong source/version and no longer matches the
     // query. It cannot be detected by validating returned top-k hits alone.
     for replace_source in [true, false] {
-        service
-            .engine
-            .vector()
+        crate::support::projection(&service)
             .delete_objects(
                 scope(&auth),
                 originals.iter().map(|entry| entry.id).collect(),
@@ -995,21 +974,15 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
         }
         replacement.search_terms = parsing::lexical("unrelated tokens");
         let rows = vec![replacement, originals[1].clone()];
-        service
-            .engine
-            .vector()
+        crate::support::projection(&service)
             .upsert_full_text(scope(&auth), rows.clone())
             .await
             .unwrap();
-        service
-            .engine
-            .vector()
+        crate::support::projection(&service)
             .upsert(scope(&auth), rows.iter().map(&vector).collect())
             .await
             .unwrap();
-        let native = service
-            .engine
-            .vector()
+        let native = crate::support::projection(&service)
             .search_full_text(FullTextQuery {
                 scope: scope(&auth),
                 artifact_ids: None,
@@ -1032,7 +1005,9 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
 async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     assert!(
         !service
@@ -1061,14 +1036,10 @@ async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
     // No job is pending, and no background task races the test-owned move.
     service.worker_running.store(true, Ordering::Release);
     assert!(service.ready().await);
-    let dataset = dir.path().join("vectors/chunk_terms_v1.lance");
-    let held = dir.path().join("held-full-text-dataset");
-    assert!(tokio::fs::metadata(&dataset).await.unwrap().is_dir());
-    tokio::fs::rename(&dataset, &held).await.unwrap();
+    let remote = crate::support::fixture(dir.path(), Some(2));
+    remote.unavailable(true);
     assert!(!service.ready().await);
-    let native = service
-        .engine
-        .vector()
+    let native = crate::support::projection(&service)
         .search_full_text(FullTextQuery {
             scope: scope(&auth),
             artifact_ids: Some(indexed.iter().map(|entry| entry.id).collect()),
@@ -1104,13 +1075,15 @@ async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
     service.engine.shutdown().await.unwrap();
     drop(service);
     assert!(matches!(
-        Service::open(dir.path(), models.models()).await,
+        crate::support::open_service(dir.path(), models.models()).await,
         Err(AppError::Unavailable(_))
     ));
     // The missing derived surface must not cause silent authority deletion or
     // automatic recreation. Restore the same dataset to verify the same source.
-    tokio::fs::rename(&held, &dataset).await.unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    remote.unavailable(false);
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let result = service
         .search(&auth, query("Atlas", "keyword", false))
         .await
@@ -1128,7 +1101,9 @@ async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
 async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal_allows_cleanup() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     let (_, auth) = provision(&service).await;
     assert!(
         service
@@ -1157,24 +1132,17 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
             .unwrap(),
         vec![(profile.clone(), 2)]
     );
-    let digest = Sha256::digest(profile.as_bytes());
-    let name = digest[..16]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    let dataset = dir.path().join(format!("vectors/vec_{name}.lance"));
-    let held = dir.path().join("held-vector-dataset");
+    let remote = crate::support::fixture(dir.path(), Some(2));
     service.worker_running.store(true, Ordering::Release);
     assert!(service.ready().await);
-    tokio::fs::rename(&dataset, &held).await.unwrap();
-    // The full-text surface is intact. It cannot substitute for the committed
-    // vector profile when reporting the whole publication as retrievable.
-    service
-        .engine
-        .vector()
-        .check_full_text_available()
-        .await
-        .unwrap();
+    remote.unavailable(true);
+    // Full text and vectors now share one collection: an outage affects both.
+    assert!(
+        crate::support::projection(&service)
+            .check_full_text_available()
+            .await
+            .is_err()
+    );
     assert!(!service.ready().await);
     assert!(matches!(
         service.message_batch_status(&auth, &receipt).await,
@@ -1188,15 +1156,14 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
     service.engine.shutdown().await.unwrap();
     drop(service);
     assert!(matches!(
-        Service::open(dir.path(), models.models()).await,
+        crate::support::open_service(dir.path(), models.models()).await,
         Err(AppError::Unavailable(_))
     ));
-    assert!(
-        !dataset.exists(),
-        "a health check must not recreate a missing surface"
-    );
-    tokio::fs::rename(&held, &dataset).await.unwrap();
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+
+    remote.unavailable(false);
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     assert_eq!(
         service.message_batch_status(&auth, &receipt).await.unwrap(),
         PublicationStatus::Retrievable
@@ -1207,9 +1174,7 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
         .unwrap();
     assert_eq!(result["hits"][0]["content"], "Atlas vector evidence");
     assert!(matches!(
-        service
-            .engine
-            .vector()
+        crate::support::projection(&service)
             .check_vector_available(&profile, 3)
             .await,
         Err(origence::storage::StorageError::Conflict(_))
@@ -1254,23 +1219,28 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
         committed > 0,
         "the fixture must retain the pre-cleanup publication ledger"
     );
-    tokio::fs::rename(&dataset, &held).await.unwrap();
-    let full_text = dir.path().join("vectors/chunk_terms_v1.lance");
-    tokio::fs::rename(&full_text, dir.path().join("held-full-text-dataset"))
-        .await
-        .unwrap();
+    remote.unavailable(true);
     service.worker_running.store(true, Ordering::Release);
-    assert!(service.ready().await);
+    assert!(
+        !service.ready().await,
+        "a unified dependency outage is not healthy, even after withdrawal"
+    );
     service.worker_running.store(false, Ordering::Release);
     service.engine.shutdown().await.unwrap();
     drop(service);
-    let service = Service::open(dir.path(), models.models()).await.unwrap();
+    assert!(
+        crate::support::open_service(dir.path(), models.models())
+            .await
+            .is_err()
+    );
+    remote.unavailable(false);
+    let service = crate::support::open_service(dir.path(), models.models())
+        .await
+        .unwrap();
     assert_eq!(
         service.message_batch_status(&auth, &receipt).await.unwrap(),
         PublicationStatus::Invisible
     );
-    assert!(!dataset.exists());
-    assert!(!full_text.exists());
     assert_invisible(&service, &auth).await;
     service.engine.shutdown().await.unwrap();
 }

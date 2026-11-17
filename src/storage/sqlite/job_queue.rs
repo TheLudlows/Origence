@@ -245,6 +245,7 @@ impl TursoTx {
     }
 
     pub(super) async fn job_row_inner(&mut self, id: Uuid) -> StorageResult<Value> {
+        self.require_private_job(id).await?;
         let row: Option<(Uuid, String, String, Option<Uuid>, Option<Uuid>)> =
             native_turso::query_as(
                 "SELECT created_by, state, operation, asset_id, source_event_id FROM oc_jobs \
@@ -294,6 +295,7 @@ impl TursoTx {
     }
 
     pub(super) async fn job_view_inner(&mut self, id: Uuid) -> StorageResult<Value> {
+        self.require_private_job(id).await?;
         let row: Option<(Uuid, String, String, i64, Option<String>, Option<String>, Option<String>, bool, i64)> = native_turso::query_as(
             "SELECT id, operation, state, generation, outcome, result, error_code, cancel_requested, updated_at \
              FROM oc_jobs WHERE tenant_id = ? AND workspace_id = ? AND id = ?",

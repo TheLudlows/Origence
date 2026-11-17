@@ -9,6 +9,7 @@ response/startup/shutdown waits and is reaped, including on failure. Production
 code does not spawn a child. No MCP client package or provider is required.
 """
 import argparse
+from anyseek_fixture_env import configure_fixture
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,9 @@ TOOL_FIELDS = {
         "exclude_session_id": "string",
     },
     "context_get": {"asset_id": "string", "version": "integer"},
+    "context_session": {},
+    "context_turn_get": {"turn_id": "string"},
+    "context_turn_archive": {"turn": "object"},
 }
 
 
@@ -79,6 +83,7 @@ def isolated_env(directory):
            and key.upper() not in {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"}}
     env.update(OC_ENABLE_MODELS="false", OC_DATA_DIR=directory, RUST_LOG="warn",
                NO_PROXY="127.0.0.1,localhost,::1", no_proxy="127.0.0.1,localhost,::1")
+    configure_fixture(env)
     return env
 
 
@@ -298,8 +303,8 @@ def check_tools(mcp):
     result = mcp.success("tools/list", {})
     require(result.get("nextCursor") is None, "unexpected MCP tool pagination")
     tools = result.get("tools", [])
-    require(len(tools) == 4 and {tool.get("name") for tool in tools} == set(TOOL_FIELDS),
-            "MCP must expose exactly the four read-only context tools")
+    require(len(tools) == len(TOOL_FIELDS) and {tool.get("name") for tool in tools} == set(TOOL_FIELDS),
+            "MCP exposed unexpected tool names")
     schemas = {}
     for tool in tools:
         name = tool["name"]
@@ -307,9 +312,18 @@ def check_tools(mcp):
         require(tool.get("outputSchema") is None, "MCP unexpectedly advertised structured output")
         root = tool["inputSchema"]
         schemas[name] = root
-        properties = schema_object(root, root, TOOL_FIELDS[name],
-                                   ["asset_id" if name == "context_get" else "query"],
+        required = {
+            "context_get": ["asset_id"], "context_session": [],
+            "context_turn_get": ["turn_id"], "context_turn_archive": ["turn"],
+        }.get(name, ["query"])
+        properties = schema_object(root, root, TOOL_FIELDS[name], required,
                                    closed=name != "context_get")
+        if name in ("context_session", "context_turn_get"):
+            continue
+        if name == "context_turn_archive":
+            fields = {"turn_id": "string", "question": "string", "answer": "string", "used_evidence": "array"}
+            schema_object(root, properties["turn"], fields, fields)
+            continue
         if name == "context_get":
             require(nullable(root, properties["version"]), "get version no longer accepts null")
             continue
@@ -400,6 +414,25 @@ def exercise(mcp, asset_id, workspace_id):
     # The same live connection must remain usable after errors.
     require(mcp.tool("context_get", {"asset_id": asset_id})["content"] == CONTENT,
             "MCP session failed to recover after invalid tool calls")
+
+
+def exercise_private_archive(mcp, other_mcp, reader_mcp, turn):
+    writer_session = mcp.tool("context_session", {})["session_id"]
+    other_session = other_mcp.tool("context_session", {})["session_id"]
+    require(uuid.UUID(writer_session) != uuid.UUID(other_session),
+            "independent keys resolved to the same archive")
+    args = {"turn": turn}
+    accepted = mcp.tool("context_turn_archive", args)
+    require(accepted["session_id"] == writer_session and
+            mcp.tool("context_turn_archive", args) == accepted, "archive retry changed receipt")
+    read = mcp.tool("context_turn_get", {"turn_id": turn["turn_id"]})
+    require(read["session_id"] == writer_session and read["answer"] == turn["answer"],
+            "explicit archive could not be read by its owner")
+    other_mcp.error("context_turn_get", {"turn_id": turn["turn_id"]},
+                    -32600, "NOT_FOUND: resource not found")
+    reader_mcp.error("context_turn_archive", args, -32600, "FORBIDDEN: permission denied")
+    mcp.invalid_arguments("context_turn_get", {"turn_id": turn["turn_id"], "session_id": other_session})
+    return writer_session
 
 
 class Host(Child):
@@ -500,12 +533,16 @@ def main():
         forbidden.extend([token, bad_token])
         sanitized(bootstrap.stderr.decode("utf-8", errors="replace"), forbidden)
         env["OC_API_KEY"] = token
+        turn = {"turn_id": str(uuid.uuid4()), "question": "What changed here?",
+                "answer": "This archive is private.", "used_evidence": []}
+        forbidden.append(turn["answer"])
         with Host(binary, env, token, forbidden) as host:
             asset_id = host.publish(OLD_CONTENT)
             require(host.publish(CONTENT) == asset_id, "fixture update created a second asset")
             reader = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "reader"})
             offline_reader = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "reader"})
-            forbidden.extend([reader["token"], offline_reader["token"]])
+            other_writer = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "writer"})
+            forbidden.extend([reader["token"], offline_reader["token"], other_writer["token"]])
             # Remote MCP receives a deliberately separate, empty data
             # directory: forwarding must not accidentally open the host's DB.
             remote_env = dict(env, OC_API_KEY=reader["token"], OC_DATA_DIR=str(Path(directory) / "remote-unused"))
@@ -518,10 +555,22 @@ def main():
                 exercise(mcp, asset_id, workspace_id)
                 mcp.error("context_bundle", {"query": QUERY, "routes": [{"route": "session"}]},
                           -32600, "FORBIDDEN: permission denied")
+                writer_env = dict(remote_env, OC_API_KEY=token)
+                other_env = dict(remote_env, OC_API_KEY=other_writer["token"])
+                with Mcp(command, writer_env, forbidden) as writer_mcp, Mcp(command, other_env, forbidden) as other_mcp:
+                    writer_mcp.initialize("2025-03-26", "2025-03-26")
+                    other_mcp.initialize("2025-03-26", "2025-03-26")
+                    writer_session = exercise_private_archive(writer_mcp, other_mcp, mcp, turn)
+                    other_mcp.shutdown()
+                    writer_mcp.shutdown()
                 revoked = host.request("/admin/keys/" + reader["key_id"], method="DELETE")
                 require(revoked.get("revoked") is True, "MCP reader key revocation failed")
                 for name in TOOL_FIELDS:
-                    arguments = {"asset_id": asset_id} if name == "context_get" else {"query": QUERY}
+                    arguments = {
+                        "context_get": {"asset_id": asset_id}, "context_session": {},
+                        "context_turn_get": {"turn_id": turn["turn_id"]},
+                        "context_turn_archive": {"turn": turn},
+                    }.get(name, {"query": QUERY})
                     mcp.error(name, arguments, -32600, "UNAUTHENTICATED: authentication required")
                 mcp.shutdown()
             invalid_startup(command, remote_env, forbidden)
@@ -545,6 +594,9 @@ def main():
         # Reopen after EOF proves the process released the exclusive DB lock.
         with Mcp(offline, env, forbidden) as mcp:
             mcp.initialize("2025-03-26", "2025-03-26")
+            require(mcp.tool("context_session", {})["session_id"] == writer_session and
+                    mcp.tool("context_turn_get", {"turn_id": turn["turn_id"]})["answer"] == turn["answer"],
+                    "archive changed after switching from host-forwarding to offline transport")
             require(mcp.tool("context_get", {"asset_id": asset_id})["content"] == CONTENT,
                     "offline MCP failed to reopen after clean shutdown")
             mcp.shutdown()

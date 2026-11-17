@@ -5,14 +5,3 @@
 !src/**
 !tests/
 !tests/**
-!examples/
-!examples/**
-!vendor/
-!vendor/**
-!.cargo/
-.cargo/**
-!.cargo/config.toml
-!tools/
-tools/**
-!tools/cmake/
-!tools/cmake/**

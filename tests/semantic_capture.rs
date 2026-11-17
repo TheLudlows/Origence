@@ -85,7 +85,9 @@ async fn fixture(
     )
     .unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, token) = provision(&s, None).await;
     (dir, s, a, token, stub, server)
 }
@@ -552,7 +554,9 @@ async fn semantic_capture_retry_reuses_plan_across_service_restart() {
     let models = s.models.clone();
     s.engine.relational().pool().close().await;
     drop(s);
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let a = s.auth(&token).await.unwrap();
     finish(&s, &a, &r).await;
     assert_eq!(stub.calls.load(Ordering::SeqCst), 1);

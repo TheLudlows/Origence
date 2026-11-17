@@ -1,5 +1,6 @@
 """No-model release/container smoke test; uses an isolated data directory/volume."""
 import argparse
+from anyseek_fixture_env import configure_fixture
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,7 @@ def main():
     for key in list(env):
         if key.startswith("OC_"):
             del env[key]
+    configure_fixture(env)
     env["OC_ENABLE_MODELS"] = "false"
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with tempfile.TemporaryDirectory(prefix=name) as directory:

@@ -336,7 +336,9 @@ async fn evidence_routes_filter_before_keyword_vector_and_hybrid_top_k() {
     let (models, _model) = models().await;
     for target_route in ["memory", "knowledge"] {
         let dir = tempfile::tempdir().unwrap();
-        let s = Service::open(dir.path(), models.clone()).await.unwrap();
+        let s = crate::support::open_service(dir.path(), models.clone())
+            .await
+            .unwrap();
         let (a, _) = provision(&s, None).await;
         let other = if target_route == "memory" {
             "knowledge"
@@ -394,13 +396,15 @@ async fn evidence_routes_filter_before_keyword_vector_and_hybrid_top_k() {
 #[tokio::test]
 async fn evidence_preserves_current_chunks_and_historical_archived_references() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     let first = memory(&s, &a, "chronicle", "Chronicle original statement 中文 🦀").await;
     let before = bundle(&s, &a, request("Chronicle", &["memory"])).await;
     assert_eq!(items(&before).len(), 1);
     let old_item = &items(&before)[0];
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let archived = archive(
         &s,
         &a,
@@ -468,7 +472,9 @@ async fn evidence_preserves_current_chunks_and_historical_archived_references() 
 #[tokio::test]
 async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, token) = provision(&s, None).await;
     let (neighbor, _) = provision(&s, Some(a.tenant_id)).await;
     let (foreign, _) = provision(&s, None).await;
@@ -478,7 +484,7 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     let writer_key = s.issue_key(&a, "writer").await.unwrap();
     let writer = s.auth(writer_key["token"].as_str().unwrap()).await.unwrap();
     memory(&s, &a, "scope", "Scopeneedle public workspace memory").await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     archive(&s, &a, session, "Scopeneedle private raw session", vec![]).await;
     let default = bundle(&s, &reader, json!({"query":"Scopeneedle","budget":32000})).await;
     assert_eq!(items(&default).len(), 1);
@@ -579,10 +585,12 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
 #[tokio::test]
 async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
-    let target_session = Uuid::new_v4();
-    let noise_session = Uuid::new_v4();
+    let target_session = id(&s.private_session(&a).await.unwrap(), "session_id");
+    let noise_session = target_session;
     let oldest = archive(
         &s,
         &a,
@@ -612,23 +620,30 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
     assert!(items(&bounded).is_empty());
     assert_eq!(accounting(&bounded, "session")["scanned"], 512);
     assert_eq!(accounting(&bounded, "session")["scan_exhausted"], true);
-    for filter in ["session_id", "exclude_session_id"] {
-        let mut input = input.clone();
-        input[filter] = json!(if filter == "session_id" {
-            target_session
-        } else {
-            noise_session
-        });
-        let filtered = bundle(&s, &a, input).await;
-        assert_eq!(items(&filtered).len(), 1, "{filtered}");
-        assert_eq!(
-            items(&filtered)[0]["provenance"]["turn_id"],
-            oldest["turn_id"]
-        );
-        assert_eq!(accounting(&filtered, "session")["scanned"], 1);
-        assert_eq!(accounting(&filtered, "session")["scan_exhausted"], false);
-        assert_accounted(&filtered);
-    }
+    // Filtering a different key's session never bypasses private ownership,
+    // even when its turn would otherwise match the query.
+    let key = s.issue_key(&a, "writer").await.unwrap();
+    let other = s.auth(key["token"].as_str().unwrap()).await.unwrap();
+    let other_session = id(&s.private_session(&other).await.unwrap(), "session_id");
+    archive(
+        &s,
+        &other,
+        other_session,
+        "Ancientneedle other private answer",
+        vec![],
+    )
+    .await;
+    let mut foreign = input.clone();
+    foreign["session_id"] = json!(other_session);
+    assert!(matches!(
+        s.evidence_bundle(&a, serde_json::from_value(foreign).unwrap())
+            .await,
+        Err(AppError::NotFound)
+    ));
+    let own = bundle(&s, &other, input.clone()).await;
+    assert_eq!(items(&own).len(), 1);
+    assert_eq!(accounting(&own, "session")["scanned"], 1);
+    assert_accounted(&own);
     let mut excluded = input;
     excluded["session_id"] = json!(target_session);
     excluded["exclude_session_id"] = json!(target_session);
@@ -638,7 +653,9 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
 #[tokio::test]
 async fn evidence_utf8_whole_blocks_obey_global_and_route_byte_boundaries() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     memory(
         &s,
@@ -735,7 +752,9 @@ async fn semantic(
 #[tokio::test]
 async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     property(&s, &a, "database.engine", "single").await;
     let identity = identity("database.engine", "production");
@@ -831,7 +850,9 @@ async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic()
 #[tokio::test]
 async fn evidence_does_not_infer_conflicts_for_sets_contexts_proposals_or_prose() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     property(&s, &a, "service.languages", "multi").await;
     property(&s, &a, "database.engine", "single").await;
@@ -915,7 +936,9 @@ async fn evidence_does_not_infer_conflicts_for_sets_contexts_proposals_or_prose(
 #[tokio::test]
 async fn evidence_whole_snapshot_withdrawal_hides_unmatched_members_and_archived_turns() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     property(&s, &a, "service.languages", "multi").await;
     let identity = identity("service.languages", "production");
@@ -942,7 +965,7 @@ async fn evidence_whole_snapshot_withdrawal_hides_unmatched_members_and_archived
     let archived = archive(
         &s,
         &a,
-        Uuid::new_v4(),
+        id(&s.private_session(&a).await.unwrap(), "session_id"),
         "Pythonneedle actual answer",
         vec![used(item)],
     )
@@ -970,7 +993,9 @@ async fn evidence_whole_snapshot_withdrawal_hides_unmatched_members_and_archived
 #[tokio::test]
 async fn evidence_partial_mode_is_explicit_and_consistent_across_routes() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     memory(&s, &a, "fallback", "Fallbackneedle original memory").await;
     knowledge(&s, &a, "Fallbackneedle original knowledge").await;
@@ -998,13 +1023,18 @@ async fn evidence_partial_mode_is_explicit_and_consistent_across_routes() {
 #[tokio::test]
 async fn evidence_session_citations_use_the_full_session_and_turn_identity() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     let turn = Uuid::new_v4();
-    let sessions = [Uuid::new_v4(), Uuid::new_v4()];
-    for session in sessions {
+    let key = s.issue_key(&a, "writer").await.unwrap();
+    let other = s.auth(key["token"].as_str().unwrap()).await.unwrap();
+    let mut citations = BTreeSet::new();
+    for actor in [&a, &other] {
+        let session = id(&s.private_session(actor).await.unwrap(), "session_id");
         s.archive_turn(
-            &a,
+            actor,
             &Uuid::new_v4().to_string(),
             session,
             serde_json::from_value(json!({
@@ -1015,30 +1045,32 @@ async fn evidence_session_citations_use_the_full_session_and_turn_identity() {
         )
         .await
         .unwrap();
+        let result = bundle(&s, actor, request("Compositeidentity", &["session"])).await;
+        assert_eq!(items(&result).len(), 1);
+        citations.insert(
+            items(&result)[0]["evidence_id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+        for item in items(&result) {
+            assert_eq!(item["provenance"]["turn_id"], json!(turn));
+            assert_eq!(
+                item["archive_roundtrip"],
+                "unsupported_session_turn_reference"
+            );
+            assert_eq!(
+                item["evidence_id"],
+                json!(format!(
+                    "turn:{}:{turn}",
+                    item["provenance"]["session_id"].as_str().unwrap()
+                ))
+            );
+            assert_eq!(item["provenance"]["used_evidence"], json!([]));
+        }
+        assert_accounted(&result);
     }
-    let result = bundle(&s, &a, request("Compositeidentity", &["session"])).await;
-    assert_eq!(items(&result).len(), 2);
-    let citations: BTreeSet<_> = items(&result)
-        .iter()
-        .map(|item| item["evidence_id"].as_str().unwrap())
-        .collect();
     assert_eq!(citations.len(), 2);
-    for item in items(&result) {
-        assert_eq!(item["provenance"]["turn_id"], json!(turn));
-        assert_eq!(
-            item["archive_roundtrip"],
-            "unsupported_session_turn_reference"
-        );
-        assert_eq!(
-            item["evidence_id"],
-            json!(format!(
-                "turn:{}:{turn}",
-                item["provenance"]["session_id"].as_str().unwrap()
-            ))
-        );
-        assert_eq!(item["provenance"]["used_evidence"], json!([]));
-    }
-    assert_accounted(&result);
 }
 
 #[derive(Clone, Default)]
@@ -1080,7 +1112,9 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     )
     .unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), models).await.unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
     let (a, _) = provision(&s, None).await;
     let original = memory(
         &s,

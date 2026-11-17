@@ -9,7 +9,10 @@ impl TursoTx {
         self.live_role_for_principal(self.principal_id).await
     }
 
-    async fn live_role_for_principal(&mut self, principal_id: Uuid) -> StorageResult<String> {
+    pub(super) async fn live_role_for_principal(
+        &mut self,
+        principal_id: Uuid,
+    ) -> StorageResult<String> {
         let key: Option<(String, Uuid, bool)> = native_turso::query_as(
             "SELECT role,workspace_id,allow_owned_workspaces=1 FROM oc_api_keys \
              WHERE id=? AND tenant_id=? AND NOT revoked",

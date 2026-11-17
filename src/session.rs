@@ -18,7 +18,7 @@ pub const MAX_USED_EVIDENCE: usize = 64;
 /// Maximum UTF-8 byte length of an optional feedback comment.
 pub const MAX_FEEDBACK_COMMENT_BYTES: usize = 4096;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceKind {
     Chunk,
@@ -27,13 +27,16 @@ pub enum EvidenceKind {
 }
 
 /// A caller-supplied exact reference to evidence used to produce the answer.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UsedEvidence {
     pub kind: EvidenceKind,
+    #[schemars(with = "String")]
     pub id: Uuid,
+    #[schemars(with = "String")]
     pub asset_id: Uuid,
     pub asset_version: i32,
+    #[schemars(with = "String")]
     pub chunk_id: Uuid,
 }
 
@@ -53,9 +56,10 @@ impl UsedEvidence {
 }
 
 /// Immutable input for a turn in the session identified by the request path.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SessionTurnInput {
+    #[schemars(with = "String")]
     pub turn_id: Uuid,
     pub question: String,
     pub answer: String,

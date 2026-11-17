@@ -207,7 +207,32 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         std::mem::size_of::<F>()
     }
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), crate::models::Models::disabled())
+    // Only initialization's collection contract is needed; no retrieval IO is
+    // executed by the future-size closures below.
+    let schema = crate::storage::anyseek::AnySeekFullTextStore::collection_config();
+    let app = axum::Router::new().route(
+        "/api/v1/index/size-fixture",
+        axum::routing::get(move || {
+            let schema = schema.clone();
+            async move {
+                axum::Json(
+                    json!({"name":schema["index_name"],"schema":schema["schema"],
+            "text_normalization":"None","vector_dimensions":null}),
+                )
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = crate::storage::anyseek::AnySeekConfig::new(
+        &format!("http://{}", listener.local_addr().unwrap()),
+        "fixture",
+        "size-fixture",
+    )
+    .unwrap();
+    let peer = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let service = Service::open_with_anyseek(dir.path(), crate::models::Models::disabled(), config)
         .await
         .unwrap();
     let auth = AuthContext {
@@ -290,7 +315,7 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
     };
     let native = service.engine.vector();
     eprintln!(
-        "Lance vector search future bytes={}",
+        "AnySeek vector search future bytes={}",
         future_size(|| native.search(VectorQuery {
             scope,
             artifact_ids: None,
@@ -302,7 +327,7 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         }))
     );
     eprintln!(
-        "Lance full-text search future bytes={}",
+        "AnySeek full-text search future bytes={}",
         future_size(|| native.search_full_text(FullTextQuery {
             scope,
             artifact_ids: None,
@@ -312,7 +337,7 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         }))
     );
     eprintln!(
-        "Lance vector/full-text upsert future bytes={}/{}",
+        "AnySeek vector/full-text upsert future bytes={}/{}",
         future_size(|| native.upsert(scope, Vec::new())),
         future_size(|| native.upsert_full_text(scope, Vec::new()))
     );
@@ -324,6 +349,7 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         );
     }
     service.engine.shutdown().await.unwrap();
+    peer.abort();
 }
 
 impl Fixture {

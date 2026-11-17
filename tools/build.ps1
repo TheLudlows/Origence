@@ -9,7 +9,7 @@ $buildOldPath = $env:PATH
 $buildOldToolchain = $env:RUSTUP_TOOLCHAIN
 Push-Location $buildRoot
 try {
-    # LanceDB and SQLite native dependencies need the MSVC dev shell and
+    # Native dependencies need the MSVC dev shell and
     # MSVC Rust target so cc-rs routes assembly to ml64 (psm/stacker).
     $buildVswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     $buildVs = & $buildVswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -29,10 +29,6 @@ try {
     $env:RUSTUP_TOOLCHAIN = $buildMsvcToolchain
     $env:CC = 'cl.exe'
     $env:CXX = 'cl.exe'
-    # Lance builds protoc from source; only the native build toolchain is needed.
-    if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
-        throw 'Install CMake (or the Visual Studio C++ CMake tools component).'
-    }
     if ($Action -eq 'Validate') {
         & cargo fmt --all -- --check
         if ($LASTEXITCODE -ne 0) { throw 'Formatting failed.' }

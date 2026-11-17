@@ -2,6 +2,8 @@
 pub mod aml;
 mod aml_protocol;
 #[cfg(feature = "local-storage")]
+mod foundation;
+#[cfg(feature = "local-storage")]
 mod http;
 #[cfg(feature = "local-storage")]
 pub use http::{ApiOptions, router, router_with_options};

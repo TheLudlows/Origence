@@ -17,6 +17,22 @@ fn session_id(id: Uuid) -> Result<()> {
 }
 
 impl Service {
+    /// Resolve the authenticated logical key's server-assigned private archive.
+    pub async fn private_session(&self, a: &AuthContext) -> Result<Value> {
+        let mut tx = self.write(a, Permission::Read).await?;
+        let session_id = tx.private_session_id().await?;
+        let key_id = tx.private_key_id().await?;
+        tx.commit().await?;
+        Ok(json!({"session_id":session_id,"key_id":key_id}))
+    }
+    /// Explicit admin authorization rotates credentials without merging archives.
+    pub async fn rotate_key(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
+        let mut tx = self.write(a, Permission::Delete).await?;
+        let key = tx.rotate_scoped_key(id).await?;
+        tx.commit().await?;
+        Ok(json!(key))
+    }
+
     pub async fn archive_turn(
         &self,
         a: &AuthContext,

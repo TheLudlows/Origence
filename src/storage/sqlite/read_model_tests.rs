@@ -749,6 +749,8 @@ async fn native_sources_check_only_requested_chunks_without_publication_guards()
 async fn event_projection_preserves_missing_deleted_and_foreign_file_semantics() {
     let (_dir, pool) = database().await;
     for sql in [
+        "CREATE TABLE oc_session_turns(tenant_id BLOB,workspace_id BLOB,session_id BLOB,source_event_id BLOB)",
+        "CREATE TABLE oc_learnings(tenant_id BLOB,workspace_id BLOB,session_id BLOB,source_event_id BLOB,asset_id BLOB)",
         "ALTER TABLE oc_events ADD COLUMN content TEXT NOT NULL DEFAULT 'source'",
         "ALTER TABLE oc_events ADD COLUMN file_id BLOB",
         "ALTER TABLE oc_events ADD COLUMN created_at INTEGER NOT NULL DEFAULT 7",

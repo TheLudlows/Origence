@@ -728,7 +728,7 @@ async fn publish_prepared(
     payload: &JobPayload,
     mut publication: Publication,
 ) -> Result<()> {
-    if service.engine.vector().uses_anyseek() && publication.full_text_operation_epoch.is_none() {
+    if publication.full_text_operation_epoch.is_none() {
         publication.full_text_operation_epoch = Some(crate::storage::anyseek::operation_epoch()?);
     }
     let a = auth(claim);
@@ -768,13 +768,13 @@ async fn publish_prepared(
             }
         }
     }
-    service.engine.vector().upsert(claim.scope, vectors).await?;
     service
         .engine
         .vector()
-        .upsert_publication_full_text(
+        .upsert_publication(
             claim.scope,
             full_text,
+            vectors,
             publication.full_text_operation_epoch,
         )
         .await?;

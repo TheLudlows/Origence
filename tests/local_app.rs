@@ -1,7 +1,7 @@
 #![cfg(feature = "local-storage")]
 use axum::{Json, Router, extract::State};
 use origence::storage::native_turso as db;
-use origence::{models::Models, service::Service, storage::*, types::*};
+use origence::{models::Models, storage::*, types::*};
 use serde_json::{Value, json};
 use std::{
     process::Stdio,
@@ -118,6 +118,7 @@ async fn job(http: &reqwest::Client, base: &str, token: &str, job: Uuid, state: 
 }
 async fn start(dir: &std::path::Path, model: &str) -> (Child, String) {
     let mut c = command(dir);
+    crate::support::command_env(&mut c, dir, Some(3));
     c.env("OC_ENABLE_MODELS", "true")
         .env("OC_MODEL_BASE_URL", model)
         .env("OC_MODEL_API_KEY", "stub")
@@ -953,7 +954,24 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
     )
     .await;
-    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 4);
+    let tool_names: std::collections::BTreeSet<_> = tools["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        tool_names,
+        std::collections::BTreeSet::from([
+            "context_bundle",
+            "context_get",
+            "context_resolve",
+            "context_search",
+            "context_session",
+            "context_turn_archive",
+            "context_turn_get",
+        ])
+    );
 
     let recalled=rpc(&mut input,&mut output,json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"context_search","arguments":{"query":"Atlas","mode":"hybrid"}}})).await;
     let recalled: Value =
@@ -1031,7 +1049,15 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .await
         .unwrap();
     assert!(!unavailable.status.success());
-    let offline = command(dir.path())
+    let mut offline_command = command(dir.path());
+    crate::support::command_env(&mut offline_command, dir.path(), Some(3));
+    let offline = offline_command
+        .env("OC_ENABLE_MODELS", "true")
+        .env("OC_MODEL_BASE_URL", &model)
+        .env("OC_MODEL_API_KEY", "stub")
+        .env("OC_EMBEDDING_MODEL", "stub")
+        .env("OC_EMBEDDING_DIMENSION", "3")
+        .env("OC_EXTRACTION_MODEL", "stub")
         .env("OC_API_KEY", token)
         .args(["--offline", "search", "approval"])
         .stdout(Stdio::piped())
@@ -1056,7 +1082,9 @@ fn post_route() -> axum::routing::MethodRouter<Arc<AtomicBool>> {
 #[tokio::test]
 async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let store = service.engine.relational();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
@@ -1171,9 +1199,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .unwrap();
     }
     tx.commit().await.unwrap();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope, full_text.clone())
         .await
         .unwrap();
@@ -1187,9 +1213,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     tx.commit().await.unwrap();
     // Establish strict BM25 strength, without imposing any choice among the
     // 130 tied decoys at the native cutoff. The old target version stays native.
-    let strength = service
-        .engine
-        .vector()
+    let strength = crate::support::projection(&service)
         .search_full_text(FullTextQuery {
             scope,
             artifact_ids: Some(vec![full_text[0].id, full_text.last().unwrap().id]),
@@ -1300,7 +1324,9 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
 #[tokio::test]
 async fn local_transactions_versions_retraction_and_idempotency() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -1458,7 +1484,9 @@ async fn local_transactions_versions_retraction_and_idempotency() {
 #[tokio::test]
 async fn racing_expected_versions_supersede_the_loser() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -1526,7 +1554,9 @@ async fn racing_expected_versions_supersede_the_loser() {
 #[tokio::test]
 async fn malformed_durable_jobs_settle_and_leave_the_worker_available() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -1640,7 +1670,9 @@ async fn malformed_durable_jobs_settle_and_leave_the_worker_available() {
 #[tokio::test]
 async fn saved_publication_checks_generation_before_decoding() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -1721,7 +1753,9 @@ async fn saved_publication_checks_generation_before_decoding() {
 #[tokio::test]
 async fn saved_publication_recovers_after_external_graph_write() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -1798,7 +1832,9 @@ async fn saved_publication_recovers_after_external_graph_write() {
     // Persisted boundary: graph has the object, SQLite has only pending intent, no version.
     s.engine.shutdown().await.unwrap();
     drop(s);
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     assert_eq!(
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([])
@@ -1867,8 +1903,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    s.engine
-        .vector()
+    crate::support::projection(&s)
         .upsert(
             scope,
             vec![VectorEntry {
@@ -1895,7 +1930,14 @@ async fn saved_publication_recovers_after_external_graph_write() {
         embedding: vec![1.0, 0.0],
         limit: 10,
     };
-    assert_eq!(s.engine.vector().search(q.clone()).await.unwrap().len(), 1);
+    assert_eq!(
+        crate::support::projection(&s)
+            .search(q.clone())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     s.delete(&a, "delete", source.source_id, "event")
         .await
         .unwrap();
@@ -1904,7 +1946,14 @@ async fn saved_publication_recovers_after_external_graph_write() {
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([entity_id])
     );
-    assert_eq!(s.engine.vector().search(q.clone()).await.unwrap().len(), 1);
+    assert_eq!(
+        crate::support::projection(&s)
+            .search(q.clone())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     let mut tx = s.engine.relational().begin_read(auth).await.unwrap();
     assert!(tx.graph_evidence(entity_id).await.unwrap().is_empty());
     assert!(
@@ -1925,14 +1974,22 @@ async fn saved_publication_recovers_after_external_graph_write() {
         s.engine.graph().list_ids(scope).await.unwrap()["entities"],
         json!([])
     );
-    assert!(s.engine.vector().search(q).await.unwrap().is_empty());
+    assert!(
+        crate::support::projection(&s)
+            .search(q)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     s.engine.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn graceful_host_shutdown_stops_worker_and_closes_store() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let view = s.clone();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1959,7 +2016,9 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
 #[tokio::test]
 async fn offline_cli_search_crosses_authority_batch_boundaries() {
     let dir = tempfile::tempdir().unwrap();
-    let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let service = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let store = service.engine.relational();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
@@ -2020,9 +2079,7 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
         .unwrap();
     }
     tx.commit().await.unwrap();
-    service
-        .engine
-        .vector()
+    crate::support::projection(&service)
         .upsert_full_text(scope, full_text.clone())
         .await
         .unwrap();
@@ -2046,7 +2103,9 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
     // A Rust test thread has a different stack budget. Run the actual binary
     // after releasing every store handle so Windows exercises its default main
     // thread stack through startup, SQL batches, native FTS and final authority.
-    let output = command(dir.path())
+    let mut offline_command = command(dir.path());
+    crate::support::command_env(&mut offline_command, dir.path(), None);
+    let output = offline_command
         .env("OC_API_KEY", &reader.token)
         .args(["--offline", "search", "approval", "--limit", "100"])
         .stdout(Stdio::piped())

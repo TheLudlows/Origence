@@ -21,6 +21,9 @@ pub mod models;
 pub mod parsing;
 #[cfg(feature = "local-storage")]
 pub mod retrieval;
+pub mod run;
+#[cfg(feature = "local-storage")]
+mod runs;
 pub mod semantic_capture;
 #[cfg(feature = "local-storage")]
 mod semantics;
@@ -29,6 +32,9 @@ pub mod service;
 pub mod session;
 #[cfg(feature = "local-storage")]
 mod sessions;
+pub mod skill;
+#[cfg(feature = "local-storage")]
+mod skills;
 pub mod storage;
 pub mod types;
 #[cfg(feature = "local-storage")]
@@ -36,5 +42,7 @@ pub mod worker;
 
 #[cfg(feature = "local-storage")]
 pub mod client;
+#[cfg(feature = "local-storage")]
+pub mod client_skill;
 #[cfg(feature = "local-storage")]
 pub mod host;

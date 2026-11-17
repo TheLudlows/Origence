@@ -83,6 +83,7 @@ impl TursoTx {
     }
 
     pub(super) async fn retract_event_inner(&mut self, id: Uuid) -> StorageResult<u64> {
+        self.require_private_source(id).await?;
         native_turso::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
@@ -159,6 +160,7 @@ impl TursoTx {
     }
 
     pub(super) async fn event_view_inner(&mut self, id: Uuid) -> StorageResult<Value> {
+        self.require_private_source(id).await?;
         let row = native_turso::query(
             "SELECT id,kind,content,file_id,created_at FROM oc_events \
              WHERE tenant_id=? AND workspace_id=? AND id=? AND state='active'",
@@ -208,6 +210,7 @@ impl TursoTx {
         source: Uuid,
         require_active: bool,
     ) -> StorageResult<Option<String>> {
+        self.require_private_source(source).await?;
         let sql = if require_active {
             "SELECT content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND state = 'active'"
         } else {
@@ -223,6 +226,7 @@ impl TursoTx {
     }
 
     pub(super) async fn event_file_inner(&mut self, source: Uuid) -> StorageResult<Value> {
+        self.require_private_source(source).await?;
         let row: Option<(String, Option<Uuid>)> = native_turso::query_as(
             "SELECT content,file_id FROM oc_events WHERE id=? AND tenant_id=? AND workspace_id=?",
         )

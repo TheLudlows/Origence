@@ -9,12 +9,17 @@ import math
 import os
 from pathlib import Path
 import platform
+import sys
 import subprocess
 import tempfile
 import time
 import urllib.error
 import urllib.request
 import urllib.parse
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+from anyseek_fixture_env import configure_fixture
 
 
 def read_jsonl(path):
@@ -178,6 +183,7 @@ def main():
             if key.startswith("OC_"):
                 del env[key]
         env["OC_ENABLE_MODELS"] = "false"
+    configure_fixture(env)
     manifest = {"schema_version": 2, "commit": args.commit, "platform": platform.platform(),
                 "mode": "matrix" if args.matrix else args.mode, "k": args.k,
                 "components": args.components, "budget_bytes": args.budget, "model_calls_enabled": args.allow_model_calls,
