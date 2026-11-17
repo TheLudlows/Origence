@@ -50,9 +50,11 @@ Search、Resolve 与 EvidenceBundle 返回 `retrieval:{requests,omitted_requests
 实际模式（browse/lexical/vector/hybrid）、客户端往返微秒、HTTP 状态、安全错误码、
 返回候选数量及可获得的后端诊断。browse 包括候选预检，不能当作语义召回。
 
-后端诊断含服务版本、分析配置摘要、查询耗时与 `visible_seq`，以及查询后另行采样的
+后端诊断格式为 v2，含服务版本、分析配置摘要、embedding 空间 SHA256（未配置为 null）、
+查询耗时与 `visible_seq`，以及查询后另行采样的
 committed/lexical/vector 进度、失败与恢复标志。配置还记录核对过的容量限制和 embedding
-空间摘要。序号属于 AnySeek collection，不是 workspace 序号、Turso 版本或跨存储快照。
+空间摘要。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
+序号属于 AnySeek collection，不是 workspace 序号、Turso 版本或跨存储快照。
 客户端往返和服务端耗时边界不同，均不证明客户端消费或模型实际使用。
 
 每次调用只保留最近 128 次尝试，较早省略数量显式返回。诊断不保存查询原文、向量、
@@ -61,7 +63,10 @@ committed/lexical/vector 进度、失败与恢复标志。配置还记录核对�
 
 `POST /v1/runs/{id}/context` 将成功诊断与精确 bundle 摘要一起写入私有 Run；
 通过认证、归属和输入校验后发生的准备失败记录 `context_preparation_failed`，并标为
-server_observed。相同成功请求重放返回首次准备的诊断；请求摘要改变返回冲突。
+server_observed。首次成功时另存私有上下文快照；相同请求重放先检查事件和请求摘要，
+复核当前权限、原始引用及私有会话有效性后返回原 bundle/回执，不再调用模型或 AnySeek，
+后端暂时不可用或语料更新不会改写原结果。快照不在分页 Run trace 中重复返回。
+请求摘要改变返回冲突；来源撤回或权限失效仍阻断重放。
 失败事件同样不可覆盖，恢复后新的准备尝试使用新的 event_id。普通 MCP/Search 请求
 不会自动加入某个 Run，仍需显式调用准备接口；未采集活动保持未知。
 

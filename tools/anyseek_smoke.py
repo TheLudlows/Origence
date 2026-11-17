@@ -89,6 +89,9 @@ def mcp_contract(binary, env, directory):
             require(item["backend_request_id"] == backend["request_id"], "backend correlation differs")
             require(backend["analysis_fingerprint"] == item["checked_config"]["analysis_fingerprint"],
                     "backend analysis differs from admitted configuration")
+            require(backend["format_version"] == 2 and
+                    backend["embedding_space_sha256"] == item["checked_config"]["embedding_space_sha256"],
+                    "backend embedding space differs from admitted configuration")
             require(backend["index_progress"]["sampling"] == "after_query_not_atomic_with_result",
                     "index progress lost its sampling boundary")
         require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
@@ -105,6 +108,8 @@ def mcp_contract(binary, env, directory):
             require(found["hits"][0]["locator"], "MCP search omitted source locator")
             require(client.tool("context_get", {"asset_id": asset})["content"] == old, "MCP get lost source content")
             require(host.publish("AnySeek smoke policy now requires token review.") == asset, "update changed asset ID")
+            require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
+                    "updated corpus changed an existing preparation receipt")
             require(client.tool("context_search", {"query": "approval"})["hits"] == [], "superseded version remained searchable")
             require(client.tool("context_get", {"asset_id": asset, "version": 1})["content"] == old, "historical source changed")
             host.request("/admin/keys/" + reader["key_id"], method="DELETE")
@@ -113,6 +118,8 @@ def mcp_contract(binary, env, directory):
     # Reopen the same authorities and projection with a fresh MCP process.
     with Host(binary, env, token, forbidden) as host:
         require(host.request(f"/v1/runs/{run_id}")["events"] == recorded, "reopen changed recorded Run observations")
+        require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
+                "reopen changed the private preparation snapshot")
         with Mcp([binary, "--server-url", host.base, "mcp"], env, forbidden) as client:
             client.initialize("2025-03-26", "2025-03-26")
             require(client.tool("context_search", {"query": "token review"})["hits"][0]["asset_id"] == asset,

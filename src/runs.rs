@@ -51,12 +51,28 @@ impl Service {
         request_digest: &str,
         code: &'static str,
         observations: &crate::retrieval_diagnostics::RetrievalDiagnostics,
-    ) -> Result<()> {
+    ) -> Result<Option<Value>> {
         let mut tx = self.write(a, Permission::Write).await?;
-        tx.record_run_context_failed(run, event_id, request_digest, code, observations)
+        let replay = tx
+            .record_run_context_failed(run, event_id, request_digest, code, observations)
             .await?;
         tx.commit().await?;
-        Ok(())
+        Ok(replay)
+    }
+
+    pub(crate) async fn replay_run_context_prepared(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        event_id: Uuid,
+        request_digest: &str,
+    ) -> Result<Option<Value>> {
+        let mut tx = self.read(a, Permission::Write).await?;
+        let replay = tx
+            .replay_run_context_prepared(run, event_id, request_digest)
+            .await?;
+        tx.commit().await?;
+        Ok(replay)
     }
 
     pub(crate) async fn check_run_owner(&self, a: &AuthContext, run: Uuid) -> Result<()> {

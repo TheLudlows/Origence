@@ -48,9 +48,19 @@ observations, is hashed. Successful idempotent replay retains the first preparat
 IDs/timing and returns that same bundle; a context request digest prevents reusing
 an event ID with another request even if both produce empty context.
 
+The successful event stores a private copy of the prepared bundle for retries.
+Replay checks the event and request digest before model/retrieval IO, revalidates
+current permission, ownership and every original citation, and returns the original
+bundle/receipt even during a backend outage or after corpus updates. Paginated
+traces omit this internal snapshot. The append transaction repeats the replay
+check so a concurrent successful preparation also wins over a later failed attempt.
+Withdrawn sources still block replay; the snapshot never grants access to them.
+
 After owner/input checks, failed preparation attempts may append a server-observed
 failure event with only a safe error code and content-free observations. Failed
 attempts are immutable; recovery uses a new event ID. Trace and prefix reads retain
 all existing owner and source guards. Backend progress is sampled after retrieval;
 it is not an atomic read of the result, an Origence transaction, delivery proof, or
 independent verification of the evidence. See [API](../API.md#检索诊断).
+Query diagnostics v2 include the current embedding-space SHA256 (or null), checked
+against the admitted space on every response in addition to the analysis digest.

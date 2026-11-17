@@ -97,13 +97,19 @@ async fn prepare_run_context(
         serde_json::to_vec(&input.context)
             .map_err(|_| AppError::Invalid("invalid context request".into()))?,
     );
+    if let Some(prepared) = service
+        .replay_run_context_prepared(&caller, run, input.event_id, &request_digest)
+        .await?
+    {
+        return prepared_context_response(prepared);
+    }
     let (result, observations) = service
         .observed_evidence_bundle(&caller, input.context)
         .await;
-    let mut bundle = match result {
+    let bundle = match result {
         Ok(bundle) => bundle,
         Err(error) => {
-            service
+            if let Some(prepared) = service
                 .record_run_context_failed(
                     &caller,
                     run,
@@ -112,23 +118,26 @@ async fn prepare_run_context(
                     error.code(),
                     &observations,
                 )
-                .await?;
+                .await?
+            {
+                return prepared_context_response(prepared);
+            }
             return Err(error);
         }
     };
-    let mut preparation = service
+    let preparation = service
         .record_run_context_prepared(&caller, run, input.event_id, &request_digest, &bundle)
         .await?;
-    // An idempotent replay carries the originally recorded diagnostic evidence.
-    if let Some(recorded) = preparation
+    prepared_context_response(preparation)
+}
+
+fn prepared_context_response(mut preparation: Value) -> Result<Json<Value>> {
+    let bundle = preparation
         .as_object_mut()
-        .and_then(|v| v.remove("recorded_retrieval"))
-    {
-        bundle.retrieval = serde_json::from_value(recorded)
-            .map_err(|_| AppError::Unavailable("invalid recorded retrieval diagnostics".into()))?;
-    }
+        .and_then(|v| v.remove("recorded_bundle"))
+        .ok_or_else(|| AppError::Unavailable("invalid prepared context snapshot".into()))?;
     Ok(Json(
-        serde_json::json!({"bundle": bundle, "preparation": preparation}),
+        serde_json::json!({"bundle":bundle,"preparation":preparation}),
     ))
 }
 

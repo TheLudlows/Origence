@@ -58,7 +58,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 全文、向量和一跳图候选只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
-1. 准备支持整组替换、analysis 与查询 diagnostics 的 AnySeek，例如 [88ab7c1](https://github.com/TheLudlows/anyseek/tree/88ab7c154d1345c646b02a56b4dcc82e73995d0d)；
+1. 准备支持整组替换、analysis 与查询 diagnostics v2 的 AnySeek，例如 [d813b91](https://github.com/TheLudlows/anyseek/tree/d813b915b7f12e7139ca316adc15699688493196)；
    由 AnySeek 管理员创建 Tenant、签发普通 Tenant key。
 2. 运行 `origence anyseek-schema` 输出仅全文的 collection 配置；启用向量时运行
    `origence anyseek-schema --with-space`。它读取已配置的 embedding 模型，输出
@@ -202,6 +202,9 @@ branches_ms 包含候选装载、融合及已启用的辅助分支；verificatio
 先比较 binding 中的 analysis_fingerprint 与 AnySeek collection 的 analysis.fingerprint。
 通过新 API 的查询响应可按 x-anyseek-request-id 关联服务器的 response_prepared 调试日志；
 HTTP 错误提供安全的 x-anyseek-error-code。该日志只说明响应已准备，body 交付仍未确认。
+查询诊断 v2 必须返回与配置一致的 embedding_space_sha256；同维度换空间也会拒绝。
+成功 Run 准备可在后端故障时复用私有快照，重放仍核验当前权限和原始来源；
+该成功回执不代表后端已经恢复，新准备请求仍需正常访问后端。
 Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不合规诊断；原始错误正文不落库。
 后端索引进度在查询后采样，出现落后/失败/恢复标志时先处理 AnySeek 健康状态，
 不能手动推进消费序号或以空召回掩盖故障。完整字段与采集边界见 [API](API.md#检索诊断)。

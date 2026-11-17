@@ -101,6 +101,32 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
     );
     let remote = fixture(dir.path(), None);
     remote.unavailable(true);
+    remote.clear_queries();
+    assert_eq!(
+        first,
+        client
+            .call(Method::POST, &path, Some(&request), None)
+            .await
+            .unwrap()
+    );
+    assert!(
+        remote.queries().is_empty(),
+        "successful replay must not call retrieval"
+    );
+    let mut different = request.clone();
+    different["context"]["query"] = json!("different query");
+    assert!(matches!(
+        client
+            .call(Method::POST, &path, Some(&different), None)
+            .await,
+        Err(origence::error::AppError::Conflict(_))
+    ));
+    assert!(remote.queries().is_empty());
+    assert!(
+        recorded["events"][0]["report"]
+            .get("replay_bundle")
+            .is_none()
+    );
     let failed_request = json!({"event_id":Uuid::new_v4(),"context":{"query":"PRIVATE QUERY"}});
     let response = reqwest::Client::new()
         .post(format!("{base}{path}"))
@@ -161,6 +187,14 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
     assert!(!recorded.to_string().contains("PRIVATE BAD REQUEST ID"));
     remote.bad_diagnostics(false);
     let outsider = HostClient::new(&base, other.token).unwrap();
+    remote.clear_queries();
+    assert!(matches!(
+        outsider
+            .call(Method::POST, &path, Some(&request), None)
+            .await,
+        Err(origence::error::AppError::NotFound)
+    ));
+    assert!(remote.queries().is_empty());
     assert!(matches!(
         outsider.call(Method::GET, &run_path, None, None).await,
         Err(origence::error::AppError::NotFound)
@@ -176,6 +210,80 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
         reopened.run_trace(&auth, run, 0, 100).await.unwrap()["events"],
         recorded["events"]
     );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = origence::api::router(reopened.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let client = HostClient::new(&base, owner.token.clone()).unwrap();
+    remote.unavailable(true);
+    remote.clear_queries();
+    assert_eq!(
+        first,
+        client
+            .call(Method::POST, &path, Some(&request), None)
+            .await
+            .unwrap()
+    );
+    assert!(remote.queries().is_empty());
+    let admin = reopened
+        .engine
+        .relational()
+        .issue_key(scope, "admin")
+        .await
+        .unwrap();
+    let admin = HostClient::new(&base, admin.token).unwrap();
+    let asset_id = first["bundle"]["items"][0]["provenance"]["asset_id"]
+        .as_str()
+        .unwrap();
+    admin
+        .call(
+            Method::DELETE,
+            &format!("/v1/assets/{asset_id}"),
+            None,
+            Some("withdraw-replay-source"),
+        )
+        .await
+        .unwrap();
+    let withdrawn = client.call(Method::POST, &path, Some(&request), None).await;
+    assert!(
+        matches!(withdrawn, Err(origence::error::AppError::NotFound)),
+        "withdrawn preparation: {withdrawn:?}"
+    );
+    assert!(
+        remote.queries().is_empty(),
+        "withdrawal must fail before backend IO"
+    );
+    assert!(matches!(
+        client.call(Method::GET, &run_path, None, None).await,
+        Err(origence::error::AppError::NotFound)
+    ));
+    assert!(matches!(
+        client
+            .call(
+                Method::GET,
+                &format!("{run_path}/prefix?through_sequence=1"),
+                None,
+                None
+            )
+            .await,
+        Err(origence::error::AppError::NotFound)
+    ));
+    admin
+        .call(
+            Method::DELETE,
+            &format!("/admin/keys/{}", owner.key_id),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        client.call(Method::POST, &path, Some(&request), None).await,
+        Err(origence::error::AppError::Unauthorized)
+    ));
+    assert!(remote.queries().is_empty());
+    host.abort();
+    let _ = host.await;
     reopened.engine.shutdown().await.unwrap();
 }
 
@@ -188,7 +296,60 @@ async fn configuration_checks_reject_wrong_embedding_space_and_persist_analysis_
         AnySeekFullTextStore::new(vector.config().with_embedding("model-a".into(), 2).unwrap())
             .unwrap();
     backend.check().await.unwrap();
+    use origence::storage::{FullTextEntry, SourceVersion, VectorEntry, VectorQuery};
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let id = Uuid::new_v4();
+    let source = SourceVersion {
+        source_id: Uuid::new_v4(),
+        version: 1,
+    };
+    backend
+        .upsert_combined(
+            scope,
+            vec![FullTextEntry {
+                id,
+                source,
+                generation: 1,
+                search_terms: "alpha".into(),
+            }],
+            vec![VectorEntry {
+                id,
+                source,
+                generation: 1,
+                embedding: vec![1., 0.],
+                profile: "model-a".into(),
+                dimension: 2,
+            }],
+            origence::storage::anyseek::operation_epoch().unwrap(),
+        )
+        .await
+        .unwrap();
+    let query = VectorQuery {
+        scope,
+        artifact_ids: Some(vec![id]),
+        profile: "model-a".into(),
+        dimension: 2,
+        generation: 1,
+        embedding: vec![1., 0.],
+        limit: 1,
+    };
+    let expected = [(id, source)].into_iter().collect();
+    assert_eq!(
+        backend
+            .search_vector(query.clone(), &expected)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     vector.info_override("embedding_space_id", json!("model-b"));
+    assert!(
+        backend.search_vector(query, &expected).await.is_err(),
+        "query must detect space drift without a health probe"
+    );
     assert!(backend.check().await.is_err());
     let dir = tempfile::tempdir().unwrap();
     let remote = fixture(dir.path(), None);

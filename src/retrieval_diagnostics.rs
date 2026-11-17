@@ -39,6 +39,7 @@ pub struct BackendQuery {
     pub elapsed_us: u64,
     pub analysis_fingerprint: String,
     pub index_progress: IndexProgress,
+    pub embedding_space_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -171,16 +172,18 @@ impl BackendQuery {
         header_id: Option<&str>,
         config: Option<&CheckedConfig>,
     ) -> bool {
-        self.format_version == 1
+        self.format_version == 2
             && request_id(&self.request_id)
             && version(&self.engine_version)
             && self.mode == expected_mode
             && header_id == Some(self.request_id.as_str())
             && digest(&self.analysis_fingerprint)
+            && self.embedding_space_sha256.as_deref().is_none_or(digest)
             && self.index_progress.sampling == "after_query_not_atomic_with_result"
             && config.is_none_or(|c| {
                 c.engine_version == self.engine_version
                     && c.analysis_fingerprint == self.analysis_fingerprint
+                    && c.embedding_space_sha256 == self.embedding_space_sha256
             })
     }
 }

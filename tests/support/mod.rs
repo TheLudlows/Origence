@@ -423,9 +423,10 @@ async fn query(
         StatusCode::OK,
         Json(
             json!({"hits":hits,"count_total":count,"visible_seq":data.posts,
-            "diagnostics":{"format_version":1,"request_id":if data.bad_diagnostics {"PRIVATE BAD REQUEST ID".into()}else{request_id},"engine_version":"fixture-1",
+            "diagnostics":{"format_version":2,"request_id":if data.bad_diagnostics {"PRIVATE BAD REQUEST ID".into()}else{request_id},"engine_version":"fixture-1",
                 "mode":if q.get("query_vector").is_some(){"vector"}else if q["query"].as_str().is_some_and(|s|!s.is_empty()){"lexical"}else{"browse"},
                 "elapsed_us":1,"analysis_fingerprint":analysis_fingerprint(),
+                "embedding_space_sha256":data.info_overrides.get("embedding_space_id").map_or_else(||data.profile.as_deref().map(storage::hash), |v|v.as_str().map(storage::hash)),
                 "index_progress":{"committed_seq":data.posts,"lexical_seq":data.posts,"vector_seq":data.posts,
                     "index_failed":false,"recovery_required":false,"sampling":"after_query_not_atomic_with_result"}}}),
         ),
