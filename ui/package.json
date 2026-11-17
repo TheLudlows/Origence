@@ -1,0 +1,21 @@
+{
+  "name": "@origence/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc && node scripts/copy.mjs",
+    "check": "tsc --noEmit",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "dev": "npm run build && node --watch dist/server.js",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "happy-dom": "21.0.4",
+    "typescript": "5.9.3"
+  }
+}
