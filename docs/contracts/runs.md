@@ -64,3 +64,35 @@ it is not an atomic read of the result, an Origence transaction, delivery proof,
 independent verification of the evidence. See [API](../API.md#检索诊断).
 Query diagnostics v2 include the current embedding-space SHA256 (or null), checked
 against the admitted space on every response in addition to the analysis digest.
+
+## Exact asset-version recorded associations
+
+`GET /v1/assets/{asset_id}/runs?version=N&after=UUID&limit=25` is a read-only
+current-logical-key lookup. A positive `version` is required; no implicit latest.
+`limit` is 1–100. `after` defaults to nil and advances by Run UUID, not timestamps.
+The response contains `asset_id`, `asset_version`, `items` (`run_id`,
+`created_at_ms` only), `next_after`, `scope:"current_logical_key"` and
+`coverage:"recorded_references"`. It exposes no Run summary, query, body or quote.
+
+The lookup table is a projection maintained atomically with accepted client
+context-reference and server-prepared events. One pointer per owner/asset/version/
+Run retains the first immutable archived reference as its proof. Retries do not
+create duplicates. The scope/owner/asset/version/Run primary key supports a bounded
+range read; there is no scan of all Runs or JSON search. In one authorized read
+snapshot the server checks the exact asset version, sources, logical owner/private
+session, authoritative event reference identity and current reference visibility.
+The projection alone grants no access. An invisible/missing proof is omitted
+conservatively, even if a later event also mentions that asset; the endpoint does
+not search other events to replace withdrawn evidence. Cursor advancement counts
+examined pointers, so an empty page can still have `next_after`.
+
+These are recorded associations, not complete capture or proof of receipt/use.
+The response does not grant access to a full trace: opening the Run rechecks the
+trace's own sources, including unrelated references. A workspace administrator
+cannot enumerate another logical key's associations; credential rotation retains
+ownership. Asset/source withdrawal denies the lookup. The UI clears stale results
+on retry, provides empty/error states, and clears the displayed asset on 403/404.
+
+This fresh-only schema adds `oc_run_asset_refs`; exact schema admission rejects
+an existing database without the table without creating it or rewriting evidence.
+Same-schema reopen retains associations. No migration or backfill is performed.

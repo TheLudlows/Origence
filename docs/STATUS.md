@@ -29,6 +29,14 @@ Blob/PDF 测试不加载元数据库；SQLite authority 单独通过 `--features
 精确本地结果、远端 CI 及未验收边界统一见 VALIDATION 和 PR。
 
 ## 检索模块拆分（已合入 PR #79）
+## #76 关联 Run 本地切片
+
+已同步 main `f62168b`（#81 SQLite）：资产详情可读取具体版本的当前 logical key 已记录 Run 引用。
+有界索引与事件同事务写入，读取再次核验权威引用/资产/来源/所有权，不返回 Run 正文；
+固定 v1 往返、另一管理员隔离、撤回、分页与重开已验证，见 [VALIDATION](VALIDATION.md)。
+索引保留首条引用证明，不替代完整采集或 trace 可读性；新 schema fresh-only，旧库拒绝而不迁移。
+本切片对应草稿 #83；第一批浏览器分支独立保留。#76 的计量、告警、PDF 页内文本和外部任务验收仍缺。
+
 
 已同步 main `3d474d9`（含 #77 UI、#78 诊断）。已核验分路的排序/融合位于
 `retrieval::rank`，最终发布及返回复核由 SQLite 事务方法负责；Search 与 EvidenceBundle

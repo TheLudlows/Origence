@@ -63,6 +63,7 @@ pub fn router_with_options(service: Service, options: ApiOptions) -> Router {
         .route("/v1/context", post(context_bundle))
         .route("/v1/resolve", post(resolve))
         .route("/v1/assets", get(assets))
+        .route("/v1/assets/{id}/runs", get(asset_runs))
         .route("/v1/assets/{id}", get(asset).delete(delete_asset))
         .route("/v1/assets/{id}/restore", post(restore))
         .route("/v1/events/{id}", get(source_event).delete(delete_event))
@@ -241,6 +242,30 @@ async fn asset(
     Query(v): Query<Version>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.get(&auth(&s, &h).await?, id, v.version).await?))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AssetRunPage {
+    version: i32,
+    after: Option<Uuid>,
+    limit: Option<usize>,
+}
+async fn asset_runs(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+    Query(page): Query<AssetRunPage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.asset_runs(
+            &auth(&s, &h).await?,
+            id,
+            page.version,
+            page.after.unwrap_or_default(),
+            page.limit.unwrap_or(25),
+        )
+        .await?,
+    ))
 }
 async fn restore(
     State(s): State<Service>,

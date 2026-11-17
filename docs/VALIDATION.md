@@ -5,6 +5,35 @@
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：#76 精确版本关联 Run（独立本地切片）
+
+基线 main `593e8fa71d7c354587cffdd1aae7c4b2e2d2a554`；独立分支，不包含第一批
+`fix/issue76-browser-coverage` 的改动。新增只读 `GET /v1/assets/{id}/runs?version=N`，
+限制当前逻辑 key、精确版本及 1–100 候选，UUID 游标。新表只是首条已记录引用的定位投影，
+引用事件仍为权威：客户端上报和服务端准备在原事务内更新，同快照读取资产、来源、owner
+并重新核验事件中的精确引用；不扫描所有 Run，不返回私有正文。不可读 proof 保守省略，
+不宣称完整关联/采集，具体边界见 Run 合同。所有新增 SQL 已逐条审查，均为单表操作，无 JOIN。
+
+真实 localhost Node UI → Origence → AnySeek，fresh v4 合成数据/一次性 key、无模型。
+AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`；Chromium 156.0.8078.79，
+1440×1000 headless，Playwright 实点无响应拦截：Run → 固定 v1 → 已记录关联 → 原 Run；
+当前 v2 关联为空；同 workspace 另一管理员关联为空且直接 Run 被拒绝；来源撤回后重新读取
+关联会清除正文和旧链接；旧引用重点击、刷新登录和重新打开 Run 均拒绝旧证据。
+共 10 项真实浏览器断言通过。此切片没有重复五页响应式验收，也未运行真实外部客户端。
+
+本地 Node 24.22.1 `npm --prefix ui run check`、`npm --prefix ui test` PASS（构建/16 项），
+现有 DOM fixture 仅增加精确版本关联往返子用例。Rust 1.98.0：
+- `cargo test --test local catalog::` PASS（5 项，含既有 semantic_catalog 3 项）；
+  新用例验证 v1/v2、同 workspace 另一管理员隔离、轮换、幂等去重、游标/上限、跨 workspace、
+  重开及来源撤回。增加权威引用缺失的空页游标断言后，精确重跑该用例 PASS。
+- `cargo test --test local workspace_schema_rejection::` PASS（5 项）；
+  `cargo test --no-default-features --test local workspace_schema_rejection::` PASS（5 项）。
+  缺失新表时打开被拒绝且数据库字节不变。
+- `cargo test --test local retrieval_diagnostics::run_diagnostics_are_private_durable_and_replay_original_evidence` PASS（1 项）。
+- `cargo fmt --check`、默认/no-default `cargo clippy --all-targets -- -D warnings`、
+  `git diff --check` PASS。Windows 未跑；没有新 CI（未推送）。
+不推送、不创建 PR、不关闭 #76；生产计量、告警、PDF 页内文本及完整外部验收仍缺。
+
 ## 2026-11-17：Run 事件来源标签与真实浏览器定向验收（本地）
 
 基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`。仅修改 UI 事件标签及详情：
@@ -547,3 +576,57 @@ Run 诊断持久化验收，通过。全部新建临时数据，不调用外部�
 仅减少空批次、已确定结果的分支和入口重复授权读取，不增加 JOIN、额外提交、
 跨请求权限缓存、事务内模型/文件/AnySeek IO 或业务元数据。DDL/格式未改变。
 本轮未重复容器 release 构建；既有 SQLite 容器互操作证据按原提交保留。远端结果见 PR。
+
+## 2026-11-17 · PR #83 synchronization with merged SQLite #81
+
+Merged main `f62168b4cbedfbe6a3a97dbb3161f9e6375fb2df` into the existing #83
+head `537fdbd982740c1283f3ef0e01dc47ef6a651347` without rewriting history.
+Coordinated Run storage with SqliteTx/sqlite_db/sqlite_err and updated the tests'
+old driver paths. Client events and server-prepared events both retain the reverse
+projection insert in their existing write transaction. Fresh-only schema admission,
+first-reference coverage and current-logical-key/source guards are unchanged.
+
+Promoted the narrowly scoped combination diagnostic into the existing catalog
+regression: an injected projection-insert failure rolls back the client event and
+server-prepared event, then retrying the same server event ID succeeds and yields
+the exact v2 association. Withdrawing independent v1 leaves that v2 association
+visible. This proves ordinary transaction failure handling, not power-loss durability.
+
+Executed on the actual synchronized worktree, Linux / Rust 1.98.0 / Node 24.22.1:
+
+- `cargo test --locked --test local asset_run_references_are_exact_bounded_private_and_withdrawal_gated`:
+  1 passed, 189 filtered (fixed version, other-admin/key/workspace isolation,
+  rotation, pagination/limits, authoritative proof recheck, reopen, withdrawal,
+  client/prepared projection rollback and successful retry).
+- `cargo test --locked --test local workspace_schema_rejection`:
+  5 passed, 185 filtered.
+- `cargo test --locked --no-default-features --features sqlite --test local workspace_schema_rejection`:
+  5 passed, 74 filtered; includes missing reverse table and old-layout rejection
+  without repair. These integration tests use the existing protocol peer for
+  AnySeek and are not real-engine ranking acceptance.
+- `cargo build --locked`: passed.
+- `cargo clippy --locked --all-targets -- -D warnings`: passed.
+- `cargo clippy --locked --no-default-features --features sqlite --all-targets -- -D warnings`: passed.
+- `cargo clippy --locked --no-default-features --all-targets -- -D warnings`: passed.
+- `cargo fmt --all -- --check`, `git diff --check`: passed.
+- `npm --prefix ui run check`; `npm --prefix ui test`: passed, 16 UI tests.
+
+Real AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`, models disabled,
+fresh temporary v4 data, disposable keys, rebuilt synchronized Origence binary:
+
+- `python3 tools/anyseek_smoke.py --anyseek-binary "$ANYSEEK_BINARY" --run python3 tools/mcp_smoke.py --binary "$ORIGENCE_BINARY"`:
+  passed both host-forwarding and offline MCP (protocol/schema/tools, safe errors,
+  live/invalid/revoked credentials, EOF and reopen).
+- Reused the real Chromium fixture via the same AnySeek launcher with the
+  synchronized UI/server. Chromium 156.0.8078.79 passed Run -> fixed v1 after v2
+  publication -> recorded association -> same Run; v2 and another same-workspace
+  admin cannot enumerate v1-owned associations. Browser source withdrawal,
+  association refresh, stale citation re-click, URL reload and Run reopen all
+  deny old content; server preparation failure remains server-observed/not-prepared.
+  No route interception, production data, paid models, screenshots or credentials
+  were added to this commit.
+
+Windows and full combined CI were not run locally. GitHub results must be checked
+on the new pushed HEAD; the old separate PR green runs and the earlier temporary
+combination tree are not evidence that this new HEAD passed remote CI. No complete
+#76/native Claude Code/Codex task or production acceptance is claimed.

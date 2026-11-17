@@ -488,3 +488,13 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 
 详见 [EvidenceBundle 契约](contracts/evidence-bundle.md)。真实 Agent
 对照需独立执行；fixture 仅验证工具/模型交互框架，不是任务收益结果。
+
+### 资产固定版本的已记录 Run 引用
+
+`GET /v1/assets/{asset_id}/runs?version=1&limit=25&after={run_uuid}`：`version` 必填且为正数；
+`limit` 为 1–100，默认 25；`after` 可省略，按 Run UUID 稳定翻页。仅当前 logical key，
+管理员没有他人的 Run 读取特权。返回 `asset_id`、`asset_version`、`items`（仅 `run_id`、
+`created_at_ms`）、`next_after`、`scope: current_logical_key`、`coverage: recorded_references`。
+空页仍可能有下一游标；源或资产不可读时拒绝访问。索引定位首条已归档引用并复核权威事件，
+不可读的关联保守省略，不承诺完整采集或整个 Run 的其他引用可读。
+详见 [Run 合同](contracts/runs.md#exact-asset-version-recorded-associations)。
