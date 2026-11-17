@@ -129,6 +129,17 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
             },
             references: [],
           },
+          ...[
+            ["server_observed", "server", "context_preparation_failed", "not_prepared"],
+            ["reported", "client", "result_reported", undefined],
+            ["future_origin", "client", "future_event", undefined],
+          ].map(([evidence_origin, reporter, kind, delivery_status], index) => ({
+            sequence: index + 2,
+            recorded_at_ms: 1001 + index,
+            evidence_origin,
+            report: { reporter, kind, delivery_status },
+            references: [],
+          })),
         ],
         next_after: null,
       });
@@ -356,6 +367,18 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         document.body.textContent.includes("context_prepared"),
     );
     assert.ok(document.body.textContent.includes("未确认收到或使用"));
+    const events = [...document.querySelectorAll(".timeline button.event")];
+    assert.deepEqual(events.map((event) => event.querySelector(".badge").textContent), [
+      "服务端准备成功", "服务端准备失败", "客户端上报", "来源未知",
+    ]);
+    events[1].click();
+    assert.ok(document.body.textContent.includes("服务端观察到准备失败；未准备上下文"));
+    assert.ok(document.body.textContent.includes("not_prepared"));
+    events[2].click();
+    assert.ok(document.body.textContent.includes("客户端上报；未经独立验证"));
+    events[3].click();
+    assert.ok(document.body.textContent.includes("证据来源未知；不推断为服务端观察或客户端上报"));
+    events[0].click();
     click("11111111 · v1");
     await wait(
       () =>
