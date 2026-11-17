@@ -194,6 +194,7 @@ function eventOrigin(event: RunEvent): [string, string] {
 
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
+  const assessments = el("div");
   let after = 0;
   const timeline = el("div", "timeline"),
     details = el("div"),
@@ -275,6 +276,11 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       if (events[0]) selectEvent(events[0]);
       more.hidden = value.next_after === null;
     } catch (e) {
+      events.length = 0;
+      timeline.replaceChildren();
+      details.replaceChildren();
+      assessments.replaceChildren();
+      summary.textContent = "";
       message(error, e);
     } finally {
       more.disabled = false;
@@ -299,7 +305,81 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       panel("事件顺序", timeline, more),
       panel("节点与上下文证据", details),
     ),
+    panel("外部核验记录", assessments),
     error,
   );
+  await load();
+  if (events.length && !ctx.signal.aborted) await verificationPanel(assessments, id, ctx);
+}
+
+// Independent DTO: external claims never create an authenticated event role.
+interface VerificationRecord {
+  assessment: {
+    verification_id: string;
+    through_sequence: number;
+    prefix_digest: string;
+    verifier_label: string;
+    assessed_at_ms: number;
+    conclusion: "passed" | "failed" | "inconclusive";
+    basis_summary: string;
+    basis_sequences: number[];
+    reported_skill_version: { skill_id: string; version: number; digest: string } | null;
+  };
+  recorder_principal_id: string;
+  recorded_at_ms: number;
+  withdrawal: { reason: string; recorded_at_ms: number } | null;
+}
+async function verificationPanel(root: HTMLElement, id: string, ctx: ViewContext) {
+  const body = el("div"), error = el("div");
+  let after: string | null = null;
+  const records: VerificationRecord[] = [];
+  let generation = 0;
+  const load = async () => {
+    const request = ++generation;
+    more.disabled = true;
+    error.replaceChildren();
+    try {
+      const page = await api.get<Page<VerificationRecord>>(
+        `/v1/runs/${encodeURIComponent(id)}/verifications?limit=25${after ? "&after=" + after : ""}`, ctx.signal,
+      );
+      if (ctx.signal.aborted || request !== generation) return;
+      records.push(...page.items);
+      after = page.next_after;
+      body.replaceChildren(...records.map((r) => {
+        const a = r.assessment;
+        return panel(
+          r.withdrawal ? "已撤销的外部核验" : "Owner 转录的外部核验",
+          badge(({ passed: "外部结论：通过", failed: "外部结论：失败", inconclusive: "外部结论：无法确定" })[a.conclusion]),
+          el("p", "muted", `核验者（未经认证的声明）：${a.verifier_label}`),
+          el("p", "muted", `声称核验时间：${date(a.assessed_at_ms)} · 平台记录时间：${date(r.recorded_at_ms)}`),
+          el("p", "mono", `记录凭据：${r.recorder_principal_id}`),
+          el("p", "mono", `固定前缀：1–${a.through_sequence} · ${a.prefix_digest}`),
+          el("p", "", a.basis_summary),
+          el("p", "muted", `依据事件：${a.basis_sequences.join(", ")}`),
+          a.reported_skill_version ? code(a.reported_skill_version) : el("p", "muted", "实际使用的 Skill 版本：未知"),
+          a.reported_skill_version ? el("p", "muted", "上述版本由 owner 声明，不证明加载或使用。") : null,
+          r.withdrawal ? el("p", "", `撤销：${r.withdrawal.reason} · ${date(r.withdrawal.recorded_at_ms)}`) : null,
+        );
+      }));
+      if (!records.length) body.append(empty("暂无外部核验记录", "自报成功不代表核验通过；未记录的核验保持未知。"));
+      more.hidden = !after;
+    } catch (e) {
+      if (ctx.signal.aborted || request !== generation) return;
+      records.length = 0;
+      after = null;
+      body.replaceChildren();
+      more.hidden = false;
+      message(error, e);
+    } finally { if (request === generation) more.disabled = false; }
+  };
+  const more = button("加载核验记录 / 重试", load);
+  const refresh = button("刷新核验记录", async () => {
+    after = null;
+    records.length = 0;
+    body.replaceChildren();
+    refresh.disabled = true;
+    try { await load(); } finally { refresh.disabled = false; }
+  });
+  root.replaceChildren(el("p", "muted", "仅 owner 转录外部证据；平台未核验其结论，核验者标签不授予 Run 正文访问权。"), body, more, refresh, error);
   await load();
 }

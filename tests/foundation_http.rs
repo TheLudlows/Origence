@@ -243,3 +243,183 @@ async fn session_from_stdio(base: &str, key: &str) -> Value {
     .await
     .expect("stdio MCP test exceeded its time budget")
 }
+
+#[tokio::test]
+async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_source() {
+    use origence::{
+        run::{RunEventInput, RunInput},
+        worker,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(
+            scope.tenant_id,
+            scope.workspace_id,
+            "synthetic verification",
+        )
+        .await
+        .unwrap();
+    let owner = store.issue_key(scope, "admin").await.unwrap();
+    let reviewer = store.issue_key(scope, "reviewer").await.unwrap();
+    let a = service.auth(&owner.token).await.unwrap();
+    let first = service
+        .knowledge(
+            &a,
+            "v1",
+            serde_json::from_value(
+                json!({"title":"Atlas", "content":"Atlas version one", "format":"text"}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    while worker::process_next(&service).await.unwrap() {}
+    let asset = first["asset_id"].clone();
+    let second = service.knowledge(&a, "v2", serde_json::from_value(json!({"title":"Atlas", "content":"Atlas version two", "format":"text", "asset_id":asset, "expected_version":1})).unwrap()).await.unwrap();
+    while worker::process_next(&service).await.unwrap() {}
+    let run = Uuid::new_v4();
+    service
+        .create_run(
+            &a,
+            RunInput {
+                run_id: run,
+                summary: "synthetic task".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let client = HostClient::new(&base, owner.token.clone()).unwrap();
+    let path = format!("/v1/runs/{run}");
+    let prepared = client
+        .call(
+            Method::POST,
+            &format!("{path}/context"),
+            Some(&json!({"event_id":Uuid::new_v4(),"context":{"query":"Atlas", "mode":"keyword"}})),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        prepared["bundle"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["provenance"]["asset_version"] == 2 || i["asset_version"] == 2),
+        "{prepared}"
+    );
+    service.append_run_event(&a, run, serde_json::from_value::<RunEventInput>(json!({"event_id":Uuid::new_v4(),"reporter":"user","observed_at_ms":1,"event":{"kind":"result_reported","outcome":"success","summary":"self-reported"}})).unwrap()).await.unwrap();
+    let prefix = service.run_prefix(&a, run, 2).await.unwrap();
+    let id = Uuid::new_v4();
+    let input = json!({"verification_id":id,"through_sequence":2,"prefix_digest":prefix["digest"],"verifier_label":"synthetic external assessor","assessed_at_ms":2,"conclusion":"failed","basis_summary":"external check found missing output","basis_sequences":[1,2],"reported_skill_version":null});
+    let route = format!("{path}/verifications");
+    let receipt = client
+        .call(Method::POST, &route, Some(&input), None)
+        .await
+        .unwrap();
+    assert_eq!(receipt["evidence_origin"], "owner_transcribed_external");
+    assert_eq!(receipt["verifier_authentication"], "unverified_claim");
+    assert_eq!(receipt["platform_verification"], "not_performed");
+    assert_eq!(receipt["assessment"]["reported_skill_version"], Value::Null);
+    assert_eq!(
+        receipt,
+        client
+            .call(Method::POST, &route, Some(&input), None)
+            .await
+            .unwrap()
+    );
+    let outsider = HostClient::new(&base, reviewer.token.clone()).unwrap();
+    assert!(
+        outsider
+            .call(Method::GET, &route, None, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        outsider
+            .call(Method::POST, &route, Some(&input), None)
+            .await
+            .is_err()
+    );
+    assert!(outsider.call(Method::GET, &path, None, None).await.is_err());
+    let mut forged = input.clone();
+    forged["platform_verification"] = json!("passed");
+    assert!(
+        client
+            .call(Method::POST, &route, Some(&forged), None)
+            .await
+            .is_err()
+    );
+    let mut invalid = input.clone();
+    invalid["basis_sequences"] = json!([3]);
+    assert!(
+        client
+            .call(Method::POST, &route, Some(&invalid), None)
+            .await
+            .is_err()
+    );
+    let mut changed = input.clone();
+    changed["conclusion"] = json!("passed");
+    assert!(matches!(
+        client
+            .call(Method::POST, &route, Some(&changed), None)
+            .await,
+        Err(origence::error::AppError::Conflict(_))
+    ));
+    // Later Run events do not invalidate or reinterpret the exact assessed prefix.
+    service.append_run_event(&a, run, serde_json::from_value(json!({"event_id":Uuid::new_v4(),"reporter":"test","observed_at_ms":3,"event":{"kind":"coverage","component":"model_use","status":"unknown","summary":"not observed"}})).unwrap()).await.unwrap();
+    assert_eq!(
+        receipt,
+        client.call(Method::GET, &route, None, None).await.unwrap()["items"][0]
+    );
+    let withdraw = format!("{route}/{id}/withdraw");
+    let reason = json!({"reason":"external evidence withdrawn"});
+    let withdrawn = client
+        .call(Method::POST, &withdraw, Some(&reason), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        withdrawn,
+        client
+            .call(Method::POST, &withdraw, Some(&reason), None)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        withdrawn,
+        client
+            .call(Method::POST, &route, Some(&input), None)
+            .await
+            .unwrap()
+    );
+    // Source withdrawal blocks even historical/revoked assessment read and replay.
+    let source: Uuid = serde_json::from_value(second["source_event_id"].clone()).unwrap();
+    service
+        .delete(&a, "withdraw-source", source, "event")
+        .await
+        .unwrap();
+    assert!(client.call(Method::GET, &route, None, None).await.is_err());
+    assert!(
+        client
+            .call(Method::POST, &route, Some(&input), None)
+            .await
+            .is_err()
+    );
+    assert!(
+        client
+            .call(Method::POST, &withdraw, Some(&reason), None)
+            .await
+            .is_err()
+    );
+    host.abort();
+    service.engine.shutdown().await.unwrap();
+}

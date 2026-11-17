@@ -21,6 +21,7 @@ const rules: [string, RegExp][] = [
   ["POST", new RegExp(`^/v1/assets/${uuid}/restore$`)],
   ["POST", new RegExp(`^/v1/jobs/${uuid}/(retry|cancel)$`)],
   ["GET", new RegExp(`^/v1/runs/${uuid}/prefix$`)],
+  ["GET", new RegExp(`^/v1/runs/${uuid}/verifications$`)],
   ["GET", new RegExp(`^/v1/assets/${uuid}/runs$`)],
   ["GET", /^\/v1\/memory-properties\/[a-z0-9_.-]+$/],
 ];
