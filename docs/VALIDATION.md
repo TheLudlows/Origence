@@ -15,8 +15,11 @@
 fast-check 的实际失败为 `graph_evidence_for_publication` 在 no-default 下 dead_code。
 
 修复提交 `b6b0bf0af39f67d8cf5ed3fe49058fa90e0471c8`：图方法仅在其唯一调用方所在的
-`local-storage` 下编译；同一 feature 控制 `tests/local.rs` 的 Service 夹具；空 schema
+`local-storage` 下编译；同一 feature 控制 Service 测试夹具；空 schema
 返回缺省空属性集合，字段集合、required、类型和 additionalProperties 检查不变。
+后续将夹具 gate 从 `tests/local.rs` 的声明移到 `tests/support/mod.rs` 文件级，
+保持同一 feature 行为，避免与新 main 在模块入口新增 catalog 测试产生文本冲突。
+移动后重跑两种 feature 全目标 Clippy 和 no-default 完整套件。
 没有全局 lint allow，也没有删掉失败检查。开始本轮时 main 已前进到 `44e06df`
 （#77 合并），这三处最小修复与该主干一致；本分支未合入 UI 或 #78 诊断功能。
 
