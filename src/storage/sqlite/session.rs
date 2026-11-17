@@ -12,16 +12,15 @@ mod context_reads;
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
-    let tables: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback'))")
-        .fetch_one(&mut *conn).await.map_err(turso_err)?;
+    let tables: bool = sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback'))")
+        .fetch_one(&mut *conn).await.map_err(sqlite_err)?;
     // Evaluate both original relations, including their prepare errors. This
     // is the existing global presence probe, not a complete schema validator.
-    let sources: bool = native_turso::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')",
-    )
-    .fetch_one(conn)
-    .await
-    .map_err(turso_err)?;
+    let sources: bool =
+        sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
+            .fetch_one(conn)
+            .await
+            .map_err(sqlite_err)?;
     Ok(tables || sources)
 }
 
@@ -53,15 +52,15 @@ const ARCHIVE_ENTITY_LEDGER: &str = "SELECT artifact_id,(source_id=? AND version
 
 const ARCHIVE_RELATION_LEDGER: &str = "SELECT artifact_id,(source_id=? AND version=? AND artifact_id=?) AS m0,(source_id=? AND version=? AND artifact_id=?) AS m1,(source_id=? AND version=? AND artifact_id=?) AS m2,(source_id=? AND version=? AND artifact_id=?) AS m3,(source_id=? AND version=? AND artifact_id=?) AS m4,(source_id=? AND version=? AND artifact_id=?) AS m5,(source_id=? AND version=? AND artifact_id=?) AS m6,(source_id=? AND version=? AND artifact_id=?) AS m7 FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND (artifact_type='relation' AND surface='graph' AND state='committed') AND ((source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?) OR (source_id=? AND version=? AND artifact_id=?))";
 
-fn association_key(value: impl native_turso::Encode) -> StorageResult<AssociationKey> {
-    let value = native_turso::Encode::encode(value).map_err(turso_err)?;
-    native_turso::Decode::decode(&value).map_err(turso_err)
+fn association_key(value: impl sqlite_db::Encode) -> StorageResult<AssociationKey> {
+    let value = sqlite_db::Encode::encode(value).map_err(sqlite_err)?;
+    sqlite_db::Decode::decode(&value).map_err(sqlite_err)
 }
 
 #[derive(Default)]
 struct ArchiveRow {
-    root: Option<native_turso::Row>,
-    chunk: Option<native_turso::Row>,
+    root: Option<sqlite_db::Row>,
+    chunk: Option<sqlite_db::Row>,
     chunk_owned: bool,
     graph_owned: bool,
 }
@@ -75,11 +74,11 @@ struct ArchiveReadBatch {
     owners_loaded: bool,
     graph_loaded: bool,
     contents_loaded: bool,
-    contents: HashMap<Uuid, native_turso::Row>,
+    contents: HashMap<Uuid, sqlite_db::Row>,
     support: HashMap<(Uuid, i32), bool>,
 }
 
-impl TursoTx {
+impl SqliteTx {
     async fn require_sessions(&mut self) -> StorageResult<()> {
         if !available(&mut self.tx).await? {
             return Err(StorageError::Unavailable(
@@ -140,7 +139,7 @@ impl TursoTx {
                 .collect();
         let keys = versions
             .iter()
-            .map(|(_, row)| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
+            .map(|(_, row)| Ok(vec![row.try_get("source_event_id").map_err(sqlite_err)?]))
             .collect::<StorageResult<Vec<_>>>()?;
         // No current-version or source-kind predicate belongs to this layer.
         let active: HashSet<_> =
@@ -211,7 +210,7 @@ impl TursoTx {
                         .as_ref()
                         .ok_or(StorageError::NotFound)?;
                     Ok(vec![
-                        root.try_get("source_event_id").map_err(turso_err)?,
+                        root.try_get("source_event_id").map_err(sqlite_err)?,
                         association_key(reference.asset_version)?,
                         association_key(reference.chunk_id)?,
                     ])
@@ -271,7 +270,7 @@ impl TursoTx {
                         .as_ref()
                         .ok_or(StorageError::NotFound)?;
                     Ok(vec![
-                        root.try_get("source_event_id").map_err(turso_err)?,
+                        root.try_get("source_event_id").map_err(sqlite_err)?,
                         association_key(reference.asset_version)?,
                         association_key(reference.id)?,
                     ])
@@ -329,10 +328,10 @@ impl TursoTx {
             )
             .await?
             {
-                if row.try_get::<Option<bool>>("active").map_err(turso_err)? == Some(true) {
+                if row.try_get::<Option<bool>>("active").map_err(sqlite_err)? == Some(true) {
                     batch
                         .contents
-                        .insert(row.try_get("id").map_err(turso_err)?, row);
+                        .insert(row.try_get("id").map_err(sqlite_err)?, row);
                 }
             }
         }
@@ -356,7 +355,7 @@ impl TursoTx {
             .as_ref()
             .ok_or(StorageError::NotFound)?
             .try_get("source_event_id")
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         let version = (reference.asset_id, reference.asset_version);
         let supported = if let Some(supported) = batch.support.get(&version) {
             *supported
@@ -376,7 +375,7 @@ impl TursoTx {
             .as_ref()
             .ok_or(StorageError::NotFound)?
             .try_get("locator")
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         let locator: Value = decode(&locator)?;
         self.archive_owners(batch).await?;
         if !batch.rows[index].chunk_owned {
@@ -412,7 +411,7 @@ impl TursoTx {
                 .get(&source)
                 .ok_or(StorageError::NotFound)?
                 .try_get::<String>("content")
-                .map_err(turso_err)?;
+                .map_err(sqlite_err)?;
         }
         Ok(ArchivedEvidence {
             evidence_ref_id,
@@ -443,9 +442,9 @@ impl TursoTx {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Vec<ArchivedEvidence>> {
-        let rows: Vec<String> = native_turso::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal LIMIT 65")
+        let rows: Vec<String> = sqlite_db::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal LIMIT 65")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         if rows.len() > crate::session::MAX_USED_EVIDENCE {
             return Err(StorageError::NotFound);
         }
@@ -473,13 +472,13 @@ impl TursoTx {
         turn: Uuid,
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_sessions().await?;
-        let turn_row = native_turso::query("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+        let turn_row = sqlite_db::query("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let keys = turn_row
             .as_ref()
             .map(|row| -> StorageResult<Vec<AssociationKey>> {
-                Ok(vec![row.try_get("source_event_id").map_err(turso_err)?])
+                Ok(vec![row.try_get("source_event_id").map_err(sqlite_err)?])
             })
             .transpose()?
             .into_iter()
@@ -492,7 +491,7 @@ impl TursoTx {
         let source = turn_row
             .ok_or(StorageError::NotFound)?
             .try_get("source_event_id")
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         let archived = self.turn_evidence(session, turn).await?;
         let references: Vec<_> = archived
             .iter()
@@ -532,9 +531,9 @@ impl TursoTx {
         if !available(&mut self.tx).await? {
             return Err(StorageError::NotFound);
         }
-        let turn: Option<(Uuid, Uuid)> = native_turso::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+        let turn: Option<(Uuid, Uuid)> = sqlite_db::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (session, turn) = turn.ok_or(StorageError::NotFound)?;
         self.require_turn_visible(session, turn).await?;
         Ok(())
@@ -553,9 +552,9 @@ impl TursoTx {
         if session.is_nil() {
             return Err(StorageError::InvalidArgument("session_id must be non-nil"));
         }
-        let existing: Option<(Uuid, String)> = native_turso::query_as("SELECT source_event_id,request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+        let existing: Option<(Uuid, String)> = sqlite_db::query_as("SELECT source_event_id,request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let source = if let Some((source, hash)) = existing {
             if hash != request_hash {
                 return Err(StorageError::Conflict("turn is immutable".into()));
@@ -590,13 +589,13 @@ impl TursoTx {
                     None,
                 )
                 .await?;
-            native_turso::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
+            sqlite_db::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
-                .bind(source).bind(request_hash).bind(self.principal_id).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+                .bind(source).bind(request_hash).bind(self.principal_id).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
             for (ordinal, item) in evidence.iter().enumerate() {
-                native_turso::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,?,?)")
+                sqlite_db::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,?,?)")
                     .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
-                    .bind(item.evidence_ref_id).bind(ordinal as i32).bind(encode(item)?).execute(&mut *self.tx).await.map_err(turso_err)?;
+                    .bind(item.evidence_ref_id).bind(ordinal as i32).bind(encode(item)?).execute(&mut *self.tx).await.map_err(sqlite_err)?;
             }
             self.audit("session.turn_archived", input.turn_id, json!({"session_id":session,"source_event_id":source,"evidence_count":evidence.len()})).await?;
             source
@@ -613,9 +612,9 @@ impl TursoTx {
             .await?
             .ok_or(StorageError::NotFound)?;
         let body: Value = decode(&body)?;
-        let (created_by, created_at): (Uuid, i64) = native_turso::query_as("SELECT created_by,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+        let (created_by, created_at): (Uuid, i64) = sqlite_db::query_as("SELECT created_by,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         let evidence = self.turn_evidence(session, turn).await?;
         let feedback = self.feedback_rows(session, turn).await?;
         Ok(
@@ -624,9 +623,9 @@ impl TursoTx {
     }
 
     async fn feedback_rows(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Vec<Value>> {
-        let rows: Vec<(Uuid, String, i64, i64)> = native_turso::query_as("SELECT principal_id,feedback,created_at,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY feedback_sequence")
+        let rows: Vec<(Uuid, String, i64, i64)> = sqlite_db::query_as("SELECT principal_id,feedback,created_at,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY feedback_sequence")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         rows.into_iter()
             .map(|(principal, body, created_at, sequence)| {
                 let mut value: Value = decode(&body)?;
@@ -661,34 +660,34 @@ impl TursoTx {
         }
         self.require_turn_visible(session, turn).await?;
         if let FeedbackTarget::Evidence { evidence_ref_id } = &input.target {
-            let found: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND evidence_ref_id=?)")
+            let found: bool = sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND evidence_ref_id=?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn).bind(evidence_ref_id)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
             if !found {
                 return Err(StorageError::NotFound);
             }
         }
-        let existing: Option<(String, Uuid, Uuid, i64)> = native_turso::query_as("SELECT request_hash,session_id,turn_id,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND principal_id=? AND feedback_id=?")
+        let existing: Option<(String, Uuid, Uuid, i64)> = sqlite_db::query_as("SELECT request_hash,session_id,turn_id,feedback_sequence FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND principal_id=? AND feedback_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(self.principal_id).bind(input.feedback_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let sequence = if let Some((hash, stored_session, stored_turn, sequence)) = existing {
             if hash != request_hash || stored_session != session || stored_turn != turn {
                 return Err(StorageError::Conflict("feedback is immutable".into()));
             }
             sequence
         } else {
-            let count: i64 = native_turso::query_scalar("SELECT count(*) FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+            let count: i64 = sqlite_db::query_scalar("SELECT count(*) FROM oc_feedback WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
             if count >= 256 {
                 return Err(StorageError::Conflict("turn feedback limit reached".into()));
             }
-            let sequence: i64 = native_turso::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0)+1 FROM oc_feedback WHERE tenant_id=? AND workspace_id=?")
+            let sequence: i64 = sqlite_db::query_scalar("SELECT COALESCE(MAX(feedback_sequence),0)+1 FROM oc_feedback WHERE tenant_id=? AND workspace_id=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
-            native_turso::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,?,?,?,?)")
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            sqlite_db::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(self.principal_id).bind(input.feedback_id)
-                .bind(session).bind(turn).bind(request_hash).bind(encode(input)?).bind(now_ms()).bind(sequence).execute(&mut *self.tx).await.map_err(turso_err)?;
+                .bind(session).bind(turn).bind(request_hash).bind(encode(input)?).bind(now_ms()).bind(sequence).execute(&mut *self.tx).await.map_err(sqlite_err)?;
             self.audit(
                 "session.feedback_recorded",
                 input.feedback_id,

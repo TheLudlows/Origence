@@ -1,4 +1,4 @@
--- Base schema for a NEW native Turso database, including asset-level identities.
+-- Base schema for a NEW native SQLite database, including asset-level identities.
 --
 -- Encodings are fixed here (A5):
 --   UUID        -> BLOB (16 bytes, native adapter UUID encoding)
@@ -8,8 +8,8 @@
 --   text        -> TEXT
 --
 -- Scope isolation is enforced by the adapter binding tenant_id/workspace_id on
--- every statement (A2.4): Turso has no row-level security. `foreign_keys` and
--- `busy_timeout` are set per connection; Turso uses its native WAL mode.
+-- every statement (A2.4): SQLite has no row-level security. `foreign_keys` and
+-- `busy_timeout` are set per connection; WAL and synchronous=FULL are explicit on every writable connection.
 
 CREATE TABLE oc_workspaces (
     tenant_id BLOB NOT NULL,
@@ -93,7 +93,7 @@ WHERE identity_key IS NOT NULL;
 
 CREATE TABLE oc_versions (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, asset_id BLOB NOT NULL,
-    version INTEGER NOT NULL CHECK (version > 0), content TEXT NOT NULL, content_hash TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version > 0), content_hash TEXT NOT NULL,
     source_event_id BLOB NOT NULL, restored_from INTEGER, title TEXT NOT NULL,
     created_by BLOB NOT NULL, created_at INTEGER NOT NULL,
     PRIMARY KEY (tenant_id, workspace_id, asset_id, version),
@@ -120,7 +120,7 @@ CREATE TABLE oc_jobs (
 CREATE TABLE oc_chunks (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
     asset_id BLOB NOT NULL, version INTEGER NOT NULL, ordinal INTEGER NOT NULL,
-    content TEXT NOT NULL, locator TEXT NOT NULL, search_terms TEXT NOT NULL,
+    content_hash TEXT NOT NULL, locator TEXT NOT NULL,
     PRIMARY KEY (tenant_id, workspace_id, id),
     UNIQUE (tenant_id, workspace_id, asset_id, version, ordinal),
     FOREIGN KEY (tenant_id, workspace_id, asset_id, version) REFERENCES oc_versions(tenant_id, workspace_id, asset_id, version)
@@ -130,7 +130,7 @@ CREATE INDEX oc_versions_source ON oc_versions(tenant_id, workspace_id, source_e
 
 CREATE TABLE oc_summaries (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
-    chunk_id BLOB NOT NULL, text TEXT NOT NULL, model_revision TEXT NOT NULL DEFAULT '',
+    chunk_id BLOB NOT NULL,
     search_terms TEXT NOT NULL,
     PRIMARY KEY (tenant_id, workspace_id, id),
     FOREIGN KEY (tenant_id, workspace_id, chunk_id) REFERENCES oc_chunks(tenant_id, workspace_id, id)
@@ -186,7 +186,6 @@ CREATE TABLE oc_artifact_ledger (
     artifact_id BLOB NOT NULL,
     surface TEXT NOT NULL CHECK (surface IN ('vector','graph','full_text')),
     generation INTEGER NOT NULL DEFAULT 1,
-    idempotency_key TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','committed','retry_wait','orphan')),
     next_retry_at INTEGER,
     created_at INTEGER NOT NULL,

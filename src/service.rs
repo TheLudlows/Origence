@@ -5,7 +5,7 @@ use crate::{
     parsing,
     storage::{
         local_blob::LocalBlobStore,
-        sqlite::{TursoStore, TursoTx},
+        sqlite::{SqliteStore, SqliteTx},
         *,
     },
     types::*,
@@ -22,6 +22,7 @@ use std::{
 use uuid::Uuid;
 
 mod catalog;
+mod content;
 mod workspaces;
 
 #[derive(Clone)]
@@ -64,7 +65,7 @@ impl Service {
         let dir = tokio::fs::canonicalize(dir.as_ref())
             .await
             .map_err(anyhow::Error::from)?;
-        let relational = Arc::new(TursoStore::open(dir.join("context.db")).await?);
+        let relational = Arc::new(SqliteStore::open(dir.join("context.db")).await?);
         let published = relational.has_committed_full_text().await?;
         let binding =
             crate::storage::retrieval_store::binding::prepare(&dir, &anyseek, published).await?;
@@ -131,15 +132,19 @@ impl Service {
             role: a.role,
         })
     }
-    pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<TursoTx> {
-        let mut tx = self.engine.relational().begin_read(authorized(a)).await?;
-        tx.check_permission(permission).await?;
-        Ok(tx)
+    pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
+        Ok(self
+            .engine
+            .relational()
+            .begin_read_checked(authorized(a), permission)
+            .await?)
     }
-    pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<TursoTx> {
-        let mut tx = self.engine.relational().begin(authorized(a)).await?;
-        tx.check_permission(permission).await?;
-        Ok(tx)
+    pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
+        Ok(self
+            .engine
+            .relational()
+            .begin_checked(authorized(a), permission)
+            .await?)
     }
     pub(crate) async fn command(
         &self,
@@ -148,7 +153,7 @@ impl Service {
         op: &str,
         key: &str,
         input: &Value,
-    ) -> Result<(TursoTx, Option<Value>)> {
+    ) -> Result<(SqliteTx, Option<Value>)> {
         if key.is_empty() || key.len() > 200 || !key.is_ascii() {
             return Err(AppError::Invalid(
                 "Idempotency-Key must contain 1..200 ASCII characters".into(),
@@ -158,13 +163,13 @@ impl Service {
         let cached = tx.begin_command(op, key, &hash(input.to_string())).await?;
         Ok((tx, cached))
     }
-    pub(crate) async fn finish(mut tx: TursoTx, response: Value) -> Result<Value> {
+    pub(crate) async fn finish(mut tx: SqliteTx, response: Value) -> Result<Value> {
         tx.finish_command(response.clone()).await?;
         tx.commit().await?;
         Ok(response)
     }
     pub(crate) async fn enqueue(
-        tx: &mut TursoTx,
+        tx: &mut SqliteTx,
         payload: JobPayload,
         asset: Option<Uuid>,
         source: Option<Uuid>,
@@ -491,8 +496,32 @@ impl Service {
     }
     pub async fn get(&self, a: &AuthContext, id: Uuid, version: Option<i32>) -> Result<Value> {
         let mut tx = self.read(a, Permission::Read).await?;
-        let v = tx.asset_view(id, version).await?;
+        let mut v = tx.asset_view(id, version).await?;
+        let references = tx
+            .chunk_refs_for_version(id, decode(v["version"].clone())?)
+            .await?;
         tx.commit().await?;
+        let chunks = self.read_chunk_content(scope(a), &references).await?;
+        let content = chunks
+            .into_iter()
+            .map(|chunk| chunk.content)
+            .collect::<String>();
+        if v["content_hash"].as_str() != Some(hash(&content).as_str()) {
+            return Err(AppError::Unavailable(
+                "document content does not match its publication".into(),
+            ));
+        }
+        let mut verify = self.read(a, Permission::Read).await?;
+        if verify.asset_view(id, version).await? != v
+            || verify
+                .chunk_refs_for_version(id, decode(v["version"].clone())?)
+                .await?
+                != references
+        {
+            return Err(AppError::Conflict("document publication changed".into()));
+        }
+        verify.commit().await?;
+        v["content"] = json!(content);
         Ok(v)
     }
     pub async fn lookup_memory(
@@ -506,6 +535,12 @@ impl Service {
         let mut tx = self.read(a, Permission::Read).await?;
         let value = tx.identity_view(&identity).await?;
         tx.commit().await?;
+        let value = self
+            .get(a, decode(value["asset_id"].clone())?, None)
+            .await?;
+        if value["identity"] != json!(identity) {
+            return Err(AppError::Conflict("memory identity changed".into()));
+        }
         Ok(value)
     }
     pub async fn source_event(&self, a: &AuthContext, id: Uuid) -> Result<Value> {

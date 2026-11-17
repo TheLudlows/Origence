@@ -1,5 +1,5 @@
 //! The identity check inspects the current format read-only without repair.
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     DomainTx, Lifecycle, Permission, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
@@ -29,7 +29,7 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
         .create_event("structured", "approval", None)
         .await
         .unwrap();
-    tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+    tx.insert_version(asset, 1, "approval", source, None, None)
         .await
         .unwrap();
     tx.update_asset_version(asset, 1, None).await.unwrap();
@@ -59,7 +59,8 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
     let mut tx = store.begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     let view = tx.asset_view(asset, Some(1)).await.unwrap();
-    assert_eq!(view["content"], "approval");
+    assert!(view.get("content").is_none());
+    assert_eq!(view["content_hash"], origence::storage::hash("approval"));
     assert_eq!(view["source_event_id"], source.to_string());
     assert_eq!(view["identity"], json!(null));
     assert_eq!(

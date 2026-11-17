@@ -1,6 +1,6 @@
 #![cfg(feature = "local-storage")]
 use axum::{Json, Router, extract::State};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{models::Models, storage::*, types::*};
 use serde_json::{Value, json};
 use std::{
@@ -188,7 +188,7 @@ async fn rpc(
     serde_json::from_str(&line).unwrap()
 }
 fn pdf() -> Vec<u8> {
-    super::pdf_parsing::text_pdf(&["Release approval evidence", "Second page provenance"])
+    super::pdf_fixture::text_pdf(&["Release approval evidence", "Second page provenance"])
 }
 
 #[tokio::test]
@@ -1132,11 +1132,11 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     for i in 0..130 {
         let (asset, _) = tx.slot(&format!("decoy-{i}")).await.unwrap();
         let source = tx.create_event("memory", "approval", None).await.unwrap();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
-        tx.insert_chunk(chunk, asset, 1, 0, "approval", &json!({}), "approval")
+        tx.insert_chunk(chunk, asset, 1, 0, "approval", &json!({}))
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
@@ -1148,6 +1148,11 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             },
             generation: 1,
             search_terms: "approval".into(),
+            payload: origence::storage::ChunkPayload {
+                content: "approval".into(),
+                locator: json!({}),
+                summary: None,
+            },
         });
     }
     let (target, _) = tx.identity_slot(&identity).await.unwrap();
@@ -1157,17 +1162,9 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             .create_event("memory", "approval evidence", None)
             .await
             .unwrap();
-        tx.insert_version(
-            target,
-            version,
-            "approval evidence",
-            "hash",
-            source,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        tx.insert_version(target, version, "approval evidence", source, None, None)
+            .await
+            .unwrap();
         let chunk = Uuid::new_v4();
         tx.insert_chunk(
             chunk,
@@ -1180,7 +1177,6 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
                 "approval current"
             },
             &json!({}),
-            "approval evidence supplemental",
         )
         .await
         .unwrap();
@@ -1196,6 +1192,16 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             },
             generation: 1,
             search_terms: "approval evidence supplemental".into(),
+            payload: origence::storage::ChunkPayload {
+                content: if version == 1 {
+                    "approval old"
+                } else {
+                    "approval current"
+                }
+                .into(),
+                locator: json!({}),
+                summary: None,
+            },
         });
     }
     // This direct authority fixture must publish the same native surface as
@@ -1212,7 +1218,6 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         tx.register_pending(LedgerEntry {
             key,
             artifact_type: "chunk".into(),
-            idempotency_key: ledger_idempotency_key(&key),
         })
         .await
         .unwrap();
@@ -1838,11 +1843,10 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     .unwrap();
     let mut tx = s.engine.relational().begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
-    tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"full_text_operation_epoch":epoch,"profile":null,"memories":[{"asset":claim.asset,"fact_key":null,"expected_version":null,"version":1,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":""}]}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
+    tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"full_text_operation_epoch":epoch,"profile":null,"memories":[{"asset":claim.asset,"fact_key":null,"expected_version":null,"version":1,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":"","search_terms":"atlas evidence","summary_terms":""}]}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
     tx.register_pending(LedgerEntry {
         key: ledger_key,
         artifact_type: "entity".into(),
-        idempotency_key: ledger_idempotency_key(&ledger_key),
     })
     .await
     .unwrap();
@@ -1854,7 +1858,6 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     tx.register_pending(LedgerEntry {
         key: chunk_pending,
         artifact_type: "chunk".into(),
-        idempotency_key: ledger_idempotency_key(&chunk_pending),
     })
     .await
     .unwrap();
@@ -1867,6 +1870,11 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
                 source,
                 generation: claim.generation,
                 search_terms: origence::parsing::lexical("Atlas evidence"),
+                payload: origence::storage::ChunkPayload {
+                    content: "Atlas evidence".into(),
+                    locator: json!({"start":0,"end":14}),
+                    summary: None,
+                },
             }],
             vec![],
             Some(origence::storage::anyseek::GraphPublication {
@@ -1890,7 +1898,7 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
         1
     );
     assert!(s.get(&a, id(&accepted, "asset_id"), None).await.is_err());
-    // Crash boundary: AnySeek owns the frozen group; Turso has pending intent only.
+    // Crash boundary: AnySeek owns the frozen group; SQLite has pending intent only.
     s.engine.shutdown().await.unwrap();
     drop(s);
     let s = crate::support::open_service(dir.path(), Models::disabled())
@@ -1960,7 +1968,6 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     tx.register_pending(LedgerEntry {
         key: vk,
         artifact_type: "chunk".into(),
-        idempotency_key: ledger_idempotency_key(&vk),
     })
     .await
     .unwrap();
@@ -2112,11 +2119,11 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
     for index in 0..130 {
         let (asset, _) = tx.slot(&format!("offline-batch-{index}")).await.unwrap();
         let source = tx.create_event("memory", "approval", None).await.unwrap();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
-        tx.insert_chunk(chunk, asset, 1, 0, "approval", &json!({}), "approval")
+        tx.insert_chunk(chunk, asset, 1, 0, "approval", &json!({}))
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
@@ -2128,6 +2135,11 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
             },
             generation: 1,
             search_terms: "approval".into(),
+            payload: origence::storage::ChunkPayload {
+                content: "approval".into(),
+                locator: json!({}),
+                summary: None,
+            },
         });
         expected.insert(chunk, (asset, source));
     }
@@ -2143,7 +2155,6 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
         tx.register_pending(LedgerEntry {
             key,
             artifact_type: "chunk".into(),
-            idempotency_key: ledger_idempotency_key(&key),
         })
         .await
         .unwrap();

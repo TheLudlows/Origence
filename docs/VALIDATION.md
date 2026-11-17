@@ -1,9 +1,125 @@
 # Origence · 当前验证
 
 核验日期：2026-11-17。本次已同步 main
-[`3d474d9`](https://github.com/TheLudlows/Origence/commit/3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe)，
+[`739be8c`](https://github.com/TheLudlows/Origence/commit/739be8cc8cf62ba80d8ea598504327e1fd63e24e)，
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：#82 同步最新 main 后的限定复验
+
+原 PR HEAD `6978745ff33fb16dce472f403818ca1db3fa29d3`，普通 merge main
+`739be8cc8cf62ba80d8ea598504327e1fd63e24e`。解决 STATUS、本文和 pages fixture
+冲突：保留主干 SQLite、固定版本关联 Run、Windows 启动器与 AnySeek 正文存储；
+合并 PDF 来源与资产关联两个 fixture 分支及断言。相对 main 无 Rust/API/SQL/CI 改动。
+下方历史证据中的缺口分类只适用于各节基线，关联 Run 已由 #83 补齐。
+
+- Node 24.22.1：`npm --prefix ui run check`、`npm --prefix ui test` 通过，17 项。
+  npm 首次安装因默认 home cache 不可写失败，改用临时 cache 后 `npm ci` 成功。
+- Rust 1.98.0：`cargo build --locked`、`cargo fmt --all -- --check`、default /
+  `--no-default-features` / `--no-default-features --features sqlite` 三组
+  `cargo clippy --locked --all-targets -- -D warnings` 通过；`git diff --check` 通过。
+- `cargo test --locked --test local catalog::` 5 项通过（包含 semantic_catalog），
+  `cargo test --locked --test local content_storage::` 4 项通过；覆盖精确版本关联、
+  key 隔离/撤回、重开、正文损坏及读取期间权限变化。没有重跑完整 Rust suite。
+- 使用合并后重建的 Origence/Node UI、从精确 pin
+  `d813b915b7f12e7139ca316adc15699688493196` 重建的真实 AnySeek，独立 fresh
+  SQLite v2 目录/collection、合成数据和一次性 key，未调用外部模型。
+  复用原 Playwright 脚本，使用当前 `tools/anyseek_smoke.py --anyseek-binary … --run
+  python3 …` 分别执行布局、撤回、PDF 三组；无 API 拦截或响应模拟。
+- Chromium 156.0.8078.79 headless：五页 × 1440/1024/736/375/320 × 浅/深色，
+  50 个布局组合无整页横向溢出、退出可见；小屏触屏模拟按钮 ≥44px，导航 tap 通过。
+  桌面键盘导航及 10 个 Run 失败事件键盘选择/焦点组合通过。
+- 320px 固定 v1（当前已 v2）、来源撤回、旧 Run 再点击、固定 URL 刷新登录、
+  重开 Run 拒绝旧正文、另一 key 拒绝和事件来源标签共 7 项通过。
+  375px 真实两页 PDF：第二页定位、不可核验页内文本提示、无假高亮、授权下载
+  SHA-256 与原始字节一致，全部通过。
+
+脚本/截图/临时 key 留在本地且不提交；未运行真实 Windows、实体触屏或屏幕阅读器。
+本节不宣称 #76 完整验收。远端 CI 以此次 merge 提交的实际 run 为准，不能沿用旧 HEAD 结果。
+
+## 2026-11-17：#86 检视后删除无用元数据与分词回退
+
+从 PR #86 的 `70c7281` 继续，已合并 main `8fe01a5`（#84 Windows 开发启动器）。
+人工核对全部调用链后删除 `oc_chunks.search_terms`：候选读取只消费 ID，旧实现仅传递词项
+再丢弃；删除 `oc_summaries.model_revision`：没有 SQL 读取方，模型来源已保存在 AnySeek payload。
+同步删除对应写入参数、SELECT/解码、候选 tuple 字段，以及目录对不存在 content 字段的删除。
+
+所有发布类型改为一次性在事务外 blocking 任务中冻结正文/摘要词项；移除可空分块词项、
+按类型分流和恢复时重新分词的回退，摘要分词也不再发生在发布事务中。摘要召回词项、
+原始来源、locator、owner/index/ledger 和完整恢复计划仍有实际消费者，保持原有校验。
+既有历史验证记录不改写；schema 仍按该 PR 的 fresh-only 范围开发，不自动转换旧布局。
+
+本地 Linux / Rust 1.98.0：default **433 passed**（221 lib + 4 协议 + 14 core + 194 local）；
+pure-core **87 passed**；独立 sqlite authority **233 passed**。三组 Clippy 均 warnings denied
+通过，fmt/diff 检查通过。新增损坏冻结词项后的重试拒绝回归，证明不会重新分词或发布；
+列缺失断言覆盖新增删除项，既有来源、历史、跨 scope、取消、重试与 private Run/Skill 测试通过。
+
+真实 AnySeek d813b91 的 **8 项契约通过**；真实 HTTP/stdio MCP、历史读取、Run 诊断、
+重开以及 AnySeek 进程重启后当前/历史正文和索引检查通过。最新 Windows/Linux CI 以 PR #86
+的当前提交运行记录为准；生产性能、模型质量、浏览器布局等范围未由本轮增加验收。
+
+## 2026-11-17：正文与索引共用 AnySeek collection
+
+基线 main `c70a1aa`，分支 `refactor/anyseek-content`，Rust 1.98.0，Linux；AnySeek
+固定为 `d813b915b7f12e7139ca316adc15699688493196`（已有 Rust 1.99.1 夹具二进制）。
+本节记录该分支的本地工作树，后续 Windows/Linux 精确提交 CI 状态以 PR 为准。
+只使用合成数据、临时目录/集合与一次性凭据；没有迁移或改写既有用户数据。
+
+- `cargo fmt --check`、`git diff --check` 与 default / pure-core / sqlite 三组
+  `cargo clippy --locked --all-targets -- -D warnings`（后两组分别加对应 feature 参数）通过。
+- `cargo test --locked --no-fail-fast`：221 lib + 4 AnySeek 协议 + 14 core + 193 local
+  = **432 passed**；8 项真实引擎契约默认忽略、在下一项单独执行。无 doctest。
+- `cargo test --locked --no-default-features`：71 lib + 2 协议 + 14 core = **87 passed**。
+  `cargo test --locked --no-default-features --features sqlite`：138 lib + 2 协议 + 14 core
+  + 79 local = **233 passed**；纯核心不引入 SQLite，Cargo.toml/Cargo.lock 未新增依赖。
+- `tools/anyseek_smoke.py --cargo-tests --binary target/debug/origence`：**8 项真实 AnySeek
+  契约通过**。新增原始 UTF-8、CRLF、摘要/模型版本、locator 随 payload 保存与读取断言。
+  正常 HTTP/stdio MCP 的查询、版本更新、历史读取、撤销 key、Run 诊断与重开检查通过。
+- 同脚本 `--binary` 新增真实 AnySeek 进程正常停机/重启，再启动 Origence 读取当前/历史正文
+  并检索，**通过**。不宣称任意断电或跨存储在线一致快照。
+- 真实 AnySeek 包裹 `tools/smoke.py` 与 `tools/ui_smoke.py`：HTTP 与 Node UI → Origence
+  → AnySeek 全链路通过，包含上传、搜索、Context、版本历史、私有 Run 和来源撤回。
+  `ui/npm run build` 与 `ui/npm test`：**16 passed**；未新增浏览器布局/无障碍验收。
+
+新增 `content_storage` 回归证明：正文与索引属于同一 Record，三处旧正文/摘要列已移除，
+固定历史版本与恢复在 Origence 重开后保留原字节；缺失/篡改 payload 明确失败；GET、Search、
+Context 在读取期间撤销 key 或撤回来源均拒绝返回。既有 PDF、语义集合、Learning、Skill、
+私有 Run、幂等、丢响应恢复、跨 scope 与 SQL 事务/取消回归继续通过。
+
+人工逐条审查新增/改动执行 SQL（含 fixture、DDL 与 format 展开）：只读单表或原有关联适配器，
+无 JOIN/关联子查询，无事务内远端 IO、无中间提交。SQL 仍保存原始来源、locator、冻结召回词项、
+完整恢复计划及私有快照；只移出已发布正文/摘要文本，不宣称清除所有文本副本。
+格式 `origence-sqlite-v2` / `origence-content-sha256-v1` 面向 fresh 数据；旧格式拒绝，不自动转换。
+生产相关性、容量、延迟、模型质量与在线备份恢复不由上述回归证明。
+
+## 2026-11-17：#76 精确版本关联 Run（独立本地切片）
+
+基线 main `593e8fa71d7c354587cffdd1aae7c4b2e2d2a554`；独立分支，不包含第一批
+`fix/issue76-browser-coverage` 的改动。新增只读 `GET /v1/assets/{id}/runs?version=N`，
+限制当前逻辑 key、精确版本及 1–100 候选，UUID 游标。新表只是首条已记录引用的定位投影，
+引用事件仍为权威：客户端上报和服务端准备在原事务内更新，同快照读取资产、来源、owner
+并重新核验事件中的精确引用；不扫描所有 Run，不返回私有正文。不可读 proof 保守省略，
+不宣称完整关联/采集，具体边界见 Run 合同。所有新增 SQL 已逐条审查，均为单表操作，无 JOIN。
+
+真实 localhost Node UI → Origence → AnySeek，fresh v4 合成数据/一次性 key、无模型。
+AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`；Chromium 156.0.8078.79，
+1440×1000 headless，Playwright 实点无响应拦截：Run → 固定 v1 → 已记录关联 → 原 Run；
+当前 v2 关联为空；同 workspace 另一管理员关联为空且直接 Run 被拒绝；来源撤回后重新读取
+关联会清除正文和旧链接；旧引用重点击、刷新登录和重新打开 Run 均拒绝旧证据。
+共 10 项真实浏览器断言通过。此切片没有重复五页响应式验收，也未运行真实外部客户端。
+
+本地 Node 24.22.1 `npm --prefix ui run check`、`npm --prefix ui test` PASS（构建/16 项），
+现有 DOM fixture 仅增加精确版本关联往返子用例。Rust 1.98.0：
+- `cargo test --test local catalog::` PASS（5 项，含既有 semantic_catalog 3 项）；
+  新用例验证 v1/v2、同 workspace 另一管理员隔离、轮换、幂等去重、游标/上限、跨 workspace、
+  重开及来源撤回。增加权威引用缺失的空页游标断言后，精确重跑该用例 PASS。
+- `cargo test --test local workspace_schema_rejection::` PASS（5 项）；
+  `cargo test --no-default-features --test local workspace_schema_rejection::` PASS（5 项）。
+  缺失新表时打开被拒绝且数据库字节不变。
+- `cargo test --test local retrieval_diagnostics::run_diagnostics_are_private_durable_and_replay_original_evidence` PASS（1 项）。
+- `cargo fmt --check`、默认/no-default `cargo clippy --all-targets -- -D warnings`、
+  `git diff --check` PASS。Windows 未跑；没有新 CI（未推送）。
+不推送、不创建 PR、不关闭 #76；生产计量、告警、PDF 页内文本及完整外部验收仍缺。
 
 ## 2026-11-17：#76 第一批响应式与 PDF 来源验收（本地 checkpoint）
 
@@ -495,3 +611,222 @@ CI 调整基于上述 #360 日志，而非减少独立验收：
 
 本次未更改 Rust 源码、schema 或 SQL；未为本次 TypeScript/工作流变更重复本地 Rust 全套。
 远端工作流仍执行上述完整 Rust 检查。Windows、真实浏览器及生产验收边界保持前述记录。
+## 2026-11-17：SQLite 全面替换与元数据精简
+
+基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`，验证在 SQLite 替换工作树执行；
+精确提交与远端结果由本次 PR head 标识。Linux、Rust 1.98.0、rusqlite 0.43.0，
+bundled SQLite 3.54.1；真实 AnySeek 固定 `d813b915b7f12e7139ca316adc15699688493196`
+（夹具使用其要求的 Rust 1.99.1）。所有行为验证使用新建临时库及测试凭据，无外部模型调用。
+
+替换范围包括全部关系/队列适配器、Service/CLI/错误边界、测试和手工诊断、Cargo 锁文件、
+CI、容器与当前文档。删除旧引擎模块和别名；历史证据与此前真实失败记录保持原样。
+Cargo 生成的新锁文件从 482 个包变为 370 个：删除 116、加入 4，净减少 112；
+原有保留包的版本未改变。rusqlite 关闭默认特性，仅启用 bundled；不增加 ORM、
+异步数据库或第三方连接池。全特性的 production dependency tree 排除所有退休存储引擎。
+另移除未使用的直接 `futures` 声明；它仍由 rmcp 传递引入。移除前后全部已解析包和
+features 完全一致，最后的 `cargo check --all-features --all-targets -j 2` 通过。
+
+元数据删除 `oc_versions.content_hash` 和 `oc_artifact_ledger.idempotency_key`，
+同时移除调用方的冗余字段/参数及字符串辅助函数。内容摘要由所读不可变正文计算，
+账本使用已有完整主键的 ON CONFLICT 幂等；外部冻结计划和 operation epoch 保持原义。
+命令幂等、Run/Skill 快照摘要、授权、来源、版本、owner/index/ledger 的独立状态仍被验证。
+
+已通过：
+
+- `cargo clippy --locked --all-features --all-targets -j 2 -- -D warnings` 与
+  `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings`。
+  前者同时编译手工诊断目标；不将其诊断执行当作生产验收。
+- `cargo test --locked -j 2 --no-fail-fast`：218 lib + 4 协议 + 202 local，
+  **424 项通过**；8 项单独运行的真实后端合同仍在常规命令中 ignored。
+- `cargo test --locked --no-default-features -j 2 --no-fail-fast`：138 lib + 2 协议 +
+  92 local，**232 项通过**；5 项真实后端测试保持 ignored。
+- `cargo build --locked -j 2`、fmt、`git diff --check`、actionlint 1.7.7、
+  Cargo metadata 与全特性退休引擎依赖检查通过。正常服务二进制只包含新 SQLite 格式标记，
+  Linux `ldd` 无动态 SQLite 或 libgomp 依赖。
+- `npm --prefix ui test`：15 项通过；Python tools 11 项、eval adapter 42 项通过。
+- 在上述正常服务二进制及固定真实 AnySeek 上分别运行 `tools/smoke.py`、
+  `tools/ui_smoke.py`、原始完整 `tools/mcp_smoke.py`，HTTP、UI 与
+  host-forwarding/offline MCP 两路径通过。
+- `tools/anyseek_smoke.py --cargo-tests`：**8 项真实引擎合同通过**，并通过其后
+  HTTP/stdio MCP、引用、版本更新、撤销、重开及 Run 诊断关联/重试/持久化检查。
+- `evals/run.py`：24 个 keyword 用例，errors=0、resolve_errors=0；document recall/MRR/NDCG
+  均约 0.63636。此合成工程检查不证明模型或真实 Agent 任务收益。
+
+新回归验证每条连接的 WAL、FULL、外键与 busy timeout、五租约上限、真实文件上的
+取消/FIFO 回滚、RETURNING 排空、错误后拒绝继续提交、读快照、跨池释放、宿主锁生命周期，
+以及直接 SQLite integrity/foreign-key 检查、元数据列消失、中文原始字节摘要与同版本重开。
+只读测试分别覆盖非空已提交 WAL（必须可读）和 checkpoint 后带中文/空格/URI 特殊字符
+的路径（不创建 sidecar）；没有用 immutable 忽略待恢复的 WAL。
+
+早期回归暴露旧引擎假设：SQLite 将大 JSON 整数转换为 REAL、每连接有独立 DDL 缓存，
+SHM read mark 也会被只读访问更新。测试改以 SQLite 原生结果为 oracle，保留无效身份、
+解码顺序、授权和证据预算断言；没有为退休引擎添加兼容分支。损坏 schema 夹具重开其
+有意改变的 DDL；活跃库比较数据库和 WAL，不将 SHM 的瞬时协调位当作持久业务字节。
+
+手工 SQL 审视：两个元数据列及相应绑定/读取被移除，版本摘要在同一授权读事务中计算；
+没有 JOIN、跨表子查询、额外业务提交或事务内模型/文件/AnySeek IO。数据库 IO 在专属
+blocking 连接 FIFO 中；取消不硬停 SQL，已发出 COMMIT 的未知结果仍需按原幂等键核对。
+只面向新库，不迁移、重写或自动转换既有文件；旧格式在可写打开之前只读拒绝。
+
+本次 CI 将 Windows 检查扩展至 PR，远端结果另见 PR，不将 Linux 结果外推到 Windows。
+标准 Docker 构建的首次尝试在下载 registry/config.json 时因本环境自签名 CA 链失败；
+同一 Dockerfile 仅用临时构建期 CA secret 补充受信链后继续构建，未关闭 TLS 校验。
+容器最终结果另见 PR。浏览器布局、真实模型/双客户端任务及生产性能不属于本次验收。
+
+## 2026-11-17：核心库无元数据库与按需访问（PR #81）
+
+在 SQLite 替换基线 `01c0d4c` 上同步 main `593e8fa`，保留 #80 的 Run 来源界面修正。
+以下为本轮工作树结果，精确提交和新的 Windows/Linux CI 由 PR head/运行链接标识；
+不把上一轮 #372 的成功或容器镜像外推为本轮结果。
+
+本轮减少实际依赖和访问：
+
+- `rusqlite` / `fs2` 只由可选 `sqlite` feature 启用。关闭默认特性的核心库不包含 SQLite
+  实现或错误类型；完整宿主 `local-storage` 自动启用 SQLite，单独 authority 显式启用它。
+- 分离始终可运行的 Blob/PDF 核心集成测试，PDF 字节夹具由核心与宿主共用；
+  原有测试没有删除或同时重复执行。手工诊断按其实际调用者依赖 `sqlite`。
+- 服务入口复用同一事务中的身份读取完成权限判断；提交仍重新检查权限。关键词候选与
+  入口授权共用快照，外部 IO 前关闭它；向量/混合模式保留模型前后的独立授权快照。
+- 空 read set、关联、空摘要查询不准备无关表；Learning 缺失或前置条件已否定、父任务
+  已取消时停止无关查询。必需数据与非空证据的失败仍拒绝操作，完整 schema 在开库和
+  显式健康检查执行。更新的是空操作的消费边界，没有压制必需查询的错误。
+- 纯向量请求不调用词法流程；其他查询的分词在 blocking 池、事务外执行。
+
+Linux Rust 1.98.0 已通过：
+
+| 配置 / 命令 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 71 lib + 2 协议 + 14 core = **87 项**；5 项真实引擎检查按原设置 ignored |
+| `cargo test --locked --no-default-features --features sqlite -j 2 --no-fail-fast` | 138 lib + 2 协议 + 14 core + 78 local = **232 项**；5 项 ignored |
+| `cargo test --locked -j 2 --no-fail-fast` | 221 lib + 4 协议 + 14 core + 188 local = **427 项**；8 项 ignored |
+| 三种配置 all-targets Clippy（完整配置含 all-features） | warnings denied，全部通过 |
+| 正常服务 build、fmt、diff、actionlint 1.7.7、Cargo metadata | 通过 |
+| `cargo tree --locked --no-default-features --edges normal,build --prefix none` | 无 rusqlite、libsqlite3-sys、fs2；CI 增加相同门禁 |
+| Node UI | 15 项通过，包含合入 #80 后的来源区分断言 |
+
+新增资源回归使用各测试库独立、仅编入单测的计数，不记录生产元数据，不使用耗时阈值：
+空读取集合在没有业务表的库上产生 **0 次客户端 driver 调用**；真正请求证据仍报存储错误。
+关键词空语料请求只需 **3 个授权读事务**（此前 4 个），client driver 调用上限 20；
+此路径无需索引/Summary 表或可访问的 AnySeek，但显式 `check` 仍拒绝不完整 schema。
+事务入口只需 BEGIN 和 key/workspace 两次读取（3 次 driver 调用），没有重复身份查询；
+同事务撤销自身 key 后提交被拒绝并回滚，外部撤销后旧授权对象也不能开启新事务。
+
+固定真实 AnySeek `d813b915` 上，正常服务二进制通过 HTTP、Node UI、完整 MCP
+host-forwarding/offline smoke；另跑 8 项真实后端合同及其 HTTP/stdio、撤销、重开与
+Run 诊断持久化验收，通过。全部新建临时数据，不调用外部模型。
+
+手工 SQL 复核：非空查询的参数化单表 SQL 保持不变；关联仍在同一适配器事务中完成。
+仅减少空批次、已确定结果的分支和入口重复授权读取，不增加 JOIN、额外提交、
+跨请求权限缓存、事务内模型/文件/AnySeek IO 或业务元数据。DDL/格式未改变。
+本轮未重复容器 release 构建；既有 SQLite 容器互操作证据按原提交保留。远端结果见 PR。
+
+## 2026-11-17 · PR #83 synchronization with merged SQLite #81
+
+Merged main `f62168b4cbedfbe6a3a97dbb3161f9e6375fb2df` into the existing #83
+head `537fdbd982740c1283f3ef0e01dc47ef6a651347` without rewriting history.
+Coordinated Run storage with SqliteTx/sqlite_db/sqlite_err and updated the tests'
+old driver paths. Client events and server-prepared events both retain the reverse
+projection insert in their existing write transaction. Fresh-only schema admission,
+first-reference coverage and current-logical-key/source guards are unchanged.
+
+Promoted the narrowly scoped combination diagnostic into the existing catalog
+regression: an injected projection-insert failure rolls back the client event and
+server-prepared event, then retrying the same server event ID succeeds and yields
+the exact v2 association. Withdrawing independent v1 leaves that v2 association
+visible. This proves ordinary transaction failure handling, not power-loss durability.
+
+Executed on the actual synchronized worktree, Linux / Rust 1.98.0 / Node 24.22.1:
+
+- `cargo test --locked --test local asset_run_references_are_exact_bounded_private_and_withdrawal_gated`:
+  1 passed, 189 filtered (fixed version, other-admin/key/workspace isolation,
+  rotation, pagination/limits, authoritative proof recheck, reopen, withdrawal,
+  client/prepared projection rollback and successful retry).
+- `cargo test --locked --test local workspace_schema_rejection`:
+  5 passed, 185 filtered.
+- `cargo test --locked --no-default-features --features sqlite --test local workspace_schema_rejection`:
+  5 passed, 74 filtered; includes missing reverse table and old-layout rejection
+  without repair. These integration tests use the existing protocol peer for
+  AnySeek and are not real-engine ranking acceptance.
+- `cargo build --locked`: passed.
+- `cargo clippy --locked --all-targets -- -D warnings`: passed.
+- `cargo clippy --locked --no-default-features --features sqlite --all-targets -- -D warnings`: passed.
+- `cargo clippy --locked --no-default-features --all-targets -- -D warnings`: passed.
+- `cargo fmt --all -- --check`, `git diff --check`: passed.
+- `npm --prefix ui run check`; `npm --prefix ui test`: passed, 16 UI tests.
+
+Real AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`, models disabled,
+fresh temporary v4 data, disposable keys, rebuilt synchronized Origence binary:
+
+- `python3 tools/anyseek_smoke.py --anyseek-binary "$ANYSEEK_BINARY" --run python3 tools/mcp_smoke.py --binary "$ORIGENCE_BINARY"`:
+  passed both host-forwarding and offline MCP (protocol/schema/tools, safe errors,
+  live/invalid/revoked credentials, EOF and reopen).
+- Reused the real Chromium fixture via the same AnySeek launcher with the
+  synchronized UI/server. Chromium 156.0.8078.79 passed Run -> fixed v1 after v2
+  publication -> recorded association -> same Run; v2 and another same-workspace
+  admin cannot enumerate v1-owned associations. Browser source withdrawal,
+  association refresh, stale citation re-click, URL reload and Run reopen all
+  deny old content; server preparation failure remains server-observed/not-prepared.
+  No route interception, production data, paid models, screenshots or credentials
+  were added to this commit.
+
+Windows and full combined CI were not run locally. GitHub results must be checked
+on the new pushed HEAD; the old separate PR green runs and the earlier temporary
+combination tree are not evidence that this new HEAD passed remote CI. No complete
+#76/native Claude Code/Codex task or production acceptance is claimed.
+
+## 2026-11-17 · Windows-native development launcher (local)
+
+Independent branch based on main `c70a1aaa0b3cb75872109406dc17b1b461d1f771`
+(includes SQLite #81 and reverse references #83); no older feature branches included.
+`tools/start-dev.ps1` targets foreground PowerShell 7.4+ and prebuilt native executables.
+It requires already provisioned separate data directories, ordinary Tenant key and
+collection; no startup provisioning, migrations, directory creation, overwrite,
+remote writes, secret arguments or persistent logs. Loopback only, models disabled.
+AnySeek readiness reads the authorized collection metadata; Origence's own full
+backend admission and /health/ready gate the optional UI. Startup/HTTP/grace waits
+are bounded. Only owned Process handles are stopped; no process-name/port killing.
+
+Commands and results:
+
+- PowerShell 7.4.6 Linux parser check of start-dev.ps1: passed. Initial pwsh startup
+  could not create its default cache on the read-only home; XDG_CACHE_HOME,
+  XDG_CONFIG_HOME and XDG_DATA_HOME were set to disposable paths for validation.
+- `ORIGENCE_TEST_PWSH=/path/to/pwsh python3 -m unittest discover -s tools -p test_start_dev.py -v`:
+  7 passed on Linux pwsh. Fake HTTP subprocesses verify ready/API/UI ordering,
+  early exit, not-ready timeout, auth denial, redirect refusal, missing-data refusal,
+  occupied-port noninterference, owned-process cleanup, spaced argument paths,
+  credential separation and suppression of deliberately secret-bearing child output.
+  These are process/HTTP contract fixtures, not real backend or Windows results.
+- `python3 -m unittest discover -s tools -p 'test_*.py'`: 11 passed, 7 opt-in launcher
+  cases skipped without ORIGENCE_TEST_PWSH. No CI scope/configuration changed.
+- `cargo build --locked`, `cargo clippy --locked --all-targets -- -D warnings`,
+  `cargo fmt --all -- --check`, `git diff --check`: passed under Rust 1.98.0.
+- `npm ci --ignore-scripts --prefix ui` (disposable cache), `npm --prefix ui run build`:
+  passed with Node 24.22.1.
+
+Real local validation used pwsh 7.4.6 on Linux, actual AnySeek built at
+`d813b915b7f12e7139ca316adc15699688493196`, Origence rebuilt from this worktree,
+and the built Node UI. A separate fixture explicitly created a temporary Tenant,
+ordinary key/collection and offline workspace, stopped bootstrap AnySeek, then
+invoked the unmodified launcher with paths containing spaces. Twice it observed
+all readiness gates, authenticated /v1/whoami retaining the same workspace, UI
+HTTP 200, group SIGINT shutdown without force warnings, closed ports and retained
+context.db; the second start reused the first data. Captured parent output was
+checked not to contain master secret, master key, ordinary key or workspace token.
+No production data, paid model/provider calls, Windows emulation or WSL was used.
+The local real-service harness is external to the repository; the reproducible
+manual setup/commands and Windows checklist are in WINDOWS-DEV.md.
+
+Validation found and corrected a PowerShell case-insensitive variable collision
+that replaced the component display name with an environment variable name.
+The real bootstrap fixture also initially precreated an empty AnySeek directory:
+the pinned engine interpreted that as recovery and exited. Documentation now uses
+an absent path for explicit first initialization, while the launcher requires an
+existing nonempty initialized directory. No automatic repair was added.
+
+Not executed: native Windows/MSVC/Windows Terminal Ctrl+C, ready-stage interruption
+on Windows, Windows process-reuse races, production recovery or power-loss tests.
+Shared-console Ctrl+C is best effort until verified there. If signal delivery fails
+or grace expires, owned-process termination is explicitly a forced stop; closing
+or killing the parent terminal may bypass finally and leave children alive. The
+launcher is not a production service supervisor. No remote PR/push/deployment.

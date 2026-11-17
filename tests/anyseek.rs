@@ -23,6 +23,11 @@ fn entry(text: &str) -> FullTextEntry {
         },
         generation: 1,
         search_terms: text.into(),
+        payload: origence::storage::ChunkPayload {
+            content: text.into(),
+            locator: serde_json::json!({}),
+            summary: None,
+        },
     }
 }
 fn config() -> AnySeekConfig {
@@ -87,11 +92,21 @@ async fn real_anyseek_scoped_and_search_replay_cleanup_and_source_validation() {
     let store = AnySeekFullTextStore::new(config()).unwrap();
     store.check().await.unwrap();
     let scope = scope();
-    let allowed = entry("鉴权 token policies");
+    let mut allowed = entry("鉴权 token policies");
+    allowed.payload.content = "原文 <b>literal</b>\r\n中文🙂 café".into();
+    allowed.payload.locator = serde_json::json!({"page":1,"byte_start":0,"parser":"fixture-v1"});
+    allowed.payload.summary = Some(origence::storage::ChunkSummary {
+        text: "完整摘要 <literal>".into(),
+        model_revision: "summary-v1".into(),
+    });
     let forbidden = entry("鉴权 token token token");
     let epoch = operation_epoch().unwrap();
     let entries = vec![allowed.clone(), forbidden.clone()];
     store.upsert(scope, entries.clone(), epoch).await.unwrap();
+    assert_eq!(
+        store.read_payloads(scope, &[allowed.id]).await.unwrap()[&allowed.id],
+        allowed.payload
+    );
     // A verified immutable group can settle an old/unknown publication without
     // regenerating an operation or mutating the group after receipt expiration.
     store
@@ -413,7 +428,7 @@ mod service_contract {
             "retry_wait"
         );
         let saved: String =
-            origence::storage::native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+            origence::storage::sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
                 .bind(job_id)
                 .fetch_one(service.engine.relational().pool())
                 .await
@@ -441,7 +456,7 @@ mod service_contract {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
         let after: String =
-            origence::storage::native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+            origence::storage::sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
                 .bind(job_id)
                 .fetch_one(service.engine.relational().pool())
                 .await
@@ -506,7 +521,7 @@ mod service_contract {
         );
         assert!(service.get(&other, id, None).await.is_err());
         let saved: String =
-            origence::storage::native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+            origence::storage::sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
                 .bind(serde_json::from_value::<Uuid>(accepted["job_id"].clone()).unwrap())
                 .fetch_one(service.engine.relational().pool())
                 .await
@@ -556,7 +571,13 @@ async fn combined_projection_replay_vector_scope_cleanup_and_unavailability() {
     .unwrap();
     store.check().await.unwrap();
     let scope = scope();
-    let allowed = entry("鉴权 token policies");
+    let mut allowed = entry("鉴权 token policies");
+    allowed.payload.content = "原文 <b>literal</b>\r\n中文🙂 café".into();
+    allowed.payload.locator = serde_json::json!({"page":1,"byte_start":0,"parser":"fixture-v1"});
+    allowed.payload.summary = Some(origence::storage::ChunkSummary {
+        text: "完整摘要 <literal>".into(),
+        model_revision: "summary-v1".into(),
+    });
     let sibling = entry("token unrelated sibling");
     let vector = |e: &FullTextEntry, embedding: Vec<f32>| VectorEntry {
         id: e.id,
@@ -771,7 +792,7 @@ async fn real_anyseek_vector_group_replay_and_partial_cleanup() {
 /// Actual engine StringSet filtering through the production Origence adapter.
 /// Run only against a separately provisioned v3 test collection.
 #[tokio::test]
-#[ignore = "requires an isolated real AnySeek v3 collection"]
+#[ignore = "requires an isolated real AnySeek content collection"]
 async fn real_anyseek_graph_string_sets_direction_scope_and_replacement() {
     use origence::{
         graph::entity_id,

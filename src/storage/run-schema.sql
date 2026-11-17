@@ -12,3 +12,9 @@ CREATE TABLE oc_run_events (
     PRIMARY KEY(tenant_id,workspace_id,run_id,event_id),
     UNIQUE(tenant_id,workspace_id,run_id,sequence)
 );
+CREATE TABLE oc_run_asset_refs (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, owner_key_id BLOB NOT NULL,
+    asset_id BLOB NOT NULL, asset_version INTEGER NOT NULL CHECK(asset_version>0),
+    run_id BLOB NOT NULL, event_id BLOB NOT NULL, evidence_ref_id BLOB NOT NULL,
+    PRIMARY KEY(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id)
+);

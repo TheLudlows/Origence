@@ -5,7 +5,7 @@
 use super::*;
 use crate::context_retrieval::ContextRoute;
 use crate::memory_identity::MemoryIdentity;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 use std::collections::HashSet;
 
 #[derive(Clone, Copy)]
@@ -55,9 +55,9 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // also omit production constraints so corrupt bindings remain testable.
     for sql in [
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content_hash TEXT NOT NULL,locator TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_learnings(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,source_event_id BLOB NOT NULL,status TEXT NOT NULL,session_id BLOB NOT NULL,improve_id BLOB NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_improve_runs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,improve_id BLOB NOT NULL,status TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,improve_id))",
         "CREATE TABLE oc_jobs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,operation TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -67,8 +67,8 @@ async fn database() -> (tempfile::TempDir, Pool) {
     (dir, pool)
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),
@@ -78,7 +78,7 @@ async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
 }
 
 async fn seed(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     row: Record,
     kind: &str,
@@ -108,8 +108,8 @@ async fn seed(
     chunk(tx, scope, row.asset, row.chunk, 1, 0, "{}").await;
 }
 
-async fn version(tx: &mut TursoTx, scope: Scope, asset: Uuid, version: i32, source: Uuid) {
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version','content','hash',?,NULL)")
+async fn version(tx: &mut SqliteTx, scope: Scope, asset: Uuid, version: i32, source: Uuid) {
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version','content',?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(asset)
@@ -121,7 +121,7 @@ async fn version(tx: &mut TursoTx, scope: Scope, asset: Uuid, version: i32, sour
 }
 
 async fn chunk(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     asset: Uuid,
     id: Uuid,
@@ -129,7 +129,7 @@ async fn chunk(
     ordinal: i64,
     locator: &str,
 ) {
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?,'content',?,'needle')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?,'content',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(id)
@@ -142,7 +142,7 @@ async fn chunk(
         .unwrap();
 }
 
-async fn registration(tx: &mut TursoTx, scope: Scope, row: Record, source: Uuid, status: &str) {
+async fn registration(tx: &mut SqliteTx, scope: Scope, row: Record, source: Uuid, status: &str) {
     let improve = Uuid::new_v4();
     db::query("INSERT INTO oc_improve_runs VALUES(?,?,?,'publishing')")
         .bind(scope.tenant_id)
@@ -165,7 +165,7 @@ async fn registration(tx: &mut TursoTx, scope: Scope, row: Record, source: Uuid,
         .unwrap();
 }
 
-async fn binding(tx: &mut TursoTx, scope: Scope, asset: Uuid, identity: &MemoryIdentity) {
+async fn binding(tx: &mut SqliteTx, scope: Scope, asset: Uuid, identity: &MemoryIdentity) {
     db::query("UPDATE oc_assets SET identity_key=?,identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(identity.key(scope).unwrap())
         .bind(serde_json::to_string(identity).unwrap())
@@ -177,7 +177,7 @@ async fn binding(tx: &mut TursoTx, scope: Scope, asset: Uuid, identity: &MemoryI
         .unwrap();
 }
 
-async fn set_locator(tx: &mut TursoTx, id: Uuid, locator: &str) {
+async fn set_locator(tx: &mut SqliteTx, id: Uuid, locator: &str) {
     db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(locator)
         .bind(tx.scope.tenant_id)
@@ -188,15 +188,9 @@ async fn set_locator(tx: &mut TursoTx, id: Uuid, locator: &str) {
         .unwrap();
 }
 
-fn ids(rows: Vec<(Uuid, String)>) -> HashSet<Uuid> {
+fn ids(rows: Vec<Uuid>) -> HashSet<Uuid> {
     let count = rows.len();
-    let result: HashSet<_> = rows
-        .into_iter()
-        .map(|(id, terms)| {
-            assert_eq!(terms, "needle");
-            id
-        })
-        .collect();
+    let result: HashSet<_> = rows.into_iter().collect();
     assert_eq!(
         result.len(),
         count,
@@ -603,7 +597,7 @@ async fn root_kind_and_current_filters_exclude_bad_payloads_before_decoding() {
                 .await
                 .unwrap();
         }
-        db::query("UPDATE oc_chunks SET id=?,locator=x'01',search_terms=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        db::query("UPDATE oc_chunks SET id=?,locator=x'01',content_hash=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(vec![index as u8]).bind(scope.tenant_id).bind(scope.workspace_id).bind(row.chunk)
             .execute(&mut *tx.tx).await.unwrap();
     }
@@ -627,16 +621,23 @@ async fn root_kind_and_current_filters_exclude_bad_payloads_before_decoding() {
         tx.context_route_rows(ContextRoute::Knowledge, None).await,
         Err(StorageError::Backend(_))
     ));
-    db::query("UPDATE oc_chunks SET locator='{}',search_terms=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
+    db::query("UPDATE oc_chunks SET locator='{}',content_hash=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
         .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(
-        tx.context_route_rows(ContextRoute::Knowledge, None).await,
-        Err(StorageError::Backend(_))
-    ));
-    db::query("UPDATE oc_chunks SET search_terms='needle',id=x'ff' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
-        .execute(&mut *tx.tx).await.unwrap();
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()),
+        HashSet::from([good.chunk])
+    );
+    db::query("UPDATE oc_chunks SET id=x'ff' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(good.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     assert!(matches!(
         tx.context_route_rows(ContextRoute::Knowledge, None).await,
         Err(StorageError::Backend(_))
@@ -890,7 +891,7 @@ async fn missing_learning_catalog_keeps_historical_classification_and_backend_er
 }
 
 #[tokio::test]
-async fn empty_route_chunks_do_not_hide_missing_association_tables() {
+async fn empty_routes_need_only_the_asset_catalog() {
     for missing in ["assets", "versions", "events", "chunks"] {
         let (_dir, pool) = database().await;
         let mut tx = transaction(&pool, scope()).await;
@@ -921,13 +922,12 @@ async fn empty_route_chunks_do_not_hide_missing_association_tables() {
             }
             _ => unreachable!(),
         }
-        assert!(
-            matches!(
-                tx.context_route_rows(ContextRoute::Knowledge, None).await,
-                Err(StorageError::Backend(_))
-            ),
-            "missing {missing}"
-        );
+        let result = tx.context_route_rows(ContextRoute::Knowledge, None).await;
+        if missing == "assets" {
+            assert!(matches!(result, Err(StorageError::Backend(_))));
+        } else {
+            assert!(result.unwrap().is_empty(), "unused {missing}");
+        }
         tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }
@@ -967,14 +967,14 @@ async fn learning_history_ignores_unmatched_raw_sources_across_page_boundaries()
     for number in 2..=255 {
         version(&mut tx, scope, later.asset, number, later.source).await;
     }
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,257,'version','content','hash',x'01',NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,257,'version','content',x'01',NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(first.asset)
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,256,'version','content','hash',x'02',NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,256,'version','content',x'02',NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(later.asset)
@@ -1038,13 +1038,8 @@ async fn learning_history_uses_native_raw_source_and_version_keys() {
         // Historical classification does not project a domain i32 or UUID.
         match index % 4 {
             0 => {
-                db::query("INSERT INTO oc_versions VALUES(?,?,?,2147483648,'version','content','hash',?,NULL)")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
-                    .execute(&mut *tx.tx).await.unwrap();
-            }
-            1 => {
                 db::query(
-                    "INSERT INTO oc_versions VALUES(?,?,?,2.5,'version','content','hash',?,NULL)",
+                    "INSERT INTO oc_versions VALUES(?,?,?,2147483648,'version','content',?,NULL)",
                 )
                 .bind(scope.tenant_id)
                 .bind(scope.workspace_id)
@@ -1054,22 +1049,30 @@ async fn learning_history_uses_native_raw_source_and_version_keys() {
                 .await
                 .unwrap();
             }
+            1 => {
+                db::query("INSERT INTO oc_versions VALUES(?,?,?,2.5,'version','content',?,NULL)")
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(row.asset)
+                    .bind(raw_source)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
             2 => {
-                db::query("INSERT INTO oc_versions VALUES(?,?,?,'historical-version','version','content','hash',?,NULL)")
+                db::query("INSERT INTO oc_versions VALUES(?,?,?,'historical-version','version','content',?,NULL)")
                     .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
                     .execute(&mut *tx.tx).await.unwrap();
             }
             3 => {
-                db::query(
-                    "INSERT INTO oc_versions VALUES(?,?,?,x'08','version','content','hash',?,NULL)",
-                )
-                .bind(scope.tenant_id)
-                .bind(scope.workspace_id)
-                .bind(row.asset)
-                .bind(raw_source)
-                .execute(&mut *tx.tx)
-                .await
-                .unwrap();
+                db::query("INSERT INTO oc_versions VALUES(?,?,?,x'08','version','content',?,NULL)")
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(row.asset)
+                    .bind(raw_source)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
             }
             _ => unreachable!(),
         }
@@ -1200,7 +1203,7 @@ async fn current_route_reads_only_current_payloads_once_across_key_batches() {
         // Historical payloads are large and deliberately invalid as text.
         // They must neither decode nor enter the current payload read set.
         for historical in 2..=130 {
-            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,'historical',zeroblob(4096),zeroblob(4096))")
+            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,'historical',zeroblob(4096))")
                 .bind(scope.tenant_id)
                 .bind(scope.workspace_id)
                 .bind(Uuid::new_v4())
@@ -1303,7 +1306,7 @@ async fn native_context_routes_filter_before_loading_other_route_content() {
                 .unwrap();
         }
     }
-    db::query("UPDATE oc_chunks SET content=zeroblob(65536) WHERE id=?")
+    db::query("UPDATE oc_chunks SET content_hash=zeroblob(65536) WHERE id=?")
         .bind(other.chunk)
         .execute(&mut *tx.tx)
         .await

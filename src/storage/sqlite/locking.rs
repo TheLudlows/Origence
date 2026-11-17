@@ -19,13 +19,13 @@ pub(in crate::storage) async fn lock_for_maintenance(
     let (guard, opening) = acquire_path_lock(&path, false)?;
     let guard = Arc::new(guard);
     let _serialized = opening.lock().await;
-    let pool = Pool::open_read_only(&path).await.map_err(turso_err)?;
+    let pool = Pool::open_read_only(&path).await.map_err(sqlite_err)?;
     pool.hold_lifetime_guard(guard.clone());
     let outcome = async {
-        let mut conn = pool.acquire().await.map_err(turso_err)?;
-        native_turso::check_format(&mut conn, "authority")
+        let mut conn = pool.acquire().await.map_err(sqlite_err)?;
+        sqlite_db::check_format(&mut conn, "authority")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         check_conn(&mut conn).await
     }
     .await;
@@ -132,12 +132,12 @@ mod maintenance_lock_tests {
     async fn maintenance_guard_blocks_new_in_process_opens_and_releases_on_drop() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("context.db");
-        let store = TursoStore::open(&path).await.unwrap();
+        let store = SqliteStore::open(&path).await.unwrap();
         store.shutdown().await.unwrap();
         drop(store);
         let guard = lock_for_maintenance(&path).await.unwrap();
         assert!(matches!(
-            TursoStore::open(&path).await,
+            SqliteStore::open(&path).await,
             Err(StorageError::Conflict(_))
         ));
         assert!(matches!(
@@ -145,6 +145,6 @@ mod maintenance_lock_tests {
             Err(StorageError::Conflict(_))
         ));
         drop(guard);
-        assert!(TursoStore::open(&path).await.is_ok());
+        assert!(SqliteStore::open(&path).await.is_ok());
     }
 }

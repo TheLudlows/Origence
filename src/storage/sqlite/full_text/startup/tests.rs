@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::native_turso::Pool;
+use crate::storage::sqlite_db::Pool;
 
 async fn database() -> (tempfile::TempDir, Pool) {
     let dir = tempfile::tempdir().unwrap();
@@ -7,7 +7,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // Diagnostic fixtures allow raw and missing keys. Affinities match the
     // authority schema; unrelated metadata is deliberately not decoded.
     for sql in [
-        "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,content TEXT,locator TEXT)",
+        "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,content_hash TEXT,locator TEXT)",
         "CREATE TABLE oc_assets(tenant_id BLOB,workspace_id BLOB,id BLOB,current_version INTEGER,deleted INTEGER,kind TEXT)",
         "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB,title TEXT)",
         "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT)",

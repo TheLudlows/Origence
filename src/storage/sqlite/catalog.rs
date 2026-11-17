@@ -1,7 +1,7 @@
 //! Bounded, scoped catalog reads. Each visible asset reuses the normal read contract.
 use super::*;
 
-impl TursoTx {
+impl SqliteTx {
     pub async fn asset_catalog(
         &mut self,
         kind: &str,
@@ -12,7 +12,7 @@ impl TursoTx {
         if !matches!(kind, "memory" | "knowledge") || !(1..=100).contains(&limit) {
             return Err(StorageError::InvalidArgument("invalid catalog page"));
         }
-        let ids: Vec<Uuid> = native_turso::query_scalar(
+        let ids: Vec<Uuid> = sqlite_db::query_scalar(
             "SELECT id FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND kind=? \
              AND NOT deleted AND current_version IS NOT NULL AND id>? ORDER BY id LIMIT ?",
         )
@@ -23,7 +23,7 @@ impl TursoTx {
         .bind((limit + 1) as i64)
         .fetch_all(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let more = ids.len() > limit;
         let mut items = Vec::new();
         let mut cursor = after;
@@ -35,7 +35,6 @@ impl TursoTx {
                     let map = value
                         .as_object_mut()
                         .ok_or_else(|| StorageError::Unavailable("invalid asset record".into()))?;
-                    map.remove("content");
                     map.remove("semantic_values");
                     items.push(value);
                 }
@@ -52,7 +51,7 @@ impl TursoTx {
             return Err(StorageError::InvalidArgument("invalid catalog page"));
         }
         let owner = self.private_key_id().await?;
-        let rows: Vec<(Uuid, String, i64)> = native_turso::query_as(
+        let rows: Vec<(Uuid, String, i64)> = sqlite_db::query_as(
             "SELECT run_id,input,created_at FROM oc_runs WHERE tenant_id=? AND workspace_id=? \
              AND owner_key_id=? AND run_id>? ORDER BY run_id LIMIT ?",
         )
@@ -63,7 +62,7 @@ impl TursoTx {
         .bind((limit + 1) as i64)
         .fetch_all(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let more = rows.len() > limit;
         let mut cursor = after;
         let mut items = Vec::new();

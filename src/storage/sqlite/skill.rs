@@ -8,20 +8,20 @@ use crate::skill::{
 
 pub(super) const SCHEMA: &str = include_str!("../skill-schema.sql");
 
-impl TursoTx {
+impl SqliteTx {
     async fn skill_head(&mut self, id: Uuid) -> StorageResult<(Uuid, u32)> {
-        native_turso::query_as("SELECT owner_key_id,current_revision FROM oc_skill_candidates WHERE tenant_id=? AND workspace_id=? AND id=?")
+        sqlite_db::query_as("SELECT owner_key_id,current_revision FROM oc_skill_candidates WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?.ok_or(StorageError::NotFound)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)
     }
     async fn skill_revision(
         &mut self,
         id: Uuid,
         revision: u32,
     ) -> StorageResult<SkillCandidateInput> {
-        let content: String = native_turso::query_scalar("SELECT content FROM oc_skill_revisions WHERE tenant_id=? AND workspace_id=? AND candidate_id=? AND revision=?")
+        let content: String = sqlite_db::query_scalar("SELECT content FROM oc_skill_revisions WHERE tenant_id=? AND workspace_id=? AND candidate_id=? AND revision=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(i64::from(revision))
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?.ok_or(StorageError::NotFound)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)?;
         decode(&content)
     }
     async fn check_skill_sources(
@@ -98,17 +98,17 @@ impl TursoTx {
         }
         self.check_skill_sources(owner, &input.sources).await?;
         if old.is_none() {
-            native_turso::query("INSERT INTO oc_skill_candidates(tenant_id,workspace_id,id,owner_key_id,current_revision) VALUES(?,?,?,?,?)")
+            sqlite_db::query("INSERT INTO oc_skill_candidates(tenant_id,workspace_id,id,owner_key_id,current_revision) VALUES(?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(owner).bind(i64::from(next))
-                .execute(&mut *self.tx).await.map_err(turso_err)?;
+                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         } else {
-            native_turso::query("UPDATE oc_skill_candidates SET current_revision=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+            sqlite_db::query("UPDATE oc_skill_candidates SET current_revision=? WHERE tenant_id=? AND workspace_id=? AND id=?")
                 .bind(i64::from(next)).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
-                .execute(&mut *self.tx).await.map_err(turso_err)?;
+                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         }
-        native_turso::query("INSERT INTO oc_skill_revisions(tenant_id,workspace_id,candidate_id,revision,content,created_at) VALUES(?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_skill_revisions(tenant_id,workspace_id,candidate_id,revision,content,created_at) VALUES(?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(i64::from(next)).bind(encode(input)?).bind(now_ms())
-            .execute(&mut *self.tx).await.map_err(turso_err)?;
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(next)
     }
     /// Candidate content and private notes are owner-only, including for admins.
@@ -150,9 +150,9 @@ impl TursoTx {
         self.check_skill_sources(owner, &content.sources).await?;
         let package = content.draft.package(&input.target, self.scope)?;
         let packet = SkillReviewPacket::build(review, input, package)?;
-        let old:Option<(Uuid,u32,Uuid,String)>=native_turso::query_as("SELECT candidate_id,revision,reviewer_id,packet FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
+        let old:Option<(Uuid,u32,Uuid,String)>=sqlite_db::query_as("SELECT candidate_id,revision,reviewer_id,packet FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some((id, revision, reviewer, stored)) = old {
             if id != candidate
                 || revision != current
@@ -163,18 +163,18 @@ impl TursoTx {
             }
             return Ok(packet);
         }
-        native_turso::query("INSERT INTO oc_skill_reviews(tenant_id,workspace_id,id,candidate_id,revision,reviewer_id,packet,digest,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_skill_reviews(tenant_id,workspace_id,id,candidate_id,revision,reviewer_id,packet,digest,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review).bind(candidate).bind(i64::from(current)).bind(input.reviewer_id)
-            .bind(encode(&packet)?).bind(&packet.digest).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+            .bind(encode(&packet)?).bind(&packet.digest).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(packet)
     }
     async fn skill_review_row(
         &mut self,
         review: Uuid,
     ) -> StorageResult<(Uuid, u32, Uuid, String, String, String)> {
-        native_turso::query_as("SELECT candidate_id,revision,reviewer_id,packet,digest,decision FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
+        sqlite_db::query_as("SELECT candidate_id,revision,reviewer_id,packet,digest,decision FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?.ok_or(StorageError::NotFound)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)
     }
     /// Selected packet only; publication roles do not grant access to the archive.
     pub async fn skill_review(&mut self, review: Uuid) -> StorageResult<Value> {
@@ -223,9 +223,9 @@ impl TursoTx {
                 "Skill decision is immutable; submit a new review".into(),
             ));
         }
-        native_turso::query("UPDATE oc_skill_reviews SET decision=?,decided_at=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        sqlite_db::query("UPDATE oc_skill_reviews SET decision=?,decided_at=? WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(next).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
-            .execute(&mut *self.tx).await.map_err(turso_err)?;
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
     /// Publication is separate from approval, with fresh permissions, source and
@@ -258,33 +258,33 @@ impl TursoTx {
             return Err(StorageError::Conflict("Skill artifacts changed".into()));
         }
         let target = &packet.target;
-        let previous:Option<(Uuid,bool)>=native_turso::query_as("SELECT review_id,withdrawn=1 FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=?")
+        let previous:Option<(Uuid,bool)>=sqlite_db::query_as("SELECT review_id,withdrawn=1 FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(target.skill_id).bind(i64::from(target.version))
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some((old, withdrawn)) = previous {
             if old != review || withdrawn {
                 return Err(StorageError::Conflict("Skill version is immutable".into()));
             }
             return Ok(package);
         }
-        let latest:i64=native_turso::query_scalar("SELECT COALESCE(MAX(version),0) FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(target.skill_id).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let latest:i64=sqlite_db::query_scalar("SELECT COALESCE(MAX(version),0) FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(target.skill_id).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         if i64::from(target.version) != latest + 1 {
             return Err(StorageError::Conflict(
                 "Skill version must follow published history".into(),
             ));
         }
-        native_turso::query("INSERT INTO oc_skill_packages(tenant_id,workspace_id,skill_id,version,review_id,owner_key_id,sources,package,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_skill_packages(tenant_id,workspace_id,skill_id,version,review_id,owner_key_id,sources,package,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(target.skill_id).bind(i64::from(target.version)).bind(review).bind(owner)
-            .bind(encode(&content.sources)?).bind(encode(&package)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+            .bind(encode(&content.sources)?).bind(encode(&package)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(package)
     }
     /// Live-authorized distribution; no private provenance or review basis returned.
     pub async fn skill_package(&mut self, id: Uuid, version: u32) -> StorageResult<SkillPackage> {
         self.check_permission(Permission::Read).await?;
-        let (owner,sources,package):(Uuid,String,String)=native_turso::query_as("SELECT owner_key_id,sources,package FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=? AND NOT withdrawn")
+        let (owner,sources,package):(Uuid,String,String)=sqlite_db::query_as("SELECT owner_key_id,sources,package FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=? AND NOT withdrawn")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(i64::from(version))
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?.ok_or(StorageError::NotFound)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)?;
         self.check_skill_sources(owner, &decode::<Vec<SkillSource>>(&sources)?)
             .await?;
         let package: SkillPackage = decode(&package)?;
@@ -293,9 +293,9 @@ impl TursoTx {
     }
     pub async fn withdraw_skill(&mut self, id: Uuid, version: u32) -> StorageResult<()> {
         self.check_permission(Permission::Publish).await?;
-        let result=native_turso::query("UPDATE oc_skill_packages SET withdrawn=1 WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=?")
+        let result=sqlite_db::query("UPDATE oc_skill_packages SET withdrawn=1 WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(i64::from(version))
-            .execute(&mut *self.tx).await.map_err(turso_err)?;
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         if result.rows_affected() == 0 {
             return Err(StorageError::NotFound);
         }

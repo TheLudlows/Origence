@@ -9,12 +9,97 @@ fn encode<T: serde::Serialize>(v: &T) -> StorageResult<String> {
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s).map_err(|_| StorageError::Unavailable("invalid run record".into()))
 }
-impl TursoTx {
+impl SqliteTx {
+    // A bounded lookup projection, never a replacement for the immutable event.
+    // Called only after that event is inserted, in the same write transaction.
+    async fn index_run_assets(
+        &mut self,
+        run: Uuid,
+        event: Uuid,
+        refs: &[ArchivedEvidence],
+    ) -> StorageResult<()> {
+        let owner = self.private_key_id().await?;
+        for reference in refs {
+            sqlite_db::query("INSERT INTO oc_run_asset_refs(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id,event_id,evidence_ref_id) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id) DO NOTHING")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner)
+                .bind(reference.reference.asset_id).bind(reference.reference.asset_version)
+                .bind(run).bind(event).bind(reference.evidence_ref_id)
+                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        }
+        Ok(())
+    }
+
+    /// Exact-version associations only; this is not a trace or proof of use.
+    pub async fn asset_runs(
+        &mut self,
+        asset: Uuid,
+        version: i32,
+        after: Uuid,
+        limit: usize,
+    ) -> StorageResult<Value> {
+        self.check_permission(Permission::Read).await?;
+        if version < 1 || !(1..=100).contains(&limit) {
+            return Err(StorageError::InvalidArgument("invalid asset run page"));
+        }
+        self.asset_view(asset, Some(version)).await?;
+        let owner = self.private_key_id().await?;
+        let rows: Vec<(Uuid, Uuid, Uuid)> = sqlite_db::query_as(
+            "SELECT run_id,event_id,evidence_ref_id FROM oc_run_asset_refs WHERE tenant_id=? AND workspace_id=? AND owner_key_id=? AND asset_id=? AND asset_version=? AND run_id>? ORDER BY run_id LIMIT ?"
+        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner)
+            .bind(asset).bind(version).bind(after).bind((limit+1) as i64)
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+        let more = rows.len() > limit;
+        let mut cursor = after;
+        let mut items = Vec::new();
+        for (run, event, evidence) in rows.into_iter().take(limit) {
+            cursor = run;
+            match self
+                .visible_asset_run(run, event, evidence, asset, version)
+                .await
+            {
+                Ok(created) => items.push(json!({"run_id":run,"created_at_ms":created})),
+                Err(StorageError::NotFound) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(
+            json!({"asset_id":asset,"asset_version":version,"items":items,
+            "next_after":more.then_some(cursor),"scope":"current_logical_key",
+            "coverage":"recorded_references"}),
+        )
+    }
+
+    async fn visible_asset_run(
+        &mut self,
+        run: Uuid,
+        event: Uuid,
+        evidence: Uuid,
+        asset: Uuid,
+        version: i32,
+    ) -> StorageResult<i64> {
+        let (_, _, created) = self.owned_run(run).await?;
+        let refs: Option<String> = sqlite_db::query_scalar(
+            "SELECT references_json FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?"
+        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        let refs: Vec<ArchivedEvidence> = decode(&refs.ok_or(StorageError::NotFound)?)?;
+        let reference = refs
+            .iter()
+            .find(|r| {
+                r.evidence_ref_id == evidence
+                    && r.reference.asset_id == asset
+                    && r.reference.asset_version == version
+            })
+            .ok_or(StorageError::NotFound)?;
+        self.require_run_reference_visible(reference).await?;
+        Ok(created)
+    }
+
     pub(crate) async fn owned_run(&mut self, run: Uuid) -> StorageResult<(Uuid, String, i64)> {
         self.check_permission(Permission::Read).await?;
         let key = self.private_key_id().await?;
-        let row:Option<(Uuid,Uuid,String,i64)>=native_turso::query_as("SELECT session_id,owner_key_id,input,created_at FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let row:Option<(Uuid,Uuid,String,i64)>=sqlite_db::query_as("SELECT session_id,owner_key_id,input,created_at FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (session, owner, input, created) = row.ok_or(StorageError::NotFound)?;
         if owner != key {
             return Err(StorageError::NotFound);
@@ -29,7 +114,7 @@ impl TursoTx {
         let owner = self.private_key_id().await?;
         let payload = encode(input)?;
         let digest = hash(&payload);
-        let existing: Option<String> = native_turso::query_scalar(
+        let existing: Option<String> = sqlite_db::query_scalar(
             "SELECT input_hash FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=?",
         )
         .bind(self.scope.tenant_id)
@@ -37,7 +122,7 @@ impl TursoTx {
         .bind(input.run_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if let Some(old) = existing {
             self.owned_run(input.run_id).await?;
             if old != digest {
@@ -46,9 +131,9 @@ impl TursoTx {
                 ));
             }
         } else {
-            native_turso::query("INSERT INTO oc_runs(tenant_id,workspace_id,run_id,session_id,owner_key_id,input,input_hash,created_at) VALUES(?,?,?,?,?,?,?,?)")
+            sqlite_db::query("INSERT INTO oc_runs(tenant_id,workspace_id,run_id,session_id,owner_key_id,input,input_hash,created_at) VALUES(?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(input.run_id).bind(session).bind(owner).bind(payload).bind(digest).bind(now_ms())
-                .execute(&mut *self.tx).await.map_err(turso_err)?;
+                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         }
         Ok(json!({"run_id":input.run_id,"session_id":session}))
     }
@@ -62,8 +147,8 @@ impl TursoTx {
         input.validate().map_err(StorageError::InvalidArgument)?;
         let payload = encode(input)?;
         let digest = hash(&payload);
-        let old:Option<(String,i64)>=native_turso::query_as("SELECT payload_hash,sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.event_id).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let old:Option<(String,i64)>=sqlite_db::query_as("SELECT payload_hash,sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.event_id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some((old, seq)) = old {
             if old != digest {
                 return Err(StorageError::Conflict(
@@ -80,15 +165,16 @@ impl TursoTx {
                 refs.push(reference);
             }
         }
-        let last:i64=native_turso::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let last:i64=sqlite_db::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         if last >= 10000 {
             return Err(StorageError::InvalidArgument("run event budget exceeded"));
         }
         let seq = last + 1;
-        native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms())
-            .execute(&mut *self.tx).await.map_err(turso_err)?;
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.index_run_assets(run, input.event_id, &refs).await?;
         Ok(json!({"run_id":run,"event_id":input.event_id,"sequence":seq}))
     }
     pub async fn private_run_trace(
@@ -101,8 +187,8 @@ impl TursoTx {
         if after < 0 || limit == 0 || limit > 100 {
             return Err(StorageError::InvalidArgument("invalid run page"));
         }
-        let rows:Vec<(i64,Uuid,String,String,i64)>=native_turso::query_as("SELECT sequence,reporter_principal_id,payload,references_json,recorded_at FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND sequence>? ORDER BY sequence LIMIT ?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(after).bind((limit+1) as i64).fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let rows:Vec<(i64,Uuid,String,String,i64)>=sqlite_db::query_as("SELECT sequence,reporter_principal_id,payload,references_json,recorded_at FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND sequence>? ORDER BY sequence LIMIT ?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(after).bind((limit+1) as i64).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         let more = rows.len() > limit;
         let mut events = Vec::new();
         let mut cursor = after;
@@ -145,14 +231,14 @@ impl TursoTx {
         through_sequence: i64,
     ) -> StorageResult<String> {
         self.check_permission(Permission::Read).await?;
-        let input:Option<String>=native_turso::query_scalar("SELECT input FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=? AND owner_key_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(owner_key_id).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let input:Option<String>=sqlite_db::query_scalar("SELECT input FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=? AND owner_key_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(owner_key_id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let input = input.ok_or(StorageError::NotFound)?;
         if !(0..=10000).contains(&through_sequence) {
             return Err(StorageError::InvalidArgument("invalid run prefix"));
         }
-        let rows:Vec<(i64,String,String,String)>=native_turso::query_as("SELECT sequence,payload_hash,references_json,payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND sequence<=? ORDER BY sequence")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(through_sequence).fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let rows:Vec<(i64,String,String,String)>=sqlite_db::query_as("SELECT sequence,payload_hash,references_json,payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND sequence<=? ORDER BY sequence")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(through_sequence).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         if rows.len() != through_sequence as usize {
             return Err(StorageError::NotFound);
         }
@@ -173,7 +259,7 @@ impl TursoTx {
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Revalidate private ownership and all original sources before replay.
     #[cfg_attr(not(feature = "local-storage"), allow(dead_code))]
     pub(crate) async fn replay_run_context_prepared(
@@ -189,9 +275,9 @@ impl TursoTx {
                 "invalid preparation identity",
             ));
         }
-        let old: Option<(String, i64, String)> = native_turso::query_as("SELECT payload,sequence,references_json FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
+        let old: Option<(String, i64, String)> = sqlite_db::query_as("SELECT payload,sequence,references_json FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let Some((payload, seq, references)) = old else {
             return Ok(None);
         };
@@ -332,9 +418,9 @@ impl TursoTx {
                 }
             }
         }
-        let old: Option<i64> = native_turso::query_scalar("SELECT sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
+        let old: Option<i64> = sqlite_db::query_scalar("SELECT sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if old.is_some() {
             return Err(StorageError::Conflict(
                 "event identity reused with different payload".into(),
@@ -344,17 +430,18 @@ impl TursoTx {
         self.validate_prepared_payload(&payload).await?;
         let payload = encode(&payload)?;
         let digest = hash(&payload);
-        let last:i64=native_turso::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let last:i64=sqlite_db::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         if last >= 10000 {
             return Err(StorageError::InvalidArgument("run event budget exceeded"));
         }
         let seq = last + 1;
-        native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.index_run_assets(run, event_id, &refs).await?;
         Ok(json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_bundle":bundle}))
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Record a failed server preparation attempt without any raw query or error body.
     #[cfg(feature = "local-storage")]
     pub(crate) async fn record_run_context_failed(
@@ -383,9 +470,9 @@ impl TursoTx {
             "context_request_digest":request_digest,"error_code":error_code,"retrieval":retrieval,"delivery_status":"not_prepared"}),
         )?;
         let digest = hash(&payload);
-        let old: Option<String> = native_turso::query_scalar("SELECT payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
+        let old: Option<String> = sqlite_db::query_scalar("SELECT payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(old) = old {
             let old: Value = decode(&old)?;
             if old["kind"] != "context_preparation_failed"
@@ -398,14 +485,14 @@ impl TursoTx {
             }
             return Ok(None);
         }
-        let last: i64 = native_turso::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        let last: i64 = sqlite_db::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         if last >= 10000 {
             return Err(StorageError::InvalidArgument("run event budget exceeded"));
         }
-        native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).bind(last+1)
-            .bind(self.principal_id).bind(payload).bind(digest).bind("[]").bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+            .bind(self.principal_id).bind(payload).bind(digest).bind("[]").bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(None)
     }
 }
@@ -414,8 +501,8 @@ impl TursoTx {
 mod tests {
     use super::*;
     use crate::run::{RunOutcome, RunReporter};
-    async fn tx(pool: &Pool, scope: Scope, principal_id: Uuid) -> TursoTx {
-        TursoTx {
+    async fn tx(pool: &Pool, scope: Scope, principal_id: Uuid) -> SqliteTx {
+        SqliteTx {
             tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
             scope,
             principal_id,
@@ -436,7 +523,7 @@ mod tests {
             tenant_id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
         };
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(?,?,'test',0)",
         )
         .bind(scope.tenant_id)
@@ -447,7 +534,7 @@ mod tests {
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
         for id in [owner, other] {
-            native_turso::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,'admin',0)").bind(id).bind(id).bind(scope.tenant_id).bind(scope.workspace_id).bind(id.to_string()).execute(&pool).await.unwrap();
+            sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,'admin',0)").bind(id).bind(id).bind(scope.tenant_id).bind(scope.workspace_id).bind(id.to_string()).execute(&pool).await.unwrap();
         }
         let input = RunInput {
             run_id: Uuid::new_v4(),
@@ -619,7 +706,7 @@ mod tests {
             Err(StorageError::NotFound)
         ));
         t.commit().await.unwrap();
-        native_turso::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
+        sqlite_db::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
             .bind(owner)
             .execute(&pool)
             .await

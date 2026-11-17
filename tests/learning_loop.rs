@@ -1,7 +1,7 @@
 #![cfg(feature = "local-storage")]
 
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{
     error::AppError,
     learning::ImproveInput,
@@ -11,7 +11,6 @@ use origence::{
     storage::{
         DomainTx, FullTextEntry, FullTextQuery, LedgerEntry, LedgerKey, Permission,
         RelationalStore, Scope, SourceVersion, Surface, VectorEntry, VectorQuery,
-        ledger_idempotency_key,
     },
     types::AuthContext,
     worker,
@@ -1574,7 +1573,7 @@ struct BudgetTemplate {
 async fn budget_template(s: &Service, a: &AuthContext, learning: &Value) -> BudgetTemplate {
     let asset = id(learning, "asset_id");
     let chunks: Vec<(Uuid, i32, String, String)> = db::query_as(
-        "SELECT id,version,content,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY ordinal",
+        "SELECT id,version,content_hash,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY ordinal",
     )
     .bind(a.tenant_id)
     .bind(a.workspace_id)
@@ -1587,7 +1586,12 @@ async fn budget_template(s: &Service, a: &AuthContext, learning: &Value) -> Budg
         1,
         "budget fixture requires one original chunk"
     );
-    let (chunk, version, content, locator) = chunks.into_iter().next().unwrap();
+    let (chunk, version, content_hash, locator) = chunks.into_iter().next().unwrap();
+    let content = s.get(a, asset, Some(version)).await.unwrap()["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(origence::storage::hash(&content), content_hash);
     let ready: Vec<(String, usize, i64)> = db::query_as(
         "SELECT model_id,dimension,generation FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND field='content' AND state='ready'",
     )
@@ -1730,7 +1734,6 @@ async fn publish_native_budget_fixture(
             tx.register_pending(LedgerEntry {
                 key,
                 artifact_type: "chunk".into(),
-                idempotency_key: ledger_idempotency_key(&key),
             })
             .await
             .unwrap();
@@ -1763,6 +1766,11 @@ async fn publish_native_budget_fixture(
             source: budget.hidden_source,
             generation: budget.generation,
             search_terms: budget.terms.clone(),
+            payload: origence::storage::ChunkPayload {
+                content: "Rust".into(),
+                locator: locator.clone(),
+                summary: None,
+            },
         })
         .collect();
     crate::support::projection(s)
@@ -1785,7 +1793,6 @@ async fn publish_native_budget_fixture(
             1000 + index as i32,
             "Rust",
             &locator,
-            &budget.terms,
         )
         .await
         .unwrap();

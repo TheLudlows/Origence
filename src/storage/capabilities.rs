@@ -54,6 +54,31 @@ pub struct FullTextEntry {
     pub source: SourceVersion,
     pub generation: i64,
     pub search_terms: String,
+    /// Immutable content stored in the same Record as its retrieval indexes.
+    pub payload: ChunkPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ChunkPayload {
+    pub content: String,
+    pub locator: serde_json::Value,
+    pub summary: Option<ChunkSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ChunkSummary {
+    pub text: String,
+    pub model_revision: String,
+}
+
+/// The control database retains only the immutable payload's identity and proof.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChunkRef {
+    pub id: Uuid,
+    pub content_hash: String,
+    pub locator: serde_json::Value,
 }
 
 /// Native AND full-text search within one authorized scope and generation.

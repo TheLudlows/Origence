@@ -5,7 +5,7 @@ use super::improve::{
     unfinished_learning_jobs,
 };
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 #[derive(Clone, Copy)]
 struct Record {
@@ -54,8 +54,8 @@ async fn database() -> (tempfile::TempDir, Pool) {
     (dir, pool)
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),
@@ -534,19 +534,21 @@ async fn learning_retry_checks_parent_child_and_native_run_keys() {
 }
 
 #[tokio::test]
-async fn job_improve_empty_inputs_do_not_hide_relation_prepare_errors() {
-    for case in 0..5 {
+async fn absent_learning_and_cancelled_parents_skip_unneeded_metadata() {
+    for case in 0..6 {
         let (_dir, pool) = database().await;
         let scope = scope();
         let mut tx = transaction(&pool, scope).await;
         let r = Record::new(1);
-        if case == 4 {
+        if case >= 4 {
             seed(&mut tx.tx, scope, r).await;
-            db::query("UPDATE oc_improve_runs SET job_id=?,status='cancelled'")
-                .bind(r.job)
-                .execute(&mut *tx.tx)
-                .await
-                .unwrap();
+            if case == 4 {
+                db::query("UPDATE oc_improve_runs SET job_id=?,status='cancelled'")
+                    .bind(r.job)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
         }
         match case {
             0 => db::query("DROP TABLE oc_events"),
@@ -573,10 +575,11 @@ async fn job_improve_empty_inputs_do_not_hide_relation_prepare_errors() {
                 .await
                 .map(|_| ()),
         };
-        assert!(
-            matches!(result, Err(StorageError::Backend(_))),
-            "case {case}: {result:?}"
-        );
+        if case == 5 {
+            assert!(matches!(result, Err(StorageError::Backend(_))));
+        } else {
+            assert!(result.is_ok(), "unused metadata case {case}: {result:?}");
+        }
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }

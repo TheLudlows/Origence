@@ -1,5 +1,5 @@
 //! Fresh schema and read-only legacy rejection; no migration or data repair.
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{Lifecycle, StorageError, sqlite::SqliteStore};
 
 #[tokio::test]
@@ -53,7 +53,9 @@ async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
             .fetch_one(&mut *conn)
             .await
             .unwrap();
-        assert_eq!(mode.to_ascii_lowercase(), "wal");
+        // Immutable admission of a checkpointed file uses no WAL/SHM and
+        // reports DELETE internally; the file's persisted header is unchanged.
+        assert_eq!(mode.to_ascii_lowercase(), "delete");
         let content: String = db::query_scalar("SELECT payload FROM oc_aml_adds")
             .fetch_one(&mut *conn)
             .await
@@ -119,8 +121,9 @@ CREATE INDEX oc_ledger_state ON oc_artifact_ledger(state, next_retry_at);
         let mut files = std::collections::BTreeMap::new();
         // The host .lock file is intentionally held with an OS-exclusive lock;
         // Windows forbids reading it while the store is open. Snapshot only the
-        // persistent database and native sidecars, never suppress their errors.
-        for name in ["old-ledger.db", "old-ledger.db-wal", "old-ledger.db-shm"] {
+        // persistent database and WAL. SQLite's SHM read marks are volatile
+        // coordination, updated even by readers; they are not stored payload.
+        for name in ["old-ledger.db", "old-ledger.db-wal"] {
             match std::fs::read(dir.path().join(name)) {
                 Ok(bytes) => {
                     files.insert(name, bytes);
@@ -140,7 +143,7 @@ CREATE INDEX oc_ledger_state ON oc_artifact_ledger(state, next_retry_at);
     assert!(!schema.contains("attempt"));
     assert!(!schema.contains("last_error"));
     assert!(schema.contains("next_retry_at"));
-    assert!(schema.contains("idempotency_key"));
+    assert!(!schema.contains("idempotency_key"));
     store.check().await.unwrap();
     db::query("DROP TABLE oc_artifact_ledger")
         .execute(store.pool())
@@ -193,4 +196,20 @@ CREATE INDEX oc_ledger_state ON oc_artifact_ledger(state, next_retry_at);
     );
     raw.close().await;
     assert_eq!(snapshot(), before);
+}
+
+#[tokio::test]
+async fn database_without_run_reverse_index_is_rejected_without_repair() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("authority.db");
+    let store = SqliteStore::open(&path).await.unwrap();
+    db::query("DROP TABLE oc_run_asset_refs")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
+    let before = tokio::fs::read(&path).await.unwrap();
+    assert!(SqliteStore::open(&path).await.is_err());
+    assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
 }

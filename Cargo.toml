@@ -11,8 +11,7 @@ autotests = false
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart"] }
 clap = { version = "4", features = ["derive", "env"] }
-fs2 = "0.4"
-futures = "0.3"
+fs2 = { version = "0.4", optional = true }
 jieba-rs = "0.7"
 # Text extraction only; no OCR, rendering, or platform bindings.
 pdf_oxide = { version = "=0.3.78", default-features = false }
@@ -23,22 +22,21 @@ schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-turso = { version = "=0.8.2", default-features = false }
+rusqlite = { version = "=0.43.0", optional = true, default-features = false, features = ["bundled"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 [dev-dependencies]
-# Deterministic Pending cancellation coverage; production uses no VFS test feature.
-turso = { version = "=0.8.2", default-features = false, features = ["io_memory_yield"] }
 tempfile = "3"
 
 [features]
 default = ["local-storage"]
-local-storage = []
+local-storage = ["sqlite"]
+sqlite = ["dep:rusqlite", "dep:fs2"]
 # Historical fixture diagnostics are opt-in and are not production acceptance.
-manual-diagnostics = []
+manual-diagnostics = ["sqlite"]
 
 [profile.release]
 lto = "thin"
@@ -47,6 +45,11 @@ strip = true
 [[test]]
 name = "local"
 path = "tests/local.rs"
+required-features = ["sqlite"]
+
+[[test]]
+name = "core"
+path = "tests/core.rs"
 
 [[test]]
 name = "anyseek"

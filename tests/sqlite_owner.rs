@@ -42,7 +42,7 @@ async fn cleanup_plan_retains_shared_owners_after_source_retraction() {
     for title in ["first", "second"] {
         let source_id = tx.create_event("knowledge", title, None).await.unwrap();
         let asset = tx.insert_knowledge_asset(title).await.unwrap();
-        tx.insert_version(asset, 1, title, "hash", source_id, None, None)
+        tx.insert_version(asset, 1, title, source_id, None, None)
             .await
             .unwrap();
         let source = SourceVersion {
@@ -59,7 +59,7 @@ async fn cleanup_plan_retains_shared_owners_after_source_retraction() {
         .unwrap();
     tx.commit().await.unwrap();
     assert!(store.cleanup_plan(auth.scope).await.unwrap().is_empty());
-    let mut owned: Vec<Uuid> = origence::storage::native_turso::query_scalar(
+    let mut owned: Vec<Uuid> = origence::storage::sqlite_db::query_scalar(
         "SELECT DISTINCT artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
     )
     .bind(auth.scope.tenant_id)
@@ -77,7 +77,7 @@ async fn cleanup_plan_retains_shared_owners_after_source_retraction() {
     for _ in 0..2 {
         assert!(store.cleanup_plan(auth.scope).await.unwrap().is_empty());
     }
-    let owners: Vec<(Uuid, Uuid)> = origence::storage::native_turso::query_as(
+    let owners: Vec<(Uuid, Uuid)> = origence::storage::sqlite_db::query_as(
         "SELECT source_id,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
     )
     .bind(auth.scope.tenant_id)

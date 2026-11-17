@@ -98,7 +98,7 @@ async fn normalization_status_does_not_claim_semantic_truth() {
         (explicit, "explicit_identity"),
         (knowledge, "not_applicable"),
     ] {
-        tx.insert_version(asset, 1, "source", "hash", source, None, None)
+        tx.insert_version(asset, 1, "source", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();

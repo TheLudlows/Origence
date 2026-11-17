@@ -1,4 +1,4 @@
-import { api } from "./api.js";
+import { api, ApiError } from "./api.js";
 import {
   badge,
   button,
@@ -242,6 +242,39 @@ export async function assetDetail(
   if (ctx.signal.aborted) return;
   const info = el("div"),
     error = el("div");
+  const related = panel(
+    `关联 Run · v${asset.version}`,
+    el("p", "muted", "仅当前逻辑 key 的已记录引用；不代表完整采集、收到或使用。"),
+  );
+  const relatedResult = el("div");
+  let relatedRequest = 0;
+  const loadRelated = async (after?: string) => {
+    const request = ++relatedRequest;
+    relatedResult.replaceChildren(el("p", "muted", "正在读取关联 Run…"));
+    try {
+      const page = await api.get<Page<{ run_id: string; created_at_ms: number }>>(
+        `/v1/assets/${id}/runs?version=${asset.version}&limit=25${after ? "&after=" + encodeURIComponent(after) : ""}`,
+        ctx.signal,
+      );
+      if (ctx.signal.aborted || request !== relatedRequest) return;
+      relatedResult.replaceChildren();
+      if (!page.items.length)
+        relatedResult.append(empty("本页没有可读取的已记录引用", "未记录不等于未使用；可能没有关联或引用已不可读。"));
+      for (const run of page.items)
+        relatedResult.append(button(`打开 Run ${run.run_id}`, () => ctx.navigate("runs", run.run_id), "link"));
+      if (page.next_after)
+        relatedResult.append(button("下一页关联 Run", () => loadRelated(page.next_after!)));
+    } catch (e) {
+      if (ctx.signal.aborted || request !== relatedRequest) return;
+      if (e instanceof ApiError && [403, 404].includes(e.status)) {
+        root.replaceChildren(empty("内容不可读取", "资产或来源已不可读，请重新检查权限和来源状态。"));
+        return;
+      }
+      message(relatedResult, e);
+      relatedResult.append(button("重试关联 Run", () => loadRelated(after)));
+    }
+  };
+  related.append(button("读取已记录引用", () => loadRelated()), relatedResult);
   const oldVersion = input(
     "对比版本",
     String(Math.max(1, asset.version - 1)),
@@ -409,6 +442,7 @@ export async function assetDetail(
           : null,
       ),
     ),
+    related,
     error,
   );
 }

@@ -1,4 +1,4 @@
-//! S0 service-level regression with real Turso authority and an AnySeek protocol fixture and loopback-only embeddings.
+//! S0 service-level regression with real SQLite authority and an AnySeek protocol fixture and loopback-only embeddings.
 //! Fixed vectors prove candidate filtering, not semantic retrieval quality.
 #![cfg(feature = "local-storage")]
 
@@ -10,7 +10,7 @@ use origence::{
     service::Service,
     storage::{
         DomainTx, IssuedKey, LedgerEntry, LedgerKey, RelationalStore, Scope, SourceVersion,
-        Surface, VectorEntry, VectorQuery, hash, ledger_idempotency_key,
+        Surface, VectorEntry, VectorQuery, hash,
     },
 };
 use reqwest::{Client, Method};
@@ -100,6 +100,7 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
     };
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let mut entries = Vec::new();
+    let mut full_text = Vec::new();
     let mut ledger = Vec::new();
     for index in 0..=decoys {
         let is_target = index == decoys;
@@ -122,17 +123,9 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
             let source_id = tx.create_event("memory", &content, None).await.unwrap();
             let source = SourceVersion { source_id, version };
             let chunk = Uuid::new_v4();
-            tx.insert_version(
-                asset,
-                version,
-                &content,
-                &hash(&content),
-                source_id,
-                None,
-                None,
-            )
-            .await
-            .unwrap();
+            tx.insert_version(asset, version, &content, source_id, None, None)
+                .await
+                .unwrap();
             tx.insert_chunk(
                 chunk,
                 asset,
@@ -140,7 +133,6 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
                 0,
                 &content,
                 &json!({"byte_start": 0, "byte_end": content.len()}),
-                &parsing::lexical(&content),
             )
             .await
             .unwrap();
@@ -159,12 +151,22 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
             tx.register_pending(LedgerEntry {
                 key,
                 artifact_type: "chunk".into(),
-                idempotency_key: ledger_idempotency_key(&key),
             })
             .await
             .unwrap();
             tx.index_ready(chunk, profile, 3, 1).await.unwrap();
             ledger.push(key);
+            full_text.push(origence::storage::FullTextEntry {
+                id: chunk,
+                source,
+                generation: 1,
+                search_terms: parsing::lexical(&content),
+                payload: origence::storage::ChunkPayload {
+                    content: content.clone(),
+                    locator: json!({"byte_start":0,"byte_end":content.len()}),
+                    summary: None,
+                },
+            });
             entries.push(VectorEntry {
                 id: chunk,
                 embedding: if is_target && version == 2 {
@@ -190,6 +192,10 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         }
     }
     tx.commit().await.unwrap();
+    crate::support::projection(service)
+        .upsert_full_text(scope, full_text)
+        .await
+        .unwrap();
     crate::support::projection(service)
         .upsert(scope, entries)
         .await

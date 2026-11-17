@@ -1,11 +1,11 @@
-//! Real Turso transactions through public library entry points, no query doubles.
+//! Real SQLite transactions through public library entry points, no query doubles.
 use super::*;
 use crate::skill::*;
 use std::collections::BTreeMap;
 
 struct Fixture {
     dir: tempfile::TempDir,
-    store: TursoStore,
+    store: SqliteStore,
     owner: AuthorizedScope,
     reviewer: AuthorizedScope,
     other: AuthorizedScope,
@@ -15,7 +15,7 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let store = TursoStore::open(dir.path().join("skills.db"))
+        let store = SqliteStore::open(dir.path().join("skills.db"))
             .await
             .unwrap();
         let scope = Scope {
@@ -37,21 +37,13 @@ impl Fixture {
         let source = Uuid::new_v4();
         let asset = Uuid::new_v4();
         let mut tx = store.begin(owner.clone()).await.unwrap();
-        native_turso::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,created_at) VALUES(?,?,?,'knowledge','source',1,0)")
+        sqlite_db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,created_at) VALUES(?,?,?,'knowledge','source',1,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(asset).execute(&mut *tx.tx).await.unwrap();
-        native_turso::query("INSERT INTO oc_events(tenant_id,workspace_id,id,content,kind,created_by,created_at) VALUES(?,?,?,'basis','knowledge',?,0)")
+        sqlite_db::query("INSERT INTO oc_events(tenant_id,workspace_id,id,content,kind,created_by,created_at) VALUES(?,?,?,'basis','knowledge',?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(source).bind(owner.principal_id).execute(&mut *tx.tx).await.unwrap();
-        tx.insert_version_inner(
-            asset,
-            1,
-            "basis",
-            &hash("basis"),
-            source,
-            None,
-            Some("source"),
-        )
-        .await
-        .unwrap();
+        tx.insert_version_inner(asset, 1, "basis", source, None, Some("source"))
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         let input = SkillCandidateInput {
             draft: SkillDraft {
@@ -154,7 +146,7 @@ async fn skill_exact_approval_private_review_restart_and_withdrawal() {
     tx.commit().await.unwrap();
     f.store.shutdown().await.unwrap();
     drop(f.store);
-    f.store = TursoStore::open(f.dir.path().join("skills.db"))
+    f.store = SqliteStore::open(f.dir.path().join("skills.db"))
         .await
         .unwrap();
     let mut tx = f.store.begin(f.other.clone()).await.unwrap();
@@ -220,7 +212,7 @@ async fn skill_edits_targets_sources_and_reviewer_revocation_invalidate_publicat
     tx.publish_skill(next, &packet.digest).await.unwrap();
     tx.commit().await.unwrap();
     let mut tx = f.store.begin(f.other.clone()).await.unwrap();
-    native_turso::query(
+    sqlite_db::query(
         "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
     )
     .bind(f.owner.scope.tenant_id)

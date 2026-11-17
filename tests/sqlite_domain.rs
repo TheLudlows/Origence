@@ -46,22 +46,14 @@ async fn memory_lifecycle_publishes_an_asset() {
         source = tx.create_event("structured", content, None).await.unwrap();
         let (a, version) = tx.slot("fact.release").await.unwrap();
         assert!(version.is_none());
-        tx.insert_version(a, 1, content, "hash-1", source, None, None)
+        tx.insert_version(a, 1, content, source, None, None)
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
-        tx.insert_chunk(
-            chunk,
-            a,
-            1,
-            0,
-            content,
-            &json!({"byte_start": 0}),
-            "审批 生产",
-        )
-        .await
-        .unwrap();
-        tx.insert_summary(Uuid::new_v4(), chunk, "summary", "model-v1", "审批")
+        tx.insert_chunk(chunk, a, 1, 0, content, &json!({"byte_start": 0}))
+            .await
+            .unwrap();
+        tx.insert_summary(Uuid::new_v4(), chunk, "审批")
             .await
             .unwrap();
         tx.update_asset_version(a, 1, None).await.unwrap();
@@ -72,7 +64,8 @@ async fn memory_lifecycle_publishes_an_asset() {
     let mut tx = store.begin(p.auth.clone()).await.unwrap();
     tx.check_permission(Permission::Read).await.unwrap();
     let view = tx.asset_view(asset, None).await.unwrap();
-    assert_eq!(view["content"], content);
+    assert!(view.get("content").is_none());
+    assert_eq!(view["content_hash"], origence::storage::hash(content));
     assert_eq!(view["version"], 1);
     assert_eq!(view["source_event_id"], source.to_string());
     tx.rollback().await.unwrap();
@@ -92,7 +85,7 @@ async fn knowledge_asset_and_restore_source() {
         tx.check_permission(Permission::Write).await.unwrap();
         asset = tx.insert_knowledge_asset("Handbook").await.unwrap();
         source = tx.create_event("knowledge", "text", None).await.unwrap();
-        tx.insert_version(asset, 1, "text", "hash", source, None, None)
+        tx.insert_version(asset, 1, "text", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();

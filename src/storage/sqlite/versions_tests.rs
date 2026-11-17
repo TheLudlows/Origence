@@ -1,10 +1,10 @@
 //! Native title inheritance and historical restore contracts.
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
-async fn database() -> (tempfile::TempDir, TursoStore, Scope) {
+async fn database() -> (tempfile::TempDir, SqliteStore, Scope) {
     let dir = tempfile::tempdir().unwrap();
-    let store = TursoStore::open(dir.path().join("versions.db"))
+    let store = SqliteStore::open(dir.path().join("versions.db"))
         .await
         .unwrap();
     let scope = Scope {
@@ -18,8 +18,8 @@ async fn database() -> (tempfile::TempDir, TursoStore, Scope) {
     (dir, store, scope)
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::nil(),
@@ -64,7 +64,7 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
     seed_root(&mut tx.tx, scope, asset, source, "inherited").await;
     seed_root(&mut tx.tx, foreign, asset, source, "wrong scope").await;
     for (version, title) in [(1, None), (2, Some("")), (3, Some("explicit"))] {
-        tx.insert_version_inner(asset, version, "body", "hash", source, Some(1), title)
+        tx.insert_version_inner(asset, version, "body", source, Some(1), title)
             .await
             .unwrap();
     }
@@ -78,10 +78,10 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    tx.insert_version_inner(asset, 4, "body", "hash", source, None, None)
+    tx.insert_version_inner(asset, 4, "body", source, None, None)
         .await
         .unwrap();
-    tx.insert_version_inner(asset, 5, "body", "hash", source, None, Some(""))
+    tx.insert_version_inner(asset, 5, "body", source, None, Some(""))
         .await
         .unwrap();
     // Insertion historically has no live/deleted/current-version read guard.
@@ -101,10 +101,10 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
     .execute(&mut *tx.tx)
     .await
     .unwrap();
-    tx.insert_version_inner(asset, 6, "body", "hash", source, None, None)
+    tx.insert_version_inner(asset, 6, "body", source, None, None)
         .await
         .unwrap();
-    let rows = db::query("SELECT title,typeof(title) AS storage_type,restored_from,source_event_id,content FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY version")
+    let rows = db::query("SELECT title,typeof(title) AS storage_type,restored_from,source_event_id,content_hash FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY version")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(asset)
@@ -127,7 +127,7 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
     assert_eq!(rows[2].get::<Option<i32>>("restored_from"), Some(1));
     for row in rows {
         assert_eq!(row.get::<Uuid>("source_event_id"), source);
-        assert_eq!(row.get::<String>("content"), "body");
+        assert_eq!(row.get::<String>("content_hash"), hash("body"));
     }
     tx.tx.rollback().await.unwrap();
     store.shutdown().await.unwrap();
@@ -150,7 +150,7 @@ async fn version_insert_retains_native_missing_row_constraints() {
     ] {
         let mut tx = transaction(&store.pool, scope).await;
         assert!(matches!(
-            tx.insert_version_inner(asset, version, "body", "hash", source, None, title)
+            tx.insert_version_inner(asset, version, "body", source, None, title)
                 .await,
             Err(StorageError::Backend(_))
         ));
@@ -170,7 +170,7 @@ async fn explicit_title_still_prepares_the_asset_table() {
     let pool = Pool::open(dir.path().join("missing-assets.db"))
         .await
         .unwrap();
-    db::query("CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,content TEXT,content_hash TEXT,source_event_id BLOB,restored_from INTEGER,title TEXT NOT NULL,created_by BLOB,created_at INTEGER)")
+    db::query("CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,content_hash TEXT,source_event_id BLOB,restored_from INTEGER,title TEXT NOT NULL,created_by BLOB,created_at INTEGER)")
         .execute(&pool).await.unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
@@ -182,7 +182,6 @@ async fn explicit_title_still_prepares_the_asset_table() {
             Uuid::new_v4(),
             1,
             "body",
-            "hash",
             Uuid::new_v4(),
             None,
             Some("explicit"),
@@ -203,16 +202,8 @@ async fn explicit_title_still_prepares_the_asset_table() {
     let mut tx = transaction(&pool, scope).await;
     // The table exists, but the original title-column reference is invalid.
     assert!(matches!(
-        tx.insert_version_inner(
-            Uuid::new_v4(),
-            1,
-            "body",
-            "hash",
-            Uuid::new_v4(),
-            None,
-            Some(""),
-        )
-        .await,
+        tx.insert_version_inner(Uuid::new_v4(), 1, "body", Uuid::new_v4(), None, Some(""),)
+            .await,
         Err(StorageError::Backend(_))
     ));
     tx.tx.rollback().await.unwrap();
@@ -220,6 +211,12 @@ async fn explicit_title_still_prepares_the_asset_table() {
     // strings still win; missing input reaches the version's native NOT NULL.
     db::query("ALTER TABLE oc_assets ADD COLUMN title TEXT")
         .execute(&pool)
+        .await
+        .unwrap();
+    // SQLite connections cache DDL. Reopen this intentionally changing test
+    // schema; production installs its complete schema once, before other leases.
+    pool.shutdown().await.unwrap();
+    let pool = Pool::open(dir.path().join("missing-assets.db"))
         .await
         .unwrap();
     let asset = Uuid::new_v4();
@@ -232,14 +229,14 @@ async fn explicit_title_still_prepares_the_asset_table() {
         .unwrap();
     let mut tx = transaction(&pool, scope).await;
     for (version, title) in [(1, ""), (2, "explicit")] {
-        tx.insert_version_inner(asset, version, "body", "hash", asset, None, Some(title))
+        tx.insert_version_inner(asset, version, "body", asset, None, Some(title))
             .await
             .unwrap();
     }
     tx.tx.commit().await.unwrap();
     let mut tx = transaction(&pool, scope).await;
     assert!(matches!(
-        tx.insert_version_inner(asset, 3, "body", "hash", asset, None, None)
+        tx.insert_version_inner(asset, 3, "body", asset, None, None)
             .await,
         Err(StorageError::Backend(_))
     ));
@@ -259,7 +256,7 @@ async fn restore_filters_retracted_roots_before_decoding_selected_fields() {
     let asset = Uuid::new_v4();
     let source = Uuid::new_v4();
     seed_root(&mut tx.tx, scope, asset, source, "title").await;
-    tx.insert_version_inner(asset, 1, "body", "hash", source, None, Some("title"))
+    tx.insert_version_inner(asset, 1, "body", source, None, Some("title"))
         .await
         .unwrap();
     db::query("UPDATE oc_assets SET current_version=x'01' WHERE id=?")

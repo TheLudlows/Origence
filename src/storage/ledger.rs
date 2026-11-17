@@ -63,20 +63,4 @@ pub struct LedgerKey {
 pub struct LedgerEntry {
     pub key: LedgerKey,
     pub artifact_type: String,
-    pub idempotency_key: String,
-}
-
-/// Deterministic idempotency key for a ledger write: the worker derives its
-/// external-store key from this so a replay targets the same object (A2.6).
-pub fn ledger_idempotency_key(key: &LedgerKey) -> String {
-    format!(
-        "{}-{}-{}-{}-{}-{}-{}",
-        key.scope.tenant_id,
-        key.scope.workspace_id,
-        key.source.source_id,
-        key.source.version,
-        key.artifact_id,
-        key.surface.as_str(),
-        key.generation
-    )
 }

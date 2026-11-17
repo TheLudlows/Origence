@@ -5,7 +5,7 @@ use origence::{
     host, mcp,
     models::Models,
     service::Service,
-    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, TursoStore},
+    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore},
     types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
@@ -64,7 +64,7 @@ enum Command {
     KeyRevoke {
         key_id: Uuid,
     },
-    /// Offline inspection of the current Turso identity schema; never migrates a database.
+    /// Offline inspection of the current SQLite identity schema; never migrates a database.
     IdentityCheck,
     /// Stdio MCP for shared retrieval and explicit private archives.
     Mcp,
@@ -118,7 +118,7 @@ fn init_tracing() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "origence=info,turso=warn".into())
+                .unwrap_or_else(|_| "origence=info".into())
                 // Upstream diagnostics may contain document internals. The
                 // worker records our sanitized error code instead.
                 .add_directive("pdf_oxide=off".parse()?),
@@ -188,7 +188,7 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 offline,
                 "identity-check requires --offline and a stopped host"
             );
-            TursoStore::check_memory_identity(data_dir.join("context.db")).await?;
+            SqliteStore::check_memory_identity(data_dir.join("context.db")).await?;
             println!("{}", json!({"feature":"memory-identity-v1","valid":true}));
             Ok(())
         }),
@@ -209,7 +209,7 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
 
 async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     tokio::fs::create_dir_all(&data_dir).await?;
-    let store = TursoStore::open(data_dir.join("context.db")).await?;
+    let store = SqliteStore::open(data_dir.join("context.db")).await?;
     let result = match command {
         Command::WorkspaceCreate { name } => {
             anyhow::ensure!(!name.trim().is_empty(), "name is required");

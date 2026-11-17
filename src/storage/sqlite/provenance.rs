@@ -1,7 +1,7 @@
 //! Source events/files, withdrawal and artifact ownership.
 use super::*;
 
-impl TursoTx {
+impl SqliteTx {
     pub(super) async fn create_event_inner(
         &mut self,
         kind: &str,
@@ -9,7 +9,7 @@ impl TursoTx {
         file: Option<Uuid>,
     ) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_events(tenant_id, workspace_id, id, content, kind, file_id, state, created_by, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)",
         )
@@ -23,7 +23,7 @@ impl TursoTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(id)
     }
 
@@ -35,7 +35,7 @@ impl TursoTx {
         size: i64,
     ) -> StorageResult<Uuid> {
         let id = Uuid::new_v4();
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_files(tenant_id, workspace_id, id, name, media_type, hash, size, deleted, created_by, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
         )
@@ -50,12 +50,12 @@ impl TursoTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(id)
     }
 
     pub(super) async fn file_exists_inner(&mut self, id: Uuid) -> StorageResult<bool> {
-        native_turso::query_scalar(
+        sqlite_db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_files WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND NOT deleted)",
         )
         .bind(self.scope.tenant_id)
@@ -63,11 +63,11 @@ impl TursoTx {
         .bind(id)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)
+        .map_err(sqlite_err)
     }
 
     pub(super) async fn file_hash_inner(&mut self, id: Uuid) -> StorageResult<Option<String>> {
-        native_turso::query_scalar(
+        sqlite_db::query_scalar(
             "SELECT hash FROM oc_files WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND NOT deleted",
         )
         .bind(self.scope.tenant_id)
@@ -75,7 +75,7 @@ impl TursoTx {
         .bind(id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)
+        .map_err(sqlite_err)
     }
 
     pub(super) async fn file_visible_inner(&mut self, id: Uuid) -> StorageResult<bool> {
@@ -84,7 +84,7 @@ impl TursoTx {
 
     pub(super) async fn retract_event_inner(&mut self, id: Uuid) -> StorageResult<u64> {
         self.require_private_source(id).await?;
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -92,12 +92,12 @@ impl TursoTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)
+        .map_err(sqlite_err)
         .map(|r| r.rows_affected())
     }
 
     pub(super) async fn delete_file_inner(&mut self, id: Uuid) -> StorageResult<u64> {
-        let count = native_turso::query(
+        let count = sqlite_db::query(
             "UPDATE oc_files SET deleted = 1 WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -105,9 +105,9 @@ impl TursoTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?
+        .map_err(sqlite_err)?
         .rows_affected();
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND file_id = ?",
         )
         .bind(self.scope.tenant_id)
@@ -115,7 +115,7 @@ impl TursoTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(count)
     }
 
@@ -125,7 +125,7 @@ impl TursoTx {
         source: Option<Uuid>,
     ) -> StorageResult<()> {
         if let Some(id) = asset {
-            let valid: bool = native_turso::query_scalar(
+            let valid: bool = sqlite_db::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND NOT deleted)",
             )
             .bind(self.scope.tenant_id)
@@ -133,7 +133,7 @@ impl TursoTx {
             .bind(id)
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
             if !valid {
                 return Err(StorageError::Conflict(
                     "asset is deleted or missing".to_string(),
@@ -141,7 +141,7 @@ impl TursoTx {
             }
         }
         if let Some(id) = source {
-            let valid: bool = native_turso::query_scalar(
+            let valid: bool = sqlite_db::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND state = 'active')",
             )
             .bind(self.scope.tenant_id)
@@ -149,7 +149,7 @@ impl TursoTx {
             .bind(id)
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
             if !valid {
                 return Err(StorageError::Conflict(
                     "source is retracted or missing".to_string(),
@@ -161,7 +161,7 @@ impl TursoTx {
 
     pub(super) async fn event_view_inner(&mut self, id: Uuid) -> StorageResult<Value> {
         self.require_private_source(id).await?;
-        let row = native_turso::query(
+        let row = sqlite_db::query(
             "SELECT id,kind,content,file_id,created_at FROM oc_events \
              WHERE tenant_id=? AND workspace_id=? AND id=? AND state='active'",
         )
@@ -170,13 +170,13 @@ impl TursoTx {
         .bind(id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let Some(row) = row else {
             return Err(StorageError::NotFound);
         };
-        let file: read_model::AssociationKey = row.try_get("file_id").map_err(turso_err)?;
+        let file: read_model::AssociationKey = row.try_get("file_id").map_err(sqlite_err)?;
         if !file.is_null() {
-            let exists: bool = native_turso::query_scalar(
+            let exists: bool = sqlite_db::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM oc_files WHERE tenant_id=? AND workspace_id=? AND id=? AND deleted=0)",
             )
             .bind(self.scope.tenant_id)
@@ -184,18 +184,18 @@ impl TursoTx {
             .bind(file)
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
             if !exists {
                 return Err(StorageError::NotFound);
             }
         }
         // File visibility precedes all domain decoding, including malformed
         // content and UUIDs in a row that the original predicate hid.
-        let event_id: Uuid = row.try_get("id").map_err(turso_err)?;
-        let kind: String = row.try_get("kind").map_err(turso_err)?;
-        let content: String = row.try_get("content").map_err(turso_err)?;
-        let file_id: Option<Uuid> = row.try_get("file_id").map_err(turso_err)?;
-        let created_at: i64 = row.try_get("created_at").map_err(turso_err)?;
+        let event_id: Uuid = row.try_get("id").map_err(sqlite_err)?;
+        let kind: String = row.try_get("kind").map_err(sqlite_err)?;
+        let content: String = row.try_get("content").map_err(sqlite_err)?;
+        let file_id: Option<Uuid> = row.try_get("file_id").map_err(sqlite_err)?;
+        let created_at: i64 = row.try_get("created_at").map_err(sqlite_err)?;
         self.require_learning_source_visible(id).await?;
         if kind == "session_turn" {
             self.require_session_source_visible(id).await?;
@@ -216,18 +216,18 @@ impl TursoTx {
         } else {
             "SELECT content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ?"
         };
-        native_turso::query_scalar(sql)
+        sqlite_db::query_scalar(sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
             .bind(source)
             .fetch_optional(&mut *self.tx)
             .await
-            .map_err(turso_err)
+            .map_err(sqlite_err)
     }
 
     pub(super) async fn event_file_inner(&mut self, source: Uuid) -> StorageResult<Value> {
         self.require_private_source(source).await?;
-        let row: Option<(String, Option<Uuid>)> = native_turso::query_as(
+        let row: Option<(String, Option<Uuid>)> = sqlite_db::query_as(
             "SELECT content,file_id FROM oc_events WHERE id=? AND tenant_id=? AND workspace_id=?",
         )
         .bind(source)
@@ -235,14 +235,14 @@ impl TursoTx {
         .bind(self.scope.workspace_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let Some((content, file_id)) = row else {
             return Err(StorageError::NotFound);
         };
         // Unlike event_view, historical file reads retain the event and its
         // original file_id when the file is absent/deleted; metadata is NULL.
         let file: Option<(Option<String>, Option<String>)> = if let Some(file) = file_id {
-            native_turso::query_as(
+            sqlite_db::query_as(
                 "SELECT hash,media_type FROM oc_files WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
             )
             .bind(self.scope.tenant_id)
@@ -250,7 +250,7 @@ impl TursoTx {
             .bind(file)
             .fetch_optional(&mut *self.tx)
             .await
-            .map_err(turso_err)?
+            .map_err(sqlite_err)?
         } else {
             None
         };
@@ -270,7 +270,7 @@ impl TursoTx {
         artifact_id: Uuid,
         chunk_id: Option<Uuid>,
     ) -> StorageResult<()> {
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_artifact_owners(tenant_id, workspace_id, source_id, version, \
              artifact_type, artifact_id, chunk_id, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
@@ -285,7 +285,7 @@ impl TursoTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(())
     }
 }

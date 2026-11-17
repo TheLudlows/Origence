@@ -1,5 +1,5 @@
 //! Final publication and response checks inside the caller's scoped snapshot.
-use super::TursoTx;
+use super::SqliteTx;
 use crate::{
     error::{AppError, Result},
     storage::SourceVersion,
@@ -38,7 +38,7 @@ fn same_evidence_identity(first: &SearchHit, second: &SearchHit) -> bool {
         && first.chunk_id == second.chunk_id
         && first.source_event_id == second.source_event_id
         && first.kind == second.kind
-        && first.content == second.content
+        && first.content_hash == second.content_hash
         && first.locator == second.locator
 }
 
@@ -60,7 +60,25 @@ pub(crate) fn batch_native_candidate(
     Ok(candidate)
 }
 
-impl TursoTx {
+impl SqliteTx {
+    pub(crate) async fn verify_content_hits(&mut self, hits: &[SearchHit]) -> Result<()> {
+        let ids: Vec<_> = hits.iter().map(|hit| hit.chunk_id).collect();
+        let current = self.visible_hits(&ids).await?;
+        let assets: Vec<_> = hits.iter().map(|hit| hit.asset_id).collect();
+        let identities = self.retrieval_identities(&assets).await?;
+        for hit in hits {
+            if !current
+                .get(&hit.chunk_id)
+                .is_some_and(|live| same_evidence_identity(hit, live))
+                || identities.get(&hit.asset_id).cloned().flatten() != hit.identity
+            {
+                return Err(AppError::Conflict(
+                    "document publication changed during content read".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
     /// Recheck all native ranking participants before returning any previously
     /// computed score. A disappeared participant makes that ranking unavailable;
     /// a live object with changed publication identity is a storage conflict.
