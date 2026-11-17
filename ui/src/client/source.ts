@@ -77,7 +77,9 @@ export async function sourcePreview(
       );
       content.append(before, el("mark", "", quote), after);
     } else content.textContent = source.content;
-    target.replaceChildren(panel("原始来源", code(locator), content));
+    target.replaceChildren(
+      panel("原始来源", code(locator), page ? null : content),
+    );
     if (source.file_id)
       target.append(
         button("下载原始文件", async () => {
@@ -102,7 +104,7 @@ export async function sourcePreview(
         el(
           "p",
           "muted",
-          `PDF 第 ${String(page)} 页；locator 的字节区间基于页内提取文本，不套用到原始 PDF 字节。`,
+          `PDF 第 ${String(page)} 页；locator 的字节区间基于页内提取文本，不套用到原始 PDF 字节。当前来源接口未提供可核验的页内文本，无法显示页内原文或高亮；原始文件下载与页内文本是不同内容。`,
         ),
       );
   } catch (e) {
