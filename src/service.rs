@@ -132,14 +132,18 @@ impl Service {
         })
     }
     pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
-        let mut tx = self.engine.relational().begin_read(authorized(a)).await?;
-        tx.check_permission(permission).await?;
-        Ok(tx)
+        Ok(self
+            .engine
+            .relational()
+            .begin_read_checked(authorized(a), permission)
+            .await?)
     }
     pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
-        let mut tx = self.engine.relational().begin(authorized(a)).await?;
-        tx.check_permission(permission).await?;
-        Ok(tx)
+        Ok(self
+            .engine
+            .relational()
+            .begin_checked(authorized(a), permission)
+            .await?)
     }
     pub(crate) async fn command(
         &self,

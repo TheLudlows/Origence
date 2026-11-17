@@ -548,23 +548,20 @@ async fn finish_helpers_preserve_dangling_summary_and_loose_owner_equivalence() 
 }
 
 #[tokio::test]
-async fn empty_cleanup_still_prepares_original_relations() {
+async fn empty_cleanup_does_not_require_unreferenced_events() {
     let (_dir, pool, scope) = raw_database().await;
     db::query("DROP TABLE oc_events")
         .execute(&pool)
         .await
         .unwrap();
     let mut tx = pool.begin().await.unwrap();
-    assert!(matches!(
-        detach_invalid_roots(&mut tx, scope).await,
-        Err(StorageError::Backend(_))
-    ));
+    assert_eq!(detach_invalid_roots(&mut tx, scope).await.unwrap(), 0);
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
 
 #[tokio::test]
-async fn empty_finish_prepares_summary_mutation_and_owner_relation() {
+async fn cleanup_checks_required_mutations_but_skips_empty_owner_associations() {
     for (sql, summaries) in [
         ("DROP TABLE oc_summaries", true),
         ("DROP TABLE oc_artifact_owners", false),
@@ -577,7 +574,11 @@ async fn empty_finish_prepares_summary_mutation_and_owner_relation() {
         } else {
             orphan_unowned_ledger(&mut tx, scope).await
         };
-        assert!(matches!(result, Err(StorageError::Backend(_))));
+        if summaries {
+            assert!(matches!(result, Err(StorageError::Backend(_))));
+        } else {
+            assert_eq!(result.unwrap(), 0);
+        }
         tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }

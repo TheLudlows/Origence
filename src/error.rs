@@ -42,6 +42,7 @@ pub enum AppError {
     Unavailable(String),
     #[error("{0}")]
     RetryableUnavailable(String),
+    #[cfg(feature = "sqlite")]
     #[error(transparent)]
     Database(#[from] crate::storage::sqlite_db::Error),
     #[error(transparent)]
@@ -57,12 +58,16 @@ impl AppError {
             Self::NotFound => "NOT_FOUND",
             Self::Conflict(_) => "VERSION_OR_IDEMPOTENCY_CONFLICT",
             Self::Unavailable(_) | Self::RetryableUnavailable(_) => "DEPENDENCY_UNAVAILABLE",
-            Self::Database(_) | Self::Internal(_) => "INTERNAL_ERROR",
+            #[cfg(feature = "sqlite")]
+            Self::Database(_) => "INTERNAL_ERROR",
+            Self::Internal(_) => "INTERNAL_ERROR",
         }
     }
     pub fn safe_message(&self) -> String {
         match self {
-            Self::Database(_) | Self::Internal(_) => "internal operation failed".into(),
+            #[cfg(feature = "sqlite")]
+            Self::Database(_) => "internal operation failed".into(),
+            Self::Internal(_) => "internal operation failed".into(),
             _ => self.to_string(),
         }
     }

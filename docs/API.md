@@ -86,6 +86,13 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ## Rust 库接口
 
+- 无元数据库核心：`default-features = false`，提供类型、解析、模型、Blob 与 AnySeek 接口。
+- SQLite 权威适配器：`default-features = false, features = ["sqlite"]`。
+- 完整 HTTP/MCP 宿主：默认 `local-storage`，自动启用 `sqlite`。
+
+核心独立检查用 `cargo test --no-default-features`；原 authority-only 检查现在显式使用
+`cargo test --no-default-features --features sqlite`，仍运行其完整授权/队列/恢复回归。
+
 宿主通过 `Service::open_with_anyseek(dir, models, config)` 组装服务；通用调用方使用
 公开 Service/DTO，事务与关联查询留在存储适配器。完整签名以 [lib.rs](../src/lib.rs)
 导出的模块和源码为准。

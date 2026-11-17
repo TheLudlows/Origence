@@ -107,6 +107,15 @@ impl Service {
             return Err(AppError::Invalid("query, mode or limit invalid".into()));
         }
         let started = std::time::Instant::now();
+        let terms = if input.mode == "vector" {
+            String::new()
+        } else {
+            let query = input.query.clone();
+            tokio::task::spawn_blocking(move || parsing::lexical(&query))
+                .await
+                .map_err(|error| AppError::Internal(error.into()))?
+        };
+        let authorization_started = std::time::Instant::now();
         // Resolve the scoped identity before branch candidate limits and native top-k.
         // The final authorized read below still verifies visibility and identity.
         let mut authorized = self.read(a, Permission::Read).await?;
@@ -115,8 +124,8 @@ impl Service {
         } else {
             None
         };
-        authorized.rollback().await?;
         if input.memory_identity.is_some() && asset_filter.is_none() {
+            authorized.rollback().await?;
             return Ok(SearchPreparation::Empty(search_response(
                 &input,
                 &self.models.profile,
@@ -127,7 +136,15 @@ impl Service {
                 (Vec::new(), Vec::new()),
             )));
         }
-        let authorization_ms = started.elapsed().as_secs_f64() * 1000.0;
+        // Keyword eligibility uses this same authorized snapshot. Model IO in
+        // vector/hybrid still runs after releasing the initial transaction.
+        let mut keyword_authorization = if input.mode == "keyword" {
+            Some(authorized)
+        } else {
+            authorized.rollback().await?;
+            None
+        };
+        let authorization_ms = authorization_started.elapsed().as_secs_f64() * 1000.0;
         let embedding_started = std::time::Instant::now();
         let mut warnings = Vec::new();
         let mut effective = input.mode.clone();
@@ -192,10 +209,12 @@ impl Service {
             }
             vector_ms = vector_started.elapsed().as_secs_f64() * 1000.0;
         }
-        let terms = parsing::lexical(&input.query);
         let mut full_text_hits = Vec::new();
         if effective != "vector" && !terms.is_empty() {
-            let mut eligibility = self.read(a, Permission::Read).await?;
+            let mut eligibility = match keyword_authorization.take() {
+                Some(tx) => tx,
+                None => self.read(a, Permission::Read).await?,
+            };
             let mut eligible = Vec::new();
             for generation in eligibility.full_text_generations().await? {
                 let ids = eligibility
@@ -227,6 +246,9 @@ impl Service {
                     full_text_hits.push((generation, hit));
                 }
             }
+        }
+        if let Some(tx) = keyword_authorization {
+            tx.rollback().await?;
         }
         Ok(SearchPreparation::Ready(Box::new(PreparedSearch {
             input,

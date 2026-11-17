@@ -500,3 +500,50 @@ blocking 连接 FIFO 中；取消不硬停 SQL，已发出 COMMIT 的未知结�
 标准 Docker 构建的首次尝试在下载 registry/config.json 时因本环境自签名 CA 链失败；
 同一 Dockerfile 仅用临时构建期 CA secret 补充受信链后继续构建，未关闭 TLS 校验。
 容器最终结果另见 PR。浏览器布局、真实模型/双客户端任务及生产性能不属于本次验收。
+
+## 2026-11-17：核心库无元数据库与按需访问（PR #81）
+
+在 SQLite 替换基线 `01c0d4c` 上同步 main `593e8fa`，保留 #80 的 Run 来源界面修正。
+以下为本轮工作树结果，精确提交和新的 Windows/Linux CI 由 PR head/运行链接标识；
+不把上一轮 #372 的成功或容器镜像外推为本轮结果。
+
+本轮减少实际依赖和访问：
+
+- `rusqlite` / `fs2` 只由可选 `sqlite` feature 启用。关闭默认特性的核心库不包含 SQLite
+  实现或错误类型；完整宿主 `local-storage` 自动启用 SQLite，单独 authority 显式启用它。
+- 分离始终可运行的 Blob/PDF 核心集成测试，PDF 字节夹具由核心与宿主共用；
+  原有测试没有删除或同时重复执行。手工诊断按其实际调用者依赖 `sqlite`。
+- 服务入口复用同一事务中的身份读取完成权限判断；提交仍重新检查权限。关键词候选与
+  入口授权共用快照，外部 IO 前关闭它；向量/混合模式保留模型前后的独立授权快照。
+- 空 read set、关联、空摘要查询不准备无关表；Learning 缺失或前置条件已否定、父任务
+  已取消时停止无关查询。必需数据与非空证据的失败仍拒绝操作，完整 schema 在开库和
+  显式健康检查执行。更新的是空操作的消费边界，没有压制必需查询的错误。
+- 纯向量请求不调用词法流程；其他查询的分词在 blocking 池、事务外执行。
+
+Linux Rust 1.98.0 已通过：
+
+| 配置 / 命令 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 71 lib + 2 协议 + 14 core = **87 项**；5 项真实引擎检查按原设置 ignored |
+| `cargo test --locked --no-default-features --features sqlite -j 2 --no-fail-fast` | 138 lib + 2 协议 + 14 core + 78 local = **232 项**；5 项 ignored |
+| `cargo test --locked -j 2 --no-fail-fast` | 221 lib + 4 协议 + 14 core + 188 local = **427 项**；8 项 ignored |
+| 三种配置 all-targets Clippy（完整配置含 all-features） | warnings denied，全部通过 |
+| 正常服务 build、fmt、diff、actionlint 1.7.7、Cargo metadata | 通过 |
+| `cargo tree --locked --no-default-features --edges normal,build --prefix none` | 无 rusqlite、libsqlite3-sys、fs2；CI 增加相同门禁 |
+| Node UI | 15 项通过，包含合入 #80 后的来源区分断言 |
+
+新增资源回归使用各测试库独立、仅编入单测的计数，不记录生产元数据，不使用耗时阈值：
+空读取集合在没有业务表的库上产生 **0 次客户端 driver 调用**；真正请求证据仍报存储错误。
+关键词空语料请求只需 **3 个授权读事务**（此前 4 个），client driver 调用上限 20；
+此路径无需索引/Summary 表或可访问的 AnySeek，但显式 `check` 仍拒绝不完整 schema。
+事务入口只需 BEGIN 和 key/workspace 两次读取（3 次 driver 调用），没有重复身份查询；
+同事务撤销自身 key 后提交被拒绝并回滚，外部撤销后旧授权对象也不能开启新事务。
+
+固定真实 AnySeek `d813b915` 上，正常服务二进制通过 HTTP、Node UI、完整 MCP
+host-forwarding/offline smoke；另跑 8 项真实后端合同及其 HTTP/stdio、撤销、重开与
+Run 诊断持久化验收，通过。全部新建临时数据，不调用外部模型。
+
+手工 SQL 复核：非空查询的参数化单表 SQL 保持不变；关联仍在同一适配器事务中完成。
+仅减少空批次、已确定结果的分支和入口重复授权读取，不增加 JOIN、额外提交、
+跨请求权限缓存、事务内模型/文件/AnySeek IO 或业务元数据。DDL/格式未改变。
+本轮未重复容器 release 构建；既有 SQLite 容器互操作证据按原提交保留。远端结果见 PR。

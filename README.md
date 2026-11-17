@@ -8,6 +8,17 @@ SQLite is bundled with the binary through rusqlite; no database service, ORM,
 or separate SQLite installation is required. Version hashes are derived from the
 original content; ledger registration uses its existing composite key directly.
 
+Library callers can use parsing, identity/value contracts, models, Blob storage
+and the AnySeek adapter without a metadata engine:
+
+```sh
+cargo test --no-default-features
+```
+
+Enable `sqlite` for the standalone authority adapter, or `local-storage` (the
+default) for the complete host. Empty read sets do not query metadata; host
+transactions validate required permissions once at entry and again at commit.
+
 ## Features
 
 - **Context** — Scoped memory and knowledge, private archives, versioning, and source references.

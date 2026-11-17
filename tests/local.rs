@@ -11,12 +11,10 @@ mod identity_vector_regression;
 mod initialization;
 mod learning_loop;
 mod local_app;
-mod local_blob;
 mod local_ledger;
 mod message_batches;
 mod owned_workspace_service;
 mod owned_workspaces;
-mod pdf_parsing;
 mod production_storage;
 mod semantic_capture;
 mod semantic_catalog;
@@ -35,5 +33,7 @@ mod storage_contract;
 mod storage_recovery;
 mod workspace_schema_rejection;
 
+#[cfg(feature = "local-storage")]
+mod pdf_fixture;
 #[cfg(feature = "local-storage")]
 mod retrieval_diagnostics;

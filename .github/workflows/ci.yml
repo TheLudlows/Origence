@@ -49,9 +49,18 @@ jobs:
           cache-on-failure: true
       # Check all Origence targets with the declared formatter.
       - run: cargo fmt --package origence -- --check
-      # Check the SQLite authority layer independently of host features.
+      - name: Core without a metadata engine
+        run: |
+          cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
+          cargo test --locked --no-default-features -j 2 --no-fail-fast
+          cargo tree --locked --no-default-features --edges normal,build --prefix none > /tmp/core-dependencies.txt
+          if grep -Eq '^(rusqlite|libsqlite3-sys|fs2) v' /tmp/core-dependencies.txt; then
+            cat /tmp/core-dependencies.txt
+            exit 1
+          fi
+      # Check SQLite authority independently of the complete host.
       - name: Authority-only Clippy
-        run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
+        run: cargo clippy --locked --no-default-features --features sqlite --all-targets -j 2 -- -D warnings
       - name: Confirm every feature set excludes retired storage engines
         run: |
           cargo tree --locked --all-features --edges normal,build --prefix none > /tmp/authority-dependencies.txt
@@ -59,8 +68,8 @@ jobs:
             cat /tmp/authority-dependencies.txt
             exit 1
           fi
-      - name: Full test suite without default features
-        run: cargo test --locked --no-default-features -j 2 --no-fail-fast
+      - name: Full SQLite authority test suite without host features
+        run: cargo test --locked --no-default-features --features sqlite -j 2 --no-fail-fast
       - name: Python tooling tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
@@ -160,5 +169,5 @@ jobs:
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1
       - name: Authority contracts without host features
-        run: cargo check --locked --no-default-features --lib -j 1
+        run: cargo check --locked --no-default-features --features sqlite --lib -j 1
 

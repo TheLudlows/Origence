@@ -9,6 +9,7 @@ impl SqliteStore {
         &self,
         auth: AuthorizedScope,
         write: bool,
+        permission: Option<Permission>,
     ) -> StorageResult<SqliteTx> {
         let tx = self
             .pool
@@ -22,11 +23,35 @@ impl SqliteStore {
             required: Vec::new(),
             command: None,
         };
-        tx.live_role().await?;
+        let role = tx.live_role().await?;
+        if let Some(permission) = permission {
+            if !permission.granted_by(&role) {
+                return Err(StorageError::Forbidden);
+            }
+            tx.required.push(permission);
+        }
         Ok(tx)
     }
     pub async fn begin_read(&self, auth: AuthorizedScope) -> StorageResult<SqliteTx> {
-        self.begin_scoped(auth, false).await
+        self.begin_scoped(auth, false, None).await
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn begin_read_checked(
+        &self,
+        auth: AuthorizedScope,
+        permission: Permission,
+    ) -> StorageResult<SqliteTx> {
+        self.begin_scoped(auth, false, Some(permission)).await
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn begin_checked(
+        &self,
+        auth: AuthorizedScope,
+        permission: Permission,
+    ) -> StorageResult<SqliteTx> {
+        self.begin_scoped(auth, true, Some(permission)).await
     }
     pub async fn workspace_scope(&self, workspace: Uuid) -> StorageResult<Scope> {
         let tenant = sqlite_db::query_scalar("SELECT tenant_id FROM oc_workspaces WHERE id=?")
@@ -243,13 +268,13 @@ impl SqliteTx {
         terms: &str,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<SearchHit>> {
-        let raw = read_model::current_rows(&mut self.tx, self.scope, None, asset_filter).await?;
-        let positions = self.local_current_positions(&raw).await?;
-        let summary_terms = self.current_summary_terms(&raw, &positions).await?;
         let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
         if words.is_empty() {
             return Ok(Vec::new());
         }
+        let raw = read_model::current_rows(&mut self.tx, self.scope, None, asset_filter).await?;
+        let positions = self.local_current_positions(&raw).await?;
+        let summary_terms = self.current_summary_terms(&raw, &positions).await?;
         let keys = positions
             .iter()
             .map(|index| raw.version_key(*index))

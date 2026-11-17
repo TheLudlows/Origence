@@ -1,4 +1,4 @@
-//! Authority checks for the derived Lance full-text surface. Single-table
+//! Authority checks for the derived AnySeek full-text surface. Single-table
 //! reads are associated inside one authority transaction before native ranking.
 use super::read_model::{NativeHitKey, unique_ids};
 use super::*;
@@ -91,7 +91,7 @@ impl SqliteTx {
                 .map(|(id, _)| id),
         );
         let mut indexed = Vec::new();
-        for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
+        for batch_index in 0..route_ids.len().div_ceil(8) {
             let start = batch_index * 8;
             let batch = &route_ids[start..(start + 8).min(route_ids.len())];
             let mut query = db::query_scalar::<read_model::AssociationKey>(

@@ -5,7 +5,7 @@ impl RelationalStore for SqliteStore {
     type Tx = SqliteTx;
 
     async fn begin(&self, authorized: AuthorizedScope) -> StorageResult<Self::Tx> {
-        self.begin_scoped(authorized, true).await
+        self.begin_scoped(authorized, true, None).await
     }
 
     async fn authenticate(&self, token: &str) -> StorageResult<AuthorizedScope> {
@@ -146,7 +146,7 @@ impl SqliteStore {
         workspace_id: Uuid,
         create: Option<&str>,
     ) -> StorageResult<Option<AuthorizedScope>> {
-        let mut tx = self.begin_scoped(auth, create.is_some()).await?;
+        let mut tx = self.begin_scoped(auth, create.is_some(), None).await?;
         let permission = if create.is_some() {
             Permission::Write
         } else {

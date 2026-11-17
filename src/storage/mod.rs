@@ -26,7 +26,9 @@ pub mod local_blob;
 #[cfg(feature = "local-storage")]
 pub(crate) mod retrieval_store;
 pub mod scope;
+#[cfg(feature = "sqlite")]
 pub mod sqlite;
+#[cfg(feature = "sqlite")]
 pub mod sqlite_db;
 pub mod traits;
 
@@ -64,6 +66,7 @@ pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};
 #[cfg(feature = "local-storage")]
 pub use retrieval_store::RetrievalStore;
 pub use scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
+#[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStore;
 pub use traits::{
     BlobStore, ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, Lifecycle, RelationalStore,

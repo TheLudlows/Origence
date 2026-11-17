@@ -1,8 +1,8 @@
 # Origence · 当前进度
 
 更新：2026-11-17。本变更已同步 main
-[`01d4f82`](https://github.com/TheLudlows/Origence/commit/01d4f82)
-（已合入 #77 UI/CI、#78 诊断与 #79 检索拆分），当前变更完成 SQLite 权威存储替换与
+[`593e8fa`](https://github.com/TheLudlows/Origence/commit/593e8fa)
+（已合入 #77 UI/CI、#78 诊断、#79 检索拆分与 #80 Run 来源界面），当前变更完成 SQLite 权威存储替换与
 可推导元数据精简。产品边界见[架构规划](design/agent-data-foundation.md)。
 **核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
 
@@ -15,6 +15,11 @@
 | Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
 
 ## SQLite 权威存储与最小元数据
+
+进一步将 SQLite/文件锁依赖设为可选：无默认特性的核心库可独立使用，纯核心与
+Blob/PDF 测试不加载元数据库；SQLite authority 单独通过 `--features sqlite` 验证。
+服务端合并事务入口的重复权限查询，关键词路径复用授权/候选快照，空读集合及没有
+候选的后续路径不访问额外元数据表。提交与返回前仍核验当前授权和发布身份。
 
 本地关系数据和持久任务只使用 rusqlite + bundled SQLite；旧引擎实现、依赖与公开别名
 已移除。关闭驱动默认 features，不引入 ORM/异步数据库库；锁文件净减少 112 个包。

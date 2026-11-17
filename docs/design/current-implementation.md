@@ -62,6 +62,11 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
 
+核心库默认特性关闭后不依赖 SQLite。纯数据契约、解析、模型、Blob 与原生 AnySeek
+接口可独立使用；`sqlite` feature 提供权威事务适配器，`local-storage` 组合完整服务。
+服务端仍必须持久化并核验权限、正文/版本、来源、幂等和恢复状态。空读集合不触碰
+不参与本次判断的表，完整结构健康由初始化与显式检查负责。
+
 `StorageEngine` 是组装结构，持有 `RelationalStore`、`JobQueue`、`VectorStore`、
 和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/SQLite 事务，
 并非任意数据库的通用运行时。`VectorStore` 暂同时承载全文接口，`RetrievalStore` 完成委派。

@@ -44,6 +44,9 @@ pub(super) async fn learning_ingest_valid(
     .fetch_one(&mut *conn)
     .await
     .map_err(sqlite_err)?;
+    if !asset_valid {
+        return Ok(false);
+    }
     let source_valid: bool = sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='learning' AND state='active')",
     )
@@ -53,6 +56,9 @@ pub(super) async fn learning_ingest_valid(
     .fetch_one(&mut *conn)
     .await
     .map_err(sqlite_err)?;
+    if !source_valid {
+        return Ok(false);
+    }
     let job_valid: bool = sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND source_event_id=? AND operation='ingest' AND cancel_requested=0 AND state IN ('pending','processing','retry_wait'))",
     )
@@ -64,8 +70,7 @@ pub(super) async fn learning_ingest_valid(
     .fetch_one(conn)
     .await
     .map_err(sqlite_err)?;
-    // Do not short-circuit relation preparation when a preceding EXISTS is false.
-    Ok(asset_valid && source_valid && job_valid)
+    Ok(job_valid)
 }
 
 pub(super) async fn learning_publication_ready(
@@ -84,6 +89,9 @@ pub(super) async fn learning_publication_ready(
     .fetch_optional(&mut *conn)
     .await
     .map_err(sqlite_err)?;
+    if row.is_none() {
+        return Ok(false);
+    }
     let key = |column| -> StorageResult<Option<AssociationKey>> {
         row.as_ref()
             .map(|row| row.try_get(column).map_err(sqlite_err))
@@ -192,6 +200,9 @@ pub(super) async fn cancelled_improve_job(
     .fetch_one(&mut *conn)
     .await
     .map_err(sqlite_err)?;
+    if parent {
+        return Ok(true);
+    }
     let runs: Vec<AssociationKey> = sqlite_db::query_scalar(
         "SELECT improve_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND ingest_job_id=?",
     )
@@ -204,7 +215,7 @@ pub(super) async fn cancelled_improve_job(
     let mut child = false;
     // The catalog's ingest_job_id is unique. Retaining every returned raw key
     // also preserves EXISTS semantics for diagnostic fixtures without that key.
-    for index in 0..runs.len().max(1) {
+    for index in 0..runs.len() {
         let cancelled: bool = sqlite_db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND improve_id=? AND status='cancelled')",
         )
@@ -216,7 +227,7 @@ pub(super) async fn cancelled_improve_job(
         .map_err(sqlite_err)?;
         child |= cancelled;
     }
-    Ok(parent || child)
+    Ok(child)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(body: &str) -> StorageResult<T> {

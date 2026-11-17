@@ -188,7 +188,7 @@ async fn rpc(
     serde_json::from_str(&line).unwrap()
 }
 fn pdf() -> Vec<u8> {
-    super::pdf_parsing::text_pdf(&["Release approval evidence", "Second page provenance"])
+    super::pdf_fixture::text_pdf(&["Release approval evidence", "Second page provenance"])
 }
 
 #[tokio::test]

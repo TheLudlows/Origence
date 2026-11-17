@@ -1326,13 +1326,13 @@ async fn visible_hit_uses_semantic_source_override_before_root_uuid_fallback() {
 }
 
 #[tokio::test]
-async fn summary_empty_query_rejects_missing_summary_schema() {
+async fn summary_empty_query_needs_no_summary_schema() {
     let (_dir, pool) = database().await;
     let mut tx = transaction(&pool, scope()).await;
-    assert!(matches!(
-        tx.summary_hits("", None).await,
-        Err(StorageError::Backend(_))
-    ));
+    let before = pool.test_counts();
+    assert!(tx.summary_hits("", None).await.unwrap().is_empty());
+    assert!(tx.summary_hits("  ", None).await.unwrap().is_empty());
+    assert_eq!(pool.test_counts(), before);
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1767,7 +1767,7 @@ async fn shallow_vector_readiness_batches_one_hundred_requests() {
         .unwrap();
     assert!(empty.is_empty());
     assert_eq!(empty_rows, 0);
-    assert_eq!(queries, 1); // Preserve the original empty-input prepare contract.
+    assert_eq!(queries, 0); // No candidates require no index metadata.
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -2029,4 +2029,93 @@ async fn retrieval_identity_decoding_follows_visibility_and_first_semantic_statu
     );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn empty_read_sets_need_no_metadata_tables_or_driver_calls() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = Pool::open(dir.path().join("no-metadata.db")).await.unwrap();
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let before = pool.test_counts();
+    assert!(tx.visible_hits(&[]).await.unwrap().is_empty());
+    assert!(tx.full_text_hits(&[]).await.unwrap().is_empty());
+    assert!(
+        tx.vector_hits_exact(&[], "unused-profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tx.index_candidate_ids(&[], None, "vector", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(tx.summary_hits("  ", None).await.unwrap().is_empty());
+    let raw = read_model::current_rows(&mut tx.tx, scope, Some(&[]), None)
+        .await
+        .unwrap();
+    assert!(tx.local_current_positions(&raw).await.unwrap().is_empty());
+    assert!(
+        tx.current_summary_terms(&raw, &[])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(tx.active_version_roots(&[]).await.unwrap().is_empty());
+    tx.verify_native_candidates(&[]).await.unwrap();
+    assert_eq!(pool.test_counts(), before);
+    // Actual evidence still requires its authoritative tables and fails closed.
+    assert!(matches!(
+        tx.full_text_hits(&[Record::new(1).key(1)]).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn checked_transaction_looks_up_authority_once_and_rechecks_commit() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("permissions.db"))
+        .await
+        .unwrap();
+    let scope = scope();
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "once")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "admin").await.unwrap();
+    let auth = store.authenticate(&key.token).await.unwrap();
+    let pool = store.pool();
+    let before = pool.test_counts();
+    let mut tx = store
+        .begin_checked(auth.clone(), Permission::Write)
+        .await
+        .unwrap();
+    let after = pool.test_counts();
+    assert_eq!(after.0 - before.0, 1);
+    assert_eq!(after.1 - before.1, 3); // BEGIN plus key/workspace reads, once.
+    db::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
+        .bind(auth.principal_id)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.commit().await, Err(StorageError::Forbidden)));
+    // Revocation and any work roll back together when the final check refuses.
+    let mut tx = store
+        .begin_read_checked(auth.clone(), Permission::Read)
+        .await
+        .unwrap();
+    tx.check_permission(Permission::Read).await.unwrap();
+    tx.rollback().await.unwrap();
+    store.revoke_key(auth.principal_id).await.unwrap();
+    assert!(matches!(
+        store
+            .begin_read_checked(auth.clone(), Permission::Read)
+            .await,
+        Err(StorageError::Forbidden)
+    ));
+    store.shutdown().await.unwrap();
 }

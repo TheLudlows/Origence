@@ -1180,6 +1180,9 @@ impl SqliteTx {
         surface: &str,
         generation: i64,
     ) -> StorageResult<Vec<Uuid>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let rows = current_root_rows(&mut self.tx, self.scope, ids, asset_filter).await?;
         let requests = rows
             .iter()
@@ -1260,6 +1263,9 @@ impl SqliteTx {
         keys: &[NativeHitKey],
         surface: &str,
     ) -> StorageResult<HashMap<NativeHitKey, SearchHit>> {
+        if keys.is_empty() {
+            return Ok(HashMap::new());
+        }
         let requests: Vec<_> = keys
             .iter()
             .map(|(id, source, generation)| {
@@ -1355,9 +1361,8 @@ impl SqliteTx {
         let mut ready = Vec::new();
         let mut queries = 0;
         let mut returned_rows = 0;
-        // Keep even the empty-input prepare behavior. Common predicates occur
-        // once: repeating them inside every slot overflowed Windows' 1 MiB stack.
-        for batch_index in 0..keys.len().div_ceil(4).max(1) {
+        // Common predicates occur once; empty work needs no index metadata.
+        for batch_index in 0..keys.len().div_ceil(4) {
             let start = batch_index * 4;
             let batch = &keys[start..(start + 4).min(keys.len())];
             let mut query = sqlite_db::query(
@@ -1456,9 +1461,9 @@ pub(super) async fn associate_query(
     requests: &[Vec<AssociationKey>],
 ) -> StorageResult<Vec<(usize, sqlite_db::Row)>> {
     let mut result = Vec::new();
-    // Even an empty input prepares all original table/column references. A
-    // missing table must not be hidden by an empty earlier relation.
-    for batch_index in 0..requests.len().div_ceil(ASSOCIATION_KEYS).max(1) {
+    // Schema health is checked at open/explicit check. Empty associations have
+    // no facts to validate and must not depend on unrelated metadata tables.
+    for batch_index in 0..requests.len().div_ceil(ASSOCIATION_KEYS) {
         let start = batch_index * ASSOCIATION_KEYS;
         let batch = &requests[start..(start + ASSOCIATION_KEYS).min(requests.len())];
         let mut query = sqlite_db::query(sql);
@@ -1579,12 +1584,12 @@ pub(super) async fn context_current_chunk_rows_measured(
         .filter_map(|(index, keys)| matched.contains(&index).then_some(keys))
         .collect();
     let mut result = Vec::new();
-    for batch_index in 0..keys.len().div_ceil(ASSOCIATION_KEYS).max(1) {
+    for batch_index in 0..keys.len().div_ceil(ASSOCIATION_KEYS) {
         let start = batch_index * ASSOCIATION_KEYS;
         let batch = &keys[start..(start + ASSOCIATION_KEYS).min(keys.len())];
         // A row belongs to one current asset key, so no per-request projection
         // or cloning of search_terms/locator is needed. Historical payloads
-        // never enter the Rust read set. Empty input still prepares this table.
+        // never enter the Rust read set. Empty work reads no chunk metadata.
         let mut query = sqlite_db::query("SELECT id,asset_id,search_terms,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND ((asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?))")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id);

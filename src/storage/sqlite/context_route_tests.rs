@@ -890,7 +890,7 @@ async fn missing_learning_catalog_keeps_historical_classification_and_backend_er
 }
 
 #[tokio::test]
-async fn empty_route_chunks_do_not_hide_missing_association_tables() {
+async fn empty_routes_need_only_the_asset_catalog() {
     for missing in ["assets", "versions", "events", "chunks"] {
         let (_dir, pool) = database().await;
         let mut tx = transaction(&pool, scope()).await;
@@ -921,13 +921,12 @@ async fn empty_route_chunks_do_not_hide_missing_association_tables() {
             }
             _ => unreachable!(),
         }
-        assert!(
-            matches!(
-                tx.context_route_rows(ContextRoute::Knowledge, None).await,
-                Err(StorageError::Backend(_))
-            ),
-            "missing {missing}"
-        );
+        let result = tx.context_route_rows(ContextRoute::Knowledge, None).await;
+        if missing == "assets" {
+            assert!(matches!(result, Err(StorageError::Backend(_))));
+        } else {
+            assert!(result.unwrap().is_empty(), "unused {missing}");
+        }
         tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }

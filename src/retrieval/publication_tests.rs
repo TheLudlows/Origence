@@ -469,3 +469,76 @@ async fn final_response_validation_preserves_first_semantic_status_type_errors()
     );
     fixture.store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn keyword_empty_corpus_uses_three_authority_snapshots_and_no_index_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    use crate::storage::{
+        RetrievalStore, StorageEngine, StorageError, anyseek::AnySeekConfig,
+        local_blob::LocalBlobStore,
+    };
+    use std::sync::{Arc, atomic::AtomicBool};
+    let store = Arc::new(
+        SqliteStore::open(dir.path().join("authority.db"))
+            .await
+            .unwrap(),
+    );
+    let service = Service {
+        engine: Arc::new(StorageEngine::new(
+            store.clone(),
+            store,
+            RetrievalStore::open(
+                AnySeekConfig::new("http://127.0.0.1:1", "unused", "unused").unwrap(),
+            )
+            .await
+            .unwrap(),
+            LocalBlobStore::open(dir.path().join("blobs"))
+                .await
+                .unwrap(),
+        )),
+        models: crate::models::Models::disabled(),
+        worker_running: Arc::new(AtomicBool::new(false)),
+    };
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "minimal reads")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "admin").await.unwrap();
+    let auth = service.auth(&key.token).await.unwrap();
+    // No index work exists. Optional index/summary tables are not dependencies
+    // of this request; the complete schema remains mandatory on open/check.
+    db::query("DROP TABLE oc_index_entries")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    db::query("DROP TABLE oc_summaries")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let before = store.pool().test_counts();
+    let response = service
+        .search(
+            &auth,
+            serde_json::from_value(json!({"query":"needle","mode":"keyword","limit":10})).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(response["hits"].as_array().unwrap().is_empty());
+    let after = store.pool().test_counts();
+    assert_eq!(after.0 - before.0, 3);
+    assert!(
+        after.1 - before.1 <= 20,
+        "empty corpus driver calls: {}",
+        after.1 - before.1
+    );
+    assert!(matches!(
+        store.check().await,
+        Err(StorageError::Unavailable(_))
+    ));
+    service.engine.shutdown().await.unwrap();
+}
