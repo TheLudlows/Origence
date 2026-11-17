@@ -45,12 +45,12 @@ Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可�
 
 ## AnySeek 统一检索
 
-全文和向量使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词
+全文、向量和一跳图候选使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词
 编码为固定 SHA-256 词项并保留 AND 语义；向量由 Origence 生成，模型 profile 与维度
 由目录绑定固定。AnySeek 只返回候选，正文、来源和可见性仍以 Turso/Blob 为准。
 
-发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 块且编码后至多 2 MiB，
-文本和向量一起通过一组 Record 提交；新业务版本使用独立组。网络结果未知时检查完整组，
+发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 个 chunk Record，编码后请求至多 2 MiB；
+图元数据附在其中一个确定的 chunk 上，不新增 Record。同一发布通过一个组提交，新业务版本使用独立组。网络结果未知时检查完整组，
 作业重用持久计划，撤回后不因残留索引而复活。查询按作用域、完整来源身份和已授权
 chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包含模型 profile 和维度。
 依赖故障返回不可用，不转换为空召回。
@@ -155,6 +155,8 @@ resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`�
 原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
 search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默认均为 true，仅 hybrid 且未限定 memory_identity 时启用。可独立关闭摘要、图分支做同库消融，原文 keyword/vector 分支始终保留；省略 components 保持旧行为。响应 `active_components` 表示实际启用的分支（不代表已有产物或命中）。resolve 沿用相同开关和现有来源/字节预算检查；HTTP 与 MCP 共用此契约。
+
+图分支用 AnySeek 元数据过滤找名称包含查询词的实体，再按任一初始实体 ID 查询入边或出边。候选会按来源、版本和 generation 经 Turso 复核，撤回或未发布的投影不能当作证据。关系在响应中保留原有方向；扩展出来的实体不会继续扩展。图字段不作为全文词项或向量，不增加参与 BM25 统计的记录。候选超过服务端上限会明确报错，不静默截断。图候选预算在引擎侧独立于响应的最多 20 个实体和 20 条关系；此路径不改变 `/v1/context`，也不新增独立图查询 API。
 
 只有知识 ingest 在配置抽取模型时生成摘要和图；短事实 publish 与 restore 不自动生成图。启用的加工步骤失败时整个任务失败，不宣称部分图已就绪。查询 embedding 失败可按 allow_partial 降级；存储错误不会通过降级绕过权限或来源验证。
 

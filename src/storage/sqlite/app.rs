@@ -294,6 +294,24 @@ impl TursoTx {
     }
 
     pub async fn graph_evidence(&mut self, artifact: Uuid) -> StorageResult<Vec<Value>> {
+        self.graph_evidence_matching(artifact, None).await
+    }
+
+    pub(crate) async fn graph_evidence_for_publication(
+        &mut self,
+        artifact: Uuid,
+        source: SourceVersion,
+        generation: i64,
+    ) -> StorageResult<Vec<Value>> {
+        self.graph_evidence_matching(artifact, Some((source, generation)))
+            .await
+    }
+
+    async fn graph_evidence_matching(
+        &mut self,
+        artifact: Uuid,
+        publication: Option<(SourceVersion, i64)>,
+    ) -> StorageResult<Vec<Value>> {
         let owners = read_model::rows_by_ids(
             &mut self.tx,
             self.scope,
@@ -316,7 +334,7 @@ impl TursoTx {
             &mut self.tx,
             self.scope,
             "oc_artifact_ledger",
-            "source_id,version,surface,state",
+            "source_id,version,generation,surface,state",
             "artifact_id",
             &[artifact],
         )
@@ -330,6 +348,12 @@ impl TursoTx {
                     row.try_get("source_id").map_err(turso_err)?,
                     row.try_get("version").map_err(turso_err)?,
                 );
+                if let Some((source, generation)) = publication
+                    && (key != (source.source_id, source.version)
+                        || row.try_get::<i64>("generation").map_err(turso_err)? != generation)
+                {
+                    continue;
+                }
                 if owners.contains(&key) {
                     roots.insert(key);
                 }

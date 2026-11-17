@@ -56,6 +56,18 @@ async fn extract(Json(v): Json<Value>) -> Json<Value> {
         }
     } else if prompt.contains("Summarize") {
         "Atlas summary evidence".to_string()
+    } else if prompt.contains("GRAPH-CHAIN-FIXTURE") {
+        json!({"memories":[],"entities":[
+            {"name":"seedalpha","entity_type":"node","description":"seed"},
+            {"name":"neighborbeta","entity_type":"node","description":"outgoing"},
+            {"name":"secondgamma","entity_type":"node","description":"second hop"},
+            {"name":"incomingdelta","entity_type":"node","description":"incoming"}
+        ],"relations":[
+            {"source":"seedalpha","predicate":"points_to","target":"neighborbeta"},
+            {"source":"neighborbeta","predicate":"points_to","target":"secondgamma"},
+            {"source":"incomingdelta","predicate":"points_to","target":"seedalpha"}
+        ]})
+        .to_string()
     } else if prompt.contains("EMPTY-EXTRACT") {
         json!({"memories":[],"entities":[],"relations":[]}).to_string()
     } else {
@@ -2136,4 +2148,229 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
         assert_eq!(hit.content, "approval");
         assert!(hit.score.is_finite());
     }
+}
+
+/// The public hybrid result preserves directed edges but expands both incident
+/// directions exactly once. This protocol-peer test is not backend acceptance.
+#[tokio::test]
+async fn graph_one_hop_direction_disabled_path_and_withdrawal() {
+    use origence::graph::{entity_id, relation_id};
+    let dir = tempfile::tempdir().unwrap();
+    let out = command(dir.path())
+        .args(["--offline", "workspace-create", "graph-chain"])
+        .output()
+        .await
+        .unwrap();
+    assert!(out.status.success());
+    let bootstrap: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let token = bootstrap["token"].as_str().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let model = format!("http://{}", listener.local_addr().unwrap());
+    let mock = tokio::spawn(
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/embeddings", post_route())
+                .route("/chat/completions", axum::routing::post(extract))
+                .with_state(Arc::new(AtomicBool::new(false))),
+        )
+        .into_future(),
+    );
+    let (mut host, base) = start(dir.path(), &model).await;
+    let http = reqwest::Client::new();
+    let doc = post(
+        &http,
+        &base,
+        token,
+        "/v1/knowledge",
+        json!({
+            "title":"chain", "content":"GRAPH-CHAIN-FIXTURE seedalpha evidence", "format":"markdown"
+        }),
+    )
+    .await;
+    job(&http, &base, token, id(&doc, "job_id"), "completed").await;
+    let query = json!({"query":"seedalpha","mode":"hybrid","limit":100,"components":{"summaries":false,"graph":true}});
+    let remote = crate::support::fixture(dir.path(), Some(3));
+    remote.clear_queries();
+    let result = post(&http, &base, token, "/v1/search", query.clone()).await;
+    let entities = result["graph"]["entities"].as_array().unwrap();
+    let mut actual = entities.iter().map(|v| id(v, "id")).collect::<Vec<_>>();
+    actual.sort();
+    let mut expected = ["seedalpha", "neighborbeta", "incomingdelta"]
+        .map(entity_id)
+        .to_vec();
+    expected.sort();
+    assert_eq!(
+        actual, expected,
+        "secondgamma must not be reached through neighborbeta"
+    );
+    let edges = result["graph"]["relations"].as_array().unwrap();
+    assert_eq!(edges.len(), 2);
+    for (from, to) in [
+        ("seedalpha", "neighborbeta"),
+        ("incomingdelta", "seedalpha"),
+    ] {
+        let expected_id = relation_id(entity_id(from), "points_to", entity_id(to));
+        let edge = edges
+            .iter()
+            .find(|e| id(e, "id") == expected_id)
+            .expect("incident edge");
+        assert_eq!(id(edge, "source_id"), entity_id(from));
+        assert_eq!(id(edge, "target_id"), entity_id(to));
+        assert!(!edge["evidence"].as_array().unwrap().is_empty());
+    }
+    let wire = remote.queries();
+    let adjacency = wire
+        .iter()
+        .flat_map(|q| q["filter"].as_array().unwrap())
+        .filter(|f| matches!(f["StringSet"]["field"].as_str(), Some("endpoint_ids")))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        adjacency.len(),
+        1,
+        "one exact incident-endpoint query, no expanded frontier"
+    );
+    for filter in adjacency {
+        assert_eq!(
+            filter["StringSet"]["filter"],
+            json!([entity_id("seedalpha")])
+        );
+    }
+    remote.clear_queries();
+    let mut disabled_query = query.clone();
+    disabled_query["components"]["graph"] = json!(false);
+    let disabled = post(&http, &base, token, "/v1/search", disabled_query).await;
+    assert_eq!(disabled["graph"], json!({"entities":[],"relations":[]}));
+    let hit_ids = |value: &Value| {
+        let mut ids = value["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| id(v, "chunk_id"))
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids
+    };
+    assert_eq!(
+        hit_ids(&result),
+        hit_ids(&disabled),
+        "graph off must retain native candidate paths"
+    );
+    assert!(
+        remote.queries().iter().all(
+            |q| q["filter"].as_array().unwrap().iter().all(|f| !matches!(
+                f.get("StringSet").or_else(|| f.get("String")).unwrap()["field"].as_str(),
+                Some("graph_keys" | "graph_id" | "endpoint_ids")
+            ))
+        ),
+        "graph-disabled must not query the graph projection"
+    );
+    let projection = remote.snapshot_records();
+    assert!(
+        projection.iter().all(|r| r["document"]["kind"] == "chunk"),
+        "graph metadata must not create standalone BM25 documents"
+    );
+    let old_projection = projection
+        .into_iter()
+        .filter(|r| !r["document"]["graph"].is_null())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        old_projection.len(),
+        1,
+        "one existing chunk anchors the source graph"
+    );
+    let updated = post(&http,&base,token,"/v1/knowledge",json!({
+        "title":"chain replacement", "content":"EMPTY-EXTRACT seedalpha replacement", "format":"markdown",
+        "asset_id":doc["asset_id"], "expected_version":1
+    })).await;
+    job(&http, &base, token, id(&updated, "job_id"), "completed").await;
+    remote.restore_stale_records(&old_projection);
+    let current = post(&http, &base, token, "/v1/search", query.clone()).await;
+    assert_eq!(
+        current["graph"],
+        json!({"entities":[],"relations":[]}),
+        "stale graph projection cannot revive the old version"
+    );
+    assert!(
+        current["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|hit| hit["version"] == 2)
+    );
+    let deleted = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::DELETE,
+        &format!("/v1/assets/{}", doc["asset_id"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    // Authorization hides the source immediately, independent of remote cleanup.
+    let withdrawn = post(&http, &base, token, "/v1/search", query.clone()).await;
+    assert_eq!(withdrawn["graph"], json!({"entities":[],"relations":[]}));
+    job(
+        &http,
+        &base,
+        token,
+        id(&deleted, "cleanup_job_id"),
+        "completed",
+    )
+    .await;
+    let cleaned = post(&http, &base, token, "/v1/search", query).await;
+    assert_eq!(cleaned["graph"], json!({"entities":[],"relations":[]}));
+    let fresh = post(&http,&base,token,"/v1/knowledge",json!({
+        "title":"source withdrawal", "content":"GRAPH-CHAIN-FIXTURE seedalpha source", "format":"markdown"
+    })).await;
+    job(&http, &base, token, id(&fresh, "job_id"), "completed").await;
+    let live = post(
+        &http,
+        &base,
+        token,
+        "/v1/search",
+        json!({"query":"seedalpha","mode":"hybrid"}),
+    )
+    .await;
+    assert_eq!(live["graph"]["relations"].as_array().unwrap().len(), 2);
+    let source = live["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["asset_id"] == fresh["asset_id"])
+        .unwrap()["source_event_id"]
+        .as_str()
+        .unwrap();
+    let revoked = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::DELETE,
+        &format!("/v1/events/{source}"),
+        Value::Null,
+    )
+    .await;
+    let hidden = post(
+        &http,
+        &base,
+        token,
+        "/v1/search",
+        json!({"query":"seedalpha","mode":"hybrid"}),
+    )
+    .await;
+    assert_eq!(
+        hidden["graph"],
+        json!({"entities":[],"relations":[]}),
+        "source retraction hides graph immediately"
+    );
+    job(
+        &http,
+        &base,
+        token,
+        id(&revoked, "cleanup_job_id"),
+        "completed",
+    )
+    .await;
+    stop(&mut host).await;
+    mock.abort();
 }

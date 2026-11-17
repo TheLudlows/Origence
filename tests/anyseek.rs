@@ -759,3 +759,208 @@ async fn real_anyseek_vector_group_replay_and_partial_cleanup() {
     assert_eq!(store.search_vector(q, &sources).await.unwrap()[0].id, a.id);
     store.delete_objects(scope, vec![a.id]).await.unwrap();
 }
+
+/// Actual engine StringSet filtering through the production Origence adapter.
+/// Run only against a separately provisioned v3 test collection.
+#[tokio::test]
+#[ignore = "requires an isolated real AnySeek v3 collection"]
+async fn real_anyseek_graph_string_sets_direction_scope_and_replacement() {
+    use origence::{
+        graph::entity_id,
+        storage::anyseek::GraphPublication,
+        types::{Entity, GraphExtraction, Relation},
+    };
+    let store = AnySeekFullTextStore::new(config()).unwrap();
+    store.check().await.unwrap();
+    let scope = scope();
+    let mut row = entry("real graph publication");
+    row.generation = 7;
+    let mut competitor = row.clone();
+    competitor.id = Uuid::new_v4();
+    competitor.search_terms = "real real graph publication additional unrelated words".into();
+    let entries = vec![row.clone(), competitor.clone()];
+    let sources = entries
+        .iter()
+        .map(|e| (e.id, e.source))
+        .collect::<HashMap<_, _>>();
+    let rank_query = FullTextQuery {
+        scope,
+        artifact_ids: Some(entries.iter().map(|e| e.id).collect()),
+        generation: 7,
+        search_terms: "real".into(),
+        limit: 10,
+    };
+    store
+        .upsert(scope, entries.clone(), operation_epoch().unwrap())
+        .await
+        .unwrap();
+    let rank = |hits: Vec<origence::storage::FullTextHit>| {
+        hits.into_iter()
+            .map(|hit| (hit.id, hit.score.to_bits()))
+            .collect::<Vec<_>>()
+    };
+    let before = rank(store.search(rank_query.clone(), &sources).await.unwrap());
+    assert_eq!(before.len(), 2);
+    let names = ["甲seed", "乙neighbor", "丙second", "丁incoming"];
+    let mut graph = GraphExtraction {
+        entities: names
+            .iter()
+            .map(|name| Entity {
+                name: (*name).into(),
+                entity_type: "node".into(),
+                description: "real contract".into(),
+            })
+            .collect(),
+        relations: [(0, 1), (1, 2), (3, 0)]
+            .into_iter()
+            .map(|(a, b)| Relation {
+                source: names[a].into(),
+                predicate: "points_to".into(),
+                target: names[b].into(),
+            })
+            .collect(),
+    };
+    // More than ten graph edges in one attached payload must survive flattening.
+    for index in 0..11 {
+        let name = format!("extraendpoint{index}");
+        graph.entities.push(Entity {
+            name: name.clone(),
+            entity_type: "node".into(),
+            description: String::new(),
+        });
+        graph.relations.push(Relation {
+            source: names[0].into(),
+            predicate: "points_to".into(),
+            target: name,
+        });
+    }
+    // Reuse identical Record IDs and text via the same emptied group. A
+    // nonempty publication is immutable, even if only metadata would change.
+    store
+        .delete_objects(scope, vec![row.id, competitor.id])
+        .await
+        .unwrap();
+    store
+        .upsert_with_graph(
+            scope,
+            entries.clone(),
+            vec![],
+            Some(GraphPublication {
+                source: row.source,
+                generation: row.generation,
+                graph,
+            }),
+            operation_epoch().unwrap(),
+        )
+        .await
+        .unwrap();
+    let attached = rank(store.search(rank_query.clone(), &sources).await.unwrap());
+    assert_eq!(
+        attached, before,
+        "adding graph metadata must preserve exact BM25 IDs, order and score bits"
+    );
+    let seeds = store
+        .graph_seed_candidates(scope, "甲seed absent")
+        .await
+        .unwrap();
+    assert_eq!(
+        seeds.len(),
+        1,
+        "StringSet any-match and exact Unicode substring"
+    );
+    assert_eq!(seeds[0].id, entity_id(names[0]));
+    assert_eq!(seeds[0].source, row.source);
+    assert_eq!(seeds[0].generation, 7);
+    let edges = store.graph_neighbors(scope, &[seeds[0].id]).await.unwrap();
+    assert_eq!(edges.len(), 13);
+    assert!(
+        edges
+            .iter()
+            .all(|edge| edge.source == row.source && edge.generation == 7)
+    );
+    for index in 0..11 {
+        assert!(
+            edges
+                .iter()
+                .any(|edge| edge.to == entity_id(&format!("extraendpoint{index}")))
+        );
+    }
+    assert!(
+        edges
+            .iter()
+            .any(|e| e.from == entity_id(names[0]) && e.to == entity_id(names[1]))
+    );
+    assert!(
+        edges
+            .iter()
+            .any(|e| e.from == entity_id(names[3]) && e.to == entity_id(names[0]))
+    );
+    assert!(
+        !edges.iter().any(|e| e.to == entity_id(names[2])),
+        "no second-hop edge"
+    );
+    let foreign = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    assert!(
+        store
+            .graph_seed_candidates(foreign, "甲seed")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        store
+            .graph_neighbors(foreign, &[seeds[0].id])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // Reuse identical Record IDs and text via the same emptied group. A
+    // nonempty publication is immutable, even if only metadata would change.
+    store
+        .delete_objects(scope, vec![row.id, competitor.id])
+        .await
+        .unwrap();
+    store
+        .upsert_with_graph(
+            scope,
+            entries.clone(),
+            vec![],
+            Some(GraphPublication {
+                source: row.source,
+                generation: row.generation,
+                graph: GraphExtraction {
+                    entities: vec![],
+                    relations: vec![],
+                },
+            }),
+            operation_epoch().unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        store
+            .graph_seed_candidates(scope, "甲seed")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        store
+            .graph_neighbors(scope, &[seeds[0].id])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let removed = rank(store.search(rank_query, &sources).await.unwrap());
+    assert_eq!(
+        removed, before,
+        "removing graph metadata must preserve exact BM25 ranking"
+    );
+    store
+        .delete_objects(scope, vec![row.id, competitor.id])
+        .await
+        .unwrap();
+}

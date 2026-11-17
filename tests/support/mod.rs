@@ -27,12 +27,14 @@ use uuid::Uuid;
 #[derive(Default)]
 struct Data {
     records: BTreeMap<String, Value>,
+    stale_graph_anchors: Vec<Value>,
     groups: HashMap<String, u64>,
     receipts: HashMap<String, Value>,
     unavailable: bool,
     reject_writes: bool,
     lose_next_write: bool,
     posts: usize,
+    queries: Vec<Value>,
 }
 
 /// A deterministic in-process HTTP peer with independent lifetime from Service.
@@ -92,6 +94,28 @@ impl AnySeekFixture {
     }
     pub fn lose_next_write(&self) {
         self.data.lock().unwrap().lose_next_write = true;
+    }
+    /// Wire requests only; this does not emulate native query planning.
+    pub fn queries(&self) -> Vec<Value> {
+        self.data.lock().unwrap().queries.clone()
+    }
+    pub fn clear_queries(&self) {
+        self.data.lock().unwrap().queries.clear();
+    }
+    /// Retain exact old projection rows for fail-closed authority regression.
+    pub fn snapshot_records(&self) -> Vec<Value> {
+        self.data
+            .lock()
+            .unwrap()
+            .records
+            .values()
+            .cloned()
+            .collect()
+    }
+    /// Inject stale graph-bearing anchors only into graph-filter queries. They
+    /// must never become stale ordinary keyword/vector candidates in this test.
+    pub fn restore_stale_records(&self, records: &[Value]) {
+        self.data.lock().unwrap().stale_graph_anchors = records.to_vec();
     }
     pub fn posts(&self) -> usize {
         self.data.lock().unwrap().posts
@@ -216,13 +240,22 @@ async fn replace(
 }
 fn matches(record: &Value, filters: &[Value]) -> bool {
     filters.iter().all(|filter| {
-        let f = &filter["String"];
+        let is_set = filter.get("StringSet").is_some();
+        let f = if is_set {
+            &filter["StringSet"]
+        } else {
+            &filter["String"]
+        };
         let field = f["field"].as_str().unwrap();
-        f["filter"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| *v == record["document"][field])
+        f["filter"].as_array().unwrap().iter().any(|v| {
+            if is_set {
+                record["document"][field]
+                    .as_array()
+                    .is_some_and(|values| values.contains(v))
+            } else {
+                record["document"][field].is_string() && *v == record["document"][field]
+            }
+        })
     })
 }
 fn scores(record: &Value, q: &Value) -> Option<f64> {
@@ -245,7 +278,8 @@ fn scores(record: &Value, q: &Value) -> Option<f64> {
             0.
         });
     }
-    let terms = record["document"]["terms"]
+    let field = q["search_fields"][0].as_str().unwrap_or("terms");
+    let terms = record["document"][field]
         .as_str()
         .unwrap_or("")
         .split_whitespace()
@@ -255,7 +289,12 @@ fn scores(record: &Value, q: &Value) -> Option<f64> {
         .unwrap_or("")
         .split_whitespace()
         .collect::<Vec<_>>();
-    if !wanted.iter().all(|word| terms.contains(word)) {
+    let matched = if q["operator"] == "or" {
+        wanted.is_empty() || wanted.iter().any(|word| terms.contains(word))
+    } else {
+        wanted.iter().all(|word| terms.contains(word))
+    };
+    if !matched {
         return None;
     }
     // Deliberately simple deterministic fixture score, not native BM25 evidence.
@@ -272,13 +311,28 @@ async fn query(
     RoutePath(_): RoutePath<String>,
     Json(q): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
-    let data = f.data.lock().unwrap();
+    let mut data = f.data.lock().unwrap();
+    data.queries.push(q.clone());
     if data.unavailable {
         return failure(StatusCode::NOT_FOUND);
     }
     let filters = q["filter"].as_array().cloned().unwrap_or_default();
-    let mut rows = data
-        .records
+    let graph_query = filters.iter().any(|filter| {
+        matches!(
+            filter["StringSet"]["field"].as_str(),
+            Some("graph_keys" | "endpoint_ids")
+        )
+    });
+    let mut candidates = data.records.clone();
+    if graph_query {
+        for anchor in &data.stale_graph_anchors {
+            candidates.insert(
+                anchor["record_id"].as_str().unwrap().to_owned(),
+                anchor.clone(),
+            );
+        }
+    }
+    let mut rows = candidates
         .values()
         .filter(|r| matches(r, &filters))
         .filter_map(|r| scores(r, &q).map(|score| (r.clone(), score)))
@@ -331,7 +385,7 @@ fn row(scope: Scope, id: Uuid, source: SourceVersion, generation: i64) -> Value 
             scope.tenant_id, scope.workspace_id, id, source.source_id, source.version, generation
         ))
     );
-    json!({"record_id":record_id,"document":{"format":"origence-search-sha256-v2","tenant":scope.tenant_id,"workspace":scope.workspace_id,"chunk_id":id,"source_id":source.source_id,"source_version":source.version.to_string(),"generation":generation.to_string(),"publication":format!("p{}",storage::hash(record_id)),"terms":""}})
+    json!({"record_id":record_id,"document":{"format":"origence-search-sha256-v3","kind":"chunk","tenant":scope.tenant_id,"workspace":scope.workspace_id,"chunk_id":id,"source_id":source.source_id,"source_version":source.version.to_string(),"generation":generation.to_string(),"publication":format!("p{}",storage::hash(record_id)),"terms":""}})
 }
 impl Projection {
     pub async fn upsert_full_text(

@@ -82,7 +82,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## AnySeek 全文与向量
 
-全文和向量只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
+全文、向量和混合检索的一跳候选走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
 1. 准备支持整组替换的 AnySeek，例如 [6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)；
@@ -163,6 +163,8 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 图存储使用 `graph.db`，沿用 `GraphStore`、确定性对象 ID 和 Turso owner/跨存储账本。所有连接启用外键，实体删除级联移除入边、出边和自环；有向遍历最多三跳、去重并排除起点。新文件自动创建完整结构，已有不兼容结构拒绝打开，不自动修复。
 
+对外 hybrid 检索只扩展一跳，不读取整个 `graph.db` 快照。新建库使用 `origence-search-sha256-v3` collection：按来源版本把实体和边作为元数据附在一个现有 chunk Record 上，同发布的 chunk 与图一次组写入。上限仍是 64 个 chunk，并受完整请求字节预算限制；超限拒绝而不分批暴露。旧 collection 或旧绑定不能用于新投影格式。
+
 本版本不加载旧 graph/kuzu.db，也不迁移旧 SQLite 图文件。实体、关系与来源
 归属由 Turso 保存，跨文件发布仍通过权威 owner/账本控制读取。
 只支持新建或同版本完整目录；不要删除图文件或清空账本来尝试迁移或恢复。
@@ -171,7 +173,7 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 ## 备份与旧基线
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含全文/向量。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含 AnySeek 的全文、向量或图候选索引。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。

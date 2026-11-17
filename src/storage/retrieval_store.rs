@@ -1,6 +1,6 @@
 //! AnySeek is the single derived lexical and vector projection.
 use super::{
-    anyseek::{AnySeekConfig, AnySeekFullTextStore},
+    anyseek::{AnySeekConfig, AnySeekFullTextStore, GraphEdgeCandidate, GraphEntityCandidate},
     *,
 };
 use std::collections::HashMap;
@@ -40,18 +40,34 @@ impl RetrievalStore {
     ) -> StorageResult<Vec<FullTextHit>> {
         self.remote.search(query, expected).await
     }
+    pub(crate) async fn graph_seed_candidates(
+        &self,
+        scope: Scope,
+        terms: &str,
+    ) -> StorageResult<Vec<GraphEntityCandidate>> {
+        self.remote.graph_seed_candidates(scope, terms).await
+    }
+    pub(crate) async fn graph_neighbors(
+        &self,
+        scope: Scope,
+        seeds: &[Uuid],
+    ) -> StorageResult<Vec<GraphEdgeCandidate>> {
+        self.remote.graph_neighbors(scope, seeds).await
+    }
     pub(crate) async fn upsert_publication(
         &self,
         scope: Scope,
         entries: Vec<FullTextEntry>,
         vectors: Vec<VectorEntry>,
+        graph: Option<super::anyseek::GraphPublication>,
         epoch: Option<u64>,
     ) -> StorageResult<()> {
         self.remote
-            .upsert_combined(
+            .upsert_with_graph(
                 scope,
                 entries,
                 vectors,
+                graph,
                 epoch.ok_or(StorageError::InvalidArgument(
                     "AnySeek publication requires a saved retry epoch",
                 ))?,
