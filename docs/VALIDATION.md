@@ -953,3 +953,36 @@ Shared-console Ctrl+C is best effort until verified there. If signal delivery fa
 or grace expires, owned-process termination is explicitly a forced stop; closing
 or killing the parent terminal may bypass finally and leave children alive. The
 launcher is not a production service supervisor. No remote PR/push/deployment.
+
+## 2026-11-17 — #89 Run 外部核验记录（本地 P0 切片）
+
+- 已 fetch 核实 main/base：`293e2bf6af3b180d43c8050731047b552ac07519`。
+  实现与下列测试对应提交：`5965f50848a17a6206c91110ffee8d2636efd32c`；
+  独立分支 `p0/run-verification`，工作树 `/workspace/Origence-run-verification`。
+- 合同见 [run-verification](contracts/run-verification.md)。仅 owner 转录外部结论，
+  不将 `reporter=user/test`、外部核验者标签、自报成功或 prepared 状态解释为认证角色/平台验真。
+  前缀摘要、记录凭据、服务端时间、声称核验者/时间、结论、依据序号/摘要和可撤销状态分别保存。
+  版本未知不填 latest；核验者角色不授予 Run 正文权。MCP/接入工具接口未改变。
+- 环境：Linux，Rust `1.98.0 (88d9e12ae 2026-08-18)`，Node `v24.22.1`。
+  `CARGO_HOME=/workspace/.cargo RUSTUP_HOME=/workspace/.rustup CARGO_TARGET_DIR=/workspace/target-run-verification`。
+  只使用 tempdir 新库、合成文本/身份、Models::disabled 和 loopback AnySeek 协议夹具；无生产凭据、真实任务或付费模型调用。
+- `cargo test --lib run --features sqlite`：8 passed。含严格 DTO 拒绝角色伪造、
+  准确前缀冲突、失败结论与自报成功共存、未知/确切声明版本、重试/冲突、撤销、分页、
+  同 schema 重开、跨管理员 Key 拒绝和凭据撤销后读写/重放拒绝。
+- `cargo test --test local run_verification --features sqlite`：2 passed。
+  公共 Service + HTTP 验证 prepared 资产 v2、自报成功、owner 转录失败、实际 Skill 使用版本未知；
+  后续 Run append 不改变核验前缀；来源撤回阻断核验读取、重放和撤销调用。
+  精确 schema 缺表拒绝且原数据库文件字节未变，不迁移、不回填。
+- `npm --prefix ui test`：17 passed（含 tsc/build）。验证独立核验显示、撤销、未知版本、
+  不可信文字不生成 HTML、刷新失败清除旧核验内容及恢复、精确 GET relay 凭据转发。
+  relay 仅新增 `/v1/runs/{UUID}/verifications` GET 白名单；未改共享导航、通用 DTO、CI 或 STATUS。
+- `cargo fmt --check` 与 `git diff --check`：通过。
+- `cargo clippy --all-targets --all-features -- -D warnings`：通过；首轮发现新 DTO 中一处
+  `collapsible_if`，已按建议合并等价条件并在最终实现提交重新验证。
+- SQL 人工检查：核验模块所有 SELECT/COUNT/INSERT/UPDATE、测试建库与撤权语句均为单表；
+  无 JOIN、逗号 FROM、跨表子查询或 CTE。关联前缀/来源/逻辑 owner 在原授权事务内复核，
+  提交前沿用实时权限复核；无外部 IO 或中间提交。
+- 未验收：Windows 行为、真实浏览器/无障碍、双客户端与企业任务、真实模型效果、独立核验者签认。
+  当前 UI 只读展示/刷新；写入与撤销通过独立 HTTP/Service API。此切片不代表 #89 全部通过，
+  也不提供 tracing/成本/生产告警。需接入与试点方按独立合同对接；联合合同确认后再安排发布。
+- 本路仅本地提交，未推送、未开 PR、未更新 Issue、未合入、未部署。
