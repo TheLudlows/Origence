@@ -35,7 +35,6 @@ impl SqliteTx {
                     let map = value
                         .as_object_mut()
                         .ok_or_else(|| StorageError::Unavailable("invalid asset record".into()))?;
-                    map.remove("content");
                     map.remove("semantic_values");
                     items.push(value);
                 }

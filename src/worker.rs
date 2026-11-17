@@ -20,8 +20,8 @@ struct PublishedChunk {
     chunk: Chunk,
     embedding: Option<Vec<f32>>,
     summary: String,
-    #[serde(default)]
-    search_terms: Option<String>,
+    search_terms: String,
+    summary_terms: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct PublishedMemory {
@@ -386,14 +386,9 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
                 chunks
             }
             JobPayload::Restore { target_version, .. } => {
-                let chunks = tx
-                    .chunks_for_version(asset, *target_version)
-                    .await?
-                    .into_iter()
-                    .map(|(content, locator)| Chunk { content, locator })
-                    .collect();
+                let references = tx.chunk_refs_for_version(asset, *target_version).await?;
                 tx.commit().await?;
-                chunks
+                service.read_chunk_content(claim.scope, &references).await?
             }
             JobPayload::Ingest { format, .. } => {
                 let file = tx
@@ -552,26 +547,6 @@ async fn prepare(
     }
     tx.commit().await?;
     let has_learning = learning_metadata.iter().any(Option::is_some);
-    let terms = if matches!(
-        payload.kind(),
-        JobKind::MessageBatchIngest | JobKind::SemanticPublish | JobKind::SemanticExtract
-    ) {
-        let texts: Vec<String> = drafts
-            .iter()
-            .flat_map(|d| d.chunks.iter().map(|c| c.content.clone()))
-            .collect();
-        tokio::task::spawn_blocking(move || {
-            texts
-                .iter()
-                .map(|text| parsing::lexical(text))
-                .collect::<Vec<_>>()
-        })
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?
-    } else {
-        Vec::new()
-    };
-    let mut terms = terms.into_iter();
     let mut memories = Vec::new();
     for (memory_index, draft) in drafts.into_iter().enumerate() {
         let mut out = Vec::new();
@@ -605,7 +580,8 @@ async fn prepare(
                 chunk,
                 embedding,
                 summary,
-                search_terms: terms.next(),
+                search_terms: String::new(),
+                summary_terms: String::new(),
             });
         }
         memories.push(PublishedMemory {
@@ -630,6 +606,18 @@ async fn prepare(
     } else {
         None
     };
+    // Freeze both indexes once, outside the executor and every SQL transaction.
+    let memories = tokio::task::spawn_blocking(move || {
+        for memory in &mut memories {
+            for chunk in &mut memory.chunks {
+                chunk.search_terms = parsing::lexical(&chunk.chunk.content);
+                chunk.summary_terms = parsing::lexical(&chunk.summary);
+            }
+        }
+        memories
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.into()))?;
     Ok(Publication {
         generation: claim.generation,
         profile,
@@ -784,10 +772,15 @@ async fn publish_prepared(
                 id: c.id,
                 source,
                 generation: claim.generation,
-                search_terms: c
-                    .search_terms
-                    .clone()
-                    .unwrap_or_else(|| parsing::lexical(&c.chunk.content)),
+                payload: ChunkPayload {
+                    content: c.chunk.content.clone(),
+                    locator: c.chunk.locator.clone(),
+                    summary: (!c.summary.is_empty()).then(|| ChunkSummary {
+                        text: c.summary.clone(),
+                        model_revision: publication.summary_model.clone().unwrap_or_default(),
+                    }),
+                },
+                search_terms: c.search_terms.clone(),
             });
             if let Some(embedding) = &c.embedding {
                 vectors.push(VectorEntry {
@@ -847,22 +840,12 @@ async fn publish_prepared(
                 ordinal as i32,
                 &c.chunk.content,
                 &c.chunk.locator,
-                &c.search_terms
-                    .clone()
-                    .unwrap_or_else(|| parsing::lexical(&c.chunk.content)),
             )
             .await?;
             tx.register_owner(source, "chunk", c.id, Some(c.id)).await?;
             if !c.summary.is_empty() {
                 let id = graph::entity_id(&format!("summary:{}", c.id));
-                tx.insert_summary(
-                    id,
-                    c.id,
-                    &c.summary,
-                    publication.summary_model.as_deref().unwrap_or(""),
-                    &parsing::lexical(&c.summary),
-                )
-                .await?;
+                tx.insert_summary(id, c.id, &c.summary_terms).await?;
                 tx.register_owner(source, "summary", id, Some(c.id)).await?;
             }
             if let Some(e) = &c.embedding {
@@ -1041,7 +1024,8 @@ mod tests {
                         },
                         embedding: None,
                         summary: String::new(),
-                        search_terms: None,
+                        search_terms: "alpha uses beta".into(),
+                        summary_terms: String::new(),
                     })
                     .collect(),
             }],

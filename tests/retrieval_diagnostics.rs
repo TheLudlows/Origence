@@ -314,6 +314,11 @@ async fn configuration_checks_reject_wrong_embedding_space_and_persist_analysis_
                 source,
                 generation: 1,
                 search_terms: "alpha".into(),
+                payload: origence::storage::ChunkPayload {
+                    content: "alpha".into(),
+                    locator: json!({}),
+                    summary: None,
+                },
             }],
             vec![VectorEntry {
                 id,

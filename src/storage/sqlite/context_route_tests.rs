@@ -55,9 +55,9 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // also omit production constraints so corrupt bindings remain testable.
     for sql in [
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content_hash TEXT NOT NULL,locator TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_learnings(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,source_event_id BLOB NOT NULL,status TEXT NOT NULL,session_id BLOB NOT NULL,improve_id BLOB NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_improve_runs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,improve_id BLOB NOT NULL,status TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,improve_id))",
         "CREATE TABLE oc_jobs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,operation TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -129,7 +129,7 @@ async fn chunk(
     ordinal: i64,
     locator: &str,
 ) {
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?,'content',?,'needle')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?,'content',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(id)
@@ -188,15 +188,9 @@ async fn set_locator(tx: &mut SqliteTx, id: Uuid, locator: &str) {
         .unwrap();
 }
 
-fn ids(rows: Vec<(Uuid, String)>) -> HashSet<Uuid> {
+fn ids(rows: Vec<Uuid>) -> HashSet<Uuid> {
     let count = rows.len();
-    let result: HashSet<_> = rows
-        .into_iter()
-        .map(|(id, terms)| {
-            assert_eq!(terms, "needle");
-            id
-        })
-        .collect();
+    let result: HashSet<_> = rows.into_iter().collect();
     assert_eq!(
         result.len(),
         count,
@@ -603,7 +597,7 @@ async fn root_kind_and_current_filters_exclude_bad_payloads_before_decoding() {
                 .await
                 .unwrap();
         }
-        db::query("UPDATE oc_chunks SET id=?,locator=x'01',search_terms=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        db::query("UPDATE oc_chunks SET id=?,locator=x'01',content_hash=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(vec![index as u8]).bind(scope.tenant_id).bind(scope.workspace_id).bind(row.chunk)
             .execute(&mut *tx.tx).await.unwrap();
     }
@@ -627,16 +621,23 @@ async fn root_kind_and_current_filters_exclude_bad_payloads_before_decoding() {
         tx.context_route_rows(ContextRoute::Knowledge, None).await,
         Err(StorageError::Backend(_))
     ));
-    db::query("UPDATE oc_chunks SET locator='{}',search_terms=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
+    db::query("UPDATE oc_chunks SET locator='{}',content_hash=x'02' WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
         .execute(&mut *tx.tx).await.unwrap();
-    assert!(matches!(
-        tx.context_route_rows(ContextRoute::Knowledge, None).await,
-        Err(StorageError::Backend(_))
-    ));
-    db::query("UPDATE oc_chunks SET search_terms='needle',id=x'ff' WHERE tenant_id=? AND workspace_id=? AND id=?")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(good.chunk)
-        .execute(&mut *tx.tx).await.unwrap();
+    assert_eq!(
+        ids(tx
+            .context_route_rows(ContextRoute::Knowledge, None)
+            .await
+            .unwrap()),
+        HashSet::from([good.chunk])
+    );
+    db::query("UPDATE oc_chunks SET id=x'ff' WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(good.chunk)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     assert!(matches!(
         tx.context_route_rows(ContextRoute::Knowledge, None).await,
         Err(StorageError::Backend(_))
@@ -1202,7 +1203,7 @@ async fn current_route_reads_only_current_payloads_once_across_key_batches() {
         // Historical payloads are large and deliberately invalid as text.
         // They must neither decode nor enter the current payload read set.
         for historical in 2..=130 {
-            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,'historical',zeroblob(4096),zeroblob(4096))")
+            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,'historical',zeroblob(4096))")
                 .bind(scope.tenant_id)
                 .bind(scope.workspace_id)
                 .bind(Uuid::new_v4())
@@ -1305,7 +1306,7 @@ async fn native_context_routes_filter_before_loading_other_route_content() {
                 .unwrap();
         }
     }
-    db::query("UPDATE oc_chunks SET content=zeroblob(65536) WHERE id=?")
+    db::query("UPDATE oc_chunks SET content_hash=zeroblob(65536) WHERE id=?")
         .bind(other.chunk)
         .execute(&mut *tx.tx)
         .await

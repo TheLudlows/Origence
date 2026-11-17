@@ -620,12 +620,13 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
         let source: Value = serde_json::from_str(original["content"].as_str().unwrap()).unwrap();
         assert_eq!(source, json!(input));
         assert!(source["messages"][2].get("timestamp").is_none());
-        let rows: Vec<(String, String)> =
-            db::query_as("SELECT content,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
-                .bind(receipt.asset_id)
-                .fetch_all(service.engine.relational().pool())
-                .await
-                .unwrap();
+        let rows: Vec<(String, String)> = db::query_as(
+            "SELECT content_hash,locator FROM oc_chunks WHERE asset_id=? ORDER BY ordinal",
+        )
+        .bind(receipt.asset_id)
+        .fetch_all(service.engine.relational().pool())
+        .await
+        .unwrap();
         for (index, message) in input.messages.iter().enumerate() {
             let parts: Vec<_> = rows
                 .iter()
@@ -633,10 +634,30 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
                     serde_json::from_str::<Value>(locator).unwrap()["message_index"] == index
                 })
                 .collect();
+            let plan: String = db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+                .bind(receipt.job_id)
+                .fetch_one(service.engine.relational().pool())
+                .await
+                .unwrap();
+            let plan: Value = serde_json::from_str(&plan).unwrap();
+            let chunks = plan["publication"]["memories"][0]["chunks"]
+                .as_array()
+                .unwrap();
+            let contents: Vec<_> = chunks
+                .iter()
+                .filter(|chunk| chunk["chunk"]["locator"]["message_index"] == index)
+                .collect();
+            assert_eq!(parts.len(), contents.len());
+            for ((digest, _), chunk) in parts.iter().zip(&contents) {
+                assert_eq!(
+                    *digest,
+                    origence::storage::hash(chunk["chunk"]["content"].as_str().unwrap())
+                );
+            }
             assert_eq!(
-                parts
+                contents
                     .iter()
-                    .map(|(text, _)| text.as_str())
+                    .map(|chunk| chunk["chunk"]["content"].as_str().unwrap())
                     .collect::<String>(),
                 message.content
             );
@@ -644,7 +665,7 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
                 let locator: Value = serde_json::from_str(locator).unwrap();
                 let start = locator["byte_start"].as_u64().unwrap() as usize;
                 let end = locator["byte_end"].as_u64().unwrap() as usize;
-                assert_eq!(text, &message.content[start..end]);
+                assert_eq!(text, &origence::storage::hash(&message.content[start..end]));
                 assert_eq!(locator["parser"], origence::messages::MESSAGE_PARSER);
                 assert_eq!(locator["role"], message.role);
                 assert_eq!(locator["timestamp"], json!(message.timestamp));

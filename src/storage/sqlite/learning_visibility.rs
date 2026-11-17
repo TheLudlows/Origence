@@ -674,7 +674,7 @@ mod tests {
             "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,kind TEXT NOT NULL,state TEXT)",
             "CREATE TABLE oc_assets(tenant_id BLOB,workspace_id BLOB,id BLOB,kind TEXT,title TEXT,current_version INTEGER,deleted INTEGER)",
             "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,title TEXT,source_event_id BLOB)",
-            "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,ordinal INTEGER,content TEXT,locator TEXT,search_terms TEXT)",
+            "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,ordinal INTEGER,content_hash TEXT,locator TEXT)",
         ] {
             sqlite_db::query(sql).execute(&pool).await.unwrap();
         }
@@ -727,7 +727,7 @@ mod tests {
                 .await
                 .unwrap();
         }
-        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,0,'fixture',?,'fixture')")
+        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,0,'fixture',?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(chunk)
@@ -848,19 +848,19 @@ mod tests {
             sqlite_db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,created_at) VALUES(?,?,?,'knowledge','fixture',0)")
                 .bind(tenant).bind(workspace).bind(*asset)
                 .execute(&mut *tx.tx).await.unwrap();
-            sqlite_db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,1,'fixture',?,'fixture',?,0)")
+            sqlite_db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,1,'fixture',?,'fixture',?,0)")
                 .bind(tenant).bind(workspace).bind(*asset).bind(ordinary_source).bind(principal)
                 .execute(&mut *tx.tx).await.unwrap();
         }
         let orphan = assets[0];
         for version in 2..=257 {
-            sqlite_db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'fixture',?,'fixture',?,0)")
+            sqlite_db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'fixture',?,'fixture',?,0)")
                 .bind(tenant).bind(workspace).bind(orphan).bind(version).bind(ordinary_source).bind(principal)
                 .execute(&mut *tx.tx).await.unwrap();
         }
         // The schema permits a version beyond i32; it must not make this
         // identity-only read fail or hide a later Learning source.
-        sqlite_db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'fixture',?,'fixture',?,0)")
+        sqlite_db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'fixture',?,'fixture',?,0)")
             .bind(tenant).bind(workspace).bind(orphan).bind(i64::from(i32::MAX) + 1)
             .bind(learning_source).bind(principal).execute(&mut *tx.tx).await.unwrap();
         assets.push(orphan); // Duplicate inputs must not multiply domain checks.

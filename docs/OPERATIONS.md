@@ -15,8 +15,9 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db` 及 SQLite WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
+| `context.db` 及 SQLite WAL | 权限、原始来源事件、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
+| AnySeek collection（远端） | 已发布分块正文、摘要/模型版本与定位信息，以及同条 Record 的全文/向量/图索引；必须单独备份 |
 | `full-text-backend.json` | AnySeek endpoint/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
@@ -55,7 +56,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## AnySeek 全文与向量
 
-全文、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。Claude Code/Codex
+全文、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。已发布正文与摘要文本由同一 AnySeek collection 持久保存。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
 1. 准备支持整组替换、analysis 与查询 diagnostics v2 的 AnySeek，例如 [d813b91](https://github.com/TheLudlows/anyseek/tree/d813b915b7f12e7139ca316adc15699688493196)；
@@ -132,13 +133,14 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 | 取消/删除发生在模型处理中 | 迟到提交复核 generation/权限/来源，不能覆盖或复活；外部孤儿由串行清理移除 |
 | 原生写完成、SQLite 发布未提交 | 保存的发布计划和账本用于重放；启动先清除无 owner 产物，再幂等写入并发布 |
 | cleanup 失败 | 读取仍被墓碑阻断；修复存储后重试失败的 cleanup，或重启触发全范围对账 |
+| 已发布正文缺失或哈希/locator 不符 | 停止依赖该数据，保留现场并从匹配的完整备份恢复；不自动重解析来源或用空正文回退 |
 | schema 不兼容 | 停止并保留现场，不自动 ALTER；使用匹配版本或新目录，不覆盖旧数据 |
 
 已受理任务的 embedding profile 与 Worker 配置必须一致；改模型不会自动重建已有向量。强退发生在发布计划保存前，模型调用可能重复。发布保证幂等，不保证外部供应商计费恰好一次。
 
 ## 图存储与来源边界
 
-对外 hybrid 检索只扩展一跳。实体和边由 AnySeek 的 `origence-search-sha256-v3` collection
+对外 hybrid 检索只扩展一跳。实体和边由 AnySeek 的 `origence-content-sha256-v1` collection
 提供候选，按来源版本附在一个现有 chunk Record 上，跟随同一组原子发布。上限仍为 64 个
 chunk，并受完整请求字节预算限制；超限拒绝，不分批暴露。
 
@@ -156,7 +158,7 @@ SQLite 随程序编译，无需安装 SQLite 服务或客户端库。可写连�
 元数据精简、格式与只读 WAL 检查边界见[存储契约](contracts/storage.md#sqlite-与最小元数据)。
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、AnySeek 绑定、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含 AnySeek 的全文、向量或图候选索引。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、AnySeek 绑定、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含 AnySeek 的正文、摘要、全文、向量或图索引。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。

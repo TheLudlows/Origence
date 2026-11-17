@@ -22,6 +22,7 @@ use std::{
 use uuid::Uuid;
 
 mod catalog;
+mod content;
 mod workspaces;
 
 #[derive(Clone)]
@@ -495,8 +496,32 @@ impl Service {
     }
     pub async fn get(&self, a: &AuthContext, id: Uuid, version: Option<i32>) -> Result<Value> {
         let mut tx = self.read(a, Permission::Read).await?;
-        let v = tx.asset_view(id, version).await?;
+        let mut v = tx.asset_view(id, version).await?;
+        let references = tx
+            .chunk_refs_for_version(id, decode(v["version"].clone())?)
+            .await?;
         tx.commit().await?;
+        let chunks = self.read_chunk_content(scope(a), &references).await?;
+        let content = chunks
+            .into_iter()
+            .map(|chunk| chunk.content)
+            .collect::<String>();
+        if v["content_hash"].as_str() != Some(hash(&content).as_str()) {
+            return Err(AppError::Unavailable(
+                "document content does not match its publication".into(),
+            ));
+        }
+        let mut verify = self.read(a, Permission::Read).await?;
+        if verify.asset_view(id, version).await? != v
+            || verify
+                .chunk_refs_for_version(id, decode(v["version"].clone())?)
+                .await?
+                != references
+        {
+            return Err(AppError::Conflict("document publication changed".into()));
+        }
+        verify.commit().await?;
+        v["content"] = json!(content);
         Ok(v)
     }
     pub async fn lookup_memory(
@@ -510,6 +535,12 @@ impl Service {
         let mut tx = self.read(a, Permission::Read).await?;
         let value = tx.identity_view(&identity).await?;
         tx.commit().await?;
+        let value = self
+            .get(a, decode(value["asset_id"].clone())?, None)
+            .await?;
+        if value["identity"] != json!(identity) {
+            return Err(AppError::Conflict("memory identity changed".into()));
+        }
         Ok(value)
     }
     pub async fn source_event(&self, a: &AuthContext, id: Uuid) -> Result<Value> {

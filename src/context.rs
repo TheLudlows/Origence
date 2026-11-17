@@ -147,7 +147,10 @@ impl Service {
                 )
                 .await?
             {
+                tx.verify_content_hits(std::slice::from_ref(&candidate.hit))
+                    .await?;
                 fresh.hit.score = candidate.hit.score;
+                fresh.hit.content = candidate.hit.content;
                 fresh.retrieval_routes = candidate.retrieval_routes;
                 items.push(asset_item(fresh, &input, &query.effective_mode)?);
             } else {

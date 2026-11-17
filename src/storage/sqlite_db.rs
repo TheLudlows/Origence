@@ -882,7 +882,7 @@ impl RawSql {
 }
 
 const FORMAT_SCHEMA: &str = "CREATE TABLE oc_storage_format (id INTEGER PRIMARY KEY CHECK (id=1), engine TEXT NOT NULL, role TEXT NOT NULL, schema_version INTEGER NOT NULL)";
-const ENGINE_FORMAT: &str = "origence-sqlite-v1";
+const ENGINE_FORMAT: &str = "origence-sqlite-v2";
 
 pub(crate) async fn install_format(conn: &mut Connection, role: &str) -> Result<()> {
     raw_sql(FORMAT_SCHEMA).execute(&mut *conn).await?;

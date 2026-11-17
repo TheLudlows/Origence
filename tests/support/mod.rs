@@ -33,6 +33,7 @@ pub fn without_retrieval_observations(value: &Value) -> Value {
 
 #[derive(Default)]
 struct Data {
+    content_read: Option<Arc<ContentReadGate>>,
     records: BTreeMap<String, Value>,
     stale_graph_anchors: Vec<Value>,
     groups: HashMap<String, u64>,
@@ -45,6 +46,12 @@ struct Data {
     profile: Option<String>,
     info_overrides: BTreeMap<String, Value>,
     bad_diagnostics: bool,
+}
+
+#[derive(Default)]
+pub struct ContentReadGate {
+    pub entered: tokio::sync::Notify,
+    pub resume: tokio::sync::Notify,
 }
 
 /// A deterministic in-process HTTP peer with independent lifetime from Service.
@@ -72,6 +79,20 @@ fn engines() -> &'static Mutex<HashMap<usize, Arc<AnySeekFixture>>> {
     ENGINES.get_or_init(Default::default)
 }
 impl AnySeekFixture {
+    pub fn pause_next_content_read(&self) -> Arc<ContentReadGate> {
+        let gate = Arc::new(ContentReadGate::default());
+        self.data.lock().unwrap().content_read = Some(gate.clone());
+        gate
+    }
+    pub fn mutate_payload(&self, id: Uuid, mutate: impl FnOnce(&mut Value)) {
+        let mut data = self.data.lock().unwrap();
+        let record = data
+            .records
+            .values_mut()
+            .find(|record| record["document"]["chunk_id"] == id.to_string())
+            .unwrap();
+        mutate(&mut record["document"]["payload"]);
+    }
     pub fn start(dimension: Option<usize>) -> Arc<Self> {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -372,6 +393,25 @@ async fn query(
     axum::extract::Extension(QueryId(request_id)): axum::extract::Extension<QueryId>,
     Json(q): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
+    let gate = {
+        let mut data = f.data.lock().unwrap();
+        if q["query"] == ""
+            && q["fields"] == json!([])
+            && q["filter"].as_array().is_some_and(|filters| {
+                filters
+                    .iter()
+                    .any(|filter| filter["String"]["field"] == "chunk_id")
+            })
+        {
+            data.content_read.take()
+        } else {
+            None
+        }
+    };
+    if let Some(gate) = gate {
+        gate.entered.notify_one();
+        gate.resume.notified().await;
+    }
     let mut data = f.data.lock().unwrap();
     data.queries.push(q.clone());
     if data.unavailable {
@@ -454,7 +494,7 @@ fn row(scope: Scope, id: Uuid, source: SourceVersion, generation: i64) -> Value 
             scope.tenant_id, scope.workspace_id, id, source.source_id, source.version, generation
         ))
     );
-    json!({"record_id":record_id,"document":{"format":"origence-search-sha256-v3","kind":"chunk","tenant":scope.tenant_id,"workspace":scope.workspace_id,"chunk_id":id,"source_id":source.source_id,"source_version":source.version.to_string(),"generation":generation.to_string(),"publication":format!("p{}",storage::hash(record_id)),"terms":""}})
+    json!({"record_id":record_id,"document":{"format":"origence-content-sha256-v1","kind":"chunk","tenant":scope.tenant_id,"workspace":scope.workspace_id,"chunk_id":id,"source_id":source.source_id,"source_version":source.version.to_string(),"generation":generation.to_string(),"publication":format!("p{}",storage::hash(record_id)),"terms":""}})
 }
 impl Projection {
     pub async fn upsert_full_text(
@@ -467,6 +507,7 @@ impl Projection {
             let r = row(scope, e.id, e.source, e.generation);
             let id = r["record_id"].as_str().unwrap().to_string();
             let existing = data.records.entry(id).or_insert(r);
+            existing["document"]["payload"] = json!(e.payload);
             existing["document"]["terms"] = json!(
                 e.search_terms
                     .split_whitespace()

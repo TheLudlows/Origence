@@ -419,9 +419,16 @@ impl Service {
         // Validate every native participant, including those below the final
         // response limit: its disappearance can change another hit's RRF rank.
         verify.verify_native_candidates(&ranked_native).await?;
-        let hits = verify
+        let mut hits = verify
             .verify_search_hits(&hits, input.limit, input.memory_identity.as_ref())
             .await?;
+        if !hits.is_empty() {
+            verify.commit().await?;
+            self.hydrate_hits(scope(a), &mut hits).await?;
+            verify = self.read(a, Permission::Read).await?;
+            verify.verify_native_candidates(&ranked_native).await?;
+            verify.verify_content_hits(&hits).await?;
+        }
         let mut live_entities = Vec::new();
         for mut e in entities {
             let evidence = verify.graph_evidence(decode(e["id"].clone())?).await?;
@@ -708,6 +715,7 @@ mod tests {
     #[test]
     fn budget_includes_citations_and_utf8() {
         let hit = SearchHit {
+            content_hash: String::new(),
             asset_id: Uuid::new_v4(),
             version: 1,
             chunk_id: Uuid::new_v4(),
