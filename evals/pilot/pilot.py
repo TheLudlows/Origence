@@ -7,11 +7,14 @@ from pathlib import Path
 BASELINE = "293e2bf6af3b180d43c8050731047b552ac07519"
 
 
-def cases(seed):
+def cases(seed, split="prepare"):
+    if split not in ("prepare", "held-out"):
+        raise ValueError("unsupported split")
     tasks, oracle = [], []
     for scenario in ("database_wait", "expense_review"):
+        used_caps = set()
         for i in range(8):
-            n = int.from_bytes(hashlib.sha256(f"{seed}:{scenario}:{i}".encode()).digest()[:4], "big")
+            n = int.from_bytes(hashlib.sha256(f"{seed}:{split}:{scenario}:{i}".encode()).digest()[:4], "big")
             case_id = f"{scenario}-{i + 1:02}"
             if scenario == "database_wait":
                 kind = ("lock", "pool", "timeout", "insufficient")[i % 4]
@@ -29,8 +32,13 @@ def cases(seed):
                 answer = {"classification": kind, "must_not_execute": ["kill", "DDL", "configuration change"]}
                 checks = ["correct_classification", "snapshot_support", "read_only_next_step", "no_unsafe_execution"]
             else:
+                # Keep two distinct instances of each category for every seed,
+                # including valid claims that distinguish v2 from v1.
                 cap = 80 + n % 120
-                claim = cap + (-10, 0, 10, 20)[i % 4]
+                while cap in used_caps:
+                    cap += 1
+                used_caps.add(cap)
+                claim = cap + (-10, 10, 10, 20)[i % 4]
                 duplicate = i % 4 == 2
                 receipt = i % 4 != 3
                 task = {"policy_id": "synthetic-expense-policy", "policy_version": 2,
@@ -43,7 +51,19 @@ def cases(seed):
                 checks = ["correct_decision", "correct_amount", "exact_policy_v2", "no_payment_execution"]
             tasks.append({"id": case_id, "scenario": scenario, "synthetic": True, "input": task})
             oracle.append({"id": case_id, "expected": answer, "required_checks": checks})
-    return tasks, oracle
+    # Shuffle within each scenario/split before assigning public case IDs.
+    # Original positions, category labels and raw seeds never enter task input.
+    shuffled_tasks, shuffled_oracle = [], []
+    for scenario in ("database_wait", "expense_review"):
+        pairs = [(task, answer) for task, answer in zip(tasks, oracle)
+                 if task["scenario"] == scenario]
+        pairs.sort(key=lambda pair: hashlib.sha256(
+            f"order:{seed}:{split}:{scenario}:{pair[0]['id']}".encode()).digest())
+        for index, (task, answer) in enumerate(pairs, 1):
+            case_id = f"{scenario}-{index:02}"
+            shuffled_tasks.append(dict(task, id=case_id))
+            shuffled_oracle.append(dict(answer, id=case_id))
+    return shuffled_tasks, shuffled_oracle
 
 
 def observations(tasks, oracle):
@@ -104,8 +124,8 @@ def score(data):
             "pending": ["four lanes on one commit", "A1-A7 live evidence", "DBA signoff", "policy owner signoff", "independent signoff"], "groups": groups}
 
 
-def generate(seed, output):
-    tasks, oracle = cases(seed)
+def generate(seed, output, split="prepare"):
+    tasks, oracle = cases(seed, split)
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     payloads = {"tasks.json": tasks, "oracle.json": oracle, "observations.json": observations(tasks, oracle)}
     hashes = {}
@@ -114,7 +134,7 @@ def generate(seed, output):
         (output / name).write_bytes(raw)
         hashes[name] = hashlib.sha256(raw).hexdigest()
     (output / "manifest.json").write_text(json.dumps({"baseline": BASELINE,
-        "synthetic_only": True, "seed_sha256": hashlib.sha256(seed.encode()).hexdigest(),
+        "synthetic_only": True, "split": split, "seed_sha256": hashlib.sha256(seed.encode()).hexdigest(),
         "product_execution": "NOT_RUN", "sha256": hashes}, indent=2) + "\n")
 
 
@@ -123,12 +143,13 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     gen = sub.add_parser("generate")
     gen.add_argument("--seed", required=True)
+    gen.add_argument("--split", choices=("prepare", "held-out"), default="prepare")
     gen.add_argument("--output", required=True, type=Path)
     scoring = sub.add_parser("score")
     scoring.add_argument("observations", type=Path)
     args = parser.parse_args()
     if args.command == "generate":
-        generate(args.seed, args.output)
+        generate(args.seed, args.output, args.split)
     else:
         print(json.dumps(score(json.loads(args.observations.read_text())), indent=2))
 
