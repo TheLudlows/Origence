@@ -38,7 +38,7 @@ flowchart TD
 
 HTTP 与单 Worker 共享一个 `StorageEngine`；SQLite authority 持有数据目录的独占 OS 锁。
 CLI/MCP 默认转发到运行中的宿主；离线访问要求独占打开。AnySeek 是独立 HTTP 服务，
-普通 Tenant key 只由宿主持有。它保存检索投影，不判定员工权限或业务来源是否有效。
+AnySeek 服务凭据只由宿主持有；每个请求同时发送显式配置的租户命名空间。它保存检索投影，不判定员工权限或业务来源是否有效。
 
 ## A1. 资产、来源与发布
 
@@ -82,10 +82,10 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 只创建新结构，不自动升级、重建丢失索引或转换已有数据。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
-`full-text-backend.json` 保存格式、endpoint、collection 和模型 profile/维度，排除 API key。
+`full-text-backend.json` 保存格式、endpoint、租户命名空间、collection 和模型 profile/维度，排除 API key。
 在 authority 独占锁下有界读取，暂存文件同步后原子发布；Unix 额外同步父目录。
 后续目标或模型配置不匹配、绑定损坏均在远端 IO 前拒绝。
-更换同一后端的凭据不修改绑定；绑定不提供跨 Tenant 凭据的身份等价证明。
+同 endpoint/命名空间/collection 下轮换服务凭据不修改绑定；切换命名空间在远端 IO 前拒绝，不通过更换凭据解释为同一后端。
 普通进程重开与任意断电保证分别验收，暂存残片不作为有效绑定。
 
 <a id="storage-scope"></a>
@@ -93,7 +93,7 @@ AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初
 
 scope 来自认证，不接受模型指定。完整身份/当前版本/来源/owner 先限定候选，
 原生检索在 top-k 前过滤；返回前在新的授权事务内复核，提交再次检查权限。
-AnySeek 的普通元数据过滤不替代员工授权，同 Tenant 的 key 也没有文档 ACL。
+AnySeek 的租户命名空间和普通元数据过滤不替代员工授权；Origence 保留自己的用户/会话 key、权限与业务范围复核。
 已撤回来源和墓碑在权威提交后退出后续读取，不等待投影物理清理；历史读取仍检查来源。
 
 AnySeek 对全部授权候选分批核对缺失、重复、来源和 generation，再执行词项或向量检索。

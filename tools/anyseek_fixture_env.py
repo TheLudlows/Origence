@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 
 def configure_fixture(env):
-    names = ("URL", "API_KEY", "COLLECTION")
+    names = ("URL", "API_KEY", "TENANT", "COLLECTION")
     values = {name: os.environ.get("ORIGENCE_TEST_ANYSEEK_" + name) for name in names}
     if not any(values.values()):
         return env

@@ -228,6 +228,7 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
     let config = crate::storage::anyseek::AnySeekConfig::new(
         &format!("http://{}", listener.local_addr().unwrap()),
         "fixture",
+        "origence-test",
         "size-fixture",
     )
     .unwrap();
@@ -488,7 +489,8 @@ async fn keyword_empty_corpus_uses_three_authority_snapshots_and_no_index_schema
             store.clone(),
             store,
             RetrievalStore::open(
-                AnySeekConfig::new("http://127.0.0.1:1", "unused", "unused").unwrap(),
+                AnySeekConfig::new("http://127.0.0.1:1", "unused", "origence-test", "unused")
+                    .unwrap(),
             )
             .await
             .unwrap(),

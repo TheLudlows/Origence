@@ -28,12 +28,40 @@ fn entry(text: &str) -> FullTextEntry {
 fn config() -> AnySeekConfig {
     AnySeekConfig::new(
         &std::env::var("OC_ANYSEEK_URL").expect("real AnySeek URL required"),
-        &std::env::var("OC_ANYSEEK_API_KEY").expect("real AnySeek tenant key required"),
+        &std::env::var("OC_ANYSEEK_API_KEY").expect("real AnySeek service key required"),
+        &std::env::var("OC_ANYSEEK_TENANT").expect("real AnySeek tenant namespace required"),
         &std::env::var("OC_ANYSEEK_COLLECTION")
             .expect("dedicated AnySeek test collection required"),
     )
     .unwrap()
 }
+#[test]
+fn adapter_requires_an_explicit_valid_backend_namespace() {
+    for namespace in [
+        "",
+        "../other",
+        "Upper",
+        "with space",
+        "a/b",
+        "a\r\nx-header: injected",
+        &"a".repeat(64),
+    ] {
+        assert!(
+            AnySeekConfig::new("https://example.com", "service-key", namespace, "origence")
+                .is_err()
+        );
+    }
+    assert!(
+        AnySeekConfig::new(
+            "https://example.com",
+            "service-key",
+            "origence_workspace",
+            "origence"
+        )
+        .is_ok()
+    );
+}
+
 fn query(
     scope: Scope,
     entries: &[FullTextEntry],
@@ -59,12 +87,23 @@ fn connection_rejects_unsafe_origins_and_invalid_identifiers() {
         "https://example.com/path",
         "https://example.com/?key=secret",
     ] {
-        assert!(AnySeekConfig::new(base, "test", "origence").is_err());
+        assert!(AnySeekConfig::new(base, "test", "origence-test", "origence").is_err());
     }
     for collection in ["", "../other", "Invalid", "a/b"] {
-        assert!(AnySeekConfig::new("http://127.0.0.1:8080", "test", collection).is_err());
+        assert!(
+            AnySeekConfig::new("http://127.0.0.1:8080", "test", "origence-test", collection)
+                .is_err()
+        );
     }
-    assert!(AnySeekConfig::new("https://example.com", "test", "origence-lexical").is_ok());
+    assert!(
+        AnySeekConfig::new(
+            "https://example.com",
+            "test",
+            "origence-test",
+            "origence-lexical"
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -245,6 +284,7 @@ async fn real_anyseek_lost_write_response_is_verified_without_resubmission() {
         AnySeekConfig::new(
             &base,
             &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+            &std::env::var("OC_ANYSEEK_TENANT").expect("real AnySeek tenant namespace required"),
             &std::env::var("OC_ANYSEEK_COLLECTION").unwrap(),
         )
         .unwrap(),
@@ -351,6 +391,7 @@ mod service_contract {
         let changed = AnySeekConfig::new(
             &std::env::var("OC_ANYSEEK_URL").unwrap(),
             &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+            &std::env::var("OC_ANYSEEK_TENANT").expect("real AnySeek tenant namespace required"),
             "different-collection",
         )
         .unwrap();
@@ -386,6 +427,8 @@ mod service_contract {
             AnySeekConfig::new(
                 &base,
                 &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+                &std::env::var("OC_ANYSEEK_TENANT")
+                    .expect("real AnySeek tenant namespace required"),
                 &std::env::var("OC_ANYSEEK_COLLECTION").unwrap(),
             )
             .unwrap()
@@ -692,7 +735,38 @@ async fn unified_collection_configuration_is_exact_and_credentials_are_not_persi
         .await
         .unwrap();
     assert!(!binding.contains("test-owned-key"));
-    let wrong = AnySeekConfig::new(&peer.base, "test-owned-key", "different").unwrap();
+    let selected: serde_json::Value = serde_json::from_str(&binding).unwrap();
+    assert_eq!(selected["tenant"], "origence-test");
+    let wrong_namespace = AnySeekConfig::new(
+        &peer.base,
+        "test-owned-key",
+        "different-namespace",
+        "origence-test",
+    )
+    .unwrap();
+    let result = origence::service::Service::open_with_anyseek(
+        dir.path(),
+        origence::models::Models::disabled(),
+        wrong_namespace,
+    )
+    .await;
+    let Err(error) = result else {
+        panic!("changed namespace was accepted");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("retrieval backend differs from the data directory binding")
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(dir.path().join("full-text-backend.json"))
+            .await
+            .unwrap(),
+        binding
+    );
+
+    let wrong =
+        AnySeekConfig::new(&peer.base, "test-owned-key", "origence-test", "different").unwrap();
     assert!(
         origence::service::Service::open_with_anyseek(
             dir.path(),
@@ -716,6 +790,7 @@ async fn real_anyseek_vector_group_replay_and_partial_cleanup() {
     let config = AnySeekConfig::new(
         &std::env::var("OC_ANYSEEK_URL").unwrap(),
         &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+        &std::env::var("OC_ANYSEEK_TENANT").expect("real AnySeek tenant namespace required"),
         &std::env::var("OC_ANYSEEK_VECTOR_COLLECTION").unwrap(),
     )
     .unwrap()

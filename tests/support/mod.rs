@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
     extract::{Path as RoutePath, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
 };
 use origence::{
@@ -111,7 +112,13 @@ impl AnySeekFixture {
         self.data.lock().unwrap().bad_diagnostics = value;
     }
     pub fn config(&self) -> AnySeekConfig {
-        AnySeekConfig::new(&self.base, "test-owned-key", "origence-test").unwrap()
+        AnySeekConfig::new(
+            &self.base,
+            "test-owned-key",
+            "origence-test",
+            "origence-test",
+        )
+        .unwrap()
     }
     pub fn unavailable(&self, value: bool) {
         self.data.lock().unwrap().unavailable = value;
@@ -185,6 +192,7 @@ pub fn command_env(command: &mut tokio::process::Command, dir: &Path, dimension:
         .env("OC_FULL_TEXT_BACKEND", "anyseek")
         .env("OC_ANYSEEK_URL", &remote.base)
         .env("OC_ANYSEEK_API_KEY", "test-owned-key")
+        .env("OC_ANYSEEK_TENANT", "origence-test")
         .env("OC_ANYSEEK_COLLECTION", "origence-test");
 }
 
@@ -197,6 +205,23 @@ async fn request_id(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
+    if request
+        .headers()
+        .get("apikey")
+        .and_then(|v| v.to_str().ok())
+        != Some("test-owned-key")
+        || request
+            .headers()
+            .get("x-anyseek-tenant")
+            .and_then(|v| v.to_str().ok())
+            != Some("origence-test")
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"code":"unauthorized"})),
+        )
+            .into_response();
+    }
     let id = Uuid::new_v4().simple().to_string();
     request.extensions_mut().insert(QueryId(id.clone()));
     let mut response = next.run(request).await;

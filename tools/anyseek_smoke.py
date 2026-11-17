@@ -24,7 +24,7 @@ from mcp_smoke import Host, Mcp, require
 
 
 def call(base, path, key, body=None):
-    headers = {"apikey": key}
+    headers = {"apikey": key, "X-AnySeek-Tenant": "origence"}
     if body is not None:
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(base + path, headers=headers,
@@ -143,7 +143,7 @@ def main():
             port = sock.getsockname()[1]
         secret = secrets.token_hex(32)
         master = base64.b64encode(hashlib.sha256(secret.encode()).digest()).decode()
-        key = base64.b64encode(secrets.token_bytes(32)).decode()
+        key = master
         env = dict(os.environ, MASTER_KEY_SECRET=secret, RUST_LOG="error", ANYSEEK_STORAGE_BACKEND="local",
                    NO_PROXY="127.0.0.1,localhost,::1", no_proxy="127.0.0.1,localhost,::1")
         base = f"http://127.0.0.1:{port}"
@@ -163,15 +163,14 @@ def main():
                         time.sleep(0.1)
                 def operation():
                     return {"epoch": int(time.time() // 86400), "nonce": "smoke-" + uuid.uuid4().hex}
-                call(base, "/api/v1/tenants", master, {"operation_id": operation(), "tenant_id": "origence"})
-                call(base, "/api/v1/apikey", master, {"operation_id": operation(), "tenant_id": "origence", "key_id": "origence", "apikey_base64": key})
                 call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-lexical", "config": schema()})
                 call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-vector", "embedding_space_id": "real-fixture:v1", "config": schema(2)})
                 env.update(OC_ANYSEEK_VECTOR_COLLECTION="origence-vector", OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base,
-                           OC_ANYSEEK_API_KEY=key, OC_ANYSEEK_COLLECTION="origence-lexical")
-                env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key,
+                           OC_ANYSEEK_API_KEY=key, OC_ANYSEEK_TENANT="origence", OC_ANYSEEK_COLLECTION="origence-lexical")
+                env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key, ORIGENCE_TEST_ANYSEEK_TENANT="origence",
                            ORIGENCE_TEST_ANYSEEK_COLLECTION="origence-lexical")
-                # Never send bootstrap master credentials to Origence or test processes.
+                # Keep the private AnySeek startup secret out of Origence; pass only
+                # the server-side service API key and explicit namespace.
                 env.pop("MASTER_KEY_SECRET", None)
                 for executable in args.test_executable:
                     subprocess.run([str(Path(executable).resolve()), "--ignored", "--nocapture", "--test-threads=1"],

@@ -81,7 +81,7 @@ jobs:
     env:
       # Override rust-toolchain.toml to test the exact declared MSRV.
       RUSTUP_TOOLCHAIN: 1.98.0
-      ANYSEEK_FIXTURE_REF: d813b915b7f12e7139ca316adc15699688493196
+      ANYSEEK_FIXTURE_REF: 800e3f1c2862c72d7de6afecde1ab921cef24671
       ANYSEEK_FIXTURE_TOOLCHAIN: 1.99.1
     steps:
       - uses: actions/checkout@v4

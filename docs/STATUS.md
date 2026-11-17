@@ -1,10 +1,10 @@
 # Origence · 当前进度
 
-更新：2026-11-17。本变更已同步 main
-[`593e8fa`](https://github.com/TheLudlows/Origence/commit/593e8fa)
-（已合入 #77 UI/CI、#78 诊断、#79 检索拆分与 #80 Run 来源界面），当前变更完成 SQLite 权威存储替换与
-可推导元数据精简。产品边界见[架构规划](design/agent-data-foundation.md)。
-**核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
+更新：2026-11-17。本轮基于 main
+[`c70a1aa`](https://github.com/TheLudlows/Origence/commit/c70a1aaa0b3cb75872109406dc17b1b461d1f771)
+同步 AnySeek 服务凭据与显式命名空间；SQLite 权威存储、检索诊断和 Run 关联保持已有实现。
+产品边界见[架构规划](design/agent-data-foundation.md)。
+**核心 API 与首版 UI 路径已实现；完整浏览器验收、双客户端和企业任务仍未完成。**
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -13,6 +13,13 @@
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 | Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
+
+## AnySeek 服务凭据与显式命名空间
+
+同步 AnySeek Catalog 7 的连接契约：宿主使用 `OC_ANYSEEK_API_KEY` 服务间凭据和
+必填 `OC_ANYSEEK_TENANT`，为每个请求发送服务凭据及租户头，不创建或签发 AnySeek
+租户 Key。后端绑定 v5 纳入命名空间，切换时在远端 IO 前拒绝，凭据轮换不改变绑定。
+Origence 自身的用户 key、私有会话和 workspace 权限保持原语义。验证见 VALIDATION。
 
 ## SQLite 权威存储与最小元数据
 

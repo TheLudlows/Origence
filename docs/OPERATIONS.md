@@ -17,7 +17,7 @@
 | --- | --- |
 | `context.db` 及 SQLite WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
-| `full-text-backend.json` | AnySeek endpoint/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |
+| `full-text-backend.json` | AnySeek endpoint/租户命名空间/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
 实际锁文件命名和数据库路径以配置及启动实现为准。不要直接修改任一库的业务记录；向量和图不是来源状态的权威。数据目录只授予宿主 OS 身份访问权限，API key 不能保护已经取得本地文件访问权的用户。
@@ -58,8 +58,8 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 全文、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
-1. 准备支持整组替换、analysis 与查询 diagnostics v2 的 AnySeek，例如 [d813b91](https://github.com/TheLudlows/anyseek/tree/d813b915b7f12e7139ca316adc15699688493196)；
-   由 AnySeek 管理员创建 Tenant、签发普通 Tenant key。
+1. 准备支持整组替换、analysis、查询 diagnostics v2 与服务凭据/租户头契约的 AnySeek（Catalog 7；本次验收 pin [`800e3f1`](https://github.com/TheLudlows/anyseek/tree/800e3f1c2862c72d7de6afecde1ab921cef24671)）；
+   为 Origence 配置服务间凭据和显式 AnySeek 租户命名空间，不注册或签发 AnySeek 租户 Key。
 2. 运行 `origence anyseek-schema` 输出仅全文的 collection 配置；启用向量时运行
    `origence anyseek-schema --with-space`。它读取已配置的 embedding 模型，输出
    `{config,embedding_space_id}`；创建 collection 时将两者放在请求顶层，维度来自
@@ -69,17 +69,23 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ```sh
 export OC_ANYSEEK_URL=http://127.0.0.1:8081
+export OC_ANYSEEK_TENANT=origence
 export OC_ANYSEEK_COLLECTION=origence-retrieval
-# 通过宿主私密环境设置 OC_ANYSEEK_API_KEY。
+# 通过宿主私密环境设置 OC_ANYSEEK_API_KEY（AnySeek 的服务间凭据）。
 # 不启用 embedding 时可设 OC_ENABLE_MODELS=false 验证全文。
 ```
 
+`OC_ANYSEEK_TENANT` 必须显式配置为 `^[a-z][a-z0-9_-]{0,62}$` 命名空间；客户端为
+每个 AnySeek 请求发送 `apikey` 服务凭据和 `X-AnySeek-Tenant`。这是检索后端的部署命名空间，
+与 Origence 业务 `tenant_id` / `workspace_id` 的 UUID 范围分离；原有文档范围过滤和最终权限
+复核保留。AnySeek 不管理员工凭据，服务凭据不得发给用户或模型。
+
 `OC_ANYSEEK_URL` 要求 HTTPS origin（loopback 可用 HTTP），不能带路径、凭据或查询参数。
 容器的 loopback 指容器自身。缺配置、schema 不符或服务故障会明确报错，宿主不会
-自动创建 Tenant/collection、切换旧索引或回退到另一套索引。
+自动创建 collection、切换旧索引或回退到另一套索引。
 启动核对版本、schema、分词器实现、停用词摘要、容量限制、维度及 embedding_space_id。
 向量 collection 的 embedding_space_id 必须与宿主模型 profile 完全一致，不能只比较维度。
-绑定文件 v4 包含目标、固定模型 profile/维度及分析配置摘要，重开时复核摘要；
+绑定文件 v5 包含 endpoint、租户命名空间、collection、固定模型 profile/维度及分析配置摘要，重开时复核摘要；
 同目标轮换 AnySeek 凭据不改绑定。缺失/不兼容旧绑定拒绝打开，保留原目录，不自动转换。
 备份与恢复必须保存该文件，并另外按 AnySeek 的规则保留对应 collection。
 

@@ -45,6 +45,7 @@ const META: &[&str] = &[
 pub struct AnySeekConfig {
     base: Url,
     key: HeaderValue,
+    tenant: String,
     collection: String,
     embedding: Option<(String, usize)>,
 }
@@ -52,7 +53,7 @@ pub struct AnySeekConfig {
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-search-backend-v4","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection,"embedding":self.embedding})
+        json!({"format":"origence-search-backend-v5","backend":"anyseek","endpoint":self.base.as_str(),"tenant":self.tenant,"collection":self.collection,"embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
@@ -62,12 +63,13 @@ impl AnySeekConfig {
             Err(std::env::VarError::NotPresent) | Ok("anyseek") => {
                 let get = |name| {
                     std::env::var(name).map_err(|_| {
-                        invalid("AnySeek URL, tenant key, and collection are required")
+                        invalid("AnySeek URL, service key, tenant namespace, and collection are required")
                     })
                 };
                 Self::new(
                     &get("OC_ANYSEEK_URL")?,
                     &get("OC_ANYSEEK_API_KEY")?,
+                    &get("OC_ANYSEEK_TENANT")?,
                     &get("OC_ANYSEEK_COLLECTION")?,
                 )
             }
@@ -91,8 +93,9 @@ impl AnySeekConfig {
         Ok(self)
     }
 
+    /// Require an explicit backend namespace and a server-owned service credential.
     /// Require HTTPS except on loopback; do not accept URL credentials or paths.
-    pub fn new(base: &str, key: &str, collection: &str) -> StorageResult<Self> {
+    pub fn new(base: &str, key: &str, tenant: &str, collection: &str) -> StorageResult<Self> {
         let base = Url::parse(base).map_err(|_| invalid("invalid AnySeek URL"))?;
         let local = matches!(
             base.host_str(),
@@ -110,24 +113,30 @@ impl AnySeekConfig {
                 "AnySeek URL requires HTTPS (HTTP on loopback) and an origin without credentials",
             ));
         }
-        if collection.is_empty()
-            || collection.len() > 63
-            || !collection.as_bytes()[0].is_ascii_lowercase()
-            || !collection
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
-        {
-            return Err(invalid("invalid AnySeek collection ID"));
+        for (name, message) in [
+            (tenant, "invalid AnySeek tenant namespace"),
+            (collection, "invalid AnySeek collection ID"),
+        ] {
+            if name.is_empty()
+                || name.len() > 63
+                || !name.as_bytes()[0].is_ascii_lowercase()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+            {
+                return Err(invalid(message));
+            }
         }
         if key.is_empty() {
-            return Err(invalid("AnySeek tenant key is required"));
+            return Err(invalid("AnySeek service key is required"));
         }
         let mut key =
-            HeaderValue::from_str(key).map_err(|_| invalid("invalid AnySeek tenant key"))?;
+            HeaderValue::from_str(key).map_err(|_| invalid("invalid AnySeek service key"))?;
         key.set_sensitive(true);
         Ok(Self {
             base,
             key,
+            tenant: tenant.into(),
             collection: collection.into(),
             embedding: None,
         })
@@ -371,7 +380,8 @@ impl AnySeekFullTextStore {
         let mut request = self
             .http
             .request(method, url)
-            .header("apikey", self.config.key.clone());
+            .header("apikey", self.config.key.clone())
+            .header("X-AnySeek-Tenant", self.config.tenant.as_str());
         if let Some(body) = body {
             let bytes = tokio::task::spawn_blocking(move || serde_json::to_vec(&body))
                 .await
@@ -1053,7 +1063,7 @@ mod unified_tests {
     use super::*;
     fn store() -> AnySeekFullTextStore {
         AnySeekFullTextStore::new(
-            AnySeekConfig::new("http://127.0.0.1:1", "test", "test")
+            AnySeekConfig::new("http://127.0.0.1:1", "test", "origence-test", "test")
                 .unwrap()
                 .with_embedding("fixed-profile".into(), 2)
                 .unwrap(),
@@ -1073,7 +1083,7 @@ mod unified_tests {
         );
         assert!(AnySeekFullTextStore::vector_collection_config(0).is_err());
         assert!(
-            AnySeekConfig::new("http://127.0.0.1:1", "key", "test")
+            AnySeekConfig::new("http://127.0.0.1:1", "key", "origence-test", "test")
                 .unwrap()
                 .with_embedding(String::new(), 2)
                 .is_err()
@@ -1083,6 +1093,20 @@ mod unified_tests {
             store().config.binding_identity()["embedding"],
             json!(["fixed-profile", 2])
         );
+    }
+    #[cfg(feature = "local-storage")]
+    #[test]
+    fn binding_pins_namespace_and_allows_service_credential_rotation() {
+        let make = |key, tenant| {
+            AnySeekConfig::new("http://127.0.0.1:8080", key, tenant, "retrieval")
+                .unwrap()
+                .binding_identity()
+        };
+        let selected = make("service-key-one", "origence");
+        assert_eq!(selected, make("service-key-two", "origence"));
+        assert_ne!(selected, make("service-key-one", "different"));
+        assert_eq!(selected["format"], "origence-search-backend-v5");
+        assert!(!selected.to_string().contains("service-key"));
     }
     #[tokio::test]
     async fn vector_validation_rejects_before_transport() {

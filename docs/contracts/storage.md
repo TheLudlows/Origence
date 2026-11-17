@@ -5,6 +5,14 @@
 完整字段与约束以 [authority schema](../../src/storage/sqlite/schema.rs) 及其引入的 DDL 为准，
 不另行维护逐字段副本或物理表数量。
 
+## AnySeek 连接边界
+
+AnySeek 连接由服务间凭据、显式租户命名空间和 collection 共同配置；所有请求传递
+`apikey` 与 `X-AnySeek-Tenant`。后端绑定 v5 固定 endpoint/命名空间/collection、模型
+空间及分析摘要，排除服务凭据；同一后端可轮换服务凭据，换命名空间在网络 IO 前拒绝。
+这里的命名空间是 AnySeek 部署范围，不代替 Origence 的 UUID tenant/workspace、用户
+逻辑 key 或来源/版本/owner 复核。AnySeek 不保存或签发租户 Key。
+
 ## SQLite 与最小元数据
 
 权威数据和任务队列统一使用 bundled SQLite 3.54.1（rusqlite 0.43.0，关闭默认

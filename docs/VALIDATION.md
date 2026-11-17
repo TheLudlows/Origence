@@ -1,9 +1,43 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。本次已同步 main
-[`3d474d9`](https://github.com/TheLudlows/Origence/commit/3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe)，
+核验日期：2026-11-17。本轮基于 main
+[`c70a1aa`](https://github.com/TheLudlows/Origence/commit/c70a1aaa0b3cb75872109406dc17b1b461d1f771)，
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：AnySeek 服务凭据与显式租户命名空间
+
+基线 main `c70a1aa`。`AnySeekConfig::new` 显式接收服务凭据、命名空间和 collection；
+环境新增必填 `OC_ANYSEEK_TENANT`。请求统一发送 `apikey` 与 `X-AnySeek-Tenant`，
+命名空间与集合名均验证为 AnySeek 的小写路径组成部分，服务凭据仍标记为敏感且不持久化。
+后端绑定 v5 固定命名空间，改命名空间在远端 IO 前拒绝且保留原绑定；同一后端的服务
+凭据轮换不改变绑定。Origence 的业务 UUID scope、用户逻辑 key、私有会话和权限复核不变。
+
+Linux / Rust 1.98.0，匹配 AnySeek Catalog 7 正常生产构建（Rust 1.99.1，无 fault-injection），
+最终 pin [`800e3f1`](https://github.com/TheLudlows/anyseek/commit/800e3f1c2862c72d7de6afecde1ab921cef24671)。
+全部 real-engine 夹具使用 localhost、独立临时数据根/命名空间/collection 和一次性服务凭据，
+不调用真实模型，不访问外部 S3 或用户服务。
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-fail-fast` | PASS：431 项；另有 8 项真实引擎契约显式 ignored，随后单独执行 |
+| `cargo test --locked --no-default-features` | PASS：88 项；另有 5 项真实引擎契约 ignored，不计通过 |
+| 真实 AnySeek 契约 | PASS：8 项，含全文/向量/图、丢失响应、发布核验、恢复及 public Service |
+| 真实 HTTP / stdio MCP | PASS：搜索、读取、引用、更新、历史、Origence 用户 key 撤销、重开及 Run 诊断重放 |
+| `tools/smoke.py` 经真实 AnySeek | PASS：公开 HTTP 路径与进程重开 |
+| Node UI → Origence → 真实 AnySeek | PASS：身份、上传、发布、目录、历史、搜索、上下文、私有 Run 隔离和来源撤回 |
+| 默认及无默认特性 Clippy | PASS：`cargo clippy --locked [--no-default-features] --all-targets -- -D warnings` |
+| `cargo fmt --check`、all-targets check、正常服务构建、`git diff --check` | PASS |
+| Node 24 UI | PASS：`npm --prefix ui run check`、`npm --prefix ui test`（16 项） |
+
+协议夹具也强制服务凭据和命名空间，防止 mock 忽略新增请求头。新增回归验证命名空间
+格式、后端绑定隔离、绑定文件保持原样，以及服务凭据不进入绑定。没有新增 SQL 或查询
+执行入口；变更仅在 HTTP 适配、配置、已有绑定和验收夹具内，原 JOIN-free 约束保持。
+
+首次后续库测试构建因编译缓存耗尽 workspace 磁盘失败；保留失败记录后仅清理可重建的
+Cargo incremental 缓存，设置 `CARGO_INCREMENTAL=0`，以上各检查均在重跑后通过。
+未改写数据目录。未执行 Windows、真实外部 Agent/模型、生产容量、跨主机或断电验收。
+Node UI HTTP smoke 不等同于完整真实浏览器/无障碍验收；已有历史浏览器证据仍按各自提交解释。
 
 ## 2026-11-17：#76 精确版本关联 Run（独立本地切片）
 
