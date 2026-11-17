@@ -1,48 +1,44 @@
 # Origence · 文档入口
 
-产品方向为企业内部 Agent 数据底座，首批客户端已确认为 Claude Code 与 Codex。
-记忆、知识、Skill 与运行时状态统一纳入上下文，可观测性贯穿其供给与使用过程。
-目标会话按用户 API key 私有隔离；正式沉淀的长期记忆、事实、Skill 和知识在 workspace 内复用。
-平台会话提供归档/查询；工作现场恢复不在范围。Skill 通过选定审阅包批准共享，执行权限继续由客户端和业务工具控制。
-Skill 从记忆与 Agent 执行经验提炼，候选内容、依据与变更供用户审视，再按获准版本分发复用。
-精简[架构规划](design/agent-data-foundation.md)明确全文与向量统一 AnySeek；
-当前只接入可选 AnySeek 全文，向量仍在 LanceDB，替换待实施。Turso 保留权威数据和来源。
+Origence 为企业内部研发与业务 Agent 提供统一上下文数据底座。上下文包含记忆、事实、
+知识、Skill 与任务状态；首批客户端为 Claude Code 和 Codex。
+全文与向量统一使用 AnySeek，Turso 保存权威数据，Blob 保存原始文件。
 
-| 目的 | 唯一入口 |
+## 从这里开始
+
+| 要了解的内容 | 文档 |
 | --- | --- |
-| 快速构建/启动 | [项目 README](../README.md) |
-| Node.js 管理界面启动、配置与验证 | [UI README](../ui/README.md) |
-| 首版核心范围、架构与验收 | [企业 Agent 数据底座精简规划](design/agent-data-foundation.md) |
-| 架构边界检视与官方产品参考 | [架构检视记录](reviews/2026-11-16-agent-data-foundation-review.md) |
-| 当前能力、缺口、下一步 | [STATUS](STATUS.md) |
-| 前序 AnySeek 全文接入的工程事实 | [AnySeek / Claude Code 实施记录](implementation/2026-11-16-anyseek-integration.md) |
-| 当前实现架构、数据归属与不变量 | [平台设计](design/current-implementation.md) |
-| HTTP/MCP/库接口 | [API](API.md) |
-| 配置、部署、恢复与 Claude Code 接入 | [OPERATIONS](OPERATIONS.md) |
-| 精确测试/CI/历史失败证据 | [VALIDATION](VALIDATION.md)、[评估入口](../evals/README.md) |
+| 构建与启动 | [项目 README](../README.md) |
+| Node.js 管理界面 | [启动、配置与测试](../ui/README.md) |
+| 已确认的产品边界、目标架构与首版验收 | [架构规划](design/agent-data-foundation.md) |
+| 当前已实现什么、阻塞项与下一步 | [STATUS](STATUS.md) |
+| 当前代码的组件、存储分工与一致性 | [实现架构](design/current-implementation.md) |
+| HTTP、MCP 与公开库接口 | [API](API.md) |
+| 配置、部署、故障处理与备份恢复 | [OPERATIONS](OPERATIONS.md) |
+| Claude Code / Codex 接入与 Skill 导出 | [CLIENTS](CLIENTS.md) |
+| 精确版本的测试结果、失败与验证边界 | [VALIDATION](VALIDATION.md) |
 
-## 目录结构
+目标架构描述要交付的产品，不作为能力已经实现的证明；当前进度只在 STATUS 维护，
+测试结果只在 VALIDATION 维护，领域契约不再复制阶段排期和历史测试数量。
 
-```text
-docs/
-├── design/          目标架构与当前实现设计
-├── contracts/       身份、记忆、证据、接口适配与存储契约
-├── implementation/  已完成切片的实施记录
-├── reviews/         架构检视与处理决定
-└── evidence/        固定版本的原始验证工件
-```
+## 实现时按需查阅
 
-README、STATUS、API、OPERATIONS 和 VALIDATION 保留在文档根目录，分别维护入口、进度、接口、运行与验证。
-领域规则按契约归档，实施记录仅保留工程事实，当前排期统一从目标架构和 STATUS 查看。
+| 领域契约 | 负责的规则 |
+| --- | --- |
+| [记忆身份与语义](contracts/memory.md) | 身份、条件、版本、单值/多值与来源撤回 |
+| [受控提取](contracts/semantic-capture.md) | 模型候选、明确授权、原文校验与持久计划 |
+| [Improve / Learning](contracts/learning.md) | 显式反馈学习、适用条件与完整支持链 |
+| [EvidenceBundle](contracts/evidence-bundle.md) | 分路召回、预算、冲突与引用 |
+| [Skill](contracts/skills.md) | 私有候选、选定审阅包、批准、发布与分发 |
+| [Run](contracts/runs.md) | 私有轨迹、上下文准备记录、客户端报告与采集缺口 |
+| [存储不变量](contracts/storage.md) | 身份占位、发布账本、原始证据与同版本恢复 |
+| [AML 适配](contracts/aml-adapter.md) | 默认关闭的可选外部协议与通用批次接口 |
 
-## 按需深入的合同
+[效果评估标准](Origence_效果评估与对比标准.md)定义评估方法；可运行入口见
+[evals](../evals/README.md)。它们不代表企业试点或竞品对照已经完成。
 
-- [身份与上下文规则](contracts/memory-identity-and-context.md)：主体、条件、更新权与冲突边界。
-- [S2 语义](contracts/memory-semantics.md)、[受控提取](contracts/semantic-capture.md)、[Improve/Learning](contracts/learning.md)、[EvidenceBundle](contracts/evidence-bundle.md)：仍有效的领域细节，不作为新排期。
-- [AML 适配](contracts/aml-adapter.md)：生产协议的确定性 ID、批次与授权合同；专项评测设施已移除。
-- [身份布局](contracts/identity-asset-layout.md)、[字段盘点](contracts/storage-field-audit-2026-10-15.md)、[索引/账本理由](contracts/index-ledger-audit-2026-10-15.md)：物理存储与保留决定。
-- [效果评估标准](Origence_效果评估与对比标准.md)、[依赖审计](DEPENDENCY_AUDIT.md)：评估口径和固定版本审计边界，不代表当前质量或审计持续通过。
+## 历史资料
 
-已被现行设计/计划取代的研究草案、旧 Serverless 方案、S2–S4 重复路线图和已完成的
-Turso/Lance 接入流水从活动树删除；可从[清理前固定版本](https://github.com/TheLudlows/Origence/tree/db434ae48fd20e7a8f54e44999a7592457390323/docs)查阅。
-VALIDATION、原始工件和仍有效的领域合同保留。进度不复制历史验收，设计不复制接口和运行说明。
+旧接入流水、已处理的架构审阅、字段盘点、依赖审计和逐阶段验收不再作为活动文档维护。
+需要追溯时查看[清理前的固定版本](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs)。
+`evidence/` 内带日期的原始工件保持不变，仅证明各自标明的版本；不代表当前状态。

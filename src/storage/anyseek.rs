@@ -18,13 +18,17 @@ use std::{
 };
 use uuid::Uuid;
 
-const FORMAT: &str = "origence-search-sha256-v2";
-const MAX_GROUP: usize = 64;
+mod graph;
+pub use graph::{GraphEdgeCandidate, GraphEntityCandidate, GraphPublication};
+
+const FORMAT: &str = "origence-search-sha256-v3";
+pub(crate) const MAX_GROUP: usize = 64;
 const MAX_RESPONSE: usize = 8 * 1024 * 1024;
 const MAX_REQUEST: usize = 2 * 1024 * 1024;
 const MAX_CANDIDATES: usize = 10_000;
 const META: &[&str] = &[
     "format",
+    "kind",
     "tenant",
     "workspace",
     "chunk_id",
@@ -47,7 +51,7 @@ pub struct AnySeekConfig {
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-search-backend-v2","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection,"embedding":self.embedding})
+        json!({"format":"origence-search-backend-v3","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection,"embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
@@ -139,6 +143,7 @@ pub struct AnySeekFullTextStore {
 #[serde(deny_unknown_fields)]
 struct Document {
     format: String,
+    kind: String,
     tenant: Uuid,
     workspace: Uuid,
     chunk_id: Uuid,
@@ -154,6 +159,12 @@ struct Document {
     dimension: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     vector: Option<Vec<f32>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    graph: Option<graph::Projection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    graph_keys: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    endpoint_ids: Option<Vec<String>>,
 }
 
 fn invalid(message: &'static str) -> StorageError {
@@ -242,6 +253,7 @@ fn decode_record(value: &Value, scope: Scope) -> StorageResult<(String, Document
     {
         return Err(inconsistent());
     }
+    graph::validate_document(&doc)?;
     Ok((record_id(&doc), doc))
 }
 
@@ -260,6 +272,9 @@ impl AnySeekFullTextStore {
     pub fn collection_config() -> Value {
         let mut schema: Vec<Value> = META.iter().map(|field| json!({"field":field,"field_type":"String","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0})).collect();
         schema.push(json!({"field":"terms","field_type":"Text","store":true,"index_lexical":true,"index_vector":false,"filterable":false,"boost":1.0}));
+        schema.push(json!({"field":"graph","field_type":"Json","store":true,"index_lexical":false,"index_vector":false,"filterable":false,"boost":1.0}));
+        schema.push(json!({"field":"endpoint_ids","field_type":"StringSet","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0}));
+        schema.push(json!({"field":"graph_keys","field_type":"StringSet","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0}));
         json!({"index_name":FORMAT,"tokenizer":"TantivySimpleV1","text_normalization":"None","stop_words":"None","schema":schema})
     }
 
@@ -425,10 +440,31 @@ impl AnySeekFullTextStore {
         let mut seen = HashSet::new();
         for hit in hits {
             let (id, doc) = decode_record(&hit["record"], scope)?;
-            if doc.publication != group || doc.terms.is_none() || !seen.insert(id.clone()) {
+            if doc.publication != group
+                || (doc.kind == "chunk" && doc.terms.is_none())
+                || !seen.insert(id.clone())
+            {
                 return Err(inconsistent());
             }
             rows.push(json!({"record_id":id,"document":doc}));
+        }
+        let anchors: Vec<_> = rows
+            .iter()
+            .filter(|r| !r["document"]["graph"].is_null())
+            .collect();
+        if anchors.len() > 1 {
+            return Err(inconsistent());
+        }
+        if let Some(anchor) = anchors.first() {
+            let d = &anchor["document"];
+            if rows.iter().any(|r| {
+                r["document"]["source_id"] != d["source_id"]
+                    || r["document"]["source_version"] != d["source_version"]
+                    || r["document"]["generation"] != d["generation"]
+                    || r["document"]["chunk_id"].as_str() < d["chunk_id"].as_str()
+            }) {
+                return Err(inconsistent());
+            }
         }
         rows.sort_by(|a, b| a["record_id"].as_str().cmp(&b["record_id"].as_str()));
         Ok(rows)
@@ -453,6 +489,22 @@ impl AnySeekFullTextStore {
         vectors: Vec<VectorEntry>,
         epoch: u64,
     ) -> StorageResult<()> {
+        self.upsert_with_graph(scope, entries, vectors, None, epoch)
+            .await
+    }
+
+    /// Publish chunks and owner-bound graph support in one bounded atomic group.
+    pub async fn upsert_with_graph(
+        &self,
+        scope: Scope,
+        entries: Vec<FullTextEntry>,
+        vectors: Vec<VectorEntry>,
+        graph: Option<GraphPublication>,
+        epoch: u64,
+    ) -> StorageResult<()> {
+        if entries.len() > MAX_GROUP || (entries.is_empty() && graph.is_some()) {
+            return Err(invalid("invalid AnySeek publication chunk count"));
+        }
         let mut vector_map = HashMap::new();
         for vector in vectors {
             if self.config.embedding.as_ref() != Some(&(vector.profile.clone(), vector.dimension))
@@ -471,10 +523,8 @@ impl AnySeekFullTextStore {
                 Err(inconsistent())
             };
         }
-        if entries.len() > MAX_GROUP {
-            return Err(invalid("AnySeek publication exceeds 64 chunks"));
-        }
         let (group, records, digest) = tokio::task::spawn_blocking(move || -> StorageResult<_> {
+            let graph = graph::prepare(graph, &entries)?;
             let mut docs = BTreeMap::new();
             let mut remaining = MAX_REQUEST;
             for entry in entries {
@@ -492,6 +542,7 @@ impl AnySeekFullTextStore {
                 }
                 let doc = Document {
                     format: FORMAT.into(),
+                    kind: "chunk".into(),
                     tenant: scope.tenant_id,
                     workspace: scope.workspace_id,
                     chunk_id: entry.id,
@@ -503,6 +554,9 @@ impl AnySeekFullTextStore {
                     profile: vector.as_ref().map(|v| v.profile.clone()),
                     dimension: vector.as_ref().map(|v| v.dimension.to_string()),
                     vector: vector.map(|v| v.embedding),
+                    graph: None,
+                    graph_keys: None,
+                    endpoint_ids: None,
                 };
                 let id = record_id(&doc);
                 if let Some(old) = docs.insert(id, doc.clone())
@@ -514,6 +568,7 @@ impl AnySeekFullTextStore {
             if !vector_map.is_empty() {
                 return Err(inconsistent());
             }
+            graph::attach(&mut docs, graph)?;
             let group = format!(
                 "p{}",
                 hash(docs.keys().cloned().collect::<Vec<_>>().join(":"))
@@ -590,6 +645,7 @@ impl AnySeekFullTextStore {
         }
         for batch in ids.chunks(MAX_GROUP) {
             let mut filters = scope_filters(query.scope);
+            filters.push(filter("kind", ["chunk".into()]));
             filters.push(filter("generation", [query.generation.to_string()]));
             filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
             let result = self.query(filters, "", batch.len() + 1, 0, false).await?;
@@ -602,7 +658,8 @@ impl AnySeekFullTextStore {
             let mut seen = HashSet::new();
             for hit in hits {
                 let (_, doc) = decode_record(&hit["record"], query.scope)?;
-                if batch.binary_search(&doc.chunk_id).is_err()
+                if doc.kind != "chunk"
+                    || batch.binary_search(&doc.chunk_id).is_err()
                     || !seen.insert(doc.chunk_id)
                     || doc.generation != query.generation.to_string()
                     || expected.get(&doc.chunk_id)
@@ -616,6 +673,7 @@ impl AnySeekFullTextStore {
             }
         }
         let mut filters = scope_filters(query.scope);
+        filters.push(filter("kind", ["chunk".into()]));
         filters.push(filter("generation", [query.generation.to_string()]));
         filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
         let result = self
@@ -644,7 +702,8 @@ impl AnySeekFullTextStore {
                 .map(|s| s as f32)
                 .filter(|s| s.is_finite())
                 .ok_or_else(inconsistent)?;
-            if ids.binary_search(&doc.chunk_id).is_err()
+            if doc.kind != "chunk"
+                || ids.binary_search(&doc.chunk_id).is_err()
                 || !seen.insert(doc.chunk_id)
                 || doc.generation != query.generation.to_string()
                 || expected.get(&doc.chunk_id) != Some(&source)
@@ -687,6 +746,7 @@ impl AnySeekFullTextStore {
         }
         for batch in ids.chunks(MAX_GROUP) {
             let mut filters = scope_filters(query.scope);
+            filters.push(filter("kind", ["chunk".into()]));
             filters.push(filter("generation", [query.generation.to_string()]));
             filters.push(filter("profile", [query.profile.clone()]));
             filters.push(filter("dimension", [query.dimension.to_string()]));
@@ -701,7 +761,8 @@ impl AnySeekFullTextStore {
             let mut seen = HashSet::new();
             for hit in hits {
                 let (_, doc) = decode_record(&hit["record"], query.scope)?;
-                if batch.binary_search(&doc.chunk_id).is_err()
+                if doc.kind != "chunk"
+                    || batch.binary_search(&doc.chunk_id).is_err()
                     || !seen.insert(doc.chunk_id)
                     || doc.generation != query.generation.to_string()
                     || doc.profile.as_deref() != Some(query.profile.as_str())
@@ -717,6 +778,7 @@ impl AnySeekFullTextStore {
             }
         }
         let mut filters = scope_filters(query.scope);
+        filters.push(filter("kind", ["chunk".into()]));
         filters.push(filter("generation", [query.generation.to_string()]));
         filters.push(filter("profile", [query.profile.clone()]));
         filters.push(filter("dimension", [query.dimension.to_string()]));
@@ -742,7 +804,8 @@ impl AnySeekFullTextStore {
                 .map(|s| s as f32)
                 .filter(|s| s.is_finite())
                 .ok_or_else(inconsistent)?;
-            if ids.binary_search(&doc.chunk_id).is_err()
+            if doc.kind != "chunk"
+                || ids.binary_search(&doc.chunk_id).is_err()
                 || !seen.insert(doc.chunk_id)
                 || doc.generation != query.generation.to_string()
                 || doc.profile.as_deref() != Some(query.profile.as_str())
@@ -771,6 +834,7 @@ impl AnySeekFullTextStore {
         let mut groups = HashSet::new();
         for batch in wanted.chunks(MAX_GROUP) {
             let mut filters = scope_filters(scope);
+            filters.push(filter("kind", ["chunk".into()]));
             filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
             let mut offset = 0;
             loop {
@@ -784,7 +848,7 @@ impl AnySeekFullTextStore {
                 let hits = result["hits"].as_array().unwrap();
                 for hit in hits {
                     let (_, doc) = decode_record(&hit["record"], scope)?;
-                    if !ids.contains(&doc.chunk_id) {
+                    if doc.kind != "chunk" || !ids.contains(&doc.chunk_id) {
                         return Err(inconsistent());
                     }
                     groups.insert(doc.publication);
@@ -813,6 +877,16 @@ impl AnySeekFullTextStore {
                 })
                 .cloned()
                 .collect();
+            if !retained.is_empty()
+                && rows.iter().any(|row| {
+                    !row["document"]["graph"].is_null()
+                        && !retained.iter().any(|r| r["record_id"] == row["record_id"])
+                })
+            {
+                return Err(invalid(
+                    "graph anchor cleanup requires complete source publication",
+                ));
+            }
             if retained.len() == rows.len() {
                 continue;
             }

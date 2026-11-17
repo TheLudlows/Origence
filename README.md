@@ -2,14 +2,14 @@
 
 **The Intelligence Foundation for AI Agents.**
 
-Origence is a Rust-based foundation for agent memory and knowledge. It provides scoped memory and knowledge storage, retrieval, and evidence-aware lifecycle management through HTTP and MCP.
+Origence is a Rust-based data foundation for internal enterprise agents. It manages memory, knowledge, reviewed Skills, and private archives, with HTTP/MCP access and explicit Run evidence. Turso holds authoritative data, AnySeek provides retrieval, and Blob storage preserves original files.
 
 ## Features
 
-- **Memory & Knowledge** — Store structured memories and ingest documents.
-- **Retrieval** — AnySeek full-text and vector search with graph-enhanced evidence.
-- **Storage** — Native Rust Turso authority, AnySeek retrieval projections, and original blobs.
-- **Governance** — Workspace isolation, versioning, provenance, and revocation.
+- **Context** — Scoped memory and knowledge, private archives, versioning, and source references.
+- **Retrieval** — Unified AnySeek full-text, vector, and one-hop graph retrieval with Turso-authorized evidence.
+- **Skills** — Private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
+- **Run evidence** — Context preparation records, reported tools/Skills/results, and explicit collection gaps.
 
 ## Quick start
 
@@ -43,20 +43,15 @@ Open `http://127.0.0.1:3000` and connect with your own API key. Set
 
 ## Documentation
 
-[Documentation index](docs/README.md) · [API and library changes](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
+[Documentation index](docs/README.md) · [API and library interfaces](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
-The proposed [enterprise Agent data foundation architecture](docs/design/agent-data-foundation.md)
-treats memory, knowledge, Skills, and runtime state as context, with unified context delivery and run evidence for Claude Code and Codex.
-Private sessions are bound to authenticated user API keys; long-term memories, facts, Skills, and knowledge belong to a workspace.
-Planned Skills are distilled from memory and Agent experience into proposals with supporting evidence for user review, revision, and publication.
-The MVP deployment and Skill approval decisions are confirmed; planned capabilities are separate from the features implemented today.
-
-See [CLI client setup](docs/CLIENTS.md) for Claude Code and Codex MCP configuration.
-
-The index separates current contracts and operations from version-specific validation and historical research. AML production endpoints remain documented in the API; AML-specific test and experiment facilities have been removed.
+The [enterprise Agent data foundation architecture](docs/design/agent-data-foundation.md)
+defines the confirmed product scope. Private archives belong to a logical user API key;
+published memories, facts, knowledge, and Skills belong to a workspace.
+Experience-to-Skill candidate generation and real-client task acceptance remain unfinished;
+see [current status](docs/STATUS.md) and [validation](docs/VALIDATION.md).
+[Client setup](docs/CLIENTS.md) covers Claude Code and Codex MCP access and approved Skill export.
 
 Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent comparison](evals/agent/README.md).
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md). The JOIN-free SQL constraint remains in force; its former automatic guard and tests have been removed.
-
-> The CLI is now named `origence`. Existing `OC_*` configuration variables and HTTP endpoints remain unchanged. The graph backend now uses `graph.db`; see [Operations](docs/OPERATIONS.md) for the rebuild boundary.

@@ -1,6 +1,6 @@
-# Private Run trace slice
+# Private Run trace
 
-Implements the narrow private evidence portion of `agent-data-foundation.md` §§5/7.
+This contract defines the private evidence path for the [architecture plan](../design/agent-data-foundation.md).
 Run creation and append are authorized relational transactions. Each Run is bound
 to a server-assigned private session and stable logical key. Workspace admin is
 not an implicit private archive reader. Credential rotation preserves logical
@@ -25,7 +25,7 @@ private session ownership are checked again inside the append transaction and
 on trace/prefix readback. Withdrawal fails closed rather than exposing stale
 private source evidence. Empty prepared bundles are valid and preserve warnings.
 No automatic capture of every context request, external tool call, or result is
-claimed by this slice. Routes must check Run ownership before retrieval IO.
+claimed by this interface. Routes must check Run ownership before retrieval IO.
 
 Selected Skill review can use the internal trusted-owner prefix digest helper,
 not raw Run content or a caller-provided owner ID. Source guards remain in force;

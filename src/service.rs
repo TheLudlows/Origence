@@ -68,12 +68,10 @@ impl Service {
         let published = relational.has_committed_full_text().await?;
         let binding =
             crate::storage::retrieval_store::binding::prepare(&dir, &anyseek, published).await?;
-        let graph = TursoGraphStore::open_with_authority(dir.join("graph.db"), &relational).await?;
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
             RetrievalStore::open(anyseek).await?,
-            graph,
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;

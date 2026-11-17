@@ -1,15 +1,13 @@
 //! Cross-store ledger round-trip (M4): a pending write is registered on the
-//! SQLite ledger, applied idempotently to an AnySeek protocol peer/SQLite graph, confirmed, and a
+//! SQLite ledger, applied idempotently to an AnySeek protocol peer with attached graph, confirmed, and a
 //! reconcile pass leaves it committed without duplicating (A2.6).
 #![cfg(feature = "local-storage")]
 
 use origence::storage::anyseek::{AnySeekFullTextStore, operation_epoch};
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
 use origence::storage::sqlite::SqliteStore;
-use origence::storage::sqlite_graph::SqliteGraphStore;
 use origence::storage::{
-    DomainTx, GraphStore, Permission, RelationalStore, Scope, SourceVersion, VectorEntry,
-    VectorQuery,
+    DomainTx, Permission, RelationalStore, Scope, SourceVersion, VectorEntry, VectorQuery,
 };
 use origence::types::Entity;
 use uuid::Uuid;
@@ -22,9 +20,6 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
     let vector =
         AnySeekFullTextStore::new(remote.config().with_embedding("p:v1".into(), 2).unwrap())
             .unwrap();
-    let graph = SqliteGraphStore::open(dir.path().join("graph.db"))
-        .await
-        .unwrap();
 
     let tenant = Uuid::new_v4();
     let workspace = Uuid::new_v4();
@@ -98,7 +93,7 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
     };
     for _ in 0..2 {
         vector
-            .upsert_combined(
+            .upsert_with_graph(
                 scope,
                 vec![origence::storage::FullTextEntry {
                     id: chunk_id,
@@ -107,12 +102,16 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
                     search_terms: "Alice".into(),
                 }],
                 vec![entry.clone()],
+                Some(origence::storage::anyseek::GraphPublication {
+                    source,
+                    generation,
+                    graph: origence::types::GraphExtraction {
+                        entities: vec![entity.clone()],
+                        relations: vec![],
+                    },
+                }),
                 operation_epoch().unwrap(),
             )
-            .await
-            .unwrap();
-        graph
-            .upsert_entities(scope, source, vec![entity.clone()])
             .await
             .unwrap();
     }
@@ -148,8 +147,10 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
         .await
         .unwrap();
     assert_eq!(hits.len(), 1);
-    let ids = graph.list_ids(scope).await.unwrap();
-    assert_eq!(ids["entities"].as_array().unwrap().len(), 1);
+    let entities = vector.graph_seed_candidates(scope, "alice").await.unwrap();
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].source, source);
+    assert!(!dir.path().join("graph.db").exists());
 
     // Step 6: re-confirm is a no-op (state-guard) and reconcile stays clean.
     {

@@ -58,29 +58,33 @@ async fn cleanup_plan_retains_shared_owners_after_source_retraction() {
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let (_, mut entities, relations) = store.cleanup_plan(auth.scope).await.unwrap();
-    entities.sort();
-    let mut expected = vec![shared, sole];
-    expected.sort();
-    assert_eq!(entities, expected);
-    assert!(relations.is_empty());
-    let mut tx = begin_write(&store, &auth).await;
-    tx.retract_event(sources[0].source_id).await.unwrap();
-    tx.commit().await.unwrap();
-    for _ in 0..2 {
-        assert_eq!(
-            store.cleanup_plan(auth.scope).await.unwrap(),
-            (Vec::new(), vec![shared], Vec::new())
-        );
-    }
-    let owners: Vec<Uuid> = origence::storage::native_turso::query_scalar(
-        "SELECT source_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
+    assert!(store.cleanup_plan(auth.scope).await.unwrap().is_empty());
+    let mut owned: Vec<Uuid> = origence::storage::native_turso::query_scalar(
+        "SELECT DISTINCT artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
     )
     .bind(auth.scope.tenant_id)
     .bind(auth.scope.workspace_id)
     .fetch_all(store.pool())
     .await
     .unwrap();
-    assert_eq!(owners, vec![sources[1].source_id]);
+    owned.sort();
+    let mut expected = vec![shared, sole];
+    expected.sort();
+    assert_eq!(owned, expected);
+    let mut tx = begin_write(&store, &auth).await;
+    tx.retract_event(sources[0].source_id).await.unwrap();
+    tx.commit().await.unwrap();
+    for _ in 0..2 {
+        assert!(store.cleanup_plan(auth.scope).await.unwrap().is_empty());
+    }
+    let owners: Vec<(Uuid, Uuid)> = origence::storage::native_turso::query_as(
+        "SELECT source_id,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?",
+    )
+    .bind(auth.scope.tenant_id)
+    .bind(auth.scope.workspace_id)
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(owners, vec![(sources[1].source_id, shared)]);
     store.shutdown().await.unwrap();
 }

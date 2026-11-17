@@ -1,6 +1,6 @@
 # S1 retrieval quality baseline (dataset v1)
 
-This page documents the S1 v1 dataset inputs and annotation protocol. Current measured results are in the [S1 v2 report](results/local-77d43a8-v2/README.md). These synthetic datasets are development material, not representative production benchmarks.
+This page documents the S1 v1 dataset inputs and annotation protocol. Historical results for their pinned code/backend are in the [S1 v2 report](results/local-77d43a8-v2/README.md). These synthetic datasets are development material, not representative production benchmarks.
 
 ## Annotation protocol
 

@@ -157,7 +157,8 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let (native, entities, relations) = store.cleanup_plan(scope).await.unwrap();
+    let native = store.cleanup_plan(scope).await.unwrap();
+    let (entities, relations) = graph_owner_ids(&store, scope).await;
     assert!(native.is_empty());
     assert_eq!(entities, vec![shared]);
     assert_eq!(relations, vec![sole]);
@@ -171,7 +172,11 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
     .await
     .unwrap();
     let plan = store.cleanup_plan(scope).await.unwrap();
-    assert_eq!(plan, (vec![old.chunk], vec![shared], Vec::new()));
+    assert_eq!(plan, vec![old.chunk]);
+    assert_eq!(
+        graph_owner_ids(&store, scope).await,
+        (vec![shared], Vec::new())
+    );
     store.shutdown().await.unwrap();
     drop(store);
     // The first authority phase committed. Native deletion can be retried
@@ -182,6 +187,13 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
     assert_eq!(store.cleanup_plan(scope).await.unwrap(), plan);
     store.finish_cleanup(scope).await.unwrap();
     store.finish_cleanup(scope).await.unwrap();
+    // An interrupted remote cleanup can always recover its original anchors,
+    // even after a prior finishing pass removed derived chunk metadata.
+    assert_eq!(store.cleanup_plan(scope).await.unwrap(), vec![old.chunk]);
+    assert_eq!(
+        graph_owner_ids(&store, scope).await,
+        (vec![shared], Vec::new())
+    );
     let chunks: Vec<Uuid> =
         db::query_scalar("SELECT id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?")
             .bind(scope.tenant_id)
@@ -252,7 +264,8 @@ async fn maintenance_keeps_loose_chunk_gate_and_cross_type_ledger_owner_match() 
     ledger(&mut tx, scope, chosen, chosen.chunk, "graph", 6).await;
     index(&mut tx, scope, chosen.chunk).await;
     tx.commit().await.unwrap();
-    let (native, entities, _) = store.cleanup_plan(scope).await.unwrap();
+    let native = store.cleanup_plan(scope).await.unwrap();
+    let (entities, _) = graph_owner_ids(&store, scope).await;
     assert_eq!(native, vec![chosen.chunk]);
     assert_eq!(entities, vec![chosen.chunk]);
     let retained: Vec<Uuid> = db::query_scalar("SELECT artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type='chunk'")
@@ -631,4 +644,20 @@ async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retr
             .unwrap();
     assert_eq!(states, vec![("orphan".into(), 123); 3]);
     store.shutdown().await.unwrap();
+}
+
+// Authority graph support remains meaningful without a second graph database.
+async fn graph_owner_ids(store: &TursoStore, scope: Scope) -> (Vec<Uuid>, Vec<Uuid>) {
+    let rows: Vec<(String, Uuid)> = db::query_as("SELECT DISTINCT artifact_type,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('entity','relation') ORDER BY artifact_type,artifact_id")
+        .bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&store.pool).await.unwrap();
+    (
+        rows.iter()
+            .filter(|(kind, _)| kind == "entity")
+            .map(|(_, id)| *id)
+            .collect(),
+        rows.iter()
+            .filter(|(kind, _)| kind == "relation")
+            .map(|(_, id)| *id)
+            .collect(),
+    )
 }

@@ -1,39 +1,13 @@
 # 本地运维说明
 
-适用单宿主 Turso 权威数据、Blob、Turso 图和独立 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
+适用单宿主 Turso 权威数据、Blob 和独立 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与恢复)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
-当前开发与验收以新建数据库为目标，不建设或验收版本升级、旧库 schema 兼容及数据迁移能力；只有后续明确调整需求才重新考虑，见 [STATUS](STATUS.md#范围与证据)。当前身份入口为只读 `identity-check`，旧升级命令已移除；旧基线说明仅供识别安全边界，不提供升级或安装。
-
-同版本运行中的持久化、重启/重试恢复和备份恢复要求不变。不兼容 schema 仍应拒绝打开；使用新目录不意味着可以删除、覆盖或静默转换旧数据，原始来源和备份继续按既有要求保留。
-
-## PR #59 查询与恢复边界
-
-关联查询采用同一事务快照内的参数化单表批量读取与 Rust 关联，不以跨表
-EXISTS/IN/CTE 替代 JOIN。权限、历史版本、source/version/generation/publication
-校验和最终返回前复核保留；Context/startup 的读取范围和调用方投影按所需数据收窄。
-隐藏行或未消费的异常字段不应污染合法结果；选中必要非法字段仍安全报错，不保留
-多个坏值的首错顺序或旧 panic。自动 SQL guard 及其测试已撤除，禁 JOIN 编码约束
-与人工审核要求仍按 [AGENTS](../AGENTS.md#sql-query-constraints) 执行；历史静态检查不等于全程序证明。
-
-Windows 原离线恢复回归和主线程原 1 MiB 栈保留。PR #59 已合入的精确主干
-[CI 38554048610](https://github.com/TheLudlows/Origence/actions/runs/38554048610)
-通过 Linux/Windows 门禁；该结果仅证明已测调用路径，不证明任意 Turso SQL
-解析路径均无栈风险。分阶段故障、原生读取与保存/重试实测见
-[VALIDATION](VALIDATION.md#pr-59无-join-分阶段验证)。
-
-固定槽位（多数 8，向量就绪匹配 4）限制请求数，不是字节/总内存预算。
-状态检查不把完整向量计划读入 Rust；准备及重试仍承担计划序列化和原生校验成本，
-ID 元数据仍为 O(total ID bytes)，没有新增输入上限。
-
-MessageBatch 发布计划与轻量回执摘要原子保存，同代重试复用并核对摘要。
-正分块已准备计划缺失或损坏摘要会明确报无效，重试不会自动修复，不提供已有
-计划的回填迁移。出现该错误应保留原库和现场，不手工补摘要或清除账本。
-缺失/null/空 chunks 的既有状态语义保留；正分块计划遵循上述摘要要求，
-异常 chunks 根类型明确报错。有摘要不等于发布成功，实际索引与发布账本仍须满足可检索门槛。
-直接改数据库中的向量计划而不改摘要，不会由状态查询完整重扫检测。
-这些变化不提供新容量、任意断电或 parser 内存隔离保证。
+只面向新建数据库，启动要求完整当前 schema；不自动补表、升级或迁移已有数据。
+同版本持久化、重启/重试和备份恢复仍是要求，不兼容结构拒绝打开。
+保留原始来源及备份，不能因使用新目录而删除或覆盖旧数据。
+事务查询、身份占位与发布计划约束见[存储不变量](contracts/storage.md)。
 
 ## 目录与进程
 
@@ -44,7 +18,6 @@ MessageBatch 发布计划与轻量回执摘要原子保存，同代重试复用�
 | `context.db` 及原生 Turso WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
 | `full-text-backend.json` | AnySeek endpoint/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |
-| `graph.db` 及原生 Turso WAL | Turso 图实体、关系与遍历投影 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
 实际锁文件命名和数据库路径以配置及启动实现为准。不要直接修改任一库的业务记录；向量和图不是来源状态的权威。数据目录只授予宿主 OS 身份访问权限，API key 不能保护已经取得本地文件访问权的用户。
@@ -82,7 +55,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## AnySeek 全文与向量
 
-全文和向量只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
+全文、向量和一跳图候选只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
 1. 准备支持整组替换的 AnySeek，例如 [6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)；
@@ -113,7 +86,7 @@ Turso 在远端提交后才发布权威版本。超时未知时检查当前组�
 
 ## 本地 embedding 服务
 
-本机已使用 Ollama 的 BGE-M3 提供兼容 OpenAI API 的 embedding，配置为：
+以下以 Ollama 的 BGE-M3 提供兼容 OpenAI API 的 embedding 为例：
 
 ```powershell
 $env:OC_ENABLE_MODELS = 'true'
@@ -125,11 +98,11 @@ $env:OC_EMBEDDING_DIMENSION = '1024'
 
 ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话；新终端需重新设置或显式配置持久环境，已运行宿主不会自动刷新。先下载 bge-m3 并保持 Ollama 运行，接口为 POST /v1/embeddings；该配置不提供抽取或生成模型。
 
-更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。S1 结果和限制见 [VALIDATION](VALIDATION.md)，运行入口见 [评估说明](../evals/README.md)。
+更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。运行入口见 [评估说明](../evals/README.md)；旧引擎上的历史实验不能当作当前 AnySeek 质量结果。
 
 ## 离线记忆身份检查
 
-原生 Turso 新库始终包含完整身份 schema。#60 将身份列并入 oc_assets，删除身份独立表；旧布局只读检查失败，不迁移、不修复。删除资产仍保留身份占位，同版本备份恢复需使用完整当前格式。详见[身份布局合同](contracts/identity-asset-layout.md)。
+原生 Turso 新库包含完整身份 schema，身份存于 oc_assets，删除资产仍保留占位；详见[存储不变量](contracts/storage.md)。
 
 `identity-check` 对已有数据库执行
 只读同版本检查，包括格式标记和完整 authority schema，不创建或修复任何表。
@@ -140,8 +113,7 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 缺文件、缺表、未标记旧库、弱约束或同名视图占用均拒绝，不安装、不转换。
 命令不加载模型、AnySeek、图或 Blob；依赖 OS 目录权限并要求独占路径锁。
-不存在的 context.db 不会被新建。旧 `memory-identity-upgrade` 命令与其
-`--dry-run` 参数已移除；只读检查没有升级状态或写入模式。
+不存在的 context.db 不会被新建；只读检查没有升级状态或写入模式。
 库调用方改用 `TursoStore::check_memory_identity(path)`，成功返回 `()`。
 
 ## 失败与恢复
@@ -161,22 +133,22 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 ## 图存储与来源边界
 
-图存储使用 `graph.db`，沿用 `GraphStore`、确定性对象 ID 和 Turso owner/跨存储账本。所有连接启用外键，实体删除级联移除入边、出边和自环；有向遍历最多三跳、去重并排除起点。新文件自动创建完整结构，已有不兼容结构拒绝打开，不自动修复。
+对外 hybrid 检索只扩展一跳。实体和边由 AnySeek 的 `origence-search-sha256-v3` collection
+提供候选，按来源版本附在一个现有 chunk Record 上，跟随同一组原子发布。上限仍为 64 个
+chunk，并受完整请求字节预算限制；超限拒绝，不分批暴露。
 
-本版本不加载旧 graph/kuzu.db，也不迁移旧 SQLite 图文件。实体、关系与来源
-归属由 Turso 保存，跨文件发布仍通过权威 owner/账本控制读取。
-只支持新建或同版本完整目录；不要删除图文件或清空账本来尝试迁移或恢复。
-原始来源与既有备份必须保留，不能把“新图文件可创建”理解为“旧图已恢复”。
+`context.db` 的 owner 和发布账本仍是证据权威。来源撤回立即阻断其证据，AnySeek 中的残留投影
+不会让关系复活；同一关系有其他有效来源时仍可召回。图投影随所属来源的 chunk 组清理。
+宿主不再创建、打开或维护独立的 `graph.db`；已有的图文件不读、不迁移、不删除。
+不提供旧库升级，不要手工清空账本或索引来试图迁移。
 
-## 备份与旧基线
+## 备份与恢复
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含全文/向量。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含 AnySeek 的全文、向量或图候选索引。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。
-
-PG 基线代码和测试可在 Git 提交 `72fb5aa` 查阅。M5 移除了 `src/db.rs`、PG 初始化/授权 SQL、Apalis 依赖及 PG 专用测试；新本地进程套件替代其核心应用验收。没有 PG 数据自动迁移功能，不应将 PG 数据目录当作 `OC_DATA_DIR`。
 
 ## AML 适配启用与批次任务
 
@@ -195,8 +167,7 @@ Add 等待上限仍为 25 分钟，上游模型单次调用仍为 45 秒；网�
 
 模型失败仍为 failed；相同 Add 返回原失败任务并给出 503。合法库调用方用通用 receipt.job_id，在 lookup_owned_workspace 返回的 AuthContext 内调用 Service::job_action(...,"retry")；没有额外 AML job 管理 HTTP 入口，root 的 /v1/jobs 不跨 workspace 查询。临时存储故障沿用原 Worker retry_wait。显式 retry 的新 generation 可改变未发布 chunk ID，但保持 job/source/asset；同 generation 的恢复保持证据 ID。重放不保证上游计费一次。
 
-审计/日志不输出消息、query、options、外部 user_id 或模型诊断。原文仍在来源/版本/发布计划内持久保存，墓碑不等于物理擦除。停机整库备份边界见[备份与旧基线](#备份与旧基线)；删除来源、工作目录或备份不证明介质物理擦除，副本及模型供应商的保留边界需单独管理。官方 Smoke/Full 与真实模型质量尚未验收。
-
+审计/日志不输出消息、query、options、外部 user_id 或模型诊断。原文仍在来源/版本/发布计划内持久保存，墓碑不等于物理擦除。停机整库备份边界见[备份与恢复](#备份与恢复)；删除来源、工作目录或备份不证明介质物理擦除，副本及模型供应商的保留边界需单独管理。官方 Smoke/Full 与真实模型质量尚未验收。
 
 ## 检索分段诊断
 
@@ -204,42 +175,19 @@ Add 等待上限仍为 25 分钟，上游模型单次调用仍为 45 秒；网�
 
 branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户作用域派生/授权查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。完整 HTTP 耗时须另行测量。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 
-## 显式停机压实向量文件
+## 记忆与受控提取运行边界
 
-历史 `vector-compact` 命令已随 LanceDB 后端移除。旧版本验证结果保留在 [VALIDATION](VALIDATION.md)，
-不适用于当前 AnySeek 索引运维。
+属性由管理员在首次分配相关身份前注册，定义不可变，不允许改表绕过约束。
+语义写入复用单 Worker、保存计划、版本竞争及来源复核；任一支持来源撤回会使整版退出读取，
+通用 restore 不能绕过。详细规则见[记忆契约](contracts/memory.md)。
 
-## S2 语义目录与发布边界
+`semantic_extract` 使用既有 extraction 配置，单次模型请求上限 45 秒。
+模型调用、JSON 校验与分词在事务外运行；计划在 embedding 前持久化。
+已保存计划按原 provenance 重用，计划提交前失败可能重新调用模型，不保证外部计费一次。
+尚无计划时 extraction 配置 fingerprint 必须匹配受理配置，embedding profile 始终须匹配。
 
-S2 只对新建数据库安装 oc_memory_properties；旧库开机不 ALTER，不接管旧 fact_key 或既有 identity。当前启动要求完整同版本 schema，缺表或不兼容库拒绝打开。离线 identity-check 只检查完整当前 schema，不安装 I1 或 S2；旧库迁移/导入暂未提供，勿手工补表后宣称已验收升级。
-
-注册属性为管理员显式操作，定义不可变。必须在分配该属性的首个身份之前完成注册。当前阶段不支持修改已注册的属性定义，也不为此开发迁移方案；只有明确调整需求后才另行设计，不允许改表绕过约束。
-
-语义写入复用现有单 durable Worker、发布计划、账本、权限重检、版本竞争、取消和失败重试；没有新增后台循环、子进程、硬期限或内存隔离保证。每次任务最多 32 个成员，每个 quote 最多 8192 字节，来源读取受既有文本上限约束；这些是应用输出限制，不是 parser 内存预算。graceful shutdown 仍完成当前任务。
-
-semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿用整快照可见性：任何支持来源撤回即隐藏整版，并禁止通用 restore 绕过语义；若当前发布来源仍有效，下一次显式 supplement 可重建仍有支持的集合；若当前发布来源本身撤回，后续写入须重新提供事实，不从历史自动补回。追加快照的原生索引账本仍归属本次发布事件，历史成员原始来源保存在不可变 locator；支持来源撤回先阻断读取，不承诺立即物理擦除所有后续快照副本。物理清理/备份保留的既有边界仍适用。
-
-确定性工程回归不能证明调用方或模型提供的 operation/value 语义正确。自由文本抽取、自动别名归一化和通用语义理解仍需独立验收；不要把显式契约通过作为这些能力的证明。
-
-
-## S3 对话语义捕获运行边界
-
-新增 `semantic_extract` 作业，HTTP/Service 受理后由现有单一串行 Worker 执行。只支持新库，本轮不开发迁移或升级。复用现有 `OC_EXTRACTION_MODEL`、模型端点配置、45 秒单请求超时和有界响应读取；可不配 embedding，此时发布 keyword 能力。调用方明确提交 targets/expected_version，并按需要为单值目标启用 allow_update；没有自动循环、会话监听或新增 worker。
-
-抽取调用在存储事务外；模型 JSON 解析/候选校验及分词通过 await spawn_blocking 完成。S2 路由在短事务中保存 `semantic_capture_plan`（原候选、固定身份/版本、路由、原始成员来源），之后再做 embedding/native 写入。模型输出不充当系统指令或发布授权。所有候选的关系发布原子提交，失败不发布有效子集。
-
-计划已保存时，重试或重开复用它，不重新提取；显式 retry 的新 generation 只重建对应代次的发布产物。计划提交前崩溃或提取本身失败，重试可能再次调用模型，不承诺外部模型恰好一次。尚无计划时 Worker 的提取配置 fingerprint 必须匹配受理配置；已保存计划可继续使用其原 provenance，embedding profile 仍必须匹配。变更模型后不要把旧候选重新标成新模型结果。
-
-恢复和最终提交重新校验权限、任务 generation/run_token、资产版本及所有原始支持来源。撤回本次捕获来源会取消相关作业；撤回其他集合成员来源会阻断待发布计划，已发布集合整体退出检索。已有计划可能保留在任务内部；逻辑撤回不等于磁盘、备份或模型供应商副本物理擦除。
-
-取消和撤权阻止发布，不能保证已经发送的远程模型调用停止；spawn_blocking 不是硬取消。优雅停机继续等待当前作业，沿用原恢复/清理语义；本轮未增加进程隔离或硬截止时间。job 的空 memories 或 duplicate 结果是合法完成；superseded 需重读版本再提交新请求。工程验证使用确定性 loopback 模型桩，不等于真实模型分类或 Agent 效果验收。
-
-
-## Turso 与 AnySeek 运行边界
-
-- 权威库仍使用原生 Rust Turso 0.8.2。新建库写入格式标记；不兼容库拒绝启动、不补表或覆盖。
-- 未提交或取消的租借在归还前执行回滚；失败弃连接。没有硬停止文件 IO 或外部模型调用的承诺。
-- chunk 全文和向量沿用既有发布账本及来源复核。AnySeek 集合检查不替代逐候选权威验证。
-- 查询前检查授权候选的 id/source/version/generation。向量另核对 profile/维度，不混用 embedding 空间。
-  依赖故障不伪装为空结果；受控的模型查询降级仍按 API 的 `allow_partial` 执行。
-- 业务权威与派生索引没有共同事务或在线备份快照。已准备原计划、精确引用、撤回边界仍由 Origence 管理。
+调用方显式提交 targets/expected_version/allow_update，没有自动监听或新 Worker。
+恢复与最终提交复核 creator、generation/run_token、版本及完整来源；取消阻止迟到发布，
+不保证停止已发出的模型调用或 blocking 工作，优雅退出等待当前作业。
+空候选/duplicate 可合法完成，superseded 需重读版本再提交。输入/输出限制见
+[受控提取](contracts/semantic-capture.md)和 [API](API.md#对话语义捕获)。

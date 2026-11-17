@@ -1,8 +1,8 @@
-# S3 explicit Improve → Learning
+# Explicit Improve → Learning
 
 ## Scope and authority
 
-This slice completes the explicit session feedback loop, not roadmap S4. It targets
+This contract defines the explicit session feedback loop. It targets
 fresh databases and uses the existing configured extraction model, typed durable
 queue, serialized Worker, and knowledge publication path. It introduces no automatic
 trigger, ranking change, memory overwrite, Guidance lifecycle, provider, migration,

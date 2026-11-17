@@ -70,7 +70,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     const path = new URL(url, "http://localhost:3000"),
-      body = options.body ? JSON.parse(options.body) : undefined;
+      body =
+        typeof options.body === "string"
+          ? JSON.parse(options.body)
+          : options.body;
     const response = (value, status = 200) =>
       new Response(JSON.stringify(value), {
         status,
@@ -143,6 +146,15 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         asset_id: ids.asset,
         state: "accepted",
       });
+    }
+    if (path.pathname === "/api/v1/files") {
+      assert.equal(
+        options.headers.get("Content-Type"),
+        "application/octet-stream",
+      );
+      assert.equal(await body.text(), "# 中文 🦀 手册");
+      assert.equal(path.searchParams.get("format"), "markdown");
+      return response({ file_id: ids.source });
     }
     if (path.pathname === "/api/v1/knowledge") {
       assert.equal(body.asset_id, null);
@@ -263,6 +275,20 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     await wait(() => modal.textContent.includes("completed"));
     assert.equal(writes.at(-1).title, "发布手册");
     click("关闭", modal);
+    click("＋ 新建 / 上传");
+    const upload = document.querySelector("dialog");
+    control("文档标题", upload).value = "上传手册";
+    const file = control("上传文件（选填，替代正文）", upload);
+    Object.defineProperty(file, "files", {
+      configurable: true,
+      value: [new File(["# 中文 🦀 手册"], "manual.md")],
+    });
+    file.dispatchEvent(new Event("change"));
+    upload.querySelector("form").requestSubmit();
+    await wait(() => upload.textContent.includes("completed"));
+    assert.equal(writes.at(-1).file_id, ids.source);
+    assert.equal(writes.at(-1).content, undefined);
+    click("关闭", upload);
   });
   await t.test(
     "context renders byte accounting and untrusted content as text",
