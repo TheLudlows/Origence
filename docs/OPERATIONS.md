@@ -214,3 +214,9 @@ HTTP 错误提供安全的 x-anyseek-error-code。该日志只说明响应已准
 Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不合规诊断；原始错误正文不落库。
 后端索引进度在查询后采样，出现落后/失败/恢复标志时先处理 AnySeek 健康状态，
 不能手动推进消费序号或以空召回掩盖故障。完整字段与采集边界见 [API](API.md#检索诊断)。
+
+## Windows 原生开发联启
+
+已初始化的本机 AnySeek + Origence 可用 [`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一
+PowerShell 7.4+ 控制台启动，可选 Node UI。首次初始化、readiness、凭据和停止限制见该文档；
+开发入口禁用模型，不替代生产服务管理或迁移。
