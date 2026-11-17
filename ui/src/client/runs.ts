@@ -172,6 +172,26 @@ export async function runsPage(
   await load();
 }
 
+function eventOrigin(event: RunEvent): [string, string] {
+  switch (event.evidence_origin) {
+    case "server_prepared":
+      return ["服务端准备成功", "服务端准备成功；未确认收到或使用"];
+    case "server_observed":
+      return event.report.kind === "context_preparation_failed"
+        ? ["服务端准备失败", "服务端观察到准备失败；未准备上下文"]
+        : ["服务端观察", "服务端观察；不代表准备、收到或使用"];
+    case "reported":
+      return [
+        event.report.reporter === "client" ? "客户端上报" : "显式上报",
+        event.report.reporter === "client"
+          ? "客户端上报；未经独立验证"
+          : `显式上报 · ${event.report.reporter ?? "未知上报者"}；未经独立验证`,
+      ];
+    default:
+      return ["来源未知", "证据来源未知；不推断为服务端观察或客户端上报"];
+  }
+}
+
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
   let after = 0;
@@ -185,11 +205,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const eventBody = report.event ?? report;
     details.replaceChildren(
       el("h2", "", kind),
-      badge(
-        event.evidence_origin === "server_prepared"
-          ? "服务端准备；未确认收到或使用"
-          : `显式上报 · ${report.reporter ?? "未知"}`,
-      ),
+      badge(eventOrigin(event)[1]),
       el(
         "p",
         "mono muted",
@@ -249,9 +265,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
               el("strong", "", kind),
               el("small", "muted", date(event.recorded_at_ms)),
             ),
-            badge(
-              event.evidence_origin === "server_prepared" ? "准备" : "上报",
-            ),
+            badge(eventOrigin(event)[0]),
           );
           return row;
         }),

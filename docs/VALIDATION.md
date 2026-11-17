@@ -5,6 +5,41 @@
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：Run 事件来源标签与真实浏览器定向验收（本地）
+
+基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`。仅修改 UI 事件标签及详情：
+`server_prepared` 显示服务端准备成功，明确不证明收到/使用；`server_observed` 的
+`context_preparation_failed` 显示服务端观察到准备失败/未准备上下文；`reported/client`
+显示客户端上报，其他或未知来源不推定为客户端。API、权限与后端语义不变。
+现有 pages fixture 扩充失败/客户端/未知来源，校验时间线和详情，没有新增重复测试套件。
+
+本地 Node 24.22.1：`cd ui && npm run check && npm test` PASS（构建及 15 项）。
+Origence Rust 1.98.0 `cargo build --locked`、`cargo fmt --package origence -- --check`、
+`cargo clippy --locked --all-targets -- -D warnings` 和 `git diff --check` PASS。
+
+真实浏览器：Playwright 驱动系统 Chromium **156.0.8078.79**，headless、1440×1000，
+直接访问 localhost 上的真实 Node UI → Origence → AnySeek。AnySeek 固定当前 main pin
+`d813b915b7f12e7139ca316adc15699688493196`；fresh v4 临时目录、一次性 key、无外部模型。
+API 只预置资产/Run/客户端事件：先发布 v1 并准备 Run，再发布同一资产 v2；用禁用模型的
+vector 准备请求产生真实 503 和服务端失败事件。未拦截或伪造浏览器响应。
+
+| 浏览器操作 | 观察结果 |
+| --- | --- |
+| 打开 Run，逐条点击成功、失败及客户端事件 | 来源 badge 正确；失败详情含 server / not_prepared，成功明确未确认收到或使用 |
+| 另一个 key 打开该 Run | 拒绝读取，未出现原正文 |
+| 当前资产已为 v2，点击 Run 中 v1 引用 | URL 带 `?version=1`；标题/正文为 v1，不含 v2 的独立标记 |
+| 在 v1 详情点击“撤回来源”并确认 | 显示“内容已阻断”，旧正文清除 |
+| 撤回后在预先打开的 Run 标签页再次点击旧 v1 引用 | 显示“暂时无法读取”及 resource not found，不返回旧正文 |
+| 刷新固定 v1 地址并重新登录；再次打开原 Run | 拒绝读取，不再显示旧正文 |
+
+复核可在新建 workspace 中按上表重复：先准备 v1 的 Run、更新至 v2，再在浏览器
+点击引用并撤回来源，分别检查已打开标签页、刷新后页面与另一 key 的访问。
+截图及本地驱动脚本不纳入 PR；测试凭据不保存，结束时服务关闭、临时数据删除。
+
+这些是单次指定路径的真实浏览器结果，不是纯 HTTP 或 happy-dom 替代验收；
+未覆盖移动端、全站可访问性、所有浏览器、真实客户端采集、计量/告警或反向关联，
+不表示 issue #76 完整完成；本节仅记录本地验证，不代表 CI、合并或部署。
+
 ## 2026-11-17：#79 合并最新 main
 
 将 main `3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe` 普通合并到 #79 的

@@ -40,6 +40,12 @@ Search/Context 返回有界查询诊断，Run 准备路径保存成功与失败�
 CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检出共用诊断 v2 后端的精确 SHA。
 最终检查与真实 AnySeek 联调结果统一记录到 VALIDATION，历史 CI 结果按原提交保留。
 
+## 本地 Run UI 定向验证
+
+基于 `01d4f82` 的本地改动区分准备成功、服务端观察到准备失败与客户端上报。
+真实 Chromium 已验证 Run → 固定 v1 → 来源撤回、旧引用再次点击及另一个 key 拒绝；
+精确范围见 [VALIDATION](VALIDATION.md)。仅本地验证，#76 的其余规格仍未完成。
+
 ## 下一步
 
 1. 完成 UI 真实浏览器布局、键盘/触屏、无障碍及 Windows 验证；预览 relay 故障仍需解决。
