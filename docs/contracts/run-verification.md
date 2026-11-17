@@ -46,3 +46,18 @@ The existing MCP/client ingestion interfaces are unchanged. Integration and pilo
 owners should use this HTTP/service DTO, display attribution and withdrawal, and
 keep self-report, preparation and assessment separate. No production task/model
 acceptance is claimed.
+
+## PRD and ingestion boundary
+
+This slice maps only to “Run 所有者记录外部签认依据”: the owner transcribes
+external assessment claims and references. It does not implement independent
+sign-off, allow a user to certify their own business outcome, or calculate a
+verified business pass rate. Even `conclusion:passed` stays an unverified external
+claim with `platform_verification:not_performed`; #89 remains open.
+
+#87 handles explicit client collection and preparation using the existing Run
+interfaces, and explicitly does not change verification semantics. No existing
+Run event/reporter/prepare schema, MCP ingestion interface, permission role or
+shared DTO changes in this slice. Integration must preserve the separate columns
+for preparation, client report, external assessment and platform verification;
+no source may promote a `user/test` report to authenticated independent sign-off.

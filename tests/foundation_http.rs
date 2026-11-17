@@ -381,7 +381,33 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
         receipt,
         client.call(Method::GET, &route, None, None).await.unwrap()["items"][0]
     );
+    let readback = client.call(Method::GET, &route, None, None).await.unwrap();
+    assert_eq!(readback["items"][0]["assessment"]["conclusion"], "failed");
+    assert_eq!(
+        readback["items"][0]["platform_verification"],
+        "not_performed"
+    );
+    assert_eq!(
+        readback["items"][0]["verifier_authentication"],
+        "unverified_claim"
+    );
+    let trace = client.call(Method::GET, &path, None, None).await.unwrap();
+    assert_eq!(trace["events"][0]["evidence_origin"], "server_prepared");
+    assert_eq!(trace["events"][1]["evidence_origin"], "reported");
+    assert_eq!(trace["events"][1]["report"]["event"]["outcome"], "success");
     let withdraw = format!("{route}/{id}/withdraw");
+    assert!(matches!(
+        outsider
+            .call(
+                Method::POST,
+                &withdraw,
+                Some(&json!({"reason":"forged approval"})),
+                None
+            )
+            .await,
+        Err(origence::error::AppError::NotFound | origence::error::AppError::Forbidden)
+    ));
+
     let reason = json!({"reason":"external evidence withdrawn"});
     let withdrawn = client
         .call(Method::POST, &withdraw, Some(&reason), None)
@@ -407,7 +433,14 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
         .delete(&a, "withdraw-source", source, "event")
         .await
         .unwrap();
-    assert!(client.call(Method::GET, &route, None, None).await.is_err());
+    assert!(matches!(
+        client.call(Method::GET, &route, None, None).await,
+        Err(origence::error::AppError::NotFound | origence::error::AppError::Forbidden)
+    ));
+    assert!(matches!(
+        client.call(Method::GET, &path, None, None).await,
+        Err(origence::error::AppError::NotFound | origence::error::AppError::Forbidden)
+    ));
     assert!(
         client
             .call(Method::POST, &route, Some(&input), None)
