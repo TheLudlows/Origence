@@ -5,6 +5,49 @@
 除单列的 #74 结果外，本文记录的是该基线的 Linux / Rust 1.98.0 检查。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：独立检索排序与权威复核拆分
+
+基线 main `dcde761ba11b34d88ce5da5f9025a22076571dfa`；实现及本地 checkpoint
+`552989e3dc251a97dd75174348342d36084e80e8`。以下为该代码树的 Linux / Rust 1.98.0
+结果（后续提交只补本节和 STATUS）。独立分支未包含 #77、#78。
+
+| 命令 / 检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --offline --lib retrieval::rank` | PASS：2 项；无 AnySeek、模型或数据库 IO，覆盖分路去重/上限、分数/UUID 并列顺序、原始分数与 RRF60 |
+| `cargo test --locked --lib retrieval::publication_tests` | PASS：现有 6 项；迟到撤回、pending/orphan/精确发布身份、正文变更、返回停止点/隐藏候选、语义错误和公开 future 栈大小 |
+| `cargo test --locked --test local evidence_bundle` | PASS：13 项（含 Learning bundle 回归）；独立路由 top-k、历史/撤回/权限/预算/冲突与外部 IO 后复核 |
+| `cargo test --locked --test local production_storage` | PASS：8 项；重放单次投票、冲突 generation、错误来源候选、投影失败/丢失和撤回 |
+| `cargo clippy --locked --all-targets -- -D warnings` | PASS |
+| `cargo test --locked --no-default-features --lib` | PASS：135 项；有既有图方法 dead_code 警告 |
+| `cargo fmt --package origence -- --check`、`git diff --check` | PASS |
+
+无默认特性严格 Clippy **FAIL**：
+`cargo clippy --locked --no-default-features --all-targets -- -D warnings` 与
+`cargo clippy --locked --no-default-features --lib -- -D warnings` 均止于
+`src/storage/sqlite/app.rs:288` 的 `graph_evidence_for_publication` dead_code。
+在未修改的 main `dcde761` 工作树重跑后一条命令，复现同一错误；本分支没有修改该方法。
+未运行无默认特性完整集成套件，不把库测试通过写成完整门禁通过。
+
+真实 AnySeek checkout 干净且固定为 `6614bbf29bad0041c65738831bc1a16da4c69660`，
+沿用既有 `tools/anyseek_smoke.py` 独立临时目录、collection 和测试凭据：
+
+```sh
+python3 tools/anyseek_smoke.py \
+  --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server \
+  --cargo-tests --binary /workspace/Origence/target/debug/origence
+```
+
+PASS：8 项真实引擎合同，以及真实 AnySeek → Origence HTTP/stdio MCP 的检索、读取、
+引用、更新、历史、撤权及重开。使用本次代码构建的 Origence；没有修改或放宽 fixture。
+EvidenceBundle/production_storage 定向集成测试仍使用仓库的协议 fixture，
+不将其计为真实 AnySeek 或真实模型质量验收。
+
+手工检查：迁移方法仍调用相同批量 authority 读方法，未新增或修改 SQL、动态 SQL 或执行入口；
+排序与复核函数体除 receiver/格式外保持等价。最终所有 native 排名参与者仍先完整复核，
+再按原响应停止点核验返回命中；快照开闭、外部 IO 顺序、图种子过滤和错误顺序不变。
+新增 Turso 模块沿用 `local-storage` cfg，不引入 Service 或排序模块依赖。
+未运行 Windows、本次全量默认集成套件、生产性能或真实客户端/模型任务。
+
 ## 2026-11-17：移除独立 Turso 图存储
 
 基于一跳适配的本地 `42c6e8f`（与 [PR #74](https://github.com/TheLudlows/Origence/pull/74) 的 `e281142` 同树）。
