@@ -39,7 +39,8 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
   const request = form(
     async () => {
       currentRequest?.abort();
-      currentRequest = new AbortController();
+      const activeRequest = new AbortController();
+      currentRequest = activeRequest;
       run.disabled = true;
       result.replaceChildren(el("p", "muted", "正在准备上下文…"));
       try {
@@ -61,7 +62,7 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
             budget: Number(budget.value),
             routes,
           },
-          AbortSignal.any([ctx.signal, currentRequest.signal]),
+          AbortSignal.any([ctx.signal, activeRequest.signal]),
         );
         if (ctx.signal.aborted) return;
         const used = el("progress");
@@ -126,9 +127,14 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
           ),
         );
       } catch (e) {
-        message(result, e);
+        if (currentRequest !== activeRequest || ctx.signal.aborted) return;
+        if (activeRequest.signal.aborted)
+          result.replaceChildren(
+            empty("预览已取消", "可以调整查询后重新预览。"),
+          );
+        else message(result, e);
       } finally {
-        run.disabled = false;
+        if (currentRequest === activeRequest) run.disabled = false;
       }
     },
     field("任务与查询", query),

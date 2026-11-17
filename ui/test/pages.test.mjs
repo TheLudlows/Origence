@@ -65,6 +65,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   };
   const writes = [],
     keys = [];
+  const searches = new Map();
   let failMemory = true,
     unauthorized = false;
   const originalFetch = globalThis.fetch;
@@ -161,6 +162,11 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       assert.equal(body.expected_version, null);
       writes.push(body);
       return response({ job_id: ids.job, asset_id: ids.asset });
+    }
+    if (path.pathname === "/api/v1/search") {
+      const pending = Promise.withResolvers();
+      searches.set(body.query, pending);
+      return pending.promise;
     }
     if (path.pathname === `/api/v1/jobs/${ids.job}`)
       return response({ state: "completed", outcome: "published" });
@@ -291,6 +297,36 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     click("关闭", upload);
   });
   await t.test(
+    "a superseded search cannot overwrite the newer query",
+    async () => {
+      click("◇记忆管理");
+      await wait(
+        () => document.querySelector("h1")?.textContent === "记忆管理",
+      );
+      const query = control("查询");
+      const search = query.closest("form");
+      query.value = "older";
+      search.requestSubmit();
+      await wait(() => searches.has("older"));
+      query.value = "newer";
+      search.requestSubmit();
+      await wait(() => searches.has("newer"));
+      const response = (title) =>
+        new Response(
+          JSON.stringify({
+            hits: [{ ...asset, title }],
+            effective_mode: "keyword",
+          }),
+        );
+      searches.get("newer").resolve(response("newer result"));
+      await wait(() => document.body.textContent.includes("newer result"));
+      searches.get("older").resolve(response("older result"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.ok(document.body.textContent.includes("newer result"));
+      assert.ok(!document.body.textContent.includes("older result"));
+    },
+  );
+  await t.test(
     "context renders byte accounting and untrusted content as text",
     async () => {
       click("⊞上下文工作台");
@@ -298,6 +334,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         () => document.querySelector("h1")?.textContent === "上下文工作台",
       );
       control("任务与查询").value = "Atlas";
+      document.querySelector("form").requestSubmit();
+      click("取消预览");
+      await wait(() => document.body.textContent.includes("预览已取消"));
+      assert.ok(!document.body.textContent.includes("正在准备上下文"));
       document.querySelector("form").requestSubmit();
       await wait(() =>
         document.body.textContent.includes("32 / 4,000 UTF-8 字节"),

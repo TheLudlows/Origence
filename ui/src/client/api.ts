@@ -37,15 +37,16 @@ export class Api {
     if (key) headers.set("Idempotency-Key", key);
     const signals = [scope.signal, AbortSignal.timeout(30_000)];
     if (signal) signals.push(signal);
+    const requestSignal = AbortSignal.any(signals);
     const response = await fetch("/api" + path, {
       method,
       headers,
       body:
         data === undefined ? undefined : binary ? data : JSON.stringify(data),
-      signal: AbortSignal.any(signals),
+      signal: requestSignal,
       cache: "no-store",
     });
-    scope.signal.throwIfAborted();
+    requestSignal.throwIfAborted();
     if (response.status === 401)
       window.dispatchEvent(new Event("origence:unauthorized"));
     if (!response.ok) {
@@ -57,9 +58,12 @@ export class Api {
       } catch {
         /* Framework errors may be plain text. */
       }
+      requestSignal.throwIfAborted();
       throw new ApiError(response.status, message);
     }
-    return (blob ? response.blob() : response.json()) as Promise<T>;
+    const value = await (blob ? response.blob() : response.json());
+    requestSignal.throwIfAborted();
+    return value as T;
   }
   get<T>(path: string, signal?: AbortSignal) {
     return this.request<T>(path, { signal });

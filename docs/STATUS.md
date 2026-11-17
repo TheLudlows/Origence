@@ -16,7 +16,7 @@
 
 ## 当前阻塞与下一步
 
-1. 复核 PR #77 的 CI；本地已修复测试夹具/图读取辅助方法的 feature gate 与 MCP 空参数 schema 检查，完整复验见 VALIDATION，历史主干失败记录保留。
+1. PR #77 基线 CI #360 的三个 Node/Linux job 已通过，Windows 按 main-only 策略跳过；本次去重、固定夹具缓存及新增真实 UI 门禁的远端结果见 PR，完整证据见 VALIDATION，历史失败记录保留。
 2. 完成 UI 真实浏览器布局、键盘/触屏、无障碍及 Windows 验证；预览 relay 故障仍需解决。
 3. 通过 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
 

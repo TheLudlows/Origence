@@ -45,8 +45,14 @@ export async function assetsPage(
     ["vector", "向量"],
   ]);
   const hits = el("div");
+  let currentSearch: AbortController | undefined;
   const retrieve = form(
     async () => {
+      currentSearch?.abort();
+      const searchRequest = new AbortController();
+      currentSearch = searchRequest;
+      const searchQuery = query.value;
+      hits.replaceChildren(el("p", "muted", "正在检索…"));
       try {
         const result = await api.post<{
           hits: (Asset & { locator: Record<string, unknown> })[];
@@ -54,8 +60,8 @@ export async function assetsPage(
           effective_mode?: string;
         }>(
           "/v1/search",
-          { query: query.value, mode: mode.value, limit: 50 },
-          ctx.signal,
+          { query: searchQuery, mode: mode.value, limit: 50 },
+          AbortSignal.any([ctx.signal, searchRequest.signal]),
         );
         if (ctx.signal.aborted) return;
         const matches = result.hits.filter((item) => item.kind === kind);
@@ -63,7 +69,7 @@ export async function assetsPage(
           el(
             "p",
             "muted",
-            `混合资产前 50 项命中中的${title}结果 · 实际模式 ${result.effective_mode ?? mode.value}`,
+            `“${searchQuery}” · 混合资产前 50 项命中中的${title}结果 · 实际模式 ${result.effective_mode ?? mode.value}`,
           ),
         );
         for (const warning of result.warnings ?? [])

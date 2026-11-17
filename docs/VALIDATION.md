@@ -172,3 +172,39 @@ Run 不返回事件或扩大私有读取范围。Windows 行为尚未在本环�
 
 Windows、真实浏览器和生产/客户端验收边界与前节相同，仍未验证；新的 GitHub CI 结果
 另见 PR，不将本地通过冒称远端 CI 已全部通过。
+
+## 2026-11-17：UI 代码复核与 CI 去重（PR #77）
+
+复核基线为 `bb0e6d9876ac1d5e5c303e55368e016ee1e0bf27`。
+该基线的 [GitHub Actions #360](https://github.com/TheLudlows/Origence/actions/runs/44013075805)
+已完成：`node-ui`、`fast-check`、`linux-native` 成功；`windows` 按既有 main-only 策略跳过。
+以下修改及本地验证属于其后的工作树，精确提交和修改后的远端结果见 PR #77。
+
+代码复核修正三处异步界面行为：凭据/路由取消后，仍在解码的响应不能再返回；
+旧检索不能覆盖新查询；取消上下文预览后退出等待状态，并允许再次预览。
+先用两个 API 回归复现解码期取消失效（均因未拒绝响应而失败），修正后运行：
+
+- `cd ui && npm test`：15 项全部通过，包含 strict TypeScript 编译、两个解码期取消回归、
+  乱序检索和取消后重新预览，以及原有 HTTP/页面合同。
+- 将 `ui/dist/` 单独复制到临时目录，以该目录的 `server.js` 启动
+  `tools/ui_smoke.py`，通过真实 Node → Origence → 固定 AnySeek `6614bbf` 链路。
+  这验证集成 job 只需 UI 构建产物，无需安装 npm 依赖或再次编译 UI。
+- 官方 `actionlint 1.7.7 .github/workflows/ci.yml`、`git diff --check` 通过。
+  actionlint 二进制按官方发布的 SHA-256 校验；未增加项目依赖。
+
+CI 调整基于上述 #360 日志，而非减少独立验收：
+
+- 移除 Ubuntu 原生工具安装（约 7.5 秒，日志为 0 newly installed）、工具链版本重复断言，
+  以及已被 `fast-check` 完整无默认特性测试覆盖的 `memory_identity` 子集（约 12.8 秒）。
+- 共享 Rust debug/incremental 配置；四个 job 名称不变。保留默认/无默认特性的完整测试、
+  严格 Clippy、依赖树检查、原始完整 MCP、真实后端合同、评估证据及 Windows 策略。
+- 保留 `cargo build --locked -j 2`：测试启用 dev-dependency 的 Turso 特性，
+  不能用测试产物替代正常服务构建。
+- AnySeek 二进制使用精确源码、Rust 版本、Ubuntu/架构和构建配置的独立缓存键，
+  不使用宽松回退键。#360 每次重编译夹具约 58.6 秒，另有约 6 秒工具链准备；
+  缓存仅包含可执行文件，所有行为验收仍使用新建临时数据。缓存命中后的实测另见 PR。
+- `node-ui` 上传一次编译的产物，`linux-native` 复用并新增真实 UI HTTP 合同门禁；
+  原先该真实链路只有本地证据。未把 DOM 测试当作浏览器布局验收。
+
+本次未更改 Rust 源码、schema 或 SQL；未为本次 TypeScript/工作流变更重复本地 Rust 全套。
+远端工作流仍执行上述完整 Rust 检查。Windows、真实浏览器及生产验收边界保持前述记录。
