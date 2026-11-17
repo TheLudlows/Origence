@@ -11,8 +11,20 @@ pub struct RetrievalStore {
     remote: AnySeekFullTextStore,
 }
 impl RetrievalStore {
-    pub(crate) fn checked_analysis_fingerprint(&self) -> StorageResult<&str> {
-        self.remote.checked_analysis_fingerprint()
+    pub(crate) async fn open_bound(
+        anyseek: AnySeekConfig,
+        binding: binding::Binding,
+    ) -> StorageResult<Self> {
+        // Check service credentials before persisting a new selection.
+        let remote = AnySeekFullTextStore::new(anyseek)?;
+        remote.check().await?;
+        binding.commit_initial().await?;
+        Ok(Self {
+            remote: remote.with_binding(binding),
+        })
+    }
+    pub(crate) async fn check_scope(&self, scope: Scope) -> StorageResult<()> {
+        self.remote.check_scope(scope, false).await
     }
     pub async fn open(anyseek: AnySeekConfig) -> StorageResult<Self> {
         Ok(Self {

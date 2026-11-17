@@ -8,6 +8,14 @@ use crate::types::SearchHit;
 mod startup;
 
 impl SqliteStore {
+    /// Root-active workspaces whose derived collections must already exist.
+    pub async fn committed_full_text_scopes(&self) -> StorageResult<Vec<Scope>> {
+        let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
+        let scopes = startup::full_text_scopes(&mut tx).await?;
+        tx.rollback().await.map_err(sqlite_err)?;
+        Ok(scopes)
+    }
+
     /// Root-active current publication metadata, not a visibility decision.
     pub async fn has_committed_full_text(&self) -> StorageResult<bool> {
         let mut tx = self.pool.begin().await.map_err(sqlite_err)?;

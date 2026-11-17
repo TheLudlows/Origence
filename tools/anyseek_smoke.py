@@ -66,7 +66,7 @@ def mcp_contract(binary, env, directory):
     env = dict(env, OC_DATA_DIR=str(Path(directory) / "origence"), OC_ENABLE_MODELS="false")
     advertised = subprocess.run([binary, "anyseek-schema"], env=env, capture_output=True, timeout=30)
     require(advertised.returncode == 0 and json.loads(advertised.stdout) == schema(),
-            "CLI AnySeek schema differs from the provisioned contract")
+            "CLI AnySeek schema differs from the workspace collection contract")
     bootstrap = subprocess.run([binary, "--offline", "workspace-create", "AnySeek smoke"],
         env=env, capture_output=True, timeout=60)
     require(bootstrap.returncode == 0, "Origence bootstrap failed")
@@ -161,16 +161,9 @@ def main():
                     except (RuntimeError, urllib.error.URLError, TimeoutError):
                         require(time.monotonic() < deadline, "AnySeek readiness timed out")
                         time.sleep(0.1)
-                def operation():
-                    return {"epoch": int(time.time() // 86400), "nonce": "smoke-" + uuid.uuid4().hex}
-                call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-lexical", "config": schema()})
-                call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-vector", "embedding_space_id": "real-fixture:v1", "config": schema(2)})
-                env.update(OC_ANYSEEK_VECTOR_COLLECTION="origence-vector", OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base,
-                           OC_ANYSEEK_API_KEY=key, OC_ANYSEEK_TENANT="origence", OC_ANYSEEK_COLLECTION="origence-lexical")
-                env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key, ORIGENCE_TEST_ANYSEEK_TENANT="origence",
-                           ORIGENCE_TEST_ANYSEEK_COLLECTION="origence-lexical")
-                # Keep the private AnySeek startup secret out of Origence; pass only
-                # the server-side service API key and explicit namespace.
+                env.update(OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base, OC_ANYSEEK_API_KEY=key)
+                env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key)
+                # Workspace collections are provisioned by Origence on first use.
                 env.pop("MASTER_KEY_SECRET", None)
                 for executable in args.test_executable:
                     subprocess.run([str(Path(executable).resolve()), "--ignored", "--nocapture", "--test-threads=1"],

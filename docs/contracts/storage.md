@@ -7,11 +7,14 @@
 
 ## AnySeek 连接边界
 
-AnySeek 连接由服务间凭据、显式租户命名空间和 collection 共同配置；所有请求传递
-`apikey` 与 `X-AnySeek-Tenant`。后端绑定 v5 固定 endpoint/命名空间/collection、模型
-空间及分析摘要，排除服务凭据；同一后端可轮换服务凭据，换命名空间在网络 IO 前拒绝。
-这里的命名空间是 AnySeek 部署范围，不代替 Origence 的 UUID tenant/workspace、用户
-逻辑 key 或来源/版本/owner 复核。AnySeek 不保存或签发租户 Key。
+AnySeek 只配置 endpoint 和服务间凭据。数据请求由已鉴权 `Scope` 自动路由：
+`X-AnySeek-Tenant = tenant_id` 的规范 UUID 字符串，collection 为 `ws_<workspace_id.simple()>`。
+无默认 namespace/collection 配置或跨 workspace 回退；所有受保护请求传递 `apikey`。
+服务启动只检查服务连通性/凭据与已发布 workspace 集合；新 workspace 首次使用时创建
+固定 schema 集合，创建未知结果通过严格回读判定。已发布集合缺失、不兼容或分析摘要变化
+必须失败，不能以空集合继续服务。候选内容仍需通过 Origence 权威范围与来源/版本复核。
+后端绑定 v6 固定 endpoint、路由规则、模型空间及首次使用时的分析摘要，不含服务凭据；
+已有发布但没有已初始化摘要时拒绝打开。AnySeek 不保存或签发租户 Key。
 
 ## SQLite 与最小元数据
 

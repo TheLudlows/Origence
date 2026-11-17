@@ -206,30 +206,14 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         std::mem::size_of::<F>()
     }
     let dir = tempfile::tempdir().unwrap();
-    // Only initialization's collection contract is needed; no retrieval IO is
-    // executed by the future-size closures below.
-    let schema = crate::storage::anyseek::AnySeekFullTextStore::collection_config();
     let app = axum::Router::new().route(
-        "/api/v1/index/size-fixture",
-        axum::routing::get(move || {
-            let schema = schema.clone();
-            async move {
-                axum::Json(
-                    json!({"name":schema["index_name"],"schema":schema["schema"],
-            "text_normalization":"None","vector_dimensions":null,"version":"fixture-1","embedding_space_id":null,"limits":{"max_records":10000,"max_candidates":10000},
-            "analysis":{"format":"native-package-analysis:v1","fingerprint":crate::storage::hash("size-fixture"),
-                "tokenizer":"TantivySimpleV1","tokenizer_identity":"tantivy-simple-v1;tantivy=0.27.0;lowercase;no-stopwords;no-length-filter",
-                "stop_words":"None","stop_words_fingerprint":crate::storage::hash(b"\"None\"")}}),
-                )
-            }
-        }),
+        "/api/v1/live",
+        axum::routing::get(|| async { axum::Json("fixture-1") }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let config = crate::storage::anyseek::AnySeekConfig::new(
         &format!("http://{}", listener.local_addr().unwrap()),
         "fixture",
-        "origence-test",
-        "size-fixture",
     )
     .unwrap();
     let peer = tokio::spawn(async move {
@@ -488,12 +472,9 @@ async fn keyword_empty_corpus_uses_three_authority_snapshots_and_no_index_schema
         engine: Arc::new(StorageEngine::new(
             store.clone(),
             store,
-            RetrievalStore::open(
-                AnySeekConfig::new("http://127.0.0.1:1", "unused", "origence-test", "unused")
-                    .unwrap(),
-            )
-            .await
-            .unwrap(),
+            RetrievalStore::open(AnySeekConfig::new("http://127.0.0.1:1", "unused").unwrap())
+                .await
+                .unwrap(),
             LocalBlobStore::open(dir.path().join("blobs"))
                 .await
                 .unwrap(),

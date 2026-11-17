@@ -2088,6 +2088,21 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
         .unwrap();
     let admin = store.issue_key(scope, "admin").await.unwrap();
     let reader = store.issue_key(scope, "reader").await.unwrap();
+    // Initialize the workspace through the public publication path before
+    // injecting the large authority fixture; this also pins the analysis binding.
+    let auth = service.auth(&admin.token).await.unwrap();
+    service
+        .memory(
+            &auth,
+            "offline-binding",
+            serde_json::from_value(
+                json!({"fact_key":"offline.binding", "content":"initialize workspace collection"}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
     let mut tx = store
         .begin(store.authenticate(&admin.token).await.unwrap())
         .await

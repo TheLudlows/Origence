@@ -181,7 +181,11 @@ Agent 或平台从授权记忆和已记录的执行经历提炼目标、前提�
 Origence 选择并固定 embedding 模型/profile 和维度，AnySeek 执行向量检索。
 检索 metadata 携带完整 workspace、资产/来源版本和 generation；候选过滤与最终权威复核保持一致。
 私有材料不默认进入 workspace 共享召回；检索/读取私有材料时额外复核 owner key 与 session，不能仅按 workspace 放行。
-AnySeek 服务凭据由 Origence 持有，每次请求携带显式配置的 `X-AnySeek-Tenant` 命名空间；该部署隔离不替代 Origence 的用户认证或 workspace 授权。
+AnySeek 服务凭据由 Origence 持有，宿主只配置 URL 和服务凭据。数据请求从已鉴权 Scope
+自动派生：`X-AnySeek-Tenant` 直接传 tenant UUID，每个 workspace 使用独立
+`ws_<无连字符 workspace UUID>` 集合，首次使用按固定 schema 初始化。
+已有发布的集合在启动时检查，丢失或配置不兼容明确报错；该存储隔离不替代用户权限、
+私有会话与来源/版本复核。
 撤权或来源撤回先阻断后续读取/分发，再清理索引；快照和 Skill 不能绕过该规则。
 依赖故障明确返回不可用，不伪装为空召回。
 

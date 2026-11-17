@@ -38,7 +38,7 @@ flowchart TD
 
 HTTP 与单 Worker 共享一个 `StorageEngine`；SQLite authority 持有数据目录的独占 OS 锁。
 CLI/MCP 默认转发到运行中的宿主；离线访问要求独占打开。AnySeek 是独立 HTTP 服务，
-AnySeek 服务凭据只由宿主持有；每个请求同时发送显式配置的租户命名空间。它保存检索投影，不判定员工权限或业务来源是否有效。
+AnySeek 服务凭据只由宿主持有；数据请求按已鉴权 Scope 发送 tenant UUID 命名空间并选择 workspace 集合。它保存检索投影，不判定员工权限或业务来源是否有效。
 
 ## A1. 资产、来源与发布
 
@@ -77,15 +77,17 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-顺序：独占打开并校验 SQLite → 校验 AnySeek 绑定 → 装配并检查投影/Blob → 持久化新绑定
-→ 检查已提交存储面 → 恢复作业、清理孤儿 → 开放服务。检查失败保持不可用。
+顺序：独占打开并校验 SQLite → 校验 AnySeek 绑定与服务凭据 → 持久化路由绑定
+→ 装配并检查投影/Blob → 检查已提交 workspace 集合 → 恢复作业、清理孤儿 → 开放服务。检查失败保持不可用。
 只创建新结构，不自动升级、重建丢失索引或转换已有数据。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
-`full-text-backend.json` 保存格式、endpoint、租户命名空间、collection 和模型 profile/维度，排除 API key。
+`full-text-backend.json` v6 保存格式、endpoint、tenant/workspace 路由规则和模型 profile/维度，排除 API key。
+首次使用集合时先持久化分析摘要，再允许发布；无已发布全文时才允许摘要尚未初始化。
 在 authority 独占锁下有界读取，暂存文件同步后原子发布；Unix 额外同步父目录。
 后续目标或模型配置不匹配、绑定损坏均在远端 IO 前拒绝。
-同 endpoint/命名空间/collection 下轮换服务凭据不修改绑定；切换命名空间在远端 IO 前拒绝，不通过更换凭据解释为同一后端。
+同 endpoint/路由/模型下轮换服务凭据不修改绑定。数据请求从已鉴权 Scope 派生 tenant UUID 命名空间
+与 `ws_<workspace UUID 无连字符>` 集合；首次使用自动创建固定 schema，重开严格检查已有发布的集合，丢失不重建。
 普通进程重开与任意断电保证分别验收，暂存残片不作为有效绑定。
 
 <a id="storage-scope"></a>

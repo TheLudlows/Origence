@@ -5,6 +5,39 @@
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：workspace 自动映射（当前）
+
+`AnySeekConfig::new(base, service_key)` 只接收连接与服务凭据。移除租户和集合配置；
+已鉴权 Scope 的 tenant UUID 直接作为命名空间，workspace 对应 `ws_<无连字符 UUID>`。
+服务启动无占位集合；首次使用创建固定 schema，已发布集合在启动时严格核验，丢失不补建。
+绑定 v6 保存 endpoint/路由规则/模型及首次使用时持久化的分析摘要，不保存凭据。
+
+Linux / Rust 1.98.0；真实引擎为 AnySeek
+[`6a46fc7`](https://github.com/TheLudlows/anyseek/commit/6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a)
+正常生产构建（Rust 1.99.1，无 fault-injection）。CI 夹具固定同一提交。
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-fail-fast` | PASS：431 项，另 8 项真实引擎契约 ignored 后单独执行 |
+| `cargo test --locked --no-default-features` | PASS：87 项，另 5 项真实引擎契约 ignored，不计通过 |
+| 默认与无默认特性 Clippy | PASS：`cargo clippy --locked [--no-default-features] --all-targets -- -D warnings` |
+| 格式与补丁 | PASS：`cargo fmt --check`、`git diff --check` |
+| 真实 AnySeek 契约 | PASS：8 项；全文/向量/图、发布重试、响应丢失恢复与 public Service 重开 |
+| HTTP / stdio MCP | PASS：搜索、读取、引用、更新、历史、用户 key 撤销、Run 诊断与进程重开 |
+| `tools/smoke.py` 经真实 AnySeek | PASS：公开 HTTP、身份范围、发布、检索与重开 |
+| Node UI → Origence → 真实 AnySeek | PASS：上传、发布、目录、历史、检索、上下文、私有 Run 隔离和来源撤回 |
+
+协议回归覆盖数字开头 tenant UUID、同租户不同 workspace、不同租户复用 workspace UUID、
+并发初始化、创建响应丢失后严格回读、已发布集合丢失后不重建、分析摘要漂移与凭据不落盘。
+夹具按命名空间/集合限制数据，真实验收不再预创建集合。AnySeek 未知 scoped ID 返回 403；
+客户端仅在带服务凭据的命名空间列表确认缺失后创建，不把任意权限错误当作缺失。
+
+新增的已发布 workspace 枚举复用原有有界单表读取与同事务来源核验，没有新增 SQL 语句、
+JOIN 或表；事务结束后再访问远端集合。此前一次离线 CLI 夹具直接注入投影、绕过首次绑定，
+现先通过公开发布路径初始化；完整回归及真实验收均在修正后重跑。
+本轮只验证独立新库及同版本重启/恢复；未执行 Windows 本地构建、真实云 S3 或真实模型质量验收。
+以下保留此前提交的验证记录，其显式 namespace/collection 配置已由本节自动路由替代。
+
 ## 2026-11-17：AnySeek 服务凭据与显式租户命名空间
 
 基线 main `c70a1aa`。`AnySeekConfig::new` 显式接收服务凭据、命名空间和 collection；

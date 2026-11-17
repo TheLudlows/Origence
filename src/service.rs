@@ -71,16 +71,10 @@ impl Service {
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
-            RetrievalStore::open(anyseek).await?,
+            RetrievalStore::open_bound(anyseek, binding).await?,
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;
-        crate::storage::retrieval_store::binding::commit(
-            &dir,
-            binding,
-            engine.vector().checked_analysis_fingerprint()?,
-        )
-        .await?;
         let service = Self {
             engine,
             models,
@@ -100,10 +94,14 @@ impl Service {
             && self.check_committed_surfaces().await.is_ok()
     }
     pub(crate) async fn check_committed_surfaces(&self) -> Result<()> {
-        if self.engine.relational().has_committed_full_text().await? {
-            // The authority metadata query has completed and holds no lease or
-            // transaction while the independent native adapter is inspected.
-            self.engine.vector().check_full_text_available().await?;
+        for scope in self
+            .engine
+            .relational()
+            .committed_full_text_scopes()
+            .await?
+        {
+            // No authority lease/transaction is held across remote IO.
+            self.engine.vector().check_scope(scope).await?;
         }
         let profiles = self.engine.relational().committed_vector_profiles().await?;
         for (profile, dimension) in profiles {

@@ -45,15 +45,13 @@ const META: &[&str] = &[
 pub struct AnySeekConfig {
     base: Url,
     key: HeaderValue,
-    tenant: String,
-    collection: String,
     embedding: Option<(String, usize)>,
 }
 
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-search-backend-v5","backend":"anyseek","endpoint":self.base.as_str(),"tenant":self.tenant,"collection":self.collection,"embedding":self.embedding})
+        json!({"format":"origence-search-backend-v6","backend":"anyseek","endpoint":self.base.as_str(),"routing":"tenant-uuid/workspace-ws-simple-uuid-v1","embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
@@ -62,16 +60,10 @@ impl AnySeekConfig {
         match std::env::var("OC_FULL_TEXT_BACKEND").as_deref() {
             Err(std::env::VarError::NotPresent) | Ok("anyseek") => {
                 let get = |name| {
-                    std::env::var(name).map_err(|_| {
-                        invalid("AnySeek URL, service key, tenant namespace, and collection are required")
-                    })
+                    std::env::var(name)
+                        .map_err(|_| invalid("AnySeek URL and service key are required"))
                 };
-                Self::new(
-                    &get("OC_ANYSEEK_URL")?,
-                    &get("OC_ANYSEEK_API_KEY")?,
-                    &get("OC_ANYSEEK_TENANT")?,
-                    &get("OC_ANYSEEK_COLLECTION")?,
-                )
+                Self::new(&get("OC_ANYSEEK_URL")?, &get("OC_ANYSEEK_API_KEY")?)
             }
             _ => Err(invalid("only the AnySeek retrieval backend is supported")),
         }
@@ -93,9 +85,9 @@ impl AnySeekConfig {
         Ok(self)
     }
 
-    /// Require an explicit backend namespace and a server-owned service credential.
+    /// Connect with a server-owned service credential; Scope determines routing.
     /// Require HTTPS except on loopback; do not accept URL credentials or paths.
-    pub fn new(base: &str, key: &str, tenant: &str, collection: &str) -> StorageResult<Self> {
+    pub fn new(base: &str, key: &str) -> StorageResult<Self> {
         let base = Url::parse(base).map_err(|_| invalid("invalid AnySeek URL"))?;
         let local = matches!(
             base.host_str(),
@@ -113,20 +105,6 @@ impl AnySeekConfig {
                 "AnySeek URL requires HTTPS (HTTP on loopback) and an origin without credentials",
             ));
         }
-        for (name, message) in [
-            (tenant, "invalid AnySeek tenant namespace"),
-            (collection, "invalid AnySeek collection ID"),
-        ] {
-            if name.is_empty()
-                || name.len() > 63
-                || !name.as_bytes()[0].is_ascii_lowercase()
-                || !name
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
-            {
-                return Err(invalid(message));
-            }
-        }
         if key.is_empty() {
             return Err(invalid("AnySeek service key is required"));
         }
@@ -136,8 +114,6 @@ impl AnySeekConfig {
         Ok(Self {
             base,
             key,
-            tenant: tenant.into(),
-            collection: collection.into(),
             embedding: None,
         })
     }
@@ -148,6 +124,9 @@ pub struct AnySeekFullTextStore {
     config: AnySeekConfig,
     http: reqwest::Client,
     checked_config: OnceLock<crate::retrieval_diagnostics::CheckedConfig>,
+    checked_scopes: tokio::sync::Mutex<HashSet<(Uuid, Uuid)>>,
+    #[cfg(feature = "local-storage")]
+    binding: Option<super::retrieval_store::binding::Binding>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -269,14 +248,7 @@ fn decode_record(value: &Value, scope: Scope) -> StorageResult<(String, Document
 }
 
 impl AnySeekFullTextStore {
-    #[cfg(feature = "local-storage")]
-    pub(crate) fn checked_analysis_fingerprint(&self) -> StorageResult<&str> {
-        self.checked_config
-            .get()
-            .map(|c| c.analysis_fingerprint.as_str())
-            .ok_or_else(unavailable)
-    }
-    /// Construct a bounded client. The collection must be provisioned separately.
+    /// Construct a bounded client; collections follow authenticated workspace scopes.
     pub fn new(config: AnySeekConfig) -> StorageResult<Self> {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -287,7 +259,23 @@ impl AnySeekFullTextStore {
             config,
             http,
             checked_config: OnceLock::new(),
+            checked_scopes: tokio::sync::Mutex::new(HashSet::new()),
+            #[cfg(feature = "local-storage")]
+            binding: None,
         })
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn with_binding(
+        mut self,
+        binding: super::retrieval_store::binding::Binding,
+    ) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    fn collection(scope: Scope) -> String {
+        format!("ws_{}", scope.workspace_id.simple())
     }
 
     /// Exact collection configuration for a fresh dedicated lexical projection.
@@ -319,10 +307,12 @@ impl AnySeekFullTextStore {
 
     async fn request(
         &self,
+        scope: Scope,
         method: Method,
         suffix: &str,
         body: Option<Value>,
     ) -> StorageResult<(StatusCode, Value)> {
+        self.ensure_scope(scope).await?;
         let mode = body
             .as_ref()
             .map(|body| {
@@ -343,7 +333,13 @@ impl AnySeekFullTextStore {
         });
         let started = std::time::Instant::now();
         let result = self
-            .request_inner(method, suffix, body, &mut observation)
+            .request_inner(
+                Some(scope),
+                method,
+                &format!("/api/v1/index/{}{}", Self::collection(scope), suffix),
+                body,
+                &mut observation,
+            )
             .await;
         if let Some(mut entry) = observation {
             entry.elapsed(started);
@@ -364,24 +360,20 @@ impl AnySeekFullTextStore {
 
     async fn request_inner(
         &self,
+        scope: Option<Scope>,
         method: Method,
-        suffix: &str,
+        path: &str,
         body: Option<Value>,
         observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
     ) -> StorageResult<(StatusCode, Value)> {
-        let url = self
-            .config
-            .base
-            .join(&format!(
-                "/api/v1/index/{}{}",
-                self.config.collection, suffix
-            ))
-            .map_err(|_| unavailable())?;
+        let url = self.config.base.join(path).map_err(|_| unavailable())?;
         let mut request = self
             .http
             .request(method, url)
-            .header("apikey", self.config.key.clone())
-            .header("X-AnySeek-Tenant", self.config.tenant.as_str());
+            .header("apikey", self.config.key.clone());
+        if let Some(scope) = scope {
+            request = request.header("X-AnySeek-Tenant", scope.tenant_id.to_string());
+        }
         if let Some(body) = body {
             let bytes = tokio::task::spawn_blocking(move || serde_json::to_vec(&body))
                 .await
@@ -462,9 +454,109 @@ impl AnySeekFullTextStore {
         Ok((status, value))
     }
 
-    /// Validate the observable schema without creating or repairing a collection.
+    /// Service health needs no configured tenant or placeholder collection.
     pub async fn check(&self) -> StorageResult<()> {
-        let (status, info) = self.request(Method::GET, "", None).await?;
+        let (status, version) = self
+            .request_inner(None, Method::GET, "/api/v1/live", None, &mut None)
+            .await?;
+        if !status.is_success()
+            || version
+                .as_str()
+                .is_none_or(|s| !crate::retrieval_diagnostics::version(s))
+        {
+            return Err(unavailable());
+        }
+        let scopes: Vec<_> = self.checked_scopes.lock().await.iter().copied().collect();
+        for (tenant_id, workspace_id) in scopes {
+            self.check_scope(
+                Scope {
+                    tenant_id,
+                    workspace_id,
+                },
+                false,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn ensure_scope(&self, scope: Scope) -> StorageResult<()> {
+        if !self
+            .checked_scopes
+            .lock()
+            .await
+            .contains(&(scope.tenant_id, scope.workspace_id))
+        {
+            self.check_scope(scope, true).await?;
+        }
+        Ok(())
+    }
+
+    /// Existing committed scopes pass create=false: missing data is never repaired.
+    pub async fn check_scope(&self, scope: Scope, create: bool) -> StorageResult<()> {
+        let mut scopes = self.checked_scopes.lock().await;
+        let path = format!("/api/v1/index/{}", Self::collection(scope));
+        let (mut status, mut info) = self
+            .request_inner(Some(scope), Method::GET, &path, None, &mut None)
+            .await?;
+        let uninitialized = create && !scopes.contains(&(scope.tenant_id, scope.workspace_id));
+        // AnySeek hides unknown scoped IDs behind 403. Confirm absence through
+        // the authenticated namespace listing; a bare authorization error never
+        // grants permission to provision or reuse a collection.
+        let absent = if uninitialized && status == StatusCode::FORBIDDEN {
+            let (listed, collections) = self
+                .request_inner(Some(scope), Method::GET, "/api/v1/index", None, &mut None)
+                .await?;
+            if !listed.is_success() {
+                return Err(unavailable());
+            }
+            let collections = collections.as_array().ok_or_else(unavailable)?;
+            if collections.iter().any(|item| item["id"].as_str().is_none()) {
+                return Err(unavailable());
+            }
+            !collections
+                .iter()
+                .any(|item| item["id"] == Self::collection(scope))
+        } else {
+            status == StatusCode::NOT_FOUND
+        };
+        if uninitialized && absent {
+            let config = match &self.config.embedding {
+                Some((_, d)) => Self::vector_collection_config(*d)?,
+                None => Self::collection_config(),
+            };
+            let epoch = operation_epoch()?;
+            let nonce = format!(
+                "oc-init-{}",
+                hash(
+                    serde_json::to_vec(&(
+                        scope.tenant_id,
+                        scope.workspace_id,
+                        &config,
+                        &self.config.embedding
+                    ))
+                    .map_err(|_| inconsistent())?
+                )
+            );
+            let body = json!({"operation_id":{"epoch":epoch,"nonce":nonce},"collection_id":Self::collection(scope),"config":config,"embedding_space_id":self.config.embedding.as_ref().map(|(p,_)|p)});
+            // A race or lost create response is settled only by a strict read.
+            let created = self
+                .request_inner(
+                    Some(scope),
+                    Method::POST,
+                    "/api/v1/index",
+                    Some(body),
+                    &mut None,
+                )
+                .await;
+            (status, info) = self
+                .request_inner(Some(scope), Method::GET, &path, None, &mut None)
+                .await?;
+            if !status.is_success() {
+                created?;
+                return Err(unavailable());
+            }
+        }
         if !status.is_success() {
             return Err(unavailable());
         }
@@ -517,14 +609,22 @@ impl AnySeekFullTextStore {
             max_candidates: info["limits"]["max_candidates"].as_u64().unwrap(),
             max_records: info["limits"]["max_records"].as_u64().unwrap(),
         };
+        #[cfg(feature = "local-storage")]
+        if let Some(binding) = &self.binding {
+            binding
+                .check_analysis(&checked.analysis_fingerprint)
+                .await?;
+        }
         if self.checked_config.get_or_init(|| checked.clone()) != &checked {
             return Err(inconsistent());
         }
+        scopes.insert((scope.tenant_id, scope.workspace_id));
         Ok(())
     }
 
     async fn query(
         &self,
+        scope: Scope,
         filters: Vec<Value>,
         query: &str,
         length: usize,
@@ -536,7 +636,7 @@ impl AnySeekFullTextStore {
         } else {
             META.to_vec()
         };
-        let (status, result) = self.request(Method::POST, "/query", Some(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
+        let (status, result) = self.request(scope, Method::POST, "/query", Some(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
         if !status.is_success() {
             return Err(unavailable());
         }
@@ -546,7 +646,7 @@ impl AnySeekFullTextStore {
         Ok(result)
     }
 
-    async fn group_version(&self, group: &str) -> StorageResult<Option<u64>> {
+    async fn group_version(&self, scope: Scope, group: &str) -> StorageResult<Option<u64>> {
         // Group IDs are generated lowercase hex, never caller-provided paths.
         if group.len() != 65
             || !group.starts_with('p')
@@ -555,7 +655,12 @@ impl AnySeekFullTextStore {
             return Err(inconsistent());
         }
         let (status, result) = self
-            .request(Method::GET, &format!("/group?group_id={group}"), None)
+            .request(
+                scope,
+                Method::GET,
+                &format!("/group?group_id={group}"),
+                None,
+            )
             .await?;
         if status == StatusCode::NOT_FOUND {
             return Ok(None);
@@ -573,7 +678,9 @@ impl AnySeekFullTextStore {
     async fn group_records(&self, scope: Scope, group: &str) -> StorageResult<Vec<Value>> {
         let mut filters = scope_filters(scope);
         filters.push(filter("publication", [group.into()]));
-        let result = self.query(filters, "", MAX_GROUP + 1, 0, true).await?;
+        let result = self
+            .query(scope, filters, "", MAX_GROUP + 1, 0, true)
+            .await?;
         if result["count_total"].as_u64().unwrap() > MAX_GROUP as u64 {
             return Err(inconsistent());
         }
@@ -733,9 +840,9 @@ impl AnySeekFullTextStore {
         // A matching group settles a lost response without a new write. Startup
         // cleanup may have cleared an uncommitted projection; its active job
         // can rebuild the empty group under a new CAS and the saved epoch.
-        let expected_version = if let Some(version) = self.group_version(&group).await? {
+        let expected_version = if let Some(version) = self.group_version(scope, &group).await? {
             let current = self.group_records(scope, &group).await?;
-            if self.group_version(&group).await? != Some(version) {
+            if self.group_version(scope, &group).await? != Some(version) {
                 return Err(unavailable());
             }
             if current == records {
@@ -752,7 +859,7 @@ impl AnySeekFullTextStore {
         let nonce = format!("origence:{}", hash(format!("{expected_version}:{digest}")));
         let request = json!({"operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,"expected_group_version":expected_version,"records":records});
         let (status, result) = self
-            .request(Method::POST, "/group/replace", Some(request))
+            .request(scope, Method::POST, "/group/replace", Some(request))
             .await?;
         if !status.is_success() {
             return Err(unavailable());
@@ -793,7 +900,9 @@ impl AnySeekFullTextStore {
             filters.push(filter("kind", ["chunk".into()]));
             filters.push(filter("generation", [query.generation.to_string()]));
             filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
-            let result = self.query(filters, "", batch.len() + 1, 0, false).await?;
+            let result = self
+                .query(query.scope, filters, "", batch.len() + 1, 0, false)
+                .await?;
             let hits = result["hits"].as_array().unwrap();
             if result["count_total"].as_u64() != Some(batch.len() as u64)
                 || hits.len() != batch.len()
@@ -823,6 +932,7 @@ impl AnySeekFullTextStore {
         filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
         let result = self
             .query(
+                query.scope,
                 filters,
                 &encode_terms(&query.search_terms, MAX_REQUEST)?,
                 query.limit,
@@ -896,7 +1006,9 @@ impl AnySeekFullTextStore {
             filters.push(filter("profile", [query.profile.clone()]));
             filters.push(filter("dimension", [query.dimension.to_string()]));
             filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
-            let result = self.query(filters, "", batch.len() + 1, 0, false).await?;
+            let result = self
+                .query(query.scope, filters, "", batch.len() + 1, 0, false)
+                .await?;
             let hits = result["hits"].as_array().unwrap();
             if result["count_total"].as_u64() != Some(batch.len() as u64)
                 || hits.len() != batch.len()
@@ -928,7 +1040,7 @@ impl AnySeekFullTextStore {
         filters.push(filter("profile", [query.profile.clone()]));
         filters.push(filter("dimension", [query.dimension.to_string()]));
         filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
-        let (status, result) = self.request(Method::POST, "/query", Some(json!({"query_vector":query.embedding,"all":true,"filter":filters,"fields":META,"length":query.limit,"count":true}))).await?;
+        let (status, result) = self.request(query.scope, Method::POST, "/query", Some(json!({"query_vector":query.embedding,"all":true,"filter":filters,"fields":META,"length":query.limit,"count":true}))).await?;
         if !status.is_success() || !result["hits"].is_array() {
             return Err(unavailable());
         }
@@ -984,7 +1096,7 @@ impl AnySeekFullTextStore {
             let mut offset = 0;
             loop {
                 let result = self
-                    .query(filters.clone(), "", MAX_GROUP, offset, false)
+                    .query(scope, filters.clone(), "", MAX_GROUP, offset, false)
                     .await?;
                 let count = result["count_total"].as_u64().unwrap();
                 if count > MAX_CANDIDATES as u64 {
@@ -1008,10 +1120,13 @@ impl AnySeekFullTextStore {
             }
         }
         for group in groups {
-            let version = self.group_version(&group).await?.ok_or_else(inconsistent)?;
+            let version = self
+                .group_version(scope, &group)
+                .await?
+                .ok_or_else(inconsistent)?;
             let next_version = version.checked_add(1).ok_or_else(inconsistent)?;
             let rows = self.group_records(scope, &group).await?;
-            if self.group_version(&group).await? != Some(version) {
+            if self.group_version(scope, &group).await? != Some(version) {
                 return Err(unavailable());
             }
             let retained: Vec<_> = rows
@@ -1042,7 +1157,7 @@ impl AnySeekFullTextStore {
                         .map_err(|_| unavailable())?
                 )
             );
-            let (status,result)=self.request(Method::POST,"/group/replace",Some(json!({"operation_id":{"epoch":operation_epoch()?,"nonce":nonce},"group_id":group,"expected_group_version":version,"records":retained}))).await?;
+            let (status,result)=self.request(scope, Method::POST,"/group/replace",Some(json!({"operation_id":{"epoch":operation_epoch()?,"nonce":nonce},"group_id":group,"expected_group_version":version,"records":retained}))).await?;
             if !status.is_success() {
                 return Err(unavailable());
             }
@@ -1063,7 +1178,7 @@ mod unified_tests {
     use super::*;
     fn store() -> AnySeekFullTextStore {
         AnySeekFullTextStore::new(
-            AnySeekConfig::new("http://127.0.0.1:1", "test", "origence-test", "test")
+            AnySeekConfig::new("http://127.0.0.1:1", "test")
                 .unwrap()
                 .with_embedding("fixed-profile".into(), 2)
                 .unwrap(),
@@ -1083,7 +1198,7 @@ mod unified_tests {
         );
         assert!(AnySeekFullTextStore::vector_collection_config(0).is_err());
         assert!(
-            AnySeekConfig::new("http://127.0.0.1:1", "key", "origence-test", "test")
+            AnySeekConfig::new("http://127.0.0.1:1", "key")
                 .unwrap()
                 .with_embedding(String::new(), 2)
                 .is_err()
@@ -1096,17 +1211,22 @@ mod unified_tests {
     }
     #[cfg(feature = "local-storage")]
     #[test]
-    fn binding_pins_namespace_and_allows_service_credential_rotation() {
-        let make = |key, tenant| {
-            AnySeekConfig::new("http://127.0.0.1:8080", key, tenant, "retrieval")
+    fn binding_pins_workspace_routing_and_allows_service_credential_rotation() {
+        let make = |key| {
+            AnySeekConfig::new("http://127.0.0.1:8080", key)
                 .unwrap()
                 .binding_identity()
         };
-        let selected = make("service-key-one", "origence");
-        assert_eq!(selected, make("service-key-two", "origence"));
-        assert_ne!(selected, make("service-key-one", "different"));
-        assert_eq!(selected["format"], "origence-search-backend-v5");
+        let selected = make("service-key-one");
+        assert_eq!(selected, make("service-key-two"));
+        assert_eq!(selected["format"], "origence-search-backend-v6");
+        assert_eq!(
+            selected["routing"],
+            "tenant-uuid/workspace-ws-simple-uuid-v1"
+        );
         assert!(!selected.to_string().contains("service-key"));
+        assert!(selected.get("tenant").is_none());
+        assert!(selected.get("collection").is_none());
     }
     #[tokio::test]
     async fn vector_validation_rejects_before_transport() {
