@@ -11,7 +11,7 @@
 //! size, fixed order, no cache reset or concurrency; timing noise/order bias apply.
 //! No end-to-end/SLO claim and no migration or historical database support.
 use origence::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
-use origence::storage::{Scope, native_turso as db};
+use origence::storage::{Scope, sqlite_db as db};
 use std::{collections::BTreeMap, path::Path, time::Instant};
 use uuid::Uuid;
 
@@ -149,7 +149,7 @@ async fn bytes(path: &Path) -> u64 {
 #[ignore = "manual native layout measurement; no performance thresholds"]
 async fn identity_layout_before_after() {
     println!(
-        "identity_layout config engine=turso-0.8.2 declared_rust=1.98.0 os={} arch={} debug_assertions={} native_defaults=true key_hashing=excluded canonical_revalidation=excluded",
+        "identity_layout config engine=sqlite-rusqlite-0.43.0 declared_rust=1.98.0 os={} arch={} debug_assertions={} native_defaults=true key_hashing=excluded canonical_revalidation=excluded",
         std::env::consts::OS,
         std::env::consts::ARCH,
         cfg!(debug_assertions)
@@ -493,7 +493,7 @@ async fn identity_layout_query_diagnostics() {
 async fn run_creation_diagnostics(query_variants: bool) {
     println!("identity_creation_suite query_variants={query_variants}");
     println!(
-        "identity_creation config engine=turso-0.8.2 os={} arch={} debug_assertions={} batch=100 key_hashing=excluded canonical_revalidation=excluded check_ablation=fixture_only",
+        "identity_creation config engine=sqlite-rusqlite-0.43.0 os={} arch={} debug_assertions={} batch=100 key_hashing=excluded canonical_revalidation=excluded check_ablation=fixture_only",
         std::env::consts::OS,
         std::env::consts::ARCH,
         cfg!(debug_assertions)

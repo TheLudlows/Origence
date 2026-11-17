@@ -1,6 +1,6 @@
 #![cfg(feature = "local-storage")]
 
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{
     error::{AppError, Result},
     models::Models,
@@ -1084,9 +1084,9 @@ async fn graph_support(
     db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,?,?,?,NULL,0)")
         .bind(a.tenant_id).bind(a.workspace_id).bind(source).bind(version)
         .bind(kind).bind(artifact).execute(s.engine.relational().pool()).await.unwrap();
-    db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'graph',1,?,?,0,0)")
+    db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'graph',1,?,0,0)")
         .bind(a.tenant_id).bind(a.workspace_id).bind(source).bind(version)
-        .bind(kind).bind(artifact).bind(Uuid::new_v4().to_string()).bind(state)
+        .bind(kind).bind(artifact).bind(state)
         .execute(s.engine.relational().pool()).await.unwrap();
 }
 

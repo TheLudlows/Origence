@@ -1,4 +1,4 @@
-//! Real Turso + Service + HTTP contracts for the UI's bounded catalogs.
+//! Real SQLite + Service + HTTP contracts for the UI's bounded catalogs.
 use crate::support::open_service;
 use origence::{
     models::Models,

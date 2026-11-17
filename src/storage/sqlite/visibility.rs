@@ -7,7 +7,7 @@
 //! or the transitive Learning closure. Callers retain those specialized guards.
 use super::*;
 
-impl TursoTx {
+impl SqliteTx {
     pub(super) async fn semantic_version_visible_local(
         &mut self,
         asset: Uuid,

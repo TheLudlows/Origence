@@ -1,5 +1,5 @@
 #![cfg(feature = "local-storage")]
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{Lifecycle, sqlite::SqliteStore};
 use serde_json::Value;
 use std::process::{Command, Output};

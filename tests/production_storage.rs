@@ -1,4 +1,4 @@
-//! Real Turso publication contracts with an AnySeek HTTP protocol fixture, through non-AML callers.
+//! Real SQLite publication contracts with an AnySeek HTTP protocol fixture, through non-AML callers.
 //!
 //! Existing message-batch tests cover vector failures and authority failures.
 //! These tests cover the new full-text surface, its authority boundary, and the
@@ -17,8 +17,7 @@ use origence::{
     service::Service,
     storage::{
         AuthorizedScope, DomainTx, FullTextEntry, FullTextQuery, LedgerEntry, LedgerKey,
-        Permission, RelationalStore, Scope, SourceVersion, Surface, VectorEntry,
-        ledger_idempotency_key, native_turso,
+        Permission, RelationalStore, Scope, SourceVersion, Surface, VectorEntry, sqlite_db,
     },
     types::{AuthContext, RetrievalComponents, SearchInput},
     worker,
@@ -204,7 +203,7 @@ async fn assert_invisible(service: &Service, auth: &AuthContext) {
 }
 
 async fn payload(service: &Service, receipt: &IngestReceipt) -> Value {
-    let text: String = native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+    let text: String = sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
         .bind(receipt.job_id)
         .fetch_one(service.engine.relational().pool())
         .await
@@ -302,7 +301,7 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
         PublicationStatus::Pending
     );
     for table in ["oc_versions", "oc_chunks", "oc_index_entries"] {
-        let count: i64 = native_turso::query_scalar(&format!("SELECT count(*) FROM {table}"))
+        let count: i64 = sqlite_db::query_scalar(&format!("SELECT count(*) FROM {table}"))
             .fetch_one(service.engine.relational().pool())
             .await
             .unwrap();
@@ -311,14 +310,14 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     let saved = payload(&service, &receipt).await;
     let planned = entries(&receipt, &saved);
     assert_eq!(planned.len(), 2);
-    let committed: i64 = native_turso::query_scalar(
+    let committed: i64 = sqlite_db::query_scalar(
         "SELECT count(*) FROM oc_artifact_ledger WHERE surface='full_text' AND state='committed'",
     )
     .fetch_one(service.engine.relational().pool())
     .await
     .unwrap();
     assert_eq!(committed, 0);
-    let registered: i64 = native_turso::query_scalar(
+    let registered: i64 = sqlite_db::query_scalar(
         "SELECT count(*) FROM oc_artifact_ledger WHERE surface='full_text'",
     )
     .fetch_one(service.engine.relational().pool())
@@ -338,7 +337,7 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     // Model a due retry abandoned in processing. Production scheduling and
     // recovery policy stay unchanged; only this fixture's clock/state moves.
     assert_eq!(
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_jobs SET state='processing',next_retry_at=0 WHERE id=? AND state='retry_wait'",
         )
         .bind(receipt.job_id)
@@ -365,7 +364,7 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
     );
     let expected: BTreeSet<_> = planned.iter().map(|entry| entry.id).collect();
     assert_eq!(native_ids(&service, &auth, 1).await, expected);
-    let committed: i64 = native_turso::query_scalar(
+    let committed: i64 = sqlite_db::query_scalar(
         "SELECT count(*) FROM oc_artifact_ledger WHERE surface='full_text' AND state='committed'",
     )
     .fetch_one(service.engine.relational().pool())
@@ -420,7 +419,7 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
         ("oc_versions", 1),
         ("oc_chunks", 2),
     ] {
-        let count: i64 = native_turso::query_scalar(&format!("SELECT count(*) FROM {table}"))
+        let count: i64 = sqlite_db::query_scalar(&format!("SELECT count(*) FROM {table}"))
             .fetch_one(service.engine.relational().pool())
             .await
             .unwrap();
@@ -655,7 +654,6 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
         tx.register_pending(LedgerEntry {
             key,
             artifact_type: "chunk".into(),
-            idempotency_key: ledger_idempotency_key(&key),
         })
         .await
         .unwrap();
@@ -716,7 +714,7 @@ async fn completed_receipt_requires_every_exact_full_text_ledger_member() {
     for entry in planned {
         for state in ["pending", "retry_wait", "orphan"] {
             assert_eq!(
-                native_turso::query(
+                sqlite_db::query(
                     "UPDATE oc_artifact_ledger SET state=? WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND surface='full_text'",
                 )
                 .bind(state)
@@ -735,7 +733,7 @@ async fn completed_receipt_requires_every_exact_full_text_ledger_member() {
                 "{state}"
             );
         }
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_artifact_ledger SET state='committed' WHERE tenant_id=? AND workspace_id=? AND artifact_id=? AND surface='full_text'",
         )
         .bind(auth.tenant_id)
@@ -1209,12 +1207,11 @@ async fn committed_vector_table_loss_blocks_readiness_and_receipt_but_withdrawal
             .unwrap()
             .is_empty()
     );
-    let committed: i64 = native_turso::query_scalar(
-        "SELECT count(*) FROM oc_artifact_ledger WHERE state='committed'",
-    )
-    .fetch_one(service.engine.relational().pool())
-    .await
-    .unwrap();
+    let committed: i64 =
+        sqlite_db::query_scalar("SELECT count(*) FROM oc_artifact_ledger WHERE state='committed'")
+            .fetch_one(service.engine.relational().pool())
+            .await
+            .unwrap();
     assert!(
         committed > 0,
         "the fixture must retain the pre-cleanup publication ledger"

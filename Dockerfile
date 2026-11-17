@@ -1,7 +1,5 @@
-# Native dependencies need a C/C++ build toolchain.
+# The official Rust build image includes the C toolchain for bundled SQLite.
 FROM rust:1.98.0-bookworm AS build-inputs
-RUN apt-get update && apt-get install -y --no-install-recommends make g++ \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
@@ -15,7 +13,7 @@ ARG BUILD_JOBS=1
 RUN cargo build --release --locked -j ${BUILD_JOBS}
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libgomp1 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --create-home context \
     && mkdir -p /data && chown context:context /data

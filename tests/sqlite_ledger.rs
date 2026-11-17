@@ -1,30 +1,12 @@
-//! Ledger type unit tests (M3): surface/state encoding and deterministic keys.
+//! Ledger type unit tests (M3): surface/state encoding and scoped lifecycle.
 
-use origence::storage::ledger::{
-    LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key,
-};
-use origence::storage::native_turso as db;
+use origence::storage::ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Lifecycle, Permission, RelationalStore, Scope, SourceVersion,
     StorageError, sqlite::SqliteStore,
 };
 use uuid::Uuid;
-
-fn key() -> LedgerKey {
-    LedgerKey {
-        scope: Scope {
-            tenant_id: Uuid::new_v4(),
-            workspace_id: Uuid::new_v4(),
-        },
-        source: SourceVersion {
-            source_id: Uuid::new_v4(),
-            version: 1,
-        },
-        artifact_id: Uuid::new_v4(),
-        surface: Surface::Graph,
-        generation: 2,
-    }
-}
 
 #[test]
 fn surface_and_state_encode_to_schema_tokens() {
@@ -34,26 +16,6 @@ fn surface_and_state_encode_to_schema_tokens() {
     assert_eq!(LedgerState::Committed.as_str(), "committed");
     assert_eq!(LedgerState::RetryWait.as_str(), "retry_wait");
     assert_eq!(LedgerState::Orphan.as_str(), "orphan");
-}
-
-#[test]
-fn idempotency_key_is_deterministic_and_scoped() {
-    let k = key();
-    let a = LedgerEntry {
-        key: k,
-        artifact_type: "entity".into(),
-        idempotency_key: ledger_idempotency_key(&k),
-    };
-    let b = LedgerEntry {
-        key: k,
-        artifact_type: "entity".into(),
-        idempotency_key: ledger_idempotency_key(&k),
-    };
-    assert_eq!(a.idempotency_key, b.idempotency_key);
-
-    let mut other = k;
-    other.generation = 3;
-    assert_ne!(ledger_idempotency_key(&k), ledger_idempotency_key(&other));
 }
 
 async fn provision(store: &SqliteStore) -> AuthorizedScope {
@@ -102,7 +64,6 @@ fn entry(scope: Scope, source_id: uuid::Uuid, artifact_id: uuid::Uuid) -> Ledger
             generation: 1,
         },
         artifact_type: "chunk".into(),
-        idempotency_key: "k".into(),
     }
 }
 

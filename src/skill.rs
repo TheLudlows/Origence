@@ -96,6 +96,7 @@ pub(crate) fn encode<T: Serialize>(value: &T) -> StorageResult<String> {
     serde_json::to_string(value)
         .map_err(|_| StorageError::Unavailable("invalid Skill record".into()))
 }
+#[cfg(feature = "sqlite")]
 pub(crate) fn decode<T: serde::de::DeserializeOwned>(value: &str) -> StorageResult<T> {
     serde_json::from_str(value)
         .map_err(|_| StorageError::Unavailable("invalid Skill record".into()))
@@ -278,6 +279,7 @@ impl SkillPackage {
     }
 }
 impl SkillReviewPacket {
+    #[cfg(feature = "sqlite")]
     pub(crate) fn build(
         id: Uuid,
         input: &SkillReviewInput,

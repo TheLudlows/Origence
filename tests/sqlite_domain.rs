@@ -46,7 +46,7 @@ async fn memory_lifecycle_publishes_an_asset() {
         source = tx.create_event("structured", content, None).await.unwrap();
         let (a, version) = tx.slot("fact.release").await.unwrap();
         assert!(version.is_none());
-        tx.insert_version(a, 1, content, "hash-1", source, None, None)
+        tx.insert_version(a, 1, content, source, None, None)
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
@@ -92,7 +92,7 @@ async fn knowledge_asset_and_restore_source() {
         tx.check_permission(Permission::Write).await.unwrap();
         asset = tx.insert_knowledge_asset("Handbook").await.unwrap();
         source = tx.create_event("knowledge", "text", None).await.unwrap();
-        tx.insert_version(asset, 1, "text", "hash", source, None, None)
+        tx.insert_version(asset, 1, "text", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();

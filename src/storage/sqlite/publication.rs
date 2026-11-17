@@ -86,10 +86,7 @@ struct BatchPublicationRow {
 }
 
 impl BatchPublicationRow {
-    fn from_metadata(
-        row: &native_turso::Row,
-        distinct_chunk_ids: i64,
-    ) -> native_turso::Result<Self> {
+    fn from_metadata(row: &sqlite_db::Row, distinct_chunk_ids: i64) -> sqlite_db::Result<Self> {
         Ok(Self {
             operation: row.try_get("operation")?,
             state: row.try_get("state")?,
@@ -109,7 +106,7 @@ impl BatchPublicationRow {
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Scope and live access are established by the caller's transaction. Receipt
     /// references are verified against the original job and source, not trusted as
     /// authority. Historical/source/Learning reads keep their own visibility rules.
@@ -118,7 +115,7 @@ impl TursoTx {
         receipt: &IngestReceipt,
     ) -> StorageResult<PublicationStatus> {
         self.check_permission(Permission::Write).await?;
-        let row = native_turso::query(
+        let row = sqlite_db::query(
             "SELECT operation,state,generation,asset_id,source_event_id, \
              json_extract(payload,'$.accepted_spec') AS accepted_spec, \
              json_extract(payload,'$.expected_version') AS expected_version, \
@@ -137,9 +134,9 @@ impl TursoTx {
         .bind(receipt.job_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let row = row.ok_or(StorageError::NotFound)?;
-        let kind: Option<&str> = row.try_get("chunk_type").map_err(turso_err)?;
+        let kind: Option<&str> = row.try_get("chunk_type").map_err(sqlite_err)?;
         if !matches!(kind, None | Some("null" | "array")) {
             return Err(StorageError::Unavailable(
                 "invalid message publication plan".into(),
@@ -148,15 +145,15 @@ impl TursoTx {
         // The immutable lightweight plan is saved atomically with the heavy
         // publication. Validate all native ID tokens before early state returns;
         // dimensions remain relevant only in the completed/visible branch.
-        let count: Option<i64> = row.try_get("chunk_count").map_err(turso_err)?;
+        let count: Option<i64> = row.try_get("chunk_count").map_err(sqlite_err)?;
         let count = usize::try_from(count.unwrap_or(0)).map_err(|_| invalid_plan())?;
         let metadata = ReceiptMetadata::decode(
             row.try_get::<Option<&str>>("receipt_metadata")
-                .map_err(turso_err)?,
+                .map_err(sqlite_err)?,
             count,
         )?;
         let distinct = self.publication_distinct_ids(&metadata).await?;
-        let row = BatchPublicationRow::from_metadata(&row, distinct).map_err(turso_err)?;
+        let row = BatchPublicationRow::from_metadata(&row, distinct).map_err(sqlite_err)?;
         let invalid =
             || StorageError::Conflict("receipt does not match accepted message batch".into());
         let spec: AcceptedMessageSpec =
@@ -171,12 +168,12 @@ impl TursoTx {
         {
             return Err(invalid());
         }
-        let source: Option<(String, String, Option<String>, Option<String>)> = native_turso::query_as(
+        let source: Option<(String, String, Option<String>, Option<String>)> = sqlite_db::query_as(
             "SELECT kind,state,json_extract(content,'$.batch_id'),json_extract(content,'$.session_id') \
              FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.source_event_id)
-        .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let Some((kind, source_state, batch_id, session_id)) = source else {
             return Ok(PublicationStatus::Invisible);
         };
@@ -186,10 +183,10 @@ impl TursoTx {
         {
             return Err(invalid());
         }
-        let live_asset: Option<(Option<i32>, bool)> = native_turso::query_as(
+        let live_asset: Option<(Option<i32>, bool)> = sqlite_db::query_as(
             "SELECT current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.asset_id)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let Some((current_version, deleted)) = live_asset else {
             return Ok(PublicationStatus::Invisible);
         };
@@ -221,10 +218,10 @@ impl TursoTx {
         let visible = self
             .publication_visible_count(receipt, &spec.embedding_profile, row.generation, &expected)
             .await?;
-        let count: i64 = native_turso::query_scalar(
+        let count: i64 = sqlite_db::query_scalar(
             "SELECT count(*) FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(receipt.asset_id).bind(receipt.target_version)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(if visible == chunk_count && count == visible {
             PublicationStatus::Retrievable
         } else {
@@ -244,7 +241,7 @@ struct PublicationChunk {
 
 type ExpectedChunks = HashMap<String, HashSet<i64>>;
 
-impl TursoTx {
+impl SqliteTx {
     async fn publication_distinct_ids(&mut self, metadata: &ReceiptMetadata) -> StorageResult<i64> {
         if metadata.chunks.is_empty() {
             return Ok(0);
@@ -256,21 +253,21 @@ impl TursoTx {
             .iter()
             .map(|chunk| chunk.id_json.as_str())
             .collect();
-        let invalid: i64 = native_turso::query_scalar(
+        let invalid: i64 = sqlite_db::query_scalar(
             "SELECT count(*) FROM json_each(?) WHERE NOT json_valid(value)",
         )
         .bind(json!(tokens).to_string())
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if invalid != 0 {
             return Err(invalid_plan());
         }
-        native_turso::query_scalar("SELECT count(DISTINCT value) FROM json_each(?)")
+        sqlite_db::query_scalar("SELECT count(DISTINCT value) FROM json_each(?)")
             .bind(metadata.ids_json())
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(turso_err)
+            .map_err(sqlite_err)
     }
 
     async fn publication_expected_chunks(
@@ -282,14 +279,14 @@ impl TursoTx {
             return Ok(expected);
         }
         let rows =
-            native_turso::query("SELECT key,upper(replace(value,'-','')) AS id FROM json_each(?)")
+            sqlite_db::query("SELECT key,upper(replace(value,'-','')) AS id FROM json_each(?)")
                 .bind(metadata.ids_json())
                 .fetch_all(&mut *self.tx)
                 .await
-                .map_err(turso_err)?;
+                .map_err(sqlite_err)?;
         for row in rows {
-            let index: usize = row.try_get("key").map_err(turso_err)?;
-            let id: Option<String> = row.try_get("id").map_err(turso_err)?;
+            let index: usize = row.try_get("key").map_err(sqlite_err)?;
+            let id: Option<String> = row.try_get("id").map_err(sqlite_err)?;
             let chunk = metadata.chunks.get(index).ok_or_else(invalid_plan)?;
             if let (Some(id), Some(dimension)) = (id, chunk.dimension)
                 && (1..=4096).contains(&dimension)
@@ -311,10 +308,10 @@ impl TursoTx {
         // metadata is read back from the job. Stale generations are prepared
         // anew, while a current saved plan cannot acquire different membership.
         let serialized = plan.to_string();
-        let saved: Option<(bool, Option<i64>, Option<String>)> = native_turso::query_as(
+        let saved: Option<(bool, Option<i64>, Option<String>)> = sqlite_db::query_as(
             "SELECT json_extract(payload,'$.publication.generation') IS json_extract(?1,'$.generation'),json_array_length(payload,'$.publication.memories[0].chunks'),CASE WHEN json_array_length(payload,'$.publication.memories[0].chunks')>0 THEN json_quote(json_extract(payload,'$.publication.receipt_metadata')) END FROM oc_jobs WHERE tenant_id=?2 AND workspace_id=?3 AND id=?4 AND operation='message_batch_ingest'",
         ).bind(&serialized).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
-            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let Some((same_generation, saved_count, saved_metadata)) = saved else {
             return Ok(false);
         };
@@ -346,26 +343,26 @@ impl TursoTx {
         } else {
             serde_json::to_string(&metadata).map_err(|_| invalid_plan())?
         };
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json_set(json(?),'$.receipt_metadata',json(?))),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?",
         ).bind(serialized).bind(metadata_text).bind(now_ms())
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job)
-            .execute(&mut *self.tx).await.map_err(turso_err)?;
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(true)
     }
 
     async fn derive_receipt_metadata(&mut self, plan: &str) -> StorageResult<ReceiptMetadata> {
-        let (kind, count): (Option<String>, Option<i64>) = native_turso::query_as(
+        let (kind, count): (Option<String>, Option<i64>) = sqlite_db::query_as(
             "SELECT json_type(?1,'$.memories[0].chunks'),json_array_length(?1,'$.memories[0].chunks')",
-        ).bind(plan).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        ).bind(plan).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         if !matches!(kind.as_deref(), None | Some("null" | "array")) {
             return Err(invalid_plan());
         }
         let mut metadata = ReceiptMetadata::empty();
         if count.unwrap_or(0) > 0 {
-            let rows: Vec<(String, Option<i64>)> = native_turso::query_as(
+            let rows: Vec<(String, Option<i64>)> = sqlite_db::query_as(
                 "SELECT json_quote(json_extract(value,'$.id')),json_array_length(value,'$.embedding') FROM json_each(?,'$.memories[0].chunks')",
-            ).bind(plan).fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            ).bind(plan).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
             metadata.chunks = rows
                 .into_iter()
                 .map(|(id_json, dimension)| ReceiptChunk { id_json, dimension })
@@ -384,16 +381,16 @@ impl TursoTx {
         // The earlier asset/source reads already proved currentness, deletion
         // and source activity. This native predicate establishes their exact
         // version association without decoding extra stored fields.
-        let root: bool = native_turso::query_scalar(
+        let root: bool = sqlite_db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=? AND source_event_id=?)",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
             .bind(receipt.asset_id).bind(receipt.target_version).bind(receipt.source_event_id)
-            .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
-        let rows = native_turso::query(
+            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+        let rows = sqlite_db::query(
             "SELECT id,hex(id) AS chunk_hex,json_extract(locator,'$.parser') IS 'memory-semantics:v1' AS semantic,CASE WHEN json_extract(locator,'$.parser') IS 'memory-semantics:v1' THEN json_type(locator,'$.support_sources') END AS support_type,CASE WHEN json_extract(locator,'$.parser') IS 'memory-semantics:v1' THEN json_quote(json_extract(locator,'$.support_sources')) END AS support_json FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=? AND ?",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
             .bind(receipt.asset_id).bind(receipt.target_version).bind(root)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         // This is per-chunk local S2 support only. In particular, do not add
         // whole-version, Learning, semantic-status or identity predicates.
         let support = self.publication_chunk_support(&rows).await?;
@@ -401,8 +398,8 @@ impl TursoTx {
         for (index, row) in rows.into_iter().enumerate() {
             if support[index] {
                 chunks.push(PublicationChunk {
-                    id: row.try_get("id").map_err(turso_err)?,
-                    hex_id: row.try_get("chunk_hex").map_err(turso_err)?,
+                    id: row.try_get("id").map_err(sqlite_err)?,
+                    hex_id: row.try_get("chunk_hex").map_err(sqlite_err)?,
                 });
             }
         }
@@ -432,21 +429,21 @@ impl TursoTx {
 
     async fn publication_chunk_support(
         &mut self,
-        rows: &[native_turso::Row],
+        rows: &[sqlite_db::Row],
     ) -> StorageResult<Vec<bool>> {
         let mut visible = vec![true; rows.len()];
         let mut members = Vec::new();
         for (index, row) in rows.iter().enumerate() {
-            if !row.try_get::<bool>("semantic").map_err(turso_err)? {
+            if !row.try_get::<bool>("semantic").map_err(sqlite_err)? {
                 continue;
             }
             let Some(kind) = row
                 .try_get::<Option<&str>>("support_type")
-                .map_err(turso_err)?
+                .map_err(sqlite_err)?
             else {
                 continue;
             };
-            let text: &str = row.try_get("support_json").map_err(turso_err)?;
+            let text: &str = row.try_get("support_json").map_err(sqlite_err)?;
             members.extend(
                 support_members(kind, text)?
                     .into_iter()
@@ -456,19 +453,22 @@ impl TursoTx {
         let mut normalized = Vec::new();
         for batch in members.chunks(READ_KEYS) {
             let values: Vec<_> = batch.iter().map(|(_, value)| value.as_str()).collect();
-            let rows = native_turso::query(
+            let rows = sqlite_db::query(
                 "SELECT key,upper(replace(value,'-','')) AS source FROM json_each(?)",
             )
             .bind(format!("[{}]", values.join(",")))
             .fetch_all(&mut *self.tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
             for row in rows {
-                let offset: usize = row.try_get("key").map_err(turso_err)?;
+                let offset: usize = row.try_get("key").map_err(sqlite_err)?;
                 let index = batch.get(offset).map(|(index, _)| *index).ok_or_else(|| {
                     StorageError::Backend("invalid normalized support index".into())
                 })?;
-                if let Some(source) = row.try_get::<Option<String>>("source").map_err(turso_err)? {
+                if let Some(source) = row
+                    .try_get::<Option<String>>("source")
+                    .map_err(sqlite_err)?
+                {
                     normalized.push((index, source));
                 } else {
                     visible[index] = false;
@@ -487,13 +487,13 @@ impl TursoTx {
                 "SELECT hex(id) AS source FROM oc_events WHERE tenant_id=? AND workspace_id=? AND state='active' AND hex(id) IN ({})",
                 vec!["?"; batch.len()].join(","),
             );
-            let mut query = native_turso::query_scalar::<String>(&sql)
+            let mut query = sqlite_db::query_scalar::<String>(&sql)
                 .bind(self.scope.tenant_id)
                 .bind(self.scope.workspace_id);
             for source in batch {
                 query = query.bind(source);
             }
-            active.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
+            active.extend(query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)?);
         }
         for (index, source) in normalized {
             if !active.contains(&source) {
@@ -514,7 +514,7 @@ impl TursoTx {
         for batch_index in 0..requests.len().div_ceil(PUBLICATION_SLOTS).max(1) {
             let start = batch_index * PUBLICATION_SLOTS;
             let batch = &requests[start..(start + PUBLICATION_SLOTS).min(requests.len())];
-            let mut query = native_turso::query(PUBLICATION_INDEX);
+            let mut query = sqlite_db::query(PUBLICATION_INDEX);
             for slot in 0..PUBLICATION_SLOTS {
                 query = query
                     .bind(batch.get(slot).map(|(_, id, _)| id.clone()))
@@ -530,9 +530,9 @@ impl TursoTx {
                     .bind(batch.get(slot).map(|(_, id, _)| id.clone()))
                     .bind(batch.get(slot).map(|(_, _, dimension)| *dimension));
             }
-            for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
+            for row in query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)? {
                 for (slot, (index, _, _)) in batch.iter().enumerate() {
-                    if row.try_get::<Option<bool>>(slot).map_err(turso_err)? == Some(true) {
+                    if row.try_get::<Option<bool>>(slot).map_err(sqlite_err)? == Some(true) {
                         matched.insert(*index);
                     }
                 }
@@ -552,7 +552,7 @@ impl TursoTx {
         for batch_index in 0..chunks.len().div_ceil(PUBLICATION_SLOTS).max(1) {
             let start = batch_index * PUBLICATION_SLOTS;
             let batch = &chunks[start..(start + PUBLICATION_SLOTS).min(chunks.len())];
-            let mut query = native_turso::query(PUBLICATION_LEDGER);
+            let mut query = sqlite_db::query(PUBLICATION_LEDGER);
             for slot in 0..PUBLICATION_SLOTS {
                 query = query.bind(batch.get(slot).map(|chunk| chunk.id.clone()));
             }
@@ -566,9 +566,9 @@ impl TursoTx {
             for slot in 0..PUBLICATION_SLOTS {
                 query = query.bind(batch.get(slot).map(|chunk| chunk.id.clone()));
             }
-            for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
+            for row in query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)? {
                 for slot in 0..batch.len() {
-                    if row.try_get::<Option<bool>>(slot).map_err(turso_err)? == Some(true) {
+                    if row.try_get::<Option<bool>>(slot).map_err(sqlite_err)? == Some(true) {
                         matched.insert(start + slot);
                     }
                 }
@@ -586,7 +586,7 @@ const PUBLICATION_LEDGER: &str = "SELECT (artifact_id=?) AS m0,(artifact_id=?) A
 mod tests {
     use super::*;
 
-    async fn database() -> (tempfile::TempDir, Pool, TursoTx, IngestReceipt) {
+    async fn database() -> (tempfile::TempDir, Pool, SqliteTx, IngestReceipt) {
         let dir = tempfile::tempdir().unwrap();
         let pool = Pool::open(dir.path().join("publication-batches.db"))
             .await
@@ -599,9 +599,9 @@ mod tests {
             "CREATE TABLE oc_index_entries(tenant_id BLOB,workspace_id BLOB,artifact_id BLOB,field TEXT,model_id TEXT,dimension INTEGER,generation INTEGER,state TEXT)",
             "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,surface TEXT,generation INTEGER,state TEXT)",
         ] {
-            native_turso::query(sql).execute(&pool).await.unwrap();
+            sqlite_db::query(sql).execute(&pool).await.unwrap();
         }
-        let tx = TursoTx {
+        let tx = SqliteTx {
             tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
             scope: Scope {
                 tenant_id: Uuid::new_v4(),
@@ -736,8 +736,8 @@ mod tests {
         pool.shutdown().await.unwrap();
     }
 
-    async fn saved_plan(tx: &mut TursoTx, job: Uuid) -> Value {
-        let value: String = native_turso::query_scalar(
+    async fn saved_plan(tx: &mut SqliteTx, job: Uuid) -> Value {
+        let value: String = sqlite_db::query_scalar(
             "SELECT json_extract(payload,'$.publication') FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
         ).bind(tx.scope.tenant_id).bind(tx.scope.workspace_id).bind(job)
             .fetch_one(&mut *tx.tx).await.unwrap();
@@ -753,7 +753,7 @@ mod tests {
     #[tokio::test]
     async fn publication_save_validates_and_reuses_same_generation_metadata() {
         let (_dir, pool, mut tx, receipt) = database().await;
-        native_turso::query("INSERT INTO oc_jobs VALUES(?,?,?,'{}','message_batch_ingest',0)")
+        sqlite_db::query("INSERT INTO oc_jobs VALUES(?,?,?,'{}','message_batch_ingest',0)")
             .bind(tx.scope.tenant_id)
             .bind(tx.scope.workspace_id)
             .bind(receipt.job_id)
@@ -813,7 +813,7 @@ mod tests {
             assert_eq!(saved_plan(&mut tx, receipt.job_id).await, prepared);
         }
         // Missing current-generation metadata is corruption, not a backfill.
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_jobs SET payload=json_remove(payload,'$.publication.receipt_metadata')",
         )
         .execute(&mut *tx.tx)
@@ -844,7 +844,7 @@ mod tests {
     async fn publication_witnesses_keep_raw_keys_multiplicity_and_local_support() {
         let (_dir, pool, mut tx, receipt) = database().await;
         let scope = tx.scope;
-        native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_versions VALUES(?,?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(receipt.asset_id)
@@ -854,7 +854,7 @@ mod tests {
             .await
             .unwrap();
         let support = Uuid::new_v4();
-        native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active')")
+        sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,'active')")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(support)
@@ -872,7 +872,7 @@ mod tests {
             } else {
                 "{}".into()
             };
-            native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
+            sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
                 .bind(scope.tenant_id)
                 .bind(scope.workspace_id)
                 .bind(&id)
@@ -883,7 +883,7 @@ mod tests {
                 .await
                 .unwrap();
             for _ in 0..2 {
-                native_turso::query(
+                sqlite_db::query(
                     "INSERT INTO oc_index_entries VALUES(?,?,?,'content','fixture',2,3,'ready')",
                 )
                 .bind(scope.tenant_id)
@@ -894,7 +894,7 @@ mod tests {
                 .unwrap();
             }
             for surface in ["vector", "full_text"] {
-                native_turso::query(
+                sqlite_db::query(
                     "INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,'chunk',?,?,3,'committed')",
                 )
                 .bind(scope.tenant_id)
@@ -914,7 +914,7 @@ mod tests {
                 .unwrap(),
             129
         );
-        native_turso::query("UPDATE oc_events SET state='retracted' WHERE id=?")
+        sqlite_db::query("UPDATE oc_events SET state='retracted' WHERE id=?")
             .bind(support)
             .execute(&mut *tx.tx)
             .await
@@ -926,7 +926,7 @@ mod tests {
                 .unwrap(),
             128
         );
-        native_turso::query("UPDATE oc_artifact_ledger SET generation=4 WHERE artifact_id=? AND surface='full_text'")
+        sqlite_db::query("UPDATE oc_artifact_ledger SET generation=4 WHERE artifact_id=? AND surface='full_text'")
             .bind(vec![0u8, 1]).execute(&mut *tx.tx).await.unwrap();
         assert_eq!(
             tx.publication_visible_count(&receipt, "fixture", 3, &expected)
@@ -941,12 +941,12 @@ mod tests {
             0
         );
         // A foreign root hides all chunks before malformed locator extraction.
-        native_turso::query("UPDATE oc_versions SET source_event_id=?")
+        sqlite_db::query("UPDATE oc_versions SET source_event_id=?")
             .bind(Uuid::new_v4())
             .execute(&mut *tx.tx)
             .await
             .unwrap();
-        native_turso::query("UPDATE oc_chunks SET locator='{'")
+        sqlite_db::query("UPDATE oc_chunks SET locator='{'")
             .execute(&mut *tx.tx)
             .await
             .unwrap();

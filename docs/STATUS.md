@@ -1,23 +1,37 @@
 # Origence · 当前进度
 
 更新：2026-11-17。本变更已同步 main
-[`3d474d9`](https://github.com/TheLudlows/Origence/commit/3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe)
-（已合入 [PR #77](https://github.com/TheLudlows/Origence/pull/77) 的 Node.js 管理界面与 CI 优化），
-继续补齐检索配置、诊断与私有 Run 重放。产品边界见[架构规划](design/agent-data-foundation.md)。
+[`593e8fa`](https://github.com/TheLudlows/Origence/commit/593e8fa)
+（已合入 #77 UI/CI、#78 诊断、#79 检索拆分与 #80 Run 来源界面），当前变更完成 SQLite 权威存储替换与
+可推导元数据精简。产品边界见[架构规划](design/agent-data-foundation.md)。
 **核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 检索 | AnySeek 全文、向量与一跳图候选同组发布；Turso 仍核验图证据，独立 `graph.db` 不再使用；真实引擎本地回归通过 | 真实模型检索质量、容量与延迟验收 |
+| 检索 | AnySeek 全文、向量与一跳图候选同组发布；SQLite 仍核验图证据，独立 `graph.db` 不再使用；真实引擎本地回归通过 | 真实模型检索质量、容量与延迟验收 |
 | 私有会话 | 逻辑 key 绑定唯一平台归档，独立 key 隔离，授权轮换与撤销 | Claude Code / Codex 同 key 跨客户端真实任务验证 |
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 | Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
 
-## 检索模块拆分（PR #79，未合并）
+## SQLite 权威存储与最小元数据
+
+进一步将 SQLite/文件锁依赖设为可选：无默认特性的核心库可独立使用，纯核心与
+Blob/PDF 测试不加载元数据库；SQLite authority 单独通过 `--features sqlite` 验证。
+服务端合并事务入口的重复权限查询，关键词路径复用授权/候选快照，空读集合及没有
+候选的后续路径不访问额外元数据表。提交与返回前仍核验当前授权和发布身份。
+
+本地关系数据和持久任务只使用 rusqlite + bundled SQLite；旧引擎实现、依赖与公开别名
+已移除。关闭驱动默认 features，不引入 ORM/异步数据库库；锁文件净减少 112 个包。
+删除版本内容哈希列和账本重复幂等字符串，分别从不可变正文和现有完整主键获得。
+授权、来源、版本历史、冻结发布计划与恢复状态仍是持久事实，详见[存储契约](contracts/storage.md)。
+本次在 PR 的 Linux/Windows CI 验证真实 SQLite 的锁、WAL、事务取消与恢复；
+精确本地结果、远端 CI 及未验收边界统一见 VALIDATION 和 PR。
+
+## 检索模块拆分（已合入 PR #79）
 
 已同步 main `3d474d9`（含 #77 UI、#78 诊断）。已核验分路的排序/融合位于
-`retrieval::rank`，最终发布及返回复核由 Turso 事务方法负责；Search 与 EvidenceBundle
+`retrieval::rank`，最终发布及返回复核由 SQLite 事务方法负责；Search 与 EvidenceBundle
 保持各自召回、原有快照边界和外部 IO 顺序，同时保留主干诊断采集及 Run 重放保护。
 合并后的验证与各历史提交的结果分别见 [VALIDATION](VALIDATION.md)。
 

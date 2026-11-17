@@ -1,6 +1,6 @@
 //! Generic workspace ownership, live key capability and command-domain tests.
 //! These deliberately use no external protocol DTOs, mappings or routes.
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, JobQueue, KeyCapabilities, Lifecycle, Permission, RelationalStore,
     Scope, StorageError, WorkItem, sqlite::SqliteStore,

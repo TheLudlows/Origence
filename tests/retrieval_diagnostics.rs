@@ -1,4 +1,4 @@
-//! Public HTTP/worker/Turso checks; the protocol peer is not the real engine.
+//! Public HTTP/worker/SQLite checks; the protocol peer is not the real engine.
 use crate::support::{fixture, open_service};
 use origence::{
     client::HostClient,

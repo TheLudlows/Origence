@@ -665,7 +665,6 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
         items.push(LedgerEntry {
             key,
             artifact_type: artifact_type.into(),
-            idempotency_key: ledger_idempotency_key(&key),
         });
     }
     let mut items = Vec::new();
@@ -835,7 +834,6 @@ async fn publish_prepared(
             memory.asset,
             memory.version,
             &content,
-            &hash(content.as_bytes()),
             source.source_id,
             payload.target_version(),
             payload.title(),

@@ -1,6 +1,6 @@
-//! native Turso relational store, queue and lifecycle (M2).
+//! native SQLite relational store, queue and lifecycle (M2).
 //!
-//! The local relational backend: one native Turso database file holds the
+//! The local relational backend: one native SQLite database file holds the
 //! authoritative tenant/workspace objects, the idempotency ledger, audit, job
 //! registration and the self-polled job queue (A5). Vector and graph data live
 //! in other backends (M4); raw file bytes live on the local filesystem.
@@ -9,7 +9,7 @@
 //! `locking` own opening and resource lifetime; `relational` owns privileged
 //! entry points; `domain` keeps the authorization/idempotency transaction envelope
 //! and delegates row operations to `identity`, `versions`, `provenance`, `ledger`
-//! and `job_queue`. Delegates borrow the same `TursoTx`; they never open another
+//! and `job_queue`. Delegates borrow the same `SqliteTx`; they never open another
 //! transaction. Feature-specific modules keep their existing boundaries.
 //!
 //! Encodings are fixed in [`sqlite-schema.sql`](include_str!("sqlite-schema.sql")).
@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::storage::native_turso::{self, Connection, Pool, Transaction};
+use crate::storage::sqlite_db::{self, Connection, Pool, Transaction};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -81,8 +81,8 @@ use crate::storage::traits::{
 
 use locking::LockGuard;
 
-/// The local relational store backed by a single native Turso database file.
-pub struct TursoStore {
+/// The local relational store backed by a single native SQLite database file.
+pub struct SqliteStore {
     pool: Pool,
     path: PathBuf,
     /// In-process lock holder bound to the database path (A2.5). Dropping it
@@ -99,9 +99,9 @@ pub(super) struct MaintenanceLock {
 /// Roles an API key may hold (A2.2 role matrix).
 const ROLES: &[&str] = &["reader", "writer", "reviewer", "admin"];
 
-fn turso_err(e: native_turso::Error) -> StorageError {
+fn sqlite_err(e: sqlite_db::Error) -> StorageError {
     match e {
-        native_turso::Error::Incompatible(message) => StorageError::Unavailable(message.into()),
+        sqlite_db::Error::Incompatible(message) => StorageError::Unavailable(message.into()),
         error => StorageError::Backend(error.to_string()),
     }
 }
@@ -132,17 +132,12 @@ struct PendingCommand {
     hash: String,
 }
 
-/// A scoped transaction over one native Turso connection. Writes execute inside the
+/// A scoped transaction over one native SQLite connection. Writes execute inside the
 /// underlying transaction, so `commit`/`rollback` make them atomic (A2.2).
-pub struct TursoTx {
+pub struct SqliteTx {
     tx: Transaction,
     scope: Scope,
     principal_id: Uuid,
     required: Vec<Permission>,
     command: Option<PendingCommand>,
 }
-
-/// Compatibility alias; the implementation uses the native Rust Turso engine.
-pub type SqliteStore = TursoStore;
-/// Compatibility alias for the native Turso domain transaction.
-pub type SqliteTx = TursoTx;

@@ -5,12 +5,12 @@
 
 use super::read_model::{NativeHitKey, current_chunks, rows_by_ids};
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 // Test-only composition of the production read primitives. Session archives
 // now use their batched guard, exercised directly in session_read_tests.
 async fn active_supported_version(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     asset: Uuid,
     version: i32,
 ) -> StorageResult<Uuid> {
@@ -68,7 +68,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
         // Non-unique only in this permissive corruption fixture; production
         // admission requires the exact unique partial identity index.
         "CREATE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key) WHERE identity_key IS NOT NULL",
-        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,artifact_id BLOB NOT NULL,artifact_type TEXT NOT NULL,source_id BLOB NOT NULL,version INTEGER NOT NULL,generation INTEGER NOT NULL,surface TEXT NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,source_id,version,artifact_id,surface,generation))",
@@ -86,8 +86,8 @@ fn scope() -> Scope {
     }
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),
@@ -97,7 +97,7 @@ async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
 }
 
 async fn seed(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     row: Record,
     current: Option<i32>,
@@ -122,7 +122,7 @@ async fn seed(
             .await
             .unwrap();
     }
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version title',?,'hash',?,NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version title',?,?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.asset)
@@ -145,7 +145,7 @@ async fn seed(
 }
 
 async fn publication(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     key: NativeHitKey,
     surface: &str,
@@ -167,7 +167,7 @@ async fn publication(
         .unwrap();
 }
 
-async fn ready_index(tx: &mut TursoTx, row: Record, field: &str, generation: i64) {
+async fn ready_index(tx: &mut SqliteTx, row: Record, field: &str, generation: i64) {
     db::query("INSERT INTO oc_index_entries VALUES(?,?,?,?,'profile',3,?,'ready')")
         .bind(tx.scope.tenant_id)
         .bind(tx.scope.workspace_id)
@@ -179,7 +179,7 @@ async fn ready_index(tx: &mut TursoTx, row: Record, field: &str, generation: i64
         .unwrap();
 }
 
-async fn locator(tx: &mut TursoTx, chunk: Uuid, value: &str) {
+async fn locator(tx: &mut SqliteTx, chunk: Uuid, value: &str) {
     db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(value)
         .bind(tx.scope.tenant_id)
@@ -1326,13 +1326,13 @@ async fn visible_hit_uses_semantic_source_override_before_root_uuid_fallback() {
 }
 
 #[tokio::test]
-async fn summary_empty_query_rejects_missing_summary_schema() {
+async fn summary_empty_query_needs_no_summary_schema() {
     let (_dir, pool) = database().await;
     let mut tx = transaction(&pool, scope()).await;
-    assert!(matches!(
-        tx.summary_hits("", None).await,
-        Err(StorageError::Backend(_))
-    ));
+    let before = pool.test_counts();
+    assert!(tx.summary_hits("", None).await.unwrap().is_empty());
+    assert!(tx.summary_hits("  ", None).await.unwrap().is_empty());
+    assert_eq!(pool.test_counts(), before);
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1767,7 +1767,7 @@ async fn shallow_vector_readiness_batches_one_hundred_requests() {
         .unwrap();
     assert!(empty.is_empty());
     assert_eq!(empty_rows, 0);
-    assert_eq!(queries, 1); // Preserve the original empty-input prepare contract.
+    assert_eq!(queries, 0); // No candidates require no index metadata.
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
 }
@@ -1817,7 +1817,7 @@ async fn graph_evidence_ignores_unconsumed_payload_and_stops_at_twenty() {
             locator(
                 &mut tx,
                 row.chunk,
-                r#"{"parser":"memory-semantics:v1","support_sources":[10000000000000000000000000000000]}"#,
+                r#"{"parser":"memory-semantics:v1","support_sources":["#,
             )
             .await;
         } else if expected.len() < 20 {
@@ -1882,7 +1882,7 @@ async fn graph_evidence_skips_invalid_historical_keys_before_decode() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_versions VALUES(?,?,x'31',1,'old','old','hash',?,NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,x'31',1,'old','old',?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.source)
@@ -2029,4 +2029,93 @@ async fn retrieval_identity_decoding_follows_visibility_and_first_semantic_statu
     );
     tx.rollback().await.unwrap();
     pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn empty_read_sets_need_no_metadata_tables_or_driver_calls() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = Pool::open(dir.path().join("no-metadata.db")).await.unwrap();
+    let scope = scope();
+    let mut tx = transaction(&pool, scope).await;
+    let before = pool.test_counts();
+    assert!(tx.visible_hits(&[]).await.unwrap().is_empty());
+    assert!(tx.full_text_hits(&[]).await.unwrap().is_empty());
+    assert!(
+        tx.vector_hits_exact(&[], "unused-profile", 3)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tx.index_candidate_ids(&[], None, "vector", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(tx.summary_hits("  ", None).await.unwrap().is_empty());
+    let raw = read_model::current_rows(&mut tx.tx, scope, Some(&[]), None)
+        .await
+        .unwrap();
+    assert!(tx.local_current_positions(&raw).await.unwrap().is_empty());
+    assert!(
+        tx.current_summary_terms(&raw, &[])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(tx.active_version_roots(&[]).await.unwrap().is_empty());
+    tx.verify_native_candidates(&[]).await.unwrap();
+    assert_eq!(pool.test_counts(), before);
+    // Actual evidence still requires its authoritative tables and fails closed.
+    assert!(matches!(
+        tx.full_text_hits(&[Record::new(1).key(1)]).await,
+        Err(StorageError::Backend(_))
+    ));
+    tx.tx.rollback().await.unwrap();
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn checked_transaction_looks_up_authority_once_and_rechecks_commit() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SqliteStore::open(dir.path().join("permissions.db"))
+        .await
+        .unwrap();
+    let scope = scope();
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "once")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "admin").await.unwrap();
+    let auth = store.authenticate(&key.token).await.unwrap();
+    let pool = store.pool();
+    let before = pool.test_counts();
+    let mut tx = store
+        .begin_checked(auth.clone(), Permission::Write)
+        .await
+        .unwrap();
+    let after = pool.test_counts();
+    assert_eq!(after.0 - before.0, 1);
+    assert_eq!(after.1 - before.1, 3); // BEGIN plus key/workspace reads, once.
+    db::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
+        .bind(auth.principal_id)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(tx.commit().await, Err(StorageError::Forbidden)));
+    // Revocation and any work roll back together when the final check refuses.
+    let mut tx = store
+        .begin_read_checked(auth.clone(), Permission::Read)
+        .await
+        .unwrap();
+    tx.check_permission(Permission::Read).await.unwrap();
+    tx.rollback().await.unwrap();
+    store.revoke_key(auth.principal_id).await.unwrap();
+    assert!(matches!(
+        store
+            .begin_read_checked(auth.clone(), Permission::Read)
+            .await,
+        Err(StorageError::Forbidden)
+    ));
+    store.shutdown().await.unwrap();
 }
