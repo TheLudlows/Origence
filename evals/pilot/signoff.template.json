@@ -1,0 +1,85 @@
+{
+  "status": "NOT_RUN",
+  "issue": "https://github.com/TheLudlows/Origence/issues/91",
+  "integration_sha": null,
+  "freeze_sha256": null,
+  "matrix": {
+    "A1": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "A2": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "A3": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "A4": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "A5": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "A6": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "A7": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    }
+  },
+  "metrics_ref": null,
+  "restoration_checkpoint": null,
+  "cleanup_inventory_ref": null,
+  "signatures": {
+    "dba": {
+      "name": null,
+      "independent_of_implementation": null,
+      "utc": null,
+      "decision": null,
+      "scope": null,
+      "evidence_manifest_sha256": null
+    },
+    "policy_owner": {
+      "name": null,
+      "independent_of_implementation": null,
+      "utc": null,
+      "decision": null,
+      "scope": null,
+      "evidence_manifest_sha256": null
+    },
+    "independent_evaluator": {
+      "name": null,
+      "independent_of_implementation": null,
+      "utc": null,
+      "decision": null,
+      "scope": null,
+      "evidence_manifest_sha256": null
+    }
+  },
+  "remaining_blockers": [
+    "Four delivery lanes must be validated on the same integration commit.",
+    "Joint contract pending root confirmation.",
+    "Real client/service/model execution not performed."
+  ],
+  "rule": "No overall PASS without all A1-A7 evidence and DBA/policy-owner/independent signatures; self-reported success or offline fixtures do not qualify."
+}

@@ -1,0 +1,97 @@
+{
+  "status": "BLOCKED",
+  "issue": "https://github.com/TheLudlows/Origence/issues/91",
+  "baseline_sha": "293e2bf6af3b180d43c8050731047b552ac07519",
+  "joint_contract_revision": null,
+  "integration_sha": null,
+  "four_lane_delivery_shas": [
+    null,
+    null,
+    null,
+    null
+  ],
+  "synthetic_only": true,
+  "fresh_database_only": true,
+  "clients": {
+    "claude_code": {
+      "version": null,
+      "binary_sha256": null,
+      "os": null,
+      "native_load_evidence_capability": null
+    },
+    "codex": {
+      "version": null,
+      "binary_sha256": null,
+      "os": null,
+      "native_load_evidence_capability": null
+    }
+  },
+  "services": {
+    "origence": {
+      "version": null,
+      "binary_sha256": null,
+      "config_sha256": null
+    },
+    "sqlite": {
+      "version": null,
+      "binary_sha256": null,
+      "config_sha256": null
+    },
+    "anyseek": {
+      "version": null,
+      "binary_sha256": null,
+      "config_sha256": null
+    }
+  },
+  "models": {
+    "claude_code_chat": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    },
+    "codex_chat": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    },
+    "embedding": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    },
+    "summary": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    }
+  },
+  "data": {
+    "tasks_sha256": null,
+    "oracle_commitment_sha256": null,
+    "seed_custodian": null,
+    "contaminated": null,
+    "scope_aliases": [],
+    "resource_inventory_ref": null
+  },
+  "criteria": {
+    "database_wait_success_threshold": null,
+    "expense_success_threshold": null,
+    "verification_coverage_threshold": null,
+    "max_time_seconds": null,
+    "max_cost": null,
+    "governance_violations_allowed": 0
+  },
+  "approvals": {
+    "dba": null,
+    "policy_owner": null,
+    "independent_evaluator": null
+  }
+}
