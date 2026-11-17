@@ -76,6 +76,8 @@ async fn stored_content_shares_index_records_and_restores_history_after_reopen()
         ("oc_chunks", "content"),
         ("oc_versions", "content"),
         ("oc_summaries", "text"),
+        ("oc_chunks", "search_terms"),
+        ("oc_summaries", "model_revision"),
     ] {
         let rows = db::query(&format!("PRAGMA table_info({table})"))
             .fetch_all(service.engine.relational().pool())
@@ -112,6 +114,38 @@ async fn stored_content_shares_index_records_and_restores_history_after_reopen()
     assert_eq!(restored["version"], 3);
     assert_eq!(restored["restored_from"], 1);
     assert_eq!(restored["content"], original);
+}
+
+#[tokio::test]
+async fn damaged_frozen_terms_fail_without_retokenizing_or_republishing() {
+    for field in ["search_terms", "summary_terms"] {
+        let (dir, service, auth, first) = setup().await;
+        let fixture = crate::support::fixture(dir.path(), None);
+        fixture.reject_writes(true);
+        let second = publish(&service, &auth, "retry", "Atlas changed source").await;
+        let job = id(&second, "job_id");
+        assert_eq!(
+            service.job(&auth, job).await.unwrap()["state"],
+            "retry_wait"
+        );
+        let attempts = fixture.posts();
+        let path = format!("$.publication.memories[0].chunks[0].{field}");
+        db::query("UPDATE oc_jobs SET payload=json_remove(payload,?),next_retry_at=0 WHERE tenant_id=? AND workspace_id=? AND id=?")
+            .bind(path).bind(auth.tenant_id).bind(auth.workspace_id).bind(job)
+            .execute(service.engine.relational().pool()).await.unwrap();
+        fixture.reject_writes(false);
+        assert!(worker::process_next(&service).await.unwrap());
+        assert_eq!(service.job(&auth, job).await.unwrap()["state"], "failed");
+        assert_eq!(fixture.posts(), attempts);
+        assert_eq!(fixture.snapshot_records().len(), 1);
+        assert_eq!(
+            service
+                .get(&auth, id(&first, "asset_id"), None)
+                .await
+                .unwrap()["version"],
+            1
+        );
+    }
 }
 
 #[tokio::test]

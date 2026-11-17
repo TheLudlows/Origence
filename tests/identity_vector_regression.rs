@@ -133,7 +133,6 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
                 0,
                 &content,
                 &json!({"byte_start": 0, "byte_end": content.len()}),
-                &parsing::lexical(&content),
             )
             .await
             .unwrap();

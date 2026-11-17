@@ -63,7 +63,7 @@ async fn seed(conn: &mut Connection, scope: Scope, row: Record) {
         .execute(&mut *conn)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator,search_terms) VALUES(?,?,?,?,?,0,'text','{}','text')")
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator) VALUES(?,?,?,?,?,0,'text','{}')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.chunk)

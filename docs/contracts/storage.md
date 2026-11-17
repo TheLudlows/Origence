@@ -52,7 +52,9 @@ AnySeek 适配器不编译或访问 SQLite；`--features sqlite` 仅启用权威
 `origence-content-sha256-v1` 每个 Record 对应一个 chunk，`payload` 为存储但不索引的
 JSON（原始 UTF-8 正文、完整 locator、可选摘要及模型版本）；同一记录上的 `terms`、
 vector 与 graph 维持既有召回方式。没有独立的整篇正文/版本/摘要 Record，不改变 BM25 语料条数。
-SQLite 不再保存 `oc_versions.content`、`oc_chunks.content` 或 `oc_summaries.text`。
+SQLite 不再保存 `oc_versions.content`、`oc_chunks.content`、`oc_summaries.text`、
+`oc_chunks.search_terms` 或 `oc_summaries.model_revision`。分块词项只供 AnySeek 使用，
+摘要模型版本随 payload 保存；SQL 仅保留仍参与 Summary 召回的词项。
 
 SQL 中仍保留用于来源与可见性判断的 locator，以及当前 Summary 召回所需的冻结词项；
 原始来源事件、私有 Run/Skill 快照与完整恢复计划也继续持久保存，不宣称消除所有文本副本。
@@ -96,6 +98,8 @@ ready + committed 仍不足以证明可见：读取还要检查权限、当前�
 以及语义快照或 Learning 支持。作业 generation、业务版本、模型 profile 和执行
 run_token 各自独立，不得相互充当身份。
 
+所有发布路径在事务外的 blocking 任务中一次生成正文/摘要词项，并随计划冻结；
+重试必须使用原词项，缺失字段按计划损坏处理，不重新分词补齐。
 发布前保存完整计划与 pending 账本，事务外将正文、摘要、定位信息与索引写入同一 AnySeek Record，再在权威事务中复核并提交。
 已准备的 MessageBatch 计划与轻量回执摘要一起保存；同代恢复复用并核对摘要，
 缺失或损坏明确失败。摘要不替代实际索引及账本检查，也不会完整重扫向量计划。

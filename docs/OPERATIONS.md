@@ -15,7 +15,7 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db` 及 SQLite WAL | 权限、原始来源事件、版本指针/内容哈希、locator、冻结召回词项、幂等、任务/恢复计划、owner、账本、审计 |
+| `context.db` 及 SQLite WAL | 权限、原始来源事件、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
 | AnySeek collection（远端） | 已发布分块正文、摘要/模型版本与定位信息，以及同条 Record 的全文/向量/图索引；必须单独备份 |
 | `full-text-backend.json` | AnySeek endpoint/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |

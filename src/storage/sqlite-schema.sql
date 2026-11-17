@@ -120,7 +120,7 @@ CREATE TABLE oc_jobs (
 CREATE TABLE oc_chunks (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
     asset_id BLOB NOT NULL, version INTEGER NOT NULL, ordinal INTEGER NOT NULL,
-    content_hash TEXT NOT NULL, locator TEXT NOT NULL, search_terms TEXT NOT NULL,
+    content_hash TEXT NOT NULL, locator TEXT NOT NULL,
     PRIMARY KEY (tenant_id, workspace_id, id),
     UNIQUE (tenant_id, workspace_id, asset_id, version, ordinal),
     FOREIGN KEY (tenant_id, workspace_id, asset_id, version) REFERENCES oc_versions(tenant_id, workspace_id, asset_id, version)
@@ -130,7 +130,7 @@ CREATE INDEX oc_versions_source ON oc_versions(tenant_id, workspace_id, source_e
 
 CREATE TABLE oc_summaries (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
-    chunk_id BLOB NOT NULL, model_revision TEXT NOT NULL DEFAULT '',
+    chunk_id BLOB NOT NULL,
     search_terms TEXT NOT NULL,
     PRIMARY KEY (tenant_id, workspace_id, id),
     FOREIGN KEY (tenant_id, workspace_id, chunk_id) REFERENCES oc_chunks(tenant_id, workspace_id, id)

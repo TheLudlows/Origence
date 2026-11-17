@@ -243,17 +243,9 @@ async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k
         tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
-        tx.insert_chunk(
-            chunk,
-            asset,
-            1,
-            0,
-            "approval",
-            &serde_json::json!({}),
-            "approval",
-        )
-        .await
-        .unwrap();
+        tx.insert_chunk(chunk, asset, 1, 0, "approval", &serde_json::json!({}))
+            .await
+            .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
         tx.index_ready(chunk, "profile", 3, 1).await.unwrap();
         records.push((chunk, source));

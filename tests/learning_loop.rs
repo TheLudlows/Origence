@@ -1793,7 +1793,6 @@ async fn publish_native_budget_fixture(
             1000 + index as i32,
             "Rust",
             &locator,
-            &budget.terms,
         )
         .await
         .unwrap();

@@ -5,6 +5,27 @@
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：#86 检视后删除无用元数据与分词回退
+
+从 PR #86 的 `70c7281` 继续，已合并 main `8fe01a5`（#84 Windows 开发启动器）。
+人工核对全部调用链后删除 `oc_chunks.search_terms`：候选读取只消费 ID，旧实现仅传递词项
+再丢弃；删除 `oc_summaries.model_revision`：没有 SQL 读取方，模型来源已保存在 AnySeek payload。
+同步删除对应写入参数、SELECT/解码、候选 tuple 字段，以及目录对不存在 content 字段的删除。
+
+所有发布类型改为一次性在事务外 blocking 任务中冻结正文/摘要词项；移除可空分块词项、
+按类型分流和恢复时重新分词的回退，摘要分词也不再发生在发布事务中。摘要召回词项、
+原始来源、locator、owner/index/ledger 和完整恢复计划仍有实际消费者，保持原有校验。
+既有历史验证记录不改写；schema 仍按该 PR 的 fresh-only 范围开发，不自动转换旧布局。
+
+本地 Linux / Rust 1.98.0：default **433 passed**（221 lib + 4 协议 + 14 core + 194 local）；
+pure-core **87 passed**；独立 sqlite authority **233 passed**。三组 Clippy 均 warnings denied
+通过，fmt/diff 检查通过。新增损坏冻结词项后的重试拒绝回归，证明不会重新分词或发布；
+列缺失断言覆盖新增删除项，既有来源、历史、跨 scope、取消、重试与 private Run/Skill 测试通过。
+
+真实 AnySeek d813b91 的 **8 项契约通过**；真实 HTTP/stdio MCP、历史读取、Run 诊断、
+重开以及 AnySeek 进程重启后当前/历史正文和索引检查通过。最新 Windows/Linux CI 以 PR #86
+的当前提交运行记录为准；生产性能、模型质量、浏览器布局等范围未由本轮增加验收。
+
 ## 2026-11-17：正文与索引共用 AnySeek collection
 
 基线 main `c70a1aa`，分支 `refactor/anyseek-content`，Rust 1.98.0，Linux；AnySeek

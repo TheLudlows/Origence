@@ -126,28 +126,28 @@ impl SqliteTx {
         &mut self,
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
-    ) -> StorageResult<Vec<(Uuid, String)>> {
+    ) -> StorageResult<Vec<Uuid>> {
         let kind = match route {
             ContextRoute::Memory => "memory",
             ContextRoute::Knowledge | ContextRoute::Learning => "knowledge",
         };
         let rows = read_model::context_current_chunk_rows(&mut self.tx, self.scope, kind).await?;
-        let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
+        let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _)| *asset));
         let membership = self.context_route_memberships(&assets, route).await?;
         let rows: Vec<_> = rows
             .into_iter()
-            .filter(|(_, asset, _, _)| membership.get(asset) == Some(&true))
+            .filter(|(_, asset, _)| membership.get(asset) == Some(&true))
             .collect();
         let identity = identity.filter(|_| route == ContextRoute::Memory);
         let identity_rows = if identity.is_some() {
-            let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _, _)| *asset));
+            let assets = read_model::unique_ids(rows.iter().map(|(_, asset, _)| *asset));
             self.identity_rows_for_assets(&assets).await?
         } else {
             HashMap::new()
         };
         let mut decoded: HashMap<Uuid, Option<MemoryIdentity>> = HashMap::new();
         let mut result = Vec::new();
-        for (id, asset, terms, locator) in rows {
+        for (id, asset, locator) in rows {
             if let Some(identity) = identity {
                 if let std::collections::hash_map::Entry::Vacant(entry) = decoded.entry(asset) {
                     let stored = identity_rows
@@ -165,7 +165,7 @@ impl SqliteTx {
                     }
                 }
             }
-            result.push((id, terms));
+            result.push(id);
         }
         Ok(result)
     }
@@ -178,12 +178,7 @@ impl SqliteTx {
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
     ) -> StorageResult<Vec<Uuid>> {
-        let route_ids = read_model::unique_ids(
-            self.context_route_rows(route, identity)
-                .await?
-                .into_iter()
-                .map(|(id, _)| id),
-        );
+        let route_ids = read_model::unique_ids(self.context_route_rows(route, identity).await?);
         // Apply the route/identity set before loading full chunk payloads and
         // visibility closures. Native equality still filters index metadata.
         let mut indexed = Vec::new();

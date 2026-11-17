@@ -256,7 +256,7 @@ pub trait DomainTx {
         title: Option<&str>,
     ) -> StorageResult<()>;
 
-    /// Insert one chunk of a version.
+    /// Register a chunk's identity, content proof and immutable provenance.
     async fn insert_chunk(
         &mut self,
         chunk: Uuid,
@@ -265,15 +265,13 @@ pub trait DomainTx {
         ordinal: i32,
         content: &str,
         locator: &Value,
-        search_terms: &str,
     ) -> StorageResult<()>;
 
-    /// Insert one chunk summary.
+    /// Register summary recall terms. Text and model provenance live in AnySeek.
     async fn insert_summary(
         &mut self,
         summary: Uuid,
         chunk: Uuid,
-        model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()>;
 

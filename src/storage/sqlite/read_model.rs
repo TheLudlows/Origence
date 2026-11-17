@@ -245,7 +245,7 @@ pub(super) async fn current_rows(
     ids: Option<&[Uuid]>,
     asset_filter: Option<Uuid>,
 ) -> StorageResult<RawCurrentRows> {
-    let columns = "id,asset_id,version,content_hash,locator,search_terms";
+    let columns = "id,asset_id,version,content_hash,locator";
     let rows = if let Some(ids) = ids {
         let ids = unique_ids(ids.iter().copied());
         let mut rows = Vec::new();
@@ -1509,14 +1509,14 @@ pub(super) async fn context_current_chunk_rows(
     conn: &mut Connection,
     scope: Scope,
     kind: &str,
-) -> StorageResult<Vec<(Uuid, Uuid, String, String)>> {
+) -> StorageResult<ContextChunkRows> {
     Ok(context_current_chunk_rows_measured(conn, scope, kind)
         .await?
         .0)
 }
 
 #[cfg(feature = "local-storage")]
-type ContextChunkRows = Vec<(Uuid, Uuid, String, String)>;
+type ContextChunkRows = Vec<(Uuid, Uuid, String)>;
 
 // Local read-set metrics let regressions verify payload scope without timing
 // thresholds or an extra query. The counters do not affect query decisions.
@@ -1590,9 +1590,9 @@ pub(super) async fn context_current_chunk_rows_measured(
         let start = batch_index * ASSOCIATION_KEYS;
         let batch = &keys[start..(start + ASSOCIATION_KEYS).min(keys.len())];
         // A row belongs to one current asset key, so no per-request projection
-        // or cloning of search_terms/locator is needed. Historical payloads
+        // or cloning of locator is needed. Historical payloads
         // never enter the Rust read set. Empty work reads no chunk metadata.
-        let mut query = sqlite_db::query("SELECT id,asset_id,search_terms,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND ((asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?))")
+        let mut query = sqlite_db::query("SELECT id,asset_id,locator FROM oc_chunks WHERE tenant_id=? AND workspace_id=? AND ((asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?) OR (asset_id=? AND version=?))")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id);
         for slot in 0..ASSOCIATION_KEYS {
@@ -1607,7 +1607,6 @@ pub(super) async fn context_current_chunk_rows_measured(
             result.push((
                 row.try_get("id").map_err(sqlite_err)?,
                 row.try_get("asset_id").map_err(sqlite_err)?,
-                row.try_get("search_terms").map_err(sqlite_err)?,
                 row.try_get("locator").map_err(sqlite_err)?,
             ));
         }

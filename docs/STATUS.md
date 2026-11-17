@@ -1,8 +1,8 @@
 # Origence · 当前进度
 
 更新：2026-11-17。本变更已同步 main
-[`c70a1aa`](https://github.com/TheLudlows/Origence/commit/c70a1aa)
-（已合入 #81 SQLite 与 #83 资产关联 Run），当前变更将已发布正文和摘要文本与索引统一保存到 AnySeek。产品边界见[架构规划](design/agent-data-foundation.md)。
+[`8fe01a5`](https://github.com/TheLudlows/Origence/commit/8fe01a5)
+（已合入 #81 SQLite、#83 资产关联 Run 与 #84 Windows 启动器），当前变更将已发布正文和摘要文本与索引统一保存到 AnySeek。产品边界见[架构规划](design/agent-data-foundation.md)。
 **核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
 
 | 范围 | 已实现 | 尚未完成 |
@@ -16,7 +16,9 @@
 ## AnySeek 正文与索引统一存储
 
 正文、摘要文本及其 provenance 与全文/向量/图索引共用同一 chunk Record。SQLite 移除
-版本/分块正文与摘要文本列，保留来源判断、发布指针、内容哈希、冻结词项和恢复状态。
+版本/分块正文与摘要文本列；复核后进一步删除未被使用的分块词项及重复摘要模型版本，
+简化候选读取为 ID 集合。保留来源判断、发布指针、内容哈希、摘要召回词项和恢复状态。
+正文及摘要词项统一在事务外生成并冻结，重试不再以重新分词兼容缺失字段的旧计划。
 历史读取和恢复使用远端不可变正文，缺失或被改写明确失败；不从原始事件静默重算。
 读取期间不持有 SQL 事务，返回前重新检查权限、来源与全部原生排序参与者。
 格式为 `origence-sqlite-v2` / `origence-content-sha256-v1`，仅新目录/集合；精确验证见 VALIDATION。

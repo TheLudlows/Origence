@@ -258,11 +258,10 @@ impl SqliteTx {
         ordinal: i32,
         content: &str,
         locator: &Value,
-        search_terms: &str,
     ) -> StorageResult<()> {
         sqlite_db::query(
-            "INSERT INTO oc_chunks(tenant_id, workspace_id, id, asset_id, version, ordinal, content_hash, locator, search_terms) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO oc_chunks(tenant_id, workspace_id, id, asset_id, version, ordinal, content_hash, locator) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -272,7 +271,6 @@ impl SqliteTx {
         .bind(ordinal)
         .bind(hash(content))
         .bind(serde_json::to_string(locator).unwrap_or_default())
-        .bind(search_terms)
         .execute(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
@@ -283,18 +281,16 @@ impl SqliteTx {
         &mut self,
         summary: Uuid,
         chunk: Uuid,
-        model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()> {
         sqlite_db::query(
-            "INSERT INTO oc_summaries(tenant_id, workspace_id, id, chunk_id, model_revision, search_terms) \
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO oc_summaries(tenant_id, workspace_id, id, chunk_id, search_terms) \
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(summary)
         .bind(chunk)
-        .bind(model_revision)
         .bind(search_terms)
         .execute(&mut *self.tx)
         .await

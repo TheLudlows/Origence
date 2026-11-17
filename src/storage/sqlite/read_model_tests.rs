@@ -70,7 +70,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
         "CREATE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key) WHERE identity_key IS NOT NULL",
         "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content_hash TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content_hash TEXT NOT NULL,locator TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,artifact_id BLOB NOT NULL,artifact_type TEXT NOT NULL,source_id BLOB NOT NULL,version INTEGER NOT NULL,generation INTEGER NOT NULL,surface TEXT NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,source_id,version,artifact_id,surface,generation))",
         "CREATE TABLE oc_index_entries(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,artifact_id BLOB NOT NULL,field TEXT NOT NULL,model_id TEXT NOT NULL,dimension INTEGER NOT NULL,generation INTEGER NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,artifact_id,field,model_id,generation))",
     ] {
@@ -132,7 +132,7 @@ async fn seed(
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,?,'{}','needle')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,0,?,'{}')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.chunk)
@@ -215,7 +215,7 @@ async fn batched_reads_cross_id_and_version_boundaries_without_truncation() {
     }
     // Unrequested historical JSON must not be evaluated by an exact-version
     // batch, even when the asset also has an eligible current chunk.
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,999,0,'old','{','old')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,999,0,'old','{')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())
@@ -691,7 +691,7 @@ async fn native_sources_check_only_requested_chunks_without_publication_guards()
     let row = Record::new(1);
     seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
     let sibling = Uuid::new_v4();
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'sibling',?,'needle')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'sibling',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(sibling)
@@ -1187,7 +1187,7 @@ async fn current_chunk_metadata_is_read_once_per_native_version_request() {
         ids.push(row.chunk);
         for ordinal in 1..17 {
             let id = Uuid::new_v4();
-            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,?,'body','{}','needle')")
+            db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,?,'body','{}')")
                 .bind(scope.tenant_id)
                 .bind(scope.workspace_id)
                 .bind(id)
@@ -1220,16 +1220,16 @@ async fn raw_request_compression_keeps_distinct_storage_types() {
         .unwrap();
     // No affinity on version: preserve integer/real/text/blob as distinct
     // storage values even where native equality may later match some of them.
-    db::query("CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version,content_hash TEXT,locator TEXT,search_terms TEXT)")
+    db::query("CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version,content_hash TEXT,locator TEXT)")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
     let asset = Uuid::new_v4();
     for sql in [
-        "INSERT INTO oc_chunks VALUES(?,?,?,?,1,'body','{}','needle')",
-        "INSERT INTO oc_chunks VALUES(?,?,?,?,1.0,'body','{}','needle')",
-        "INSERT INTO oc_chunks VALUES(?,?,?,?,'1','body','{}','needle')",
-        "INSERT INTO oc_chunks VALUES(?,?,?,?,x'31','body','{}','needle')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,1,'body','{}')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,1.0,'body','{}')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,'1','body','{}')",
+        "INSERT INTO oc_chunks VALUES(?,?,?,?,x'31','body','{}')",
     ] {
         db::query(sql)
             .bind(scope.tenant_id)
@@ -1375,11 +1375,6 @@ async fn summary_hits_keep_native_aggregation_and_null_terms() {
             .unwrap()
             .is_empty()
     );
-    // Summary retrieval and hit rendering do not consume raw chunk terms.
-    db::query("UPDATE oc_chunks SET search_terms=x'01'")
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
     assert!(tx.visible_hit(row.chunk).await.unwrap().is_some());
     assert_eq!(tx.summary_hits("needle", None).await.unwrap().len(), 1);
     db::query("UPDATE oc_chunks SET content_hash=x'02'")
@@ -1407,7 +1402,7 @@ async fn selected_payload_waits_for_other_chunk_version_support() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'other',?,'other')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'other',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())
@@ -1438,7 +1433,7 @@ async fn orphan_learning_hides_invalid_render_payload() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("UPDATE oc_chunks SET content_hash=x'02',search_terms=x'03'")
+    db::query("UPDATE oc_chunks SET content_hash=x'02'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -1466,7 +1461,7 @@ async fn index_candidates_do_not_consume_hit_payload() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("UPDATE oc_chunks SET content_hash=x'02',search_terms=x'03'")
+    db::query("UPDATE oc_chunks SET content_hash=x'02'")
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -1555,7 +1550,7 @@ async fn hidden_index_metadata_and_payload_do_not_poison_hits() {
     );
     // The malformed candidate ID is not needed by the version guard. Another
     // chunk hides the whole version before that output ID is decoded.
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'support',?,'support')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'support',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())
@@ -1891,7 +1886,7 @@ async fn graph_evidence_skips_invalid_historical_keys_before_decode() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_chunks VALUES(?,?,x'32',x'31',1,0,x'01','{}','old')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,x'32',x'31',1,0,x'01','{}')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .execute(&mut *tx.tx)
@@ -2016,7 +2011,7 @@ async fn retrieval_identity_decoding_follows_visibility_and_first_semantic_statu
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'later',?,'later')")
+    db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,1,'later',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())

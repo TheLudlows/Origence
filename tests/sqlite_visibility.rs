@@ -54,7 +54,7 @@ async fn seed(store: &SqliteStore, scope: Scope, ids: EvidenceIds) -> Authorized
     db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle',?,'visibility',?,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset).bind(ids.root).bind(auth.principal_id)
         .execute(store.pool()).await.unwrap();
-    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator,search_terms) VALUES(?,?,?,?,3,0,?,?,'needle')")
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator) VALUES(?,?,?,?,3,0,?,?)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.chunk).bind(ids.asset)
         .bind(scope.workspace_id.to_string()).bind(ids.locator().to_string())
         .execute(store.pool()).await.unwrap();

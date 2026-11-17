@@ -674,7 +674,7 @@ mod tests {
             "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,kind TEXT NOT NULL,state TEXT)",
             "CREATE TABLE oc_assets(tenant_id BLOB,workspace_id BLOB,id BLOB,kind TEXT,title TEXT,current_version INTEGER,deleted INTEGER)",
             "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,title TEXT,source_event_id BLOB)",
-            "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,ordinal INTEGER,content_hash TEXT,locator TEXT,search_terms TEXT)",
+            "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,ordinal INTEGER,content_hash TEXT,locator TEXT)",
         ] {
             sqlite_db::query(sql).execute(&pool).await.unwrap();
         }
@@ -727,7 +727,7 @@ mod tests {
                 .await
                 .unwrap();
         }
-        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,0,'fixture',?,'fixture')")
+        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,1,0,'fixture',?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(chunk)

@@ -50,18 +50,10 @@ async fn memory_lifecycle_publishes_an_asset() {
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
-        tx.insert_chunk(
-            chunk,
-            a,
-            1,
-            0,
-            content,
-            &json!({"byte_start": 0}),
-            "审批 生产",
-        )
-        .await
-        .unwrap();
-        tx.insert_summary(Uuid::new_v4(), chunk, "model-v1", "审批")
+        tx.insert_chunk(chunk, a, 1, 0, content, &json!({"byte_start": 0}))
+            .await
+            .unwrap();
+        tx.insert_summary(Uuid::new_v4(), chunk, "审批")
             .await
             .unwrap();
         tx.update_asset_version(a, 1, None).await.unwrap();

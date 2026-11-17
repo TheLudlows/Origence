@@ -237,10 +237,7 @@ fn entries(receipt: &IngestReceipt, payload: &Value) -> Vec<FullTextEntry> {
                 version: receipt.target_version,
             },
             generation,
-            search_terms: chunk["search_terms"]
-                .as_str()
-                .map(str::to_owned)
-                .unwrap_or_else(|| parsing::lexical(chunk["chunk"]["content"].as_str().unwrap())),
+            search_terms: chunk["search_terms"].as_str().unwrap().to_owned(),
         })
         .collect()
 }
@@ -807,14 +804,9 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
         (chunks[1], "alpha"),
         (chunks[2], "beta"),
     ] {
-        tx.insert_summary(
-            Uuid::new_v4(),
-            chunk,
-            "fixture-summary",
-            &parsing::lexical(text),
-        )
-        .await
-        .unwrap();
+        tx.insert_summary(Uuid::new_v4(), chunk, &parsing::lexical(text))
+            .await
+            .unwrap();
     }
     tx.commit().await.unwrap();
     let mut tx = service

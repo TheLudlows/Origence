@@ -332,28 +332,18 @@ impl DomainTx for SqliteTx {
         ordinal: i32,
         content: &str,
         locator: &Value,
-        search_terms: &str,
     ) -> StorageResult<()> {
-        self.insert_chunk_inner(
-            chunk,
-            asset,
-            version,
-            ordinal,
-            content,
-            locator,
-            search_terms,
-        )
-        .await
+        self.insert_chunk_inner(chunk, asset, version, ordinal, content, locator)
+            .await
     }
 
     async fn insert_summary(
         &mut self,
         summary: Uuid,
         chunk: Uuid,
-        model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()> {
-        self.insert_summary_inner(summary, chunk, model_revision, search_terms)
+        self.insert_summary_inner(summary, chunk, search_terms)
             .await
     }
 
