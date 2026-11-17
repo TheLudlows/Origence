@@ -4,18 +4,64 @@ use crate::{
     service::{Service, decode, scope},
     storage::{
         DomainTx, FullTextHit, FullTextQuery, Permission, SourceVersion, VectorHit, VectorQuery,
+        anyseek::{GraphEdgeCandidate, GraphEntityCandidate},
+        sqlite::TursoTx,
     },
     types::*,
 };
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use uuid::Uuid;
 
 #[cfg(test)]
 #[path = "retrieval/publication_tests.rs"]
 mod publication_tests;
 
+const GRAPH_LIMIT: usize = 20;
+
+struct GraphCandidates {
+    seeds: BTreeMap<Uuid, GraphEntityCandidate>,
+    edges: Vec<GraphEdgeCandidate>,
+}
+
 impl Service {
+    async fn find_graph_candidates(&self, a: &AuthContext, terms: &str) -> Result<GraphCandidates> {
+        let scope = scope(a);
+        let remote = self.engine.vector();
+        let candidates = remote.graph_seed_candidates(scope, terms).await?;
+        let mut seeds = BTreeMap::new();
+        if !candidates.is_empty() {
+            // Apply the disclosure gate before the seed budget. A pending or
+            // withdrawn projection can neither fan out nor crowd out live seeds.
+            let mut tx = self.read(a, Permission::Read).await?;
+            for candidate in candidates {
+                if !seeds.contains_key(&candidate.id)
+                    && !tx
+                        .graph_evidence_for_publication(
+                            candidate.id,
+                            candidate.source,
+                            candidate.generation,
+                        )
+                        .await?
+                        .is_empty()
+                {
+                    seeds.insert(candidate.id, candidate);
+                    if seeds.len() == GRAPH_LIMIT {
+                        break;
+                    }
+                }
+            }
+            tx.commit().await?;
+        }
+        let seed_ids: Vec<_> = seeds.keys().copied().collect();
+        let edges = if seed_ids.is_empty() {
+            Vec::new()
+        } else {
+            remote.graph_neighbors(scope, &seed_ids).await?
+        };
+        Ok(GraphCandidates { seeds, edges })
+    }
+
     pub async fn search(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
         // Native query futures are large. Keep that state on the heap rather
         // than embedding it in every host/router/helper future awaiting us.
@@ -214,7 +260,7 @@ impl Service {
         let graph_enabled =
             effective == "hybrid" && input.memory_identity.is_none() && input.components.graph;
         let graph = if graph_enabled {
-            Some(self.engine.graph().snapshot(scope(a)).await?)
+            Some(Box::pin(self.find_graph_candidates(a, &terms)).await?)
         } else {
             None
         };
@@ -321,84 +367,17 @@ impl Service {
         if effective != "keyword" {
             branches.push(vectors);
         }
-        let (mut entities, mut relations) = (Vec::new(), Vec::new());
         if summaries_enabled {
             branches.push(tx.summary_hits(&terms, asset_filter).await?);
         }
-        if let Some(graph) = graph {
-            let all_entities: Vec<Value> = decode(graph["entities"].clone())?;
-            let all_relations: Vec<Value> = decode(graph["relations"].clone())?;
-            let mut ids = HashSet::new();
-            for entity in &all_entities {
-                if !terms
-                    .split_whitespace()
-                    .any(|term| entity["name"].as_str().unwrap_or("").contains(term))
-                {
-                    continue;
-                }
-                let id: Uuid = decode(entity["id"].clone())?;
-                // Withdrawn dependencies must not consume the seed budget.
-                if !tx.graph_evidence(id).await?.is_empty() {
-                    ids.insert(id);
-                    if ids.len() == 20 {
-                        break;
-                    }
-                }
-            }
-            let seeds = ids.clone();
-            let mut edges = Vec::new();
-            for edge in all_relations {
-                let from: Uuid = decode(edge["source_id"].clone())?;
-                let to: Uuid = decode(edge["target_id"].clone())?;
-                if seeds.contains(&from) || seeds.contains(&to) {
-                    ids.insert(from);
-                    ids.insert(to);
-                    edges.push(edge);
-                }
-            }
-            let mut evidence_hits = Vec::new();
-            for mut entity in all_entities {
-                let id: Uuid = decode(entity["id"].clone())?;
-                if !ids.contains(&id) {
-                    continue;
-                }
-                let evidence = tx.graph_evidence(id).await?;
-                if !evidence.is_empty() {
-                    for e in &evidence {
-                        if let Some(h) = tx.visible_hit(decode(e["chunk_id"].clone())?).await? {
-                            evidence_hits.push(h);
-                        }
-                    }
-                    entity["evidence"] = json!(evidence);
-                    entities.push(entity);
-                }
-                if entities.len() >= 20 {
-                    break;
-                }
-            }
-            let visible: HashSet<Uuid> = entities
-                .iter()
-                .map(|e| decode(e["id"].clone()))
-                .collect::<Result<_>>()?;
-            for mut edge in edges {
-                if !visible.contains(&decode(edge["source_id"].clone())?)
-                    || !visible.contains(&decode(edge["target_id"].clone())?)
-                {
-                    continue;
-                }
-                let evidence = tx.graph_evidence(decode(edge["id"].clone())?).await?;
-                if !evidence.is_empty() {
-                    edge["evidence"] = json!(evidence);
-                    relations.push(edge);
-                }
-                if relations.len() >= 20 {
-                    break;
-                }
-            }
-            evidence_hits.sort_by_key(|h| h.chunk_id);
-            evidence_hits.dedup_by_key(|h| h.chunk_id);
+        let (entities, relations) = if let Some(graph) = graph {
+            let (entities, relations, evidence_hits) =
+                Box::pin(project_graph_evidence(&mut tx, graph)).await?;
             branches.push(evidence_hits);
-        }
+            (entities, relations)
+        } else {
+            (Vec::new(), Vec::new())
+        };
         let hits = fuse(branches, effective == "hybrid");
         tx.commit().await?;
         let branches_ms = branches_started.elapsed().as_secs_f64() * 1000.0;
@@ -532,6 +511,78 @@ struct PreparedSearch {
     terms: String,
     native_hits: Vec<(i64, VectorHit)>,
     full_text_hits: Vec<(i64, FullTextHit)>,
+}
+
+async fn project_graph_evidence(
+    tx: &mut TursoTx,
+    graph: GraphCandidates,
+) -> Result<(Vec<Value>, Vec<Value>, Vec<SearchHit>)> {
+    let mut names = BTreeMap::new();
+    for (id, seed) in graph.seeds {
+        if !tx
+            .graph_evidence_for_publication(id, seed.source, seed.generation)
+            .await?
+            .is_empty()
+        {
+            names.insert(id, seed.name);
+        }
+    }
+    // Snapshot only the seeds. Neighbor endpoints must not seed a second hop.
+    let seeds: HashSet<_> = names.keys().copied().collect();
+    let mut edges = BTreeMap::new();
+    for edge in graph.edges {
+        if !(seeds.contains(&edge.from) || seeds.contains(&edge.to))
+            || edges.contains_key(&edge.id)
+            || tx
+                .graph_evidence_for_publication(edge.id, edge.source, edge.generation)
+                .await?
+                .is_empty()
+        {
+            continue;
+        }
+        names
+            .entry(edge.from)
+            .or_insert_with(|| edge.from_name.clone());
+        names.entry(edge.to).or_insert_with(|| edge.to_name.clone());
+        edges.insert(edge.id, edge);
+    }
+    let mut entities = Vec::new();
+    let mut evidence_hits = Vec::new();
+    let mut visible = HashSet::new();
+    for (id, name) in names {
+        let evidence = tx.graph_evidence(id).await?;
+        if evidence.is_empty() {
+            continue;
+        }
+        for e in &evidence {
+            if let Some(hit) = tx.visible_hit(decode(e["chunk_id"].clone())?).await? {
+                evidence_hits.push(hit);
+            }
+        }
+        entities.push(json!({"id":id,"name":name,"evidence":evidence}));
+        visible.insert(id);
+        if entities.len() == GRAPH_LIMIT {
+            break;
+        }
+    }
+    let mut relations = Vec::new();
+    for (id, edge) in edges {
+        if !visible.contains(&edge.from) || !visible.contains(&edge.to) {
+            continue;
+        }
+        let evidence = tx.graph_evidence(id).await?;
+        if !evidence.is_empty() {
+            let fact = format!("{} {} {}", edge.from_name, edge.predicate, edge.to_name);
+            relations.push(json!({"id":id,"source_id":edge.from,"target_id":edge.to,
+                "fact_text":fact,"evidence":evidence}));
+        }
+        if relations.len() == GRAPH_LIMIT {
+            break;
+        }
+    }
+    evidence_hits.sort_by_key(|hit| hit.chunk_id);
+    evidence_hits.dedup_by_key(|hit| hit.chunk_id);
+    Ok((entities, relations, evidence_hits))
 }
 
 // Serialize only after the authority transactions finish. Keeping these JSON

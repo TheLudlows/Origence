@@ -722,6 +722,39 @@ fn ledger(claim: &ClaimedJob, publication: &Publication) -> Result<Vec<LedgerEnt
     }
     Ok(items)
 }
+/// Graph support belongs to the same frozen source/version/generation as the
+/// chunk projection. Never manufacture a new source or graph on a retry.
+fn graph_publication(
+    claim: &ClaimedJob,
+    kind: JobKind,
+    publication: &Publication,
+) -> Result<Option<crate::storage::anyseek::GraphPublication>> {
+    let Some(graph) = &publication.graph else {
+        return Ok(None);
+    };
+    if kind != JobKind::Ingest
+        || publication.generation != claim.generation
+        || publication.memories.len() != 1
+        || publication.memories[0].chunks.is_empty()
+        || publication.memories[0].version <= 0
+    {
+        return Err(AppError::Invalid(
+            "invalid graph publication ownership".into(),
+        ));
+    }
+    // The graph is stored on an existing chunk, not as additional group members.
+    if publication.memories[0].chunks.len() > crate::storage::anyseek::MAX_GROUP {
+        return Err(AppError::Invalid(
+            "AnySeek graph publication exceeds 64 chunks".into(),
+        ));
+    }
+    Ok(Some(crate::storage::anyseek::GraphPublication {
+        source: source_for(claim, publication.memories[0].version)?,
+        generation: claim.generation,
+        graph: graph.clone(),
+    }))
+}
+
 async fn publish_prepared(
     service: &Service,
     claim: &ClaimedJob,
@@ -731,6 +764,7 @@ async fn publish_prepared(
     if publication.full_text_operation_epoch.is_none() {
         publication.full_text_operation_epoch = Some(crate::storage::anyseek::operation_epoch()?);
     }
+    let graph_projection = graph_publication(claim, payload.kind(), &publication)?;
     let a = auth(claim);
     let entries = ledger(claim, &publication)?;
     let mut tx = service.write(&a, permission(payload)).await?;
@@ -775,22 +809,12 @@ async fn publish_prepared(
             claim.scope,
             full_text,
             vectors,
+            graph_projection,
             publication.full_text_operation_epoch,
         )
         .await?;
-    if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
-        let source = source_for(claim, first.version)?;
-        service
-            .engine
-            .graph()
-            .upsert_entities(claim.scope, source, g.entities.clone())
-            .await?;
-        service
-            .engine
-            .graph()
-            .upsert_relations(claim.scope, source, g.relations.clone())
-            .await?;
-    }
+    // The graph projection was written in the same AnySeek group as chunks.
+    // Only the final authority transaction may make those supports visible.
     let mut tx = service.write(&a, permission(payload)).await?;
     guard(&mut tx, claim, payload).await?;
     for memory in &publication.memories {
@@ -929,26 +953,13 @@ async fn publish_prepared(
 /// with native writes. Visibility is already blocked by the relational tombstone.
 pub async fn cleanup(service: &Service) -> Result<()> {
     for scope in service.engine.relational().scopes().await? {
-        let (vectors, entities, relations) =
-            service.engine.relational().cleanup_plan(scope).await?;
+        let chunks = service.engine.relational().cleanup_plan(scope).await?;
+        // Graph metadata follows its source publication group. Do not delete
+        // entity/edge IDs globally: another source may still support them.
         service
             .engine
             .vector()
-            .delete_objects(scope, vectors)
-            .await?;
-        let ids = service.engine.graph().list_ids(scope).await?;
-        let dead_entities: Vec<Uuid> = decode::<Vec<Uuid>>(ids["entities"].clone())?
-            .into_iter()
-            .filter(|id| !entities.contains(id))
-            .collect();
-        let dead_relations: Vec<Uuid> = decode::<Vec<Uuid>>(ids["relations"].clone())?
-            .into_iter()
-            .filter(|id| !relations.contains(id))
-            .collect();
-        service
-            .engine
-            .graph()
-            .delete_objects(scope, dead_entities, dead_relations)
+            .delete_objects(scope, chunks)
             .await?;
         service.engine.relational().finish_cleanup(scope).await?;
     }
@@ -990,6 +1001,120 @@ mod tests {
         let publication: Publication = serde_json::from_value(unprepared.clone()).unwrap();
         assert!(publication.receipt_metadata.is_none());
         assert_eq!(serde_json::to_value(publication).unwrap(), unprepared);
+    }
+
+    fn graph_plan_fixture(chunks: usize) -> (ClaimedJob, Publication) {
+        let claim = ClaimedJob {
+            scope: Scope {
+                tenant_id: Uuid::new_v4(),
+                workspace_id: Uuid::new_v4(),
+            },
+            job_id: Uuid::new_v4(),
+            kind: "ingest".into(),
+            payload: json!({}),
+            generation: 3,
+            run_token: 1,
+            created_by: Uuid::new_v4(),
+            asset: Some(Uuid::new_v4()),
+            source: Some(Uuid::new_v4()),
+        };
+        let graph = graph::parse_graph_extraction(&json!({
+            "entities":[{"name":"alpha","entity_type":"component","description":""},
+                        {"name":"beta","entity_type":"component","description":""}],
+            "relations":[{"source":"alpha","predicate":"uses","target":"beta"}]
+        }))
+        .unwrap();
+        let publication = Publication {
+            generation: 3,
+            profile: None,
+            summary_model: None,
+            graph: Some(graph),
+            memories: vec![PublishedMemory {
+                asset: claim.asset.unwrap(),
+                fact_key: None,
+                expected_version: None,
+                version: 1,
+                chunks: (0..chunks)
+                    .map(|n| PublishedChunk {
+                        id: Uuid::from_u128(n as u128 + 1),
+                        chunk: Chunk {
+                            content: "alpha uses beta".into(),
+                            locator: json!({}),
+                        },
+                        embedding: None,
+                        summary: String::new(),
+                        search_terms: None,
+                    })
+                    .collect(),
+            }],
+            receipt_metadata: None,
+            full_text_operation_epoch: Some(7),
+        };
+        (claim, publication)
+    }
+
+    #[test]
+    fn graph_publication_preserves_saved_source_and_retry_plan() {
+        let (claim, publication) = graph_plan_fixture(1);
+        let saved = serde_json::to_value(&publication).unwrap();
+        let replay: Publication = serde_json::from_value(saved.clone()).unwrap();
+        let projection = graph_publication(&claim, JobKind::Ingest, &replay)
+            .unwrap()
+            .unwrap();
+        assert_eq!(projection.source, source_for(&claim, 1).unwrap());
+        assert_eq!(projection.generation, 3);
+        assert_eq!(Some(projection.graph), replay.graph);
+        assert_eq!(serde_json::to_value(&replay).unwrap(), saved);
+        assert_eq!(replay.full_text_operation_epoch, Some(7));
+        let entries = ledger(&claim, &replay).unwrap();
+        assert_eq!(entries.len(), 4);
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.key.surface == Surface::Graph)
+                .count(),
+            3
+        );
+    }
+
+    #[test]
+    fn graph_publication_rejects_ambiguous_owner_and_chunk_overflow() {
+        let (claim, mut publication) = graph_plan_fixture(64);
+        assert!(matches!(
+            graph_publication(&claim, JobKind::Publish, &publication),
+            Err(AppError::Invalid(_))
+        ));
+        assert!(graph_publication(&claim, JobKind::Ingest, &publication).is_ok());
+        let extra = publication.memories[0].chunks[0].clone();
+        publication.memories[0].chunks.push(extra);
+        assert!(matches!(
+            graph_publication(&claim, JobKind::Ingest, &publication),
+            Err(AppError::Invalid(_))
+        ));
+        publication.memories[0].chunks.truncate(1);
+        publication.generation += 1;
+        assert!(matches!(
+            graph_publication(&claim, JobKind::Ingest, &publication),
+            Err(AppError::Invalid(_))
+        ));
+        publication.generation = claim.generation;
+        publication.memories.push(publication.memories[0].clone());
+        assert!(matches!(
+            graph_publication(&claim, JobKind::Ingest, &publication),
+            Err(AppError::Invalid(_))
+        ));
+        publication.memories.truncate(1);
+        publication.memories[0].chunks.clear();
+        assert!(matches!(
+            graph_publication(&claim, JobKind::Ingest, &publication),
+            Err(AppError::Invalid(_))
+        ));
+        publication.graph = None;
+        assert!(
+            graph_publication(&claim, JobKind::Ingest, &publication)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

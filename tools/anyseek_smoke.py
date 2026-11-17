@@ -38,13 +38,21 @@ def call(base, path, key, body=None):
 
 
 def schema(dimension=None):
-    fields = ["format", "tenant", "workspace", "chunk_id", "source_id", "source_version", "generation", "publication", "profile", "dimension"]
+    fields = ["format", "kind", "tenant", "workspace", "chunk_id", "source_id", "source_version", "generation", "publication", "profile", "dimension"]
     result = [{"field": name, "field_type": "String", "store": True,
                "index_lexical": False, "index_vector": False, "filterable": True, "boost": 1.0}
               for name in fields]
     result.append({"field": "terms", "field_type": "Text", "store": True,
                    "index_lexical": True, "index_vector": False, "filterable": False, "boost": 1.0})
-    config = {"index_name": "origence-search-sha256-v2", "schema": result,
+    for name, field_type, filterable in [
+        ("graph", "Json", False),
+        ("endpoint_ids", "StringSet", True),
+        ("graph_keys", "StringSet", True),
+    ]:
+        result.append({"field": name, "field_type": field_type, "store": True,
+                       "index_lexical": False, "index_vector": False,
+                       "filterable": filterable, "boost": 1.0})
+    config = {"index_name": "origence-search-sha256-v3", "schema": result,
               "tokenizer": "TantivySimpleV1", "text_normalization": "None", "stop_words": "None"}
     if dimension is not None:
         require(1 <= dimension <= 4096, "invalid fixture vector dimension")

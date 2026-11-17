@@ -2,12 +2,13 @@
 
 更新：2026-11-17。代码基线为 main
 [`0a1a56c`](https://github.com/TheLudlows/Origence/commit/0a1a56c1da74e78be0118782b04a3f5a37251060)
-（[PR #73](https://github.com/TheLudlows/Origence/pull/73)）；产品边界见[架构规划](design/agent-data-foundation.md)。
-**首版核心路径已实现，CI 尚有失败，真实双客户端和企业任务尚未完成验收。**
+（[PR #73](https://github.com/TheLudlows/Origence/pull/73)）；[PR #74](https://github.com/TheLudlows/Origence/pull/74) 的新增能力与本地验收另列。
+产品边界见[架构规划](design/agent-data-foundation.md)。
+**首版核心路径已实现，主干 #73 基线的 CI 尚有失败，真实双客户端和企业任务尚未完成验收。**
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 检索 | AnySeek 全文/向量、同组发布、模型与目录绑定；真实引擎合同回归通过 | 真实模型检索质量、容量与延迟验收 |
+| 检索 | AnySeek 全文、向量与一跳图候选同组发布；Turso 仍核验图证据，独立 `graph.db` 不再使用；真实引擎本地回归通过 | 真实模型检索质量、容量与延迟验收 |
 | 私有会话 | 逻辑 key 绑定唯一平台归档，独立 key 隔离，授权轮换与撤销 | Claude Code / Codex 同 key 跨客户端真实任务验证 |
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |

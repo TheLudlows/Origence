@@ -1,6 +1,6 @@
 # 本地运维说明
 
-适用单宿主 Turso 权威数据、Blob、Turso 图和独立 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与恢复)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
+适用单宿主 Turso 权威数据、Blob 和独立 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与恢复)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
@@ -18,7 +18,6 @@
 | `context.db` 及原生 Turso WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
 | `full-text-backend.json` | AnySeek endpoint/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |
-| `graph.db` 及原生 Turso WAL | Turso 图实体、关系与遍历投影 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
 实际锁文件命名和数据库路径以配置及启动实现为准。不要直接修改任一库的业务记录；向量和图不是来源状态的权威。数据目录只授予宿主 OS 身份访问权限，API key 不能保护已经取得本地文件访问权的用户。
@@ -56,7 +55,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## AnySeek 全文与向量
 
-全文和向量只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
+全文、向量和一跳图候选只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
 1. 准备支持整组替换的 AnySeek，例如 [6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)；
@@ -134,17 +133,19 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 ## 图存储与来源边界
 
-图存储使用 `graph.db`，沿用 `GraphStore`、确定性对象 ID 和 Turso owner/跨存储账本。所有连接启用外键，实体删除级联移除入边、出边和自环；有向遍历最多三跳、去重并排除起点。新文件自动创建完整结构，已有不兼容结构拒绝打开，不自动修复。
+对外 hybrid 检索只扩展一跳。实体和边由 AnySeek 的 `origence-search-sha256-v3` collection
+提供候选，按来源版本附在一个现有 chunk Record 上，跟随同一组原子发布。上限仍为 64 个
+chunk，并受完整请求字节预算限制；超限拒绝，不分批暴露。
 
-本版本不加载旧 graph/kuzu.db，也不迁移旧 SQLite 图文件。实体、关系与来源
-归属由 Turso 保存，跨文件发布仍通过权威 owner/账本控制读取。
-只支持新建或同版本完整目录；不要删除图文件或清空账本来尝试迁移或恢复。
-原始来源与既有备份必须保留，不能把“新图文件可创建”理解为“旧图已恢复”。
+`context.db` 的 owner 和发布账本仍是证据权威。来源撤回立即阻断其证据，AnySeek 中的残留投影
+不会让关系复活；同一关系有其他有效来源时仍可召回。图投影随所属来源的 chunk 组清理。
+宿主不再创建、打开或维护独立的 `graph.db`；已有的图文件不读、不迁移、不删除。
+不提供旧库升级，不要手工清空账本或索引来试图迁移。
 
 ## 备份与恢复
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含全文/向量。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含 AnySeek 的全文、向量或图候选索引。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。

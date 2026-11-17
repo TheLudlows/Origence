@@ -32,9 +32,7 @@ flowchart TD
     W --> B[Blob：原始文件]
     W --> R[RetrievalStore]
     S --> R
-    R --> F[AnySeek 全文与向量]
-    W --> G[Turso 图投影]
-    S --> G
+    R --> F[AnySeek 全文、向量与一跳候选]
     W --> P[按配置调用模型与解析器]
 ```
 
@@ -57,16 +55,15 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
 | RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本 | 原生 Turso `context.db` |
-| RetrievalStore | 带作用域、来源、generation 与模型 profile 的全文/向量投影 | AnySeek HTTP |
+| RetrievalStore | 带作用域、来源、generation 的全文、向量和一跳图投影 | AnySeek HTTP |
 | 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 Turso `context.db` |
-| GraphStore | 图实体、关系及遍历投影 | 原生 Turso `graph.db`；owner 权威仍在 authority |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
 
 `StorageEngine` 是组装结构，持有 `RelationalStore`、`JobQueue`、`VectorStore`、
-`GraphStore` 和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/Turso 事务，
+和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/Turso 事务，
 并非任意数据库的通用运行时。`VectorStore` 暂同时承载全文接口，`RetrievalStore` 完成委派。
 存储 SQL 留在适配器；所有业务事务携带 scope。模型、文件与远端索引 IO 在事务外执行。
 业务、幂等、审计和入队同事务提交，JobQueue 消费者不在另一连接补登记任务。
@@ -110,11 +107,11 @@ metadata 或存储错误明确失败；正文与 locator 从 Origence 权威数�
 ### A2.6 跨存储发布与清理
 
 1. 权威事务保存发布计划、pending 账本；AnySeek 计划保存原 operation epoch。
-2. 在事务外写入全文、向量和图投影，使用确定性完整身份。
+2. 在事务外向 AnySeek 写入全文、向量和图投影，使用确定性完整身份。
 3. 权威事务再次核对运行/来源/权限/版本，提交版本、owner、ready 索引及作业完成。
-4. 失败或撤回后按权威清理规划删除孤儿；共享对象保留仍有效的 owner。
+4. 失败或撤回后按权威清理规划删除孤儿；图关系的有效来源保留自己的 owner 和独立投影。
 
-AnySeek 用一组 Record 原子写入一个不可变发布的文本和向量；新业务版本使用独立组。
+AnySeek 用一组 Record 原子写入一个不可变发布的 chunk，其中一个可附带图元数据；新业务版本使用独立组。
 这不是 Origence 与 AnySeek 的共同事务。响应丢失先核对完整当前组；原计划恢复复用 epoch。
 清理以当前 group 版本 CAS 保留其他成员，启动清理后仍有效的作业可在原计划下重建。
 超出原操作窗口且无法确认完整提交时保留失败状态，不换身份猜测写入。
@@ -126,7 +123,7 @@ AnySeek 用一组 Record 原子写入一个不可变发布的文本和向量；�
 未知后端、缺配置和存储错误不静默降级。只有请求允许的模型失败可按原契约降为 keyword。
 
 AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序须在实际后端与任务集上独立评估。
-每个发布最多 64 块、编码后请求 2 MiB；超限整份拒绝。候选、响应、超时和解析限制见
+每个发布最多 64 个 chunk Record，完整编码请求至多 2 MiB，图元数据不占独立 Record；超限整份拒绝。候选、响应、超时和解析限制见
 [API](../API.md#anyseek-统一检索)与 [OPERATIONS](../OPERATIONS.md#anyseek-全文与向量)，不在设计重复维护数值。
 AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定配置。全库相关性、容量和延迟未验收。
 

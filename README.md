@@ -7,7 +7,7 @@ Origence is a Rust-based data foundation for internal enterprise agents. It mana
 ## Features
 
 - **Context** — Scoped memory and knowledge, private archives, versioning, and source references.
-- **Retrieval** — Unified AnySeek full-text and vector search.
+- **Retrieval** — Unified AnySeek full-text, vector, and one-hop graph retrieval with Turso-authorized evidence.
 - **Skills** — Private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
 - **Run evidence** — Context preparation records, reported tools/Skills/results, and explicit collection gaps.
 

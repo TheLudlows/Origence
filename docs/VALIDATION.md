@@ -2,10 +2,39 @@
 
 核验日期：2026-11-17。代码基线：main
 [`0a1a56c1da74e78be0118782b04a3f5a37251060`](https://github.com/TheLudlows/Origence/commit/0a1a56c1da74e78be0118782b04a3f5a37251060)。
-以下运行结果来自该提交的 Linux / Rust 1.98.0 检查；本次文档整理不修改源码、依赖或配置。
+除单列的 #74 结果外，本文记录的是该基线的 Linux / Rust 1.98.0 检查。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
-## 本地运行结果
+## 2026-11-17：移除独立 Turso 图存储
+
+基于一跳适配的本地 `42c6e8f`（与 [PR #74](https://github.com/TheLudlows/Origence/pull/74) 的 `e281142` 同树）。
+本地 Linux / Rust 1.98.0，代码头 `f0caae4c75df01c9e8e98f2c515caccbab0d032f`。全量构建中发现的无用测试 re-export 已移除，最终严格 Clippy 通过。
+
+- `cargo test --locked --no-fail-fast`：213 库测试、199 集成测试和 4 协议测试通过；旧图存储独有测试移除。
+- 应用回归：新库不创建 `graph.db`；旧文件未读取或修改；远端已写、权威未提交的冻结图发布可在重启后清理和重放。共享边撤回一份来源后保留另一份，未发布与撤回证据均不泄露。
+- 真实本地 AnySeek `6614bbf`：一跳方向/来源/替换、BM25 排序和分数对照、HTTP/stdio MCP 烟测通过。
+- 格式、`git diff --check`、`cargo clippy --locked --all-targets -- -D warnings` 通过。
+- 不修改 `context.db` schema、AnySeek 代码或协议；未运行 GitHub Actions、Windows 和生产验收，不提供旧库迁移。
+
+## 2026-11-17：AnySeek 一跳候选与原文排序
+
+基线为 [PR #73](https://github.com/TheLudlows/Origence/pull/73) 的 `0a1a56c`，
+验证版本 `1094887725fe903fe1eaf0019e9e4ebf8b153842`。本地 Linux，Rust 1.98.0，真实 AnySeek `6614bbf` 使用独立临时目录。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| `cargo test --locked --no-fail-fast` | 222 库测试、212 本地集成和 4 协议测试通过；默认忽略的真实后端用例在下行单独记录 |
+| 真实后端图用例 | 通过：同一来源 13 条一跳邻边、入边/出边、Unicode 子串、scope/version/generation、清理重放；相同 chunk 加图前、加图后、清除图后，相关性排序和分数位一致 |
+| 真实 AnySeek + Origence HTTP/stdio MCP 烟测 | 通过：检索、读取、引用、更新、历史、密钥撤销与重开；该通用烟测不等同于原生客户端验收 |
+| 格式、Clippy（`--all-targets -- -D warnings`）与差异检查 | 通过 |
+| Python 工具及评估辅助 UT | 8 + 42 通过 |
+
+独立引擎对照：固定 24 个 chunk 和同一查询，加入 40 个无全文字段的独立图 Record 会改变 BM25 排序；
+改为只更新已有 Record 的图元数据，24 个命中的排序及分数完全相同。这是有限样本的回归证据，不是容量或生产性能验收。
+公共检索的图候选仍需 Turso 的精确发布证明，来源更新后人工残留的旧索引和撤回事件在清理前后均不可见。
+未运行 GitHub Actions、Windows、生产规模或真实客户端任务；部署仅覆盖新建库及 v3 collection。
+
+## #73 基线的本地运行结果
 
 | 检查 | 结果 | 范围 |
 | --- | --- | --- |
