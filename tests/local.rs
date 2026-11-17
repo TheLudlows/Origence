@@ -1,3 +1,6 @@
+#[cfg(feature = "local-storage")]
+mod catalog;
+#[cfg(feature = "local-storage")]
 mod support;
 // One integration executable avoids repeatedly linking the native engines.
 mod evidence_bundle;

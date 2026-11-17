@@ -29,6 +29,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 mod app;
+mod catalog;
 #[cfg(feature = "local-storage")]
 mod context;
 #[cfg(all(test, feature = "local-storage"))]

@@ -21,6 +21,7 @@ use std::{
 };
 use uuid::Uuid;
 
+mod catalog;
 mod workspaces;
 
 #[derive(Clone)]

@@ -11,6 +11,7 @@ Skill 从记忆与 Agent 执行经验提炼，候选内容、依据与变更供�
 | 目的 | 唯一入口 |
 | --- | --- |
 | 快速构建/启动 | [项目 README](../README.md) |
+| Node.js 管理界面启动、配置与验证 | [UI README](../ui/README.md) |
 | 首版核心范围、架构与验收 | [企业 Agent 数据底座精简规划](design/agent-data-foundation.md) |
 | 架构边界检视与官方产品参考 | [架构检视记录](reviews/2026-11-16-agent-data-foundation-review.md) |
 | 当前能力、缺口、下一步 | [STATUS](STATUS.md) |

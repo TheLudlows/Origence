@@ -1533,3 +1533,45 @@ Linux / Rust 1.98.0，默认功能代码与 Clippy 核验于
 主要新增覆盖：全文/向量同组发布重试、保留成员清理和模型绑定、私有会话/Run 所有权和授权
 轮换、公开 Learning 引用脱敏、选定审阅包与审批绑定、Skill 产物校验和导出。
 自动提炼、原生受管加载及撤回、真实引擎和双客户端试点未验收。
+
+## 2026-11-17：Node.js 管理界面与只读目录（Issue #76）
+
+实现基线 `0a1a56c1da74e78be0118782b04a3f5a37251060`，测试在本变更工作树运行；
+精确发布提交随 PR 记录。环境为 Linux、Rust 1.98.0、Node.js 24.22.1、npm 11.9.0；
+真实 AnySeek 测试依赖固定为 `6614bbf29bad0041c65738831bc1a16da4c69660`。
+所有行为测试使用新建临时库和测试凭据，不调用外部模型，不接触已有用户数据。
+
+已通过：
+
+- `cd ui && npm test`：12 项（含 6 个页面流程子测试）通过。覆盖同源 HTTP 转发、
+  并发用户凭据隔离、原始二进制上传、409 保留、路径/Origin/重定向拒绝、超时、
+  中文/emoji/组合字符的 UTF-8 定位、固定版本差异、表单幂等重试、五页导航和 401 清理。
+  TypeScript strict 编译随该命令执行；happy-dom 只验证 DOM/请求合同，不是浏览器布局验收。
+- `cargo test --locked -j 2 --no-fail-fast`：218 库、4 AnySeek 本地协议、212 本地集成通过；
+  7 项单独配置的真实 AnySeek 合同测试在此命令中保持 ignored，没有改写为通过。
+- `cargo test --locked --no-default-features -j 2 --no-fail-fast`：141 库、2 AnySeek 本地协议、
+  105 本地集成通过，4 项真实后端测试保持 ignored。
+- `cargo test --locked --test local catalog::catalog_pages -j 2`：目录专项 1 项通过。
+  包含分页、失效来源被过滤后的游标推进、元数据不返回正文、workspace 隔离、
+  其他管理员不能读取私有 Run、获授权轮换延续逻辑归属及旧凭据拒绝。
+- 默认与 `--no-default-features` 的 `cargo clippy --locked --all-targets -j 2 -- -D warnings`、
+  `cargo fmt --all -- --check` 通过。
+- `python3 tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/ui_smoke.py --binary target/debug/origence --ui-entry ui/dist/server.js`
+  通过真实 Node UI → Origence → AnySeek HTTP 链路：认证、文件上传、异步发布、两类目录、
+  固定版本、关键词检索、上下文字节预算、准备回执、跨 key Run 拒绝和来源撤回。
+  这项真实引擎验收没有调用真实模型，不证明检索质量或 Agent 任务收益。
+- `python3 -m py_compile tools/ui_smoke.py`、`git diff --check` 通过。
+
+核验中修正：新建知识请求的 expected_version 必须为空而非 0；幂等删除测试需传请求键。
+无默认 feature 全目标检查暴露原有 `tests/local.rs` 无条件加载 Service 夹具的问题；
+已仅对该夹具模块增加与其调用者一致的 feature gate，没有删除任何无默认 feature 测试。
+
+SQL 手工审视：新增仅两个参数化单表 SELECT，分别读取 scoped 资产候选与当前逻辑 key 的 Run。
+关联/可见性复用原存储适配器，在同一授权只读事务完成；没有 JOIN、跨表子查询、
+额外提交、模型/文件/AnySeek I/O、schema 变更或迁移。资产目录每页最多扫描 100 个候选，
+Run 不返回事件或扩大私有读取范围。Windows 行为尚未在本环境验证。
+
+未完成：真实浏览器的布局、键盘/触屏与无障碍验收。管理预览在识别标准 host/port 参数后
+启动到 relay 阶段，但 `sites-preview` 报 `relay could not open browser port 4173`；
+共享 Chrome 对对应地址返回连接拒绝，没有用 DOM 测试冒称浏览器验证通过。
+线上部署、生产计量/告警、真实模型与 Claude Code/Codex 任务也未验收；缺失计量仍显示未知。
