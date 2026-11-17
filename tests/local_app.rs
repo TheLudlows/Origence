@@ -1,6 +1,6 @@
 #![cfg(feature = "local-storage")]
 use axum::{Json, Router, extract::State};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{models::Models, storage::*, types::*};
 use serde_json::{Value, json};
 use std::{
@@ -188,7 +188,7 @@ async fn rpc(
     serde_json::from_str(&line).unwrap()
 }
 fn pdf() -> Vec<u8> {
-    super::pdf_parsing::text_pdf(&["Release approval evidence", "Second page provenance"])
+    super::pdf_fixture::text_pdf(&["Release approval evidence", "Second page provenance"])
 }
 
 #[tokio::test]
@@ -1132,7 +1132,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
     for i in 0..130 {
         let (asset, _) = tx.slot(&format!("decoy-{i}")).await.unwrap();
         let source = tx.create_event("memory", "approval", None).await.unwrap();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
@@ -1157,17 +1157,9 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             .create_event("memory", "approval evidence", None)
             .await
             .unwrap();
-        tx.insert_version(
-            target,
-            version,
-            "approval evidence",
-            "hash",
-            source,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        tx.insert_version(target, version, "approval evidence", source, None, None)
+            .await
+            .unwrap();
         let chunk = Uuid::new_v4();
         tx.insert_chunk(
             chunk,
@@ -1212,7 +1204,6 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         tx.register_pending(LedgerEntry {
             key,
             artifact_type: "chunk".into(),
-            idempotency_key: ledger_idempotency_key(&key),
         })
         .await
         .unwrap();
@@ -1842,7 +1833,6 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     tx.register_pending(LedgerEntry {
         key: ledger_key,
         artifact_type: "entity".into(),
-        idempotency_key: ledger_idempotency_key(&ledger_key),
     })
     .await
     .unwrap();
@@ -1854,7 +1844,6 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     tx.register_pending(LedgerEntry {
         key: chunk_pending,
         artifact_type: "chunk".into(),
-        idempotency_key: ledger_idempotency_key(&chunk_pending),
     })
     .await
     .unwrap();
@@ -1890,7 +1879,7 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
         1
     );
     assert!(s.get(&a, id(&accepted, "asset_id"), None).await.is_err());
-    // Crash boundary: AnySeek owns the frozen group; Turso has pending intent only.
+    // Crash boundary: AnySeek owns the frozen group; SQLite has pending intent only.
     s.engine.shutdown().await.unwrap();
     drop(s);
     let s = crate::support::open_service(dir.path(), Models::disabled())
@@ -1960,7 +1949,6 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     tx.register_pending(LedgerEntry {
         key: vk,
         artifact_type: "chunk".into(),
-        idempotency_key: ledger_idempotency_key(&vk),
     })
     .await
     .unwrap();
@@ -2112,7 +2100,7 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
     for index in 0..130 {
         let (asset, _) = tx.slot(&format!("offline-batch-{index}")).await.unwrap();
         let source = tx.create_event("memory", "approval", None).await.unwrap();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
         let chunk = Uuid::new_v4();
@@ -2143,7 +2131,6 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
         tx.register_pending(LedgerEntry {
             key,
             artifact_type: "chunk".into(),
-            idempotency_key: ledger_idempotency_key(&key),
         })
         .await
         .unwrap();

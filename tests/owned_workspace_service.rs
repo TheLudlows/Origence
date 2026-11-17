@@ -1,6 +1,6 @@
 //! Public library upload/job/search regression for generic owned workspaces.
 #![cfg(feature = "local-storage")]
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{
     error::AppError,
     models::Models,

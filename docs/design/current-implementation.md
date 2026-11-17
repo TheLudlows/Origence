@@ -1,6 +1,6 @@
 # Origence · 当前平台设计
 
-更新：2026-11-17。代码基线：main `0a1a56c`。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
+更新：2026-11-17。代码基线：main `01d4f82` 及当前 SQLite 替换。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
 首版目标另见[架构规划](agent-data-foundation.md)。当前实现包括 AnySeek 统一检索、
@@ -20,7 +20,7 @@ flowchart TD
     C[Claude Code / Codex] --> M[stdio MCP]
     M --> H[Origence HTTP 宿主]
     H --> S[Service：认证、作用域、用例和证据]
-    S --> A[Turso：权威数据、任务、发布账本]
+    S --> A[SQLite：权威数据、任务、发布账本]
     S --> K[Skill：候选、选定审阅包、批准与发布]
     K --> A
     K --> E[显式包导出]
@@ -36,7 +36,7 @@ flowchart TD
     W --> P[按配置调用模型与解析器]
 ```
 
-HTTP 与单 Worker 共享一个 `StorageEngine`；Turso authority 持有数据目录的独占 OS 锁。
+HTTP 与单 Worker 共享一个 `StorageEngine`；SQLite authority 持有数据目录的独占 OS 锁。
 CLI/MCP 默认转发到运行中的宿主；离线访问要求独占打开。AnySeek 是独立 HTTP 服务，
 普通 Tenant key 只由宿主持有。它保存检索投影，不判定员工权限或业务来源是否有效。
 
@@ -54,16 +54,21 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
-| RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本 | 原生 Turso `context.db` |
+| RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本 | 原生 SQLite `context.db` |
 | RetrievalStore | 带作用域、来源、generation 的全文、向量和一跳图投影 | AnySeek HTTP |
-| 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 Turso `context.db` |
+| 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 SQLite `context.db` |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
 
+核心库默认特性关闭后不依赖 SQLite。纯数据契约、解析、模型、Blob 与原生 AnySeek
+接口可独立使用；`sqlite` feature 提供权威事务适配器，`local-storage` 组合完整服务。
+服务端仍必须持久化并核验权限、正文/版本、来源、幂等和恢复状态。空读集合不触碰
+不参与本次判断的表，完整结构健康由初始化与显式检查负责。
+
 `StorageEngine` 是组装结构，持有 `RelationalStore`、`JobQueue`、`VectorStore`、
-和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/Turso 事务，
+和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/SQLite 事务，
 并非任意数据库的通用运行时。`VectorStore` 暂同时承载全文接口，`RetrievalStore` 完成委派。
 存储 SQL 留在适配器；所有业务事务携带 scope。模型、文件与远端索引 IO 在事务外执行。
 业务、幂等、审计和入队同事务提交，JobQueue 消费者不在另一连接补登记任务。
@@ -72,7 +77,7 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-顺序：独占打开并校验 Turso → 校验 AnySeek 绑定 → 装配并检查投影/Blob → 持久化新绑定
+顺序：独占打开并校验 SQLite → 校验 AnySeek 绑定 → 装配并检查投影/Blob → 持久化新绑定
 → 检查已提交存储面 → 恢复作业、清理孤儿 → 开放服务。检查失败保持不可用。
 只创建新结构，不自动升级、重建丢失索引或转换已有数据。
 

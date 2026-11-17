@@ -2,7 +2,7 @@
 //! Deterministic localhost embeddings exercise engineering, not model quality.
 #![cfg(feature = "local-storage")]
 use axum::{Json, Router, routing::post};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{
     error::AppError,
     messages::{

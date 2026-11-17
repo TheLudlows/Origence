@@ -1,24 +1,24 @@
 //! RelationalStore entry points: authentication, workspaces and API keys.
 use super::*;
 
-impl RelationalStore for TursoStore {
-    type Tx = TursoTx;
+impl RelationalStore for SqliteStore {
+    type Tx = SqliteTx;
 
     async fn begin(&self, authorized: AuthorizedScope) -> StorageResult<Self::Tx> {
-        self.begin_scoped(authorized, true).await
+        self.begin_scoped(authorized, true, None).await
     }
 
     async fn authenticate(&self, token: &str) -> StorageResult<AuthorizedScope> {
         if token.len() < 32 || token.len() > 256 {
             return Err(StorageError::Forbidden);
         }
-        let row: Option<(Uuid, Uuid, Uuid, String)> = native_turso::query_as(
+        let row: Option<(Uuid, Uuid, Uuid, String)> = sqlite_db::query_as(
             "SELECT tenant_id, workspace_id, id, role FROM oc_api_keys WHERE token_hash = ? AND NOT revoked",
         )
         .bind(hash(token))
         .fetch_optional(&self.pool)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let (tenant_id, workspace_id, principal_id, role) = row.ok_or(StorageError::Forbidden)?;
         Ok(AuthorizedScope {
             scope: Scope {
@@ -36,7 +36,7 @@ impl RelationalStore for TursoStore {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<()> {
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_workspaces(tenant_id, id, name, created_at) VALUES (?, ?, ?, ?)",
         )
         .bind(tenant_id)
@@ -45,7 +45,7 @@ impl RelationalStore for TursoStore {
         .bind(now_ms())
         .execute(&self.pool)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(())
     }
 
@@ -67,22 +67,22 @@ impl RelationalStore for TursoStore {
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
-            .map_err(turso_err)?;
-        let owner: Option<Option<Uuid>> = native_turso::query_scalar(
+            .map_err(sqlite_err)?;
+        let owner: Option<Option<Uuid>> = sqlite_db::query_scalar(
             "SELECT owner_workspace_id FROM oc_workspaces WHERE tenant_id = ? AND id = ?",
         )
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let owner = owner.ok_or(StorageError::NotFound)?;
         if capabilities.allow_owned_workspaces && owner.is_some() {
             return Err(StorageError::Forbidden);
         }
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_api_keys(id, logical_key_id, tenant_id, workspace_id, token_hash, role, allow_owned_workspaces, revoked, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
         )
@@ -96,8 +96,8 @@ impl RelationalStore for TursoStore {
         .bind(now_ms())
         .execute(&mut *tx)
         .await
-        .map_err(turso_err)?;
-        tx.commit().await.map_err(turso_err)?;
+        .map_err(sqlite_err)?;
+        tx.commit().await.map_err(sqlite_err)?;
         Ok(IssuedKey { key_id, token })
     }
 
@@ -126,11 +126,11 @@ impl RelationalStore for TursoStore {
     }
 
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()> {
-        native_turso::query("UPDATE oc_api_keys SET revoked = 1 WHERE id = ?")
+        sqlite_db::query("UPDATE oc_api_keys SET revoked = 1 WHERE id = ?")
             .bind(key_id)
             .execute(&self.pool)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         Ok(())
     }
 
@@ -139,14 +139,14 @@ impl RelationalStore for TursoStore {
     }
 }
 
-impl TursoStore {
+impl SqliteStore {
     async fn owned_workspace(
         &self,
         auth: AuthorizedScope,
         workspace_id: Uuid,
         create: Option<&str>,
     ) -> StorageResult<Option<AuthorizedScope>> {
-        let mut tx = self.begin_scoped(auth, create.is_some()).await?;
+        let mut tx = self.begin_scoped(auth, create.is_some(), None).await?;
         let permission = if create.is_some() {
             Permission::Write
         } else {
@@ -160,13 +160,13 @@ impl TursoStore {
         }
         // Lookup by global identity so a cross-tenant collision also fails;
         // never overwrite or silently select a different identity.
-        let existing: Option<(Uuid, Option<Uuid>)> = native_turso::query_as(
+        let existing: Option<(Uuid, Option<Uuid>)> = sqlite_db::query_as(
             "SELECT tenant_id,owner_workspace_id FROM oc_workspaces WHERE id=?",
         )
         .bind(workspace_id)
         .fetch_optional(&mut *tx.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let found = match existing {
             Some((tenant, owner)) => {
                 if tenant != tx.scope.tenant_id || owner != Some(tx.scope.workspace_id) {
@@ -178,7 +178,7 @@ impl TursoStore {
             }
             None => match create {
                 Some(name) => {
-                    native_turso::query(
+                    sqlite_db::query(
                         "INSERT INTO oc_workspaces(tenant_id,id,name,owner_workspace_id,created_at) \
                          VALUES(?,?,?,?,?)",
                     )
@@ -189,7 +189,7 @@ impl TursoStore {
                     .bind(now_ms())
                     .execute(&mut *tx.tx)
                     .await
-                    .map_err(turso_err)?;
+                    .map_err(sqlite_err)?;
                     tx.audit("workspace.create_owned", workspace_id, json!({}))
                         .await?;
                     true
@@ -215,12 +215,12 @@ impl TursoStore {
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     async fn require_owned_workspace_root(
         &mut self,
         permission: Permission,
     ) -> StorageResult<String> {
-        let role: Option<String> = native_turso::query_scalar(
+        let role: Option<String> = sqlite_db::query_scalar(
             "SELECT role FROM oc_api_keys \
              WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked \
                AND allow_owned_workspaces=1",
@@ -230,9 +230,9 @@ impl TursoTx {
         .bind(self.scope.workspace_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let role = role.ok_or(StorageError::Forbidden)?;
-        let root: Option<Uuid> = native_turso::query_scalar(
+        let root: Option<Uuid> = sqlite_db::query_scalar(
             "SELECT id FROM oc_workspaces \
              WHERE tenant_id=? AND id=? AND owner_workspace_id IS NULL",
         )
@@ -240,7 +240,7 @@ impl TursoTx {
         .bind(self.scope.workspace_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if root.is_none() || !permission.granted_by(&role) {
             return Err(StorageError::Forbidden);
         }

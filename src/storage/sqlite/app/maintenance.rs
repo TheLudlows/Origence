@@ -30,25 +30,22 @@ const REMOVE_INDEXES: &str = "UPDATE oc_index_entries SET state='removed' WHERE 
 
 const ORPHAN_LEDGER: &str = "UPDATE oc_artifact_ledger SET state='orphan',updated_at=? WHERE tenant_id=? AND workspace_id=? AND rowid IN (?,?,?,?,?,?,?,?)";
 
-fn keys(rows: &[native_turso::Row], columns: &[&str]) -> StorageResult<Vec<Vec<AssociationKey>>> {
+fn keys(rows: &[sqlite_db::Row], columns: &[&str]) -> StorageResult<Vec<Vec<AssociationKey>>> {
     rows.iter()
         .map(|row| {
             columns
                 .iter()
-                .map(|column| row.try_get(*column).map_err(turso_err))
+                .map(|column| row.try_get(*column).map_err(sqlite_err))
                 .collect()
         })
         .collect()
 }
 
-fn unmatched_rowids(
-    rows: &[native_turso::Row],
-    matched: &HashSet<usize>,
-) -> StorageResult<Vec<i64>> {
+fn unmatched_rowids(rows: &[sqlite_db::Row], matched: &HashSet<usize>) -> StorageResult<Vec<i64>> {
     rows.iter()
         .enumerate()
         .filter(|(index, _)| !matched.contains(index))
-        .map(|(_, row)| row.try_get("cleanup_rowid").map_err(turso_err))
+        .map(|(_, row)| row.try_get("cleanup_rowid").map_err(sqlite_err))
         .collect()
 }
 
@@ -66,7 +63,7 @@ async fn mutate_rowids(
     for index in 0..ids.len().div_ceil(8).max(1) {
         let start = index * 8;
         let batch = &ids[start..(start + 8).min(ids.len())];
-        let mut query = native_turso::query(sql);
+        let mut query = sqlite_db::query(sql);
         if let Some(timestamp) = timestamp {
             query = query.bind(timestamp);
         }
@@ -77,7 +74,7 @@ async fn mutate_rowids(
         changed += query
             .execute(&mut *conn)
             .await
-            .map_err(turso_err)?
+            .map_err(sqlite_err)?
             .rows_affected();
     }
     Ok(changed)
@@ -87,12 +84,12 @@ pub(super) async fn detach_invalid_roots(
     conn: &mut Connection,
     scope: Scope,
 ) -> StorageResult<u64> {
-    let owners = native_turso::query("SELECT rowid AS cleanup_rowid,source_id,version FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?")
+    let owners = sqlite_db::query("SELECT rowid AS cleanup_rowid,source_id,version FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
     let versions = read_model::associate_query(
         conn,
         scope,
@@ -103,11 +100,11 @@ pub(super) async fn detach_invalid_roots(
     .await?;
     let asset_keys = versions
         .iter()
-        .map(|(_, row)| Ok(vec![row.try_get("asset_id").map_err(turso_err)?]))
+        .map(|(_, row)| Ok(vec![row.try_get("asset_id").map_err(sqlite_err)?]))
         .collect::<StorageResult<Vec<_>>>()?;
     let event_keys = versions
         .iter()
-        .map(|(_, row)| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
+        .map(|(_, row)| Ok(vec![row.try_get("source_event_id").map_err(sqlite_err)?]))
         .collect::<StorageResult<Vec<_>>>()?;
     let assets: HashSet<_> = read_model::associate_query(conn, scope, LIVE_ASSETS, 1, &asset_keys)
         .await?
@@ -140,18 +137,18 @@ pub(super) async fn detach_invalid_chunks(
     conn: &mut Connection,
     scope: Scope,
 ) -> StorageResult<u64> {
-    let owners = native_turso::query("SELECT rowid AS cleanup_rowid,chunk_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('chunk','summary')")
+    let owners = sqlite_db::query("SELECT rowid AS cleanup_rowid,chunk_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('chunk','summary')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
     let chunks =
         read_model::associate_query(conn, scope, OWNER_CHUNKS, 1, &keys(&owners, &["chunk_id"])?)
             .await?;
     let asset_keys = chunks
         .iter()
-        .map(|(_, row)| Ok(vec![row.try_get("asset_id").map_err(turso_err)?]))
+        .map(|(_, row)| Ok(vec![row.try_get("asset_id").map_err(sqlite_err)?]))
         .collect::<StorageResult<Vec<_>>>()?;
     let assets = read_model::associate_query(conn, scope, LIVE_ASSETS, 1, &asset_keys).await?;
     let live: HashSet<_> = assets
@@ -172,12 +169,12 @@ pub(super) async fn unowned_native_artifacts(
     conn: &mut Connection,
     scope: Scope,
 ) -> StorageResult<Vec<Uuid>> {
-    let ledger = native_turso::query("SELECT DISTINCT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND surface IN ('vector','full_text')")
+    let ledger = sqlite_db::query("SELECT DISTINCT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND surface IN ('vector','full_text')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
     let owned: HashSet<_> = read_model::associate_query(
         conn,
         scope,
@@ -193,7 +190,7 @@ pub(super) async fn unowned_native_artifacts(
         .iter()
         .enumerate()
         .filter(|(index, _)| !owned.contains(index))
-        .map(|(_, row)| row.try_get("artifact_id").map_err(turso_err))
+        .map(|(_, row)| row.try_get("artifact_id").map_err(sqlite_err))
         .collect()
 }
 
@@ -201,14 +198,14 @@ pub(super) async fn remove_unowned_chunks(
     conn: &mut Connection,
     scope: Scope,
 ) -> StorageResult<u64> {
-    let chunks = native_turso::query(
+    let chunks = sqlite_db::query(
         "SELECT rowid AS cleanup_rowid,id FROM oc_chunks WHERE tenant_id=? AND workspace_id=?",
     )
     .bind(scope.tenant_id)
     .bind(scope.workspace_id)
     .fetch_all(&mut *conn)
     .await
-    .map_err(turso_err)?;
+    .map_err(sqlite_err)?;
     let owned: HashSet<_> =
         read_model::associate_query(conn, scope, CHUNK_OWNERS, 1, &keys(&chunks, &["id"])?)
             .await?
@@ -219,20 +216,20 @@ pub(super) async fn remove_unowned_chunks(
         .iter()
         .enumerate()
         .filter(|(index, _)| !owned.contains(index))
-        .map(|(_, row)| row.try_get("id").map_err(turso_err))
+        .map(|(_, row)| row.try_get("id").map_err(sqlite_err))
         .collect::<StorageResult<_>>()?;
     // Delete every affected summary before any chunk, retaining the original
     // global FK-safe order. A summary with no chunk at all is not selected.
     for index in 0..dead_keys.len().div_ceil(8).max(1) {
         let start = index * 8;
         let batch = &dead_keys[start..(start + 8).min(dead_keys.len())];
-        let mut query = native_turso::query("DELETE FROM oc_summaries WHERE tenant_id=? AND workspace_id=? AND chunk_id IN (?,?,?,?,?,?,?,?)")
+        let mut query = sqlite_db::query("DELETE FROM oc_summaries WHERE tenant_id=? AND workspace_id=? AND chunk_id IN (?,?,?,?,?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id);
         for slot in 0..8 {
             query = query.bind(batch.get(slot).cloned());
         }
-        query.execute(&mut *conn).await.map_err(turso_err)?;
+        query.execute(&mut *conn).await.map_err(sqlite_err)?;
     }
     mutate_rowids(
         conn,
@@ -248,12 +245,12 @@ pub(super) async fn remove_missing_indexes(
     conn: &mut Connection,
     scope: Scope,
 ) -> StorageResult<u64> {
-    let rows = native_turso::query("SELECT rowid AS cleanup_rowid,artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=?")
+    let rows = sqlite_db::query("SELECT rowid AS cleanup_rowid,artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
     let present: HashSet<_> = read_model::associate_query(
         conn,
         scope,
@@ -280,12 +277,12 @@ pub(super) async fn orphan_unowned_ledger(
     scope: Scope,
 ) -> StorageResult<u64> {
     let now = now_ms();
-    let rows = native_turso::query("SELECT rowid AS cleanup_rowid,source_id,version,artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=?")
+    let rows = sqlite_db::query("SELECT rowid AS cleanup_rowid,source_id,version,artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=?")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
     // No type, surface or generation condition belonged to this owner match.
     let owned: HashSet<_> = read_model::associate_query(
         conn,

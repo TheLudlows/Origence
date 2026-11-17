@@ -1,6 +1,6 @@
 //! Structured identity persistence and legacy compatibility.
 use origence::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Lifecycle, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
@@ -46,7 +46,7 @@ async fn reuse_publish_and_isolate_identity() {
         .create_event("identified", "approval", None)
         .await
         .unwrap();
-    tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+    tx.insert_version(asset, 1, "approval", source, None, None)
         .await
         .unwrap();
     tx.update_asset_version(asset, 1, None).await.unwrap();
@@ -110,7 +110,7 @@ async fn lookup_is_exact_scoped_and_reads_current_version() {
     let (asset, _) = tx.identity_slot(&i).await.unwrap();
     let source = tx.create_event("identified", "source", None).await.unwrap();
     for version in [1, 2] {
-        tx.insert_version(asset, version, "approval", "hash", source, None, None)
+        tx.insert_version(asset, version, "approval", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, version, None).await.unwrap();
@@ -186,12 +186,12 @@ async fn lookup_hides_unpublished_deleted_and_retracted_memories() {
             Err(StorageError::NotFound)
         ));
         let source = tx.create_event("identified", "source", None).await.unwrap();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
         let source = tx.create_event("identified", "update", None).await.unwrap();
-        tx.insert_version(asset, 2, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 2, "approval", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, 2, None).await.unwrap();
@@ -240,7 +240,7 @@ async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k
     for asset in [decoy, target] {
         let source = tx.create_event("memory", "approval", None).await.unwrap();
         let chunk = Uuid::new_v4();
-        tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+        tx.insert_version(asset, 1, "approval", source, None, None)
             .await
             .unwrap();
         tx.insert_chunk(
@@ -266,14 +266,13 @@ async fn vector_candidate_ids_are_filtered_by_exact_identity_before_native_top_k
         db::query(
             "INSERT INTO oc_artifact_ledger
              (tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,
-              surface,generation,idempotency_key,state,created_at,updated_at)
-             VALUES(?,?,?,1,'chunk',?,'vector',1,?,'committed',1,1)",
+              surface,generation,state,created_at,updated_at)
+             VALUES(?,?,?,1,'chunk',?,'vector',1,'committed',1,1)",
         )
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(source)
         .bind(chunk)
-        .bind(chunk.to_string())
         .execute(store.pool())
         .await
         .unwrap();
@@ -518,7 +517,7 @@ async fn selected_identity_reads_fail_closed_on_corrupt_body_or_key() {
         .create_event("identified", "approval", None)
         .await
         .unwrap();
-    tx.insert_version(asset, 1, "approval", "hash", source, None, None)
+    tx.insert_version(asset, 1, "approval", source, None, None)
         .await
         .unwrap();
     tx.update_asset_version(asset, 1, None).await.unwrap();
@@ -590,17 +589,9 @@ async fn same_format_backup_reopens_with_identity_history_sources_and_tombstones
         .unwrap();
     for version in [1, 2, 3] {
         let restored_from = (version == 3).then_some(1);
-        tx.insert_version(
-            asset,
-            version,
-            "approval",
-            "hash",
-            source,
-            restored_from,
-            None,
-        )
-        .await
-        .unwrap();
+        tx.insert_version(asset, version, "approval", source, restored_from, None)
+            .await
+            .unwrap();
         tx.update_asset_version(asset, version, None).await.unwrap();
     }
     let (deleted, _) = tx.identity_slot(&deleted_identity).await.unwrap();

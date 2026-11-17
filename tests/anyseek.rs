@@ -413,7 +413,7 @@ mod service_contract {
             "retry_wait"
         );
         let saved: String =
-            origence::storage::native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+            origence::storage::sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
                 .bind(job_id)
                 .fetch_one(service.engine.relational().pool())
                 .await
@@ -441,7 +441,7 @@ mod service_contract {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
         let after: String =
-            origence::storage::native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+            origence::storage::sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
                 .bind(job_id)
                 .fetch_one(service.engine.relational().pool())
                 .await
@@ -506,7 +506,7 @@ mod service_contract {
         );
         assert!(service.get(&other, id, None).await.is_err());
         let saved: String =
-            origence::storage::native_turso::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
+            origence::storage::sqlite_db::query_scalar("SELECT payload FROM oc_jobs WHERE id=?")
                 .bind(serde_json::from_value::<Uuid>(accepted["job_id"].clone()).unwrap())
                 .fetch_one(service.engine.relational().pool())
                 .await

@@ -1,11 +1,11 @@
-//! Native Turso open/initialize/check/shutdown; never migrate existing databases.
+//! Native SQLite open/initialize/check/shutdown; never migrate existing databases.
 use super::locking::{acquire_lock, acquire_path_lock};
 use super::schema::{check_conn, exec_schema, reject_legacy_aml_schema, schema_present};
 use super::*;
 use std::path::Path;
 
-impl TursoStore {
-    /// Open a fresh or same-version native Turso database. Existing unmarked
+impl SqliteStore {
+    /// Open a fresh or same-version native SQLite database. Existing unmarked
     /// databases are inspected read-only and rejected before any writable open.
     pub async fn open(path: impl AsRef<Path>) -> StorageResult<Self> {
         let requested = path.as_ref();
@@ -27,20 +27,20 @@ impl TursoStore {
         let lock = std::sync::Arc::new(lock);
         let _serialized = opening.lock().await;
         if path.exists() && tokio::fs::metadata(&path).await?.len() != 0 {
-            let pool = Pool::open_read_only(&path).await.map_err(turso_err)?;
+            let pool = Pool::open_read_only(&path).await.map_err(sqlite_err)?;
             pool.hold_lifetime_guard(lock.clone());
             let outcome = async {
-                let mut conn = pool.acquire().await.map_err(turso_err)?;
-                native_turso::check_format(&mut conn, "authority")
+                let mut conn = pool.acquire().await.map_err(sqlite_err)?;
+                sqlite_db::check_format(&mut conn, "authority")
                     .await
-                    .map_err(turso_err)?;
+                    .map_err(sqlite_err)?;
                 check_conn(&mut conn).await
             }
             .await;
             pool.close().await;
             outcome?;
         }
-        let pool = Pool::open(&path).await.map_err(turso_err)?;
+        let pool = Pool::open(&path).await.map_err(sqlite_err)?;
         pool.hold_lifetime_guard(lock.clone());
         let store = Self {
             pool,
@@ -58,13 +58,13 @@ impl TursoStore {
         let (lock, opening) = acquire_path_lock(&path, false)?;
         let lock = std::sync::Arc::new(lock);
         let _serialized = opening.lock().await;
-        let pool = Pool::open_read_only(&path).await.map_err(turso_err)?;
+        let pool = Pool::open_read_only(&path).await.map_err(sqlite_err)?;
         pool.hold_lifetime_guard(lock);
         let outcome = async {
-            let mut conn = pool.acquire().await.map_err(turso_err)?;
-            native_turso::check_format(&mut conn, "authority")
+            let mut conn = pool.acquire().await.map_err(sqlite_err)?;
+            sqlite_db::check_format(&mut conn, "authority")
                 .await
-                .map_err(turso_err)?;
+                .map_err(sqlite_err)?;
             check_conn(&mut conn).await
         }
         .await;
@@ -72,7 +72,7 @@ impl TursoStore {
         outcome
     }
 
-    /// Native Turso leases for storage adapters and diagnostic tests. Domain
+    /// Native SQLite leases for storage adapters and diagnostic tests. Domain
     /// transactions never expose the pool through the vendor-neutral trait.
     pub fn pool(&self) -> &Pool {
         &self.pool
@@ -82,45 +82,45 @@ impl TursoStore {
     }
 }
 
-impl Lifecycle for TursoStore {
+impl Lifecycle for SqliteStore {
     async fn initialize(&self) -> StorageResult<()> {
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         reject_legacy_aml_schema(&mut tx).await?;
         if !schema_present(&mut tx).await? {
-            let existing: i64 = native_turso::query_scalar(
+            let existing: i64 = sqlite_db::query_scalar(
                 "SELECT count(*) FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",
             )
             .fetch_one(&mut *tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
             if existing != 0 {
                 return Err(StorageError::Unavailable(
                     "incompatible database; no migration was attempted".into(),
                 ));
             }
             exec_schema(&mut tx).await?;
-            native_turso::install_format(&mut tx, "authority")
+            sqlite_db::install_format(&mut tx, "authority")
                 .await
-                .map_err(turso_err)?;
+                .map_err(sqlite_err)?;
         }
-        native_turso::check_format(&mut tx, "authority")
+        sqlite_db::check_format(&mut tx, "authority")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         check_conn(&mut tx).await?;
-        tx.commit().await.map_err(turso_err)
+        tx.commit().await.map_err(sqlite_err)
     }
     async fn check(&self) -> StorageResult<()> {
-        let mut conn = self.pool.acquire().await.map_err(turso_err)?;
-        native_turso::check_format(&mut conn, "authority")
+        let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
+        sqlite_db::check_format(&mut conn, "authority")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         check_conn(&mut conn).await
     }
     async fn shutdown(&self) -> StorageResult<()> {
-        self.pool.shutdown().await.map_err(turso_err)
+        self.pool.shutdown().await.map_err(sqlite_err)
     }
 }

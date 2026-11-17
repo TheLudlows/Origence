@@ -1,7 +1,7 @@
 # Claude Code 与 Codex 接入
 
 两个客户端都通过本地 stdio 进程访问运行中的 Origence HTTP 宿主。客户端不直接访问
-Turso、Blob 或 AnySeek，也不需要它们的凭据。
+SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 
 1. 使用项目所属 workspace 的个人 API key，通过启动环境提供 `OC_API_KEY`。
    不要把密钥写进配置文件、提交到项目或贴进对话。

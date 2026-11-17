@@ -69,14 +69,12 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
         tx.register_pending(LedgerEntry {
             key: vector_key,
             artifact_type: "chunk".into(),
-            idempotency_key: origence::storage::ledger::ledger_idempotency_key(&vector_key),
         })
         .await
         .unwrap();
         tx.register_pending(LedgerEntry {
             key: graph_key,
             artifact_type: "entity".into(),
-            idempotency_key: origence::storage::ledger::ledger_idempotency_key(&graph_key),
         })
         .await
         .unwrap();

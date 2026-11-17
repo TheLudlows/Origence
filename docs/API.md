@@ -1,6 +1,6 @@
 # Origence API 与库接口
 
-适用本地宿主 Turso 权威数据以及 AnySeek 全文、向量与一跳图投影。本文负责 HTTP v1 与公开库接口契约；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
+适用本地宿主 SQLite 权威数据以及 AnySeek 全文、向量与一跳图投影。本文负责 HTTP v1 与公开库接口契约；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
 按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
 
@@ -54,7 +54,7 @@ Search、Resolve 与 EvidenceBundle 返回 `retrieval:{requests,omitted_requests
 查询耗时与 `visible_seq`，以及查询后另行采样的
 committed/lexical/vector 进度、失败与恢复标志。配置还记录核对过的容量限制和 embedding
 空间摘要。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
-序号属于 AnySeek collection，不是 workspace 序号、Turso 版本或跨存储快照。
+序号属于 AnySeek collection，不是 workspace 序号、SQLite 版本或跨存储快照。
 客户端往返和服务端耗时边界不同，均不证明客户端消费或模型实际使用。
 
 每次调用只保留最近 128 次尝试，较早省略数量显式返回。诊断不保存查询原文、向量、
@@ -74,7 +74,7 @@ server_observed。首次成功时另存私有上下文快照；相同请求重�
 
 全文、向量和一跳图候选使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词
 编码为固定 SHA-256 词项并保留 AND 语义；向量由 Origence 生成，模型 profile 与维度
-由目录绑定固定。AnySeek 只返回候选，正文、来源和可见性仍以 Turso/Blob 为准。
+由目录绑定固定。AnySeek 只返回候选，正文、来源和可见性仍以 SQLite/Blob 为准。
 
 发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 个 chunk Record，编码后请求至多 2 MiB；
 图元数据附在其中一个确定的 chunk 上，不新增 Record。同一发布通过一个组提交，新业务版本使用独立组。网络结果未知时检查完整组，
@@ -86,15 +86,22 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ## Rust 库接口
 
+- 无元数据库核心：`default-features = false`，提供类型、解析、模型、Blob 与 AnySeek 接口。
+- SQLite 权威适配器：`default-features = false, features = ["sqlite"]`。
+- 完整 HTTP/MCP 宿主：默认 `local-storage`，自动启用 `sqlite`。
+
+核心独立检查用 `cargo test --no-default-features`；原 authority-only 检查现在显式使用
+`cargo test --no-default-features --features sqlite`，仍运行其完整授权/队列/恢复回归。
+
 宿主通过 `Service::open_with_anyseek(dir, models, config)` 组装服务；通用调用方使用
 公开 Service/DTO，事务与关联查询留在存储适配器。完整签名以 [lib.rs](../src/lib.rs)
 导出的模块和源码为准。
 
-旧 `GraphStore`、`TursoGraphStore`、`SqliteGraphStore` 和独立图遍历已移除；
-`StorageEngine::new` 不再接收图存储，`TursoStore::cleanup_plan` 只返回待清理的 chunk ID。
+旧的独立图存储接口和图遍历已移除；
+`StorageEngine::new` 不再接收图存储，`SqliteStore::cleanup_plan` 只返回待清理的 chunk ID。
 现有 HTTP/MCP 图检索契约不变。
 
-- `TursoStore::check_memory_identity(path)` 对已有路径执行只读、独占锁下的完整同版本
+- `SqliteStore::check_memory_identity(path)` 对已有路径执行只读、独占锁下的完整同版本
   schema 检查，不创建或修复表；CLI 为 `--offline identity-check`。
 - 命令幂等、作业执行和 artifact owner/index/ledger 各有独立职责，见[存储不变量](contracts/storage.md)。
 - 所属 workspace 与消息批次接口见下文；外部协议字段不能进入通用存储或授权判断。
@@ -180,9 +187,9 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
 
-所有业务写事务以 Turso `BEGIN IMMEDIATE` 开始，原子提交业务、幂等、审计和入队。模型/文件/原生索引 IO 在关系事务外执行。最终提交再次校验权限、墓碑、来源、预期版本、generation 和 run_token；密钥撤销与写事务串行化。此本地适配器无 RLS，scope 由适配器显式绑定。
+所有业务写事务以 SQLite `BEGIN IMMEDIATE` 开始，原子提交业务、幂等、审计和入队。模型/文件/原生索引 IO 在关系事务外执行。最终提交再次校验权限、墓碑、来源、预期版本、generation 和 run_token；密钥撤销与写事务串行化。此本地适配器无 RLS，scope 由适配器显式绑定。
 
-发布计划和 pending 账本先落 Turso，全文/向量/图写入后，版本、owner、ready 索引及 committed 账本与任务完成一起提交。外部产物不等于已发布证据。短暂存储错误进入 `retry_wait`，最多尝试 5 次；模型/输入失败需显式重试。独占宿主重启时恢复 processing 并提升 run_token，先对账清理再接收请求。
+发布计划和 pending 账本先落 SQLite，全文/向量/图写入后，版本、owner、ready 索引及 committed 账本与任务完成一起提交。外部产物不等于已发布证据。短暂存储错误进入 `retry_wait`，最多尝试 5 次；模型/输入失败需显式重试。独占宿主重启时恢复 processing 并提升 run_token，先对账清理再接收请求。
 
 cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原始事件、版本和文件仍保留，不等于原文物理擦除。
 
@@ -194,11 +201,11 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
 
-原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
+原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。SQLite owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
 search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默认均为 true，仅 hybrid 且未限定 memory_identity 时启用。可独立关闭摘要、图分支做同库消融，原文 keyword/vector 分支始终保留；省略 components 保持旧行为。响应 `active_components` 表示实际启用的分支（不代表已有产物或命中）。resolve 沿用相同开关和现有来源/字节预算检查；HTTP 与 MCP 共用此契约。
 
-图分支用 AnySeek 元数据过滤找名称包含查询词的实体，再按任一初始实体 ID 查询入边或出边。候选会按来源、版本和 generation 经 Turso 复核，撤回或未发布的投影不能当作证据。关系在响应中保留原有方向；扩展出来的实体不会继续扩展。图字段不作为全文词项或向量，不增加参与 BM25 统计的记录。候选超过服务端上限会明确报错，不静默截断。图候选预算在引擎侧独立于响应的最多 20 个实体和 20 条关系；此路径不改变 `/v1/context`，也不新增独立图查询 API。
+图分支用 AnySeek 元数据过滤找名称包含查询词的实体，再按任一初始实体 ID 查询入边或出边。候选会按来源、版本和 generation 经 SQLite 复核，撤回或未发布的投影不能当作证据。关系在响应中保留原有方向；扩展出来的实体不会继续扩展。图字段不作为全文词项或向量，不增加参与 BM25 统计的记录。候选超过服务端上限会明确报错，不静默截断。图候选预算在引擎侧独立于响应的最多 20 个实体和 20 条关系；此路径不改变 `/v1/context`，也不新增独立图查询 API。
 
 只有知识 ingest 在配置抽取模型时生成摘要和图；短事实 publish 与 restore 不自动生成图。启用的加工步骤失败时整个任务失败，不宣称部分图已就绪。查询 embedding 失败可按 allow_partial 降级；存储错误不会通过降级绕过权限或来源验证。
 
@@ -238,7 +245,7 @@ writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的�
 
 ## 检索与上下文身份标注
 
-search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 Turso 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
+search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
 
 resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normalization_status，context_policy=identity-provenance-v1；图引用格式不变。引用/标题/标注/正文均计入字节预算，整块保留或省略，因此标注可能减少正文容量。状态只表示身份绑定，不表示真值、有效期或置信度；冲突识别和类型预算未实现。
 
@@ -394,7 +401,7 @@ locator 沿用记忆语义原始来源与字节范围，自动提取的新成员
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该资产快照根来源，reference.asset_version 是实际使用的资产版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id；相同正文和有序 used_evidence（即使换 Idempotency-Key 或同 workspace 换调用方）返回原标识，改变内容返回 409，不新增版本。Turso 事务原子保存问答来源事件、档案、实际引用、审计与命令回执；任一引用失败全部回滚。
+归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id；相同正文和有序 used_evidence（即使换 Idempotency-Key 或同 workspace 换调用方）返回原标识，改变内容返回 409，不新增版本。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执；任一引用失败全部回滚。
 
 反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
 

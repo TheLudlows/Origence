@@ -468,3 +468,165 @@ CI 调整基于上述 #360 日志，而非减少独立验收：
 
 本次未更改 Rust 源码、schema 或 SQL；未为本次 TypeScript/工作流变更重复本地 Rust 全套。
 远端工作流仍执行上述完整 Rust 检查。Windows、真实浏览器及生产验收边界保持前述记录。
+## 2026-11-17：SQLite 全面替换与元数据精简
+
+基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`，验证在 SQLite 替换工作树执行；
+精确提交与远端结果由本次 PR head 标识。Linux、Rust 1.98.0、rusqlite 0.43.0，
+bundled SQLite 3.54.1；真实 AnySeek 固定 `d813b915b7f12e7139ca316adc15699688493196`
+（夹具使用其要求的 Rust 1.99.1）。所有行为验证使用新建临时库及测试凭据，无外部模型调用。
+
+替换范围包括全部关系/队列适配器、Service/CLI/错误边界、测试和手工诊断、Cargo 锁文件、
+CI、容器与当前文档。删除旧引擎模块和别名；历史证据与此前真实失败记录保持原样。
+Cargo 生成的新锁文件从 482 个包变为 370 个：删除 116、加入 4，净减少 112；
+原有保留包的版本未改变。rusqlite 关闭默认特性，仅启用 bundled；不增加 ORM、
+异步数据库或第三方连接池。全特性的 production dependency tree 排除所有退休存储引擎。
+另移除未使用的直接 `futures` 声明；它仍由 rmcp 传递引入。移除前后全部已解析包和
+features 完全一致，最后的 `cargo check --all-features --all-targets -j 2` 通过。
+
+元数据删除 `oc_versions.content_hash` 和 `oc_artifact_ledger.idempotency_key`，
+同时移除调用方的冗余字段/参数及字符串辅助函数。内容摘要由所读不可变正文计算，
+账本使用已有完整主键的 ON CONFLICT 幂等；外部冻结计划和 operation epoch 保持原义。
+命令幂等、Run/Skill 快照摘要、授权、来源、版本、owner/index/ledger 的独立状态仍被验证。
+
+已通过：
+
+- `cargo clippy --locked --all-features --all-targets -j 2 -- -D warnings` 与
+  `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings`。
+  前者同时编译手工诊断目标；不将其诊断执行当作生产验收。
+- `cargo test --locked -j 2 --no-fail-fast`：218 lib + 4 协议 + 202 local，
+  **424 项通过**；8 项单独运行的真实后端合同仍在常规命令中 ignored。
+- `cargo test --locked --no-default-features -j 2 --no-fail-fast`：138 lib + 2 协议 +
+  92 local，**232 项通过**；5 项真实后端测试保持 ignored。
+- `cargo build --locked -j 2`、fmt、`git diff --check`、actionlint 1.7.7、
+  Cargo metadata 与全特性退休引擎依赖检查通过。正常服务二进制只包含新 SQLite 格式标记，
+  Linux `ldd` 无动态 SQLite 或 libgomp 依赖。
+- `npm --prefix ui test`：15 项通过；Python tools 11 项、eval adapter 42 项通过。
+- 在上述正常服务二进制及固定真实 AnySeek 上分别运行 `tools/smoke.py`、
+  `tools/ui_smoke.py`、原始完整 `tools/mcp_smoke.py`，HTTP、UI 与
+  host-forwarding/offline MCP 两路径通过。
+- `tools/anyseek_smoke.py --cargo-tests`：**8 项真实引擎合同通过**，并通过其后
+  HTTP/stdio MCP、引用、版本更新、撤销、重开及 Run 诊断关联/重试/持久化检查。
+- `evals/run.py`：24 个 keyword 用例，errors=0、resolve_errors=0；document recall/MRR/NDCG
+  均约 0.63636。此合成工程检查不证明模型或真实 Agent 任务收益。
+
+新回归验证每条连接的 WAL、FULL、外键与 busy timeout、五租约上限、真实文件上的
+取消/FIFO 回滚、RETURNING 排空、错误后拒绝继续提交、读快照、跨池释放、宿主锁生命周期，
+以及直接 SQLite integrity/foreign-key 检查、元数据列消失、中文原始字节摘要与同版本重开。
+只读测试分别覆盖非空已提交 WAL（必须可读）和 checkpoint 后带中文/空格/URI 特殊字符
+的路径（不创建 sidecar）；没有用 immutable 忽略待恢复的 WAL。
+
+早期回归暴露旧引擎假设：SQLite 将大 JSON 整数转换为 REAL、每连接有独立 DDL 缓存，
+SHM read mark 也会被只读访问更新。测试改以 SQLite 原生结果为 oracle，保留无效身份、
+解码顺序、授权和证据预算断言；没有为退休引擎添加兼容分支。损坏 schema 夹具重开其
+有意改变的 DDL；活跃库比较数据库和 WAL，不将 SHM 的瞬时协调位当作持久业务字节。
+
+手工 SQL 审视：两个元数据列及相应绑定/读取被移除，版本摘要在同一授权读事务中计算；
+没有 JOIN、跨表子查询、额外业务提交或事务内模型/文件/AnySeek IO。数据库 IO 在专属
+blocking 连接 FIFO 中；取消不硬停 SQL，已发出 COMMIT 的未知结果仍需按原幂等键核对。
+只面向新库，不迁移、重写或自动转换既有文件；旧格式在可写打开之前只读拒绝。
+
+本次 CI 将 Windows 检查扩展至 PR，远端结果另见 PR，不将 Linux 结果外推到 Windows。
+标准 Docker 构建的首次尝试在下载 registry/config.json 时因本环境自签名 CA 链失败；
+同一 Dockerfile 仅用临时构建期 CA secret 补充受信链后继续构建，未关闭 TLS 校验。
+容器最终结果另见 PR。浏览器布局、真实模型/双客户端任务及生产性能不属于本次验收。
+
+## 2026-11-17：核心库无元数据库与按需访问（PR #81）
+
+在 SQLite 替换基线 `01c0d4c` 上同步 main `593e8fa`，保留 #80 的 Run 来源界面修正。
+以下为本轮工作树结果，精确提交和新的 Windows/Linux CI 由 PR head/运行链接标识；
+不把上一轮 #372 的成功或容器镜像外推为本轮结果。
+
+本轮减少实际依赖和访问：
+
+- `rusqlite` / `fs2` 只由可选 `sqlite` feature 启用。关闭默认特性的核心库不包含 SQLite
+  实现或错误类型；完整宿主 `local-storage` 自动启用 SQLite，单独 authority 显式启用它。
+- 分离始终可运行的 Blob/PDF 核心集成测试，PDF 字节夹具由核心与宿主共用；
+  原有测试没有删除或同时重复执行。手工诊断按其实际调用者依赖 `sqlite`。
+- 服务入口复用同一事务中的身份读取完成权限判断；提交仍重新检查权限。关键词候选与
+  入口授权共用快照，外部 IO 前关闭它；向量/混合模式保留模型前后的独立授权快照。
+- 空 read set、关联、空摘要查询不准备无关表；Learning 缺失或前置条件已否定、父任务
+  已取消时停止无关查询。必需数据与非空证据的失败仍拒绝操作，完整 schema 在开库和
+  显式健康检查执行。更新的是空操作的消费边界，没有压制必需查询的错误。
+- 纯向量请求不调用词法流程；其他查询的分词在 blocking 池、事务外执行。
+
+Linux Rust 1.98.0 已通过：
+
+| 配置 / 命令 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-default-features -j 2 --no-fail-fast` | 71 lib + 2 协议 + 14 core = **87 项**；5 项真实引擎检查按原设置 ignored |
+| `cargo test --locked --no-default-features --features sqlite -j 2 --no-fail-fast` | 138 lib + 2 协议 + 14 core + 78 local = **232 项**；5 项 ignored |
+| `cargo test --locked -j 2 --no-fail-fast` | 221 lib + 4 协议 + 14 core + 188 local = **427 项**；8 项 ignored |
+| 三种配置 all-targets Clippy（完整配置含 all-features） | warnings denied，全部通过 |
+| 正常服务 build、fmt、diff、actionlint 1.7.7、Cargo metadata | 通过 |
+| `cargo tree --locked --no-default-features --edges normal,build --prefix none` | 无 rusqlite、libsqlite3-sys、fs2；CI 增加相同门禁 |
+| Node UI | 15 项通过，包含合入 #80 后的来源区分断言 |
+
+新增资源回归使用各测试库独立、仅编入单测的计数，不记录生产元数据，不使用耗时阈值：
+空读取集合在没有业务表的库上产生 **0 次客户端 driver 调用**；真正请求证据仍报存储错误。
+关键词空语料请求只需 **3 个授权读事务**（此前 4 个），client driver 调用上限 20；
+此路径无需索引/Summary 表或可访问的 AnySeek，但显式 `check` 仍拒绝不完整 schema。
+事务入口只需 BEGIN 和 key/workspace 两次读取（3 次 driver 调用），没有重复身份查询；
+同事务撤销自身 key 后提交被拒绝并回滚，外部撤销后旧授权对象也不能开启新事务。
+
+固定真实 AnySeek `d813b915` 上，正常服务二进制通过 HTTP、Node UI、完整 MCP
+host-forwarding/offline smoke；另跑 8 项真实后端合同及其 HTTP/stdio、撤销、重开与
+Run 诊断持久化验收，通过。全部新建临时数据，不调用外部模型。
+
+手工 SQL 复核：非空查询的参数化单表 SQL 保持不变；关联仍在同一适配器事务中完成。
+仅减少空批次、已确定结果的分支和入口重复授权读取，不增加 JOIN、额外提交、
+跨请求权限缓存、事务内模型/文件/AnySeek IO 或业务元数据。DDL/格式未改变。
+本轮未重复容器 release 构建；既有 SQLite 容器互操作证据按原提交保留。远端结果见 PR。
+
+## 2026-11-17 · PR #83 synchronization with merged SQLite #81
+
+Merged main `f62168b4cbedfbe6a3a97dbb3161f9e6375fb2df` into the existing #83
+head `537fdbd982740c1283f3ef0e01dc47ef6a651347` without rewriting history.
+Coordinated Run storage with SqliteTx/sqlite_db/sqlite_err and updated the tests'
+old driver paths. Client events and server-prepared events both retain the reverse
+projection insert in their existing write transaction. Fresh-only schema admission,
+first-reference coverage and current-logical-key/source guards are unchanged.
+
+Promoted the narrowly scoped combination diagnostic into the existing catalog
+regression: an injected projection-insert failure rolls back the client event and
+server-prepared event, then retrying the same server event ID succeeds and yields
+the exact v2 association. Withdrawing independent v1 leaves that v2 association
+visible. This proves ordinary transaction failure handling, not power-loss durability.
+
+Executed on the actual synchronized worktree, Linux / Rust 1.98.0 / Node 24.22.1:
+
+- `cargo test --locked --test local asset_run_references_are_exact_bounded_private_and_withdrawal_gated`:
+  1 passed, 189 filtered (fixed version, other-admin/key/workspace isolation,
+  rotation, pagination/limits, authoritative proof recheck, reopen, withdrawal,
+  client/prepared projection rollback and successful retry).
+- `cargo test --locked --test local workspace_schema_rejection`:
+  5 passed, 185 filtered.
+- `cargo test --locked --no-default-features --features sqlite --test local workspace_schema_rejection`:
+  5 passed, 74 filtered; includes missing reverse table and old-layout rejection
+  without repair. These integration tests use the existing protocol peer for
+  AnySeek and are not real-engine ranking acceptance.
+- `cargo build --locked`: passed.
+- `cargo clippy --locked --all-targets -- -D warnings`: passed.
+- `cargo clippy --locked --no-default-features --features sqlite --all-targets -- -D warnings`: passed.
+- `cargo clippy --locked --no-default-features --all-targets -- -D warnings`: passed.
+- `cargo fmt --all -- --check`, `git diff --check`: passed.
+- `npm --prefix ui run check`; `npm --prefix ui test`: passed, 16 UI tests.
+
+Real AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`, models disabled,
+fresh temporary v4 data, disposable keys, rebuilt synchronized Origence binary:
+
+- `python3 tools/anyseek_smoke.py --anyseek-binary "$ANYSEEK_BINARY" --run python3 tools/mcp_smoke.py --binary "$ORIGENCE_BINARY"`:
+  passed both host-forwarding and offline MCP (protocol/schema/tools, safe errors,
+  live/invalid/revoked credentials, EOF and reopen).
+- Reused the real Chromium fixture via the same AnySeek launcher with the
+  synchronized UI/server. Chromium 156.0.8078.79 passed Run -> fixed v1 after v2
+  publication -> recorded association -> same Run; v2 and another same-workspace
+  admin cannot enumerate v1-owned associations. Browser source withdrawal,
+  association refresh, stale citation re-click, URL reload and Run reopen all
+  deny old content; server preparation failure remains server-observed/not-prepared.
+  No route interception, production data, paid models, screenshots or credentials
+  were added to this commit.
+
+Windows and full combined CI were not run locally. GitHub results must be checked
+on the new pushed HEAD; the old separate PR green runs and the earlier temporary
+combination tree are not evidence that this new HEAD passed remote CI. No complete
+#76/native Claude Code/Codex task or production acceptance is claimed.

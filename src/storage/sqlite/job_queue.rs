@@ -5,16 +5,16 @@ use super::*;
 /// crashed worker and requeued by the next claim (A2.5).
 const PROCESSING_TIMEOUT_MS: i64 = 5 * 60 * 1000;
 
-impl JobQueue for TursoStore {
+impl JobQueue for SqliteStore {
     async fn claim_next(&self) -> StorageResult<Option<ClaimedJob>> {
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         let now = now_ms();
         // Requeue processing jobs abandoned by a crashed worker (A2.5).
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_jobs SET state = 'pending', updated_at = ? \
              WHERE state = 'processing' AND NOT cancel_requested AND updated_at < ?",
         )
@@ -22,7 +22,7 @@ impl JobQueue for TursoStore {
         .bind(now - PROCESSING_TIMEOUT_MS)
         .execute(&mut *tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let row: Option<(
             Uuid,
             Uuid,
@@ -34,7 +34,7 @@ impl JobQueue for TursoStore {
             Uuid,
             Option<Uuid>,
             Option<Uuid>,
-        )> = native_turso::query_as(
+        )> = sqlite_db::query_as(
             "SELECT id, tenant_id, workspace_id, operation, payload, generation, run_token, \
                     created_by, asset_id, source_event_id \
              FROM oc_jobs \
@@ -45,7 +45,7 @@ impl JobQueue for TursoStore {
         .bind(now)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let Some((
             job_id,
             tenant_id,
@@ -59,11 +59,11 @@ impl JobQueue for TursoStore {
             source,
         )) = row
         else {
-            tx.commit().await.map_err(turso_err)?;
+            tx.commit().await.map_err(sqlite_err)?;
             return Ok(None);
         };
         // The state guard makes the claim atomic even if two workers race.
-        let claimed = native_turso::query(
+        let claimed = sqlite_db::query(
             "UPDATE oc_jobs SET state = 'processing', run_token = run_token + 1, \
              attempt = attempt + 1, updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND state IN ('pending', 'retry_wait')",
@@ -74,8 +74,8 @@ impl JobQueue for TursoStore {
         .bind(job_id)
         .execute(&mut *tx)
         .await
-        .map_err(turso_err)?;
-        tx.commit().await.map_err(turso_err)?;
+        .map_err(sqlite_err)?;
+        tx.commit().await.map_err(sqlite_err)?;
         if claimed.rows_affected() == 0 {
             return Ok(None);
         }
@@ -116,7 +116,7 @@ impl JobQueue for TursoStore {
                 Some(now + retry_delay(attempt)),
             ),
         };
-        let result = native_turso::query(
+        let result = sqlite_db::query(
             "UPDATE oc_jobs SET state = ?, outcome = ?, attempt = COALESCE(?, attempt), \
              next_retry_at = ?, updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND generation = ? AND run_token = ? AND state = 'processing'",
@@ -133,7 +133,7 @@ impl JobQueue for TursoStore {
         .bind(claim.run_token)
         .execute(&self.pool)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if result.rows_affected() == 0 {
             return Err(StorageError::Conflict("stale job claim".to_string()));
         }
@@ -141,9 +141,9 @@ impl JobQueue for TursoStore {
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     pub(super) async fn enqueue_inner(&mut self, work: WorkItem) -> StorageResult<()> {
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_jobs(tenant_id, workspace_id, id, created_by, operation, payload, \
              state, run_token, generation, attempt, asset_id, source_event_id, cancel_requested, \
              created_at, updated_at) \
@@ -161,7 +161,7 @@ impl TursoTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(())
     }
 
@@ -169,7 +169,7 @@ impl TursoTx {
         use super::read_model::{self, AssociationKey};
 
         let now = now_ms();
-        let jobs = native_turso::query(
+        let jobs = sqlite_db::query(
             "SELECT id,asset_id,source_event_id FROM oc_jobs WHERE tenant_id=? AND workspace_id=? \
              AND operation<>'cleanup' AND state IN ('pending','processing','failed','retry_wait')",
         )
@@ -177,17 +177,17 @@ impl TursoTx {
         .bind(self.scope.workspace_id)
         .fetch_all(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let mut asset_keys = Vec::with_capacity(jobs.len());
         let mut source_keys = Vec::with_capacity(jobs.len());
         for row in &jobs {
             asset_keys.push(vec![
                 row.try_get::<AssociationKey>("asset_id")
-                    .map_err(turso_err)?,
+                    .map_err(sqlite_err)?,
             ]);
             source_keys.push(vec![
                 row.try_get::<AssociationKey>("source_event_id")
-                    .map_err(turso_err)?,
+                    .map_err(sqlite_err)?,
             ]);
         }
         let assets = read_model::associate_rows(
@@ -223,12 +223,12 @@ impl TursoTx {
             .iter()
             .enumerate()
             .filter(|(index, _)| affected.contains(index))
-            .map(|(_, row)| row.try_get::<AssociationKey>("id").map_err(turso_err))
+            .map(|(_, row)| row.try_get::<AssociationKey>("id").map_err(sqlite_err))
             .collect::<StorageResult<Vec<_>>>()?;
         // Prepare the mutation even with no targets. Raw keys retain native
         // equality; the original UPDATE never decoded a job UUID or target.
         for index in 0..targets.len().max(1) {
-            native_turso::query(
+            sqlite_db::query(
                 "UPDATE oc_jobs SET state='cancelled',cancel_requested=1,run_token=run_token+1,updated_at=? \
                  WHERE tenant_id=? AND workspace_id=? AND id=? AND operation<>'cleanup' \
                  AND state IN ('pending','processing','failed','retry_wait')",
@@ -239,24 +239,23 @@ impl TursoTx {
             .bind(targets.get(index).cloned())
             .execute(&mut *self.tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         }
         Ok(())
     }
 
     pub(super) async fn job_row_inner(&mut self, id: Uuid) -> StorageResult<Value> {
         self.require_private_job(id).await?;
-        let row: Option<(Uuid, String, String, Option<Uuid>, Option<Uuid>)> =
-            native_turso::query_as(
-                "SELECT created_by, state, operation, asset_id, source_event_id FROM oc_jobs \
+        let row: Option<(Uuid, String, String, Option<Uuid>, Option<Uuid>)> = sqlite_db::query_as(
+            "SELECT created_by, state, operation, asset_id, source_event_id FROM oc_jobs \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
-            )
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(id)
-            .fetch_optional(&mut *self.tx)
-            .await
-            .map_err(turso_err)?;
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
         let Some((created_by, state, operation, asset, source)) = row else {
             return Err(StorageError::NotFound);
         };
@@ -274,7 +273,7 @@ impl TursoTx {
         id: Uuid,
         action: &str,
     ) -> StorageResult<i64> {
-        native_turso::query_scalar(
+        sqlite_db::query_scalar(
             "UPDATE oc_jobs SET state = ?, generation = generation + 1, run_token = run_token + 1, \
                     cancel_requested = ?, error_code = NULL, next_retry_at = NULL, attempt = 0, updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ? RETURNING generation",
@@ -291,12 +290,12 @@ impl TursoTx {
         .bind(id)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)
+        .map_err(sqlite_err)
     }
 
     pub(super) async fn job_view_inner(&mut self, id: Uuid) -> StorageResult<Value> {
         self.require_private_job(id).await?;
-        let row: Option<(Uuid, String, String, i64, Option<String>, Option<String>, Option<String>, bool, i64)> = native_turso::query_as(
+        let row: Option<(Uuid, String, String, i64, Option<String>, Option<String>, Option<String>, bool, i64)> = sqlite_db::query_as(
             "SELECT id, operation, state, generation, outcome, result, error_code, cancel_requested, updated_at \
              FROM oc_jobs WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
@@ -305,7 +304,7 @@ impl TursoTx {
         .bind(id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let Some((
             job_id,
             operation,
@@ -339,7 +338,7 @@ impl TursoTx {
         generation: i64,
         run_token: i64,
     ) -> StorageResult<bool> {
-        native_turso::query_scalar(
+        sqlite_db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND generation = ? AND run_token = ? AND state = 'processing' AND NOT cancel_requested)",
         )
         .bind(self.scope.tenant_id)
@@ -349,7 +348,7 @@ impl TursoTx {
         .bind(run_token)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)
+        .map_err(sqlite_err)
     }
 
     pub(super) async fn settle_completed_inner(
@@ -358,7 +357,7 @@ impl TursoTx {
         outcome: &str,
         result: &Value,
     ) -> StorageResult<()> {
-        native_turso::query(
+        sqlite_db::query(
             "UPDATE oc_jobs SET state = 'completed', outcome = ?, result = ?, error_code = NULL, updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
@@ -370,7 +369,7 @@ impl TursoTx {
         .bind(job)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(())
     }
 }

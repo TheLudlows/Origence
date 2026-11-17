@@ -5,6 +5,47 @@
 完整字段与约束以 [authority schema](../../src/storage/sqlite/schema.rs) 及其引入的 DDL 为准，
 不另行维护逐字段副本或物理表数量。
 
+## SQLite 与最小元数据
+
+权威数据和任务队列统一使用 bundled SQLite 3.54.1（rusqlite 0.43.0，关闭默认
+features，仅启用 bundled），不引入 ORM 或独立异步数据库依赖。
+`SqliteStore` / `SqliteTx` 是唯一的本地关系实现；引擎标记为 `origence-sqlite-v1`，
+没有旧引擎的适配器、别名或回退路径。
+
+SQLite 是可选的库能力：`--no-default-features` 的核心接口、解析、模型、Blob 和
+AnySeek 适配器不编译或访问 SQLite；`--features sqlite` 仅启用权威适配器，默认
+`local-storage` 组合完整宿主及 SQLite。完整宿主仍使用 SQLite 保存当前正文、权限、
+归属、版本、幂等、持久任务和恢复事实。
+
+请求只读取实际参与操作的元数据：空批次和空检索词直接返回空结果；缺少上游候选时，
+不查询下游索引、Summary、来源或 owner。Learning 不存在、前置条件不成立或父任务
+已取消时也不继续查询无关记录。非空证据与必需的读写仍严格校验。
+完整 DDL 检查在开库及显式健康检查执行，业务空操作不再兼任全库 schema 探测。
+
+服务事务在同一快照中完成一次入口身份/权限查询并登记提交要求，提交前重新检查权限；
+不缓存跨请求的权限。关键词请求复用入口事务读取候选；向量/混合模式在模型 IO 前
+结束入口事务，保留后续新快照及返回前的发布/撤回/权限复核。
+
+只持久化无法安全重建的业务事实、授权依据和恢复状态：
+
+- 版本正文的 `content_hash` 在读取时按原始 UTF-8 字节计算，不再另存一列或由写入方指定。
+  HTTP/Skill 证据中的哈希字段保持不变。
+- 发布账本使用现有完整主键保证登记幂等，不再保存由这些列拼接的 `idempotency_key`，
+  也不要求 Worker 携带该重复字符串。外部发布仍使用冻结计划和原 operation epoch。
+- 命令请求摘要、私有 Run/Skill 的快照摘要、原始文件哈希、解析/模型 provenance、
+  冻结检索词项、owner/index/ledger 仍各有校验或恢复职责，不能当作镜像删除。
+
+每个可写连接显式使用 WAL、`synchronous=FULL`、外键和 5 秒 busy timeout。
+每池最多五个独占租约，SQLite 的同步 IO 在有序 blocking 连接线程执行；取消 await
+不硬停 SQL，后续操作拒绝使用该租约，排队回滚在原操作完成后执行，再归还连接。
+关闭等待租约、回滚和 SQLite 句柄释放后才释放宿主锁；不另开持久作业 Worker。
+已经发出的 COMMIT 可能完成而调用方没有收到确认；这种未知结果仍通过原命令幂等键
+和持久状态核对，取消 await 不能撤销已经提交的数据。
+
+停机且没有非空 WAL 时，只读准入使用 immutable 连接，不创建 sidecar；存在提交 WAL
+时必须读取 WAL，不使用 immutable。SHM 的 read mark 是 SQLite 的临时协调状态，
+不是备份中的业务事实；只读访问也可能更新它，数据库与已提交 WAL 不因此被改写。
+
 ## 身份占位
 
 - `oc_assets.identity_key` 与 `identity_json` 成对为空，或在 memory 资产上同时存在。

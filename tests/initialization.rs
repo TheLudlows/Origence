@@ -1,4 +1,4 @@
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{Lifecycle, sqlite::SqliteStore};
 
 #[tokio::test]

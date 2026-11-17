@@ -1,7 +1,7 @@
 #![cfg(feature = "local-storage")]
 
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::{
     error::AppError,
     learning::ImproveInput,
@@ -11,7 +11,6 @@ use origence::{
     storage::{
         DomainTx, FullTextEntry, FullTextQuery, LedgerEntry, LedgerKey, Permission,
         RelationalStore, Scope, SourceVersion, Surface, VectorEntry, VectorQuery,
-        ledger_idempotency_key,
     },
     types::AuthContext,
     worker,
@@ -1730,7 +1729,6 @@ async fn publish_native_budget_fixture(
             tx.register_pending(LedgerEntry {
                 key,
                 artifact_type: "chunk".into(),
-                idempotency_key: ledger_idempotency_key(&key),
             })
             .await
             .unwrap();

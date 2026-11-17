@@ -1,15 +1,15 @@
-//! Fixed native Turso schema installation and literal-preserving admission.
+//! Fixed native SQLite schema installation and literal-preserving admission.
 use super::*;
 
 const SCHEMA: &str = include_str!("../sqlite-schema.sql");
 
 pub(super) async fn reject_legacy_aml_schema(conn: &mut Connection) -> StorageResult<()> {
-    let exists: bool = native_turso::query_scalar(
+    let exists: bool = sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name GLOB 'oc_aml_*')",
     )
     .fetch_one(conn)
     .await
-    .map_err(turso_err)?;
+    .map_err(sqlite_err)?;
     if exists {
         return Err(StorageError::Unavailable(
             "legacy AML schema requires a new database; no migration was attempted".into(),
@@ -19,12 +19,12 @@ pub(super) async fn reject_legacy_aml_schema(conn: &mut Connection) -> StorageRe
 }
 
 pub(super) async fn schema_present(conn: &mut Connection) -> StorageResult<bool> {
-    native_turso::query_scalar(
+    sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_workspaces')",
     )
     .fetch_one(conn)
     .await
-    .map_err(turso_err)
+    .map_err(sqlite_err)
 }
 
 pub(super) async fn exec_schema(conn: &mut Connection) -> StorageResult<()> {
@@ -36,17 +36,17 @@ pub(super) async fn exec_schema(conn: &mut Connection) -> StorageResult<()> {
         runs::SCHEMA,
         skill::SCHEMA,
     ] {
-        native_turso::raw_sql(schema)
+        sqlite_db::raw_sql(schema)
             .execute(&mut *conn)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
     }
     Ok(())
 }
 
 pub(super) async fn check_conn(conn: &mut Connection) -> StorageResult<()> {
     reject_legacy_aml_schema(conn).await?;
-    native_turso::verify_schema(
+    sqlite_db::verify_schema(
         conn,
         &[
             SCHEMA,
@@ -58,5 +58,5 @@ pub(super) async fn check_conn(conn: &mut Connection) -> StorageResult<()> {
         ],
     )
     .await
-    .map_err(turso_err)
+    .map_err(sqlite_err)
 }

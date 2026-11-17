@@ -1,10 +1,10 @@
-//! Native Turso JSON projections used by receipt readiness.
+//! Native SQLite JSON projections used by receipt readiness.
 //!
 //! These fixtures deliberately retain malformed persisted shapes. They freeze
 //! the engine boundary before a production rewrite; they do not introduce a
 //! new policy for rejecting those shapes. Every query has at most one relation.
 
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 async fn database() -> (tempfile::TempDir, db::Pool) {
     let dir = tempfile::tempdir().unwrap();
@@ -114,7 +114,7 @@ async fn receipt_json_invalid_element_errors_before_state_interpretation() {
             .fetch_one(&pool)
             .await;
             assert!(
-                matches!(result, Err(db::Error::Native(_))),
+                matches!(result, Err(db::Error::Sqlite(_))),
                 "{state}, {chunks}: {result:?}"
             );
         }
@@ -191,7 +191,7 @@ async fn receipt_json_array_element_requires_native_second_parse() {
             .bind(r#"["not-json"]"#)
             .fetch_one(&pool)
             .await;
-    assert!(matches!(nested, Err(db::Error::Native(_))));
+    assert!(matches!(nested, Err(db::Error::Sqlite(_))));
     pool.shutdown().await.unwrap();
 }
 

@@ -24,7 +24,7 @@ mod session_tests;
 
 const RECENT_EVENTS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND state='active' AND kind='session_turn' AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
 
-impl TursoTx {
+impl SqliteTx {
     pub(crate) async fn context_route_matches(
         &mut self,
         asset: Uuid,
@@ -57,16 +57,16 @@ impl TursoTx {
                 "SELECT id,kind,current_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND NOT deleted AND current_version IS NOT NULL AND id IN ({})",
                 vec!["?"; batch.len()].join(",")
             );
-            let mut query = native_turso::query(&sql)
+            let mut query = sqlite_db::query(&sql)
                 .bind(self.scope.tenant_id)
                 .bind(self.scope.workspace_id);
             for asset in batch {
                 query = query.bind(*asset);
             }
-            for row in query.fetch_all(&mut *self.tx).await.map_err(turso_err)? {
-                let kind: String = row.try_get("kind").map_err(turso_err)?;
+            for row in query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)? {
+                let kind: String = row.try_get("kind").map_err(sqlite_err)?;
                 if kind == expected {
-                    selected.push((row.try_get::<Uuid>("id").map_err(turso_err)?, row));
+                    selected.push((row.try_get::<Uuid>("id").map_err(sqlite_err)?, row));
                 }
             }
         }
@@ -87,17 +87,17 @@ impl TursoTx {
             // An orphan history can make available=true even without the
             // catalog table. The old final membership SELECT then failed;
             // an empty Rust publication map must not turn that into false.
-            let _: bool = native_turso::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND status='published')")
+            let _: bool = sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND status='published')")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         }
         let mut keys = Vec::new();
         let mut published = Vec::new();
         for (asset, row) in selected {
             if let Some(source) = learning.published_sources.get(&asset) {
                 keys.push(vec![
-                    row.try_get::<AssociationKey>("id").map_err(turso_err)?,
-                    row.try_get("current_version").map_err(turso_err)?,
+                    row.try_get::<AssociationKey>("id").map_err(sqlite_err)?,
+                    row.try_get("current_version").map_err(sqlite_err)?,
                     AssociationKey::from_uuid(*source),
                 ]);
                 published.push(asset);
@@ -190,7 +190,7 @@ impl TursoTx {
         for batch_index in 0..route_ids.len().div_ceil(8).max(1) {
             let start = batch_index * 8;
             let batch = &route_ids[start..(start + 8).min(route_ids.len())];
-            let mut query = native_turso::query_scalar::<read_model::AssociationKey>(
+            let mut query = sqlite_db::query_scalar::<read_model::AssociationKey>(
                 "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready' AND artifact_id IN (?,?,?,?,?,?,?,?)",
             )
             .bind(self.scope.tenant_id)
@@ -201,7 +201,7 @@ impl TursoTx {
             for slot in 0..8 {
                 query = query.bind(batch.get(slot).copied());
             }
-            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
+            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)?);
         }
         self.index_candidate_ids(&indexed, None, "vector", generation)
             .await
@@ -246,7 +246,7 @@ impl TursoTx {
         if route == ContextRoute::Memory && !self.context_identity_matches(&hit, identity).await? {
             return Ok(None);
         }
-        let version_root_source_event_id: Uuid = native_turso::query_scalar(
+        let version_root_source_event_id: Uuid = sqlite_db::query_scalar(
             "SELECT source_event_id FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         )
         .bind(self.scope.tenant_id)
@@ -255,7 +255,7 @@ impl TursoTx {
         .bind(hit.version)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let semantic = hit.locator["parser"] == crate::memory_semantics::PARSER;
         let source_version = if semantic {
             hit.locator["source_version"]
@@ -313,9 +313,9 @@ impl TursoTx {
         // Learning remains a workspace asset; private support pointers are
         // included only for the key that owns the underlying archive.
         let (learning_id, improve_id, session_id, body): (Uuid, Uuid, Uuid, String) =
-            native_turso::query_as("SELECT id,improve_id,session_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND status='published'")
+            sqlite_db::query_as("SELECT id,improve_id,session_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND status='published'")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
-                .fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         let own_archive = self.bound_private_session().await? == Some(session_id);
         let candidate: LearningCandidate = serde_json::from_str(&body)
             .map_err(|_| StorageError::Unavailable("invalid learning record".into()))?;
@@ -384,7 +384,7 @@ impl TursoTx {
             } else {
                 "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
             };
-            let mut query = native_turso::query(sql)
+            let mut query = sqlite_db::query(sql)
                 .bind(self.scope.tenant_id)
                 .bind(self.scope.workspace_id)
                 .bind(session)
@@ -399,18 +399,18 @@ impl TursoTx {
                     .bind(session.clone())
                     .bind(turn.clone());
             }
-            let rows = query.fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            let rows = query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
             let size = rows.len();
             if let Some(last) = rows.last() {
                 cursor = Some((
-                    last.try_get("created_at").map_err(turso_err)?,
-                    last.try_get("session_id").map_err(turso_err)?,
-                    last.try_get("turn_id").map_err(turso_err)?,
+                    last.try_get("created_at").map_err(sqlite_err)?,
+                    last.try_get("session_id").map_err(sqlite_err)?,
+                    last.try_get("turn_id").map_err(sqlite_err)?,
                 ));
             }
             let keys = rows
                 .iter()
-                .map(|row| Ok(vec![row.try_get("source_event_id").map_err(turso_err)?]))
+                .map(|row| Ok(vec![row.try_get("source_event_id").map_err(sqlite_err)?]))
                 .collect::<StorageResult<Vec<_>>>()?;
             // Even the empty first page prepares the event relation, as the
             // original statement did. Domain keys are decoded only after gate.
@@ -437,8 +437,8 @@ impl TursoTx {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.try_get("session_id").map_err(turso_err)?,
-                    row.try_get("turn_id").map_err(turso_err)?,
+                    row.try_get("session_id").map_err(sqlite_err)?,
+                    row.try_get("turn_id").map_err(sqlite_err)?,
                 ))
             })
             .collect()

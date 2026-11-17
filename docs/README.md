@@ -2,7 +2,7 @@
 
 Origence 为企业内部研发与业务 Agent 提供统一上下文数据底座。上下文包含记忆、事实、
 知识、Skill 与任务状态；首批客户端为 Claude Code 和 Codex。
-全文与向量统一使用 AnySeek，Turso 保存权威数据，Blob 保存原始文件。
+全文与向量统一使用 AnySeek，SQLite 保存权威数据，Blob 保存原始文件。
 
 ## 从这里开始
 

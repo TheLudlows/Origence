@@ -1,9 +1,9 @@
-//! Commit-time permission contract against the real SQLite/Turso adapter.
+//! Commit-time permission contract against the real SQLite/SQLite adapter.
 //!
 //! Scope, idempotency, audit, rollback and queue contracts live in sqlite_store.
 //! No mock adapter is maintained alongside the production implementation.
 
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     DomainTx, JobQueue, Permission, RelationalStore, Scope, StorageError, WorkItem,
     sqlite::SqliteStore,

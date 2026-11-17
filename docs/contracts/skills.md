@@ -1,6 +1,6 @@
 # Skill review, publication and distribution
 
-This contract defines the public-library/Turso workflow. A reported successful
+This contract defines the public-library/SQLite workflow. A reported successful
 outcome does not independently establish that a method works. A client supplies a
 draft derived from authorized, exact asset versions or immutable private Run
 prefixes. No operation auto-publishes.
@@ -22,8 +22,8 @@ prefixes. No operation auto-publishes.
   revision, supporting source authority, and exact generated package. Any candidate
   edit invalidates prior approval, including a source or private-note edit.
 - Publication stores bounded immutable package bytes and provenance in the existing
-  Turso authority transaction. There is no external IO/worker or partially installed
-  package. Versions increase monotonically. Packages currently reside in Turso;
+  SQLite authority transaction. There is no external IO/worker or partially installed
+  package. Versions increase monotonically. Packages currently reside in SQLite;
   original document bytes remain in Blob storage.
 - `skill_package(skill, version)` returns only approved manifest and files, with
   fresh source and withdrawal checks. Review basis, raw source IDs, private notes,

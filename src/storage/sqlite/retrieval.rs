@@ -1,5 +1,5 @@
 //! Final publication and response checks inside the caller's scoped snapshot.
-use super::TursoTx;
+use super::SqliteTx;
 use crate::{
     error::{AppError, Result},
     storage::SourceVersion,
@@ -60,7 +60,7 @@ pub(crate) fn batch_native_candidate(
     Ok(candidate)
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Recheck all native ranking participants before returning any previously
     /// computed score. A disappeared participant makes that ranking unavailable;
     /// a live object with changed publication identity is a storage conflict.

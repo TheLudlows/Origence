@@ -1,11 +1,11 @@
 //! Native session windows and ordered raw metadata regression coverage.
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 use crate::storage::{AuthorizedScope, RelationalStore};
 
-async fn database() -> (tempfile::TempDir, TursoStore, AuthorizedScope) {
+async fn database() -> (tempfile::TempDir, SqliteStore, AuthorizedScope) {
     let dir = tempfile::tempdir().unwrap();
-    let store = TursoStore::open(dir.path().join("context-session.db"))
+    let store = SqliteStore::open(dir.path().join("context-session.db"))
         .await
         .unwrap();
     let scope = Scope {
@@ -21,7 +21,7 @@ async fn database() -> (tempfile::TempDir, TursoStore, AuthorizedScope) {
     (dir, store, auth)
 }
 
-async fn turn(tx: &mut TursoTx, session: Uuid, id: Uuid, created: i64, kind: &str) -> Uuid {
+async fn turn(tx: &mut SqliteTx, session: Uuid, id: Uuid, created: i64, kind: &str) -> Uuid {
     let source = tx
         .create_event_inner(kind, r#"{"question":"needle","answer":"answer"}"#, None)
         .await
@@ -40,7 +40,7 @@ async fn turn(tx: &mut TursoTx, session: Uuid, id: Uuid, created: i64, kind: &st
     source
 }
 
-async fn body(tx: &mut TursoTx, source: Uuid, value: &str) {
+async fn body(tx: &mut SqliteTx, source: Uuid, value: &str) {
     db::query("UPDATE oc_events SET content=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(value)
         .bind(tx.scope.tenant_id)
@@ -51,7 +51,7 @@ async fn body(tx: &mut TursoTx, source: Uuid, value: &str) {
         .unwrap();
 }
 
-async fn evidence(tx: &mut TursoTx, session: Uuid, turn: Uuid, ordinal: i64, value: &str) {
+async fn evidence(tx: &mut SqliteTx, session: Uuid, turn: Uuid, ordinal: i64, value: &str) {
     db::query("INSERT INTO oc_session_turn_evidence(tenant_id,workspace_id,session_id,turn_id,evidence_ref_id,ordinal,evidence) VALUES(?,?,?,?,?,?,?)")
         .bind(tx.scope.tenant_id)
         .bind(tx.scope.workspace_id)
@@ -286,7 +286,7 @@ async fn hidden_turns_do_not_prepare_final_body_or_timestamp_columns() {
         .execute(&pool)
         .await
         .unwrap();
-    let mut tx = TursoTx {
+    let mut tx = SqliteTx {
         tx: pool.begin().await.unwrap(),
         scope,
         principal_id: Uuid::nil(),

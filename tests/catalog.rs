@@ -1,4 +1,4 @@
-//! Real Turso + Service + HTTP contracts for the UI's bounded catalogs.
+//! Real SQLite + Service + HTTP contracts for the UI's bounded catalogs.
 use crate::support::open_service;
 use origence::{
     models::Models,
@@ -245,6 +245,30 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
             "event":{"kind":"context_reported","references":[reference.clone()]}
         }))
         .unwrap();
+        if runs.is_empty() {
+            origence::storage::sqlite_db::raw_sql("CREATE TRIGGER reject_run_projection BEFORE INSERT ON oc_run_asset_refs BEGIN SELECT RAISE(ABORT,'injected projection failure'); END;")
+                .execute(store.pool()).await.unwrap();
+            assert!(s.append_run_event(&a, run, event.clone()).await.is_err());
+            let events: i64 = origence::storage::sqlite_db::query_scalar(
+                "SELECT count(*) FROM oc_run_events WHERE run_id=?",
+            )
+            .bind(run)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+            let refs: i64 = origence::storage::sqlite_db::query_scalar(
+                "SELECT count(*) FROM oc_run_asset_refs WHERE run_id=?",
+            )
+            .bind(run)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+            assert_eq!((events, refs), (0, 0));
+            origence::storage::sqlite_db::raw_sql("DROP TRIGGER reject_run_projection")
+                .execute(store.pool())
+                .await
+                .unwrap();
+        }
         s.append_run_event(&a, run, event.clone()).await.unwrap();
         s.append_run_event(&a, run, event).await.unwrap();
         runs.push(run);
@@ -290,14 +314,14 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
     // The lookup projection is not authority: an absent immutable reference
     // must not turn a stale pointer into a visible association.
     let pool = s.engine.relational().pool();
-    let saved: String = origence::storage::native_turso::query_scalar("SELECT references_json FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+    let saved: String = origence::storage::sqlite_db::query_scalar("SELECT references_json FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(runs[0]).fetch_one(pool).await.unwrap();
-    origence::storage::native_turso::query("UPDATE oc_run_events SET references_json='[]' WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+    origence::storage::sqlite_db::query("UPDATE oc_run_events SET references_json='[]' WHERE tenant_id=? AND workspace_id=? AND run_id=?")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(runs[0]).execute(pool).await.unwrap();
     let skipped = s.asset_runs(&a, asset, 1, Uuid::nil(), 1).await.unwrap();
     assert!(skipped["items"].as_array().unwrap().is_empty());
     assert_eq!(skipped["next_after"], runs[0].to_string());
-    origence::storage::native_turso::query("UPDATE oc_run_events SET references_json=? WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+    origence::storage::sqlite_db::query("UPDATE oc_run_events SET references_json=? WHERE tenant_id=? AND workspace_id=? AND run_id=?")
         .bind(saved).bind(scope.tenant_id).bind(scope.workspace_id).bind(runs[0]).execute(pool).await.unwrap();
 
     for (version, limit) in [(0, 25), (1, 0), (1, 101)] {
@@ -368,15 +392,59 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
             .len(),
         1
     );
+    // Injected fault after the prepared event insert but before its
+    // reverse projection: neither half may survive the failed transaction.
+    let pool = s.engine.relational().pool();
+    origence::storage::sqlite_db::raw_sql("CREATE TRIGGER reject_run_projection BEFORE INSERT ON oc_run_asset_refs BEGIN SELECT RAISE(ABORT,'injected projection failure'); END;").execute(pool).await.unwrap();
+    let event_id = Uuid::new_v4();
+    let failed = http
+        .post(format!("{base}/v1/runs/{}/context", runs[0]))
+        .bearer_auth(rotated["token"].as_str().unwrap())
+        .json(&json!({"event_id":event_id,"context":{"query":"Atlas","mode":"keyword"}}))
+        .send()
+        .await
+        .unwrap();
+    assert!(failed.status().is_server_error());
+    let events: i64 = origence::storage::sqlite_db::query_scalar(
+        "SELECT count(*) FROM oc_run_events WHERE event_id=?",
+    )
+    .bind(event_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let refs: i64 = origence::storage::sqlite_db::query_scalar(
+        "SELECT count(*) FROM oc_run_asset_refs WHERE event_id=?",
+    )
+    .bind(event_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!((events, refs), (0, 0));
+    origence::storage::sqlite_db::raw_sql("DROP TRIGGER reject_run_projection")
+        .execute(pool)
+        .await
+        .unwrap();
+    let prepared = http
+        .post(format!("{base}/v1/runs/{}/context", runs[0]))
+        .bearer_auth(rotated["token"].as_str().unwrap())
+        .json(&json!({"event_id":event_id,"context":{"query":"Atlas","mode":"keyword"}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(prepared.status(), 200);
+    let linked = s.asset_runs(&a, asset, 2, Uuid::nil(), 25).await.unwrap();
+    assert_eq!(linked["items"].as_array().unwrap().len(), 1);
+    assert_eq!(linked["items"][0]["run_id"], runs[0].to_string());
     let source: Uuid = serde_json::from_value(receipt["source_event_id"].clone()).unwrap();
     s.delete(&a, "withdraw-v1", source, "event").await.unwrap();
     assert!(s.asset_runs(&a, asset, 1, Uuid::nil(), 25).await.is_err());
-    // v2's independent source remains readable, but has no recorded v2 references.
-    assert!(
+    // The successful preparation now links v2; withdrawing v1 leaves it visible.
+    assert_eq!(
         s.asset_runs(&a, asset, 2, Uuid::nil(), 25).await.unwrap()["items"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .len(),
+        1
     );
     host.abort();
 }

@@ -249,7 +249,6 @@ pub trait DomainTx {
         asset: Uuid,
         version: i32,
         content: &str,
-        content_hash: &str,
         source: Uuid,
         restored_from: Option<i32>,
         title: Option<&str>,
