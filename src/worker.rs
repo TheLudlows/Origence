@@ -813,19 +813,8 @@ async fn publish_prepared(
             publication.full_text_operation_epoch,
         )
         .await?;
-    if let (Some(g), Some(first)) = (&publication.graph, publication.memories.first()) {
-        let source = source_for(claim, first.version)?;
-        service
-            .engine
-            .graph()
-            .upsert_entities(claim.scope, source, g.entities.clone())
-            .await?;
-        service
-            .engine
-            .graph()
-            .upsert_relations(claim.scope, source, g.relations.clone())
-            .await?;
-    }
+    // The graph projection was written in the same AnySeek group as chunks.
+    // Only the final authority transaction may make those supports visible.
     let mut tx = service.write(&a, permission(payload)).await?;
     guard(&mut tx, claim, payload).await?;
     for memory in &publication.memories {
@@ -964,26 +953,13 @@ async fn publish_prepared(
 /// with native writes. Visibility is already blocked by the relational tombstone.
 pub async fn cleanup(service: &Service) -> Result<()> {
     for scope in service.engine.relational().scopes().await? {
-        let (vectors, entities, relations) =
-            service.engine.relational().cleanup_plan(scope).await?;
+        let chunks = service.engine.relational().cleanup_plan(scope).await?;
+        // Graph metadata follows its source publication group. Do not delete
+        // entity/edge IDs globally: another source may still support them.
         service
             .engine
             .vector()
-            .delete_objects(scope, vectors)
-            .await?;
-        let ids = service.engine.graph().list_ids(scope).await?;
-        let dead_entities: Vec<Uuid> = decode::<Vec<Uuid>>(ids["entities"].clone())?
-            .into_iter()
-            .filter(|id| !entities.contains(id))
-            .collect();
-        let dead_relations: Vec<Uuid> = decode::<Vec<Uuid>>(ids["relations"].clone())?
-            .into_iter()
-            .filter(|id| !relations.contains(id))
-            .collect();
-        service
-            .engine
-            .graph()
-            .delete_objects(scope, dead_entities, dead_relations)
+            .delete_objects(scope, chunks)
             .await?;
         service.engine.relational().finish_cleanup(scope).await?;
     }

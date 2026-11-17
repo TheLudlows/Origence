@@ -72,11 +72,9 @@ impl TursoStore {
             .bind(retry).bind(state).bind(code).bind(retry).bind(now_ms()+2000).bind(now_ms()).bind(claim.scope.tenant_id).bind(claim.scope.workspace_id).bind(claim.job_id).bind(claim.generation).bind(claim.run_token).execute(&self.pool).await.map_err(turso_err)?;
         Ok(())
     }
-    /// Detach invalid provenance before native cleanup. Repeatable after a crash.
-    pub async fn cleanup_plan(
-        &self,
-        scope: Scope,
-    ) -> StorageResult<(Vec<Uuid>, Vec<Uuid>, Vec<Uuid>)> {
+    /// Detach invalid provenance and find unowned AnySeek chunk IDs.
+    /// The durable ledger retains these IDs across failed or repeated native cleanup.
+    pub async fn cleanup_plan(&self, scope: Scope) -> StorageResult<Vec<Uuid>> {
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
@@ -95,21 +93,11 @@ impl TursoStore {
         };
         guarded.detach_unsupported_learning_owners().await?;
         let mut tx = guarded.tx;
-        let sources = maintenance::unowned_native_artifacts(&mut tx, scope).await?;
-        let rows: Vec<(String,Uuid)> = native_turso::query_as("SELECT DISTINCT artifact_type,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('entity','relation')").bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&mut *tx).await.map_err(turso_err)?;
+        let chunks = maintenance::unowned_native_artifacts(&mut tx, scope).await?;
         tx.commit().await.map_err(turso_err)?;
-        let entities = rows
-            .iter()
-            .filter(|(k, _)| k == "entity")
-            .map(|(_, id)| *id)
-            .collect();
-        let relations = rows
-            .iter()
-            .filter(|(k, _)| k == "relation")
-            .map(|(_, id)| *id)
-            .collect();
-        Ok((sources, entities, relations))
+        Ok(chunks)
     }
+
     pub async fn finish_cleanup(&self, scope: Scope) -> StorageResult<()> {
         let mut tx = self
             .pool

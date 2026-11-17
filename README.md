@@ -44,4 +44,4 @@ Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent compa
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md). The JOIN-free SQL constraint remains in force; its former automatic guard and tests have been removed.
 
-> The CLI is now named `origence`. Existing `OC_*` configuration variables and HTTP endpoints remain unchanged. The graph backend now uses `graph.db`; see [Operations](docs/OPERATIONS.md) for the rebuild boundary.
+> The CLI is now named `origence`. Existing `OC_*` configuration variables and HTTP endpoints remain unchanged. AnySeek provides one-hop graph candidates, and Turso still authorizes their source evidence. See [Operations](docs/OPERATIONS.md) for the storage boundary.

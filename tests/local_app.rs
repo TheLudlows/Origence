@@ -1763,7 +1763,7 @@ async fn saved_publication_checks_generation_before_decoding() {
 }
 
 #[tokio::test]
-async fn saved_publication_recovers_after_external_graph_write() {
+async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -1824,9 +1824,14 @@ async fn saved_publication_recovers_after_external_graph_write() {
         .authenticate(&key.token)
         .await
         .unwrap();
+    let epoch = origence::storage::anyseek::operation_epoch().unwrap();
+    let native = origence::storage::anyseek::AnySeekFullTextStore::new(
+        crate::support::fixture(dir.path(), None).config(),
+    )
+    .unwrap();
     let mut tx = s.engine.relational().begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
-    tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"profile":null,"memories":[{"asset":claim.asset,"fact_key":null,"expected_version":null,"version":1,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":""}]}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
+    tx.save_publication(claim.job_id,&json!({"generation":claim.generation,"full_text_operation_epoch":epoch,"profile":null,"memories":[{"asset":claim.asset,"fact_key":null,"expected_version":null,"version":1,"chunks":[{"id":chunk_id,"chunk":{"content":"Atlas evidence","locator":{"start":0,"end":14}},"embedding":null,"summary":""}]}],"graph":{"entities":[entity],"relations":[]}})).await.unwrap();
     tx.register_pending(LedgerEntry {
         key: ledger_key,
         artifact_type: "entity".into(),
@@ -1834,23 +1839,57 @@ async fn saved_publication_recovers_after_external_graph_write() {
     })
     .await
     .unwrap();
+    let chunk_pending = LedgerKey {
+        artifact_id: chunk_id,
+        surface: Surface::FullText,
+        ..ledger_key
+    };
+    tx.register_pending(LedgerEntry {
+        key: chunk_pending,
+        artifact_type: "chunk".into(),
+        idempotency_key: ledger_idempotency_key(&chunk_pending),
+    })
+    .await
+    .unwrap();
     tx.commit().await.unwrap();
-    s.engine
-        .graph()
-        .upsert_entities(scope, source, vec![entity])
+    native
+        .upsert_with_graph(
+            scope,
+            vec![FullTextEntry {
+                id: chunk_id,
+                source,
+                generation: claim.generation,
+                search_terms: origence::parsing::lexical("Atlas evidence"),
+            }],
+            vec![],
+            Some(origence::storage::anyseek::GraphPublication {
+                source,
+                generation: claim.generation,
+                graph: GraphExtraction {
+                    entities: vec![entity],
+                    relations: vec![],
+                },
+            }),
+            epoch,
+        )
         .await
         .unwrap();
+    assert_eq!(
+        native
+            .graph_seed_candidates(scope, "atlas")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(s.get(&a, id(&accepted, "asset_id"), None).await.is_err());
-    // Persisted boundary: graph has the object, SQLite has only pending intent, no version.
+    // Crash boundary: AnySeek owns the frozen group; Turso has pending intent only.
     s.engine.shutdown().await.unwrap();
     drop(s);
     let s = crate::support::open_service(dir.path(), Models::disabled())
         .await
         .unwrap();
-    assert_eq!(
-        s.engine.graph().list_ids(scope).await.unwrap()["entities"],
-        json!([])
-    );
+    assert!(s.get(&a, id(&accepted, "asset_id"), None).await.is_err());
     assert!(origence::worker::process_next(&s).await.unwrap());
     assert!(!origence::worker::process_next(&s).await.unwrap());
     assert_eq!(
@@ -1858,8 +1897,12 @@ async fn saved_publication_recovers_after_external_graph_write() {
         1
     );
     assert_eq!(
-        s.engine.graph().list_ids(scope).await.unwrap()["entities"],
-        json!([entity_id])
+        native
+            .graph_seed_candidates(scope, "atlas")
+            .await
+            .unwrap()
+            .len(),
+        1
     );
     let versions: i64 = db::query_scalar("SELECT count(*) FROM oc_versions")
         .fetch_one(s.engine.relational().pool())
@@ -1955,8 +1998,12 @@ async fn saved_publication_recovers_after_external_graph_write() {
         .unwrap();
     // No worker is running: stale native records exist but cannot become public evidence.
     assert_eq!(
-        s.engine.graph().list_ids(scope).await.unwrap()["entities"],
-        json!([entity_id])
+        native
+            .graph_seed_candidates(scope, "atlas")
+            .await
+            .unwrap()
+            .len(),
+        1
     );
     assert_eq!(
         crate::support::projection(&s)
@@ -1982,9 +2029,12 @@ async fn saved_publication_recovers_after_external_graph_write() {
     );
     tx.commit().await.unwrap();
     assert!(origence::worker::process_next(&s).await.unwrap());
-    assert_eq!(
-        s.engine.graph().list_ids(scope).await.unwrap()["entities"],
-        json!([])
+    assert!(
+        native
+            .graph_seed_candidates(scope, "atlas")
+            .await
+            .unwrap()
+            .is_empty()
     );
     assert!(
         crate::support::projection(&s)
@@ -1994,6 +2044,7 @@ async fn saved_publication_recovers_after_external_graph_write() {
             .is_empty()
     );
     s.engine.shutdown().await.unwrap();
+    assert!(!dir.path().join("graph.db").exists());
 }
 
 #[tokio::test]
@@ -2176,7 +2227,7 @@ async fn graph_one_hop_direction_disabled_path_and_withdrawal() {
         )
         .into_future(),
     );
-    let (mut host, base) = start(dir.path(), &model).await;
+    let (mut host, mut base) = start(dir.path(), &model).await;
     let http = reqwest::Client::new();
     let doc = post(
         &http,
@@ -2190,6 +2241,49 @@ async fn graph_one_hop_direction_disabled_path_and_withdrawal() {
     .await;
     job(&http, &base, token, id(&doc, "job_id"), "completed").await;
     let query = json!({"query":"seedalpha","mode":"hybrid","limit":100,"components":{"summaries":false,"graph":true}});
+    let shared = post(&http,&base,token,"/v1/knowledge",json!({"title":"shared chain","content":"GRAPH-CHAIN-FIXTURE seedalpha shared evidence","format":"markdown"})).await;
+    job(&http, &base, token, id(&shared, "job_id"), "completed").await;
+    let shared_graph = post(&http, &base, token, "/v1/search", query.clone()).await;
+    assert_eq!(
+        shared_graph["graph"]["relations"].as_array().unwrap().len(),
+        2
+    );
+    assert!(
+        shared_graph["graph"]["relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|edge| edge["evidence"].as_array().unwrap().len() >= 2)
+    );
+    let removed = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::DELETE,
+        &format!("/v1/assets/{}", shared["asset_id"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    job(
+        &http,
+        &base,
+        token,
+        id(&removed, "cleanup_job_id"),
+        "completed",
+    )
+    .await;
+    assert!(
+        !dir.path().join("graph.db").exists(),
+        "fresh deployment must not create graph.db"
+    );
+    stop(&mut host).await;
+    let legacy_bytes = b"fixture-owned invalid legacy graph database: must remain untouched";
+    std::fs::write(dir.path().join("graph.db"), legacy_bytes).unwrap();
+    (host, base) = start(dir.path(), &model).await;
+    assert_eq!(
+        std::fs::read(dir.path().join("graph.db")).unwrap(),
+        legacy_bytes
+    );
     let remote = crate::support::fixture(dir.path(), Some(3));
     remote.clear_queries();
     let result = post(&http, &base, token, "/v1/search", query.clone()).await;
@@ -2372,5 +2466,9 @@ async fn graph_one_hop_direction_disabled_path_and_withdrawal() {
     )
     .await;
     stop(&mut host).await;
+    assert_eq!(
+        std::fs::read(dir.path().join("graph.db")).unwrap(),
+        legacy_bytes
+    );
     mock.abort();
 }

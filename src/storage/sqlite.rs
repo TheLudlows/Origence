@@ -77,8 +77,6 @@ use crate::storage::traits::{
 };
 
 use locking::LockGuard;
-#[cfg(all(test, feature = "local-storage"))]
-pub(super) use locking::lock_for_maintenance;
 
 /// The local relational store backed by a single native Turso database file.
 pub struct TursoStore {

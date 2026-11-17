@@ -26,8 +26,6 @@ flowchart TD
     W --> R[RetrievalStore]
     S --> R
     R --> F[AnySeek 全文、向量与一跳候选]
-    W --> G[Turso 图投影]
-    S --> G
     W --> P[按配置调用模型与解析器]
 ```
 
@@ -49,17 +47,16 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
-| RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本 | 原生 Turso `context.db` |
+| RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本（含图证据） | 原生 Turso `context.db` |
 | RetrievalStore | 带作用域、来源、generation 的全文/向量与一跳图候选投影 | AnySeek HTTP |
 | 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 Turso `context.db` |
-| GraphStore | 图实体、关系及遍历投影 | 原生 Turso `graph.db`；owner 权威仍在 authority |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
 
 `StorageEngine` 是组装结构，持有 `RelationalStore`、`JobQueue`、`VectorStore`、
-`GraphStore` 和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/Turso 事务，
+和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/Turso 事务，
 并非任意数据库的通用运行时。`VectorStore` 暂同时承载全文接口，`RetrievalStore` 完成委派。
 存储 SQL 留在适配器；所有业务事务携带 scope。模型、文件与远端索引 IO 在事务外执行。
 业务、幂等、审计和入队同事务提交，JobQueue 消费者不在另一连接补登记任务。
@@ -103,9 +100,9 @@ metadata 或存储错误明确失败；正文与 locator 从 Origence 权威数�
 ### A2.6 跨存储发布与清理
 
 1. 权威事务保存发布计划、pending 账本；AnySeek 计划保存原 operation epoch。
-2. 在事务外写入全文、向量和图投影，使用确定性完整身份。
+2. 在事务外向 AnySeek 写入全文、向量和图投影，使用确定性完整身份。
 3. 权威事务再次核对运行/来源/权限/版本，提交版本、owner、ready 索引及作业完成。
-4. 失败或撤回后按权威清理规划删除孤儿；共享对象保留仍有效的 owner。
+4. 失败或撤回后按权威清理规划删除孤立来源的投影；共享关系仍保留有效来源的 owner 和独立投影。
 
 AnySeek 用一组 Record 原子写入一个不可变发布的 chunk（其中一个携带图候选元数据）；新业务版本使用独立组。
 这不是 Origence 与 AnySeek 的共同事务。响应丢失先核对完整当前组；原计划恢复复用 epoch。

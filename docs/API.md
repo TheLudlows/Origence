@@ -58,6 +58,14 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 部署及目录绑定见 [OPERATIONS](OPERATIONS.md#anyseek-全文与向量)；
 此前可选全文切片的历史协议与验证见[实施记录](implementation/2026-11-16-anyseek-integration.md)。
 
+## 旧 Turso 图投影移除
+
+HTTP 和 MCP 不改接口。图候选只从 AnySeek 读取；`context.db` 继续管理权限、来源、owner 和发布账本。
+宿主不再打开 `graph.db`，也不会迁移或删除旧文件。Rust 库移除了 `GraphStore`、`TursoGraphStore`、
+`SqliteGraphStore` 以及 `StorageEngine::graph()`；手工构造 `StorageEngine::new` 时不再传入图存储。
+`TursoStore::cleanup_plan` 改为只返回待清理的 chunk ID，不再返回旧图存储的实体和关系集合。
+对外一跳能力仍由 hybrid search/resolve 提供；旧 Rust 库的单独图遍历不再提供。
+
 ## Issue #61：Rust 库与 CLI 破坏性变更
 
 以下是公开 Rust 接口及离线 CLI 的删除/改名，不提供兼容包装；不是旧数据库迁移。对应提交与验收见 [VALIDATION](VALIDATION.md#第二批精确头验收)。HTTP 请求/响应仍按本文各节契约使用。
@@ -65,7 +73,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 - 删除无实际持久化作用的 `DomainTx::record_source`。调用方移除该空调用；真实来源仍由事件、资产版本及 owner/账本的现有事务路径保存，不能因此省略来源写入或核验。
 - `TursoTx::keyword_hits(terms, true, asset_filter)` 改为 `summary_hits(terms, asset_filter)`，不再接受 `summaries` 布尔参数；保留同 chunk 跨摘要行聚合后的 AND 语义。`keyword_hits(..., false, ...)` 的关系库原文扫描入口删除；产品原文 keyword 检索不走关系库扫描。
 - 删除六个旧 `DomainTx` 方法：`cleanup_derived_chunks`、`settle_failed`、`detach_owners`、`owned_artifacts`、`fail_retryable`、`fail_permanent`，以及专属实现/mock。当前共享 owner 清理由 `cleanup_plan` / `finish_cleanup` 执行，作业失败由 `fail_job` 处理；这些是现有产品路径，不是六个旧方法的一一语义替代，尤其旧 ledger failure 不等于作业重试。`register_owner`、`register_pending`、`confirm_committed`、`retry_delay` 和 owners/ledger 契约保留。
-- 删除后端声明类型 `Capabilities` 及 `VectorStore::capabilities()` / `GraphStore::capabilities()`；调用方和自定义实现须移除对应声明。鉴权类型 `KeyCapabilities`、显式 `allow_owned_workspaces` 和图查询实际 `max_hops` 限制保留，不能因名称相似一并删除。
+- 删除后端声明类型 `Capabilities` 及 `VectorStore::capabilities()` / `GraphStore::capabilities()`；调用方和自定义实现须移除对应声明。鉴权类型 `KeyCapabilities` 和显式 `allow_owned_workspaces` 不受影响。独立的图遍历限制只属于旧图存储。
 - 删除 `TursoStore::upgrade_memory_identity(path, dry_run)`、`MemoryIdentityUpgrade` 及 CLI `memory-identity-upgrade --dry-run`。库调用方改用 `TursoStore::check_memory_identity(path) -> StorageResult<()>`；CLI 改用 `--offline identity-check`。该入口对已有数据库执行只读、独占锁下的完整同版本 schema 检查，不创建、安装或修复表；成功表示检查有效，不表示完成升级。输出与安全步骤见[离线记忆身份检查](OPERATIONS.md#离线记忆身份检查)。
 
 ## Issue #60：账本两列精简

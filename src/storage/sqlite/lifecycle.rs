@@ -77,10 +77,6 @@ impl TursoStore {
     pub fn pool(&self) -> &Pool {
         &self.pool
     }
-    #[cfg(feature = "local-storage")]
-    pub(crate) fn native_lifetime_guard(&self) -> std::sync::Arc<dyn Send + Sync> {
-        self._lock.clone()
-    }
     pub fn path(&self) -> &Path {
         &self.path
     }

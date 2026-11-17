@@ -3,8 +3,8 @@
 //! # Ownership boundary (A2.4)
 //! The local API and Worker share one in-process [`StorageEngine`]. The
 //! relational store holds the data directory's single-host OS lock; business
-//! modules share adapters rather than opening independent databases. Graph IO
-//! uses the native Rust Turso connection pool.
+//! modules share adapters rather than opening independent databases. Graph authority
+//! stays in the relational store; graph candidates share the AnySeek projection.
 //!
 //! # Shutdown order
 //! The host stops and joins the worker before [`StorageEngine::shutdown`].
@@ -28,9 +28,7 @@ pub mod native_turso;
 pub(crate) mod retrieval_store;
 pub mod scope;
 pub mod sqlite;
-pub mod sqlite_graph;
 pub use sqlite as turso;
-pub use sqlite_graph as turso_graph;
 pub mod traits;
 
 pub fn hash(bytes: impl AsRef<[u8]>) -> String {
@@ -43,7 +41,6 @@ pub type LocalEngine = StorageEngine<
     std::sync::Arc<sqlite::TursoStore>,
     std::sync::Arc<sqlite::TursoStore>,
     RetrievalStore,
-    TursoGraphStore,
     local_blob::LocalBlobStore,
 >;
 
@@ -69,29 +66,26 @@ pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotenc
 pub use retrieval_store::RetrievalStore;
 pub use scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
 pub use sqlite::{SqliteStore, TursoStore};
-pub use sqlite_graph::{SqliteGraphStore, TursoGraphStore};
 pub use traits::{
-    BlobStore, ClaimedJob, DomainTx, GraphStore, IssuedKey, JobFinish, JobQueue, Lifecycle,
-    RelationalStore, VectorStore, WorkItem,
+    BlobStore, ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, Lifecycle, RelationalStore,
+    VectorStore, WorkItem,
 };
 
 /// Assembles the four stores behind one interface. Owned by the local host;
 /// API and Worker share it in-process (A2.4).
-pub struct StorageEngine<R, Q, V, G, B> {
+pub struct StorageEngine<R, Q, V, B> {
     relational: R,
     queue: Q,
     vector: V,
-    graph: G,
     blobs: B,
 }
 
-impl<R, Q, V, G, B> StorageEngine<R, Q, V, G, B> {
-    pub fn new(relational: R, queue: Q, vector: V, graph: G, blobs: B) -> Self {
+impl<R, Q, V, B> StorageEngine<R, Q, V, B> {
+    pub fn new(relational: R, queue: Q, vector: V, blobs: B) -> Self {
         Self {
             relational,
             queue,
             vector,
-            graph,
             blobs,
         }
     }
@@ -105,20 +99,16 @@ impl<R, Q, V, G, B> StorageEngine<R, Q, V, G, B> {
     pub fn vector(&self) -> &V {
         &self.vector
     }
-    pub fn graph(&self) -> &G {
-        &self.graph
-    }
     pub fn blobs(&self) -> &B {
         &self.blobs
     }
 }
 
-impl<R, Q, V, G, B> StorageEngine<R, Q, V, G, B>
+impl<R, Q, V, B> StorageEngine<R, Q, V, B>
 where
     R: Lifecycle,
     Q: Lifecycle,
     V: Lifecycle,
-    G: Lifecycle,
     B: Lifecycle,
 {
     /// Initialize all backends; a failure part-way leaves already-initialized
@@ -127,7 +117,6 @@ where
         self.relational.initialize().await?;
         self.queue.initialize().await?;
         self.vector.initialize().await?;
-        self.graph.initialize().await?;
         self.blobs.initialize().await?;
         Ok(())
     }
@@ -137,7 +126,6 @@ where
         self.relational.check().await?;
         self.queue.check().await?;
         self.vector.check().await?;
-        self.graph.check().await?;
         self.blobs.check().await?;
         Ok(())
     }
@@ -146,10 +134,63 @@ where
     /// queue and relational authority (which may share one physical pool).
     pub async fn shutdown(&self) -> StorageResult<()> {
         self.vector.shutdown().await?;
-        self.graph.shutdown().await?;
         self.blobs.shutdown().await?;
         self.queue.shutdown().await?;
         self.relational.shutdown().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod engine_lifecycle_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    struct Backend(&'static str, Arc<Mutex<Vec<String>>>);
+    impl Backend {
+        fn record(&self, action: &str) -> StorageResult<()> {
+            self.1.lock().unwrap().push(format!("{}:{action}", self.0));
+            Ok(())
+        }
+    }
+    impl Lifecycle for Backend {
+        async fn initialize(&self) -> StorageResult<()> {
+            self.record("initialize")
+        }
+        async fn check(&self) -> StorageResult<()> {
+            self.record("check")
+        }
+        async fn shutdown(&self) -> StorageResult<()> {
+            self.record("shutdown")
+        }
+    }
+    #[tokio::test]
+    async fn projection_and_blob_shutdown_precede_authority_without_graph_backend() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let engine = StorageEngine::new(
+            Backend("authority", events.clone()),
+            Backend("queue", events.clone()),
+            Backend("projection", events.clone()),
+            Backend("blob", events.clone()),
+        );
+        engine.initialize().await.unwrap();
+        engine.check().await.unwrap();
+        engine.shutdown().await.unwrap();
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                "authority:initialize",
+                "queue:initialize",
+                "projection:initialize",
+                "blob:initialize",
+                "authority:check",
+                "queue:check",
+                "projection:check",
+                "blob:check",
+                "projection:shutdown",
+                "blob:shutdown",
+                "queue:shutdown",
+                "authority:shutdown"
+            ]
+        );
     }
 }

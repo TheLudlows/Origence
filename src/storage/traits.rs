@@ -37,7 +37,6 @@ use crate::storage::{
     error::{StorageError, StorageResult},
     scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion},
 };
-use crate::types::{Entity, Relation};
 
 /// A unit of work registered on a transaction for later claim by a worker.
 /// The queue consumer claims/acks/retries; enqueue itself never opens a second
@@ -480,48 +479,6 @@ pub trait VectorStore {
 
     /// Remove every vector and full-text row originating from a source version.
     async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()>;
-}
-
-/// Graph storage. Entity/relation writes carry scope + source version; queries
-/// declare the max traversal they need (A2.2, A2.7).
-pub trait GraphStore {
-    /// Write entities originating from a source version.
-    async fn upsert_entities(
-        &self,
-        scope: Scope,
-        source: SourceVersion,
-        entities: Vec<Entity>,
-    ) -> StorageResult<()>;
-
-    /// Write relations originating from a source version.
-    async fn upsert_relations(
-        &self,
-        scope: Scope,
-        source: SourceVersion,
-        relations: Vec<Relation>,
-    ) -> StorageResult<()>;
-
-    /// Return the ids reachable from `from` within `max_hops` hops.
-    async fn traverse(&self, scope: Scope, from: Uuid, max_hops: usize)
-    -> StorageResult<Vec<Uuid>>;
-
-    /// Remove graph objects that originate solely from a source version.
-    async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()>;
-
-    /// Return every entity/relation id currently stored for `scope`, as
-    /// `{"entities": [..], "relations": [..]}`. graph-core G4 diffs this
-    /// against the retained owner IDs from `cleanup_plan` to find orphans (A2.6).
-    async fn list_ids(&self, scope: Scope) -> StorageResult<Value>;
-
-    /// Delete the given entity/relation ids (already diffed to orphans by the
-    /// caller). This — not `delete_source` — is the authoritative shared-source
-    /// delete; shared objects are retained until their last owner is gone (A2.4).
-    async fn delete_objects(
-        &self,
-        scope: Scope,
-        entities: Vec<Uuid>,
-        relations: Vec<Uuid>,
-    ) -> StorageResult<()>;
 }
 
 /// Raw file storage. Keys are [`BlobKey`]s constrained by scope + root, never

@@ -21,7 +21,6 @@ mod semantic_memory;
 mod session_feedback;
 mod sqlite_domain;
 mod sqlite_evidence;
-mod sqlite_graph_store;
 mod sqlite_identity;
 mod sqlite_identity_check;
 mod sqlite_ledger;
