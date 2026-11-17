@@ -66,8 +66,11 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const writes = [],
     keys = [];
   const searches = new Map();
+  const catalogQueries = [];
   let failMemory = true,
-    unauthorized = false;
+    unauthorized = false,
+    conflictKnowledge = false,
+    jobState = "completed";
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     const path = new URL(url, "http://localhost:3000"),
@@ -94,11 +97,15 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       });
     if (path.pathname === "/api/health/ready")
       return response({ status: "ready" });
-    if (path.pathname === "/api/v1/assets")
+    if (path.pathname === "/api/v1/assets") {
+      catalogQueries.push(path.searchParams);
+      if (path.searchParams.get("memory_filter")?.includes("staging"))
+        return response({items: path.searchParams.has("after") ? [asset] : [], next_after: path.searchParams.has("after") ? null : ids.asset});
       return response({
         items: [asset].filter((a) => a.kind === path.searchParams.get("kind")),
         next_after: null,
       });
+    }
     if (path.pathname === "/api/v1/runs")
       return response({
         items: [
@@ -175,6 +182,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return response({ file_id: ids.source });
     }
     if (path.pathname === "/api/v1/knowledge") {
+      if (conflictKnowledge) return response({error:{message:"asset/version mismatch"}},409);
       assert.equal(body.asset_id, null);
       assert.equal(body.expected_version, null);
       writes.push(body);
@@ -186,7 +194,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return pending.promise;
     }
     if (path.pathname === `/api/v1/jobs/${ids.job}`)
-      return response({ state: "completed", outcome: "published" });
+      return response({ state: jobState, outcome: jobState === "completed" ? "published" : null });
     if (path.pathname === "/api/v1/context") {
       assert.equal(body.budget, 4000);
       return response({
@@ -312,6 +320,61 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(writes.at(-1).file_id, ids.source);
     assert.equal(writes.at(-1).content, undefined);
     click("关闭", upload);
+  });
+  await t.test("memory filters are server predicates and preserve empty-page continuation", async () => {
+    click("◇记忆管理");
+    await wait(() => document.querySelector("h1")?.textContent === "记忆管理");
+    control("主体类型").value = "service";
+    control("主体 ID").value = "Atlas";
+    control("属性").value = "release.rule";
+    control("完整适用条件").value = '{"env":"staging"}';
+    click("应用目录筛选");
+    await wait(() => document.body.textContent.includes("本批暂无匹配资产"));
+    const first = catalogQueries.at(-1);
+    assert.equal(first.has("after"), false);
+    assert.deepEqual(JSON.parse(first.get("memory_filter")), {subject:{kind:"service",stable_id:"Atlas"},predicate:"release.rule",context:{env:"staging"}});
+    click("加载下一页");
+    await wait(() => document.querySelector("table")?.textContent.includes("Atlas"));
+    assert.equal(catalogQueries.at(-1).get("after"), ids.asset);
+    assert.equal(catalogQueries.at(-1).get("memory_filter"), first.get("memory_filter"));
+    control("完整适用条件").value = '{"env":"production"}';
+    click("应用目录筛选");
+    await wait(() => catalogQueries.at(-1).get("memory_filter")?.includes("production"));
+    assert.equal(catalogQueries.at(-1).has("after"), false);
+  });
+  await t.test("failed jobs and version conflicts reread authority without replacing drafts", async () => {
+    const { editor } = await import("../dist/client/asset-editor.js");
+    const { trackJob } = await import("../dist/client/jobs.js");
+    const lifetime = new AbortController();
+    const ctx = { signal: lifetime.signal, role: "writer", navigate() {} };
+    const target = document.createElement("div");
+    document.body.append(target);
+    for (const state of ["failed", "superseded"]) {
+      jobState = state;
+      await trackJob({job_id: ids.job, asset_id: ids.asset}, target, ctx);
+      click("读取当前资产", target);
+      await wait(() => target.textContent.includes("当前已发布 v1"));
+      assert.equal(target.textContent.includes("重试任务"), state === "failed");
+      assert.equal(target.textContent.includes("取消任务"), false);
+    }
+    jobState = "completed";
+    conflictKnowledge = true;
+    editor("knowledge", ctx, {...asset, kind: "knowledge"});
+    const modal = document.querySelector("dialog");
+    control("正文", modal).value = "retained draft";
+    modal.querySelector("form").requestSubmit();
+    await wait(() => modal.textContent.includes("版本冲突"));
+    asset.version = 2;
+    click("读取当前版本", modal);
+    await wait(() => modal.textContent.includes("当前已发布 v2"));
+    assert.equal(control("正文", modal).value, "retained draft");
+    assert(modal.textContent.includes("基于 v1 提交"));
+    assert.equal(modal.querySelector("form").hidden, false);
+    click("关闭", modal);
+    asset.version = 1;
+    conflictKnowledge = false;
+    target.remove();
+    lifetime.abort();
   });
   await t.test(
     "a superseded search cannot overwrite the newer query",
