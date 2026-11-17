@@ -953,3 +953,45 @@ Shared-console Ctrl+C is best effort until verified there. If signal delivery fa
 or grace expires, owned-process termination is explicitly a forced stop; closing
 or killing the parent terminal may bypass finally and leave children alive. The
 launcher is not a production service supervisor. No remote PR/push/deployment.
+
+## 2026-11-17 — #87 minimal MCP Run host adapter (local only)
+
+Base and read-only latest-main check: `293e2bf6af3b180d43c8050731047b552ac07519`.
+Independent branch `p0/mcp-host-adapter`, worktree `/workspace/origence-mcp`.
+Read repository AGENTS.md, current status/design, Run contract and client/API
+implementation; no repository `.agents/skills` exists and workspace `.agents`
+is empty. Interface and two-host observation boundaries are frozen in
+[the host contract example](../examples/run-host-contract.md).
+
+Four MCP tools delegate through typed HostClient methods to existing Run HTTP
+routes. Shared DTOs, Run storage, authentication, SQL, navigation, CI and STATUS
+are unchanged. Manual execution-input review found no added SQL or storage calls;
+all authority/source/version/replay decisions stay on the existing HTTP path.
+Embedded local MCP explicitly rejects these new Run operations with a server-URL
+requirement; the documented remote CLI/MCP path is covered.
+
+Linux, Rust `1.98.0 (88d9e12ae 2026-08-18)`, rmcp `1.8.0`, models disabled,
+fresh temporary SQLite, synthetic content and loopback AnySeek protocol fixture:
+
+- `cargo fmt --all -- --check`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test --test local mcp_runs -- --nocapture`: 1 passed.
+- `cargo test --test local foundation_http -- --nocapture`: 1 passed.
+- `cargo test --test local retrieval_diagnostics -- --nocapture`: 2 passed.
+- `git diff --check`: passed.
+
+The new test launches two actual Origence stdio processes and verifies tool
+listing, same-logical-key archive and turn readback, independent Run IDs, other
+writer/admin denial, unchanged retries and changed-payload conflicts, all seven
+existing report variants, explicit unknown, rejection of forged server events,
+HTTP preparation success/replay/failure, source withdrawal, credential rotation
+and revocation of the replacement credential on an already-open MCP connection.
+Initial test failure was a fixture mistake: it revoked the old credential ID
+after rotation. The corrected test revokes the returned new credential ID;
+server key semantics were not changed. Final rerun passed.
+
+These synthetic peers are not Claude Code/Codex task evidence. Claude Code is
+not installed in this environment; no real host/model task was invoked. Actual
+two-host/version-frozen task observations, native Windows and enterprise task
+outcomes remain unaccepted. No production credentials/data, paid model calls,
+migration, push, PR, Issue update, merge or deployment was performed.

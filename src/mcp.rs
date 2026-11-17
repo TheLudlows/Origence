@@ -37,6 +37,43 @@ struct TurnGetInput {
 struct TurnArchiveInput {
     turn: SessionTurnInput,
 }
+// Adapter-only envelopes; shared Run DTOs and authority semantics stay unchanged.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RunCreateInput {
+    run_id: String,
+    summary: String,
+}
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RunAppendInput {
+    run_id: String,
+    /// Existing RunEventInput: event_id, reporter, observed_at_ms, event.
+    /// event.kind: context_reported, tool_reported, result_reported, feedback,
+    /// skill_loaded_reported, artifact_reported, coverage. Never server events.
+    report: serde_json::Value,
+}
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RunPrepareInput {
+    run_id: String,
+    event_id: String,
+    context: crate::evidence::EvidenceInput,
+}
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RunReadInput {
+    run_id: String,
+    #[serde(default)]
+    after: i64,
+    limit: Option<usize>,
+}
+fn run_uuid(value: &str) -> std::result::Result<Uuid, ErrorData> {
+    Uuid::parse_str(value)
+        .ok()
+        .filter(|id| !id.is_nil())
+        .ok_or_else(|| ErrorData::invalid_params("non-nil UUID required", None))
+}
 #[tool_router]
 impl ContextMcp {
     pub fn new(service: Service, token: String) -> Self {
@@ -47,6 +84,81 @@ impl ContextMcp {
             tool_router: Self::tool_router(),
         }
     }
+    fn run_client(&self) -> std::result::Result<&crate::client::HostClient, ErrorData> {
+        self.client
+            .as_ref()
+            .ok_or_else(|| ErrorData::invalid_request("Run tools require --server-url", None))
+    }
+
+    #[tool(
+        description = "Create a private task Run via the host. Reuse run_id and identical summary on retry. Each task gets a separate Run; same logical key shares its archive. Requires --server-url and writer access."
+    )]
+    async fn context_run_create(
+        &self,
+        Parameters(input): Parameters<RunCreateInput>,
+    ) -> std::result::Result<CallToolResult, ErrorData> {
+        result(
+            self.run_client()?
+                .create_run(&crate::run::RunInput {
+                    run_id: run_uuid(&input.run_id)?,
+                    summary: input.summary,
+                })
+                .await,
+        )
+    }
+
+    #[tool(
+        description = "Append an explicit existing RunEventInput report. Reports are claims, not verified execution. Omitted activity is unknown; use coverage with unknown/partial/not_collected. Reuse event_id and identical payload on retry. Never submit credentials or raw tool output."
+    )]
+    async fn context_run_report(
+        &self,
+        Parameters(input): Parameters<RunAppendInput>,
+    ) -> std::result::Result<CallToolResult, ErrorData> {
+        let report = serde_json::from_value::<crate::run::RunEventInput>(input.report)
+            .map_err(|_| ErrorData::invalid_params("invalid RunEventInput", None))?;
+        result(
+            self.run_client()?
+                .append_run_event(run_uuid(&input.run_id)?, &report)
+                .await,
+        )
+    }
+
+    #[tool(
+        description = "Prepare context for an owned Run through the authoritative HTTP path. Records server preparation or safe failure; does not prove delivery or model use. Retry the same event_id/context; recovery after failure requires a new event_id."
+    )]
+    async fn context_run_prepare(
+        &self,
+        Parameters(input): Parameters<RunPrepareInput>,
+    ) -> std::result::Result<CallToolResult, ErrorData> {
+        result(
+            self.run_client()?
+                .prepare_run_context(
+                    run_uuid(&input.run_id)?,
+                    run_uuid(&input.event_id)?,
+                    &input.context,
+                )
+                .await,
+        )
+    }
+
+    #[tool(
+        description = "Read your private Run trace, with current authorization and source checks. after is a sequence cursor; limit defaults to 50 (maximum 100). Missing events mean unknown, never complete capture."
+    )]
+    async fn context_run_get(
+        &self,
+        Parameters(input): Parameters<RunReadInput>,
+    ) -> std::result::Result<CallToolResult, ErrorData> {
+        result(
+            self.run_client()?
+                .run_trace(
+                    run_uuid(&input.run_id)?,
+                    input.after,
+                    input.limit.unwrap_or(50),
+                )
+                .await,
+        )
+    }
+
     #[tool(
         description = "Search published workspace memory and knowledge with source citations. Only currently published versions with valid sources are returned."
     )]
