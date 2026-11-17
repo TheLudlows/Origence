@@ -83,3 +83,48 @@ permissions through existing APIs, using synthetic local provider responses.
   UX or direct private-turn selection is added.
 - No push, PR, Issue mutation, merge or deployment. Publication remains subject to
   root-thread review of the five-route joint contract.
+
+## Learning-source follow-up (2026-11-17, draft PR #94)
+
+Test-only implementation: `a709dfe2702efcb223d7765fc9ae0b7a71a838c9`, based on
+`e08e0e2c0e418757486c3899b47d869a0366a89e`. Remote main remains
+`293e2bf6af3b180d43c8050731047b552ac07519`. No product, schema, Run interface,
+SQL, model configuration or CI change was needed.
+
+`learning_skill_cli_exact_source_private_support_and_withdrawal` creates a real
+published Learning through the existing synthetic Improve/ingest fixture and real
+SQLite. A different same-workspace writer uses the actual CLI over loopback HTTP
+to select asset v1 with its exact content hash; nonexistent v2 returns NOT_FOUND.
+That member saves a candidate and submits two explicit packets to a separate
+reviewer. Both are approved, one is explicitly published in the temporary test
+workspace, and the other remains unpublished. Neither writer nor reviewer can
+read the original owner's turn, feedback, raw source event or private Learning
+detail. Each denied HTTP read has an owner HTTP 200 positive control. Selected
+packets contain no original answer, session/turn identity or private candidate notes.
+
+Deleting the original supporting archive event through authenticated HTTP leaves
+cleanup pending. The previously approved unpublished candidate now fails publication
+with NOT_FOUND; the previously readable package, candidate and exact asset source
+also fail with NOT_FOUND. This validates transitive support withdrawal before index
+cleanup, rather than merely withdrawing a Skill version. Skill-stage proposal,
+verification and embedding fixture counters remain unchanged. All data and
+credentials are generated in fresh temporary test storage; no paid model or actual
+business Skill is used.
+
+Results under Rust 1.98.0:
+
+- `cargo test --locked --test local learning_ -- --nocapture`: **21 passed**, including
+  the new Learning CLI case (replaces the earlier 20-test coverage count).
+- `cargo test --locked --test skill-workflow -- --nocapture`: **1 passed**, existing
+  Run CLI workflow retained.
+- `cargo clippy --locked --all-targets -- -D warnings`, `cargo fmt --all -- --check`
+  and `git diff --check`: passed.
+- Initial test incorrectly required HTTP 403 for every private read; a writer
+  without the owner's session received the existing 404 privacy response. The
+  final test accepts 403/404 with owner-positive controls. No authorization behavior
+  was changed to satisfy the assertion.
+
+This closes the earlier exact-Learning CLI coverage gap. The original local-only
+stage above is historical; this increment updates the same draft PR #94. Windows,
+real Claude Code/Codex tasks, native loading and business outcomes remain unaccepted.
+No Issue mutation, merge or deployment is performed.

@@ -959,3 +959,11 @@ Shared-console Ctrl+C is best effort until verified there. If signal delivery fa
 or grace expires, owned-process termination is explicitly a forced stop; closing
 or killing the parent terminal may bypass finally and leave children alive. The
 launcher is not a production service supervisor. No remote PR/push/deployment.
+
+## 2026-11-17：#88 Learning 来源专项补验（草稿 #94）
+
+`a709dfe2702efcb223d7765fc9ae0b7a71a838c9` 只增加确定性测试：同空间另一 writer
+经真实 CLI/HTTP 选择已发布 Learning 精确 v1，私有支持读取拒绝；撤回原归档支持后，
+待发布候选与已发布包均返回 NOT_FOUND，清理仍 pending。21 项 Learning 回归、
+原 Run CLI 回归及格式/Clippy 通过。详见 [#88 追加记录](validation/issue-88-skill.md)。
+未变更产品代码，不代表真实客户端或业务验收。
