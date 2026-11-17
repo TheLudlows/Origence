@@ -1,12 +1,11 @@
-# S4: opt-in EvidenceBundle and bounded Agent comparison
+# EvidenceBundle
 
 ## Scope
 
-This is an additive read-only context layer. `Service::evidence_bundle`, HTTP
+This is the read-only context assembly contract. `Service::evidence_bundle`, HTTP
 `POST /v1/context`, and MCP `context_bundle` share one request and response.
-Existing search/resolve, storage backends, migrations, publishers and workers
-are unchanged. Guidance remains external evidence, not a new
-lifecycle. Current-stage databases are fresh databases per AGENTS.md.
+Search/resolve retain their separate contracts. Guidance remains external
+evidence without an independent publication lifecycle. Current-stage databases are fresh databases per AGENTS.md.
 
 Engineering coverage and Agent effectiveness are separate gates. Fixtures prove
 only harness behavior. A live-model run is **NOT_RUN** until a verified runtime,
@@ -69,7 +68,7 @@ must not invent chunk IDs or claim complete archive coverage.
 
 Only identical typed evidence locations coalesce, retaining keyword/vector
 origins. Equal text at distinct locations/versions is never similarity-deduped.
-Only exact explicit S2 identities with a registered single-valued property and
+Only exact explicit memory identities with a registered single-valued property and
 confirmed/conflict semantic values qualify for deterministic conflict grouping.
 Multi-valued facts, different contexts, negation, proposals, ambiguity and
 unstructured prose are not inferred to conflict. Assessment is bounded to
