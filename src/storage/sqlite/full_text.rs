@@ -92,12 +92,7 @@ impl SqliteTx {
         route: crate::context_retrieval::ContextRoute,
         identity: Option<&crate::memory_identity::MemoryIdentity>,
     ) -> StorageResult<Vec<Uuid>> {
-        let route_ids = unique_ids(
-            self.context_route_rows(route, identity)
-                .await?
-                .into_iter()
-                .map(|(id, _)| id),
-        );
+        let route_ids = unique_ids(self.context_route_rows(route, identity).await?);
         let mut indexed = Vec::new();
         for batch_index in 0..route_ids.len().div_ceil(8) {
             let start = batch_index * 8;

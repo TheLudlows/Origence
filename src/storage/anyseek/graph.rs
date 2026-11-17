@@ -361,6 +361,11 @@ mod tests {
                 source,
                 generation: 1,
                 search_terms: "chunk".into(),
+                payload: crate::storage::ChunkPayload {
+                    content: "chunk".into(),
+                    locator: json!({}),
+                    summary: None,
+                },
             }],
         )
     }

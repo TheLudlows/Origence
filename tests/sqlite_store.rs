@@ -457,7 +457,9 @@ async fn sqlite_file_interoperability_and_derived_version_hash_survive_reopen() 
             .is_none()
     );
     for (table, column) in [
-        ("oc_versions", "content_hash"),
+        ("oc_versions", "content"),
+        ("oc_chunks", "content"),
+        ("oc_summaries", "text"),
         ("oc_artifact_ledger", "idempotency_key"),
     ] {
         let fields = raw
@@ -473,14 +475,14 @@ async fn sqlite_file_interoperability_and_derived_version_hash_survive_reopen() 
         raw.query_row("SELECT engine FROM oc_storage_format", [], |r| r
             .get::<_, String>(0))
             .unwrap(),
-        "origence-sqlite-v1"
+        "origence-sqlite-v2"
     );
     drop(raw);
     let store = SqliteStore::open(&path).await.unwrap();
     let auth = store.authenticate(&p.key.token).await.unwrap();
     let mut tx = store.begin_read(auth).await.unwrap();
     let value = tx.asset_view(asset, Some(1)).await.unwrap();
-    assert_eq!(value["content"], content);
+    assert!(value.get("content").is_none());
     assert_eq!(value["content_hash"], origence::storage::hash(content));
     tx.commit().await.unwrap();
     store.shutdown().await.unwrap();

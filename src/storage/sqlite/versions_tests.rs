@@ -104,7 +104,7 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
     tx.insert_version_inner(asset, 6, "body", source, None, None)
         .await
         .unwrap();
-    let rows = db::query("SELECT title,typeof(title) AS storage_type,restored_from,source_event_id,content FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY version")
+    let rows = db::query("SELECT title,typeof(title) AS storage_type,restored_from,source_event_id,content_hash FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? ORDER BY version")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(asset)
@@ -127,7 +127,7 @@ async fn version_titles_preserve_empty_explicit_and_native_inheritance() {
     assert_eq!(rows[2].get::<Option<i32>>("restored_from"), Some(1));
     for row in rows {
         assert_eq!(row.get::<Uuid>("source_event_id"), source);
-        assert_eq!(row.get::<String>("content"), "body");
+        assert_eq!(row.get::<String>("content_hash"), hash("body"));
     }
     tx.tx.rollback().await.unwrap();
     store.shutdown().await.unwrap();
@@ -170,7 +170,7 @@ async fn explicit_title_still_prepares_the_asset_table() {
     let pool = Pool::open(dir.path().join("missing-assets.db"))
         .await
         .unwrap();
-    db::query("CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,content TEXT,source_event_id BLOB,restored_from INTEGER,title TEXT NOT NULL,created_by BLOB,created_at INTEGER)")
+    db::query("CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,content_hash TEXT,source_event_id BLOB,restored_from INTEGER,title TEXT NOT NULL,created_by BLOB,created_at INTEGER)")
         .execute(&pool).await.unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),

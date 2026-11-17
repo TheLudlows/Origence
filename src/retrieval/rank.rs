@@ -46,6 +46,7 @@ mod tests {
 
     fn hit(id: u128, score: f64) -> SearchHit {
         SearchHit {
+            content_hash: String::new(),
             asset_id: Uuid::from_u128(1000 + id),
             version: 1,
             chunk_id: Uuid::from_u128(id),

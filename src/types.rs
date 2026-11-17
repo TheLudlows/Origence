@@ -166,6 +166,9 @@ fn default_budget() -> usize {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchHit {
+    /// Transaction-local proof of immutable remote content; never sent to clients.
+    #[serde(skip)]
+    pub content_hash: String,
     pub asset_id: Uuid,
     pub version: i32,
     pub chunk_id: Uuid,

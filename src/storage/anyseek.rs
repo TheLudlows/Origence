@@ -1,4 +1,5 @@
-//! Bounded unified HTTP lexical/vector projection. Origence remains the visibility authority.
+//! Immutable chunk content with unified lexical/vector indexes over HTTP.
+//! Origence remains the visibility authority.
 //!
 //! A publication is immutable and uses one bounded Record group. Its UTC retry
 //! epoch is saved in the ordinary publication plan before network IO. Each
@@ -22,7 +23,7 @@ use uuid::Uuid;
 mod graph;
 pub use graph::{GraphEdgeCandidate, GraphEntityCandidate, GraphPublication};
 
-const FORMAT: &str = "origence-search-sha256-v3";
+const FORMAT: &str = "origence-content-sha256-v1";
 pub(crate) const MAX_GROUP: usize = 64;
 const MAX_RESPONSE: usize = 8 * 1024 * 1024;
 const MAX_REQUEST: usize = 2 * 1024 * 1024;
@@ -51,7 +52,7 @@ pub struct AnySeekConfig {
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-search-backend-v6","backend":"anyseek","endpoint":self.base.as_str(),"routing":"tenant-uuid/workspace-ws-simple-uuid-v1","embedding":self.embedding})
+        json!({"format":"origence-content-backend-v2","backend":"anyseek","endpoint":self.base.as_str(),"routing":"tenant-uuid/workspace-ws-simple-uuid-v1","embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
@@ -141,6 +142,8 @@ struct Document {
     source_version: String,
     generation: String,
     publication: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    payload: Option<super::ChunkPayload>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     terms: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -248,6 +251,59 @@ fn decode_record(value: &Value, scope: Scope) -> StorageResult<(String, Document
 }
 
 impl AnySeekFullTextStore {
+    /// Read immutable payloads by scoped chunk identity. Residual generations
+    /// may repeat identical bytes; conflicting payloads never select a winner.
+    /// Callers must verify these bytes against the authority's content proof.
+    pub async fn read_payloads(
+        &self,
+        scope: Scope,
+        ids: &[Uuid],
+    ) -> StorageResult<HashMap<Uuid, super::ChunkPayload>> {
+        let mut ids = ids.to_vec();
+        ids.sort_unstable();
+        ids.dedup();
+        if ids.len() > MAX_CANDIDATES {
+            return Err(invalid("AnySeek content read exceeds candidate budget"));
+        }
+        let mut payloads = HashMap::new();
+        for batch in ids.chunks(MAX_GROUP) {
+            let mut filters = scope_filters(scope);
+            filters.push(filter("kind", ["chunk".into()]));
+            filters.push(filter("chunk_id", batch.iter().map(Uuid::to_string)));
+            let result = self
+                .query(scope, filters, "", MAX_CANDIDATES, 0, true)
+                .await?;
+            let hits = result["hits"].as_array().ok_or_else(unavailable)?;
+            if result["count_total"].as_u64() != Some(hits.len() as u64) {
+                return Err(unavailable());
+            }
+            let mut seen = HashSet::new();
+            for hit in hits {
+                let (_, doc) = decode_record(&hit["record"], scope)?;
+                if doc.kind != "chunk" || batch.binary_search(&doc.chunk_id).is_err() {
+                    return Err(inconsistent());
+                }
+                let payload = doc.payload.ok_or_else(inconsistent)?;
+                seen.insert(doc.chunk_id);
+                match payloads.entry(doc.chunk_id) {
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(payload);
+                    }
+                    std::collections::hash_map::Entry::Occupied(entry)
+                        if entry.get() != &payload =>
+                    {
+                        return Err(inconsistent());
+                    }
+                    _ => {}
+                }
+            }
+            if seen.len() != batch.len() {
+                return Err(unavailable());
+            }
+        }
+        Ok(payloads)
+    }
+
     /// Construct a bounded client; collections follow authenticated workspace scopes.
     pub fn new(config: AnySeekConfig) -> StorageResult<Self> {
         let http = reqwest::Client::builder()
@@ -282,6 +338,7 @@ impl AnySeekFullTextStore {
     pub fn collection_config() -> Value {
         let mut schema: Vec<Value> = META.iter().map(|field| json!({"field":field,"field_type":"String","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0})).collect();
         schema.push(json!({"field":"terms","field_type":"Text","store":true,"index_lexical":true,"index_vector":false,"filterable":false,"boost":1.0}));
+        schema.push(json!({"field":"payload","field_type":"Json","store":true,"index_lexical":false,"index_vector":false,"filterable":false,"boost":1.0}));
         schema.push(json!({"field":"graph","field_type":"Json","store":true,"index_lexical":false,"index_vector":false,"filterable":false,"boost":1.0}));
         schema.push(json!({"field":"endpoint_ids","field_type":"StringSet","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0}));
         schema.push(json!({"field":"graph_keys","field_type":"StringSet","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0}));
@@ -802,6 +859,7 @@ impl AnySeekFullTextStore {
                     source_version: entry.source.version.to_string(),
                     generation: entry.generation.to_string(),
                     publication: String::new(),
+                    payload: Some(entry.payload),
                     terms: Some(terms),
                     profile: vector.as_ref().map(|v| v.profile.clone()),
                     dimension: vector.as_ref().map(|v| v.dimension.to_string()),
@@ -1219,7 +1277,7 @@ mod unified_tests {
         };
         let selected = make("service-key-one");
         assert_eq!(selected, make("service-key-two"));
-        assert_eq!(selected["format"], "origence-search-backend-v6");
+        assert_eq!(selected["format"], "origence-content-backend-v2");
         assert_eq!(
             selected["routing"],
             "tenant-uuid/workspace-ws-simple-uuid-v1"

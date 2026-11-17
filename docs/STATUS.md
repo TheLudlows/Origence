@@ -1,10 +1,9 @@
 # Origence · 当前进度
 
-更新：2026-11-17。本轮基于 main
-[`c70a1aa`](https://github.com/TheLudlows/Origence/commit/c70a1aaa0b3cb75872109406dc17b1b461d1f771)
-同步 AnySeek 服务凭据与 workspace 自动路由；SQLite 权威存储、检索诊断和 Run 关联保持已有实现。
+更新：2026-11-17。本轮已同步 main [`739be8c`](https://github.com/TheLudlows/Origence/commit/739be8c)
+（含 #84 Windows 启动器、#86 正文与索引统一存储），并接入 AnySeek 服务凭据与 workspace 自动路由。
 产品边界见[架构规划](design/agent-data-foundation.md)。
-**核心 API 与首版 UI 路径已实现；完整浏览器验收、双客户端和企业任务仍未完成。**
+**核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -19,9 +18,19 @@
 只配置 `OC_ANYSEEK_URL` 与 `OC_ANYSEEK_API_KEY`；已鉴权 tenant UUID 直接作为
 AnySeek 命名空间，workspace UUID 对应 `ws_<无连字符 UUID>` 集合，无须另配租户或集合。
 首次使用按固定 schema 自动初始化，并发及创建响应丢失后严格回读；已有发布的集合在
-启动时检查，丢失/配置漂移不会静默建空。绑定 v6 固定路由及模型配置，首次集合使用时
+启动时检查，丢失/配置漂移不会静默建空。绑定 `origence-content-backend-v2` 固定正文格式、路由及模型配置，首次集合使用时
 持久化分析摘要。AnySeek 不签发租户 Key；Origence 用户权限和私有会话保持原语义。
 验证见 VALIDATION。
+
+## AnySeek 正文与索引统一存储
+
+正文、摘要文本及其 provenance 与全文/向量/图索引共用同一 chunk Record。SQLite 移除
+版本/分块正文与摘要文本列；复核后进一步删除未被使用的分块词项及重复摘要模型版本，
+简化候选读取为 ID 集合。保留来源判断、发布指针、内容哈希、摘要召回词项和恢复状态。
+正文及摘要词项统一在事务外生成并冻结，重试不再以重新分词兼容缺失字段的旧计划。
+历史读取和恢复使用远端不可变正文，缺失或被改写明确失败；不从原始事件静默重算。
+读取期间不持有 SQL 事务，返回前重新检查权限、来源与全部原生排序参与者。
+格式为 `origence-sqlite-v2` / `origence-content-sha256-v1`，仅新目录/集合；精确验证见 VALIDATION。
 
 ## SQLite 权威存储与最小元数据
 
@@ -32,7 +41,7 @@ Blob/PDF 测试不加载元数据库；SQLite authority 单独通过 `--features
 
 本地关系数据和持久任务只使用 rusqlite + bundled SQLite；旧引擎实现、依赖与公开别名
 已移除。关闭驱动默认 features，不引入 ORM/异步数据库库；锁文件净减少 112 个包。
-删除版本内容哈希列和账本重复幂等字符串，分别从不可变正文和现有完整主键获得。
+保留账本复合主键幂等；正文迁出后恢复持久化版本哈希，并为 chunk 保存内容哈希，供跨存储核验。
 授权、来源、版本历史、冻结发布计划与恢复状态仍是持久事实，详见[存储契约](contracts/storage.md)。
 本次在 PR 的 Linux/Windows CI 验证真实 SQLite 的锁、WAL、事务取消与恢复；
 精确本地结果、远端 CI 及未验收边界统一见 VALIDATION 和 PR。
@@ -44,7 +53,7 @@ Blob/PDF 测试不加载元数据库；SQLite authority 单独通过 `--features
 有界索引与事件同事务写入，读取再次核验权威引用/资产/来源/所有权，不返回 Run 正文；
 固定 v1 往返、另一管理员隔离、撤回、分页与重开已验证，见 [VALIDATION](VALIDATION.md)。
 索引保留首条引用证明，不替代完整采集或 trace 可读性；新 schema fresh-only，旧库拒绝而不迁移。
-本切片对应草稿 #83；第一批浏览器分支独立保留。#76 的计量、告警、PDF 页内文本和外部任务验收仍缺。
+本切片已合入 #83；第一批浏览器分支独立保留。#76 的计量、告警、PDF 页内文本和外部任务验收仍缺。
 
 
 已同步 main `3d474d9`（含 #77 UI、#78 诊断）。已核验分路的排序/融合位于
@@ -84,3 +93,11 @@ Skill 的 API 审批和目录导出不等于真实用户审阅、客户端加载
 私有会话依据可能限制其他 key 的审阅或分发，详见 [Run 契约](contracts/runs.md)。
 首批采用成员授权范围一致的 workspace；企业身份与差异文档 ACL 尚未实现。
 平台只提供归档/查询，不恢复客户端工作现场。Skill 发布不授予工具执行权限。
+
+## 本地 Windows 开发联启入口
+
+基于 main `c70a1aa`，新增 PowerShell 7.4+ 的 AnySeek → Origence → 可选 Node UI
+前台联启脚本，使用已初始化目录及当前环境凭据；首次初始化独立说明。
+Linux pwsh 的模拟进程回归和真实服务启动/停止/重开已验证，**真实 Windows 尚未实测**。
+命令、readiness 与停止限制见 [Windows 开发说明](WINDOWS-DEV.md) 和 VALIDATION。
+仅本地交付，不改变部署、生产恢复或现有 CI 范围。

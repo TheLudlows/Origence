@@ -208,7 +208,8 @@ pub trait DomainTx {
 
     // -- API read views -------------------------------------------------------
 
-    /// A published asset version, or [`StorageError::NotFound`].
+    /// Published version metadata and immutable content hash, or NotFound.
+    /// The host resolves chunk bytes outside the transaction and rechecks this view.
     async fn asset_view(&mut self, id: Uuid, version: Option<i32>) -> StorageResult<Value>;
 
     /// A live source event in this scope. Requires application writer access.
@@ -233,12 +234,13 @@ pub trait DomainTx {
     /// A source event joined with its file for ingest, or [`StorageError::NotFound`].
     async fn event_file(&mut self, source: Uuid) -> StorageResult<Value>;
 
-    /// The ordered `(content, locator)` chunks of an asset version.
-    async fn chunks_for_version(
+    /// Ordered immutable content references of an asset version. Resolve them
+    /// outside this transaction, then recheck authorization and visibility.
+    async fn chunk_refs_for_version(
         &mut self,
         asset: Uuid,
         version: i32,
-    ) -> StorageResult<Vec<(String, Value)>>;
+    ) -> StorageResult<Vec<super::ChunkRef>>;
 
     /// The current published version of an asset, if any.
     async fn asset_current_version(&mut self, asset: Uuid) -> StorageResult<Option<i32>>;
@@ -254,7 +256,7 @@ pub trait DomainTx {
         title: Option<&str>,
     ) -> StorageResult<()>;
 
-    /// Insert one chunk of a version.
+    /// Register a chunk's identity, content proof and immutable provenance.
     async fn insert_chunk(
         &mut self,
         chunk: Uuid,
@@ -263,16 +265,13 @@ pub trait DomainTx {
         ordinal: i32,
         content: &str,
         locator: &Value,
-        search_terms: &str,
     ) -> StorageResult<()>;
 
-    /// Insert one chunk summary.
+    /// Register summary recall terms. Text and model provenance live in AnySeek.
     async fn insert_summary(
         &mut self,
         summary: Uuid,
         chunk: Uuid,
-        text: &str,
-        model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()>;
 

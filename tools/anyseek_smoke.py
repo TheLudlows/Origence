@@ -24,7 +24,7 @@ from mcp_smoke import Host, Mcp, require
 
 
 def call(base, path, key, body=None):
-    headers = {"apikey": key, "X-AnySeek-Tenant": "origence"}
+    headers = {"apikey": key}
     if body is not None:
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(base + path, headers=headers,
@@ -45,6 +45,7 @@ def schema(dimension=None):
     result.append({"field": "terms", "field_type": "Text", "store": True,
                    "index_lexical": True, "index_vector": False, "filterable": False, "boost": 1.0})
     for name, field_type, filterable in [
+        ("payload", "Json", False),
         ("graph", "Json", False),
         ("endpoint_ids", "StringSet", True),
         ("graph_keys", "StringSet", True),
@@ -52,7 +53,7 @@ def schema(dimension=None):
         result.append({"field": name, "field_type": field_type, "store": True,
                        "index_lexical": False, "index_vector": False,
                        "filterable": filterable, "boost": 1.0})
-    config = {"index_name": "origence-search-sha256-v3", "schema": result,
+    config = {"index_name": "origence-content-sha256-v1", "schema": result,
               "tokenizer": "TantivySimpleV1", "text_normalization": "None", "stop_words": "None"}
     if dimension is not None:
         require(1 <= dimension <= 4096, "invalid fixture vector dimension")
@@ -60,6 +61,18 @@ def schema(dimension=None):
                        "index_lexical": False, "index_vector": True, "filterable": False, "boost": 1.0})
         config["vector"] = {"dimensions": dimension}
     return config
+
+
+def wait_ready(process, base, key):
+    deadline = time.monotonic() + 60
+    while True:
+        require(process.poll() is None, "AnySeek fixture exited before readiness")
+        try:
+            call(base, "/api/v1/live", key)
+            return
+        except (RuntimeError, urllib.error.URLError, TimeoutError):
+            require(time.monotonic() < deadline, "AnySeek readiness timed out")
+            time.sleep(0.1)
 
 
 def mcp_contract(binary, env, directory):
@@ -126,6 +139,7 @@ def mcp_contract(binary, env, directory):
                     "reopen lost AnySeek publication")
             client.shutdown()
     print("PASS: real AnySeek -> Origence HTTP/stdio MCP search, read, citations, update, history, key revocation and reopen; Run diagnostic correlation, retry and durability", flush=True)
+    return env, token, asset, old
 
 
 def main():
@@ -152,15 +166,7 @@ def main():
                 "local_ip=127.0.0.1", f"local_port={port}", f"index_path={directory}/anyseek"],
                 env=env, stdout=log, stderr=log)
             try:
-                deadline = time.monotonic() + 60
-                while True:
-                    require(process.poll() is None, "AnySeek fixture exited before readiness")
-                    try:
-                        call(base, "/api/v1/live", key)
-                        break
-                    except (RuntimeError, urllib.error.URLError, TimeoutError):
-                        require(time.monotonic() < deadline, "AnySeek readiness timed out")
-                        time.sleep(0.1)
+                wait_ready(process, base, key)
                 env.update(OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base, OC_ANYSEEK_API_KEY=key)
                 env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key)
                 # Workspace collections are provisioned by Origence on first use.
@@ -174,7 +180,22 @@ def main():
                 if args.run:
                     subprocess.run(args.run, env=env, check=True, timeout=600)
                 if args.binary:
-                    mcp_contract(str(Path(args.binary).resolve()), env, directory)
+                    binary = str(Path(args.binary).resolve())
+                    probe_env, token, asset, original = mcp_contract(binary, env, directory)
+                    process.send_signal(signal.SIGTERM)
+                    process.wait(timeout=30)
+                    process = subprocess.Popen(process.args, env=dict(env, MASTER_KEY_SECRET=secret), stdout=log, stderr=log)
+                    wait_ready(process, base, key)
+                    with Host(binary, probe_env, token, [token, key]) as host:
+                        require(host.request(f"/v1/assets/{asset}?version=1")["content"] == original,
+                                "AnySeek restart lost historical stored content")
+                        current = host.request(f"/v1/assets/{asset}")
+                        require(current["content"] == "AnySeek smoke policy now requires token review.",
+                                "AnySeek restart lost current stored content")
+                        found = host.request("/v1/search", {"query":"token review", "mode":"keyword"})
+                        require(found["hits"] and found["hits"][0]["asset_id"] == asset,
+                                "AnySeek restart lost the matching content index")
+                    print("PASS: AnySeek process restart preserves historical/current body and its index", flush=True)
             finally:
                 if process.poll() is None:
                     process.send_signal(signal.SIGTERM)

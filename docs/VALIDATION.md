@@ -1,11 +1,41 @@
 # Origence · 当前验证
 
 核验日期：2026-11-17。本轮基于 main
-[`c70a1aa`](https://github.com/TheLudlows/Origence/commit/c70a1aaa0b3cb75872109406dc17b1b461d1f771)，
+[`739be8c`](https://github.com/TheLudlows/Origence/commit/739be8c)，
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
-## 2026-11-17：workspace 自动映射（当前）
+## 2026-11-17：#85 同步 main 与冲突整合（当前）
+
+将 main `739be8c`（含 #84 Windows 联启与 #86 AnySeek 正文存储）合入 #85。保留
+`origence-content-sha256-v1` payload schema、不可变历史内容/来源核验和 workspace 自动路由。
+新增正文读取接口向每次查询传递已鉴权 Scope；路由回归用相同 chunk/source ID 在三个
+租户/workspace 组合保存不同正文，并核对各自返回值。后端绑定改为
+`origence-content-backend-v2`，同时固定正文格式和自动路由；旧绑定拒绝、不转换或覆盖。
+
+Windows 启动器不再要求或转发 `OC_ANYSEEK_COLLECTION`，改用携带服务凭据的
+`/api/v1/live` 验证版本与服务凭据；Origence 继续检查已发布集合。初始化文档移除旧
+租户注册/Key 签发/手工建集合请求。测试断言正确探测路径、服务凭据、进程环境隔离、
+退出清理和失败传播；未放宽端口、目录、输出抑制和进程所有权约束。
+
+Linux / Rust 1.98.0；AnySeek 正常生产构建固定 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`
+（Rust 1.99.1）；不使用真实用户数据或模型服务。
+
+| 检查 | 结果 |
+| --- | --- |
+| 默认完整回归 | PASS：222 lib + 5 协议 + 14 core + 194 local = 435 项；8 项真实契约另执行 |
+| 核心库 / 独立 SQLite authority | PASS：87 / 233 项；5 项真实契约 ignored 不计入通过 |
+| Clippy | PASS：default、no-default、no-default + sqlite 三组 all-targets，均 `-D warnings` |
+| 格式/补丁 | PASS：`cargo fmt --check`、`git diff --check` |
+| 真实 AnySeek | PASS：8 项契约，HTTP/stdio MCP、历史版本/Run 重放与 AnySeek 进程重启后正文/索引一致 |
+| 真实 HTTP / Node UI | PASS：两套 smoke，包含上传、发布、检索、上下文、历史、私有 Run 和来源撤回 |
+| Linux PowerShell 7.4.13 | PASS：7 项模拟子服务/进程合同回归；官方 release SHA-256 核验后运行 |
+
+本次冲突处理没有新增 SQL 或依赖；保留 main 的单表事务、异步 IO 边界与权限/来源复核。
+新增当前记录，以下各批次证据保留原范围。Linux PowerShell 不等于真实 Windows 控制台
+信号/原生 MSVC 验收；Windows/Linux 远端 CI 以本次合并提交记录为准。
+
+## 2026-11-17：workspace 自动映射（同步 main 前）
 
 `AnySeekConfig::new(base, service_key)` 只接收连接与服务凭据。移除租户和集合配置；
 已鉴权 Scope 的 tenant UUID 直接作为命名空间，workspace 对应 `ws_<无连字符 UUID>`。
@@ -71,6 +101,61 @@ Linux / Rust 1.98.0，匹配 AnySeek Catalog 7 正常生产构建（Rust 1.99.1�
 Cargo incremental 缓存，设置 `CARGO_INCREMENTAL=0`，以上各检查均在重跑后通过。
 未改写数据目录。未执行 Windows、真实外部 Agent/模型、生产容量、跨主机或断电验收。
 Node UI HTTP smoke 不等同于完整真实浏览器/无障碍验收；已有历史浏览器证据仍按各自提交解释。
+
+## 2026-11-17：#86 检视后删除无用元数据与分词回退
+
+从 PR #86 的 `70c7281` 继续，已合并 main `8fe01a5`（#84 Windows 开发启动器）。
+人工核对全部调用链后删除 `oc_chunks.search_terms`：候选读取只消费 ID，旧实现仅传递词项
+再丢弃；删除 `oc_summaries.model_revision`：没有 SQL 读取方，模型来源已保存在 AnySeek payload。
+同步删除对应写入参数、SELECT/解码、候选 tuple 字段，以及目录对不存在 content 字段的删除。
+
+所有发布类型改为一次性在事务外 blocking 任务中冻结正文/摘要词项；移除可空分块词项、
+按类型分流和恢复时重新分词的回退，摘要分词也不再发生在发布事务中。摘要召回词项、
+原始来源、locator、owner/index/ledger 和完整恢复计划仍有实际消费者，保持原有校验。
+既有历史验证记录不改写；schema 仍按该 PR 的 fresh-only 范围开发，不自动转换旧布局。
+
+本地 Linux / Rust 1.98.0：default **433 passed**（221 lib + 4 协议 + 14 core + 194 local）；
+pure-core **87 passed**；独立 sqlite authority **233 passed**。三组 Clippy 均 warnings denied
+通过，fmt/diff 检查通过。新增损坏冻结词项后的重试拒绝回归，证明不会重新分词或发布；
+列缺失断言覆盖新增删除项，既有来源、历史、跨 scope、取消、重试与 private Run/Skill 测试通过。
+
+真实 AnySeek d813b91 的 **8 项契约通过**；真实 HTTP/stdio MCP、历史读取、Run 诊断、
+重开以及 AnySeek 进程重启后当前/历史正文和索引检查通过。最新 Windows/Linux CI 以 PR #86
+的当前提交运行记录为准；生产性能、模型质量、浏览器布局等范围未由本轮增加验收。
+
+## 2026-11-17：正文与索引共用 AnySeek collection
+
+基线 main `c70a1aa`，分支 `refactor/anyseek-content`，Rust 1.98.0，Linux；AnySeek
+固定为 `d813b915b7f12e7139ca316adc15699688493196`（已有 Rust 1.99.1 夹具二进制）。
+本节记录该分支的本地工作树，后续 Windows/Linux 精确提交 CI 状态以 PR 为准。
+只使用合成数据、临时目录/集合与一次性凭据；没有迁移或改写既有用户数据。
+
+- `cargo fmt --check`、`git diff --check` 与 default / pure-core / sqlite 三组
+  `cargo clippy --locked --all-targets -- -D warnings`（后两组分别加对应 feature 参数）通过。
+- `cargo test --locked --no-fail-fast`：221 lib + 4 AnySeek 协议 + 14 core + 193 local
+  = **432 passed**；8 项真实引擎契约默认忽略、在下一项单独执行。无 doctest。
+- `cargo test --locked --no-default-features`：71 lib + 2 协议 + 14 core = **87 passed**。
+  `cargo test --locked --no-default-features --features sqlite`：138 lib + 2 协议 + 14 core
+  + 79 local = **233 passed**；纯核心不引入 SQLite，Cargo.toml/Cargo.lock 未新增依赖。
+- `tools/anyseek_smoke.py --cargo-tests --binary target/debug/origence`：**8 项真实 AnySeek
+  契约通过**。新增原始 UTF-8、CRLF、摘要/模型版本、locator 随 payload 保存与读取断言。
+  正常 HTTP/stdio MCP 的查询、版本更新、历史读取、撤销 key、Run 诊断与重开检查通过。
+- 同脚本 `--binary` 新增真实 AnySeek 进程正常停机/重启，再启动 Origence 读取当前/历史正文
+  并检索，**通过**。不宣称任意断电或跨存储在线一致快照。
+- 真实 AnySeek 包裹 `tools/smoke.py` 与 `tools/ui_smoke.py`：HTTP 与 Node UI → Origence
+  → AnySeek 全链路通过，包含上传、搜索、Context、版本历史、私有 Run 和来源撤回。
+  `ui/npm run build` 与 `ui/npm test`：**16 passed**；未新增浏览器布局/无障碍验收。
+
+新增 `content_storage` 回归证明：正文与索引属于同一 Record，三处旧正文/摘要列已移除，
+固定历史版本与恢复在 Origence 重开后保留原字节；缺失/篡改 payload 明确失败；GET、Search、
+Context 在读取期间撤销 key 或撤回来源均拒绝返回。既有 PDF、语义集合、Learning、Skill、
+私有 Run、幂等、丢响应恢复、跨 scope 与 SQL 事务/取消回归继续通过。
+
+人工逐条审查新增/改动执行 SQL（含 fixture、DDL 与 format 展开）：只读单表或原有关联适配器，
+无 JOIN/关联子查询，无事务内远端 IO、无中间提交。SQL 仍保存原始来源、locator、冻结召回词项、
+完整恢复计划及私有快照；只移出已发布正文/摘要文本，不宣称清除所有文本副本。
+格式 `origence-sqlite-v2` / `origence-content-sha256-v1` 面向 fresh 数据；旧格式拒绝，不自动转换。
+生产相关性、容量、延迟、模型质量与在线备份恢复不由上述回归证明。
 
 ## 2026-11-17：#76 精确版本关联 Run（独立本地切片）
 
@@ -697,3 +782,60 @@ Windows and full combined CI were not run locally. GitHub results must be checke
 on the new pushed HEAD; the old separate PR green runs and the earlier temporary
 combination tree are not evidence that this new HEAD passed remote CI. No complete
 #76/native Claude Code/Codex task or production acceptance is claimed.
+
+## 2026-11-17 · Windows-native development launcher (local)
+
+Independent branch based on main `c70a1aaa0b3cb75872109406dc17b1b461d1f771`
+(includes SQLite #81 and reverse references #83); no older feature branches included.
+`tools/start-dev.ps1` targets foreground PowerShell 7.4+ and prebuilt native executables.
+It requires already provisioned separate data directories, ordinary Tenant key and
+collection; no startup provisioning, migrations, directory creation, overwrite,
+remote writes, secret arguments or persistent logs. Loopback only, models disabled.
+AnySeek readiness reads the authorized collection metadata; Origence's own full
+backend admission and /health/ready gate the optional UI. Startup/HTTP/grace waits
+are bounded. Only owned Process handles are stopped; no process-name/port killing.
+
+Commands and results:
+
+- PowerShell 7.4.6 Linux parser check of start-dev.ps1: passed. Initial pwsh startup
+  could not create its default cache on the read-only home; XDG_CACHE_HOME,
+  XDG_CONFIG_HOME and XDG_DATA_HOME were set to disposable paths for validation.
+- `ORIGENCE_TEST_PWSH=/path/to/pwsh python3 -m unittest discover -s tools -p test_start_dev.py -v`:
+  7 passed on Linux pwsh. Fake HTTP subprocesses verify ready/API/UI ordering,
+  early exit, not-ready timeout, auth denial, redirect refusal, missing-data refusal,
+  occupied-port noninterference, owned-process cleanup, spaced argument paths,
+  credential separation and suppression of deliberately secret-bearing child output.
+  These are process/HTTP contract fixtures, not real backend or Windows results.
+- `python3 -m unittest discover -s tools -p 'test_*.py'`: 11 passed, 7 opt-in launcher
+  cases skipped without ORIGENCE_TEST_PWSH. No CI scope/configuration changed.
+- `cargo build --locked`, `cargo clippy --locked --all-targets -- -D warnings`,
+  `cargo fmt --all -- --check`, `git diff --check`: passed under Rust 1.98.0.
+- `npm ci --ignore-scripts --prefix ui` (disposable cache), `npm --prefix ui run build`:
+  passed with Node 24.22.1.
+
+Real local validation used pwsh 7.4.6 on Linux, actual AnySeek built at
+`d813b915b7f12e7139ca316adc15699688493196`, Origence rebuilt from this worktree,
+and the built Node UI. A separate fixture explicitly created a temporary Tenant,
+ordinary key/collection and offline workspace, stopped bootstrap AnySeek, then
+invoked the unmodified launcher with paths containing spaces. Twice it observed
+all readiness gates, authenticated /v1/whoami retaining the same workspace, UI
+HTTP 200, group SIGINT shutdown without force warnings, closed ports and retained
+context.db; the second start reused the first data. Captured parent output was
+checked not to contain master secret, master key, ordinary key or workspace token.
+No production data, paid model/provider calls, Windows emulation or WSL was used.
+The local real-service harness is external to the repository; the reproducible
+manual setup/commands and Windows checklist are in WINDOWS-DEV.md.
+
+Validation found and corrected a PowerShell case-insensitive variable collision
+that replaced the component display name with an environment variable name.
+The real bootstrap fixture also initially precreated an empty AnySeek directory:
+the pinned engine interpreted that as recovery and exited. Documentation now uses
+an absent path for explicit first initialization, while the launcher requires an
+existing nonempty initialized directory. No automatic repair was added.
+
+Not executed: native Windows/MSVC/Windows Terminal Ctrl+C, ready-stage interruption
+on Windows, Windows process-reuse races, production recovery or power-loss tests.
+Shared-console Ctrl+C is best effort until verified there. If signal delivery fails
+or grace expires, owned-process termination is explicitly a forced stop; closing
+or killing the parent terminal may bypass finally and leave children alive. The
+launcher is not a production service supervisor. No remote PR/push/deployment.

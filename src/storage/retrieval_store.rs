@@ -1,4 +1,4 @@
-//! AnySeek is the single derived lexical and vector projection.
+//! AnySeek owns immutable chunk content and its derived retrieval indexes.
 use super::{
     anyseek::{AnySeekConfig, AnySeekFullTextStore, GraphEdgeCandidate, GraphEntityCandidate},
     *,
@@ -15,7 +15,6 @@ impl RetrievalStore {
         anyseek: AnySeekConfig,
         binding: binding::Binding,
     ) -> StorageResult<Self> {
-        // Check service credentials before persisting a new selection.
         let remote = AnySeekFullTextStore::new(anyseek)?;
         remote.check().await?;
         binding.commit_initial().await?;
@@ -25,6 +24,13 @@ impl RetrievalStore {
     }
     pub(crate) async fn check_scope(&self, scope: Scope) -> StorageResult<()> {
         self.remote.check_scope(scope, false).await
+    }
+    pub(crate) async fn read_payloads(
+        &self,
+        scope: Scope,
+        ids: &[Uuid],
+    ) -> StorageResult<HashMap<Uuid, ChunkPayload>> {
+        self.remote.read_payloads(scope, ids).await
     }
     pub async fn open(anyseek: AnySeekConfig) -> StorageResult<Self> {
         Ok(Self {
