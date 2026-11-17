@@ -285,6 +285,7 @@ impl TursoTx {
         self.graph_evidence_matching(artifact, None).await
     }
 
+    #[cfg(feature = "local-storage")]
     pub(crate) async fn graph_evidence_for_publication(
         &mut self,
         artifact: Uuid,

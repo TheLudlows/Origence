@@ -6,6 +6,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 const FILE: &str = "full-text-backend.json";
 const MAX_BYTES: usize = 4096;
 
+pub(crate) struct Binding {
+    selected: serde_json::Value,
+    existing_analysis: Option<String>,
+}
+
 fn mismatch() -> StorageError {
     StorageError::Conflict("retrieval backend differs from the data directory binding".into())
 }
@@ -19,7 +24,7 @@ pub(crate) async fn prepare(
     dir: &Path,
     selected: &AnySeekConfig,
     published_full_text: bool,
-) -> StorageResult<Option<Vec<u8>>> {
+) -> StorageResult<Binding> {
     let expected = selected.binding_identity();
     match tokio::fs::File::open(dir.join(FILE)).await {
         Ok(file) => {
@@ -31,12 +36,21 @@ pub(crate) async fn prepare(
             if bytes.len() > MAX_BYTES {
                 return Err(unavailable());
             }
-            let saved: serde_json::Value =
+            let mut saved: serde_json::Value =
                 serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
+            let fingerprint = saved
+                .as_object_mut()
+                .and_then(|v| v.remove("analysis_fingerprint"))
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .filter(|s| crate::retrieval_diagnostics::digest(s))
+                .ok_or_else(mismatch)?;
             if expected != saved {
                 return Err(mismatch());
             }
-            Ok(None)
+            Ok(Binding {
+                selected: expected,
+                existing_analysis: Some(fingerprint),
+            })
         }
         Err(error) if error.kind() == ErrorKind::NotFound => {
             if published_full_text {
@@ -46,7 +60,10 @@ pub(crate) async fn prepare(
             if bytes.len() > MAX_BYTES {
                 return Err(unavailable());
             }
-            Ok(Some(bytes))
+            Ok(Binding {
+                selected: expected,
+                existing_analysis: None,
+            })
         }
         Err(_) => Err(unavailable()),
     }
@@ -55,10 +72,22 @@ pub(crate) async fn prepare(
 /// Persist only after backend health checks, before jobs or HTTP are admitted.
 /// The staging file is private to this attempt; interrupted staging files are
 /// not mistaken for a valid binding or permission to overwrite user data.
-pub(crate) async fn commit(dir: &Path, pending: Option<Vec<u8>>) -> StorageResult<()> {
-    let Some(bytes) = pending else {
-        return Ok(());
-    };
+pub(crate) async fn commit(dir: &Path, mut pending: Binding, analysis: &str) -> StorageResult<()> {
+    if !crate::retrieval_diagnostics::digest(analysis) {
+        return Err(unavailable());
+    }
+    if let Some(expected) = pending.existing_analysis {
+        return if expected == analysis {
+            Ok(())
+        } else {
+            Err(mismatch())
+        };
+    }
+    pending.selected["analysis_fingerprint"] = serde_json::json!(analysis);
+    let bytes = serde_json::to_vec(&pending.selected).map_err(|_| unavailable())?;
+    if bytes.len() > MAX_BYTES {
+        return Err(unavailable());
+    }
     let stage = dir.join(format!(".full-text-backend-{}.tmp", uuid::Uuid::new_v4()));
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)

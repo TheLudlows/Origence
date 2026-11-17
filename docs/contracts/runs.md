@@ -39,3 +39,18 @@ execution nor grant access, and do not imply that the referenced object exists.
 Run readback never recursively resolves Skill packages (a Skill may itself cite
 an immutable Run prefix). The owner-only prefix endpoint supplies the exact digest
 needed for that nonrecursive source reference.
+
+## Retrieval observations
+
+Prepared context includes a request-local bounded retrieval trace and its checked
+analysis/embedding configuration identity. The exact serialized bundle, including
+observations, is hashed. Successful idempotent replay retains the first preparation's
+IDs/timing and returns that same bundle; a context request digest prevents reusing
+an event ID with another request even if both produce empty context.
+
+After owner/input checks, failed preparation attempts may append a server-observed
+failure event with only a safe error code and content-free observations. Failed
+attempts are immutable; recovery uses a new event ID. Trace and prefix reads retain
+all existing owner and source guards. Backend progress is sampled after retrieval;
+it is not an atomic read of the result, an Origence transaction, delivery proof, or
+independent verification of the evidence. See [API](../API.md#检索诊断).

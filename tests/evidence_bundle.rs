@@ -523,7 +523,10 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
-    assert_eq!(response.json::<Value>().await.unwrap(), expected);
+    assert_eq!(
+        crate::support::without_retrieval_observations(&response.json::<Value>().await.unwrap()),
+        crate::support::without_retrieval_observations(&expected)
+    );
     let response = http
         .post(format!("{base}/v1/context"))
         .bearer_auth(reader_token)
@@ -797,7 +800,11 @@ async fn evidence_explicit_single_value_conflicts_are_atomic_and_deterministic()
         BTreeSet::from([json!("PostgreSQL").to_string(), json!("MySQL").to_string()])
     );
     assert_accounted(&full);
-    assert_eq!(bundle(&s, &a, input.clone()).await, full);
+    // Context content stays deterministic; request IDs and timing describe each attempt.
+    assert_eq!(
+        crate::support::without_retrieval_observations(&bundle(&s, &a, input.clone()).await),
+        crate::support::without_retrieval_observations(&full)
+    );
     // Exact-identity recall must retain the explicit opposing suggestion too;
     // filtering only the normalized asset would silently choose a winner.
     let mut scoped = input.clone();

@@ -82,7 +82,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: TheLudlows/anyseek
-          ref: 6614bbf29bad0041c65738831bc1a16da4c69660
+          ref: 88ab7c154d1345c646b02a56b4dcc82e73995d0d
           path: .anyseek-fixture
           sparse-checkout: |
             anyseek

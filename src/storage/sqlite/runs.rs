@@ -113,7 +113,7 @@ impl TursoTx {
             }
             self.validate_prepared_payload(&decode::<Value>(&payload)?)
                 .await?;
-            events.push(json!({"sequence":seq,"reporter_principal_id":principal,"report":decode::<Value>(&payload)?,"references":refs,"recorded_at_ms":recorded,"evidence_origin":if decode::<Value>(&payload)?["kind"]=="context_prepared" {"server_prepared"} else {"reported"}}));
+            events.push(json!({"sequence":seq,"reporter_principal_id":principal,"report":decode::<Value>(&payload)?,"references":refs,"recorded_at_ms":recorded,"evidence_origin":if decode::<Value>(&payload)?["kind"]=="context_prepared" {"server_prepared"} else if decode::<Value>(&payload)?["kind"]=="context_preparation_failed" {"server_observed"} else {"reported"}}));
             cursor = seq;
         }
         Ok(
@@ -200,12 +200,14 @@ impl TursoTx {
         &mut self,
         run: Uuid,
         event_id: Uuid,
+        request_digest: &str,
         bundle: &crate::evidence::EvidenceBundle,
     ) -> StorageResult<Value> {
         use crate::evidence::EvidenceProvenance;
         self.check_permission(Permission::Write).await?;
         self.owned_run(run).await?;
         if event_id.is_nil()
+            || !crate::retrieval_diagnostics::digest(request_digest)
             || bundle.tenant_id != self.scope.tenant_id
             || bundle.workspace_id != self.scope.workspace_id
         {
@@ -251,26 +253,91 @@ impl TursoTx {
                 }
             }
         }
-        let payload = json!({"kind":"context_prepared","event_id":event_id,"reporter":"server","bundle_digest":hash(encode(bundle)?),"citations":citations,"routes":bundle.routes,"warnings":bundle.warnings,"budget":bundle.budget,"used_bytes":bundle.used_bytes,"omitted_conflict_groups":bundle.omitted_conflict_groups,"delivery_status":"prepared_not_confirmed_received_or_used"});
-        self.validate_prepared_payload(&payload).await?;
-        let payload = encode(&payload)?;
-        let digest = hash(&payload);
-        let old:Option<(String,i64)>=native_turso::query_as("SELECT payload_hash,sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
-        if let Some((old, seq)) = old {
-            if old != digest {
+        let old: Option<(String, i64)> = native_turso::query_as("SELECT payload,sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id)
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        if let Some((previous, seq)) = old {
+            let previous: Value = decode(&previous)?;
+            let mut original = bundle.clone();
+            original.retrieval =
+                serde_json::from_value(previous["retrieval"].clone()).map_err(|_| {
+                    StorageError::Conflict("event identity reused with different payload".into())
+                })?;
+            if previous["kind"] != "context_prepared"
+                || previous["context_request_digest"] != request_digest
+                || previous["bundle_digest"] != hash(encode(&original)?)
+            {
                 return Err(StorageError::Conflict(
                     "event identity reused with different payload".into(),
                 ));
             }
-            return Ok(json!({"run_id":run,"event_id":event_id,"sequence":seq}));
+            return Ok(
+                json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_retrieval":original.retrieval}),
+            );
         }
+        let payload = json!({"kind":"context_prepared","event_id":event_id,"reporter":"server","context_request_digest":request_digest,"bundle_digest":hash(encode(bundle)?),"citations":citations,"retrieval":bundle.retrieval,"routes":bundle.routes,"warnings":bundle.warnings,"budget":bundle.budget,"used_bytes":bundle.used_bytes,"omitted_conflict_groups":bundle.omitted_conflict_groups,"delivery_status":"prepared_not_confirmed_received_or_used"});
+        self.validate_prepared_payload(&payload).await?;
+        let payload = encode(&payload)?;
+        let digest = hash(&payload);
         let last:i64=native_turso::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
         if last >= 10000 {
             return Err(StorageError::InvalidArgument("run event budget exceeded"));
         }
         let seq = last + 1;
         native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
-        Ok(json!({"run_id":run,"event_id":event_id,"sequence":seq}))
+        Ok(
+            json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_retrieval":bundle.retrieval}),
+        )
+    }
+}
+
+impl TursoTx {
+    /// Record a failed server preparation attempt without any raw query or error body.
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn record_run_context_failed(
+        &mut self,
+        run: Uuid,
+        event_id: Uuid,
+        request_digest: &str,
+        error_code: &'static str,
+        retrieval: &crate::retrieval_diagnostics::RetrievalDiagnostics,
+    ) -> StorageResult<()> {
+        self.check_permission(Permission::Write).await?;
+        self.owned_run(run).await?;
+        if event_id.is_nil() || !crate::retrieval_diagnostics::digest(request_digest) {
+            return Err(StorageError::InvalidArgument(
+                "invalid preparation event ID",
+            ));
+        }
+        let payload = encode(
+            &json!({"kind":"context_preparation_failed","event_id":event_id,"reporter":"server",
+            "context_request_digest":request_digest,"error_code":error_code,"retrieval":retrieval,"delivery_status":"not_prepared"}),
+        )?;
+        let digest = hash(&payload);
+        let old: Option<String> = native_turso::query_scalar("SELECT payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id)
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        if let Some(old) = old {
+            let old: Value = decode(&old)?;
+            if old["kind"] != "context_preparation_failed"
+                || old["context_request_digest"] != request_digest
+                || old["error_code"] != error_code
+            {
+                return Err(StorageError::Conflict(
+                    "event identity reused with different payload".into(),
+                ));
+            }
+            return Ok(());
+        }
+        let last: i64 = native_turso::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(turso_err)?;
+        if last >= 10000 {
+            return Err(StorageError::InvalidArgument("run event budget exceeded"));
+        }
+        native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).bind(last+1)
+            .bind(self.principal_id).bind(payload).bind(digest).bind("[]").bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+        Ok(())
     }
 }
 
@@ -382,6 +449,7 @@ mod tests {
         );
         assert!(t.private_run_prefix_digest(input.run_id, 3).await.is_err());
         let bundle = crate::evidence::EvidenceBundle {
+            retrieval: Default::default(),
             tenant_id: scope.tenant_id,
             workspace_id: scope.workspace_id,
             policy: "test".into(),
@@ -400,19 +468,19 @@ mod tests {
         };
         let prepared_id = Uuid::new_v4();
         let prepared = t
-            .record_run_context_prepared(input.run_id, prepared_id, &bundle)
+            .record_run_context_prepared(input.run_id, prepared_id, &hash("request"), &bundle)
             .await
             .unwrap();
         assert_eq!(
             prepared,
-            t.record_run_context_prepared(input.run_id, prepared_id, &bundle)
+            t.record_run_context_prepared(input.run_id, prepared_id, &hash("request"), &bundle)
                 .await
                 .unwrap()
         );
         let mut altered = bundle.clone();
         altered.budget = 101;
         assert!(matches!(
-            t.record_run_context_prepared(input.run_id, prepared_id, &altered)
+            t.record_run_context_prepared(input.run_id, prepared_id, &hash("request"), &altered)
                 .await,
             Err(StorageError::Conflict(_))
         ));

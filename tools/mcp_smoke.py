@@ -296,7 +296,7 @@ def schema_object(root, node, fields, required, closed=True):
         require(node.get("additionalProperties") is False, "MCP schema no longer rejects unknown fields")
     for name, expected in fields.items():
         schema_type(root, node["properties"][name], expected)
-    return node["properties"]
+    return node.get("properties", {})
 
 
 def check_tools(mcp):

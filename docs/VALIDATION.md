@@ -1,9 +1,38 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。代码基线：main
-[`0a1a56c1da74e78be0118782b04a3f5a37251060`](https://github.com/TheLudlows/Origence/commit/0a1a56c1da74e78be0118782b04a3f5a37251060)。
-除单列的 #74 结果外，本文记录的是该基线的 Linux / Rust 1.98.0 检查。
+核验日期：2026-11-17。本次检索诊断基于 main
+[`dcde761`](https://github.com/TheLudlows/Origence/commit/dcde761ba11b34d88ce5da5f9025a22076571dfa)，
+最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：检索配置、诊断与私有 Run
+
+基于 main `dcde761`，真实引擎为 AnySeek
+[`88ab7c1`](https://github.com/TheLudlows/anyseek/commit/88ab7c154d1345c646b02a56b4dcc82e73995d0d)。
+本地 Linux，Origence 使用 Rust 1.98.0，AnySeek 使用 Rust 1.99.1。
+
+| 检查 | 结果 |
+| --- | --- |
+| 默认测试 `cargo test --locked --no-fail-fast` | PASS：lib 214、协议 4、集成 201；8 项真实后端测试单独运行 |
+| 无默认特性全套测试 | PASS：lib 136、协议 2、集成 92；5 项真实后端测试按该特性集忽略 |
+| 默认 / 无默认 `cargo clippy --locked --all-targets -- -D warnings` | PASS；无默认命令另带 --no-default-features |
+| 真实 AnySeek 合同 | PASS：8 项，包含全文/向量/图、重放、未知写入、清理及恢复 |
+| 真实 HTTP/stdio MCP、Run | PASS：配置核对、请求关联、准备记录、幂等回执、重开后诊断不变 |
+| MCP 完整冒烟 | PASS：宿主转发/离线协议、schema、安全错误、撤权、EOF 和重开 |
+| Python tools / evals | PASS：8 / 42 项 |
+
+新增定向回归覆盖：相同维度不同 embedding 空间拒绝、分析摘要重开核对且不覆盖绑定、
+并发请求隔离与 128 条上限、成功/失败 Run 诊断、同 ID 重放保留原观察、畸形诊断丢弃、
+私有读取隔离及同版本重开。旧上下文确定性断言只排除本次新增的请求标识/耗时，
+其余内容、引用、冲突和预算仍完整比较。
+
+本次修正测试辅助模块的特性门控、仅本地使用的图核验方法门控，以及 MCP 空 object
+schema 的 properties 缺省读取；未为绕过测试放宽权限、来源、索引或发布校验。
+绑定格式 v4 仅面向新目录，旧绑定明确拒绝，不自动转换已有数据。
+
+服务端进度在查询后另采样；诊断不证明跨系统事务、已交付或模型已使用。
+真实引擎合同使用隔离测试数据，不代表真实 embedding 质量、Claude Code/Codex 任务收益、
+Windows、生产容量、真实 S3 或断电验收。历史段落按各自提交保留。
 
 ## 2026-11-17：移除独立 Turso 图存储
 
@@ -63,7 +92,7 @@ MCP 失败位置为 [schema_object](../tools/mcp_smoke.py#L299)。诊断运行�
 **该诊断未修改仓库脚本，不计为原始冒烟通过，也不证明真实 Claude Code/Codex 任务已验收。**
 无默认特性失败位置为 [Service 导入](../tests/support/mod.rs#L12)；本地与 CI 一致。
 
-## main CI
+## 历史 main CI（0a1a56c）
 
 [Origence CI · run 43998026090](https://github.com/TheLudlows/Origence/actions/runs/43998026090)
 对应上述精确 main 提交，总体 **FAIL**。
@@ -90,7 +119,7 @@ MCP 失败位置为 [schema_object](../tools/mcp_smoke.py#L299)。诊断运行�
 仓库 evidence 目录内的既有原始工件保持不变。历史结果只属于其标明的提交/后端，
 旧文中的“当前”“进行中”“待验收”不作为现在的状态。
 
-## 本次文档整理检查
+## 历史文档整理检查（PR #75）
 
 仅修改 Markdown；实现源码、配置、依赖、原始 evidence 与冻结评估结果保持不变。
 历史文章通过上述固定 Git 版本保留，不改写其原始验证事实。

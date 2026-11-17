@@ -24,6 +24,13 @@ use std::{
 };
 use uuid::Uuid;
 
+/// Compare deterministic context content across separate retrieval attempts.
+pub fn without_retrieval_observations(value: &Value) -> Value {
+    let mut value = value.clone();
+    value.as_object_mut().unwrap().remove("retrieval");
+    value
+}
+
 #[derive(Default)]
 struct Data {
     records: BTreeMap<String, Value>,
@@ -35,6 +42,9 @@ struct Data {
     lose_next_write: bool,
     posts: usize,
     queries: Vec<Value>,
+    profile: Option<String>,
+    info_overrides: BTreeMap<String, Value>,
+    bad_diagnostics: bool,
 }
 
 /// A deterministic in-process HTTP peer with independent lifetime from Service.
@@ -75,6 +85,7 @@ impl AnySeekFixture {
             .route("/api/v1/index/{id}/group", get(group))
             .route("/api/v1/index/{id}/group/replace", post(replace))
             .route("/api/v1/index/{id}/query", post(query))
+            .layer(axum::middleware::from_fn(request_id))
             .with_state(fixture.clone());
         runtime().spawn(async move {
             axum::serve(tokio::net::TcpListener::from_std(listener).unwrap(), app)
@@ -82,6 +93,22 @@ impl AnySeekFixture {
                 .unwrap();
         });
         fixture
+    }
+    pub fn bind_profile(&self, profile: Option<String>) {
+        let mut data = self.data.lock().unwrap();
+        if data.profile.is_none() {
+            data.profile = profile;
+        }
+    }
+    pub fn info_override(&self, key: &str, value: Value) {
+        self.data
+            .lock()
+            .unwrap()
+            .info_overrides
+            .insert(key.into(), value);
+    }
+    pub fn bad_diagnostics(&self, value: bool) {
+        self.data.lock().unwrap().bad_diagnostics = value;
     }
     pub fn config(&self) -> AnySeekConfig {
         AnySeekConfig::new(&self.base, "test-owned-key", "origence-test").unwrap()
@@ -143,6 +170,7 @@ pub async fn open_service(
             .as_ref()
             .map(|_| models.embedding_dimension()),
     );
+    remote.bind_profile(models.profile.clone());
     let service = Service::open_with_anyseek(dir, models, remote.config()).await?;
     engines()
         .lock()
@@ -160,6 +188,34 @@ pub fn command_env(command: &mut tokio::process::Command, dir: &Path, dimension:
         .env("OC_ANYSEEK_COLLECTION", "origence-test");
 }
 
+#[derive(Clone)]
+struct QueryId(String);
+fn analysis_fingerprint() -> String {
+    storage::hash("fixture-analysis-v1")
+}
+async fn request_id(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let id = Uuid::new_v4().simple().to_string();
+    request.extensions_mut().insert(QueryId(id.clone()));
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert("x-anyseek-request-id", id.parse().unwrap());
+    let code = match response.status() {
+        StatusCode::NOT_FOUND => Some("not_found"),
+        StatusCode::SERVICE_UNAVAILABLE => Some("recovery_required"),
+        _ => None,
+    };
+    if let Some(code) = code {
+        response
+            .headers_mut()
+            .insert("x-anyseek-error-code", code.parse().unwrap());
+    }
+    response
+}
+
 async fn info(State(f): State<Arc<AnySeekFixture>>) -> (StatusCode, Json<Value>) {
     if f.data.lock().unwrap().unavailable {
         return failure(StatusCode::NOT_FOUND);
@@ -168,12 +224,16 @@ async fn info(State(f): State<Arc<AnySeekFixture>>) -> (StatusCode, Json<Value>)
         Some(d) => AnySeekFullTextStore::vector_collection_config(d).unwrap(),
         None => AnySeekFullTextStore::collection_config(),
     };
-    (
-        StatusCode::OK,
-        Json(
-            json!({"name":schema["index_name"],"schema":schema["schema"],"text_normalization":"None","vector_dimensions":f.dimension}),
-        ),
-    )
+    let data = f.data.lock().unwrap();
+    let mut info = json!({"version":"fixture-1", "name":schema["index_name"],"schema":schema["schema"],"text_normalization":"None","vector_dimensions":f.dimension,
+        "embedding_space_id":data.profile,"limits":{"max_records":10000,"max_candidates":10000},
+        "analysis":{"format":"native-package-analysis:v1","fingerprint":analysis_fingerprint(),"tokenizer":"TantivySimpleV1",
+            "tokenizer_identity":"tantivy-simple-v1;tantivy=0.27.0;lowercase;no-stopwords;no-length-filter",
+            "stop_words":"None","stop_words_fingerprint":storage::hash(b"\"None\"")}});
+    for (key, value) in &data.info_overrides {
+        info[key] = value.clone();
+    }
+    (StatusCode::OK, Json(info))
 }
 fn failure(status: StatusCode) -> (StatusCode, Json<Value>) {
     (
@@ -309,6 +369,7 @@ fn scores(record: &Value, q: &Value) -> Option<f64> {
 async fn query(
     State(f): State<Arc<AnySeekFixture>>,
     RoutePath(_): RoutePath<String>,
+    axum::extract::Extension(QueryId(request_id)): axum::extract::Extension<QueryId>,
     Json(q): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
     let mut data = f.data.lock().unwrap();
@@ -360,7 +421,14 @@ async fn query(
         .collect::<Vec<_>>();
     (
         StatusCode::OK,
-        Json(json!({"hits":hits,"count_total":count})),
+        Json(
+            json!({"hits":hits,"count_total":count,"visible_seq":data.posts,
+            "diagnostics":{"format_version":1,"request_id":if data.bad_diagnostics {"PRIVATE BAD REQUEST ID".into()}else{request_id},"engine_version":"fixture-1",
+                "mode":if q.get("query_vector").is_some(){"vector"}else if q["query"].as_str().is_some_and(|s|!s.is_empty()){"lexical"}else{"browse"},
+                "elapsed_us":1,"analysis_fingerprint":analysis_fingerprint(),
+                "index_progress":{"committed_seq":data.posts,"lexical_seq":data.posts,"vector_seq":data.posts,
+                    "index_failed":false,"recovery_required":false,"sampling":"after_query_not_atomic_with_result"}}}),
+        ),
     )
 }
 

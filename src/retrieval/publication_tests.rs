@@ -217,7 +217,10 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
             async move {
                 axum::Json(
                     json!({"name":schema["index_name"],"schema":schema["schema"],
-            "text_normalization":"None","vector_dimensions":null}),
+            "text_normalization":"None","vector_dimensions":null,"version":"fixture-1","embedding_space_id":null,"limits":{"max_records":10000,"max_candidates":10000},
+            "analysis":{"format":"native-package-analysis:v1","fingerprint":crate::storage::hash("size-fixture"),
+                "tokenizer":"TantivySimpleV1","tokenizer_identity":"tantivy-simple-v1;tantivy=0.27.0;lowercase;no-stopwords;no-length-filter",
+                "stop_words":"None","stop_words_fingerprint":crate::storage::hash(b"\"None\"")}}),
                 )
             }
         }),

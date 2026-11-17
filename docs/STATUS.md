@@ -1,10 +1,10 @@
 # Origence · 当前进度
 
 更新：2026-11-17。代码基线为 main
-[`0a1a56c`](https://github.com/TheLudlows/Origence/commit/0a1a56c1da74e78be0118782b04a3f5a37251060)
-（[PR #73](https://github.com/TheLudlows/Origence/pull/73)）；[PR #74](https://github.com/TheLudlows/Origence/pull/74) 的新增能力与本地验收另列。
+[`dcde761`](https://github.com/TheLudlows/Origence/commit/dcde761ba11b34d88ce5da5f9025a22076571dfa)
+（已合入 [PR #74](https://github.com/TheLudlows/Origence/pull/74) 与文档整理）；本切片继续补齐检索配置与诊断。
 产品边界见[架构规划](design/agent-data-foundation.md)。
-**首版核心路径已实现，主干 #73 基线的 CI 尚有失败，真实双客户端和企业任务尚未完成验收。**
+**首版核心路径已实现；本切片补齐检索诊断，真实双客户端和企业任务尚未完成验收。**
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -13,11 +13,17 @@
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 
-## 当前阻塞与下一步
+## 检索配置与诊断
 
-1. 修复无默认特性构建：测试辅助模块无条件导入受特性控制的 `Service`。
-2. 修复 MCP 冒烟脚本：空参数 schema 缺少 `properties` 时触发 KeyError。
-3. 通过 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
+当前切片基于 main `dcde761`：核对分析配置与 embedding 空间并持久绑定摘要；
+Search/Context 返回有界查询诊断，Run 准备路径保存成功与失败观察。
+最近 128 次尝试和明确省略数不构成完整客户端采集或跨存储快照。字段见 [API](API.md#检索诊断)。
+本切片同时修正无默认特性测试夹具/局部方法的特性边界及 MCP 空 schema 检查，
+最终检查与真实 AnySeek 联调结果统一记录到 VALIDATION。
+
+## 下一步
+
+通过检查后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
 
 精确测试结果、CI 运行及诊断限制见 [VALIDATION](VALIDATION.md)。
 Skill 的 API 审批和目录导出不等于真实用户审阅、客户端加载或任务收益验收。

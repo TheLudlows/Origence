@@ -210,6 +210,10 @@ struct Host {
 
 impl Host {
     async fn start(dir: &Path, model_url: &str) -> Self {
+        crate::support::fixture(dir, Some(3)).bind_profile(Some(format!(
+            "{}:s0-regression:3:v1",
+            origence::storage::hash(model_url)
+        )));
         let mut command = Command::new(env!("CARGO_BIN_EXE_origence"));
         crate::support::command_env(&mut command, dir, Some(3));
         let mut child = command

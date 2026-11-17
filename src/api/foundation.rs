@@ -89,10 +89,44 @@ async fn prepare_run_context(
     let caller = auth(&service, &headers).await?;
     caller.require("write")?;
     service.check_run_owner(&caller, run).await?;
-    let bundle = service.evidence_bundle(&caller, input.context).await?;
-    let preparation = service
-        .record_run_context_prepared(&caller, run, input.event_id, &bundle)
+    input
+        .context
+        .validate()
+        .map_err(|e| AppError::Invalid(e.into()))?;
+    let request_digest = crate::storage::hash(
+        serde_json::to_vec(&input.context)
+            .map_err(|_| AppError::Invalid("invalid context request".into()))?,
+    );
+    let (result, observations) = service
+        .observed_evidence_bundle(&caller, input.context)
+        .await;
+    let mut bundle = match result {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            service
+                .record_run_context_failed(
+                    &caller,
+                    run,
+                    input.event_id,
+                    &request_digest,
+                    error.code(),
+                    &observations,
+                )
+                .await?;
+            return Err(error);
+        }
+    };
+    let mut preparation = service
+        .record_run_context_prepared(&caller, run, input.event_id, &request_digest, &bundle)
         .await?;
+    // An idempotent replay carries the originally recorded diagnostic evidence.
+    if let Some(recorded) = preparation
+        .as_object_mut()
+        .and_then(|v| v.remove("recorded_retrieval"))
+    {
+        bundle.retrieval = serde_json::from_value(recorded)
+            .map_err(|_| AppError::Unavailable("invalid recorded retrieval diagnostics".into()))?;
+    }
     Ok(Json(
         serde_json::json!({"bundle": bundle, "preparation": preparation}),
     ))

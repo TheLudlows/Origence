@@ -58,11 +58,13 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 全文、向量和一跳图候选只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
-1. 准备支持整组替换的 AnySeek，例如 [6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)；
+1. 准备支持整组替换、analysis 与查询 diagnostics 的 AnySeek，例如 [88ab7c1](https://github.com/TheLudlows/anyseek/tree/88ab7c154d1345c646b02a56b4dcc82e73995d0d)；
    由 AnySeek 管理员创建 Tenant、签发普通 Tenant key。
 2. 运行 `origence anyseek-schema` 输出仅全文的 collection 配置；启用向量时运行
-   `origence anyseek-schema --dimensions N`，N 必须等于 `OC_EMBEDDING_DIMENSION`。
-   使用输出配置创建专用新 collection，不改 tokenizer、归一化或 schema。
+   `origence anyseek-schema --with-space`。它读取已配置的 embedding 模型，输出
+   `{config,embedding_space_id}`；创建 collection 时将两者放在请求顶层，维度来自
+   `OC_EMBEDDING_DIMENSION`。不输出模型密钥，也不调用模型。
+   使用输出创建专用新 collection，不改 tokenizer、归一化或 schema。
 3. 设置宿主环境，使用独立新 Origence 数据目录启动：
 
 ```sh
@@ -75,7 +77,10 @@ export OC_ANYSEEK_COLLECTION=origence-retrieval
 `OC_ANYSEEK_URL` 要求 HTTPS origin（loopback 可用 HTTP），不能带路径、凭据或查询参数。
 容器的 loopback 指容器自身。缺配置、schema 不符或服务故障会明确报错，宿主不会
 自动创建 Tenant/collection、切换旧索引或回退到另一套索引。
-绑定文件包含目标和固定模型 profile/维度；同目标轮换 AnySeek 凭据不改绑定。
+启动核对版本、schema、分词器实现、停用词摘要、容量限制、维度及 embedding_space_id。
+向量 collection 的 embedding_space_id 必须与宿主模型 profile 完全一致，不能只比较维度。
+绑定文件 v4 包含目标、固定模型 profile/维度及分析配置摘要，重开时复核摘要；
+同目标轮换 AnySeek 凭据不改绑定。缺失/不兼容旧绑定拒绝打开，保留原目录，不自动转换。
 备份与恢复必须保存该文件，并另外按 AnySeek 的规则保留对应 collection。
 
 每次发布最多 64 块、编码后的请求最多 2 MiB，文本与向量一起写入一组 Record。
@@ -191,3 +196,12 @@ branches_ms 包含候选装载、融合及已启用的辅助分支；verificatio
 不保证停止已发出的模型调用或 blocking 工作，优雅退出等待当前作业。
 空候选/duplicate 可合法完成，superseded 需重读版本再提交。输入/输出限制见
 [受控提取](contracts/semantic-capture.md)和 [API](API.md#对话语义捕获)。
+
+## 查询诊断与 Run
+
+先比较 binding 中的 analysis_fingerprint 与 AnySeek collection 的 analysis.fingerprint。
+通过新 API 的查询响应可按 x-anyseek-request-id 关联服务器的 response_prepared 调试日志；
+HTTP 错误提供安全的 x-anyseek-error-code。该日志只说明响应已准备，body 交付仍未确认。
+Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不合规诊断；原始错误正文不落库。
+后端索引进度在查询后采样，出现落后/失败/恢复标志时先处理 AnySeek 健康状态，
+不能手动推进消费序号或以空召回掩盖故障。完整字段与采集边界见 [API](API.md#检索诊断)。

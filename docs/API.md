@@ -43,6 +43,28 @@ Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可�
 当前由调用方提交候选，不自动读取原生客户端会话或自动发布。包格式和边界见
 [Skill 契约](contracts/skills.md)。
 
+## 检索诊断
+
+Search、Resolve 与 EvidenceBundle 返回 `retrieval:{requests,omitted_requests}`。
+每条是一次真实 AnySeek `/query` HTTP 尝试，包含 Origence/后端请求标识、路由、
+实际模式（browse/lexical/vector/hybrid）、客户端往返微秒、HTTP 状态、安全错误码、
+返回候选数量及可获得的后端诊断。browse 包括候选预检，不能当作语义召回。
+
+后端诊断含服务版本、分析配置摘要、查询耗时与 `visible_seq`，以及查询后另行采样的
+committed/lexical/vector 进度、失败与恢复标志。配置还记录核对过的容量限制和 embedding
+空间摘要。序号属于 AnySeek collection，不是 workspace 序号、Turso 版本或跨存储快照。
+客户端往返和服务端耗时边界不同，均不证明客户端消费或模型实际使用。
+
+每次调用只保留最近 128 次尝试，较早省略数量显式返回。诊断不保存查询原文、向量、
+过滤值、正文、URL、密钥或原始后端错误；未知/未收到字段保持 null。畸形或关联不符的
+后端诊断拒绝使用。上下文内容与引用的确定性不包含各次调用变化的标识和耗时。
+
+`POST /v1/runs/{id}/context` 将成功诊断与精确 bundle 摘要一起写入私有 Run；
+通过认证、归属和输入校验后发生的准备失败记录 `context_preparation_failed`，并标为
+server_observed。相同成功请求重放返回首次准备的诊断；请求摘要改变返回冲突。
+失败事件同样不可覆盖，恢复后新的准备尝试使用新的 event_id。普通 MCP/Search 请求
+不会自动加入某个 Run，仍需显式调用准备接口；未采集活动保持未知。
+
 ## AnySeek 统一检索
 
 全文、向量和一跳图候选使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词

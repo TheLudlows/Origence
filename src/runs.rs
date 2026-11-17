@@ -43,6 +43,22 @@ impl Service {
 }
 
 impl Service {
+    pub(crate) async fn record_run_context_failed(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        event_id: Uuid,
+        request_digest: &str,
+        code: &'static str,
+        observations: &crate::retrieval_diagnostics::RetrievalDiagnostics,
+    ) -> Result<()> {
+        let mut tx = self.write(a, Permission::Write).await?;
+        tx.record_run_context_failed(run, event_id, request_digest, code, observations)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub(crate) async fn check_run_owner(&self, a: &AuthContext, run: Uuid) -> Result<()> {
         let mut tx = self.read(a, Permission::Read).await?;
         tx.owned_run(run).await?;
@@ -54,11 +70,12 @@ impl Service {
         a: &AuthContext,
         run: Uuid,
         event_id: Uuid,
+        request_digest: &str,
         bundle: &crate::evidence::EvidenceBundle,
     ) -> Result<Value> {
         let mut tx = self.write(a, Permission::Write).await?;
         let result = tx
-            .record_run_context_prepared(run, event_id, bundle)
+            .record_run_context_prepared(run, event_id, request_digest, bundle)
             .await?;
         tx.commit().await?;
         Ok(result)
