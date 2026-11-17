@@ -5,6 +5,51 @@
 除单列的 #74 结果外，本文记录的是该基线的 Linux / Rust 1.98.0 检查。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：#79 CI 故障修复与检查审计
+
+失败运行 [44036124032](https://github.com/TheLudlows/Origence/actions/runs/44036124032)
+对应 #79 `5ce7f4c`。读取实际 job 日志后，本地精确复现 MCP 的失败调用链：
+`protocols → check_tools → schema_object` 在第 299 行访问空参数 schema 缺省的
+`properties`，抛出 `KeyError`。前一节通过的 `anyseek_smoke.py --binary` 是较小的
+合同入口，不等同于 CI 的 `--run python3 tools/mcp_smoke.py` 完整检查。
+fast-check 的实际失败为 `graph_evidence_for_publication` 在 no-default 下 dead_code。
+
+修复提交 `b6b0bf0af39f67d8cf5ed3fe49058fa90e0471c8`：图方法仅在其唯一调用方所在的
+`local-storage` 下编译；同一 feature 控制 `tests/local.rs` 的 Service 夹具；空 schema
+返回缺省空属性集合，字段集合、required、类型和 additionalProperties 检查不变。
+没有全局 lint allow，也没有删掉失败检查。开始本轮时 main 已前进到 `44e06df`
+（#77 合并），这三处最小修复与该主干一致；本分支未合入 UI 或 #78 诊断功能。
+
+Linux / Rust 1.98.0 本地结果（后续仅补文档）：
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings` | PASS |
+| `cargo clippy --locked --all-targets -j 2 -- -D warnings` | PASS |
+| `cargo test --locked --no-default-features -j 2 --no-fail-fast` | PASS：135 lib + 2 协议 + 92 local；5 个真实后端用例保持 ignored |
+| `cargo test --locked --lib retrieval` | PASS：14 项，含 rank/publication/身份/返回合同 |
+| `cargo test --locked --test local graph` | PASS：4 项；图发布恢复、一跳/撤回、证据精确身份、workspace 隔离 |
+| `cargo build --locked -j 2` | PASS；新产物用于下述 MCP 验证 |
+| 固定真实 AnySeek 下 `tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary /workspace/Origence/target/debug/origence` | PASS：与失败 CI 同一完整入口；host-forwarding 和 offline 两路径均通过 |
+| `python3 -m unittest discover -s tools -p 'test_*.py' -v` | PASS：8 项 |
+| main `44e06df` 已有的 `tools/test_mcp_schema.py` | 原样取到临时目录运行，3 PASS；空对象、缺失非空字段、未知字段拒绝，无新增重复 UT |
+| `cargo fmt --package origence -- --check`、`git diff --check` | PASS |
+
+CI/UT 审计：本次删除 **0** 项，工作流保持不变。
+
+- 旧 linux-native 的 no-default `memory_identity` 子集与 fast-check 完整 no-default 套件
+  使用同一 Rust/Ubuntu、feature、push/PR 触发范围；新 main 已移除该重复步骤，无需在 #79 再做清理。
+- 保留默认/no-default 完整套件、MCP 完整离线/转发检查、HTTP smoke 和固定真实 AnySeek
+  ignored 合同：它们的 feature、入口及 fixture 不等价，不能相互替代。
+- 保留 publication/EvidenceBundle/来源撤回/隔离用例；旧库拒绝、旧 key 冲突和遗留 graph.db
+  不被覆盖的检查仍对应当前只读拒绝与数据保留合同，名称中的 legacy 不表示测试失效。
+- 保留 syscall fault UT：`.lance` 只是合成文件名，测试仍检查 C 注入器的 sentinel/path
+  限制、计数、writev、暂停/终止行为，不能据扩展名判断废弃。
+- `manual-diagnostics` 布局诊断为显式 feature + ignored，普通 CI 本来不执行；其进一步去留
+  不影响这次门禁，不扩大为历史工具清理。
+
+本地未重跑全量默认集成、Windows 或真实模型/生产性能；远端新 CI 需独立看结果。
+
 ## 2026-11-17：独立检索排序与权威复核拆分
 
 基线 main `dcde761ba11b34d88ce5da5f9025a22076571dfa`；实现及本地 checkpoint

@@ -18,7 +18,9 @@
 基于 main `dcde761`，将已核验分路的排序/融合移到 `retrieval::rank`，
 最终发布及返回复核移到 Turso 事务方法；Search 与 EvidenceBundle 保持各自召回、
 原有快照边界和外部 IO 顺序。此分支未包含 #77 UI 或 #78 诊断改动。
-定向验证和主干已有检查失败见 [VALIDATION](VALIDATION.md)。
+定向验证见 [VALIDATION](VALIDATION.md)。#79 后续已补齐 no-default feature 边界与
+空参数 MCP schema 检查；两种 feature 的严格 Clippy、本地 no-default 全套已通过。
+旧 CI 失败及新验证分开记录；新 main `44e06df` 已含同样三处修复，本分支未引入 UI。
 
 ## 当前阻塞与下一步
 
