@@ -51,7 +51,7 @@ struct RunAppendInput {
     /// Existing RunEventInput: event_id, reporter, observed_at_ms, event.
     /// event.kind: context_reported, tool_reported, result_reported, feedback,
     /// skill_loaded_reported, artifact_reported, coverage. Never server events.
-    report: serde_json::Value,
+    report: serde_json::Map<String, serde_json::Value>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -114,8 +114,10 @@ impl ContextMcp {
         &self,
         Parameters(input): Parameters<RunAppendInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
-        let report = serde_json::from_value::<crate::run::RunEventInput>(input.report)
-            .map_err(|_| ErrorData::invalid_params("invalid RunEventInput", None))?;
+        let report = serde_json::from_value::<crate::run::RunEventInput>(
+            serde_json::Value::Object(input.report),
+        )
+        .map_err(|_| ErrorData::invalid_params("invalid RunEventInput", None))?;
         result(
             self.run_client()?
                 .append_run_event(run_uuid(&input.run_id)?, &report)

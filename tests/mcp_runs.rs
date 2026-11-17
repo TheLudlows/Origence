@@ -128,6 +128,108 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
     b.call("context_turn_get", json!({"turn_id":turn}))
         .await
         .unwrap();
+    // MCP archive -> existing HTTP feedback/Improve; Run feedback is not a substitute.
+    let client = HostClient::new(&base, owner.token.clone()).unwrap();
+    let sid = session["session_id"].as_str().unwrap();
+    let feedback_path = format!("/v1/sessions/{sid}/turns/{turn}/feedback");
+    let feedback = json!({"feedback_id":Uuid::new_v4(),"target":{"type":"turn"},"rating":"helpful","comment":"synthetic explicit feedback"});
+    let feedback_receipt = client
+        .call(
+            reqwest::Method::POST,
+            &feedback_path,
+            Some(&feedback),
+            Some("mcp-feedback"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        feedback_receipt,
+        client
+            .call(
+                reqwest::Method::POST,
+                &feedback_path,
+                Some(&feedback),
+                Some("mcp-feedback")
+            )
+            .await
+            .unwrap()
+    );
+    let mut changed_feedback = feedback.clone();
+    changed_feedback["rating"] = json!("unhelpful");
+    assert!(matches!(
+        client
+            .call(
+                reqwest::Method::POST,
+                &feedback_path,
+                Some(&changed_feedback),
+                Some("mcp-feedback")
+            )
+            .await,
+        Err(origence::error::AppError::Conflict(_))
+    ));
+    let feedback_view = client
+        .call(reqwest::Method::GET, &feedback_path, None, None)
+        .await
+        .unwrap();
+    assert_eq!(feedback_view["feedback"].as_array().unwrap().len(), 1);
+    let improve_id = Uuid::new_v4();
+    let improve_path = format!("/v1/sessions/{sid}/improve");
+    let improve =
+        json!({"improve_id":improve_id,"conditions":["synthetic fixture only"],"max_feedback":1});
+    // Disabled models must fail explicitly, with no accepted improvement persisted.
+    assert!(matches!(
+        client
+            .call(
+                reqwest::Method::POST,
+                &improve_path,
+                Some(&improve),
+                Some("mcp-improve")
+            )
+            .await,
+        Err(origence::error::AppError::Unavailable(_))
+    ));
+    assert!(matches!(
+        client
+            .call(
+                reqwest::Method::GET,
+                &format!("/v1/improvements/{improve_id}"),
+                None,
+                None
+            )
+            .await,
+        Err(origence::error::AppError::NotFound)
+    ));
+    for token in [&other.token, &admin.token] {
+        let outsider = HostClient::new(&base, token.to_string()).unwrap();
+        assert!(
+            outsider
+                .call(reqwest::Method::GET, &feedback_path, None, None)
+                .await
+                .is_err()
+        );
+        assert!(
+            outsider
+                .call(
+                    reqwest::Method::POST,
+                    &feedback_path,
+                    Some(&feedback),
+                    Some("outsider-feedback")
+                )
+                .await
+                .is_err()
+        );
+        assert!(
+            outsider
+                .call(
+                    reqwest::Method::POST,
+                    &improve_path,
+                    Some(&improve),
+                    Some("outsider-improve")
+                )
+                .await
+                .is_err()
+        );
+    }
     let run = Uuid::new_v4();
     let create = json!({"run_id":run,"summary":"synthetic task"});
     let first = a.call("context_run_create", create.clone()).await.unwrap();

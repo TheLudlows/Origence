@@ -74,3 +74,73 @@ HTTP host, fresh temporary SQLite and a synthetic AnySeek protocol fixture, with
 models disabled. Those peers are **not** Claude Code or Codex. Real two-host task
 acceptance, Windows execution, host-version freezing and enterprise task outcomes
 remain outstanding; do not promote this fixture to those acceptance claims.
+
+## Explicit archive → feedback → Improve over existing HTTP
+
+The four Run tools do not replace turn archival, turn/evidence feedback, or
+Improve. `context_turn_archive` / `context_turn_get` remain the MCP archive
+entry points. Both hosts may use the existing HTTP routes below with their same
+logical key; no extra MCP tools or new persistence are needed. Run `feedback`
+is only a trace report and never writes session feedback or triggers Improve.
+Helpful feedback is not an independently verified business result (#89).
+
+Run this synthetic example against an authorized disposable host, with
+`OC_SERVER_URL` and `OC_API_KEY` set in the environment. Set `OC_EXAMPLE_TURN_ID`
+to one new UUID and retain it for retries. This explicitly archives the displayed
+synthetic question/answer and records feedback. Set `OC_EXAMPLE_IMPROVE=1` only
+when explicitly requesting Improve; it requires a configured extraction model.
+For this task only local synthetic model fixtures may be used. With models disabled,
+Improve returns 503 and no improvement is accepted; that is not a successful job.
+
+```sh
+export OC_SERVER_URL=http://127.0.0.1:8080
+export OC_EXAMPLE_TURN_ID=33333333-3333-4333-8333-333333333333
+# OC_API_KEY is supplied securely by your environment, not pasted into this file.
+python3 - <<'PY'
+import json, os, urllib.request, urllib.error, uuid
+base = os.environ['OC_SERVER_URL'].rstrip('/')
+turn = uuid.UUID(os.environ['OC_EXAMPLE_TURN_ID'])
+def call(path, body=None, key=None):
+    headers = {'Authorization': 'Bearer ' + os.environ['OC_API_KEY']}
+    if body is not None:
+        headers['Content-Type'] = 'application/json'
+    if key:
+        headers['Idempotency-Key'] = key
+    req = urllib.request.Request(base + path, headers=headers,
+        data=None if body is None else json.dumps(body).encode())
+    # No redirects: never forward the credential to another origin.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):
+            return None
+    try:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=60) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as error:
+        raise SystemExit(f'HTTP {error.code}; no success claimed; read back or retry identical IDs') from None
+session = call('/v1/session')['session_id']
+path = f'/v1/sessions/{session}/turns'
+call(path, {'turn_id': str(turn), 'question': 'Synthetic example question',
+    'answer': 'Synthetic example answer', 'used_evidence': []}, f'example-turn-{turn}')
+feedback_id = str(uuid.uuid5(turn, 'feedback'))
+feedback_path = f'{path}/{turn}/feedback'
+call(feedback_path, {'feedback_id': feedback_id, 'target': {'type': 'turn'},
+    'rating': 'helpful', 'comment': 'Synthetic explicit feedback'}, f'example-feedback-{turn}')
+print('Archived turn and feedback readback:', call(feedback_path))
+if os.environ.get('OC_EXAMPLE_IMPROVE') == '1':
+    improve_id = str(uuid.uuid5(turn, 'improve'))
+    print('Improve acceptance:', call(f'/v1/sessions/{session}/improve',
+        {'improve_id': improve_id, 'conditions': ['synthetic example only'],
+         'max_feedback': 1}, f'example-improve-{turn}'))
+    print('Improve status:', call(f'/v1/improvements/{improve_id}'))
+PY
+```
+
+The same `/v1/session` lookup resolves the session of a turn archived through MCP;
+use its actual `turn_id` to post feedback without re-archiving different content.
+Use the server-assigned `evidence_ref_id` with `target.type="evidence"` to rate an
+archived evidence reference. Retain IDs and full payloads on retry. Changed payloads
+conflict. An accepted Improve response is not completion; read its status and
+existing job endpoint. No automatic retry, local conversation capture or background
+Improve invocation is added. Source withdrawal and current ownership apply to all
+reads and replays. Default missing usage/result evidence remains **unknown**;
+this adapter does not implement or attest #89's independent verification.

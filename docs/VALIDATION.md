@@ -995,3 +995,54 @@ not installed in this environment; no real host/model task was invoked. Actual
 two-host/version-frozen task observations, native Windows and enterprise task
 outcomes remain unaccepted. No production credentials/data, paid model calls,
 migration, push, PR, Issue update, merge or deployment was performed.
+
+### #87 publication follow-up — explicit HTTP feedback/Improve and MCP gates
+
+Continues local implementation `3877322753ff8bd2b921f5fe1a43e6a33352b108`.
+Read #87 and #89: the four Run tools do not replace explicit turn archival,
+session/evidence feedback or Improve, and do not add independent verification.
+[Runnable synthetic HTTP commands](../examples/run-host-contract.md#explicit-archive--feedback--improve-over-existing-http)
+use the same logical-key session and preserve explicit opt-in for Improve.
+Run feedback remains a report; helpful feedback is not verified task success.
+No service API, persistence, generic DTO, CI, navigation or STATUS change.
+
+New protocol coverage: MCP archive → HostClient HTTP feedback → readback,
+idempotent feedback and changed-payload conflict, other writer/admin denial,
+explicit Improve with disabled models returning unavailable and leaving no accepted
+improvement. The existing 20 local synthetic-model Learning regressions cover
+positive Improve HTTP acceptance, processing, exact citations, recovery and source
+withdrawal. No real provider or paid model is used.
+
+The old exact seven-tool gates were updated to the exact eleven-tool contract,
+including required fields and nested context schema. Report is now explicitly an
+object in the adapter schema and still decoded into the existing strict Run DTO.
+The first full smoke found a second stale assumption: revoked calls defaulted to
+retrieval `{query}` arguments. Valid per-Run-tool arguments now exercise the same
+strict unauthenticated error assertion for every tool; no error gate was relaxed.
+
+Final local results (Linux, declared Origence Rust 1.98.0):
+
+- `cargo test --test local mcp_runs -- --nocapture`: 1 passed.
+- `cargo test --test local local_host_api_cli_mcp_models_and_recovery -- --nocapture`: 1 passed.
+- `cargo test --test local learning_loop -- --nocapture`: 20 passed (local synthetic model fixture).
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo build --locked`, `cargo fmt --all -- --check`, `git diff --check`: passed.
+- `PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py`: 3 passed.
+- Actual stdio eleven-tool schema check with a temporary synthetic auth stub: passed.
+- `python3 tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary target/debug/origence`: passed host-forwarding and offline modes, all protocol negotiations, exact schemas/tool lists, sanitized errors, live revocation, EOF and reopen.
+
+The smoke used a clean checkout of the CI-pinned real AnySeek source
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`, rebuilt with Rust 1.99.1,
+`--locked --no-default-features --bin anyseek_server -j 2`. Binary SHA256:
+`8e9eb15edd86fb38b4a837476ed219bc6c7bc85a89d9f7460bb4c18316a57beb`.
+Upstream build warnings were not changed. All databases, collections, content and
+credentials were disposable synthetic fixtures. This is real service/protocol
+coverage, not real Claude Code/Codex task or independent business-result evidence.
+
+Immediately before publication, remote main remained
+`293e2bf6af3b180d43c8050731047b552ac07519`; no branch-matching PR existed.
+No rebase or force push is needed. User authorization now permits a normal push
+and independent draft PR with Refs #87; the earlier local-only record above is
+historical. Exact published HEAD and CI state are recorded in the PR/handoff.
+Real two-host/version-frozen tasks and Windows remain unaccepted. No Issue update,
+merge or deployment is authorized by this follow-up.

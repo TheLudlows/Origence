@@ -58,6 +58,10 @@ TOOL_FIELDS = {
         "exclude_session_id": "string",
     },
     "context_get": {"asset_id": "string", "version": "integer"},
+    "context_run_create": {"run_id": "string", "summary": "string"},
+    "context_run_prepare": {"run_id": "string", "event_id": "string", "context": "object"},
+    "context_run_report": {"run_id": "string", "report": "object"},
+    "context_run_get": {"run_id": "string", "after": "integer", "limit": "integer"},
     "context_session": {},
     "context_turn_get": {"turn_id": "string"},
     "context_turn_archive": {"turn": "object"},
@@ -313,11 +317,22 @@ def check_tools(mcp):
         root = tool["inputSchema"]
         schemas[name] = root
         required = {
+            "context_run_create": ["run_id", "summary"],
+            "context_run_prepare": ["run_id", "event_id", "context"],
+            "context_run_report": ["run_id", "report"],
+            "context_run_get": ["run_id"],
             "context_get": ["asset_id"], "context_session": [],
             "context_turn_get": ["turn_id"], "context_turn_archive": ["turn"],
         }.get(name, ["query"])
         properties = schema_object(root, root, TOOL_FIELDS[name], required,
                                    closed=name != "context_get")
+        if name.startswith("context_run_"):
+            if name == "context_run_get":
+                require(properties["after"].get("default") == 0, "Run cursor default changed")
+                require(nullable(root, properties["limit"]), "Run limit no longer accepts null")
+            if name == "context_run_prepare":
+                schema_object(root, properties["context"], TOOL_FIELDS["context_bundle"], ["query"])
+            continue
         if name in ("context_session", "context_turn_get"):
             continue
         if name == "context_turn_archive":
@@ -567,6 +582,12 @@ def main():
                 require(revoked.get("revoked") is True, "MCP reader key revocation failed")
                 for name in TOOL_FIELDS:
                     arguments = {
+                        "context_run_create": {"run_id": str(uuid.uuid4()), "summary": "synthetic revoked task"},
+                        "context_run_prepare": {"run_id": str(uuid.uuid4()), "event_id": str(uuid.uuid4()), "context": {"query": QUERY}},
+                        "context_run_report": {"run_id": str(uuid.uuid4()), "report": {
+                            "event_id": str(uuid.uuid4()), "reporter": "test", "observed_at_ms": 0,
+                            "event": {"kind": "coverage", "component": "external tools", "status": "unknown", "summary": "not observed"}}},
+                        "context_run_get": {"run_id": str(uuid.uuid4())},
                         "context_get": {"asset_id": asset_id}, "context_session": {},
                         "context_turn_get": {"turn_id": turn["turn_id"]},
                         "context_turn_archive": {"turn": turn},
