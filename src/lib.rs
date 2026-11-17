@@ -34,6 +34,9 @@ pub mod session;
 #[cfg(feature = "local-storage")]
 mod sessions;
 pub mod skill;
+pub mod skill_candidate;
+#[cfg(feature = "local-storage")]
+pub mod skill_workflow;
 #[cfg(feature = "local-storage")]
 mod skills;
 pub mod storage;

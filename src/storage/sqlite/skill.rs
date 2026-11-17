@@ -148,6 +148,13 @@ impl SqliteTx {
         }
         let content = self.skill_revision(candidate, current).await?;
         self.check_skill_sources(owner, &content.sources).await?;
+        if crate::skill_candidate::selected_basis(&content)?
+            .is_some_and(|basis| basis != input.basis)
+        {
+            return Err(StorageError::Conflict(
+                "edit the candidate revision to change selected basis".into(),
+            ));
+        }
         let package = content.draft.package(&input.target, self.scope)?;
         let packet = SkillReviewPacket::build(review, input, package)?;
         let old:Option<(Uuid,u32,Uuid,String)>=sqlite_db::query_as("SELECT candidate_id,revision,reviewer_id,packet FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
