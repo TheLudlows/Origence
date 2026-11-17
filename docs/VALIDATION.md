@@ -986,3 +986,29 @@ launcher is not a production service supervisor. No remote PR/push/deployment.
   当前 UI 只读展示/刷新；写入与撤销通过独立 HTTP/Service API。此切片不代表 #89 全部通过，
   也不提供 tracing/成本/生产告警。需接入与试点方按独立合同对接；联合合同确认后再安排发布。
 - 本路仅本地提交，未推送、未开 PR、未更新 Issue、未合入、未部署。
+
+## 2026-11-17 — #89 草稿发布前定向复验
+
+- 续接本地 `87b284c8fa3b9c324db2aa039af69a026b2c1dd5`；重新 fetch 后 main 仍为
+  `293e2bf6af3b180d43c8050731047b552ac07519`。本轮测试/合同提交：
+  `ddca4c52b3d71b2650f0ad13ce1e613089a42858`。
+- 对照 #87 已发布 Issue 的采集合同：显式归档/Run prepare 与核验分离，`src/run.rs`、
+  MCP 接入接口没有本路变更；未发现 #87 可供联合运行的公开实现 PR，故不声明联合验收。
+  本路只对应 PRD 的“Run 所有者记录外部签认依据”，不生成独立签认、平台核验通过状态或
+  业务通过率。用户不能用 owner 转录将自己提升为认证核验者；#89 不关闭。
+- 再跑 `cargo test --lib run --features sqlite`：8 passed；
+  `cargo test --test local run_verification --features sqlite`：2 passed。
+  加强真实 Service/HTTP readback 断言：prepared、自报 success、转录 failed、
+  `platform_verification:not_performed`、`verifier_authentication:unverified_claim` 分离；
+  非 owner reviewer 无权撤销，来源撤回后核验与 Run 正文均返回 NotFound/Forbidden。
+- `npm --prefix ui test`：17 passed；`cargo fmt --check`、`git diff --check`、
+  `cargo clippy --all-targets --all-features -- -D warnings` 均通过。
+- Chromium `156.0.8078.79`：`npm --prefix ui run build` 后运行
+  `node ui/scripts/check-run-verification-browser.mjs` 通过。真实 Chromium DOM、已构建 UI
+  和 relay，合成 HTTP 响应；覆盖准备/上报/外部三种结论分别显示、未知使用版本、撤销、
+  不可信文字转义、来源不可用后刷新清除旧核验内容，以及另一 Key 拒绝后的正文/核验不显示。
+  该浏览器夹具不替代上述真实 SQLite/Service 授权验证，也不代表真实双客户端/生产任务验收。
+- schema 差异仅新增 `oc_run_verifications`，沿用精确 fresh-only admission；本轮再次通过
+  缺表拒绝且数据库字节不变测试。应用 SQL 仍单表，跨表关联与授权/来源复核留在原事务。
+- 允许正常推送本分支并创建针对 main 的草稿 PR（Refs #89）。不改 Issue、不合入、不部署。
+  Windows、完整无障碍、真实双客户端/业务任务和外部独立签认仍未验收。
