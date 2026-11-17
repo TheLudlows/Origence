@@ -298,6 +298,7 @@ nav {
   display: grid;
   gap: 15px;
   align-content: start;
+  grid-template-columns: minmax(0, 1fr);
 }
 .columns {
   display: grid;
@@ -595,8 +596,7 @@ ins {
   .brand {
     font-size: 24px;
   }
-  .workspace,
-  .account {
+  .workspace {
     display: none;
   }
   nav {
@@ -670,8 +670,10 @@ ins {
     font-size: 11px;
   }
 }
-@media (pointer: coarse) {
+@media (any-pointer: coarse) {
   button,
+  button.link,
+  button.icon-button,
   select,
   input {
     min-height: 44px;

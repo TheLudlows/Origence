@@ -1,9 +1,12 @@
 # Origence · 当前进度
 
-更新：2026-11-17。本轮已同步 main [`739be8c`](https://github.com/TheLudlows/Origence/commit/739be8c)
-（含 #84 Windows 启动器、#86 正文与索引统一存储），并接入 AnySeek 服务凭据与 workspace 自动路由。
+更新：2026-11-17。已同步 main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)
+（含 #81、#83、#84、#85、#86），保留已发布正文与索引统一存储、服务凭据和 workspace 自动路由。
 产品边界见[架构规划](design/agent-data-foundation.md)。
-**核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
+**#76 仍未完成：五页首版与部分真实浏览器验收已完成；完整无障碍、双客户端和企业任务仍缺。**
+
+PR #82 包含窄屏表格、退出入口、粗指针按钮与 PDF 来源提示修复。
+响应式、键盘、固定版本/撤回证据及本次同步验证分别见 [VALIDATION](VALIDATION.md)。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |

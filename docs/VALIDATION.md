@@ -1,9 +1,67 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。本轮基于 main
-[`739be8c`](https://github.com/TheLudlows/Origence/commit/739be8c)，
-最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
+核验日期：2026-11-17。已同步 main
+[`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
+最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：#82 同步 #85 后解决文档冲突（当前）
+
+从 PR #82 HEAD `74de4655d5c251970be716ad873f8cfdb1ee0a3a` 普通 merge main
+`92258fc578bbdb1c21ca949ddbbcfb1729a5813a`（已合入 #85）。冲突只有 STATUS 与本文；
+合并保留窄屏/PDF 验证、#85 workspace 自动路由和各批次历史证据。相对该 main，
+Rust、API、SQL、Cargo/Node 依赖与 CI 无改动；UI 改动范围仍是 CSS、来源提示和 DOM 回归。
+
+本次 Linux / Node 24.19.0、Rust 1.98.0：
+
+- `npm --prefix ui run check`、`npm --prefix ui test` 通过，**17 项**；使用与锁文件一致的既有依赖。
+- `cargo fmt --all -- --check`、默认特性 `cargo clippy --locked --all-targets -- -D warnings`
+  与 `git diff --check` 通过。没有重跑完整 Rust 测试集；main 的 435 项结果按其原提交保留。
+- 真实 localhost Node UI → Origence → AnySeek **通过**：身份、上传/发布、目录、历史、
+  检索、上下文、私有 Run 隔离和来源撤回。后端使用与 main 相同 Rust 源码的生产二进制、
+  固定 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`、独立 fresh 数据目录、
+  自动 workspace collection 和一次性服务凭据，不调用真实模型、不拦截或模拟 API。
+- Chromium **154.0.8037.57** headless：五页 × 1440/1024/736/375/320 × 浅/深色，
+  **50 个布局组合**无整页横向溢出且退出可见；另 **10 个 Run 详情布局**通过。
+  320px 触屏模拟中主题切换、调用链路导航、可见按钮高度 ≥44px 和退出后回到登录通过。
+- 375px 页面调用真实 PDF source 的来源预览：页码 2 提示、不可核验页内文本说明、
+  不生成高亮与授权下载通过；下载 SHA-256 与上传的两页 PDF 原字节一致。
+  本轮没有增加真正的 PDF 页内文本展示或高亮，也没有重复历史的全部键盘/撤回复验。
+
+浏览器脚本与一次性数据仅留在临时目录，不提交 token/截图或测试产物。真实 Windows、
+实体触屏与屏幕阅读器未执行；本次不宣称 #76 完整验收。远端 CI 以此合并提交为准。
+
+## 2026-11-17：#82 同步最新 main 后的限定复验
+
+原 PR HEAD `6978745ff33fb16dce472f403818ca1db3fa29d3`，普通 merge main
+`739be8cc8cf62ba80d8ea598504327e1fd63e24e`。解决 STATUS、本文和 pages fixture
+冲突：保留主干 SQLite、固定版本关联 Run、Windows 启动器与 AnySeek 正文存储；
+合并 PDF 来源与资产关联两个 fixture 分支及断言。相对 main 无 Rust/API/SQL/CI 改动。
+下方历史证据中的缺口分类只适用于各节基线，关联 Run 已由 #83 补齐。
+
+- Node 24.22.1：`npm --prefix ui run check`、`npm --prefix ui test` 通过，17 项。
+  npm 首次安装因默认 home cache 不可写失败，改用临时 cache 后 `npm ci` 成功。
+- Rust 1.98.0：`cargo build --locked`、`cargo fmt --all -- --check`、default /
+  `--no-default-features` / `--no-default-features --features sqlite` 三组
+  `cargo clippy --locked --all-targets -- -D warnings` 通过；`git diff --check` 通过。
+- `cargo test --locked --test local catalog::` 5 项通过（包含 semantic_catalog），
+  `cargo test --locked --test local content_storage::` 4 项通过；覆盖精确版本关联、
+  key 隔离/撤回、重开、正文损坏及读取期间权限变化。没有重跑完整 Rust suite。
+- 使用合并后重建的 Origence/Node UI、从精确 pin
+  `d813b915b7f12e7139ca316adc15699688493196` 重建的真实 AnySeek，独立 fresh
+  SQLite v2 目录/collection、合成数据和一次性 key，未调用外部模型。
+  复用原 Playwright 脚本，使用当前 `tools/anyseek_smoke.py --anyseek-binary … --run
+  python3 …` 分别执行布局、撤回、PDF 三组；无 API 拦截或响应模拟。
+- Chromium 156.0.8078.79 headless：五页 × 1440/1024/736/375/320 × 浅/深色，
+  50 个布局组合无整页横向溢出、退出可见；小屏触屏模拟按钮 ≥44px，导航 tap 通过。
+  桌面键盘导航及 10 个 Run 失败事件键盘选择/焦点组合通过。
+- 320px 固定 v1（当前已 v2）、来源撤回、旧 Run 再点击、固定 URL 刷新登录、
+  重开 Run 拒绝旧正文、另一 key 拒绝和事件来源标签共 7 项通过。
+  375px 真实两页 PDF：第二页定位、不可核验页内文本提示、无假高亮、授权下载
+  SHA-256 与原始字节一致，全部通过。
+
+脚本/截图/临时 key 留在本地且不提交；未运行真实 Windows、实体触屏或屏幕阅读器。
+本节不宣称 #76 完整验收。远端 CI 以此次 merge 提交的实际 run 为准，不能沿用旧 HEAD 结果。
 
 ## 2026-11-17：#85 同步 main 与冲突整合（当前）
 
@@ -185,6 +243,62 @@ AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`；Chromium 156.0.8078.79�
 - `cargo fmt --check`、默认/no-default `cargo clippy --all-targets -- -D warnings`、
   `git diff --check` PASS。Windows 未跑；没有新 CI（未推送）。
 不推送、不创建 PR、不关闭 #76；生产计量、告警、PDF 页内文本及完整外部验收仍缺。
+
+## 2026-11-17：#76 第一批响应式与 PDF 来源验收（本地 checkpoint）
+
+基线 main `593e8fa71d7c354587cffdd1aae7c4b2e2d2a554`（#80 已合入）。
+修复真实浏览器复现的 panel grid 最小内容宽度：320px Run 目录原为 350px、
+320/375px 知识目录原为 430px；现在表格在容器内滚动，不撑开整页。
+小屏保留账户退出入口；粗指针（包括混合输入设备）链接与主题按钮达到 44px 高度。
+PDF 来源展示明确区分页码/页内字节范围、缺失的可核验页内文本、原始文件下载，
+不展示来源事件的空正文或将其伪装成页内高亮。没有修改 API、权限或存储。
+
+本地 Node 24.22.1 `npm --prefix ui run check`、`npm --prefix ui test` PASS（构建与 16 项）。
+唯一新增 DOM 子用例验证 PDF 页码、缺失文本说明、下载入口及不生成错误高亮。
+Rust 1.98.0 `cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、
+`cargo clippy --all-targets --no-default-features -- -D warnings`、`git diff --check` PASS。
+
+真实 localhost Node UI → Origence → AnySeek，fresh v4 合成数据、一次性 key、模型禁用；
+引擎 pin `d813b915b7f12e7139ca316adc15699688493196`。Playwright 驱动系统
+Chromium 156.0.8078.79（headless），不拦截 API。50 个五页布局组合：
+1440/1024/736/375/320 × 1000、浅/深色；各页 document.scrollWidth 等于 viewport，
+退出入口可见。736/375/320 使用触屏上下文与真实 tap；每页通过 CDP 重申触屏模拟，
+断言 any-pointer:coarse 为真后测量所有可见按钮高度 ≥44px（初版脚本中浏览器会重置
+输入模拟，不能把该次鼠标状态算作触屏结果）。桌面导航可用键盘 Enter；10 个 Run
+详情组合可用键盘选择真实准备失败事件且焦点 outline=solid，显示 server-observed/not-prepared。
+这不是物理触屏、屏幕阅读器或所有控件键盘顺序的完整验收。
+
+另一次独立 fresh v4 流程上传带真实 xref 的两页合成 PDF，等待真实入库完成；375px
+浏览器关键词检索第二页并点击核验：locator page=2、parser=pdf-oxide-0.3.78-v1，
+显示页内文本不可用，无 mark；点击授权下载，SHA-256 与上传 PDF 原始字节一致。
+截图留在本地验证产物，没有纳入仓库。实际来源事件 API 不返回提取后的页内文本，
+故页内文本高亮仍未完成；不能对拼接后的整份资产正文套用页内偏移。
+
+Checkpoint `78d39f57017860c0ceccb53b38b4f72cfe958def` 后另跑真实 320×1000 浏览器：
+Run 引用在当前资产 v2 时仍打开固定 v1；撤回来源立即清除正文；预先打开的旧 Run
+再次点击、固定 v1 URL 刷新后重新登录、重新打开原 Run 均拒绝旧内容；另一 logical key
+读取 Run 被拒绝。真实失败标签与客户端上报标签同时通过。所有 7 个断言通过。
+
+### #76 未勾选条目的证据分类
+
+| 条目 | 当前状态与边界 |
+| --- | --- |
+| 对象/列表/聚合/告警合同 | 部分：资产目录和当前 logical key Run 目录存在；聚合、告警与反查合同缺失 |
+| Memory 身份及状态查询 | 部分：现有目录/检索/显式身份入口和语义状态守卫；完整筛选与真实状态矩阵未验收 |
+| Knowledge 上传/旧版保留/来源/恢复 | 部分：当前真实 PDF 上传、任务发布、来源下载已验；全部格式与更新失败/恢复矩阵未重跑 |
+| expected_version/409/重复/任务/角色 | 部分：既有 DOM 覆盖重试身份，服务端合同存在；全角色真实浏览器并发/任务矩阵未验收 |
+| 固定版本/PDF/UTF-8 | 部分：上节已有真实固定 v1/撤回证据，本批 PDF 第二页与原始下载通过；UTF-8 中日韩/emoji 边界 UT 通过，PDF 可核验页内文本 API 缺失 |
+| 真实预算/Token/成本 | 部分：实际 UTF-8 字节预算已显示；没有可信 Token/价格合同，不推算费用 |
+| key/角色/撤回/过期引用 | 部分：上节真实另一 key 拒绝、固定引用撤回已验；全部角色/过期组合未完成 |
+| 键盘/触屏/主题/尺寸 | 部分：本批 50 布局、触屏按钮/导航和 10 Run 键盘组合通过；完整焦点顺序、辅助技术、实体设备未验收 |
+| 冻结真实客户端/企业任务 | 外部验收：未运行真实 Claude Code/Codex 客户端或企业任务 |
+
+下一批后端合同的源码核对：单次准备诊断最多记录 128 次查询观察并带省略数，不能
+当完整 Run 成功率/P95；没有可信生命周期、Token、价格、聚合窗口及告警状态合同。
+资产→Run 没有反向接口/索引，不能用跨 key 枚举或前端缓存补齐；需按 owner key 有界查询、
+精确版本与同快照来源复核，返回覆盖/游标。PDF 可核验页内文本需按不可变版本读取并
+验证页内 chunks 的连续 UTF-8 范围、parser 和来源权限，不能用当前解析器重解释旧偏移。
+这些合同未在本批臆造实现，#76 仍未完成。
 
 ## 2026-11-17：Run 事件来源标签与真实浏览器定向验收（本地）
 

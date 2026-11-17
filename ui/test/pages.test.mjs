@@ -159,6 +159,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         state: "accepted",
       });
     }
+    if (path.pathname === `/api/v1/events/${ids.source}`)
+      return response({ content: "source text is not verified PDF page text", file_id: ids.source });
     if (path.pathname === `/api/v1/assets/${ids.asset}/runs`) {
       assert.equal(path.searchParams.get("version"), "1");
       return response({items:[{run_id:ids.run,created_at_ms:1}],next_after:null,scope:"current_logical_key",coverage:"recorded_references"});
@@ -361,6 +363,18 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       assert.ok(document.body.textContent.includes("不是历史 Run 快照"));
     },
   );
+  await t.test("PDF source distinguishes page locator from unavailable page text", async () => {
+    const { sourcePreview } = await import("../dist/client/source.js");
+    const target = document.createElement("div");
+    await sourcePreview(target, ids.source, { page: 2, byte_start: 0, byte_end: 6 }, {
+      signal: new AbortController().signal, role: "admin", navigate() {},
+    });
+    assert.ok(target.textContent.includes("PDF 第 2 页"));
+    assert.ok(target.textContent.includes("未提供可核验的页内文本"));
+    assert.ok(target.textContent.includes("下载原始文件"));
+    assert.ok(!target.textContent.includes("source text is not verified"));
+    assert.equal(target.querySelector("mark"), null);
+  });
   await t.test("Run preparation links to the exact asset version", async () => {
     click("⑂调用链路");
     await wait(() => document.body.textContent.includes("fixture task"));
