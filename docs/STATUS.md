@@ -1,25 +1,31 @@
 # Origence · 当前进度
 
-实现以 main `43708c8`（已合入 [PR #72](https://github.com/TheLudlows/Origence/pull/72)）和
-[首版规划](design/agent-data-foundation.md) v0.8 为基线。本分支只面向新建数据库，
-不自动转换已有 schema 或旧检索索引。
+更新：2026-11-17。代码基线为 main
+[`0a1a56c`](https://github.com/TheLudlows/Origence/commit/0a1a56c1da74e78be0118782b04a3f5a37251060)
+（[PR #73](https://github.com/TheLudlows/Origence/pull/73)）；产品边界见[架构规划](design/agent-data-foundation.md)。
+**首版核心路径已实现，CI 尚有失败，真实双客户端和企业任务尚未完成验收。**
 
-| 范围 | 此分支实现 | 仍需验证或补齐 |
+| 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 检索 | AnySeek 全文和向量、同组发布、目录和模型 profile 绑定，移除 LanceDB 实现及依赖 | 真实 AnySeek 版本的向量/HTTP/MCP 合同及质量、容量 |
-| 私有会话 | 稳定逻辑 key 绑定服务端归档，显式归档/读取、授权轮换、撤销 | Claude Code 与 Codex 的真实同 key 跨客户端任务 |
-| Skill | 显式候选、选定审阅包、精确批准、不可变发布、在线授权下载和双客户端格式导出 | 自动提炼策略、原生受管加载与撤回、研发/业务真实试点 |
-| Run | 私有 Run、服务端上下文准备清单、客户端上报、Skill/结果/工件引用和采集缺口 | 两真实客户端的事件采集与端到端追溯；未上报项保持未知 |
+| 检索 | AnySeek 全文/向量、同组发布、模型与目录绑定；真实引擎合同回归通过 | 真实模型检索质量、容量与延迟验收 |
+| 私有会话 | 逻辑 key 绑定唯一平台归档，独立 key 隔离，授权轮换与撤销 | Claude Code / Codex 同 key 跨客户端真实任务验证 |
+| Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
+| Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 
-workspace 资产可供同空间有权限成员使用。原始会话、Run、未发布候选和私有来源不随
-发布共享；发布批准不授予工具执行权限。源码行为、HTTP 和本地夹具验证不等于真实客户端、
-模型效果或生产验收。准确结果见 [VALIDATION](VALIDATION.md)。
+## 当前阻塞与下一步
+
+1. 修复无默认特性构建：测试辅助模块无条件导入受特性控制的 `Service`。
+2. 修复 MCP 冒烟脚本：空参数 schema 缺少 `properties` 时触发 KeyError。
+3. 通过 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
+
+精确测试结果、CI 运行及诊断限制见 [VALIDATION](VALIDATION.md)。
+Skill 的 API 审批和目录导出不等于真实用户审阅、客户端加载或任务收益验收。
 
 ## 范围与证据
 
-首批可使用授权覆盖所有成员的同权限 workspace；企业身份与差异文档 ACL 未实现，
-不能混入权限不兼容资料。实现只面向新建库，保留同版本恢复和来源持久化，不覆盖或删除既有数据。
-[#64](https://github.com/TheLudlows/Origence/issues/64) /
-[#65](https://github.com/TheLudlows/Origence/issues/65) 的质量、负载及维护恢复结论未完成。
-当前实现见[平台设计](design/current-implementation.md)，操作见 [OPERATIONS](OPERATIONS.md)
-及[客户端接入](CLIENTS.md)。
+只面向新建数据库；同版本持久化、重启/重试与备份恢复仍是要求。
+原始会话、Run 和未发布候选按逻辑 key 私有隔离；workspace 成员身份不授予他人原始归档访问权。
+正式沉淀的长期资产供同 workspace 获授权成员复用，支持来源仍需有效；Skill 的
+私有会话依据可能限制其他 key 的审阅或分发，详见 [Run 契约](contracts/runs.md)。
+首批采用成员授权范围一致的 workspace；企业身份与差异文档 ACL 尚未实现。
+平台只提供归档/查询，不恢复客户端工作现场。Skill 发布不授予工具执行权限。
