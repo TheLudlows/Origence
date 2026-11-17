@@ -15,9 +15,25 @@ impl Service {
         auth: &AuthContext,
         input: EvidenceInput,
     ) -> Result<EvidenceBundle> {
-        // A bounded public future prevents native retrieval state from being
-        // duplicated on the stack of each embedding host's async call chain.
-        Box::pin(self.evidence_bundle_inner(auth, input)).await
+        self.observed_evidence_bundle(auth, input).await.0
+    }
+
+    pub(crate) async fn observed_evidence_bundle(
+        &self,
+        auth: &AuthContext,
+        input: EvidenceInput,
+    ) -> (
+        Result<EvidenceBundle>,
+        crate::retrieval_diagnostics::RetrievalDiagnostics,
+    ) {
+        let (mut result, observations) = crate::retrieval_diagnostics::capture(Box::pin(
+            self.evidence_bundle_inner(auth, input),
+        ))
+        .await;
+        if let Ok(bundle) = &mut result {
+            bundle.retrieval = observations.clone();
+        }
+        (result, observations)
     }
 
     async fn evidence_bundle_inner(
@@ -53,6 +69,7 @@ impl Service {
             )
             .await?;
         let mut bundle = EvidenceBundle {
+            retrieval: Default::default(),
             tenant_id: auth.tenant_id, workspace_id: auth.workspace_id,
             policy: CONTEXT_POLICY.into(), validity: "passed_current_visibility_snapshot_not_factual_truth".into(),
             conflict_assessment: "explicit_single_value_identity_only_within_recalled_candidates; general_prose_not_assessed".into(),
@@ -82,15 +99,17 @@ impl Service {
             };
             match asset_route(route.route) {
                 Some(kind) => {
-                    let found = self
-                        .context_candidates(
+                    let found = crate::retrieval_diagnostics::in_route(
+                        route.route,
+                        self.context_candidates(
                             auth,
                             &query,
                             kind,
                             input.memory_identity.as_ref(),
                             route.limit,
-                        )
-                        .await?;
+                        ),
+                    )
+                    .await?;
                     accounting.candidates = found.candidates.len();
                     assets.extend(found.candidates);
                     ranked_native.extend(found.ranked_native);

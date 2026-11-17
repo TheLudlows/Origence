@@ -43,6 +43,33 @@ Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可�
 当前由调用方提交候选，不自动读取原生客户端会话或自动发布。包格式和边界见
 [Skill 契约](contracts/skills.md)。
 
+## 检索诊断
+
+Search、Resolve 与 EvidenceBundle 返回 `retrieval:{requests,omitted_requests}`。
+每条是一次真实 AnySeek `/query` HTTP 尝试，包含 Origence/后端请求标识、路由、
+实际模式（browse/lexical/vector/hybrid）、客户端往返微秒、HTTP 状态、安全错误码、
+返回候选数量及可获得的后端诊断。browse 包括候选预检，不能当作语义召回。
+
+后端诊断格式为 v2，含服务版本、分析配置摘要、embedding 空间 SHA256（未配置为 null）、
+查询耗时与 `visible_seq`，以及查询后另行采样的
+committed/lexical/vector 进度、失败与恢复标志。配置还记录核对过的容量限制和 embedding
+空间摘要。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
+序号属于 AnySeek collection，不是 workspace 序号、Turso 版本或跨存储快照。
+客户端往返和服务端耗时边界不同，均不证明客户端消费或模型实际使用。
+
+每次调用只保留最近 128 次尝试，较早省略数量显式返回。诊断不保存查询原文、向量、
+过滤值、正文、URL、密钥或原始后端错误；未知/未收到字段保持 null。畸形或关联不符的
+后端诊断拒绝使用。上下文内容与引用的确定性不包含各次调用变化的标识和耗时。
+
+`POST /v1/runs/{id}/context` 将成功诊断与精确 bundle 摘要一起写入私有 Run；
+通过认证、归属和输入校验后发生的准备失败记录 `context_preparation_failed`，并标为
+server_observed。首次成功时另存私有上下文快照；相同请求重放先检查事件和请求摘要，
+复核当前权限、原始引用及私有会话有效性后返回原 bundle/回执，不再调用模型或 AnySeek，
+后端暂时不可用或语料更新不会改写原结果。快照不在分页 Run trace 中重复返回。
+请求摘要改变返回冲突；来源撤回或权限失效仍阻断重放。
+失败事件同样不可覆盖，恢复后新的准备尝试使用新的 event_id。普通 MCP/Search 请求
+不会自动加入某个 Run，仍需显式调用准备接口；未采集活动保持未知。
+
 ## AnySeek 统一检索
 
 全文、向量和一跳图候选使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词
@@ -84,6 +111,23 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 原始文件和任务可能涉及未发布数据，reader 不能读取。记忆与 capture 由 writer 授权直接发布，发布任务提交时重新核验权限与来源。
 
 ## 接口
+
+### 管理界面只读目录
+
+- `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`：reader 以上，
+  workspace 来自认证；按资产 UUID 升序扫描当前已发布、未删除的候选，逐条复用
+  普通资产读取的完整来源/语义/可见性检查。返回 `{items,next_after}`，items 仅为
+  资产元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
+- `GET /v1/runs?limit=25&after=<UUID>`：reader 以上，只返回当前逻辑 key 的 Run
+  ID、脱敏 summary 与创建时间，不授予管理员读取其他 key 私有记录的权限。
+  获授权的凭据轮换延续逻辑身份；响应含 `scope:"current_logical_key"`。
+
+两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
+按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
+资产页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
+分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
+
+Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打开数据库或执行 CLI。
 
 | 方法和路径 | 请求 / 结果 |
 | --- | --- |

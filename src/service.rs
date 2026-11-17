@@ -21,6 +21,7 @@ use std::{
 };
 use uuid::Uuid;
 
+mod catalog;
 mod workspaces;
 
 #[derive(Clone)]
@@ -74,7 +75,12 @@ impl Service {
             LocalBlobStore::open(dir.join("blobs")).await?,
         ));
         engine.check().await?;
-        crate::storage::retrieval_store::binding::commit(&dir, binding).await?;
+        crate::storage::retrieval_store::binding::commit(
+            &dir,
+            binding,
+            engine.vector().checked_analysis_fingerprint()?,
+        )
+        .await?;
         let service = Self {
             engine,
             models,

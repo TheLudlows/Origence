@@ -130,6 +130,10 @@ async fn job(http: &reqwest::Client, base: &str, token: &str, job: Uuid, state: 
 }
 async fn start(dir: &std::path::Path, model: &str) -> (Child, String) {
     let mut c = command(dir);
+    crate::support::fixture(dir, Some(3)).bind_profile(Some(format!(
+        "{}:stub:3:v1",
+        origence::storage::hash(model)
+    )));
     crate::support::command_env(&mut c, dir, Some(3));
     c.env("OC_ENABLE_MODELS", "true")
         .env("OC_MODEL_BASE_URL", model)
@@ -1018,7 +1022,10 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let via_mcp = rpc(&mut input, &mut output, bundle_rpc.clone()).await;
     let via_mcp: Value =
         serde_json::from_str(via_mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(direct_bundle, via_mcp);
+    assert_eq!(
+        crate::support::without_retrieval_observations(&direct_bundle),
+        crate::support::without_retrieval_observations(&via_mcp)
+    );
     assert!(!via_mcp["items"].as_array().unwrap().is_empty());
     let get = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context_get","arguments":{"asset_id":published["asset_id"]}}});
     let result = rpc(&mut input, &mut output, get.clone()).await;

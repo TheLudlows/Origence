@@ -71,7 +71,12 @@ impl Service {
     pub async fn search(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {
         // Native query futures are large. Keep that state on the heap rather
         // than embedding it in every host/router/helper future awaiting us.
-        Box::pin(self.search_inner(a, input)).await
+        let (result, observations) =
+            crate::retrieval_diagnostics::capture(Box::pin(self.search_inner(a, input))).await;
+        result.map(|mut response| {
+            response["retrieval"] = json!(observations);
+            response
+        })
     }
 
     async fn search_inner(&self, a: &AuthContext, input: SearchInput) -> Result<Value> {

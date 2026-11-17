@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 pub(super) fn routes() -> Router<Service> {
     Router::new()
-        .route("/v1/runs", post(create_run))
+        .route("/v1/runs", post(create_run).get(list_runs))
         .route("/v1/runs/{id}", get(run_trace))
         .route("/v1/runs/{id}/prefix", get(run_prefix))
         .route("/v1/runs/{id}/events", post(append_run_event))
@@ -57,6 +57,29 @@ async fn create_run(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunPage {
+    after: Option<Uuid>,
+    limit: Option<usize>,
+}
+
+async fn list_runs(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Query(page): Query<RunPage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        service
+            .list_runs(
+                &auth(&service, &headers).await?,
+                page.after.unwrap_or_default(),
+                page.limit.unwrap_or(50),
+            )
+            .await?,
+    ))
+}
+
 async fn append_run_event(
     State(service): State<Service>,
     headers: HeaderMap,
@@ -89,12 +112,55 @@ async fn prepare_run_context(
     let caller = auth(&service, &headers).await?;
     caller.require("write")?;
     service.check_run_owner(&caller, run).await?;
-    let bundle = service.evidence_bundle(&caller, input.context).await?;
+    input
+        .context
+        .validate()
+        .map_err(|e| AppError::Invalid(e.into()))?;
+    let request_digest = crate::storage::hash(
+        serde_json::to_vec(&input.context)
+            .map_err(|_| AppError::Invalid("invalid context request".into()))?,
+    );
+    if let Some(prepared) = service
+        .replay_run_context_prepared(&caller, run, input.event_id, &request_digest)
+        .await?
+    {
+        return prepared_context_response(prepared);
+    }
+    let (result, observations) = service
+        .observed_evidence_bundle(&caller, input.context)
+        .await;
+    let bundle = match result {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            if let Some(prepared) = service
+                .record_run_context_failed(
+                    &caller,
+                    run,
+                    input.event_id,
+                    &request_digest,
+                    error.code(),
+                    &observations,
+                )
+                .await?
+            {
+                return prepared_context_response(prepared);
+            }
+            return Err(error);
+        }
+    };
     let preparation = service
-        .record_run_context_prepared(&caller, run, input.event_id, &bundle)
+        .record_run_context_prepared(&caller, run, input.event_id, &request_digest, &bundle)
         .await?;
+    prepared_context_response(preparation)
+}
+
+fn prepared_context_response(mut preparation: Value) -> Result<Json<Value>> {
+    let bundle = preparation
+        .as_object_mut()
+        .and_then(|v| v.remove("recorded_bundle"))
+        .ok_or_else(|| AppError::Unavailable("invalid prepared context snapshot".into()))?;
     Ok(Json(
-        serde_json::json!({"bundle": bundle, "preparation": preparation}),
+        serde_json::json!({"bundle":bundle,"preparation":preparation}),
     ))
 }
 

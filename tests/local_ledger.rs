@@ -17,6 +17,7 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let sqlite = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
     let remote = crate::support::AnySeekFixture::start(Some(2));
+    remote.bind_profile(Some("p:v1".into()));
     let vector =
         AnySeekFullTextStore::new(remote.config().with_embedding("p:v1".into(), 2).unwrap())
             .unwrap();

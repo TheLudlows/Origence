@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
@@ -51,7 +52,7 @@ pub struct AnySeekConfig {
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-search-backend-v3","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection,"embedding":self.embedding})
+        json!({"format":"origence-search-backend-v4","backend":"anyseek","endpoint":self.base.as_str(),"collection":self.collection,"embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
@@ -137,6 +138,7 @@ impl AnySeekConfig {
 pub struct AnySeekFullTextStore {
     config: AnySeekConfig,
     http: reqwest::Client,
+    checked_config: OnceLock<crate::retrieval_diagnostics::CheckedConfig>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -258,6 +260,13 @@ fn decode_record(value: &Value, scope: Scope) -> StorageResult<(String, Document
 }
 
 impl AnySeekFullTextStore {
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn checked_analysis_fingerprint(&self) -> StorageResult<&str> {
+        self.checked_config
+            .get()
+            .map(|c| c.analysis_fingerprint.as_str())
+            .ok_or_else(unavailable)
+    }
     /// Construct a bounded client. The collection must be provisioned separately.
     pub fn new(config: AnySeekConfig) -> StorageResult<Self> {
         let http = reqwest::Client::builder()
@@ -265,7 +274,11 @@ impl AnySeekFullTextStore {
             .timeout(Duration::from_secs(30))
             .build()
             .map_err(|_| unavailable())?;
-        Ok(Self { config, http })
+        Ok(Self {
+            config,
+            http,
+            checked_config: OnceLock::new(),
+        })
     }
 
     /// Exact collection configuration for a fresh dedicated lexical projection.
@@ -301,6 +314,52 @@ impl AnySeekFullTextStore {
         suffix: &str,
         body: Option<Value>,
     ) -> StorageResult<(StatusCode, Value)> {
+        let mode = body
+            .as_ref()
+            .map(|body| {
+                if body.get("query_vector").is_some() {
+                    "vector"
+                } else if body["query"].as_str().is_some_and(|s| !s.is_empty()) {
+                    "lexical"
+                } else {
+                    "browse"
+                }
+            })
+            .unwrap_or("browse");
+        let mut observation = (suffix == "/query").then(|| {
+            crate::retrieval_diagnostics::QueryObservation::new(
+                mode,
+                self.checked_config.get().cloned(),
+            )
+        });
+        let started = std::time::Instant::now();
+        let result = self
+            .request_inner(method, suffix, body, &mut observation)
+            .await;
+        if let Some(mut entry) = observation {
+            entry.elapsed(started);
+            if let Err(error) = &result
+                && entry.outcome == "received"
+            {
+                entry.outcome = match error {
+                    StorageError::TransientUnavailable(_) => "transport_unavailable",
+                    StorageError::Conflict(_) => "invalid_backend_diagnostics",
+                    _ => "invalid_response",
+                }
+                .into();
+            }
+            crate::retrieval_diagnostics::record(entry);
+        }
+        result
+    }
+
+    async fn request_inner(
+        &self,
+        method: Method,
+        suffix: &str,
+        body: Option<Value>,
+        observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
+    ) -> StorageResult<(StatusCode, Value)> {
         let url = self
             .config
             .base
@@ -325,8 +384,31 @@ impl AnySeekFullTextStore {
                 .header("Content-Type", "application/json")
                 .body(bytes);
         }
+        if let Some(entry) = observation {
+            entry.outcome = "transport_unavailable".into();
+        }
         let mut response = request.send().await.map_err(|_| transient())?;
         let status = response.status();
+        if let Some(entry) = observation {
+            entry.http_status = Some(status.as_u16());
+            entry.backend_request_id = response
+                .headers()
+                .get("x-anyseek-request-id")
+                .and_then(|s| s.to_str().ok())
+                .filter(|s| crate::retrieval_diagnostics::request_id(s))
+                .map(str::to_owned);
+            entry.backend_code = response
+                .headers()
+                .get("x-anyseek-error-code")
+                .and_then(|s| s.to_str().ok())
+                .and_then(crate::retrieval_diagnostics::error_code);
+            entry.outcome = if status.is_success() {
+                "received"
+            } else {
+                "http_error"
+            }
+            .into();
+        }
         if status.is_server_error()
             || status == StatusCode::TOO_MANY_REQUESTS
             || status == StatusCode::REQUEST_TIMEOUT
@@ -344,10 +426,29 @@ impl AnySeekFullTextStore {
             }
             bytes.extend_from_slice(&part);
         }
-        let value = tokio::task::spawn_blocking(move || serde_json::from_slice(&bytes))
+        let value: Value = tokio::task::spawn_blocking(move || serde_json::from_slice(&bytes))
             .await
             .map_err(|_| unavailable())?
             .map_err(|_| unavailable())?;
+        if let Some(entry) = observation {
+            let backend: crate::retrieval_diagnostics::BackendQuery =
+                serde_json::from_value(value["diagnostics"].clone()).map_err(|_| unavailable())?;
+            if !backend.valid(
+                &entry.mode,
+                entry.backend_request_id.as_deref(),
+                entry.checked_config.as_ref(),
+            ) {
+                entry.outcome = "invalid_backend_diagnostics".into();
+                return Err(unavailable());
+            }
+            entry.visible_seq = value["visible_seq"].as_u64();
+            entry.returned_candidates = value["hits"].as_array().map(Vec::len);
+            if entry.visible_seq.is_none() {
+                return Err(unavailable());
+            }
+            entry.backend = Some(backend);
+            entry.outcome = "response_received_not_authority_verified".into();
+        }
         Ok((status, value))
     }
 
@@ -370,10 +471,44 @@ impl AnySeekFullTextStore {
                     .embedding
                     .as_ref()
                     .map_or(Value::Null, |(_, d)| json!(d))
+            || info["analysis"]["format"] != "native-package-analysis:v1"
+            || info["analysis"]["tokenizer"] != "TantivySimpleV1"
+            || info["analysis"]["tokenizer_identity"]
+                != "tantivy-simple-v1;tantivy=0.27.0;lowercase;no-stopwords;no-length-filter"
+            || info["analysis"]["stop_words"] != "None"
+            || info["analysis"]["stop_words_fingerprint"] != hash(b"\"None\"")
+            || info["analysis"]["fingerprint"]
+                .as_str()
+                .is_none_or(|s| !crate::retrieval_diagnostics::digest(s))
+            || info["version"]
+                .as_str()
+                .is_none_or(|s| !crate::retrieval_diagnostics::version(s))
+            || info["limits"]["max_candidates"]
+                .as_u64()
+                .is_none_or(|n| n == 0)
+            || info["limits"]["max_records"]
+                .as_u64()
+                .is_none_or(|n| n == 0)
+            || info["embedding_space_id"]
+                != self
+                    .config
+                    .embedding
+                    .as_ref()
+                    .map_or(Value::Null, |(p, _)| json!(p))
         {
             return Err(StorageError::Conflict(
                 "incompatible AnySeek retrieval collection".into(),
             ));
+        }
+        let checked = crate::retrieval_diagnostics::CheckedConfig {
+            engine_version: info["version"].as_str().unwrap().to_owned(),
+            analysis_fingerprint: info["analysis"]["fingerprint"].as_str().unwrap().to_owned(),
+            embedding_space_sha256: self.config.embedding.as_ref().map(|(p, _)| hash(p)),
+            max_candidates: info["limits"]["max_candidates"].as_u64().unwrap(),
+            max_records: info["limits"]["max_records"].as_u64().unwrap(),
+        };
+        if self.checked_config.get_or_init(|| checked.clone()) != &checked {
+            return Err(inconsistent());
         }
         Ok(())
     }

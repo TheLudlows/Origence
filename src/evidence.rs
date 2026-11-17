@@ -225,6 +225,8 @@ pub struct RouteAccounting {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvidenceBundle {
+    #[serde(default)]
+    pub retrieval: crate::retrieval_diagnostics::RetrievalDiagnostics,
     pub tenant_id: Uuid,
     pub workspace_id: Uuid,
     pub policy: String,
@@ -450,6 +452,7 @@ mod tests {
     }
     fn bundle(budget: usize) -> EvidenceBundle {
         EvidenceBundle {
+            retrieval: Default::default(),
             tenant_id: Uuid::nil(),
             workspace_id: Uuid::nil(),
             policy: CONTEXT_POLICY.into(),
