@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::native_turso::Pool;
+use crate::storage::sqlite_db::Pool;
 
 async fn database() -> (tempfile::TempDir, Pool) {
     let dir = tempfile::tempdir().unwrap();

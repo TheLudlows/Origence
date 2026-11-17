@@ -5,14 +5,14 @@ use crate::memory_identity::MemoryIdentity;
 /// Decode only at the caller's existing visibility/route boundary. The schema
 /// enforces the pair and memory kind; recheck them for corrupt/custom fixtures.
 pub(super) fn identity_body(
-    row: &native_turso::Row,
+    row: &sqlite_db::Row,
 ) -> StorageResult<Option<(String, MemoryIdentity)>> {
-    let key: Option<String> = row.try_get("identity_key").map_err(turso_err)?;
-    let body: Option<String> = row.try_get("identity_json").map_err(turso_err)?;
+    let key: Option<String> = row.try_get("identity_key").map_err(sqlite_err)?;
+    let body: Option<String> = row.try_get("identity_json").map_err(sqlite_err)?;
     match (key, body) {
         (None, None) => Ok(None),
         (Some(key), Some(body)) => {
-            if row.try_get::<String>("kind").map_err(turso_err)? != "memory" {
+            if row.try_get::<String>("kind").map_err(sqlite_err)? != "memory" {
                 return Err(StorageError::Unavailable(
                     "memory identity binding mismatch".into(),
                 ));
@@ -29,7 +29,7 @@ pub(super) fn identity_body(
 
 pub(super) fn checked_identity(
     scope: Scope,
-    row: &native_turso::Row,
+    row: &sqlite_db::Row,
 ) -> StorageResult<Option<MemoryIdentity>> {
     identity_body(row)?
         .map(|(key, identity)| {
@@ -46,12 +46,12 @@ pub(super) fn checked_identity(
         .transpose()
 }
 
-impl TursoTx {
+impl SqliteTx {
     pub(super) async fn identity_for_asset(
         &mut self,
         asset: Uuid,
     ) -> StorageResult<Option<MemoryIdentity>> {
-        let row = native_turso::query(
+        let row = sqlite_db::query(
             "SELECT kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
@@ -59,7 +59,7 @@ impl TursoTx {
         .bind(asset)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         row.map(|row| checked_identity(self.scope, &row))
             .transpose()
             .map(Option::flatten)
@@ -69,7 +69,7 @@ impl TursoTx {
         &mut self,
         fact_key: &str,
     ) -> StorageResult<(Uuid, Option<i32>)> {
-        let existing = native_turso::query(
+        let existing = sqlite_db::query(
             "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets \
              WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?",
         )
@@ -78,11 +78,11 @@ impl TursoTx {
         .bind(fact_key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if let Some(row) = existing {
-            let id = row.try_get("id").map_err(turso_err)?;
-            let version = row.try_get("current_version").map_err(turso_err)?;
-            let deleted: bool = row.try_get("deleted").map_err(turso_err)?;
+            let id = row.try_get("id").map_err(sqlite_err)?;
+            let version = row.try_get("current_version").map_err(sqlite_err)?;
+            let deleted: bool = row.try_get("deleted").map_err(sqlite_err)?;
             // This endpoint never renders or reuses structured identities. Keep
             // its established conflict before tombstone/hash checks.
             if identity_body(&row)?.is_some() {
@@ -98,7 +98,7 @@ impl TursoTx {
             return Ok((id, version));
         }
         let id = Uuid::new_v4();
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_assets(tenant_id, workspace_id, id, kind, title, fact_key, created_at) \
              VALUES (?, ?, ?, 'memory', ?, ?, ?)",
         )
@@ -110,7 +110,7 @@ impl TursoTx {
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok((id, None))
     }
 
@@ -121,7 +121,7 @@ impl TursoTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let row = native_turso::query(
+        let row = sqlite_db::query(
             "SELECT id,kind,identity_key,identity_json FROM oc_assets \
              WHERE tenant_id=? AND workspace_id=? AND identity_key=?",
         )
@@ -130,9 +130,9 @@ impl TursoTx {
         .bind(key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?
+        .map_err(sqlite_err)?
         .ok_or(StorageError::NotFound)?;
-        let asset = row.try_get("id").map_err(turso_err)?;
+        let asset = row.try_get("id").map_err(sqlite_err)?;
         if checked_identity(self.scope, &row)?.as_ref() != Some(identity) {
             return Err(StorageError::Unavailable(
                 "memory identity binding mismatch".into(),
@@ -148,10 +148,9 @@ impl TursoTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        // Exact schema admission guarantees this scoped identity index. Turso
-        // 0.8.2 otherwise chooses the fact-slot scope prefix for this query.
+        // Exact schema admission guarantees this scoped identity index.
         // State the partial-index predicate explicitly; canonical keys are non-null.
-        let existing = native_turso::query(
+        let existing = sqlite_db::query(
             "SELECT id,current_version,deleted,kind,identity_key,identity_json FROM oc_assets \
              INDEXED BY oc_memory_identity_slot WHERE tenant_id=? AND workspace_id=? \
              AND identity_key=? AND kind='memory' AND identity_key IS NOT NULL",
@@ -161,11 +160,11 @@ impl TursoTx {
         .bind(&key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if let Some(row) = existing {
-            let asset = row.try_get("id").map_err(turso_err)?;
-            let version = row.try_get("current_version").map_err(turso_err)?;
-            let deleted: bool = row.try_get("deleted").map_err(turso_err)?;
+            let asset = row.try_get("id").map_err(sqlite_err)?;
+            let version = row.try_get("current_version").map_err(sqlite_err)?;
+            let deleted: bool = row.try_get("deleted").map_err(sqlite_err)?;
             // The requested identity is validated and selected by its canonical
             // key. Comparing the body establishes key/body agreement while
             // preserving Conflict before the tombstone check.
@@ -181,7 +180,7 @@ impl TursoTx {
             }
             return Ok((asset, version));
         }
-        let collision: bool = native_turso::query_scalar(
+        let collision: bool = sqlite_db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND kind='memory' AND fact_key=?)",
         )
         .bind(self.scope.tenant_id)
@@ -189,7 +188,7 @@ impl TursoTx {
         .bind(&key)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if collision {
             return Err(StorageError::Conflict(
                 "memory identity conflicts with a legacy fact slot".into(),
@@ -198,7 +197,7 @@ impl TursoTx {
         let asset = Uuid::new_v4();
         let encoded = serde_json::to_string(identity)
             .map_err(|_| StorageError::Unavailable("memory identity encoding failed".into()))?;
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,fact_key,created_at,identity_key,identity_json) VALUES (?,?,?,'memory',?,?,?,?,?)",
         )
         .bind(self.scope.tenant_id)
@@ -211,19 +210,19 @@ impl TursoTx {
         .bind(encoded)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok((asset, None))
     }
 }
 
 #[cfg(feature = "local-storage")]
-impl TursoTx {
+impl SqliteTx {
     /// Raw asset identity columns, including unidentified assets. No current or
     /// semantic-status guard: consumers decode after their route filtering.
     pub(super) async fn identity_rows_for_assets(
         &mut self,
         assets: &[Uuid],
-    ) -> StorageResult<HashMap<Uuid, native_turso::Row>> {
+    ) -> StorageResult<HashMap<Uuid, sqlite_db::Row>> {
         if assets.is_empty() {
             return Ok(HashMap::new());
         }
@@ -237,7 +236,7 @@ impl TursoTx {
         )
         .await?
         .into_iter()
-        .map(|row| Ok((row.try_get("id").map_err(turso_err)?, row)))
+        .map(|row| Ok((row.try_get("id").map_err(sqlite_err)?, row)))
         .collect()
     }
 }

@@ -11,11 +11,11 @@ const TURN_BODIES: &str = "SELECT content,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2
 
 #[derive(Default)]
 struct TurnRow {
-    turn: Option<native_turso::Row>,
-    event: Option<native_turso::Row>,
-    evidence: Vec<native_turso::Row>,
-    body: Option<native_turso::Row>,
-    date: Option<native_turso::Row>,
+    turn: Option<sqlite_db::Row>,
+    event: Option<sqlite_db::Row>,
+    evidence: Vec<sqlite_db::Row>,
+    body: Option<sqlite_db::Row>,
+    date: Option<sqlite_db::Row>,
 }
 
 pub(in crate::storage::sqlite) struct TurnReadBatch {
@@ -27,7 +27,7 @@ pub(in crate::storage::sqlite) struct TurnReadBatch {
     archive_indices: Vec<Vec<usize>>,
 }
 
-impl TursoTx {
+impl SqliteTx {
     pub(in crate::storage::sqlite) async fn context_turn_metadata(
         &mut self,
         keys: &[(Uuid, Uuid)],
@@ -57,7 +57,7 @@ impl TursoTx {
             .iter()
             .map(|row| {
                 Ok(vec![match &row.turn {
-                    Some(row) => row.try_get("source_event_id").map_err(turso_err)?,
+                    Some(row) => row.try_get("source_event_id").map_err(sqlite_err)?,
                     None => association_key(None::<Uuid>)?,
                 }])
             })
@@ -102,7 +102,7 @@ impl TursoTx {
             for (index, row) in rows {
                 groups.insert(index / read_model::ASSOCIATION_KEYS);
                 if batch.rows[index].evidence.len() < 65 {
-                    cursors[index] = Some(row.try_get("ordinal").map_err(turso_err)?);
+                    cursors[index] = Some(row.try_get("ordinal").map_err(sqlite_err)?);
                     batch.rows[index].evidence.push(row);
                 }
                 if batch.rows[index].evidence.len() == 65 {
@@ -155,7 +155,7 @@ impl TursoTx {
             .iter()
             .map(|row| {
                 Ok(vec![match &row.turn {
-                    Some(row) => row.try_get("source_event_id").map_err(turso_err)?,
+                    Some(row) => row.try_get("source_event_id").map_err(sqlite_err)?,
                     None => association_key(None::<Uuid>)?,
                 }])
             })
@@ -182,12 +182,12 @@ impl TursoTx {
             .as_ref()
             .ok_or(StorageError::NotFound)?
             .try_get("source_event_id")
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         self.context_turn_evidence_rows(batch).await?;
         let texts: Vec<String> = batch.rows[index]
             .evidence
             .iter()
-            .map(|row| row.try_get("evidence").map_err(turso_err))
+            .map(|row| row.try_get("evidence").map_err(sqlite_err))
             .collect::<StorageResult<_>>()?;
         if texts.len() > crate::session::MAX_USED_EVIDENCE {
             return Ok(None);
@@ -228,13 +228,13 @@ impl TursoTx {
         let Some(row) = &batch.rows[index].body else {
             return Ok(None);
         };
-        let body: String = row.try_get("content").map_err(turso_err)?;
+        let body: String = row.try_get("content").map_err(sqlite_err)?;
         let created_at: i64 = batch.rows[index]
             .date
             .as_ref()
             .ok_or(StorageError::NotFound)?
             .try_get("created_at")
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         #[derive(serde::Deserialize)]
         struct Body {
             question: String,

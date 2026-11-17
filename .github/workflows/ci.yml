@@ -49,13 +49,13 @@ jobs:
           cache-on-failure: true
       # Check all Origence targets with the declared formatter.
       - run: cargo fmt --package origence -- --check
-      # Check the Turso authority layer independently of host features.
+      # Check the SQLite authority layer independently of host features.
       - name: Authority-only Clippy
         run: cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
-      - name: Confirm every feature set excludes the retired Lance backend
+      - name: Confirm every feature set excludes retired storage engines
         run: |
           cargo tree --locked --all-features --edges normal,build --prefix none > /tmp/authority-dependencies.txt
-          if grep -Eq '^(lance(-[^ ]+)?|lancedb|protobuf-src) v' /tmp/authority-dependencies.txt; then
+          if grep -Eq '^(turso(-[^ ]+|_[^ ]+)?|libsql(-[^ ]+|_[^ ]+)?|limbo(-[^ ]+|_[^ ]+)?|lance(-[^ ]+)?|lancedb|protobuf-src) v' /tmp/authority-dependencies.txt; then
             cat /tmp/authority-dependencies.txt
             exit 1
           fi
@@ -89,7 +89,7 @@ jobs:
       # One complete default-feature run includes the former focused filters.
       - run: cargo test --locked -j 2 --no-fail-fast
       - name: Debug build
-        # Keep a production build: tests also enable dev-dependency features.
+        # Smoke tests exercise the normal service build.
         run: cargo build --locked -j 2
       - name: Fetch the pinned real AnySeek fixture
         uses: actions/checkout@v4
@@ -142,8 +142,7 @@ jobs:
           path: ${{ runner.temp }}/origence-keyword-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: ignore
   windows:
-    # Keep the established main-only Windows policy.
-    if: github.ref == 'refs/heads/main'
+    # SQLite replacement must verify native locking and recovery on both OSes.
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
@@ -154,8 +153,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          # Do not restore the retired native backend dependency cache.
-          prefix-key: v2-anyseek
+          prefix-key: v3-sqlite
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       - name: Build tools, lint, and all local lifecycle tests

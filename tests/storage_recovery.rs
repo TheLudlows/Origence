@@ -1,7 +1,7 @@
 //! Ledger reconcile tests (M3): stuck pending and due retry_wait converge.
 
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, SourceVersion,
     sqlite::SqliteStore,
@@ -44,7 +44,6 @@ fn entry(scope: Scope, source_id: uuid::Uuid, artifact_id: uuid::Uuid) -> Ledger
             generation: 1,
         },
         artifact_type: "chunk".into(),
-        idempotency_key: "k".into(),
     }
 }
 

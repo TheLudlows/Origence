@@ -1,7 +1,7 @@
 //! SQLite adapter tests (M2): privileged ops, scoped transactions, idempotency
 //! and the self-polled queue against a real database file in a temp dir.
 
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, IssuedKey, JobFinish, JobQueue, Lifecycle, Permission,
     RelationalStore, Scope, StorageError, WorkItem, sqlite::SqliteStore,
@@ -236,7 +236,7 @@ async fn rollback_discards_writes() {
             .create_event("knowledge", "source bytes", None)
             .await
             .unwrap();
-        tx.insert_version(asset, 1, "source bytes", "hash", source, None, None)
+        tx.insert_version(asset, 1, "source bytes", source, None, None)
             .await
             .unwrap();
         tx.update_asset_version(asset, 1, None).await.unwrap();
@@ -418,4 +418,70 @@ async fn abandoned_processing_job_is_recovered() {
     assert_eq!(recovered.job_id, job_id);
     assert_eq!(recovered.run_token, 2);
     store.settle(recovered, JobFinish::Completed).await.unwrap();
+}
+
+#[tokio::test]
+async fn sqlite_file_interoperability_and_derived_version_hash_survive_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("authority.db");
+    let store = SqliteStore::open(&path).await.unwrap();
+    let p = provision(&store, "minimal metadata").await;
+    let content = "中文、emoji 🌍 与 e\u{301} 保留原始字节。";
+    let mut tx = store.begin(p.auth.clone()).await.unwrap();
+    let source = tx.create_event("memory", content, None).await.unwrap();
+    let (asset, _) = tx.slot("fact").await.unwrap();
+    tx.insert_version(asset, 1, content, source, None, None)
+        .await
+        .unwrap();
+    tx.update_asset_version(asset, 1, None).await.unwrap();
+    tx.commit().await.unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
+
+    // A caller using SQLite directly can read/check the complete authority file.
+    let raw =
+        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    assert_eq!(
+        raw.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+            .unwrap(),
+        "ok"
+    );
+    assert!(
+        raw.prepare("PRAGMA foreign_key_check")
+            .unwrap()
+            .query([])
+            .unwrap()
+            .next()
+            .unwrap()
+            .is_none()
+    );
+    for (table, column) in [
+        ("oc_versions", "content_hash"),
+        ("oc_artifact_ledger", "idempotency_key"),
+    ] {
+        let fields = raw
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(!fields.iter().any(|field| field == column));
+    }
+    assert_eq!(
+        raw.query_row("SELECT engine FROM oc_storage_format", [], |r| r
+            .get::<_, String>(0))
+            .unwrap(),
+        "origence-sqlite-v1"
+    );
+    drop(raw);
+    let store = SqliteStore::open(&path).await.unwrap();
+    let auth = store.authenticate(&p.key.token).await.unwrap();
+    let mut tx = store.begin_read(auth).await.unwrap();
+    let value = tx.asset_view(asset, Some(1)).await.unwrap();
+    assert_eq!(value["content"], content);
+    assert_eq!(value["content_hash"], origence::storage::hash(content));
+    tx.commit().await.unwrap();
+    store.shutdown().await.unwrap();
 }

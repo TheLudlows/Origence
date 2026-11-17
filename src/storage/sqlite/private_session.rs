@@ -1,25 +1,25 @@
 //! Private archives are bound to logical keys, not caller-selected session IDs.
 use super::*;
 
-impl TursoTx {
+impl SqliteTx {
     /// Stable identity survives only an explicitly authorized credential rotation.
     pub async fn private_key_id(&mut self) -> StorageResult<Uuid> {
         self.check_permission(Permission::Read).await?;
-        native_turso::query_scalar(
+        sqlite_db::query_scalar(
             "SELECT logical_key_id FROM oc_api_keys WHERE tenant_id=? AND id=? AND NOT revoked",
         )
         .bind(self.scope.tenant_id)
         .bind(self.principal_id)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?
+        .map_err(sqlite_err)?
         .ok_or(StorageError::Forbidden)
     }
     /// Read the authenticated key's binding without creating a session.
     pub async fn bound_private_session(&mut self) -> StorageResult<Option<Uuid>> {
         let owner = self.private_key_id().await?;
-        native_turso::query_scalar("SELECT session_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND logical_key_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).fetch_optional(&mut *self.tx).await.map_err(turso_err)
+        sqlite_db::query_scalar("SELECT session_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND logical_key_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
     }
     /// Resolve or create the server-assigned session in a write transaction.
     pub async fn private_session_id(&mut self) -> StorageResult<Uuid> {
@@ -28,8 +28,8 @@ impl TursoTx {
         }
         let owner = self.private_key_id().await?;
         let id = Uuid::new_v4();
-        native_turso::query("INSERT INTO oc_key_sessions(tenant_id,workspace_id,logical_key_id,session_id) VALUES(?,?,?,?)")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).bind(id).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("INSERT INTO oc_key_sessions(tenant_id,workspace_id,logical_key_id,session_id) VALUES(?,?,?,?)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).bind(id).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(id)
     }
     /// Workspace membership never confers another key's private session access.
@@ -42,14 +42,14 @@ impl TursoTx {
     /// Rotate one live credential, retaining its logical identity and all archives.
     pub async fn rotate_scoped_key(&mut self, id: Uuid) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::Delete).await?;
-        let old:Option<(Uuid,String,bool)>=native_turso::query_as("SELECT logical_key_id,role,allow_owned_workspaces FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT revoked")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let old:Option<(Uuid,String,bool)>=sqlite_db::query_as("SELECT logical_key_id,role,allow_owned_workspaces FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT revoked")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (logical, role, capability) = old.ok_or(StorageError::NotFound)?;
         // A key may rotate itself only under this transaction's already-verified admin role.
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        native_turso::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?,?)")
-            .bind(key_id).bind(logical).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capability).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?,?)")
+            .bind(key_id).bind(logical).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capability).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         self.revoke_scoped_key(id).await?;
         self.audit(
             "key.rotate",
@@ -61,16 +61,16 @@ impl TursoTx {
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Guard indirect raw-source access before content or locators leave storage.
     pub(super) async fn require_private_source(&mut self, source: Uuid) -> StorageResult<()> {
-        let session:Option<Uuid>=native_turso::query_scalar("SELECT session_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let session:Option<Uuid>=sqlite_db::query_scalar("SELECT session_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(session) = session {
             self.require_private_session(session).await?;
         }
-        let learning_session: Option<Uuid> = native_turso::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let learning_session: Option<Uuid> = sqlite_db::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(session) = learning_session {
             self.require_private_session(session).await?;
         }
@@ -78,13 +78,13 @@ impl TursoTx {
     }
     /// Improve job details include private frozen turns and must retain their scope.
     pub(super) async fn require_private_job(&mut self, job: Uuid) -> StorageResult<()> {
-        let session:Option<Uuid>=native_turso::query_scalar("SELECT session_id FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND job_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let session:Option<Uuid>=sqlite_db::query_scalar("SELECT session_id FROM oc_improve_runs WHERE tenant_id=? AND workspace_id=? AND job_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(session) = session {
             self.require_private_session(session).await?;
         }
-        let session:Option<Uuid>=native_turso::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND ingest_job_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let session:Option<Uuid>=sqlite_db::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND ingest_job_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(session) = session {
             self.require_private_session(session).await?;
         }
@@ -101,7 +101,7 @@ mod tests {
     #[tokio::test]
     async fn private_archive_isolation_and_authorized_rotation() {
         let dir = tempfile::tempdir().unwrap();
-        let store = TursoStore::open(dir.path().join("private.db"))
+        let store = SqliteStore::open(dir.path().join("private.db"))
             .await
             .unwrap();
         let scope = Scope {

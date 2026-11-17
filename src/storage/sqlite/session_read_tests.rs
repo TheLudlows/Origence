@@ -2,7 +2,7 @@
 //! no multi-relation SQL oracle or public-permission bypass is introduced.
 use super::*;
 use crate::session::{ArchivedEvidence, EvidenceKind, UsedEvidence};
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 async fn database() -> (tempfile::TempDir, Pool) {
     let dir = tempfile::tempdir().unwrap();
@@ -33,8 +33,8 @@ fn scope() -> Scope {
     }
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),
@@ -54,7 +54,7 @@ fn reference(index: u128) -> UsedEvidence {
     }
 }
 
-async fn event(tx: &mut TursoTx, scope: Scope, id: Uuid, content: &str) {
+async fn event(tx: &mut SqliteTx, scope: Scope, id: Uuid, content: &str) {
     db::query("INSERT INTO oc_events VALUES(?,?,?,'active','ordinary',?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -65,7 +65,7 @@ async fn event(tx: &mut TursoTx, scope: Scope, id: Uuid, content: &str) {
         .unwrap();
 }
 
-async fn seed(tx: &mut TursoTx, scope: Scope, index: u128) -> ArchivedEvidence {
+async fn seed(tx: &mut SqliteTx, scope: Scope, index: u128) -> ArchivedEvidence {
     let reference = reference(index);
     let root = Uuid::from_u128(30_000 + index);
     event(tx, scope, root, "root content").await;
@@ -114,7 +114,7 @@ async fn seed(tx: &mut TursoTx, scope: Scope, index: u128) -> ArchivedEvidence {
     }
 }
 
-async fn store_turn(tx: &mut TursoTx, evidence: &[ArchivedEvidence]) -> (Uuid, Uuid, Uuid) {
+async fn store_turn(tx: &mut SqliteTx, evidence: &[ArchivedEvidence]) -> (Uuid, Uuid, Uuid) {
     let session = Uuid::new_v4();
     let turn = Uuid::new_v4();
     let root = Uuid::new_v4();
@@ -145,7 +145,7 @@ async fn store_turn(tx: &mut TursoTx, evidence: &[ArchivedEvidence]) -> (Uuid, U
     (session, turn, root)
 }
 
-async fn set_locator(tx: &mut TursoTx, reference: &UsedEvidence, locator: &str) {
+async fn set_locator(tx: &mut SqliteTx, reference: &UsedEvidence, locator: &str) {
     db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(locator)
         .bind(tx.scope.tenant_id)

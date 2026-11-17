@@ -1,10 +1,10 @@
 //! Artifact publication ledger transitions and reconciliation.
 use super::*;
 
-impl TursoStore {
+impl SqliteStore {
     pub(super) async fn reconcile_ledger_inner(&self) -> StorageResult<Value> {
         let now = now_ms();
-        let orphaned = native_turso::query(
+        let orphaned = sqlite_db::query(
             "UPDATE oc_artifact_ledger SET state = 'orphan', updated_at = ? \
              WHERE state = 'pending' AND updated_at < ?",
         )
@@ -12,9 +12,9 @@ impl TursoStore {
         .bind(now - LEDGER_PENDING_TIMEOUT_MS)
         .execute(&self.pool)
         .await
-        .map_err(turso_err)?
+        .map_err(sqlite_err)?
         .rows_affected();
-        let requeued = native_turso::query(
+        let requeued = sqlite_db::query(
             "UPDATE oc_artifact_ledger SET state = 'pending', updated_at = ? \
              WHERE state = 'retry_wait' AND next_retry_at IS NOT NULL AND next_retry_at <= ?",
         )
@@ -22,22 +22,22 @@ impl TursoStore {
         .bind(now)
         .execute(&self.pool)
         .await
-        .map_err(turso_err)?
+        .map_err(sqlite_err)?
         .rows_affected();
         Ok(json!({ "requeued": requeued, "orphaned": orphaned }))
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     pub(super) async fn register_pending_inner(&mut self, entry: LedgerEntry) -> StorageResult<()> {
         if entry.key.scope != self.scope {
             return Err(StorageError::Forbidden);
         }
-        native_turso::query(
+        sqlite_db::query(
             "INSERT INTO oc_artifact_ledger(tenant_id, workspace_id, source_id, version, \
-             artifact_type, artifact_id, surface, generation, idempotency_key, state, \
+             artifact_type, artifact_id, surface, generation, state, \
              created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?) \
              ON CONFLICT DO NOTHING",
         )
         .bind(entry.key.scope.tenant_id)
@@ -48,12 +48,11 @@ impl TursoTx {
         .bind(entry.key.artifact_id)
         .bind(entry.key.surface.as_str())
         .bind(entry.key.generation)
-        .bind(entry.idempotency_key)
         .bind(now_ms())
         .bind(now_ms())
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(())
     }
 
@@ -63,7 +62,7 @@ impl TursoTx {
         }
         // Both reads/writes use the caller's transaction. Missing or withdrawn
         // sources are a no-op, but still prepare the exact ledger UPDATE.
-        let active: bool = native_turso::query_scalar(
+        let active: bool = sqlite_db::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND state='active')",
         )
         .bind(key.scope.tenant_id)
@@ -71,8 +70,8 @@ impl TursoTx {
         .bind(key.source.source_id)
         .fetch_one(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
-        native_turso::query(
+        .map_err(sqlite_err)?;
+        sqlite_db::query(
             "UPDATE oc_artifact_ledger SET state = 'committed', updated_at = ? \
              WHERE tenant_id = ? AND workspace_id = ? AND source_id = ? AND version = ? \
                AND artifact_id = ? AND surface = ? AND generation = ? \
@@ -89,7 +88,7 @@ impl TursoTx {
         .bind(active)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         Ok(())
     }
 }
@@ -109,13 +108,13 @@ mod tests {
             "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
             "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_id BLOB,surface TEXT,generation INTEGER,state TEXT,updated_at INTEGER,next_retry_at INTEGER)",
         ] {
-            native_turso::query(sql).execute(&pool).await.unwrap();
+            sqlite_db::query(sql).execute(&pool).await.unwrap();
         }
         let scope = Scope {
             tenant_id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
         };
-        let mut tx = TursoTx {
+        let mut tx = SqliteTx {
             tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
             scope,
             principal_id: Uuid::new_v4(),
@@ -132,22 +131,20 @@ mod tests {
             surface: Surface::Vector,
             generation: 3,
         };
-        native_turso::query(
-            "INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,'retry_wait',1,123)",
-        )
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(key.source.source_id)
-        .bind(key.source.version)
-        .bind(key.artifact_id)
-        .bind(key.surface.as_str())
-        .bind(key.generation)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+        sqlite_db::query("INSERT INTO oc_artifact_ledger VALUES(?,?,?,?,?,?,?,'retry_wait',1,123)")
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(key.source.source_id)
+            .bind(key.source.version)
+            .bind(key.artifact_id)
+            .bind(key.surface.as_str())
+            .bind(key.generation)
+            .execute(&mut *tx.tx)
+            .await
+            .unwrap();
         // Missing and withdrawn sources remain successful no-ops.
         tx.confirm_committed_inner(key).await.unwrap();
-        native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'retracted')")
+        sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,'retracted')")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(key.source.source_id)
@@ -156,12 +153,12 @@ mod tests {
             .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
         let before: (String, i64, i64) =
-            native_turso::query_as("SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger")
+            sqlite_db::query_as("SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger")
                 .fetch_one(&mut *tx.tx)
                 .await
                 .unwrap();
         assert_eq!(before, ("retry_wait".into(), 1, 123));
-        native_turso::query("UPDATE oc_events SET state='active'")
+        sqlite_db::query("UPDATE oc_events SET state='active'")
             .execute(&mut *tx.tx)
             .await
             .unwrap();
@@ -169,25 +166,25 @@ mod tests {
         wrong.generation += 1;
         tx.confirm_committed_inner(wrong).await.unwrap();
         let unchanged: (String, i64, i64) =
-            native_turso::query_as("SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger")
+            sqlite_db::query_as("SELECT state,updated_at,next_retry_at FROM oc_artifact_ledger")
                 .fetch_one(&mut *tx.tx)
                 .await
                 .unwrap();
         assert_eq!(unchanged, before);
         tx.confirm_committed_inner(key).await.unwrap();
         let after: (String, i64) =
-            native_turso::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger")
+            sqlite_db::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger")
                 .fetch_one(&mut *tx.tx)
                 .await
                 .unwrap();
         assert_eq!(after, ("committed".into(), 123));
-        native_turso::query("UPDATE oc_artifact_ledger SET state='orphan'")
+        sqlite_db::query("UPDATE oc_artifact_ledger SET state='orphan'")
             .execute(&mut *tx.tx)
             .await
             .unwrap();
         tx.confirm_committed_inner(key).await.unwrap();
         let state: (String, i64) =
-            native_turso::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger")
+            sqlite_db::query_as("SELECT state,next_retry_at FROM oc_artifact_ledger")
                 .fetch_one(&mut *tx.tx)
                 .await
                 .unwrap();
@@ -199,11 +196,11 @@ mod tests {
         ));
         tx.tx.rollback().await.unwrap();
         // An absent source must not bypass preparing the ledger statement.
-        native_turso::query("DROP TABLE oc_artifact_ledger")
+        sqlite_db::query("DROP TABLE oc_artifact_ledger")
             .execute(&pool)
             .await
             .unwrap();
-        let mut tx = TursoTx {
+        let mut tx = SqliteTx {
             tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
             scope,
             principal_id: Uuid::new_v4(),

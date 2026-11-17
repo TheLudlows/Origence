@@ -2,7 +2,7 @@
 //! have passed; neither existence nor profile discovery reads content or JSON.
 use super::super::read_model::AssociationKey;
 use super::*;
-use crate::storage::native_turso::{FromRow, Row};
+use crate::storage::sqlite_db::{FromRow, Row};
 use std::collections::BTreeSet;
 
 const PAGE_SIZE: usize = 32;
@@ -84,14 +84,14 @@ async fn match_rows(
                 }
             }
         }
-        for row in query.fetch_all(&mut *conn).await.map_err(turso_err)? {
+        for row in query.fetch_all(&mut *conn).await.map_err(sqlite_err)? {
             for (slot, name) in ["m0", "m1", "m2", "m3"]
                 .iter()
                 .take(batch.len())
                 .enumerate()
             {
-                if row.try_get::<Option<bool>>(*name).map_err(turso_err)? == Some(true) {
-                    result.push((start + slot, Row::from_row(&row).map_err(turso_err)?));
+                if row.try_get::<Option<bool>>(*name).map_err(sqlite_err)? == Some(true) {
+                    result.push((start + slot, Row::from_row(&row).map_err(sqlite_err)?));
                 }
             }
         }
@@ -129,9 +129,9 @@ impl Pages {
             .bind(PAGE_SIZE)
             .fetch_all(&mut *conn)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         if let Some(last) = rows.last() {
-            self.after = Some(last.try_get("startup_rowid").map_err(turso_err)?);
+            self.after = Some(last.try_get("startup_rowid").map_err(sqlite_err)?);
         }
         #[cfg(test)]
         {
@@ -155,12 +155,12 @@ fn publications(rows: &[Row]) -> StorageResult<Vec<Publication>> {
     rows.iter()
         .map(|row| {
             Ok(Publication {
-                tenant: row.try_get("tenant_id").map_err(turso_err)?,
-                workspace: row.try_get("workspace_id").map_err(turso_err)?,
-                artifact: row.try_get("artifact_id").map_err(turso_err)?,
-                source: row.try_get("source_id").map_err(turso_err)?,
-                version: row.try_get("version").map_err(turso_err)?,
-                generation: row.try_get("generation").map_err(turso_err)?,
+                tenant: row.try_get("tenant_id").map_err(sqlite_err)?,
+                workspace: row.try_get("workspace_id").map_err(sqlite_err)?,
+                artifact: row.try_get("artifact_id").map_err(sqlite_err)?,
+                source: row.try_get("source_id").map_err(sqlite_err)?,
+                version: row.try_get("version").map_err(sqlite_err)?,
+                generation: row.try_get("generation").map_err(sqlite_err)?,
             })
         })
         .collect()
@@ -188,7 +188,7 @@ async fn current_publications(
             index,
             chunk
                 .try_get::<AssociationKey>("asset_id")
-                .map_err(turso_err)?,
+                .map_err(sqlite_err)?,
         ));
     }
     let requests: Vec<_> = selected
@@ -280,8 +280,8 @@ async fn profiles_in_pages(
             .collect();
         for (_, row) in match_rows(conn, INDEXES, 4, &requests).await? {
             profiles.insert((
-                row.try_get("model_id").map_err(turso_err)?,
-                row.try_get("dimension").map_err(turso_err)?,
+                row.try_get("model_id").map_err(sqlite_err)?,
+                row.try_get("dimension").map_err(sqlite_err)?,
             ));
         }
         if rows.len() < PAGE_SIZE {

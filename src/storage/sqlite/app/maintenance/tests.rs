@@ -1,6 +1,6 @@
 use super::*;
 use crate::storage::RelationalStore;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 #[derive(Clone, Copy)]
 struct Record {
@@ -21,9 +21,9 @@ impl Record {
     }
 }
 
-async fn database() -> (tempfile::TempDir, TursoStore, Scope) {
+async fn database() -> (tempfile::TempDir, SqliteStore, Scope) {
     let dir = tempfile::tempdir().unwrap();
-    let store = TursoStore::open(dir.path().join("maintenance.db"))
+    let store = SqliteStore::open(dir.path().join("maintenance.db"))
         .await
         .unwrap();
     let scope = Scope {
@@ -53,7 +53,7 @@ async fn seed(conn: &mut Connection, scope: Scope, row: Record) {
         .execute(&mut *conn)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'immutable version','hash',?,'title',?,0)")
+    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'immutable version',?,'title',?,0)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.asset)
@@ -103,7 +103,7 @@ async fn ledger(
     surface: &str,
     generation: i64,
 ) {
-    db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,?,'chunk',?,?,?,'test','committed',0,0)")
+    db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,state,created_at,updated_at) VALUES(?,?,?,?,'chunk',?,?,?,'committed',0,0)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.source)
@@ -181,7 +181,7 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
     drop(store);
     // The first authority phase committed. Native deletion can be retried
     // before a separate finish transaction; immutable source rows remain.
-    let store = TursoStore::open(dir.path().join("maintenance.db"))
+    let store = SqliteStore::open(dir.path().join("maintenance.db"))
         .await
         .unwrap();
     assert_eq!(store.cleanup_plan(scope).await.unwrap(), plan);
@@ -647,7 +647,7 @@ async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retr
 }
 
 // Authority graph support remains meaningful without a second graph database.
-async fn graph_owner_ids(store: &TursoStore, scope: Scope) -> (Vec<Uuid>, Vec<Uuid>) {
+async fn graph_owner_ids(store: &SqliteStore, scope: Scope) -> (Vec<Uuid>, Vec<Uuid>) {
     let rows: Vec<(String, Uuid)> = db::query_as("SELECT DISTINCT artifact_type,artifact_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('entity','relation') ORDER BY artifact_type,artifact_id")
         .bind(scope.tenant_id).bind(scope.workspace_id).fetch_all(&store.pool).await.unwrap();
     (

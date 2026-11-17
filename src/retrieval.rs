@@ -5,7 +5,7 @@ use crate::{
     storage::{
         DomainTx, FullTextHit, FullTextQuery, Permission, SourceVersion, VectorHit, VectorQuery,
         anyseek::{GraphEdgeCandidate, GraphEntityCandidate},
-        sqlite::TursoTx,
+        sqlite::SqliteTx,
     },
     types::*,
 };
@@ -521,7 +521,7 @@ struct PreparedSearch {
 }
 
 async fn project_graph_evidence(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     graph: GraphCandidates,
 ) -> Result<(Vec<Value>, Vec<Value>, Vec<SearchHit>)> {
     let mut names = BTreeMap::new();
@@ -606,13 +606,13 @@ fn search_response(
 ) -> Value {
     let (summaries_enabled, graph_enabled) = components;
     let (entities, relations) = graph;
-    json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":profile,"retrieval_policy":"turso-anyseek-filtered-rrf60-v3","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}})
+    json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":profile,"retrieval_policy":"sqlite-anyseek-filtered-rrf60-v3","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}})
 }
 
 /// Once a native candidate has participated in top-k, dropping it silently can
 /// conceal an incomplete result set or retain RRF ranks from withdrawn evidence.
 pub(crate) async fn live_native_candidate(
-    tx: &mut crate::storage::sqlite::TursoTx,
+    tx: &mut crate::storage::sqlite::SqliteTx,
     id: Uuid,
     candidate: Option<SearchHit>,
 ) -> Result<Option<SearchHit>> {

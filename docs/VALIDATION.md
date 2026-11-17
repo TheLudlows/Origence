@@ -404,3 +404,62 @@ CI 调整基于上述 #360 日志，而非减少独立验收：
 
 本次未更改 Rust 源码、schema 或 SQL；未为本次 TypeScript/工作流变更重复本地 Rust 全套。
 远端工作流仍执行上述完整 Rust 检查。Windows、真实浏览器及生产验收边界保持前述记录。
+## 2026-11-17：SQLite 全面替换与元数据精简
+
+基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`，验证在 SQLite 替换工作树执行；
+精确提交与远端结果由本次 PR head 标识。Linux、Rust 1.98.0、rusqlite 0.43.0，
+bundled SQLite 3.54.1；真实 AnySeek 固定 `d813b915b7f12e7139ca316adc15699688493196`
+（夹具使用其要求的 Rust 1.99.1）。所有行为验证使用新建临时库及测试凭据，无外部模型调用。
+
+替换范围包括全部关系/队列适配器、Service/CLI/错误边界、测试和手工诊断、Cargo 锁文件、
+CI、容器与当前文档。删除旧引擎模块和别名；历史证据与此前真实失败记录保持原样。
+Cargo 生成的新锁文件从 482 个包变为 370 个：删除 116、加入 4，净减少 112；
+原有保留包的版本未改变。rusqlite 关闭默认特性，仅启用 bundled；不增加 ORM、
+异步数据库或第三方连接池。全特性的 production dependency tree 排除所有退休存储引擎。
+
+元数据删除 `oc_versions.content_hash` 和 `oc_artifact_ledger.idempotency_key`，
+同时移除调用方的冗余字段/参数及字符串辅助函数。内容摘要由所读不可变正文计算，
+账本使用已有完整主键的 ON CONFLICT 幂等；外部冻结计划和 operation epoch 保持原义。
+命令幂等、Run/Skill 快照摘要、授权、来源、版本、owner/index/ledger 的独立状态仍被验证。
+
+已通过：
+
+- `cargo clippy --locked --all-features --all-targets -j 2 -- -D warnings` 与
+  `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings`。
+  前者同时编译手工诊断目标；不将其诊断执行当作生产验收。
+- `cargo test --locked -j 2 --no-fail-fast`：218 lib + 4 协议 + 202 local，
+  **424 项通过**；8 项单独运行的真实后端合同仍在常规命令中 ignored。
+- `cargo test --locked --no-default-features -j 2 --no-fail-fast`：138 lib + 2 协议 +
+  92 local，**232 项通过**；5 项真实后端测试保持 ignored。
+- `cargo build --locked -j 2`、fmt、`git diff --check`、actionlint 1.7.7、
+  Cargo metadata 与全特性退休引擎依赖检查通过。正常服务二进制只包含新 SQLite 格式标记，
+  Linux `ldd` 无动态 SQLite 或 libgomp 依赖。
+- `npm --prefix ui test`：15 项通过；Python tools 11 项、eval adapter 42 项通过。
+- 在上述正常服务二进制及固定真实 AnySeek 上分别运行 `tools/smoke.py`、
+  `tools/ui_smoke.py`、原始完整 `tools/mcp_smoke.py`，HTTP、UI 与
+  host-forwarding/offline MCP 两路径通过。
+- `tools/anyseek_smoke.py --cargo-tests`：**8 项真实引擎合同通过**，并通过其后
+  HTTP/stdio MCP、引用、版本更新、撤销、重开及 Run 诊断关联/重试/持久化检查。
+- `evals/run.py`：24 个 keyword 用例，errors=0、resolve_errors=0；document recall/MRR/NDCG
+  均约 0.63636。此合成工程检查不证明模型或真实 Agent 任务收益。
+
+新回归验证每条连接的 WAL、FULL、外键与 busy timeout、五租约上限、真实文件上的
+取消/FIFO 回滚、RETURNING 排空、错误后拒绝继续提交、读快照、跨池释放、宿主锁生命周期，
+以及直接 SQLite integrity/foreign-key 检查、元数据列消失、中文原始字节摘要与同版本重开。
+只读测试分别覆盖非空已提交 WAL（必须可读）和 checkpoint 后带中文/空格/URI 特殊字符
+的路径（不创建 sidecar）；没有用 immutable 忽略待恢复的 WAL。
+
+早期回归暴露旧引擎假设：SQLite 将大 JSON 整数转换为 REAL、每连接有独立 DDL 缓存，
+SHM read mark 也会被只读访问更新。测试改以 SQLite 原生结果为 oracle，保留无效身份、
+解码顺序、授权和证据预算断言；没有为退休引擎添加兼容分支。损坏 schema 夹具重开其
+有意改变的 DDL；活跃库比较数据库和 WAL，不将 SHM 的瞬时协调位当作持久业务字节。
+
+手工 SQL 审视：两个元数据列及相应绑定/读取被移除，版本摘要在同一授权读事务中计算；
+没有 JOIN、跨表子查询、额外业务提交或事务内模型/文件/AnySeek IO。数据库 IO 在专属
+blocking 连接 FIFO 中；取消不硬停 SQL，已发出 COMMIT 的未知结果仍需按原幂等键核对。
+只面向新库，不迁移、重写或自动转换既有文件；旧格式在可写打开之前只读拒绝。
+
+本次 CI 将 Windows 检查扩展至 PR，远端结果另见 PR，不将 Linux 结果外推到 Windows。
+标准 Docker 构建的首次尝试在下载 registry/config.json 时因本环境自签名 CA 链失败；
+同一 Dockerfile 仅用临时构建期 CA secret 补充受信链后继续构建，未关闭 TLS 校验。
+容器最终结果另见 PR。浏览器布局、真实模型/双客户端任务及生产性能不属于本次验收。

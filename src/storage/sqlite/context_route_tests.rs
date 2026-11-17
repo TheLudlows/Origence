@@ -5,7 +5,7 @@
 use super::*;
 use crate::context_retrieval::ContextRoute;
 use crate::memory_identity::MemoryIdentity;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 use std::collections::HashSet;
 
 #[derive(Clone, Copy)]
@@ -55,7 +55,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // also omit production constraints so corrupt bindings remain testable.
     for sql in [
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_learnings(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,source_event_id BLOB NOT NULL,status TEXT NOT NULL,session_id BLOB NOT NULL,improve_id BLOB NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -67,8 +67,8 @@ async fn database() -> (tempfile::TempDir, Pool) {
     (dir, pool)
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),
@@ -78,7 +78,7 @@ async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
 }
 
 async fn seed(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     row: Record,
     kind: &str,
@@ -108,8 +108,8 @@ async fn seed(
     chunk(tx, scope, row.asset, row.chunk, 1, 0, "{}").await;
 }
 
-async fn version(tx: &mut TursoTx, scope: Scope, asset: Uuid, version: i32, source: Uuid) {
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version','content','hash',?,NULL)")
+async fn version(tx: &mut SqliteTx, scope: Scope, asset: Uuid, version: i32, source: Uuid) {
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version','content',?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(asset)
@@ -121,7 +121,7 @@ async fn version(tx: &mut TursoTx, scope: Scope, asset: Uuid, version: i32, sour
 }
 
 async fn chunk(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     asset: Uuid,
     id: Uuid,
@@ -142,7 +142,7 @@ async fn chunk(
         .unwrap();
 }
 
-async fn registration(tx: &mut TursoTx, scope: Scope, row: Record, source: Uuid, status: &str) {
+async fn registration(tx: &mut SqliteTx, scope: Scope, row: Record, source: Uuid, status: &str) {
     let improve = Uuid::new_v4();
     db::query("INSERT INTO oc_improve_runs VALUES(?,?,?,'publishing')")
         .bind(scope.tenant_id)
@@ -165,7 +165,7 @@ async fn registration(tx: &mut TursoTx, scope: Scope, row: Record, source: Uuid,
         .unwrap();
 }
 
-async fn binding(tx: &mut TursoTx, scope: Scope, asset: Uuid, identity: &MemoryIdentity) {
+async fn binding(tx: &mut SqliteTx, scope: Scope, asset: Uuid, identity: &MemoryIdentity) {
     db::query("UPDATE oc_assets SET identity_key=?,identity_json=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(identity.key(scope).unwrap())
         .bind(serde_json::to_string(identity).unwrap())
@@ -177,7 +177,7 @@ async fn binding(tx: &mut TursoTx, scope: Scope, asset: Uuid, identity: &MemoryI
         .unwrap();
 }
 
-async fn set_locator(tx: &mut TursoTx, id: Uuid, locator: &str) {
+async fn set_locator(tx: &mut SqliteTx, id: Uuid, locator: &str) {
     db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(locator)
         .bind(tx.scope.tenant_id)
@@ -967,14 +967,14 @@ async fn learning_history_ignores_unmatched_raw_sources_across_page_boundaries()
     for number in 2..=255 {
         version(&mut tx, scope, later.asset, number, later.source).await;
     }
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,257,'version','content','hash',x'01',NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,257,'version','content',x'01',NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(first.asset)
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,256,'version','content','hash',x'02',NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,256,'version','content',x'02',NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(later.asset)
@@ -1038,13 +1038,8 @@ async fn learning_history_uses_native_raw_source_and_version_keys() {
         // Historical classification does not project a domain i32 or UUID.
         match index % 4 {
             0 => {
-                db::query("INSERT INTO oc_versions VALUES(?,?,?,2147483648,'version','content','hash',?,NULL)")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
-                    .execute(&mut *tx.tx).await.unwrap();
-            }
-            1 => {
                 db::query(
-                    "INSERT INTO oc_versions VALUES(?,?,?,2.5,'version','content','hash',?,NULL)",
+                    "INSERT INTO oc_versions VALUES(?,?,?,2147483648,'version','content',?,NULL)",
                 )
                 .bind(scope.tenant_id)
                 .bind(scope.workspace_id)
@@ -1054,22 +1049,30 @@ async fn learning_history_uses_native_raw_source_and_version_keys() {
                 .await
                 .unwrap();
             }
+            1 => {
+                db::query("INSERT INTO oc_versions VALUES(?,?,?,2.5,'version','content',?,NULL)")
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(row.asset)
+                    .bind(raw_source)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
+            }
             2 => {
-                db::query("INSERT INTO oc_versions VALUES(?,?,?,'historical-version','version','content','hash',?,NULL)")
+                db::query("INSERT INTO oc_versions VALUES(?,?,?,'historical-version','version','content',?,NULL)")
                     .bind(scope.tenant_id).bind(scope.workspace_id).bind(row.asset).bind(raw_source)
                     .execute(&mut *tx.tx).await.unwrap();
             }
             3 => {
-                db::query(
-                    "INSERT INTO oc_versions VALUES(?,?,?,x'08','version','content','hash',?,NULL)",
-                )
-                .bind(scope.tenant_id)
-                .bind(scope.workspace_id)
-                .bind(row.asset)
-                .bind(raw_source)
-                .execute(&mut *tx.tx)
-                .await
-                .unwrap();
+                db::query("INSERT INTO oc_versions VALUES(?,?,?,x'08','version','content',?,NULL)")
+                    .bind(scope.tenant_id)
+                    .bind(scope.workspace_id)
+                    .bind(row.asset)
+                    .bind(raw_source)
+                    .execute(&mut *tx.tx)
+                    .await
+                    .unwrap();
             }
             _ => unreachable!(),
         }

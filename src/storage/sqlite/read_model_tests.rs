@@ -5,12 +5,12 @@
 
 use super::read_model::{NativeHitKey, current_chunks, rows_by_ids};
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 // Test-only composition of the production read primitives. Session archives
 // now use their batched guard, exercised directly in session_read_tests.
 async fn active_supported_version(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     asset: Uuid,
     version: i32,
 ) -> StorageResult<Uuid> {
@@ -68,7 +68,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
         // Non-unique only in this permissive corruption fixture; production
         // admission requires the exact unique partial identity index.
         "CREATE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key) WHERE identity_key IS NOT NULL",
-        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,artifact_id BLOB NOT NULL,artifact_type TEXT NOT NULL,source_id BLOB NOT NULL,version INTEGER NOT NULL,generation INTEGER NOT NULL,surface TEXT NOT NULL,state TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,source_id,version,artifact_id,surface,generation))",
@@ -86,8 +86,8 @@ fn scope() -> Scope {
     }
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),
@@ -97,7 +97,7 @@ async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
 }
 
 async fn seed(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     row: Record,
     current: Option<i32>,
@@ -122,7 +122,7 @@ async fn seed(
             .await
             .unwrap();
     }
-    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version title',?,'hash',?,NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,?,?,'version title',?,?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.asset)
@@ -145,7 +145,7 @@ async fn seed(
 }
 
 async fn publication(
-    tx: &mut TursoTx,
+    tx: &mut SqliteTx,
     scope: Scope,
     key: NativeHitKey,
     surface: &str,
@@ -167,7 +167,7 @@ async fn publication(
         .unwrap();
 }
 
-async fn ready_index(tx: &mut TursoTx, row: Record, field: &str, generation: i64) {
+async fn ready_index(tx: &mut SqliteTx, row: Record, field: &str, generation: i64) {
     db::query("INSERT INTO oc_index_entries VALUES(?,?,?,?,'profile',3,?,'ready')")
         .bind(tx.scope.tenant_id)
         .bind(tx.scope.workspace_id)
@@ -179,7 +179,7 @@ async fn ready_index(tx: &mut TursoTx, row: Record, field: &str, generation: i64
         .unwrap();
 }
 
-async fn locator(tx: &mut TursoTx, chunk: Uuid, value: &str) {
+async fn locator(tx: &mut SqliteTx, chunk: Uuid, value: &str) {
     db::query("UPDATE oc_chunks SET locator=? WHERE tenant_id=? AND workspace_id=? AND id=?")
         .bind(value)
         .bind(tx.scope.tenant_id)
@@ -1817,7 +1817,7 @@ async fn graph_evidence_ignores_unconsumed_payload_and_stops_at_twenty() {
             locator(
                 &mut tx,
                 row.chunk,
-                r#"{"parser":"memory-semantics:v1","support_sources":[10000000000000000000000000000000]}"#,
+                r#"{"parser":"memory-semantics:v1","support_sources":["#,
             )
             .await;
         } else if expected.len() < 20 {
@@ -1882,7 +1882,7 @@ async fn graph_evidence_skips_invalid_historical_keys_before_decode() {
         .execute(&mut *tx.tx)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_versions VALUES(?,?,x'31',1,'old','old','hash',?,NULL)")
+    db::query("INSERT INTO oc_versions VALUES(?,?,x'31',1,'old','old',?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.source)

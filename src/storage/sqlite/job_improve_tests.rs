@@ -5,7 +5,7 @@ use super::improve::{
     unfinished_learning_jobs,
 };
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 
 #[derive(Clone, Copy)]
 struct Record {
@@ -54,8 +54,8 @@ async fn database() -> (tempfile::TempDir, Pool) {
     (dir, pool)
 }
 
-async fn transaction(pool: &Pool, scope: Scope) -> TursoTx {
-    TursoTx {
+async fn transaction(pool: &Pool, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx: pool.begin_with("BEGIN IMMEDIATE").await.unwrap(),
         scope,
         principal_id: Uuid::new_v4(),

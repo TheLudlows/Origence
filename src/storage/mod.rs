@@ -8,7 +8,7 @@
 //!
 //! # Shutdown order
 //! The host stops and joins the worker before [`StorageEngine::shutdown`].
-//! Native stores close before the queue/relational authority; Turso backs
+//! Native stores close before the queue/relational authority; SQLite backs
 //! both queue and relational roles, so shutting down either closes its pool.
 //!
 //! # Transaction boundary
@@ -23,12 +23,11 @@ pub mod capabilities;
 pub mod error;
 pub mod ledger;
 pub mod local_blob;
-pub mod native_turso;
 #[cfg(feature = "local-storage")]
 pub(crate) mod retrieval_store;
 pub mod scope;
 pub mod sqlite;
-pub use sqlite as turso;
+pub mod sqlite_db;
 pub mod traits;
 
 pub fn hash(bytes: impl AsRef<[u8]>) -> String {
@@ -38,8 +37,8 @@ pub fn hash(bytes: impl AsRef<[u8]>) -> String {
 
 #[cfg(feature = "local-storage")]
 pub type LocalEngine = StorageEngine<
-    std::sync::Arc<sqlite::TursoStore>,
-    std::sync::Arc<sqlite::TursoStore>,
+    std::sync::Arc<sqlite::SqliteStore>,
+    std::sync::Arc<sqlite::SqliteStore>,
     RetrievalStore,
     local_blob::LocalBlobStore,
 >;
@@ -61,11 +60,11 @@ pub use capabilities::{
     VectorQuery,
 };
 pub use error::{StorageError, StorageResult};
-pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface, ledger_idempotency_key};
+pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};
 #[cfg(feature = "local-storage")]
 pub use retrieval_store::RetrievalStore;
 pub use scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
-pub use sqlite::{SqliteStore, TursoStore};
+pub use sqlite::SqliteStore;
 pub use traits::{
     BlobStore, ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, Lifecycle, RelationalStore,
     VectorStore, WorkItem,

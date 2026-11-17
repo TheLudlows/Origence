@@ -1,33 +1,64 @@
-//! Small typed adapter over the native Rust `turso` engine, pinned to 0.8.2.
+//! Typed SQLite access with bounded leases and ordered blocking execution.
 //!
-//! This is not SQLx, libSQL, or SQLite FFI. It retains the domain's parameterized
-//! SQL while making UUID BLOB encoding, row decoding, connection leasing and
-//! cancellation cleanup explicit. A lease is never concurrently shared. Unfinished
-//! transactions receive one bounded asynchronous rollback on lease drop; only
-//! cleaned connections return to the pool. Shutdown waits for that cleanup.
-//! Query results are fully drained before a lease is released (including RETURNING).
+//! Each connection owns a FIFO on a Tokio blocking thread. SQLite never blocks
+//! an async executor. Cancelling an await does not stop running SQL: the lease is
+//! poisoned and its queued rollback runs after that operation, before reuse.
+//! The same FIFO drains RETURNING, closes SQLite, and only then releases the host
+//! lock. These are connection workers, not additional durable job workers.
 
-use std::collections::HashMap;
+use rusqlite::OpenFlags;
+pub use rusqlite::types::Value;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use uuid::Uuid;
 
 const CONNECTIONS: u32 = 5;
-type DatabaseRegistry = HashMap<(PathBuf, bool), Weak<turso::Database>>;
-static DATABASES: LazyLock<tokio::sync::Mutex<DatabaseRegistry>> =
-    LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
+
+fn immutable_uri(path: &Path) -> Result<String> {
+    let path = path
+        .to_str()
+        .ok_or(Error::Decode("database path is not UTF-8"))?;
+    #[cfg(windows)]
+    let path = path
+        .strip_prefix(r"\\?\")
+        .unwrap_or(path)
+        .replace('\\', "/");
+    #[cfg(windows)]
+    let path = if let Some(unc) = path.strip_prefix("UNC/") {
+        format!("//{unc}")
+    } else {
+        path
+    };
+    let mut uri = String::from("file:");
+    if path.starts_with("//") {
+        uri.push_str("//");
+    } else if !path.starts_with('/') {
+        uri.push('/');
+    }
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric() || b"/-_.~:".contains(&byte) {
+            uri.push(char::from(byte));
+        } else {
+            uri.push('%');
+            uri.push(char::from(b"0123456789ABCDEF"[usize::from(byte >> 4)]));
+            uri.push(char::from(b"0123456789ABCDEF"[usize::from(byte & 15)]));
+        }
+    }
+    uri.push_str("?immutable=1");
+    Ok(uri)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Native(#[from] turso::Error),
+    Sqlite(#[from] rusqlite::Error),
     #[error("invalid database value: {0}")]
     Decode(&'static str),
     #[error("query returned no rows")]
@@ -48,7 +79,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 struct PoolState {
-    database: Mutex<Option<Arc<turso::Database>>>,
+    path: PathBuf,
     idle: Mutex<Vec<Connection>>,
     permits: Arc<Semaphore>,
     closed: AtomicBool,
@@ -81,28 +112,8 @@ impl Pool {
                 .await?
                 .join(path.file_name().ok_or(Error::Decode("database filename"))?)
         };
-        let key = (path.clone(), read_only);
-        // A single native Database owns the pager/WAL for each canonical path.
-        // Independently opened API/worker handles still own separate lease pools.
-        let mut databases = DATABASES.lock().await;
-        let database = match databases.get(&key).and_then(Weak::upgrade) {
-            Some(database) => database,
-            None => {
-                let path = path
-                    .to_str()
-                    .ok_or(Error::Decode("database path is not UTF-8"))?;
-                let database = Arc::new(
-                    turso::Builder::new_local(path)
-                        .read_only(read_only)
-                        .build()
-                        .await?,
-                );
-                databases.insert(key, Arc::downgrade(&database));
-                database
-            }
-        };
         Ok(Self(Arc::new(PoolState {
-            database: Mutex::new(Some(database)),
+            path,
             idle: Mutex::new(Vec::new()),
             permits: Arc::new(Semaphore::new(CONNECTIONS as usize)),
             closed: AtomicBool::new(false),
@@ -112,19 +123,12 @@ impl Pool {
         })))
     }
 
-    /// Keep the host/path lock alive through owned transactions, cloned pools
-    /// and asynchronous rollback, even when their original Store is dropped.
+    /// Retained by cloned pools, leases and every live SQLite connection worker.
     pub(crate) fn hold_lifetime_guard(&self, guard: Arc<dyn Send + Sync>) {
-        *self.0.lifetime_guard.lock().expect("Turso pool poisoned") = Some(guard);
+        *self.0.lifetime_guard.lock().expect("SQLite pool poisoned") = Some(guard);
     }
 
     pub async fn acquire(&self) -> Result<PoolConnection> {
-        if self.0.closed.load(Ordering::Acquire) {
-            return Err(Error::Closed);
-        }
-        if self.0.cleanup_failed.load(Ordering::Acquire) {
-            return Err(Error::Cleanup);
-        }
         let permit = self
             .0
             .permits
@@ -138,44 +142,15 @@ impl Pool {
         if self.0.cleanup_failed.load(Ordering::Acquire) {
             return Err(Error::Cleanup);
         }
-        let idle = self.0.idle.lock().expect("Turso pool poisoned").pop();
-        let mut connection = match idle {
+        let idle = self.0.idle.lock().expect("SQLite pool poisoned").pop();
+        let connection = match idle {
             Some(connection) => connection,
-            None => {
-                let raw = self
-                    .0
-                    .database
-                    .lock()
-                    .expect("Turso pool poisoned")
-                    .as_ref()
-                    .ok_or(Error::Closed)?
-                    .connect()?;
-                raw.busy_timeout(Duration::from_secs(5))?;
-                if !self.0.read_only {
-                    raw.execute("PRAGMA foreign_keys = ON", ()).await?;
-                }
-                Connection {
-                    raw,
-                    interrupted: false,
-                    managed_transaction: false,
-                }
-            }
+            None => return Connection::open(self.0.clone(), permit).await,
         };
-        // Errors, early returns, dropped transactions and cancelled futures all
-        // return through this gate. No connection with an open transaction is
-        // handed to another caller. A cleanup failure drops the connection.
-        if !connection.raw.is_autocommit()? {
-            connection.raw.execute("ROLLBACK", ()).await?;
-        }
-        if connection.interrupted {
-            probe_connection(&connection.raw).await?;
-            connection.interrupted = false;
-        }
-        connection.managed_transaction = false;
         Ok(PoolConnection {
             connection: Some(connection),
             pool: self.0.clone(),
-            _permit: Some(permit),
+            permit: Some(permit),
         })
     }
 
@@ -199,73 +174,187 @@ impl Pool {
 
     pub async fn shutdown(&self) -> Result<()> {
         self.0.closed.store(true, Ordering::Release);
-        // Wait for borrowed transactions/queries, then release every native
-        // handle. Committed WAL remains part of stopped-directory backups.
         let _permits = self
             .0
             .permits
             .acquire_many(CONNECTIONS)
             .await
             .map_err(|_| Error::Closed)?;
-        let idle = std::mem::take(&mut *self.0.idle.lock().expect("Turso pool poisoned"));
+        let idle = std::mem::take(&mut *self.0.idle.lock().expect("SQLite pool poisoned"));
         let mut failure = None;
         for connection in idle {
-            let cleaned = async {
-                if !connection.raw.is_autocommit()? {
-                    connection.raw.execute("ROLLBACK", ()).await?;
-                }
-                Ok::<(), turso::Error>(())
-            }
-            .await;
-            if let Err(error) = cleaned {
-                failure = Some(error);
+            let (reply, closed) = oneshot::channel();
+            if connection.sender.send(Command::Close(reply)).is_err() || closed.await.is_err() {
+                failure = Some(Error::Closed);
             }
         }
-        self.0.database.lock().expect("Turso pool poisoned").take();
         self.0
             .lifetime_guard
             .lock()
-            .expect("Turso pool poisoned")
+            .expect("SQLite pool poisoned")
             .take();
         match failure {
-            Some(error) => Err(error.into()),
+            Some(error) => Err(error),
             None if self.0.cleanup_failed.load(Ordering::Acquire) => Err(Error::Cleanup),
             None => Ok(()),
         }
     }
 }
 
-async fn probe_connection(connection: &turso::Connection) -> turso::Result<()> {
-    // Native execute rejects row-producing statements; query and drain this
-    // health check so cancellation cleanup cannot poison a healthy connection.
-    let mut rows = connection.query("SELECT 1", ()).await?;
-    while rows.next().await?.is_some() {}
-    Ok(())
+type Operation = Box<dyn FnOnce(&mut rusqlite::Connection) + Send>;
+enum Command {
+    Run(Operation),
+    Close(oneshot::Sender<()>),
 }
 
 pub struct Connection {
-    raw: turso::Connection,
+    sender: mpsc::UnboundedSender<Command>,
     interrupted: bool,
+    autocommit: bool,
     managed_transaction: bool,
 }
 impl Connection {
-    fn check_ready(&mut self) -> Result<()> {
-        // A caller may catch a query error or cancel its future while keeping
-        // the lease. Neither permits the next write to escape its transaction.
+    async fn open(pool: Arc<PoolState>, permit: OwnedSemaphorePermit) -> Result<PoolConnection> {
+        let path = pool.path.clone();
+        let read_only = pool.read_only;
+        let guard = pool
+            .lifetime_guard
+            .lock()
+            .expect("SQLite pool poisoned")
+            .clone();
+        let (sender, mut commands) = mpsc::unbounded_channel();
+        let (ready, opened) = oneshot::channel();
+        // A connection stays on one blocking thread for its entire lifetime.
+        // The FIFO prevents a cancelled, queued write from running after cleanup.
+        tokio::task::spawn_blocking(move || {
+            let guard = guard;
+            let opened = (|| -> Result<rusqlite::Connection> {
+                let flags = if read_only {
+                    OpenFlags::SQLITE_OPEN_READ_ONLY
+                } else {
+                    OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE
+                };
+                // A stopped, checkpointed database needs no WAL recovery. Use
+                // immutable read-only access there so admission creates no
+                // sidecars. Never use immutable when committed WAL may exist.
+                let mut wal = path.as_os_str().to_os_string();
+                wal.push("-wal");
+                let checkpointed = if read_only {
+                    match std::fs::metadata(PathBuf::from(wal)) {
+                        Ok(metadata) => metadata.len() == 0,
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+                        Err(error) => return Err(error.into()),
+                    }
+                } else {
+                    false
+                };
+                let raw = if read_only && checkpointed {
+                    rusqlite::Connection::open_with_flags(
+                        immutable_uri(&path)?,
+                        flags | OpenFlags::SQLITE_OPEN_URI | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                    )?
+                } else {
+                    rusqlite::Connection::open_with_flags(
+                        path,
+                        flags | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                    )?
+                };
+                raw.busy_timeout(Duration::from_secs(5))?;
+                raw.pragma_update(None, "foreign_keys", true)?;
+                if !read_only {
+                    let mode: String =
+                        raw.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0))?;
+                    if mode != "wal" {
+                        return Err(Error::Incompatible("SQLite WAL is required"));
+                    }
+                    raw.pragma_update(None, "synchronous", "FULL")?;
+                }
+                Ok(raw)
+            })();
+            let mut raw = match opened {
+                Ok(raw) => raw,
+                Err(error) => {
+                    let _ = ready.send(Err(error));
+                    return;
+                }
+            };
+            let connection = Connection {
+                sender,
+                interrupted: false,
+                autocommit: true,
+                managed_transaction: false,
+            };
+            let _ = ready.send(Ok(PoolConnection {
+                connection: Some(connection),
+                pool,
+                permit: Some(permit),
+            }));
+            let mut closed = None;
+            while let Some(command) = commands.blocking_recv() {
+                match command {
+                    Command::Run(operation) => operation(&mut raw),
+                    Command::Close(reply) => {
+                        closed = Some(reply);
+                        break;
+                    }
+                }
+            }
+            drop(raw);
+            drop(guard);
+            if let Some(reply) = closed {
+                let _ = reply.send(());
+            }
+        });
+        opened.await.map_err(|_| Error::Closed)?
+    }
+
+    fn check_ready(&self) -> Result<()> {
         if self.interrupted {
             return Err(Error::Unfinished);
         }
-        if self.managed_transaction && self.raw.is_autocommit()? {
-            return Err(Error::TransactionAborted);
-        }
         Ok(())
+    }
+
+    async fn call<T: Send + 'static>(
+        &mut self,
+        operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        let (reply, result) = oneshot::channel();
+        self.sender
+            .send(Command::Run(Box::new(move |raw| {
+                let result = operation(raw).map(|value| (value, raw.is_autocommit()));
+                let _ = reply.send(result);
+            })))
+            .map_err(|_| Error::Closed)?;
+        let (value, autocommit) = result.await.map_err(|_| Error::Closed)??;
+        self.autocommit = autocommit;
+        Ok(value)
+    }
+
+    async fn run<T: Send + 'static>(
+        &mut self,
+        operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        self.check_ready()?;
+        let managed = self.managed_transaction;
+        self.interrupted = true;
+        let value = self
+            .call(move |raw| {
+                if managed && raw.is_autocommit() {
+                    return Err(Error::TransactionAborted);
+                }
+                operation(raw)
+            })
+            .await?;
+        self.interrupted = false;
+        Ok(value)
     }
 }
 
 pub struct PoolConnection {
     connection: Option<Connection>,
     pool: Arc<PoolState>,
-    _permit: Option<OwnedSemaphorePermit>,
+    permit: Option<OwnedSemaphorePermit>,
 }
 impl Deref for PoolConnection {
     type Target = Connection;
@@ -283,54 +372,42 @@ impl Drop for PoolConnection {
         let Some(mut connection) = self.connection.take() else {
             return;
         };
-        if !connection.interrupted && connection.raw.is_autocommit().unwrap_or(false) {
+        // A fully acknowledged, autocommit operation has no cleanup to enqueue.
+        // Its last SQLite state arrived with the result from the same FIFO.
+        if !connection.interrupted && connection.autocommit {
             connection.managed_transaction = false;
             self.pool
                 .idle
                 .lock()
-                .expect("Turso pool poisoned")
+                .expect("SQLite pool poisoned")
                 .push(connection);
             return;
         }
-        // Rust has no async Drop. This is bounded pool housekeeping, never a
-        // second durable worker or a retry loop: the task retains its existing
-        // permit, and shutdown waits for every such permit before releasing DB.
-        // Simply deferring cleanup to this pool's next acquire would retain a
-        // write lock while a different handle to the same file is waiting.
         let pool = self.pool.clone();
-        let permit = self._permit.take();
-        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            let _cleanup = runtime.spawn(async move {
-                let cleaned = async {
-                    if !connection.raw.is_autocommit()? {
-                        connection.raw.execute("ROLLBACK", ()).await?;
-                    }
-                    if connection.interrupted {
-                        probe_connection(&connection.raw).await?;
-                    }
-                    Ok::<(), turso::Error>(())
-                }
-                .await;
-                if cleaned.is_ok() {
-                    connection.interrupted = false;
-                    connection.managed_transaction = false;
-                    pool.idle
-                        .lock()
-                        .expect("Turso pool poisoned")
-                        .push(connection);
-                } else {
-                    pool.cleanup_failed.store(true, Ordering::Release);
-                    // Discard before releasing its permit, so shutdown cannot
-                    // finish while a failed native connection is still alive.
-                    drop(connection);
-                }
-                drop(permit);
-            });
-        } else {
-            // Without a runtime, never return unverified state to a pool.
-            pool.cleanup_failed.store(true, Ordering::Release);
-            drop(connection);
+        let permit = self.permit.take();
+        let sender = connection.sender.clone();
+        let sent = sender.send(Command::Run(Box::new(move |raw| {
+            let cleaned = if raw.is_autocommit() {
+                Ok(())
+            } else {
+                raw.execute_batch("ROLLBACK")
+            };
+            if cleaned.is_err() {
+                pool.cleanup_failed.store(true, Ordering::Release);
+            }
+            connection.interrupted = false;
+            connection.autocommit = true;
+            connection.managed_transaction = false;
+            // Even a failed connection stays here for shutdown to close. The
+            // cleanup_failed gate prevents it (or any other lease) being reused.
+            pool.idle
+                .lock()
+                .expect("SQLite pool poisoned")
+                .push(connection);
             drop(permit);
+        })));
+        if sent.is_err() {
+            self.pool.cleanup_failed.store(true, Ordering::Release);
         }
     }
 }
@@ -340,23 +417,25 @@ pub struct Transaction {
 }
 impl Transaction {
     pub async fn commit(mut self) -> Result<()> {
-        self.connection.check_ready()?;
-        self.connection.interrupted = true;
-        self.connection.raw.execute("COMMIT", ()).await?;
-        self.connection.interrupted = false;
+        self.connection
+            .run(|raw| {
+                raw.execute_batch("COMMIT")?;
+                Ok(())
+            })
+            .await?;
         self.connection.managed_transaction = false;
         Ok(())
     }
     pub async fn rollback(mut self) -> Result<()> {
-        // Some native execution errors already roll the transaction back.
-        // Only rollback may settle that state; commit must never claim success.
-        if !self.connection.raw.is_autocommit()? {
-            self.connection.interrupted = true;
-            self.connection.raw.execute("ROLLBACK", ()).await?;
-        }
-        if self.connection.interrupted {
-            probe_connection(&self.connection.raw).await?;
-        }
+        self.connection.interrupted = true;
+        self.connection
+            .call(|raw| {
+                if !raw.is_autocommit() {
+                    raw.execute_batch("ROLLBACK")?;
+                }
+                Ok(())
+            })
+            .await?;
         self.connection.interrupted = false;
         self.connection.managed_transaction = false;
         Ok(())
@@ -373,7 +452,6 @@ impl DerefMut for Transaction {
         &mut self.connection
     }
 }
-
 // The owned variant keeps a pool lease alive through full row draining.
 pub enum ConnectionAccess<'a> {
     Borrowed(&'a mut Connection),
@@ -425,95 +503,95 @@ impl<'a> Executor<'a> {
 pub type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
 pub trait Encode {
-    fn encode(self) -> Result<turso::Value>;
+    fn encode(self) -> Result<Value>;
 }
 impl Encode for String {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Text(self))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Text(self))
     }
 }
 impl Encode for &str {
-    fn encode(self) -> Result<turso::Value> {
+    fn encode(self) -> Result<Value> {
         self.to_owned().encode()
     }
 }
 impl<T: Encode + Clone> Encode for &T {
-    fn encode(self) -> Result<turso::Value> {
+    fn encode(self) -> Result<Value> {
         (*self).clone().encode()
     }
 }
 impl Encode for Uuid {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Blob(self.as_bytes().to_vec()))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Blob(self.as_bytes().to_vec()))
     }
 }
 impl Encode for Vec<u8> {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Blob(self))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Blob(self))
     }
 }
 impl Encode for bool {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Integer(i64::from(self)))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Integer(i64::from(self)))
     }
 }
 impl Encode for f64 {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Real(self))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Real(self))
     }
 }
 impl Encode for serde_json::Value {
-    fn encode(self) -> Result<turso::Value> {
+    fn encode(self) -> Result<Value> {
         self.to_string().encode()
     }
 }
 impl<T: Encode> Encode for Option<T> {
-    fn encode(self) -> Result<turso::Value> {
-        self.map_or(Ok(turso::Value::Null), Encode::encode)
+    fn encode(self) -> Result<Value> {
+        self.map_or(Ok(Value::Null), Encode::encode)
     }
 }
 macro_rules! encode_integer { ($($ty:ty),+) => { $(impl Encode for $ty {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Integer(i64::try_from(self).map_err(|_| Error::Decode("integer overflow"))?))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Integer(i64::try_from(self).map_err(|_| Error::Decode("integer overflow"))?))
     }
 })+ }; }
 encode_integer!(u64, usize);
 impl Encode for i64 {
-    fn encode(self) -> Result<turso::Value> {
-        Ok(turso::Value::Integer(self))
+    fn encode(self) -> Result<Value> {
+        Ok(Value::Integer(self))
     }
 }
 impl Encode for i32 {
-    fn encode(self) -> Result<turso::Value> {
+    fn encode(self) -> Result<Value> {
         i64::from(self).encode()
     }
 }
 impl Encode for u32 {
-    fn encode(self) -> Result<turso::Value> {
+    fn encode(self) -> Result<Value> {
         i64::from(self).encode()
     }
 }
 
 pub trait Decode<'a>: Sized {
-    fn decode(value: &'a turso::Value) -> Result<Self>;
+    fn decode(value: &'a Value) -> Result<Self>;
 }
 impl<'a> Decode<'a> for &'a str {
-    fn decode(value: &'a turso::Value) -> Result<Self> {
+    fn decode(value: &'a Value) -> Result<Self> {
         match value {
-            turso::Value::Text(value) => Ok(value),
+            Value::Text(value) => Ok(value),
             _ => Err(Error::Decode("expected text")),
         }
     }
 }
 impl Decode<'_> for String {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         <&str>::decode(value).map(str::to_owned)
     }
 }
 impl Decode<'_> for Uuid {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         match value {
-            turso::Value::Blob(value) => {
+            Value::Blob(value) => {
                 Uuid::from_slice(value).map_err(|_| Error::Decode("expected 16-byte UUID"))
             }
             _ => Err(Error::Decode("expected UUID blob")),
@@ -521,29 +599,29 @@ impl Decode<'_> for Uuid {
     }
 }
 impl Decode<'_> for Vec<u8> {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         match value {
-            turso::Value::Blob(value) => Ok(value.clone()),
+            Value::Blob(value) => Ok(value.clone()),
             _ => Err(Error::Decode("expected blob")),
         }
     }
 }
 impl Decode<'_> for i64 {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         match value {
-            turso::Value::Integer(value) => Ok(*value),
+            Value::Integer(value) => Ok(*value),
             _ => Err(Error::Decode("expected integer")),
         }
     }
 }
 macro_rules! decode_integer { ($($ty:ty),+) => { $(impl Decode<'_> for $ty {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         Self::try_from(i64::decode(value)?).map_err(|_| Error::Decode("integer overflow"))
     }
 })+ }; }
 decode_integer!(i32, u32, u64, usize);
 impl Decode<'_> for bool {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         match i64::decode(value)? {
             0 => Ok(false),
             1 => Ok(true),
@@ -552,23 +630,23 @@ impl Decode<'_> for bool {
     }
 }
 impl Decode<'_> for f64 {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         match value {
-            turso::Value::Real(value) => Ok(*value),
-            turso::Value::Integer(value) => Ok(*value as f64),
+            Value::Real(value) => Ok(*value),
+            Value::Integer(value) => Ok(*value as f64),
             _ => Err(Error::Decode("expected number")),
         }
     }
 }
 impl Decode<'_> for serde_json::Value {
-    fn decode(value: &turso::Value) -> Result<Self> {
+    fn decode(value: &Value) -> Result<Self> {
         serde_json::from_str(<&str>::decode(value)?).map_err(|_| Error::Decode("invalid JSON"))
     }
 }
 impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
-    fn decode(value: &'a turso::Value) -> Result<Self> {
+    fn decode(value: &'a Value) -> Result<Self> {
         match value {
-            turso::Value::Null => Ok(None),
+            Value::Null => Ok(None),
             _ => T::decode(value).map(Some),
         }
     }
@@ -577,7 +655,7 @@ impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
 #[derive(Debug)]
 pub struct Row {
     names: Arc<Vec<String>>,
-    values: Vec<turso::Value>,
+    values: Vec<Value>,
 }
 pub trait ColumnIndex {
     fn index(&self, names: &[String]) -> Result<usize>;
@@ -643,7 +721,7 @@ tuple_row!(A:0,B:1,C:2,D:3,E:4,F:5,G:6,H:7,I:8,J:9,K:10,L:11,M:12,N:13,O:14,P:15
 
 pub struct Query<T = Row> {
     sql: String,
-    params: Result<Vec<turso::Value>>,
+    params: Result<Vec<Value>>,
     _row: PhantomData<fn() -> T>,
 }
 pub fn query(sql: &str) -> Query {
@@ -669,11 +747,14 @@ impl<T> Query<T> {
         let Query { sql, params, .. } = self;
         Box::pin(async move {
             let mut connection = executor.connection().await?;
-            connection.check_ready()?;
-            connection.interrupted = true;
-            let result = connection.raw.execute(sql, params?).await?;
-            connection.interrupted = false;
-            Ok(QueryResult(result))
+            let params = params?;
+            connection
+                .run(move |raw| {
+                    Ok(QueryResult(
+                        raw.execute(&sql, rusqlite::params_from_iter(params))? as u64,
+                    ))
+                })
+                .await
         })
     }
 }
@@ -682,23 +763,30 @@ impl<T: FromRow + Send + 'static> Query<T> {
         let executor = executor.into();
         Box::pin(async move {
             let mut connection = executor.connection().await?;
-            connection.check_ready()?;
-            connection.interrupted = true;
-            let mut rows = connection.raw.query(self.sql, self.params?).await?;
-            let names = Arc::new(rows.column_names());
-            let mut output = Vec::new();
-            while let Some(row) = rows.next().await? {
-                let values = (0..row.column_count())
-                    .map(|index| row.get_value(index))
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                output.push(T::from_row(&Row {
-                    names: names.clone(),
-                    values,
-                })?);
-            }
-            drop(rows);
-            connection.interrupted = false;
-            Ok(output)
+            let params = self.params?;
+            connection
+                .run(move |raw| {
+                    let mut statement = raw.prepare(&self.sql)?;
+                    let names = Arc::new(
+                        statement
+                            .column_names()
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>(),
+                    );
+                    let mut rows = statement.query(rusqlite::params_from_iter(params))?;
+                    let mut output = Vec::new();
+                    while let Some(row) = rows.next()? {
+                        let values = (0..names.len())
+                            .map(|index| row.get(index))
+                            .collect::<rusqlite::Result<Vec<Value>>>()?;
+                        output.push(T::from_row(&Row {
+                            names: names.clone(),
+                            values,
+                        })?);
+                    }
+                    Ok(output)
+                })
+                .await
         })
     }
     pub fn fetch_optional<'a>(
@@ -752,17 +840,18 @@ impl RawSql {
         let executor = executor.into();
         Box::pin(async move {
             let mut connection = executor.connection().await?;
-            connection.check_ready()?;
-            connection.interrupted = true;
-            connection.raw.execute_batch(self.0).await?;
-            connection.interrupted = false;
-            Ok(QueryResult(0))
+            connection
+                .run(move |raw| {
+                    raw.execute_batch(&self.0)?;
+                    Ok(QueryResult(0))
+                })
+                .await
         })
     }
 }
 
 const FORMAT_SCHEMA: &str = "CREATE TABLE oc_storage_format (id INTEGER PRIMARY KEY CHECK (id=1), engine TEXT NOT NULL, role TEXT NOT NULL, schema_version INTEGER NOT NULL)";
-const ENGINE_FORMAT: &str = "origence-native-turso-0.8.2";
+const ENGINE_FORMAT: &str = "origence-sqlite-v1";
 
 pub(crate) async fn install_format(conn: &mut Connection, role: &str) -> Result<()> {
     raw_sql(FORMAT_SCHEMA).execute(&mut *conn).await?;
@@ -786,7 +875,7 @@ pub(crate) async fn check_format(conn: &mut Connection, role: &str) -> Result<()
         != Some(canonical_ddl(FORMAT_SCHEMA, "oc_storage_format"))
     {
         return Err(Error::Incompatible(
-            "missing or incompatible native Turso format marker",
+            "missing or incompatible SQLite format marker",
         ));
     }
     let rows: Vec<(i64, String, String, i64)> =
@@ -794,15 +883,13 @@ pub(crate) async fn check_format(conn: &mut Connection, role: &str) -> Result<()
             .fetch_all(conn)
             .await?;
     if rows != vec![(1, ENGINE_FORMAT.into(), role.into(), 1)] {
-        return Err(Error::Incompatible(
-            "incompatible native Turso format marker",
-        ));
+        return Err(Error::Incompatible("incompatible SQLite format marker"));
     }
     Ok(())
 }
 
 /// Token-preserving schema comparison. Only differences observed and verified
-/// against Turso 0.8.2 are admitted: CREATE's IF NOT EXISTS display guard and
+/// for embedded schemas are admitted: CREATE's IF NOT EXISTS display guard and
 /// the engine's quoting of `key` in oc_commands / `action` in oc_audit.
 /// String literals and all other quoted identifiers retain their exact bytes.
 fn ddl_tokens(sql: &str) -> Vec<String> {
@@ -922,11 +1009,11 @@ fn schema_objects(schema: &str) -> Result<Vec<(String, Vec<String>)>> {
             2
         };
         if tokens.first().is_none_or(|t| t != "create") {
-            return Err(Error::Incompatible("invalid embedded Turso schema"));
+            return Err(Error::Incompatible("invalid embedded SQLite schema"));
         }
         let name = tokens
             .get(index)
-            .ok_or(Error::Incompatible("invalid embedded Turso schema"))?
+            .ok_or(Error::Incompatible("invalid embedded SQLite schema"))?
             .clone();
         output.push((name.clone(), canonical_ddl(&statement, &name)));
     }
@@ -954,7 +1041,7 @@ pub(crate) async fn verify_schema(conn: &mut Connection, schemas: &[&str]) -> Re
     actual.sort();
     if actual != expected {
         return Err(Error::Incompatible(
-            "incompatible native Turso schema; no migration was attempted",
+            "incompatible SQLite schema; no migration was attempted",
         ));
     }
     Ok(())
@@ -963,6 +1050,94 @@ pub(crate) async fn verify_schema(conn: &mut Connection, schemas: &[&str]) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn every_connection_enforces_wal_full_foreign_keys_and_lease_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = Pool::open(dir.path().join("pragmas.db")).await.unwrap();
+        let mut leases = Vec::new();
+        for _ in 0..CONNECTIONS {
+            let mut connection = pool.acquire().await.unwrap();
+            for (pragma, expected) in [
+                ("foreign_keys", 1),
+                ("synchronous", 2),
+                ("busy_timeout", 5000),
+            ] {
+                assert_eq!(
+                    query_scalar::<i64>(&format!("PRAGMA {pragma}"))
+                        .fetch_one(&mut *connection)
+                        .await
+                        .unwrap(),
+                    expected
+                );
+            }
+            assert_eq!(
+                query_scalar::<String>("PRAGMA journal_mode")
+                    .fetch_one(&mut *connection)
+                    .await
+                    .unwrap(),
+                "wal"
+            );
+            leases.push(connection);
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), pool.acquire())
+                .await
+                .is_err()
+        );
+        drop(leases);
+        pool.shutdown().await.unwrap();
+        assert!(matches!(pool.acquire().await, Err(Error::Closed)));
+    }
+
+    #[tokio::test]
+    async fn read_only_admission_reads_committed_wal_and_checkpointed_unicode_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("元数据 % #.db");
+        let pool = Pool::open(&path).await.unwrap();
+        raw_sql("CREATE TABLE t(value TEXT); INSERT INTO t VALUES('原文 🌍')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut wal = path.as_os_str().to_os_string();
+        wal.push("-wal");
+        let wal = PathBuf::from(wal);
+        let before = (std::fs::read(&path).unwrap(), std::fs::read(&wal).unwrap());
+        assert!(!before.1.is_empty());
+        let reader = Pool::open_read_only(&path).await.unwrap();
+        assert_eq!(
+            query_scalar::<String>("SELECT value FROM t")
+                .fetch_one(&reader)
+                .await
+                .unwrap(),
+            "原文 🌍"
+        );
+        reader.shutdown().await.unwrap();
+        assert_eq!(
+            (std::fs::read(&path).unwrap(), std::fs::read(&wal).unwrap()),
+            before
+        );
+        pool.shutdown().await.unwrap();
+        let names = || {
+            let mut names = std::fs::read_dir(dir.path())
+                .unwrap()
+                .map(|p| p.unwrap().file_name())
+                .collect::<Vec<_>>();
+            names.sort();
+            names
+        };
+        let before = (std::fs::read(&path).unwrap(), names());
+        let reader = Pool::open_read_only(&path).await.unwrap();
+        assert_eq!(
+            query_scalar::<String>("SELECT value FROM t")
+                .fetch_one(&reader)
+                .await
+                .unwrap(),
+            "原文 🌍"
+        );
+        reader.shutdown().await.unwrap();
+        assert_eq!((std::fs::read(&path).unwrap(), names()), before);
+    }
 
     #[test]
     fn ddl_normalization_is_narrow_and_preserves_literals() {
@@ -1139,7 +1314,7 @@ mod tests {
                     .await
                     .map(|_| ()),
             };
-            assert!(matches!(error, Err(Error::Native(_))));
+            assert!(matches!(error, Err(Error::Sqlite(_))));
             // All entry points must refuse the retained transaction. In
             // particular, none may silently run in the engine's autocommit.
             assert!(matches!(
@@ -1218,94 +1393,69 @@ mod tests {
         pool.shutdown().await.unwrap();
     }
     #[tokio::test(flavor = "current_thread")]
-    async fn pending_write_cancellation_rolls_back_before_pool_reuse() {
+    async fn queued_write_cancellation_rolls_back_before_pool_reuse() {
         use std::future::poll_fn;
         use std::task::Poll;
-        fn pool(database: turso::Database) -> Pool {
-            Pool(Arc::new(PoolState {
-                database: Mutex::new(Some(Arc::new(database))),
-                idle: Mutex::new(Vec::new()),
-                permits: Arc::new(Semaphore::new(CONNECTIONS as usize)),
-                closed: AtomicBool::new(false),
-                cleanup_failed: AtomicBool::new(false),
-                read_only: false,
-                lifetime_guard: Mutex::new(None),
-            }))
-        }
         for explicit_rollback in [false, true] {
-            // The SDK's deferred-completion VFS forces an actual Pending. It is
-            // not evidence for file-backed mid-I/O cancellation or power failure.
-            #[allow(clippy::arc_with_non_send_sync)]
-            let io = Arc::new(turso::core::MemoryYieldIO::new());
-            let database = turso::Builder::new_local("adapter-cancellation.db")
-                .with_io_impl(io.clone())
-                .build()
+            let dir = tempfile::tempdir().unwrap();
+            let pool = Pool::open(dir.path().join("cancellation.db"))
                 .await
                 .unwrap();
-            let first = pool(database);
-            raw_sql(include_str!("sqlite-schema.sql"))
-                .execute(&first)
+            raw_sql("CREATE TABLE t(value INTEGER); INSERT INTO t VALUES(1)")
+                .execute(&pool)
                 .await
                 .unwrap();
-            query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(zeroblob(16),zeroblob(16),'fixture',1)").execute(&first).await.unwrap();
-            query("INSERT INTO oc_jobs(tenant_id,workspace_id,id,created_by,operation,payload,created_at,updated_at) VALUES(zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),'fixture','{}',1,1)").execute(&first).await.unwrap();
-            first.shutdown().await.unwrap();
-            drop(first);
-            let database = turso::Builder::new_local("adapter-cancellation.db")
-                .with_io_impl(io)
-                .build()
-                .await
-                .unwrap();
-            let reopened = pool(database);
-            let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
-            let mut operation =
-                Box::pin(query("UPDATE oc_jobs SET generation=999").execute(&mut *tx));
-            let first_poll = poll_fn(|cx| Poll::Ready(operation.as_mut().poll(cx))).await;
-            assert!(
-                matches!(first_poll, Poll::Pending),
-                "write must yield to exercise cancellation"
-            );
+            let mut tx = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            let release = block_worker(&tx).await;
+            let mut operation = Box::pin(query("UPDATE t SET value=999").execute(&mut *tx));
+            assert!(matches!(
+                poll_fn(|cx| Poll::Ready(operation.as_mut().poll(cx))).await,
+                Poll::Pending
+            ));
             drop(operation);
             assert!(matches!(
-                query("UPDATE oc_jobs SET generation=888")
-                    .execute(&mut *tx)
-                    .await,
+                query("UPDATE t SET value=888").execute(&mut *tx).await,
                 Err(Error::Unfinished)
             ));
-            assert!(matches!(
-                query_scalar::<i64>("SELECT generation FROM oc_jobs")
-                    .fetch_one(&mut *tx)
-                    .await,
-                Err(Error::Unfinished)
-            ));
+            release.send(()).unwrap();
             if explicit_rollback {
                 tx.rollback().await.unwrap();
             } else {
-                // Refused commit consumes the transaction, so Drop still cleans it.
                 assert!(matches!(tx.commit().await, Err(Error::Unfinished)));
             }
             assert_eq!(
-                query_scalar::<i64>("SELECT generation FROM oc_jobs")
-                    .fetch_one(&reopened)
+                query_scalar::<i64>("SELECT value FROM t")
+                    .fetch_one(&pool)
                     .await
                     .unwrap(),
                 1
             );
-            let mut tx = reopened.begin_with("BEGIN IMMEDIATE").await.unwrap();
-            query("UPDATE oc_jobs SET generation=2")
-                .execute(&mut *tx)
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
+            query("UPDATE t SET value=2").execute(&pool).await.unwrap();
+            pool.shutdown().await.unwrap();
+            // Independently open the file with SQLite after every worker closes.
+            let raw = rusqlite::Connection::open(dir.path().join("cancellation.db")).unwrap();
             assert_eq!(
-                query_scalar::<i64>("SELECT generation FROM oc_jobs")
-                    .fetch_one(&reopened)
-                    .await
+                raw.query_row("SELECT value FROM t", [], |row| row.get::<_, i64>(0))
                     .unwrap(),
                 2
             );
-            reopened.shutdown().await.unwrap();
         }
+    }
+
+    // Hold the actual file-backed connection worker before a queued operation.
+    // This exercises FIFO cleanup, not hard interruption of running SQLite IO.
+    async fn block_worker(connection: &Connection) -> std::sync::mpsc::Sender<()> {
+        let (started, ready) = oneshot::channel();
+        let (release, blocked) = std::sync::mpsc::channel();
+        connection
+            .sender
+            .send(Command::Run(Box::new(move |_| {
+                let _ = started.send(());
+                let _ = blocked.recv();
+            })))
+            .unwrap();
+        ready.await.unwrap();
+        release
     }
 
     #[tokio::test]
@@ -1368,11 +1518,12 @@ mod tests {
             .execute(&mut *tx)
             .await
             .unwrap();
+        let release = block_worker(&tx).await;
         drop(pool);
         assert!(!dropped.load(Ordering::Acquire));
         drop(tx);
-        // Current-thread cleanup cannot run before this task yields.
         assert!(!dropped.load(Ordering::Acquire));
+        release.send(()).unwrap();
         tokio::time::timeout(Duration::from_secs(6), async {
             while !dropped.load(Ordering::Acquire) {
                 tokio::task::yield_now().await;

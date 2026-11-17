@@ -1,4 +1,4 @@
-use origence::storage::native_turso as db;
+use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, RelationalStore, Scope, SourceVersion, SqliteStore, StorageError,
 };
@@ -51,7 +51,7 @@ async fn seed(store: &SqliteStore, scope: Scope, ids: EvidenceIds) -> Authorized
     db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,created_at) VALUES(?,?,?,'memory','visibility',3,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset)
         .execute(store.pool()).await.unwrap();
-    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle','fixture',?,'visibility',?,0)")
+    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle',?,'visibility',?,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset).bind(ids.root).bind(auth.principal_id)
         .execute(store.pool()).await.unwrap();
     db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,3,0,?,?,'needle')")
@@ -71,9 +71,9 @@ async fn seed(store: &SqliteStore, scope: Scope, ids: EvidenceIds) -> Authorized
         db::query("INSERT INTO oc_artifact_owners(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,chunk_id,created_at) VALUES(?,?,?,3,?,?,?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.root).bind(kind).bind(artifact)
             .bind((kind == "chunk").then_some(ids.chunk)).execute(store.pool()).await.unwrap();
-        db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,idempotency_key,state,created_at,updated_at) VALUES(?,?,?,3,?,?,?,11,?,'committed',0,0)")
+        db::query("INSERT INTO oc_artifact_ledger(tenant_id,workspace_id,source_id,version,artifact_type,artifact_id,surface,generation,state,created_at,updated_at) VALUES(?,?,?,3,?,?,?,11,'committed',0,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.root).bind(kind).bind(artifact)
-            .bind(surface).bind(Uuid::new_v4().to_string()).execute(store.pool()).await.unwrap();
+            .bind(surface).execute(store.pool()).await.unwrap();
     }
     auth
 }

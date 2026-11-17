@@ -43,7 +43,7 @@ pub enum AppError {
     #[error("{0}")]
     RetryableUnavailable(String),
     #[error(transparent)]
-    Database(#[from] crate::storage::native_turso::Error),
+    Database(#[from] crate::storage::sqlite_db::Error),
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }

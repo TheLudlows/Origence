@@ -23,15 +23,13 @@ schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-turso = { version = "=0.8.2", default-features = false }
+rusqlite = { version = "=0.43.0", default-features = false, features = ["bundled"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 [dev-dependencies]
-# Deterministic Pending cancellation coverage; production uses no VFS test feature.
-turso = { version = "=0.8.2", default-features = false, features = ["io_memory_yield"] }
 tempfile = "3"
 
 [features]

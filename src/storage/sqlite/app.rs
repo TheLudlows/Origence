@@ -1,21 +1,21 @@
-//! Local application queries. SQL stays inside the native Turso adapter.
+//! Local application queries. SQL stays inside the native SQLite adapter.
 use super::*;
 use crate::types::SearchHit;
 
 mod maintenance;
 
-impl TursoStore {
+impl SqliteStore {
     pub(super) async fn begin_scoped(
         &self,
         auth: AuthorizedScope,
         write: bool,
-    ) -> StorageResult<TursoTx> {
+    ) -> StorageResult<SqliteTx> {
         let tx = self
             .pool
             .begin_with(if write { "BEGIN IMMEDIATE" } else { "BEGIN" })
             .await
-            .map_err(turso_err)?;
-        let mut tx = TursoTx {
+            .map_err(sqlite_err)?;
+        let mut tx = SqliteTx {
             tx,
             scope: auth.scope,
             principal_id: auth.principal_id,
@@ -25,15 +25,15 @@ impl TursoStore {
         tx.live_role().await?;
         Ok(tx)
     }
-    pub async fn begin_read(&self, auth: AuthorizedScope) -> StorageResult<TursoTx> {
+    pub async fn begin_read(&self, auth: AuthorizedScope) -> StorageResult<SqliteTx> {
         self.begin_scoped(auth, false).await
     }
     pub async fn workspace_scope(&self, workspace: Uuid) -> StorageResult<Scope> {
-        let tenant = native_turso::query_scalar("SELECT tenant_id FROM oc_workspaces WHERE id=?")
+        let tenant = sqlite_db::query_scalar("SELECT tenant_id FROM oc_workspaces WHERE id=?")
             .bind(workspace)
             .fetch_optional(&self.pool)
             .await
-            .map_err(turso_err)?
+            .map_err(sqlite_err)?
             .ok_or(StorageError::NotFound)?;
         Ok(Scope {
             tenant_id: tenant,
@@ -41,11 +41,10 @@ impl TursoStore {
         })
     }
     pub async fn scopes(&self) -> StorageResult<Vec<Scope>> {
-        let rows: Vec<(Uuid, Uuid)> =
-            native_turso::query_as("SELECT tenant_id,id FROM oc_workspaces")
-                .fetch_all(&self.pool)
-                .await
-                .map_err(turso_err)?;
+        let rows: Vec<(Uuid, Uuid)> = sqlite_db::query_as("SELECT tenant_id,id FROM oc_workspaces")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(sqlite_err)?;
         Ok(rows
             .into_iter()
             .map(|(tenant_id, workspace_id)| Scope {
@@ -56,7 +55,7 @@ impl TursoStore {
     }
     /// Called exactly once by the exclusive host before it begins polling.
     pub async fn recover_jobs(&self) -> StorageResult<()> {
-        native_turso::query("UPDATE oc_jobs SET state='pending',run_token=run_token+1,updated_at=? WHERE state='processing' AND NOT cancel_requested").bind(now_ms()).execute(&self.pool).await.map_err(turso_err)?;
+        sqlite_db::query("UPDATE oc_jobs SET state='pending',run_token=run_token+1,updated_at=? WHERE state='processing' AND NOT cancel_requested").bind(now_ms()).execute(&self.pool).await.map_err(sqlite_err)?;
         self.reconcile_ledger().await?;
         Ok(())
     }
@@ -68,8 +67,8 @@ impl TursoStore {
         code: &str,
         retry: bool,
     ) -> StorageResult<()> {
-        native_turso::query("UPDATE oc_jobs SET state=CASE WHEN ? AND attempt<5 THEN 'retry_wait' ELSE ? END,error_code=?,next_retry_at=CASE WHEN ? AND attempt<5 THEN ? ELSE NULL END,updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=? AND generation=? AND run_token=? AND state='processing'")
-            .bind(retry).bind(state).bind(code).bind(retry).bind(now_ms()+2000).bind(now_ms()).bind(claim.scope.tenant_id).bind(claim.scope.workspace_id).bind(claim.job_id).bind(claim.generation).bind(claim.run_token).execute(&self.pool).await.map_err(turso_err)?;
+        sqlite_db::query("UPDATE oc_jobs SET state=CASE WHEN ? AND attempt<5 THEN 'retry_wait' ELSE ? END,error_code=?,next_retry_at=CASE WHEN ? AND attempt<5 THEN ? ELSE NULL END,updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=? AND generation=? AND run_token=? AND state='processing'")
+            .bind(retry).bind(state).bind(code).bind(retry).bind(now_ms()+2000).bind(now_ms()).bind(claim.scope.tenant_id).bind(claim.scope.workspace_id).bind(claim.job_id).bind(claim.generation).bind(claim.run_token).execute(&self.pool).await.map_err(sqlite_err)?;
         Ok(())
     }
     /// Detach invalid provenance and find unowned AnySeek chunk IDs.
@@ -79,12 +78,12 @@ impl TursoStore {
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         maintenance::detach_invalid_roots(&mut tx, scope).await?;
         maintenance::detach_invalid_chunks(&mut tx, scope).await?;
         // Maintenance is privileged but still uses the identical scoped,
         // fail-closed dependency guard as all user-visible Learning reads.
-        let mut guarded = TursoTx {
+        let mut guarded = SqliteTx {
             tx,
             scope,
             principal_id: Uuid::nil(),
@@ -94,7 +93,7 @@ impl TursoStore {
         guarded.detach_unsupported_learning_owners().await?;
         let mut tx = guarded.tx;
         let chunks = maintenance::unowned_native_artifacts(&mut tx, scope).await?;
-        tx.commit().await.map_err(turso_err)?;
+        tx.commit().await.map_err(sqlite_err)?;
         Ok(chunks)
     }
 
@@ -103,15 +102,15 @@ impl TursoStore {
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
         maintenance::remove_unowned_chunks(&mut tx, scope).await?;
         maintenance::remove_missing_indexes(&mut tx, scope).await?;
         maintenance::orphan_unowned_ledger(&mut tx, scope).await?;
-        tx.commit().await.map_err(turso_err)
+        tx.commit().await.map_err(sqlite_err)
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Restrict retrieval candidates by an exact identity before top-k/ranking.
     /// This does not allocate a memory slot or reinterpret legacy fact keys.
     pub async fn identity_candidate_asset(
@@ -121,7 +120,7 @@ impl TursoTx {
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::Conflict("invalid memory identity".into()))?;
-        let row = native_turso::query(
+        let row = sqlite_db::query(
             "SELECT id,kind,identity_key,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND identity_key=? AND kind='memory' AND NOT deleted",
         )
         .bind(self.scope.tenant_id)
@@ -129,11 +128,11 @@ impl TursoTx {
         .bind(key)
         .fetch_optional(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         let Some(row) = row else {
             return Ok(None);
         };
-        let asset = row.try_get("id").map_err(turso_err)?;
+        let asset = row.try_get("id").map_err(sqlite_err)?;
         if identity::checked_identity(self.scope, &row)?.as_ref() != Some(identity) {
             return Err(StorageError::Unavailable(
                 "memory identity binding mismatch".into(),
@@ -143,7 +142,7 @@ impl TursoTx {
     }
 
     pub async fn asset_metadata(&mut self, id: Uuid) -> StorageResult<Value> {
-        let row: Option<(String, Option<i32>, bool)> = native_turso::query_as("SELECT kind,current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let row: Option<(String, Option<i32>, bool)> = sqlite_db::query_as("SELECT kind,current_version,deleted FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (kind, current_version, deleted) = row.ok_or(StorageError::NotFound)?;
         Ok(json!({"kind":kind,"current_version":current_version,"deleted":deleted}))
     }
@@ -151,7 +150,7 @@ impl TursoTx {
         if self.save_message_publication_inner(job, plan).await? {
             return Ok(());
         }
-        native_turso::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
     pub async fn index_ready(
@@ -161,7 +160,7 @@ impl TursoTx {
         dimension: usize,
         generation: i64,
     ) -> StorageResult<()> {
-        native_turso::query("INSERT INTO oc_index_entries(tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at) VALUES(?,?,?,'content',?,?,?,'ready',?) ON CONFLICT DO UPDATE SET state='ready'").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(chunk).bind(profile).bind(dimension as i64).bind(generation).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("INSERT INTO oc_index_entries(tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at) VALUES(?,?,?,'content',?,?,?,'ready',?) ON CONFLICT DO UPDATE SET state='ready'").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(chunk).bind(profile).bind(dimension as i64).bind(generation).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
     pub async fn vector_generations(
@@ -169,7 +168,7 @@ impl TursoTx {
         profile: &str,
         dimension: usize,
     ) -> StorageResult<Vec<i64>> {
-        native_turso::query_scalar("SELECT DISTINCT generation FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND state='ready'").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(profile).bind(dimension as i64).fetch_all(&mut *self.tx).await.map_err(turso_err)
+        sqlite_db::query_scalar("SELECT DISTINCT generation FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND state='ready'").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(profile).bind(dimension as i64).fetch_all(&mut *self.tx).await.map_err(sqlite_err)
     }
     pub async fn vector_candidates(
         &mut self,
@@ -178,11 +177,11 @@ impl TursoTx {
         generation: i64,
         asset_filter: Option<Uuid>,
     ) -> StorageResult<Vec<Uuid>> {
-        let ids: Vec<read_model::AssociationKey> = native_turso::query_scalar(
+        let ids: Vec<read_model::AssociationKey> = sqlite_db::query_scalar(
             "SELECT artifact_id FROM oc_index_entries WHERE tenant_id=? AND workspace_id=? AND model_id=? AND dimension=? AND generation=? AND state='ready'",
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
             .bind(profile).bind(dimension).bind(generation)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         self.index_candidate_ids(&ids, asset_filter, "vector", generation)
             .await
     }
@@ -263,7 +262,7 @@ impl TursoTx {
             }
             let text: Option<String> = summary_terms
                 .get(&index)
-                .map(|row| row.try_get("search_terms").map_err(turso_err))
+                .map(|row| row.try_get("search_terms").map_err(sqlite_err))
                 .transpose()?
                 .flatten();
             let tokens: std::collections::HashSet<_> =
@@ -314,8 +313,8 @@ impl TursoTx {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.try_get("source_id").map_err(turso_err)?,
-                    row.try_get("version").map_err(turso_err)?,
+                    row.try_get("source_id").map_err(sqlite_err)?,
+                    row.try_get("version").map_err(sqlite_err)?,
                 ))
             })
             .collect::<StorageResult<_>>()?;
@@ -330,16 +329,16 @@ impl TursoTx {
         .await?;
         let mut roots = std::collections::HashSet::new();
         for row in ledger {
-            if row.try_get::<String>("surface").map_err(turso_err)? == "graph"
-                && row.try_get::<String>("state").map_err(turso_err)? == "committed"
+            if row.try_get::<String>("surface").map_err(sqlite_err)? == "graph"
+                && row.try_get::<String>("state").map_err(sqlite_err)? == "committed"
             {
                 let key = (
-                    row.try_get("source_id").map_err(turso_err)?,
-                    row.try_get("version").map_err(turso_err)?,
+                    row.try_get("source_id").map_err(sqlite_err)?,
+                    row.try_get("version").map_err(sqlite_err)?,
                 );
                 if let Some((source, generation)) = publication
                     && (key != (source.source_id, source.version)
-                        || row.try_get::<i64>("generation").map_err(turso_err)? != generation)
+                        || row.try_get::<i64>("generation").map_err(sqlite_err)? != generation)
                 {
                     continue;
                 }
@@ -368,21 +367,21 @@ impl TursoTx {
             return Err(StorageError::Conflict("invalid role".into()));
         }
         if capabilities.allow_owned_workspaces {
-            let root: bool = native_turso::query_scalar(
+            let root: bool = sqlite_db::query_scalar(
                 "SELECT owner_workspace_id IS NULL FROM oc_workspaces WHERE tenant_id=? AND id=?",
             )
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
             .fetch_one(&mut *self.tx)
             .await
-            .map_err(turso_err)?;
+            .map_err(sqlite_err)?;
             if !root {
                 return Err(StorageError::Forbidden);
             }
         }
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        native_turso::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(key_id).bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capabilities.allow_owned_workspaces).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(key_id).bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capabilities.allow_owned_workspaces).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         self.audit(
             "key.issue",
             key_id,
@@ -393,7 +392,7 @@ impl TursoTx {
     }
     pub async fn revoke_scoped_key(&mut self, id: Uuid) -> StorageResult<()> {
         self.check_permission(Permission::Delete).await?;
-        let result = native_turso::query(
+        let result = sqlite_db::query(
             "UPDATE oc_api_keys SET revoked=1 WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
@@ -401,7 +400,7 @@ impl TursoTx {
         .bind(id)
         .execute(&mut *self.tx)
         .await
-        .map_err(turso_err)?;
+        .map_err(sqlite_err)?;
         if result.rows_affected() == 0 {
             return Err(StorageError::NotFound);
         }
@@ -415,12 +414,12 @@ impl TursoTx {
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     pub async fn resume_pending(&mut self, key: LedgerKey) -> StorageResult<()> {
         if key.scope != self.scope {
             return Err(StorageError::Forbidden);
         }
-        native_turso::query("UPDATE oc_artifact_ledger SET state='pending',updated_at=? WHERE tenant_id=? AND workspace_id=? AND source_id=? AND version=? AND artifact_id=? AND surface=? AND generation=? AND state IN ('orphan','retry_wait')").bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(key.source.source_id).bind(key.source.version).bind(key.artifact_id).bind(key.surface.as_str()).bind(key.generation).execute(&mut *self.tx).await.map_err(turso_err)?;
+        sqlite_db::query("UPDATE oc_artifact_ledger SET state='pending',updated_at=? WHERE tenant_id=? AND workspace_id=? AND source_id=? AND version=? AND artifact_id=? AND surface=? AND generation=? AND state IN ('orphan','retry_wait')").bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(key.source.source_id).bind(key.source.version).bind(key.artifact_id).bind(key.surface.as_str()).bind(key.generation).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
 }

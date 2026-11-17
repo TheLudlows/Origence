@@ -2,31 +2,31 @@
 //! reads are associated inside one authority transaction before native ranking.
 use super::read_model::{NativeHitKey, unique_ids};
 use super::*;
-use crate::storage::native_turso as db;
+use crate::storage::sqlite_db as db;
 use crate::types::SearchHit;
 
 mod startup;
 
-impl TursoStore {
+impl SqliteStore {
     /// Root-active current publication metadata, not a visibility decision.
     pub async fn has_committed_full_text(&self) -> StorageResult<bool> {
-        let mut tx = self.pool.begin().await.map_err(turso_err)?;
+        let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
         let required = startup::has_full_text(&mut tx).await?;
-        tx.rollback().await.map_err(turso_err)?;
+        tx.rollback().await.map_err(sqlite_err)?;
         Ok(required)
     }
 
     /// Required profile schemas in one snapshot. Withdrawn or superseded roots
     /// do not prevent startup cleanup; no support graph is loaded here.
     pub async fn committed_vector_profiles(&self) -> StorageResult<Vec<(String, usize)>> {
-        let mut tx = self.pool.begin().await.map_err(turso_err)?;
+        let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
         let profiles = startup::vector_profiles(&mut tx).await?;
-        tx.rollback().await.map_err(turso_err)?;
+        tx.rollback().await.map_err(sqlite_err)?;
         Ok(profiles)
     }
 }
 
-impl TursoTx {
+impl SqliteTx {
     /// Exact roots for already-eligible IDs in the same authority snapshot.
     pub async fn native_candidate_sources(
         &mut self,
@@ -45,7 +45,7 @@ impl TursoTx {
     pub async fn full_text_generations(&mut self) -> StorageResult<Vec<i64>> {
         db::query_scalar("SELECT DISTINCT generation FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND surface='full_text' AND state='committed'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)
     }
 
     pub async fn full_text_candidates(
@@ -55,7 +55,7 @@ impl TursoTx {
     ) -> StorageResult<Vec<Uuid>> {
         let ids: Vec<read_model::AssociationKey> = db::query_scalar("SELECT artifact_id FROM oc_artifact_ledger WHERE tenant_id=? AND workspace_id=? AND generation=? AND surface='full_text' AND state='committed'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(generation)
-            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         self.index_candidate_ids(&ids, asset_filter, "full_text", generation)
             .await
     }
@@ -103,7 +103,7 @@ impl TursoTx {
             for slot in 0..8 {
                 query = query.bind(batch.get(slot).copied());
             }
-            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(turso_err)?);
+            indexed.extend(query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)?);
         }
         self.index_candidate_ids(&indexed, None, "full_text", generation)
             .await

@@ -1,5 +1,5 @@
 //! Loopback protocol fixture, not an AnySeek engine or ranking-acceptance test.
-//! Real Turso, public Service/worker and HTTP adapter code remain under test.
+//! Real SQLite, public Service/worker and HTTP adapter code remain under test.
 #![allow(dead_code)] // Shared by two integration executables with different fixture needs.
 use axum::{
     Json, Router,

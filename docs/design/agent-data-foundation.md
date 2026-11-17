@@ -48,7 +48,7 @@ flowchart TB
     AUTH --> SERVE
     AUTH --> REVIEW
     SERVE --> SEARCH[AnySeek：全文检索与向量检索]
-    SERVE --> STORE[Turso：权威数据、权限、版本与任务]
+    SERVE --> STORE[SQLite：权威数据、权限、版本与任务]
     ASSET --> BLOB[Blob：原文、Skill 包与必要工件]
     subgraph OBS[Agent 可观测性]
         RUN[私有 Run：上下文、Skill、工具与结果证据]
@@ -66,7 +66,7 @@ flowchart TB
 
 这是目标图。实线表示业务调用或数据依赖，虚线表示观测证据流；事件接收和查询均校验权限。
 客户端负责模型调用和工具执行，Origence 提供上下文、Skill 与证据管理。
-全文与向量只有 AnySeek 一条目标检索路径，业务权威数据保留在 Turso，原始文件保留在 Blob。
+全文与向量只有 AnySeek 一条目标检索路径，业务权威数据保留在 SQLite，原始文件保留在 Blob。
 
 ## 3. 上下文包含什么
 
@@ -176,7 +176,7 @@ Agent 或平台从授权记忆和已记录的执行经历提炼目标、前提�
 | 数据准备 | 接入资料、保留原文、解析/切块、生成查询与文档向量 | 保存文本、向量与检索 metadata，维护索引 |
 | 检索 | 派生授权范围、发起全文/向量查询、复核来源与版本、组装引用 | 全文匹配、向量相似检索与候选排序 |
 | 上下文与 Skill | 资产生命周期、经验提炼、用户审视、发布、交付与运行证据 | 提供获准内容的检索投影 |
-| 持久化 | Turso 保存权威状态与持久任务，Blob 保存原始工件 | 按稳定记录身份写入、更新、删除及恢复索引 |
+| 持久化 | SQLite 保存权威状态与持久任务，Blob 保存原始工件 | 按稳定记录身份写入、更新、删除及恢复索引 |
 
 Origence 选择并固定 embedding 模型/profile 和维度，AnySeek 执行向量检索。
 检索 metadata 携带完整 workspace、资产/来源版本和 generation；候选过滤与最终权威复核保持一致。

@@ -5,7 +5,7 @@ use crate::{
     parsing,
     storage::{
         local_blob::LocalBlobStore,
-        sqlite::{TursoStore, TursoTx},
+        sqlite::{SqliteStore, SqliteTx},
         *,
     },
     types::*,
@@ -64,7 +64,7 @@ impl Service {
         let dir = tokio::fs::canonicalize(dir.as_ref())
             .await
             .map_err(anyhow::Error::from)?;
-        let relational = Arc::new(TursoStore::open(dir.join("context.db")).await?);
+        let relational = Arc::new(SqliteStore::open(dir.join("context.db")).await?);
         let published = relational.has_committed_full_text().await?;
         let binding =
             crate::storage::retrieval_store::binding::prepare(&dir, &anyseek, published).await?;
@@ -131,12 +131,12 @@ impl Service {
             role: a.role,
         })
     }
-    pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<TursoTx> {
+    pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
         let mut tx = self.engine.relational().begin_read(authorized(a)).await?;
         tx.check_permission(permission).await?;
         Ok(tx)
     }
-    pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<TursoTx> {
+    pub(crate) async fn write(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
         let mut tx = self.engine.relational().begin(authorized(a)).await?;
         tx.check_permission(permission).await?;
         Ok(tx)
@@ -148,7 +148,7 @@ impl Service {
         op: &str,
         key: &str,
         input: &Value,
-    ) -> Result<(TursoTx, Option<Value>)> {
+    ) -> Result<(SqliteTx, Option<Value>)> {
         if key.is_empty() || key.len() > 200 || !key.is_ascii() {
             return Err(AppError::Invalid(
                 "Idempotency-Key must contain 1..200 ASCII characters".into(),
@@ -158,13 +158,13 @@ impl Service {
         let cached = tx.begin_command(op, key, &hash(input.to_string())).await?;
         Ok((tx, cached))
     }
-    pub(crate) async fn finish(mut tx: TursoTx, response: Value) -> Result<Value> {
+    pub(crate) async fn finish(mut tx: SqliteTx, response: Value) -> Result<Value> {
         tx.finish_command(response.clone()).await?;
         tx.commit().await?;
         Ok(response)
     }
     pub(crate) async fn enqueue(
-        tx: &mut TursoTx,
+        tx: &mut SqliteTx,
         payload: JobPayload,
         asset: Option<Uuid>,
         source: Option<Uuid>,

@@ -1,7 +1,7 @@
 use super::*;
 
-fn transaction(tx: Transaction, scope: Scope) -> TursoTx {
-    TursoTx {
+fn transaction(tx: Transaction, scope: Scope) -> SqliteTx {
+    SqliteTx {
         tx,
         scope,
         principal_id: Uuid::nil(),
@@ -32,14 +32,12 @@ fn normalized_object_members_preserve_every_duplicate_key() {
 async fn local_support_matches_native_parameter_json_oracle() {
     let dir = tempfile::tempdir().unwrap();
     let pool = Pool::open(dir.path().join("supports.db")).await.unwrap();
-    native_turso::query("CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,locator TEXT)")
+    sqlite_db::query("CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,locator TEXT)")
         .execute(&pool).await.unwrap();
-    native_turso::query(
-        "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlite_db::query("CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -52,7 +50,7 @@ async fn local_support_matches_native_parameter_json_oracle() {
         (scope.workspace_id, inactive, "retracted"),
         (Uuid::new_v4(), foreign, "active"),
     ] {
-        native_turso::query("INSERT INTO oc_events VALUES(?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(workspace)
             .bind(source)
@@ -112,7 +110,7 @@ async fn local_support_matches_native_parameter_json_oracle() {
     let active_hex = active.simple().to_string().to_uppercase();
     for (index, locator) in cases.iter().enumerate() {
         let asset = Uuid::from_u128(index as u128 + 1);
-        native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(Uuid::new_v4())
@@ -124,15 +122,14 @@ async fn local_support_matches_native_parameter_json_oracle() {
             .unwrap();
         // Independent oracle: native JSON directly over a bound locator,
         // with no business-table association or correlated subquery.
-        let semantic: bool = native_turso::query_scalar(
-            "SELECT json_extract(?,'$.parser') IS 'memory-semantics:v1'",
-        )
-        .bind(locator)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let semantic: bool =
+            sqlite_db::query_scalar("SELECT json_extract(?,'$.parser') IS 'memory-semantics:v1'")
+                .bind(locator)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         let visible = if semantic {
-            let sources: Vec<Option<String>> = native_turso::query_scalar(
+            let sources: Vec<Option<String>> = sqlite_db::query_scalar(
                 "SELECT upper(replace(value,'-','')) FROM json_each(?,'$.support_sources')",
             )
             .bind(locator)
@@ -156,7 +153,7 @@ async fn local_support_matches_native_parameter_json_oracle() {
     // Native extraction rejects malformed originals before Rust decoding.
     for malformed in ["{", "[", "not JSON"] {
         let asset = Uuid::new_v4();
-        native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(Uuid::new_v4())
@@ -167,7 +164,7 @@ async fn local_support_matches_native_parameter_json_oracle() {
             .await
             .unwrap();
         assert!(
-            native_turso::query_scalar::<bool>(
+            sqlite_db::query_scalar::<bool>(
                 "SELECT json_extract(?,'$.parser') IS 'memory-semantics:v1'",
             )
             .bind(malformed)
@@ -196,7 +193,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT)",
         "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)",
     ] {
-        native_turso::query(sql).execute(&pool).await.unwrap();
+        sqlite_db::query(sql).execute(&pool).await.unwrap();
     }
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
@@ -206,7 +203,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     let id = Uuid::new_v4();
     let source = Uuid::new_v4();
     let locator = r#"{"parser":"memory-semantics:v1","support_sources":[31]}"#;
-    let oracle = native_turso::query(
+    let oracle = sqlite_db::query(
         "SELECT value AS raw_source,typeof(value) AS raw_type,upper(replace(value,'-','')) AS source FROM json_each(?,'$.support_sources')",
     )
     .bind(locator)
@@ -219,7 +216,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     // Deliberately corrupt short-blob event identity in this unconstrained
     // fixture: hex(x'31') matches numeric 31. This proves the guard cannot drop
     // non-text values; it does not claim x'31' is a valid application UUID.
-    native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
+    sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(vec![0x31_u8])
@@ -229,7 +226,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     // The old source extraction fails String decoding even though local
     // upper/replace finds the deliberately corrupt active event.
     assert!(
-        native_turso::query_scalar::<String>(
+        sqlite_db::query_scalar::<String>(
             "SELECT DISTINCT value FROM json_each(?,'$.support_sources')",
         )
         .bind(locator)
@@ -237,14 +234,14 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         .await
         .is_err()
     );
-    native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
+    sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(source)
         .execute(&pool)
         .await
         .unwrap();
-    native_turso::query("INSERT INTO oc_versions VALUES(?,?,?,?,?)")
+    sqlite_db::query("INSERT INTO oc_versions VALUES(?,?,?,?,?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(asset)
@@ -253,7 +250,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         .execute(&pool)
         .await
         .unwrap();
-    native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
+    sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(id)
@@ -289,7 +286,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     ));
     tx.tx.rollback().await.unwrap();
     // Rejection by either earlier guard must not expose the delayed type error.
-    native_turso::query("UPDATE oc_events SET state='retracted'")
+    sqlite_db::query("UPDATE oc_events SET state='retracted'")
         .execute(&pool)
         .await
         .unwrap();
@@ -302,7 +299,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
             .is_empty()
     );
     tx.tx.rollback().await.unwrap();
-    native_turso::query("UPDATE oc_events SET state='active',kind='learning'")
+    sqlite_db::query("UPDATE oc_events SET state='active',kind='learning'")
         .execute(&pool)
         .await
         .unwrap();
@@ -317,7 +314,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     tx.tx.rollback().await.unwrap();
     // Containers are native text values: their later failure is UUID parsing,
     // not String decoding. A non-text member anywhere is decoded before UUIDs.
-    let rows = native_turso::query("SELECT value AS raw_source FROM json_each(?)")
+    let rows = sqlite_db::query("SELECT value AS raw_source FROM json_each(?)")
         .bind(r#"[{},[]]"#)
         .fetch_all(&pool)
         .await
@@ -326,7 +323,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         strict_support_sources(&rows),
         Err(StorageError::NotFound)
     ));
-    let rows = native_turso::query("SELECT value AS raw_source FROM json_each(?)")
+    let rows = sqlite_db::query("SELECT value AS raw_source FROM json_each(?)")
         .bind(r#"["not-a-uuid",17]"#)
         .fetch_all(&pool)
         .await
@@ -335,7 +332,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         strict_support_sources(&rows),
         Err(StorageError::Backend(_))
     ));
-    let rows = native_turso::query("SELECT value AS raw_source FROM json_each(?)")
+    let rows = sqlite_db::query("SELECT value AS raw_source FROM json_each(?)")
         .bind(r#"[17,"not-a-uuid"]"#)
         .fetch_all(&pool)
         .await
@@ -344,7 +341,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         strict_support_sources(&rows),
         Err(StorageError::Backend(_))
     ));
-    native_turso::query("UPDATE oc_events SET state='active',kind='knowledge'")
+    sqlite_db::query("UPDATE oc_events SET state='active',kind='knowledge'")
         .execute(&pool)
         .await
         .unwrap();
@@ -354,7 +351,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         json!([31, invalid_uuid]),
         json!([invalid_uuid]),
     ] {
-        native_turso::query("UPDATE oc_chunks SET locator=?")
+        sqlite_db::query("UPDATE oc_chunks SET locator=?")
             .bind(json!({"parser":"memory-semantics:v1","support_sources":values}).to_string())
             .execute(&pool)
             .await
@@ -369,34 +366,29 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         }
         tx.tx.rollback().await.unwrap();
     }
-    // This is bound JSON, not a SQL literal. Native Turso rejects the bare
-    // integer lexeme before it can become a real value; preserve that oracle.
+    // SQLite converts an out-of-range JSON integer to REAL. It remains an
+    // invalid source identity; do not emulate the retired engine's parse error.
     let large_integer_locator =
         r#"{"parser":"memory-semantics:v1","support_sources":[10000000000000000000000000000000]}"#;
-    let error = native_turso::query("SELECT value FROM json_each(?,'$.support_sources')")
+    let number: f64 = sqlite_db::query_scalar("SELECT value FROM json_each(?,'$.support_sources')")
         .bind(large_integer_locator)
-        .fetch_all(&pool)
+        .fetch_one(&pool)
         .await
-        .unwrap_err();
-    assert!(matches!(&error, native_turso::Error::Native(_)));
-    assert!(error.to_string().contains("number too large"));
-    native_turso::query("UPDATE oc_chunks SET locator=?")
+        .unwrap();
+    assert_eq!(number, 1e31);
+    sqlite_db::query("UPDATE oc_chunks SET locator=?")
         .bind(large_integer_locator)
         .execute(&pool)
         .await
         .unwrap();
     let mut tx = transaction(pool.begin().await.unwrap(), scope);
-    assert!(matches!(
-        tx.local_support_visibility(&[(asset, 1)]).await,
-        Err(StorageError::Backend(_))
-    ));
-    // A native expression error invalidates this lease; settle it before
-    // continuing the independent real-valued oracle.
+    assert!(!tx.local_support_visibility(&[(asset, 1)]).await.unwrap()[&(asset, 1)]);
+    assert!(!tx.semantic_version_visible(asset, 1).await.unwrap());
     tx.tx.rollback().await.unwrap();
     // Exercise a real lexeme separately. A valid all-decimal UUID collision
     // is checked when its native text has 32 digits; do not assume formatting.
     let large_locator = r#"{"parser":"memory-semantics:v1","support_sources":[1e31]}"#;
-    let large = native_turso::query(
+    let large = sqlite_db::query(
         "SELECT value AS raw_source,upper(replace(value,'-','')) AS source FROM json_each(?,'$.support_sources')",
     ).bind(large_locator).fetch_one(&pool).await.unwrap();
     assert!(matches!(
@@ -406,18 +398,18 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
     let normalized: String = large.try_get("source").unwrap();
     if normalized.len() == 32 && normalized.bytes().all(|byte| byte.is_ascii_digit()) {
         let numeric_source = Uuid::parse_str(&normalized).unwrap();
-        native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
+        sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(numeric_source)
             .execute(&pool)
             .await
             .unwrap();
-        native_turso::query("UPDATE oc_events SET state='active',kind='knowledge'")
+        sqlite_db::query("UPDATE oc_events SET state='active',kind='knowledge'")
             .execute(&pool)
             .await
             .unwrap();
-        native_turso::query("UPDATE oc_chunks SET locator=?")
+        sqlite_db::query("UPDATE oc_chunks SET locator=?")
             .bind(large_locator)
             .execute(&pool)
             .await
@@ -444,7 +436,7 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
         "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT)",
         "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB)",
     ] {
-        native_turso::query(sql).execute(&pool).await.unwrap();
+        sqlite_db::query(sql).execute(&pool).await.unwrap();
     }
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
@@ -453,7 +445,7 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
     let asset = Uuid::new_v4();
     let sources: Vec<_> = (1..=130).map(Uuid::from_u128).collect();
     for source in &sources {
-        native_turso::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
+        sqlite_db::query("INSERT INTO oc_events VALUES(?,?,?,'active','knowledge')")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(*source)
@@ -481,7 +473,7 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
     // Malformed unrelated history must not be evaluated by an exact read.
     locators.push("{".into());
     for (index, locator) in locators.iter().enumerate() {
-        native_turso::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_chunks VALUES(?,?,?,?,?,?)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .bind(Uuid::new_v4())
@@ -502,7 +494,7 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
             .await
             .unwrap()
     );
-    native_turso::query(
+    sqlite_db::query(
         "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
     )
     .bind(scope.tenant_id)
@@ -513,16 +505,14 @@ async fn exact_semantic_support_preserves_history_empty_sets_and_batched_sources
     .unwrap();
     assert!(!tx.semantic_version_visible(asset, 1).await.unwrap());
     assert!(tx.semantic_version_visible(asset, 2).await.unwrap());
-    native_turso::query(
-        "UPDATE oc_events SET kind=? WHERE tenant_id=? AND workspace_id=? AND id=?",
-    )
-    .bind(vec![0xff_u8])
-    .bind(scope.tenant_id)
-    .bind(scope.workspace_id)
-    .bind(sources[0])
-    .execute(&mut *tx.tx)
-    .await
-    .unwrap();
+    sqlite_db::query("UPDATE oc_events SET kind=? WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(vec![0xff_u8])
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(sources[0])
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
     // Local activity succeeds; exact source visibility still strictly decodes
     // the native event kind instead of treating a malformed kind as ordinary.
     assert!(tx.local_support_visibility(&[(asset, 5)]).await.unwrap()[&(asset, 5)]);
@@ -552,7 +542,7 @@ async fn native_parser_gating_ignores_only_unconsumed_invalid_support() {
         ] {
             let locator = format!("{{\"parser\":{parser},\"support_sources\":{support}}}");
             let mut old_tx = pool.begin().await.unwrap();
-            let old = native_turso::query_scalar::<i64>(
+            let old = sqlite_db::query_scalar::<i64>(
                 "SELECT 1 WHERE json_extract(?,'$.parser') IS NOT 'memory-semantics:v1' OR NOT EXISTS(SELECT 1 FROM json_each(?,'$.support_sources') WHERE upper(replace(value,'-','')) != ? OR value IS NULL)",
             )
             .bind(locator.as_str())
@@ -565,8 +555,8 @@ async fn native_parser_gating_ignores_only_unconsumed_invalid_support() {
             // Independent lease: a native expression failure must not make
             // the comparison pass merely because the first query autoaborted.
             let mut new_tx = pool.begin().await.unwrap();
-            let new: native_turso::Result<bool> = async {
-                let (semantic, kind, normalized): (bool, Option<String>, Option<String>) = native_turso::query_as(
+            let new: sqlite_db::Result<bool> = async {
+                let (semantic, kind, normalized): (bool, Option<String>, Option<String>) = sqlite_db::query_as(
                     "SELECT json_extract(?,'$.parser') IS 'memory-semantics:v1',CASE WHEN json_extract(?,'$.parser') IS 'memory-semantics:v1' THEN json_type(?,'$.support_sources') END,CASE WHEN json_extract(?,'$.parser') IS 'memory-semantics:v1' THEN json_quote(json_extract(?,'$.support_sources')) END",
                 )
                 .bind(locator.as_str())
@@ -584,7 +574,7 @@ async fn native_parser_gating_ignores_only_unconsumed_invalid_support() {
                 if kind.is_none() {
                     return Ok(true);
                 }
-                let values: Vec<Option<String>> = native_turso::query_scalar(
+                let values: Vec<Option<String>> = sqlite_db::query_scalar(
                     "SELECT upper(replace(value,'-','')) FROM json_each(?)",
                 )
                 .bind(normalized)
@@ -594,27 +584,15 @@ async fn native_parser_gating_ignores_only_unconsumed_invalid_support() {
             }
             .await;
             new_tx.rollback().await.unwrap();
-            if support == "[10000000000000000000000000000000]" {
-                // The old OR still evaluates this invalid native number. Plain
-                // and null parsers do not consume semantic support, so the new
-                // projection deliberately ignores it. Semantic rows still fail.
-                assert!(matches!(&old, Err(native_turso::Error::Native(_))));
-                if parser == "\"memory-semantics:v1\"" {
-                    assert!(matches!(&new, Err(native_turso::Error::Native(_))));
-                } else {
-                    assert!(matches!(new, Ok(true)), "{locator}: {new:?}");
-                }
-                continue;
-            }
             match (old, new) {
                 (Ok(old), Ok(new)) => assert_eq!(old, new, "{locator}"),
                 (Err(old), Err(new)) => {
                     assert!(
-                        matches!(&old, native_turso::Error::Native(_)),
+                        matches!(&old, sqlite_db::Error::Sqlite(_)),
                         "{locator}: {old}"
                     );
                     assert!(
-                        matches!(&new, native_turso::Error::Native(_)),
+                        matches!(&new, sqlite_db::Error::Sqlite(_)),
                         "{locator}: {new}"
                     );
                 }
