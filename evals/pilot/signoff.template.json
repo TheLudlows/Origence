@@ -4,43 +4,43 @@
   "integration_sha": null,
   "freeze_sha256": null,
   "matrix": {
-    "A1": {
+    "P1": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
       "unknowns": []
     },
-    "A2": {
+    "P2": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
       "unknowns": []
     },
-    "A3": {
+    "P3": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
       "unknowns": []
     },
-    "A4": {
+    "P4": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
       "unknowns": []
     },
-    "A5": {
+    "P5": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
       "unknowns": []
     },
-    "A6": {
+    "P6": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
       "unknowns": []
     },
-    "A7": {
+    "P7": {
       "status": "NOT_RUN",
       "evidence_refs": [],
       "failures": [],
@@ -81,5 +81,47 @@
     "Joint contract pending root confirmation.",
     "Real client/service/model execution not performed."
   ],
-  "rule": "No overall PASS without all A1-A7 evidence and DBA/policy-owner/independent signatures; self-reported success or offline fixtures do not qualify."
+  "rule": "No overall PASS without separate prd-v0.3.A1-A7 evidence, pilot.P1-P7 checks and DBA/policy-owner/independent signatures. Number equality is not a mapping. Self-reports and offline fixtures do not qualify.",
+  "matrix_namespace": "pilot.P",
+  "prd_matrix": {
+    "A1": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A2": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A3": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A4": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A5": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A6": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A7": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    }
+  },
+  "prd_matrix_namespace": "prd-v0.3.A",
+  "mapping_status": "PENDING_JOINT_REVIEW",
+  "prd_metrics_ref": null,
+  "metrics_note": "metrics_ref is legacy offline preparation metrics; prd_metrics_ref must independently report adjudicated pass/fail/pending and due counts per PRD v0.3."
 }

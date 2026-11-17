@@ -93,5 +93,42 @@
     "dba": null,
     "policy_owner": null,
     "independent_evaluator": null
+  },
+  "acceptance_mapping": {
+    "prd_revision": "v0.3",
+    "prd_requested_library_id": "libfile_0283272d2e948191aa958616af7dcd24",
+    "prd_pdf_sha256": "bdfed146e6879fbf4a8a28d4139ae474e2544400458e4bfc4196c768bf73a7a7",
+    "prd_namespace": "prd-v0.3.A1-A7",
+    "pilot_namespace": "pilot.P1-P7",
+    "mapping_ref": "PRD-MAPPING.md",
+    "status": "PENDING_JOINT_REVIEW"
+  },
+  "preflight": {
+    "checklist_ref": "PREFLIGHT.md",
+    "scored": false,
+    "status": "NOT_RUN",
+    "evidence_ref": null
+  },
+  "loading_evidence": {
+    "server_authorized_fetch_or_export": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "native_client_loading": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "content_in_model_context": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "local_residuals_after_withdrawal": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "managed_online_reload": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    }
   }
 }
