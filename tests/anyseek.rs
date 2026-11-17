@@ -33,9 +33,7 @@ fn entry(text: &str) -> FullTextEntry {
 fn config() -> AnySeekConfig {
     AnySeekConfig::new(
         &std::env::var("OC_ANYSEEK_URL").expect("real AnySeek URL required"),
-        &std::env::var("OC_ANYSEEK_API_KEY").expect("real AnySeek tenant key required"),
-        &std::env::var("OC_ANYSEEK_COLLECTION")
-            .expect("dedicated AnySeek test collection required"),
+        &std::env::var("OC_ANYSEEK_API_KEY").expect("real AnySeek service key required"),
     )
     .unwrap()
 }
@@ -57,19 +55,19 @@ fn query(
 }
 
 #[test]
-fn connection_rejects_unsafe_origins_and_invalid_identifiers() {
+fn connection_rejects_unsafe_origins_and_invalid_service_keys() {
     for base in [
         "http://example.com",
         "https://user:secret@example.com",
         "https://example.com/path",
         "https://example.com/?key=secret",
     ] {
-        assert!(AnySeekConfig::new(base, "test", "origence").is_err());
+        assert!(AnySeekConfig::new(base, "test").is_err());
     }
-    for collection in ["", "../other", "Invalid", "a/b"] {
-        assert!(AnySeekConfig::new("http://127.0.0.1:8080", "test", collection).is_err());
+    for key in ["", "bad\r\nheader"] {
+        assert!(AnySeekConfig::new("http://127.0.0.1:8080", key).is_err());
     }
-    assert!(AnySeekConfig::new("https://example.com", "test", "origence-lexical").is_ok());
+    assert!(AnySeekConfig::new("https://example.com", "test").is_ok());
 }
 
 #[test]
@@ -257,12 +255,7 @@ async fn real_anyseek_lost_write_response_is_verified_without_resubmission() {
     use std::sync::atomic::Ordering;
     let (base, posts, server) = lost_write_proxy().await;
     let store = AnySeekFullTextStore::new(
-        AnySeekConfig::new(
-            &base,
-            &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
-            &std::env::var("OC_ANYSEEK_COLLECTION").unwrap(),
-        )
-        .unwrap(),
+        AnySeekConfig::new(&base, &std::env::var("OC_ANYSEEK_API_KEY").unwrap()).unwrap(),
     )
     .unwrap();
     let scope = scope();
@@ -364,9 +357,8 @@ mod service_contract {
             .unwrap();
         assert!(!binding.contains(&std::env::var("OC_ANYSEEK_API_KEY").unwrap()));
         let changed = AnySeekConfig::new(
-            &std::env::var("OC_ANYSEEK_URL").unwrap(),
+            "http://127.0.0.1:1",
             &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
-            "different-collection",
         )
         .unwrap();
         assert!(
@@ -397,14 +389,8 @@ mod service_contract {
     #[ignore = "requires real AnySeek; verifies pending publication recovery after a lost write response"]
     async fn anyseek_pending_publication_reopens_with_its_saved_epoch() {
         let (base, posts, proxy) = lost_write_proxy().await;
-        let config = || {
-            AnySeekConfig::new(
-                &base,
-                &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
-                &std::env::var("OC_ANYSEEK_COLLECTION").unwrap(),
-            )
-            .unwrap()
-        };
+        let config =
+            || AnySeekConfig::new(&base, &std::env::var("OC_ANYSEEK_API_KEY").unwrap()).unwrap();
         let dir = tempfile::tempdir().unwrap();
         let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())
             .await
@@ -694,7 +680,7 @@ async fn unified_collection_configuration_is_exact_and_credentials_are_not_persi
     assert!(
         AnySeekFullTextStore::new(peer.config())
             .unwrap()
-            .check()
+            .check_scope(scope(), true)
             .await
             .is_err()
     );
@@ -703,7 +689,7 @@ async fn unified_collection_configuration_is_exact_and_credentials_are_not_persi
     assert!(AnySeekFullTextStore::vector_collection_config(0).is_err());
     assert!(AnySeekFullTextStore::vector_collection_config(4097).is_err());
     let dir = tempfile::tempdir().unwrap();
-    let peer = support::fixture(dir.path(), None);
+    let _peer = support::fixture(dir.path(), None);
     let service = support::open_service(dir.path(), origence::models::Models::disabled())
         .await
         .unwrap();
@@ -713,7 +699,15 @@ async fn unified_collection_configuration_is_exact_and_credentials_are_not_persi
         .await
         .unwrap();
     assert!(!binding.contains("test-owned-key"));
-    let wrong = AnySeekConfig::new(&peer.base, "test-owned-key", "different").unwrap();
+    let selected: serde_json::Value = serde_json::from_str(&binding).unwrap();
+    assert_eq!(
+        selected["routing"],
+        "tenant-uuid/workspace-ws-simple-uuid-v1"
+    );
+    assert!(selected.get("tenant").is_none());
+    assert!(selected.get("collection").is_none());
+    // Endpoint changes remain fenced, without a configured namespace/collection.
+    let wrong = AnySeekConfig::new("http://127.0.0.1:1", "test-owned-key").unwrap();
     assert!(
         origence::service::Service::open_with_anyseek(
             dir.path(),
@@ -722,6 +716,12 @@ async fn unified_collection_configuration_is_exact_and_credentials_are_not_persi
         )
         .await
         .is_err()
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(dir.path().join("full-text-backend.json"))
+            .await
+            .unwrap(),
+        binding
     );
     assert!(
         support::open_service(dir.path(), origence::models::Models::disabled())
@@ -737,7 +737,6 @@ async fn real_anyseek_vector_group_replay_and_partial_cleanup() {
     let config = AnySeekConfig::new(
         &std::env::var("OC_ANYSEEK_URL").unwrap(),
         &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
-        &std::env::var("OC_ANYSEEK_VECTOR_COLLECTION").unwrap(),
     )
     .unwrap()
     .with_embedding("real-fixture:v1".into(), 2)
@@ -992,4 +991,75 @@ async fn real_anyseek_graph_string_sets_direction_scope_and_replacement() {
         .delete_objects(scope, vec![row.id, competitor.id])
         .await
         .unwrap();
+}
+
+#[cfg(feature = "local-storage")]
+#[tokio::test]
+async fn workspace_collections_are_automatic_isolated_and_never_repaired_after_loss() {
+    let peer = support::AnySeekFixture::start(None);
+    let store = AnySeekFullTextStore::new(peer.config()).unwrap();
+    store.check().await.unwrap();
+    assert_eq!(
+        peer.creations(),
+        0,
+        "service health must not create a placeholder"
+    );
+    let a = Scope {
+        tenant_id: Uuid::parse_str("12345678-1234-4234-8234-123456789012").unwrap(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let b = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..a
+    };
+    let c = Scope {
+        tenant_id: Uuid::new_v4(),
+        ..a
+    };
+    peer.lose_next_create();
+    let (first, concurrent) = tokio::join!(store.check_scope(a, true), store.check_scope(a, true));
+    first.unwrap();
+    concurrent.unwrap();
+    assert_eq!(
+        peer.creations(),
+        1,
+        "lost response/concurrent initialization must converge"
+    );
+    // Identical logical artifact/source IDs can coexist in distinct scopes.
+    let row = entry("workspace scoped token");
+    for target in [a, b, c] {
+        let mut scoped_row = row.clone();
+        scoped_row.payload.content =
+            format!("content for {}/{}", target.tenant_id, target.workspace_id);
+        store
+            .upsert(target, vec![scoped_row.clone()], operation_epoch().unwrap())
+            .await
+            .unwrap();
+        let payloads = store.read_payloads(target, &[row.id]).await.unwrap();
+        assert_eq!(payloads.get(&row.id), Some(&scoped_row.payload));
+        let (q, sources) = query(target, std::slice::from_ref(&row), "token");
+        assert_eq!(store.search(q, &sources).await.unwrap()[0].id, row.id);
+    }
+    assert_eq!(peer.creations(), 3);
+    for target in [a, b, c] {
+        assert!(peer.routes().contains(&(
+            target.tenant_id.to_string(),
+            format!("ws_{}", target.workspace_id.simple())
+        )));
+    }
+    peer.remove_collection(a);
+    assert!(store.check().await.is_err());
+    assert!(
+        store
+            .upsert(a, vec![row], operation_epoch().unwrap())
+            .await
+            .is_err()
+    );
+    let reopened = AnySeekFullTextStore::new(peer.config()).unwrap();
+    assert!(reopened.check_scope(a, false).await.is_err());
+    assert_eq!(
+        peer.creations(),
+        3,
+        "missing committed collection must not be recreated"
+    );
 }

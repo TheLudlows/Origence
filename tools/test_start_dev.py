@@ -17,7 +17,7 @@ role=pathlib.Path(sys.argv[0]).stem
 args=sys.argv[1:]
 port=int(next(a.split('=',1)[1] for a in args if a.startswith('local_port='))) if role=='anyseek' else int(args[args.index('--bind')+1].split(':')[-1]) if role=='origence' else int(os.environ['ORIGENCE_UI_PORT'])
 if role=='anyseek': assert 'OC_ANYSEEK_API_KEY' not in os.environ
-if role=='origence': assert 'MASTER_KEY_SECRET' not in os.environ
+if role=='origence': assert 'MASTER_KEY_SECRET' not in os.environ and 'OC_ANYSEEK_COLLECTION' not in os.environ and 'OC_ANYSEEK_TENANT' not in os.environ
 if role=='node': assert 'MASTER_KEY_SECRET' not in os.environ and 'OC_ANYSEEK_API_KEY' not in os.environ
 pathlib.Path(os.environ['DEV_TEST_RECORD']+'/'+role).write_text(json.dumps({'pid':os.getpid(),'args':args}))
 print(os.environ['DEV_TEST_SECRET'],flush=True)
@@ -29,9 +29,10 @@ if role=='origence':
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*args): pass
  def do_GET(self):
+  if role=='anyseek': assert self.path=='/api/v1/live' and self.headers.get('apikey')=='disposable-key'
   code=302 if mode=='redirect' and role=='anyseek' else 403 if mode=='denied' and role=='anyseek' else 503 if mode=='timeout' and role=='anyseek' else 200
   self.send_response(code);self.end_headers()
-  body={'name':'origence-search-sha256-v3','analysis':{'format':'native-package-analysis:v1'}} if role=='anyseek' else {'status':'ready'}
+  body='fixture-1' if role=='anyseek' else {'status':'ready'}
   self.wfile.write(b'<html>fixture</html>' if role=='node' else json.dumps(body).encode())
 http.server.HTTPServer(('127.0.0.1',port),Handler).serve_forever()
 '''
@@ -49,7 +50,7 @@ class StartDevTests(unittest.TestCase):
         (self.root/'api').mkdir(); (self.root/'api/context.db').write_text('fixture')
         (self.root/'index').mkdir(); (self.root/'index/existing').touch()
         (self.root/'records').mkdir()
-        self.env = dict(os.environ, MASTER_KEY_SECRET='disposable-master', OC_ANYSEEK_API_KEY='disposable-key', OC_ANYSEEK_COLLECTION='fixture', DEV_TEST_SECRET='MUST_NOT_LEAK_471', DEV_TEST_RECORD=str(self.root/'records'))
+        self.env = dict(os.environ, MASTER_KEY_SECRET='disposable-master', OC_ANYSEEK_API_KEY='disposable-key', DEV_TEST_SECRET='MUST_NOT_LEAK_471', DEV_TEST_RECORD=str(self.root/'records'))
         for category in ['CACHE','CONFIG','DATA']:
             self.env['XDG_'+category+'_HOME'] = str(self.root/category)
         for role in ['anyseek','origence','node']:

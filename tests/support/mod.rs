@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
     extract::{Path as RoutePath, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
 };
 use origence::{
@@ -18,7 +19,7 @@ use origence::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
 };
@@ -35,6 +36,10 @@ pub fn without_retrieval_observations(value: &Value) -> Value {
 struct Data {
     content_read: Option<Arc<ContentReadGate>>,
     records: BTreeMap<String, Value>,
+    collections: HashSet<(String, String)>,
+    creations: usize,
+    routes: Vec<(String, String)>,
+    lose_next_create: bool,
     stale_graph_anchors: Vec<Value>,
     groups: HashMap<String, u64>,
     receipts: HashMap<String, Value>,
@@ -102,6 +107,8 @@ impl AnySeekFixture {
             data: Arc::new(Mutex::new(Data::default())),
         });
         let app = Router::new()
+            .route("/api/v1/live", get(|| async { Json("fixture-1") }))
+            .route("/api/v1/index", get(list).post(create))
             .route("/api/v1/index/{id}", get(info))
             .route("/api/v1/index/{id}/group", get(group))
             .route("/api/v1/index/{id}/group/replace", post(replace))
@@ -132,7 +139,22 @@ impl AnySeekFixture {
         self.data.lock().unwrap().bad_diagnostics = value;
     }
     pub fn config(&self) -> AnySeekConfig {
-        AnySeekConfig::new(&self.base, "test-owned-key", "origence-test").unwrap()
+        AnySeekConfig::new(&self.base, "test-owned-key").unwrap()
+    }
+    pub fn creations(&self) -> usize {
+        self.data.lock().unwrap().creations
+    }
+    pub fn routes(&self) -> Vec<(String, String)> {
+        self.data.lock().unwrap().routes.clone()
+    }
+    pub fn lose_next_create(&self) {
+        self.data.lock().unwrap().lose_next_create = true;
+    }
+    pub fn remove_collection(&self, scope: Scope) {
+        self.data.lock().unwrap().collections.remove(&(
+            scope.tenant_id.to_string(),
+            format!("ws_{}", scope.workspace_id.simple()),
+        ));
     }
     pub fn unavailable(&self, value: bool) {
         self.data.lock().unwrap().unavailable = value;
@@ -205,12 +227,13 @@ pub fn command_env(command: &mut tokio::process::Command, dir: &Path, dimension:
     command
         .env("OC_FULL_TEXT_BACKEND", "anyseek")
         .env("OC_ANYSEEK_URL", &remote.base)
-        .env("OC_ANYSEEK_API_KEY", "test-owned-key")
-        .env("OC_ANYSEEK_COLLECTION", "origence-test");
+        .env("OC_ANYSEEK_API_KEY", "test-owned-key");
 }
 
 #[derive(Clone)]
 struct QueryId(String);
+#[derive(Clone)]
+struct Namespace(String);
 fn analysis_fingerprint() -> String {
     storage::hash("fixture-analysis-v1")
 }
@@ -218,6 +241,30 @@ async fn request_id(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
+    if request
+        .headers()
+        .get("apikey")
+        .and_then(|v| v.to_str().ok())
+        != Some("test-owned-key")
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"code":"unauthorized"})),
+        )
+            .into_response();
+    }
+    if request.uri().path() != "/api/v1/live" {
+        let tenant = request
+            .headers()
+            .get("x-anyseek-tenant")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if Uuid::parse_str(tenant).is_err() {
+            return failure(StatusCode::BAD_REQUEST).into_response();
+        }
+        let tenant = tenant.to_owned();
+        request.extensions_mut().insert(Namespace(tenant));
+    }
     let id = Uuid::new_v4().simple().to_string();
     request.extensions_mut().insert(QueryId(id.clone()));
     let mut response = next.run(request).await;
@@ -237,9 +284,59 @@ async fn request_id(
     response
 }
 
-async fn info(State(f): State<Arc<AnySeekFixture>>) -> (StatusCode, Json<Value>) {
-    if f.data.lock().unwrap().unavailable {
-        return failure(StatusCode::NOT_FOUND);
+async fn list(
+    State(f): State<Arc<AnySeekFixture>>,
+    axum::extract::Extension(Namespace(tenant)): axum::extract::Extension<Namespace>,
+) -> (StatusCode, Json<Value>) {
+    let data = f.data.lock().unwrap();
+    if data.unavailable {
+        return failure(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    (
+        StatusCode::OK,
+        Json(json!(
+            data.collections
+                .iter()
+                .filter(|(t, _)| t == &tenant)
+                .map(|(_, id)| json!({"id":id}))
+                .collect::<Vec<_>>()
+        )),
+    )
+}
+async fn create(
+    State(f): State<Arc<AnySeekFixture>>,
+    axum::extract::Extension(Namespace(tenant)): axum::extract::Extension<Namespace>,
+    Json(q): Json<Value>,
+) -> (StatusCode, Json<Value>) {
+    let mut data = f.data.lock().unwrap();
+    if data.unavailable {
+        return failure(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    let id = q["collection_id"].as_str().unwrap().to_owned();
+    if !data.collections.insert((tenant, id.clone())) {
+        return failure(StatusCode::CONFLICT);
+    }
+    data.creations += 1;
+    if data.lose_next_create {
+        data.lose_next_create = false;
+        return failure(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    (StatusCode::OK, Json(json!({"collection_id": id})))
+}
+async fn info(
+    State(f): State<Arc<AnySeekFixture>>,
+    RoutePath(id): RoutePath<String>,
+    axum::extract::Extension(Namespace(tenant)): axum::extract::Extension<Namespace>,
+) -> (StatusCode, Json<Value>) {
+    {
+        let mut data = f.data.lock().unwrap();
+        data.routes.push((tenant.clone(), id.clone()));
+        if data.unavailable {
+            return failure(StatusCode::NOT_FOUND);
+        }
+        if !data.collections.contains(&(tenant, id)) {
+            return failure(StatusCode::FORBIDDEN);
+        }
     }
     let schema = match f.dimension {
         Some(d) => AnySeekFullTextStore::vector_collection_config(d).unwrap(),
@@ -264,14 +361,22 @@ fn failure(status: StatusCode) -> (StatusCode, Json<Value>) {
 }
 async fn group(
     State(f): State<Arc<AnySeekFixture>>,
+    RoutePath(collection): RoutePath<String>,
+    axum::extract::Extension(Namespace(tenant)): axum::extract::Extension<Namespace>,
     Query(q): Query<HashMap<String, String>>,
 ) -> (StatusCode, Json<Value>) {
     let data = f.data.lock().unwrap();
     if data.unavailable {
         return failure(StatusCode::NOT_FOUND);
     }
+    if !data
+        .collections
+        .contains(&(tenant.clone(), collection.clone()))
+    {
+        return failure(StatusCode::NOT_FOUND);
+    }
     let id = q.get("group_id").unwrap();
-    match data.groups.get(id) {
+    match data.groups.get(&format!("{tenant}/{collection}/{id}")) {
         Some(v) => (
             StatusCode::OK,
             Json(json!({"group_id":id,"group_version":v})),
@@ -281,22 +386,31 @@ async fn group(
 }
 async fn replace(
     State(f): State<Arc<AnySeekFixture>>,
+    RoutePath(collection): RoutePath<String>,
+    axum::extract::Extension(Namespace(tenant)): axum::extract::Extension<Namespace>,
     Json(q): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
     let mut data = f.data.lock().unwrap();
     if data.unavailable {
         return failure(StatusCode::NOT_FOUND);
     }
+    if !data
+        .collections
+        .contains(&(tenant.clone(), collection.clone()))
+    {
+        return failure(StatusCode::NOT_FOUND);
+    }
     if data.reject_writes {
         return failure(StatusCode::SERVICE_UNAVAILABLE);
     }
     data.posts += 1;
-    let operation = q["operation_id"].to_string();
+    let operation = format!("{tenant}/{collection}/{}", q["operation_id"]);
     if let Some(receipt) = data.receipts.get(&operation) {
         return (StatusCode::OK, Json(receipt.clone()));
     }
     let group = q["group_id"].as_str().unwrap().to_string();
-    let current = data.groups.get(&group).copied().unwrap_or(0);
+    let group_key = format!("{tenant}/{collection}/{group}");
+    let current = data.groups.get(&group_key).copied().unwrap_or(0);
     if q["expected_group_version"].as_u64() != Some(current) {
         return failure(StatusCode::CONFLICT);
     }
@@ -310,7 +424,7 @@ async fn replace(
         data.records
             .insert(row["record_id"].as_str().unwrap().into(), row.clone());
     }
-    data.groups.insert(group.clone(), current + 1);
+    data.groups.insert(group_key, current + 1);
     let receipt = json!({"atomic":true,"operation_id":q["operation_id"],"receipt":{"group_id":group,"group_version":current+1,"record_count":rows.len()}});
     data.receipts.insert(operation, receipt.clone());
     if data.lose_next_write {
@@ -389,7 +503,8 @@ fn scores(record: &Value, q: &Value) -> Option<f64> {
 }
 async fn query(
     State(f): State<Arc<AnySeekFixture>>,
-    RoutePath(_): RoutePath<String>,
+    RoutePath(collection): RoutePath<String>,
+    axum::extract::Extension(Namespace(tenant)): axum::extract::Extension<Namespace>,
     axum::extract::Extension(QueryId(request_id)): axum::extract::Extension<QueryId>,
     Json(q): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
@@ -424,7 +539,23 @@ async fn query(
             Some("graph_keys" | "endpoint_ids")
         )
     });
-    let mut candidates = data.records.clone();
+    if !data
+        .collections
+        .contains(&(tenant.clone(), collection.clone()))
+    {
+        return failure(StatusCode::NOT_FOUND);
+    }
+    let mut candidates: BTreeMap<_, _> = data
+        .records
+        .iter()
+        .filter(|(_, row)| {
+            row["document"]["tenant"] == tenant
+                && row["document"]["workspace"]
+                    .as_str()
+                    .is_some_and(|ws| collection == format!("ws_{}", ws.replace('-', "")))
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     if graph_query {
         for anchor in &data.stale_graph_anchors {
             candidates.insert(
@@ -522,7 +653,13 @@ impl Projection {
             .map(|r| r["document"]["publication"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
         for group in groups {
-            data.groups.entry(group).or_insert(1);
+            data.groups
+                .entry(format!(
+                    "{}/ws_{}/{group}",
+                    scope.tenant_id,
+                    scope.workspace_id.simple()
+                ))
+                .or_insert(1);
         }
         Ok(())
     }
@@ -542,7 +679,13 @@ impl Projection {
             .map(|r| r["document"]["publication"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
         for group in groups {
-            data.groups.entry(group).or_insert(1);
+            data.groups
+                .entry(format!(
+                    "{}/ws_{}/{group}",
+                    scope.tenant_id,
+                    scope.workspace_id.simple()
+                ))
+                .or_insert(1);
         }
         Ok(())
     }
@@ -621,7 +764,30 @@ impl Projection {
         Ok(())
     }
     pub async fn check_full_text_available(&self) -> StorageResult<()> {
-        AnySeekFullTextStore::new(self.0.config())?.check().await
+        let (scopes, profile) = {
+            let data = self.0.data.lock().unwrap();
+            if data.unavailable {
+                return Err(StorageError::Unavailable("test backend unavailable".into()));
+            }
+            (
+                data.collections.iter().cloned().collect::<Vec<_>>(),
+                data.profile.clone(),
+            )
+        };
+        let mut config = self.0.config();
+        if let (Some(d), Some(p)) = (self.0.dimension, profile) {
+            config = config.with_embedding(p, d)?;
+        }
+        let backend = AnySeekFullTextStore::new(config)?;
+        backend.check().await?;
+        for (tenant, collection) in scopes {
+            let scope = Scope {
+                tenant_id: Uuid::parse_str(&tenant).unwrap(),
+                workspace_id: Uuid::parse_str(collection.strip_prefix("ws_").unwrap()).unwrap(),
+            };
+            backend.check_scope(scope, false).await?;
+        }
+        Ok(())
     }
     pub async fn check_vector_available(
         &self,

@@ -5,6 +5,17 @@
 完整字段与约束以 [authority schema](../../src/storage/sqlite/schema.rs) 及其引入的 DDL 为准，
 不另行维护逐字段副本或物理表数量。
 
+## AnySeek 连接边界
+
+AnySeek 只配置 endpoint 和服务间凭据。数据请求由已鉴权 `Scope` 自动路由：
+`X-AnySeek-Tenant = tenant_id` 的规范 UUID 字符串，collection 为 `ws_<workspace_id.simple()>`。
+无默认 namespace/collection 配置或跨 workspace 回退；所有受保护请求传递 `apikey`。
+服务启动只检查服务连通性/凭据与已发布 workspace 集合；新 workspace 首次使用时创建
+固定 schema 集合，创建未知结果通过严格回读判定。已发布集合缺失、不兼容或分析摘要变化
+必须失败，不能以空集合继续服务。候选内容仍需通过 Origence 权威范围与来源/版本复核。
+后端绑定 `origence-content-backend-v2` 固定 endpoint、路由规则、模型空间及首次使用时的分析摘要，不含服务凭据；
+已有发布但没有已初始化摘要时拒绝打开。AnySeek 不保存或签发租户 Key。
+
 ## SQLite 与最小元数据
 
 权威数据和任务队列统一使用 bundled SQLite 3.54.1（rusqlite 0.43.0，关闭默认

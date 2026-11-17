@@ -1,12 +1,12 @@
 # Origence · 当前进度
 
-更新：2026-11-17。已同步 main `739be8c`（含 #81、#83、#84、#86），
-已发布正文和摘要文本与索引统一保存到 AnySeek。产品边界见[架构规划](design/agent-data-foundation.md)。
+更新：2026-11-17。已同步 main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)
+（含 #81、#83、#84、#85、#86），保留已发布正文与索引统一存储、服务凭据和 workspace 自动路由。
+产品边界见[架构规划](design/agent-data-foundation.md)。
 **#76 仍未完成：五页首版与部分真实浏览器验收已完成；完整无障碍、双客户端和企业任务仍缺。**
 
-PR #82 保留窄屏表格、退出入口、粗指针按钮与诚实 PDF fallback 修复；
-已同步 main `739be8c`，包含 SQLite、资产关联 Run、Windows 启动器与 AnySeek 正文存储。
-历史与本次响应式、键盘、固定版本/撤回证据分别见 [VALIDATION](VALIDATION.md)。
+PR #82 包含窄屏表格、退出入口、粗指针按钮与 PDF 来源提示修复。
+响应式、键盘、固定版本/撤回证据及本次同步验证分别见 [VALIDATION](VALIDATION.md)。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -15,6 +15,15 @@ PR #82 保留窄屏表格、退出入口、粗指针按钮与诚实 PDF fallback
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 | Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
+
+## AnySeek 服务凭据与 workspace 集合
+
+只配置 `OC_ANYSEEK_URL` 与 `OC_ANYSEEK_API_KEY`；已鉴权 tenant UUID 直接作为
+AnySeek 命名空间，workspace UUID 对应 `ws_<无连字符 UUID>` 集合，无须另配租户或集合。
+首次使用按固定 schema 自动初始化，并发及创建响应丢失后严格回读；已有发布的集合在
+启动时检查，丢失/配置漂移不会静默建空。绑定 `origence-content-backend-v2` 固定正文格式、路由及模型配置，首次集合使用时
+持久化分析摘要。AnySeek 不签发租户 Key；Origence 用户权限和私有会话保持原语义。
+验证见 VALIDATION。
 
 ## AnySeek 正文与索引统一存储
 

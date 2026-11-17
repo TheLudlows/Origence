@@ -359,15 +359,49 @@ async fn configuration_checks_reject_wrong_embedding_space_and_persist_analysis_
     let dir = tempfile::tempdir().unwrap();
     let remote = fixture(dir.path(), None);
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    service
+        .engine
+        .relational()
+        .create_workspace(scope.tenant_id, scope.workspace_id, "analysis binding")
+        .await
+        .unwrap();
+    let key = service
+        .engine
+        .relational()
+        .issue_key(scope, "writer")
+        .await
+        .unwrap();
+    let auth = service.auth(&key.token).await.unwrap();
+    service
+        .memory(
+            &auth,
+            "pin-analysis",
+            serde_json::from_value(
+                json!({"fact_key":"analysis.policy", "content":"Pin analysis before publication"}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    while worker::process_next(&service).await.unwrap() {}
     service.engine.shutdown().await.unwrap();
     drop(service);
     let binding = std::fs::read(dir.path().join("full-text-backend.json")).unwrap();
-    let mut info: Value = reqwest::get(format!("{}/api/v1/index/origence-test", remote.base))
+    let mut info: Value = reqwest::Client::new()
+        .get(format!(
+            "{}/api/v1/index/ws_{}",
+            remote.base,
+            scope.workspace_id.simple()
+        ))
+        .header("apikey", "test-owned-key")
+        .header("X-AnySeek-Tenant", scope.tenant_id.to_string())
+        .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
+    let original_analysis = info["analysis"].clone();
     info["analysis"]["fingerprint"] =
         json!(origence::storage::hash("different native configuration"));
     remote.info_override("analysis", info["analysis"].clone());
@@ -375,5 +409,17 @@ async fn configuration_checks_reject_wrong_embedding_space_and_persist_analysis_
     assert_eq!(
         binding,
         std::fs::read(dir.path().join("full-text-backend.json")).unwrap()
+    );
+    remote.info_override("analysis", original_analysis);
+    let reopened = open_service(dir.path(), Models::disabled()).await.unwrap();
+    reopened.engine.shutdown().await.unwrap();
+    drop(reopened);
+    let created = remote.creations();
+    remote.remove_collection(scope);
+    assert!(open_service(dir.path(), Models::disabled()).await.is_err());
+    assert_eq!(
+        remote.creations(),
+        created,
+        "restart must not recreate a missing published collection"
     );
 }

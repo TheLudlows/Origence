@@ -1,9 +1,35 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。本次已同步 main
-[`739be8c`](https://github.com/TheLudlows/Origence/commit/739be8cc8cf62ba80d8ea598504327e1fd63e24e)，
-最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
+核验日期：2026-11-17。已同步 main
+[`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
+最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：#82 同步 #85 后解决文档冲突（当前）
+
+从 PR #82 HEAD `74de4655d5c251970be716ad873f8cfdb1ee0a3a` 普通 merge main
+`92258fc578bbdb1c21ca949ddbbcfb1729a5813a`（已合入 #85）。冲突只有 STATUS 与本文；
+合并保留窄屏/PDF 验证、#85 workspace 自动路由和各批次历史证据。相对该 main，
+Rust、API、SQL、Cargo/Node 依赖与 CI 无改动；UI 改动范围仍是 CSS、来源提示和 DOM 回归。
+
+本次 Linux / Node 24.19.0、Rust 1.98.0：
+
+- `npm --prefix ui run check`、`npm --prefix ui test` 通过，**17 项**；使用与锁文件一致的既有依赖。
+- `cargo fmt --all -- --check`、默认特性 `cargo clippy --locked --all-targets -- -D warnings`
+  与 `git diff --check` 通过。没有重跑完整 Rust 测试集；main 的 435 项结果按其原提交保留。
+- 真实 localhost Node UI → Origence → AnySeek **通过**：身份、上传/发布、目录、历史、
+  检索、上下文、私有 Run 隔离和来源撤回。后端使用与 main 相同 Rust 源码的生产二进制、
+  固定 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`、独立 fresh 数据目录、
+  自动 workspace collection 和一次性服务凭据，不调用真实模型、不拦截或模拟 API。
+- Chromium **154.0.8037.57** headless：五页 × 1440/1024/736/375/320 × 浅/深色，
+  **50 个布局组合**无整页横向溢出且退出可见；另 **10 个 Run 详情布局**通过。
+  320px 触屏模拟中主题切换、调用链路导航、可见按钮高度 ≥44px 和退出后回到登录通过。
+- 375px 页面调用真实 PDF source 的来源预览：页码 2 提示、不可核验页内文本说明、
+  不生成高亮与授权下载通过；下载 SHA-256 与上传的两页 PDF 原字节一致。
+  本轮没有增加真正的 PDF 页内文本展示或高亮，也没有重复历史的全部键盘/撤回复验。
+
+浏览器脚本与一次性数据仅留在临时目录，不提交 token/截图或测试产物。真实 Windows、
+实体触屏与屏幕阅读器未执行；本次不宣称 #76 完整验收。远端 CI 以此合并提交为准。
 
 ## 2026-11-17：#82 同步最新 main 后的限定复验
 
@@ -36,6 +62,103 @@
 
 脚本/截图/临时 key 留在本地且不提交；未运行真实 Windows、实体触屏或屏幕阅读器。
 本节不宣称 #76 完整验收。远端 CI 以此次 merge 提交的实际 run 为准，不能沿用旧 HEAD 结果。
+
+## 2026-11-17：#85 同步 main 与冲突整合（当前）
+
+将 main `739be8c`（含 #84 Windows 联启与 #86 AnySeek 正文存储）合入 #85。保留
+`origence-content-sha256-v1` payload schema、不可变历史内容/来源核验和 workspace 自动路由。
+新增正文读取接口向每次查询传递已鉴权 Scope；路由回归用相同 chunk/source ID 在三个
+租户/workspace 组合保存不同正文，并核对各自返回值。后端绑定改为
+`origence-content-backend-v2`，同时固定正文格式和自动路由；旧绑定拒绝、不转换或覆盖。
+
+Windows 启动器不再要求或转发 `OC_ANYSEEK_COLLECTION`，改用携带服务凭据的
+`/api/v1/live` 验证版本与服务凭据；Origence 继续检查已发布集合。初始化文档移除旧
+租户注册/Key 签发/手工建集合请求。测试断言正确探测路径、服务凭据、进程环境隔离、
+退出清理和失败传播；未放宽端口、目录、输出抑制和进程所有权约束。
+
+Linux / Rust 1.98.0；AnySeek 正常生产构建固定 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`
+（Rust 1.99.1）；不使用真实用户数据或模型服务。
+
+| 检查 | 结果 |
+| --- | --- |
+| 默认完整回归 | PASS：222 lib + 5 协议 + 14 core + 194 local = 435 项；8 项真实契约另执行 |
+| 核心库 / 独立 SQLite authority | PASS：87 / 233 项；5 项真实契约 ignored 不计入通过 |
+| Clippy | PASS：default、no-default、no-default + sqlite 三组 all-targets，均 `-D warnings` |
+| 格式/补丁 | PASS：`cargo fmt --check`、`git diff --check` |
+| 真实 AnySeek | PASS：8 项契约，HTTP/stdio MCP、历史版本/Run 重放与 AnySeek 进程重启后正文/索引一致 |
+| 真实 HTTP / Node UI | PASS：两套 smoke，包含上传、发布、检索、上下文、历史、私有 Run 和来源撤回 |
+| Linux PowerShell 7.4.13 | PASS：7 项模拟子服务/进程合同回归；官方 release SHA-256 核验后运行 |
+
+本次冲突处理没有新增 SQL 或依赖；保留 main 的单表事务、异步 IO 边界与权限/来源复核。
+新增当前记录，以下各批次证据保留原范围。Linux PowerShell 不等于真实 Windows 控制台
+信号/原生 MSVC 验收；Windows/Linux 远端 CI 以本次合并提交记录为准。
+
+## 2026-11-17：workspace 自动映射（同步 main 前）
+
+`AnySeekConfig::new(base, service_key)` 只接收连接与服务凭据。移除租户和集合配置；
+已鉴权 Scope 的 tenant UUID 直接作为命名空间，workspace 对应 `ws_<无连字符 UUID>`。
+服务启动无占位集合；首次使用创建固定 schema，已发布集合在启动时严格核验，丢失不补建。
+绑定 v6 保存 endpoint/路由规则/模型及首次使用时持久化的分析摘要，不保存凭据。
+
+Linux / Rust 1.98.0；真实引擎为 AnySeek
+[`6a46fc7`](https://github.com/TheLudlows/anyseek/commit/6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a)
+正常生产构建（Rust 1.99.1，无 fault-injection）。CI 夹具固定同一提交。
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-fail-fast` | PASS：431 项，另 8 项真实引擎契约 ignored 后单独执行 |
+| `cargo test --locked --no-default-features` | PASS：87 项，另 5 项真实引擎契约 ignored，不计通过 |
+| 默认与无默认特性 Clippy | PASS：`cargo clippy --locked [--no-default-features] --all-targets -- -D warnings` |
+| 格式与补丁 | PASS：`cargo fmt --check`、`git diff --check` |
+| 真实 AnySeek 契约 | PASS：8 项；全文/向量/图、发布重试、响应丢失恢复与 public Service 重开 |
+| HTTP / stdio MCP | PASS：搜索、读取、引用、更新、历史、用户 key 撤销、Run 诊断与进程重开 |
+| `tools/smoke.py` 经真实 AnySeek | PASS：公开 HTTP、身份范围、发布、检索与重开 |
+| Node UI → Origence → 真实 AnySeek | PASS：上传、发布、目录、历史、检索、上下文、私有 Run 隔离和来源撤回 |
+
+协议回归覆盖数字开头 tenant UUID、同租户不同 workspace、不同租户复用 workspace UUID、
+并发初始化、创建响应丢失后严格回读、已发布集合丢失后不重建、分析摘要漂移与凭据不落盘。
+夹具按命名空间/集合限制数据，真实验收不再预创建集合。AnySeek 未知 scoped ID 返回 403；
+客户端仅在带服务凭据的命名空间列表确认缺失后创建，不把任意权限错误当作缺失。
+
+新增的已发布 workspace 枚举复用原有有界单表读取与同事务来源核验，没有新增 SQL 语句、
+JOIN 或表；事务结束后再访问远端集合。此前一次离线 CLI 夹具直接注入投影、绕过首次绑定，
+现先通过公开发布路径初始化；完整回归及真实验收均在修正后重跑。
+本轮只验证独立新库及同版本重启/恢复；未执行 Windows 本地构建、真实云 S3 或真实模型质量验收。
+以下保留此前提交的验证记录，其显式 namespace/collection 配置已由本节自动路由替代。
+
+## 2026-11-17：AnySeek 服务凭据与显式租户命名空间
+
+基线 main `c70a1aa`。`AnySeekConfig::new` 显式接收服务凭据、命名空间和 collection；
+环境新增必填 `OC_ANYSEEK_TENANT`。请求统一发送 `apikey` 与 `X-AnySeek-Tenant`，
+命名空间与集合名均验证为 AnySeek 的小写路径组成部分，服务凭据仍标记为敏感且不持久化。
+后端绑定 v5 固定命名空间，改命名空间在远端 IO 前拒绝且保留原绑定；同一后端的服务
+凭据轮换不改变绑定。Origence 的业务 UUID scope、用户逻辑 key、私有会话和权限复核不变。
+
+Linux / Rust 1.98.0，匹配 AnySeek Catalog 7 正常生产构建（Rust 1.99.1，无 fault-injection），
+最终 pin [`800e3f1`](https://github.com/TheLudlows/anyseek/commit/800e3f1c2862c72d7de6afecde1ab921cef24671)。
+全部 real-engine 夹具使用 localhost、独立临时数据根/命名空间/collection 和一次性服务凭据，
+不调用真实模型，不访问外部 S3 或用户服务。
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --no-fail-fast` | PASS：431 项；另有 8 项真实引擎契约显式 ignored，随后单独执行 |
+| `cargo test --locked --no-default-features` | PASS：88 项；另有 5 项真实引擎契约 ignored，不计通过 |
+| 真实 AnySeek 契约 | PASS：8 项，含全文/向量/图、丢失响应、发布核验、恢复及 public Service |
+| 真实 HTTP / stdio MCP | PASS：搜索、读取、引用、更新、历史、Origence 用户 key 撤销、重开及 Run 诊断重放 |
+| `tools/smoke.py` 经真实 AnySeek | PASS：公开 HTTP 路径与进程重开 |
+| Node UI → Origence → 真实 AnySeek | PASS：身份、上传、发布、目录、历史、搜索、上下文、私有 Run 隔离和来源撤回 |
+| 默认及无默认特性 Clippy | PASS：`cargo clippy --locked [--no-default-features] --all-targets -- -D warnings` |
+| `cargo fmt --check`、all-targets check、正常服务构建、`git diff --check` | PASS |
+| Node 24 UI | PASS：`npm --prefix ui run check`、`npm --prefix ui test`（16 项） |
+
+协议夹具也强制服务凭据和命名空间，防止 mock 忽略新增请求头。新增回归验证命名空间
+格式、后端绑定隔离、绑定文件保持原样，以及服务凭据不进入绑定。没有新增 SQL 或查询
+执行入口；变更仅在 HTTP 适配、配置、已有绑定和验收夹具内，原 JOIN-free 约束保持。
+
+首次后续库测试构建因编译缓存耗尽 workspace 磁盘失败；保留失败记录后仅清理可重建的
+Cargo incremental 缓存，设置 `CARGO_INCREMENTAL=0`，以上各检查均在重跑后通过。
+未改写数据目录。未执行 Windows、真实外部 Agent/模型、生产容量、跨主机或断电验收。
+Node UI HTTP smoke 不等同于完整真实浏览器/无障碍验收；已有历史浏览器证据仍按各自提交解释。
 
 ## 2026-11-17：#86 检视后删除无用元数据与分词回退
 

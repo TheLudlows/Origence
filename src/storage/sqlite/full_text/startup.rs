@@ -303,6 +303,32 @@ async fn profiles_in_pages(
         .collect()
 }
 
+pub(super) async fn full_text_scopes(conn: &mut Connection) -> StorageResult<Vec<Scope>> {
+    let mut pages = Pages::default();
+    let mut scopes = BTreeSet::new();
+    loop {
+        let rows = pages.next(conn, "full_text").await?;
+        let publications = publications(&rows)?;
+        for index in current_publications(conn, &publications).await? {
+            let row = &rows[index];
+            scopes.insert((
+                row.try_get::<Uuid>("tenant_id").map_err(sqlite_err)?,
+                row.try_get::<Uuid>("workspace_id").map_err(sqlite_err)?,
+            ));
+        }
+        if rows.len() < PAGE_SIZE {
+            break;
+        }
+    }
+    Ok(scopes
+        .into_iter()
+        .map(|(tenant_id, workspace_id)| Scope {
+            tenant_id,
+            workspace_id,
+        })
+        .collect())
+}
+
 pub(super) async fn vector_profiles(conn: &mut Connection) -> StorageResult<Vec<(String, usize)>> {
     profiles_in_pages(conn, &mut Pages::default()).await
 }
