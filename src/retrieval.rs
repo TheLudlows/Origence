@@ -17,6 +17,12 @@ use uuid::Uuid;
 #[path = "retrieval/publication_tests.rs"]
 mod publication_tests;
 
+pub(crate) mod rank;
+use crate::storage::sqlite::retrieval::{
+    NativePublicationProof, NativeRankedCandidate, batch_native_candidate,
+};
+use rank::{fuse, prepare_branch};
+
 const GRAPH_LIMIT: usize = 20;
 
 struct GraphCandidates {
@@ -385,14 +391,10 @@ impl Service {
         let mut verify = self.read(a, Permission::Read).await?;
         // Validate every native participant, including those below the final
         // response limit: its disappearance can change another hit's RRF rank.
-        verify_native_candidates(&mut verify, &ranked_native).await?;
-        let hits = verify_search_hits(
-            &mut verify,
-            &hits,
-            input.limit,
-            input.memory_identity.as_ref(),
-        )
-        .await?;
+        verify.verify_native_candidates(&ranked_native).await?;
+        let hits = verify
+            .verify_search_hits(&hits, input.limit, input.memory_identity.as_ref())
+            .await?;
         let mut live_entities = Vec::new();
         for mut e in entities {
             let evidence = verify.graph_evidence(decode(e["id"].clone())?).await?;
@@ -602,173 +604,6 @@ fn search_response(
     json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":profile,"retrieval_policy":"turso-anyseek-filtered-rrf60-v3","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}})
 }
 
-type NativeCandidateKey = (Uuid, SourceVersion, i64);
-
-/// Exact authority that justified a native score. Kept private and retained
-/// until the response's final relational snapshot, never serialized to clients.
-#[derive(Clone, Debug)]
-pub(crate) enum NativePublicationProof {
-    FullText {
-        source: SourceVersion,
-        generation: i64,
-    },
-    Vector {
-        source: SourceVersion,
-        generation: i64,
-        profile: String,
-        dimension: usize,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct NativeRankedCandidate {
-    pub hit: SearchHit,
-    pub proof: NativePublicationProof,
-}
-
-fn same_evidence_identity(first: &SearchHit, second: &SearchHit) -> bool {
-    first.asset_id == second.asset_id
-        && first.version == second.version
-        && first.chunk_id == second.chunk_id
-        && first.source_event_id == second.source_event_id
-        && first.kind == second.kind
-        && first.content == second.content
-        && first.locator == second.locator
-}
-
-/// Recheck all native ranking participants before returning any previously
-/// computed score. A disappeared participant makes that ranking unavailable;
-/// a live object with changed publication identity is a storage conflict.
-/// No native IO, new ranking, retry loop or cross-store snapshot is implied.
-pub(crate) async fn verify_native_candidates(
-    tx: &mut crate::storage::sqlite::TursoTx,
-    candidates: &[NativeRankedCandidate],
-) -> Result<()> {
-    let mut full_text = Vec::new();
-    let mut vectors: HashMap<(String, usize), Vec<NativeCandidateKey>> = HashMap::new();
-    for candidate in candidates {
-        match &candidate.proof {
-            NativePublicationProof::FullText { source, generation } => {
-                full_text.push((candidate.hit.chunk_id, *source, *generation));
-            }
-            NativePublicationProof::Vector {
-                source,
-                generation,
-                profile,
-                dimension,
-            } => {
-                vectors
-                    .entry((profile.clone(), *dimension))
-                    .or_default()
-                    .push((candidate.hit.chunk_id, *source, *generation));
-            }
-        }
-    }
-    let full_text_hits = tx.full_text_hits(&full_text).await?;
-    let mut vector_hits = HashMap::new();
-    for ((profile, dimension), keys) in vectors {
-        vector_hits.insert(
-            (profile.clone(), dimension),
-            tx.vector_hits_exact(&keys, &profile, dimension).await?,
-        );
-    }
-    let mut checked = Vec::new();
-    let mut missing = Vec::new();
-    for candidate in candidates {
-        let id = candidate.hit.chunk_id;
-        let current = match &candidate.proof {
-            NativePublicationProof::FullText { source, generation } => {
-                full_text_hits.get(&(id, *source, *generation)).cloned()
-            }
-            NativePublicationProof::Vector {
-                source,
-                generation,
-                profile,
-                dimension,
-            } => vector_hits
-                .get(&(profile.clone(), *dimension))
-                .and_then(|hits| hits.get(&(id, *source, *generation)))
-                .cloned(),
-        };
-        if current.is_none() {
-            missing.push(id);
-        }
-        checked.push(current);
-    }
-    let live_missing = tx.visible_hits(&missing).await?;
-    for (candidate, current) in candidates.iter().zip(checked) {
-        let current = batch_native_candidate(candidate.hit.chunk_id, current, &live_missing)?
-            .ok_or_else(|| AppError::Unavailable("native retrieval became unavailable".into()))?;
-        if !same_evidence_identity(&candidate.hit, &current) {
-            return Err(AppError::Conflict(
-                "native retrieval evidence changed".into(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// Keep final response verification bounded by its original rank stop point.
-pub(crate) async fn verify_search_hits(
-    tx: &mut crate::storage::sqlite::TursoTx,
-    hits: &[SearchHit],
-    limit: usize,
-    identity: Option<&crate::memory_identity::MemoryIdentity>,
-) -> Result<Vec<SearchHit>> {
-    let mut current = Vec::new();
-    let mut cursor = 0;
-    // At most the remaining response capacity is inspected per batch. This
-    // preserves the old stop point for non-native Summary/Graph candidates:
-    // a malformed lower-ranked row must not invalidate an already-full page.
-    while cursor < hits.len() {
-        let capacity = limit.saturating_sub(current.len()).max(1);
-        let end = (cursor + capacity).min(hits.len());
-        let ids: Vec<_> = hits[cursor..end].iter().map(|hit| hit.chunk_id).collect();
-        let live_hits = tx.visible_hits(&ids).await?;
-        let mut selected = Vec::new();
-        for h in &hits[cursor..end] {
-            if let Some(mut live) = live_hits.get(&h.chunk_id).cloned() {
-                live.score = h.score;
-                selected.push(live);
-            }
-        }
-        let assets: Vec<_> = selected.iter().map(|hit| hit.asset_id).collect();
-        let identities = tx.retrieval_identities(&assets).await?;
-        for mut live in selected {
-            live.identity = identities.get(&live.asset_id).cloned().flatten();
-            if !live.matches_identity(identity) {
-                return Err(AppError::Conflict(
-                    "native retrieval identity changed".into(),
-                ));
-            }
-            current.push(live);
-        }
-        if current.len() == limit {
-            break;
-        }
-        cursor = end;
-    }
-    Ok(current)
-}
-
-fn batch_native_candidate(
-    id: Uuid,
-    candidate: Option<SearchHit>,
-    live_missing: &HashMap<Uuid, SearchHit>,
-) -> Result<Option<SearchHit>> {
-    if candidate.is_none() {
-        if live_missing.contains_key(&id) {
-            return Err(AppError::Conflict(
-                "native retrieval does not match live publication".into(),
-            ));
-        }
-        return Err(AppError::Unavailable(
-            "native retrieval became unavailable".into(),
-        ));
-    }
-    Ok(candidate)
-}
-
 /// Once a native candidate has participated in top-k, dropping it silently can
 /// conceal an incomplete result set or retain RRF ranks from withdrawn evidence.
 pub(crate) async fn live_native_candidate(
@@ -815,41 +650,6 @@ pub(crate) fn unique_native(
     Ok(true)
 }
 
-/// Normalize each scoped branch before assigning RRF ranks. A retried native
-/// generation cannot cast extra votes for the same evidence identity.
-pub(crate) fn prepare_branch(hits: &mut Vec<SearchHit>, limit: usize) {
-    hits.sort_by(|a, b| {
-        b.score
-            .total_cmp(&a.score)
-            .then(a.chunk_id.cmp(&b.chunk_id))
-    });
-    let mut seen = HashSet::new();
-    hits.retain(|hit| seen.insert((hit.asset_id, hit.version, hit.chunk_id, hit.source_event_id)));
-    hits.truncate(limit);
-}
-
-fn fuse(branches: Vec<Vec<SearchHit>>, hybrid: bool) -> Vec<SearchHit> {
-    let mut merged: HashMap<Uuid, SearchHit> = HashMap::new();
-    for mut branch in branches {
-        prepare_branch(&mut branch, 100);
-        for (rank, mut hit) in branch.into_iter().enumerate() {
-            if hybrid {
-                hit.score = 1.0 / (60.0 + rank as f64 + 1.0);
-            }
-            merged
-                .entry(hit.chunk_id)
-                .and_modify(|old| old.score += hit.score)
-                .or_insert(hit);
-        }
-    }
-    let mut hits: Vec<_> = merged.into_values().collect();
-    hits.sort_by(|a, b| {
-        b.score
-            .total_cmp(&a.score)
-            .then(a.chunk_id.cmp(&b.chunk_id))
-    });
-    hits
-}
 pub fn render(hits: &[SearchHit], budget: usize) -> (String, Vec<Value>) {
     // Explicit conservative byte budget, not a claim to model-specific tokenization.
     // Byte count includes all titles, separators and citation markers. No partial citation records.

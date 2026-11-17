@@ -16,9 +16,9 @@ use crate::{
     learning::SupportField,
     memory_identity::MemoryIdentity,
     parsing,
-    retrieval::{NativePublicationProof, NativeRankedCandidate},
     service::{Service, scope},
     session::ArchivedEvidence,
+    storage::sqlite::retrieval::{NativePublicationProof, NativeRankedCandidate},
     storage::{DomainTx, FullTextQuery, Permission, VectorQuery},
     types::{AuthContext, SearchHit},
 };
@@ -284,7 +284,7 @@ impl Service {
                     keyword.push(hit);
                 }
             }
-            crate::retrieval::prepare_branch(&mut keyword, CONTEXT_CANDIDATE_LIMIT);
+            crate::retrieval::rank::prepare_branch(&mut keyword, CONTEXT_CANDIDATE_LIMIT);
             branches.push(("keyword", keyword));
         }
         if query.effective_mode != "keyword" {
@@ -332,7 +332,7 @@ impl Service {
                     vectors.push(hit);
                 }
             }
-            crate::retrieval::prepare_branch(&mut vectors, CONTEXT_CANDIDATE_LIMIT);
+            crate::retrieval::rank::prepare_branch(&mut vectors, CONTEXT_CANDIDATE_LIMIT);
             branches.push(("vector", vectors));
         }
         let fused = fuse_context_branches(branches, query.effective_mode == "hybrid");
@@ -402,7 +402,7 @@ fn fuse_context_branches(
 ) -> Vec<(SearchHit, Vec<String>)> {
     let mut merged: HashMap<Uuid, (SearchHit, Vec<String>)> = HashMap::new();
     for (origin, mut branch) in branches {
-        crate::retrieval::prepare_branch(&mut branch, CONTEXT_CANDIDATE_LIMIT);
+        crate::retrieval::rank::prepare_branch(&mut branch, CONTEXT_CANDIDATE_LIMIT);
         for (rank, mut hit) in branch.into_iter().enumerate() {
             if hybrid {
                 hit.score = 1.0 / (60.0 + rank as f64 + 1.0);

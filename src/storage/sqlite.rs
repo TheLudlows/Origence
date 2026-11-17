@@ -54,6 +54,8 @@ mod read_model;
 #[cfg(test)]
 mod read_model_tests;
 mod relational;
+#[cfg(feature = "local-storage")]
+pub(crate) mod retrieval;
 mod runs;
 mod schema;
 mod semantics;
