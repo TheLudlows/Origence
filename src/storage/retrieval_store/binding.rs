@@ -1,6 +1,9 @@
 //! Key-free backend binding under the authority's exclusive directory lock.
 use crate::storage::{StorageError, StorageResult, anyseek::AnySeekConfig};
-use std::{io::ErrorKind, path::Path};
+use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const FILE: &str = "full-text-backend.json";
@@ -8,7 +11,8 @@ const MAX_BYTES: usize = 4096;
 
 pub(crate) struct Binding {
     selected: serde_json::Value,
-    existing_analysis: Option<String>,
+    dir: PathBuf,
+    analysis: tokio::sync::Mutex<Option<String>>,
 }
 
 fn mismatch() -> StorageError {
@@ -38,18 +42,23 @@ pub(crate) async fn prepare(
             }
             let mut saved: serde_json::Value =
                 serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
-            let fingerprint = saved
+            let fingerprint = match saved
                 .as_object_mut()
                 .and_then(|v| v.remove("analysis_fingerprint"))
-                .and_then(|v| v.as_str().map(str::to_owned))
-                .filter(|s| crate::retrieval_diagnostics::digest(s))
-                .ok_or_else(mismatch)?;
+            {
+                Some(serde_json::Value::Null) if !published_full_text => None,
+                Some(serde_json::Value::String(s)) if crate::retrieval_diagnostics::digest(&s) => {
+                    Some(s)
+                }
+                _ => return Err(mismatch()),
+            };
             if expected != saved {
                 return Err(mismatch());
             }
             Ok(Binding {
                 selected: expected,
-                existing_analysis: Some(fingerprint),
+                dir: dir.to_owned(),
+                analysis: tokio::sync::Mutex::new(fingerprint),
             })
         }
         Err(error) if error.kind() == ErrorKind::NotFound => {
@@ -62,29 +71,48 @@ pub(crate) async fn prepare(
             }
             Ok(Binding {
                 selected: expected,
-                existing_analysis: None,
+                dir: dir.to_owned(),
+                analysis: tokio::sync::Mutex::new(None),
             })
         }
         Err(_) => Err(unavailable()),
     }
 }
 
-/// Persist only after backend health checks, before jobs or HTTP are admitted.
-/// The staging file is private to this attempt; interrupted staging files are
-/// not mistaken for a valid binding or permission to overwrite user data.
-pub(crate) async fn commit(dir: &Path, mut pending: Binding, analysis: &str) -> StorageResult<()> {
-    if !crate::retrieval_diagnostics::digest(analysis) {
-        return Err(unavailable());
+impl Binding {
+    /// Persist endpoint/routing before serving; analysis is pinned on first use,
+    /// before any publication. Null is valid only without committed projections.
+    pub(crate) async fn commit_initial(&self) -> StorageResult<()> {
+        let analysis = self.analysis.lock().await;
+        persist(&self.dir, &self.selected, analysis.as_deref()).await
     }
-    if let Some(expected) = pending.existing_analysis {
-        return if expected == analysis {
-            Ok(())
-        } else {
-            Err(mismatch())
-        };
+
+    pub(crate) async fn check_analysis(&self, analysis: &str) -> StorageResult<()> {
+        if !crate::retrieval_diagnostics::digest(analysis) {
+            return Err(unavailable());
+        }
+        let mut saved = self.analysis.lock().await;
+        if let Some(expected) = saved.as_ref() {
+            return if expected == analysis {
+                Ok(())
+            } else {
+                Err(mismatch())
+            };
+        }
+        persist(&self.dir, &self.selected, Some(analysis)).await?;
+        *saved = Some(analysis.to_owned());
+        Ok(())
     }
-    pending.selected["analysis_fingerprint"] = serde_json::json!(analysis);
-    let bytes = serde_json::to_vec(&pending.selected).map_err(|_| unavailable())?;
+}
+
+async fn persist(
+    dir: &Path,
+    selected: &serde_json::Value,
+    analysis: Option<&str>,
+) -> StorageResult<()> {
+    let mut selected = selected.clone();
+    selected["analysis_fingerprint"] = serde_json::json!(analysis);
+    let bytes = serde_json::to_vec(&selected).map_err(|_| unavailable())?;
     if bytes.len() > MAX_BYTES {
         return Err(unavailable());
     }

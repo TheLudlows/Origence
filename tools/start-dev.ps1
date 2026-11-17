@@ -82,7 +82,7 @@ function Test-Ready([string]$Url, [string]$Kind) {
         catch { return $false }
         $status = [int]$response.StatusCode
         if ($status -in @(401,403,404) -or ($status -ge 300 -and $status -lt 400)) {
-            throw "$Kind readiness rejected (HTTP $status); check provisioned collection/credentials or endpoint."
+            throw "$Kind readiness rejected (HTTP $status); check service credentials or endpoint."
         }
         if ($status -ne 200) { return $false }
         try {
@@ -90,7 +90,7 @@ function Test-Ready([string]$Url, [string]$Kind) {
             if ($Kind -eq 'UI') { return $text.Contains('<html') }
             $body = $text | ConvertFrom-Json
             if ($Kind -eq 'AnySeek') {
-                return $body.name -eq 'origence-search-sha256-v3' -and $body.analysis.format -eq 'native-package-analysis:v1'
+                return $body -is [string] -and $body -cmatch '^[A-Za-z0-9.+_-]{1,64}$'
             }
             return $body.status -eq 'ready'
         } catch { return $false }
@@ -119,7 +119,7 @@ try {
         throw 'AnySeek data directory is empty; initialize separately.'
     }
     [void](Require-Path (Join-Path $DataDir 'context.db') Leaf 'Initialized Origence context.db')
-    foreach ($name in @('MASTER_KEY_SECRET','OC_ANYSEEK_API_KEY','OC_ANYSEEK_COLLECTION')) {
+    foreach ($name in @('MASTER_KEY_SECRET','OC_ANYSEEK_API_KEY')) {
         if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Set $name in this process environment; values are never printed." }
     }
     $ports = @($AnySeekPort, $ApiPort)
@@ -134,11 +134,11 @@ try {
     Start-Owned 'AnySeek' $AnySeekExe @('local_ip=127.0.0.1', "local_port=$AnySeekPort", "index_path=$AnySeekDataDir") @{
         MASTER_KEY_SECRET = $env:MASTER_KEY_SECRET; ANYSEEK_STORAGE_BACKEND = 'local'; RUST_LOG = 'error'
     }
-    Wait-Ready "$backend/api/v1/index/$([Uri]::EscapeDataString($env:OC_ANYSEEK_COLLECTION))" 'AnySeek'
+    Wait-Ready "$backend/api/v1/live" 'AnySeek'
     Start-Owned 'Origence' $OrigenceExe @('serve', '--bind', "127.0.0.1:$ApiPort") @{
         OC_DATA_DIR = $DataDir; OC_FULL_TEXT_BACKEND = 'anyseek'; OC_ENABLE_MODELS = 'false'
         OC_ANYSEEK_URL = $backend; OC_ANYSEEK_API_KEY = $env:OC_ANYSEEK_API_KEY
-        OC_ANYSEEK_COLLECTION = $env:OC_ANYSEEK_COLLECTION; RUST_LOG = 'error'
+        RUST_LOG = 'error'
     }
     Wait-Ready "http://127.0.0.1:$ApiPort/health/ready" 'Origence'
     if ($Ui) {

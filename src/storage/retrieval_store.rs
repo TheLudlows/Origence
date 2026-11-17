@@ -11,15 +11,26 @@ pub struct RetrievalStore {
     remote: AnySeekFullTextStore,
 }
 impl RetrievalStore {
+    pub(crate) async fn open_bound(
+        anyseek: AnySeekConfig,
+        binding: binding::Binding,
+    ) -> StorageResult<Self> {
+        let remote = AnySeekFullTextStore::new(anyseek)?;
+        remote.check().await?;
+        binding.commit_initial().await?;
+        Ok(Self {
+            remote: remote.with_binding(binding),
+        })
+    }
+    pub(crate) async fn check_scope(&self, scope: Scope) -> StorageResult<()> {
+        self.remote.check_scope(scope, false).await
+    }
     pub(crate) async fn read_payloads(
         &self,
         scope: Scope,
         ids: &[Uuid],
     ) -> StorageResult<HashMap<Uuid, ChunkPayload>> {
         self.remote.read_payloads(scope, ids).await
-    }
-    pub(crate) fn checked_analysis_fingerprint(&self) -> StorageResult<&str> {
-        self.remote.checked_analysis_fingerprint()
     }
     pub async fn open(anyseek: AnySeekConfig) -> StorageResult<Self> {
         Ok(Self {

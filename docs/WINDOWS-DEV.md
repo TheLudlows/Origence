@@ -11,14 +11,13 @@
 
 ```powershell
 $env:MASTER_KEY_SECRET = Read-Host -MaskInput 'AnySeek existing master secret'
-$env:OC_ANYSEEK_API_KEY = Read-Host -MaskInput 'Existing ordinary Tenant key (base64)'
-$env:OC_ANYSEEK_COLLECTION = 'origence-dev'
+$env:OC_ANYSEEK_API_KEY = Read-Host -MaskInput 'Existing AnySeek service credential (base64)'
 $env:OC_DATA_DIR = 'C:\dev-data\origence'
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\tools\start-dev.ps1 -AnySeekExe C:\src\anyseek\target\debug\anyseek_server.exe -AnySeekDataDir C:\dev-data\anyseek -Ui
 ```
 
 `-ExecutionPolicy Bypass` 仅用于本次已审阅的本地脚本进程，不修改机器/用户策略。
-这是复用既有数据与普通 key 的启动命令，不能把新生成的 master secret 用于已有 AnySeek。
+这是复用既有数据与服务凭据 的启动命令，不能把新生成的 master secret 用于已有 AnySeek。
 秘密不作为参数、不写入脚本、配置、日志或 Git；勿开启 PowerShell transcript。
 UI 在浏览器输入当前用户的 Origence key，启动器不接收、不转发该业务 token。
 `-Ui` 可省略；`-OrigenceExe` 默认为仓库 `target/debug/origence.exe`，可指定 release 路径。
@@ -29,16 +28,18 @@ UI 在浏览器输入当前用户的 Origence key，启动器不接收、不转�
 不能用改端口绕过绑定检查。仅 loopback，无对外监听开关。
 
 AnySeek 必须用当前兼容 pin
-`d813b915b7f12e7139ca316adc15699688493196` 构建，或由操作者验证等价合同。
-脚本先用普通 key GET `/api/v1/index/{collection}` 验证已授权的 collection 元信息，
-不把 `/live` 或 TCP 监听当 ready；Origence 再做完整 schema/analysis/diagnostics
-兼容性核验，脚本等 `/health/ready` 返回 `status=ready` 后才启动可选 UI。
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 构建，或由操作者验证等价合同。
+脚本携带服务凭据 GET `/api/v1/live`，由 AnySeek 校验服务凭据并返回版本；不依赖预先创建的
+集合。Origence 再检查已发布 workspace 集合的完整 schema/analysis/diagnostics，脚本等
+`/health/ready` 返回 `status=ready` 后才启动可选 UI。
+每个已鉴权 tenant/workspace 自动映射到 namespace/collection，首次使用创建；不再配置
+`OC_ANYSEEK_TENANT` 或 `OC_ANYSEEK_COLLECTION`。已有发布的集合丢失时拒绝启动，不补建空集合。
 ready 不保证模型质量；本开发入口明确设置 `OC_ENABLE_MODELS=false`，用于无模型全文流程。
 模型/AML/向量专项配置请用手动启动流程，不会静默继承调用者的 OC_* 配置。
 
 ## 一次性初始化（与启动器分开）
 
-仅对**明确选定的全新测试目录、Tenant、key ID 和专用 collection**执行下面操作。
+仅对**明确选定的全新测试目录与 Origence workspace**执行下面操作。
 已初始化时跳过，不重复创建或覆盖；已有库不迁移，需遵守 fresh-only 与同版本重开合同。
 凭据请保存到自己的私密提供器；以下变量仅留在会话内，关窗即丢失。不要把 token 打印到
 共享终端、日志或文档。所有 HTTP 请求指向本机，禁止把示例改为生产地址直接执行。
@@ -67,25 +68,13 @@ $env:ANYSEEK_STORAGE_BACKEND = 'local'
 & C:\src\anyseek\target\debug\anyseek_server.exe local_ip=127.0.0.1 local_port=8081 index_path=C:\dev-data\anyseek
 ```
 
-2. 在第二个 pwsh 终端、Origence 仓库根目录执行。提供上一步同一 master secret；
-普通 Tenant key 为新生成的 32 随机字节，master 只用于这次管理请求。
+2. 在第二个 pwsh 终端、Origence 仓库根目录执行。提供上一步同一 master secret，
+由它派生 Origence 到 AnySeek 的服务间凭据；无需注册 AnySeek 租户或签发租户 Key。
 
 ```powershell
 $env:MASTER_KEY_SECRET = Read-Host -MaskInput 'Same private master secret'
-$master = [Convert]::ToBase64String([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($env:MASTER_KEY_SECRET)))
-$env:OC_ANYSEEK_API_KEY = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:OC_ANYSEEK_COLLECTION = 'origence-dev'
-$base = 'http://127.0.0.1:8081'
-function New-Operation { @{ epoch = [long][Math]::Floor([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()/86400); nonce = [guid]::NewGuid().ToString('N') } }
-function Send-Setup($Path, $Key, $Body) {
-    Invoke-RestMethod -Method Post -Uri "$base$Path" -Headers @{apikey=$Key} -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 30) -NoProxy -MaximumRedirection 0 -ErrorAction Stop | Out-Null
-}
-Send-Setup '/api/v1/tenants' $master @{operation_id=(New-Operation); tenant_id='origence-dev'}
-Send-Setup '/api/v1/apikey' $master @{operation_id=(New-Operation); tenant_id='origence-dev'; key_id='dev-app'; apikey_base64=$env:OC_ANYSEEK_API_KEY}
-$configText = & .\target\debug\origence.exe anyseek-schema
-if ($LASTEXITCODE -ne 0) { throw 'Schema command failed' }
-Send-Setup '/api/v1/index' $env:OC_ANYSEEK_API_KEY @{operation_id=(New-Operation); collection_id=$env:OC_ANYSEEK_COLLECTION; config=($configText | ConvertFrom-Json)}
-Remove-Variable master
+$env:OC_ANYSEEK_API_KEY = [Convert]::ToBase64String([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($env:MASTER_KEY_SECRET)))
+$env:OC_ANYSEEK_URL = 'http://127.0.0.1:8081'
 $env:OC_DATA_DIR = 'C:\dev-data\origence'
 New-Item -ItemType Directory $env:OC_DATA_DIR -ErrorAction Stop | Out-Null
 $workspaceText = & .\target\debug\origence.exe --offline workspace-create dev
@@ -115,8 +104,8 @@ Windows 服务管理器。端口检查不是原子预留，竞争失败会通过
 
 每阶段默认 ready 超时 60 秒（`-StartupTimeoutSeconds`；单次 HTTP 最多 2 秒）。
 检查全部启用端口无占用、文件/已初始化目录存在后才启动；401/403/404/重定向直接失败。
-仅持有锁的现有进程也会导致新进程退出，脚本不会接管它。常规启动不生成目录、key、
-Tenant 或 collection，不发管理/写入 HTTP 请求。底层服务正常重开/恢复可能写入其数据。
+仅持有锁的现有进程也会导致新进程退出，脚本不会接管它。启动器不生成目录或 key，不发管理/写入 HTTP 请求。Origence 在新 workspace 首次使用时
+按固定 schema 创建对应集合；底层服务正常重开/恢复可能写入其数据。
 
 子进程输出被持续丢弃，不保存完整日志，避免把内部诊断或密钥传到联启终端。
 早退报告组件名称与退出码；需要进一步定位时在私密终端单独运行该 exe，按现有脱敏规则
