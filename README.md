@@ -26,6 +26,21 @@ cargo build --locked
 
 Use the workspace token returned by `workspace-create` to access the API.
 
+## Management UI
+
+The lightweight [Node.js management UI](ui/README.md) calls Origence's HTTP API
+for memory, knowledge, context previews and private Run evidence. Requires Node.js 24.
+
+```sh
+cd ui
+npm ci --ignore-scripts
+npm run build
+npm start
+```
+
+Open `http://127.0.0.1:3000` and connect with your own API key. Set
+`ORIGENCE_API_BASE_URL` when Origence is not at `http://127.0.0.1:8080`.
+
 ## Documentation
 
 [Documentation index](docs/README.md) · [API and library interfaces](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)

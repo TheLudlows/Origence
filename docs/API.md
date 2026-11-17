@@ -85,6 +85,23 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ## 接口
 
+### 管理界面只读目录
+
+- `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`：reader 以上，
+  workspace 来自认证；按资产 UUID 升序扫描当前已发布、未删除的候选，逐条复用
+  普通资产读取的完整来源/语义/可见性检查。返回 `{items,next_after}`，items 仅为
+  资产元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
+- `GET /v1/runs?limit=25&after=<UUID>`：reader 以上，只返回当前逻辑 key 的 Run
+  ID、脱敏 summary 与创建时间，不授予管理员读取其他 key 私有记录的权限。
+  获授权的凭据轮换延续逻辑身份；响应含 `scope:"current_logical_key"`。
+
+两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
+按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
+资产页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
+分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
+
+Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打开数据库或执行 CLI。
+
 | 方法和路径 | 请求 / 结果 |
 | --- | --- |
 | `GET /health/live` | 进程存活，无鉴权 |

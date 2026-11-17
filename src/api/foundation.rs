@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 pub(super) fn routes() -> Router<Service> {
     Router::new()
-        .route("/v1/runs", post(create_run))
+        .route("/v1/runs", post(create_run).get(list_runs))
         .route("/v1/runs/{id}", get(run_trace))
         .route("/v1/runs/{id}/prefix", get(run_prefix))
         .route("/v1/runs/{id}/events", post(append_run_event))
@@ -53,6 +53,29 @@ async fn create_run(
     Ok(Json(
         service
             .create_run(&auth(&service, &headers).await?, input)
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunPage {
+    after: Option<Uuid>,
+    limit: Option<usize>,
+}
+
+async fn list_runs(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Query(page): Query<RunPage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        service
+            .list_runs(
+                &auth(&service, &headers).await?,
+                page.after.unwrap_or_default(),
+                page.limit.unwrap_or(50),
+            )
             .await?,
     ))
 }
