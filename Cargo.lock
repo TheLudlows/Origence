@@ -1713,7 +1713,6 @@ dependencies = [
  "axum",
  "clap",
  "fs2",
- "futures",
  "jieba-rs",
  "pdf_oxide",
  "pulldown-cmark",

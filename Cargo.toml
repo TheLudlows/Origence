@@ -12,7 +12,6 @@ anyhow = "1"
 axum = { version = "0.8", features = ["multipart"] }
 clap = { version = "4", features = ["derive", "env"] }
 fs2 = "0.4"
-futures = "0.3"
 jieba-rs = "0.7"
 # Text extraction only; no OCR, rendering, or platform bindings.
 pdf_oxide = { version = "=0.3.78", default-features = false }

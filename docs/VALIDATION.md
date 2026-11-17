@@ -416,6 +416,8 @@ CI、容器与当前文档。删除旧引擎模块和别名；历史证据与此
 Cargo 生成的新锁文件从 482 个包变为 370 个：删除 116、加入 4，净减少 112；
 原有保留包的版本未改变。rusqlite 关闭默认特性，仅启用 bundled；不增加 ORM、
 异步数据库或第三方连接池。全特性的 production dependency tree 排除所有退休存储引擎。
+另移除未使用的直接 `futures` 声明；它仍由 rmcp 传递引入。移除前后全部已解析包和
+features 完全一致，最后的 `cargo check --all-features --all-targets -j 2` 通过。
 
 元数据删除 `oc_versions.content_hash` 和 `oc_artifact_ledger.idempotency_key`，
 同时移除调用方的冗余字段/参数及字符串辅助函数。内容摘要由所读不可变正文计算，
