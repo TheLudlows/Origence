@@ -75,3 +75,11 @@ Skill 的 API 审批和目录导出不等于真实用户审阅、客户端加载
 私有会话依据可能限制其他 key 的审阅或分发，详见 [Run 契约](contracts/runs.md)。
 首批采用成员授权范围一致的 workspace；企业身份与差异文档 ACL 尚未实现。
 平台只提供归档/查询，不恢复客户端工作现场。Skill 发布不授予工具执行权限。
+
+## 本地 Windows 开发联启入口
+
+基于 main `c70a1aa`，新增 PowerShell 7.4+ 的 AnySeek → Origence → 可选 Node UI
+前台联启脚本，使用已初始化目录及当前环境凭据；首次初始化独立说明。
+Linux pwsh 的模拟进程回归和真实服务启动/停止/重开已验证，**真实 Windows 尚未实测**。
+命令、readiness 与停止限制见 [Windows 开发说明](WINDOWS-DEV.md) 和 VALIDATION。
+仅本地交付，不改变部署、生产恢复或现有 CI 范围。
