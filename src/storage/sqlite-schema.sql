@@ -44,6 +44,7 @@ END;
 
 CREATE TABLE oc_api_keys (
     id BLOB PRIMARY KEY,
+    logical_key_id BLOB NOT NULL,
     tenant_id BLOB NOT NULL,
     workspace_id BLOB NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,

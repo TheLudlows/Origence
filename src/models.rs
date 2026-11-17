@@ -139,6 +139,10 @@ impl Models {
             dimension,
         })
     }
+    pub fn embedding_dimension(&self) -> usize {
+        self.dimension
+    }
+
     pub fn semantic_extraction_profile(&self) -> Option<String> {
         self.extraction_model.as_ref().map(|model| {
             format!(

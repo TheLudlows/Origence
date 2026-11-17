@@ -1,15 +1,11 @@
-# Turso/LanceDB need native build tools; Lance builds protoc from source.
+# Native dependencies need a C/C++ build toolchain.
 FROM rust:1.98.0-bookworm AS build-inputs
-RUN apt-get update && apt-get install -y --no-install-recommends cmake make g++ \
+RUN apt-get update && apt-get install -y --no-install-recommends make g++ \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
-COPY .cargo ./.cargo
-COPY tools/cmake ./tools/cmake
 COPY src ./src
 COPY tests ./tests
-COPY examples ./examples
-COPY vendor ./vendor
 # Validate every declared target against the actual Docker build context.
 RUN cargo metadata --no-deps --format-version 1 > /tmp/cargo-metadata.json
 

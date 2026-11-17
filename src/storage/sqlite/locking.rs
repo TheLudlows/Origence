@@ -1,5 +1,5 @@
 //! Process lock ownership, reentrant open serialization and maintenance exclusion.
-#[cfg(feature = "local-vector")]
+#[cfg(test)]
 use super::schema::check_conn;
 use super::*;
 use fs2::FileExt;
@@ -8,7 +8,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, LazyLock, Mutex};
 
-#[cfg(feature = "local-vector")]
+#[cfg(test)]
 pub(in crate::storage) async fn lock_for_maintenance(
     path: &Path,
 ) -> StorageResult<MaintenanceLock> {
@@ -124,7 +124,7 @@ impl Drop for LockGuard {
     }
 }
 
-#[cfg(all(test, feature = "local-vector"))]
+#[cfg(test)]
 mod maintenance_lock_tests {
     use super::*;
 

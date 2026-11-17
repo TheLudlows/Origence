@@ -1,15 +1,15 @@
 //! Cross-store ledger round-trip (M4): a pending write is registered on the
-//! SQLite ledger, applied idempotently to LanceDB/SQLite graph, confirmed, and a
+//! SQLite ledger, applied idempotently to an AnySeek protocol peer/SQLite graph, confirmed, and a
 //! reconcile pass leaves it committed without duplicating (A2.6).
 #![cfg(feature = "local-storage")]
 
-use origence::storage::lancedb::LanceDbStore;
+use origence::storage::anyseek::{AnySeekFullTextStore, operation_epoch};
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
 use origence::storage::sqlite::SqliteStore;
 use origence::storage::sqlite_graph::SqliteGraphStore;
 use origence::storage::{
     DomainTx, GraphStore, Permission, RelationalStore, Scope, SourceVersion, VectorEntry,
-    VectorQuery, VectorStore,
+    VectorQuery,
 };
 use origence::types::Entity;
 use uuid::Uuid;
@@ -18,7 +18,10 @@ use uuid::Uuid;
 async fn pending_write_confirms_and_reconcile_is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let sqlite = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let vector = LanceDbStore::open(dir.path().join("vector")).await.unwrap();
+    let remote = crate::support::AnySeekFixture::start(Some(2));
+    let vector =
+        AnySeekFullTextStore::new(remote.config().with_embedding("p:v1".into(), 2).unwrap())
+            .unwrap();
     let graph = SqliteGraphStore::open(dir.path().join("graph.db"))
         .await
         .unwrap();
@@ -94,7 +97,20 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
         source,
     };
     for _ in 0..2 {
-        vector.upsert(scope, vec![entry.clone()]).await.unwrap();
+        vector
+            .upsert_combined(
+                scope,
+                vec![origence::storage::FullTextEntry {
+                    id: chunk_id,
+                    source,
+                    generation,
+                    search_terms: "Alice".into(),
+                }],
+                vec![entry.clone()],
+                operation_epoch().unwrap(),
+            )
+            .await
+            .unwrap();
         graph
             .upsert_entities(scope, source, vec![entity.clone()])
             .await
@@ -117,15 +133,18 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
 
     // Step 5: no duplication from the replayed writes.
     let hits = vector
-        .search(VectorQuery {
-            artifact_ids: None,
-            scope,
-            profile: "p:v1".into(),
-            dimension: 2,
-            generation,
-            embedding: vec![1.0, 0.0],
-            limit: 10,
-        })
+        .search_vector(
+            VectorQuery {
+                artifact_ids: Some(vec![chunk_id]),
+                scope,
+                profile: "p:v1".into(),
+                dimension: 2,
+                generation,
+                embedding: vec![1.0, 0.0],
+                limit: 10,
+            },
+            &[(chunk_id, source)].into(),
+        )
         .await
         .unwrap();
     assert_eq!(hits.len(), 1);

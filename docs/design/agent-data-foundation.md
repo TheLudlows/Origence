@@ -1,6 +1,6 @@
 # Origence · 企业 Agent 数据底座架构规划
 
-版本：v0.8 · 2026-11-16 · **首版关键决策已确认，目标能力尚待实现**。
+版本：v0.8 · 2026-11-16 · **首版目标与验收合同，落地进度另见 STATUS**。
 
 本文描述首版目标；当前实现见 [STATUS](../STATUS.md)，已实现架构与接口分别见
 [平台设计](current-implementation.md)和 [API](../API.md)。
@@ -95,6 +95,9 @@ flowchart TB
 同一逻辑 key 在 Claude Code/Codex 中访问同一 Origence 归档会话记录；需要独立记录的 Agent 使用不同 key。
 同一会话可包含多个任务/Run。会话归属由服务端认证派生，传入其他 session ID 不能切换所有权。
 workspace 成员身份不授予他人私有会话的读取权；所有私有入口、上下文组装与工件读取遵守同一边界。
+实现合同：`GET /v1/session` 返回认证逻辑 key 的 `{session_id,key_id}`，无调用方可选归属。
+`POST /admin/keys/{id}/rotate` 仅允许当前 admin 在凭据所属 workspace 内轮换；返回新凭据，旧凭据立即失效。
+显式 SessionTurn 路由继续要求 writer，并额外匹配当前 key 的 session；读取权限与归属检查不能互相替代。
 平台保存已提交的记录并提供查询，不同步或恢复客户端原生聊天、上下文窗口、工具/进程/环境状态，也不重放操作。
 
 从私有记录沉淀时显式生成 workspace 资产并确定共享正文，保留受控来源关联；原会话与轨迹继续私有。
@@ -202,10 +205,7 @@ Skill 还需核验候选修改后批准失效、支持来源失效后的读取/�
 会话验收只覆盖归档/查询、授权轮换、撤销阻断和数据保留；客户端工作现场恢复不列为能力或验收项。
 检索替换通过公开库、HTTP/MCP 和实际 AnySeek 验证；客户端收益使用冻结任务比较，文档或协议 fixture 不代表真实任务通过。
 
-**当前差距**：代码仍是可选 AnySeek 全文、LanceDB 向量；AnySeek 向量接入与 LanceDB 移除尚未实施。
-既有 Bundle、SessionTurn、Feedback 和 Learning 可以复用；Skill 提炼/审视/发布、通用 Run 和两真实客户端验收仍待完成。
-当前 SessionTurn 仍按 workspace 和 writer 权限访问，尚无 key→唯一会话绑定，不满足本节目标私有边界。
-精确进度和历史证据分别保留在 [STATUS](../STATUS.md)与 [VALIDATION](../VALIDATION.md)。
+当前代码、验证结果与未完成范围分别见 [STATUS](../STATUS.md) 和 [VALIDATION](../VALIDATION.md)。
 
 ## 8. 已确认决定与试点准备
 

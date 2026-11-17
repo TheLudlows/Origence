@@ -1,4 +1,4 @@
-//! S0 service-level regression with real SQLite/LanceDB and loopback-only embeddings.
+//! S0 service-level regression with real Turso authority and an AnySeek protocol fixture and loopback-only embeddings.
 //! Fixed vectors prove candidate filtering, not semantic retrieval quality.
 #![cfg(feature = "local-storage")]
 
@@ -10,7 +10,7 @@ use origence::{
     service::Service,
     storage::{
         DomainTx, IssuedKey, LedgerEntry, LedgerKey, RelationalStore, Scope, SourceVersion,
-        Surface, VectorEntry, VectorQuery, VectorStore, hash, ledger_idempotency_key,
+        Surface, VectorEntry, VectorQuery, hash, ledger_idempotency_key,
     },
 };
 use reqwest::{Client, Method};
@@ -190,9 +190,7 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         }
     }
     tx.commit().await.unwrap();
-    service
-        .engine
-        .vector()
+    crate::support::projection(service)
         .upsert(scope, entries)
         .await
         .unwrap();
@@ -212,7 +210,9 @@ struct Host {
 
 impl Host {
     async fn start(dir: &Path, model_url: &str) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_origence"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_origence"));
+        crate::support::command_env(&mut command, dir, Some(3));
+        let mut child = command
             .env("OC_DATA_DIR", dir)
             .env("OC_ENABLE_MODELS", "true")
             .env("OC_MODEL_BASE_URL", model_url)
@@ -245,14 +245,25 @@ impl Host {
                 .build()
                 .unwrap(),
         };
-        host.call(
-            Method::GET,
-            "/health/ready",
-            "",
-            Value::Null,
-            StatusCode::OK,
-        )
-        .await;
+        // A bound socket does not imply the durable worker has started yet.
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let status = host
+                    .http
+                    .get(format!("{}/health/ready", host.base))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status();
+                if status == StatusCode::OK {
+                    break;
+                }
+                assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("host worker readiness deadline");
         host
     }
 
@@ -335,7 +346,19 @@ async fn exercise(mode: &str) {
         workspace_id: Uuid::new_v4(),
     };
     let (primary, other_workspace, other_tenant) = {
-        let service = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let service = crate::support::open_service(
+            dir.path(),
+            Models::configured(
+                model_url.clone(),
+                "local-s0-test".into(),
+                Some("s0-regression".into()),
+                None,
+                3,
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
         let primary = seed(&service, scope, &profile, DISTRACTORS).await;
         let other_workspace = seed(
             &service,
@@ -366,9 +389,7 @@ async fn exercise(mode: &str) {
         assert_eq!(ids.len(), DISTRACTORS + 1);
         assert!(!ids.contains(&primary.old_chunk));
         tx.commit().await.unwrap();
-        let native = service
-            .engine
-            .vector()
+        let native = crate::support::projection(&service)
             .search(VectorQuery {
                 scope: primary.scope,
                 artifact_ids: Some(ids),
@@ -383,9 +404,7 @@ async fn exercise(mode: &str) {
         assert_eq!(native.len(), 100);
         assert!(native.iter().all(|hit| hit.id != primary.current_chunk));
         // The old vector is physically present but must never become current evidence.
-        let stale = service
-            .engine
-            .vector()
+        let stale = crate::support::projection(&service)
             .search(VectorQuery {
                 scope,
                 artifact_ids: Some(vec![primary.old_chunk]),
@@ -539,14 +558,14 @@ async fn exercise(mode: &str) {
 }
 
 #[tokio::test]
-async fn s0_vector_identity_prefilter_real_lancedb() {
+async fn s0_vector_identity_prefilter_anyseek_protocol() {
     tokio::time::timeout(Duration::from_secs(180), exercise("vector"))
         .await
         .expect("vector regression deadline");
 }
 
 #[tokio::test]
-async fn s0_hybrid_identity_prefilter_real_lancedb() {
+async fn s0_hybrid_identity_prefilter_anyseek_protocol() {
     tokio::time::timeout(Duration::from_secs(180), exercise("hybrid"))
         .await
         .expect("hybrid regression deadline");

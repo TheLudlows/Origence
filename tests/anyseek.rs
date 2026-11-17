@@ -1,4 +1,6 @@
-//! Opt-in contract tests against a real, separately provisioned AnySeek server.
+//! Local HTTP protocol tests plus opt-in separately provisioned real AnySeek contracts.
+#[cfg(feature = "local-storage")]
+mod support;
 use origence::storage::{
     FullTextEntry, FullTextQuery, Scope, SourceVersion,
     anyseek::{AnySeekConfig, AnySeekFullTextStore, operation_epoch},
@@ -327,99 +329,33 @@ mod service_contract {
     #[ignore = "requires real AnySeek; rejects silently changing the data directory's lexical backend"]
     async fn anyseek_backend_selection_is_bound_before_serving_data() {
         let dir = tempfile::tempdir().unwrap();
-        let local = Service::open(dir.path(), Models::disabled()).await.unwrap();
-        let (token, auth) = provision(&local).await;
-        local
-            .knowledge(
-                &auth,
-                "binding-first",
-                serde_json::from_value(
-                    json!({"title":"binding","format":"text","content":"pinned backend evidence"}),
-                )
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert!(worker::process_next(&local).await.unwrap());
-        local.engine.shutdown().await.unwrap();
-        drop(local);
-        let rejected = match Service::open_with_anyseek(
-            dir.path(),
-            Models::disabled(),
-            Some(config()),
-        )
-        .await
-        {
-            Ok(service) => {
-                service.engine.shutdown().await.unwrap();
-                false
-            }
-            Err(error) => {
-                assert_eq!(error.code(), "VERSION_OR_IDEMPOTENCY_CONFLICT");
-                true
-            }
-        };
-        assert!(
-            rejected,
-            "published LanceDB data must not silently select a different lexical backend"
-        );
-        let local = Service::open(dir.path(), Models::disabled()).await.unwrap();
-        let auth = local.auth(&token).await.unwrap();
-        let input =
-            serde_json::from_value(json!({"query":"pinned backend","mode":"keyword"})).unwrap();
-        assert!(
-            !local.search(&auth, input).await.unwrap()["hits"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
-        local.engine.shutdown().await.unwrap();
-        drop(local);
+        assert!(!dir.path().join("context.db").exists());
 
         let remote_dir = tempfile::tempdir().unwrap();
-        let remote =
-            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), Some(config()))
-                .await
-                .unwrap();
+        let remote = Service::open_with_anyseek(remote_dir.path(), Models::disabled(), config())
+            .await
+            .unwrap();
         remote.engine.shutdown().await.unwrap();
         drop(remote);
         let binding = tokio::fs::read_to_string(remote_dir.path().join("full-text-backend.json"))
             .await
             .unwrap();
         assert!(!binding.contains(&std::env::var("OC_ANYSEEK_API_KEY").unwrap()));
-        for selection in [
-            None,
-            Some(
-                AnySeekConfig::new(
-                    &std::env::var("OC_ANYSEEK_URL").unwrap(),
-                    &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
-                    "different-collection",
-                )
-                .unwrap(),
-            ),
-        ] {
-            let rejected =
-                match Service::open_with_anyseek(remote_dir.path(), Models::disabled(), selection)
-                    .await
-                {
-                    Ok(service) => {
-                        service.engine.shutdown().await.unwrap();
-                        false
-                    }
-                    Err(error) => {
-                        assert_eq!(error.code(), "VERSION_OR_IDEMPOTENCY_CONFLICT");
-                        true
-                    }
-                };
-            assert!(
-                rejected,
-                "a bound AnySeek directory must reject changed selection before backend IO"
-            );
-        }
-        let remote =
-            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), Some(config()))
+        let changed = AnySeekConfig::new(
+            &std::env::var("OC_ANYSEEK_URL").unwrap(),
+            &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+            "different-collection",
+        )
+        .unwrap();
+        assert!(
+            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), changed)
                 .await
-                .unwrap();
+                .is_err(),
+            "a bound directory must reject changed selection before backend IO"
+        );
+        let remote = Service::open_with_anyseek(remote_dir.path(), Models::disabled(), config())
+            .await
+            .unwrap();
         remote.engine.shutdown().await.unwrap();
         drop(remote);
         tokio::fs::write(
@@ -429,7 +365,7 @@ mod service_contract {
         .await
         .unwrap();
         assert!(
-            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), Some(config()))
+            Service::open_with_anyseek(remote_dir.path(), Models::disabled(), config())
                 .await
                 .is_err()
         );
@@ -448,7 +384,7 @@ mod service_contract {
             .unwrap()
         };
         let dir = tempfile::tempdir().unwrap();
-        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), Some(config()))
+        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())
             .await
             .unwrap();
         let (token, auth) = provision(&service).await;
@@ -480,7 +416,7 @@ mod service_contract {
         assert!(epoch.is_u64());
         service.engine.shutdown().await.unwrap();
         drop(service);
-        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), Some(config()))
+        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())
             .await
             .unwrap();
         let auth = service.auth(&token).await.unwrap();
@@ -522,7 +458,7 @@ mod service_contract {
     #[ignore = "requires real AnySeek; run tools/anyseek_smoke.py with a built Origence binary"]
     async fn anyseek_public_service_ingest_search_get_delete_and_reopen() {
         let dir = tempfile::tempdir().unwrap();
-        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), Some(config()))
+        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())
             .await
             .unwrap();
         let (token, auth) = provision(&service).await;
@@ -576,7 +512,7 @@ mod service_contract {
         );
         service.engine.shutdown().await.unwrap();
         drop(service);
-        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), Some(config()))
+        let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())
             .await
             .unwrap();
         let auth = service.auth(&token).await.unwrap();
@@ -597,4 +533,229 @@ mod service_contract {
         while worker::process_next(&service).await.unwrap() {}
         service.engine.shutdown().await.unwrap();
     }
+}
+
+#[cfg(feature = "local-storage")]
+#[tokio::test]
+async fn combined_projection_replay_vector_scope_cleanup_and_unavailability() {
+    use origence::storage::{VectorEntry, VectorQuery};
+    let peer = support::AnySeekFixture::start(Some(2));
+    let store = AnySeekFullTextStore::new(
+        peer.config()
+            .with_embedding("test-profile".into(), 2)
+            .unwrap(),
+    )
+    .unwrap();
+    store.check().await.unwrap();
+    let scope = scope();
+    let allowed = entry("鉴权 token policies");
+    let sibling = entry("token unrelated sibling");
+    let vector = |e: &FullTextEntry, embedding: Vec<f32>| VectorEntry {
+        id: e.id,
+        source: e.source,
+        generation: e.generation,
+        profile: "test-profile".into(),
+        dimension: 2,
+        embedding,
+    };
+    let vectors = vec![
+        vector(&allowed, vec![0.1, 0.3]),
+        vector(&sibling, vec![0.7, 0.2]),
+    ];
+    let entries = vec![allowed.clone(), sibling.clone()];
+    let epoch = operation_epoch().unwrap();
+    peer.lose_next_write();
+    let error = store
+        .upsert_combined(scope, entries.clone(), vectors.clone(), epoch)
+        .await
+        .unwrap_err();
+    assert!(!error.to_string().contains("private test backend"));
+    assert_eq!(peer.posts(), 1);
+    // The f32 payload's JSON roundtrip must settle the exact original group,
+    // including an old operation epoch, rather than submit another replacement.
+    store
+        .upsert_combined(scope, entries, vectors, epoch.saturating_sub(5))
+        .await
+        .unwrap();
+    assert_eq!(peer.posts(), 1);
+    let q = VectorQuery {
+        scope,
+        artifact_ids: Some(vec![allowed.id]),
+        generation: 1,
+        profile: "test-profile".into(),
+        dimension: 2,
+        embedding: vec![0.1, 0.3],
+        limit: 1,
+    };
+    let expected = [(allowed.id, allowed.source)].into();
+    let hits = store.search_vector(q.clone(), &expected).await.unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, allowed.id);
+    assert!(hits[0].score.is_finite());
+    assert!(
+        store
+            .search_vector(
+                VectorQuery {
+                    artifact_ids: None,
+                    ..q.clone()
+                },
+                &expected
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .search_vector(
+                VectorQuery {
+                    dimension: 3,
+                    ..q.clone()
+                },
+                &expected
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .search_vector(
+                VectorQuery {
+                    scope: Scope {
+                        workspace_id: Uuid::new_v4(),
+                        ..scope
+                    },
+                    ..q.clone()
+                },
+                &expected
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .search_vector(q.clone(), &[(allowed.id, sibling.source)].into())
+            .await
+            .is_err()
+    );
+    store.delete_objects(scope, vec![sibling.id]).await.unwrap();
+    store.delete_objects(scope, vec![sibling.id]).await.unwrap();
+    assert_eq!(
+        store.search_vector(q.clone(), &expected).await.unwrap()[0].id,
+        allowed.id
+    );
+    let (lexical, sources) = query(scope, std::slice::from_ref(&allowed), "鉴权 token");
+    assert_eq!(
+        store.search(lexical, &sources).await.unwrap()[0].id,
+        allowed.id
+    );
+    peer.unavailable(true);
+    assert!(
+        store.search_vector(q.clone(), &expected).await.is_err(),
+        "outage must not look like empty recall"
+    );
+    peer.unavailable(false);
+    store.delete_objects(scope, vec![allowed.id]).await.unwrap();
+    assert!(store.search_vector(q, &expected).await.is_err());
+}
+
+#[cfg(feature = "local-storage")]
+#[tokio::test]
+async fn unified_collection_configuration_is_exact_and_credentials_are_not_persisted() {
+    let peer = support::AnySeekFixture::start(Some(2));
+    assert!(
+        AnySeekFullTextStore::new(peer.config())
+            .unwrap()
+            .check()
+            .await
+            .is_err()
+    );
+    let configured = peer.config().with_embedding("model:v1".into(), 2).unwrap();
+    assert!(configured.with_embedding("different".into(), 2).is_err());
+    assert!(AnySeekFullTextStore::vector_collection_config(0).is_err());
+    assert!(AnySeekFullTextStore::vector_collection_config(4097).is_err());
+    let dir = tempfile::tempdir().unwrap();
+    let peer = support::fixture(dir.path(), None);
+    let service = support::open_service(dir.path(), origence::models::Models::disabled())
+        .await
+        .unwrap();
+    service.engine.shutdown().await.unwrap();
+    drop(service);
+    let binding = tokio::fs::read_to_string(dir.path().join("full-text-backend.json"))
+        .await
+        .unwrap();
+    assert!(!binding.contains("test-owned-key"));
+    let wrong = AnySeekConfig::new(&peer.base, "test-owned-key", "different").unwrap();
+    assert!(
+        origence::service::Service::open_with_anyseek(
+            dir.path(),
+            origence::models::Models::disabled(),
+            wrong
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        support::open_service(dir.path(), origence::models::Models::disabled())
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated real vector AnySeek collection; run tools/anyseek_smoke.py"]
+async fn real_anyseek_vector_group_replay_and_partial_cleanup() {
+    use origence::storage::{VectorEntry, VectorQuery};
+    let config = AnySeekConfig::new(
+        &std::env::var("OC_ANYSEEK_URL").unwrap(),
+        &std::env::var("OC_ANYSEEK_API_KEY").unwrap(),
+        &std::env::var("OC_ANYSEEK_VECTOR_COLLECTION").unwrap(),
+    )
+    .unwrap()
+    .with_embedding("real-fixture:v1".into(), 2)
+    .unwrap();
+    let store = AnySeekFullTextStore::new(config).unwrap();
+    store.check().await.unwrap();
+    let scope = scope();
+    let a = entry("token 鉴权");
+    let b = entry("other token");
+    let vector = |e: &FullTextEntry, embedding| VectorEntry {
+        id: e.id,
+        source: e.source,
+        generation: 1,
+        profile: "real-fixture:v1".into(),
+        dimension: 2,
+        embedding,
+    };
+    let vectors = vec![vector(&a, vec![0.1, 0.3]), vector(&b, vec![0.7, 0.2])];
+    let epoch = operation_epoch().unwrap();
+    store
+        .upsert_combined(scope, vec![a.clone(), b.clone()], vectors.clone(), epoch)
+        .await
+        .unwrap();
+    store
+        .upsert_combined(
+            scope,
+            vec![a.clone(), b.clone()],
+            vectors,
+            epoch.saturating_sub(5),
+        )
+        .await
+        .unwrap();
+    let q = VectorQuery {
+        scope,
+        artifact_ids: Some(vec![a.id]),
+        profile: "real-fixture:v1".into(),
+        dimension: 2,
+        generation: 1,
+        embedding: vec![0.1, 0.3],
+        limit: 1,
+    };
+    let sources = [(a.id, a.source)].into();
+    assert_eq!(
+        store.search_vector(q.clone(), &sources).await.unwrap()[0].id,
+        a.id
+    );
+    store.delete_objects(scope, vec![b.id]).await.unwrap();
+    assert_eq!(store.search_vector(q, &sources).await.unwrap()[0].id, a.id);
+    store.delete_objects(scope, vec![a.id]).await.unwrap();
 }

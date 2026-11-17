@@ -1,3 +1,9 @@
+CREATE TABLE oc_key_sessions (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL,
+    logical_key_id BLOB NOT NULL, session_id BLOB NOT NULL,
+    PRIMARY KEY (tenant_id, workspace_id, logical_key_id),
+    UNIQUE (tenant_id, workspace_id, session_id)
+);
 CREATE TABLE oc_session_turns (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL,
     session_id BLOB NOT NULL, turn_id BLOB NOT NULL,

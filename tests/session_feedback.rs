@@ -184,9 +184,11 @@ fn rejected(result: Result<Value>) {
 #[tokio::test]
 async fn session_empty_evidence_is_explicit_and_archive_needs_no_models_or_worker() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let input = turn(turn_id, vec![]);
     let mut missing = input.clone();
@@ -230,7 +232,9 @@ async fn session_empty_evidence_is_explicit_and_archive_needs_no_models_or_worke
 #[tokio::test]
 async fn session_archives_only_used_subset_with_server_resolved_historical_provenance() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let first = publish(&s, &a, "subset-one", "Atlas shared evidence first").await;
     let unused = publish(&s, &a, "subset-two", "Atlas shared evidence second").await;
@@ -251,7 +255,7 @@ async fn session_archives_only_used_subset_with_server_resolved_historical_prove
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
     );
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let jobs = count(&s, "oc_jobs").await;
     archive(
@@ -286,11 +290,13 @@ async fn session_archives_only_used_subset_with_server_resolved_historical_prove
 #[tokio::test]
 async fn session_turn_and_feedback_replays_are_immutable_and_side_effect_free() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     publish(&s, &a, "replay", "Atlas replay evidence").await;
     let hit = &search(&s, &a, "replay").await["hits"][0];
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let input = turn(turn_id, vec![evidence(hit)]);
     let receipt = archive(&s, &a, "archive-replay", session, input.clone())
@@ -396,8 +402,11 @@ async fn session_turn_and_feedback_replays_are_immutable_and_side_effect_free() 
 #[tokio::test]
 async fn session_reference_validation_rejects_forged_ownership_without_partial_writes() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     publish(&s, &a, "reference-one", "Atlas first reference").await;
     publish(&s, &a, "reference-two", "Atlas second reference").await;
     let hits = search(&s, &a, "reference").await;
@@ -426,7 +435,7 @@ async fn session_reference_validation_rejects_forged_ownership_without_partial_w
                 &s,
                 &a,
                 &format!("forged-{index}"),
-                Uuid::new_v4(),
+                session,
                 turn(Uuid::new_v4(), vec![first.clone(), reference]),
             )
             .await,
@@ -442,7 +451,7 @@ async fn session_reference_validation_rejects_forged_ownership_without_partial_w
             &s,
             &a,
             "cross-workspace-evidence",
-            Uuid::new_v4(),
+            session,
             turn(Uuid::new_v4(), vec![evidence(&foreign_hit["hits"][0])]),
         )
         .await,
@@ -465,11 +474,13 @@ async fn session_reference_validation_rejects_forged_ownership_without_partial_w
 #[tokio::test]
 async fn session_feedback_target_is_bound_to_archived_turn_and_principal() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     publish(&s, &a, "target", "Atlas target evidence").await;
     let used = evidence(&search(&s, &a, "target").await["hits"][0]);
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let first = Uuid::new_v4();
     let second = Uuid::new_v4();
     for turn_id in [first, second] {
@@ -512,14 +523,45 @@ async fn session_feedback_target_is_bound_to_archived_turn_and_principal() {
         record(&s, &a, "feedback-moved", session, second, input.clone()).await,
         Err(AppError::Conflict(_))
     ));
-    // Feedback identity is per principal. A different authorized writer can
-    // independently use the same client-generated feedback UUID.
+    // A new key has its own private archive, even with a write role.
     let writer = role(&s, &a, "writer").await;
-    record(&s, &writer, "feedback-domain", session, second, input)
-        .await
-        .unwrap();
-    for (turn_id, actor) in [(first, &a), (second, &writer)] {
-        let rows = s.session_feedback(actor, session, turn_id).await.unwrap();
+    assert!(matches!(
+        record(
+            &s,
+            &writer,
+            "foreign-feedback",
+            session,
+            second,
+            input.clone()
+        )
+        .await,
+        Err(AppError::NotFound)
+    ));
+    let writer_session = id(&s.private_session(&writer).await.unwrap(), "session_id");
+    archive(
+        &s,
+        &writer,
+        "own-turn",
+        writer_session,
+        turn(second, vec![]),
+    )
+    .await
+    .unwrap();
+    record(
+        &s,
+        &writer,
+        "feedback-domain",
+        writer_session,
+        second,
+        input,
+    )
+    .await
+    .unwrap();
+    for (session_id, turn_id, actor) in [(session, first, &a), (writer_session, second, &writer)] {
+        let rows = s
+            .session_feedback(actor, session_id, turn_id)
+            .await
+            .unwrap();
         assert_eq!(rows["feedback"].as_array().unwrap().len(), 1);
         assert_eq!(rows["feedback"][0]["feedback_id"], json!(feedback_id));
     }
@@ -538,13 +580,15 @@ async fn session_feedback_target_is_bound_to_archived_turn_and_principal() {
 #[tokio::test]
 async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let writer = role(&s, &a, "writer").await;
     let reader = role(&s, &a, "reader").await;
     let (same_tenant, _) = provision_scope(&s, a.tenant_id, Uuid::new_v4()).await;
     let (other_tenant, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&writer).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let input = turn(turn_id, vec![]);
     let receipt = archive(&s, &writer, "private-turn", session, input.clone())
@@ -561,21 +605,18 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
     )
     .await
     .unwrap();
-    // Turn identity is workspace/session/turn, independent of the writer key.
-    let before = counts(&s, false).await;
+    // Workspace administration does not grant access to another logical key.
+    let before = counts(&s, true).await;
+    assert!(matches!(
+        archive(&s, &a, "private-turn", session, input.clone()).await,
+        Err(AppError::NotFound)
+    ));
+    assert_eq!(counts(&s, true).await, before);
     assert_eq!(
-        archive(&s, &a, "private-turn", session, input.clone())
-            .await
-            .unwrap(),
-        receipt
-    );
-    assert_eq!(counts(&s, false).await, before);
-    // Another writer in the same workspace may inspect an authorized archive.
-    assert_eq!(
-        s.session_turn(&a, session, turn_id).await.unwrap()["source_event_id"],
+        s.session_turn(&writer, session, turn_id).await.unwrap()["source_event_id"],
         receipt["source_event_id"]
     );
-    for other in [&same_tenant, &other_tenant] {
+    for other in [&a, &same_tenant, &other_tenant] {
         assert!(matches!(
             s.session_turn(other, session, turn_id).await,
             Err(AppError::NotFound)
@@ -600,12 +641,13 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
             .await,
             Err(AppError::NotFound)
         ));
-        // Session and turn IDs are scoped, not globally reserved by another tenant.
-        archive(&s, other, "private-turn", session, input.clone())
+        // Each key may reuse a turn ID only inside its own server-assigned session.
+        let own_session = id(&s.private_session(other).await.unwrap(), "session_id");
+        archive(&s, other, "private-turn", own_session, input.clone())
             .await
             .unwrap();
         assert_ne!(
-            s.session_turn(other, session, turn_id).await.unwrap()["source_event_id"],
+            s.session_turn(other, own_session, turn_id).await.unwrap()["source_event_id"],
             receipt["source_event_id"]
         );
     }
@@ -669,11 +711,13 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
 #[tokio::test]
 async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     publish(&s, &a, "race", "Atlas race evidence").await;
     let hits = search(&s, &a, "race").await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let input = turn(turn_id, vec![evidence(&hits["hits"][0])]);
     let before_events = count(&s, "oc_events").await;
@@ -720,7 +764,9 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
     let before = counts(&s, true).await;
     s.engine.relational().pool().close().await;
     drop(s);
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let a = s.auth(&token).await.unwrap();
     assert_eq!(s.session_turn(&a, session, turn_id).await.unwrap(), saved);
     assert_eq!(
@@ -742,12 +788,14 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
 #[tokio::test]
 async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     publish(&s, &a, "rollback-one", "Atlas rollback first").await;
     publish(&s, &a, "rollback-two", "Atlas rollback second").await;
     let hits = search(&s, &a, "rollback").await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let input = turn(
         turn_id,
@@ -829,14 +877,14 @@ async fn assert_hidden(
         Err(AppError::NotFound)
     ));
     let before = counts(s, true).await;
-    let archive_key = format!("withdrawn-archive-{session}");
+    let archive_key = format!("withdrawn-archive-{session}-{turn_id}");
     for key in [archive_key.as_str(), "new-command-withdrawn-archive"] {
         assert!(matches!(
             archive(s, a, key, session, input.clone()).await,
             Err(AppError::NotFound)
         ));
     }
-    let feedback_key = format!("withdrawn-feedback-{session}");
+    let feedback_key = format!("withdrawn-feedback-{session}-{turn_id}");
     for key in [feedback_key.as_str(), "new-command-withdrawn-feedback"] {
         assert!(matches!(
             record(s, a, key, session, turn_id, feedback.clone()).await,
@@ -862,12 +910,14 @@ async fn assert_hidden(
 async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanup() {
     for target in ["event", "asset", "archive"] {
         let dir = tempfile::tempdir().unwrap();
-        let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let s = crate::support::open_service(dir.path(), Models::disabled())
+            .await
+            .unwrap();
         let (a, token) = provision(&s).await;
         let first = publish(&s, &a, "withdraw-one", "Atlas withdrawal first").await;
         publish(&s, &a, "withdraw-two", "Atlas withdrawal second").await;
         let hits = search(&s, &a, "withdrawal").await;
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn_id = Uuid::new_v4();
         let input = turn(
             turn_id,
@@ -881,7 +931,7 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
         let receipt = archive(
             &s,
             &a,
-            &format!("withdrawn-archive-{session}"),
+            &format!("withdrawn-archive-{session}-{turn_id}"),
             session,
             input.clone(),
         )
@@ -891,7 +941,7 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
         record(
             &s,
             &a,
-            &format!("withdrawn-feedback-{session}"),
+            &format!("withdrawn-feedback-{session}-{turn_id}"),
             session,
             turn_id,
             feedback.clone(),
@@ -944,7 +994,9 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
         );
         s.engine.relational().pool().close().await;
         drop(s);
-        let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let s = crate::support::open_service(dir.path(), Models::disabled())
+            .await
+            .unwrap();
         let a = s.auth(&token).await.unwrap();
         assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
     }
@@ -953,7 +1005,9 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
 #[tokio::test]
 async fn session_deleted_file_invalidates_archived_evidence_before_cleanup() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     let upload = s
         .upload(
@@ -979,13 +1033,13 @@ async fn session_deleted_file_invalidates_archived_evidence_before_cleanup() {
     finish(&s, &a, &published).await;
     let hits = search(&s, &a, "Atlas").await;
     assert_eq!(hits["hits"].as_array().unwrap().len(), 1);
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let input = turn(turn_id, vec![evidence(&hits["hits"][0])]);
     let receipt = archive(
         &s,
         &a,
-        &format!("withdrawn-archive-{session}"),
+        &format!("withdrawn-archive-{session}-{turn_id}"),
         session,
         input.clone(),
     )
@@ -995,7 +1049,7 @@ async fn session_deleted_file_invalidates_archived_evidence_before_cleanup() {
     record(
         &s,
         &a,
-        &format!("withdrawn-feedback-{session}"),
+        &format!("withdrawn-feedback-{session}-{turn_id}"),
         session,
         turn_id,
         feedback.clone(),
@@ -1039,8 +1093,11 @@ async fn graph_support(
 #[tokio::test]
 async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let first = publish(&s, &a, "graph-one", "Atlas graph first").await;
     let second = publish(&s, &a, "graph-two", "Atlas graph second").await;
     let hits = search(&s, &a, "graph").await;
@@ -1102,14 +1159,13 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
                 &s,
                 &a,
                 &Uuid::new_v4().to_string(),
-                Uuid::new_v4(),
+                session,
                 turn(Uuid::new_v4(), vec![invalid]),
             )
             .await,
         );
         assert_eq!(counts(&s, true).await, before);
     }
-    let session = Uuid::new_v4();
     let turn_id = Uuid::new_v4();
     let used = vec![
         evidence(first_hit),
@@ -1120,7 +1176,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     let receipt = archive(
         &s,
         &a,
-        &format!("withdrawn-archive-{session}"),
+        &format!("withdrawn-archive-{session}-{turn_id}"),
         session,
         input.clone(),
     )
@@ -1142,7 +1198,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
     record(
         &s,
         &a,
-        &format!("withdrawn-feedback-{session}"),
+        &format!("withdrawn-feedback-{session}-{turn_id}"),
         session,
         turn_id,
         feedback.clone(),
@@ -1162,7 +1218,7 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
         "committed",
     )
     .await;
-    let other_session = Uuid::new_v4();
+    let other_session = session; // A second turn shares this logical key's archive.
     let other_turn = Uuid::new_v4();
     archive(
         &s,
@@ -1233,7 +1289,9 @@ async fn semantic_member(
 #[tokio::test]
 async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snapshot() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
     s.register_memory_property(
         &a,
@@ -1254,13 +1312,13 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
     assert_eq!(python_hits["hits"].as_array().unwrap().len(), 1);
     let mut archives = Vec::new();
     for hit in [&rust_hits["hits"][0], &python_hits["hits"][0]] {
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let turn_id = Uuid::new_v4();
         let input = turn(turn_id, vec![evidence(hit)]);
         let receipt = archive(
             &s,
             &a,
-            &format!("withdrawn-archive-{session}"),
+            &format!("withdrawn-archive-{session}-{turn_id}"),
             session,
             input.clone(),
         )
@@ -1291,7 +1349,7 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
         record(
             &s,
             &a,
-            &format!("withdrawn-feedback-{session}"),
+            &format!("withdrawn-feedback-{session}-{turn_id}"),
             session,
             turn_id,
             feedback.clone(),
@@ -1354,9 +1412,11 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
 async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
     for drop_all in [false, true] {
         let dir = tempfile::tempdir().unwrap();
-        let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+        let s = crate::support::open_service(dir.path(), Models::disabled())
+            .await
+            .unwrap();
         let (a, _) = provision(&s).await;
-        let session = Uuid::new_v4();
+        let session = id(&s.private_session(&a).await.unwrap(), "session_id");
         let input = turn(Uuid::new_v4(), vec![]);
         let receipt = archive(&s, &a, "schema-source", session, input.clone())
             .await
@@ -1381,7 +1441,11 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
         }
         s.engine.relational().pool().close().await;
         drop(s);
-        assert!(Service::open(dir.path(), Models::disabled()).await.is_err());
+        assert!(
+            crate::support::open_service(dir.path(), Models::disabled())
+                .await
+                .is_err()
+        );
 
         let database_path = dir.path().join("context.db");
         let raw_pool = db::Pool::open(database_path).await.unwrap();
@@ -1411,9 +1475,11 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
 #[tokio::test]
 async fn session_feedback_capacity_blocks_new_records_but_preserves_replays() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, _) = provision(&s).await;
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     archive(&s, &a, "capacity-turn", session, turn(turn_id, vec![]))
         .await
@@ -1459,7 +1525,11 @@ async fn session_feedback_capacity_blocks_new_records_but_preserves_replays() {
     );
     assert_eq!(counts(&s, false).await, before);
     let writer = role(&s, &a, "writer").await;
-    for actor in [&a, &writer] {
+    assert!(matches!(
+        s.session_feedback(&writer, session, turn_id).await,
+        Err(AppError::NotFound)
+    ));
+    for actor in [&a] {
         let before = counts(&s, true).await;
         assert!(matches!(
             record(
@@ -1526,7 +1596,9 @@ async fn serve(s: Service) -> (String, Server) {
 #[tokio::test]
 async fn session_http_contract_validates_fields_permissions_and_idempotency() {
     let dir = tempfile::tempdir().unwrap();
-    let s = Service::open(dir.path(), Models::disabled()).await.unwrap();
+    let s = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
     let (a, token) = provision(&s).await;
     let (_, other_token) = provision(&s).await;
     let reader = s.issue_key(&a, "reader").await.unwrap();
@@ -1536,7 +1608,7 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .unwrap();
-    let session = Uuid::new_v4();
+    let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn_id = Uuid::new_v4();
     let turns_url = format!("{base}/v1/sessions/{session}/turns");
     let turn_url = format!("{turns_url}/{turn_id}");

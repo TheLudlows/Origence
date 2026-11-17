@@ -548,7 +548,7 @@ fn search_response(
 ) -> Value {
     let (summaries_enabled, graph_enabled) = components;
     let (entities, relations) = graph;
-    json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":profile,"retrieval_policy":"turso-lance-filtered-rrf60-v2","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}})
+    json!({"hits":hits,"memory_identity":input.memory_identity,"requested_mode":input.mode,"effective_mode":effective,"warnings":warnings,"embedding_profile":profile,"retrieval_policy":"turso-anyseek-filtered-rrf60-v3","active_components":{"summaries":summaries_enabled,"graph":graph_enabled},"graph":{"entities":entities,"relations":relations}})
 }
 
 type NativeCandidateKey = (Uuid, SourceVersion, i64);

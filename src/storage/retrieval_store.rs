@@ -1,143 +1,114 @@
-//! Compose the existing vector backend with an independently selected lexical store.
+//! AnySeek is the single derived lexical and vector projection.
 use super::{
     anyseek::{AnySeekConfig, AnySeekFullTextStore},
     *,
 };
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 use uuid::Uuid;
-
 pub(crate) mod binding;
 
 pub struct RetrievalStore {
-    local: LanceDbStore,
-    lexical: Option<AnySeekFullTextStore>,
+    remote: AnySeekFullTextStore,
 }
-
 impl RetrievalStore {
-    pub async fn open(
-        dir: impl AsRef<Path>,
-        anyseek: Option<AnySeekConfig>,
-    ) -> StorageResult<Self> {
+    pub async fn open(anyseek: AnySeekConfig) -> StorageResult<Self> {
         Ok(Self {
-            local: LanceDbStore::open(dir).await?,
-            lexical: anyseek.map(AnySeekFullTextStore::new).transpose()?,
+            remote: AnySeekFullTextStore::new(anyseek)?,
         })
     }
-    pub fn uses_anyseek(&self) -> bool {
-        self.lexical.is_some()
-    }
     pub async fn check_full_text_available(&self) -> StorageResult<()> {
-        match &self.lexical {
-            Some(store) => store.check().await,
-            None => self.local.check_full_text_available().await,
-        }
+        self.remote.check().await
     }
     pub async fn check_vector_available(
         &self,
         profile: &str,
         dimension: usize,
     ) -> StorageResult<()> {
-        self.local.check_vector_available(profile, dimension).await
+        self.remote.check_vector(profile, dimension).await
     }
     pub(crate) async fn search_authorized(
         &self,
         query: VectorQuery,
         expected: &HashMap<Uuid, SourceVersion>,
     ) -> StorageResult<Vec<VectorHit>> {
-        self.local.search_authorized(query, expected).await
+        self.remote.search_vector(query, expected).await
     }
     pub(crate) async fn search_full_text_authorized(
         &self,
         query: FullTextQuery,
         expected: &HashMap<Uuid, SourceVersion>,
     ) -> StorageResult<Vec<FullTextHit>> {
-        match &self.lexical {
-            Some(store) => store.search(query, expected).await,
-            None => {
-                self.local
-                    .search_full_text_authorized(query, expected)
-                    .await
-            }
-        }
+        self.remote.search(query, expected).await
     }
-    pub(crate) async fn upsert_publication_full_text(
+    pub(crate) async fn upsert_publication(
         &self,
         scope: Scope,
         entries: Vec<FullTextEntry>,
+        vectors: Vec<VectorEntry>,
         epoch: Option<u64>,
     ) -> StorageResult<()> {
-        match &self.lexical {
-            Some(store) => {
-                store
-                    .upsert(
-                        scope,
-                        entries,
-                        epoch.ok_or(StorageError::InvalidArgument(
-                            "AnySeek publication requires a saved retry epoch",
-                        ))?,
-                    )
-                    .await
-            }
-            None => self.local.upsert_full_text(scope, entries).await,
-        }
+        self.remote
+            .upsert_combined(
+                scope,
+                entries,
+                vectors,
+                epoch.ok_or(StorageError::InvalidArgument(
+                    "AnySeek publication requires a saved retry epoch",
+                ))?,
+            )
+            .await
     }
 }
-
 impl Lifecycle for RetrievalStore {
     async fn initialize(&self) -> StorageResult<()> {
         self.check().await
     }
     async fn check(&self) -> StorageResult<()> {
-        self.local.check().await?;
-        if let Some(store) = &self.lexical {
-            store.check().await?;
-        }
-        Ok(())
+        self.remote.check().await
     }
     async fn shutdown(&self) -> StorageResult<()> {
-        self.local.shutdown().await
+        Ok(())
     }
 }
-
 impl VectorStore for RetrievalStore {
-    async fn upsert(&self, scope: Scope, entries: Vec<VectorEntry>) -> StorageResult<()> {
-        self.local.upsert(scope, entries).await
+    async fn upsert(&self, _scope: Scope, entries: Vec<VectorEntry>) -> StorageResult<()> {
+        if entries.is_empty() {
+            Ok(())
+        } else {
+            Err(StorageError::InvalidArgument(
+                "AnySeek writes require the durable publication path",
+            ))
+        }
     }
-    async fn search(&self, query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
-        self.local.search(query).await
+    async fn search(&self, _query: VectorQuery) -> StorageResult<Vec<VectorHit>> {
+        Err(StorageError::InvalidArgument(
+            "AnySeek queries require authoritative candidate sources",
+        ))
     }
     async fn upsert_full_text(
         &self,
-        scope: Scope,
+        _scope: Scope,
         entries: Vec<FullTextEntry>,
     ) -> StorageResult<()> {
-        if self.lexical.is_some() && !entries.is_empty() {
-            return Err(StorageError::InvalidArgument(
+        if entries.is_empty() {
+            Ok(())
+        } else {
+            Err(StorageError::InvalidArgument(
                 "AnySeek writes require the durable publication path",
-            ));
+            ))
         }
-        self.local.upsert_full_text(scope, entries).await
     }
-    async fn search_full_text(&self, query: FullTextQuery) -> StorageResult<Vec<FullTextHit>> {
-        if self.lexical.is_some() {
-            return Err(StorageError::InvalidArgument(
-                "AnySeek queries require authoritative candidate sources",
-            ));
-        }
-        self.local.search_full_text(query).await
+    async fn search_full_text(&self, _query: FullTextQuery) -> StorageResult<Vec<FullTextHit>> {
+        Err(StorageError::InvalidArgument(
+            "AnySeek queries require authoritative candidate sources",
+        ))
     }
     async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()> {
-        if let Some(store) = &self.lexical {
-            store.delete_objects(scope, ids.clone()).await?;
-        }
-        self.local.delete_objects(scope, ids).await
+        self.remote.delete_objects(scope, ids).await
     }
-    async fn delete_source(&self, scope: Scope, source: SourceVersion) -> StorageResult<()> {
-        if self.lexical.is_some() {
-            return Err(StorageError::InvalidArgument(
-                "AnySeek cleanup requires authoritative artifact IDs",
-            ));
-        }
-        self.local.delete_source(scope, source).await
+    async fn delete_source(&self, _scope: Scope, _source: SourceVersion) -> StorageResult<()> {
+        Err(StorageError::InvalidArgument(
+            "AnySeek cleanup requires authoritative artifact IDs",
+        ))
     }
 }

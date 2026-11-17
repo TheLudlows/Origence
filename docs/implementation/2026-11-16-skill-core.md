@@ -1,0 +1,59 @@
+# Skill review core (local implementation slice)
+
+This slice implements a public-library/Turso workflow, not automatic Skill mining,
+client loading acceptance, or a claim that a method works merely because an Agent
+reported success. A client supplies a draft derived from authorized, exact asset
+versions or immutable private Run prefixes. No operation auto-publishes.
+
+## Contract
+
+- `save_skill_candidate(id, expected_revision, input)` creates or appends immutable
+  revisions under the caller's stable logical key. Private notes and source
+  references remain owner-only, even from workspace administrators.
+- The owner submits an explicit review ID, exact revision, named reviewer credential,
+  workspace/Skill/version target, and selected redacted basis. Only that reviewer
+  and the owner can read this packet. A reviewer gets no implicit raw archive access.
+- `decide_skill_review(review, packet_digest, approve)` requires the appointed
+  live Publish role. A decision is immutable. A new review ID is needed to change
+  the decision. Credential rotation requires a new reviewer appointment; candidate
+  ownership survives an authorized logical-key rotation.
+- `publish_skill(review, packet_digest)` is a distinct explicit operation. It
+  rechecks current Publish authority, the approving credential, current candidate
+  revision, supporting source authority, and exact generated package. Any candidate
+  edit invalidates prior approval, including a source or private-note edit.
+- Publication stores bounded immutable package bytes and provenance in the existing
+  Turso authority transaction. There is no external IO/worker or partially installed
+  package. Versions increase monotonically. This slice does not introduce Blob
+  replication or migration support.
+- `skill_package(skill, version)` returns only approved manifest and files, with
+  fresh source and withdrawal checks. Review basis, raw source IDs, private notes,
+  and approval records are not in the distributed package. Exact historical source
+  versions remain usable while their authority/support is valid; later appends to a
+  Run do not alter an approved immutable prefix. Retraction/withdrawal fails closed.
+
+`SkillPackage` contains `manifest`, `files` and `digest`. The format-1 manifest has
+only tenant/workspace, Skill ID/version, name, description, and artifact hashes.
+Files are server-generated `SKILL.md` and at most sixteen bounded
+`references/<lowercase-slug>.md|.txt` files. The digest is SHA-256 of the canonical
+serde JSON tuple `(manifest, files)`; maps are ordered. `SkillPackage::validate()`
+checks the exact generated frontmatter, allowlisted files, and all hashes. It does
+not substitute for a live authorized distribution call.
+
+No arbitrary frontmatter, executable/script file, hook, dynamic command,
+tool-preauthorization or credential metadata fields exist in this format; unknown
+fields and unsupported paths are rejected, including Windows device names.
+The validator rejects Claude shell-preprocessing markers in descriptions, body, and
+references (inline and fenced forms), per the [client contract](https://code.claude.com/docs/en/skills#inject-dynamic-context).
+Natural-language instructions can still suggest actions; they are not execution authorization. This is not a general secret detector: reviewers remain responsible
+for ensuring the selected prose/reference contents are authorized and redacted.
+Offline exports cannot be instantly recalled, and approval does not grant business
+tool permissions.
+
+## Validation scope
+
+Focused native Turso tests cover publication without approval, owner/reviewer
+isolation, digest/target mismatch, edit invalidation, idempotent retry, same-version
+reopen, source retraction, and withdrawal. Package tests cover unknown execution
+metadata and path/extension rejection. Final exact command results are recorded
+in `docs/VALIDATION.md` by the integration owner; no live client or model-quality
+acceptance is claimed by these tests.

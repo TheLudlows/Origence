@@ -166,8 +166,10 @@ pub struct LearningCitation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LearningEvidence {
     pub learning_id: Uuid,
-    pub improve_id: Uuid,
-    pub session_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub improve_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<Uuid>,
     pub statement: String,
     pub why: String,
     pub conditions: Vec<String>,

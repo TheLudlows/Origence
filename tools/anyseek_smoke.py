@@ -37,15 +37,21 @@ def call(base, path, key, body=None):
         raise RuntimeError(f"AnySeek fixture HTTP {error.code}") from None
 
 
-def schema():
-    fields = ["format", "tenant", "workspace", "chunk_id", "source_id", "source_version", "generation", "publication"]
+def schema(dimension=None):
+    fields = ["format", "tenant", "workspace", "chunk_id", "source_id", "source_version", "generation", "publication", "profile", "dimension"]
     result = [{"field": name, "field_type": "String", "store": True,
                "index_lexical": False, "index_vector": False, "filterable": True, "boost": 1.0}
               for name in fields]
     result.append({"field": "terms", "field_type": "Text", "store": True,
                    "index_lexical": True, "index_vector": False, "filterable": False, "boost": 1.0})
-    return {"index_name": "origence-lexical-sha256-v1", "schema": result,
-            "tokenizer": "TantivySimpleV1", "text_normalization": "None", "stop_words": "None"}
+    config = {"index_name": "origence-search-sha256-v2", "schema": result,
+              "tokenizer": "TantivySimpleV1", "text_normalization": "None", "stop_words": "None"}
+    if dimension is not None:
+        require(1 <= dimension <= 4096, "invalid fixture vector dimension")
+        result.append({"field": "vector", "field_type": "Json", "store": True,
+                       "index_lexical": False, "index_vector": True, "filterable": False, "boost": 1.0})
+        config["vector"] = {"dimensions": dimension}
+    return config
 
 
 def mcp_contract(binary, env, directory):
@@ -93,8 +99,9 @@ def main():
     parser.add_argument("--test-executable", action="append", default=[])
     parser.add_argument("--cargo-tests", action="store_true", help="run the real-backend Rust target through Cargo")
     parser.add_argument("--binary")
+    parser.add_argument("--run", nargs=argparse.REMAINDER, help="run another isolated smoke/eval command against this fixture")
     args = parser.parse_args()
-    require(args.test_executable or args.binary or args.cargo_tests, "provide a test executable, Cargo tests or Origence binary")
+    require(args.test_executable or args.binary or args.cargo_tests or args.run, "provide a test executable, Cargo tests or Origence binary")
     with tempfile.TemporaryDirectory(prefix="origence-anyseek-") as directory:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -124,8 +131,11 @@ def main():
                 call(base, "/api/v1/tenants", master, {"operation_id": operation(), "tenant_id": "origence"})
                 call(base, "/api/v1/apikey", master, {"operation_id": operation(), "tenant_id": "origence", "key_id": "origence", "apikey_base64": key})
                 call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-lexical", "config": schema()})
-                env.update(OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base,
+                call(base, "/api/v1/index", key, {"operation_id": operation(), "collection_id": "origence-vector", "config": schema(2)})
+                env.update(OC_ANYSEEK_VECTOR_COLLECTION="origence-vector", OC_FULL_TEXT_BACKEND="anyseek", OC_ANYSEEK_URL=base,
                            OC_ANYSEEK_API_KEY=key, OC_ANYSEEK_COLLECTION="origence-lexical")
+                env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key,
+                           ORIGENCE_TEST_ANYSEEK_COLLECTION="origence-lexical")
                 # Never send bootstrap master credentials to Origence or test processes.
                 env.pop("MASTER_KEY_SECRET", None)
                 for executable in args.test_executable:
@@ -134,6 +144,8 @@ def main():
                 if args.cargo_tests:
                     subprocess.run(["cargo", "test", "--locked", "--test", "anyseek", "--", "--ignored", "--nocapture", "--test-threads=1"],
                                    env=env, check=True, timeout=300, cwd=Path(__file__).resolve().parent.parent)
+                if args.run:
+                    subprocess.run(args.run, env=env, check=True, timeout=600)
                 if args.binary:
                     mcp_contract(str(Path(args.binary).resolve()), env, directory)
             finally:

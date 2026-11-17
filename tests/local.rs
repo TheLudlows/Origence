@@ -1,17 +1,15 @@
+mod support;
 // One integration executable avoids repeatedly linking the native engines.
 mod evidence_bundle;
+#[cfg(feature = "local-storage")]
+mod foundation_http;
 mod identity_check_cli;
 mod identity_vector_regression;
 mod initialization;
-mod lancedb_native_search;
-mod lancedb_store;
 mod learning_loop;
 mod local_app;
 mod local_blob;
 mod local_ledger;
-mod local_writer_recovery;
-mod maintenance_fixture;
-mod maintenance_recovery;
 mod message_batches;
 mod owned_workspace_service;
 mod owned_workspaces;

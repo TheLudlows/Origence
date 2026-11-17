@@ -1475,3 +1475,61 @@ shutdown 的完整字节和大小。这不是手动构造 Poisoned，也不依�
 Rust 编译、两项新回归、常规测试与完整14格，结果和原始工件见本节开头。
 这不替代后续提交的 CI，也不是任意写入窗口或断电保证。Windows 本轮未运行，
 旧损坏数据不会由本补丁自动修复，#65 仍保持打开。
+
+## 2026-11-17 · Lance 依赖与构建清理（本地切片）
+
+此切片移除 Lance/LanceDB 检索及压缩专用实现、vendored `lance-io`、
+物理布局探针及其专用恢复矩阵；保留通用 Turso 权威锁、图存储生命周期、
+发布校验和独立 syscall 故障注入工具的测试。历史验证记录不代表替换后的后端验收。
+
+在 Linux 本地、声明的 Rust 1.98.0 上：
+
+- `cargo tree --offline --all-features --edges normal,build --prefix none` 成功，
+  输出不含 `lance*`、`lancedb`、`protobuf-src`、Arrow 或 CMake 构建依赖。
+  `Cargo.lock` 由 Cargo 按现有锁文件重新解析，不手工编辑。
+- `cargo metadata --offline --locked --no-deps --format-version 1` 成功。
+- 修改的七个 Rust 文件经 `rustfmt --edition 2024 --check --config skip_children=true` 检查通过；
+  `git diff --check` 通过。这不是整个集成分支的格式检查结论。
+- `python3 -m unittest discover -s tools -p 'test_*.py' -v`：8/8 通过，
+  覆盖保留的独立 syscall 注入工具，不是 AnySeek 恢复测试。
+
+此清理切片独立依赖同批 AnySeek 适配器与混合测试迁移；此处未运行整库 Cargo 测试、
+Clippy、Docker 构建、Windows 或 GitHub Actions，不能据此宣称替换已端到端验收。
+
+## 2026-11-17 AnySeek unified adapter local milestone
+
+Production slice `1875381` removes the Lance composition and sends lexical terms and
+optional externally generated vectors in one saved-epoch group publication. The
+collection binding pins endpoint, collection, embedding profile and dimension.
+Vector queries preflight authorized candidate identities and recheck scope, source
+version, generation, profile and dimension on returned hits; final Turso checks remain.
+Missing AnySeek configuration fails explicitly before opening the data directory.
+
+Rust 1.98.0 local checks: `cargo check --no-default-features --lib` and
+`cargo check --lib` passed; `cargo test --locked --lib
+storage::anyseek::unified_tests` passed 2 tests; `cargo clippy --locked --lib
+--bin origence -- -D warnings` passed; formatting passed. These are adapter/schema
+and invalid-input checks, not real AnySeek service or full application acceptance.
+Protocol/public-library/HTTP/MCP and live-backend checks are separate pending evidence.
+The source contract was checked against the public AnySeek Record HTTP README
+(group replacement, vector schema, query_vector/all) on 2026-11-16 UTC.
+
+## 2026-11-16 · Agent 数据底座 v0.8 本地集成
+
+Linux / Rust 1.98.0，默认功能代码与 Clippy 核验于
+`c916d3181fd37dec1594fd46cb95ef6d5a2df8ca`。无默认功能的库测试在
+等效库源码 `a5f610088284d8a421d7d2c477c6d4245f3dddcf` 上执行；
+两提交之间只改测试夹具和 Cargo 文件末尾空行。
+
+- `cargo test --locked --no-fail-fast`：库 218、AnySeek 本地协议 4、本地集成
+  211 项通过；7 项真实 AnySeek 测试按设计未运行。HTTP/MCP 子进程使用隔离的测试主机、
+  假模型和本地协议 peer，不等于对真实 AnySeek 服务或真实客户端任务验收。
+- `cargo test --locked --no-default-features --lib`：141 项通过。
+- `cargo clippy --locked --all-targets -- -D warnings`、`cargo fmt --package origence -- --check`
+  和相对 main 的 `git diff --check` 通过；默认依赖树无 Lance/LanceDB/protobuf-src。
+- Python `tools` 与 `evals` 单测分别 8、42 项通过；Codex CLI 在隔离配置中识别了
+  示例 MCP 配置，未运行模型。无 GitHub Actions、远端推送或 PR。
+
+主要新增覆盖：全文/向量同组发布重试、保留成员清理和模型绑定、私有会话/Run 所有权和授权
+轮换、公开 Learning 引用脱敏、选定审阅包与审批绑定、Skill 产物校验和导出。
+自动提炼、原生受管加载及撤回、真实引擎和双客户端试点未验收。

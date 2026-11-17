@@ -1,54 +1,69 @@
 # Origence API 与库接口
 
-适用本地宿主 Turso 权威数据、LanceDB 向量/Turso 图，以及可选 AnySeek 全文投影。本文负责 HTTP v1 与公开库接口契约及调用方变更；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
+适用本地宿主 Turso 权威数据、Turso 图以及 AnySeek 全文/向量投影。本文负责 HTTP v1 与公开库接口契约及调用方变更；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
 按需阅读：[库接口变更](#issue-61rust-库与-cli-破坏性变更) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
 
-所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。修改接口还需 1–200 个 ASCII 字符的 `Idempotency-Key`；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
+所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。原有命令式修改接口需 1–200 个 ASCII 字符的 `Idempotency-Key`；Run/Skill 使用下文的稳定 ID、修订号与摘要；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 
-## AnySeek 全文适配：M1 首个切片
+## 私有会话、Run 与 Skill
 
-`Service::open(dir, models)` 保持现有默认后端；新增
-`Service::open_with_anyseek(dir, models, Option<AnySeekConfig>)` 供库调用方显式选择全文投影。
-`LocalEngine` 的检索适配类型改为 `RetrievalStore`，组合既有 LanceDB 向量与可选
-AnySeek 全文；直接使用 `LanceDbStore` 的库调用不变。模型、Blob、图、Turso 和单 Worker
-仍在原有路径内；此切片没有将向量、记忆治理或全部存储替换为 AnySeek。
+`GET /v1/session` 从认证派生逻辑 key 与服务端 session ID（首次可创建绑定）。已有
+`/v1/sessions/{session_id}/turns`、反馈和 Improve 接口只接受当前 key 的归档，
+并保留 writer 权限。发布后的 Learning 正文和条件可被同 workspace 召回，但归档、
+Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可以对当前空间的活跃凭据调用
+`POST /admin/keys/{id}/rotate`，新凭据延续原逻辑 key 并撤销旧凭据；响应中的新 token
+应安全保存。独立签发的新 key 不能读取原归档。客户端通过
+[`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.md) 使用同一边界。
 
-全文选择受目录绑定约束。AnySeek 只能初始化未绑定且没有已发布全文的目录；成功后将
-格式、backend、endpoint/collection 写入 `full-text-backend.json`，不保存凭据。
-后续选择不匹配或绑定损坏时拒绝启动；后端/目标不匹配为版本/配置冲突，不隐式转换索引。
-本地默认目录不因该功能新建绑定；同版本备份恢复须携带 AnySeek 绑定文件。
+| Run 接口 | 输入与结果 |
+| --- | --- |
+| `POST /v1/runs` | writer 提交稳定的 `run_id` 与脱敏 `summary`，绑定当前归档 |
+| `POST /v1/runs/{id}/events` | 稳定 `event_id`、时间、报告方与具名事件；相同重试返回原序号 |
+| `POST /v1/runs/{id}/context` | `event_id` 和 `context`（EvidenceBundle 请求）；返回 bundle 和服务端准备回执 |
+| `GET /v1/runs/{id}?after=0&limit=50` | 当前 key 的分页追溯，包含明确的采集边界 |
+| `GET /v1/runs/{id}/prefix?through_sequence=N` | 当前 key 的不可变前缀摘要，可作为 Skill 依据 |
 
-HTTP、MCP 请求形状和四个工具名称不变。AnySeek 仅返回候选，正文和引用仍从
-Origence 权威数据读取。查询先按 tenant/workspace、generation 和已授权 chunk IDs
-过滤，对全部候选分批核对来源/缺失/重复，再检索并执行原有最终可见性检查。
-存储失败、缺失索引和身份冲突均明确失败，不当作空召回。
-网络、HTTP 5xx/408/429 使用可重试依赖错误，HTTP 保持 503，并由原有持久队列有限重试；
-配置、身份和模型错误保持原分类，不因接入远端后端而统一放宽为自动重试。
+服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
+结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
+详情见 [Run 契约](design/private-run-trace.md)。
 
-全文投影使用 `origence-lexical-sha256-v1` 契约：Origence 预分词后，把每个词项编码为
-一个固定长度 SHA-256 词项，保留词项出现次数与 AND 匹配，避免 AnySeek 查询语法和
-二次分词改变含义。BM25 分数和排序不承诺与 LanceDB 相同。资产/标题/locator 在
-Origence 中关联，AnySeek 元数据保存 chunk、来源版本、generation 和作用域。
+| Skill 接口 | 输入与结果 |
+| --- | --- |
+| `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`；0 创建，修改产生新修订 |
+| `GET /v1/skill-candidates/{id}` | 仅创建者读取候选、私有备注和精确依据 |
+| `POST /v1/skill-candidates/{id}/reviews/{review}` | 选定审阅者、修订、发布目标和脱敏依据 |
+| `GET /v1/skill-reviews/{review}` | 选定审阅包与决定，不扩展到原会话或 Run |
+| `POST /v1/skill-reviews/{review}/decision` | 指定审阅者使用 `{digest,approve}` 批准或驳回精确内容 |
+| `POST /v1/skill-reviews/{review}/publish` | 有发布权者按 `{digest}` 发布已批准的不可变版本 |
+| `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
+| `DELETE /v1/skills/{id}/versions/{version}` | 有发布权的角色撤回版本，阻断后续在线导出 |
 
-每个不可变发布最多 64 个 chunk，编码后的完整 HTTP 请求最多 2 MiB；超限返回输入
-错误，不能拆批后声称整份原子发布。group ID 和 Record ID 由完整发布身份确定，
-新业务版本使用独立组，当前可见版本由原有权威事务切换。
-发布计划在外部 IO 前保存 `full_text_operation_epoch`，请求 nonce 确定性派生。
-丢失响应时先核对当前完整组，不更换身份猜测补写；未决且超过原操作窗口的写入保持失败。
-启动清理可能清空尚未发布的组；仍有效的作业在保存的 epoch 和新 CAS 下重建。
-孤儿删除读取当前组版本及完整成员后条件替换，重试先确认当前成员，保留同组其他对象。
+候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
+当前由调用方提交候选，不自动读取原生客户端会话或自动发布。包格式和边界见
+[Skill 实施说明](implementation/2026-11-16-skill-core.md)。
 
-`AnySeekFullTextStore` 的公开库接口接受显式 epoch 和授权候选来源，供非 AML 调用方
-验证；配置的 `RetrievalStore` 拒绝缺少持久发布上下文的直接全文写入，以及缺少权威来源
-集合的直接全文查询。部署和 Claude Code 配置见 [OPERATIONS](OPERATIONS.md#anyseek-全文与-claude-code)。
+## AnySeek 统一检索
+
+全文和向量使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词
+编码为固定 SHA-256 词项并保留 AND 语义；向量由 Origence 生成，模型 profile 与维度
+由目录绑定固定。AnySeek 只返回候选，正文、来源和可见性仍以 Turso/Blob 为准。
+
+发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 块且编码后至多 2 MiB，
+文本和向量一起通过一组 Record 提交；新业务版本使用独立组。网络结果未知时检查完整组，
+作业重用持久计划，撤回后不因残留索引而复活。查询按作用域、完整来源身份和已授权
+chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包含模型 profile 和维度。
+依赖故障返回不可用，不转换为空召回。
+
+部署及目录绑定见 [OPERATIONS](OPERATIONS.md#anyseek-全文与向量)；
+此前可选全文切片的历史协议与验证见[实施记录](implementation/2026-11-16-anyseek-integration.md)。
 
 ## Issue #61：Rust 库与 CLI 破坏性变更
 
 以下是公开 Rust 接口及离线 CLI 的删除/改名，不提供兼容包装；不是旧数据库迁移。对应提交与验收见 [VALIDATION](VALIDATION.md#第二批精确头验收)。HTTP 请求/响应仍按本文各节契约使用。
 
 - 删除无实际持久化作用的 `DomainTx::record_source`。调用方移除该空调用；真实来源仍由事件、资产版本及 owner/账本的现有事务路径保存，不能因此省略来源写入或核验。
-- `TursoTx::keyword_hits(terms, true, asset_filter)` 改为 `summary_hits(terms, asset_filter)`，不再接受 `summaries` 布尔参数；保留同 chunk 跨摘要行聚合后的 AND 语义。`keyword_hits(..., false, ...)` 的关系库原文扫描入口删除；产品原文 keyword 检索继续走 LanceDB 原生全文路径。
+- `TursoTx::keyword_hits(terms, true, asset_filter)` 改为 `summary_hits(terms, asset_filter)`，不再接受 `summaries` 布尔参数；保留同 chunk 跨摘要行聚合后的 AND 语义。`keyword_hits(..., false, ...)` 的关系库原文扫描入口删除；产品原文 keyword 检索不走关系库扫描。
 - 删除六个旧 `DomainTx` 方法：`cleanup_derived_chunks`、`settle_failed`、`detach_owners`、`owned_artifacts`、`fail_retryable`、`fail_permanent`，以及专属实现/mock。当前共享 owner 清理由 `cleanup_plan` / `finish_cleanup` 执行，作业失败由 `fail_job` 处理；这些是现有产品路径，不是六个旧方法的一一语义替代，尤其旧 ledger failure 不等于作业重试。`register_owner`、`register_pending`、`confirm_committed`、`retry_delay` 和 owners/ledger 契约保留。
 - 删除后端声明类型 `Capabilities` 及 `VectorStore::capabilities()` / `GraphStore::capabilities()`；调用方和自定义实现须移除对应声明。鉴权类型 `KeyCapabilities`、显式 `allow_owned_workspaces` 和图查询实际 `max_hops` 限制保留，不能因名称相似一并删除。
 - 删除 `TursoStore::upgrade_memory_identity(path, dry_run)`、`MemoryIdentityUpgrade` 及 CLI `memory-identity-upgrade --dry-run`。库调用方改用 `TursoStore::check_memory_identity(path) -> StorageResult<()>`；CLI 改用 `--offline identity-check`。该入口对已有数据库执行只读、独占锁下的完整同版本 schema 检查，不创建、安装或修复表；成功表示检查有效，不表示完成升级。输出与安全步骤见[离线记忆身份检查](OPERATIONS.md#离线记忆身份检查)。
@@ -133,11 +148,11 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 返回 hits 含 asset_id/version/chunk_id/source_event_id/locator/score。locator 给出原文 UTF-8 字节区间、行号，PDF 另有页号。只取当前已发布版本，显式历史版本走 get。
 
-向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐或 reranker；向量查询按固定条件选择 ANN 或 exact，边界见 [OPERATIONS](OPERATIONS.md#turso--lancedb-运行边界)。
+向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐或 reranker；向量查询在 AnySeek 中对授权候选排名；不承诺对原后端或生产分布具有同等排序与性能。
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
 
-原文关键词默认使用 LanceDB 原生 BM25，对 Jieba 预分词字段做显式 whitespace/AND 匹配（查询词项全部出现）；可选 AnySeek 遵循上面的词项编码合同。两者均限定当前 scope、发布代与完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
+原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。Turso owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
 search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默认均为 true，仅 hybrid 且未限定 memory_identity 时启用。可独立关闭摘要、图分支做同库消融，原文 keyword/vector 分支始终保留；省略 components 保持旧行为。响应 `active_components` 表示实际启用的分支（不代表已有产物或命中）。resolve 沿用相同开关和现有来源/字节预算检查；HTTP 与 MCP 共用此契约。
 
@@ -362,7 +377,7 @@ rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断�
 
 - `POST /v1/sessions/{session_id}/improve`（writer+，Idempotency-Key）：`{improve_id,conditions:["仅在 staging 发布时"],max_feedback:32}`。improve_id 非 nil 且正文不可变；conditions 必填，1–8 个互异非空项，每项最多 256 UTF-8 字节；max_feedback 默认 32，范围 1–32。
 - `GET /v1/improvements/{improve_id}`（writer+）：返回状态、父任务、冻结水位、数量、提议/核验保存状态、Learning 子任务及安全错误码，不返回冻结问答或模型原始响应。依赖撤回后仍可读取这些管理信息。
-- `GET /v1/learnings/{learning_id}`（reader+）：只返回仍有完整有效支持的已发布 Learning，包含 statement、why、conditions、支持轮次/反馈标识、范围及知识资产/来源/任务。支持的原始问答 quote 不在 reader 响应中；writer 可通过原会话 API 读取。
+- `GET /v1/learnings/{learning_id}`（仅原逻辑 key）：返回仍有效的已发布 Learning 详情，包含公开声明、条件及私有支持指针，不含原始问答 quote。普通 workspace 成员通过 Search/Bundle 复用公开正文与条件。
 
 反馈使用 workspace 内事务分配的单调 feedback_sequence，身份仍是 tenant/workspace/principal/feedback_id。时间戳相同或回退不影响批次。每次冻结最多 32 条反馈、128 KiB JSON 输入；首条过大报错，不消费水位。提议与核验的每次完整序列化模型输入也限制为 128 KiB；核验加入候选后若超界，在发出请求前失败且不消费水位，可取消后缩小批次重试。冻结时已失效的轮次只保存跳过标识，不保留隐藏正文。同一 session 最多一个 accepted/publishing run；重放相同命令或 improve_id 复用领域结果，改变请求返回 409。
 

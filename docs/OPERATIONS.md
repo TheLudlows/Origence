@@ -1,6 +1,6 @@
 # 本地运维说明
 
-适用单宿主原生 Turso/LanceDB/Turso 图；存储接入 PR #58 与查询改写 PR #59 已合入。PR #59 主干为 `75c238ffa830d50840d4b84c2dce6d7d69a4793c`，不代表生产容量或任意断电验收。按操作阅读：[启动与凭据](#初始化与凭据) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线) · [身份检查](#离线记忆身份检查) · [AML](#aml-适配启用与批次任务) · [向量压实](#显式停机压实向量文件)。当前进度及验证见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md)。
+适用单宿主 Turso 权威数据、Blob、Turso 图和独立 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与旧基线)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
@@ -43,8 +43,7 @@ MessageBatch 发布计划与轻量回执摘要原子保存，同代重试复用�
 | --- | --- |
 | `context.db` 及原生 Turso WAL | 权限、事件、版本、幂等、任务、owner、索引元数据、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
-| `full-text-backend.json` | AnySeek 目录的格式、endpoint/collection 绑定；不含 key，随整目录备份 |
-| `vectors/` | 按模型 profile 分表的 LanceDB 向量及 chunk_terms_v1 全文表 |
+| `full-text-backend.json` | AnySeek endpoint/collection 和 embedding profile/维度绑定；不含 key，随整目录备份 |
 | `graph.db` 及原生 Turso WAL | Turso 图实体、关系与遍历投影 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
@@ -81,63 +80,36 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 
-## AnySeek 全文与 Claude Code
+## AnySeek 全文与向量
 
-这是 [M1](implementation/2026-11-16-anyseek-integration.md) 的可选全文切片，
-当前默认仍为 LanceDB。配置作用于宿主；MCP 客户端只连接 Origence，并使用个人 reader key。
-库调用方使用 `Service::open_with_anyseek` 显式传入配置，`Service::open` 不读取这些变量。
+全文和向量只走 AnySeek，Turso 仍决定版本、授权、来源和可见性。Claude Code/Codex
+只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
-1. 准备 AnySeek [固定版本 6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)
-   或验证过的后续版本，按其[服务指南](https://github.com/TheLudlows/anyseek/blob/6614bbf29bad0041c65738831bc1a16da4c69660/anyseek/src/server/README.md)
-   由管理员创建 Tenant、签发普通 Tenant key。
-2. 执行 `origence anyseek-schema` 输出 collection 的 `config`，管理员用此配置创建专用新集合。
-   保持 `TantivySimpleV1`、无停用词、无额外文本归一化。宿主启动核对可观察的字段 schema、
-   名称、归一化及向量配置；当前 AnySeek info 未返回 tokenizer/stop_words，这两项依赖按原配置部署。
-3. 为开发使用独立新 Origence 数据目录；保留已有目录和备份。设置以下宿主环境后，
-   先按既有步骤创建 workspace，再启动 `origence serve`。
+1. 准备支持整组替换的 AnySeek，例如 [6614bbf](https://github.com/TheLudlows/anyseek/tree/6614bbf29bad0041c65738831bc1a16da4c69660)；
+   由 AnySeek 管理员创建 Tenant、签发普通 Tenant key。
+2. 运行 `origence anyseek-schema` 输出仅全文的 collection 配置；启用向量时运行
+   `origence anyseek-schema --dimensions N`，N 必须等于 `OC_EMBEDDING_DIMENSION`。
+   使用输出配置创建专用新 collection，不改 tokenizer、归一化或 schema。
+3. 设置宿主环境，使用独立新 Origence 数据目录启动：
 
 ```sh
-export OC_FULL_TEXT_BACKEND=anyseek
 export OC_ANYSEEK_URL=http://127.0.0.1:8081
-export OC_ANYSEEK_COLLECTION=origence-lexical
-# OC_ANYSEEK_API_KEY 由宿主私密环境提供普通 Tenant key。
-# OC_DATA_DIR 指向本次独立新目录，OC_ENABLE_MODELS=false 可先验证关键词链路。
+export OC_ANYSEEK_COLLECTION=origence-retrieval
+# 通过宿主私密环境设置 OC_ANYSEEK_API_KEY。
+# 不启用 embedding 时可设 OC_ENABLE_MODELS=false 验证全文。
 ```
 
-`OC_ANYSEEK_URL` 只接受没有路径/凭据/query/fragment 的 HTTPS origin；loopback 可用 HTTP。
-普通集合名遵守 AnySeek 的小写标识规则。未知后端选择、缺配置或后端错误均明确拒绝。
-宿主不自动创建 Tenant、签发 key、重建丢失索引或切换已有库的检索数据。
-AnySeek 初始化成功后保存目录绑定；已有本地全文发布不能直接改用 AnySeek。
-已绑定目录在打开远端服务前检查 backend、endpoint/collection 和绑定完整性；
-更换地址/集合或漏配 `OC_FULL_TEXT_BACKEND` 均拒绝启动。原地址/集合下的凭据轮换不改绑定，
-仍须通过服务认证与索引检查。绑定有界读取 4 KiB，暂存同步后原子发布，Unix 另同步父目录；
-残留暂存文件不作为有效配置，不自动修复损坏绑定。备份恢复包含该文件，并保持后端目标一致。
-远端 key 仅由宿主持有；AnySeek 同 Tenant 的普通 key 不提供员工文档权限。
-Compose 已传递这些变量；容器中的 loopback 指容器自身，远端服务应使用可达 HTTPS origin。
+`OC_ANYSEEK_URL` 要求 HTTPS origin（loopback 可用 HTTP），不能带路径、凭据或查询参数。
+容器的 loopback 指容器自身。缺配置、schema 不符或服务故障会明确报错，宿主不会
+自动创建 Tenant/collection、切换旧索引或回退到另一套索引。
+绑定文件包含目标和固定模型 profile/维度；同目标轮换 AnySeek 凭据不改绑定。
+备份与恢复必须保存该文件，并另外按 AnySeek 的规则保留对应 collection。
 
-将[Claude Code MCP 示例](../examples/claude-code.mcp.json)中的可执行文件和宿主地址替换为
-实际值，作为项目 MCP 配置。启动 Claude Code 的进程环境提供 `OC_API_KEY`，使用该项目
-workspace 的 reader key。stdio 子进程继承该 key，通过宿主转发，保持数据目录的独占锁。
-常用工具为 `context_search` 和 `context_get`；其余现有工具保留，均遵守原契约。
-检索内容是外部证据，最终代码修改由 Claude Code 在本地工作区执行。
-
-每个发布最多 64 块、编码后请求最多 2 MiB；HTTP 总超时 30 秒、成功响应上限 8 MiB，
-候选最多 10,000、产品单路检索最多 100。哈希/较大 JSON 转换在 blocking worker 执行；
-取消等待不代表硬取消这些任务或已经发送的后端写入。后端不可用不会回退为空结果或另一份索引。
-这些上限不是全进程 RSS、容量、延迟或任意断电保证。
-
-保留新目录中的 Turso/Blob/图/LanceDB 向量与 AnySeek 服务数据，按各自同版本备份规则恢复。
-此切片没有跨 Origence 与 AnySeek 的在线一致快照；AnySeek 投影丢失时保持失败，不自动修复。
-发布 epoch 保存于原有作业计划；超过原操作窗口且无法验证完整提交时需保留现场显式处置。
-
-真实引擎回归（临时数据、临时凭据，不调用模型）：
-
-```sh
-python3 tools/anyseek_smoke.py --anyseek-binary /path/to/anyseek_server --cargo-tests --binary target/debug/origence
-```
-
-该入口验证公开库与 HTTP/stdio MCP，不等于真实 Claude Code 客户端或开发任务质量验收。
-当前精确执行结果见 [VALIDATION](VALIDATION.md)。
+每次发布最多 64 块、编码后的请求最多 2 MiB，文本与向量一起写入一组 Record。
+Turso 在远端提交后才发布权威版本。超时未知时检查当前组，合法作业按原持久计划恢复；
+未决且超过原操作窗口时保留现场，不靠新操作 ID 猜测结果。
+检索先按授权身份过滤、核对索引候选，再由 Turso 复核可见性。撤回先阻断读取，索引清理异步执行。
+实际模型效果、生产容量、跨系统在线快照不在本地 UT 证明范围。
 
 ## 本地 embedding 服务
 
@@ -167,7 +139,7 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 3. 合法同版本库输出 `{"feature":"memory-identity-v1","valid":true}`；检查失败以非零状态退出。
 
 缺文件、缺表、未标记旧库、弱约束或同名视图占用均拒绝，不安装、不转换。
-命令不加载模型、LanceDB、图或 Blob；依赖 OS 目录权限并要求独占路径锁。
+命令不加载模型、AnySeek、图或 Blob；依赖 OS 目录权限并要求独占路径锁。
 不存在的 context.db 不会被新建。旧 `memory-identity-upgrade` 命令与其
 `--dry-run` 参数已移除；只读检查没有升级状态或写入模式。
 库调用方改用 `TursoStore::check_memory_identity(path)`，成功返回 `()`。
@@ -199,7 +171,7 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 ## 备份与旧基线
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、全文/向量、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 Turso 及其 WAL、AnySeek 绑定、图、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含全文/向量。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。
@@ -234,25 +206,8 @@ branches_ms 包含候选装载、融合及已启用的辅助分支；verificatio
 
 ## 显式停机压实向量文件
 
-频繁的小批次 Add 会形成许多 LanceDB 碎片。停机维护命令只整理现有向量表的物理布局，使用原生 Compact，不执行 All/Prune、不创建索引、不删除历史版本、不更新模型、关系记录或来源原文。它不作为 Search、Add 或 Worker 的自动步骤。
-
-先按上文停止宿主并完成整库备份，再查看和执行：
-
-~~~powershell
-origence --data-dir <已有数据目录> --offline vector-compact --dry-run
-origence --data-dir <已有数据目录> --offline vector-compact
-~~~
-
-命令不需要 API key，不加载模型；授权来自数据目录的 OS 访问权限，范围是该库的所有向量 profile。必须有兼容的 context.db 和已初始化的 vectors 目录。dry-run 仍获取独占锁，但不改变向量数据或版本；缺失目录/库不会被初始化。维护期间，已有进程和同进程新开的宿主都被拒绝；维护退出后释放锁。不要绕过宿主锁直接并发写 LanceDB。
-
-所有表的命名与 schema 在首次压实前验证；输出按稳定排序的 table_index 给出版本、行数、碎片数和当前表字节数，不输出路径、凭据、源文本或底层错误详情。每表独立提交；中途失败时较早的表可能已经完成，可在检查磁盘和停机状态后显式重试。已是单碎片的表不重写。
-
-每次只处理一个表，使用两个库级压实任务，目标每片 4096 行。Lance 保留索引覆盖边界，已索引与未索引数据不能合并，因此小表也可能保留多个片段；维护不隐式刷新索引。这个目标不是硬内存上限；没有硬超时或硬取消保证。维护需要额外磁盘空间并占用 IO/CPU；保留历史文件意味着它不是磁盘回收或物理擦除。强退/断电中的维护恢复尚未独立验收，不承诺任意断电安全。需要结束维护时应优先等待命令完成，再启动宿主。Worker、上传/解析的取消和关闭保证没有改变。
-
-成功后正常启动宿主。检索仍在候选产生前按 scope/profile/generation/授权 ID 过滤，并执行关系库最终可见性复核；读一致性间隔保持为零。物理碎片重新增长后可能需要再次停机维护，未实现后台压实调度。历史维护对照记录见 [VALIDATION](VALIDATION.md#2026-10-11-完整公开库持续写入与再次压实)，不据此设置固定维护周期；多 profile 正确性与单 profile 真实模型性能分别验收。
-
-更细的成功查询计时可设置 RUST_LOG=error,origence::search_timing=debug,origence::vector_timing=debug：vector_timing 提供 list_ms/open_ms/prepare_ms/execute_ms/collect_ms/decode_ms/total_ms 和 returned_count。execute 含规划/启动，collect 含流执行与读取，不应把它全部当作物理磁盘等待。日志不含查询、scope 或过滤表达式。
-
+历史 `vector-compact` 命令已随 LanceDB 后端移除。旧版本验证结果保留在 [VALIDATION](VALIDATION.md)，
+不适用于当前 AnySeek 索引运维。
 
 ## S2 语义目录与发布边界
 
@@ -280,42 +235,11 @@ semantic_publish 发布前后复核完整来源支持及逐字区间。多值沿
 取消和撤权阻止发布，不能保证已经发送的远程模型调用停止；spawn_blocking 不是硬取消。优雅停机继续等待当前作业，沿用原恢复/清理语义；本轮未增加进程隔离或硬截止时间。job 的空 memories 或 duplicate 结果是合法完成；superseded 需重读版本再提交新请求。工程验证使用确定性 loopback 模型桩，不等于真实模型分类或 Agent 效果验收。
 
 
-## Turso / LanceDB 运行边界
+## Turso 与 AnySeek 运行边界
 
-本节描述已合入的 Turso/LanceDB 后端；实际验证状态以 VALIDATION 与精确 head CI 为准。
-
-- 权威数据库使用原生 Rust Turso 0.8.2，不使用 SQLx SQLite 或 libSQL。
-  数据目录仍包含 context.db、graph.db、vectors 与 blobs；原文 Blob 不改动。
-- 新建库写入引擎/角色/schema 格式标记。既有非空文件只读检查后才可写开；
-  不兼容或缺对象的库拒绝打开，不安装缺表、不迁移、不覆盖。旧名称类型别名
-  仅保留调用兼容，不表示继续使用 SQLite 引擎。
-- identity-check 执行离线只读同版本检查；有效库报告 valid=true，
-  缺表/未标记库拒绝。不提供旧库安装、修复或迁移能力。
-- 每个连接池最多五个租借；未提交或取消的连接归还前完成一次异步 rollback。
-  清理保留连接额度与宿主 OS 锁，失败弃连接并使池不可用；shutdown 等清理结束。
-  这不是硬时限：没有新增业务 worker/重试循环，也没有宣称强制终止文件 IO。
-  原生 query（包括 RETURNING）先完整读取结果，再归还连接。
-  SQL 错误或取消后的租借拒绝后续 SQL 与 commit；事务须 rollback 或 drop，
-  其他租借须 drop 后清理，不允许其后写入意外变成自动提交。
-- chunk full_text 与 vector 分别有发布账本；原生写全部成功后才在权威事务中
-  发布版本、所有者、索引就绪及任务成功。失败后重用持久化计划与完整身份重放。
-  撤回先改变权威可见性，再清理派生索引，残留原生行不能恢复已撤回来源。
-- 当前有效发布需要的 FTS 表/索引或向量 profile 表/schema 缺失或不匹配时，
-  启动、ready 与可检索回执明确失败。健康检查按当前未删除资产和有效根来源
-  的精确已提交账本决定必需表；撤回/非当前版本的残留账本不单独阻止启动清理。
-  此健康检查仅核根来源元数据和物理 schema，不替代语义支持闭包或逐行检索校验。
-  检索前按固定原生 snapshot 校验全部候选的 id/source/version，缺失、重复、
-  错配明确失败，不静默返回不完整结果。此检查读取身份元数据，增加查询开销；
-  不能把 T0 的耗时比直接当成生产性能结果。没有自动重建或自动修复损坏数据。
-- Search/Context 最终权威快照重新核对全部已参与原生排名的完整发布身份。
-  排名期间撤回返回可重试的不可用错误；活跃对象的来源/版本/代次/索引状态
-  错配返回冲突，不静默缩短 TopK 或沿用旧分数。没有无界自动重试，
-  也没有承诺 Turso 与 LanceDB 之间存在一个共同事务快照。
-- LanceDB 的 remote feature 仅因 0.40 发布包编译缺陷开启；连接只使用绝对本地
-  文件路径，不配置远端地址、凭据或付费服务。
-- ANN 使用每物理 segment 64 分区 IVF_FLAT/L2 与固定 32 probes；只读校验
-  实际分区数，并拒绝会触发上游统计接口自动迁移的残缺/重叠覆盖元数据。满足冻结候选数量/过滤比例
-  才选择；其他情况 exact。该阈值来自有界合成验证，不保证任意生产分布召回率
-  或 SLO。同分截止集合可变，RRF 前仍按完整 scoped 身份验证、去重及排序。
-- 停服备份应保留整个数据目录及 WAL/派生索引，不能只复制主 .db 文件。
-  在线跨库备份与任意断电恢复不在当前已证明范围内。
+- 权威库仍使用原生 Rust Turso 0.8.2。新建库写入格式标记；不兼容库拒绝启动、不补表或覆盖。
+- 未提交或取消的租借在归还前执行回滚；失败弃连接。没有硬停止文件 IO 或外部模型调用的承诺。
+- chunk 全文和向量沿用既有发布账本及来源复核。AnySeek 集合检查不替代逐候选权威验证。
+- 查询前检查授权候选的 id/source/version/generation。向量另核对 profile/维度，不混用 embedding 空间。
+  依赖故障不伪装为空结果；受控的模型查询降级仍按 API 的 `allow_partial` 执行。
+- 业务权威与派生索引没有共同事务或在线备份快照。已准备原计划、精确引用、撤回边界仍由 Origence 管理。

@@ -516,6 +516,7 @@ impl TursoTx {
     }
 
     pub async fn require_turn_visible(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Uuid> {
+        self.require_private_session(session).await?;
         self.check_permission(Permission::Write).await?;
         let (source, evidence) = self.require_turn_visible_local(session, turn).await?;
         self.require_archived_evidence_set_visible(&evidence)
@@ -547,6 +548,7 @@ impl TursoTx {
     ) -> StorageResult<Value> {
         self.check_permission(Permission::Write).await?;
         self.require_sessions().await?;
+        self.require_private_session(session).await?;
         input.validate().map_err(StorageError::InvalidArgument)?;
         if session.is_nil() {
             return Err(StorageError::InvalidArgument("session_id must be non-nil"));

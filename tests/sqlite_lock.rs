@@ -62,12 +62,6 @@ async fn lock_is_exclusive_across_processes() {
         Err(StorageError::Conflict(_))
     ));
 
-    #[cfg(feature = "local-vector")]
-    assert!(matches!(
-        origence::storage::maintenance::compact_vectors(dir.path(), true).await,
-        Err(StorageError::Conflict(_))
-    ));
-
     // When the holder exits, the OS releases the lock and a fresh open wins.
     let _ = child.kill();
     let _ = child.wait();

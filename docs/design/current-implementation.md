@@ -3,15 +3,12 @@
 更新：2026-11-16。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
-统一上下文（包含记忆、知识、Skill 等）和双客户端的目标设计另见[首版架构规划](agent-data-foundation.md)，
-本文继续描述已实现架构，不把 Skill/Run/快照等规划能力计为现状。
-目标全文/向量检索已确定统一使用 AnySeek；下文 LanceDB 与图投影描述仅记录当前实现，不定义首版目标范围。
-目标会话按用户 API key 私有隔离、沉淀资产在 workspace 内复用；当前 SessionTurn 仍按 workspace/writer 访问，尚未实现该会话边界。
+首版目标另见[架构规划](agent-data-foundation.md)。当前实现包括 AnySeek 统一检索、
+私有归档、Skill 审批发布与 Run 追溯的基础路径；真实客户端和任务验收与代码实现分开记载。
 
 ## 1. 产品边界
 
-Origence 为企业内部 Agent 提供受权限控制、可追溯的记忆与知识等上下文。现有接入切片提供
-Claude Code 配置与只读 MCP；目标首批客户端已扩为 Claude Code 和 Codex，两者真实客户端均待验收。
+Origence 为企业内部 Agent 提供受权限控制、可追溯的记忆与知识等上下文。支持 Claude Code 和 Codex 的 stdio 配置、显式私有归档工具及批准包导出；两者真实客户端均待验收。
 当前提供显式知识/记忆写入、检索、上下文组装及受控会话学习，
 企业身份、文档 ACL、项目自动关联和真实开发任务效果仍待验收。
 前序检索切片见[实施记录](../implementation/2026-11-16-anyseek-integration.md)；首版范围以精简规划为准。
@@ -20,7 +17,7 @@ Claude Code 配置与只读 MCP；目标首批客户端已扩为 Claude Code 和
 
 ```mermaid
 flowchart TD
-    C[Claude Code] --> M[只读 stdio MCP]
+    C[Claude Code / Codex] --> M[stdio MCP]
     M --> H[Origence HTTP 宿主]
     H --> S[Service：认证、作用域、用例和证据]
     S --> A[Turso：权威数据、任务、发布账本]
@@ -28,8 +25,7 @@ flowchart TD
     W --> B[Blob：原始文件]
     W --> R[RetrievalStore]
     S --> R
-    R --> F[AnySeek 可选全文 / LanceDB 默认全文]
-    R --> V[LanceDB 向量]
+    R --> F[AnySeek 全文与向量]
     W --> G[Turso 图投影]
     S --> G
     W --> P[按配置调用模型与解析器]
@@ -54,9 +50,8 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
 | RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本 | 原生 Turso `context.db` |
-| RetrievalStore | 全文后端选择与向量委派 | 组合适配器，非第二条业务发布路径 |
-| 全文投影 | 带作用域与完整来源身份的候选 | 默认 LanceDB；可选 AnySeek HTTP |
-| 向量投影 | 按 profile/dimension/generation 隔离 | LanceDB |
+| RetrievalStore | 带作用域、来源、generation 与模型 profile 的全文/向量投影 | AnySeek HTTP |
+| 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 Turso `context.db` |
 | GraphStore | 图实体、关系及遍历投影 | 原生 Turso `graph.db`；owner 权威仍在 authority |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
@@ -73,14 +68,14 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-顺序：独占打开并校验 Turso → 校验全文后端绑定 → 装配并检查投影/Blob → 持久化新绑定
+顺序：独占打开并校验 Turso → 校验 AnySeek 绑定 → 装配并检查投影/Blob → 持久化新绑定
 → 检查已提交存储面 → 恢复作业、清理孤儿 → 开放服务。检查失败保持不可用。
 只创建新结构，不自动升级、重建丢失索引或转换已有数据。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
-`full-text-backend.json` 保存格式、backend、endpoint 和 collection，排除 API key。
+`full-text-backend.json` 保存格式、endpoint、collection 和模型 profile/维度，排除 API key。
 在 authority 独占锁下有界读取，暂存文件同步后原子发布；Unix 额外同步父目录。
-后续默认/远端选择或 endpoint/collection 不匹配、绑定损坏均在远端 IO 前拒绝。
+后续目标或模型配置不匹配、绑定损坏均在远端 IO 前拒绝。
 更换同一后端的凭据不修改绑定；绑定不提供跨 Tenant 凭据的身份等价证明。
 普通进程重开与任意断电保证分别验收，暂存残片不作为有效绑定。
 
@@ -92,7 +87,7 @@ scope 来自认证，不接受模型指定。完整身份/当前版本/来源/ow
 AnySeek 的普通元数据过滤不替代员工授权，同 Tenant 的 key 也没有文档 ACL。
 已撤回来源和墓碑在权威提交后退出后续读取，不等待投影物理清理；历史读取仍检查来源。
 
-AnySeek 对全部授权候选分批核对缺失、重复、来源和 generation，再执行词项检索。
+AnySeek 对全部授权候选分批核对缺失、重复、来源和 generation，再执行词项或向量检索。
 metadata 或存储错误明确失败；正文与 locator 从 Origence 权威数据重建。
 
 <a id="storage-queue"></a>
@@ -112,7 +107,7 @@ metadata 或存储错误明确失败；正文与 locator 从 Origence 权威数�
 3. 权威事务再次核对运行/来源/权限/版本，提交版本、owner、ready 索引及作业完成。
 4. 失败或撤回后按权威清理规划删除孤儿；共享对象保留仍有效的 owner。
 
-AnySeek 用一组 Record 原子替换一个不可变发布的分块；新业务版本使用独立组。
+AnySeek 用一组 Record 原子写入一个不可变发布的文本和向量；新业务版本使用独立组。
 这不是 Origence 与 AnySeek 的共同事务。响应丢失先核对完整当前组；原计划恢复复用 epoch。
 清理以当前 group 版本 CAS 保留其他成员，启动清理后仍有效的作业可在原计划下重建。
 超出原操作窗口且无法确认完整提交时保留失败状态，不换身份猜测写入。
@@ -120,13 +115,12 @@ AnySeek 用一组 Record 原子替换一个不可变发布的分块；新业务�
 <a id="storage-configuration"></a>
 ### A2.7 配置与失败边界
 
-`OC_FULL_TEXT_BACKEND=anyseek` 仅选择全文，向量仍为 LanceDB。
-库调用方显式传入 `AnySeekConfig`；`Service::open` 保持默认本地行为。
+宿主必须配置 AnySeek；库调用方使用 `Service::open_with_anyseek(dir, models, config)`。
 未知后端、缺配置和存储错误不静默降级。只有请求允许的模型失败可按原契约降为 keyword。
 
 AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序不承诺与 LanceDB 相同。
 每个发布最多 64 块、编码后请求 2 MiB；超限整份拒绝。候选、响应、超时和解析限制见
-[API](../API.md#anyseek-全文适配m1-首个切片)与 [OPERATIONS](../OPERATIONS.md#anyseek-全文与-claude-code)，不在设计重复维护数值。
+[API](../API.md#anyseek-统一检索)与 [OPERATIONS](../OPERATIONS.md#anyseek-全文与向量)，不在设计重复维护数值。
 AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定配置。全库相关性、容量和延迟未验收。
 
 <a id="storage-acceptance"></a>
@@ -140,12 +134,12 @@ AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定�
 
 显式记忆身份由 scope + subject + predicate + 规范 context 决定，语义相似不授予覆盖权。
 单值/多值、冲突证据和整快照来源撤回见 [身份规格](../contracts/memory-identity-and-context.md)。
-SessionTurn 显式归档实际使用的证据；Feedback 幂等但不自动调权。
+SessionTurn 显式归档实际使用的证据。归档和 Run 绑定当前 workspace 的稳定逻辑 key；独立 key 不共享，授权轮换可延续。Feedback 幂等但不自动调权。
 Improve 显式提案、核验并经普通知识发布 Learning，保留适用条件和完整支持闭包。
 它不等于自动学习所有交互，也没有独立 Guidance 生命周期。
 
 EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字节预算；session
-默认关闭且需要 writer 权限。仅识别明确单值身份冲突，不推断一般文本矛盾。
+默认关闭且仅当前 key 的 writer 可读。仅识别明确单值身份冲突，不推断一般文本矛盾。
 会话引用不能伪造为现有 chunk/entity/relation 归档引用。具体域规则保留在 S2/S3/S4 合同。
 
 ## A4. 后续范围
@@ -162,6 +156,6 @@ EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字
 
 ## A6. 协议边界
 
-HTTP 与库 DTO 统一见 API；MCP 保持 `context_search`、`context_get`、`context_resolve`、
-`context_bundle`。CLI/MCP 宿主转发不直接打开运行中的数据目录。
-[Claude Code 配置示例](../../examples/claude-code.mcp.json)只提供接入配置，不证明客户端或任务质量已验收。
+HTTP 与库 DTO 见 [API](../API.md)。MCP 提供 workspace 资产检索与显式私有会话归档，
+默认转发运行中的宿主而不打开其数据目录。Skill 下载和客户端原生加载各自记录，
+显式导出的副本不会由服务端追回。见[双客户端接入](../CLIENTS.md)。

@@ -376,6 +376,7 @@ impl TursoTx {
     ) -> StorageResult<ImproveRun> {
         self.check_permission(Permission::Write).await?;
         self.require_improve().await?;
+        self.require_private_session(session).await?;
         input.validate().map_err(StorageError::InvalidArgument)?;
         if session.is_nil() || job_id.is_nil() {
             return Err(StorageError::InvalidArgument(
@@ -504,6 +505,7 @@ impl TursoTx {
             verification,
             status,
         ) = row.ok_or(StorageError::NotFound)?;
+        self.require_private_session(session_id).await?;
         let input: ImproveInput = decode(&request)?;
         Ok(ImproveRun {
             improve_id,
@@ -844,6 +846,7 @@ impl TursoTx {
             .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
         let (improve, session, asset, source, job, status, candidate) =
             row.ok_or(StorageError::NotFound)?;
+        self.require_private_session(session).await?;
         self.require_learning_asset_visible(asset).await?;
         let candidate: LearningCandidate = decode(&candidate)?;
         let supports: Vec<Value> = candidate.supports.iter().map(|support| json!({
@@ -939,15 +942,10 @@ impl TursoTx {
         self.guard_learning_publication(Some(asset), Some(source))
             .await?;
         let candidate: LearningCandidate = decode(&body)?;
-        let mut support_turns: Vec<Uuid> = candidate
-            .supports
-            .iter()
-            .map(|support| support.turn_id)
-            .collect();
-        support_turns.sort_unstable();
-        support_turns.dedup();
+        // Raw session and turn UUIDs belong only in owner-authorized detail,
+        // never in a shared asset's immutable citation locator.
         Ok(Some(
-            json!({"learning_id":id,"conditions":candidate.conditions,"support_turns":support_turns}),
+            json!({"learning_id":id,"conditions":candidate.conditions}),
         ))
     }
 
