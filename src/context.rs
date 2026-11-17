@@ -136,7 +136,7 @@ impl Service {
             bundle.routes.push(accounting);
         }
         let mut tx = self.read(auth, permission).await?;
-        crate::retrieval::verify_native_candidates(&mut tx, &ranked_native).await?;
+        tx.verify_native_candidates(&ranked_native).await?;
         let mut items = Vec::new();
         for candidate in assets {
             if let Some(mut fresh) = tx

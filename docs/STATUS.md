@@ -1,7 +1,7 @@
 # Origence · 当前进度
 
 更新：2026-11-17。本变更已同步 main
-[`44e06df`](https://github.com/TheLudlows/Origence/commit/44e06df95cccc723f128dfcb4bda826d869ad5db)
+[`3d474d9`](https://github.com/TheLudlows/Origence/commit/3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe)
 （已合入 [PR #77](https://github.com/TheLudlows/Origence/pull/77) 的 Node.js 管理界面与 CI 优化），
 继续补齐检索配置、诊断与私有 Run 重放。产品边界见[架构规划](design/agent-data-foundation.md)。
 **核心 API 与首版 UI 路径已实现；真实浏览器、双客户端和企业任务尚未完成验收。**
@@ -13,6 +13,13 @@
 | Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
 | Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
 | Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
+
+## 检索模块拆分（PR #79，未合并）
+
+已同步 main `3d474d9`（含 #77 UI、#78 诊断）。已核验分路的排序/融合位于
+`retrieval::rank`，最终发布及返回复核由 Turso 事务方法负责；Search 与 EvidenceBundle
+保持各自召回、原有快照边界和外部 IO 顺序，同时保留主干诊断采集及 Run 重放保护。
+合并后的验证与各历史提交的结果分别见 [VALIDATION](VALIDATION.md)。
 
 ## 检索配置与诊断
 

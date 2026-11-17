@@ -113,7 +113,7 @@ impl Fixture {
     async fn verify(&self) -> Result<()> {
         let mut tx = self.store.begin_read(self.auth.clone()).await?;
         tx.check_permission(Permission::Read).await?;
-        verify_native_candidates(&mut tx, &self.ranked).await?;
+        tx.verify_native_candidates(&self.ranked).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -363,7 +363,7 @@ impl Fixture {
     ) -> Result<Vec<SearchHit>> {
         let mut tx = self.store.begin_read(self.auth.clone()).await?;
         tx.check_permission(Permission::Read).await?;
-        let result = verify_search_hits(&mut tx, hits, limit, None).await;
+        let result = tx.verify_search_hits(hits, limit, None).await;
         tx.rollback().await?;
         result
     }

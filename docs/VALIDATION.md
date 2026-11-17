@@ -1,9 +1,130 @@
 # Origence · 当前验证
 
 核验日期：2026-11-17。本次已同步 main
-[`44e06df`](https://github.com/TheLudlows/Origence/commit/44e06df95cccc723f128dfcb4bda826d869ad5db)，
+[`3d474d9`](https://github.com/TheLudlows/Origence/commit/3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe)，
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-17：#79 合并最新 main
+
+将 main `3d474d9b4efe2edb0cf0c6a4aca9c0d1c3cba3fe` 普通合并到 #79 的
+`04eb4b6774e5c9f6a8346b05b95d10754d58557a`，未重写分支。实际文本冲突仅在
+STATUS/VALIDATION：现状采用主干 UI/诊断/Run 内容，双方历史验证按原提交保留。
+代码自动合并后另核对 Search/Context/publication_tests：主干诊断 capture、route 标签、
+bundle 观察和新 fixture 元数据全部保留，最终所有 native 排名参与者仍由 Turso 批量复核。
+Run/API、AnySeek、UI、CI 与主干相同；主干已有 fixture feature gate，移除本分支重复 gate。
+没有改变 SQL、错误优先级、Run 重放/失败/撤回合同，也没有恢复旧 CI/UT。
+
+本轮真实后端固定为当前 CI 的 `d813b915b7f12e7139ca316adc15699688493196`，
+在独立干净 worktree 构建；不再以早期 `6614bbf` 的结果代表当前协议。
+本地 Origence Rust 1.98.0、AnySeek Rust 1.99.1、Node 24.22.1；临时数据与凭据。
+
+| 合并后检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --lib` | PASS：216 项；含离线 rank、publication 最终复核/栈约束、诊断隔离及 Run 存储合同 |
+| `cargo test --locked --test local` | PASS：202 项；含 EvidenceBundle、生产存储、诊断配置、Run 成功/失败/重放/来源撤回与重开 |
+| `npm ci --ignore-scripts --cache /tmp/pr79-npm-cache`、`npm test` | PASS：UI 构建与 15 项；初次默认缓存目录不可写，改用临时缓存后通过 |
+| Python tools / evals | PASS：11 / 42 项 |
+| `cargo test --locked --no-default-features --lib` | PASS：136 项 |
+| 默认/no-default `cargo clippy --locked --all-targets -- -D warnings` | PASS；无默认命令另带 `--no-default-features` |
+| `cargo fmt --package origence -- --check`、`git diff --check` | PASS |
+| `cargo build --locked` | PASS |
+| 最新固定 AnySeek 下 `anyseek_smoke.py --cargo-tests --binary … --run python3 tools/mcp_smoke.py --binary …` | PASS：8 项真实引擎合同、完整 MCP 转发/离线、HTTP/stdio、Run 诊断关联/重试/重开 |
+| 最新固定 AnySeek 下 `anyseek_smoke.py --run python3 tools/ui_smoke.py --binary … --ui-entry ui/dist/server.js` | PASS：UI 到后端入库/目录/历史/检索/上下文、Run 隔离及来源撤回 |
+
+本轮未重跑 no-default 完整集成套件、Windows、真实浏览器布局、生产性能或真实模型/客户端任务。
+不把合并前的 CI 或本地通过写成新 HEAD 的远端 CI 通过。
+
+## 2026-11-17：#79 CI 故障修复与检查审计
+
+失败运行 [44036124032](https://github.com/TheLudlows/Origence/actions/runs/44036124032)
+对应 #79 `5ce7f4c`。读取实际 job 日志后，本地精确复现 MCP 的失败调用链：
+`protocols → check_tools → schema_object` 在第 299 行访问空参数 schema 缺省的
+`properties`，抛出 `KeyError`。前一节通过的 `anyseek_smoke.py --binary` 是较小的
+合同入口，不等同于 CI 的 `--run python3 tools/mcp_smoke.py` 完整检查。
+fast-check 的实际失败为 `graph_evidence_for_publication` 在 no-default 下 dead_code。
+
+修复提交 `b6b0bf0af39f67d8cf5ed3fe49058fa90e0471c8`：图方法仅在其唯一调用方所在的
+`local-storage` 下编译；同一 feature 控制 Service 测试夹具；空 schema
+返回缺省空属性集合，字段集合、required、类型和 additionalProperties 检查不变。
+后续将夹具 gate 从 `tests/local.rs` 的声明移到 `tests/support/mod.rs` 文件级，
+保持同一 feature 行为，避免与新 main 在模块入口新增 catalog 测试产生文本冲突。
+移动后重跑两种 feature 全目标 Clippy 和 no-default 完整套件。
+没有全局 lint allow，也没有删掉失败检查。开始本轮时 main 已前进到 `44e06df`
+（#77 合并），这三处最小修复与该主干一致；本分支未合入 UI 或 #78 诊断功能。
+
+Linux / Rust 1.98.0 本地结果（后续仅补文档）：
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings` | PASS |
+| `cargo clippy --locked --all-targets -j 2 -- -D warnings` | PASS |
+| `cargo test --locked --no-default-features -j 2 --no-fail-fast` | PASS：135 lib + 2 协议 + 92 local；5 个真实后端用例保持 ignored |
+| `cargo test --locked --lib retrieval` | PASS：14 项，含 rank/publication/身份/返回合同 |
+| `cargo test --locked --test local graph` | PASS：4 项；图发布恢复、一跳/撤回、证据精确身份、workspace 隔离 |
+| `cargo build --locked -j 2` | PASS；新产物用于下述 MCP 验证 |
+| 固定真实 AnySeek 下 `tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary /workspace/Origence/target/debug/origence` | PASS：与失败 CI 同一完整入口；host-forwarding 和 offline 两路径均通过 |
+| `python3 -m unittest discover -s tools -p 'test_*.py' -v` | PASS：8 项 |
+| main `44e06df` 已有的 `tools/test_mcp_schema.py` | 原样取到临时目录运行，3 PASS；空对象、缺失非空字段、未知字段拒绝，无新增重复 UT |
+| `cargo fmt --package origence -- --check`、`git diff --check` | PASS |
+
+CI/UT 审计：本次删除 **0** 项，工作流保持不变。
+
+- 旧 linux-native 的 no-default `memory_identity` 子集与 fast-check 完整 no-default 套件
+  使用同一 Rust/Ubuntu、feature、push/PR 触发范围；新 main 已移除该重复步骤，无需在 #79 再做清理。
+- 保留默认/no-default 完整套件、MCP 完整离线/转发检查、HTTP smoke 和固定真实 AnySeek
+  ignored 合同：它们的 feature、入口及 fixture 不等价，不能相互替代。
+- 保留 publication/EvidenceBundle/来源撤回/隔离用例；旧库拒绝、旧 key 冲突和遗留 graph.db
+  不被覆盖的检查仍对应当前只读拒绝与数据保留合同，名称中的 legacy 不表示测试失效。
+- 保留 syscall fault UT：`.lance` 只是合成文件名，测试仍检查 C 注入器的 sentinel/path
+  限制、计数、writev、暂停/终止行为，不能据扩展名判断废弃。
+- `manual-diagnostics` 布局诊断为显式 feature + ignored，普通 CI 本来不执行；其进一步去留
+  不影响这次门禁，不扩大为历史工具清理。
+
+本地未重跑全量默认集成、Windows 或真实模型/生产性能；远端新 CI 需独立看结果。
+
+## 2026-11-17：独立检索排序与权威复核拆分
+
+基线 main `dcde761ba11b34d88ce5da5f9025a22076571dfa`；实现及本地 checkpoint
+`552989e3dc251a97dd75174348342d36084e80e8`。以下为该代码树的 Linux / Rust 1.98.0
+结果（后续提交只补本节和 STATUS）。独立分支未包含 #77、#78。
+
+| 命令 / 检查 | 结果 |
+| --- | --- |
+| `cargo test --locked --offline --lib retrieval::rank` | PASS：2 项；无 AnySeek、模型或数据库 IO，覆盖分路去重/上限、分数/UUID 并列顺序、原始分数与 RRF60 |
+| `cargo test --locked --lib retrieval::publication_tests` | PASS：现有 6 项；迟到撤回、pending/orphan/精确发布身份、正文变更、返回停止点/隐藏候选、语义错误和公开 future 栈大小 |
+| `cargo test --locked --test local evidence_bundle` | PASS：13 项（含 Learning bundle 回归）；独立路由 top-k、历史/撤回/权限/预算/冲突与外部 IO 后复核 |
+| `cargo test --locked --test local production_storage` | PASS：8 项；重放单次投票、冲突 generation、错误来源候选、投影失败/丢失和撤回 |
+| `cargo clippy --locked --all-targets -- -D warnings` | PASS |
+| `cargo test --locked --no-default-features --lib` | PASS：135 项；有既有图方法 dead_code 警告 |
+| `cargo fmt --package origence -- --check`、`git diff --check` | PASS |
+
+无默认特性严格 Clippy **FAIL**：
+`cargo clippy --locked --no-default-features --all-targets -- -D warnings` 与
+`cargo clippy --locked --no-default-features --lib -- -D warnings` 均止于
+`src/storage/sqlite/app.rs:288` 的 `graph_evidence_for_publication` dead_code。
+在未修改的 main `dcde761` 工作树重跑后一条命令，复现同一错误；本分支没有修改该方法。
+未运行无默认特性完整集成套件，不把库测试通过写成完整门禁通过。
+
+真实 AnySeek checkout 干净且固定为 `6614bbf29bad0041c65738831bc1a16da4c69660`，
+沿用既有 `tools/anyseek_smoke.py` 独立临时目录、collection 和测试凭据：
+
+```sh
+python3 tools/anyseek_smoke.py \
+  --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server \
+  --cargo-tests --binary /workspace/Origence/target/debug/origence
+```
+
+PASS：8 项真实引擎合同，以及真实 AnySeek → Origence HTTP/stdio MCP 的检索、读取、
+引用、更新、历史、撤权及重开。使用本次代码构建的 Origence；没有修改或放宽 fixture。
+EvidenceBundle/production_storage 定向集成测试仍使用仓库的协议 fixture，
+不将其计为真实 AnySeek 或真实模型质量验收。
+
+手工检查：迁移方法仍调用相同批量 authority 读方法，未新增或修改 SQL、动态 SQL 或执行入口；
+排序与复核函数体除 receiver/格式外保持等价。最终所有 native 排名参与者仍先完整复核，
+再按原响应停止点核验返回命中；快照开闭、外部 IO 顺序、图种子过滤和错误顺序不变。
+新增 Turso 模块沿用 `local-storage` cfg，不引入 Service 或排序模块依赖。
+未运行 Windows、本次全量默认集成套件、生产性能或真实客户端/模型任务。
 
 ## 2026-11-17：PR #78 同步 main 与冲突处理
 
