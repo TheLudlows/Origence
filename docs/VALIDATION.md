@@ -5,6 +5,35 @@
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：#76 精确版本关联 Run（独立本地切片）
+
+基线 main `593e8fa71d7c354587cffdd1aae7c4b2e2d2a554`；独立分支，不包含第一批
+`fix/issue76-browser-coverage` 的改动。新增只读 `GET /v1/assets/{id}/runs?version=N`，
+限制当前逻辑 key、精确版本及 1–100 候选，UUID 游标。新表只是首条已记录引用的定位投影，
+引用事件仍为权威：客户端上报和服务端准备在原事务内更新，同快照读取资产、来源、owner
+并重新核验事件中的精确引用；不扫描所有 Run，不返回私有正文。不可读 proof 保守省略，
+不宣称完整关联/采集，具体边界见 Run 合同。所有新增 SQL 已逐条审查，均为单表操作，无 JOIN。
+
+真实 localhost Node UI → Origence → AnySeek，fresh v4 合成数据/一次性 key、无模型。
+AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`；Chromium 156.0.8078.79，
+1440×1000 headless，Playwright 实点无响应拦截：Run → 固定 v1 → 已记录关联 → 原 Run；
+当前 v2 关联为空；同 workspace 另一管理员关联为空且直接 Run 被拒绝；来源撤回后重新读取
+关联会清除正文和旧链接；旧引用重点击、刷新登录和重新打开 Run 均拒绝旧证据。
+共 10 项真实浏览器断言通过。此切片没有重复五页响应式验收，也未运行真实外部客户端。
+
+本地 Node 24.22.1 `npm --prefix ui run check`、`npm --prefix ui test` PASS（构建/16 项），
+现有 DOM fixture 仅增加精确版本关联往返子用例。Rust 1.98.0：
+- `cargo test --test local catalog::` PASS（5 项，含既有 semantic_catalog 3 项）；
+  新用例验证 v1/v2、同 workspace 另一管理员隔离、轮换、幂等去重、游标/上限、跨 workspace、
+  重开及来源撤回。增加权威引用缺失的空页游标断言后，精确重跑该用例 PASS。
+- `cargo test --test local workspace_schema_rejection::` PASS（5 项）；
+  `cargo test --no-default-features --test local workspace_schema_rejection::` PASS（5 项）。
+  缺失新表时打开被拒绝且数据库字节不变。
+- `cargo test --test local retrieval_diagnostics::run_diagnostics_are_private_durable_and_replay_original_evidence` PASS（1 项）。
+- `cargo fmt --check`、默认/no-default `cargo clippy --all-targets -- -D warnings`、
+  `git diff --check` PASS。Windows 未跑；没有新 CI（未推送）。
+不推送、不创建 PR、不关闭 #76；生产计量、告警、PDF 页内文本及完整外部验收仍缺。
+
 ## 2026-11-17：Run 事件来源标签与真实浏览器定向验收（本地）
 
 基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`。仅修改 UI 事件标签及详情：

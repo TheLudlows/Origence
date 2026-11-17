@@ -159,6 +159,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         state: "accepted",
       });
     }
+    if (path.pathname === `/api/v1/assets/${ids.asset}/runs`) {
+      assert.equal(path.searchParams.get("version"), "1");
+      return response({items:[{run_id:ids.run,created_at_ms:1}],next_after:null,scope:"current_logical_key",coverage:"recorded_references"});
+    }
     if (path.pathname === "/api/v1/files") {
       assert.equal(
         options.headers.get("Content-Type"),
@@ -385,6 +389,13 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         location.hash.includes("?version=1") &&
         document.querySelector("h1")?.textContent === asset.title,
     );
+  });
+  await t.test("asset association uses the displayed exact version and returns to Run", async () => {
+    click("读取已记录引用");
+    await wait(() => document.body.textContent.includes(`打开 Run ${ids.run}`));
+    assert.ok(document.body.textContent.includes("仅当前逻辑 key 的已记录引用"));
+    click(`打开 Run ${ids.run}`);
+    await wait(() => location.hash === `#runs/${ids.run}` && document.querySelector("h1")?.textContent === "Run 详情");
   });
   await t.test(
     "revoked credentials clear private UI and return to login",

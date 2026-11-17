@@ -10,6 +10,91 @@ fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s).map_err(|_| StorageError::Unavailable("invalid run record".into()))
 }
 impl TursoTx {
+    // A bounded lookup projection, never a replacement for the immutable event.
+    // Called only after that event is inserted, in the same write transaction.
+    async fn index_run_assets(
+        &mut self,
+        run: Uuid,
+        event: Uuid,
+        refs: &[ArchivedEvidence],
+    ) -> StorageResult<()> {
+        let owner = self.private_key_id().await?;
+        for reference in refs {
+            native_turso::query("INSERT INTO oc_run_asset_refs(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id,event_id,evidence_ref_id) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id) DO NOTHING")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner)
+                .bind(reference.reference.asset_id).bind(reference.reference.asset_version)
+                .bind(run).bind(event).bind(reference.evidence_ref_id)
+                .execute(&mut *self.tx).await.map_err(turso_err)?;
+        }
+        Ok(())
+    }
+
+    /// Exact-version associations only; this is not a trace or proof of use.
+    pub async fn asset_runs(
+        &mut self,
+        asset: Uuid,
+        version: i32,
+        after: Uuid,
+        limit: usize,
+    ) -> StorageResult<Value> {
+        self.check_permission(Permission::Read).await?;
+        if version < 1 || !(1..=100).contains(&limit) {
+            return Err(StorageError::InvalidArgument("invalid asset run page"));
+        }
+        self.asset_view(asset, Some(version)).await?;
+        let owner = self.private_key_id().await?;
+        let rows: Vec<(Uuid, Uuid, Uuid)> = native_turso::query_as(
+            "SELECT run_id,event_id,evidence_ref_id FROM oc_run_asset_refs WHERE tenant_id=? AND workspace_id=? AND owner_key_id=? AND asset_id=? AND asset_version=? AND run_id>? ORDER BY run_id LIMIT ?"
+        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner)
+            .bind(asset).bind(version).bind(after).bind((limit+1) as i64)
+            .fetch_all(&mut *self.tx).await.map_err(turso_err)?;
+        let more = rows.len() > limit;
+        let mut cursor = after;
+        let mut items = Vec::new();
+        for (run, event, evidence) in rows.into_iter().take(limit) {
+            cursor = run;
+            match self
+                .visible_asset_run(run, event, evidence, asset, version)
+                .await
+            {
+                Ok(created) => items.push(json!({"run_id":run,"created_at_ms":created})),
+                Err(StorageError::NotFound) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(
+            json!({"asset_id":asset,"asset_version":version,"items":items,
+            "next_after":more.then_some(cursor),"scope":"current_logical_key",
+            "coverage":"recorded_references"}),
+        )
+    }
+
+    async fn visible_asset_run(
+        &mut self,
+        run: Uuid,
+        event: Uuid,
+        evidence: Uuid,
+        asset: Uuid,
+        version: i32,
+    ) -> StorageResult<i64> {
+        let (_, _, created) = self.owned_run(run).await?;
+        let refs: Option<String> = native_turso::query_scalar(
+            "SELECT references_json FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?"
+        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event)
+            .fetch_optional(&mut *self.tx).await.map_err(turso_err)?;
+        let refs: Vec<ArchivedEvidence> = decode(&refs.ok_or(StorageError::NotFound)?)?;
+        let reference = refs
+            .iter()
+            .find(|r| {
+                r.evidence_ref_id == evidence
+                    && r.reference.asset_id == asset
+                    && r.reference.asset_version == version
+            })
+            .ok_or(StorageError::NotFound)?;
+        self.require_run_reference_visible(reference).await?;
+        Ok(created)
+    }
+
     pub(crate) async fn owned_run(&mut self, run: Uuid) -> StorageResult<(Uuid, String, i64)> {
         self.check_permission(Permission::Read).await?;
         let key = self.private_key_id().await?;
@@ -89,6 +174,7 @@ impl TursoTx {
         native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms())
             .execute(&mut *self.tx).await.map_err(turso_err)?;
+        self.index_run_assets(run, input.event_id, &refs).await?;
         Ok(json!({"run_id":run,"event_id":input.event_id,"sequence":seq}))
     }
     pub async fn private_run_trace(
@@ -350,6 +436,7 @@ impl TursoTx {
         }
         let seq = last + 1;
         native_turso::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(turso_err)?;
+        self.index_run_assets(run, event_id, &refs).await?;
         Ok(json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_bundle":bundle}))
     }
 }
