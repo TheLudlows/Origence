@@ -5,7 +5,7 @@
 本文描述首版目标；当前实现见 [STATUS](../STATUS.md)，已实现架构与接口分别见
 [平台设计](current-implementation.md)和 [API](../API.md)。
 本版收敛首版能力，**全文与向量检索统一使用 AnySeek**。
-边界检视与行业参考见[检视记录](../reviews/2026-11-16-agent-data-foundation-review.md)；四项处理决定已按用户确认纳入本版，其余建议单列。
+逻辑 key 生命周期、仅归档/查询、选定审阅包共享与发布/执行授权分离已按用户确认纳入本版。
 
 ## 1. 定位与首版范围
 
@@ -186,7 +186,7 @@ AnySeek 服务凭据由 Origence 持有，其 Tenant 隔离不替代 workspace �
 依赖故障明确返回不可用，不伪装为空召回。
 
 实现复用现有发布账本、单持久 Worker、原计划恢复和来源定位规则；外部模型/索引 IO 留在事务外。
-检索统一完成时移除 Origence 中的 LanceDB 检索实现及无用依赖，构建配置一并更新。
+Origence 不维护第二套全文/向量引擎，构建依赖和部署配置遵守统一 AnySeek 的边界。
 
 ## 7. 实施顺序与验收
 
@@ -219,3 +219,14 @@ Skill 还需核验候选修改后批准失效、支持来源失效后的读取/�
 - **共享与执行**：以选定审阅包批准共享；首版 Skill 仅文本/参考资料，发布批准和实际操作授权分别处理。
 
 按第 7 节拆分实现合同并推进；候选生成策略等操作细节随实现落实，既有领域合同仍在各自文档维护。
+
+## 9. 设计参考
+
+以下资料于 2026-11-16 查阅，用于比较机制，不作为 Origence 的实现或效果证明。
+
+| 参考 | 采用的边界 |
+| --- | --- |
+| [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)、[LangMem](https://langchain-ai.github.io/langmem/concepts/conceptual_guide/) | 私有任务状态与跨任务资产分开，事实、经历和方法分别表达 |
+| [Letta Skills](https://docs.letta.com/configuration/skills) | 从执行经历形成可复用方法，按 workspace 发布并保留人工批准 |
+| [Agent Skills](https://agentskills.io/specification)、[Claude Code](https://code.claude.com/docs/en/skills)、[Codex](https://learn.chatgpt.com/docs/build-skills) | 通用文本包与客户端加载分开验收，发布不授予工具执行权限 |
+| [Langfuse Sessions](https://langfuse.com/docs/observability/features/sessions)、[LangSmith Threads](https://docs.langchain.com/langsmith/threads) | 用 session/Run 关联证据，区分真实采集与缺口，不提供工作现场恢复 |

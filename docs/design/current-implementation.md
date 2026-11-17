@@ -1,6 +1,6 @@
 # Origence · 当前平台设计
 
-更新：2026-11-16。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
+更新：2026-11-17。代码基线：main `0a1a56c`。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
 首版目标另见[架构规划](agent-data-foundation.md)。当前实现包括 AnySeek 统一检索、
@@ -10,8 +10,8 @@ A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方
 
 Origence 为企业内部 Agent 提供受权限控制、可追溯的记忆与知识等上下文。支持 Claude Code 和 Codex 的 stdio 配置、显式私有归档工具及批准包导出；两者真实客户端均待验收。
 当前提供显式知识/记忆写入、检索、上下文组装及受控会话学习，
-企业身份、文档 ACL、项目自动关联和真实开发任务效果仍待验收。
-前序检索切片见[实施记录](../implementation/2026-11-16-anyseek-integration.md)；首版范围以精简规划为准。
+企业身份、文档 ACL 与项目自动关联尚未实现，真实开发任务效果仍待验收。
+首版范围以架构规划为准，当前进度统一在 STATUS 维护。
 
 ## 2. 当前架构
 
@@ -21,6 +21,13 @@ flowchart TD
     M --> H[Origence HTTP 宿主]
     H --> S[Service：认证、作用域、用例和证据]
     S --> A[Turso：权威数据、任务、发布账本]
+    S --> K[Skill：候选、选定审阅包、批准与发布]
+    K --> A
+    K --> E[显式包导出]
+    E --> C
+    S --> O[Run：上下文准备、客户端报告与采集缺口]
+    O --> A
+    X[显式 Run 事件调用方] -. HTTP 上报 .-> H
     W[单 Worker] --> A
     W --> B[Blob：原始文件]
     W --> R[RetrievalStore]
@@ -118,7 +125,7 @@ AnySeek 用一组 Record 原子写入一个不可变发布的文本和向量；�
 宿主必须配置 AnySeek；库调用方使用 `Service::open_with_anyseek(dir, models, config)`。
 未知后端、缺配置和存储错误不静默降级。只有请求允许的模型失败可按原契约降为 keyword。
 
-AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序不承诺与 LanceDB 相同。
+AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序须在实际后端与任务集上独立评估。
 每个发布最多 64 块、编码后请求 2 MiB；超限整份拒绝。候选、响应、超时和解析限制见
 [API](../API.md#anyseek-统一检索)与 [OPERATIONS](../OPERATIONS.md#anyseek-全文与向量)，不在设计重复维护数值。
 AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定配置。全库相关性、容量和延迟未验收。
@@ -133,26 +140,31 @@ AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定�
 ## A3. 身份、会话与条件经验
 
 显式记忆身份由 scope + subject + predicate + 规范 context 决定，语义相似不授予覆盖权。
-单值/多值、冲突证据和整快照来源撤回见 [身份规格](../contracts/memory-identity-and-context.md)。
+单值/多值、冲突证据和整快照来源撤回见 [身份规格](../contracts/memory.md)。
 SessionTurn 显式归档实际使用的证据。归档和 Run 绑定当前 workspace 的稳定逻辑 key；独立 key 不共享，授权轮换可延续。Feedback 幂等但不自动调权。
 Improve 显式提案、核验并经普通知识发布 Learning，保留适用条件和完整支持闭包。
 它不等于自动学习所有交互，也没有独立 Guidance 生命周期。
 
 EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字节预算；session
 默认关闭且仅当前 key 的 writer 可读。仅识别明确单值身份冲突，不推断一般文本矛盾。
-会话引用不能伪造为现有 chunk/entity/relation 归档引用。具体域规则保留在 S2/S3/S4 合同。
+会话引用不能伪造为现有 chunk/entity/relation 归档引用。具体规则见[记忆](../contracts/memory.md)、[学习](../contracts/learning.md)和[上下文](../contracts/evidence-bundle.md)契约。
 
-## A4. 后续范围
+## A4. Skill 与 Run
 
-第一版剩余客户端验证、企业身份/ACL、项目关联、源同步及真实任务评估见 M1–M3。
-分布式、完整 SaaS、通用 Agent 编排和新增自动记忆策略按需求另行立项，不作为已实现能力。
+Skill 候选由调用方提交，当前不自动挖掘客户端经验。候选/修订与备注私有；所有者选定
+审阅包交付指定审阅者，批准绑定精确包与目标。发布版本不可变、分发时重新核验来源，
+显式导出两种客户端目录格式；原生加载与离线副本回收不属于导出证明。
+细节见 [Skill 契约](../contracts/skills.md)。
+
+Run 归属逻辑 key；服务端记录准备过的精确上下文，客户端工具/Skill/结果事件为上报。
+未上报保持未知，不能把准备、收到、加载、实际使用与验证成功合并为同一事实。
+细节见 [Run 契约](../contracts/runs.md)。
 
 ## A5. 数据模型与约束来源
 
-物理字段与保留理由以[身份布局](../contracts/identity-asset-layout.md)、
-[字段盘点](../contracts/storage-field-audit-2026-10-15.md)和[索引/账本理由](../contracts/index-ledger-audit-2026-10-15.md)为准。
-本设计不重复 DDL。所有新查询遵守 [AGENTS](../../AGENTS.md) 的无 JOIN、事务和来源约束。
-原文保留、同版本备份恢复、持久化与重试仍是要求；旧库升级与数据迁移不在当前范围。
+物理 schema 以 DDL 为准，身份占位、独立生命周期与恢复要求见[存储不变量](../contracts/storage.md)。
+所有新查询遵守 [AGENTS](../../AGENTS.md) 的无 JOIN、事务和来源约束；
+原文保留、同版本备份恢复、持久化与重试仍是要求，旧库升级与数据迁移不在当前范围。
 
 ## A6. 协议边界
 

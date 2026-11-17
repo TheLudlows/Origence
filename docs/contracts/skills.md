@@ -1,9 +1,9 @@
-# Skill review core (local implementation slice)
+# Skill review, publication and distribution
 
-This slice implements a public-library/Turso workflow, not automatic Skill mining,
-client loading acceptance, or a claim that a method works merely because an Agent
-reported success. A client supplies a draft derived from authorized, exact asset
-versions or immutable private Run prefixes. No operation auto-publishes.
+This contract defines the public-library/Turso workflow. A reported successful
+outcome does not independently establish that a method works. A client supplies a
+draft derived from authorized, exact asset versions or immutable private Run
+prefixes. No operation auto-publishes.
 
 ## Contract
 
@@ -23,8 +23,8 @@ versions or immutable private Run prefixes. No operation auto-publishes.
   edit invalidates prior approval, including a source or private-note edit.
 - Publication stores bounded immutable package bytes and provenance in the existing
   Turso authority transaction. There is no external IO/worker or partially installed
-  package. Versions increase monotonically. This slice does not introduce Blob
-  replication or migration support.
+  package. Versions increase monotonically. Packages currently reside in Turso;
+  original document bytes remain in Blob storage.
 - `skill_package(skill, version)` returns only approved manifest and files, with
   fresh source and withdrawal checks. Review basis, raw source IDs, private notes,
   and approval records are not in the distributed package. Exact historical source
@@ -49,11 +49,10 @@ for ensuring the selected prose/reference contents are authorized and redacted.
 Offline exports cannot be instantly recalled, and approval does not grant business
 tool permissions.
 
-## Validation scope
+## Client boundary
 
-Focused native Turso tests cover publication without approval, owner/reviewer
-isolation, digest/target mismatch, edit invalidation, idempotent retry, same-version
-reopen, source retraction, and withdrawal. Package tests cover unknown execution
-metadata and path/extension rejection. Final exact command results are recorded
-in `docs/VALIDATION.md` by the integration owner; no live client or model-quality
-acceptance is claimed by these tests.
+Approved package export writes the Claude Code or Codex project layout after a fresh
+scope/version/source check; see [CLIENTS](../CLIENTS.md). Export is an explicit file
+copy. Managed loading, revocation of existing offline copies, and automatic candidate
+mining are not implemented. Current results belong in [VALIDATION](../VALIDATION.md).
+Private Run references retain the restrictions in the [Run contract](runs.md).
