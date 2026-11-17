@@ -1,4 +1,4 @@
-//! AnySeek is the single derived lexical and vector projection.
+//! AnySeek owns immutable chunk content and its derived retrieval indexes.
 use super::{
     anyseek::{AnySeekConfig, AnySeekFullTextStore, GraphEdgeCandidate, GraphEntityCandidate},
     *,
@@ -11,6 +11,13 @@ pub struct RetrievalStore {
     remote: AnySeekFullTextStore,
 }
 impl RetrievalStore {
+    pub(crate) async fn read_payloads(
+        &self,
+        scope: Scope,
+        ids: &[Uuid],
+    ) -> StorageResult<HashMap<Uuid, ChunkPayload>> {
+        self.remote.read_payloads(scope, ids).await
+    }
     pub(crate) fn checked_analysis_fingerprint(&self) -> StorageResult<&str> {
         self.remote.checked_analysis_fingerprint()
     }

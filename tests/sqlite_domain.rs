@@ -61,7 +61,7 @@ async fn memory_lifecycle_publishes_an_asset() {
         )
         .await
         .unwrap();
-        tx.insert_summary(Uuid::new_v4(), chunk, "summary", "model-v1", "审批")
+        tx.insert_summary(Uuid::new_v4(), chunk, "model-v1", "审批")
             .await
             .unwrap();
         tx.update_asset_version(a, 1, None).await.unwrap();
@@ -72,7 +72,8 @@ async fn memory_lifecycle_publishes_an_asset() {
     let mut tx = store.begin(p.auth.clone()).await.unwrap();
     tx.check_permission(Permission::Read).await.unwrap();
     let view = tx.asset_view(asset, None).await.unwrap();
-    assert_eq!(view["content"], content);
+    assert!(view.get("content").is_none());
+    assert_eq!(view["content_hash"], origence::storage::hash(content));
     assert_eq!(view["version"], 1);
     assert_eq!(view["source_event_id"], source.to_string());
     tx.rollback().await.unwrap();

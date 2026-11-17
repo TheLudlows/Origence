@@ -131,7 +131,8 @@ impl SqliteTx {
             Err(error) => return Err(error),
         }
         let mut members = Vec::new();
-        for (quote, locator) in self.chunks_for_version(asset, version).await? {
+        for reference in self.chunk_refs_for_version(asset, version).await? {
+            let locator = reference.locator;
             if locator["parser"] != crate::memory_semantics::PARSER
                 || locator["semantic_status"] != "confirmed"
             {
@@ -139,21 +140,31 @@ impl SqliteTx {
                     "existing version is not a semantic fact".into(),
                 ));
             }
+            let source_id: Uuid = serde_json::from_value(locator["source_event_id"].clone())
+                .map_err(|_| StorageError::Unavailable("invalid semantic provenance".into()))?;
+            let Some(body) = self.event_content(source_id, true).await? else {
+                continue;
+            };
+            let start = locator["byte_start"]
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok());
+            let end = locator["byte_end"]
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok());
+            let quote = start
+                .zip(end)
+                .and_then(|(start, end)| body.get(start..end))
+                .filter(|quote| hash(quote) == reference.content_hash)
+                .ok_or_else(|| StorageError::Unavailable("invalid semantic provenance".into()))?;
             let member: crate::memory_semantics::Member=serde_json::from_value(json!({"source_event_id":locator["source_event_id"],"source_version":locator["source_version"],"extraction":locator["extraction"],"statement":{"value":locator["semantic_value"],"quote":quote,"byte_start":locator["byte_start"],"byte_end":locator["byte_end"]}}))
                 .map_err(|_|StorageError::Unavailable("invalid semantic provenance".into()))?;
-            if self
-                .event_content(member.source_event_id, true)
-                .await?
-                .is_some()
+            match self
+                .require_learning_source_visible(member.source_event_id)
+                .await
             {
-                match self
-                    .require_learning_source_visible(member.source_event_id)
-                    .await
-                {
-                    Ok(()) => members.push(member),
-                    Err(StorageError::NotFound) => {}
-                    Err(error) => return Err(error),
-                }
+                Ok(()) => members.push(member),
+                Err(StorageError::NotFound) => {}
+                Err(error) => return Err(error),
             }
         }
         Ok(members)

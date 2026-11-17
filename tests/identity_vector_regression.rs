@@ -100,6 +100,7 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
     };
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let mut entries = Vec::new();
+    let mut full_text = Vec::new();
     let mut ledger = Vec::new();
     for index in 0..=decoys {
         let is_target = index == decoys;
@@ -156,6 +157,17 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
             .unwrap();
             tx.index_ready(chunk, profile, 3, 1).await.unwrap();
             ledger.push(key);
+            full_text.push(origence::storage::FullTextEntry {
+                id: chunk,
+                source,
+                generation: 1,
+                search_terms: parsing::lexical(&content),
+                payload: origence::storage::ChunkPayload {
+                    content: content.clone(),
+                    locator: json!({"byte_start":0,"byte_end":content.len()}),
+                    summary: None,
+                },
+            });
             entries.push(VectorEntry {
                 id: chunk,
                 embedding: if is_target && version == 2 {
@@ -181,6 +193,10 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         }
     }
     tx.commit().await.unwrap();
+    crate::support::projection(service)
+        .upsert_full_text(scope, full_text)
+        .await
+        .unwrap();
     crate::support::projection(service)
         .upsert(scope, entries)
         .await

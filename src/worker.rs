@@ -386,14 +386,9 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
                 chunks
             }
             JobPayload::Restore { target_version, .. } => {
-                let chunks = tx
-                    .chunks_for_version(asset, *target_version)
-                    .await?
-                    .into_iter()
-                    .map(|(content, locator)| Chunk { content, locator })
-                    .collect();
+                let references = tx.chunk_refs_for_version(asset, *target_version).await?;
                 tx.commit().await?;
-                chunks
+                service.read_chunk_content(claim.scope, &references).await?
             }
             JobPayload::Ingest { format, .. } => {
                 let file = tx
@@ -784,6 +779,14 @@ async fn publish_prepared(
                 id: c.id,
                 source,
                 generation: claim.generation,
+                payload: ChunkPayload {
+                    content: c.chunk.content.clone(),
+                    locator: c.chunk.locator.clone(),
+                    summary: (!c.summary.is_empty()).then(|| ChunkSummary {
+                        text: c.summary.clone(),
+                        model_revision: publication.summary_model.clone().unwrap_or_default(),
+                    }),
+                },
                 search_terms: c
                     .search_terms
                     .clone()
@@ -858,7 +861,6 @@ async fn publish_prepared(
                 tx.insert_summary(
                     id,
                     c.id,
-                    &c.summary,
                     publication.summary_model.as_deref().unwrap_or(""),
                     &parsing::lexical(&c.summary),
                 )

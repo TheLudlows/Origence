@@ -53,7 +53,7 @@ async fn seed(conn: &mut Connection, scope: Scope, row: Record) {
         .execute(&mut *conn)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'immutable version',?,'title',?,0)")
+    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,?,'immutable version',?,'title',?,0)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.asset)
@@ -63,7 +63,7 @@ async fn seed(conn: &mut Connection, scope: Scope, row: Record) {
         .execute(&mut *conn)
         .await
         .unwrap();
-    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,?,0,'text','{}','text')")
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator,search_terms) VALUES(?,?,?,?,?,0,'text','{}','text')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(row.chunk)
@@ -148,7 +148,7 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
         index(&mut tx, scope, row.chunk).await;
     }
     owner(&mut tx, scope, old, "relation", sole, None).await;
-    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,text,search_terms) VALUES(?,?,?,?,'summary','summary')")
+    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,search_terms) VALUES(?,?,?,?,'summary')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())
@@ -591,7 +591,7 @@ async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retr
     let mut tx = store.pool.begin().await.unwrap();
     seed(&mut tx, scope, row).await;
     index(&mut tx, scope, row.chunk).await;
-    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,text,search_terms) VALUES(?,?,?,?,'summary','summary')")
+    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,search_terms) VALUES(?,?,?,?,'summary')")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(Uuid::new_v4())

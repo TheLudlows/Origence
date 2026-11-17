@@ -59,7 +59,8 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
     let mut tx = store.begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     let view = tx.asset_view(asset, Some(1)).await.unwrap();
-    assert_eq!(view["content"], "approval");
+    assert!(view.get("content").is_none());
+    assert_eq!(view["content_hash"], origence::storage::hash("approval"));
     assert_eq!(view["source_event_id"], source.to_string());
     assert_eq!(view["identity"], json!(null));
     assert_eq!(

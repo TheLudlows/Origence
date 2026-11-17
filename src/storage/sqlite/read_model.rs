@@ -161,7 +161,8 @@ pub(super) async fn current_chunks_measured(
                 version,
                 kind,
                 title,
-                content: row.try_get("content").map_err(sqlite_err)?,
+                content: String::new(),
+                content_hash: row.try_get("content_hash").map_err(sqlite_err)?,
                 locator,
                 source_event_id,
                 score: 0.0,
@@ -229,7 +230,8 @@ impl RawCurrentRows {
             title: self.versions[&position]
                 .try_get("title")
                 .map_err(sqlite_err)?,
-            content: row.try_get("content").map_err(sqlite_err)?,
+            content: String::new(),
+            content_hash: row.try_get("content_hash").map_err(sqlite_err)?,
             locator,
             source_event_id,
             score,
@@ -243,7 +245,7 @@ pub(super) async fn current_rows(
     ids: Option<&[Uuid]>,
     asset_filter: Option<Uuid>,
 ) -> StorageResult<RawCurrentRows> {
-    let columns = "id,asset_id,version,content,locator,search_terms";
+    let columns = "id,asset_id,version,content_hash,locator,search_terms";
     let rows = if let Some(ids) = ids {
         let ids = unique_ids(ids.iter().copied());
         let mut rows = Vec::new();

@@ -58,8 +58,8 @@ impl<T: Lifecycle> Lifecycle for std::sync::Arc<T> {
 }
 
 pub use capabilities::{
-    BlobKey, Embedding, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit,
-    VectorQuery,
+    BlobKey, ChunkPayload, ChunkRef, ChunkSummary, Embedding, FullTextEntry, FullTextHit,
+    FullTextQuery, VectorEntry, VectorHit, VectorQuery,
 };
 pub use error::{StorageError, StorageResult};
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};

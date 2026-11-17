@@ -5,6 +5,40 @@
 最新本地检查见首节；后续历史结果仅适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：正文与索引共用 AnySeek collection
+
+基线 main `c70a1aa`，分支 `refactor/anyseek-content`，Rust 1.98.0，Linux；AnySeek
+固定为 `d813b915b7f12e7139ca316adc15699688493196`（已有 Rust 1.99.1 夹具二进制）。
+本节记录该分支的本地工作树，后续 Windows/Linux 精确提交 CI 状态以 PR 为准。
+只使用合成数据、临时目录/集合与一次性凭据；没有迁移或改写既有用户数据。
+
+- `cargo fmt --check`、`git diff --check` 与 default / pure-core / sqlite 三组
+  `cargo clippy --locked --all-targets -- -D warnings`（后两组分别加对应 feature 参数）通过。
+- `cargo test --locked --no-fail-fast`：221 lib + 4 AnySeek 协议 + 14 core + 193 local
+  = **432 passed**；8 项真实引擎契约默认忽略、在下一项单独执行。无 doctest。
+- `cargo test --locked --no-default-features`：71 lib + 2 协议 + 14 core = **87 passed**。
+  `cargo test --locked --no-default-features --features sqlite`：138 lib + 2 协议 + 14 core
+  + 79 local = **233 passed**；纯核心不引入 SQLite，Cargo.toml/Cargo.lock 未新增依赖。
+- `tools/anyseek_smoke.py --cargo-tests --binary target/debug/origence`：**8 项真实 AnySeek
+  契约通过**。新增原始 UTF-8、CRLF、摘要/模型版本、locator 随 payload 保存与读取断言。
+  正常 HTTP/stdio MCP 的查询、版本更新、历史读取、撤销 key、Run 诊断与重开检查通过。
+- 同脚本 `--binary` 新增真实 AnySeek 进程正常停机/重启，再启动 Origence 读取当前/历史正文
+  并检索，**通过**。不宣称任意断电或跨存储在线一致快照。
+- 真实 AnySeek 包裹 `tools/smoke.py` 与 `tools/ui_smoke.py`：HTTP 与 Node UI → Origence
+  → AnySeek 全链路通过，包含上传、搜索、Context、版本历史、私有 Run 和来源撤回。
+  `ui/npm run build` 与 `ui/npm test`：**16 passed**；未新增浏览器布局/无障碍验收。
+
+新增 `content_storage` 回归证明：正文与索引属于同一 Record，三处旧正文/摘要列已移除，
+固定历史版本与恢复在 Origence 重开后保留原字节；缺失/篡改 payload 明确失败；GET、Search、
+Context 在读取期间撤销 key 或撤回来源均拒绝返回。既有 PDF、语义集合、Learning、Skill、
+私有 Run、幂等、丢响应恢复、跨 scope 与 SQL 事务/取消回归继续通过。
+
+人工逐条审查新增/改动执行 SQL（含 fixture、DDL 与 format 展开）：只读单表或原有关联适配器，
+无 JOIN/关联子查询，无事务内远端 IO、无中间提交。SQL 仍保存原始来源、locator、冻结召回词项、
+完整恢复计划及私有快照；只移出已发布正文/摘要文本，不宣称清除所有文本副本。
+格式 `origence-sqlite-v2` / `origence-content-sha256-v1` 面向 fresh 数据；旧格式拒绝，不自动转换。
+生产相关性、容量、延迟、模型质量与在线备份恢复不由上述回归证明。
+
 ## 2026-11-17：#76 精确版本关联 Run（独立本地切片）
 
 基线 main `593e8fa71d7c354587cffdd1aae7c4b2e2d2a554`；独立分支，不包含第一批

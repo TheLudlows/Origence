@@ -71,13 +71,13 @@ mod versions;
 mod versions_tests;
 mod visibility;
 
-use crate::storage::Lifecycle;
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::ledger::{LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey};
 use crate::storage::scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
 use crate::storage::traits::{
     ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, RelationalStore, WorkItem,
 };
+use crate::storage::{ChunkRef, Lifecycle};
 
 use locking::LockGuard;
 

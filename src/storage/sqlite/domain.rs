@@ -299,12 +299,12 @@ impl DomainTx for SqliteTx {
         self.event_file_inner(source).await
     }
 
-    async fn chunks_for_version(
+    async fn chunk_refs_for_version(
         &mut self,
         asset: Uuid,
         version: i32,
-    ) -> StorageResult<Vec<(String, Value)>> {
-        self.chunks_for_version_inner(asset, version).await
+    ) -> StorageResult<Vec<ChunkRef>> {
+        self.chunk_refs_for_version_inner(asset, version).await
     }
 
     async fn asset_current_version(&mut self, asset: Uuid) -> StorageResult<Option<i32>> {
@@ -350,11 +350,10 @@ impl DomainTx for SqliteTx {
         &mut self,
         summary: Uuid,
         chunk: Uuid,
-        text: &str,
         model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()> {
-        self.insert_summary_inner(summary, chunk, text, model_revision, search_terms)
+        self.insert_summary_inner(summary, chunk, model_revision, search_terms)
             .await
     }
 

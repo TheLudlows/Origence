@@ -262,6 +262,7 @@ async fn native_non_text_support_keeps_delayed_string_decode_error() {
         .unwrap();
     let chunk = || CurrentChunk {
         hit: SearchHit {
+            content_hash: String::new(),
             identity: None,
             chunk_id: id,
             asset_id: asset,

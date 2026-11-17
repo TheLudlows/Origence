@@ -186,7 +186,7 @@ async fn final_native_validation_rechecks_exact_publication_identity_and_readine
 async fn final_native_validation_never_attaches_an_old_score_to_changed_evidence() {
     let fixture = Fixture::new().await;
     fixture.verify().await.unwrap();
-    db::query("UPDATE oc_chunks SET content='different evidence' WHERE id=?")
+    db::query("UPDATE oc_chunks SET content_hash='different evidence' WHERE id=?")
         .bind(fixture.ranked[0].hit.chunk_id)
         .execute(fixture.store.pool())
         .await
@@ -454,7 +454,7 @@ async fn final_response_validation_preserves_first_semantic_status_type_errors()
     }
     // Only the first semantic row's status was decoded by the old contract.
     // A later non-string status must not poison a valid first-row status.
-    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,1,1,'later',?,'later')")
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator,search_terms) VALUES(?,?,?,?,1,1,'later',?,'later')")
         .bind(fixture.auth.scope.tenant_id)
         .bind(fixture.auth.scope.workspace_id)
         .bind(Uuid::new_v4())

@@ -99,6 +99,11 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
                     source,
                     generation,
                     search_terms: "Alice".into(),
+                    payload: origence::storage::ChunkPayload {
+                        content: "Alice".into(),
+                        locator: serde_json::json!({}),
+                        summary: None,
+                    },
                 }],
                 vec![entry.clone()],
                 Some(origence::storage::anyseek::GraphPublication {

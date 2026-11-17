@@ -353,6 +353,20 @@ impl Service {
             }
         }
         tx.commit().await?;
+        let references: Vec<_> = candidates
+            .iter()
+            .map(|candidate| crate::storage::ChunkRef {
+                id: candidate.hit.chunk_id,
+                content_hash: candidate.hit.content_hash.clone(),
+                locator: candidate.hit.locator.clone(),
+            })
+            .collect();
+        for (candidate, chunk) in candidates
+            .iter_mut()
+            .zip(self.read_chunk_content(scope(auth), &references).await?)
+        {
+            candidate.hit.content = chunk.content;
+        }
         Ok(ContextCandidateResult {
             candidates,
             ranked_native,
@@ -428,6 +442,7 @@ mod tests {
 
     fn hit(id: u128, content: &str) -> SearchHit {
         SearchHit {
+            content_hash: String::new(),
             asset_id: Uuid::from_u128(id + 100),
             version: 1,
             chunk_id: Uuid::from_u128(id),

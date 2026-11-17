@@ -1148,6 +1148,11 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             },
             generation: 1,
             search_terms: "approval".into(),
+            payload: origence::storage::ChunkPayload {
+                content: "approval".into(),
+                locator: json!({}),
+                summary: None,
+            },
         });
     }
     let (target, _) = tx.identity_slot(&identity).await.unwrap();
@@ -1188,6 +1193,16 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
             },
             generation: 1,
             search_terms: "approval evidence supplemental".into(),
+            payload: origence::storage::ChunkPayload {
+                content: if version == 1 {
+                    "approval old"
+                } else {
+                    "approval current"
+                }
+                .into(),
+                locator: json!({}),
+                summary: None,
+            },
         });
     }
     // This direct authority fixture must publish the same native surface as
@@ -1856,6 +1871,11 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
                 source,
                 generation: claim.generation,
                 search_terms: origence::parsing::lexical("Atlas evidence"),
+                payload: origence::storage::ChunkPayload {
+                    content: "Atlas evidence".into(),
+                    locator: json!({"start":0,"end":14}),
+                    summary: None,
+                },
             }],
             vec![],
             Some(origence::storage::anyseek::GraphPublication {
@@ -2116,6 +2136,11 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
             },
             generation: 1,
             search_terms: "approval".into(),
+            payload: origence::storage::ChunkPayload {
+                content: "approval".into(),
+                locator: json!({}),
+                summary: None,
+            },
         });
         expected.insert(chunk, (asset, source));
     }

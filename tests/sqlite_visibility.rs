@@ -51,14 +51,14 @@ async fn seed(store: &SqliteStore, scope: Scope, ids: EvidenceIds) -> Authorized
     db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,current_version,created_at) VALUES(?,?,?,'memory','visibility',3,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset)
         .execute(store.pool()).await.unwrap();
-    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle',?,'visibility',?,0)")
+    db::query("INSERT INTO oc_versions(tenant_id,workspace_id,asset_id,version,content_hash,source_event_id,title,created_by,created_at) VALUES(?,?,?,3,'needle',?,'visibility',?,0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.asset).bind(ids.root).bind(auth.principal_id)
         .execute(store.pool()).await.unwrap();
-    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content,locator,search_terms) VALUES(?,?,?,?,3,0,?,?,'needle')")
+    db::query("INSERT INTO oc_chunks(tenant_id,workspace_id,id,asset_id,version,ordinal,content_hash,locator,search_terms) VALUES(?,?,?,?,3,0,?,?,'needle')")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.chunk).bind(ids.asset)
         .bind(scope.workspace_id.to_string()).bind(ids.locator().to_string())
         .execute(store.pool()).await.unwrap();
-    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,text,search_terms) VALUES(?,?,?,?,'summary','summary')")
+    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,search_terms) VALUES(?,?,?,?,'summary')")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::new_v4()).bind(ids.chunk)
         .execute(store.pool()).await.unwrap();
     db::query("INSERT INTO oc_index_entries(tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at) VALUES(?,?,?,'content','profile-visibility',7,11,'ready',0)")
@@ -90,7 +90,7 @@ async fn assert_visibility(
         let hits = tx.summary_hits("summary", filter).await.unwrap();
         assert_eq!(hits.len(), usize::from(visible));
         for hit in hits {
-            assert_eq!(hit.content, auth.scope.workspace_id.to_string());
+            assert_eq!(hit.content_hash, auth.scope.workspace_id.to_string());
             assert_eq!(hit.source_event_id, ids.member);
             assert_eq!(hit.version, 3);
         }

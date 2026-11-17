@@ -1,6 +1,6 @@
 # Origence · 当前平台设计
 
-更新：2026-11-17。代码基线：main `01d4f82` 及当前 SQLite 替换。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
+更新：2026-11-17。代码基线：main `c70a1aa` 及当前 AnySeek 正文存储变更。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
 首版目标另见[架构规划](agent-data-foundation.md)。当前实现包括 AnySeek 统一检索、
@@ -38,7 +38,7 @@ flowchart TD
 
 HTTP 与单 Worker 共享一个 `StorageEngine`；SQLite authority 持有数据目录的独占 OS 锁。
 CLI/MCP 默认转发到运行中的宿主；离线访问要求独占打开。AnySeek 是独立 HTTP 服务，
-普通 Tenant key 只由宿主持有。它保存检索投影，不判定员工权限或业务来源是否有效。
+普通 Tenant key 只由宿主持有。它保存已发布正文与检索索引，不判定员工权限或业务来源是否有效。
 
 ## A1. 资产、来源与发布
 
@@ -54,8 +54,8 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
-| RelationalStore / JobQueue | 权限、来源、正文、版本、身份、审计、任务、owner 与发布账本 | 原生 SQLite `context.db` |
-| RetrievalStore | 带作用域、来源、generation 的全文、向量和一跳图投影 | AnySeek HTTP |
+| RelationalStore / JobQueue | 权限、原始来源、版本指针/哈希、身份、审计、任务、owner 与发布账本 | 原生 SQLite `context.db` |
+| RetrievalStore | 带作用域、来源、generation 的分块正文/摘要及全文、向量和一跳图索引 | AnySeek HTTP |
 | 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 SQLite `context.db` |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
@@ -97,7 +97,7 @@ AnySeek 的普通元数据过滤不替代员工授权，同 Tenant 的 key 也�
 已撤回来源和墓碑在权威提交后退出后续读取，不等待投影物理清理；历史读取仍检查来源。
 
 AnySeek 对全部授权候选分批核对缺失、重复、来源和 generation，再执行词项或向量检索。
-metadata 或存储错误明确失败；正文与 locator 从 Origence 权威数据重建。
+metadata 或存储错误明确失败；正文与 locator 从 AnySeek payload 读取，核验 SQL 中的内容哈希及 provenance，远端 IO 后再复核授权和可见性。
 
 <a id="storage-queue"></a>
 ### A2.5 单 Worker 与恢复
@@ -112,8 +112,8 @@ metadata 或存储错误明确失败；正文与 locator 从 Origence 权威数�
 ### A2.6 跨存储发布与清理
 
 1. 权威事务保存发布计划、pending 账本；AnySeek 计划保存原 operation epoch。
-2. 在事务外向 AnySeek 写入全文、向量和图投影，使用确定性完整身份。
-3. 权威事务再次核对运行/来源/权限/版本，提交版本、owner、ready 索引及作业完成。
+2. 在事务外向同一 AnySeek collection 写入正文、摘要、全文、向量和图投影，使用确定性完整身份。
+3. 权威事务再次核对运行/来源/权限/版本，提交版本元数据/内容哈希、owner、ready 索引及作业完成。
 4. 失败或撤回后按权威清理规划删除孤儿；图关系的有效来源保留自己的 owner 和独立投影。
 
 AnySeek 用一组 Record 原子写入一个不可变发布的 chunk，其中一个可附带图元数据；新业务版本使用独立组。

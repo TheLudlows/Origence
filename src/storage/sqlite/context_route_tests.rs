@@ -55,9 +55,9 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // also omit production constraints so corrupt bindings remain testable.
     for sql in [
         "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
+        "CREATE TABLE oc_versions(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,title TEXT NOT NULL,content_hash TEXT NOT NULL,source_event_id BLOB NOT NULL,restored_from INTEGER,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
         "CREATE TABLE oc_events(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,state TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
-        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_chunks(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,version INTEGER NOT NULL,ordinal INTEGER NOT NULL,content_hash TEXT NOT NULL,locator TEXT NOT NULL,search_terms TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_learnings(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,asset_id BLOB NOT NULL,source_event_id BLOB NOT NULL,status TEXT NOT NULL,session_id BLOB NOT NULL,improve_id BLOB NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_improve_runs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,improve_id BLOB NOT NULL,status TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,improve_id))",
         "CREATE TABLE oc_jobs(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,operation TEXT NOT NULL,PRIMARY KEY(tenant_id,workspace_id,id))",
@@ -1305,7 +1305,7 @@ async fn native_context_routes_filter_before_loading_other_route_content() {
                 .unwrap();
         }
     }
-    db::query("UPDATE oc_chunks SET content=zeroblob(65536) WHERE id=?")
+    db::query("UPDATE oc_chunks SET content_hash=zeroblob(65536) WHERE id=?")
         .bind(other.chunk)
         .execute(&mut *tx.tx)
         .await

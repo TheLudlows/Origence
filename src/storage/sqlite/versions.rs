@@ -106,7 +106,7 @@ impl SqliteTx {
         let requests = vec![vec![AssociationKey::from_uuid(id), requested.clone()]];
         let roots = read_model::live_root_rows(&mut self.tx, self.scope, &requests).await?;
         let row = sqlite_db::query(
-            "SELECT title,version,content,restored_from FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
+            "SELECT title,version,content_hash,restored_from FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -124,17 +124,16 @@ impl SqliteTx {
         let kind: String = asset.try_get("kind").map_err(sqlite_err)?;
         let title: String = row.try_get("title").map_err(sqlite_err)?;
         let v: i32 = row.try_get("version").map_err(sqlite_err)?;
-        let content: String = row.try_get("content").map_err(sqlite_err)?;
+        let content_hash: String = row.try_get("content_hash").map_err(sqlite_err)?;
         let source_event_id: Uuid = root.1.try_get("source_event_id").map_err(sqlite_err)?;
         let restored_from: Option<i32> = row.try_get("restored_from").map_err(sqlite_err)?;
-        let content_hash = hash(&content);
         self.require_learning_asset_visible(asset_id).await?;
         let semantic_status = self.semantic_version_status(asset_id, v).await?;
         let semantic_chunks = if semantic_status.is_some() {
             if !self.semantic_version_visible(asset_id, v).await? {
                 return Err(StorageError::NotFound);
             }
-            self.chunks_for_version(asset_id, v).await?
+            self.chunk_refs_for_version(asset_id, v).await?
         } else {
             Vec::new()
         };
@@ -153,7 +152,6 @@ impl SqliteTx {
             "kind": kind,
             "title": title,
             "version": v,
-            "content": content,
             "source_event_id": source_event_id,
             "restored_from": restored_from,
             "content_hash": content_hash,
@@ -162,18 +160,18 @@ impl SqliteTx {
         });
         if let Some(status) = semantic_status {
             value["semantic_status"] = json!(status);
-            value["semantic_values"] = json!(semantic_chunks.iter().map(|(_, l)| json!({"value":l["semantic_value"],"source_event_id":l["source_event_id"],"source_version":l["source_version"],"locator":l})).collect::<Vec<_>>());
+            value["semantic_values"] = json!(semantic_chunks.iter().map(|c| { let l = &c.locator; json!({"value":l["semantic_value"],"source_event_id":l["source_event_id"],"source_version":l["source_version"],"locator":l}) }).collect::<Vec<_>>());
         }
         Ok(value)
     }
 
-    pub(super) async fn chunks_for_version_inner(
+    pub(super) async fn chunk_refs_for_version_inner(
         &mut self,
         asset: Uuid,
         version: i32,
-    ) -> StorageResult<Vec<(String, Value)>> {
-        let rows: Vec<(String, String)> = sqlite_db::query_as(
-            "SELECT content, locator FROM oc_chunks \
+    ) -> StorageResult<Vec<ChunkRef>> {
+        let rows: Vec<(Uuid, String, String)> = sqlite_db::query_as(
+            "SELECT id, content_hash, locator FROM oc_chunks \
              WHERE tenant_id = ? AND workspace_id = ? AND asset_id = ? AND version = ? ORDER BY ordinal",
         )
         .bind(self.scope.tenant_id)
@@ -185,11 +183,10 @@ impl SqliteTx {
         .map_err(sqlite_err)?;
         Ok(rows
             .into_iter()
-            .map(|(content, locator)| {
-                (
-                    content,
-                    serde_json::from_str(&locator).unwrap_or(Value::Null),
-                )
+            .map(|(id, content_hash, locator)| ChunkRef {
+                id,
+                content_hash,
+                locator: serde_json::from_str(&locator).unwrap_or(Value::Null),
             })
             .collect())
     }
@@ -233,14 +230,14 @@ impl SqliteTx {
         .await
         .map_err(sqlite_err)?;
         sqlite_db::query(
-            "INSERT INTO oc_versions(tenant_id, workspace_id, asset_id, version, content, source_event_id, restored_from, title, created_by, created_at) \
+            "INSERT INTO oc_versions(tenant_id, workspace_id, asset_id, version, content_hash, source_event_id, restored_from, title, created_by, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, ?), ?, ?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(asset)
         .bind(version)
-        .bind(content)
+        .bind(hash(content))
         .bind(source)
         .bind(restored_from)
         .bind(title)
@@ -264,7 +261,7 @@ impl SqliteTx {
         search_terms: &str,
     ) -> StorageResult<()> {
         sqlite_db::query(
-            "INSERT INTO oc_chunks(tenant_id, workspace_id, id, asset_id, version, ordinal, content, locator, search_terms) \
+            "INSERT INTO oc_chunks(tenant_id, workspace_id, id, asset_id, version, ordinal, content_hash, locator, search_terms) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(self.scope.tenant_id)
@@ -273,7 +270,7 @@ impl SqliteTx {
         .bind(asset)
         .bind(version)
         .bind(ordinal)
-        .bind(content)
+        .bind(hash(content))
         .bind(serde_json::to_string(locator).unwrap_or_default())
         .bind(search_terms)
         .execute(&mut *self.tx)
@@ -286,19 +283,17 @@ impl SqliteTx {
         &mut self,
         summary: Uuid,
         chunk: Uuid,
-        text: &str,
         model_revision: &str,
         search_terms: &str,
     ) -> StorageResult<()> {
         sqlite_db::query(
-            "INSERT INTO oc_summaries(tenant_id, workspace_id, id, chunk_id, text, model_revision, search_terms) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO oc_summaries(tenant_id, workspace_id, id, chunk_id, model_revision, search_terms) \
+             VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(summary)
         .bind(chunk)
-        .bind(text)
         .bind(model_revision)
         .bind(search_terms)
         .execute(&mut *self.tx)
