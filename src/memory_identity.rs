@@ -48,6 +48,56 @@ pub struct MemoryIdentity {
     pub context: BTreeMap<String, String>,
 }
 
+/// Exact catalog predicates; omitted fields impose no constraint. Context is
+/// the complete map, not a subset or a semantic/environment alias.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryCatalogFilter {
+    pub subject: Option<MemorySubject>,
+    pub predicate: Option<String>,
+    pub context: Option<BTreeMap<String, String>>,
+    pub identified: Option<bool>,
+}
+
+impl MemoryCatalogFilter {
+    pub fn validate(&self) -> Result<(), IdentityError> {
+        if self.identified == Some(false)
+            && (self.subject.is_some() || self.predicate.is_some() || self.context.is_some())
+        {
+            return Err(IdentityError::Invalid("unidentified filter"));
+        }
+        MemoryIdentity {
+            subject: self.subject.clone().unwrap_or(MemorySubject {
+                kind: SubjectKind::Service,
+                stable_id: "catalog".into(),
+            }),
+            predicate: self.predicate.clone().unwrap_or_else(|| "catalog".into()),
+            context: self.context.clone().unwrap_or_default(),
+        }
+        .validate()
+    }
+
+    pub fn matches(&self, identity: Option<&MemoryIdentity>) -> bool {
+        if self
+            .identified
+            .is_some_and(|known| known != identity.is_some())
+        {
+            return false;
+        }
+        match identity {
+            Some(identity) => {
+                self.subject.as_ref().is_none_or(|v| v == &identity.subject)
+                    && self
+                        .predicate
+                        .as_ref()
+                        .is_none_or(|v| v == &identity.predicate)
+                    && self.context.as_ref().is_none_or(|v| v == &identity.context)
+            }
+            None => self.subject.is_none() && self.predicate.is_none() && self.context.is_none(),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityError {
     #[error("invalid memory identity field: {0}")]
@@ -113,6 +163,36 @@ impl MemoryIdentity {
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn catalog_filter_requires_exact_context_and_explicit_identity() {
+        let identity: MemoryIdentity = serde_json::from_value(serde_json::json!({
+            "subject":{"kind":"service","stable_id":"Atlas"},
+            "predicate":"release.rule","context":{"env":"production","region":"cn"}
+        }))
+        .unwrap();
+        let filter: MemoryCatalogFilter = serde_json::from_value(serde_json::json!({
+            "context":{"region":"cn","env":"production"}
+        }))
+        .unwrap();
+        assert!(filter.validate().is_ok());
+        assert!(filter.matches(Some(&identity)));
+        assert!(!filter.matches(None));
+        let subset: MemoryCatalogFilter = serde_json::from_value(serde_json::json!({
+            "context":{"env":"production"}
+        }))
+        .unwrap();
+        assert!(!subset.matches(Some(&identity)));
+        let unknown: MemoryCatalogFilter =
+            serde_json::from_value(serde_json::json!({"identified":false})).unwrap();
+        assert!(unknown.matches(None));
+        assert!(!unknown.matches(Some(&identity)));
+        let invalid = MemoryCatalogFilter {
+            predicate: Some("release.rule".into()),
+            ..unknown
+        };
+        assert!(invalid.validate().is_err());
+    }
 
     fn scope() -> Scope {
         Scope {

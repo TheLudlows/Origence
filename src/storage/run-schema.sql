@@ -18,3 +18,9 @@ CREATE TABLE oc_run_asset_refs (
     run_id BLOB NOT NULL, event_id BLOB NOT NULL, evidence_ref_id BLOB NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id)
 );
+CREATE TABLE oc_run_verifications (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
+    verification_id BLOB NOT NULL, payload TEXT NOT NULL, record TEXT NOT NULL,
+    withdrawal TEXT,
+    PRIMARY KEY(tenant_id,workspace_id,run_id,verification_id)
+);

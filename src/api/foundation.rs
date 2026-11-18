@@ -22,6 +22,14 @@ pub(super) fn routes() -> Router<Service> {
         .route("/v1/runs", post(create_run).get(list_runs))
         .route("/v1/runs/{id}", get(run_trace))
         .route("/v1/runs/{id}/prefix", get(run_prefix))
+        .route(
+            "/v1/runs/{id}/verifications",
+            get(run_verifications).post(record_run_verification),
+        )
+        .route(
+            "/v1/runs/{id}/verifications/{verification}/withdraw",
+            post(withdraw_run_verification),
+        )
         .route("/v1/runs/{id}/events", post(append_run_event))
         .route("/v1/runs/{id}/context", post(prepare_run_context))
         .route(
@@ -313,5 +321,54 @@ async fn withdraw_skill(
 ) -> Result<Json<Value>> {
     Ok(Json(
         s.withdraw_skill(&auth(&s, &h).await?, id, version).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerificationPage {
+    #[serde(default)]
+    after: Uuid,
+    limit: Option<usize>,
+}
+async fn run_verifications(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+    Query(q): Query<VerificationPage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        service
+            .run_verifications(
+                &auth(&service, &headers).await?,
+                run,
+                q.after,
+                q.limit.unwrap_or(25),
+            )
+            .await?,
+    ))
+}
+async fn record_run_verification(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+    Json(input): Json<crate::run_verification::RunVerificationInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        service
+            .record_run_verification(&auth(&service, &headers).await?, run, input)
+            .await?,
+    ))
+}
+async fn withdraw_run_verification(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((run, id)): Path<(Uuid, Uuid)>,
+    Json(input): Json<crate::run_verification::WithdrawRunVerificationInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        service
+            .withdraw_run_verification(&auth(&service, &headers).await?, run, id, input)
+            .await?,
     ))
 }

@@ -47,6 +47,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
   };
+  let verificationDenied = false;
   const asset = {
     asset_id: ids.asset,
     title: "<img src=x>",
@@ -66,8 +67,11 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const writes = [],
     keys = [];
   const searches = new Map();
+  const catalogQueries = [];
   let failMemory = true,
-    unauthorized = false;
+    unauthorized = false,
+    conflictKnowledge = false,
+    jobState = "completed";
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     const path = new URL(url, "http://localhost:3000"),
@@ -94,11 +98,15 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       });
     if (path.pathname === "/api/health/ready")
       return response({ status: "ready" });
-    if (path.pathname === "/api/v1/assets")
+    if (path.pathname === "/api/v1/assets") {
+      catalogQueries.push(path.searchParams);
+      if (path.searchParams.get("memory_filter")?.includes("staging"))
+        return response({items: path.searchParams.has("after") ? [asset] : [], next_after: path.searchParams.has("after") ? null : ids.asset});
       return response({
         items: [asset].filter((a) => a.kind === path.searchParams.get("kind")),
         next_after: null,
       });
+    }
     if (path.pathname === "/api/v1/runs")
       return response({
         items: [
@@ -106,6 +114,16 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         ],
         next_after: null,
       });
+    if (path.pathname === `/api/v1/runs/${ids.run}/verifications` && verificationDenied)
+      return response({ error: { message: "source unavailable" } }, 404);
+    if (path.pathname === `/api/v1/runs/${ids.run}/verifications`)
+      return response({ items: [{
+        assessment: { verification_id: ids.source, through_sequence: 2, prefix_digest: "d".repeat(64),
+          verifier_label: "<img src=x> external tester", assessed_at_ms: 1000, conclusion: "failed",
+          basis_summary: "synthetic missing output", basis_sequences: [1, 2], reported_skill_version: null },
+        recorder_principal_id: ids.run, recorded_at_ms: 2000,
+        withdrawal: { reason: "superseded evidence", recorded_at_ms: 3000 },
+      }], next_after: null });
     if (path.pathname === `/api/v1/runs/${ids.run}`)
       return response({
         run: { run_id: ids.run, summary: "fixture task" },
@@ -175,6 +193,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return response({ file_id: ids.source });
     }
     if (path.pathname === "/api/v1/knowledge") {
+      if (conflictKnowledge) return response({error:{message:"asset/version mismatch"}},409);
       assert.equal(body.asset_id, null);
       assert.equal(body.expected_version, null);
       writes.push(body);
@@ -186,7 +205,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return pending.promise;
     }
     if (path.pathname === `/api/v1/jobs/${ids.job}`)
-      return response({ state: "completed", outcome: "published" });
+      return response({ state: jobState, outcome: jobState === "completed" ? "published" : null });
     if (path.pathname === "/api/v1/context") {
       assert.equal(body.budget, 4000);
       return response({
@@ -313,6 +332,61 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(writes.at(-1).content, undefined);
     click("关闭", upload);
   });
+  await t.test("memory filters are server predicates and preserve empty-page continuation", async () => {
+    click("◇记忆管理");
+    await wait(() => document.querySelector("h1")?.textContent === "记忆管理");
+    control("主体类型").value = "service";
+    control("主体 ID").value = "Atlas";
+    control("属性").value = "release.rule";
+    control("完整适用条件").value = '{"env":"staging"}';
+    click("应用目录筛选");
+    await wait(() => document.body.textContent.includes("本批暂无匹配资产"));
+    const first = catalogQueries.at(-1);
+    assert.equal(first.has("after"), false);
+    assert.deepEqual(JSON.parse(first.get("memory_filter")), {subject:{kind:"service",stable_id:"Atlas"},predicate:"release.rule",context:{env:"staging"}});
+    click("加载下一页");
+    await wait(() => document.querySelector("table")?.textContent.includes("Atlas"));
+    assert.equal(catalogQueries.at(-1).get("after"), ids.asset);
+    assert.equal(catalogQueries.at(-1).get("memory_filter"), first.get("memory_filter"));
+    control("完整适用条件").value = '{"env":"production"}';
+    click("应用目录筛选");
+    await wait(() => catalogQueries.at(-1).get("memory_filter")?.includes("production"));
+    assert.equal(catalogQueries.at(-1).has("after"), false);
+  });
+  await t.test("failed jobs and version conflicts reread authority without replacing drafts", async () => {
+    const { editor } = await import("../dist/client/asset-editor.js");
+    const { trackJob } = await import("../dist/client/jobs.js");
+    const lifetime = new AbortController();
+    const ctx = { signal: lifetime.signal, role: "writer", navigate() {} };
+    const target = document.createElement("div");
+    document.body.append(target);
+    for (const state of ["failed", "superseded"]) {
+      jobState = state;
+      await trackJob({job_id: ids.job, asset_id: ids.asset}, target, ctx);
+      click("读取当前资产", target);
+      await wait(() => target.textContent.includes("当前已发布 v1"));
+      assert.equal(target.textContent.includes("重试任务"), state === "failed");
+      assert.equal(target.textContent.includes("取消任务"), false);
+    }
+    jobState = "completed";
+    conflictKnowledge = true;
+    editor("knowledge", ctx, {...asset, kind: "knowledge"});
+    const modal = document.querySelector("dialog");
+    control("正文", modal).value = "retained draft";
+    modal.querySelector("form").requestSubmit();
+    await wait(() => modal.textContent.includes("版本冲突"));
+    asset.version = 2;
+    click("读取当前版本", modal);
+    await wait(() => modal.textContent.includes("当前已发布 v2"));
+    assert.equal(control("正文", modal).value, "retained draft");
+    assert(modal.textContent.includes("基于 v1 提交"));
+    assert.equal(modal.querySelector("form").hidden, false);
+    click("关闭", modal);
+    asset.version = 1;
+    conflictKnowledge = false;
+    target.remove();
+    lifetime.abort();
+  });
   await t.test(
     "a superseded search cannot overwrite the newer query",
     async () => {
@@ -384,6 +458,12 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         document.querySelector("h1")?.textContent === "Run 详情" &&
         document.body.textContent.includes("context_prepared"),
     );
+    await wait(() => document.body.textContent.includes("外部结论：失败"));
+    assert.ok(document.body.textContent.includes("已撤销的外部核验"));
+    assert.ok(document.body.textContent.includes("实际使用的 Skill 版本：未知"));
+    assert.ok(document.body.textContent.includes("平台未核验其结论"));
+    assert.ok(document.body.textContent.includes("<img src=x> external tester"));
+    assert.equal(document.querySelectorAll("img").length, 0);
     assert.ok(document.body.textContent.includes("未确认收到或使用"));
     const events = [...document.querySelectorAll(".timeline button.event")];
     assert.deepEqual(events.map((event) => event.querySelector(".badge").textContent), [
@@ -396,6 +476,14 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(document.body.textContent.includes("客户端上报；未经独立验证"));
     events[3].click();
     assert.ok(document.body.textContent.includes("证据来源未知；不推断为服务端观察或客户端上报"));
+    verificationDenied = true;
+    click("刷新核验记录");
+    await wait(() => document.body.textContent.includes("source unavailable"));
+    assert.ok(!document.body.textContent.includes("synthetic missing output"));
+    assert.ok(!document.body.textContent.includes("<img src=x> external tester"));
+    verificationDenied = false;
+    click("刷新核验记录");
+    await wait(() => document.body.textContent.includes("synthetic missing output"));
     events[0].click();
     click("11111111 · v1");
     await wait(

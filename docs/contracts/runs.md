@@ -96,3 +96,10 @@ on retry, provides empty/error states, and clears the displayed asset on 403/404
 This fresh-only schema adds `oc_run_asset_refs`; exact schema admission rejects
 an existing database without the table without creating it or rewriting evidence.
 Same-schema reopen retains associations. No migration or backfill is performed.
+
+## External verification records
+
+Owner-transcribed external assessments use a separate [verification contract](run-verification.md).
+They address an exact Run prefix and preserve attribution, basis, unknown use
+versions and withdrawal. They are never platform attestations; a claimed verifier
+or `reporter=user/test` label does not grant private Run access.

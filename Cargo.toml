@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.98.0"
 description = "The Intelligence Foundation for AI Agents."
 publish = false
+default-run = "origence"
 autotests = false
 
 [dependencies]
@@ -63,4 +64,14 @@ required-features = ["manual-diagnostics"]
 [[bin]]
 name = "origence"
 path = "src/main.rs"
+required-features = ["local-storage"]
+
+[[bin]]
+name = "origence-skill"
+path = "src/bin/origence-skill.rs"
+required-features = ["local-storage"]
+
+[[test]]
+name = "skill-workflow"
+path = "tests/skill_workflow.rs"
 required-features = ["local-storage"]
