@@ -59,3 +59,16 @@ prepare/held-out 两组生成及评分 smoke 通过，均 NOT_CERTIFIED。
 补丁只含文档/模板；无生产代码或 SQL 变更，无 Rust 检查要求新增。
 未运行真实客户端、模型、安装、登录、生产数据、恢复或受管重载；未生成真实未见种子，
 单独公开合成样例仅供未来预检，不评分、不签认。仍等待四路同 SHA、联合映射冻结及独立签认。
+
+## #92 文档补丁发布前复验（2026-11-18）
+
+沿用本地 6e0ac96a277be92ae7734396a51411bcdc9ad3cf，远端 #92 head 核对仍为
+810f6900ff7bc990cdacd95862d5cf2da1688b75，main 仍为
+293e2bf6af3b180d43c8050731047b552ac07519。按后续授权仅快进更新原草稿分支。
+已检查根 AGENTS.md；/workspace/.agents 为空，仓库/工作树未发现 .agents/skills。
+
+PREFLIGHT 补充 Windows 新 DataDir/独立 AnySeekDataDir/workspace 与初始化要求，
+将 #95 旧库缺 oc_run_verifications 的拒绝归为启动 schema 不兼容；另列题面不含规则/答案的
+授权真实 v2 检索和无权限干净会话对照，不进入正式分母。客户端触发/JSONL 信号仍待冻结版实查。
+13 项 Python 用例、两模板命名空间/状态检查及 diff --check 均通过；不改代码/评分格式。
+未执行模型、安装、登录、业务签认、Windows 或真实检索预检。#91 仍 NOT_RUN，未合入或部署。
