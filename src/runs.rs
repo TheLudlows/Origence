@@ -112,3 +112,43 @@ impl Service {
         Ok(serde_json::json!({"run_id":run,"through_sequence":through_sequence,"digest":digest}))
     }
 }
+
+impl Service {
+    pub async fn record_run_verification(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        input: crate::run_verification::RunVerificationInput,
+    ) -> Result<Value> {
+        input.validate().map_err(|e| AppError::Invalid(e.into()))?;
+        let mut tx = self.write(a, Permission::Write).await?;
+        let result = tx.record_run_verification(run, &input).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+    pub async fn run_verifications(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        after: Uuid,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut tx = self.read(a, Permission::Read).await?;
+        let result = tx.run_verifications(run, after, limit).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+    pub async fn withdraw_run_verification(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        id: Uuid,
+        input: crate::run_verification::WithdrawRunVerificationInput,
+    ) -> Result<Value> {
+        input.validate().map_err(|e| AppError::Invalid(e.into()))?;
+        let mut tx = self.write(a, Permission::Write).await?;
+        let result = tx.withdraw_run_verification(run, id, &input).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+}

@@ -49,6 +49,11 @@ test("proxy isolates credentials, preserves binary uploads and business errors",
   );
   assert.equal(a.user, "Bearer alice");
   assert.equal(b.user, "Bearer bob");
+  const verificationPath = "/api/v1/runs/22222222-2222-4222-8222-222222222222/verifications?limit=25";
+  const verificationResponse = await fetch(ui + verificationPath, { headers: { Authorization: "Bearer alice" } });
+  assert.equal(verificationResponse.status, 200);
+  assert.equal(received.at(-1).url, verificationPath.replace("/api", ""));
+  assert.equal(received.at(-1).key, "Bearer alice");
   const bytes = new Uint8Array([0, 255, 1, 128]);
   await fetch(ui + "/api/v1/files?name=中文.pdf&format=pdf", {
     method: "POST",

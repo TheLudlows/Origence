@@ -213,3 +213,19 @@ async fn database_without_run_reverse_index_is_rejected_without_repair() {
     assert!(SqliteStore::open(&path).await.is_err());
     assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
 }
+
+#[tokio::test]
+async fn missing_run_verification_table_is_rejected_without_migration() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("incompatible.db");
+    let store = SqliteStore::open(&path).await.unwrap();
+    db::raw_sql("DROP TABLE oc_run_verifications")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
+    let before = tokio::fs::read(&path).await.unwrap();
+    assert!(SqliteStore::open(&path).await.is_err());
+    assert_eq!(before, tokio::fs::read(&path).await.unwrap());
+}

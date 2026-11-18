@@ -23,6 +23,7 @@ pub mod parsing;
 pub mod retrieval;
 pub mod retrieval_diagnostics;
 pub mod run;
+pub mod run_verification;
 #[cfg(feature = "local-storage")]
 mod runs;
 pub mod semantic_capture;

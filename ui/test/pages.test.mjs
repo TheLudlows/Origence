@@ -47,6 +47,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
   };
+  let verificationDenied = false;
   const asset = {
     asset_id: ids.asset,
     title: "<img src=x>",
@@ -113,6 +114,16 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         ],
         next_after: null,
       });
+    if (path.pathname === `/api/v1/runs/${ids.run}/verifications` && verificationDenied)
+      return response({ error: { message: "source unavailable" } }, 404);
+    if (path.pathname === `/api/v1/runs/${ids.run}/verifications`)
+      return response({ items: [{
+        assessment: { verification_id: ids.source, through_sequence: 2, prefix_digest: "d".repeat(64),
+          verifier_label: "<img src=x> external tester", assessed_at_ms: 1000, conclusion: "failed",
+          basis_summary: "synthetic missing output", basis_sequences: [1, 2], reported_skill_version: null },
+        recorder_principal_id: ids.run, recorded_at_ms: 2000,
+        withdrawal: { reason: "superseded evidence", recorded_at_ms: 3000 },
+      }], next_after: null });
     if (path.pathname === `/api/v1/runs/${ids.run}`)
       return response({
         run: { run_id: ids.run, summary: "fixture task" },
@@ -447,6 +458,12 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         document.querySelector("h1")?.textContent === "Run 详情" &&
         document.body.textContent.includes("context_prepared"),
     );
+    await wait(() => document.body.textContent.includes("外部结论：失败"));
+    assert.ok(document.body.textContent.includes("已撤销的外部核验"));
+    assert.ok(document.body.textContent.includes("实际使用的 Skill 版本：未知"));
+    assert.ok(document.body.textContent.includes("平台未核验其结论"));
+    assert.ok(document.body.textContent.includes("<img src=x> external tester"));
+    assert.equal(document.querySelectorAll("img").length, 0);
     assert.ok(document.body.textContent.includes("未确认收到或使用"));
     const events = [...document.querySelectorAll(".timeline button.event")];
     assert.deepEqual(events.map((event) => event.querySelector(".badge").textContent), [
@@ -459,6 +476,14 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(document.body.textContent.includes("客户端上报；未经独立验证"));
     events[3].click();
     assert.ok(document.body.textContent.includes("证据来源未知；不推断为服务端观察或客户端上报"));
+    verificationDenied = true;
+    click("刷新核验记录");
+    await wait(() => document.body.textContent.includes("source unavailable"));
+    assert.ok(!document.body.textContent.includes("synthetic missing output"));
+    assert.ok(!document.body.textContent.includes("<img src=x> external tester"));
+    verificationDenied = false;
+    click("刷新核验记录");
+    await wait(() => document.body.textContent.includes("synthetic missing output"));
     events[0].click();
     click("11111111 · v1");
     await wait(

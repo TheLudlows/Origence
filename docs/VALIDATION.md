@@ -1023,6 +1023,65 @@ or grace expires, owned-process termination is explicitly a forced stop; closing
 or killing the parent terminal may bypass finally and leave children alive. The
 launcher is not a production service supervisor. No remote PR/push/deployment.
 
+## 2026-11-17 — #89 Run 外部核验记录（本地 P0 切片）
+
+- 已 fetch 核实 main/base：`293e2bf6af3b180d43c8050731047b552ac07519`。
+  实现与下列测试对应提交：`5965f50848a17a6206c91110ffee8d2636efd32c`；
+  独立分支 `p0/run-verification`，工作树 `/workspace/Origence-run-verification`。
+- 合同见 [run-verification](contracts/run-verification.md)。仅 owner 转录外部结论，
+  不将 `reporter=user/test`、外部核验者标签、自报成功或 prepared 状态解释为认证角色/平台验真。
+  前缀摘要、记录凭据、服务端时间、声称核验者/时间、结论、依据序号/摘要和可撤销状态分别保存。
+  版本未知不填 latest；核验者角色不授予 Run 正文权。MCP/接入工具接口未改变。
+- 环境：Linux，Rust `1.98.0 (88d9e12ae 2026-08-18)`，Node `v24.22.1`。
+  `CARGO_HOME=/workspace/.cargo RUSTUP_HOME=/workspace/.rustup CARGO_TARGET_DIR=/workspace/target-run-verification`。
+  只使用 tempdir 新库、合成文本/身份、Models::disabled 和 loopback AnySeek 协议夹具；无生产凭据、真实任务或付费模型调用。
+- `cargo test --lib run --features sqlite`：8 passed。含严格 DTO 拒绝角色伪造、
+  准确前缀冲突、失败结论与自报成功共存、未知/确切声明版本、重试/冲突、撤销、分页、
+  同 schema 重开、跨管理员 Key 拒绝和凭据撤销后读写/重放拒绝。
+- `cargo test --test local run_verification --features sqlite`：2 passed。
+  公共 Service + HTTP 验证 prepared 资产 v2、自报成功、owner 转录失败、实际 Skill 使用版本未知；
+  后续 Run append 不改变核验前缀；来源撤回阻断核验读取、重放和撤销调用。
+  精确 schema 缺表拒绝且原数据库文件字节未变，不迁移、不回填。
+- `npm --prefix ui test`：17 passed（含 tsc/build）。验证独立核验显示、撤销、未知版本、
+  不可信文字不生成 HTML、刷新失败清除旧核验内容及恢复、精确 GET relay 凭据转发。
+  relay 仅新增 `/v1/runs/{UUID}/verifications` GET 白名单；未改共享导航、通用 DTO、CI 或 STATUS。
+- `cargo fmt --check` 与 `git diff --check`：通过。
+- `cargo clippy --all-targets --all-features -- -D warnings`：通过；首轮发现新 DTO 中一处
+  `collapsible_if`，已按建议合并等价条件并在最终实现提交重新验证。
+- SQL 人工检查：核验模块所有 SELECT/COUNT/INSERT/UPDATE、测试建库与撤权语句均为单表；
+  无 JOIN、逗号 FROM、跨表子查询或 CTE。关联前缀/来源/逻辑 owner 在原授权事务内复核，
+  提交前沿用实时权限复核；无外部 IO 或中间提交。
+- 未验收：Windows 行为、真实浏览器/无障碍、双客户端与企业任务、真实模型效果、独立核验者签认。
+  当前 UI 只读展示/刷新；写入与撤销通过独立 HTTP/Service API。此切片不代表 #89 全部通过，
+  也不提供 tracing/成本/生产告警。需接入与试点方按独立合同对接；联合合同确认后再安排发布。
+- 本路仅本地提交，未推送、未开 PR、未更新 Issue、未合入、未部署。
+
+## 2026-11-17 — #89 草稿发布前定向复验
+
+- 续接本地 `87b284c8fa3b9c324db2aa039af69a026b2c1dd5`；重新 fetch 后 main 仍为
+  `293e2bf6af3b180d43c8050731047b552ac07519`。本轮测试/合同提交：
+  `ddca4c52b3d71b2650f0ad13ce1e613089a42858`。
+- 对照 #87 已发布 Issue 的采集合同：显式归档/Run prepare 与核验分离，`src/run.rs`、
+  MCP 接入接口没有本路变更；未发现 #87 可供联合运行的公开实现 PR，故不声明联合验收。
+  本路只对应 PRD 的“Run 所有者记录外部签认依据”，不生成独立签认、平台核验通过状态或
+  业务通过率。用户不能用 owner 转录将自己提升为认证核验者；#89 不关闭。
+- 再跑 `cargo test --lib run --features sqlite`：8 passed；
+  `cargo test --test local run_verification --features sqlite`：2 passed。
+  加强真实 Service/HTTP readback 断言：prepared、自报 success、转录 failed、
+  `platform_verification:not_performed`、`verifier_authentication:unverified_claim` 分离；
+  非 owner reviewer 无权撤销，来源撤回后核验与 Run 正文均返回 NotFound/Forbidden。
+- `npm --prefix ui test`：17 passed；`cargo fmt --check`、`git diff --check`、
+  `cargo clippy --all-targets --all-features -- -D warnings` 均通过。
+- Chromium `156.0.8078.79`：`npm --prefix ui run build` 后运行
+  `node ui/scripts/check-run-verification-browser.mjs` 通过。真实 Chromium DOM、已构建 UI
+  和 relay，合成 HTTP 响应；覆盖准备/上报/外部三种结论分别显示、未知使用版本、撤销、
+  不可信文字转义、来源不可用后刷新清除旧核验内容，以及另一 Key 拒绝后的正文/核验不显示。
+  该浏览器夹具不替代上述真实 SQLite/Service 授权验证，也不代表真实双客户端/生产任务验收。
+- schema 差异仅新增 `oc_run_verifications`，沿用精确 fresh-only admission；本轮再次通过
+  缺表拒绝且数据库字节不变测试。应用 SQL 仍单表，跨表关联与授权/来源复核留在原事务。
+- 允许正常推送本分支并创建针对 main 的草稿 PR（Refs #89）。不改 Issue、不合入、不部署。
+  Windows、完整无障碍、真实双客户端/业务任务和外部独立签认仍未验收。
+
 ## 2026-11-17：#88 Learning 来源专项补验（草稿 #94）
 
 `a709dfe2702efcb223d7765fc9ae0b7a71a838c9` 只增加确定性测试：同空间另一 writer
@@ -1030,3 +1089,18 @@ launcher is not a production service supervisor. No remote PR/push/deployment.
 待发布候选与已发布包均返回 NOT_FOUND，清理仍 pending。21 项 Learning 回归、
 原 Run CLI 回归及格式/Clippy 通过。详见 [#88 追加记录](validation/issue-88-skill.md)。
 未变更产品代码，不代表真实客户端或业务验收。
+
+## 2026-11-18 — #95 coordinated integration after #93/#94
+
+Merged main `a56246406a0688f646a45a85cc2954fb14a8d28a` into original #95
+`dfbaade8eb8848d6085cf5b9f61f986f2c8b9428` without rewriting history. Only this
+validation history conflicted; both entries remain. Automatic module/UI-test
+merges preserve the existing source, exact-prefix, logical-key and fresh-only
+schema contracts; no implementation change was needed.
+Linux Rust 1.98.0: fmt and diff checks, `cargo test --locked --lib run_verification`
+(2), `cargo test --locked --test local run_verification` (2),
+`cargo test --locked --test local workspace_schema_rejection` (6), and
+`cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
+Node UI build/tests: 19 passed. All database fixtures were newly created temporary
+stores, not old stores converted to the new schema. No external model or production
+material was used. New exact-HEAD CI is required before merging; full pilot remains NOT_RUN.
