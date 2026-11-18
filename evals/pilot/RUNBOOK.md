@@ -1,41 +1,42 @@
-# 证据、恢复和清理手册
+# 试点执行、恢复与清理手册
 
 ## 开跑前
 
-1. 填冻结表：Issue/合同修订、四路交付 SHA 与整合 SHA、二进制哈希、客户端版本及安装来源、OS、AnySeek 二进制/配置/集合 schema、SQLite 运行版本、Blob root/manifest、模型供应方与不可变修订、token/时间/成本预算。版本不可固定则 BLOCKED，不填 guessed/latest。
-2. 仅授权合成或已脱敏样本；本包默认只合成。数据负责人签认数据边界。新建测试 workspace、最小角色 key 和独立新库；记录资源清单，但只记 key 的内部别名/逻辑 owner，不记密钥。测试身份不等于允许连接真实业务数据库。
-3. 由 DBA 和制度负责人冻结 rubric、必要检查、成功阈值与停止条件。实际模型调用及费用需单独已授权预算；本地自动检查不触发此类调用。
-4. 四路负责人在同一整合提交登记交付和测试；独立验收人重新跑联合路径。分支单测和导出夹具只能是辅助证据。
+使用[冻结表](freeze.template.json)登记整合 SHA、服务和客户端二进制哈希、OS、实际模型修订及配置、SQLite 和 AnySeek 版本、Blob 清单、时间与费用预算。单独初始化测试资源，记录逻辑 key 别名。数据负责人签认合成或脱敏范围；DBA 和制度负责人在开跑前签认两场景的 rubric、阈值和停止条件。缺少必需配置或签认时记 BLOCKED。
+
+## 题集与评分表
+
+在仓库根目录运行。以下种子均公开，仅用于演示，输出目录须为新路径。
+
+```sh
+python evals/pilot/pilot.py generate --seed public-development-1 --output pilot-prepare-new
+python evals/pilot/pilot.py generate --split held-out --seed public-example-only --exclude-tasks pilot-prepare-new/tasks.json --output pilot-example-new
+python evals/pilot/pilot.py score pilot-example-new/observations.json
+```
+
+每个场景 8 题，各有无 Skill 基线和有 Skill 复做两行。报销覆盖正常、有效超限、重复和缺凭证，各两例。生成器按实际输入内容排重，再重排题号。独立保管人应为每批已暴露的题目重复传入 `--exclude-tasks`，清单会登记这些文件的 SHA-256。若可用输入不足，生成器报错。
+正式未见题须在开发和 Skill 冻结后使用独立保密种子生成，仅向操作者交付 `tasks.json`。保管人封存种子、oracle 和摘要；若答案已泄露，登记污染并换批。按题号随机安排两臂顺序，分别使用干净会话和相同客户端、模型及工具预算，记录顺序、超时与人工干预。
+填写同目录的 v2 `observations.json`。评分时逐一核对 `manifest.json`、`tasks.json`、整表题集摘要和每行输入摘要。未绑定的 v1 表只供历史查阅。预登记题全部保留在离线分母中；正式业务成功率和核验覆盖率按 [PRD 口径](PRD-MAPPING.md#计量差异必须披露) 单列。
+
+## 执行矩阵
+
+| 检查 | 记录与判定 |
+| --- | --- |
+| P1 接入 | 在同一整合提交和新库上验证双端 MCP search/get 和归档往返，由独立验收人核对冻结表。 |
+| P2 数据库排障 | Claude Code 首做、Codex 复做未见题。DBA 按快照核验阻塞链、连接池、超时分类和只读建议。 |
+| P3 报销复核 | Codex 首做、Claude Code 复做未见题。制度负责人核对金额、重复票据、缺材料和适用制度版本。只给复核意见。 |
+| P4 更正与撤回 | 更正到 v2 后按精确引用读 v1；候选编辑后重新审阅。撤回来源后检查 get/search/context/package、关联 Run 和准备重放。分别核对新会话、缓存及受管在线重载。 |
+| P5 隔离 | 同 key 跨端归档；异 key（含管理员）读私有会话、候选和 Run 均应拒绝。验证跨 tenant/workspace 同名隔离、凭据轮换及撤权后的读取和重放。 |
+| P6 追溯 | 逐题关联输入、精确准备 bundle、实际交付、原生加载、工具、输出及独立判定。按场景、客户端和基线/复用分组，缺失观察记 UNKNOWN。 |
+| P7 恢复 | 依下节演练停写、同版本恢复与清理。DBA、制度负责人和独立验收人分别签认。 |
+
+隔离、撤回、版本检查须零违规。Windows/Linux 分开登记；小样本报告计数和描述性差值。业务结果、证据覆盖和 Skill 加载分别核验。
 
 ## 真实闭环与精确加载证据
 
-公开样例可按[预检说明](PREFLIGHT.md)复跑。正式双场景按下列步骤执行，开始前填写冻结表。
-
-研发首做必须在 Claude Code，业务首做必须在 Codex。记录真实终端版本输出、会话 ID、任务输入摘要、MCP 工具请求/响应及 server Run ID。连接等待题使用给定合成快照，DBA 校验诊断，不让客户端触达生产。
-
-从首做的精确资产版本或不可变 Run 前缀生成候选，保留 revision、选定脱敏依据、审阅人、审阅 packet digest、批准时间和发布 skill ID/version/package digest。修改候选后验证旧批准失效并重新审批；不能自动发布。
-
-复做客户端在隔离项目、干净会话中，先通过服务器在线授权校验取得/显式导出精确版本，再独立观察真实客户端原生加载。两步不能合并称为受管在线加载。保存：
-
-- 服务器 scope/version/source 检查与返回 digest 的证据；
-- 原生客户端实际加载的 Skill 路径/标识、SKILL.md 与 references 字节哈希、客户端 session/run 对应及原生加载事件/可读诊断；
-- 内容进入实际模型上下文的可观测记录，及该记录是否由客户端报告、由服务端准备或独立观察；
-- 工具调用、输出工件哈希、独立负责人复核与必要检查结果。
-
-精确绑定是 `(tenant, workspace, skill UUID, version, package digest, artifact hashes, client session, Run, time)`。
-包 digest 按产品规范校验，不能把单个 SKILL.md 哈希当成 canonical package digest。
-目录存在、skill-export 成功、MCP 注册、`skill_loaded_reported` 或模型说“我已加载”均不能单独证明原生加载。
-若冻结客户端没有可核验加载证据，记录 UNKNOWN/BLOCKED，不补造截图/日志；不以离线回放替代。
-来源撤回后分别观察新的在线获取/导出是否被拒、既有文件/缓存是否残留、既有会话与新会话的实际加载状态。阻止新在线获取不等于回收副本或清除已注入上下文；停止使用旧会话并记录残留边界。
-
-受管在线重载是独立未验证项：需要另有受管机制、精确版本切换/再授权与撤回行为的真实证据，现有导出和 MCP Run 上报不提供此证明。本补丁不降低原要求，也不新增该功能。缺加载/模型上下文证据标 UNKNOWN，未执行标 NOT_RUN；业务成功不能填补两者。能力预检见 [PREFLIGHT](PREFLIGHT.md)，依据与交付边界见 [PRD-MAPPING](PRD-MAPPING.md)。
-
-## 证据封装
-
-每次实验单独受限目录，包含 freeze、tasks hash、oracle 承诺、bindings、原始客户端转录、服务日志、trace/bundle、加载记录、输出、独立判分和签认。
-证据索引每条含相对路径、SHA256、字节数、采集时间 UTC、采集者、证据类型与分别对应 prd-v0.3.A*、pilot.P*、题号及精确版本。
-原始敏感项留受限存储，公开附件另做脱敏副本并标记来源；不把私有原文、密钥、真实 endpoint 诊断贴入提交。
-对缺失日志记 not-collected；正文提及一个工具不证明调用。索引哈希只能证明固定字节，不能证明真实性。
+保留首做的精确资产版本或不可变 Run 前缀、候选修订、脱敏依据、审阅人和批准的 packet digest。编辑后用旧批准尝试发布应被拒绝，再按新修订审阅并明确发布。
+复做端在新项目和新会话中在线导出获批包。登记 tenant、workspace、Skill UUID、版本、包摘要、各文件哈希、原生会话、Run、时间。分别记录服务端授权获取、客户端原生加载事件、可观察的模型输入与实际操作。撤回后分别记录新下载、本地字节、会话上下文和受管在线重载；无法观察记 UNKNOWN，未执行记 NOT_RUN。
+证据存入受限目录，索引包括相对路径、SHA-256、字节数、UTC 时间、采集人、证据类型、PRD 条款、执行项和题号。保留原始来源及定位（含 PDF 页码和页内 UTF-8 范围）、工具请求回执、输出工件和独立判定。公开附件先脱敏，登记采集遗漏；记录主张与引用数量、返工、耗时和成本。
 
 ## 同版本 SQLite / AnySeek / Blob 恢复演练
 

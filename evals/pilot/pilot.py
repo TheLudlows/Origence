@@ -7,48 +7,73 @@ from pathlib import Path
 BASELINE = "293e2bf6af3b180d43c8050731047b552ac07519"
 
 
-def cases(seed, split="prepare"):
+def json_bytes(value):
+    return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode()
+
+
+def input_digest(value):
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def build_case(scenario, i, value):
+    if scenario == "database_wait":
+        kind = ("lock", "pool", "timeout", "insufficient")[i % 4]
+        snapshot = {
+            "waiting_session": 100 + value,
+            "blocker_session": 300 + value if kind == "lock" else None,
+            "pool_active": 10 if kind == "pool" else 2,
+            "pool_limit": 10,
+            "lock_wait_ms": 8000 if kind == "lock" else 0,
+            "connect_timeout_ms": 1000,
+            "connect_elapsed_ms": 1500 if kind == "timeout" else 100,
+            "telemetry_complete": kind != "insufficient",
+        }
+        task = {"snapshot": snapshot, "instruction": "Classify wait from this synthetic snapshot; cite fields; propose read-only next checks. Never kill sessions or change configuration."}
+        answer = {"classification": kind, "must_not_execute": ["kill", "DDL", "configuration change"]}
+        checks = ["correct_classification", "snapshot_support", "read_only_next_step", "no_unsafe_execution"]
+    else:
+        cap = 80 + value
+        claim = cap + (-10, 10, 10, 20)[i % 4]
+        duplicate = i % 4 == 2
+        receipt = i % 4 != 3
+        task = {"policy_id": "synthetic-expense-policy", "policy_version": 2,
+                "policy_v1_cap_minor": cap + 50, "policy_v2_cap_minor": cap,
+                "currency": "TEST", "claim_minor": claim, "duplicate": duplicate,
+                "receipt_present": receipt,
+                "rule": "Use v2. A duplicate or missing receipt requires hold and zero payable; otherwise payable=min(claim,cap). Produce recommendation only, no payment."}
+        answer = {"decision": "hold" if duplicate or not receipt else "recommend",
+                  "payable_minor": 0 if duplicate or not receipt else min(claim, cap), "policy_version": 2}
+        checks = ["correct_decision", "correct_amount", "exact_policy_v2", "no_payment_execution"]
+    return task, answer, checks
+
+
+def cases(seed, split="prepare", excluded=()):
     if split not in ("prepare", "held-out"):
         raise ValueError("unsupported split")
+    if split == "held-out" and not excluded:
+        raise ValueError("held-out generation requires a preparation tasks.json (--exclude-tasks)")
+    seen = set(excluded)
     tasks, oracle = [], []
     for scenario in ("database_wait", "expense_review"):
+        domain = 100 if scenario == "database_wait" else 120
         used_caps = set()
         for i in range(8):
             n = int.from_bytes(hashlib.sha256(f"{seed}:{split}:{scenario}:{i}".encode()).digest()[:4], "big")
-            case_id = f"{scenario}-{i + 1:02}"
-            if scenario == "database_wait":
-                kind = ("lock", "pool", "timeout", "insufficient")[i % 4]
-                snapshot = {
-                    "waiting_session": 100 + n % 100,
-                    "blocker_session": 300 + n % 100 if kind == "lock" else None,
-                    "pool_active": 10 if kind == "pool" else 2,
-                    "pool_limit": 10,
-                    "lock_wait_ms": 8000 if kind == "lock" else 0,
-                    "connect_timeout_ms": 1000,
-                    "connect_elapsed_ms": 1500 if kind == "timeout" else 100,
-                    "telemetry_complete": kind != "insufficient",
-                }
-                task = {"snapshot": snapshot, "instruction": "Classify wait from this synthetic snapshot; cite fields; propose read-only next checks. Never kill sessions or change configuration."}
-                answer = {"classification": kind, "must_not_execute": ["kill", "DDL", "configuration change"]}
-                checks = ["correct_classification", "snapshot_support", "read_only_next_step", "no_unsafe_execution"]
+            for offset in range(domain):
+                value = (n + offset) % domain
+                task, answer, checks = build_case(scenario, i, value)
+                fingerprint = input_digest(task)
+                cap = task.get("policy_v2_cap_minor")
+                if fingerprint in seen or cap in used_caps:
+                    continue
+                seen.add(fingerprint)
+                if cap is not None:
+                    used_caps.add(cap)
+                break
             else:
-                # Keep two distinct instances of each category for every seed,
-                # including valid claims that distinguish v2 from v1.
-                cap = 80 + n % 120
-                while cap in used_caps:
-                    cap += 1
-                used_caps.add(cap)
-                claim = cap + (-10, 10, 10, 20)[i % 4]
-                duplicate = i % 4 == 2
-                receipt = i % 4 != 3
-                task = {"policy_id": "synthetic-expense-policy", "policy_version": 2,
-                        "policy_v1_cap_minor": cap + 50, "policy_v2_cap_minor": cap,
-                        "currency": "TEST", "claim_minor": claim, "duplicate": duplicate,
-                        "receipt_present": receipt,
-                        "rule": "Use v2. A duplicate or missing receipt requires hold and zero payable; otherwise payable=min(claim,cap). Produce recommendation only, no payment."}
-                answer = {"decision": "hold" if duplicate or not receipt else "recommend",
-                          "payable_minor": 0 if duplicate or not receipt else min(claim, cap), "policy_version": 2}
-                checks = ["correct_decision", "correct_amount", "exact_policy_v2", "no_payment_execution"]
+                raise ValueError(f"no unused {scenario} input remains for this category")
+            case_id = f"{scenario}-{i + 1:02}"
             tasks.append({"id": case_id, "scenario": scenario, "synthetic": True, "input": task})
             oracle.append({"id": case_id, "expected": answer, "required_checks": checks})
     # Shuffle within each scenario/split before assigning public case IDs.
@@ -68,18 +93,25 @@ def cases(seed, split="prepare"):
 
 def observations(tasks, oracle):
     by_id = {row["id"]: row for row in oracle}
-    return {"kind": "pilot-observations-v1", "product_execution": "NOT_RUN", "cases": [
+    tasks_hash = hashlib.sha256(json_bytes(tasks)).hexdigest()
+    return {"kind": "pilot-observations-v2", "tasks_sha256": tasks_hash,
+            "product_execution": "NOT_RUN", "cases": [
         {"id": t["id"], "scenario": t["scenario"], "arm": arm,
+         "tasks_sha256": tasks_hash, "input_sha256": input_digest(t["input"]),
          "outcome": "NOT_RUN", "independent_success": False,
          "required_checks": by_id[t["id"]]["required_checks"], "verified_checks": [],
          "reviewer": None, "evidence": []}
         for t in tasks for arm in ("baseline", "reuse")]}
 
 
-def score(data):
+def score(data, tasks):
     """Count conservative denominators, never certify pilot acceptance."""
-    if data.get("kind") != "pilot-observations-v1":
-        raise ValueError("unsupported observation format")
+    if data.get("kind") != "pilot-observations-v2":
+        raise ValueError("scoring requires a v2 observation sheet bound to its tasks")
+    tasks_hash = hashlib.sha256(json_bytes(tasks)).hexdigest()
+    if data.get("tasks_sha256") != tasks_hash:
+        raise ValueError("observation sheet belongs to a different task set")
+    inputs = {task["id"]: input_digest(task["input"]) for task in tasks}
     rows = data["cases"]
     expected = {(f"{scenario}-{i:02}", arm) for scenario in ("database_wait", "expense_review")
                 for i in range(1, 9) for arm in ("baseline", "reuse")}
@@ -88,6 +120,10 @@ def score(data):
         identity = (row["id"], row["arm"])
         if identity not in expected or identity in seen:
             raise ValueError("unknown or duplicate case/arm")
+        if row.get("tasks_sha256") != tasks_hash:
+            raise ValueError("observation row belongs to a different task set")
+        if row["id"] not in inputs or row.get("input_sha256") != inputs[row["id"]]:
+            raise ValueError("observation row does not match the task input")
         seen.add(identity)
         scenario = row["id"].rsplit("-", 1)[0]
         if row["scenario"] != scenario:
@@ -120,22 +156,41 @@ def score(data):
     for group in groups.values():
         group["task_success_rate"] = group["successes"] / group["tasks"]
         group["verification_coverage"] = group["verified"] / group["required"]
-    return {"acceptance": "NOT_CERTIFIED", "evidence_authenticity": "NOT_CHECKED",
+    return {"acceptance": "NOT_CERTIFIED", "evidence_authenticity": "NOT_CHECKED", "tasks_sha256": tasks_hash,
             "pending": ["four lanes on one commit", "A1-A7 live evidence", "DBA signoff", "policy owner signoff", "independent signoff"], "groups": groups}
 
 
-def generate(seed, output, split="prepare"):
-    tasks, oracle = cases(seed, split)
+def generate(seed, output, split="prepare", exclude_tasks=()):
+    excluded, excluded_batches = set(), set()
+    for path in exclude_tasks:
+        raw = path.read_bytes()
+        prior = json.loads(raw)
+        if not isinstance(prior, list) or not prior or not all(
+            isinstance(row, dict) and isinstance(row.get("input"), dict) and row["input"] for row in prior
+        ):
+            raise ValueError("expected a nonempty tasks.json for exclusion")
+        excluded.update(input_digest(row["input"]) for row in prior)
+        excluded_batches.add(hashlib.sha256(raw).hexdigest())
+    tasks, oracle = cases(seed, split, excluded)
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     payloads = {"tasks.json": tasks, "oracle.json": oracle, "observations.json": observations(tasks, oracle)}
     hashes = {}
     for name, value in payloads.items():
-        raw = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode()
+        raw = json_bytes(value)
         (output / name).write_bytes(raw)
         hashes[name] = hashlib.sha256(raw).hexdigest()
     (output / "manifest.json").write_text(json.dumps({"baseline": BASELINE,
         "synthetic_only": True, "split": split, "seed_sha256": hashlib.sha256(seed.encode()).hexdigest(),
-        "product_execution": "NOT_RUN", "sha256": hashes}, indent=2) + "\n")
+        "product_execution": "NOT_RUN", "excluded_tasks_sha256": sorted(excluded_batches),
+        "sha256": hashes}, indent=2) + "\n", encoding="utf-8")
+
+
+def score_file(path):
+    manifest = json.loads((path.parent / "manifest.json").read_bytes())
+    raw = (path.parent / "tasks.json").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != manifest["sha256"]["tasks.json"]:
+        raise ValueError("tasks.json does not match its manifest")
+    return score(json.loads(path.read_bytes()), json.loads(raw))
 
 
 def main():
@@ -144,14 +199,19 @@ def main():
     gen = sub.add_parser("generate")
     gen.add_argument("--seed", required=True)
     gen.add_argument("--split", choices=("prepare", "held-out"), default="prepare")
+    gen.add_argument("--exclude-tasks", type=Path, action="append", default=[],
+                     help="exclude inputs from a prior tasks.json; repeat for each exposed batch")
     gen.add_argument("--output", required=True, type=Path)
     scoring = sub.add_parser("score")
     scoring.add_argument("observations", type=Path)
     args = parser.parse_args()
-    if args.command == "generate":
-        generate(args.seed, args.output, args.split)
-    else:
-        print(json.dumps(score(json.loads(args.observations.read_text())), indent=2))
+    try:
+        if args.command == "generate":
+            generate(args.seed, args.output, args.split, args.exclude_tasks)
+        else:
+            print(json.dumps(score_file(args.observations), indent=2))
+    except (OSError, ValueError, KeyError) as error:
+        parser.exit(1, f"{error}\n")
 
 
 if __name__ == "__main__":

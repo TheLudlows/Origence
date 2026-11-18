@@ -1,16 +1,18 @@
 import copy
+import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from pilot import cases, generate, observations, score
+from pilot import build_case, cases, generate, input_digest, observations, score, score_file
 
 
 class PilotTests(unittest.TestCase):
     def setUp(self):
         self.tasks, self.oracle = cases("test")
         self.data = observations(self.tasks, self.oracle)
+        self.excluded = {input_digest(task['input']) for task in self.tasks}
 
     def test_reproducible_and_seed_changes_instances(self):
         self.assertEqual(cases("test"), cases("test"))
@@ -18,7 +20,7 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(len(self.tasks), 16)
 
     def test_zero_observations_never_certify(self):
-        result = score(self.data)
+        result = score(self.data, self.tasks)
         self.assertEqual(result["acceptance"], "NOT_CERTIFIED")
         for group in result["groups"].values():
             self.assertEqual((group["tasks"], group["required"], group["task_success_rate"], group["verification_coverage"]), (8, 32, 0, 0))
@@ -26,7 +28,7 @@ class PilotTests(unittest.TestCase):
     def test_success_and_coverage_are_separate(self):
         row = self.data["cases"][0]
         row.update(outcome="COMPLETED", reviewer="independent-test-reviewer", evidence=["synthetic-evidence:1"], verified_checks=row["required_checks"][:2])
-        group = score(self.data)["groups"]["database_wait/baseline"]
+        group = score(self.data, self.tasks)["groups"]["database_wait/baseline"]
         self.assertEqual(group["task_success_rate"], 0)
         self.assertEqual(group["verification_coverage"], 2 / 32)
 
@@ -35,28 +37,28 @@ class PilotTests(unittest.TestCase):
             data = copy.deepcopy(self.data)
             mutation(data)
             with self.assertRaises(ValueError):
-                score(data)
+                score(data, self.tasks)
 
     def test_unsubstantiated_success_rejected(self):
         self.data["cases"][0]["independent_success"] = True
         with self.assertRaises(ValueError):
-            score(self.data)
+            score(self.data, self.tasks)
 
     def test_even_all_success_does_not_certify_pilot(self):
         for row in self.data["cases"]:
             row.update(outcome="COMPLETED", independent_success=True, reviewer="synthetic-reviewer", evidence=["fixture-only"], verified_checks=row["required_checks"][:])
-        self.assertEqual(score(self.data)["acceptance"], "NOT_CERTIFIED")
+        self.assertEqual(score(self.data, self.tasks)["acceptance"], "NOT_CERTIFIED")
 
     def test_duplicate_or_unknown_checks_rejected(self):
         for checks in (["snapshot_support", "snapshot_support"], ["unknown"]):
             data = copy.deepcopy(self.data)
             data["cases"][0].update(outcome="COMPLETED", reviewer="reviewer", evidence=["ref"], verified_checks=checks)
             with self.assertRaises(ValueError):
-                score(data)
+                score(data, self.tasks)
 
     def test_timeout_stays_in_denominator(self):
         self.data["cases"][0]["outcome"] = "TIMEOUT"
-        self.assertEqual(score(self.data)["groups"]["database_wait/baseline"]["tasks"], 8)
+        self.assertEqual(score(self.data, self.tasks)["groups"]["database_wait/baseline"]["tasks"], 8)
 
     def test_expense_oracle_matches_frozen_rule(self):
         for task, oracle in zip(self.tasks[8:], self.oracle[8:]):
@@ -68,7 +70,7 @@ class PilotTests(unittest.TestCase):
         # These are public test seeds, not the evaluator's sealed holdout seed.
         for seed, split in [(seed, split) for seed in ["public-development-1", "synthetic-holdout-test"] + [str(i) for i in range(100)] for split in ("prepare", "held-out")]:
             with self.subTest(seed=seed, split=split):
-                tasks, oracle = cases(seed, split)
+                tasks, oracle = cases(seed, split, self.excluded)
                 self.assertEqual(len(tasks), 16)
                 categories = {name: [] for name in ("normal", "capped", "duplicate", "missing")}
                 for task, answer in zip(tasks[8:], oracle[8:]):
@@ -102,7 +104,7 @@ class PilotTests(unittest.TestCase):
 
     def test_shuffle_reproducible_and_not_fixed_to_case_number(self):
         def mapping(seed, split, scenario):
-            tasks, oracle = cases(seed, split)
+            tasks, oracle = cases(seed, split, self.excluded)
             result = []
             for task, answer in zip(tasks, oracle):
                 if task["scenario"] != scenario:
@@ -115,7 +117,7 @@ class PilotTests(unittest.TestCase):
                     result.append("duplicate" if value["duplicate"] else "missing" if not value["receipt_present"] else "capped" if value["claim_minor"] > value["policy_v2_cap_minor"] else "normal")
             return result
         for split in ("prepare", "held-out"):
-            self.assertEqual(cases("seed-a", split), cases("seed-a", split))
+            self.assertEqual(cases("seed-a", split, self.excluded), cases("seed-a", split, self.excluded))
             for scenario in ("database_wait", "expense_review"):
                 self.assertNotEqual(mapping("seed-a", split, scenario), mapping("seed-b", split, scenario))
         for scenario in ("database_wait", "expense_review"):
@@ -124,7 +126,9 @@ class PilotTests(unittest.TestCase):
     def test_generated_agent_input_excludes_oracle(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "new"
-            generate("synthetic-holdout-test", output, "held-out")
+            prep = Path(tmp) / "prepare"
+            generate("test", prep)
+            generate("synthetic-holdout-test", output, "held-out", [prep / "tasks.json"])
             tasks = json.loads((output / "tasks.json").read_text())
             self.assertNotIn("synthetic-holdout-test", json.dumps(tasks))
             self.assertNotIn("held-out", json.dumps(tasks))
@@ -141,6 +145,74 @@ class PilotTests(unittest.TestCase):
             self.assertEqual(json.loads((output / "manifest.json").read_text())["product_execution"], "NOT_RUN")
             with self.assertRaises(FileExistsError):
                 generate("different", output)
+
+    def test_held_out_excludes_exposed_inputs_regardless_of_ids_or_key_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            previous = []
+            exposed = set()
+            for seed in ("public-development-1", "additional-public-batch"):
+                batch, _ = cases(seed)
+                for item in batch:
+                    exposed.add(input_digest(item["input"]))
+                    item["id"] = "renumbered-" + item["id"]
+                    item["input"] = dict(reversed(list(item["input"].items())))
+                path = root / (seed + ".json")
+                path.write_text(json.dumps(batch), encoding="utf-8")
+                previous.append(path)
+            for label, paths in (("a", previous), ("b", reversed(previous))):
+                generate("public-review-demo-0", root / label, "held-out", paths)
+            raw = (root / "a" / "tasks.json").read_bytes()
+            self.assertEqual(raw, (root / "b" / "tasks.json").read_bytes())
+            held = {input_digest(item["input"]) for item in json.loads(raw)}
+            self.assertEqual(len(held), 16)
+            self.assertTrue(held.isdisjoint(exposed))
+            manifest = json.loads((root / "a" / "manifest.json").read_bytes())
+            self.assertEqual(set(manifest["excluded_tasks_sha256"]),
+                             {hashlib.sha256(path.read_bytes()).hexdigest() for path in previous})
+
+    def test_missing_or_exhausted_exclusions_do_not_publish_a_batch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "new"
+            with self.assertRaisesRegex(ValueError, "requires a preparation"):
+                generate("seed", target, "held-out")
+            excluded = Path(tmp) / "exposed.json"
+            excluded.write_text(json.dumps([{"input": build_case("database_wait", 0, i)[0]}
+                                            for i in range(100)]), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "no unused database_wait"):
+                generate("seed", target, "held-out", [excluded])
+            self.assertFalse(target.exists())
+
+    def test_score_checks_the_bundle_and_each_observation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a, b = root / "a", root / "b"
+            generate("public-development-1", a)
+            generate("public-review-demo-0", b, "held-out", [a / "tasks.json"])
+            sheet = a / "observations.json"
+            original = json.loads(sheet.read_bytes())
+            peer = json.loads((b / sheet.name).read_bytes())
+            expected = hashlib.sha256((a / "tasks.json").read_bytes()).hexdigest()
+            self.assertEqual(score_file(sheet)["tasks_sha256"], expected)
+            sheet.write_text(json.dumps(peer), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "different task set"):
+                score_file(sheet)
+            mixed = copy.deepcopy(original)
+            mixed["cases"][0] = peer["cases"][0]
+            sheet.write_text(json.dumps(mixed), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "row belongs to a different task set"):
+                score_file(sheet)
+            mixed["cases"][0]["tasks_sha256"] = expected
+            sheet.write_text(json.dumps(mixed), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "task input"):
+                score_file(sheet)
+            sheet.write_text(json.dumps(dict(original, kind="pilot-observations-v1")), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "v2 observation"):
+                score_file(sheet)
+            sheet.write_text(json.dumps(original), encoding="utf-8")
+            (a / "tasks.json").write_bytes((b / "tasks.json").read_bytes())
+            with self.assertRaisesRegex(ValueError, "manifest"):
+                score_file(sheet)
 
 
 if __name__ == "__main__":
