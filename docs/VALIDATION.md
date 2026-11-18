@@ -1225,7 +1225,18 @@ CI must pass before merge; actual final main will be independently retested.
   响应。1024px 和 320px 均通过键盘切页、重复导航、浏览器前进后退、无效路径、
   延迟目录响应保留输入焦点和文本、编辑及提取对话框在可访问性树中的名称、
   Escape 和关闭按钮返回原控件，以及对话框打开时无整页横向溢出。
-  本地验证脚本从仓库根目录运行 `node /workspace/issue76-audit/focus-regression.cjs`。
+  浏览器回归脚本 `ui/scripts/check-navigation-focus-browser.cjs` 单独运行，使用
+  Node 24、Playwright 1.62.1 和 Chromium。从仓库根目录执行以下命令，按本机调整
+  Chromium 路径。Playwright 装在临时目录。
+
+  ```sh
+  browser_deps=$(mktemp -d)
+  npm install --prefix "$browser_deps" --ignore-scripts playwright@1.62.1
+  npm --prefix ui ci --ignore-scripts
+  npm --prefix ui run build
+  NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+    node ui/scripts/check-navigation-focus-browser.cjs
+  ```
 - `node ui/scripts/check-run-verification-browser.mjs` 通过。
   `cargo fmt --all -- --check`、
   `cargo clippy --locked --all-targets --all-features -- -D warnings` 和
