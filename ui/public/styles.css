@@ -540,8 +540,12 @@ dialog::backdrop {
 .asset-tabs [aria-selected="true"] {
   background: var(--soft);
   border-color: var(--accent);
-  color: var(--accent);
   font-weight: 600;
+}
+.asset-tabs [aria-selected="true"],
+.asset-version-status.good,
+.asset-comparison ins {
+  color: light-dark(#106f60, var(--accent));
 }
 .asset-comparison-controls {
   align-items: flex-end;
