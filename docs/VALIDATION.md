@@ -1,9 +1,36 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。已同步 main
+最近一次本地核验为 2026-11-18，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-18 · #87 双客户端归档互读与独立 Run
+
+Windows，main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)，AnySeek `6a46fc7`。新建 workspace，仅向两端提供同一个临时 writer key。Claude Code 2.1.327 报告模型 `glm-5.3`，Codex CLI 0.170.0 指定 `gpt-6.2-sol`，其事件未报告精确模型修订。整轮耗时 62.26 秒。
+
+- Claude Code 显式归档含随机答案的问答，并创建和准备第一个 Run。Codex 凭 turn ID 读回答案，反向归档另一份问答，创建和准备第二个 Run。全新 Claude Code 会话按第二个 turn ID 读回。两个读取提示均未提供目标答案，两端最终输出都包含对方的随机答案；服务端按 ID 核对了问答正文和两份准备回执。
+- 用相同凭据通过 HTTP 重放准备请求，回执和事件列表保持一致。重用事件 ID 改变查询返回 409。缺少 embedding 的 vector 准备返回 503，Run 新增一条服务端观察到的准备失败事件。
+- 同 workspace 的另一管理员读取归档和 Run 均返回 404。轮换后旧凭据返回 401，新凭据保留原会话、归档和准备回执。撤销后，读取及重放均返回 401。
+
+本轮覆盖 [#87](https://github.com/TheLudlows/Origence/issues/87) 的接入验收。业务答案、原生 Skill 加载和独立业务核验属于 [#91](https://github.com/TheLudlows/Origence/issues/91) 的双场景试点。
+
+仓库内的[复跑脚本](../tools/live_archive_smoke.py)在 Windows 上使用上述主干构建和 AnySeek 完成同一组检查，耗时 67.68 秒。两次跨客户端读取均返回正确的随机答案，准备回执、冲突、失败事件与凭据隔离检查全部通过。整理脚本时，一次旧二进制在启动客户端前因缺少会话接口返回 404，另一次未能从 Codex 的最终答复核对对端答案。最终复跑显式读取 Codex 的最终消息文件。此脚本的 Linux 实机运行待验证。
+
+Rust 1.98.0 的 `cargo fmt --all -- --check`、`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过。Python 脚本编译检查通过，`test_mcp_schema.py` 的 3 项测试通过。运行方式见[双客户端归档验收](CLIENTS.md#复跑双客户端归档验收)。
+
+## 2026-11-18 · Codex 非交互检索与版本读取
+
+在 Windows 上用 main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)、
+本地 AnySeek 和 Codex CLI 0.170.0 运行合成报销题。两轮都指定 `gpt-6.2-sol`，
+使用相同任务提示、只读沙箱和 `approval_policy = "never"`。每轮使用新 workspace、
+独立 reader key 和相同的 v1、v2 规则。各轮的直接 MCP 对照均能读取 v2。
+
+- 第一轮耗时 31.09 秒。Codex 发现了两个工具，两次调用 `context_search` 均因客户端审批失败，Origence 未收到工具调用。
+- 第二轮耗时 34.62 秒。为 `context_search` 和 `context_get` 分别配置 `approval_mode = "approve"` 后，
+  搜索返回 v2，随后按命中的资产 ID 和版本读到 v2 正文。客户端返回的资产 ID、版本和金额 100 TEST 单位均与预期相符。
+
+该结果覆盖一题合成预检。P0 真实任务与独立签认仍待执行。配置方法见[客户端接入](CLIENTS.md#用-codex-非交互验证只读检索)。
 
 ## 2026-11-17：#88 独立 Skill 候选入口（本地切片）
 
