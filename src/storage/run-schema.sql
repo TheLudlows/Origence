@@ -4,6 +4,7 @@ CREATE TABLE oc_runs (
     input TEXT NOT NULL, input_hash TEXT NOT NULL, created_at INTEGER NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,run_id)
 );
+CREATE INDEX oc_runs_owner_created_at ON oc_runs(tenant_id,workspace_id,owner_key_id,created_at);
 CREATE TABLE oc_run_events (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
     event_id BLOB NOT NULL, sequence INTEGER NOT NULL CHECK(sequence>0),
@@ -17,4 +18,10 @@ CREATE TABLE oc_run_asset_refs (
     asset_id BLOB NOT NULL, asset_version INTEGER NOT NULL CHECK(asset_version>0),
     run_id BLOB NOT NULL, event_id BLOB NOT NULL, evidence_ref_id BLOB NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id)
+);
+CREATE TABLE oc_run_verifications (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
+    verification_id BLOB NOT NULL, payload TEXT NOT NULL, record TEXT NOT NULL,
+    withdrawal TEXT,
+    PRIMARY KEY(tenant_id,workspace_id,run_id,verification_id)
 );

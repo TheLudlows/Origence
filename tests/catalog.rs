@@ -186,6 +186,175 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
             .status(),
         401
     );
+    let admin = rotated_auth;
+    // Exact server-side filters share the existing authority/visibility checks.
+    let staging = s.identified_memory(&admin, "staging", serde_json::from_value(json!({
+        "identity":{"subject":{"kind":"service","stable_id":"Atlas-1"},"predicate":"release.rule","context":{"env":"staging"}},
+        "content":"staging evidence", "expected_version":0
+    })).unwrap()).await.unwrap();
+    s.memory(
+        &admin,
+        "legacy",
+        MemoryInput {
+            fact_key: "legacy".into(),
+            content: "unknown identity".into(),
+            publish_if_authorized: true,
+        },
+    )
+    .await
+    .unwrap();
+    while worker::process_next(&s).await.unwrap() {}
+    for (filter, expected) in [
+        (json!({"context":{"env":"production"}}), 2),
+        (
+            json!({"subject":{"kind":"service","stable_id":"Atlas-1"},"predicate":"release.rule"}),
+            2,
+        ),
+        (json!({"context":{"env":"staging"}}), 1),
+        (json!({"context":{}}), 0),
+        (json!({"identified":false}), 1),
+        (json!({"predicate":"absent"}), 0),
+        (
+            json!({"subject":{"kind":"service","stable_id":"atlas-1"}}),
+            0,
+        ),
+    ] {
+        let filter = serde_json::from_value(filter).unwrap();
+        let mut cursor = Uuid::nil();
+        let mut found = Vec::new();
+        loop {
+            let page = s.list_memories(&reader, &filter, cursor, 1).await.unwrap();
+            for item in page["items"].as_array().unwrap() {
+                assert!(item.get("content").is_none());
+                assert!(item.get("semantic_values").is_none());
+                found.push(item["asset_id"].clone());
+            }
+            if page["next_after"].is_null() {
+                break;
+            }
+            let next: Uuid = serde_json::from_value(page["next_after"].clone()).unwrap();
+            assert!(next > cursor);
+            cursor = next;
+        }
+        assert_eq!(found.len(), expected);
+        assert!(
+            s.list_memories(&outsider, &filter, Uuid::nil(), 25)
+                .await
+                .unwrap()["items"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let filter = json!({"context":{"env":"staging"}}).to_string();
+    let filtered = http
+        .get(format!("{base}/v1/assets"))
+        .query(&[
+            ("kind", "memory"),
+            ("memory_filter", &filter),
+            ("limit", "1"),
+        ])
+        .bearer_auth(&reader_key.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(filtered.status(), 200);
+    assert_eq!(
+        filtered.json::<Value>().await.unwrap()["items"][0]["asset_id"],
+        staging["asset_id"]
+    );
+    for filter in [
+        json!({"identified":false,"predicate":"release.rule"}),
+        json!({"context":{"env":1}}),
+        json!({"unknown":true}),
+    ] {
+        let response = http
+            .get(format!("{base}/v1/assets"))
+            .query(&[("kind", "memory"), ("memory_filter", &filter.to_string())])
+            .bearer_auth(&reader_key.token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 422);
+    }
+    let empty = origence::memory_identity::MemoryCatalogFilter::default();
+    assert!(
+        s.list_memories(&reader, &empty, Uuid::nil(), 0)
+            .await
+            .is_err()
+    );
+    assert!(
+        s.list_memories(&reader, &empty, Uuid::nil(), 101)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        http.get(format!("{base}/v1/assets?kind=memory&memory_filter=%7B%7D"))
+            .bearer_auth(&admin_key.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        http.get(format!(
+            "{base}/v1/assets?kind=knowledge&memory_filter=%7B%7D"
+        ))
+        .bearer_auth(&reader_key.token)
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        422
+    );
+    // Pending rows also count against the fixed work budget. No worker/model IO
+    // is needed to prove empty-page continuation beyond the 100-candidate cap.
+    for n in 0..101 {
+        s.memory(
+            &admin,
+            &format!("pending-{n}"),
+            MemoryInput {
+                fact_key: format!("pending-{n}"),
+                content: "pending".into(),
+                publish_if_authorized: true,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let absent = serde_json::from_value(json!({"predicate":"absent"})).unwrap();
+    let first = s
+        .list_memories(&reader, &absent, Uuid::nil(), 25)
+        .await
+        .unwrap();
+    assert_eq!(first["items"], json!([]));
+    assert!(!first["next_after"].is_null());
+    let last = s
+        .list_memories(
+            &reader,
+            &absent,
+            serde_json::from_value(first["next_after"].clone()).unwrap(),
+            25,
+        )
+        .await
+        .unwrap();
+    assert_eq!(last["items"], json!([]));
+    assert!(last["next_after"].is_null());
+    let plan: Vec<(i64,i64,i64,String)> = origence::storage::sqlite_db::query_as(
+        "EXPLAIN QUERY PLAN SELECT id,kind,deleted,current_version,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id>? ORDER BY id LIMIT 101"
+    ).bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::nil()).fetch_all(store.pool()).await.unwrap();
+    assert!(
+        plan.iter()
+            .any(|row| row.3.contains("SEARCH") && row.3.contains("INDEX")),
+        "{plan:?}"
+    );
+    assert!(
+        !plan
+            .iter()
+            .any(|row| row.3.contains("TEMP B-TREE") || row.3.contains("SCAN")),
+        "{plan:?}"
+    );
     host.abort();
 }
 
@@ -446,5 +615,218 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
             .len(),
         1
     );
+    host.abort();
+}
+
+#[tokio::test]
+async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
+    use origence::storage::sqlite_db as db;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "trends")
+        .await
+        .unwrap();
+    let owner = store.issue_key(scope, "writer").await.unwrap();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let owner_auth = service.auth(&owner.token).await.unwrap();
+    let admin_auth = service.auth(&admin.token).await.unwrap();
+    let mut runs = Vec::new();
+    for _ in 0..26 {
+        let run = RunInput {
+            run_id: Uuid::new_v4(),
+            summary: "synthetic task".into(),
+        };
+        service.create_run(&owner_auth, run.clone()).await.unwrap();
+        service.create_run(&owner_auth, run.clone()).await.unwrap();
+        runs.push(run.run_id);
+    }
+    for (tenant, workspace) in [
+        (scope.tenant_id, Uuid::new_v4()),
+        (Uuid::new_v4(), Uuid::new_v4()),
+    ] {
+        store
+            .create_workspace(tenant, workspace, "other")
+            .await
+            .unwrap();
+        let key = store
+            .issue_key(
+                Scope {
+                    tenant_id: tenant,
+                    workspace_id: workspace,
+                },
+                "admin",
+            )
+            .await
+            .unwrap();
+        let auth = service.auth(&key.token).await.unwrap();
+        service
+            .create_run(
+                &auth,
+                RunInput {
+                    run_id: Uuid::new_v4(),
+                    summary: "isolated".into(),
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    let end = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+        - 1_000;
+    let hour = 3_600_000;
+    let day = 24 * hour;
+    // Fix the timestamp of existing authoritative records in this disposable database.
+    for (index, id) in runs.iter().enumerate() {
+        let created_at = match index {
+            0 => end - 7 * day - 1,
+            1 => end - 7 * day,
+            2 => end - day - 1,
+            3 => end - day,
+            4 => end - day + hour - 1,
+            5 => end - day + hour,
+            6 => end,
+            _ => end - 1,
+        };
+        db::query(
+            "UPDATE oc_runs SET created_at=? WHERE tenant_id=? AND workspace_id=? AND run_id=?",
+        )
+        .bind(created_at)
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(*id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    }
+    let mut tx = store
+        .begin(store.authenticate(&owner.token).await.unwrap())
+        .await
+        .unwrap();
+    for (window, count, width, expected_total) in [("24h", 24, hour, 22), ("7d", 7, day, 24)] {
+        let value = tx.run_creation_overview_at(window, end).await.unwrap();
+        assert_eq!(value["timezone"], "UTC");
+        assert_eq!(value["scope"], "current_logical_key");
+        assert_eq!(value["start_ms"], end - count * width);
+        assert_eq!(value["end_ms"], end);
+        assert_eq!(value["created_runs"], expected_total);
+        let series = value["series"].as_array().unwrap();
+        assert_eq!(series.len(), count as usize);
+        for (index, row) in series.iter().enumerate() {
+            let start = end - (count - index as i64) * width;
+            assert_eq!(row["start_ms"], start);
+            assert_eq!(row["end_ms"], start + width);
+        }
+        let counts = series
+            .iter()
+            .map(|row| row["created_runs"].as_i64().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(counts.iter().sum::<i64>(), expected_total);
+        if window == "24h" {
+            assert_eq!(counts[..2], [2, 1]);
+            assert_eq!(counts[23], 19);
+        } else {
+            assert_eq!(counts[0], 1);
+            assert_eq!(counts[5], 1);
+            assert_eq!(counts[6], 22);
+        }
+    }
+    drop(tx);
+
+    let list = service
+        .list_runs(&owner_auth, Uuid::nil(), 25)
+        .await
+        .unwrap();
+    assert_eq!(list["items"].as_array().unwrap().len(), 25);
+    assert!(list["next_after"].is_string());
+    let plan: Vec<(i64, i64, i64, String)> = db::query_as(
+        "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM oc_runs INDEXED BY oc_runs_owner_created_at \
+         WHERE tenant_id=? AND workspace_id=? AND owner_key_id=? AND created_at>=? AND created_at<?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(owner.key_id)
+    .bind(end - day)
+    .bind(end)
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    let [(_, _, _, path)] = plan.as_slice() else {
+        panic!("expected a single index search: {plan:?}");
+    };
+    assert!(path.starts_with("SEARCH oc_runs USING COVERING INDEX oc_runs_owner_created_at"));
+    assert!(path.contains(
+        "tenant_id=? AND workspace_id=? AND owner_key_id=? AND created_at>? AND created_at<?"
+    ));
+    println!("Run creation count plan: {path}");
+    // Move all fixtures safely inside both rolling windows for the real HTTP check.
+    db::query("UPDATE oc_runs SET created_at=? WHERE tenant_id=? AND workspace_id=?")
+        .bind(end)
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+    let replacement = service.rotate_key(&admin_auth, owner.key_id).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/v1/runs/overview", listener.local_addr().unwrap());
+    let app = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let http = reqwest::Client::new();
+    for (token, expected) in [
+        (replacement["token"].as_str().unwrap(), 26),
+        (&admin.token, 0),
+        (&reader.token, 0),
+    ] {
+        for (query, buckets) in [("", 24), ("?window=7d", 7)] {
+            let value: Value = http
+                .get(format!("{endpoint}{query}"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(value["created_runs"], expected);
+            let series = value["series"].as_array().unwrap();
+            assert_eq!(series.len(), buckets);
+            assert_eq!(
+                series
+                    .iter()
+                    .map(|row| row["created_runs"].as_i64().unwrap())
+                    .sum::<i64>(),
+                expected
+            );
+        }
+    }
+    for (query, token, expected) in [
+        ("", None, 401),
+        ("", Some(owner.token.as_str()), 401),
+        ("?window=30d", Some(admin.token.as_str()), 422),
+        ("?tenant_id=forbidden", Some(admin.token.as_str()), 400),
+        ("?workspace_id=forbidden", Some(admin.token.as_str()), 400),
+        ("?owner_key_id=forbidden", Some(admin.token.as_str()), 400),
+    ] {
+        let mut request = http.get(format!("{endpoint}{query}"));
+        if let Some(token) = token {
+            request = request.bearer_auth(token);
+        }
+        assert_eq!(request.send().await.unwrap().status(), expected, "{query}");
+    }
     host.abort();
 }

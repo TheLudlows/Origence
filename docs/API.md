@@ -2,11 +2,11 @@
 
 适用本地宿主 SQLite 控制状态以及 AnySeek 正文、摘要、全文、向量与一跳图投影。本文负责 HTTP v1 与公开库接口契约；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
-按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份) · [AML](#aml-http-协议)。
+按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份)。
 
 所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。原有命令式修改接口需 1–200 个 ASCII 字符的 `Idempotency-Key`；Run/Skill 使用下文的稳定 ID、修订号与摘要；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 
-## 私有会话、Run 与 Skill
+## 私有会话、Trace 与 Skill
 
 `GET /v1/session` 从认证派生逻辑 key 与服务端 session ID（首次可创建绑定）。已有
 `/v1/sessions/{session_id}/turns`、反馈和 Improve 接口只接受当前 key 的归档，
@@ -15,6 +15,8 @@ Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可�
 `POST /admin/keys/{id}/rotate`，新凭据延续原逻辑 key 并撤销旧凭据；响应中的新 token
 应安全保存。独立签发的新 key 不能读取原归档。客户端通过
 [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.md) 使用同一边界。
+
+Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权限和来源有效性处理。
 
 | Run 接口 | 输入与结果 |
 | --- | --- |
@@ -26,7 +28,8 @@ Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可�
 
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
 结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
-详情见 [Run 契约](contracts/runs.md)。
+外部核验记录由 Run 所有者针对精确前缀通过 HTTP 提交，保留转录来源与核验身份的声明状态。
+详情见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.md)。
 
 | Skill 接口 | 输入与结果 |
 | --- | --- |
@@ -40,8 +43,8 @@ Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可�
 | `DELETE /v1/skills/{id}/versions/{version}` | 有发布权的角色撤回版本，阻断后续在线导出 |
 
 候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
-当前由调用方提交候选，不自动读取原生客户端会话或自动发布。包格式和边界见
-[Skill 契约](contracts/skills.md)。
+调用方提交候选，也可用选定经历 CLI 将手工填写的方法绑定到一个精确依据。包格式和边界见
+[Skill 契约](contracts/skills.md)和[选定经历 CLI](SKILL-CANDIDATE-CLI.md)。
 
 ## 检索诊断
 
@@ -72,9 +75,9 @@ server_observed。首次成功时另存私有上下文快照；相同请求重�
 
 ## AnySeek 统一检索
 
-全文、向量和一跳图候选使用同一专用 collection，不再支持 LanceDB 后端。适配器将 Origence 预分词
+每个 workspace 的全文、向量和一跳图候选使用同一 AnySeek collection。适配器将 Origence 预分词
 编码为固定 SHA-256 词项并保留 AND 语义；向量由 Origence 生成，模型 profile 与维度
-由目录绑定固定。AnySeek 只返回候选，正文、来源和可见性仍以 SQLite/Blob 为准。
+由目录绑定固定。AnySeek 保存发布后的分块正文和摘要，SQLite 保存权限、发布版本、来源和内容哈希，Blob 保存原始文件。返回前，Origence 核验正文、权限、版本与来源。
 
 发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 个 chunk Record，编码后请求至多 2 MiB；
 图元数据附在其中一个确定的 chunk 上，不新增 Record。同一发布通过一个组提交，新业务版本使用独立组。网络结果未知时检查完整组，
@@ -133,6 +136,37 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
 资产页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
 分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
+
+运行总览使用独立的 `GET /v1/runs/overview?window=24h|7d`，默认 `24h`。
+仅统计当前 tenant、workspace 和逻辑 key 的持久化 Run 创建记录。
+响应包含 `scope:"current_logical_key"`、`window`、`timezone:"UTC"`、
+`start_ms`、`end_ms`、`created_runs` 和 `series`。
+`series` 按时间升序返回 24 个一小时桶或 7 个 24 小时桶，每桶
+含 `start_ms`、`end_ms`、`created_runs`，包括零计数。
+起止为 Unix 毫秒，窗口和桶均左闭右开，以本次服务端读取时刻为终点向前滚动。
+此计数随授权轮换保留，事件、重试和证据撤回不会新增或抹去创建记录。
+窗口参数不能覆盖鉴权范围。详情见 [Run 合同](contracts/runs.md#run-creation-overview)。
+该接口使用新建的 SQLite 权威库。新版拒绝缺少创建时间索引的旧库，旧版也拒绝
+含新索引的库。两个方向均在修改数据库前拒绝。
+
+记忆目录支持额外的 `memory_filter=<URL 编码 JSON>`，例如：
+`{"subject":{"kind":"service","stable_id":"Atlas"},"predicate":"release.rule","context":{"env":"production"}}`。
+库入口为 `Service::list_memories(auth, &MemoryCatalogFilter, after, limit)`。
+
+- `subject` 可省略；提供时必须包含现有 `kind` 与精确业务 `stable_id`，不推断名称或 key。
+- `predicate` 可省略；提供时按现有身份规范校验并精确匹配。
+- `context` 可省略表示不限；提供时比较完整字符串键值集合，键顺序无关，大小写/Unicode
+  原样比较。`{}` 只匹配空条件，不是通配符，也不是子集条件。
+- `identified` 可省略表示不限，`true` 只匹配已保存的显式身份，`false` 只匹配无身份资产；
+  `false` 不能同时指定主体/属性/条件。未知身份不会推断。未知字段或非法组合拒绝。
+- 仅 `kind=memory` 接受此字段，JSON 字符串最大 16,384 字节。
+
+筛选目录仍是实时、有界的候选游标接口，而不是全量计数：单次按 scoped 主键从 after
+检查最多 100 个候选（另取一个 lookahead），包含非记忆、未发布或隐藏候选；在返回前
+完成精确筛选及正常资产来源/语义可见性复核。`limit` 是返回上限；可能少于 limit 或为空，
+只要 `next_after` 非 null 就应继续，变更筛选须清空游标。不会为凑满一页无限扫描。
+未指定 `memory_filter` 的既有目录行为不变。记忆 UI 通过此服务端筛选分页，不以本页
+文本过滤或搜索命中冒充目录；知识页的“筛选已加载的资产”仍明确是本地筛选。
 
 Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打开数据库或执行 CLI。
 
@@ -196,6 +230,11 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 ## 检索
 
 返回 hits 含 asset_id/version/chunk_id/source_event_id/locator/score。locator 给出原文 UTF-8 字节区间、行号，PDF 另有页号。只取当前已发布版本，显式历史版本走 get。
+
+私有 Run 的固定 PDF 引用可用 `GET /v1/runs/{id}/pdf-source?sequence=N&evidence_ref_id=UUID`
+读取已核对的页内提取文本。该接口要求 Run 所有权和现有原件权限，返回精确资产版本、
+已知页码及可验证的文本片段，或明确无页内定位。`original=true` 获取该引用的原件。
+详情见 [Run 契约](contracts/runs.md#pdf-page-preview-from-a-private-run)。
 
 向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐或 reranker；向量查询在 AnySeek 中对授权候选排名；不承诺对原后端或生产分布具有同等排序与性能。
 
@@ -263,7 +302,7 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 ## 通用所属 workspace 与消息批次库接口
 
-以下能力通过公开 Rust Service API 使用，不要求 AML 协议或 HTTP 路由。
+以下能力通过公开 Rust Service API 使用。
 
 - `issue_key_with_capabilities(auth, role, KeyCapabilities { allow_owned_workspaces: true })`：只有目标 root 的当前 admin 可签发；既有 `issue_key` 默认 false，admin 或同 root 新 key 不自动继承。直接绑定 child 的 key 不可获得继续派生能力。
 - `ensure_owned_workspace(auth, target_id, name)`：当前有显式能力的 root writer 及以上，在同一事务创建或检查一层所属 workspace。目标 tenant/owner 不匹配返回冲突；不改绑或随机改 ID。返回的 AuthContext 保留原 key，只提供 reader/writer 权限。
@@ -275,32 +314,7 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 - 同一 workspace 的合法新 key 可命中同一回执，但 job.created_by 不变。原 key 撤销/降权/关闭能力后，新 key 不接管原消息发布任务；Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。正常轮换先排空旧任务，再撤销旧 key。原有 cleanup 是特权回收任务：仍允许当前 admin 在原 creator 撤销后显式重试清理，但不转移 created_by，也不发布数据。
 - 原文来源 JSON 保留完整 batch/session/role/timestamp 和输入顺序；分块定位包含 source_event_id、external_batch_id、message_index、source_path、消息内 UTF-8 byte_start/end 及 parser 规格。同 session 的多批次不会仅由局部 message_index 区分。原始批次不伪造 SessionTurn/Feedback。
 
-派生能力 root key 是受信服务端凭据，可以访问其 root 下全部用户 workspace。`user_id` 只选作用域，不验证终端用户身份；接入服务负责终端用户访问约束，不应向终端用户分发 root key。
-
-## AML HTTP 协议
-
-AML 只在 `origence::api::aml` 适配层定义 DTO、校验、确定性 ID、通用调用转换与等待/响应策略。宿主路由默认关闭：显式设置 `OC_ENABLE_AML=true` 或启动 `serve --enable-aml`。库宿主使用 `api::ApiOptions { enable_aml: true }` 与 `router_with_options` / `host::serve_with_options`；原 `router` / `serve` 默认关闭。
-
-先由 root workspace 当前 admin 经通用 `POST /admin/keys` 签发 `{"workspace_id":"<root UUID>","role":"writer","allow_owned_workspaces":true}`，或用 `key-create <root UUID> --role writer --allow-owned-workspaces`。reader key 也必须显式获授能力才能 Search。`/admin/aml/namespace` 已移除。宿主开关不授予数据权限，key 能力也不自动启用路由。
-
-所有入口使用 `Authorization: Bearer <token>`；Add 使用请求体 request_id，不要求 Idempotency-Key。
-
-| 方法和路径 | 请求及响应 |
-| --- | --- |
-| `POST /aml/add` | `{request_id,user_id,session_id,messages:[{role:"user"或"assistant",content:"原文",timestamp:可选Unix毫秒整数}]}` |
-| `POST /aml/search` | `{query,user_id,top_k,options:可选字符串数组}` → `{data:[{id,content}]}` |
-
-用户 workspace 使用冻结 UUIDv5 命名空间和版本化长度编码，由认证 key 的 tenant/root 与完整 user_id 计算；[确定性编码合同](contracts/aml-adapter.md#确定性编码细节)。大小写、空格与 Unicode 编码形式原样保留，不截断或归一化；session、request、key、模型或重启不改变定位。需要隔离的新数据集使用另一个显式 root。ID 不是权限凭证，不承诺数学上的无碰撞；已有 ID 的 tenant/owner 不符则冲突，不能改绑或随机回退。
-
-Add 将 request_id 编成 `aml:add:v1:` + 完整 UTF-8 的 SHA-256 小写十六进制摘要，原 ID 同时保留为 MessageBatch.batch_id 并参与一致性核验。一次 Add 创建一个通用 source event、asset、message_batch_ingest job 与命令回执，整批发布且全部索引可检索后才返回 HTTP 200、`{success:true,request_id,user_id,session_id}`；三个 ID 原样回传，不返回 202。跨 key 同键复用原任务但不转移 created_by；任何内容、session、角色、时间、顺序或接受规格变化返回 409。省略 timestamp 与 null 等价，不按时间重排。
-
-新 parser 是 `message-batch-ranges-v1`，parser_version=1、chunking_version=1，raw_only=true。每条消息按最多 2400 UTF-8 字节独立分块；来源 JSON 保留解码后原文而不保留 HTTP JSON 空白/转义拼写。locator 与 Search 的 Source metadata 包括 source_event_id、external_batch_id、session_id、message_index/count、role、timestamp、parser/version、chunking_version、source_path、byte_basis、byte_start/end。范围是具体消息 content UTF-8 的半开区间，不是拼接资产或来源 JSON 的偏移；同 session 多批次通过完整来源标识区别。旧 `aml-message-ranges-v1` 是历史来源标记，其原始字节偏移不重新解释，已有档案不重写。
-
-Search 只读计算/授权目标，不创建未知用户 workspace；先核验实时 root 能力，合法未知目标返回空 data。固定原文 vector，关闭摘要/图/重排，allow_partial=false；options 字符串数组接受但不影响查询/写入，不生成答案。按既有相关性与 ID tie-break 返回至多 top_k 条。新库随机资产/分块 UUID 与旧库不同，同分顺序可能不同；不据此声称质量变化。来源标注和正文都是外部证据，不是指令。
-
-输入边界保持请求体最多 10 MiB；三个 ID 各 1–4096 UTF-8 字节且无 NUL；每批 1–256 条非空文本消息、正文合计最多 1,000,000 UTF-8 字节；query 非空、无 NUL、最多 4000 UTF-8 字节；top_k 为 1–100。AML 仅接受 user/assistant，通用库才接受 system/tool 等标签。timestamp 为可选有符号 i64 Unix 毫秒，不补接收时间。不支持图片、数组 content、未知字段或非法类型，返回脱敏 422；HTTP body 超限为 413，不截断后发布。
-
-Add 最长观察原任务 25 分钟；超时 503，原任务继续，HTTP 断开不取消或复制任务。未认证 401、无权限 403、内容/规格冲突和当前来源/索引已不可见 409、模型未配置/失败或仍未完成 503。每次重放重新查询原回执实时发布状态，不能沿用旧 success。显式 retry 保持 job/source/asset 和原接受规格；新 generation 的未发布 chunk ID 可变，已发布证据不改写。库调用方可直接使用通用 submit_message_batch / message_batch_status / wait_message_batch，而不依赖 AML DTO。
+派生能力 root key 是受信服务端凭据，可以访问 root 下全部所属 workspace。调用方负责核对终端用户身份并选择获授权的目标 workspace。root key 仅供受信服务使用。
 
 ## 显式记忆语义
 
@@ -374,9 +388,9 @@ locator 沿用记忆语义原始来源与字节范围，自动提取的新成员
 
 ## 会话归档与幂等反馈
 
-仅新建数据库。SessionTurn 是不可变的问答档案，由调用方在回答完成后明确提交；不自动保存检索命中，不调用模型，也不生成资产、向量、图、任务或新的 Worker。`state:"archived"` 只表示关系型归档已提交，`state:"recorded"` 只表示反馈已提交，不表示可检索或已学习。Improve、Learning、会话向量召回、自动改权和指导均未在此切片实现。
+SessionTurn 是不可变的问答档案，由调用方在回答完成后明确提交。`state:"archived"` 表示归档已提交，`state:"recorded"` 表示反馈已提交。学习需要显式调用下文的 [Improve](#显式-improve--learning)。
 
-所有入口要求 writer/reviewer/admin，与原始来源读取权限一致；同 workspace 内上述角色共享档案，并非创建者私有。tenant/workspace 完全来自认证，撤销密钥后的旧 AuthContext 也不能继续读写。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil；POST 要求 Idempotency-Key，GET 不要求。未知字段、缺少必要字段、未知枚举均拒绝。
+归档轮次和反馈的读写均要求 writer 或更高权限，并且 `session_id` 必须是认证逻辑 key 的绑定会话。tenant、workspace 与逻辑 key 均来自认证，读写和重试都检查凭据是否仍然有效。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil。POST 要求 `Idempotency-Key`。未知字段、缺少必要字段、未知枚举均拒绝。
 
 `POST /v1/sessions/{session_id}/turns` 示例：
 
@@ -401,7 +415,7 @@ locator 沿用记忆语义原始来源与字节范围，自动提取的新成员
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该资产快照根来源，reference.asset_version 是实际使用的资产版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id；相同正文和有序 used_evidence（即使换 Idempotency-Key 或同 workspace 换调用方）返回原标识，改变内容返回 409，不新增版本。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执；任一引用失败全部回滚。
+归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执，任一引用失败则回滚。
 
 反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
 

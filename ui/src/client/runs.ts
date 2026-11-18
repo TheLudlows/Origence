@@ -18,14 +18,28 @@ import {
   type ViewContext,
 } from "./components.js";
 import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
-import { sourcePreview } from "./source.js";
+import { runPdfPreview, sourcePreview } from "./source.js";
+import { runCreationTrend } from "./run-creation-trend.js";
 
-export function citation(ref: Provenance, ctx: ViewContext) {
+export function citation(ref: Provenance, ctx: ViewContext, pdf?: { path?: string }) {
   const source = el("div");
+  const pdfPath = pdf?.path;
+  const openPdf = pdfPath && ctx.role !== "reader"
+    ? button("核验 PDF 页内引用", async () => {
+        if (!openPdf) return;
+        openPdf.disabled = true;
+        try {
+          await runPdfPreview(source, pdfPath, ctx);
+        } finally {
+          openPdf.disabled = false;
+        }
+      })
+    : null;
   return el(
     "div",
     "citation",
-    ref.asset_id
+    ref.asset_id && (!pdf || (typeof ref.asset_version === "number" &&
+      Number.isSafeInteger(ref.asset_version) && ref.asset_version > 0))
       ? button(
           `${short(ref.asset_id)} · v${ref.asset_version ?? "?"}`,
           () => ctx.navigate("asset", ref.asset_id, ref.asset_version),
@@ -33,11 +47,13 @@ export function citation(ref: Provenance, ctx: ViewContext) {
         )
       : badge(ref.type),
     code(ref),
-    ref.source_event_id && ctx.role !== "reader"
-      ? button("核验原始引用", () =>
-          sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx),
-        )
-      : null,
+    pdf
+      ? openPdf ?? el("p", "muted", "没有可用于核验的页内来源。")
+      : ref.source_event_id && ctx.role !== "reader"
+        ? button("核验原始引用", () =>
+            sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx),
+          )
+        : null,
     source,
   );
 }
@@ -52,7 +68,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   );
   const cards = el("div", "stats");
   const list = panel("当前 key 的运行");
-  root.append(cards, list);
+  root.append(cards, runCreationTrend(ctx.signal), list);
   const results = await Promise.allSettled([
     api.get<{ status: string }>("/health/ready", ctx.signal),
     api.get<Page<Run>>("/v1/runs?limit=25", ctx.signal),
@@ -84,7 +100,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   );
   cards.append(
     panel(
-      "延迟 / Token 成本",
+      "业务成功率 / 端到端 P95 / Token / 成本",
       el("div", "stat-value", "未采集"),
       el("p", "muted", "没有计量数据时保留未知"),
     ),
@@ -192,8 +208,28 @@ function eventOrigin(event: RunEvent): [string, string] {
   }
 }
 
+interface ArchivedPdfReference {
+  evidence_ref_id: string;
+  source_event_id: string;
+  locator: Record<string, unknown>;
+  reference: { chunk_id: string; asset_id: string; asset_version: number };
+}
+function pdfLocator(locator?: Record<string, unknown>) {
+  return locator?.page != null ||
+    (typeof locator?.parser === "string" && locator.parser.startsWith("pdf-"));
+}
+function archivedPdf(value: unknown): value is ArchivedPdfReference {
+  const item = value as Partial<ArchivedPdfReference> | null;
+  return typeof item?.evidence_ref_id === "string" &&
+    typeof item.source_event_id === "string" &&
+    typeof item.reference?.chunk_id === "string" &&
+    typeof item.reference.asset_id === "string" &&
+    Number.isSafeInteger(item.reference.asset_version) && item.reference.asset_version > 0 && pdfLocator(item.locator);
+}
+
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
+  const assessments = el("div");
   let after = 0;
   const timeline = el("div", "timeline"),
     details = el("div"),
@@ -216,8 +252,41 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])
       : [];
-    for (const ref of refs) details.append(citation(ref, ctx));
-    for (const ref of event.references) details.append(code(ref));
+    const pdfRefs = event.references.filter(archivedPdf);
+    const shown = new Set<string>();
+    const pdfPath = (ref: ArchivedPdfReference) => {
+      shown.add(ref.evidence_ref_id);
+      const query = new URLSearchParams({
+        sequence: String(event.sequence),
+        evidence_ref_id: ref.evidence_ref_id,
+      });
+      return `/v1/runs/${encodeURIComponent(id)}/pdf-source?${query}`;
+    };
+    for (const ref of refs) {
+      if (!pdfLocator(ref.locator)) {
+        details.append(citation(ref, ctx));
+        continue;
+      }
+      const archived = pdfRefs.find((r) =>
+        r.reference.chunk_id === ref.chunk_id &&
+        r.reference.asset_id === ref.asset_id &&
+        r.reference.asset_version === ref.asset_version &&
+        r.source_event_id === ref.source_event_id,
+      );
+      details.append(citation(ref, ctx, { path: archived && pdfPath(archived) }));
+    }
+    for (const ref of event.references) {
+      if (archivedPdf(ref) && !shown.has(ref.evidence_ref_id)) {
+        details.append(citation({
+          type: "asset_chunk",
+          asset_id: ref.reference.asset_id,
+          asset_version: ref.reference.asset_version,
+          source_event_id: ref.source_event_id,
+          locator: ref.locator,
+        }, ctx, { path: pdfPath(ref) }));
+      }
+      details.append(code(ref));
+    }
     details.append(
       button("获取此处的固定前缀摘要", async () => {
         try {
@@ -275,6 +344,11 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       if (events[0]) selectEvent(events[0]);
       more.hidden = value.next_after === null;
     } catch (e) {
+      events.length = 0;
+      timeline.replaceChildren();
+      details.replaceChildren();
+      assessments.replaceChildren();
+      summary.textContent = "";
       message(error, e);
     } finally {
       more.disabled = false;
@@ -299,7 +373,81 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       panel("事件顺序", timeline, more),
       panel("节点与上下文证据", details),
     ),
+    panel("外部核验记录", assessments),
     error,
   );
+  await load();
+  if (events.length && !ctx.signal.aborted) await verificationPanel(assessments, id, ctx);
+}
+
+// Independent DTO: external claims never create an authenticated event role.
+interface VerificationRecord {
+  assessment: {
+    verification_id: string;
+    through_sequence: number;
+    prefix_digest: string;
+    verifier_label: string;
+    assessed_at_ms: number;
+    conclusion: "passed" | "failed" | "inconclusive";
+    basis_summary: string;
+    basis_sequences: number[];
+    reported_skill_version: { skill_id: string; version: number; digest: string } | null;
+  };
+  recorder_principal_id: string;
+  recorded_at_ms: number;
+  withdrawal: { reason: string; recorded_at_ms: number } | null;
+}
+async function verificationPanel(root: HTMLElement, id: string, ctx: ViewContext) {
+  const body = el("div"), error = el("div");
+  let after: string | null = null;
+  const records: VerificationRecord[] = [];
+  let generation = 0;
+  const load = async () => {
+    const request = ++generation;
+    more.disabled = true;
+    error.replaceChildren();
+    try {
+      const page = await api.get<Page<VerificationRecord>>(
+        `/v1/runs/${encodeURIComponent(id)}/verifications?limit=25${after ? "&after=" + after : ""}`, ctx.signal,
+      );
+      if (ctx.signal.aborted || request !== generation) return;
+      records.push(...page.items);
+      after = page.next_after;
+      body.replaceChildren(...records.map((r) => {
+        const a = r.assessment;
+        return panel(
+          r.withdrawal ? "已撤销的外部核验" : "Owner 转录的外部核验",
+          badge(({ passed: "外部结论：通过", failed: "外部结论：失败", inconclusive: "外部结论：无法确定" })[a.conclusion]),
+          el("p", "muted", `核验者（未经认证的声明）：${a.verifier_label}`),
+          el("p", "muted", `声称核验时间：${date(a.assessed_at_ms)} · 平台记录时间：${date(r.recorded_at_ms)}`),
+          el("p", "mono", `记录凭据：${r.recorder_principal_id}`),
+          el("p", "mono", `固定前缀：1–${a.through_sequence} · ${a.prefix_digest}`),
+          el("p", "", a.basis_summary),
+          el("p", "muted", `依据事件：${a.basis_sequences.join(", ")}`),
+          a.reported_skill_version ? code(a.reported_skill_version) : el("p", "muted", "实际使用的 Skill 版本：未知"),
+          a.reported_skill_version ? el("p", "muted", "上述版本由 owner 声明，不证明加载或使用。") : null,
+          r.withdrawal ? el("p", "", `撤销：${r.withdrawal.reason} · ${date(r.withdrawal.recorded_at_ms)}`) : null,
+        );
+      }));
+      if (!records.length) body.append(empty("暂无外部核验记录", "自报成功不代表核验通过；未记录的核验保持未知。"));
+      more.hidden = !after;
+    } catch (e) {
+      if (ctx.signal.aborted || request !== generation) return;
+      records.length = 0;
+      after = null;
+      body.replaceChildren();
+      more.hidden = false;
+      message(error, e);
+    } finally { if (request === generation) more.disabled = false; }
+  };
+  const more = button("加载核验记录 / 重试", load);
+  const refresh = button("刷新核验记录", async () => {
+    after = null;
+    records.length = 0;
+    body.replaceChildren();
+    refresh.disabled = true;
+    try { await load(); } finally { refresh.disabled = false; }
+  });
+  root.replaceChildren(el("p", "muted", "仅 owner 转录外部证据；平台未核验其结论，核验者标签不授予 Run 正文访问权。"), body, more, refresh, error);
   await load();
 }

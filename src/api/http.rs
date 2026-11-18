@@ -15,18 +15,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ApiOptions {
-    /// Explicit host opt-in. Authorization still requires a capable root key.
-    pub enable_aml: bool,
-}
-
 pub fn router(service: Service) -> Router {
-    router_with_options(service, ApiOptions::default())
-}
-
-pub fn router_with_options(service: Service, options: ApiOptions) -> Router {
-    let router = Router::new()
+    Router::new()
         .route(
             "/health/live",
             get(|| async { Json(json!({"status":"ok"})) }),
@@ -70,15 +60,7 @@ pub fn router_with_options(service: Service, options: ApiOptions) -> Router {
         .route("/v1/jobs/{id}", get(job))
         .route("/v1/jobs/{id}/{action}", post(job_action))
         .route("/v1/files", post(upload))
-        .route("/v1/files/{id}", get(file).delete(delete_file));
-    let router = if options.enable_aml {
-        router
-            .route("/aml/add", post(aml_add))
-            .route("/aml/search", post(aml_search))
-    } else {
-        router
-    };
-    router
+        .route("/v1/files/{id}", get(file).delete(delete_file))
         .merge(super::foundation::routes())
         .layer(DefaultBodyLimit::max(crate::parsing::MAX_FILE))
         .with_state(service)
@@ -216,6 +198,7 @@ struct Version {
 #[serde(deny_unknown_fields)]
 struct AssetPage {
     kind: String,
+    memory_filter: Option<String>,
     after: Option<Uuid>,
     limit: Option<usize>,
 }
@@ -225,6 +208,22 @@ async fn assets(
     h: HeaderMap,
     Query(page): Query<AssetPage>,
 ) -> Result<Json<Value>> {
+    if let Some(filter) = page.memory_filter {
+        if page.kind != "memory" || filter.len() > 16384 {
+            return Err(AppError::Invalid("invalid memory filter".into()));
+        }
+        let filter = serde_json::from_str::<crate::memory_identity::MemoryCatalogFilter>(&filter)
+            .map_err(|_| AppError::Invalid("invalid memory filter".into()))?;
+        return Ok(Json(
+            s.list_memories(
+                &auth(&s, &h).await?,
+                &filter,
+                page.after.unwrap_or_default(),
+                page.limit.unwrap_or(50),
+            )
+            .await?,
+        ));
+    }
     Ok(Json(
         s.list_assets(
             &auth(&s, &h).await?,
@@ -394,25 +393,6 @@ async fn revoke_key(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.revoke_key(&auth(&s, &h).await?, id).await?))
-}
-
-async fn aml_add(
-    State(s): State<Service>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<Json<crate::api::aml::AddResponse>> {
-    let auth = auth(&s, &h).await?;
-    let input = tokio::task::spawn_blocking(move || crate::api::aml::parse_add(&body))
-        .await
-        .map_err(|e| AppError::Internal(e.into()))??;
-    Ok(Json(super::aml::add(&s, &auth, input).await?))
-}
-async fn aml_search(State(s): State<Service>, h: HeaderMap, body: Bytes) -> Result<Json<Value>> {
-    let auth = auth(&s, &h).await?;
-    let input = tokio::task::spawn_blocking(move || crate::api::aml::parse_search(&body))
-        .await
-        .map_err(|e| AppError::Internal(e.into()))??;
-    Ok(Json(super::aml::search(&s, &auth, input).await?))
 }
 
 async fn archive_turn(

@@ -57,6 +57,7 @@ mod read_model_tests;
 mod relational;
 #[cfg(feature = "local-storage")]
 pub(crate) mod retrieval;
+mod run_verification;
 mod runs;
 mod schema;
 mod semantics;
@@ -111,7 +112,7 @@ fn hash(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes.as_ref()))
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)

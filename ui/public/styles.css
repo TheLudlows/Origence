@@ -82,7 +82,8 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+[role="tabpanel"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -282,8 +283,7 @@ nav {
 .page-heading p {
   margin-top: 5px;
 }
-.actions,
-.tabs {
+.actions {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -537,7 +537,20 @@ dialog::backdrop {
 .login h1 {
   font-size: 23px;
 }
-.tabs .field {
+.asset-tabs [aria-selected="true"] {
+  background: var(--soft);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.asset-tabs [aria-selected="true"],
+.asset-version-status.good,
+.asset-comparison ins {
+  color: light-dark(#106f60, var(--accent));
+}
+.asset-comparison-controls {
+  align-items: flex-end;
+}
+.asset-comparison-controls .field {
   min-width: 100px;
   max-width: 150px;
 }

@@ -8,7 +8,7 @@ import {
   status,
   type ViewContext,
 } from "./components.js";
-import type { Job, Receipt } from "./types.js";
+import type { Asset, Job, Receipt } from "./types.js";
 const terminal = new Set(["completed", "failed", "cancelled", "superseded"]);
 
 export async function trackJob(
@@ -38,6 +38,32 @@ export async function trackJob(
         state.append(
           button("查看资产 →", () => ctx.navigate("asset", asset), "link"),
         );
+      if (asset && ["failed", "cancelled", "superseded"].includes(job.state)) {
+        const current = el("div");
+        state.append(
+          el(
+            "p",
+            "muted",
+            "任务状态不代表当前资产版本。重新读取以确认仍可访问的已发布内容。",
+          ),
+          button("读取当前资产", async () => {
+            try {
+              const latest = await api.get<Asset>(`/v1/assets/${asset}`, ctx.signal);
+              current.replaceChildren(
+                el("p", "", `当前已发布 v${latest.version} · ${latest.title}`),
+                button(
+                  "查看当前资产 →",
+                  () => ctx.navigate("asset", asset),
+                  "link",
+                ),
+              );
+            } catch (error) {
+              message(current, error);
+            }
+          }),
+          current,
+        );
+      }
       const action = async (name: string) => {
         try {
           await api.post(

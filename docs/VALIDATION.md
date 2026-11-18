@@ -1,9 +1,105 @@
 # Origence · 当前验证
 
-核验日期：2026-11-17。已同步 main
+最近一次本地核验为 2026-11-18，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-18 · #87 双客户端归档互读与独立 Run
+
+Windows，main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)，AnySeek `6a46fc7`。新建 workspace，仅向两端提供同一个临时 writer key。Claude Code 2.1.327 报告模型 `glm-5.3`，Codex CLI 0.170.0 指定 `gpt-6.2-sol`，其事件未报告精确模型修订。整轮耗时 62.26 秒。
+
+- Claude Code 显式归档含随机答案的问答，并创建和准备第一个 Run。Codex 凭 turn ID 读回答案，反向归档另一份问答，创建和准备第二个 Run。全新 Claude Code 会话按第二个 turn ID 读回。两个读取提示均未提供目标答案，两端最终输出都包含对方的随机答案；服务端按 ID 核对了问答正文和两份准备回执。
+- 用相同凭据通过 HTTP 重放准备请求，回执和事件列表保持一致。重用事件 ID 改变查询返回 409。缺少 embedding 的 vector 准备返回 503，Run 新增一条服务端观察到的准备失败事件。
+- 同 workspace 的另一管理员读取归档和 Run 均返回 404。轮换后旧凭据返回 401，新凭据保留原会话、归档和准备回执。撤销后，读取及重放均返回 401。
+
+本轮覆盖 [#87](https://github.com/TheLudlows/Origence/issues/87) 的接入验收。业务答案、原生 Skill 加载和独立业务核验属于 [#91](https://github.com/TheLudlows/Origence/issues/91) 的双场景试点。
+
+仓库内的[复跑脚本](../tools/live_archive_smoke.py)在 Windows 上使用上述主干构建和 AnySeek 完成同一组检查，耗时 67.68 秒。两次跨客户端读取均返回正确的随机答案，准备回执、冲突、失败事件与凭据隔离检查全部通过。整理脚本时，一次旧二进制在启动客户端前因缺少会话接口返回 404，另一次未能从 Codex 的最终答复核对对端答案。最终复跑显式读取 Codex 的最终消息文件。此脚本的 Linux 实机运行待验证。
+
+Rust 1.98.0 的 `cargo fmt --all -- --check`、`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过。Python 脚本编译检查通过，`test_mcp_schema.py` 的 3 项测试通过。运行方式见[双客户端归档验收](CLIENTS.md#复跑双客户端归档验收)。
+
+## 2026-11-18 · Codex 非交互检索与版本读取
+
+在 Windows 上用 main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)、
+本地 AnySeek 和 Codex CLI 0.170.0 运行合成报销题。两轮都指定 `gpt-6.2-sol`，
+使用相同任务提示、只读沙箱和 `approval_policy = "never"`。每轮使用新 workspace、
+独立 reader key 和相同的 v1、v2 规则。各轮的直接 MCP 对照均能读取 v2。
+
+- 第一轮耗时 31.09 秒。Codex 发现了两个工具，两次调用 `context_search` 均因客户端审批失败，Origence 未收到工具调用。
+- 第二轮耗时 34.62 秒。为 `context_search` 和 `context_get` 分别配置 `approval_mode = "approve"` 后，
+  搜索返回 v2，随后按命中的资产 ID 和版本读到 v2 正文。客户端返回的资产 ID、版本和金额 100 TEST 单位均与预期相符。
+
+该结果覆盖一题合成预检。P0 真实任务与独立签认仍待执行。配置方法见[客户端接入](CLIENTS.md#用-codex-非交互验证只读检索)。
+
+## 2026-11-17：#88 独立 Skill 候选入口（本地切片）
+
+基于 `293e2bf6af3b180d43c8050731047b552ac07519` 的独立 CLI、选定依据绑定修订、
+合成权限/撤回回归与未验收边界见 [#88 验证记录](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md)。
+未发布，不改变下方历史证据，也不代表五路 P0 联合验收。
+
+## 2026-11-17：#90 控制台事实与知识治理（本地）
+
+基线 main `293e2bf6af3b180d43c8050731047b552ac07519`，独立分支
+`feat/console-governance-p0`。选取旧本地 `be3474b` 的目录过滤和 `e9dc434` 的任务/
+409 反馈，重新适配当前 SQLite/AnySeek 正文存储，不搬旧 schema、STATUS 或其它功能。
+不改 Run UI、来源核验接口、共享导航/DTO、CI、存储格式或权限。
+
+记忆目录通过 `memory_filter` 与 `Service::list_memories` 精确匹配持久身份：主体、
+属性和完整条件集合；未知身份不推断。每次按 scope 主键 seek 最多 100 个候选，另取
+1 个 lookahead；在同一读事务筛选、复核正常资产来源/语义可见性，再返回最多 limit 条。
+候选游标允许空页续翻，不返回总数，不无限扫描。目录无正文，身份定义及写入不变。
+人工审查新增 SQL：单表 `oc_assets`，绑定 tenant/workspace/after；无 JOIN、子查询、
+新表/索引、迁移、事务内原生 IO 或中间提交。EXPLAIN 回归确认 SEARCH/INDEX，无 SCAN
+或 TEMP B-TREE。此证据不等于生产规模性能验收。
+
+知识编辑的 409 显式保留草稿及原 expected_version，用户可重读当前版本比较；失败、
+取消或 superseded 的已知资产任务可重新读取当前已发布元数据，不把任务失败等同资产丢失。
+重试/取消仍调用原接口与权限，完成或撤回状态不能由 UI 绕过。
+
+### 自动化结果
+
+Linux，Node 24.22.1 / Rust 1.98.0：
+
+- `npm --prefix ui run check`、`npm --prefix ui test`：构建、19 项通过。
+  复用同一 pages fixture，保留 Run/PDF/关联等既有断言；新增筛选续翻与任务/409 子用例。
+- `cargo test --locked --test local catalog::`：5 项通过，包含目录 HTTP/Service、
+  精确过滤、生产/staging、未知身份、撤回、轮换、跨 workspace、limit 1 翻页、
+  101 个未发布候选的空页续翻、非法过滤/上限及既有精确 Run 反查。
+- `cargo test --locked --lib memory_identity::` 与加 `--no-default-features`：各 9 项通过。
+- `cargo test --locked --test local racing_expected_versions_supersede_the_loser`：1 项通过。
+- `cargo test --locked --no-default-features --features sqlite --test local catalog::`：
+  3 项 semantic_catalog 通过；HTTP/原生目录测试由 local-storage cfg 排除，不能算复跑。
+- `cargo build --locked`、`cargo fmt --all -- --check`、`git diff --check` 通过。
+  default / `--no-default-features` / `--no-default-features --features sqlite` 三组
+  `cargo clippy --locked --all-targets -- -D warnings` 通过。
+
+### 本地真实浏览器范围
+
+使用当前 main 钉住的 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`
+（Rust 1.99.1 重建），本分支 Origence/Node UI，Chromium 156.0.8078.79 headless。
+当前 `tools/anyseek_smoke.py --anyseek-binary <pin binary> --run python3 <fixture>`
+包裹三组复用的 Playwright 脚本；各自 fresh SQLite v2/AnySeek 目录、一次性测试 key、
+合成文档，无 API 拦截，无付费模型/生产数据。原脚本因记忆正文标签、响应等待条件以及不适用的普通 chunk 高亮假设失败；
+修正选择器/精确请求等待，并改用真实 source_span 语义事实后重跑。属性由后台 API
+预置（UI 代理不开放管理属性路径），不修改代理白名单，不将普通 chunk 偏移冒充
+来源区间；以上失败不作为产品通过证据。
+
+记忆流程通过：reader 目录以真实过滤请求得到 production 25+1 条，已撤回条目不返回；
+主体/属性/完整条件、staging、未知身份、空条件与筛选重置均核验；撤回 staging 后重筛为空。
+浏览器编辑 production 时身份字段锁定，提交 v2 后同主体 staging 仍为原正文/v1。
+另用后台登记属性与真实语义写入产生带非零 source_span 的中文、emoji、组合字符引用：
+浏览器点击核验后的 mark 等于权威来源 UTF-8 字节切片，reader 直接读原始来源为 403。
+正常显式事实不因本次验证获得额外高亮能力；PDF 页内文本仍独立未完成。
+
+知识流程通过：真实损坏 PDF 更新/重试均失败，v1 仍可读与关键词检索；浏览器旧表单
+遭遇真实 expected_version 409，保留草稿并重读 v2；reader 无更新按钮且写入/任务访问拒绝，
+writer 不能撤回来源，已完成任务 retry/cancel 为 409，撤回失败来源后不能重试。
+Run 只复验不改动：320px 旧 Run 引用在当前 v2 时仍打开固定 v1；撤回清正文、旧引用
+再点击/固定 URL 刷新/重开 Run 拒绝旧正文；另一 key 被拒绝及真实事件来源标签，共 7 项通过。
+
+未推送、无新 CI；真实 Windows、实体设备/辅助技术、全部语义状态、PDF 页内高亮、
+完整 #76 与外部双客户端/企业任务均未在本路完成。截图、临时数据和凭据不提交。
 
 ## 2026-11-17：#82 同步 #85 后解决文档冲突（当前）
 
@@ -613,8 +709,7 @@ MCP 失败位置为 [schema_object](../tools/mcp_smoke.py#L299)。诊断运行�
 [清理前 VALIDATION](https://github.com/TheLudlows/Origence/blob/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/VALIDATION.md)、
 [历史依赖审计](https://github.com/TheLudlows/Origence/blob/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/DEPENDENCY_AUDIT.md)
 和[原始工件](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/evidence)查阅。
-仓库 evidence 目录内的既有原始工件保持不变。历史结果只属于其标明的提交/后端，
-旧文中的“当前”“进行中”“待验收”不作为现在的状态。
+历史结果以链接中的原始工件及其标明的提交和后端为准。当前进度见 [STATUS](STATUS.md)。
 
 ## 历史文档整理检查（PR #75）
 
@@ -953,3 +1048,424 @@ Shared-console Ctrl+C is best effort until verified there. If signal delivery fa
 or grace expires, owned-process termination is explicitly a forced stop; closing
 or killing the parent terminal may bypass finally and leave children alive. The
 launcher is not a production service supervisor. No remote PR/push/deployment.
+
+## 2026-11-17 — #87 minimal MCP Run host adapter (local only)
+
+Base and read-only latest-main check: `293e2bf6af3b180d43c8050731047b552ac07519`.
+Independent branch `p0/mcp-host-adapter`, worktree `/workspace/origence-mcp`.
+Read repository AGENTS.md, current status/design, Run contract and client/API
+implementation; no repository `.agents/skills` exists and workspace `.agents`
+is empty. Interface and two-host observation boundaries are frozen in
+[the host contract example](../examples/run-host-contract.md).
+
+Four MCP tools delegate through typed HostClient methods to existing Run HTTP
+routes. Shared DTOs, Run storage, authentication, SQL, navigation, CI and STATUS
+are unchanged. Manual execution-input review found no added SQL or storage calls;
+all authority/source/version/replay decisions stay on the existing HTTP path.
+Embedded local MCP explicitly rejects these new Run operations with a server-URL
+requirement; the documented remote CLI/MCP path is covered.
+
+Linux, Rust `1.98.0 (88d9e12ae 2026-08-18)`, rmcp `1.8.0`, models disabled,
+fresh temporary SQLite, synthetic content and loopback AnySeek protocol fixture:
+
+- `cargo fmt --all -- --check`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test --test local mcp_runs -- --nocapture`: 1 passed.
+- `cargo test --test local foundation_http -- --nocapture`: 1 passed.
+- `cargo test --test local retrieval_diagnostics -- --nocapture`: 2 passed.
+- `git diff --check`: passed.
+
+The new test launches two actual Origence stdio processes and verifies tool
+listing, same-logical-key archive and turn readback, independent Run IDs, other
+writer/admin denial, unchanged retries and changed-payload conflicts, all seven
+existing report variants, explicit unknown, rejection of forged server events,
+HTTP preparation success/replay/failure, source withdrawal, credential rotation
+and revocation of the replacement credential on an already-open MCP connection.
+Initial test failure was a fixture mistake: it revoked the old credential ID
+after rotation. The corrected test revokes the returned new credential ID;
+server key semantics were not changed. Final rerun passed.
+
+These synthetic peers are not Claude Code/Codex task evidence. Claude Code is
+not installed in this environment; no real host/model task was invoked. Actual
+two-host/version-frozen task observations, native Windows and enterprise task
+outcomes remain unaccepted. No production credentials/data, paid model calls,
+migration, push, PR, Issue update, merge or deployment was performed.
+
+### #87 publication follow-up — explicit HTTP feedback/Improve and MCP gates
+
+Continues local implementation `3877322753ff8bd2b921f5fe1a43e6a33352b108`.
+Read #87 and #89: the four Run tools do not replace explicit turn archival,
+session/evidence feedback or Improve, and do not add independent verification.
+[Runnable synthetic HTTP commands](../examples/run-host-contract.md#explicit-archive--feedback--improve-over-existing-http)
+use the same logical-key session and preserve explicit opt-in for Improve.
+Run feedback remains a report; helpful feedback is not verified task success.
+No service API, persistence, generic DTO, CI, navigation or STATUS change.
+
+New protocol coverage: MCP archive → HostClient HTTP feedback → readback,
+idempotent feedback and changed-payload conflict, other writer/admin denial,
+explicit Improve with disabled models returning unavailable and leaving no accepted
+improvement. The existing 20 local synthetic-model Learning regressions cover
+positive Improve HTTP acceptance, processing, exact citations, recovery and source
+withdrawal. No real provider or paid model is used.
+
+The old exact seven-tool gates were updated to the exact eleven-tool contract,
+including required fields and nested context schema. Report is now explicitly an
+object in the adapter schema and still decoded into the existing strict Run DTO.
+The first full smoke found a second stale assumption: revoked calls defaulted to
+retrieval `{query}` arguments. Valid per-Run-tool arguments now exercise the same
+strict unauthenticated error assertion for every tool; no error gate was relaxed.
+
+Final local results (Linux, declared Origence Rust 1.98.0):
+
+- `cargo test --test local mcp_runs -- --nocapture`: 1 passed.
+- `cargo test --test local local_host_api_cli_mcp_models_and_recovery -- --nocapture`: 1 passed.
+- `cargo test --test local learning_loop -- --nocapture`: 20 passed (local synthetic model fixture).
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo build --locked`, `cargo fmt --all -- --check`, `git diff --check`: passed.
+- `PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py`: 3 passed.
+- Actual stdio eleven-tool schema check with a temporary synthetic auth stub: passed.
+- `python3 tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary target/debug/origence`: passed host-forwarding and offline modes, all protocol negotiations, exact schemas/tool lists, sanitized errors, live revocation, EOF and reopen.
+
+The smoke used a clean checkout of the CI-pinned real AnySeek source
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`, rebuilt with Rust 1.99.1,
+`--locked --no-default-features --bin anyseek_server -j 2`. Binary SHA256:
+`8e9eb15edd86fb38b4a837476ed219bc6c7bc85a89d9f7460bb4c18316a57beb`.
+Upstream build warnings were not changed. All databases, collections, content and
+credentials were disposable synthetic fixtures. This is real service/protocol
+coverage, not real Claude Code/Codex task or independent business-result evidence.
+
+Immediately before publication, remote main remained
+`293e2bf6af3b180d43c8050731047b552ac07519`; no branch-matching PR existed.
+No rebase or force push is needed. User authorization now permits a normal push
+and independent draft PR with Refs #87; the earlier local-only record above is
+historical. Exact published HEAD and CI state are recorded in the PR/handoff.
+Real two-host/version-frozen tasks and Windows remain unaccepted. No Issue update,
+merge or deployment is authorized by this follow-up.
+
+## 2026-11-17 — #89 Run 外部核验记录（本地 P0 切片）
+
+- 已 fetch 核实 main/base：`293e2bf6af3b180d43c8050731047b552ac07519`。
+  实现与下列测试对应提交：`5965f50848a17a6206c91110ffee8d2636efd32c`；
+  独立分支 `p0/run-verification`，工作树 `/workspace/Origence-run-verification`。
+- 合同见 [run-verification](contracts/run-verification.md)。仅 owner 转录外部结论，
+  不将 `reporter=user/test`、外部核验者标签、自报成功或 prepared 状态解释为认证角色/平台验真。
+  前缀摘要、记录凭据、服务端时间、声称核验者/时间、结论、依据序号/摘要和可撤销状态分别保存。
+  版本未知不填 latest；核验者角色不授予 Run 正文权。MCP/接入工具接口未改变。
+- 环境：Linux，Rust `1.98.0 (88d9e12ae 2026-08-18)`，Node `v24.22.1`。
+  `CARGO_HOME=/workspace/.cargo RUSTUP_HOME=/workspace/.rustup CARGO_TARGET_DIR=/workspace/target-run-verification`。
+  只使用 tempdir 新库、合成文本/身份、Models::disabled 和 loopback AnySeek 协议夹具；无生产凭据、真实任务或付费模型调用。
+- `cargo test --lib run --features sqlite`：8 passed。含严格 DTO 拒绝角色伪造、
+  准确前缀冲突、失败结论与自报成功共存、未知/确切声明版本、重试/冲突、撤销、分页、
+  同 schema 重开、跨管理员 Key 拒绝和凭据撤销后读写/重放拒绝。
+- `cargo test --test local run_verification --features sqlite`：2 passed。
+  公共 Service + HTTP 验证 prepared 资产 v2、自报成功、owner 转录失败、实际 Skill 使用版本未知；
+  后续 Run append 不改变核验前缀；来源撤回阻断核验读取、重放和撤销调用。
+  精确 schema 缺表拒绝且原数据库文件字节未变，不迁移、不回填。
+- `npm --prefix ui test`：17 passed（含 tsc/build）。验证独立核验显示、撤销、未知版本、
+  不可信文字不生成 HTML、刷新失败清除旧核验内容及恢复、精确 GET relay 凭据转发。
+  relay 仅新增 `/v1/runs/{UUID}/verifications` GET 白名单；未改共享导航、通用 DTO、CI 或 STATUS。
+- `cargo fmt --check` 与 `git diff --check`：通过。
+- `cargo clippy --all-targets --all-features -- -D warnings`：通过；首轮发现新 DTO 中一处
+  `collapsible_if`，已按建议合并等价条件并在最终实现提交重新验证。
+- SQL 人工检查：核验模块所有 SELECT/COUNT/INSERT/UPDATE、测试建库与撤权语句均为单表；
+  无 JOIN、逗号 FROM、跨表子查询或 CTE。关联前缀/来源/逻辑 owner 在原授权事务内复核，
+  提交前沿用实时权限复核；无外部 IO 或中间提交。
+- 未验收：Windows 行为、真实浏览器/无障碍、双客户端与企业任务、真实模型效果、独立核验者签认。
+  当前 UI 只读展示/刷新；写入与撤销通过独立 HTTP/Service API。此切片不代表 #89 全部通过，
+  也不提供 tracing/成本/生产告警。需接入与试点方按独立合同对接；联合合同确认后再安排发布。
+- 本路仅本地提交，未推送、未开 PR、未更新 Issue、未合入、未部署。
+
+## 2026-11-17 — #89 草稿发布前定向复验
+
+- 续接本地 `87b284c8fa3b9c324db2aa039af69a026b2c1dd5`；重新 fetch 后 main 仍为
+  `293e2bf6af3b180d43c8050731047b552ac07519`。本轮测试/合同提交：
+  `ddca4c52b3d71b2650f0ad13ce1e613089a42858`。
+- 对照 #87 已发布 Issue 的采集合同：显式归档/Run prepare 与核验分离，`src/run.rs`、
+  MCP 接入接口没有本路变更；未发现 #87 可供联合运行的公开实现 PR，故不声明联合验收。
+  本路只对应 PRD 的“Run 所有者记录外部签认依据”，不生成独立签认、平台核验通过状态或
+  业务通过率。用户不能用 owner 转录将自己提升为认证核验者；#89 不关闭。
+- 再跑 `cargo test --lib run --features sqlite`：8 passed；
+  `cargo test --test local run_verification --features sqlite`：2 passed。
+  加强真实 Service/HTTP readback 断言：prepared、自报 success、转录 failed、
+  `platform_verification:not_performed`、`verifier_authentication:unverified_claim` 分离；
+  非 owner reviewer 无权撤销，来源撤回后核验与 Run 正文均返回 NotFound/Forbidden。
+- `npm --prefix ui test`：17 passed；`cargo fmt --check`、`git diff --check`、
+  `cargo clippy --all-targets --all-features -- -D warnings` 均通过。
+- Chromium `156.0.8078.79`：`npm --prefix ui run build` 后运行
+  `node ui/scripts/check-run-verification-browser.mjs` 通过。真实 Chromium DOM、已构建 UI
+  和 relay，合成 HTTP 响应；覆盖准备/上报/外部三种结论分别显示、未知使用版本、撤销、
+  不可信文字转义、来源不可用后刷新清除旧核验内容，以及另一 Key 拒绝后的正文/核验不显示。
+  该浏览器夹具不替代上述真实 SQLite/Service 授权验证，也不代表真实双客户端/生产任务验收。
+- schema 差异仅新增 `oc_run_verifications`，沿用精确 fresh-only admission；本轮再次通过
+  缺表拒绝且数据库字节不变测试。应用 SQL 仍单表，跨表关联与授权/来源复核留在原事务。
+- 允许正常推送本分支并创建针对 main 的草稿 PR（Refs #89）。不改 Issue、不合入、不部署。
+  Windows、完整无障碍、真实双客户端/业务任务和外部独立签认仍未验收。
+
+## 2026-11-17：#88 Learning 来源专项补验（草稿 #94）
+
+`a709dfe2702efcb223d7765fc9ae0b7a71a838c9` 只增加确定性测试：同空间另一 writer
+经真实 CLI/HTTP 选择已发布 Learning 精确 v1，私有支持读取拒绝；撤回原归档支持后，
+待发布候选与已发布包均返回 NOT_FOUND，清理仍 pending。21 项 Learning 回归、
+原 Run CLI 回归及格式/Clippy 通过。详见 [#88 追加记录](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md#learning-source-follow-up-2026-11-17-draft-pr-94)。
+未变更产品代码，不代表真实客户端或业务验收。
+
+## 2026-11-18 — #95 coordinated integration after #93/#94
+
+Merged main `a56246406a0688f646a45a85cc2954fb14a8d28a` into original #95
+`dfbaade8eb8848d6085cf5b9f61f986f2c8b9428` without rewriting history. Only this
+validation history conflicted; both entries remain. Automatic module/UI-test
+merges preserve the existing source, exact-prefix, logical-key and fresh-only
+schema contracts; no implementation change was needed.
+Linux Rust 1.98.0: fmt and diff checks, `cargo test --locked --lib run_verification`
+(2), `cargo test --locked --test local run_verification` (2),
+`cargo test --locked --test local workspace_schema_rejection` (6), and
+`cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
+Node UI build/tests: 19 passed. All database fixtures were newly created temporary
+stores, not old stores converted to the new schema. No external model or production
+material was used. New exact-HEAD CI is required before merging; full pilot remains NOT_RUN.
+
+## 2026-11-18 — #96 coordinated integration after #93–#95
+
+Merged main `e78b6ba5f3d6fcb4730789981a092c85cdc4c12a` into original #96
+`07ddb1640c652bdd82c8ba168fe86bac9563cfa9` without history rewriting. Only this
+validation history conflicted; all records remain. No MCP/HTTP, storage, DTO or
+CI behavior changed during resolution.
+Linux Rust 1.98.0: fmt/diff checks, `cargo test --locked --test local mcp_runs::`
+(1), `cargo test --locked --test local foundation_http::` (2), full-feature
+all-target strict Clippy, and `cargo build --locked --bins` passed.
+`PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py`:
+3 passed. Databases and protocol/model fixtures were fresh and synthetic. These
+checks do not certify real native clients or business outcomes. The new exact-HEAD
+CI must pass before merge; actual final main will be independently retested.
+
+## 2026-11-18 — #76 路由焦点与编辑对话框名称（本地）
+
+基于 main `48cfa7c643b8c077ad33c55981def51979afde05`。切页时将焦点放在新主区域，
+无效地址或版本则聚焦错误内容，目标不进入 Tab 顺序。焦点在页面替换时移动一次，后续
+请求完成后保留用户已经选中的控件。共享编辑与提取对话框由现有标题提供可访问名称，
+关闭行为沿用原生 dialog。界面布局、路由结构和 API 保持原行为。
+
+- Linux、Node 24.22.1。 `npm --prefix ui run check` 与 `npm --prefix ui test`
+  通过，19 项。复用页面 DOM 流程断言主区域焦点与对话框的标题关联。
+- Chromium 156.0.8078.79。使用已构建的 UI、真实 Node 转发及 loopback 合成 HTTP
+  响应。1024px 和 320px 均通过键盘切页、重复导航、浏览器前进后退、无效路径、
+  延迟目录响应保留输入焦点和文本、编辑及提取对话框在可访问性树中的名称、
+  Escape 和关闭按钮返回原控件，以及对话框打开时无整页横向溢出。
+  浏览器回归脚本 `ui/scripts/check-navigation-focus-browser.cjs` 单独运行，使用
+  Node 24、Playwright 1.62.1 和 Chromium。从仓库根目录执行以下命令，按本机调整
+  Chromium 路径。Playwright 装在临时目录。
+
+  ```sh
+  browser_deps=$(mktemp -d)
+  npm install --prefix "$browser_deps" --ignore-scripts playwright@1.62.1
+  npm --prefix ui ci --ignore-scripts
+  npm --prefix ui run build
+  NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+    node ui/scripts/check-navigation-focus-browser.cjs
+  ```
+- `node ui/scripts/check-run-verification-browser.mjs` 通过。
+  `cargo fmt --all -- --check`、
+  `cargo clippy --locked --all-targets --all-features -- -D warnings` 和
+  `git diff --check` 通过。
+
+本轮范围限于上述 UI 回归。屏幕阅读器、实体触屏、其他浏览器、完整 #76 及真实产品
+客户端任务仍待验收。记录和实现均为本地提交。
+
+## 2026-11-18 — #76 私有 Run 的固定版本 PDF 页内定位
+
+- 最新 main 核对为 `48cfa7c643b8c077ad33c55981def51979afde05`。独立本地
+  分支 `fix/issue76-pdf-page`。本地对象库未找到候选 `56989af`，未将其当作交付依据。
+  查阅仓库 AGENTS.md 和来源/Run 合同，仓库及工作区无适用的 `.agents/skills`。
+- Linux x86_64，Rust/Cargo 1.98.0、Node 24.22.1、Chromium 156.0.8078.79。
+  测试只使用合成 PDF、新临时 SQLite、动态 loopback 端口和 AnySeek 协议夹具，
+  模型禁用。Codex/Claude Code 产品客户端测试保持暂停。
+- `cargo test --locked --offline --test local run_pdf_source`：1 passed。
+  通过已授权原件与发布片段哈希验证 v1 第 2 页，在 v2 发布后仍返回 v1 原件字节；
+  相同文本重复时返回页码和无 span，原件仍可授权打开。跨 Key、reader、无关证据 ID、
+  请求指定版本、来源撤回后的重复获取均按合同拒绝。覆盖公共 Service、上传/发布/搜索
+  管道和真实 HTTP 请求。
+- `cargo test --locked --offline --lib pdf_page_span`：1 passed。覆盖 UTF-8 多字节边界、
+  片段哈希、未知解析器、重复匹配和纯栅格页无高亮。首轮非 ASCII 夹具未声明字库编码，
+  修正夹具 WinAnsi 编码后复跑通过。现有
+  `cargo test --locked --offline --no-default-features --test core pdf_`：9 passed，
+  含多语言、分页、损坏、操作符截断、文件/页数/总文本限制和拒绝部分发布。
+- `npm --prefix ui test`：19 passed。随后从仓库根目录执行
+  `node ui/scripts/check-run-pdf-browser.mjs`：通过。真实 Chromium 和构建后的 UI/relay
+  使用合成 HTTP 响应，验证 v1 页内文本 mark、原件字节、第 2 页和第 3 页的实际新标签
+  Blob URL、回退不高亮以及撤回后拒绝新开；没有回退到 asset 最新版或裸文件 URL。
+  首轮浏览器行为断言通过后有配置目录清理竞争，改用正常关闭并重试清理后整条通过。
+  `node ui/scripts/check-run-verification-browser.mjs`：既有 Run 核验浏览器回归通过。
+- `cargo fmt --all -- --check`、`cargo clippy --locked --offline --all-targets --all-features -- -D warnings`
+  与 `git diff --check` 通过。复用已有单表存储查询，未新增 SQL、依赖、权限、schema 或迁移。
+  撤回后的新响应要求重新获得权限和来源检查，已经打开的原件遵循现有下载语义。
+- 局限：高亮位于核对后的页内提取文本，浏览器原件在对应页打开。未加坐标覆盖或 OCR。
+  浏览器与真实 HTTP 后端分别验证，Windows 和完整 #76 验收未跑。本切片仅在独立分支
+  本地提交，未推送、未发 PR。
+
+### #76 PDF 真实服务与 Chromium 联验
+
+同步 main `8cdf88f709d708b75689768e6caada45fde56155` 后，在
+`47b73234de9d57bb3b996b1a244421a06276e4f2` 复验。原 PDF 提交
+`a95b931642372211575f7a11c57668208ffe43c1` 至该合并提交的 Rust、Cargo、
+测试工具和 CI 无差异，UI 则重新构建以覆盖主干 #98 的页面变化。以下补记仅改变验证文档。
+
+真实 AnySeek 使用 CI 固定源码提交 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`，
+Rust 1.99.1 从源构建。AnySeek 二进制 SHA256
+`ef581925d9afa44ce7be3694144ef010354925304e63ca737fc7b33d1687cc3a`，
+Origence 1.98.0 工具链编译的测试二进制 SHA256
+`e05e5f930d94bd003fa337d0ba8fe01c24375f504d8e61810496ce6eaf678f52`。
+两者在联验前后分别校验一致。使用 Node 24.22.1、Chromium 156.0.8078.79、
+动态 loopback 端口及临时合成数据，模型关闭。
+
+- 同一 Run `a1d2cca4-f58b-4bac-a378-cf036fa218db` 在真实 AnySeek 上固定 v1
+  引用，再发布 v2。正常工作空间登录后，构建的 UI 经 relay 从真实纳入授权的 HTTP
+  接口读取 v1 第 2 页，页面提取文本高亮 `NeedleUnique historical fixed PDF page`。
+  浏览器收到的原件在原生查看器打开第 2/2 页，SHA256 为
+  `0604486708bf7f3959dcdd53b5af8d4817b32cd1b738beb06d9fb8461bc69fc7`，
+  与 v1 字节相符。原生 PDF 页面无像素覆盖层。
+- 重复片段回退到页 1 与授权原件，文本无高亮。纯栅格 PDF 按现有规则拒绝发布，
+  其原件沿用已有授权下载。缺证据 ID 为 404，reader 读原件为 403，另一 admin
+  读取私有 Run/来源为 404。
+- 撤回 v1 时浏览器保留旧按钮。再次点击收到真实 404 后移除按钮和高亮，
+  v2 仍为当前版本。联验保留了浏览器原件哈希、原生查看器截图和 HTTP 状态记录。
+- 本地格式、Clippy、PDF 单元 1 项、Service/HTTP 1 项、无默认特性的 PDF 核心
+  9 项及 UI 19 项均通过。合成 Chromium 回归和上述真实服务联验均通过。
+
+## 2026-11-18 — #76 Run 创建量与趋势（本地）
+
+基于 main `3c66b5b06fbf40cc22641b373f892da1b617aff0`。总览以一个服务端
+截止时间和一个授权读快照计算当前逻辑 key 的创建记录。UTC 半开滚动窗口返回
+24 个一小时桶或 7 个 24 小时桶，空桶为 0。Run 目录仍按 UUID 分页。重复创建
+请求及证据撤回不改变创建计数，业务结果无法从创建记录推断。
+
+SQLite 新增单个 tenant/workspace/owner/created_at 覆盖索引。使用现有精确
+schema admission，缺索引的旧目录在写入前拒绝，不建索引、不迁移。测试中的
+实际 EXPLAIN 为 `SEARCH oc_runs USING COVERING INDEX oc_runs_owner_created_at
+(tenant_id=? AND workspace_id=? AND owner_key_id=? AND created_at>? AND created_at<?)`。
+每个桶执行一个单表标量计数，最多 24 个互不重叠的范围查询，不提取 Run 或事件正文。
+
+- Linux / Rust 1.98.0。 `cargo test --locked --no-fail-fast` 通过，450 项通过、
+  8 项默认忽略的引擎专项未计入。 `cargo test --locked --test local run_creation_ -- --nocapture`
+  复跑覆盖查询计划、固定时刻的桶边界与总和、幂等、跨 scope/逻辑 key、读权限、轮换、
+  无效窗口与范围参数、超过首屏和空计数。现有 Run 核验/证据撤回测试另确认详情拒绝而
+  该 Run 仍保留在目录和创建量中。
+- `cargo fmt --all -- --check` 及默认全特性、authority-only、core-only 的
+  `cargo clippy --locked --all-targets -- -D warnings` 均通过。authority-only 使用
+  `cargo test --locked --no-default-features --features sqlite --test local
+  missing_run_creation_index_is_rejected_without_repair` 验证旧文件原样保留。
+- Node 24.22.1。 `npm --prefix ui run check`、`npm --prefix ui test` 通过，19 项，
+  覆盖两时间窗口、列表独立、错误与重试。既有 Chromium 路由焦点回归通过。
+- Chromium 156.0.8078.79、实际 Node relay、实际 Origence/SQLite 与固定 AnySeek
+  `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。合成临时数据中两窗口均正确
+  显示 30 个 Run，而目录首屏为 25。另一管理员及 reader 均为 0，窗内空桶、
+  桶合计、UTC 边界与 320px 布局均通过。浏览器使用
+  `tools/anyseek_smoke.py` 启动隔离的引擎。
+
+业务成功率、端到端 P95、Token 和成本仍未采集。本切片不提供告警、生产容量验收、
+Windows 运行证据或真实客户端验证。仅本地提交。
+
+草稿发布前补验了两个方向的 schema 拒绝。用基线 `3c66b5b` 和含索引的
+`a43c270` 分别构建 Origence，通过 `--offline workspace-create` 各建一个临时库，
+再用另一版本运行同一打开操作。新版拒绝缺索引的库，旧版拒绝含新索引的库。
+两次打开均返回 incompatible schema，SQLite 文件与打开前逐字节一致。
+实现与测试代码自 `a43c270` 保持一致，草稿准备提交仅补全兼容边界说明。
+
+## 2026-11-18 — #76 资产详情页签键盘操作（本地）
+
+基于 `origin/main` 的 `3c66b5b`。方向键及 Home/End 移动页签焦点，Enter、空格或点击
+激活页签。Tab 从页签组进入当前面板，继续 Tab 可达版本比较。reader 直接查看正文，仍可
+比较版本。原始来源仅在激活时请求；离开来源页签或当前资产路由时取消待完成的原文请求。
+版本比较在独立区域显示，重新比较时只保留最新请求。沿用现有 API 和角色边界。
+
+- Linux、Node 24.22.1：`npm --prefix ui run check` 及 `npm --prefix ui test`（19 项）通过。
+- Chromium 156.0.8078.79（headless）、Playwright 1.62.1、已构建的 UI 和真实 Node 转发，
+  上游为 loopback 合成 HTTP 夹具。1024/736/375/320 px × 浅/深色 × writer/reader
+  共 16 组通过。验证 Tab/Shift+Tab、左右方向键环绕、焦点轮廓、激活键和点击、可访问性树
+  的页签与面板关系，以及页面无横向溢出。reader 发出 0 个原文请求。故意延迟原文与历史
+  版本响应，验证切回正文、快速重新比较和切到另一固定版本时旧请求已取消；原文与比较
+  交错返回时各自显示，比较仍保留固定版本和增删内容。
+- #98 的路由焦点和对话框浏览器回归（1024/320 px）、现有 Run 独立核验与 PDF 来源脚本均通过。
+- Rust 1.98.0 的 `cargo fmt --all -- --check`、
+  `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` 及
+  `git diff --check` 通过。
+
+从仓库根目录复跑。Playwright 装在临时目录，按本机调整 Chromium 路径。
+
+```sh
+browser_deps=$(mktemp -d)
+npm install --prefix "$browser_deps" --cache "$browser_deps/npm-cache" --ignore-scripts playwright@1.62.1
+npm --prefix ui ci --cache "$browser_deps/npm-cache" --ignore-scripts
+npm --prefix ui run check
+npm --prefix ui test
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-asset-tabs-browser.cjs
+```
+
+浏览器证据覆盖键盘、鼠标和 Chromium 可访问性树。屏幕阅读器、实体触屏、真实业务账号
+与 Codex/Claude Code 产品客户端任务未执行。#76 保持开放。
+
+### 合入前复验
+
+同步已包含 #100 的主干 `63bdcdf4691c9ba761e4581b4aa62e94c89e94f1`，保留上方两份
+验证记录。原有资产页与脚本改动保持一致。复跑 UI 类型检查、19 项测试、16 组资产页签
+Chromium 检查、#98 的两个宽度及现有 Run 核验和 PDF 来源浏览器脚本，全部通过。
+Rust 1.98.0 格式检查、离线全目标全特性 Clippy（warnings denied）及差异检查通过。
+
+## 2026-11-18 — #76 资产版本比较状态与文字对比度（本地）
+
+基于 `origin/main` 的 `6dcd03336c1d0605032a9083e9a4a2a02a972f1c`。版本比较区预置
+`role=status`、`aria-atomic=true` 的常驻节点。加载和完成提示放在同一个 polite 状态区，
+差异正文独立显示。当前请求失败时清空加载文字，在结果区显示错误警报。比较请求被
+替换或离开详情时取消，过期成功和错误均不会更新状态或差异区。
+
+Chromium 156.0.8078.79 用元素计算样式合成前景、背景，再按 sRGB 相对亮度计算对比度。
+阈值按未舍入值核对。浅色仅将下列三个资产详情元素的文本前景从 `#137f6d` 调为
+`#106f60`。暗色对应值与基线一致，主题色和背景定义保持原样。
+
+| 元素 | 浅色背景 | 浅色修复前 | 浅色修复后 | 深色 |
+| --- | --- | ---: | ---: | ---: |
+| 选中的正文 / 原始来源页签 | `#f1f5f6` | 4.4656:1 | 5.5219:1 | 7.0595:1 |
+| 新增差异文字 | `#eef6f5` | 4.4666:1 | 5.5232:1 | 7.2363:1 |
+| 版本区肯定状态徽标 | `#eaf3f2` | 4.3417:1 | 5.3687:1 | 6.9543:1 |
+
+浅色加载、完成和差异摘要为 4.7429:1，错误和删除文字为 5.0615:1。Node 24.22.1 和
+Playwright 1.62.1，按上方命令复跑同一 loopback 合成 HTTP 夹具，16 组全部通过。验证
+状态节点在请求前已存在、加载和完成内容在同一 Chromium AX 节点、完成提示与差异分开、
+延迟 503 和重试、重复同版本、切到另一版本后过期响应及比较按钮焦点。writer 页签键盘
+和原文请求行为通过，reader 原文请求仍为 0。
+
+UI 类型检查、19 项测试、#98 的两个宽度、Run 核验和 PDF 来源浏览器回归、Rust 1.98.0
+格式检查及离线全目标全特性 Clippy 均通过。Chromium 结果覆盖无障碍语义与焦点。
+本轮缺少可观察实际播报的屏幕阅读器和获准测试的实体触屏，两项仍待验收。#76 保持开放。
+
+## 2026-11-18 · 统一数据底座文档校准
+
+以 main `4160fd5` 为代码基线，按记忆、知识、Skill 和 Trace 交叉核对产品文档、公开接口与当前实现。改动范围为文档和 Cargo 包描述。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 和
+  `cargo +1.98.0 clippy --locked --offline --all-targets --all-features -- -D warnings` 均通过。
+- `cargo +1.98.0 test --locked --offline --no-fail-fast --target-dir target/doc-positioning-check --quiet`
+  通过，449 项通过、0 项失败，8 项需要隔离真实 AnySeek 的测试默认忽略。
+  首次使用默认构建目录时，正在运行的 `origence.exe` 锁住目标文件，构建以 Windows 错误 5 退出。改用独立构建目录后完成复跑。
+- 检查了 12 份活动 Markdown 的 125 个本地链接及目标锚点，未发现指向已移除锚点的仓库内链接。`git diff --check` 通过。
+
+本轮覆盖文档一致性和 Rust 默认测试集。真实客户端双场景试点及独立签认仍按 [#91](https://github.com/TheLudlows/Origence/issues/91) 追踪。
+
+## 2026-11-18 · 移除 AML 协议适配
+
+基于 `4160fd5`，移除协议模块、HTTP 路由、启动开关及仅供协议派生 ID 使用的 UUIDv5 和 `sha1_smol`。消息批次、所属 workspace 和原始来源定位继续使用通用接口。SQLite 使用既有完整 schema 核对拒绝额外对象。核查了实际执行的单表目录查询与测试 DDL/DML，未新增关联查询。现有数据库拒绝测试覆盖检查和重开，并比对拒绝前后的文件字节。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 和 `cargo +1.98.0 clippy --locked --offline --all-targets --all-features -- -D warnings` 通过。
+- `cargo +1.98.0 test --locked --offline --no-fail-fast --target-dir target/doc-positioning-check --quiet` 通过，448 项通过，8 项真实 AnySeek 测试默认忽略。
+- `cargo +1.98.0 test --locked --offline --no-default-features --target-dir target/doc-positioning-check --quiet` 通过，90 项通过，默认忽略 5 项。
+- `cargo +1.98.0 test --locked --offline --no-default-features --features sqlite --test local --target-dir target/doc-positioning-check --quiet workspace_schema_rejection` 通过 6 项。
+- 在新的临时目录用固定 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 运行 `tools/anyseek_smoke.py --test-executable`，8 项真实引擎测试全部通过。真实 HTTP 宿主验证旧路由均返回 404，CLI 拒绝旧开关，正常发布与全文检索通过。
+- `docker compose --env-file .env.example config --quiet` 通过。当前机器只有 Docker Desktop 所用的 WSL 发行版，Linux Docker 引擎不可用，本轮未运行 Linux 测试。现有 CI 工作流仍可覆盖 Linux 与 Windows。
+
+## 2026-11-18 · CI 去重
+
+四个作业及原有测试、Clippy 和真实引擎联验命令均保留。`fast-check` 负责统一格式检查，Windows CI 跳过重复格式检查，Windows 本地 `Validate` 默认仍检查格式。`linux-native` 复用默认特性集成测试生成的宿主二进制，进入冒烟测试前检查它可执行。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 通过。
+- 在全新的 `target/ci-binary-check` 目录设置 `CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0`、`CARGO_INCREMENTAL=0`，执行 `cargo +1.98.0 test --locked --offline -j 2 --no-fail-fast --quiet`。448 项通过，8 项真实 AnySeek 测试默认忽略。未额外执行 `cargo build`，集成测试生成的 `debug/origence.exe` 已通过 `serve --help` 验证。
+- 本机 Windows PowerShell 5.1 运行 `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck` 通过。Clippy 通过，默认测试 448 项通过，8 项默认忽略。工作流的 Linux 和 GitHub runner 实测仍待 CI。

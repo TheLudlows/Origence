@@ -1,7 +1,8 @@
 param(
     [ValidateSet('Build', 'Test', 'Validate')][string]$Action = 'Validate',
     [int]$Jobs = 1,
-    [int]$NativeJobs = 4
+    [int]$NativeJobs = 4,
+    [switch]$SkipFormatCheck
 )
 $ErrorActionPreference = 'Stop'
 $buildRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -30,8 +31,10 @@ try {
     $env:CC = 'cl.exe'
     $env:CXX = 'cl.exe'
     if ($Action -eq 'Validate') {
-        & cargo fmt --all -- --check
-        if ($LASTEXITCODE -ne 0) { throw 'Formatting failed.' }
+        if (-not $SkipFormatCheck) {
+            & cargo fmt --all -- --check
+            if ($LASTEXITCODE -ne 0) { throw 'Formatting failed.' }
+        }
         & cargo clippy --locked --all-targets -j $NativeJobs -- -D warnings
         if ($LASTEXITCODE -ne 0) { throw 'Clippy failed.' }
     }

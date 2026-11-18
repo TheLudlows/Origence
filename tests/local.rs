@@ -39,3 +39,9 @@ mod workspace_schema_rejection;
 mod pdf_fixture;
 #[cfg(feature = "local-storage")]
 mod retrieval_diagnostics;
+
+#[cfg(feature = "local-storage")]
+mod mcp_runs;
+
+#[cfg(feature = "local-storage")]
+mod run_pdf_source;

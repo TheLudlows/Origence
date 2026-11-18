@@ -3,21 +3,6 @@ use super::*;
 
 const SCHEMA: &str = include_str!("../sqlite-schema.sql");
 
-pub(super) async fn reject_legacy_aml_schema(conn: &mut Connection) -> StorageResult<()> {
-    let exists: bool = sqlite_db::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name GLOB 'oc_aml_*')",
-    )
-    .fetch_one(conn)
-    .await
-    .map_err(sqlite_err)?;
-    if exists {
-        return Err(StorageError::Unavailable(
-            "legacy AML schema requires a new database; no migration was attempted".into(),
-        ));
-    }
-    Ok(())
-}
-
 pub(super) async fn schema_present(conn: &mut Connection) -> StorageResult<bool> {
     sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_workspaces')",
@@ -45,7 +30,6 @@ pub(super) async fn exec_schema(conn: &mut Connection) -> StorageResult<()> {
 }
 
 pub(super) async fn check_conn(conn: &mut Connection) -> StorageResult<()> {
-    reject_legacy_aml_schema(conn).await?;
     sqlite_db::verify_schema(
         conn,
         &[

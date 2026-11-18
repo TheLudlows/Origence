@@ -12,6 +12,7 @@ const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const rules: [string, RegExp][] = [
   ["GET", /^\/health\/(live|ready)$/],
   ["GET", /^\/v1\/(whoami|session|assets|runs)$/],
+  ["GET", /^\/v1\/runs\/overview$/],
   [
     "POST",
     /^\/v1\/(search|context|knowledge|files|memories\/(identified|semantic|lookup)|captures\/(identified|semantic))$/,
@@ -21,6 +22,8 @@ const rules: [string, RegExp][] = [
   ["POST", new RegExp(`^/v1/assets/${uuid}/restore$`)],
   ["POST", new RegExp(`^/v1/jobs/${uuid}/(retry|cancel)$`)],
   ["GET", new RegExp(`^/v1/runs/${uuid}/prefix$`)],
+  ["GET", new RegExp(`^/v1/runs/${uuid}/pdf-source$`)],
+  ["GET", new RegExp(`^/v1/runs/${uuid}/verifications$`)],
   ["GET", new RegExp(`^/v1/assets/${uuid}/runs$`)],
   ["GET", /^\/v1\/memory-properties\/[a-z0-9_.-]+$/],
 ];

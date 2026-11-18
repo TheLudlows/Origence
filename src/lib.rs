@@ -1,3 +1,4 @@
+#[cfg(feature = "local-storage")]
 pub mod api;
 pub mod capture;
 #[cfg(feature = "local-storage")]
@@ -24,6 +25,9 @@ pub mod retrieval;
 pub mod retrieval_diagnostics;
 pub mod run;
 #[cfg(feature = "local-storage")]
+pub mod run_pdf;
+pub mod run_verification;
+#[cfg(feature = "local-storage")]
 mod runs;
 pub mod semantic_capture;
 #[cfg(feature = "local-storage")]
@@ -34,6 +38,9 @@ pub mod session;
 #[cfg(feature = "local-storage")]
 mod sessions;
 pub mod skill;
+pub mod skill_candidate;
+#[cfg(feature = "local-storage")]
+pub mod skill_workflow;
 #[cfg(feature = "local-storage")]
 mod skills;
 pub mod storage;

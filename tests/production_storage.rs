@@ -1,4 +1,4 @@
-//! Real SQLite publication contracts with an AnySeek HTTP protocol fixture, through non-AML callers.
+//! Real SQLite publication contracts with an AnySeek HTTP protocol fixture through public callers.
 //!
 //! Existing message-batch tests cover vector failures and authority failures.
 //! These tests cover the new full-text surface, its authority boundary, and the

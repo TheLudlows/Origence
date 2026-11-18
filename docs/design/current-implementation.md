@@ -1,17 +1,15 @@
 # Origence · 当前平台设计
 
-更新：2026-11-17。代码基线：main `c70a1aa` 及当前 AnySeek 正文存储变更。本文负责当前架构与不变量；接口见 [API](../API.md)，运行与恢复见
+更新：2026-11-18。代码基线为 main `4160fd5`。本文描述当前架构与不变量。接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
-首版目标另见[架构规划](agent-data-foundation.md)。当前实现包括 AnySeek 统一检索、
-私有归档、Skill 审批发布与 Run 追溯的基础路径；真实客户端和任务验收与代码实现分开记载。
+首版目标与验收合同见[架构规划](agent-data-foundation.md)。
 
 ## 1. 产品边界
 
-Origence 为企业内部 Agent 提供受权限控制、可追溯的记忆与知识等上下文。支持 Claude Code 和 Codex 的 stdio 配置、显式私有归档工具及批准包导出；两者真实客户端均待验收。
-当前提供显式知识/记忆写入、检索、上下文组装及受控会话学习，
-企业身份、文档 ACL 与项目自动关联尚未实现，真实开发任务效果仍待验收。
-首版范围以架构规划为准，当前进度统一在 STATUS 维护。
+Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。当前提供记忆与知识的写入和检索、Skill 候选与审批发布、私有 Run 记录与查询，以及上下文组装和显式会话学习。
+
+Claude Code 和 Codex 是首版试点宿主，现有入口包括 stdio MCP、显式归档与 Run 工具、已批准 Skill 的目录导出。试点进度见 [STATUS](../STATUS.md)。
 
 ## 2. 当前架构
 
@@ -25,7 +23,7 @@ flowchart TD
     K --> A
     K --> E[显式包导出]
     E --> C
-    S --> O[Run：上下文准备、客户端报告与采集缺口]
+    S --> O[Trace / Run：准备记录、报告、采集缺口与外部核验]
     O --> A
     X[显式 Run 事件调用方] -. HTTP 上报 .-> H
     W[单 Worker] --> A
@@ -57,7 +55,7 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 | --- | --- | --- |
 | RelationalStore / JobQueue | 权限、原始来源、版本指针/哈希、身份、审计、任务、owner 与发布账本 | 原生 SQLite `context.db` |
 | RetrievalStore | 带作用域、来源、generation 的分块正文/摘要及全文、向量和一跳图索引 | AnySeek HTTP |
-| 私有 Run / Skill | 私有事件、候选与批准包，分发复核来源 | 原生 SQLite `context.db` |
+| Trace / Skill | 私有 Run 事件及核验记录、Skill 候选和发布包 | 原生 SQLite `context.db` |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
 <a id="storage-interfaces"></a>
@@ -156,14 +154,13 @@ EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字
 
 ## A4. Skill 与 Run
 
-Skill 候选由调用方提交，当前不自动挖掘客户端经验。候选/修订与备注私有；所有者选定
+Skill 候选由调用方提交。选定经历 CLI 可根据调用方提供的方法与一个精确依据预填候选，
+例如 Run 前缀或已发布 Learning 版本。候选/修订与备注私有，所有者选定
 审阅包交付指定审阅者，批准绑定精确包与目标。发布版本不可变、分发时重新核验来源，
 显式导出两种客户端目录格式；原生加载与离线副本回收不属于导出证明。
-细节见 [Skill 契约](../contracts/skills.md)。
+细节见 [Skill 契约](../contracts/skills.md)和[选定经历 CLI](../SKILL-CANDIDATE-CLI.md)。
 
-Run 归属逻辑 key；服务端记录准备过的精确上下文，客户端工具/Skill/结果事件为上报。
-未上报保持未知，不能把准备、收到、加载、实际使用与验证成功合并为同一事实。
-细节见 [Run 契约](../contracts/runs.md)。
+Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上下文，客户端上报工具、Skill、结果和工件引用。工件上报保存外部 ID 与摘要。Run 所有者可以为精确前缀转录外部评估，保留独立的来源标记。客户端未上报的活动保持未知。见 [Run 契约](../contracts/runs.md)和[外部核验契约](../contracts/run-verification.md)。
 
 ## A5. 数据模型与约束来源
 
@@ -173,6 +170,5 @@ Run 归属逻辑 key；服务端记录准备过的精确上下文，客户端工
 
 ## A6. 协议边界
 
-HTTP 与库 DTO 见 [API](../API.md)。MCP 提供 workspace 资产检索与显式私有会话归档，
-默认转发运行中的宿主而不打开其数据目录。Skill 下载和客户端原生加载各自记录，
+HTTP 与库 DTO 见 [API](../API.md)。MCP 提供 workspace 资产检索、显式私有会话归档与 Run 工具。Run 工具经 HTTP 转发给运行中的宿主。Skill 下载和客户端原生加载各自记录，
 显式导出的副本不会由服务端追回。见[双客户端接入](../CLIENTS.md)。

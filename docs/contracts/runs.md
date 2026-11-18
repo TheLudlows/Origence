@@ -1,6 +1,7 @@
 # Private Run trace
 
-This contract defines the private evidence path for the [architecture plan](../design/agent-data-foundation.md).
+Trace is a core data domain in Origence. Run is the unit of storage and access for
+private execution evidence. See the [architecture plan](../design/agent-data-foundation.md).
 Run creation and append are authorized relational transactions. Each Run is bound
 to a server-assigned private session and stable logical key. Workspace admin is
 not an implicit private archive reader. Credential rotation preserves logical
@@ -96,3 +97,74 @@ on retry, provides empty/error states, and clears the displayed asset on 403/404
 This fresh-only schema adds `oc_run_asset_refs`; exact schema admission rejects
 an existing database without the table without creating it or rewriting evidence.
 Same-schema reopen retains associations. No migration or backfill is performed.
+
+## Run creation overview
+
+`GET /v1/runs/overview?window=24h|7d` requires the same Read authority as
+the Run directory. It counts each durable Run row once within the authenticated
+tenant, workspace and logical key. Credential rotation retains the same
+logical owner. A workspace administrator sees their own counts. A reader
+with no Run records receives zeroes, without creating a session.
+
+A single service clock reading supplies the end of the rolling window. The
+interval is `[end_ms - duration_ms, end_ms)` in UTC Unix milliseconds.
+Buckets start at the window start and are contiguous half-open intervals,
+one hour for `24h` and 24 hours for `7d`. They are anchored to the exact
+request cutoff and can cross clock hours or UTC midnight. The server computes
+all bucket counts within one authorized SQLite read snapshot, includes empty
+buckets and returns their sum as `created_runs`.
+
+Creation is the server's durable record of a Run, independent of result,
+event count and whether historical evidence is still readable. A retry of
+the same accepted Run ID leaves the count unchanged. The existing UUID-ordered
+Run directory keeps its pagination. Successful runs, verified outcomes,
+end-to-end latency, tokens and cost require separate observations.
+
+The existing primary key sorts by Run UUID. The new covering index
+`oc_runs_owner_created_at` supports each bounded owner/time count and avoids
+reading Run bodies. A request takes at most 24 disjoint index range counts
+over at most seven days. Work still scales with matching index entries.
+The index is installed only on fresh SQLite authority databases. The new
+binary rejects a database missing the index during read-only schema admission.
+The previous binary also rejects a database containing the new index. Keep
+each data directory with its matching binary. Both rejections preserve the
+existing data, and there is no migration.
+
+## External verification records
+
+Owner-transcribed external assessments use a separate [verification contract](run-verification.md).
+They address an exact Run prefix and preserve attribution, basis, unknown use
+versions and withdrawal. They are never platform attestations; a claimed verifier
+or `reporter=user/test` label does not grant private Run access.
+
+## PDF page preview from a private Run
+
+`GET /v1/runs/{run}/pdf-source?sequence=N&evidence_ref_id=UUID` resolves an
+archived PDF citation from that Run event. The UUID is server assigned and read
+from the event's archive references. The query accepts neither a file ID nor an
+asset version, page, range or parser supplied by the caller. The route requires
+the existing original-source Write permission and the current logical Run owner.
+It checks the event's current reference visibility, the exact published member
+and root sources, and the original file before and after file/parse work.
+
+The response has `asset_version`, a known one-based `page` or null, and a `span`
+of `before`, `highlight`, `after` or null. A span requires the integrity-checked
+original, the archived PDF parser marker, a valid page-local UTF-8 byte range,
+the immutable published chunk hash, and a unique exact match on the extracted
+page. Extraction warnings or ambiguous, invalid or unusable text yield a null
+span. Returned text is the verified extraction for that page. The PDF viewer
+uses the separate original file and opens at its recorded page. There is no
+coordinate overlay or OCR. Scan-only files still follow existing ingestion rules.
+
+Adding `original=true` returns the same authorized, integrity-checked original as
+a no-store attachment. The UI fetches it again on every open and applies a
+browser Blob URL page fragment. Source withdrawal and credential revocation
+prevent new previews and opens. A copy already received by a user or opened in a
+viewer remains under the existing download semantics.
+
+Preview reads are bounded by the existing upload size, page count and extracted
+text limits. The parser runs off async threads and outside storage transactions.
+At most two blocking preview tasks run at once in a process. Busy requests may
+retry. Dropping an HTTP request does not abort an active parser; its permit is
+released when it finishes. The ingest parser marker, durable worker and
+fresh-database schema remain unchanged.

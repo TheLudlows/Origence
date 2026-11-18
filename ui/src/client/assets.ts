@@ -12,6 +12,7 @@ import {
   labelControl,
   message,
   panel,
+  parseObject,
   select,
   short,
   status,
@@ -114,12 +115,54 @@ export async function assetsPage(
     el("div", "form-grid", field("查询", query), field("检索方式", mode)),
     submit("检索预览"),
   );
+  const subjectKind = select([
+    ["", "不限"], ["user", "user"], ["agent", "agent"],
+    ["project", "project"], ["service", "service"], ["team", "team"],
+  ]);
+  const subjectId = input("精确业务 ID（区分大小写）");
+  const predicate = input("精确属性，如 release.rule");
+  const conditions = input('完整条件 JSON；留空不限，{} 仅空条件');
+  const identified = select([
+    ["", "不限"], ["true", "已知显式身份"], ["false", "未知身份"],
+  ]);
+  let appliedFilter = "{}";
+  let catalogRequest: AbortController | undefined;
+  const applyFilter = form(async () => {
+    try {
+      if (Boolean(subjectKind.value) !== Boolean(subjectId.value))
+        throw new Error("主体类型与主体 ID 须一起填写");
+      const filter: Record<string, unknown> = {};
+      if (subjectKind.value)
+        filter.subject = { kind: subjectKind.value, stable_id: subjectId.value };
+      if (predicate.value) filter.predicate = predicate.value;
+      if (conditions.value.trim()) filter.context = parseObject(conditions.value);
+      if (identified.value) filter.identified = identified.value === "true";
+      appliedFilter = JSON.stringify(filter);
+      catalogRequest?.abort();
+      items = [];
+      after = null;
+      list.replaceChildren();
+      await load();
+    } catch (e) {
+      message(error, e);
+    }
+  },
+    el("div", "form-grid",
+      field("主体类型", subjectKind), field("主体 ID", subjectId),
+      field("属性", predicate), field("完整适用条件", conditions),
+      field("身份", identified),
+    ),
+    submit("应用目录筛选"),
+    el("p", "muted",
+      "精确匹配、区分大小写；条件比较完整键值集合。未知身份不推断主体。每次最多检查 100 个候选，空页仍可能有下一页。",
+    ),
+  );
   const direct = input("资产 UUID");
   const jobId = input("任务 UUID");
   let items: Asset[] = [],
     after: string | null = null;
   const render = () => {
-    const filtered = items.filter((a) =>
+    const filtered = kind === "memory" ? items : items.filter((a) =>
       JSON.stringify([a.title, a.identity])
         .toLowerCase()
         .includes(search.value.toLowerCase()),
@@ -159,28 +202,34 @@ export async function assetsPage(
             rows,
           )
         : empty(
-            "没有匹配的资产",
-            "此处仅显示当前权限下已发布且来源有效的内容。",
+            after ? "本批暂无匹配资产" : "没有匹配的资产",
+            after
+              ? "仍有候选可检查，请加载下一页。只显示已发布且来源有效的匹配内容。"
+              : "此处仅显示当前权限下已发布且来源有效的内容。",
           ),
     );
   };
   const more = button("加载下一页", () => load());
   const load = async () => {
     more.disabled = true;
+    catalogRequest?.abort();
+    const request = new AbortController();
+    catalogRequest = request;
+    error.replaceChildren();
     try {
       const page = await api.get<Page<Asset>>(
-        `/v1/assets?kind=${kind}&limit=25${after ? "&after=" + after : ""}`,
-        ctx.signal,
+        `/v1/assets?kind=${kind}&limit=25${after ? "&after=" + after : ""}${kind === "memory" ? "&memory_filter=" + encodeURIComponent(appliedFilter) : ""}`,
+        AbortSignal.any([ctx.signal, request.signal]),
       );
-      if (ctx.signal.aborted) return;
+      if (ctx.signal.aborted || request.signal.aborted) return;
       items.push(...page.items);
       after = page.next_after;
       more.hidden = !after;
       render();
     } catch (e) {
-      message(error, e);
+      if (!request.signal.aborted) message(error, e);
     } finally {
-      more.disabled = false;
+      if (catalogRequest === request) more.disabled = false;
     }
   };
   search.addEventListener("input", render);
@@ -201,7 +250,7 @@ export async function assetsPage(
           )
         : null,
     ),
-    panel("已发布资产", labelControl(search, "筛选已加载的资产"), list, more),
+    panel("已发布资产", kind === "memory" ? applyFilter : labelControl(search, "筛选已加载的资产"), list, more),
     panel("检索预览", retrieve, hits),
     panel(
       "通过标识打开",
@@ -229,6 +278,89 @@ export async function assetsPage(
   await load();
 }
 
+function assetContent(asset: Asset, ctx: ViewContext) {
+  const body = code(asset.content);
+  if (!canWrite(ctx.role)) return panel("正文", body);
+
+  const source = el("div");
+  let sourceRequest: AbortController | undefined;
+  const loadSource = async () => {
+    const request = new AbortController();
+    sourceRequest = request;
+    const signal = AbortSignal.any([ctx.signal, request.signal]);
+    const loading = el("p", "muted", "正在读取原始来源…");
+    loading.setAttribute("role", "status");
+    source.replaceChildren(loading);
+    try {
+      const event = await api.get(`/v1/events/${asset.source_event_id}`, signal);
+      if (!signal.aborted) source.replaceChildren(code(event));
+    } catch (e) {
+      if (!signal.aborted) message(source, e);
+    }
+  };
+
+  let selected = 0;
+  const tabs = [
+    { id: "asset-body", label: "正文", content: body },
+    { id: "asset-source", label: "原始来源", content: source },
+  ].map(({ id, label, content }, index) => {
+    const tab = button(label, () => activate(index));
+    const tabPanel = el("div", "", content);
+    tab.id = `${id}-tab`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(index === selected));
+    tab.setAttribute("aria-controls", id);
+    tab.tabIndex = index === selected ? 0 : -1;
+    tabPanel.id = id;
+    tabPanel.setAttribute("role", "tabpanel");
+    tabPanel.setAttribute("aria-labelledby", tab.id);
+    tabPanel.tabIndex = 0;
+    tabPanel.hidden = index !== selected;
+    return { tab, tabPanel };
+  });
+  const tablist = el("div", "actions asset-tabs", ...tabs.map(({ tab }) => tab));
+  tablist.setAttribute("role", "tablist");
+  tablist.setAttribute("aria-label", "内容与来源");
+
+  const setTabStop = (index: number) => {
+    tabs.forEach(({ tab }, i) => {
+      tab.tabIndex = i === index ? 0 : -1;
+    });
+  };
+  function activate(index: number) {
+    selected = index;
+    setTabStop(index);
+    tabs.forEach(({ tab, tabPanel }, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tabPanel.hidden = i !== index;
+    });
+    tabs[index]?.tab.focus();
+    sourceRequest?.abort();
+    source.removeAttribute("role");
+    source.replaceChildren();
+    if (index === 1) void loadSource();
+  }
+  tabs.forEach(({ tab }, index) => {
+    tab.addEventListener("keydown", (event) => {
+      let next: number;
+      if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+      else if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      else return;
+
+      event.preventDefault();
+      setTabStop(next);
+      tabs[next]?.tab.focus();
+    });
+  });
+  tablist.addEventListener("focusout", (event) => {
+    // Re-enter the tablist on the active tab after browsing without activating.
+    if (!tablist.contains(event.relatedTarget as Node | null)) setTabStop(selected);
+  });
+  return panel("内容与来源", tablist, ...tabs.map(({ tabPanel }) => tabPanel));
+}
+
 export async function assetDetail(
   root: HTMLElement,
   id: string,
@@ -240,8 +372,7 @@ export async function assetDetail(
     ctx.signal,
   );
   if (ctx.signal.aborted) return;
-  const info = el("div"),
-    error = el("div");
+  const error = el("div");
   const related = panel(
     `关联 Run · v${asset.version}`,
     el("p", "muted", "仅当前逻辑 key 的已记录引用；不代表完整采集、收到或使用。"),
@@ -283,23 +414,28 @@ export async function assetDetail(
   oldVersion.min = "1";
   const historyVersion = input("版本号", String(asset.version), "number");
   historyVersion.min = "1";
-  const loadSource = async () => {
-    try {
-      info.replaceChildren(
-        code(await api.get(`/v1/events/${asset.source_event_id}`, ctx.signal)),
-      );
-    } catch (e) {
-      message(info, e);
-    }
-  };
+  const comparisonStatus = el("p", "muted");
+  comparisonStatus.setAttribute("role", "status");
+  comparisonStatus.setAttribute("aria-atomic", "true");
+  const comparisonResult = el("div");
+  let compareRequest: AbortController | undefined;
   const compare = async () => {
+    compareRequest?.abort();
+    const request = new AbortController();
+    compareRequest = request;
+    const signal = AbortSignal.any([ctx.signal, request.signal]);
+    comparisonResult.removeAttribute("role");
+    comparisonResult.replaceChildren();
+    const loading = "正在比较正文…";
+    if (comparisonStatus.textContent !== loading) comparisonStatus.textContent = loading;
     try {
       const old = await api.get<Asset>(
         `/v1/assets/${id}?version=${Number(oldVersion.value)}`,
-        ctx.signal,
+        signal,
       );
+      if (signal.aborted) return;
       const delta = textDelta(old.content ?? "", asset.content ?? "");
-      info.replaceChildren(
+      comparisonResult.replaceChildren(
         el(
           "p",
           "muted",
@@ -314,8 +450,11 @@ export async function assetDetail(
           delta.suffix,
         ),
       );
+      comparisonStatus.textContent = `正文比较完成，v${old.version} 到 v${asset.version}。`;
     } catch (e) {
-      message(info, e);
+      if (signal.aborted) return;
+      comparisonStatus.textContent = "";
+      message(comparisonResult, e);
     }
   };
   const mutate = async (path: string, method: string, data?: unknown) => {
@@ -375,7 +514,8 @@ export async function assetDetail(
       message(error, e);
     }
   };
-  info.append(code(asset.content));
+  const versionStatus = status(asset.semantic_status ?? asset.normalization_status);
+  versionStatus.classList.add("asset-version-status");
   root.append(
     heading(
       asset.title || "记忆详情",
@@ -388,7 +528,7 @@ export async function assetDetail(
       el(
         "div",
         "actions",
-        status(asset.semantic_status ?? asset.normalization_status),
+        versionStatus,
         badge(`v${asset.version}`),
       ),
       asset.identity ? code(asset.identity) : null,
@@ -399,17 +539,16 @@ export async function assetDetail(
         submit("读取版本"),
       ),
     ),
+    assetContent(asset, ctx),
     panel(
-      "内容与来源",
+      "版本比较",
       el(
         "div",
-        "tabs",
-        button("正文", () => info.replaceChildren(code(asset.content))),
-        canWrite(ctx.role) ? button("原始来源", loadSource) : null,
+        "actions asset-comparison-controls",
         field("对比版本", oldVersion),
         button("比较正文", compare),
       ),
-      info,
+      el("div", "asset-comparison", comparisonStatus, comparisonResult),
     ),
     panel(
       "来源引用",

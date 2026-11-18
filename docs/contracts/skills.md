@@ -56,3 +56,13 @@ scope/version/source check; see [CLIENTS](../CLIENTS.md). Export is an explicit 
 copy. Managed loading, revocation of existing offline copies, and automatic candidate
 mining are not implemented. Current results belong in [VALIDATION](../VALIDATION.md).
 Private Run references retain the restrictions in the [Run contract](runs.md).
+
+## Selected-experience drafting entry point
+
+The independent [Skill CLI](../SKILL-CANDIDATE-CLI.md) deterministically prefills a
+private editable candidate from one explicitly selected fixed Run prefix or exact
+asset/Learning version plus owner-confirmed disclosed prose. It reuses existing
+candidate/review/publication endpoints. Selected basis is revision-bound in a
+private notes envelope; submitting a different basis for that envelope conflicts
+until the owner appends a candidate revision. No private supports are auto-copied,
+no model is required, and saving never submits, approves or publishes.
