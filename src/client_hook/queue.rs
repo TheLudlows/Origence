@@ -131,13 +131,14 @@ impl Queue {
     }
 
     fn prepare_directory(&self) -> anyhow::Result<()> {
-        let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
-        {
+        let created = {
             use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        match builder.create(&self.0) {
+            fs::DirBuilder::new().mode(0o700).create(&self.0)
+        };
+        #[cfg(not(unix))]
+        let created = fs::create_dir(&self.0);
+        match created {
             Ok(()) => {
                 let parent = self.0.parent().context("invalid hook queue location")?;
                 sync_directory(parent)?;

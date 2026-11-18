@@ -21,6 +21,12 @@ MCP schema 的 3 项 Python 回归通过，三份接入示例和两份脱敏夹�
   其他 key 读取拒绝、reader 写入拒绝、轮换撤销后旧记录滞留和新事件仍使用原逻辑 key 的 Run。
   现有 MCP、Run、PDF 来源定位和回归用例一并通过。
 
+草稿 PR #106 的首轮 CI 在 Windows Clippy 上因 `unused_mut` 失败。创建队列目录的可变
+构建器只在 Unix 的权限分支中使用。修复后 Unix 显式创建 `0700` 目录，Windows 使用
+继承私有父目录 ACL 的常规目录创建调用。Linux 重新运行格式、全目标 Clippy、五项 Hook、
+两项 MCP/Run 定向测试及上述聚合回归，结果均通过。
+[首轮 Windows CI 日志](https://github.com/TheLudlows/Origence/actions/runs/44326867155/job/134880390115)
+
 当前证据来自本地夹具。真实 Codex 和 Claude Code 的 Hook 加载、实际事件及标识覆盖、Windows 文件行为、
 真实模型和正式试点仍待验收。Claude Code 缺少可靠的整轮用户中断信号，无关联 ID 的事件会跳过。
 显式 MCP 关联需要调用方已持有准确标识，自动会话正文归档留在后续规划。
