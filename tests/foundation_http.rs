@@ -427,6 +427,8 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
             .await
             .unwrap()
     );
+    let overview = || client.call(Method::GET, "/v1/runs/overview", None, None);
+    assert_eq!(overview().await.unwrap()["created_runs"], 1);
     // Source withdrawal blocks even historical/revoked assessment read and replay.
     let source: Uuid = serde_json::from_value(second["source_event_id"].clone()).unwrap();
     service
@@ -441,6 +443,12 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
         client.call(Method::GET, &path, None, None).await,
         Err(origence::error::AppError::NotFound | origence::error::AppError::Forbidden)
     ));
+    assert_eq!(overview().await.unwrap()["created_runs"], 1);
+    let catalog = client
+        .call(Method::GET, "/v1/runs", None, None)
+        .await
+        .unwrap();
+    assert_eq!(catalog["items"][0]["run_id"], run.to_string());
     assert!(
         client
             .call(Method::POST, &route, Some(&input), None)

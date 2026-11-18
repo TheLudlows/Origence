@@ -47,4 +47,13 @@ impl Service {
         tx.commit().await?;
         Ok(value)
     }
+
+    pub async fn run_creation_overview(&self, auth: &AuthContext, window: &str) -> Result<Value> {
+        let mut tx = self.read(auth, Permission::Read).await?;
+        let value = tx
+            .run_creation_overview_at(window, crate::storage::sqlite::now_ms())
+            .await?;
+        tx.commit().await?;
+        Ok(value)
+    }
 }

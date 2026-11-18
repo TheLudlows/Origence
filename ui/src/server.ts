@@ -12,6 +12,7 @@ const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const rules: [string, RegExp][] = [
   ["GET", /^\/health\/(live|ready)$/],
   ["GET", /^\/v1\/(whoami|session|assets|runs)$/],
+  ["GET", /^\/v1\/runs\/overview$/],
   [
     "POST",
     /^\/v1\/(search|context|knowledge|files|memories\/(identified|semantic|lookup)|captures\/(identified|semantic))$/,

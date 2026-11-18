@@ -1,0 +1,72 @@
+import { api } from "./api.js";
+import { button, el, field, message, panel, select, table } from "./components.js";
+
+interface RunCreationBucket {
+  start_ms: number;
+  end_ms: number;
+  created_runs: number;
+}
+
+interface RunCreationOverview extends RunCreationBucket {
+  series: RunCreationBucket[];
+}
+
+function utc(ms: number) {
+  return new Date(ms).toISOString().replace("T", " ").replace("Z", "");
+}
+
+export function runCreationTrend(signal: AbortSignal) {
+  const window = select([
+    ["24h", "最近 24 小时"],
+    ["7d", "最近 7 天"],
+  ]);
+  const result = el("div");
+  const status = el("p");
+  status.setAttribute("role", "status");
+  let pending: AbortController | undefined;
+  const load = async () => {
+    pending?.abort();
+    const request = new AbortController();
+    pending = request;
+    const requestSignal = AbortSignal.any([signal, request.signal]);
+    status.textContent = "正在读取创建量…";
+    result.replaceChildren();
+    try {
+      const data = await api.get<RunCreationOverview>(
+        `/v1/runs/overview?window=${encodeURIComponent(window.value)}`,
+        requestSignal,
+      );
+      if (requestSignal.aborted) return;
+      const scale = Math.max(1, ...data.series.map((bucket) => bucket.created_runs));
+      status.textContent = `新建运行 ${data.created_runs.toLocaleString("zh-CN")} 条`;
+      result.append(
+        el("p", "muted", `UTC ${utc(data.start_ms)}（含）至 ${utc(data.end_ms)}（不含）`),
+        table(
+          ["桶起点（UTC，含）", "桶终点（UTC，不含）", "创建数", "相对趋势"],
+          data.series.map((bucket) => {
+            const bar = el("meter");
+            bar.max = scale;
+            bar.value = bucket.created_runs;
+            bar.setAttribute("aria-hidden", "true");
+            return [utc(bucket.start_ms), utc(bucket.end_ms), bucket.created_runs, bar];
+          }),
+        ),
+      );
+    } catch (error) {
+      if (requestSignal.aborted) return;
+      status.textContent = "创建量暂不可用";
+      const failure = el("div");
+      message(failure, error);
+      result.append(failure, button("重试读取创建量", load));
+    }
+  };
+  window.addEventListener("change", () => void load());
+  void load();
+  return panel(
+    "运行创建趋势",
+    field("统计范围", window),
+    el("p", "muted", "统计当前逻辑 key 下服务端记录的新建运行。该数字包含所有结果状态。"),
+    status,
+    result,
+  );
+}

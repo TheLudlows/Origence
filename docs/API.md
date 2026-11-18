@@ -134,6 +134,16 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 资产页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
 分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
 
+运行总览使用独立的 `GET /v1/runs/overview?window=24h|7d`，默认 `24h`。
+仅统计当前 tenant、workspace 和逻辑 key 的持久化 Run 创建记录。
+响应包含 `scope:"current_logical_key"`、`window`、`timezone:"UTC"`、
+`start_ms`、`end_ms`、`created_runs` 和 `series`。
+`series` 按时间升序返回 24 个一小时桶或 7 个 24 小时桶，每桶
+含 `start_ms`、`end_ms`、`created_runs`，包括零计数。
+起止为 Unix 毫秒，窗口和桶均左闭右开，以本次服务端读取时刻为终点向前滚动。
+此计数随授权轮换保留，事件、重试和证据撤回不会新增或抹去创建记录。
+窗口参数不能覆盖鉴权范围。详情见 [Run 合同](contracts/runs.md#run-creation-overview)。
+
 记忆目录支持额外的 `memory_filter=<URL 编码 JSON>`，例如：
 `{"subject":{"kind":"service","stable_id":"Atlas"},"predicate":"release.rule","context":{"env":"production"}}`。
 库入口为 `Service::list_memories(auth, &MemoryCatalogFilter, after, limit)`。

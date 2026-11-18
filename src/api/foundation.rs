@@ -21,6 +21,7 @@ use uuid::Uuid;
 pub(super) fn routes() -> Router<Service> {
     Router::new()
         .route("/v1/runs", post(create_run).get(list_runs))
+        .route("/v1/runs/overview", get(run_creation_overview))
         .route("/v1/runs/{id}", get(run_trace))
         .route("/v1/runs/{id}/prefix", get(run_prefix))
         .route("/v1/runs/{id}/pdf-source", get(run_pdf_source))
@@ -86,6 +87,25 @@ async fn list_runs(
                 page.after.unwrap_or_default(),
                 page.limit.unwrap_or(50),
             )
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunOverviewQuery {
+    window: Option<String>,
+}
+
+async fn run_creation_overview(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Query(query): Query<RunOverviewQuery>,
+) -> Result<Json<Value>> {
+    let caller = auth(&service, &headers).await?;
+    Ok(Json(
+        service
+            .run_creation_overview(&caller, query.window.as_deref().unwrap_or("24h"))
             .await?,
     ))
 }

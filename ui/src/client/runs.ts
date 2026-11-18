@@ -19,6 +19,7 @@ import {
 } from "./components.js";
 import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
 import { runPdfPreview, sourcePreview } from "./source.js";
+import { runCreationTrend } from "./run-creation-trend.js";
 
 export function citation(ref: Provenance, ctx: ViewContext, pdf?: { path?: string }) {
   const source = el("div");
@@ -67,7 +68,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   );
   const cards = el("div", "stats");
   const list = panel("当前 key 的运行");
-  root.append(cards, list);
+  root.append(cards, runCreationTrend(ctx.signal), list);
   const results = await Promise.allSettled([
     api.get<{ status: string }>("/health/ready", ctx.signal),
     api.get<Page<Run>>("/v1/runs?limit=25", ctx.signal),
@@ -99,7 +100,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   );
   cards.append(
     panel(
-      "延迟 / Token 成本",
+      "业务成功率 / 端到端 P95 / Token / 成本",
       el("div", "stat-value", "未采集"),
       el("p", "muted", "没有计量数据时保留未知"),
     ),

@@ -1304,3 +1304,37 @@ Origence 1.98.0 工具链编译的测试二进制 SHA256
   v2 仍为当前版本。联验保留了浏览器原件哈希、原生查看器截图和 HTTP 状态记录。
 - 本地格式、Clippy、PDF 单元 1 项、Service/HTTP 1 项、无默认特性的 PDF 核心
   9 项及 UI 19 项均通过。合成 Chromium 回归和上述真实服务联验均通过。
+
+## 2026-11-18 — #76 Run 创建量与趋势（本地）
+
+基于 main `3c66b5b06fbf40cc22641b373f892da1b617aff0`。总览以一个服务端
+截止时间和一个授权读快照计算当前逻辑 key 的创建记录。UTC 半开滚动窗口返回
+24 个一小时桶或 7 个 24 小时桶，空桶为 0。Run 目录仍按 UUID 分页。重复创建
+请求及证据撤回不改变创建计数，业务结果无法从创建记录推断。
+
+SQLite 新增单个 tenant/workspace/owner/created_at 覆盖索引。使用现有精确
+schema admission，缺索引的旧目录在写入前拒绝，不建索引、不迁移。测试中的
+实际 EXPLAIN 为 `SEARCH oc_runs USING COVERING INDEX oc_runs_owner_created_at
+(tenant_id=? AND workspace_id=? AND owner_key_id=? AND created_at>? AND created_at<?)`。
+每个桶执行一个单表标量计数，最多 24 个互不重叠的范围查询，不提取 Run 或事件正文。
+
+- Linux / Rust 1.98.0。 `cargo test --locked --no-fail-fast` 通过，450 项通过、
+  8 项默认忽略的引擎专项未计入。 `cargo test --locked --test local run_creation_ -- --nocapture`
+  复跑覆盖查询计划、固定时刻的桶边界与总和、幂等、跨 scope/逻辑 key、读权限、轮换、
+  无效窗口与范围参数、超过首屏和空计数。现有 Run 核验/证据撤回测试另确认详情拒绝而
+  该 Run 仍保留在目录和创建量中。
+- `cargo fmt --all -- --check` 及默认全特性、authority-only、core-only 的
+  `cargo clippy --locked --all-targets -- -D warnings` 均通过。authority-only 使用
+  `cargo test --locked --no-default-features --features sqlite --test local
+  missing_run_creation_index_is_rejected_without_repair` 验证旧文件原样保留。
+- Node 24.22.1。 `npm --prefix ui run check`、`npm --prefix ui test` 通过，19 项，
+  覆盖两时间窗口、列表独立、错误与重试。既有 Chromium 路由焦点回归通过。
+- Chromium 156.0.8078.79、实际 Node relay、实际 Origence/SQLite 与固定 AnySeek
+  `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。合成临时数据中两窗口均正确
+  显示 30 个 Run，而目录首屏为 25。另一管理员及 reader 均为 0，窗内空桶、
+  桶合计、UTC 边界与 320px 布局均通过。本地浏览器证据复跑：
+  `python3 tools/anyseek_smoke.py --anyseek-binary <AnySeek binary> --run
+  python3 /workspace/issue76-run-trends-evidence/smoke.py --binary <Origence binary>`。
+
+业务成功率、端到端 P95、Token 和成本仍未采集。本切片不提供告警、生产容量验收、
+Windows 运行证据或真实客户端验证。仅本地提交。
