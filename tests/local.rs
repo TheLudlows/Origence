@@ -42,3 +42,6 @@ mod retrieval_diagnostics;
 
 #[cfg(feature = "local-storage")]
 mod mcp_runs;
+
+#[cfg(feature = "local-storage")]
+mod run_pdf_source;

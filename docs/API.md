@@ -216,6 +216,11 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 返回 hits 含 asset_id/version/chunk_id/source_event_id/locator/score。locator 给出原文 UTF-8 字节区间、行号，PDF 另有页号。只取当前已发布版本，显式历史版本走 get。
 
+私有 Run 的固定 PDF 引用可用 `GET /v1/runs/{id}/pdf-source?sequence=N&evidence_ref_id=UUID`
+读取已核对的页内提取文本。该接口要求 Run 所有权和现有原件权限，返回精确资产版本、
+已知页码及可验证的文本片段，或明确无页内定位。`original=true` 获取该引用的原件。
+详情见 [Run 契约](contracts/runs.md#pdf-page-preview-from-a-private-run)。
+
 向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐或 reranker；向量查询在 AnySeek 中对授权候选排名；不承诺对原后端或生产分布具有同等排序与性能。
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。

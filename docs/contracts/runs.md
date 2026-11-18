@@ -103,3 +103,35 @@ Owner-transcribed external assessments use a separate [verification contract](ru
 They address an exact Run prefix and preserve attribution, basis, unknown use
 versions and withdrawal. They are never platform attestations; a claimed verifier
 or `reporter=user/test` label does not grant private Run access.
+
+## PDF page preview from a private Run
+
+`GET /v1/runs/{run}/pdf-source?sequence=N&evidence_ref_id=UUID` resolves an
+archived PDF citation from that Run event. The UUID is server assigned and read
+from the event's archive references. The query accepts neither a file ID nor an
+asset version, page, range or parser supplied by the caller. The route requires
+the existing original-source Write permission and the current logical Run owner.
+It checks the event's current reference visibility, the exact published member
+and root sources, and the original file before and after file/parse work.
+
+The response has `asset_version`, a known one-based `page` or null, and a `span`
+of `before`, `highlight`, `after` or null. A span requires the integrity-checked
+original, the archived PDF parser marker, a valid page-local UTF-8 byte range,
+the immutable published chunk hash, and a unique exact match on the extracted
+page. Extraction warnings or ambiguous, invalid or unusable text yield a null
+span. Returned text is the verified extraction for that page. The PDF viewer
+uses the separate original file and opens at its recorded page. There is no
+coordinate overlay or OCR. Scan-only files still follow existing ingestion rules.
+
+Adding `original=true` returns the same authorized, integrity-checked original as
+a no-store attachment. The UI fetches it again on every open and applies a
+browser Blob URL page fragment. Source withdrawal and credential revocation
+prevent new previews and opens. A copy already received by a user or opened in a
+viewer remains under the existing download semantics.
+
+Preview reads are bounded by the existing upload size, page count and extracted
+text limits. The parser runs off async threads and outside storage transactions.
+At most two blocking preview tasks run at once in a process. Busy requests may
+retry. Dropping an HTTP request does not abort an active parser; its permit is
+released when it finishes. The ingest parser marker, durable worker and
+fresh-database schema remain unchanged.

@@ -11,7 +11,7 @@ use std::{io::Read, path::Path, sync::LazyLock};
 static JIEBA: LazyLock<jieba_rs::Jieba> = LazyLock::new(jieba_rs::Jieba::new);
 pub const MAX_TEXT: usize = 1_000_000;
 pub const MAX_FILE: usize = 10 * 1024 * 1024;
-const MAX_PDF_PAGES: usize = 200;
+pub(crate) const MAX_PDF_PAGES: usize = 200;
 const PDF_PARSER: &str = "pdf-oxide-0.3.78-v1";
 
 pub fn validate_text(text: &str) -> Result<()> {
@@ -85,6 +85,27 @@ fn parse_pdf(path: &Path) -> Result<Vec<Chunk>> {
     if bytes.len() > MAX_FILE {
         return Err(AppError::Invalid("file too large".into()));
     }
+    let (doc, count) = open_pdf(bytes)?;
+    let mut result = Vec::new();
+    let mut total = 0;
+    for page in 0..count {
+        let text = extract_pdf_page(&doc, page, false)?;
+        total += text.len();
+        if total > MAX_TEXT {
+            return Err(AppError::Invalid(
+                "PDF extracted text limit exceeded".into(),
+            ));
+        }
+        for mut chunk in chunks(&text, "text")? {
+            chunk.locator["page"] = json!(page + 1);
+            chunk.locator["parser"] = json!(PDF_PARSER);
+            result.push(chunk);
+        }
+    }
+    Ok(result)
+}
+
+fn open_pdf(bytes: Vec<u8>) -> Result<(PdfDocument, usize)> {
     // Free-function diagnostics are thread-local; a previous failed open on a
     // reused blocking thread must not contaminate this document's diagnostics.
     drain_global_warnings();
@@ -101,42 +122,81 @@ fn parse_pdf(path: &Path) -> Result<Vec<Chunk>> {
             "PDF page limit exceeded or empty PDF".into(),
         ));
     }
-    let mut result = Vec::new();
-    let mut total = 0;
-    for page in 0..count {
-        let text = doc.extract_text(page).map_err(|_| {
-            AppError::Invalid(format!("PDF text extraction failed on page {}", page + 1))
-        })?;
-        if doc.take_structured_warnings().iter().any(|warning| {
-            matches!(
-                warning.category,
-                WarningCategory::OperatorCapExceeded | WarningCategory::EofPremature
-            )
-        }) {
-            return Err(AppError::Invalid(format!(
-                "PDF extraction was incomplete on page {}",
-                page + 1
-            )));
-        }
-        if text.chars().filter(|c| c.is_alphanumeric()).take(3).count() < 3 {
-            return Err(AppError::Invalid(format!(
-                "PDF page {} has no usable text; OCR is unsupported",
-                page + 1
-            )));
-        }
-        total += text.len();
-        if total > MAX_TEXT {
-            return Err(AppError::Invalid(
-                "PDF extracted text limit exceeded".into(),
-            ));
-        }
-        for mut chunk in chunks(&text, "text")? {
-            chunk.locator["page"] = json!(page + 1);
-            chunk.locator["parser"] = json!(PDF_PARSER);
-            result.push(chunk);
-        }
+    Ok((doc, count))
+}
+
+fn extract_pdf_page(doc: &PdfDocument, page: usize, strict: bool) -> Result<String> {
+    let text = doc.extract_text(page).map_err(|_| {
+        AppError::Invalid(format!("PDF text extraction failed on page {}", page + 1))
+    })?;
+    if doc.take_structured_warnings().iter().any(|warning| {
+        matches!(
+            warning.category,
+            WarningCategory::OperatorCapExceeded | WarningCategory::EofPremature
+        ) || strict
+    }) {
+        return Err(AppError::Invalid(format!(
+            "PDF extraction was incomplete on page {}",
+            page + 1
+        )));
     }
-    Ok(result)
+    if text.chars().filter(|c| c.is_alphanumeric()).take(3).count() < 3 {
+        return Err(AppError::Invalid(format!(
+            "PDF page {} has no usable text; OCR is unsupported",
+            page + 1
+        )));
+    }
+
+    if text.len() > MAX_TEXT {
+        return Err(AppError::Invalid(
+            "PDF extracted text limit exceeded".into(),
+        ));
+    }
+    Ok(text)
+}
+
+#[cfg(feature = "local-storage")]
+#[derive(serde::Serialize)]
+pub struct PdfPageSpan {
+    pub before: String,
+    pub highlight: String,
+    pub after: String,
+}
+
+/// Locate a unique archived byte range using the same extraction as ingestion.
+#[cfg(feature = "local-storage")]
+pub(crate) fn pdf_page_span(
+    bytes: Vec<u8>,
+    locator: &serde_json::Value,
+    chunk_hash: &str,
+) -> Option<PdfPageSpan> {
+    if bytes.len() > MAX_FILE || locator["parser"].as_str() != Some(PDF_PARSER) {
+        return None;
+    }
+    let page = usize::try_from(locator["page"].as_u64()?)
+        .ok()?
+        .checked_sub(1)?;
+    let start = usize::try_from(locator["byte_start"].as_u64()?).ok()?;
+    let end = usize::try_from(locator["byte_end"].as_u64()?).ok()?;
+    let (doc, count) = open_pdf(bytes).ok()?;
+    if page >= count {
+        return None;
+    }
+    let text = extract_pdf_page(&doc, page, true).ok()?;
+    let quote = text.get(start..end)?;
+    let first = quote.chars().next()?;
+    if quote.trim().is_empty()
+        || crate::storage::hash(quote) != chunk_hash
+        || text.find(quote) != Some(start)
+        || text[start + first.len_utf8()..].contains(quote)
+    {
+        return None;
+    }
+    Some(PdfPageSpan {
+        before: text[..start].to_owned(),
+        highlight: quote.to_owned(),
+        after: text[end..].to_owned(),
+    })
 }
 
 pub async fn parse_file(path: &Path, format: &str) -> Result<Vec<Chunk>> {

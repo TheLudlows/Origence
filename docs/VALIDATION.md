@@ -1211,3 +1211,34 @@ all-target strict Clippy, and `cargo build --locked --bins` passed.
 3 passed. Databases and protocol/model fixtures were fresh and synthetic. These
 checks do not certify real native clients or business outcomes. The new exact-HEAD
 CI must pass before merge; actual final main will be independently retested.
+
+## 2026-11-18 — #76 私有 Run 的固定版本 PDF 页内定位
+
+- 最新 main 核对为 `48cfa7c643b8c077ad33c55981def51979afde05`。独立本地
+  分支 `fix/issue76-pdf-page`。本地对象库未找到候选 `56989af`，未将其当作交付依据。
+  查阅仓库 AGENTS.md 和来源/Run 合同，仓库及工作区无适用的 `.agents/skills`。
+- Linux x86_64，Rust/Cargo 1.98.0、Node 24.22.1、Chromium 156.0.8078.79。
+  测试只使用合成 PDF、新临时 SQLite、动态 loopback 端口和 AnySeek 协议夹具，
+  模型禁用。Codex/Claude Code 产品客户端测试保持暂停。
+- `cargo test --locked --offline --test local run_pdf_source`：1 passed。
+  通过已授权原件与发布片段哈希验证 v1 第 2 页，在 v2 发布后仍返回 v1 原件字节；
+  相同文本重复时返回页码和无 span，原件仍可授权打开。跨 Key、reader、无关证据 ID、
+  请求指定版本、来源撤回后的重复获取均按合同拒绝。覆盖公共 Service、上传/发布/搜索
+  管道和真实 HTTP 请求。
+- `cargo test --locked --offline --lib pdf_page_span`：1 passed。覆盖 UTF-8 多字节边界、
+  片段哈希、未知解析器、重复匹配和纯栅格页无高亮。首轮非 ASCII 夹具未声明字库编码，
+  修正夹具 WinAnsi 编码后复跑通过。现有
+  `cargo test --locked --offline --no-default-features --test core pdf_`：9 passed，
+  含多语言、分页、损坏、操作符截断、文件/页数/总文本限制和拒绝部分发布。
+- `npm --prefix ui test`：19 passed。随后从仓库根目录执行
+  `node ui/scripts/check-run-pdf-browser.mjs`：通过。真实 Chromium 和构建后的 UI/relay
+  使用合成 HTTP 响应，验证 v1 页内文本 mark、原件字节、第 2 页和第 3 页的实际新标签
+  Blob URL、回退不高亮以及撤回后拒绝新开；没有回退到 asset 最新版或裸文件 URL。
+  首轮浏览器行为断言通过后有配置目录清理竞争，改用正常关闭并重试清理后整条通过。
+  `node ui/scripts/check-run-verification-browser.mjs`：既有 Run 核验浏览器回归通过。
+- `cargo fmt --all -- --check`、`cargo clippy --locked --offline --all-targets --all-features -- -D warnings`
+  与 `git diff --check` 通过。复用已有单表存储查询，未新增 SQL、依赖、权限、schema 或迁移。
+  撤回后的新响应要求重新获得权限和来源检查，已经打开的原件遵循现有下载语义。
+- 局限：高亮位于核对后的页内提取文本，浏览器原件在对应页打开。未加坐标覆盖或 OCR。
+  浏览器与真实 HTTP 后端分别验证，Windows 和完整 #76 验收未跑。本切片仅在独立分支
+  本地提交，未推送、未发 PR。
