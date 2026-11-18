@@ -72,3 +72,50 @@ PREFLIGHT 补充 Windows 新 DataDir/独立 AnySeekDataDir/workspace 与初始�
 授权真实 v2 检索和无权限干净会话对照，不进入正式分母。客户端触发/JSONL 信号仍待冻结版实查。
 13 项 Python 用例、两模板命名空间/状态检查及 diff --check 均通过；不改代码/评分格式。
 未执行模型、安装、登录、业务签认、Windows 或真实检索预检。#91 仍 NOT_RUN，未合入或部署。
+
+## 已整合主干和非客户端证据（2026-11-18）
+
+远端 main 和独立测试工作树均核对为 `48cfa7c643b8c077ad33c55981def51979afde05`。
+四个实施 PR 已合入，GitHub 合入状态与本地祖先提交一致：
+
+| 实施范围 | PR | 主干提交 |
+| --- | --- | --- |
+| #90 控制台治理 | [#93](https://github.com/TheLudlows/Origence/pull/93) | `9c4ed2ea6fdf17ed8b931ddcddf4f081c4367719` |
+| #88 Skill 候选 | [#94](https://github.com/TheLudlows/Origence/pull/94) | `a56246406a0688f646a45a85cc2954fb14a8d28a` |
+| #89 Run 核验与审阅 | [#95](https://github.com/TheLudlows/Origence/pull/95) | `e78b6ba5f3d6fcb4730789981a092c85cdc4c12a` |
+| #87 MCP 与私有 Run | [#96](https://github.com/TheLudlows/Origence/pull/96) | `48cfa7c643b8c077ad33c55981def51979afde05` |
+
+[主干 CI 44217031418](https://github.com/TheLudlows/Origence/actions/runs/44217031418)
+的 `windows`、`node-ui`、`fast-check`、`linux-native` 均为 completed/success。
+[#92](https://github.com/TheLudlows/Origence/pull/92) 保持草稿。正式试点仍为 **NOT_RUN**。
+
+### 同版本恢复
+
+本轮 Linux x86_64 使用上述 Origence 主干和 CI 固定 AnySeek
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。SQLite/Blob 使用新临时权威目录，
+并创建获授权和无权限两个独立合成 workspace。AnySeek 使用专用 loopback 端口和新存储根。
+宿主停写并正常关闭后，在同一停写窗口复制完整权威目录，通过 AnySeek 原生服务备份
+`POST /api/v1/service-backups` 和恢复 `POST /api/v1/service-restores` 生成独立目标根。
+源测试实例关闭后用该新根启动恢复实例，沿用专用端口保留绑定。测试进程、目录、快照和恢复副本
+在结束后清理。
+
+按 [RUNBOOK 的同版本恢复流程](RUNBOOK.md#同版本-sqlite--anyseek--blob-恢复演练) 核对了以下
+**10 组工程检查**：
+
+1. 停机复制的完整权威目录与源目录文件哈希一致，清单包含 SQLite 和 Blob 文件。
+2. AnySeek 服务备份使用相同操作 ID 重试时，返回相同回执。
+3. AnySeek 恢复生成独立、尚未启动的根。同一恢复请求重试返回相同回执。
+4. 恢复后的 SQLite 通过同版本离线结构检查。
+5. 历史 v1 与当前 v2 正文可按精确版本读取，当前指针仍为 v2。
+6. v1 和 v2 的两份原始 Blob 字节均与上传时一致。
+7. 恢复后的关键词命中保留精确版本、来源、块、locator 和正文。
+8. 已撤回来源的定版读取返回 404，关键词检索零命中。
+9. 原 Run 前缀和同事件的准备重放回执保持一致。
+10. 无权 workspace 的定版资产和原 Run 读取均返回 404，关键词检索零命中。
+
+本次工程检查覆盖 Linux 合成数据。缺失或冲突对象负例、恢复后 Skill 摘要和任务集、
+Windows 专门恢复演练及生产恢复仍待验。正式 pilot.P7 签认 **NOT_RUN**。
+独立 DBA 待复查停写点、快照对应、完整断言和清理，制度负责人及独立验收人尚未签认。
+
+验收材料自身验证通过 13 项 Python 用例、模板命名空间/未签认状态检查及 `git diff --check`。
+Codex 与 Claude Code 产品客户端测试暂停，正式试点和评分均维持 `NOT_RUN`。

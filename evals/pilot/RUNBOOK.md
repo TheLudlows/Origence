@@ -9,6 +9,8 @@
 
 ## 真实闭环与精确加载证据
 
+Codex 与 Claude Code 的产品客户端测试均已暂停。本节保留恢复试跑后的原验收步骤。
+
 研发首做必须在 Claude Code，业务首做必须在 Codex。记录真实终端版本输出、会话 ID、任务输入摘要、MCP 工具请求/响应及 server Run ID。连接等待题使用给定合成快照，DBA 校验诊断，不让客户端触达生产。
 
 从首做的精确资产版本或不可变 Run 前缀生成候选，保留 revision、选定脱敏依据、审阅人、审阅 packet digest、批准时间和发布 skill ID/version/package digest。修改候选后验证旧批准失效并重新审批；不能自动发布。
@@ -36,6 +38,9 @@
 对缺失日志记 not-collected；正文提及一个工具不证明调用。索引哈希只能证明固定字节，不能证明真实性。
 
 ## 同版本 SQLite / AnySeek / Blob 恢复演练
+
+整合主干上的 Linux 合成环境已补充工程恢复检查，范围及缺口见 [VALIDATION](VALIDATION.md#已整合主干和非客户端证据2026-11-18)。
+正式 pilot.P7 仍待按本节完整复查并独立签认。
 
 1. 仅在专用新库完成样本导入、精确 v1→v2 更正、来源撤回、私有 Run、Skill 发布与 pending/failed job；保存可预期 get/search/context/package、Run prefix、权限拒绝结果。
 2. 记录同一整合 SHA、二进制哈希、schema/分析/embedding 配置和 AnySeek 版本。协调停止客户端、所有写入方、宿主与 worker，确认进程退出；等待/记录未完成请求的幂等身份。没有在线跨库一致快照协议，无法停写就 BLOCKED。

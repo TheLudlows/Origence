@@ -1,8 +1,13 @@
 # 五路 P0 独立试点验收（准备材料，不是通过报告）
 
-基线 / 2026-11-17 远端 main：`293e2bf6af3b180d43c8050731047b552ac07519`。
+2026-11-18 已核对整合主干 `48cfa7c643b8c077ad33c55981def51979afde05`，包含四个实施 PR
+#93–#96。[主干 CI 44217031418](https://github.com/TheLudlows/Origence/actions/runs/44217031418)
+的 Windows、Node UI、fast-check 和 Linux native 四项均通过。
+本目录原准备基线为 `293e2bf6af3b180d43c8050731047b552ac07519`。
 对应 [Issue #91](https://github.com/TheLudlows/Origence/issues/91)。本路只新增 `evals/pilot`；未使用客户数据、生产凭据、付费模型、客户端模型调用或生产库。
-当前结论 **NOT_RUN / 等待四路交付在同一提交**。本路执行清单使用 `pilot.P1–P7`，PRD v0.3 条款使用 `prd-v0.3.A1–A7`，两者不是同号对应。
+正式试点 **NOT_RUN**。Codex 与 Claude Code 的产品客户端测试均已暂停，独立 DBA、
+制度负责人及验收人签认待办。本路执行清单使用 `pilot.P1–P7`，PRD v0.3 条款使用
+`prd-v0.3.A1–A7`，两者不是同号对应。
 原文已核对；逐条映射及待补证据见 [PRD-MAPPING](PRD-MAPPING.md)。映射待联合审阅冻结，不能当成通过报告或产品扩展。
 
 依据：[架构](../../docs/design/agent-data-foundation.md)、[Skill](../../docs/contracts/skills.md)、
@@ -25,6 +30,8 @@
 所有隔离/撤回/版本硬门槛零违规；失败不得由质量均分抵消。试点量小只报告计数和描述性差值，不宣称统计提升。
 业务通过阈值与最大时长/成本由 DBA、制度负责人在开跑前写入冻结记录并签认；未填为 BLOCKED。
 Windows/Linux 行为核验按整合交付要求分别登记，不以本地 Python 校验替代。
+Linux 隔离同版本恢复的 10 组工程检查和签认状态见
+[验证记录](VALIDATION.md#已整合主干和非客户端证据2026-11-18)。
 
 ## 本地复跑（零网络、零模型、零产品写入）
 
@@ -60,5 +67,5 @@ PRD 的业务成功率为独立通过数/已独立判定数，核验覆盖率为
 
 先用 [单独未评分预检](PREFLIGHT.md) 核对证据能力，预检不进入评分集或未见集。
 模板见 `freeze.template.json`、`signoff.template.json`；证据和恢复清理见 `RUNBOOK.md`。
-最终必须等待根线程确认联合合同与四路同一 SHA，再执行真客户端/服务/模型步骤；
-未经 DBA 与制度负责人和独立验收人签认，不报试点通过。
+四路实施已汇集到上述主干。正式试点仍需确认联合映射与冻结配置，在客户端测试恢复后按原矩阵执行，
+并由 DBA、制度负责人和独立验收人签认。
