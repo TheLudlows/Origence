@@ -4,18 +4,111 @@ const { createServer } = require('node:http');
 const { once } = require('node:events');
 const { resolve } = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { chromium } = require('playwright');
-
-async function listen(server) {
-  server.listen(0, '127.0.0.1');
+async function listen(server, port = 0) {
+  server.listen(port, '127.0.0.1');
   await once(server, 'listening');
   return 'http://127.0.0.1:' + server.address().port;
+}
+
+const overviewStatus = '合成创建量暂不可用';
+const isFocused = (control) => control.evaluate((node) => document.activeElement === node);
+
+async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCount) {
+  const trend = page.locator('section').filter({ has: page.getByRole('heading', { name: '运行创建趋势' }) });
+  const range = trend.getByRole('combobox', { name: '统计范围' });
+  const status = trend.getByRole('status');
+  const retry = trend.getByRole('button', { name: '重试读取创建量' });
+  const error = trend.getByRole('alert').getByText(overviewStatus, { exact: true });
+  const openTrace = page.getByRole('button', { name: '查看调用链 →' });
+  const main = page.getByRole('main');
+  const focusRetry = async () => {
+    await range.focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await isFocused(retry), true);
+  };
+  const focusSnapshot = (node) => node.evaluate((button) => ({
+    attached: button.isConnected,
+    focused: document.activeElement === button,
+    activeTag: document.activeElement?.tagName,
+    disabled: button.getAttribute('aria-disabled'),
+    outline: button.isConnected && getComputedStyle(button).outlineStyle === 'solid',
+  }));
+
+  (await receiveInitial())(false);
+  await error.waitFor();
+  assert.equal(await status.innerText(), '创建量暂不可用');
+  assert.equal(await isFocused(main), true);
+  await focusRetry();
+  const originalRetry = await retry.elementHandle();
+  const receiveFailure = holdOverview();
+  await page.keyboard.press('Enter');
+  const sendFailure = await receiveFailure();
+  assert.equal(await status.innerText(), '正在读取创建量…');
+  const during = await focusSnapshot(originalRetry);
+  await page.keyboard.press('Space');
+  sendFailure(false);
+  await error.waitFor();
+  const afterFailure = {
+    ...await focusSnapshot(originalRetry),
+    sameButton: await retry.evaluate((node, before) => node === before, originalRetry),
+  };
+
+  // Finish the recovery probe even on the baseline that loses focus.
+  if (!afterFailure.focused) await focusRetry();
+  const receiveSuccess = holdOverview();
+  await page.keyboard.press('Space');
+  (await receiveSuccess())(true);
+  await trend.getByText('新建运行 3 条', { exact: true }).waitFor();
+  await retry.waitFor({ state: 'hidden' });
+  const recovered = {
+    focusedRange: await isFocused(range),
+    activeTag: await page.evaluate(() => document.activeElement.tagName),
+  };
+  assert.deepEqual({ during, afterFailure, recovered }, {
+    during: { attached: true, focused: true, activeTag: 'BUTTON', disabled: 'true', outline: true },
+    afterFailure: { attached: true, focused: true, activeTag: 'BUTTON', disabled: null, outline: true, sameButton: true },
+    recovered: { focusedRange: true, activeTag: 'SELECT' },
+  });
+
+  const receiveRangeFailure = holdOverview();
+  await range.press('ArrowDown');
+  (await receiveRangeFailure())(false);
+  await error.waitFor();
+  assert.equal(await isFocused(range), true);
+  await focusRetry();
+  const receiveBackgroundSuccess = holdOverview();
+  await page.keyboard.press('Enter');
+  const sendBackgroundSuccess = await receiveBackgroundSuccess();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await isFocused(openTrace), true);
+  sendBackgroundSuccess(true);
+  await trend.getByText('新建运行 4 条', { exact: true }).waitFor();
+  await retry.waitFor({ state: 'hidden' });
+  assert.equal(await isFocused(openTrace), true);
+  assert.equal(requestCount(), 5);
 }
 
 (async () => {
   const dist = resolve(__dirname, '../dist');
   const { createUiServer } = await import(pathToFileURL(resolve(dist, 'server.js')));
-  let onKnowledgeRequest;
+  const manual = process.argv.includes('--serve');
+  let onKnowledgeRequest, onOverviewRequest, manualAttempts = 0;
+  const holdOverview = () => {
+    assert.equal(onOverviewRequest, undefined);
+    const { promise, resolve } = Promise.withResolvers();
+    onOverviewRequest = resolve;
+    return async () => {
+      const deadline = setTimeout(() => resolve(null), 4000);
+      try {
+        const send = await promise;
+        assert.ok(send, 'Fixture did not receive the overview request');
+        return send;
+      } finally {
+        clearTimeout(deadline);
+      }
+    };
+  };
   const upstream = createServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     const url = new URL(request.url, 'http://fixture.invalid');
@@ -25,6 +118,37 @@ async function listen(server) {
       role: 'admin',
     }));
     if (url.pathname === '/health/ready') return response.end('{"status":"ready"}');
+    if (url.pathname === '/v1/runs/overview') {
+      const sendOverview = (success) => {
+        if (response.destroyed) return;
+        if (!success) {
+          response.statusCode = 503;
+          response.end(JSON.stringify({ error: { message: overviewStatus } }));
+          return;
+        }
+        const days = url.searchParams.get('window') === '7d';
+        const buckets = days ? 7 : 24;
+        const duration = days ? 86_400_000 : 3_600_000;
+        const created = days ? 4 : 3;
+        response.end(JSON.stringify({
+          start_ms: 0, end_ms: buckets * duration, created_runs: created,
+          series: Array.from({ length: buckets }, (_, index) => ({
+            start_ms: index * duration, end_ms: (index + 1) * duration, created_runs: index === 0 ? created : 0,
+          })),
+        }));
+      };
+      if (manual) {
+        const attempt = ++manualAttempts;
+        setTimeout(() => sendOverview(attempt === 3 || attempt >= 5), 1200);
+      } else if (onOverviewRequest) {
+        const notify = onOverviewRequest;
+        onOverviewRequest = undefined;
+        notify(sendOverview);
+      } else {
+        sendOverview(true);
+      }
+      return;
+    }
     if (url.pathname === '/v1/assets' || url.pathname === '/v1/runs') {
       const sendPage = () => response.end('{"items":[],"next_after":null}');
       if (url.searchParams.get('kind') === 'knowledge' && onKnowledgeRequest) {
@@ -41,11 +165,22 @@ async function listen(server) {
   let ui, browser;
   try {
     ui = createUiServer({ apiBaseUrl: await listen(upstream) });
-    const origin = await listen(ui);
+    const origin = await listen(ui, manual ? Number(process.env.ORIGENCE_FIXTURE_PORT ?? 0) : 0);
+    if (manual) {
+      console.log(origin + '/#overview · API key synthetic-key · fixture responses: 503, 503, 200, 503, then 200');
+      await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
+      return;
+    }
+    const { chromium } = require('playwright');
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     for (const width of [1024, 320]) {
       const page = await browser.newPage({ viewport: { width, height: 768 } });
       page.setDefaultTimeout(4000);
+      let overviewRequests = 0;
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/v1/runs/overview') overviewRequests++;
+      });
+      const receiveInitial = holdOverview();
       await page.goto(origin + '/#overview');
       await page.getByLabel('API key').fill('synthetic-key');
       await page.getByRole('button', { name: '连接工作空间' }).press('Enter');
@@ -57,6 +192,8 @@ async function listen(server) {
         assert.equal(await page.locator('main').getAttribute('tabindex'), '-1');
       };
       await expectMain('运行总览');
+      await checkOverviewRetry(page, receiveInitial, holdOverview, () => overviewRequests);
+      console.log('PASS ' + width + 'px: keyboard retry, focus during latency and repeated error, recovery with and without focus on Retry');
       const heldKnowledge = new Promise((resolve) => { onKnowledgeRequest = resolve; });
       await nav(/知识管理/).press('Enter');
       await expectMain('知识管理');
