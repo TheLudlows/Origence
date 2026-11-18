@@ -29,6 +29,11 @@ const pages = [
 let user: User | undefined;
 let route = new AbortController();
 
+function focusRoute(target: HTMLElement) {
+  target.tabIndex = -1;
+  target.focus({ preventScroll: true });
+}
+
 function navigate(page: string, id?: string, version?: number) {
   const hash =
     "#" +
@@ -110,10 +115,12 @@ async function render() {
   try {
     id = encodedId ? decodeURIComponent(encodedId) : undefined;
   } catch {
+    const error = empty("地址无效", "无法读取该资源标识。");
     mount.replaceChildren(
-      empty("地址无效", "无法读取该资源标识。"),
+      error,
       button("回到总览", () => navigate("overview")),
     );
+    focusRoute(error);
     return;
   }
   const versionValue = new URLSearchParams(search).get("version");
@@ -122,10 +129,12 @@ async function render() {
     versionValue &&
     (!Number.isInteger(version) || version! < 1 || version! > 2147483647)
   ) {
+    const error = empty("版本无效", "请输入正整数版本号。");
     mount.replaceChildren(
-      empty("版本无效", "请输入正整数版本号。"),
+      error,
       button("回到总览", () => navigate("overview")),
     );
+    focusRoute(error);
     return;
   }
   const title = pages.find(([key]) => key === page)?.[2] ?? "资产详情";
@@ -204,6 +213,9 @@ async function render() {
       ),
     ),
   );
+  // Move focus once when replacing the old page. Async results may arrive
+  // after the user has already moved focus to a control on the new page.
+  focusRoute(content);
   content.append(el("p", "muted", "正在读取…"));
   try {
     content.replaceChildren();

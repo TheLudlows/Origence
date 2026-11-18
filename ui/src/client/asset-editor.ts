@@ -15,15 +15,20 @@ import {
 import type { Asset, Receipt } from "./types.js";
 import { trackJob } from "./jobs.js";
 
+let dialogCount = 0;
+
 function dialog(title: string, ctx: ViewContext) {
   const modal = el("dialog");
   const lifetime = new AbortController();
   const body = el("div");
+  const label = el("h2", "", title);
+  label.id = `asset-editor-title-${++dialogCount}`;
+  modal.setAttribute("aria-labelledby", label.id);
   modal.append(
     el(
       "div",
       "dialog-head",
-      el("h2", "", title),
+      label,
       button("关闭", () => modal.close()),
     ),
     body,

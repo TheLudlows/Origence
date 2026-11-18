@@ -1211,3 +1211,25 @@ all-target strict Clippy, and `cargo build --locked --bins` passed.
 3 passed. Databases and protocol/model fixtures were fresh and synthetic. These
 checks do not certify real native clients or business outcomes. The new exact-HEAD
 CI must pass before merge; actual final main will be independently retested.
+
+## 2026-11-18 — #76 路由焦点与编辑对话框名称（本地）
+
+基于 main `48cfa7c643b8c077ad33c55981def51979afde05`。切页时将焦点放在新主区域，
+无效地址或版本则聚焦错误内容，目标不进入 Tab 顺序。焦点在页面替换时移动一次，后续
+请求完成后保留用户已经选中的控件。共享编辑与提取对话框由现有标题提供可访问名称，
+关闭行为沿用原生 dialog。界面布局、路由结构和 API 保持原行为。
+
+- Linux、Node 24.22.1。 `npm --prefix ui run check` 与 `npm --prefix ui test`
+  通过，19 项。复用页面 DOM 流程断言主区域焦点与对话框的标题关联。
+- Chromium 156.0.8078.79。使用已构建的 UI、真实 Node 转发及 loopback 合成 HTTP
+  响应。1024px 和 320px 均通过键盘切页、重复导航、浏览器前进后退、无效路径、
+  延迟目录响应保留输入焦点和文本、编辑及提取对话框在可访问性树中的名称、
+  Escape 和关闭按钮返回原控件，以及对话框打开时无整页横向溢出。
+  本地验证脚本从仓库根目录运行 `node /workspace/issue76-audit/focus-regression.cjs`。
+- `node ui/scripts/check-run-verification-browser.mjs` 通过。
+  `cargo fmt --all -- --check`、
+  `cargo clippy --locked --all-targets --all-features -- -D warnings` 和
+  `git diff --check` 通过。
+
+本轮范围限于上述 UI 回归。屏幕阅读器、实体触屏、其他浏览器、完整 #76 及真实产品
+客户端任务仍待验收。记录和实现均为本地提交。
