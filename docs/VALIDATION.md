@@ -15,6 +15,10 @@ Windows，main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5
 
 本轮覆盖 [#87](https://github.com/TheLudlows/Origence/issues/87) 的接入验收。业务答案、原生 Skill 加载和独立业务核验属于 [#91](https://github.com/TheLudlows/Origence/issues/91) 的双场景试点。
 
+仓库内的[复跑脚本](../tools/live_archive_smoke.py)在 Windows 上使用上述主干构建和 AnySeek 完成同一组检查，耗时 67.68 秒。两次跨客户端读取均返回正确的随机答案，准备回执、冲突、失败事件与凭据隔离检查全部通过。整理脚本时，一次旧二进制在启动客户端前因缺少会话接口返回 404，另一次未能从 Codex 的最终答复核对对端答案。最终复跑显式读取 Codex 的最终消息文件。此脚本的 Linux 实机运行待验证。
+
+Rust 1.98.0 的 `cargo fmt --all -- --check`、`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过。Python 脚本编译检查通过，`test_mcp_schema.py` 的 3 项测试通过。运行方式见[双客户端归档验收](CLIENTS.md#复跑双客户端归档验收)。
+
 ## 2026-11-18 · Codex 非交互检索与版本读取
 
 在 Windows 上用 main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)、

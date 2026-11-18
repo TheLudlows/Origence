@@ -64,6 +64,21 @@ Claude Code 和 Codex 使用相同的 MCP 接口。排查一次跨客户端任�
 | 使用上下文、加载 Skill、产生任务结果 | 客户端观测和 `context_run_report` 的报告方、事件与覆盖范围 | 客户端声明了哪些动作。缺少记录的步骤保持未知。 |
 | 业务结果复核 | 与固定 Run 前缀关联的核验记录及其依据 | 谁转录了什么结论，以及是否已有独立签认。 |
 
+### 复跑双客户端归档验收
+
+安装已配置模型访问权限的 Claude Code 和 Codex CLI，并准备当前版本的 Origence 和固定版本的
+AnySeek 可执行文件。在仓库根目录运行以下命令，将四个大写占位符替换为对应路径或模型名。
+
+```sh
+python tools/anyseek_smoke.py --anyseek-binary ANYSEEK_BINARY --run python tools/live_archive_smoke.py --binary ORIGENCE_BINARY --claude-model CLAUDE_MODEL --codex-model CODEX_MODEL --report archive-result.json
+```
+
+Claude Code 以 `--bare` 运行，从环境获取 Anthropic 凭据和端点。若已在个人设置中配置，
+可在命令末尾加 `--claude-settings PATH`，从该 JSON 的 `env` 读取这组设置。
+Codex 使用 OpenAI provider，可用 `--codex-credential-store` 选择已有登录凭据的存储方式。
+每次运行会调用真实模型，在新的临时 workspace 中完成三次客户端会话。三次调用共享四分钟等待预算，
+单次最多等待 85 秒。报告写入一个新文件，仅含模型选择、工具名、耗时和验收结果。
+
 ## 导出已批准的 Skill
 
 获得 workspace 的 tenant/workspace 标识、已发布的 Skill ID 与精确版本后运行：
