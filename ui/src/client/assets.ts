@@ -414,17 +414,20 @@ export async function assetDetail(
   oldVersion.min = "1";
   const historyVersion = input("版本号", String(asset.version), "number");
   historyVersion.min = "1";
-  const comparison = el("div");
+  const comparisonStatus = el("p", "muted");
+  comparisonStatus.setAttribute("role", "status");
+  comparisonStatus.setAttribute("aria-atomic", "true");
+  const comparisonResult = el("div");
   let compareRequest: AbortController | undefined;
   const compare = async () => {
     compareRequest?.abort();
     const request = new AbortController();
     compareRequest = request;
     const signal = AbortSignal.any([ctx.signal, request.signal]);
-    const loading = el("p", "muted", "正在比较正文…");
-    loading.setAttribute("role", "status");
-    comparison.removeAttribute("role");
-    comparison.replaceChildren(loading);
+    comparisonResult.removeAttribute("role");
+    comparisonResult.replaceChildren();
+    const loading = "正在比较正文…";
+    if (comparisonStatus.textContent !== loading) comparisonStatus.textContent = loading;
     try {
       const old = await api.get<Asset>(
         `/v1/assets/${id}?version=${Number(oldVersion.value)}`,
@@ -432,7 +435,7 @@ export async function assetDetail(
       );
       if (signal.aborted) return;
       const delta = textDelta(old.content ?? "", asset.content ?? "");
-      comparison.replaceChildren(
+      comparisonResult.replaceChildren(
         el(
           "p",
           "muted",
@@ -447,8 +450,11 @@ export async function assetDetail(
           delta.suffix,
         ),
       );
+      comparisonStatus.textContent = `正文比较完成，v${old.version} 到 v${asset.version}。`;
     } catch (e) {
-      if (!signal.aborted) message(comparison, e);
+      if (signal.aborted) return;
+      comparisonStatus.textContent = "";
+      message(comparisonResult, e);
     }
   };
   const mutate = async (path: string, method: string, data?: unknown) => {
@@ -508,6 +514,8 @@ export async function assetDetail(
       message(error, e);
     }
   };
+  const versionStatus = status(asset.semantic_status ?? asset.normalization_status);
+  versionStatus.classList.add("asset-version-status");
   root.append(
     heading(
       asset.title || "记忆详情",
@@ -520,7 +528,7 @@ export async function assetDetail(
       el(
         "div",
         "actions",
-        status(asset.semantic_status ?? asset.normalization_status),
+        versionStatus,
         badge(`v${asset.version}`),
       ),
       asset.identity ? code(asset.identity) : null,
@@ -540,7 +548,7 @@ export async function assetDetail(
         field("对比版本", oldVersion),
         button("比较正文", compare),
       ),
-      comparison,
+      el("div", "asset-comparison", comparisonStatus, comparisonResult),
     ),
     panel(
       "来源引用",
