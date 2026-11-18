@@ -30,6 +30,58 @@ impl HostClient {
             .map_err(anyhow::Error::from)?;
         Ok(Self { base, token, http })
     }
+    /// Create a private Run. The UUID is the durable retry identity.
+    pub async fn create_run(&self, input: &crate::run::RunInput) -> Result<Value> {
+        self.call(
+            reqwest::Method::POST,
+            "/v1/runs",
+            Some(&serde_json::json!(input)),
+            None,
+        )
+        .await
+    }
+
+    /// Append an explicit claim; never converts reports into server attestations.
+    pub async fn append_run_event(
+        &self,
+        run: uuid::Uuid,
+        input: &crate::run::RunEventInput,
+    ) -> Result<Value> {
+        self.call(
+            reqwest::Method::POST,
+            &format!("/v1/runs/{run}/events"),
+            Some(&serde_json::json!(input)),
+            None,
+        )
+        .await
+    }
+
+    /// Use the HTTP authority's preparation/replay/failure path unchanged.
+    pub async fn prepare_run_context(
+        &self,
+        run: uuid::Uuid,
+        event_id: uuid::Uuid,
+        context: &crate::evidence::EvidenceInput,
+    ) -> Result<Value> {
+        self.call(
+            reqwest::Method::POST,
+            &format!("/v1/runs/{run}/context"),
+            Some(&serde_json::json!({"event_id":event_id,"context":context})),
+            None,
+        )
+        .await
+    }
+
+    pub async fn run_trace(&self, run: uuid::Uuid, after: i64, limit: usize) -> Result<Value> {
+        self.call(
+            reqwest::Method::GET,
+            &format!("/v1/runs/{run}?after={after}&limit={limit}"),
+            None,
+            None,
+        )
+        .await
+    }
+
     pub async fn call(
         &self,
         method: reqwest::Method,

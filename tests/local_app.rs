@@ -979,6 +979,10 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     assert_eq!(
         tool_names,
         std::collections::BTreeSet::from([
+            "context_run_create",
+            "context_run_prepare",
+            "context_run_report",
+            "context_run_get",
             "context_bundle",
             "context_get",
             "context_resolve",
