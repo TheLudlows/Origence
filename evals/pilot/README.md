@@ -4,7 +4,7 @@
 #93–#96。[主干 CI 44217031418](https://github.com/TheLudlows/Origence/actions/runs/44217031418)
 的 Windows、Node UI、fast-check 和 Linux native 四项均通过。
 本目录原准备基线为 `293e2bf6af3b180d43c8050731047b552ac07519`。
-[#104](https://github.com/TheLudlows/Origence/pull/104) 合入后，真实客户端使用主干 `e024b78` 和公开合成报销样例完成了原生 Skill 加载预检。复跑入口及逐端证据见[预检说明](PREFLIGHT.md)。
+[#104](https://github.com/TheLudlows/Origence/pull/104) 合入后，真实客户端使用主干 `e024b78` 和公开合成报销样例完成了原生 Skill 加载预检。本目录还提供[双场景交接演练](PREFLIGHT.md#复跑双场景跨客户端交接)，用于检查一端首做、审阅发布和另一端复做的完整路径。各次尝试的结果见[验证记录](VALIDATION.md)。
 [#91](https://github.com/TheLudlows/Origence/issues/91) 正式试点 **NOT_RUN**。未见题和评分条件待冻结，独立 DBA、
 制度负责人及验收人签认待办。本路执行清单使用 `pilot.P1–P7`，PRD v0.3 条款使用
 `prd-v0.3.A1–A7`，两者不是同号对应。

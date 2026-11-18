@@ -60,12 +60,20 @@ def publish(host, space, writer, reviewer, name, body):
     asset = host.publish("Public synthetic policy: cap an eligible claim at 100 TEST units.")
     version = host.request(f"/v1/assets/{asset}?version=1")
     source = {"kind": "asset", "asset_id": asset, "version": 1, "content_sha256": version["content_hash"]}
+    package, approval = publish_from_source(
+        host, space, reviewer, name, "Check a synthetic TEST-unit expense claim", body, source,
+    )
+    approval["source_event_id"] = version["source_event_id"]
+    return package, version["source_event_id"], approval
+
+
+def publish_from_source(host, space, reviewer, name, description, body, source):
     target = {key: space[key] for key in ("tenant_id", "workspace_id")}
     target.update(skill_id=uid(), version=1)
     candidate, review = uid(), uid()
     candidate_path = "/v1/skill-candidates/" + candidate
     saved = host.request(candidate_path, {"expected_revision": 0, "candidate": {
-        "draft": {"name": name, "description": "Check a synthetic TEST-unit expense claim", "body": body},
+        "draft": {"name": name, "description": description, "body": body},
         "sources": [source], "private_notes": ""}}, method="PUT")
     packet = host.request(candidate_path + "/reviews/" + review, {
         "revision": saved["revision"], "reviewer_id": reviewer["key_id"],
@@ -76,9 +84,9 @@ def publish(host, space, writer, reviewer, name, body):
     host.request(review_path + "/decision", {"approve": True, "digest": packet["digest"]})
     package = host.request(review_path + "/publish", {"digest": packet["digest"]})
     require(all(package["manifest"][k] == v for k, v in target.items()), "published target mismatch")
-    return package, version["source_event_id"], {
+    return package, {
         **target, "name": name, "candidate_id": candidate, "revision": saved["revision"], "review_id": review,
-        "reviewer_key_id": reviewer["key_id"], "source_event_id": version["source_event_id"],
+        "reviewer_key_id": reviewer["key_id"],
         "packet_digest": packet["digest"], "source": source, "package_digest": package["digest"],
         "file_sha256": package["manifest"]["artifact_sha256"]["SKILL.md"],
     }
@@ -107,6 +115,13 @@ def installed(project, client, package):
 
 
 def claude_load(args, project, path, run, marker, body, deadline):
+    prompt = (f"Use the Skill tool to load project skill {path.parent.name}. Public test, Run {run}. "
+              "Claim 110 TEST units with receipt, no duplicate.")
+    evidence, answer = claude_turn(args, project, run, prompt, deadline, path, body)
+    return {**evidence, "answer_matches": answer.strip() == "100 " + marker}
+
+
+def claude_turn(args, project, run, prompt, deadline, path=None, body=None):
     env = child_environment()
     provider = os.environ if not args.claude_settings else json.loads(
         args.claude_settings.read_text(encoding="utf-8-sig"))["env"]
@@ -115,15 +130,17 @@ def claude_load(args, project, path, run, marker, body, deadline):
     env.update(CLAUDE_CONFIG_DIR=str(project.parent / "claude-settings"), DISABLE_TELEMETRY="1",
                CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1")
     session = uid()
-    name = path.parent.name
-    prompt = (f"Use the Skill tool to load project skill {name}. Public test, Run {run}. "
-              "Claim 110 TEST units with receipt, no duplicate.")
+    name = path.parent.name if path else None
     mcp = project.parent / "empty-mcp.json"
     mcp.write_text('{"mcpServers":{}}', encoding="utf-8")
     command = [args.claude, "-p", "--session-id", session, "--permission-mode", "dontAsk",
                "--setting-sources", "project", "--strict-mcp-config", "--mcp-config", str(mcp),
-               "--model", args.claude_model, "--tools", "Skill", "--allowedTools", "Skill",
+               "--model", args.claude_model, "--tools", "Skill" if path else "",
                "--output-format", "stream-json", "--verbose"]
+    if path:
+        command.extend(["--allowedTools", "Skill"])
+    else:
+        command.extend(["--effort", "low"])
     with start(command, project, env) as process:
         try:
             output, _ = process.communicate(prompt.encode(), timeout=max(0.1, deadline - time.monotonic()))
@@ -138,9 +155,11 @@ def claude_load(args, project, path, run, marker, body, deadline):
             event = json.loads(line)
             if event.get("sessionId") == session:
                 transcript.append(event)
-    calls = [b for e in relevant + transcript if e.get("type") == "assistant"
-                for b in e["message"]["content"] if b.get("type") == "tool_use" and b.get("name") == "Skill"
-                and b.get("input", {}).get("skill", "").split(":")[-1] == name]
+    tool_uses = [b for e in relevant + transcript if e.get("type") == "assistant"
+                 for b in e["message"]["content"] if b.get("type") == "tool_use"]
+    calls = [b for b in tool_uses if path and b.get("name") == "Skill"
+             and b.get("input", {}).get("skill", "").split(":")[-1] == name]
+    require(len(calls) == len(tool_uses), "Claude Code used an unrelated tool")
     call_ids = {b["id"] for b in calls}
     blocks = []
     for event in relevant + transcript:
@@ -151,16 +170,16 @@ def claude_load(args, project, path, run, marker, body, deadline):
                     and not b.get("is_error") for b in blocks)
     last = next((e.get("result", "") for e in reversed(relevant)
                  if e.get("type") == "result" and not e.get("is_error")), "")
-    injected = any(body in b.get("text", "") and name in b["text"] for b in blocks)
+    injected = bool(path) and any(body in b.get("text", "") and name in b["text"] for b in blocks)
     init = next((e for e in relevant if e.get("subtype") == "init"), {})
     return {
-        "session_id": session, "run_id": run, "trigger": "model Skill tool",
+        "session_id": session, "run_id": run, "trigger": "model Skill tool" if path else "plain task",
         "reported_model": init.get("model"),
         "skill_in_init": name in init.get("skills", []) or name in init.get("slash_commands", []),
         "tool_call_ids": sorted(call_ids), "tool_result_success": completed,
         "input_body_observed": injected, "model_request_body_verified": None,
-        "answer_matches": last.strip() == "100 " + marker, "event_stream_sha256": sha(output),
-    }
+        "event_stream_sha256": sha(output),
+    }, last
 
 
 def codex_request_matches(request, name, body, run):
@@ -176,7 +195,13 @@ def codex_request_matches(request, name, body, run):
 
 
 def codex_load(args, project, path, run, marker, body, deadline):
-    name = path.parent.name
+    prompt = (f"Public test, Run {run}. Claim 110 TEST units with receipt, no duplicate. "
+              "Follow the selected skill. Use no other tools.")
+    evidence, answer = codex_turn(args, project, run, prompt, deadline, path, body)
+    return {**evidence, "answer_matches": answer.strip() == "100 " + marker}
+
+
+def codex_turn(args, project, run, prompt, deadline, path=None, body=None):
     trace_root = project.parent / "native-trace"
     env = child_environment()
     env.update({k: os.environ[k] for k in ("OPENAI_API_KEY", "CODEX_HOME") if k in os.environ})
@@ -223,22 +248,19 @@ def codex_load(args, project, path, run, marker, body, deadline):
             rpc("initialize", {"clientInfo": {"name": "origence-pilot", "version": "1"},
                                "capabilities": {"experimentalApi": True}}, 1)
             send("initialized", {})
-            listing = rpc("skills/list", {"cwds": [str(project)], "forceReload": True}, 2)
-            matches = [s for entry in listing["data"] for s in entry["skills"] if s["name"] == name
-                       and Path(s["path"]).samefile(path) and s.get("enabled", True)]
-            require(len(matches) == 1, "Codex did not discover the exported project Skill")
+            inputs = [{"type": "text", "text": prompt}]
+            if path:
+                name = path.parent.name
+                listing = rpc("skills/list", {"cwds": [str(project)], "forceReload": True}, 2)
+                matches = [s for entry in listing["data"] for s in entry["skills"] if s["name"] == name
+                           and Path(s["path"]).samefile(path) and s.get("enabled", True)]
+                require(len(matches) == 1, "Codex did not discover the exported project Skill")
+                inputs.append({"type": "skill", "name": name, "path": str(path)})
             thread = rpc("thread/start", {
                 "cwd": str(project), "model": args.codex_model, "approvalPolicy": "never",
                 "sandbox": "read-only", "ephemeral": True,
             }, 3)["thread"]["id"]
-            prompt = (f"Public test, Run {run}. Claim 110 TEST units with receipt, no duplicate. "
-                      "Follow the selected skill. Use no other tools.")
-            turn = rpc("turn/start", {
-                "threadId": thread, "input": [
-                    {"type": "text", "text": prompt},
-                    {"type": "skill", "name": name, "path": str(path)},
-                ],
-            }, 4)["turn"]["id"]
+            turn = rpc("turn/start", {"threadId": thread, "input": inputs}, 4)["turn"]["id"]
             last = ""
             while True:
                 msg = receive()
@@ -247,6 +269,8 @@ def codex_load(args, project, path, run, marker, body, deadline):
                     continue
                 if msg.get("method") == "item/completed" and params.get("turnId") == turn:
                     item = params["item"]
+                    require(item["type"] in ("userMessage", "reasoning", "agentMessage", "plan"),
+                            "Codex performed an unexpected action")
                     if item["type"] == "agentMessage":
                         last = item["text"]
                 if msg.get("method") == "turn/completed" and params["turn"]["id"] == turn:
@@ -259,11 +283,12 @@ def codex_load(args, project, path, run, marker, body, deadline):
     for file in trace_root.rglob("*.json"):
         data = file.read_bytes()
         request = json.loads(data)
-        if codex_request_matches(request, name, body, run):
+        if path and codex_request_matches(request, name, body, run):
             digests.append(sha(data))
-    return {"session_id": thread, "turn_id": turn, "run_id": run, "trigger": "explicit native Skill input",
-            "native_path_discovered": True, "model_request_body_verified": bool(digests),
-            "request_sha256": digests, "answer_matches": last.strip() == "100 " + marker}
+    return {"session_id": thread, "turn_id": turn, "run_id": run,
+            "trigger": "explicit native Skill input" if path else "plain task",
+            "native_path_discovered": bool(path), "model_request_body_verified": bool(digests) if path else None,
+            "request_sha256": digests}, last
 
 
 def probe(args, report):
@@ -357,8 +382,12 @@ def probe(args, report):
                 report["withdrawal"][client] = {"new_export_denied": True, "existing_copy_matches": True}
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    require(len(report["clients"]) == 2 and all(c["status"] == "OBSERVED" for c in report["clients"].values()),
+            "one or more native loading observations incomplete")
+
+
+def main(run_probe=probe, description=__doc__):
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--claude-model", required=True)
@@ -387,13 +416,11 @@ def main():
                 report["cli_versions"][client] = version.group().decode("ascii")
             with args.binary.open("rb") as binary:
                 report["origence_binary_sha256"] = hashlib.file_digest(binary, "sha256").hexdigest()
-            probe(args, report)
+            run_probe(args, report)
         finally:
             report["elapsed_seconds"] = round(time.monotonic() - start_time, 2)
             json.dump(report, out, indent=2)
             out.write("\n")
-    require(len(report["clients"]) == 2 and all(c["status"] == "OBSERVED" for c in report["clients"].values()),
-            "one or more native loading observations incomplete")
 
 
 if __name__ == "__main__":

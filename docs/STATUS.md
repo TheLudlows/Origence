@@ -5,7 +5,7 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 
 当前变更移除了 AML 评测协议的 HTTP 入口与启动开关。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
 
-Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收，也在 Windows 公开报销样例中加载了同一版获批 Skill。**P0 的数据库排障和报销复核正式试点尚未执行**，独立签认仍待完成。见 [#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) 和 [#91 P0 验收](https://github.com/TheLudlows/Origence/issues/91)。
+Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。Windows 的[公开合成演练](../evals/pilot/public-handoff.windows.json)已跑通两个方向：Claude Code 首做数据库排障、Codex 加载获批 Skill 复做，报销复核按相反方向完成。**P0 正式未见题试点和独立业务签认仍待执行**。见 [#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) 和 [#91 P0 验收](https://github.com/TheLudlows/Origence/issues/91)。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |

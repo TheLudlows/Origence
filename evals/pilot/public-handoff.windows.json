@@ -1,0 +1,223 @@
+{
+  "scope": "public synthetic unscored",
+  "formal_trial": "NOT_RUN",
+  "started_at": "2026-11-18T14:37:01.046724+00:00",
+  "configured_models": {
+    "codex": "gpt-6.2-sol",
+    "claude-code": "haiku"
+  },
+  "cli_versions": {
+    "codex": "0.170.0",
+    "claude-code": "2.1.327"
+  },
+  "origence_binary_sha256": "a5c144f9e51facc71856168dff18a57f68b3e9a6ccabe4901f8da30026bae5cc",
+  "scenarios": {
+    "database_wait": {
+      "status": "OBSERVED",
+      "first": {
+        "client": "claude-code",
+        "native": {
+          "session_id": "98789d1b-a744-49de-b673-880c9ce6dd0b",
+          "run_id": "9a1239f1-d782-4f7c-80ff-4edee4bdc58b",
+          "trigger": "plain task",
+          "reported_model": "glm-5.3",
+          "skill_in_init": false,
+          "tool_call_ids": [],
+          "tool_result_success": false,
+          "input_body_observed": false,
+          "model_request_body_verified": null,
+          "event_stream_sha256": "7fe0f171a269ff1bca10b38beb927388fd6b68aec4d60d3b1711a84ffd516b89"
+        },
+        "input": {
+          "telemetry_complete": true,
+          "blocker_session": 312,
+          "lock_wait_ms": 8000,
+          "pool_active": 2,
+          "pool_limit": 10,
+          "connect_elapsed_ms": 100,
+          "connect_timeout_ms": 1000
+        },
+        "prompt_sha256": "c01a3474d2131cdb46143efd43b1163805e63470d6766db026303cfcf9091c40",
+        "output_sha256": "c9ebe5123fd89b9ca4dba41aea17097d687c14990f0bd226869a6444187d17f6",
+        "answer": {
+          "classification": "lock",
+          "evidence_field": "blocker_session",
+          "next_check": "inspect_blocker"
+        },
+        "rules": {
+          "connect_deadline_exceeded": "timeout",
+          "identified_lock_blocker": "lock",
+          "insufficient_check": "collect_telemetry",
+          "lock_check": "inspect_blocker",
+          "missing_telemetry": "insufficient",
+          "pool_check": "inspect_pool_metrics",
+          "pool_exhausted": "pool",
+          "timeout_check": "inspect_connect_latency"
+        }
+      },
+      "approval": {
+        "tenant_id": "ac757421-c73e-4431-9488-8cae7f610e1a",
+        "workspace_id": "c2c45789-6899-4325-87b6-4c604ae4a31e",
+        "skill_id": "3273d701-e88d-4473-9eb2-50c272f8cd9d",
+        "version": 1,
+        "name": "database-wait-18c88f",
+        "candidate_id": "64f52e97-854e-4abf-a422-e6f45bd4f621",
+        "revision": 1,
+        "review_id": "6847d622-2544-499e-be23-109e71f53915",
+        "reviewer_key_id": "70477447-c507-4f36-8416-e9918bcce080",
+        "packet_digest": "35c06f24f7682a5d65896bf9818175af2b81d4b8b9a920f0e3347a99cb3e7630",
+        "source": {
+          "kind": "run",
+          "digest": "0e3b645ef2fcf2db9a7b3bcef94e0fc45ba982b909a504eff904c2c6d0e7eac3",
+          "run_id": "9a1239f1-d782-4f7c-80ff-4edee4bdc58b",
+          "through_sequence": 1
+        },
+        "package_digest": "99730c41650944216d0c172fcc8fc51d76c9447a6d0268394676852602920193",
+        "file_sha256": "a9aa801119b0d8f52c99339139390444668e170600201e17de41feef466745dd"
+      },
+      "private_run_http": 404,
+      "private_candidate_http": 404,
+      "second": {
+        "client": "codex",
+        "native": {
+          "session_id": "01a1ef17-03cd-7620-b3d6-72258765c81a",
+          "turn_id": "01a1ef17-0411-7a30-83ac-640c2842f755",
+          "run_id": "05adfd69-bd71-46c2-93eb-1202fe184d3b",
+          "trigger": "explicit native Skill input",
+          "native_path_discovered": true,
+          "model_request_body_verified": true,
+          "request_sha256": [
+            "e4e735c4fa1886fa54a9d09c068428adb720818ba71a3e94cb2f7f6f700874ff"
+          ]
+        },
+        "input": {
+          "telemetry_complete": true,
+          "blocker_session": null,
+          "lock_wait_ms": 0,
+          "pool_active": 12,
+          "pool_limit": 12,
+          "connect_elapsed_ms": 90,
+          "connect_timeout_ms": 900
+        },
+        "prompt_sha256": "381a84cbac7b379700f3f3652069754916ccf3ec9f6394370f74bec95665305c",
+        "output_sha256": "1cf21f574a10e426faf11c2e1c6cb0a8c0154a48996a41d2c7ed4655d182b93d",
+        "answer": {
+          "classification": "pool",
+          "evidence_field": "pool_active",
+          "next_check": "inspect_pool_metrics"
+        },
+        "receipt_sha256": "824bd03a7abced80747ea4dfceeeaf3504dbe65ba1200e7bafb7df95795387c0",
+        "load_prefix": {
+          "digest": "de7468d79583e3529a1835e5865111606befaa9aa28b0393962fa05629509816",
+          "run_id": "05adfd69-bd71-46c2-93eb-1202fe184d3b",
+          "through_sequence": 1
+        },
+        "result_prefix": {
+          "digest": "b19a79a66017726748d2908bc3cf1db7de32e62e3c1a26f97afdb650c759fc8b",
+          "run_id": "05adfd69-bd71-46c2-93eb-1202fe184d3b",
+          "through_sequence": 2
+        }
+      }
+    },
+    "expense_review": {
+      "status": "OBSERVED",
+      "first": {
+        "client": "codex",
+        "native": {
+          "session_id": "01a1ef16-f445-7852-93ec-d2828fc60e9b",
+          "turn_id": "01a1ef16-f49e-7681-9eef-1098ae387397",
+          "run_id": "4d7bb959-10b6-48ba-ba15-19c735ed87ba",
+          "trigger": "plain task",
+          "native_path_discovered": false,
+          "model_request_body_verified": null,
+          "request_sha256": []
+        },
+        "input": {
+          "claim_minor": 120,
+          "receipt_present": true,
+          "duplicate": true,
+          "currency": "TEST"
+        },
+        "prompt_sha256": "408f0932aa79ea7970696eeddd563369d6c905b2ba407dfc8776250036c0a33c",
+        "output_sha256": "263553f5ea77f7af56d8d43d963961380148638a05d3cd7113fc46008e09d213",
+        "answer": {
+          "decision": "hold",
+          "payable_minor": 0,
+          "policy_version": 2
+        },
+        "rules": {
+          "duplicate_decision": "hold",
+          "eligible_cap_minor": 97,
+          "eligible_decision": "recommend",
+          "held_payable_minor": 0,
+          "missing_receipt_decision": "hold",
+          "policy_version": 2
+        }
+      },
+      "approval": {
+        "tenant_id": "4e3af1fe-7724-43d5-9000-b049198ea571",
+        "workspace_id": "f0889174-a54b-4bd8-abdd-8f3e1e415a38",
+        "skill_id": "1a1a4157-2d73-4b73-86dd-a0e8e18f1a71",
+        "version": 1,
+        "name": "expense-review-34560a",
+        "candidate_id": "15839a50-b352-4f5a-aca9-79f8e9c9e9e2",
+        "revision": 1,
+        "review_id": "58788413-201d-41ee-a63d-c4c9384550d2",
+        "reviewer_key_id": "79b626b2-f254-4467-9300-ee514a904e56",
+        "packet_digest": "fe78b7438943f8390f5f14f4d5e54ecd84af3007d849801db7e6385bf54702ea",
+        "source": {
+          "kind": "run",
+          "digest": "c08e56d3641be9a9e2530fd8f67aff56fa736f5e953779703a95fca827d61468",
+          "run_id": "4d7bb959-10b6-48ba-ba15-19c735ed87ba",
+          "through_sequence": 1
+        },
+        "package_digest": "639a1a575ae9e3e98735ed8bc3a29b33d28ba393c63159046fc137c53c773a2c",
+        "file_sha256": "55df71cde434ad975da39e724787b3e9ace5d8bc04352a81d55aa674ce3c02ee"
+      },
+      "private_run_http": 404,
+      "private_candidate_http": 404,
+      "second": {
+        "client": "claude-code",
+        "native": {
+          "session_id": "4921074c-98f3-448b-90d2-3ffdd040b897",
+          "run_id": "5c1e1a37-fecb-4434-8e94-8b15653eb1fa",
+          "trigger": "model Skill tool",
+          "reported_model": "glm-5.3",
+          "skill_in_init": true,
+          "tool_call_ids": [
+            "call_b410c79b1f1f443f948bf288"
+          ],
+          "tool_result_success": true,
+          "input_body_observed": true,
+          "model_request_body_verified": null,
+          "event_stream_sha256": "a821daf75e4d0c69a5470bc4fe22d29ebe4770a2cdc8b7b9cda21f3f2f8c2c53"
+        },
+        "input": {
+          "claim_minor": 123,
+          "receipt_present": true,
+          "duplicate": false,
+          "currency": "TEST"
+        },
+        "prompt_sha256": "f7336e30e288f3e533ee7cbd5a0943ee3044835a0e9eee0e63afb3cdfe934468",
+        "output_sha256": "fbb26344b10990e8e51615d2d80d24833593d0e3630fcb3b682c8ff1cdab2589",
+        "answer": {
+          "decision": "recommend",
+          "payable_minor": 97,
+          "policy_version": 2
+        },
+        "receipt_sha256": "261959ed9cc613fbd8e9544711431c4c009f27aa96f41bf9c07c5cfd2b9fe76b",
+        "load_prefix": {
+          "digest": "d486ddd9dafb0e263edb944e801be95ca767029c6ed646aef2e6c1a5587899fd",
+          "run_id": "5c1e1a37-fecb-4434-8e94-8b15653eb1fa",
+          "through_sequence": 1
+        },
+        "result_prefix": {
+          "digest": "d0a81be37051e45435d48a0e163cfdbc11fe9f1e42dfc5cbfab58ab2027c7f2f",
+          "run_id": "5c1e1a37-fecb-4434-8e94-8b15653eb1fa",
+          "through_sequence": 2
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 40.91
+}
