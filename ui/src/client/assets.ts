@@ -278,6 +278,89 @@ export async function assetsPage(
   await load();
 }
 
+function assetContent(asset: Asset, ctx: ViewContext) {
+  const body = code(asset.content);
+  if (!canWrite(ctx.role)) return panel("正文", body);
+
+  const source = el("div");
+  let sourceRequest: AbortController | undefined;
+  const loadSource = async () => {
+    const request = new AbortController();
+    sourceRequest = request;
+    const signal = AbortSignal.any([ctx.signal, request.signal]);
+    const loading = el("p", "muted", "正在读取原始来源…");
+    loading.setAttribute("role", "status");
+    source.replaceChildren(loading);
+    try {
+      const event = await api.get(`/v1/events/${asset.source_event_id}`, signal);
+      if (!signal.aborted) source.replaceChildren(code(event));
+    } catch (e) {
+      if (!signal.aborted) message(source, e);
+    }
+  };
+
+  let selected = 0;
+  const tabs = [
+    { id: "asset-body", label: "正文", content: body },
+    { id: "asset-source", label: "原始来源", content: source },
+  ].map(({ id, label, content }, index) => {
+    const tab = button(label, () => activate(index));
+    const tabPanel = el("div", "", content);
+    tab.id = `${id}-tab`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(index === selected));
+    tab.setAttribute("aria-controls", id);
+    tab.tabIndex = index === selected ? 0 : -1;
+    tabPanel.id = id;
+    tabPanel.setAttribute("role", "tabpanel");
+    tabPanel.setAttribute("aria-labelledby", tab.id);
+    tabPanel.tabIndex = 0;
+    tabPanel.hidden = index !== selected;
+    return { tab, tabPanel };
+  });
+  const tablist = el("div", "actions asset-tabs", ...tabs.map(({ tab }) => tab));
+  tablist.setAttribute("role", "tablist");
+  tablist.setAttribute("aria-label", "内容与来源");
+
+  const setTabStop = (index: number) => {
+    tabs.forEach(({ tab }, i) => {
+      tab.tabIndex = i === index ? 0 : -1;
+    });
+  };
+  function activate(index: number) {
+    selected = index;
+    setTabStop(index);
+    tabs.forEach(({ tab, tabPanel }, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tabPanel.hidden = i !== index;
+    });
+    tabs[index]?.tab.focus();
+    sourceRequest?.abort();
+    source.removeAttribute("role");
+    source.replaceChildren();
+    if (index === 1) void loadSource();
+  }
+  tabs.forEach(({ tab }, index) => {
+    tab.addEventListener("keydown", (event) => {
+      let next: number;
+      if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+      else if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      else return;
+
+      event.preventDefault();
+      setTabStop(next);
+      tabs[next]?.tab.focus();
+    });
+  });
+  tablist.addEventListener("focusout", (event) => {
+    // Re-enter the tablist on the active tab after browsing without activating.
+    if (!tablist.contains(event.relatedTarget as Node | null)) setTabStop(selected);
+  });
+  return panel("内容与来源", tablist, ...tabs.map(({ tabPanel }) => tabPanel));
+}
+
 export async function assetDetail(
   root: HTMLElement,
   id: string,
@@ -289,8 +372,7 @@ export async function assetDetail(
     ctx.signal,
   );
   if (ctx.signal.aborted) return;
-  const info = el("div"),
-    error = el("div");
+  const error = el("div");
   const related = panel(
     `关联 Run · v${asset.version}`,
     el("p", "muted", "仅当前逻辑 key 的已记录引用；不代表完整采集、收到或使用。"),
@@ -332,23 +414,25 @@ export async function assetDetail(
   oldVersion.min = "1";
   const historyVersion = input("版本号", String(asset.version), "number");
   historyVersion.min = "1";
-  const loadSource = async () => {
-    try {
-      info.replaceChildren(
-        code(await api.get(`/v1/events/${asset.source_event_id}`, ctx.signal)),
-      );
-    } catch (e) {
-      message(info, e);
-    }
-  };
+  const comparison = el("div");
+  let compareRequest: AbortController | undefined;
   const compare = async () => {
+    compareRequest?.abort();
+    const request = new AbortController();
+    compareRequest = request;
+    const signal = AbortSignal.any([ctx.signal, request.signal]);
+    const loading = el("p", "muted", "正在比较正文…");
+    loading.setAttribute("role", "status");
+    comparison.removeAttribute("role");
+    comparison.replaceChildren(loading);
     try {
       const old = await api.get<Asset>(
         `/v1/assets/${id}?version=${Number(oldVersion.value)}`,
-        ctx.signal,
+        signal,
       );
+      if (signal.aborted) return;
       const delta = textDelta(old.content ?? "", asset.content ?? "");
-      info.replaceChildren(
+      comparison.replaceChildren(
         el(
           "p",
           "muted",
@@ -364,7 +448,7 @@ export async function assetDetail(
         ),
       );
     } catch (e) {
-      message(info, e);
+      if (!signal.aborted) message(comparison, e);
     }
   };
   const mutate = async (path: string, method: string, data?: unknown) => {
@@ -424,7 +508,6 @@ export async function assetDetail(
       message(error, e);
     }
   };
-  info.append(code(asset.content));
   root.append(
     heading(
       asset.title || "记忆详情",
@@ -448,17 +531,16 @@ export async function assetDetail(
         submit("读取版本"),
       ),
     ),
+    assetContent(asset, ctx),
     panel(
-      "内容与来源",
+      "版本比较",
       el(
         "div",
-        "tabs",
-        button("正文", () => info.replaceChildren(code(asset.content))),
-        canWrite(ctx.role) ? button("原始来源", loadSource) : null,
+        "actions asset-comparison-controls",
         field("对比版本", oldVersion),
         button("比较正文", compare),
       ),
-      info,
+      comparison,
     ),
     panel(
       "来源引用",

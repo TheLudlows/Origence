@@ -1343,3 +1343,44 @@ Windows 运行证据或真实客户端验证。仅本地提交。
 再用另一版本运行同一打开操作。新版拒绝缺索引的库，旧版拒绝含新索引的库。
 两次打开均返回 incompatible schema，SQLite 文件与打开前逐字节一致。
 实现与测试代码自 `a43c270` 保持一致，草稿准备提交仅补全兼容边界说明。
+
+## 2026-11-18 — #76 资产详情页签键盘操作（本地）
+
+基于 `origin/main` 的 `3c66b5b`。方向键及 Home/End 移动页签焦点，Enter、空格或点击
+激活页签。Tab 从页签组进入当前面板，继续 Tab 可达版本比较。reader 直接查看正文，仍可
+比较版本。原始来源仅在激活时请求；离开来源页签或当前资产路由时取消待完成的原文请求。
+版本比较在独立区域显示，重新比较时只保留最新请求。沿用现有 API 和角色边界。
+
+- Linux、Node 24.22.1：`npm --prefix ui run check` 及 `npm --prefix ui test`（19 项）通过。
+- Chromium 156.0.8078.79（headless）、Playwright 1.62.1、已构建的 UI 和真实 Node 转发，
+  上游为 loopback 合成 HTTP 夹具。1024/736/375/320 px × 浅/深色 × writer/reader
+  共 16 组通过。验证 Tab/Shift+Tab、左右方向键环绕、焦点轮廓、激活键和点击、可访问性树
+  的页签与面板关系，以及页面无横向溢出。reader 发出 0 个原文请求。故意延迟原文与历史
+  版本响应，验证切回正文、快速重新比较和切到另一固定版本时旧请求已取消；原文与比较
+  交错返回时各自显示，比较仍保留固定版本和增删内容。
+- #98 的路由焦点和对话框浏览器回归（1024/320 px）、现有 Run 独立核验与 PDF 来源脚本均通过。
+- Rust 1.98.0 的 `cargo fmt --all -- --check`、
+  `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` 及
+  `git diff --check` 通过。
+
+从仓库根目录复跑。Playwright 装在临时目录，按本机调整 Chromium 路径。
+
+```sh
+browser_deps=$(mktemp -d)
+npm install --prefix "$browser_deps" --cache "$browser_deps/npm-cache" --ignore-scripts playwright@1.62.1
+npm --prefix ui ci --cache "$browser_deps/npm-cache" --ignore-scripts
+npm --prefix ui run check
+npm --prefix ui test
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-asset-tabs-browser.cjs
+```
+
+浏览器证据覆盖键盘、鼠标和 Chromium 可访问性树。屏幕阅读器、实体触屏、真实业务账号
+与 Codex/Claude Code 产品客户端任务未执行。#76 保持开放。
+
+### 合入前复验
+
+同步已包含 #100 的主干 `63bdcdf4691c9ba761e4581b4aa62e94c89e94f1`，保留上方两份
+验证记录。原有资产页与脚本改动保持一致。复跑 UI 类型检查、19 项测试、16 组资产页签
+Chromium 检查、#98 的两个宽度及现有 Run 核验和 PDF 来源浏览器脚本，全部通过。
+Rust 1.98.0 格式检查、离线全目标全特性 Clippy（warnings denied）及差异检查通过。
