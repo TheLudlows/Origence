@@ -309,3 +309,95 @@ async fn skill_private_run_basis_and_revoked_approver_fail_closed() {
     tx.rollback().await.unwrap();
     f.store.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn selected_experience_basis_is_revision_bound_and_sources_stay_live() {
+    let f = Fixture::new().await;
+    let mut selection = crate::skill_candidate::SelectedExperience {
+        source: f.input.sources[0].clone(),
+        name: "selected-method".into(),
+        description: "Verify a synthetic result".into(),
+        steps: "Check independently.".into(),
+        selected_basis: "Disclosed observation".into(),
+        disclosure_confirmed: true,
+        private_notes: "PRIVATE raw supports".into(),
+    };
+    let candidate = Uuid::new_v4();
+    let review = Uuid::new_v4();
+    let skill = Uuid::new_v4();
+    let input = selection.candidate().unwrap();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
+    tx.save_skill_candidate(candidate, 0, &input).await.unwrap();
+    let mut request = f.review(1, skill);
+    assert!(matches!(
+        tx.submit_skill_review(candidate, review, &request).await,
+        Err(StorageError::Conflict(_))
+    ));
+    request.basis = selection.selected_basis.clone();
+    let packet = tx
+        .submit_skill_review(candidate, review, &request)
+        .await
+        .unwrap();
+    assert!(!serde_json::to_string(&packet).unwrap().contains("PRIVATE"));
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.reviewer.clone()).await.unwrap();
+    tx.decide_skill_review(review, &packet.digest, true)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    selection.selected_basis = "Revised disclosed observation".into();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
+    assert_eq!(
+        tx.save_skill_candidate(candidate, 1, &selection.candidate().unwrap())
+            .await
+            .unwrap(),
+        2
+    );
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.reviewer.clone()).await.unwrap();
+    assert!(tx.publish_skill(review, &packet.digest).await.is_err());
+    tx.rollback().await.unwrap();
+    let next_review = Uuid::new_v4();
+    request.revision = 2;
+    request.basis = selection.selected_basis.clone();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
+    let packet = tx
+        .submit_skill_review(candidate, next_review, &request)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.reviewer.clone()).await.unwrap();
+    tx.decide_skill_review(next_review, &packet.digest, true)
+        .await
+        .unwrap();
+    let package = tx.publish_skill(next_review, &packet.digest).await.unwrap();
+    assert!(
+        !serde_json::to_string(&package)
+            .unwrap()
+            .contains("observation")
+    );
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.other.clone()).await.unwrap();
+    sqlite_db::query(
+        "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(f.owner.scope.tenant_id)
+    .bind(f.owner.scope.workspace_id)
+    .bind(f.source)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
+    assert!(matches!(
+        tx.skill_package(skill, 1).await,
+        Err(StorageError::NotFound)
+    ));
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
+    assert!(
+        tx.save_skill_candidate(candidate, 1, &selection.candidate().unwrap())
+            .await
+            .is_err()
+    );
+    tx.rollback().await.unwrap();
+    f.store.shutdown().await.unwrap();
+}

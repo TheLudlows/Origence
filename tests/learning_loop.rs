@@ -2338,3 +2338,222 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 2);
     assert_eq!(fixture.verifications.load(Ordering::SeqCst), 2);
 }
+
+/// #88: exact published Learning is a shared source, not access to its private supports.
+#[tokio::test]
+async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
+    async fn cli(base: &str, token: &str, args: &[&str], ok: bool) -> Value {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence-skill"))
+            .arg("--server-url")
+            .arg(base)
+            .args(args)
+            .env("OC_API_KEY", token)
+            .output()
+            .await
+            .unwrap();
+        assert_eq!(
+            output.status.success(),
+            ok,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if ok {
+            serde_json::from_slice(&output.stdout).unwrap()
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("NOT_FOUND"));
+            Value::Null
+        }
+    }
+    let (models, fixture, _model) = models().await;
+    let dir = tempfile::tempdir().unwrap();
+    let s = crate::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
+    let (owner, owner_token) = provision(&s).await;
+    publish(&s, &owner).await;
+    let hits = search(&s, &owner, "keyword").await;
+    let session = id(&s.private_session(&owner).await.unwrap(), "session_id");
+    let turn = archive(&s, &owner, session, vec![evidence(&hits["hits"][0])]).await;
+    feedback(&s, &owner, &turn, Uuid::new_v4()).await;
+    let learning = learn(&s, &owner, session).await;
+    let writer = s.issue_key(&owner, "writer").await.unwrap();
+    let reviewer = s.issue_key(&owner, "reviewer").await.unwrap();
+    let writer_token = writer["token"].as_str().unwrap();
+    let reviewer_token = reviewer["token"].as_str().unwrap();
+    let (base, _api) = serve(origence::api::router(s.clone())).await;
+    let http = reqwest::Client::new();
+    let asset = id(&learning, "asset_id").to_string();
+    let source = cli(&base, writer_token, &["asset-source", &asset, "1"], true).await;
+    assert_eq!(source["asset_id"], learning["asset_id"]);
+    assert_eq!(source["version"], 1);
+    assert_eq!(source["kind"], "asset");
+    assert_eq!(
+        source["content_sha256"],
+        s.get(&owner, id(&learning, "asset_id"), Some(1))
+            .await
+            .unwrap()["content_hash"]
+    );
+    assert_eq!(source.as_object().unwrap().len(), 4);
+    cli(&base, writer_token, &["asset-source", &asset, "2"], false).await;
+    // Even the new candidate owner and the appointed reviewer cannot read old raw support.
+    for token in [writer_token, reviewer_token] {
+        for path in [
+            format!("/v1/sessions/{session}/turns/{}", id(&turn, "turn_id")),
+            format!(
+                "/v1/sessions/{session}/turns/{}/feedback",
+                id(&turn, "turn_id")
+            ),
+            format!("/v1/events/{}", id(&turn, "source_event_id")),
+            format!("/v1/learnings/{}", id(&learning, "learning_id")),
+        ] {
+            let response = http
+                .get(format!("{base}{path}"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap();
+            assert!(
+                matches!(
+                    response.status(),
+                    StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+                ),
+                "{path}"
+            );
+            // A positive control rules out a missing route or invalid fixture ID.
+            let owner_read = http
+                .get(format!("{base}{path}"))
+                .bearer_auth(&owner_token)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(owner_read.status(), StatusCode::OK, "{path}");
+            assert!(!response.text().await.unwrap().contains(ANSWER));
+        }
+    }
+    let calls = (
+        fixture.proposals.load(Ordering::SeqCst),
+        fixture.verifications.load(Ordering::SeqCst),
+        fixture.embeddings.load(Ordering::SeqCst),
+    );
+    let candidate = Uuid::new_v4().to_string();
+    let file = dir.path().join("selected-learning.json");
+    tokio::fs::write(&file, json!({"source":source,"name":"learning-check","description":"Synthetic conditional method","steps":STATEMENT,"selected_basis":"Explicitly disclosed synthetic Learning observation","disclosure_confirmed":true,"private_notes":"PRIVATE candidate scratch"}).to_string()).await.unwrap();
+    cli(
+        &base,
+        writer_token,
+        &[
+            "save",
+            &candidate,
+            "--expected-revision",
+            "0",
+            "--input",
+            file.to_str().unwrap(),
+        ],
+        true,
+    )
+    .await;
+    let tenant = owner.tenant_id.to_string();
+    let workspace = owner.workspace_id.to_string();
+    let reviewer_id = reviewer["key_id"].as_str().unwrap();
+    let mut approved = Vec::new();
+    for _ in 0..2 {
+        let review = Uuid::new_v4().to_string();
+        let skill = Uuid::new_v4().to_string();
+        let packet = cli(
+            &base,
+            writer_token,
+            &[
+                "submit",
+                &candidate,
+                &review,
+                "--revision",
+                "1",
+                "--reviewer-id",
+                reviewer_id,
+                "--tenant-id",
+                &tenant,
+                "--workspace-id",
+                &workspace,
+                "--skill-id",
+                &skill,
+                "--version",
+                "1",
+            ],
+            true,
+        )
+        .await;
+        let digest = packet["digest"].as_str().unwrap().to_string();
+        for hidden in [
+            ANSWER.to_string(),
+            session.to_string(),
+            id(&turn, "turn_id").to_string(),
+            "PRIVATE candidate scratch".into(),
+        ] {
+            assert!(!packet.to_string().contains(&hidden));
+        }
+        cli(
+            &base,
+            reviewer_token,
+            &["decide", &review, &digest, "--approve"],
+            true,
+        )
+        .await;
+        approved.push((review, skill, digest));
+    }
+    let (published_review, published_skill, published_digest) = &approved[0];
+    cli(
+        &base,
+        reviewer_token,
+        &["publish", published_review, published_digest],
+        true,
+    )
+    .await;
+    cli(
+        &base,
+        writer_token,
+        &["package", published_skill, "1"],
+        true,
+    )
+    .await;
+    // Withdraw the original private archive supporting Learning, not the Skill itself.
+    let withdrawn = http
+        .delete(format!("{base}/v1/events/{}", id(&turn, "source_event_id")))
+        .bearer_auth(&owner_token)
+        .header("Idempotency-Key", "withdraw-learning-support")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(withdrawn.status(), StatusCode::OK);
+    let receipt: Value = withdrawn.json().await.unwrap();
+    assert_eq!(
+        s.job(&owner, id(&receipt, "cleanup_job_id")).await.unwrap()["state"],
+        "pending"
+    );
+    let (pending_review, _, pending_digest) = &approved[1];
+    cli(
+        &base,
+        reviewer_token,
+        &["publish", pending_review, pending_digest],
+        false,
+    )
+    .await;
+    cli(
+        &base,
+        writer_token,
+        &["package", published_skill, "1"],
+        false,
+    )
+    .await;
+    cli(&base, writer_token, &["candidate", &candidate], false).await;
+    cli(&base, writer_token, &["asset-source", &asset, "1"], false).await;
+    // Skill-only operations never invoke even the deterministic loopback model.
+    assert_eq!(
+        calls,
+        (
+            fixture.proposals.load(Ordering::SeqCst),
+            fixture.verifications.load(Ordering::SeqCst),
+            fixture.embeddings.load(Ordering::SeqCst)
+        )
+    );
+    s.engine.shutdown().await.unwrap();
+}
