@@ -1434,3 +1434,11 @@ UI 类型检查、19 项测试、#98 的两个宽度、Run 核验和 PDF 来源�
 - `cargo +1.98.0 test --locked --offline --no-default-features --features sqlite --test local --target-dir target/doc-positioning-check --quiet workspace_schema_rejection` 通过 6 项。
 - 在新的临时目录用固定 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 运行 `tools/anyseek_smoke.py --test-executable`，8 项真实引擎测试全部通过。真实 HTTP 宿主验证旧路由均返回 404，CLI 拒绝旧开关，正常发布与全文检索通过。
 - `docker compose --env-file .env.example config --quiet` 通过。当前机器只有 Docker Desktop 所用的 WSL 发行版，Linux Docker 引擎不可用，本轮未运行 Linux 测试。现有 CI 工作流仍可覆盖 Linux 与 Windows。
+
+## 2026-11-18 · CI 去重
+
+四个作业及原有测试、Clippy 和真实引擎联验命令均保留。`fast-check` 负责统一格式检查，Windows CI 跳过重复格式检查，Windows 本地 `Validate` 默认仍检查格式。`linux-native` 复用默认特性集成测试生成的宿主二进制，进入冒烟测试前检查它可执行。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 通过。
+- 在全新的 `target/ci-binary-check` 目录设置 `CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0`、`CARGO_INCREMENTAL=0`，执行 `cargo +1.98.0 test --locked --offline -j 2 --no-fail-fast --quiet`。448 项通过，8 项真实 AnySeek 测试默认忽略。未额外执行 `cargo build`，集成测试生成的 `debug/origence.exe` 已通过 `serve --help` 验证。
+- 本机 Windows PowerShell 5.1 运行 `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck` 通过。Clippy 通过，默认测试 448 项通过，8 项默认忽略。工作流的 Linux 和 GitHub runner 实测仍待 CI。

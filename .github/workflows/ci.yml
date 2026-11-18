@@ -48,7 +48,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       # Check all Origence targets with the declared formatter.
-      - run: cargo fmt --package origence -- --check
+      - run: cargo fmt --all -- --check
       - name: Core without a metadata engine
         run: |
           cargo clippy --locked --no-default-features --all-targets -j 2 -- -D warnings
@@ -88,18 +88,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.0
-          components: rustfmt, clippy
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       # Ubuntu 24.04 includes make/g++; no-default-features is covered in fast-check.
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
-      # One complete default-feature run includes the former focused filters.
-      - run: cargo test --locked -j 2 --no-fail-fast
-      - name: Debug build
-        # Smoke tests exercise the normal service build.
-        run: cargo build --locked -j 2
+      - name: Default-feature tests and smoke binary
+        run: |
+          cargo test --locked -j 2 --no-fail-fast
+          # The integration tests build the CLI that the smoke steps reuse.
+          test -x target/debug/origence
       - name: Fetch the pinned real AnySeek fixture
         uses: actions/checkout@v4
         with:
@@ -167,7 +167,7 @@ jobs:
           cache-on-failure: true
       - name: Build tools, lint, and all local lifecycle tests
         shell: pwsh
-        run: ./tools/build.ps1 -Action Validate -Jobs 1
+        run: ./tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck
       - name: Authority contracts without host features
         run: cargo check --locked --no-default-features --features sqlite --lib -j 1
 
