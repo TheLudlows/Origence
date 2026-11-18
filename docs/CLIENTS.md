@@ -26,6 +26,24 @@ SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 
 双客户端真实任务的验收进度见 [P0 验收 #91](https://github.com/TheLudlows/Origence/issues/91)。
 
+## 用 Codex 非交互验证只读检索
+
+在专用测试项目中，若已授权 Codex 使用 reader key 自动搜索和读取资料，可在该项目的
+Codex MCP 配置中加入以下两项。使用 `codex exec` 且
+`approval_policy = "never"` 时，需要交互审批的工具调用会在到达 Origence 前失败。
+
+```toml
+[mcp_servers.origence.tools.context_search]
+approval_mode = "approve"
+
+[mcp_servers.origence.tools.context_get]
+approval_mode = "approve"
+```
+
+让 Codex 搜索一份已发布资料，再用命中的 `asset_id` 和 `version` 读取正文。
+在 `codex exec --json` 的输出中核对两次 `mcp_tool_call` 的完成状态，并核对答案引用的版本。
+如果搜索的完成事件显示 `failed` 且带有审批错误，先检查本次会话是否加载了上述工具配置。
+
 ## 记录私有 Trace
 
 使用 `--server-url` 连接 HTTP 宿主后，可为任务建立并读取私有 Run。创建、准备和上报需要 writer 权限。
@@ -36,6 +54,15 @@ SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 4. 用 `context_run_get` 分页查看当前逻辑 key 的 Run 轨迹。
 
 服务端回执记录上下文准备，客户端上报保留报告方，未采集活动保持未知。外部核验使用针对精确 Run 前缀的 HTTP 接口。详见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.md)。
+
+Claude Code 和 Codex 使用相同的 MCP 接口。排查一次跨客户端任务时，可按下表核对记录。
+
+| 要核对的动作 | 在哪里核对 | 记录能证明什么 |
+| --- | --- | --- |
+| 显式归档与读回 | 两端的 `context_turn_archive`、`context_turn_get` 调用，以及按 turn ID 读取的服务端问答 | 指定问答已保存，同一逻辑 key 的另一端可以读回。 |
+| 创建 Run、准备上下文 | `context_run_create`、`context_run_prepare` 回执和 `context_run_get` 事件 | Run 的归属、服务端准备的内容或失败原因。 |
+| 使用上下文、加载 Skill、产生任务结果 | 客户端观测和 `context_run_report` 的报告方、事件与覆盖范围 | 客户端声明了哪些动作。缺少记录的步骤保持未知。 |
+| 业务结果复核 | 与固定 Run 前缀关联的核验记录及其依据 | 谁转录了什么结论，以及是否已有独立签认。 |
 
 ## 导出已批准的 Skill
 
