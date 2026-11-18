@@ -2,7 +2,9 @@
 
 ## Scope
 
-This is the read-only context assembly contract. `Service::evidence_bundle`, HTTP
+This contract defines read-only context assembly over memory, knowledge, Learning,
+and opt-in private session turns. Skill packages and Run traces have their own
+access contracts. `Service::evidence_bundle`, HTTP
 `POST /v1/context`, and MCP `context_bundle` share one request and response.
 Search/resolve retain their separate contracts. Guidance remains external
 evidence without an independent publication lifecycle. Current-stage databases are fresh databases per AGENTS.md.
@@ -51,8 +53,8 @@ concepts are deliberately distinct. Session provenance is a tagged real
 fictional chunk. Citation IDs include both session and turn IDs.
 
 Learning is reader-visible only as its published statement/why, exact conditions
-and sanitized support identifiers/ranges. Raw supporting Q&A/quotes remain
-writer-only. Conditions appear in retained text, item metadata and citation
+and sanitized support identifiers/ranges. Raw supporting Q&A and quotes require
+writer authority and ownership of the private session's logical key. Conditions appear in retained text, item metadata and citation
 provenance. Caller context uses exact string membership for every condition;
 `caller_context_exact_match` means only that the caller supplied those strings.
 Otherwise applicability is explicitly `unverified`. No model interprets,
@@ -91,7 +93,7 @@ Response JSON outside `rendered_context` is not charged to the context budget.
 ## Independent Agent evidence
 
 The `evals/agent` data, `evals/agent/runner.py`, and
-`evals/agent/local_chat.py` harness are separate from AML and its observed questions.
+`evals/agent/local_chat.py` harness use separately authored synthetic cases.
 Four arms share model, prompts, tool permissions, model-call limits and context budget: no memory, simple hybrid (summary/graph disabled),
 EvidenceBundle, and explicitly nondeployable gold diagnostic. A bounded
 model/tool loop records raw actions, observations, final answer, citations,

@@ -1,6 +1,6 @@
 //! Native SQLite open/initialize/check/shutdown; never migrate existing databases.
 use super::locking::{acquire_lock, acquire_path_lock};
-use super::schema::{check_conn, exec_schema, reject_legacy_aml_schema, schema_present};
+use super::schema::{check_conn, exec_schema, schema_present};
 use super::*;
 use std::path::Path;
 
@@ -89,7 +89,6 @@ impl Lifecycle for SqliteStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(sqlite_err)?;
-        reject_legacy_aml_schema(&mut tx).await?;
         if !schema_present(&mut tx).await? {
             let existing: i64 = sqlite_db::query_scalar(
                 "SELECT count(*) FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",

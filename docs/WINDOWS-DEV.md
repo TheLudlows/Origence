@@ -35,7 +35,7 @@ AnySeek 必须用当前兼容 pin
 每个已鉴权 tenant/workspace 自动映射到 namespace/collection，首次使用创建；不再配置
 `OC_ANYSEEK_TENANT` 或 `OC_ANYSEEK_COLLECTION`。已有发布的集合丢失时拒绝启动，不补建空集合。
 ready 不保证模型质量；本开发入口明确设置 `OC_ENABLE_MODELS=false`，用于无模型全文流程。
-模型/AML/向量专项配置请用手动启动流程，不会静默继承调用者的 OC_* 配置。
+模型与向量专项配置使用手动启动流程。开发启动器按文档声明的配置启动服务。
 
 ## 一次性初始化（与启动器分开）
 

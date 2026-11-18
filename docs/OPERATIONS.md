@@ -165,30 +165,19 @@ SQLite 随程序编译，无需安装 SQLite 服务或客户端库。可写连�
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。
 
-## AML 适配启用与批次任务
+## 通用消息批次与所属 workspace
 
-仅使用独立新库。新 schema 不创建 oc_aml_namespaces、oc_aml_users、oc_aml_adds；发现旧 AML 表/视图或缺少新通用约束的库明确拒绝打开，不删除、自动升级、转换或静默补建。不得向业务库手工复制 DDL。正常同版本重启/停机备份恢复仍受支持；历史身份命令不再安装旧库缺表。
+所属 workspace 的访问能力由 root 管理员显式授予。具备能力的 root 凭据用于受信服务，派生访问受 reader 或 writer 权限限制。调用方通过公开 Rust API 选择目标 workspace。接口、幂等与授权细节见 [API](API.md#通用所属-workspace-与消息批次库接口)。
 
-1. 用现有 init 创建或配置明确的 root workspace。`OC_ENABLE_AML=true` / `serve --enable-aml` 显式启用路由，默认关闭。Compose 显式透传该变量；`.env` 中未设置时仍为 false。
-2. root admin 使用通用 `/admin/keys` 的 `allow_owned_workspaces:true` 或 `key-create <root UUID> --role writer --allow-owned-workspaces` 签发受信服务端 key；每次轮换必须再次显式授予。仅知道 user_id 或目标 UUID 不构成授权。
-3. root key 按 reader/writer 权限访问该 root 全部所属用户 workspace，不向终端用户分发；接入服务负责终端用户身份和作用域选择。
-4. 配置 embedding 后使用 Add；固定 raw-only 原文 vector，不启用摘要/抽取/图。每批来源、asset、原 job 及命令回执在一个事务内受理，消息解析/预分词与保存计划解码在 spawn_blocking、事务外运行，仍由既有单 Worker 串行 prepare/publish。
+提交消息批次需要配置与接受规格一致的 embedding profile。批次以原文向量入库，接受规格与任务一同持久化。解析和外部调用继续在存储事务外执行，入库使用既有单 Worker。轮换前可先等旧凭据提交的任务完成，撤销会阻断该凭据的未完成发布。
 
-轮换先排空原 key 未完成任务再撤销。新 key 可命中相同回执，但 created_by 不变；紧急撤销接受旧任务被中断，新 key 不能接管，也不能为已失去权限的原 creator 显式 retry。已发布数据按当前读权限、有效来源、版本和索引判断，不因读取 key 更换而失效。
-
-接受规格含 parser/version、chunking_version、raw_only 与 embedding profile，保存在原 job payload。同键换规格返回冲突；重启/恢复/retry 不采用新默认值覆盖，运行模型 profile 不匹配会失败。更换 root 或 request_id 不是规避内容冲突/权限限制的方法。
-
-Add 等待上限仍为 25 分钟，上游模型单次调用仍为 45 秒；网关需允许长连接，或用相同 request_id/内容重放。队列等待也计入上限，输入上限不是吞吐/SLO 保证。超时/断线只结束观察，不取消 blocking 闭包或持久任务，无新增 Worker、自动重试、硬时间/内存隔离。优雅停止等待当前 Worker；已存在 Add 观察请求可能等待到 25 分钟结束。
-
-模型失败仍为 failed；相同 Add 返回原失败任务并给出 503。合法库调用方用通用 receipt.job_id，在 lookup_owned_workspace 返回的 AuthContext 内调用 Service::job_action(...,"retry")；没有额外 AML job 管理 HTTP 入口，root 的 /v1/jobs 不跨 workspace 查询。临时存储故障沿用原 Worker retry_wait。显式 retry 的新 generation 可改变未发布 chunk ID，但保持 job/source/asset；同 generation 的恢复保持证据 ID。重放不保证上游计费一次。
-
-审计/日志不输出消息、query、options、外部 user_id 或模型诊断。原文仍在来源/版本/发布计划内持久保存，墓碑不等于物理擦除。停机整库备份边界见[备份与恢复](#备份与恢复)；删除来源、工作目录或备份不证明介质物理擦除，副本及模型供应商的保留边界需单独管理。官方 Smoke/Full 与真实模型质量尚未验收。
+库调用方通过 `wait_message_batch` 指定观察时限。等待结束只停止观察，原持久任务由 Worker 继续处理。HTTP 宿主已移除旧评测入口的长等待处理。优雅停止仍等待当前 Worker 和进行中的 HTTP 请求。
 
 ## 检索分段诊断
 
 设置 RUST_LOG=error,origence::search_timing=debug 可记录成功 Search 的 authorization_ms、embedding_ms、eligibility_ms、vector_ms、branches_ms、verification_ms、total_ms，以及 vector_batches/native_count/returned_count。日志不含 query、证据、用户/资产 ID、路径或凭据。默认 info 不输出这些 debug 事件。
 
-branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 AML 用户作用域派生/授权查询、HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。完整 HTTP 耗时须另行测量。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
+branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。完整 HTTP 耗时须另行测量。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 
 ## 记忆与受控提取运行边界
 

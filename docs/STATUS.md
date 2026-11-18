@@ -1,20 +1,23 @@
 # Origence · 当前进度
 
-更新：2026-11-17。已同步 main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)
-（含 #81、#83、#84、#85、#86），保留已发布正文与索引统一存储、服务凭据和 workspace 自动路由。
-产品边界见[架构规划](design/agent-data-foundation.md)。
-**#76 仍未完成：五页首版与部分真实浏览器验收已完成；完整无障碍、双客户端和企业任务仍缺。**
+更新于 2026-11-18，代码基线为 main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)。
+Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。首版目标见[产品路线图](ROADMAP.md)与[架构规划](design/agent-data-foundation.md)。
 
-PR #82 包含窄屏表格、退出入口、粗指针按钮与 PDF 来源提示修复。
-响应式、键盘、固定版本/撤回证据及本次同步验证分别见 [VALIDATION](VALIDATION.md)。
+当前变更移除了 AML 评测协议的 HTTP 入口与启动开关。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
+
+**P0 的数据库排障和报销复核试点尚未执行。** 双客户端产品测试暂停，独立签认仍待完成。见 [P0 验收 #91](https://github.com/TheLudlows/Origence/issues/91)。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 检索 | AnySeek 全文、向量与一跳图候选同组发布；SQLite 仍核验图证据，独立 `graph.db` 不再使用；真实引擎本地回归通过 | 真实模型检索质量、容量与延迟验收 |
-| 私有会话 | 逻辑 key 绑定唯一平台归档，独立 key 隔离，授权轮换与撤销 | Claude Code / Codex 同 key 跨客户端真实任务验证 |
-| Skill | 调用方提交候选、选定审阅包、精确批准、不可变版本、在线下载与两种原生目录格式导出 | 从经验生成候选的产品入口、原生受管加载与撤回、研发/业务试点 |
-| Run | 私有 Run、服务端上下文准备清单、工具/Skill/结果/工件报告与采集缺口 | 两真实客户端的事件采集及可读的端到端追溯体验 |
-| Node.js 管理界面 | 五页 UI、逐用户 HTTP 转发、受限资产/Run 目录、异步入库与固定版本/来源查看；见 [启动说明](../ui/README.md) | 真实浏览器布局与无障碍验收、生产计量与部署 |
+| 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。见[记忆契约](contracts/memory.md) | P0 真实任务验收 |
+| 知识 | Text、Markdown、PDF 入库，版本读取与比较、发布与撤回；更新失败保留原发布版本。见 [API](API.md#接口) | P0 真实任务验收 |
+| Skill | [选定经历 CLI](SKILL-CANDIDATE-CLI.md)、选定审阅包、精确批准、不可变发布、在线下载和两种客户端目录格式导出 | 双客户端真实加载与撤回验收；原生受管加载 |
+| Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报与采集缺口、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.md) | 双客户端真实事件采集、端到端证据核对及独立签认 |
+| 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核；按预算组装证据。真实引擎本地回归通过 | 当前后端的模型检索质量、容量与延迟验收 |
+| 私有归档与反馈 | 逻辑 key 绑定私有归档、授权轮换与撤销、显式反馈和 Improve → Learning | 双客户端同 key 查询与隔离的真实任务验收 |
+| Node.js 管理界面 | 五页 UI，受限目录、异步入库、固定版本与来源、按当前 key 的 Run 创建数及趋势；已有 Chromium 定向验证 | 实际屏幕阅读器、实体触屏、生产计量与告警。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
+
+精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
 ## AnySeek 服务凭据与 workspace 集合
 
@@ -49,15 +52,15 @@ Blob/PDF 测试不加载元数据库；SQLite authority 单独通过 `--features
 本次在 PR 的 Linux/Windows CI 验证真实 SQLite 的锁、WAL、事务取消与恢复；
 精确本地结果、远端 CI 及未验收边界统一见 VALIDATION 和 PR。
 
-## 检索模块拆分（已合入 PR #79）
 ## #76 关联 Run 本地切片
 
 已同步 main `f62168b`（#81 SQLite）：资产详情可读取具体版本的当前 logical key 已记录 Run 引用。
 有界索引与事件同事务写入，读取再次核验权威引用/资产/来源/所有权，不返回 Run 正文；
 固定 v1 往返、另一管理员隔离、撤回、分页与重开已验证，见 [VALIDATION](VALIDATION.md)。
 索引保留首条引用证明，不替代完整采集或 trace 可读性；新 schema fresh-only，旧库拒绝而不迁移。
-本切片已合入 #83；第一批浏览器分支独立保留。#76 的计量、告警、PDF 页内文本和外部任务验收仍缺。
+本切片已合入 #83。随后 #99 实现 PDF 页内文本定位，#100 实现 Run 创建数与趋势。
 
+## 检索模块拆分（已合入 PR #79）
 
 已同步 main `3d474d9`（含 #77 UI、#78 诊断）。已核验分路的排序/融合位于
 `retrieval::rank`，最终发布及返回复核由 SQLite 事务方法负责；Search 与 EvidenceBundle
@@ -82,11 +85,8 @@ CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检�
 
 ## 下一步
 
-1. 完成 UI 真实浏览器布局、键盘/触屏、无障碍及 Windows 验证；预览 relay 故障仍需解决。
-2. 通过合并后的 CI 后，冻结客户端/模型版本，以研发、业务各一个真实任务验证归档、Skill 复用和 Run 追溯。
-
-精确测试结果、CI 运行及诊断限制见 [VALIDATION](VALIDATION.md)。
-Skill 的 API 审批和目录导出不等于真实用户审阅、客户端加载或任务收益验收。
+1. 继续 [#76](https://github.com/TheLudlows/Origence/issues/76) 的屏幕阅读器和实体触屏验收，并按现有验收清单补足证据。
+2. 恢复双客户端产品测试后，按 [#91](https://github.com/TheLudlows/Origence/issues/91) 冻结客户端、模型和任务材料，验证归档、Skill 复用和 Trace，并完成独立签认。
 
 ## 范围与证据
 
