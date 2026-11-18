@@ -23,6 +23,8 @@ pub mod parsing;
 pub mod retrieval;
 pub mod retrieval_diagnostics;
 pub mod run;
+#[cfg(feature = "local-storage")]
+pub mod run_pdf;
 pub mod run_verification;
 #[cfg(feature = "local-storage")]
 mod runs;

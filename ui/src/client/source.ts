@@ -111,3 +111,59 @@ export async function sourcePreview(
     message(target, e);
   }
 }
+
+interface RunPdfPreview {
+  asset_version: number;
+  page: number | null;
+  span: { before: string; highlight: string; after: string } | null;
+}
+
+export async function runPdfPreview(target: HTMLElement, path: string, ctx: ViewContext) {
+  target.replaceChildren();
+  try {
+    const preview = await api.get<RunPdfPreview>(path, ctx.signal);
+    if (ctx.signal.aborted || !target.isConnected) return;
+    const page = preview.page;
+    const span = preview.span;
+    const open = button(page ? `打开原件第 ${page} 页` : "打开原始 PDF", async () => {
+      open.disabled = true;
+      try {
+        // Reauthorize the archived citation on every open. Never retain a
+        // downloadable URL in the view after the request.
+        const blob = await api.request<Blob>(path + "&original=true", {
+          signal: ctx.signal,
+          blob: true,
+        });
+        if (ctx.signal.aborted || !target.isConnected) return;
+        const url = URL.createObjectURL(blob.slice(0, blob.size, "application/pdf"));
+        const close = () => URL.revokeObjectURL(url);
+        ctx.signal.addEventListener("abort", close, { once: true });
+        const link = el("a");
+        link.href = page ? `${url}#page=${page}` : url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.click();
+        setTimeout(() => {
+          close();
+          ctx.signal.removeEventListener("abort", close);
+        }, 60_000);
+      } catch (e) {
+        if (ctx.signal.aborted || !target.isConnected) return;
+        target.replaceChildren();
+        message(target, e);
+      } finally {
+        open.disabled = false;
+      }
+    });
+    target.append(panel(
+      page ? `v${preview.asset_version} · PDF 第 ${page} 页` : `v${preview.asset_version} · PDF`,
+      span
+        ? el("pre", "code", span.before, el("mark", "", span.highlight), span.after)
+        : el("p", "muted", "缺少可核验的页内定位，未高亮片段。"),
+      span ? el("p", "muted", "高亮位于已核对的页内提取文本。") : null,
+      open,
+    ));
+  } catch (e) {
+    if (!ctx.signal.aborted && target.isConnected) message(target, e);
+  }
+}

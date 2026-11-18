@@ -18,14 +18,27 @@ import {
   type ViewContext,
 } from "./components.js";
 import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
-import { sourcePreview } from "./source.js";
+import { runPdfPreview, sourcePreview } from "./source.js";
 
-export function citation(ref: Provenance, ctx: ViewContext) {
+export function citation(ref: Provenance, ctx: ViewContext, pdf?: { path?: string }) {
   const source = el("div");
+  const pdfPath = pdf?.path;
+  const openPdf = pdfPath && ctx.role !== "reader"
+    ? button("核验 PDF 页内引用", async () => {
+        if (!openPdf) return;
+        openPdf.disabled = true;
+        try {
+          await runPdfPreview(source, pdfPath, ctx);
+        } finally {
+          openPdf.disabled = false;
+        }
+      })
+    : null;
   return el(
     "div",
     "citation",
-    ref.asset_id
+    ref.asset_id && (!pdf || (typeof ref.asset_version === "number" &&
+      Number.isSafeInteger(ref.asset_version) && ref.asset_version > 0))
       ? button(
           `${short(ref.asset_id)} · v${ref.asset_version ?? "?"}`,
           () => ctx.navigate("asset", ref.asset_id, ref.asset_version),
@@ -33,11 +46,13 @@ export function citation(ref: Provenance, ctx: ViewContext) {
         )
       : badge(ref.type),
     code(ref),
-    ref.source_event_id && ctx.role !== "reader"
-      ? button("核验原始引用", () =>
-          sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx),
-        )
-      : null,
+    pdf
+      ? openPdf ?? el("p", "muted", "没有可用于核验的页内来源。")
+      : ref.source_event_id && ctx.role !== "reader"
+        ? button("核验原始引用", () =>
+            sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx),
+          )
+        : null,
     source,
   );
 }
@@ -192,6 +207,25 @@ function eventOrigin(event: RunEvent): [string, string] {
   }
 }
 
+interface ArchivedPdfReference {
+  evidence_ref_id: string;
+  source_event_id: string;
+  locator: Record<string, unknown>;
+  reference: { chunk_id: string; asset_id: string; asset_version: number };
+}
+function pdfLocator(locator?: Record<string, unknown>) {
+  return locator?.page != null ||
+    (typeof locator?.parser === "string" && locator.parser.startsWith("pdf-"));
+}
+function archivedPdf(value: unknown): value is ArchivedPdfReference {
+  const item = value as Partial<ArchivedPdfReference> | null;
+  return typeof item?.evidence_ref_id === "string" &&
+    typeof item.source_event_id === "string" &&
+    typeof item.reference?.chunk_id === "string" &&
+    typeof item.reference.asset_id === "string" &&
+    Number.isSafeInteger(item.reference.asset_version) && item.reference.asset_version > 0 && pdfLocator(item.locator);
+}
+
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
   const assessments = el("div");
@@ -217,8 +251,41 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])
       : [];
-    for (const ref of refs) details.append(citation(ref, ctx));
-    for (const ref of event.references) details.append(code(ref));
+    const pdfRefs = event.references.filter(archivedPdf);
+    const shown = new Set<string>();
+    const pdfPath = (ref: ArchivedPdfReference) => {
+      shown.add(ref.evidence_ref_id);
+      const query = new URLSearchParams({
+        sequence: String(event.sequence),
+        evidence_ref_id: ref.evidence_ref_id,
+      });
+      return `/v1/runs/${encodeURIComponent(id)}/pdf-source?${query}`;
+    };
+    for (const ref of refs) {
+      if (!pdfLocator(ref.locator)) {
+        details.append(citation(ref, ctx));
+        continue;
+      }
+      const archived = pdfRefs.find((r) =>
+        r.reference.chunk_id === ref.chunk_id &&
+        r.reference.asset_id === ref.asset_id &&
+        r.reference.asset_version === ref.asset_version &&
+        r.source_event_id === ref.source_event_id,
+      );
+      details.append(citation(ref, ctx, { path: archived && pdfPath(archived) }));
+    }
+    for (const ref of event.references) {
+      if (archivedPdf(ref) && !shown.has(ref.evidence_ref_id)) {
+        details.append(citation({
+          type: "asset_chunk",
+          asset_id: ref.reference.asset_id,
+          asset_version: ref.reference.asset_version,
+          source_event_id: ref.source_event_id,
+          locator: ref.locator,
+        }, ctx, { path: pdfPath(ref) }));
+      }
+      details.append(code(ref));
+    }
     details.append(
       button("获取此处的固定前缀摘要", async () => {
         try {

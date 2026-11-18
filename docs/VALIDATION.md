@@ -1244,3 +1244,63 @@ CI must pass before merge; actual final main will be independently retested.
 
 本轮范围限于上述 UI 回归。屏幕阅读器、实体触屏、其他浏览器、完整 #76 及真实产品
 客户端任务仍待验收。记录和实现均为本地提交。
+
+## 2026-11-18 — #76 私有 Run 的固定版本 PDF 页内定位
+
+- 最新 main 核对为 `48cfa7c643b8c077ad33c55981def51979afde05`。独立本地
+  分支 `fix/issue76-pdf-page`。本地对象库未找到候选 `56989af`，未将其当作交付依据。
+  查阅仓库 AGENTS.md 和来源/Run 合同，仓库及工作区无适用的 `.agents/skills`。
+- Linux x86_64，Rust/Cargo 1.98.0、Node 24.22.1、Chromium 156.0.8078.79。
+  测试只使用合成 PDF、新临时 SQLite、动态 loopback 端口和 AnySeek 协议夹具，
+  模型禁用。Codex/Claude Code 产品客户端测试保持暂停。
+- `cargo test --locked --offline --test local run_pdf_source`：1 passed。
+  通过已授权原件与发布片段哈希验证 v1 第 2 页，在 v2 发布后仍返回 v1 原件字节；
+  相同文本重复时返回页码和无 span，原件仍可授权打开。跨 Key、reader、无关证据 ID、
+  请求指定版本、来源撤回后的重复获取均按合同拒绝。覆盖公共 Service、上传/发布/搜索
+  管道和真实 HTTP 请求。
+- `cargo test --locked --offline --lib pdf_page_span`：1 passed。覆盖 UTF-8 多字节边界、
+  片段哈希、未知解析器、重复匹配和纯栅格页无高亮。首轮非 ASCII 夹具未声明字库编码，
+  修正夹具 WinAnsi 编码后复跑通过。现有
+  `cargo test --locked --offline --no-default-features --test core pdf_`：9 passed，
+  含多语言、分页、损坏、操作符截断、文件/页数/总文本限制和拒绝部分发布。
+- `npm --prefix ui test`：19 passed。随后从仓库根目录执行
+  `node ui/scripts/check-run-pdf-browser.mjs`：通过。真实 Chromium 和构建后的 UI/relay
+  使用合成 HTTP 响应，验证 v1 页内文本 mark、原件字节、第 2 页和第 3 页的实际新标签
+  Blob URL、回退不高亮以及撤回后拒绝新开；没有回退到 asset 最新版或裸文件 URL。
+  首轮浏览器行为断言通过后有配置目录清理竞争，改用正常关闭并重试清理后整条通过。
+  `node ui/scripts/check-run-verification-browser.mjs`：既有 Run 核验浏览器回归通过。
+- `cargo fmt --all -- --check`、`cargo clippy --locked --offline --all-targets --all-features -- -D warnings`
+  与 `git diff --check` 通过。复用已有单表存储查询，未新增 SQL、依赖、权限、schema 或迁移。
+  撤回后的新响应要求重新获得权限和来源检查，已经打开的原件遵循现有下载语义。
+- 局限：高亮位于核对后的页内提取文本，浏览器原件在对应页打开。未加坐标覆盖或 OCR。
+  浏览器与真实 HTTP 后端分别验证，Windows 和完整 #76 验收未跑。本切片仅在独立分支
+  本地提交，未推送、未发 PR。
+
+### #76 PDF 真实服务与 Chromium 联验
+
+同步 main `8cdf88f709d708b75689768e6caada45fde56155` 后，在
+`47b73234de9d57bb3b996b1a244421a06276e4f2` 复验。原 PDF 提交
+`a95b931642372211575f7a11c57668208ffe43c1` 至该合并提交的 Rust、Cargo、
+测试工具和 CI 无差异，UI 则重新构建以覆盖主干 #98 的页面变化。以下补记仅改变验证文档。
+
+真实 AnySeek 使用 CI 固定源码提交 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`，
+Rust 1.99.1 从源构建。AnySeek 二进制 SHA256
+`ef581925d9afa44ce7be3694144ef010354925304e63ca737fc7b33d1687cc3a`，
+Origence 1.98.0 工具链编译的测试二进制 SHA256
+`e05e5f930d94bd003fa337d0ba8fe01c24375f504d8e61810496ce6eaf678f52`。
+两者在联验前后分别校验一致。使用 Node 24.22.1、Chromium 156.0.8078.79、
+动态 loopback 端口及临时合成数据，模型关闭。
+
+- 同一 Run `a1d2cca4-f58b-4bac-a378-cf036fa218db` 在真实 AnySeek 上固定 v1
+  引用，再发布 v2。正常工作空间登录后，构建的 UI 经 relay 从真实纳入授权的 HTTP
+  接口读取 v1 第 2 页，页面提取文本高亮 `NeedleUnique historical fixed PDF page`。
+  浏览器收到的原件在原生查看器打开第 2/2 页，SHA256 为
+  `0604486708bf7f3959dcdd53b5af8d4817b32cd1b738beb06d9fb8461bc69fc7`，
+  与 v1 字节相符。原生 PDF 页面无像素覆盖层。
+- 重复片段回退到页 1 与授权原件，文本无高亮。纯栅格 PDF 按现有规则拒绝发布，
+  其原件沿用已有授权下载。缺证据 ID 为 404，reader 读原件为 403，另一 admin
+  读取私有 Run/来源为 404。
+- 撤回 v1 时浏览器保留旧按钮。再次点击收到真实 404 后移除按钮和高亮，
+  v2 仍为当前版本。联验保留了浏览器原件哈希、原生查看器截图和 HTTP 状态记录。
+- 本地格式、Clippy、PDF 单元 1 项、Service/HTTP 1 项、无默认特性的 PDF 核心
+  9 项及 UI 19 项均通过。合成 Chromium 回归和上述真实服务联验均通过。

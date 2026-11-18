@@ -10,7 +10,8 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, header},
+    response::{IntoResponse, Response},
     routing::{get, post, put},
 };
 use serde::Deserialize;
@@ -22,6 +23,7 @@ pub(super) fn routes() -> Router<Service> {
         .route("/v1/runs", post(create_run).get(list_runs))
         .route("/v1/runs/{id}", get(run_trace))
         .route("/v1/runs/{id}/prefix", get(run_prefix))
+        .route("/v1/runs/{id}/pdf-source", get(run_pdf_source))
         .route(
             "/v1/runs/{id}/verifications",
             get(run_verifications).post(record_run_verification),
@@ -371,4 +373,48 @@ async fn withdraw_run_verification(
             .withdraw_run_verification(&auth(&service, &headers).await?, run, id, input)
             .await?,
     ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunPdfQuery {
+    sequence: i64,
+    evidence_ref_id: Uuid,
+    #[serde(default)]
+    original: bool,
+}
+
+async fn run_pdf_source(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+    Query(q): Query<RunPdfQuery>,
+) -> Result<Response> {
+    let caller = auth(&service, &headers).await?;
+    let no_store = (header::CACHE_CONTROL, "no-store");
+    if q.original {
+        let bytes = service
+            .run_pdf_original(&caller, run, q.sequence, q.evidence_ref_id)
+            .await?;
+        Ok((
+            [
+                no_store,
+                (header::CONTENT_TYPE, "application/octet-stream"),
+                (header::CONTENT_DISPOSITION, "attachment"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            bytes,
+        )
+            .into_response())
+    } else {
+        Ok((
+            [no_store],
+            Json(
+                service
+                    .run_pdf_preview(&caller, run, q.sequence, q.evidence_ref_id)
+                    .await?,
+            ),
+        )
+            .into_response())
+    }
 }
