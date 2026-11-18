@@ -4,6 +4,7 @@ CREATE TABLE oc_runs (
     input TEXT NOT NULL, input_hash TEXT NOT NULL, created_at INTEGER NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,run_id)
 );
+CREATE INDEX oc_runs_owner_created_at ON oc_runs(tenant_id,workspace_id,owner_key_id,created_at);
 CREATE TABLE oc_run_events (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
     event_id BLOB NOT NULL, sequence INTEGER NOT NULL CHECK(sequence>0),

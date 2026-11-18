@@ -97,6 +97,38 @@ This fresh-only schema adds `oc_run_asset_refs`; exact schema admission rejects
 an existing database without the table without creating it or rewriting evidence.
 Same-schema reopen retains associations. No migration or backfill is performed.
 
+## Run creation overview
+
+`GET /v1/runs/overview?window=24h|7d` requires the same Read authority as
+the Run directory. It counts each durable Run row once within the authenticated
+tenant, workspace and logical key. Credential rotation retains the same
+logical owner. A workspace administrator sees their own counts. A reader
+with no Run records receives zeroes, without creating a session.
+
+A single service clock reading supplies the end of the rolling window. The
+interval is `[end_ms - duration_ms, end_ms)` in UTC Unix milliseconds.
+Buckets start at the window start and are contiguous half-open intervals,
+one hour for `24h` and 24 hours for `7d`. They are anchored to the exact
+request cutoff and can cross clock hours or UTC midnight. The server computes
+all bucket counts within one authorized SQLite read snapshot, includes empty
+buckets and returns their sum as `created_runs`.
+
+Creation is the server's durable record of a Run, independent of result,
+event count and whether historical evidence is still readable. A retry of
+the same accepted Run ID leaves the count unchanged. The existing UUID-ordered
+Run directory keeps its pagination. Successful runs, verified outcomes,
+end-to-end latency, tokens and cost require separate observations.
+
+The existing primary key sorts by Run UUID. The new covering index
+`oc_runs_owner_created_at` supports each bounded owner/time count and avoids
+reading Run bodies. A request takes at most 24 disjoint index range counts
+over at most seven days. Work still scales with matching index entries.
+The index is installed only on fresh SQLite authority databases. The new
+binary rejects a database missing the index during read-only schema admission.
+The previous binary also rejects a database containing the new index. Keep
+each data directory with its matching binary. Both rejections preserve the
+existing data, and there is no migration.
+
 ## External verification records
 
 Owner-transcribed external assessments use a separate [verification contract](run-verification.md).

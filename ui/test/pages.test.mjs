@@ -68,6 +68,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     keys = [];
   const searches = new Map();
   const catalogQueries = [];
+  let overviewUnavailable = false;
   let failMemory = true,
     unauthorized = false,
     conflictKnowledge = false,
@@ -98,6 +99,24 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       });
     if (path.pathname === "/api/health/ready")
       return response({ status: "ready" });
+    if (path.pathname === "/api/v1/runs/overview") {
+      if (overviewUnavailable)
+        return response({ error: { message: "overview unavailable" } }, 503);
+      const window = path.searchParams.get("window");
+      assert.ok(window === "24h" || window === "7d");
+      const size = window === "24h" ? 24 : 7;
+      const width = window === "24h" ? 3_600_000 : 86_400_000;
+      return response({
+        start_ms: 0,
+        end_ms: size * width,
+        created_runs: window === "24h" ? 31 : 34,
+        series: Array.from({ length: size }, (_, index) => ({
+          start_ms: index * width,
+          end_ms: (index + 1) * width,
+          created_runs: index === 0 ? (window === "24h" ? 31 : 34) : 0,
+        })),
+      });
+    }
     if (path.pathname === "/api/v1/assets") {
       catalogQueries.push(path.searchParams);
       if (path.searchParams.get("memory_filter")?.includes("staging"))
@@ -279,6 +298,26 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         document.body.textContent.includes("fixture task"),
     );
     assert.equal(document.querySelector("h1").textContent, "运行总览");
+    const trend = [...document.querySelectorAll("section")].find(
+      (section) => section.querySelector("h2")?.textContent === "运行创建趋势",
+    );
+    await wait(() => trend.textContent.includes("新建运行 31 条"));
+    assert.equal(trend.querySelectorAll("tbody tr").length, 24);
+    assert.ok(document.body.textContent.includes("fixture task"));
+    const range = control("统计范围", trend);
+    range.value = "7d";
+    range.dispatchEvent(new Event("change"));
+    await wait(() => trend.textContent.includes("新建运行 34 条"));
+    assert.equal(trend.querySelectorAll("tbody tr").length, 7);
+    overviewUnavailable = true;
+    range.value = "24h";
+    range.dispatchEvent(new Event("change"));
+    await wait(() => trend.textContent.includes("创建量暂不可用"));
+    assert.equal(trend.querySelectorAll("tbody tr").length, 0);
+    assert.ok(document.body.textContent.includes("fixture task"));
+    overviewUnavailable = false;
+    click("重试读取创建量", trend);
+    await wait(() => trend.textContent.includes("新建运行 31 条"));
     assert.equal(window.localStorage.length, 0);
     assert.equal(window.sessionStorage.length, 0);
   });

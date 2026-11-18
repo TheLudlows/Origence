@@ -1,6 +1,9 @@
 //! Bounded, scoped catalog reads. Each visible asset reuses the normal read contract.
 use super::*;
 
+const COUNT_RUNS_CREATED: &str = "SELECT COUNT(*) FROM oc_runs INDEXED BY oc_runs_owner_created_at \
+    WHERE tenant_id=? AND workspace_id=? AND owner_key_id=? AND created_at>=? AND created_at<?";
+
 impl SqliteTx {
     pub async fn asset_catalog(
         &mut self,
@@ -131,5 +134,45 @@ impl SqliteTx {
             items.push(json!({"run_id":id,"summary":input.summary,"created_at_ms":created}));
         }
         Ok(json!({"items":items,"next_after":more.then_some(cursor),"scope":"current_logical_key"}))
+    }
+
+    /// Count authoritative Run records for the same logical key as the catalog.
+    pub async fn run_creation_overview_at(
+        &mut self,
+        window: &str,
+        end_ms: i64,
+    ) -> StorageResult<Value> {
+        let owner = self.private_key_id().await?;
+        let (buckets, width_ms) = match window {
+            "24h" => (24, 3_600_000),
+            "7d" => (7, 86_400_000),
+            _ => return Err(StorageError::InvalidArgument("invalid Run overview window")),
+        };
+        let start_ms = end_ms
+            .checked_sub(i64::from(buckets) * width_ms)
+            .filter(|start| *start >= 0)
+            .ok_or(StorageError::InvalidArgument("invalid Run overview time"))?;
+        let mut total = 0;
+        let mut series = Vec::with_capacity(buckets as usize);
+        for bucket in 0..buckets {
+            let start = start_ms + i64::from(bucket) * width_ms;
+            let end = start + width_ms;
+            // The non-overlapping seeks use the covering index in this read snapshot.
+            let count: i64 = sqlite_db::query_scalar(COUNT_RUNS_CREATED)
+                .bind(self.scope.tenant_id)
+                .bind(self.scope.workspace_id)
+                .bind(owner)
+                .bind(start)
+                .bind(end)
+                .fetch_one(&mut *self.tx)
+                .await
+                .map_err(sqlite_err)?;
+            total += count;
+            series.push(json!({"start_ms":start, "end_ms":end, "created_runs":count}));
+        }
+        Ok(json!({
+            "scope":"current_logical_key", "window":window, "timezone":"UTC",
+            "start_ms":start_ms, "end_ms":end_ms, "created_runs":total, "series":series
+        }))
     }
 }
