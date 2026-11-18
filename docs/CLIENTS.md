@@ -24,7 +24,18 @@ SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 客户端的本地聊天记录，也不会恢复客户端的工作现场。
 检索内容是外部证据，不是可直接执行的指令。
 
-本页说明本地接入方式，不是实际客户端任务或模型效果的验收报告。
+双客户端真实任务的验收进度见 [P0 验收 #91](https://github.com/TheLudlows/Origence/issues/91)。
+
+## 记录私有 Trace
+
+使用 `--server-url` 连接 HTTP 宿主后，可为任务建立并读取私有 Run。创建、准备和上报需要 writer 权限。
+
+1. 用 `context_run_create` 提交稳定的 `run_id` 和脱敏任务摘要。
+2. 用 `context_run_prepare` 准备上下文，服务端把精确引用和准备回执写入 Run。
+3. 用 `context_run_report` 明确上报观察到的 Skill 加载、工具、结果和采集缺口。重试保留原 `event_id` 和请求内容。
+4. 用 `context_run_get` 分页查看当前逻辑 key 的 Run 轨迹。
+
+服务端回执记录上下文准备，客户端上报保留报告方，未采集活动保持未知。外部核验使用针对精确 Run 前缀的 HTTP 接口。详见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.md)。
 
 ## 导出已批准的 Skill
 

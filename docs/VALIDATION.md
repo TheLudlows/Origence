@@ -8,7 +8,7 @@
 ## 2026-11-17：#88 独立 Skill 候选入口（本地切片）
 
 基于 `293e2bf6af3b180d43c8050731047b552ac07519` 的独立 CLI、选定依据绑定修订、
-合成权限/撤回回归与未验收边界见 [#88 验证记录](validation/issue-88-skill.md)。
+合成权限/撤回回归与未验收边界见 [#88 验证记录](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md)。
 未发布，不改变下方历史证据，也不代表五路 P0 联合验收。
 
 ## 2026-11-17：#90 控制台事实与知识治理（本地）
@@ -682,8 +682,7 @@ MCP 失败位置为 [schema_object](../tools/mcp_smoke.py#L299)。诊断运行�
 [清理前 VALIDATION](https://github.com/TheLudlows/Origence/blob/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/VALIDATION.md)、
 [历史依赖审计](https://github.com/TheLudlows/Origence/blob/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/DEPENDENCY_AUDIT.md)
 和[原始工件](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/evidence)查阅。
-仓库 evidence 目录内的既有原始工件保持不变。历史结果只属于其标明的提交/后端，
-旧文中的“当前”“进行中”“待验收”不作为现在的状态。
+历史结果以链接中的原始工件及其标明的提交和后端为准。当前进度见 [STATUS](STATUS.md)。
 
 ## 历史文档整理检查（PR #75）
 
@@ -1180,7 +1179,7 @@ merge or deployment is authorized by this follow-up.
 `a709dfe2702efcb223d7765fc9ae0b7a71a838c9` 只增加确定性测试：同空间另一 writer
 经真实 CLI/HTTP 选择已发布 Learning 精确 v1，私有支持读取拒绝；撤回原归档支持后，
 待发布候选与已发布包均返回 NOT_FOUND，清理仍 pending。21 项 Learning 回归、
-原 Run CLI 回归及格式/Clippy 通过。详见 [#88 追加记录](validation/issue-88-skill.md)。
+原 Run CLI 回归及格式/Clippy 通过。详见 [#88 追加记录](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md#learning-source-follow-up-2026-11-17-draft-pr-94)。
 未变更产品代码，不代表真实客户端或业务验收。
 
 ## 2026-11-18 — #95 coordinated integration after #93/#94
@@ -1411,3 +1410,35 @@ Playwright 1.62.1，按上方命令复跑同一 loopback 合成 HTTP 夹具，16
 UI 类型检查、19 项测试、#98 的两个宽度、Run 核验和 PDF 来源浏览器回归、Rust 1.98.0
 格式检查及离线全目标全特性 Clippy 均通过。Chromium 结果覆盖无障碍语义与焦点。
 本轮缺少可观察实际播报的屏幕阅读器和获准测试的实体触屏，两项仍待验收。#76 保持开放。
+
+## 2026-11-18 · 统一数据底座文档校准
+
+以 main `4160fd5` 为代码基线，按记忆、知识、Skill 和 Trace 交叉核对产品文档、公开接口与当前实现。改动范围为文档和 Cargo 包描述。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 和
+  `cargo +1.98.0 clippy --locked --offline --all-targets --all-features -- -D warnings` 均通过。
+- `cargo +1.98.0 test --locked --offline --no-fail-fast --target-dir target/doc-positioning-check --quiet`
+  通过，449 项通过、0 项失败，8 项需要隔离真实 AnySeek 的测试默认忽略。
+  首次使用默认构建目录时，正在运行的 `origence.exe` 锁住目标文件，构建以 Windows 错误 5 退出。改用独立构建目录后完成复跑。
+- 检查了 12 份活动 Markdown 的 125 个本地链接及目标锚点，未发现指向已移除锚点的仓库内链接。`git diff --check` 通过。
+
+本轮覆盖文档一致性和 Rust 默认测试集。真实客户端双场景试点及独立签认仍按 [#91](https://github.com/TheLudlows/Origence/issues/91) 追踪。
+
+## 2026-11-18 · 移除 AML 协议适配
+
+基于 `4160fd5`，移除协议模块、HTTP 路由、启动开关及仅供协议派生 ID 使用的 UUIDv5 和 `sha1_smol`。消息批次、所属 workspace 和原始来源定位继续使用通用接口。SQLite 使用既有完整 schema 核对拒绝额外对象。核查了实际执行的单表目录查询与测试 DDL/DML，未新增关联查询。现有数据库拒绝测试覆盖检查和重开，并比对拒绝前后的文件字节。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 和 `cargo +1.98.0 clippy --locked --offline --all-targets --all-features -- -D warnings` 通过。
+- `cargo +1.98.0 test --locked --offline --no-fail-fast --target-dir target/doc-positioning-check --quiet` 通过，448 项通过，8 项真实 AnySeek 测试默认忽略。
+- `cargo +1.98.0 test --locked --offline --no-default-features --target-dir target/doc-positioning-check --quiet` 通过，90 项通过，默认忽略 5 项。
+- `cargo +1.98.0 test --locked --offline --no-default-features --features sqlite --test local --target-dir target/doc-positioning-check --quiet workspace_schema_rejection` 通过 6 项。
+- 在新的临时目录用固定 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 运行 `tools/anyseek_smoke.py --test-executable`，8 项真实引擎测试全部通过。真实 HTTP 宿主验证旧路由均返回 404，CLI 拒绝旧开关，正常发布与全文检索通过。
+- `docker compose --env-file .env.example config --quiet` 通过。当前机器只有 Docker Desktop 所用的 WSL 发行版，Linux Docker 引擎不可用，本轮未运行 Linux 测试。现有 CI 工作流仍可覆盖 Linux 与 Windows。
+
+## 2026-11-18 · CI 去重
+
+四个作业及原有测试、Clippy 和真实引擎联验命令均保留。`fast-check` 负责统一格式检查，Windows CI 跳过重复格式检查，Windows 本地 `Validate` 默认仍检查格式。`linux-native` 复用默认特性集成测试生成的宿主二进制，进入冒烟测试前检查它可执行。
+
+- Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 通过。
+- 在全新的 `target/ci-binary-check` 目录设置 `CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0`、`CARGO_INCREMENTAL=0`，执行 `cargo +1.98.0 test --locked --offline -j 2 --no-fail-fast --quiet`。448 项通过，8 项真实 AnySeek 测试默认忽略。未额外执行 `cargo build`，集成测试生成的 `debug/origence.exe` 已通过 `serve --help` 验证。
+- 本机 Windows PowerShell 5.1 运行 `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck` 通过。Clippy 通过，默认测试 448 项通过，8 项默认忽略。工作流的 Linux 和 GitHub runner 实测仍待 CI。

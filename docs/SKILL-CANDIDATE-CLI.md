@@ -106,4 +106,4 @@ continues to provide explicit Claude Code/Codex copies. Offline copies are not
 remotely cleaned up or instantly recalled. No native client loading, automatic
 publication, shared navigation, schema migration, or cross-Run mining is added.
 
-Validation and unaccepted boundaries: [Issue 88 validation](validation/issue-88-skill.md).
+See the [archived Issue 88 validation](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md) for test results and acceptance scope.

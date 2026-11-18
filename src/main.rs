@@ -45,9 +45,6 @@ enum Command {
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
-        /// Enable the AML protocol routes for explicitly capable root keys.
-        #[arg(long, env = "OC_ENABLE_AML", default_value_t = false)]
-        enable_aml: bool,
     },
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
@@ -163,7 +160,7 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{output}");
             Ok(())
         }),
-        Command::Serve { bind, enable_aml } => Box::pin(async move {
+        Command::Serve { bind } => Box::pin(async move {
             let service = Service::open_with_anyseek(
                 &data_dir,
                 Models::from_env()?,
@@ -175,13 +172,7 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 "{}",
                 json!({"listening":listener.local_addr()?.to_string()})
             );
-            host::serve_with_options(
-                service,
-                listener,
-                origence::api::ApiOptions { enable_aml },
-                host::shutdown_signal(),
-            )
-            .await
+            host::serve(service, listener, host::shutdown_signal()).await
         }),
         Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(

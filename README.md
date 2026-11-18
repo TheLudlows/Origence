@@ -1,40 +1,28 @@
 # Origence
 
-**The Intelligence Foundation for AI Agents.**
+**The unified data foundation for AI agents.**
 
-Origence is a Rust-based data foundation for internal enterprise agents. It manages memory, knowledge, reviewed Skills, and private archives, with HTTP/MCP access and explicit Run evidence. SQLite holds authoritative data, AnySeek provides retrieval, and Blob storage preserves original files.
+Origence manages memory, knowledge, Skills, and traces. It provides HTTP and MCP interfaces and a management UI. The first pilot targets internal engineering and business teams using Claude Code and Codex.
 
-SQLite is bundled with the binary through rusqlite; no database service, ORM,
-or separate SQLite installation is required. Version hashes are derived from the
-original content; ledger registration uses its existing composite key directly.
+## Core data
 
-Library callers can use parsing, identity/value contracts, models, Blob storage
-and the AnySeek adapter without a metadata engine:
+- **Memory** records scoped facts, preferences, and decisions with version and source references.
+- **Knowledge** manages documents and their published versions, with source references and withdrawal.
+- **Skills** package reusable methods through private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
+- **Trace** stores private Run records, including server-side context preparation, reported Skill loads, tools and results, external assessment records, and collection gaps.
 
-```sh
-cargo test --no-default-features
-```
-
-Enable `sqlite` for the standalone authority adapter, or `local-storage` (the
-default) for the complete host. Empty read sets do not query metadata; host
-transactions validate required permissions once at entry and again at commit.
-
-## Features
-
-- **Context** — Scoped memory and knowledge, private archives, versioning, and source references.
-- **Retrieval** — Unified AnySeek full-text, vector, and one-hop graph retrieval with SQLite-authorized evidence.
-- **Skills** — Private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
-- **Run evidence** — Context preparation records, reported tools/Skills/results, and explicit collection gaps.
+Context preparation selects authorized evidence for a task. AnySeek supports full-text, vector, and one-hop graph retrieval, with authorization and source checks in Origence.
 
 ## Quick start
 
-Requires Rust **1.98.0** and a dedicated AnySeek collection. Follow the
-[AnySeek setup](docs/OPERATIONS.md#anyseek-全文与向量) to provision the collection
-and set the host configuration before serving. Use a fresh data directory;
-existing databases are not migrated by startup.
+Requires Rust **1.98.0** and a compatible AnySeek service. Follow the
+[AnySeek setup](docs/OPERATIONS.md#anyseek-全文与向量) to configure the service URL
+and credentials. Origence initializes each workspace collection on first use.
+Choose a fresh data directory for this quick start.
 
 ```sh
 cargo build --locked
+export OC_DATA_DIR="$(mktemp -d)"
 ./target/debug/origence --offline workspace-create demo
 ./target/debug/origence serve
 ```
@@ -56,16 +44,26 @@ npm start
 Open `http://127.0.0.1:3000` and connect with your own API key. Set
 `ORIGENCE_API_BASE_URL` when Origence is not at `http://127.0.0.1:8080`.
 
+## Rust library and storage
+
+The Rust host bundles SQLite through rusqlite and uses it for permissions, version metadata, and durable records. AnySeek stores published text and serves retrieval. Blob storage preserves original files. Version hashes are derived from the original content, and ledger registration uses its existing composite key.
+
+Library callers can use parsing, identity and value contracts, models, Blob storage, and the AnySeek adapter without a metadata engine.
+
+```sh
+cargo test --no-default-features
+```
+
+Enable `sqlite` for the standalone authority adapter or `local-storage` (the default) for the complete host. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
+
 ## Documentation
 
 [Product goals and roadmap](docs/ROADMAP.md) · [Documentation index](docs/README.md) · [API and library interfaces](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
-The [enterprise Agent data foundation architecture](docs/design/agent-data-foundation.md)
-defines the confirmed product scope. Private archives belong to a logical user API key;
-published memories, facts, knowledge, and Skills belong to a workspace.
-Experience-to-Skill candidate generation and real-client task acceptance remain unfinished;
-see [current status](docs/STATUS.md) and [validation](docs/VALIDATION.md).
-[Client setup](docs/CLIENTS.md) covers Claude Code and Codex MCP access and approved Skill export.
+Private archives, Run traces, and unpublished candidates belong to a logical API key.
+Published memory, knowledge, and Skills belong to a workspace and are available to authorized members. See the [architecture](docs/design/agent-data-foundation.md).
+
+The selected-experience CLI binds a drafted Skill method to one exact source, such as a Run prefix or a published Learning version. Real-client pilot acceptance remains open. See the [CLI guide](docs/SKILL-CANDIDATE-CLI.md), [client setup](docs/CLIENTS.md), and [pilot acceptance issue](https://github.com/TheLudlows/Origence/issues/91).
 
 Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent comparison](evals/agent/README.md).
 

@@ -1,25 +1,9 @@
-//! Fresh schema and read-only legacy rejection; no migration or data repair.
+//! Read-only rejection tests for incompatible SQLite authority schemas.
 use origence::storage::sqlite_db as db;
 use origence::storage::{Lifecycle, StorageError, sqlite::SqliteStore};
 
 #[tokio::test]
-async fn fresh_database_has_no_protocol_specific_tables() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = SqliteStore::open(dir.path().join("fresh.db"))
-        .await
-        .unwrap();
-    let count: i64 =
-        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name GLOB 'oc_aml_*'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-    assert_eq!(count, 0);
-    store.check().await.unwrap();
-    store.shutdown().await.unwrap();
-}
-
-#[tokio::test]
-async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
+async fn unmarked_schema_is_rejected_before_wal_or_domain_schema_writes() {
     for has_base in [false, true] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("legacy.db");
@@ -32,8 +16,8 @@ async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
                 .unwrap();
         }
         db::raw_sql(
-            "CREATE TABLE oc_aml_adds(payload TEXT NOT NULL);\
-             INSERT INTO oc_aml_adds VALUES('preserve legacy data');",
+            "CREATE TABLE foreign_archive(payload TEXT NOT NULL);\
+             INSERT INTO foreign_archive VALUES('preserve legacy data');",
         )
         .execute(&mut *conn)
         .await
@@ -43,7 +27,7 @@ async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
         let before = tokio::fs::read(&path).await.unwrap();
         let result = SqliteStore::open(&path).await;
         assert!(
-            matches!(result, Err(StorageError::Unavailable(ref message)) if message.contains("legacy AML schema") || message.contains("format"))
+            matches!(result, Err(StorageError::Unavailable(ref message)) if message.contains("format"))
         );
         assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
         let database_path = &path;
@@ -56,7 +40,7 @@ async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
         // Immutable admission of a checkpointed file uses no WAL/SHM and
         // reports DELETE internally; the file's persisted header is unchanged.
         assert_eq!(mode.to_ascii_lowercase(), "delete");
-        let content: String = db::query_scalar("SELECT payload FROM oc_aml_adds")
+        let content: String = db::query_scalar("SELECT payload FROM foreign_archive")
             .fetch_one(&mut *conn)
             .await
             .unwrap();
@@ -73,25 +57,31 @@ async fn legacy_schema_is_rejected_before_wal_or_domain_schema_writes() {
 }
 
 #[tokio::test]
-async fn an_existing_protocol_table_cannot_hide_behind_the_generic_schema() {
+async fn an_unexpected_table_is_rejected_without_repair() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SqliteStore::open(dir.path().join("mixed.db"))
-        .await
-        .unwrap();
-    db::query("CREATE TABLE oc_aml_users(legacy_id TEXT)")
-        .execute(store.pool())
-        .await
-        .unwrap();
+    let path = dir.path().join("mixed.db");
+    let store = SqliteStore::open(&path).await.unwrap();
+    db::raw_sql(
+        "CREATE TABLE foreign_archive(payload TEXT NOT NULL);\
+         INSERT INTO foreign_archive VALUES('preserve existing data');",
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
     assert!(
-        matches!(store.check().await, Err(StorageError::Unavailable(ref message)) if message.contains("legacy AML schema") || message.contains("format"))
+        matches!(store.check().await, Err(StorageError::Unavailable(ref message)) if message.contains("incompatible SQLite schema"))
     );
-    let count: i64 =
-        db::query_scalar("SELECT count(*) FROM sqlite_master WHERE name='oc_aml_users'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-    assert_eq!(count, 1);
     store.shutdown().await.unwrap();
+    drop(store);
+
+    let before = tokio::fs::read(&path).await.unwrap();
+    assert!(
+        matches!(SqliteStore::check_memory_identity(&path).await, Err(StorageError::Unavailable(ref message)) if message.contains("incompatible SQLite schema"))
+    );
+    assert!(
+        matches!(SqliteStore::open(&path).await, Err(StorageError::Unavailable(ref message)) if message.contains("incompatible SQLite schema"))
+    );
+    assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
 }
 
 #[tokio::test]

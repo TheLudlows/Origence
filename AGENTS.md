@@ -53,7 +53,7 @@ implementation. Prefer the smallest change that meets the documented behavior.
 
 - External evaluation protocol rules belong in API adapters, never storage
   schemas, generic job types, or authorization decisions. New lower-level
-  capabilities must also be verified through a non-AML public-library caller.
+  capabilities must also be verified through a public-library caller independent of the protocol.
 
 ## Blocking work and resource limits
 

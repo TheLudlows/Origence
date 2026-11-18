@@ -1,6 +1,7 @@
 # Private Run trace
 
-This contract defines the private evidence path for the [architecture plan](../design/agent-data-foundation.md).
+Trace is a core data domain in Origence. Run is the unit of storage and access for
+private execution evidence. See the [architecture plan](../design/agent-data-foundation.md).
 Run creation and append are authorized relational transactions. Each Run is bound
 to a server-assigned private session and stable logical key. Workspace admin is
 not an implicit private archive reader. Credential rotation preserves logical
