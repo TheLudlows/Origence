@@ -12,6 +12,7 @@ import {
   labelControl,
   message,
   panel,
+  parseObject,
   select,
   short,
   status,
@@ -114,12 +115,54 @@ export async function assetsPage(
     el("div", "form-grid", field("查询", query), field("检索方式", mode)),
     submit("检索预览"),
   );
+  const subjectKind = select([
+    ["", "不限"], ["user", "user"], ["agent", "agent"],
+    ["project", "project"], ["service", "service"], ["team", "team"],
+  ]);
+  const subjectId = input("精确业务 ID（区分大小写）");
+  const predicate = input("精确属性，如 release.rule");
+  const conditions = input('完整条件 JSON；留空不限，{} 仅空条件');
+  const identified = select([
+    ["", "不限"], ["true", "已知显式身份"], ["false", "未知身份"],
+  ]);
+  let appliedFilter = "{}";
+  let catalogRequest: AbortController | undefined;
+  const applyFilter = form(async () => {
+    try {
+      if (Boolean(subjectKind.value) !== Boolean(subjectId.value))
+        throw new Error("主体类型与主体 ID 须一起填写");
+      const filter: Record<string, unknown> = {};
+      if (subjectKind.value)
+        filter.subject = { kind: subjectKind.value, stable_id: subjectId.value };
+      if (predicate.value) filter.predicate = predicate.value;
+      if (conditions.value.trim()) filter.context = parseObject(conditions.value);
+      if (identified.value) filter.identified = identified.value === "true";
+      appliedFilter = JSON.stringify(filter);
+      catalogRequest?.abort();
+      items = [];
+      after = null;
+      list.replaceChildren();
+      await load();
+    } catch (e) {
+      message(error, e);
+    }
+  },
+    el("div", "form-grid",
+      field("主体类型", subjectKind), field("主体 ID", subjectId),
+      field("属性", predicate), field("完整适用条件", conditions),
+      field("身份", identified),
+    ),
+    submit("应用目录筛选"),
+    el("p", "muted",
+      "精确匹配、区分大小写；条件比较完整键值集合。未知身份不推断主体。每次最多检查 100 个候选，空页仍可能有下一页。",
+    ),
+  );
   const direct = input("资产 UUID");
   const jobId = input("任务 UUID");
   let items: Asset[] = [],
     after: string | null = null;
   const render = () => {
-    const filtered = items.filter((a) =>
+    const filtered = kind === "memory" ? items : items.filter((a) =>
       JSON.stringify([a.title, a.identity])
         .toLowerCase()
         .includes(search.value.toLowerCase()),
@@ -159,28 +202,34 @@ export async function assetsPage(
             rows,
           )
         : empty(
-            "没有匹配的资产",
-            "此处仅显示当前权限下已发布且来源有效的内容。",
+            after ? "本批暂无匹配资产" : "没有匹配的资产",
+            after
+              ? "仍有候选可检查，请加载下一页。只显示已发布且来源有效的匹配内容。"
+              : "此处仅显示当前权限下已发布且来源有效的内容。",
           ),
     );
   };
   const more = button("加载下一页", () => load());
   const load = async () => {
     more.disabled = true;
+    catalogRequest?.abort();
+    const request = new AbortController();
+    catalogRequest = request;
+    error.replaceChildren();
     try {
       const page = await api.get<Page<Asset>>(
-        `/v1/assets?kind=${kind}&limit=25${after ? "&after=" + after : ""}`,
-        ctx.signal,
+        `/v1/assets?kind=${kind}&limit=25${after ? "&after=" + after : ""}${kind === "memory" ? "&memory_filter=" + encodeURIComponent(appliedFilter) : ""}`,
+        AbortSignal.any([ctx.signal, request.signal]),
       );
-      if (ctx.signal.aborted) return;
+      if (ctx.signal.aborted || request.signal.aborted) return;
       items.push(...page.items);
       after = page.next_after;
       more.hidden = !after;
       render();
     } catch (e) {
-      message(error, e);
+      if (!request.signal.aborted) message(error, e);
     } finally {
-      more.disabled = false;
+      if (catalogRequest === request) more.disabled = false;
     }
   };
   search.addEventListener("input", render);
@@ -201,7 +250,7 @@ export async function assetsPage(
           )
         : null,
     ),
-    panel("已发布资产", labelControl(search, "筛选已加载的资产"), list, more),
+    panel("已发布资产", kind === "memory" ? applyFilter : labelControl(search, "筛选已加载的资产"), list, more),
     panel("检索预览", retrieve, hits),
     panel(
       "通过标识打开",

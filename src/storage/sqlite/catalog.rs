@@ -45,6 +45,64 @@ impl SqliteTx {
         Ok(json!({"items":items,"next_after":more.then_some(cursor)}))
     }
 
+    pub async fn memory_catalog(
+        &mut self,
+        filter: &crate::memory_identity::MemoryCatalogFilter,
+        after: Uuid,
+        limit: usize,
+    ) -> StorageResult<Value> {
+        self.check_permission(Permission::Read).await?;
+        filter
+            .validate()
+            .map_err(|_| StorageError::InvalidArgument("invalid memory filter"))?;
+        if !(1..=100).contains(&limit) {
+            return Err(StorageError::InvalidArgument("invalid catalog page"));
+        }
+        // Seek the scoped primary key, with no unindexed predicate before LIMIT:
+        // at most 100 candidates plus one lookahead, including hidden/non-memory rows.
+        let rows: Vec<(Uuid, String, bool, Option<i32>, Option<String>)> = sqlite_db::query_as(
+            "SELECT id,kind,deleted,current_version,identity_json FROM oc_assets \
+             WHERE tenant_id=? AND workspace_id=? AND id>? ORDER BY id LIMIT 101",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(after)
+        .fetch_all(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let count = rows.len();
+        let mut scanned = 0;
+        let mut cursor = after;
+        let mut items = Vec::new();
+        for (id, kind, deleted, version, identity) in rows.into_iter().take(100) {
+            scanned += 1;
+            cursor = id;
+            if kind == "memory" && !deleted && version.is_some() {
+                let identity: Option<crate::memory_identity::MemoryIdentity> = identity
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()
+                    .map_err(|_| StorageError::Unavailable("invalid memory identity".into()))?;
+                if filter.matches(identity.as_ref()) {
+                    match self.asset_view(id, None).await {
+                        Ok(mut value) => {
+                            let map = value.as_object_mut().ok_or_else(|| {
+                                StorageError::Unavailable("invalid asset record".into())
+                            })?;
+                            map.remove("semantic_values");
+                            items.push(value);
+                        }
+                        Err(StorageError::NotFound) => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            if items.len() == limit {
+                break;
+            }
+        }
+        Ok(json!({"items":items,"next_after":(scanned < count).then_some(cursor)}))
+    }
+
     pub async fn run_catalog(&mut self, after: Uuid, limit: usize) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
         if !(1..=100).contains(&limit) {

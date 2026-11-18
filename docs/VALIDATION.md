@@ -5,6 +5,69 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-17：#90 控制台事实与知识治理（本地）
+
+基线 main `293e2bf6af3b180d43c8050731047b552ac07519`，独立分支
+`feat/console-governance-p0`。选取旧本地 `be3474b` 的目录过滤和 `e9dc434` 的任务/
+409 反馈，重新适配当前 SQLite/AnySeek 正文存储，不搬旧 schema、STATUS 或其它功能。
+不改 Run UI、来源核验接口、共享导航/DTO、CI、存储格式或权限。
+
+记忆目录通过 `memory_filter` 与 `Service::list_memories` 精确匹配持久身份：主体、
+属性和完整条件集合；未知身份不推断。每次按 scope 主键 seek 最多 100 个候选，另取
+1 个 lookahead；在同一读事务筛选、复核正常资产来源/语义可见性，再返回最多 limit 条。
+候选游标允许空页续翻，不返回总数，不无限扫描。目录无正文，身份定义及写入不变。
+人工审查新增 SQL：单表 `oc_assets`，绑定 tenant/workspace/after；无 JOIN、子查询、
+新表/索引、迁移、事务内原生 IO 或中间提交。EXPLAIN 回归确认 SEARCH/INDEX，无 SCAN
+或 TEMP B-TREE。此证据不等于生产规模性能验收。
+
+知识编辑的 409 显式保留草稿及原 expected_version，用户可重读当前版本比较；失败、
+取消或 superseded 的已知资产任务可重新读取当前已发布元数据，不把任务失败等同资产丢失。
+重试/取消仍调用原接口与权限，完成或撤回状态不能由 UI 绕过。
+
+### 自动化结果
+
+Linux，Node 24.22.1 / Rust 1.98.0：
+
+- `npm --prefix ui run check`、`npm --prefix ui test`：构建、19 项通过。
+  复用同一 pages fixture，保留 Run/PDF/关联等既有断言；新增筛选续翻与任务/409 子用例。
+- `cargo test --locked --test local catalog::`：5 项通过，包含目录 HTTP/Service、
+  精确过滤、生产/staging、未知身份、撤回、轮换、跨 workspace、limit 1 翻页、
+  101 个未发布候选的空页续翻、非法过滤/上限及既有精确 Run 反查。
+- `cargo test --locked --lib memory_identity::` 与加 `--no-default-features`：各 9 项通过。
+- `cargo test --locked --test local racing_expected_versions_supersede_the_loser`：1 项通过。
+- `cargo test --locked --no-default-features --features sqlite --test local catalog::`：
+  3 项 semantic_catalog 通过；HTTP/原生目录测试由 local-storage cfg 排除，不能算复跑。
+- `cargo build --locked`、`cargo fmt --all -- --check`、`git diff --check` 通过。
+  default / `--no-default-features` / `--no-default-features --features sqlite` 三组
+  `cargo clippy --locked --all-targets -- -D warnings` 通过。
+
+### 本地真实浏览器范围
+
+使用当前 main 钉住的 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`
+（Rust 1.99.1 重建），本分支 Origence/Node UI，Chromium 156.0.8078.79 headless。
+当前 `tools/anyseek_smoke.py --anyseek-binary <pin binary> --run python3 <fixture>`
+包裹三组复用的 Playwright 脚本；各自 fresh SQLite v2/AnySeek 目录、一次性测试 key、
+合成文档，无 API 拦截，无付费模型/生产数据。原脚本因记忆正文标签、响应等待条件以及不适用的普通 chunk 高亮假设失败；
+修正选择器/精确请求等待，并改用真实 source_span 语义事实后重跑。属性由后台 API
+预置（UI 代理不开放管理属性路径），不修改代理白名单，不将普通 chunk 偏移冒充
+来源区间；以上失败不作为产品通过证据。
+
+记忆流程通过：reader 目录以真实过滤请求得到 production 25+1 条，已撤回条目不返回；
+主体/属性/完整条件、staging、未知身份、空条件与筛选重置均核验；撤回 staging 后重筛为空。
+浏览器编辑 production 时身份字段锁定，提交 v2 后同主体 staging 仍为原正文/v1。
+另用后台登记属性与真实语义写入产生带非零 source_span 的中文、emoji、组合字符引用：
+浏览器点击核验后的 mark 等于权威来源 UTF-8 字节切片，reader 直接读原始来源为 403。
+正常显式事实不因本次验证获得额外高亮能力；PDF 页内文本仍独立未完成。
+
+知识流程通过：真实损坏 PDF 更新/重试均失败，v1 仍可读与关键词检索；浏览器旧表单
+遭遇真实 expected_version 409，保留草稿并重读 v2；reader 无更新按钮且写入/任务访问拒绝，
+writer 不能撤回来源，已完成任务 retry/cancel 为 409，撤回失败来源后不能重试。
+Run 只复验不改动：320px 旧 Run 引用在当前 v2 时仍打开固定 v1；撤回清正文、旧引用
+再点击/固定 URL 刷新/重开 Run 拒绝旧正文；另一 key 被拒绝及真实事件来源标签，共 7 项通过。
+
+未推送、无新 CI；真实 Windows、实体设备/辅助技术、全部语义状态、PDF 页内高亮、
+完整 #76 与外部双客户端/企业任务均未在本路完成。截图、临时数据和凭据不提交。
+
 ## 2026-11-17：#82 同步 #85 后解决文档冲突（当前）
 
 从 PR #82 HEAD `74de4655d5c251970be716ad873f8cfdb1ee0a3a` 普通 merge main

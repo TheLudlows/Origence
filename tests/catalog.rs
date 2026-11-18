@@ -186,6 +186,175 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
             .status(),
         401
     );
+    let admin = rotated_auth;
+    // Exact server-side filters share the existing authority/visibility checks.
+    let staging = s.identified_memory(&admin, "staging", serde_json::from_value(json!({
+        "identity":{"subject":{"kind":"service","stable_id":"Atlas-1"},"predicate":"release.rule","context":{"env":"staging"}},
+        "content":"staging evidence", "expected_version":0
+    })).unwrap()).await.unwrap();
+    s.memory(
+        &admin,
+        "legacy",
+        MemoryInput {
+            fact_key: "legacy".into(),
+            content: "unknown identity".into(),
+            publish_if_authorized: true,
+        },
+    )
+    .await
+    .unwrap();
+    while worker::process_next(&s).await.unwrap() {}
+    for (filter, expected) in [
+        (json!({"context":{"env":"production"}}), 2),
+        (
+            json!({"subject":{"kind":"service","stable_id":"Atlas-1"},"predicate":"release.rule"}),
+            2,
+        ),
+        (json!({"context":{"env":"staging"}}), 1),
+        (json!({"context":{}}), 0),
+        (json!({"identified":false}), 1),
+        (json!({"predicate":"absent"}), 0),
+        (
+            json!({"subject":{"kind":"service","stable_id":"atlas-1"}}),
+            0,
+        ),
+    ] {
+        let filter = serde_json::from_value(filter).unwrap();
+        let mut cursor = Uuid::nil();
+        let mut found = Vec::new();
+        loop {
+            let page = s.list_memories(&reader, &filter, cursor, 1).await.unwrap();
+            for item in page["items"].as_array().unwrap() {
+                assert!(item.get("content").is_none());
+                assert!(item.get("semantic_values").is_none());
+                found.push(item["asset_id"].clone());
+            }
+            if page["next_after"].is_null() {
+                break;
+            }
+            let next: Uuid = serde_json::from_value(page["next_after"].clone()).unwrap();
+            assert!(next > cursor);
+            cursor = next;
+        }
+        assert_eq!(found.len(), expected);
+        assert!(
+            s.list_memories(&outsider, &filter, Uuid::nil(), 25)
+                .await
+                .unwrap()["items"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let filter = json!({"context":{"env":"staging"}}).to_string();
+    let filtered = http
+        .get(format!("{base}/v1/assets"))
+        .query(&[
+            ("kind", "memory"),
+            ("memory_filter", &filter),
+            ("limit", "1"),
+        ])
+        .bearer_auth(&reader_key.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(filtered.status(), 200);
+    assert_eq!(
+        filtered.json::<Value>().await.unwrap()["items"][0]["asset_id"],
+        staging["asset_id"]
+    );
+    for filter in [
+        json!({"identified":false,"predicate":"release.rule"}),
+        json!({"context":{"env":1}}),
+        json!({"unknown":true}),
+    ] {
+        let response = http
+            .get(format!("{base}/v1/assets"))
+            .query(&[("kind", "memory"), ("memory_filter", &filter.to_string())])
+            .bearer_auth(&reader_key.token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 422);
+    }
+    let empty = origence::memory_identity::MemoryCatalogFilter::default();
+    assert!(
+        s.list_memories(&reader, &empty, Uuid::nil(), 0)
+            .await
+            .is_err()
+    );
+    assert!(
+        s.list_memories(&reader, &empty, Uuid::nil(), 101)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        http.get(format!("{base}/v1/assets?kind=memory&memory_filter=%7B%7D"))
+            .bearer_auth(&admin_key.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        http.get(format!(
+            "{base}/v1/assets?kind=knowledge&memory_filter=%7B%7D"
+        ))
+        .bearer_auth(&reader_key.token)
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        422
+    );
+    // Pending rows also count against the fixed work budget. No worker/model IO
+    // is needed to prove empty-page continuation beyond the 100-candidate cap.
+    for n in 0..101 {
+        s.memory(
+            &admin,
+            &format!("pending-{n}"),
+            MemoryInput {
+                fact_key: format!("pending-{n}"),
+                content: "pending".into(),
+                publish_if_authorized: true,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let absent = serde_json::from_value(json!({"predicate":"absent"})).unwrap();
+    let first = s
+        .list_memories(&reader, &absent, Uuid::nil(), 25)
+        .await
+        .unwrap();
+    assert_eq!(first["items"], json!([]));
+    assert!(!first["next_after"].is_null());
+    let last = s
+        .list_memories(
+            &reader,
+            &absent,
+            serde_json::from_value(first["next_after"].clone()).unwrap(),
+            25,
+        )
+        .await
+        .unwrap();
+    assert_eq!(last["items"], json!([]));
+    assert!(last["next_after"].is_null());
+    let plan: Vec<(i64,i64,i64,String)> = origence::storage::sqlite_db::query_as(
+        "EXPLAIN QUERY PLAN SELECT id,kind,deleted,current_version,identity_json FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id>? ORDER BY id LIMIT 101"
+    ).bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::nil()).fetch_all(store.pool()).await.unwrap();
+    assert!(
+        plan.iter()
+            .any(|row| row.3.contains("SEARCH") && row.3.contains("INDEX")),
+        "{plan:?}"
+    );
+    assert!(
+        !plan
+            .iter()
+            .any(|row| row.3.contains("TEMP B-TREE") || row.3.contains("SCAN")),
+        "{plan:?}"
+    );
     host.abort();
 }
 
