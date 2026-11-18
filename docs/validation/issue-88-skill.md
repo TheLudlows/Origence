@@ -128,3 +128,16 @@ This closes the earlier exact-Learning CLI coverage gap. The original local-only
 stage above is historical; this increment updates the same draft PR #94. Windows,
 real Claude Code/Codex tasks, native loading and business outcomes remain unaccepted.
 No Issue mutation, merge or deployment is performed.
+
+## 2026-11-18 coordinated integration after #93
+
+Merged main `9c4ed2ea6fdf17ed8b931ddcddf4f081c4367719` into original PR #94
+head `013dfb59130f53cad68d3e158564d186908f0ded` without rewriting history.
+Only `docs/VALIDATION.md` conflicted; both historical entries were preserved.
+No Skill, schema, API or test behavior was changed during conflict resolution.
+Linux Rust 1.98.0: `cargo fmt --all -- --check`, `git diff --check`,
+`cargo test --locked --test skill-workflow` (1),
+`cargo test --locked --test local learning_loop` (21), and
+`cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
+Tests used fresh temporary data and local fixtures, not paid models or real-client
+acceptance. Remote CI must pass on the new merge HEAD before squash merging.
