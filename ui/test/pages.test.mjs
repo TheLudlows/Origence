@@ -289,8 +289,18 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       await wait(
         () => document.querySelector("h1")?.textContent === "记忆管理",
       );
+      const main = document.querySelector("main");
+      assert.equal(main.tabIndex, -1);
+      assert.equal(document.activeElement, main);
       click("＋ 新建记忆");
       const modal = document.querySelector("dialog");
+      const label = modal.querySelector("h2");
+      assert.ok(label.id);
+      assert.equal(
+        document.getElementById(modal.getAttribute("aria-labelledby")),
+        label,
+      );
+      assert.equal(label.textContent, "新建记忆");
       control("主体稳定 ID", modal).value = "Atlas";
       control("属性", modal).value = "release.rule";
       control("适用条件（字符串键值）", modal).value = '{"env":"production"}';
