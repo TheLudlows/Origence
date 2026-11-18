@@ -214,6 +214,67 @@ class PilotTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "manifest"):
                 score_file(sheet)
 
+    def test_held_out_requires_independent_frozen_tasks_sha256(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prep, first, other = (root / name for name in ("prep", "first", "other"))
+            generate("public-verify-92", prep)
+            for batch in (first, other):
+                generate("public-verify-92-" + batch.name, batch, "held-out", [prep / "tasks.json"])
+            frozen = root / "public-test-freeze.json"
+            data = (first / "tasks.json").read_bytes()
+            digest = hashlib.sha256(data).hexdigest()
+            frozen.write_text(json.dumps({"data": {"tasks_sha256": digest}}), encoding="utf-8")
+            sheet = first / "observations.json"
+            with self.assertRaisesRegex(ValueError, "requires --freeze"):
+                score_file(sheet)
+            with self.assertRaisesRegex(ValueError, "requires a held-out batch"):
+                score_file(prep / sheet.name, freeze_path=frozen)
+            with self.assertRaisesRegex(ValueError, "freeze.data.tasks_sha256"):
+                score_file(other / sheet.name, freeze_path=frozen)
+            result = score_file(sheet, freeze_path=frozen)
+            self.assertEqual((result["split"], result["score_mode"], result["tasks_sha256"]),
+                             ("held-out", "FROZEN_BATCH", digest))
+            self.assertEqual((result["acceptance"], result["evidence_authenticity"]),
+                             ("NOT_CERTIFIED", "NOT_CHECKED"))
+
+            frozen.write_text('{"data":{"tasks_sha256":null}}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "freeze.data.tasks_sha256"):
+                score_file(sheet, freeze_path=frozen)
+            frozen.write_text(json.dumps({"data": {"tasks_sha256": digest}}), encoding="utf-8")
+            (first / "tasks.json").write_bytes(data + b"\n")
+            manifest = first / "manifest.json"
+            modified = json.loads(manifest.read_bytes())
+            modified["sha256"]["tasks.json"] = hashlib.sha256(data + b"\n").hexdigest()
+            manifest.write_text(json.dumps(modified), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "freeze.data.tasks_sha256"):
+                score_file(sheet, freeze_path=frozen)
+
+    def test_preparation_metrics_are_repeatable_and_do_not_score_public_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "prepare"
+            generate("public-verify-92", root)
+            sheet = root / "observations.json"
+            data = json.loads(sheet.read_bytes())
+            done, failed = (next(row for row in data["cases"] if row["id"] == name and row["arm"] == "baseline")
+                            for name in ("database_wait-01", "database_wait-02"))
+            done.update(outcome="COMPLETED", independent_success=True, reviewer="public-fixture",
+                        evidence=["fixture-success"], verified_checks=done["required_checks"][:])
+            failed.update(outcome="COMPLETED", reviewer="public-fixture", evidence=["fixture-failure"],
+                          verified_checks=failed["required_checks"][:2])
+            sheet.write_text(json.dumps(data), encoding="utf-8")
+            raw = sheet.read_bytes()
+            result = score_file(sheet)
+            self.assertEqual(result, score_file(sheet))
+            self.assertEqual(raw, sheet.read_bytes())
+            self.assertEqual((result["split"], result["score_mode"]), ("prepare", "PREPARATION_ONLY"))
+            group = result["groups"]["database_wait/baseline"]
+            self.assertEqual((group["tasks"], group["required"]), (8, 32))
+            self.assertEqual((group["task_success_rate"], group["verification_coverage"]), (1 / 8, 6 / 32))
+            sheet.write_bytes(Path(__file__).with_name("public-handoff.windows.json").read_bytes())
+            with self.assertRaisesRegex(ValueError, "split mismatch"):
+                score_file(sheet)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -91,10 +91,10 @@ def cases(seed, split="prepare", excluded=()):
     return shuffled_tasks, shuffled_oracle
 
 
-def observations(tasks, oracle):
+def observations(tasks, oracle, split="prepare"):
     by_id = {row["id"]: row for row in oracle}
     tasks_hash = hashlib.sha256(json_bytes(tasks)).hexdigest()
-    return {"kind": "pilot-observations-v2", "tasks_sha256": tasks_hash,
+    return {"kind": "pilot-observations-v2", "split": split, "tasks_sha256": tasks_hash,
             "product_execution": "NOT_RUN", "cases": [
         {"id": t["id"], "scenario": t["scenario"], "arm": arm,
          "tasks_sha256": tasks_hash, "input_sha256": input_digest(t["input"]),
@@ -104,11 +104,12 @@ def observations(tasks, oracle):
         for t in tasks for arm in ("baseline", "reuse")]}
 
 
-def score(data, tasks):
+def score(data, tasks, *, tasks_hash=None):
     """Count conservative denominators, never certify pilot acceptance."""
     if data.get("kind") != "pilot-observations-v2":
         raise ValueError("scoring requires a v2 observation sheet bound to its tasks")
-    tasks_hash = hashlib.sha256(json_bytes(tasks)).hexdigest()
+    if tasks_hash is None:
+        tasks_hash = hashlib.sha256(json_bytes(tasks)).hexdigest()
     if data.get("tasks_sha256") != tasks_hash:
         raise ValueError("observation sheet belongs to a different task set")
     inputs = {task["id"]: input_digest(task["input"]) for task in tasks}
@@ -173,7 +174,7 @@ def generate(seed, output, split="prepare", exclude_tasks=()):
         excluded_batches.add(hashlib.sha256(raw).hexdigest())
     tasks, oracle = cases(seed, split, excluded)
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
-    payloads = {"tasks.json": tasks, "oracle.json": oracle, "observations.json": observations(tasks, oracle)}
+    payloads = {"tasks.json": tasks, "oracle.json": oracle, "observations.json": observations(tasks, oracle, split)}
     hashes = {}
     for name, value in payloads.items():
         raw = json_bytes(value)
@@ -185,12 +186,29 @@ def generate(seed, output, split="prepare", exclude_tasks=()):
         "sha256": hashes}, indent=2) + "\n", encoding="utf-8")
 
 
-def score_file(path):
+def score_file(path, *, freeze_path=None):
     manifest = json.loads((path.parent / "manifest.json").read_bytes())
     raw = (path.parent / "tasks.json").read_bytes()
-    if hashlib.sha256(raw).hexdigest() != manifest["sha256"]["tasks.json"]:
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != manifest["sha256"]["tasks.json"]:
         raise ValueError("tasks.json does not match its manifest")
-    return score(json.loads(path.read_bytes()), json.loads(raw))
+    data = json.loads(path.read_bytes())
+    split = manifest.get("split")
+    if split not in ("prepare", "held-out") or not isinstance(data, dict) or data.get("split") != split:
+        raise ValueError("observation sheet belongs to a different task set (split mismatch)")
+    if freeze_path is None:
+        if split != "prepare":
+            raise ValueError("held-out scoring requires --freeze from the independent custodian")
+        mode = "PREPARATION_ONLY"
+    else:
+        if split != "held-out":
+            raise ValueError("--freeze requires a held-out batch")
+        freeze = json.loads(freeze_path.read_bytes())
+        frozen_data = freeze.get("data") if isinstance(freeze, dict) else None
+        if not isinstance(frozen_data, dict) or frozen_data.get("tasks_sha256") != digest:
+            raise ValueError("freeze.data.tasks_sha256 does not match tasks.json bytes")
+        mode = "FROZEN_BATCH"
+    return dict(score(data, json.loads(raw), tasks_hash=digest), split=split, score_mode=mode)
 
 
 def main():
@@ -204,12 +222,15 @@ def main():
     gen.add_argument("--output", required=True, type=Path)
     scoring = sub.add_parser("score")
     scoring.add_argument("observations", type=Path)
+    mode = scoring.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--prepare", action="store_true", help="score a preparation batch for offline diagnostics only")
+    mode.add_argument("--freeze", type=Path, help="trusted freeze supplied independently of the held-out batch")
     args = parser.parse_args()
     try:
         if args.command == "generate":
             generate(args.seed, args.output, args.split, args.exclude_tasks)
         else:
-            print(json.dumps(score_file(args.observations), indent=2))
+            print(json.dumps(score_file(args.observations, freeze_path=args.freeze), indent=2))
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"{error}\n")
 

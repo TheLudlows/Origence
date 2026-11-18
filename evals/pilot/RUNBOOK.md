@@ -11,12 +11,24 @@
 ```sh
 python evals/pilot/pilot.py generate --seed public-development-1 --output pilot-prepare-new
 python evals/pilot/pilot.py generate --split held-out --seed public-example-only --exclude-tasks pilot-prepare-new/tasks.json --output pilot-example-new
-python evals/pilot/pilot.py score pilot-example-new/observations.json
+python evals/pilot/pilot.py score --prepare pilot-prepare-new/observations.json
 ```
 
 每个场景 8 题，各有无 Skill 基线和有 Skill 复做两行。报销覆盖正常、有效超限、重复和缺凭证，各两例。生成器按实际输入内容排重，再重排题号。独立保管人应为每批已暴露的题目重复传入 `--exclude-tasks`，清单会登记这些文件的 SHA-256。若可用输入不足，生成器报错。
 正式未见题须在开发和 Skill 冻结后使用独立保密种子生成，仅向操作者交付 `tasks.json`。保管人封存种子、oracle 和摘要；若答案已泄露，登记污染并换批。按题号随机安排两臂顺序，分别使用干净会话和相同客户端、模型及工具预算，记录顺序、超时与人工干预。
-填写同目录的 v2 `observations.json`。评分时逐一核对 `manifest.json`、`tasks.json`、整表题集摘要和每行输入摘要。未绑定的 v1 表只供历史查阅。预登记题全部保留在离线分母中；正式业务成功率和核验覆盖率按 [PRD 口径](PRD-MAPPING.md#计量差异必须披露) 单列。
+填写同目录的 v2 `observations.json`，保留分组、整表题集摘要和每行输入摘要。观察行可随核验更新。
+评分器按原始字节核对任务文件、清单和观察表。`--prepare` 接收 prepare，输出 `PREPARATION_ONLY`。
+公开交接演练记录单独保存。未绑定的历史观察表只供查阅。
+
+独立保管人应将正式留出批次的原始 `tasks.json` SHA-256 登记到可信冻结记录的 `data.tasks_sha256`。
+留出评分需独立指定该文件，校验通过时标记 `FROZEN_BATCH`：
+
+```sh
+python evals/pilot/pilot.py score "$held_out_observations" --freeze "$trusted_freeze"
+```
+
+模板的空哈希和仅自洽的其他批次会被拒绝。评分器核对冻结值，保管人仍需确认冻结文件来源及签认。
+预登记题全部保留在离线分母中。正式业务成功率和核验覆盖率按 [PRD 口径](PRD-MAPPING.md#计量差异必须披露) 单列。
 
 ## 执行矩阵
 
