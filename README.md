@@ -58,7 +58,7 @@ Open `http://127.0.0.1:3000` and connect with your own API key. Set
 
 ## Documentation
 
-[Documentation index](docs/README.md) · [API and library interfaces](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
+[Product goals and roadmap](docs/ROADMAP.md) · [Documentation index](docs/README.md) · [API and library interfaces](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
 
 The [enterprise Agent data foundation architecture](docs/design/agent-data-foundation.md)
 defines the confirmed product scope. Private archives belong to a logical user API key;

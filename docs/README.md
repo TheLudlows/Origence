@@ -10,6 +10,7 @@ Origence 为企业内部研发与业务 Agent 提供统一上下文数据底座�
 | --- | --- |
 | 构建与启动 | [项目 README](../README.md) |
 | Node.js 管理界面 | [启动、配置与测试](../ui/README.md) |
+| 产品目标、六项能力与长期路线 | [产品路线图](ROADMAP.md) |
 | 已确认的产品边界、目标架构与首版验收 | [架构规划](design/agent-data-foundation.md) |
 | 当前已实现什么、阻塞项与下一步 | [STATUS](STATUS.md) |
 | 当前代码的组件、存储分工与一致性 | [实现架构](design/current-implementation.md) |
