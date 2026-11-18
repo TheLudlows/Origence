@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use origence::{
     client::HostClient,
+    client_hook::{self, Client as HookClient, Profile as HookProfile},
     client_skill::{SkillClient, export_skill},
     host, mcp,
     models::Models,
@@ -9,7 +10,7 @@ use origence::{
     types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
-use std::{future::Future, path::PathBuf, pin::Pin};
+use std::{future::Future, path::PathBuf, pin::Pin, time::Duration};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -65,6 +66,13 @@ enum Command {
     IdentityCheck,
     /// Stdio MCP for shared retrieval and explicit private archives.
     Mcp,
+    /// Capture opt-in client hooks or send their private queue to the host.
+    ClientHook {
+        #[arg(long)]
+        profile: PathBuf,
+        #[command(subcommand)]
+        action: HookAction,
+    },
     /// Export one approved Skill copy into a Claude Code or Codex project.
     SkillExport {
         #[arg(long, value_enum)]
@@ -102,6 +110,30 @@ enum Command {
         version: Option<i32>,
     },
 }
+#[derive(Subcommand)]
+enum HookAction {
+    /// Read hook stdin and enqueue only allowlisted metadata. Never sends HTTP.
+    Capture {
+        #[arg(long, value_enum)]
+        client: HookClient,
+    },
+    /// Send one batch, or repeat in a process independent of the client.
+    Flush {
+        #[arg(long)]
+        watch: bool,
+    },
+    /// Resolve an explicit MCP binding from reliable identifiers for a turn.
+    RunId {
+        #[arg(long, value_enum)]
+        client: HookClient,
+        #[arg(long)]
+        session_id: String,
+        /// Codex turn_id or Claude Code prompt_id.
+        #[arg(long)]
+        correlation_id: String,
+    },
+}
+
 type CommandFuture<'a, T> = Pin<Box<dyn Future<Output = anyhow::Result<T>> + 'a>>;
 
 #[tokio::main]
@@ -183,6 +215,7 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{}", json!({"feature":"memory-identity-v1","valid":true}));
             Ok(())
         }),
+        Command::ClientHook { profile, action } => Box::pin(run_client_hook(profile, action)),
         command @ (Command::WorkspaceCreate { .. }
         | Command::KeyCreate { .. }
         | Command::KeyRevoke { .. })
@@ -196,6 +229,96 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
         command if offline => Box::pin(run_offline(data_dir, command)),
         command => Box::pin(run_remote(server_url, command)),
     }
+}
+
+async fn run_client_hook(path: PathBuf, action: HookAction) -> anyhow::Result<()> {
+    if let HookAction::Capture { client } = action {
+        let capture = tokio::task::spawn_blocking(move || {
+            let Some(profile) = HookProfile::load(&path)?.filter(|p| p.enabled(client)) else {
+                return Ok(client_hook::Capture::Ignored);
+            };
+            let token = hook_token(&profile)?;
+            profile.enqueue(
+                client,
+                &token,
+                &std::env::current_dir()?,
+                std::io::stdin().lock(),
+            )
+        })
+        .await?;
+        match capture {
+            Ok(client_hook::Capture::MissingIdentity) => {
+                eprintln!("Origence hook: missing reliable event or turn identity")
+            }
+            Ok(client_hook::Capture::Full) => {
+                eprintln!("Origence hook: observation skipped because the queue is full")
+            }
+            Err(error) => eprintln!("Origence hook: observation skipped ({error})"),
+            _ => {}
+        }
+        // A neutral response for Codex Stop and other command-hook schemas.
+        println!("{{}}");
+        return Ok(());
+    }
+
+    let mut previous = None;
+    loop {
+        let profile_path = path.clone();
+        let Some(profile) =
+            tokio::task::spawn_blocking(move || HookProfile::load(&profile_path)).await??
+        else {
+            return Ok(());
+        };
+        match &action {
+            HookAction::RunId {
+                client,
+                session_id,
+                correlation_id,
+            } => {
+                let run = profile
+                    .run_identity(*client, session_id, correlation_id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("hook client disabled or missing reliable identity")
+                    })?;
+                println!("{}", serde_json::to_string(&run)?);
+                return Ok(());
+            }
+            HookAction::Flush { watch } => {
+                let token = hook_token(&profile)?;
+                let report = match profile.flush(token).await {
+                    Ok(report) => report,
+                    Err(error) if *watch => {
+                        eprintln!("Origence hook sender: local queue unavailable ({error})");
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
+                if !watch
+                    || report.sent > 0
+                    || report.discarded > 0
+                    || previous.as_ref() != Some(&report)
+                {
+                    println!("{}", serde_json::to_string(&report)?);
+                }
+                if !watch {
+                    return Ok(());
+                }
+                let wait = if report.sent + report.discarded > 0 {
+                    Duration::from_millis(250)
+                } else {
+                    Duration::from_secs(5)
+                };
+                previous = Some(report);
+                tokio::time::sleep(wait).await;
+            }
+            HookAction::Capture { .. } => unreachable!(),
+        }
+    }
+}
+
+fn hook_token(profile: &HookProfile) -> anyhow::Result<String> {
+    std::env::var(profile.key_env()).map_err(|_| anyhow::anyhow!("hook credential is unavailable"))
 }
 
 async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {

@@ -5,6 +5,27 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-18 · #105 Codex 与 Claude Code Hook 离线验证
+
+Linux x86_64（6.18.57），Rust 1.98.0，主干基线 `e024b78eb2ecbf1aa1851783c89be8238ca819a1`。
+`cargo fmt --all -- --check`、`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 和
+`cargo test --offline --locked -j 2` 通过。Rust 共 455 项通过、8 项需要真实 AnySeek 的现有用例忽略。
+MCP schema 的 3 项 Python 回归通过，三份接入示例和两份脱敏夹具通过 JSON 解析检查。
+
+- 五项 Hook 夹具覆盖默认关闭时零队列、零 HTTP，项目和客户端边界，身份缺失、乱序、去重、
+  队列并发与容量、连接拒绝后的持久恢复、回执缺失时逐字节重放以及配置与凭据变化时的出队隔离。
+- Codex 夹具核对停止检查、主线程中断、MCP 工具结构化错误和 Bash 的未知状态。
+  Claude Code 夹具核对同提示 ID 的开始与停止、工具成功和失败、可选耗时、工具 abort、API 错误和明确关联的子代理。
+  两端都检查敏感占位内容不会进入队列和 HTTP 负载。
+- 合成 stdio MCP 客户端通过真实本地 Origence HTTP 和 SQLite 验证两端显式复用，覆盖 MCP 先建与 Hook 先建、
+  其他 key 读取拒绝、reader 写入拒绝、轮换撤销后旧记录滞留和新事件仍使用原逻辑 key 的 Run。
+  现有 MCP、Run、PDF 来源定位和回归用例一并通过。
+
+当前证据来自本地夹具。真实 Codex 和 Claude Code 的 Hook 加载、实际事件及标识覆盖、Windows 文件行为、
+真实模型和正式试点仍待验收。Claude Code 缺少可靠的整轮用户中断信号，无关联 ID 的事件会跳过。
+显式 MCP 关联需要调用方已持有准确标识，自动会话正文归档留在后续规划。
+[客户端接入与覆盖说明](CLIENTS.md#按项目启用私有-run-hook)
+
 ## 2026-11-18 · #87 双客户端归档互读与独立 Run
 
 Windows，main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)，AnySeek `6a46fc7`。新建 workspace，仅向两端提供同一个临时 writer key。Claude Code 2.1.327 报告模型 `glm-5.3`，Codex CLI 0.170.0 指定 `gpt-6.2-sol`，其事件未报告精确模型修订。整轮耗时 62.26 秒。

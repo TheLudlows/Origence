@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "clients": ["codex", "claude_code"],
+  "project": "/absolute/path/to/project",
+  "server_url": "https://origence.example",
+  "logical_key_id": "11111111-1111-4111-8111-111111111111",
+  "key_env": "OC_ORIGENCE_PROJECT_KEY"
+}

@@ -79,6 +79,81 @@ Codex 使用 OpenAI provider，可用 `--codex-credential-store` 选择已有登
 每次运行会调用真实模型，在新的临时 workspace 中完成三次客户端会话。三次调用共享四分钟等待预算，
 单次最多等待 85 秒。报告写入一个新文件，仅含模型选择、工具名、耗时和验收结果。
 
+## 按项目启用私有 Run Hook
+
+默认关闭。每个项目使用一个由自己管理的 [Origence profile](../examples/client-hook.profile.json)。
+在项目外的私有目录保存副本。Unix 上目录设为 `0700`、文件设为 `0600`，Windows 上使用仅当前用户可读写的目录和 ACL。
+填入本机的项目绝对路径、服务 origin、逻辑 key UUID 和该项目专用的凭据环境变量名。
+`GET /v1/session` 或同一凭据的 MCP `context_session` 返回逻辑 `key_id`，轮换前后相同。
+将该项目的 writer 凭据通过启动环境交给客户端和下述发送器。profile 与客户端 Hook 示例均只填环境变量名或 profile 路径。
+在 `clients` 中选 `codex`、`claude_code` 或两者，然后将 `enabled` 设为 `true`。
+
+- **Codex**：将 [Hook 示例](../examples/codex.hooks.json) 中所选事件的处理器合并到目标项目的
+  `.codex/hooks.json`。已有内联 Hook 时沿用现有配置格式，避免同层重复声明。
+  替换可执行文件和 profile 的绝对路径，按 Hook shell 的规则处理空格。
+  先按 Codex 本身的流程信任项目，再在 `/hooks` 审查并信任所选 Hook 定义。
+  [Codex 官方 Hook 文档](https://learn.chatgpt.com/docs/hooks)
+- **Claude Code**：将 [Hook 示例](../examples/claude-code.hooks.json) 中所选事件的处理器合并到
+  目标项目的 `.claude/settings.local.json`。替换 `command` 和 `args` 中的绝对路径。
+  Windows 指向 `origence.exe` 并按 JSON 规则转义路径。在 `/hooks` 核对加载来源和处理器。
+  [Claude Code 官方 Hook 文档](https://code.claude.com/docs/en/hooks)
+
+仅追加对应处理器，保留现有配置和客户端的信任及管理策略。Hook 会核对实际进程工作目录和事件工作目录。
+两者须属于该 profile 的项目。普通子目录可用，独立嵌套 Git 项目和项目外目录会被跳过。
+启用 linked worktree 时为其设置专用 profile，并核对客户端实际加载的 Hook 配置。
+
+在单独终端或本机用户级服务中为每个 profile 启动发送器。它可先于客户端启动，也可以在离线后重新启动。
+
+```sh
+origence client-hook --profile /absolute/private/project.json flush --watch
+```
+
+去掉 `--watch` 发送至多 16 条，便于手动运行或由本机调度器调用。Hook 进程只读一次有上限的 stdin，
+以短锁写入最多 256 条待发元数据，随后结束。队列满、锁忙、本地写入失败、输入超限或缺少关联标识时，
+Hook 保持客户端原流程，可能在 Hook 诊断输出中留下固定的跳过原因。Hook 不读取 transcript，也不保存
+会话内容、路径、工具参数、原始输出、凭据或原始事件 JSON。待发队列和去重记录存放在 profile 同目录下
+的 `<profile 文件名>.queue/`，只包含派生 ID、首个本地观察时间和明确允许的结构化元数据。
+
+发送器使用现有私有 Run API，每批先用会话接口确认凭据对应的逻辑 key。网络或确认回执异常会保留原
+`event_id` 和原负载重试。队列按项目、服务 origin、逻辑 key、凭据环境变量名和当时的凭据隔离。
+`held` 是当前配置无法发送的记录数量，`blocked` 表示认证、授权、逻辑 key 或网络问题，
+`discarded` 表示服务端明确拒绝或报告身份冲突。权限撤销及凭据轮换后，旧队列保持隔离。
+轮换后的新事件仍关联同一逻辑 key 上的同一 Run。观察时已用旧凭据入队的事件可能永久缺失。
+关闭 profile 或移出相应 `clients` 条目会在发送器下次读取配置时生效，在途批次仍使用其原凭据，
+可停止发送器来结束该批次。需要清理滞留记录时，在项目 Hook 和发送器停用后移走整个私有队列目录。
+已确认的记录保留最近 1024 个本地事件 ID。超过该窗口的重复通知仍使用相同 ID，由服务端的幂等约束
+拒绝不同负载。Run 事件序号反映服务端确认顺序，时间为本地观察时间。
+
+### 事件和关联边界
+
+| 客户端 | 关联键 | 可记录的观察 | 覆盖缺口 |
+| --- | --- | --- | --- |
+| Codex | `session_id` 和 `turn_id` | `UserPromptSubmit`、允许名单内的 `PostToolUse`、`Stop`、主线程 `Interrupt`。Origence MCP 工具只使用结构化结果中实际给出的 `isError` | Bash 与补丁工具状态保留未知，无 Hook 耗时字段。无子代理生命周期、托管工具或异常进程退出来推定终止 |
+| Claude Code | `session_id` 和当前用户提示的 UUID `prompt_id` | `UserPromptSubmit`、允许名单内的 `PostToolUse` 和 `PostToolUseFailure`、`Stop`、`StopFailure`，及同时含 `prompt_id` 和 `agent_id` 的 `SubagentStart`、`SubagentStop`。工具耗时及 abort 标记按实际字段记录 | `prompt_id` 的粒度是一条提示，转向或后续提示可使用新 UUID。整轮用户中断没有可靠信号，取消运行中的工具可跳过失败 Hook。`SessionEnd` 无轮次结论。子代理内部工具与后台任务不采集，子代理事件只代表收到时的提示上下文 |
+
+精确工具名单由上面的 Hook 示例和代码同时限定。同一轮多次收到相同生命周期信号时会合并。
+子代理同一种生命周期信号也按当前提示和代理 ID 合并，不能据此计算实际启动或停止次数。
+`Stop` 表示客户端进入停机检查，其他 Hook 仍可延续该轮。中断和 API 错误均是客户端观察，
+业务结果保持未知。没有末尾事件时保留采集缺口。缺少可靠标识时跳过该观察，包括只提供会话 ID 的
+Claude Code 版本或事件。
+
+### 显式关联 Origence MCP
+
+如果受信任的调用方已经拥有当前 Hook 事件里的确切标识，可用相同 profile 确定这轮的
+`run_id` 和固定 `summary`。Claude Code 使用 `--client claude-code`，并将
+`prompt_id` 作为 `--correlation-id`。
+
+```sh
+origence client-hook --profile /absolute/private/project.json run-id \
+  --client codex --session-id SESSION_ID --correlation-id TURN_ID
+```
+
+用相同逻辑 key 调用 MCP `context_run_create`，原样传入两字段，随后用这个 `run_id` 上报或准备上下文。
+发送器先到或 MCP 先到都使用同一个私有 Run。现有 Run 工具不从 Codex 或 Claude Code 自动获得
+这两个准确的关联标识。当调用方得不到它们时，允许 Hook 独立记录可识别的轮次。需要同轮合并时，
+应省略该轮的独立 MCP Run 创建，继续使用无需 Run ID 的检索工具。旧的手动 Run、时间接近的调用和
+工具原始参数均不参与关联。显式 Run 创建冲突会按原授权和幂等契约处理。
+
 ## 导出已批准的 Skill
 
 获得 workspace 的 tenant/workspace 标识、已发布的 Skill ID 与精确版本后运行：

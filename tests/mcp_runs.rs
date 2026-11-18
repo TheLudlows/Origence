@@ -444,3 +444,157 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
     let _ = host.await;
     service.engine.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() {
+    use crate::client_hooks::HookFixture;
+    use origence::client_hook::{Capture, Client};
+    use reqwest::Method;
+
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "hook fixture")
+        .await
+        .unwrap();
+    let writer = store.issue_key(scope, "writer").await.unwrap();
+    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = origence::api::router(service.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let fixture = HookFixture::new();
+    fixture.configure(&base, writer.key_id, &["codex", "claude_code"]);
+
+    let mut mcp = Peer::start(&base, &writer.token).await;
+    assert_eq!(
+        fixture.enqueue(Client::Codex, &writer.token, "start"),
+        Capture::Queued
+    );
+    assert_eq!(
+        fixture.enqueue(Client::ClaudeCode, &writer.token, "start"),
+        Capture::Queued
+    );
+    let codex = fixture
+        .profile()
+        .run_identity(Client::Codex, "codex-test-session", "codex-test-turn")
+        .unwrap();
+    let claude = fixture
+        .profile()
+        .run_identity(
+            Client::ClaudeCode,
+            "claude-test-session",
+            "550e8400-e29b-41d4-a716-446655440000",
+        )
+        .unwrap();
+    assert_ne!(codex.run_id, claude.run_id);
+    // The user/caller explicitly passes matching ID and summary. Either side can create first.
+    assert_eq!(
+        mcp.call("context_run_create", json!(codex)).await.unwrap()["run_id"],
+        codex.run_id.to_string()
+    );
+    let outcome = fixture.profile().flush(writer.token.clone()).await.unwrap();
+    assert_eq!(outcome.sent, 2);
+    assert_eq!(
+        mcp.call("context_run_create", json!(claude)).await.unwrap()["run_id"],
+        claude.run_id.to_string()
+    );
+    assert_eq!(mcp.call("context_run_report", json!({
+        "run_id": claude.run_id,
+        "report": {
+            "event_id": Uuid::new_v4(), "observed_at_ms": 1, "reporter": "user",
+            "event": {"kind":"coverage","component":"synthetic_mcp","status":"partial","summary":"explicitly linked fixture"}
+        }
+    })).await.unwrap()["sequence"], 2);
+    let trace = mcp
+        .call("context_run_get", json!({"run_id": claude.run_id}))
+        .await
+        .unwrap();
+    assert_eq!(trace["events"].as_array().unwrap().len(), 2);
+    assert_eq!(trace["unreported_activity"], "unknown");
+    mcp.stop().await;
+
+    let owner = HostClient::new(&base, writer.token.clone()).unwrap();
+    let admin_client = HostClient::new(&base, admin.token).unwrap();
+    let directory = owner
+        .call(Method::GET, "/v1/runs", None, None)
+        .await
+        .unwrap();
+    assert_eq!(directory["items"].as_array().unwrap().len(), 2);
+    assert!(matches!(
+        admin_client.run_trace(claude.run_id, 0, 50).await,
+        Err(origence::error::AppError::NotFound)
+    ));
+
+    fixture.configure(&base, reader.key_id, &["claude_code"]);
+    assert_eq!(
+        fixture.enqueue(Client::ClaudeCode, &reader.token, "start"),
+        Capture::Queued
+    );
+    let rejected = fixture.profile().flush(reader.token).await.unwrap();
+    assert_eq!(rejected.blocked, Some("authorization_denied"));
+
+    fixture.configure(&base, writer.key_id, &["codex", "claude_code"]);
+    assert_eq!(
+        fixture.enqueue(Client::Codex, &writer.token, "stop"),
+        Capture::Queued
+    );
+    let replacement = admin_client
+        .call(
+            Method::POST,
+            &format!("/admin/keys/{}/rotate", writer.key_id),
+            None,
+            None,
+        )
+        .await
+        .unwrap()["token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        fixture.profile().flush(writer.token).await.unwrap().blocked,
+        Some("authorization_denied")
+    );
+    let replacement_client = HostClient::new(&base, replacement.clone()).unwrap();
+    assert!(
+        replacement_client
+            .run_trace(codex.run_id, 0, 10)
+            .await
+            .is_ok()
+    );
+    assert_eq!(
+        fixture
+            .profile()
+            .flush(replacement.clone())
+            .await
+            .unwrap()
+            .held,
+        2
+    );
+    assert_eq!(
+        fixture.enqueue(Client::Codex, &replacement, "stop"),
+        Capture::Duplicate
+    );
+    assert_eq!(
+        fixture.enqueue(Client::Codex, &replacement, "shell"),
+        Capture::Queued
+    );
+    let outcome = fixture.profile().flush(replacement).await.unwrap();
+    assert_eq!(outcome.sent, 1);
+    assert_eq!(outcome.held, 2);
+    let trace = replacement_client
+        .run_trace(codex.run_id, 0, 10)
+        .await
+        .unwrap();
+    assert_eq!(trace["events"].as_array().unwrap().len(), 2);
+    assert_eq!(trace["events"][1]["report"]["event"]["tool"], "Bash");
+
+    server.abort();
+    service.engine.shutdown().await.unwrap();
+}

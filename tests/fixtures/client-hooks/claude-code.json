@@ -1,0 +1,79 @@
+{
+  "start": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "transcript_path": "/FIXTURE_PRIVATE_TRANSCRIPT.jsonl",
+    "prompt": "FIXTURE_PRIVATE_PROMPT"
+  },
+  "tool_completed": {
+    "hook_event_name": "PostToolUse",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "tool_name": "Write",
+    "tool_use_id": "fixture-claude-write",
+    "tool_input": {"file_path": "/FIXTURE_PRIVATE_PATH", "content": "FIXTURE_PRIVATE_CONTENT"},
+    "tool_response": {"filePath": "/FIXTURE_PRIVATE_PATH", "type": "create"},
+    "duration_ms": 12
+  },
+  "tool_failure": {
+    "hook_event_name": "PostToolUseFailure",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "tool_name": "Bash",
+    "tool_use_id": "fixture-claude-bash",
+    "tool_input": {"command": "FIXTURE_PRIVATE_ARGUMENT"},
+    "error": "Exit code 1\nFIXTURE_PRIVATE_OUTPUT",
+    "is_interrupt": false,
+    "duration_ms": 4187
+  },
+  "tool_abort": {
+    "hook_event_name": "PostToolUseFailure",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "tool_name": "Bash",
+    "tool_use_id": "fixture-claude-aborted",
+    "tool_input": {"command": "FIXTURE_PRIVATE_ARGUMENT"},
+    "error": "FIXTURE_PRIVATE_OUTPUT",
+    "is_interrupt": true
+  },
+  "subagent_start": {
+    "hook_event_name": "SubagentStart",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "agent_id": "fixture-claude-agent",
+    "agent_type": "FIXTURE_PRIVATE_AGENT_TYPE"
+  },
+  "subagent_stop": {
+    "hook_event_name": "SubagentStop",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "stop_hook_active": false,
+    "agent_id": "fixture-claude-agent",
+    "agent_type": "FIXTURE_PRIVATE_AGENT_TYPE",
+    "agent_transcript_path": "/FIXTURE_PRIVATE_CHILD_TRANSCRIPT.jsonl",
+    "last_assistant_message": "FIXTURE_PRIVATE_CHILD_REPLY",
+    "background_tasks": [{"description": "FIXTURE_PRIVATE_BACKGROUND_TASK"}]
+  },
+  "stop": {
+    "hook_event_name": "Stop",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+    "stop_hook_active": false,
+    "last_assistant_message": "FIXTURE_PRIVATE_REPLY"
+  },
+  "api_error": {
+    "hook_event_name": "StopFailure",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440001",
+    "error": "rate_limit",
+    "error_details": "FIXTURE_PRIVATE_API_ERROR",
+    "last_assistant_message": "FIXTURE_PRIVATE_REPLY"
+  },
+  "session_end": {
+    "hook_event_name": "SessionEnd",
+    "session_id": "claude-test-session",
+    "prompt_id": "550e8400-e29b-41d4-a716-446655440001",
+    "reason": "other"
+  }
+}
