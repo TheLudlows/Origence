@@ -123,8 +123,11 @@ The existing primary key sorts by Run UUID. The new covering index
 `oc_runs_owner_created_at` supports each bounded owner/time count and avoids
 reading Run bodies. A request takes at most 24 disjoint index range counts
 over at most seven days. Work still scales with matching index entries.
-The index is installed only on fresh SQLite authority databases. Exact
-schema admission rejects existing databases missing the index before writes.
+The index is installed only on fresh SQLite authority databases. The new
+binary rejects a database missing the index during read-only schema admission.
+The previous binary also rejects a database containing the new index. Keep
+each data directory with its matching binary. Both rejections preserve the
+existing data, and there is no migration.
 
 ## External verification records
 

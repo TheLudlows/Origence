@@ -143,6 +143,8 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 起止为 Unix 毫秒，窗口和桶均左闭右开，以本次服务端读取时刻为终点向前滚动。
 此计数随授权轮换保留，事件、重试和证据撤回不会新增或抹去创建记录。
 窗口参数不能覆盖鉴权范围。详情见 [Run 合同](contracts/runs.md#run-creation-overview)。
+该接口使用新建的 SQLite 权威库。新版拒绝缺少创建时间索引的旧库，旧版也拒绝
+含新索引的库。两个方向均在修改数据库前拒绝。
 
 记忆目录支持额外的 `memory_filter=<URL 编码 JSON>`，例如：
 `{"subject":{"kind":"service","stable_id":"Atlas"},"predicate":"release.rule","context":{"env":"production"}}`。

@@ -1332,9 +1332,14 @@ schema admission，缺索引的旧目录在写入前拒绝，不建索引、不�
 - Chromium 156.0.8078.79、实际 Node relay、实际 Origence/SQLite 与固定 AnySeek
   `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。合成临时数据中两窗口均正确
   显示 30 个 Run，而目录首屏为 25。另一管理员及 reader 均为 0，窗内空桶、
-  桶合计、UTC 边界与 320px 布局均通过。本地浏览器证据复跑：
-  `python3 tools/anyseek_smoke.py --anyseek-binary <AnySeek binary> --run
-  python3 /workspace/issue76-run-trends-evidence/smoke.py --binary <Origence binary>`。
+  桶合计、UTC 边界与 320px 布局均通过。浏览器使用
+  `tools/anyseek_smoke.py` 启动隔离的引擎。
 
 业务成功率、端到端 P95、Token 和成本仍未采集。本切片不提供告警、生产容量验收、
 Windows 运行证据或真实客户端验证。仅本地提交。
+
+草稿发布前补验了两个方向的 schema 拒绝。用基线 `3c66b5b` 和含索引的
+`a43c270` 分别构建 Origence，通过 `--offline workspace-create` 各建一个临时库，
+再用另一版本运行同一打开操作。新版拒绝缺索引的库，旧版拒绝含新索引的库。
+两次打开均返回 incompatible schema，SQLite 文件与打开前逐字节一致。
+实现与测试代码自 `a43c270` 保持一致，草稿准备提交仅补全兼容边界说明。
