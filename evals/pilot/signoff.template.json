@@ -78,7 +78,7 @@
   },
   "remaining_blockers": [
     "The four implementation PRs are on main 48cfa7c643b8c077ad33c55981def51979afde05. The final pilot freeze and joint mapping still need confirmation.",
-    "Codex and Claude Code product client testing is paused. Real model work is NOT_RUN.",
+    "The formal two-scenario held-out trial awaits a sealed task set and a frozen rubric. Public client preflights are unscored.",
     "The isolated engineering recovery checks await independent DBA review. Policy-owner and independent evaluator signatures are pending."
   ],
   "rule": "No overall PASS without separate prd-v0.3.A1-A7 evidence, pilot.P1-P7 checks and DBA/policy-owner/independent signatures. Number equality is not a mapping. Self-reports and offline fixtures do not qualify.",

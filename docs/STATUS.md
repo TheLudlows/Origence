@@ -5,13 +5,13 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 
 当前变更移除了 AML 评测协议的 HTTP 入口与启动开关。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
 
-Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。**P0 的数据库排障和报销复核正式试点尚未执行**，独立签认仍待完成。见 [#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) 和 [#91 P0 验收](https://github.com/TheLudlows/Origence/issues/91)。
+Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收，也在 Windows 公开报销样例中加载了同一版获批 Skill。**P0 的数据库排障和报销复核正式试点尚未执行**，独立签认仍待完成。见 [#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) 和 [#91 P0 验收](https://github.com/TheLudlows/Origence/issues/91)。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
 | 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。见[记忆契约](contracts/memory.md) | P0 真实任务验收 |
 | 知识 | Text、Markdown、PDF 入库，版本读取与比较、发布与撤回；更新失败保留原发布版本。见 [API](API.md#接口) | P0 真实任务验收 |
-| Skill | [选定经历 CLI](SKILL-CANDIDATE-CLI.md)、选定审阅包、精确批准、不可变发布、在线下载和两种客户端目录格式导出 | 双客户端真实加载与撤回验收；原生受管加载 |
+| Skill | [选定经历 CLI](SKILL-CANDIDATE-CLI.md)、审阅、精确批准、不可变发布和在线导出。公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报与采集缺口、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.md) | 双客户端真实事件采集、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核；按预算组装证据。真实引擎本地回归通过 | 当前后端的模型检索质量、容量与延迟验收 |
 | 私有归档与反馈 | 双客户端显式归档互读、逻辑 key 隔离与轮换撤销已验证；支持显式反馈和 Improve → Learning | 在 P0 双场景任务中核对归档和反馈证据 |

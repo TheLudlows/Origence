@@ -1,5 +1,24 @@
 # #91 本地验证记录
 
+## 双客户端原生 Skill 加载（2026-11-18）
+
+Windows，产品代码基线 [`e024b78`](https://github.com/TheLudlows/Origence/commit/e024b78eb2ecbf1aa1851783c89be8238ca819a1)，AnySeek `6a46fc7`。在全新 workspace 公开测试一笔 110 TEST 单位的合成报销。脚本创建 v1 来源并由不同的 writer、reviewer 测试账户提交及审批候选。两个新项目分别从服务端导出同一个 Skill v1，逐项核对 manifest 及文件字节。最终复跑耗时 8.83 秒。[机器可读记录](native-skill.windows.json)
+
+| 客户端 | 本轮观察 |
+| --- | --- |
+| Codex CLI 0.170.0，指定 `gpt-6.2-sol` | 原生 `skills/list` 找到导出的精确文件，`turn/start` 显式选中它。一份发往模型的请求记录同时含 Run ID、Skill 名及完整正文。最终答案给出 100 和包内随机串。 |
+| Claude Code 2.1.327，`haiku` 在本轮报告为 `glm-5.3` | 新项目的原生会话记录到与 Skill 名匹配的一次 `Skill` 调用、成功回执和注入正文。最终答案给出同样的金额和随机串。供应商端请求正文未采集。 |
+
+两端分别建立 Run。脚本在核对原生证据后写入 `skill_loaded_reported`，按 Run 读回并核对 `reporter=test`、事件内容及 `reported` 归属，最后读取第一条事件的不可变前缀。JSON 保留审批摘要、精确版本、文件哈希、会话与 Run 标识、请求或输出流摘要。临时目录中的原始模型请求和客户端转录在结束时清理。
+
+撤回唯一支持来源后，直接读取包返回 HTTP 404。两种客户端的新导出均返回资源不存在，新目录内零文件；原两个项目中的 manifest 和 SKILL.md 仍与发布版本一致。已打开的会话、已注入上下文的撤回和受管在线重载仍待验证。
+
+早期两轮在 Claude Code 的 `--bare` 配置下未取得加载证据；第一轮撤回请求还因缺幂等键返回 422。补上幂等键，改用仅启用项目配置的正常启动模式和 `Skill` 工具后，两次观察到两端加载。模型的精确不可变修订仍未冻结。本轮只验证一个由测试程序编写的 Skill，双向首做、未见题复用、独立业务判定及正式评分均为 NOT_RUN。
+
+Rust 1.98.0 的 `cargo fmt --all -- --check`、`cargo clippy --offline --locked --all-targets -j 2 -- -D warnings` 通过。默认目标中的 Windows 可执行文件被占用，在单独的 `target/ci-binary-check` 目录以 `cargo build --offline --locked` 构建并执行。15 项验收材料单测（含 2 项原生请求证据归属测试）及脚本编译检查通过。此次未改 Rust 或 SQL。Linux 原生加载仍待验证。
+
+## 初次准备（2026-11-17）
+
 日期：2026-11-17。基线为 `293e2bf6af3b180d43c8050731047b552ac07519`，
 `git ls-remote origin refs/heads/main` 已核实一致；原检出 HEAD 为
 `c70a1aaa0b3cb75872109406dc17b1b461d1f771`，未在其上编辑。

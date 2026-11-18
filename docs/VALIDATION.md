@@ -5,6 +5,12 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-18 · #91 双客户端加载同一版 Skill
+
+Windows 使用合入 #104 的主干 `e024b78` 构建 Origence，配合 AnySeek `6a46fc7` 和新建的测试 workspace。Codex 0.170.0 和 Claude Code 2.1.327 都从获批包的正文读出随机校验串，各自的 Run 均读回了对应包版本、摘要和测试程序上报的加载事件。Codex 的原生请求记录含正文，Claude Code 的原生会话含成功的 Skill 调用和正文。来源撤回后在线包返回 404，两次新导出均被拒绝，原有两份文件仍与发布时的摘要一致。最终复跑耗时 8.83 秒。正式双场景仍待独立验收。[逐端证据与限制](../evals/pilot/VALIDATION.md#双客户端原生-skill-加载2026-11-18)
+
+Rust 1.98.0 格式检查、离线锁定依赖的全目标 Clippy（警告按错误处理）和验收材料 15 项 Python 测试通过。此次使用已重新构建的二进制执行公开样例。[复跑命令](../evals/pilot/PREFLIGHT.md#复跑原生-skill-加载)
+
 ## 2026-11-18 · #87 双客户端归档互读与独立 Run
 
 Windows，main [`4160fd5`](https://github.com/TheLudlows/Origence/commit/4160fd5a7cbd7e21af54903a9471fcda15f5f08c)，AnySeek `6a46fc7`。新建 workspace，仅向两端提供同一个临时 writer key。Claude Code 2.1.327 报告模型 `glm-5.3`，Codex CLI 0.170.0 指定 `gpt-6.2-sol`，其事件未报告精确模型修订。整轮耗时 62.26 秒。
