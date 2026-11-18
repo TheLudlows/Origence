@@ -1,4 +1,4 @@
-import { api } from "./api.js";
+import { api, ApiError } from "./api.js";
 import {
   button,
   el,
@@ -233,6 +233,36 @@ export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
         await trackJob(receipt, result, ctx);
       } catch (error) {
         message(result, error);
+        if (
+          kind === "knowledge" &&
+          asset &&
+          error instanceof ApiError &&
+          error.status === 409
+        ) {
+          const current = el("div");
+          result.append(
+            el(
+              "p",
+              "muted",
+              "版本冲突。草稿和提交版本保持不变；请比较当前版本后重新打开更新表单。",
+            ),
+            button("读取当前版本", async () => {
+              try {
+                const latest = await api.get<Asset>(
+                  `/v1/assets/${asset.asset_id}`,
+                  ctx.signal,
+                );
+                current.replaceChildren(
+                  el("p", "", `当前已发布 v${latest.version} · ${latest.title}`),
+                  el("pre", "", latest.content),
+                );
+              } catch (failure) {
+                message(current, failure);
+              }
+            }),
+            current,
+          );
+        }
       } finally {
         save.disabled = false;
       }

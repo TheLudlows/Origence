@@ -134,6 +134,25 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 资产页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
 分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
 
+记忆目录支持额外的 `memory_filter=<URL 编码 JSON>`，例如：
+`{"subject":{"kind":"service","stable_id":"Atlas"},"predicate":"release.rule","context":{"env":"production"}}`。
+库入口为 `Service::list_memories(auth, &MemoryCatalogFilter, after, limit)`。
+
+- `subject` 可省略；提供时必须包含现有 `kind` 与精确业务 `stable_id`，不推断名称或 key。
+- `predicate` 可省略；提供时按现有身份规范校验并精确匹配。
+- `context` 可省略表示不限；提供时比较完整字符串键值集合，键顺序无关，大小写/Unicode
+  原样比较。`{}` 只匹配空条件，不是通配符，也不是子集条件。
+- `identified` 可省略表示不限，`true` 只匹配已保存的显式身份，`false` 只匹配无身份资产；
+  `false` 不能同时指定主体/属性/条件。未知身份不会推断。未知字段或非法组合拒绝。
+- 仅 `kind=memory` 接受此字段，JSON 字符串最大 16,384 字节。
+
+筛选目录仍是实时、有界的候选游标接口，而不是全量计数：单次按 scoped 主键从 after
+检查最多 100 个候选（另取一个 lookahead），包含非记忆、未发布或隐藏候选；在返回前
+完成精确筛选及正常资产来源/语义可见性复核。`limit` 是返回上限；可能少于 limit 或为空，
+只要 `next_after` 非 null 就应继续，变更筛选须清空游标。不会为凑满一页无限扫描。
+未指定 `memory_filter` 的既有目录行为不变。记忆 UI 通过此服务端筛选分页，不以本页
+文本过滤或搜索命中冒充目录；知识页的“筛选已加载的资产”仍明确是本地筛选。
+
 Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打开数据库或执行 CLI。
 
 | 方法和路径 | 请求 / 结果 |

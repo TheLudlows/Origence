@@ -216,6 +216,7 @@ struct Version {
 #[serde(deny_unknown_fields)]
 struct AssetPage {
     kind: String,
+    memory_filter: Option<String>,
     after: Option<Uuid>,
     limit: Option<usize>,
 }
@@ -225,6 +226,22 @@ async fn assets(
     h: HeaderMap,
     Query(page): Query<AssetPage>,
 ) -> Result<Json<Value>> {
+    if let Some(filter) = page.memory_filter {
+        if page.kind != "memory" || filter.len() > 16384 {
+            return Err(AppError::Invalid("invalid memory filter".into()));
+        }
+        let filter = serde_json::from_str::<crate::memory_identity::MemoryCatalogFilter>(&filter)
+            .map_err(|_| AppError::Invalid("invalid memory filter".into()))?;
+        return Ok(Json(
+            s.list_memories(
+                &auth(&s, &h).await?,
+                &filter,
+                page.after.unwrap_or_default(),
+                page.limit.unwrap_or(50),
+            )
+            .await?,
+        ));
+    }
     Ok(Json(
         s.list_assets(
             &auth(&s, &h).await?,
