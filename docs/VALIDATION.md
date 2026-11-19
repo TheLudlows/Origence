@@ -1515,3 +1515,83 @@ UI 类型检查、19 项测试、#98 的两个宽度、Run 核验和 PDF 来源�
 - Windows / Rust 1.98.0 的 `cargo +1.98.0 fmt --all -- --check` 通过。
 - 在全新的 `target/ci-binary-check` 目录设置 `CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0`、`CARGO_INCREMENTAL=0`，执行 `cargo +1.98.0 test --locked --offline -j 2 --no-fail-fast --quiet`。448 项通过，8 项真实 AnySeek 测试默认忽略。未额外执行 `cargo build`，集成测试生成的 `debug/origence.exe` 已通过 `serve --help` 验证。
 - 本机 Windows PowerShell 5.1 运行 `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck` 通过。Clippy 通过，默认测试 448 项通过，8 项默认忽略。工作流的 Linux 和 GitHub runner 实测仍待 CI。
+
+## 2026-11-18 — #76 运行创建趋势重试焦点（本地）
+
+基线 `origin/main` 为 `e024b78eb2ecbf1aa1851783c89be8238ca819a1`，已包含 #98–102。
+修复前，在 1024 px 的真实 Chromium 中，首次 503 后可用 Tab 从「统计范围」进入重试按钮。
+按 Enter 后按钮立即离开 DOM，焦点落到 `body`。再次 503 后显示另一个按钮，焦点仍在
+`body`。重新聚焦按钮并按空格成功后，焦点也落到 `body`。
+
+修复后，首次失败仍显示错误和重试按钮。请求等待期间同一按钮保留焦点与可见轮廓，
+`aria-disabled` 表示暂不可再次触发。失败时同一按钮恢复可用。成功后隐藏按钮，只有该按钮
+仍持有焦点时，才把焦点移到同一区域的「统计范围」。已用 Shift+Tab 移开的焦点保持原处。
+
+- Linux、Node 24.22.1、Playwright 1.62.1、Chromium 156.0.8078.79。1024/320 px 的
+  `ui/scripts/check-navigation-focus-browser.cjs` 通过。已构建 UI 与 Node 转发使用合成
+  loopback HTTP 夹具，控制响应顺序并检查首次失败、键盘重试、等待期重复按键、再次失败、
+  成功时两种焦点路径，以及 #98 既有路由和对话框焦点。16 组资产页签浏览器回归均通过。
+- `npm --prefix ui run check`、`npm --prefix ui test`（19 项）、`git diff --check`、
+  Rust 1.98.0 的 `cargo fmt --all -- --check` 和
+  `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` 通过。
+
+使用上方相同的 UI 构建和 Playwright 安装方式，从仓库根目录复跑。
+
+```sh
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-navigation-focus-browser.cjs
+```
+
+### 实际读屏和实体触屏待验收
+
+从仓库根目录启动同一夹具的手动模式，用命令输出的本地地址和合成 key `synthetic-key`。
+服务仅监听 loopback。每次验收前重新启动夹具。手动模式的五次响应已通过 HTTP 验证，
+依次为 503、503、200、503、200，每次延迟约 1.2 秒。
+
+```sh
+npm --prefix ui run build
+ORIGENCE_FIXTURE_PORT=43176 node ui/scripts/check-navigation-focus-browser.cjs --serve
+```
+
+1. 在能记录实际播报的读屏会话中连接夹具。记录首次失败播报，Tab 到「重试读取创建量」并按
+   Enter，记录加载、重复失败及按钮焦点。再次用空格重试，记录成功播报，确认焦点移到
+   「统计范围」。然后切到「最近 7 天」，在下次重试未完成时移开焦点，确认成功后焦点仍在
+   原处。记录设备、读屏、浏览器版本和实际播报。
+2. 用一台获准且通过既有本地连接可访问夹具的实体触屏重跑失败、重试、再次失败和恢复。
+   实际点按，检查响应等待期间的状态可读、连续点按不会重复触发、恢复后结果可达且滚动
+   可用。记录设备、浏览器、视口和手势结果。
+
+本轮未运行实际屏幕阅读器和实体触屏。正式试点、真实模型及产品端 Codex/Claude Code 测试
+保持暂停，#76 保持开放。
+
+## 2026-11-18 — #76 Run 详情采集声明（本地）
+
+基于 `origin/main` 的 `e024b78eb2ecbf1aa1851783c89be8238ca819a1`。基线仅在所选事件的
+原始 JSON 中展示 `coverage`。Run 详情现用已有 Trace 分页里的结构化事件，按证据顺序显示
+事件序号、组件、声明状态和上报来源。同一组件的后续声明保留前序缺口。声明未经独立
+核验，整轮采集范围仍未知。有后续事件时明确限定在已加载范围。无声明的成功读回显示
+「已加载事件中未见采集声明，覆盖未知」。
+
+沿用现有路由、授权和原始事件详情。403 等读取失败清除旧声明并显示原错误，重试从首批
+事件开始。切换 Run 和 401 登出复用既有路由及凭据生命周期清除私有视图。
+
+- Linux、Node 24.22.1，`npm --prefix ui run check` 与 `npm --prefix ui test`（20 项）通过。
+  合成 HTTP 回归覆盖重复组件的顺序、四种声明状态、不可信文本转义、分页范围、403 清除
+  与重试、等待另一 Run 期间清旧数据，以及 401 清除私有视图。
+- Chromium 156.0.8078.79、Playwright 1.62.1。通过已构建的 UI 和真实 Node 转发，用
+  隔离的 loopback 夹具，在 1024 和 320 px 实际走登录、分页、403、重试、切换 Run 和
+  401 登出。#98 路由焦点回归和 16 组资产页签回归通过。旧 Run 核验 CDP 脚本偶发
+  `ERR_ABORTED`，用主干原脚本也可复现。本轮用下方独立 Playwright 检查确认声明行为。
+- Rust 1.98.0 的 `cargo fmt --all -- --check`、
+  `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` 及
+  `git diff --check` 均通过。
+
+用上文相同的 UI 构建和 Playwright 安装方式，从仓库根目录复跑。
+
+```sh
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-run-coverage-browser.cjs
+```
+
+本轮使用合成数据进行 Chromium 和 DOM 验证。实际读屏和实体触屏仍待验收，真实客户端、
+模型和正式试点保持暂停，#76 保持开放。

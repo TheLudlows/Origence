@@ -46,8 +46,12 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     run: "22222222-2222-4222-8222-222222222222",
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
+    coverageRun: "55555555-5555-4555-8555-555555555555",
   };
   let verificationDenied = false;
+  let coveragePageDenied = false;
+  let holdTrace = false, releaseTrace;
+  const coverageCursors = [];
   const asset = {
     asset_id: ids.asset,
     title: "<img src=x>",
@@ -143,8 +147,30 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         recorder_principal_id: ids.run, recorded_at_ms: 2000,
         withdrawal: { reason: "superseded evidence", recorded_at_ms: 3000 },
       }], next_after: null });
-    if (path.pathname === `/api/v1/runs/${ids.run}`)
+    if (path.pathname === `/api/v1/runs/${ids.coverageRun}/verifications`)
+      return response({ items: [], next_after: null });
+    if (path.pathname === `/api/v1/runs/${ids.coverageRun}`) {
+      const after = path.searchParams.get("after");
+      coverageCursors.push(after);
+      if (after === "1" && coveragePageDenied)
+        return response({ error: { message: "synthetic trace denied" } }, 403);
+      const claims = after === "0"
+        ? [[1, "codex_hook", "not_collected", "client"]]
+        : [[2, "codex_hook", "reported", "test"], [3, "<img src=x>", "partial", "client"], [4, "other", "unknown", "user"]];
       return response({
+        run: { run_id: ids.coverageRun, summary: "synthetic coverage Run" },
+        events: claims.map(([sequence, component, status, reporter]) => ({
+          sequence,
+          recorded_at_ms: 1000 + sequence,
+          evidence_origin: "reported",
+          report: { reporter, event: { kind: "coverage", component, status, summary: "synthetic declaration" } },
+          references: [],
+        })),
+        next_after: after === "0" ? 1 : null,
+      });
+    }
+    if (path.pathname === `/api/v1/runs/${ids.run}`) {
+      const trace = response({
         run: { run_id: ids.run, summary: "fixture task" },
         events: [
           {
@@ -180,6 +206,11 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         ],
         next_after: null,
       });
+      if (!holdTrace) return trace;
+      const pending = Promise.withResolvers();
+      releaseTrace = () => pending.resolve(trace);
+      return pending.promise;
+    }
     if (path.pathname === `/api/v1/assets/${ids.asset}`) return response(asset);
     if (path.pathname === "/api/v1/memories/identified") {
       writes.push(body);
@@ -288,6 +319,9 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(label, `Missing field ${text}`);
     return label.querySelector("input,select,textarea");
   };
+  const coveragePanel = () => [...document.querySelectorAll("section")].find(
+    (section) => section.querySelector("h2")?.textContent === "采集声明",
+  );
   await import("../dist/client/app.js");
   await t.test("login and real-scope overview", async () => {
     control("API key").value = "disposable-fixture-key";
@@ -548,14 +582,64 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     click(`打开 Run ${ids.run}`);
     await wait(() => location.hash === `#runs/${ids.run}` && document.querySelector("h1")?.textContent === "Run 详情");
   });
+  await t.test("Run coverage keeps loaded declarations ordered and clears denied or replaced evidence", async () => {
+    const unknown = "已加载事件中未见采集声明，覆盖未知";
+    await wait(() => coveragePanel()?.textContent.includes(unknown));
+    location.hash = `#runs/${ids.coverageRun}`;
+    await wait(() => coveragePanel()?.textContent.includes("codex_hook"));
+    const panel = coveragePanel();
+    const rows = () => [...panel.querySelectorAll("tbody tr")].map(
+      (row) => [...row.cells].map((cell) => cell.textContent),
+    );
+    const first = ["1", "codex_hook", "未采集", "客户端上报；未经独立验证"];
+    assert.deepEqual(rows(), [first]);
+    assert.match(panel.textContent, /整轮覆盖仍未知.*还有后续事件/u);
+
+    coveragePageDenied = true;
+    click("加载后续事件");
+    await wait(() => document.body.textContent.includes("synthetic trace denied"));
+    assert.equal(panel.hidden, true);
+    assert.deepEqual(rows(), []);
+    assert.ok(!panel.textContent.includes(unknown));
+
+    coveragePageDenied = false;
+    click("加载后续事件");
+    await wait(() => !panel.hidden && rows().length === 1);
+    assert.ok(!document.body.textContent.includes("synthetic trace denied"));
+    click("加载后续事件");
+    await wait(() => rows().length === 4);
+    assert.deepEqual(coverageCursors, ["0", "1", "0", "1"]);
+    assert.deepEqual(rows(), [first,
+      ["2", "codex_hook", "已上报", "显式上报 · test；未经独立验证"],
+      ["3", "<img src=x>", "部分采集", "客户端上报；未经独立验证"],
+      ["4", "other", "未知", "显式上报 · user；未经独立验证"],
+    ]);
+    assert.equal(panel.querySelector("img"), null);
+    assert.ok(!panel.textContent.includes("还有后续事件"));
+    assert.equal(document.querySelectorAll(".timeline button.event").length, 4);
+
+    holdTrace = true;
+    location.hash = `#runs/${ids.run}`;
+    await wait(() => releaseTrace && coveragePanel()?.textContent.includes("正在读取采集声明"));
+    assert.equal(panel.isConnected, false);
+    assert.ok(!document.body.textContent.includes("codex_hook"));
+    assert.ok(!coveragePanel().textContent.includes(unknown));
+    holdTrace = false;
+    releaseTrace();
+    await wait(() => coveragePanel()?.textContent.includes(unknown));
+  });
   await t.test(
     "revoked credentials clear private UI and return to login",
     async () => {
+      location.hash = `#runs/${ids.coverageRun}`;
+      await wait(() => coveragePanel()?.textContent.includes("codex_hook"));
       unauthorized = true;
-      click("◇记忆管理");
+      click("加载后续事件");
       await wait(() => document.querySelector("input[type=password]"));
       assert.equal(document.querySelector("nav"), null);
       assert.equal(document.querySelector("dialog"), null);
+      assert.equal(coveragePanel(), undefined);
+      assert.ok(!document.body.textContent.includes("codex_hook"));
     },
   );
 });
