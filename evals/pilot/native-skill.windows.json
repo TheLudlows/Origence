@@ -1,0 +1,93 @@
+{
+  "scope": "public synthetic unscored",
+  "formal_trial": "NOT_RUN",
+  "clients": {
+    "codex": {
+      "session_id": "01a1ef0b-a61b-7be2-8152-08776ce0a309",
+      "turn_id": "01a1ef0b-a66c-7713-9835-825034b59a8b",
+      "run_id": "ca9c6737-675f-4ce6-ba5c-f4ef555b353b",
+      "trigger": "explicit native Skill input",
+      "native_path_discovered": true,
+      "model_request_body_verified": true,
+      "request_sha256": [
+        "e01ea975062f9d6849d50edd40a5055e187597cb72794fc6a453254e053f95d5"
+      ],
+      "answer_matches": true,
+      "status": "OBSERVED",
+      "event_id": "28d227e3-f275-4f34-9fc4-8e518ab72557",
+      "observed_at_ms": 1795011887879,
+      "prefix": {
+        "digest": "7fc31d9bfa524e9953eb441ee1b127111ab1b1c467771f01f1851571f26efa9c",
+        "run_id": "ca9c6737-675f-4ce6-ba5c-f4ef555b353b",
+        "through_sequence": 1
+      }
+    },
+    "claude-code": {
+      "session_id": "5937672b-346b-4ef3-a1d7-cb75a6faafd9",
+      "run_id": "8a43c013-fd84-46ed-a30d-2e6119c9a7ff",
+      "trigger": "model Skill tool",
+      "reported_model": "glm-5.3",
+      "skill_in_init": true,
+      "tool_call_ids": [
+        "call_b21d1dc95b154f1b9641ef4b"
+      ],
+      "tool_result_success": true,
+      "input_body_observed": true,
+      "model_request_body_verified": null,
+      "answer_matches": true,
+      "event_stream_sha256": "32ad9daa8e9a07343ce0650d19cd59f9d0e1ee98e27b5ad368dfd664e4a2ab48",
+      "status": "OBSERVED",
+      "event_id": "67131717-f211-4e7f-9992-ae9da114644b",
+      "observed_at_ms": 1795011887915,
+      "prefix": {
+        "digest": "54d42607b4732b00f08be2b911a2e3b4cf679d0584d54e32156e1434a7d64196",
+        "run_id": "8a43c013-fd84-46ed-a30d-2e6119c9a7ff",
+        "through_sequence": 1
+      }
+    }
+  },
+  "started_at": "2026-11-18T14:24:39.176331+00:00",
+  "configured_models": {
+    "codex": "gpt-6.2-sol",
+    "claude-code": "haiku"
+  },
+  "cli_versions": {
+    "codex": "0.170.0",
+    "claude-code": "2.1.327"
+  },
+  "origence_binary_sha256": "a5c144f9e51facc71856168dff18a57f68b3e9a6ccabe4901f8da30026bae5cc",
+  "approval": {
+    "tenant_id": "c0e17079-bd11-4777-b413-a62a8fed2b88",
+    "workspace_id": "6eeac971-317b-4cb2-b41c-d28466d29928",
+    "skill_id": "47a9a8ce-206e-4f73-9520-41efebfde96d",
+    "version": 1,
+    "name": "expense-check-660d31",
+    "candidate_id": "07956f85-2fb4-44e5-8d68-4e929c285513",
+    "revision": 1,
+    "review_id": "873dfa38-fb08-4ec6-b275-02c606eb2d99",
+    "reviewer_key_id": "129301b8-958b-4236-9d52-26ff2ddac861",
+    "source_event_id": "a7fa8fff-5f46-4c3e-b2ec-fa1387b1778c",
+    "packet_digest": "1520ba16f2bf9a0bffc74dec32c3517551b6bf9ce9fc26f33fbe200295bd12d0",
+    "source": {
+      "kind": "asset",
+      "asset_id": "0c9e83f9-7031-4fc9-95a1-262f696a601d",
+      "version": 1,
+      "content_sha256": "a140d189dd1582b1e70b1baeb42147d7baf0edcf402565f6f39653b411fb2542"
+    },
+    "package_digest": "9d5262e2c198d7ca19746f5b2fbeecc9c0515df7c4fb7fdb056e25365adf9d08",
+    "file_sha256": "dbab604467dfe5a9fefe1215ba72ccfd5c9bd21d694ccb81f53f13504ca067ce"
+  },
+  "marker_sha256": "afd9e85ad426f44d00583e9488056c81fdb893b993f14bd671c3bcfa64fd675e",
+  "withdrawn_package_http": 404,
+  "withdrawal": {
+    "codex": {
+      "new_export_denied": true,
+      "existing_copy_matches": true
+    },
+    "claude-code": {
+      "new_export_denied": true,
+      "existing_copy_matches": true
+    }
+  },
+  "elapsed_seconds": 8.83
+}

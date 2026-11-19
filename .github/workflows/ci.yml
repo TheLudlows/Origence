@@ -73,7 +73,9 @@ jobs:
       - name: Python tooling tests (no external model calls)
         run: python3 -m unittest discover -s tools -p 'test_*.py' -v
       - name: Python evaluation adapter tests
-        run: python3 -m unittest discover -s evals -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s evals -p 'test_*.py' -v
+          python3 -m unittest discover -s evals/pilot -p 'test_*.py' -v
   linux-native:
     needs: node-ui
     runs-on: ubuntu-24.04

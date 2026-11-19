@@ -1,0 +1,127 @@
+{
+  "status": "NOT_RUN",
+  "issue": "https://github.com/TheLudlows/Origence/issues/91",
+  "integration_sha": null,
+  "freeze_sha256": null,
+  "matrix": {
+    "P1": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "P2": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "P3": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "P4": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "P5": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "P6": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    },
+    "P7": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "failures": [],
+      "unknowns": []
+    }
+  },
+  "metrics_ref": null,
+  "restoration_checkpoint": null,
+  "cleanup_inventory_ref": null,
+  "signatures": {
+    "dba": {
+      "name": null,
+      "independent_of_implementation": null,
+      "utc": null,
+      "decision": null,
+      "scope": null,
+      "evidence_manifest_sha256": null
+    },
+    "policy_owner": {
+      "name": null,
+      "independent_of_implementation": null,
+      "utc": null,
+      "decision": null,
+      "scope": null,
+      "evidence_manifest_sha256": null
+    },
+    "independent_evaluator": {
+      "name": null,
+      "independent_of_implementation": null,
+      "utc": null,
+      "decision": null,
+      "scope": null,
+      "evidence_manifest_sha256": null
+    }
+  },
+  "remaining_blockers": [
+    "The four implementation PRs are on main 48cfa7c643b8c077ad33c55981def51979afde05. The final pilot freeze and joint mapping still need confirmation.",
+    "The formal two-scenario held-out trial awaits a sealed task set and a frozen rubric. Public client preflights are unscored.",
+    "The isolated engineering recovery checks await independent DBA review. Policy-owner and independent evaluator signatures are pending."
+  ],
+  "rule": "No overall PASS without separate prd-v0.3.A1-A7 evidence, pilot.P1-P7 checks and DBA/policy-owner/independent signatures. Number equality is not a mapping. Self-reports and offline fixtures do not qualify.",
+  "matrix_namespace": "pilot.P",
+  "prd_matrix": {
+    "A1": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A2": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A3": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A4": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A5": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A6": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    },
+    "A7": {
+      "status": "NOT_RUN",
+      "evidence_refs": [],
+      "unknowns": []
+    }
+  },
+  "prd_matrix_namespace": "prd-v0.3.A",
+  "mapping_status": "PENDING_JOINT_REVIEW",
+  "prd_metrics_ref": null,
+  "metrics_note": "metrics_ref is legacy offline preparation metrics; prd_metrics_ref must independently report adjudicated pass/fail/pending and due counts per PRD v0.3."
+}
