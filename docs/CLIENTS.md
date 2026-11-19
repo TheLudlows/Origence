@@ -83,6 +83,12 @@ Codex 使用 OpenAI provider，可用 `--codex-credential-store` 选择已有登
 
 默认关闭。每个项目使用一个由自己管理的 [Origence profile](../examples/client-hook.profile.json)。
 在项目外的私有目录保存副本。Unix 上目录设为 `0700`、文件设为 `0600`，Windows 上使用仅当前用户可读写的目录和 ACL。
+Windows 版本不会创建、收紧或检查 DACL；已有宽权限目录或文件不会被程序拒绝。
+这是调用方管理的前置条件，不是程序强制的权限保证。
+Windows CI 的 `tools/test_hook_acl.ps1` 仅在独立临时目录显式建立私有 DACL，
+使用合成 Hook 输入检查队列、临时文件及锁文件在失败重试/新进程后仍继承该权限。
+宽权限负例只验证测试中的 ACL 检查器，不运行 Hook，也不代表产品会拒绝宽权限。
+该检查不验证其他身份实际访问、管理员特权、真实客户端安装、事件覆盖或断电持久性。
 填入本机的项目绝对路径、服务 origin、逻辑 key UUID 和该项目专用的凭据环境变量名。
 `GET /v1/session` 或同一凭据的 MCP `context_session` 返回逻辑 `key_id`，轮换前后相同。
 将该项目的 writer 凭据通过启动环境交给客户端和下述发送器。profile 与客户端 Hook 示例均只填环境变量名或 profile 路径。
