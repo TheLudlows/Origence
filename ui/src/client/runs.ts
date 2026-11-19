@@ -285,6 +285,49 @@ function archivedPdf(value: unknown): value is ArchivedPdfReference {
     Number.isSafeInteger(item.reference.asset_version) && item.reference.asset_version > 0 && pdfLocator(item.locator);
 }
 
+function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
+  const notice = el("div", "muted");
+  notice.setAttribute("role", "status");
+  notice.setAttribute("aria-atomic", "true");
+  const result = el("div");
+  let pending = false;
+  const load = button("获取此处的固定前缀摘要", async () => {
+    if (pending || signal.aborted) return;
+    pending = true;
+    // Remain focusable while the event's own request is in flight.
+    load.setAttribute("aria-disabled", "true");
+    result.replaceChildren();
+    notice.className = "muted";
+    notice.textContent = "正在读取固定前缀摘要…";
+    try {
+      const prefix = await api.get<{
+        run_id: string;
+        through_sequence: number;
+        digest: string;
+      } | null>(`/v1/runs/${encodeURIComponent(runId)}/prefix?through_sequence=${sequence}`, signal);
+      if (signal.aborted) return;
+      if (prefix?.run_id !== runId.toLowerCase() || prefix.through_sequence !== sequence ||
+          typeof prefix.digest !== "string" || !/^[0-9a-f]{64}$/.test(prefix.digest)) {
+        throw new Error("固定前缀响应与当前 Run 或事件不一致");
+      }
+      result.replaceChildren(code({
+        run_id: prefix.run_id,
+        through_sequence: prefix.through_sequence,
+        digest: prefix.digest,
+      }));
+      notice.textContent = `已读取截至事件 ${sequence} 的固定前缀摘要。`;
+    } catch (e) {
+      if (signal.aborted) return;
+      notice.className = "error";
+      notice.textContent = e instanceof Error ? e.message : "固定前缀摘要读取失败，请重试";
+    } finally {
+      pending = false;
+      load.removeAttribute("aria-disabled");
+    }
+  });
+  return el("div", "", load, notice, result);
+}
+
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
   const assessments = el("div");
@@ -295,7 +338,11 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     details = el("div"),
     summary = el("p", "muted"),
     error = el("div");
+  let selected: AbortController | undefined;
   const selectEvent = (event: RunEvent) => {
+    selected?.abort();
+    selected = new AbortController();
+    const selectionSignal = AbortSignal.any([ctx.signal, selected.signal]);
     const report = event.report,
       kind = report.kind ?? String(report.event?.kind ?? "reported");
     const eventBody = report.event ?? report;
@@ -349,19 +396,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       }
       details.append(code(ref));
     }
-    details.append(
-      button("获取此处的固定前缀摘要", async () => {
-        try {
-          const prefix = await api.get(
-            `/v1/runs/${id}/prefix?through_sequence=${event.sequence}`,
-            ctx.signal,
-          );
-          details.append(code(prefix));
-        } catch (e) {
-          message(error, e);
-        }
-      }),
-    );
+    details.append(fixedPrefix(id, event.sequence, selectionSignal));
     timeline
       .querySelectorAll("button")
       .forEach((b) =>
@@ -412,6 +447,8 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       if (ctx.signal.aborted) return;
       events.length = 0;
       after = 0;
+      selected?.abort();
+      selected = undefined;
       timeline.replaceChildren();
       details.replaceChildren();
       assessments.replaceChildren();
