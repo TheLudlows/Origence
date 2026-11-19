@@ -64,6 +64,13 @@ committed/lexical/vector 进度、失败与恢复标志。配置还记录核对�
 过滤值、正文、URL、密钥或原始后端错误；未知/未收到字段保持 null。畸形或关联不符的
 后端诊断拒绝使用。上下文内容与引用的确定性不包含各次调用变化的标识和耗时。
 
+EvidenceBundle 的 `retrieval` 可选带 `context_query_embedding`，仅记录该次 Origence
+上下文查询向量化的输入用量。字段含 `model_config_sha256`（已配置 embedding profile 的摘要）
+与 `provider_reported_prompt_tokens`（模型端响应 `usage.prompt_tokens` 的无符号 32 位整数）。
+模型端明确返回 0 时保留 0；缺失、无效或无可用响应时为 null，不能用 `total_tokens`、
+输出 Token 或 UTF-8 字节补算。字段不存在表示没有这条观察，例如纯关键词查询或旧记录。
+总览、Agent 整轮用量和成本不以该数据推算。独立上下文预览可以返回观察，但不附加到 Run。
+
 `POST /v1/runs/{id}/context` 将成功诊断与精确 bundle 摘要一起写入私有 Run；
 通过认证、归属和输入校验后发生的准备失败记录 `context_preparation_failed`，并标为
 server_observed。首次成功时另存私有上下文快照；相同请求重放先检查事件和请求摘要，

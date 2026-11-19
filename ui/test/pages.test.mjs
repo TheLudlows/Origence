@@ -171,6 +171,12 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       });
     }
     if (path.pathname === `/api/v1/runs/${ids.run}`) {
+      const embeddingUsage = (tokens) => ({
+        context_query_embedding: {
+          model_config_sha256: "a".repeat(64),
+          provider_reported_prompt_tokens: tokens,
+        },
+      });
       const trace = response({
         run: { run_id: ids.run, summary: "fixture task" },
         events: [
@@ -181,6 +187,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
             report: {
               kind: "context_prepared",
               reporter: "server",
+              retrieval: embeddingUsage(0),
               citations: [
                 {
                   type: "asset_chunk",
@@ -194,14 +201,16 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
             references: [],
           },
           ...[
-            ["server_observed", "server", "context_preparation_failed", "not_prepared"],
-            ["reported", "client", "result_reported", undefined],
+            ["server_observed", "server", "context_preparation_failed", "not_prepared", embeddingUsage(null)],
+            ["reported", "client", "result_reported", undefined, embeddingUsage(42)],
             ["future_origin", "client", "future_event", undefined],
-          ].map(([evidence_origin, reporter, kind, delivery_status], index) => ({
+            ["server_prepared", "server", "context_prepared", undefined, {requests: [], omitted_requests: 0}],
+            ["reported", "client", "context_prepared", undefined, embeddingUsage(42)],
+          ].map(([evidence_origin, reporter, kind, delivery_status, retrieval], index) => ({
             sequence: index + 2,
             recorded_at_ms: 1001 + index,
             evidence_origin,
-            report: { reporter, kind, delivery_status },
+            report: { reporter, kind, delivery_status, retrieval },
             references: [],
           })),
         ],
@@ -578,15 +587,27 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(document.body.textContent.includes("未确认收到或使用"));
     const events = [...document.querySelectorAll(".timeline button.event")];
     assert.deepEqual(events.map((event) => event.querySelector(".badge").textContent), [
-      "服务端准备成功", "服务端准备失败", "客户端上报", "来源未知",
+      "服务端准备成功", "服务端准备失败", "客户端上报", "来源未知", "服务端准备成功", "客户端上报",
     ]);
+    assert.ok(document.body.textContent.includes("0 Token（模型服务上报）"));
+    assert.ok(document.body.textContent.includes("查询向量配置 SHA-256：" + "a".repeat(64)));
+    assert.ok(document.body.textContent.includes("不是 Agent 或整轮用量，不计算成本"));
     events[1].click();
+    assert.ok(document.body.textContent.includes("未知（没有可用的模型服务上报）"));
+    assert.ok(!document.body.textContent.includes("0 Token（模型服务上报）"));
     assert.ok(document.body.textContent.includes("服务端观察到准备失败；未准备上下文"));
     assert.ok(document.body.textContent.includes("not_prepared"));
     events[2].click();
     assert.ok(document.body.textContent.includes("客户端上报；未经独立验证"));
+    assert.ok(!document.body.textContent.includes("上下文查询向量化 · 输入 Token"));
     events[3].click();
     assert.ok(document.body.textContent.includes("证据来源未知；不推断为服务端观察或客户端上报"));
+    events[4].click();
+    assert.ok(document.body.textContent.includes("未知（没有可用的模型服务上报）"));
+    assert.ok(!document.body.textContent.includes("查询向量配置 SHA-256："));
+    events[5].click();
+    assert.ok(!document.body.textContent.includes("上下文查询向量化 · 输入 Token"));
+    assert.ok(!document.body.textContent.includes("42 Token（模型服务上报）"));
     verificationDenied = true;
     click("刷新核验记录");
     await wait(() => document.body.textContent.includes("source unavailable"));

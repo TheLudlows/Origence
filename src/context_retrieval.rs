@@ -135,7 +135,20 @@ impl Service {
             embedding: None,
         };
         if mode != "keyword" {
-            match self.models.embed(query).await {
+            let embedding = self
+                .models
+                .embed_observed(query, |provider_reported_prompt_tokens| {
+                    if let Some(profile) = &self.models.profile {
+                        crate::retrieval_diagnostics::record_context_query_embedding(
+                            crate::retrieval_diagnostics::ContextQueryEmbedding {
+                                model_config_sha256: crate::storage::hash(profile),
+                                provider_reported_prompt_tokens,
+                            },
+                        );
+                    }
+                })
+                .await;
+            match embedding {
                 Ok(embedding) => prepared.embedding = Some(embedding),
                 Err(_) if allow_partial => {
                     prepared.effective_mode = "keyword".into();

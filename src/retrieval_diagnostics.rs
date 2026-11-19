@@ -17,6 +17,8 @@ tokio::task_local! { static OBSERVATIONS: Arc<Mutex<Collector>>; static ROUTE: E
 struct Collector {
     requests: VecDeque<QueryObservation>,
     omitted: usize,
+    #[cfg(any(feature = "local-storage", test))]
+    context_query_embedding: Option<ContextQueryEmbedding>,
 }
 
 /// Content-free backend configuration verified at collection admission.
@@ -69,11 +71,22 @@ pub struct QueryObservation {
     pub checked_config: Option<CheckedConfig>,
 }
 
+/// Input usage claimed by the configured embedding endpoint for this one
+/// Context query. Not an independent count, Agent usage, or cost.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContextQueryEmbedding {
+    pub model_config_sha256: String,
+    pub provider_reported_prompt_tokens: Option<u32>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct RetrievalDiagnostics {
     /// Most recent requests in execution order; earlier omissions are explicit.
     pub requests: Vec<QueryObservation>,
     pub omitted_requests: usize,
+    // Omit a missing observation so old prepared bundle digests still verify.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_query_embedding: Option<ContextQueryEmbedding>,
 }
 
 #[cfg(any(feature = "local-storage", test))]
@@ -84,6 +97,7 @@ pub(crate) async fn capture<F: Future>(future: F) -> (F::Output, RetrievalDiagno
     let trace = RetrievalDiagnostics {
         requests: observations.requests.drain(..).collect(),
         omitted_requests: observations.omitted,
+        context_query_embedding: observations.context_query_embedding.take(),
     };
     (result, trace)
 }
@@ -91,6 +105,14 @@ pub(crate) async fn capture<F: Future>(future: F) -> (F::Output, RetrievalDiagno
 #[cfg(any(feature = "local-storage", test))]
 pub(crate) async fn in_route<F: Future>(route: EvidenceRoute, future: F) -> F::Output {
     ROUTE.scope(route, future).await
+}
+
+#[cfg(feature = "local-storage")]
+pub(crate) fn record_context_query_embedding(entry: ContextQueryEmbedding) {
+    let _ = OBSERVATIONS.try_with(|collector| {
+        let mut data = collector.lock().unwrap_or_else(|p| p.into_inner());
+        data.context_query_embedding = Some(entry);
+    });
 }
 
 pub(crate) fn record(entry: QueryObservation) {
@@ -191,6 +213,15 @@ impl BackendQuery {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn earlier_diagnostics_serialize_identically_for_prepared_bundle_digest() {
+        let earlier = r#"{"requests":[],"omitted_requests":0}"#;
+        let parsed: RetrievalDiagnostics = serde_json::from_str(earlier).unwrap();
+        assert!(parsed.context_query_embedding.is_none());
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), earlier);
+    }
+
     #[tokio::test]
     async fn overlapping_requests_remain_isolated_and_overflow_is_explicit() {
         let one = capture(async {
