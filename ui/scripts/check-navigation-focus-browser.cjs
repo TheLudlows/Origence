@@ -13,6 +13,55 @@ async function listen(server, port = 0) {
 const overviewStatus = '合成创建量暂不可用';
 const isFocused = (control) => control.evaluate((node) => document.activeElement === node);
 
+async function connectOverview(page, origin) {
+  await page.goto(origin + '/#overview');
+  await page.getByLabel('API key').fill('synthetic-key');
+  await page.getByRole('button', { name: '连接工作空间' }).press('Enter');
+}
+
+async function checkResponsiveNavigation(page, width) {
+  const main = page.getByRole('main');
+  const nav = page.getByRole('navigation', { name: '主导航' });
+  const theme = page.getByRole('button', { name: '切换明暗主题' });
+  const exit = page.getByRole('button', { name: '退出', exact: true });
+  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '上下文工作台'];
+  const buttons = labels.map((label) => nav.getByRole('button', { name: new RegExp(label + '$') }));
+  const expectLayout = async () => {
+    const navigation = await nav.boundingBox();
+    const header = await page.locator('.topbar').boundingBox();
+    assert.ok(navigation && header);
+    if (width === 736) assert.ok(navigation.x + navigation.width <= header.x, 'navigation belongs beside the workspace');
+    else assert.ok(navigation.y + navigation.height <= header.y, 'navigation belongs above the workspace');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
+  };
+  const step = async (key, control) => {
+    await page.keyboard.press(key);
+    assert.equal(await isFocused(control), true, `Focus after ${key}: ${await control.innerText()}`);
+    assert.ok(await control.evaluate((node) => {
+      const { left, right, top, bottom } = node.getBoundingClientRect();
+      return node.matches(':focus-visible') && getComputedStyle(node).outlineStyle === 'solid' &&
+        left >= 0 && right <= innerWidth && top >= 0 && bottom <= innerHeight;
+    }), `Visible focus after ${key}: ${await control.innerText()}`);
+  };
+
+  await main.getByRole('heading', { name: '运行总览', exact: true }).waitFor();
+  await main.getByText('新建运行 3 条', { exact: true }).waitFor();
+  assert.equal(await isFocused(main), true);
+  assert.equal(await buttons[0].getAttribute('aria-current'), 'page');
+  await expectLayout();
+  for (const control of [theme, exit, ...buttons.toReversed()]) await step('Shift+Tab', control);
+  for (const control of [...buttons.slice(1), exit, theme]) await step('Tab', control);
+  await step('Shift+Tab', exit);
+  await step('Shift+Tab', buttons.at(-1));
+  await page.keyboard.press('Enter');
+  await main.getByRole('heading', { name: '上下文工作台', exact: true }).waitFor();
+  assert.equal(await isFocused(main), true);
+  assert.equal(await buttons.at(-1).getAttribute('aria-current'), 'page');
+  assert.equal(await nav.locator('[aria-current="page"]').count(), 1);
+  await step('Tab', main.getByLabel('任务与查询'));
+  await expectLayout();
+}
+
 async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCount) {
   const trend = page.locator('section').filter({ has: page.getByRole('heading', { name: '运行创建趋势' }) });
   const range = trend.getByRole('combobox', { name: '统计范围' });
@@ -181,9 +230,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
         if (new URL(request.url()).pathname === '/api/v1/runs/overview') overviewRequests++;
       });
       const receiveInitial = holdOverview();
-      await page.goto(origin + '/#overview');
-      await page.getByLabel('API key').fill('synthetic-key');
-      await page.getByRole('button', { name: '连接工作空间' }).press('Enter');
+      await connectOverview(page, origin);
 
       const nav = (name) => page.getByRole('navigation').getByRole('button', { name });
       const expectMain = async (title) => {
@@ -255,6 +302,16 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
       assert.equal(await page.evaluate(() => document.activeElement.textContent.includes('版本无效')), true);
       console.log('PASS ' + width + 'px: route focus, delayed response, same-route reload, Back/Forward, dialog names, Escape/close focus return, invalid routes, no viewport overflow');
       await page.close();
+    }
+    for (const width of [736, 375]) {
+      for (const colorScheme of ['light', 'dark']) {
+        const page = await browser.newPage({ viewport: { width, height: 768 }, colorScheme });
+        page.setDefaultTimeout(4000);
+        await connectOverview(page, origin);
+        await checkResponsiveNavigation(page, width);
+        console.log(`PASS ${width}px ${colorScheme}: responsive navigation, Tab order in both directions, route landing and visible focus`);
+        await page.close();
+      }
     }
   } finally {
     await browser?.close();
