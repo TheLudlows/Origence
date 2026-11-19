@@ -339,7 +339,12 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     summary = el("p", "muted"),
     error = el("div");
   let selected: AbortController | undefined;
+  let selectedSequence: number | undefined;
+  let verification: AbortController | undefined;
+  let loading = false;
   const selectEvent = (event: RunEvent) => {
+    if (selectedSequence === event.sequence) return;
+    selectedSequence = event.sequence;
     selected?.abort();
     selected = new AbortController();
     const selectionSignal = AbortSignal.any([ctx.signal, selected.signal]);
@@ -406,8 +411,22 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         ),
       );
   };
+  const eventRow = (event: RunEvent) => {
+    const kind = event.report.kind ?? String(event.report.event?.kind ?? "reported");
+    const row = button("", () => selectEvent(event), "event");
+    row.dataset.sequence = String(event.sequence);
+    row.setAttribute("aria-pressed", "false");
+    row.append(
+      el("span", "event-index", event.sequence),
+      el("div", "", el("strong", "", kind), el("small", "muted", date(event.recorded_at_ms))),
+      badge(eventOrigin(event)[0]),
+    );
+    return row;
+  };
   const load = async () => {
-    more.disabled = true;
+    if (loading || ctx.signal.aborted) return;
+    loading = true;
+    more.setAttribute("aria-disabled", "true");
     try {
       const value = await api.get<Trace>(
         `/v1/runs/${encodeURIComponent(id)}?after=${after}&limit=50`,
@@ -415,40 +434,40 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       );
       if (ctx.signal.aborted) return;
       summary.textContent = value.run.summary;
+      const firstPage = events.length === 0;
       events.push(...value.events);
       after = value.next_after ?? after;
       error.replaceChildren();
       showCoverage(declarations, events, value.next_after !== null);
       coverage.hidden = false;
-      timeline.replaceChildren(
-        ...events.map((event) => {
-          const kind =
-            event.report.kind ?? String(event.report.event?.kind ?? "reported");
-          const row = button("", () => selectEvent(event), "event");
-          row.dataset.sequence = String(event.sequence);
-          row.append(
-            el("span", "event-index", event.sequence),
-            el(
-              "div",
-              "",
-              el("strong", "", kind),
-              el("small", "muted", date(event.recorded_at_ms)),
-            ),
-            badge(eventOrigin(event)[0]),
-          );
-          return row;
-        }),
-      );
+      const rows = value.events.map(eventRow);
+      if (firstPage) timeline.replaceChildren(...rows);
+      else timeline.append(...rows);
       if (!events.length)
         timeline.append(empty("暂无已记录事件", "未上报的活动未知。"));
-      if (events[0]) selectEvent(events[0]);
+      if (selectedSequence === undefined && events[0]) selectEvent(events[0]);
+      if (events.length && !verification) {
+        verification = new AbortController();
+        const signal = AbortSignal.any([ctx.signal, verification.signal]);
+        void verificationPanel(assessments, id, { ...ctx, signal });
+      }
+      const moveFocus = value.next_after === null && document.activeElement === more;
       more.hidden = value.next_after === null;
+      if (moveFocus) {
+        (rows[0] ?? timeline.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+          ?? back).focus();
+      }
     } catch (e) {
       if (ctx.signal.aborted) return;
+      const focused = document.activeElement;
+      const restoreFocus = [timeline, details, assessments].some((section) => section.contains(focused));
       events.length = 0;
       after = 0;
       selected?.abort();
       selected = undefined;
+      selectedSequence = undefined;
+      verification?.abort();
+      verification = undefined;
       timeline.replaceChildren();
       details.replaceChildren();
       assessments.replaceChildren();
@@ -456,16 +475,19 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       coverage.hidden = true;
       summary.textContent = "";
       message(error, e);
+      if (restoreFocus) more.focus();
     } finally {
-      more.disabled = false;
+      loading = false;
+      more.removeAttribute("aria-disabled");
     }
   };
   const more = button("加载后续事件", load);
+  const back = button("返回运行列表", () => ctx.navigate("runs"));
   root.append(
     heading(
       "Run 详情",
       id,
-      button("返回运行列表", () => ctx.navigate("runs")),
+      back,
     ),
     summary,
     el(
@@ -484,7 +506,6 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     error,
   );
   await load();
-  if (events.length && !ctx.signal.aborted) await verificationPanel(assessments, id, ctx);
 }
 
 // Independent DTO: external claims never create an authenticated event role.
