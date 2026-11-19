@@ -1,6 +1,6 @@
 # Origence · 当前进度
 
-更新于 2026-11-19，整合基线为 main [`e663c3a`](https://github.com/TheLudlows/Origence/commit/e663c3a723262450b639680752a1e10ed69a43f8)。
+更新于 2026-11-19，整合基线为 main [`2094f81`](https://github.com/TheLudlows/Origence/commit/2094f81c990aaf7d69d4ff09295c1a2a837c4ba1)。
 Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。首版目标见[产品路线图](ROADMAP.md)与[架构规划](design/agent-data-foundation.md)。
 
 AML 评测协议的 HTTP 入口与启动开关已移除。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。

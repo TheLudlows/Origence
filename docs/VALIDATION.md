@@ -5,6 +5,12 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-19 · #92 与主干 #108 整合
+
+整合主干 `2094f81c990aaf7d69d4ff09295c1a2a837c4ba1`。24 项离线试点测试与公开合成评分 CLI 冒烟通过。重复评分结果逐字节一致，评分拒绝同 split 错批、准备批、空冻结模板和公开演练记录。两种评分模式均为四组，每组 8 个任务、32 个核验项。
+
+#108 的四项 CI 在 `96fb05052ae70eca63ae5b8ad1fba72abef84b7f` 通过。整合后的 #92 以其自身提交的 CI 为准。真实客户端、模型、正式试点及独立签认仍待验证。[#108 CI](https://github.com/TheLudlows/Origence/actions/runs/44439456768)
+
 ## 2026-11-19 · #92 与主干 #106 整合
 
 整合主干 `533658b4f378228f888c1c9b27b5d9b119e19c6b`。24 项离线试点测试与公开合成 CLI smoke 通过。
@@ -33,6 +39,14 @@ MCP schema 的 3 项 Python 回归通过，三份接入示例和两份脱敏夹�
 继承私有父目录 ACL 的常规目录创建调用。Linux 重新运行格式、全目标 Clippy、五项 Hook、
 两项 MCP/Run 定向测试及上述聚合回归，结果均通过。
 [首轮 Windows CI 日志](https://github.com/TheLudlows/Origence/actions/runs/44326867155/job/134880390115)
+
+2026-11-19，基于主干 `e663c3a723262450b639680752a1e10ed69a43f8`，修正并发夹具对队列锁的断言。
+#92 的 Windows CI 中，八个线程同时提交同一事件，四个线程在 75 毫秒的等待预算内未拿到锁，
+触发 `hook queue busy`。夹具现在要求恰好一条入队，锁忙的提交在竞争结束后必须去重，
+且主动持锁时另一条事件不会修改队列。原有发送器锁隔离与队列容量断言继续执行。
+Linux Rust 1.98.0 的格式检查、全目标 Clippy、5 项 Hook 和 2 项 MCP/Run 定向回归通过。
+`cargo test --offline --locked -j 2` 共 455 项通过，8 项需要真实 AnySeek 的既有用例忽略。
+[原 Windows CI 日志](https://github.com/TheLudlows/Origence/actions/runs/44436948640/job/135268079885)
 
 当前证据来自本地夹具。真实 Codex 和 Claude Code 的 Hook 加载、实际事件及标识覆盖、Windows 文件行为、
 真实模型和正式试点仍待验收。Claude Code 缺少可靠的整轮用户中断信号，无关联 ID 的事件会跳过。
