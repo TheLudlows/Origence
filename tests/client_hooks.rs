@@ -56,6 +56,16 @@ impl HookFixture {
         Profile::load(&self.config).unwrap().unwrap()
     }
 
+    fn cli(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        command
+            .current_dir(&self.project)
+            .env_remove("ORIGENCE_TEST_HOOK_KEY")
+            .args(["client-hook", "--profile"])
+            .arg(&self.config);
+        command
+    }
+
     fn queue_dir(&self) -> PathBuf {
         self.config.with_file_name("project.json.queue")
     }
@@ -215,22 +225,22 @@ async fn client_hooks_opt_in_and_project_boundary() {
 
     // Exercise the public CLI without any user credential or valid hook stdin.
     fixture.write_config(json!({"server_url": peer.base}));
-    let cli = || {
-        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_origence"));
-        command
-            .current_dir(&fixture.project)
-            .env_remove("ORIGENCE_TEST_HOOK_KEY")
-            .args(["client-hook", "--profile"])
-            .arg(&fixture.config);
-        command
-    };
-    let capture = cli()
+    let capture = fixture
+        .cli()
         .args(["capture", "--client", "codex"])
         .output()
         .unwrap();
     assert!(capture.status.success());
     assert!(capture.stderr.is_empty());
-    assert!(cli().arg("flush").output().unwrap().status.success());
+    assert!(
+        fixture
+            .cli()
+            .arg("flush")
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
     assert!(!fixture.queue_dir().exists());
 
     fixture.configure(&peer.base, peer.key, &["codex"]);
@@ -290,7 +300,8 @@ async fn client_hooks_opt_in_and_project_boundary() {
 
     use std::io::{Read, Write};
     use std::process::Stdio;
-    let mut child = cli()
+    let mut child = fixture
+        .cli()
         .args(["capture", "--client", "codex"])
         .env("ORIGENCE_TEST_HOOK_KEY", TOKEN)
         .stdin(Stdio::piped())
@@ -313,7 +324,8 @@ async fn client_hooks_opt_in_and_project_boundary() {
     assert_eq!(fixture.queue()["pending"].as_array().unwrap().len(), 1);
     assert_eq!(peer.log.lock().unwrap().sessions, 0);
 
-    let identity = cli()
+    let identity = fixture
+        .cli()
         .args([
             "run-id",
             "--client",
@@ -326,7 +338,7 @@ async fn client_hooks_opt_in_and_project_boundary() {
         .output()
         .unwrap();
     let identity: Value = serde_json::from_slice(&identity.stdout).unwrap();
-    let mut sender = tokio::process::Command::from(cli());
+    let mut sender = tokio::process::Command::from(fixture.cli());
     let sent = sender
         .arg("flush")
         .env("ORIGENCE_TEST_HOOK_KEY", TOKEN)
@@ -350,18 +362,52 @@ async fn client_hooks_connection_refused_then_sender_restart() {
         fixture.enqueue(Client::ClaudeCode, TOKEN, "stop"),
         Capture::Queued
     );
-    let original = fixture.queue();
-    assert_eq!(
-        fixture.profile().flush(TOKEN.into()).await.unwrap().blocked,
-        Some("host_unavailable")
-    );
-    assert_eq!(fixture.queue(), original);
+    let queue_path = fixture.queue_dir().join("queue-v1.json");
+    let original = fs::read(&queue_path).unwrap();
+    let original_state: Value = serde_json::from_slice(&original).unwrap();
+    let event_id = &original_state["pending"][0]["event_id"];
+    let flush = || {
+        let mut command = tokio::process::Command::from(fixture.cli());
+        command
+            .arg("flush")
+            .env("ORIGENCE_TEST_HOOK_KEY", TOKEN)
+            .kill_on_drop(true);
+        command
+    };
+    let offline = flush().output().await.unwrap();
+    assert!(offline.status.success(), "{offline:?}");
+    let report: Value = serde_json::from_slice(&offline.stdout).unwrap();
+    assert_eq!(report["blocked"], "host_unavailable");
+    assert_eq!(fs::read(&queue_path).unwrap(), original);
+
+    let gate = Arc::new(Gate::default());
+    peer.log.lock().unwrap().gate = Some(gate.clone());
     peer.serve(socket.listen(16).unwrap());
-    assert_eq!(fixture.profile().flush(TOKEN.into()).await.unwrap().sent, 1);
+    let mut interrupted = flush().spawn().unwrap();
+    tokio::select! {
+        () = gate.entered.notified() => {}
+        outcome = interrupted.wait() => panic!("sender exited before the peer received the append: {outcome:?}"),
+    }
+    assert_eq!(&peer.log.lock().unwrap().appends[0].1["event_id"], event_id);
+    // The peer has received the append but cannot return the receipt until released.
+    interrupted.kill().await.unwrap();
+    assert!(!interrupted.wait().await.unwrap().success());
+    gate.resume.notify_one();
+    assert_eq!(fs::read(&queue_path).unwrap(), original);
+
+    let restarted = flush().output().await.unwrap();
+    assert!(restarted.status.success(), "{restarted:?}");
+    let report: Value = serde_json::from_slice(&restarted.stdout).unwrap();
+    assert_eq!(report["sent"], 1);
+    assert_eq!(report["blocked"], Value::Null);
     assert_eq!(
-        peer.log.lock().unwrap().appends[0].1["event_id"],
-        original["pending"][0]["event_id"]
+        fixture.queue(),
+        json!({"pending": [], "acknowledged": [event_id]})
     );
+    let log = peer.log.lock().unwrap();
+    assert_eq!(log.appends.len(), 2);
+    assert_eq!(log.appends[0], log.appends[1]);
+    assert_eq!(log.append_bodies[0], log.append_bodies[1]);
 }
 
 #[tokio::test]
