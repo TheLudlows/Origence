@@ -1646,3 +1646,33 @@ NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
 
 GitHub CI 的 `node-ui` 运行 `npm test`，包括构建及 Node 测试。Chromium 焦点脚本按
 上述命令在本地单独执行；`node-ui` 的结果只涵盖其实际运行的构建及 Node 测试。
+
+## 2026-11-19 — #76 上下文知识的固定版本与原文字节核验
+
+基于 main `1c5e00297b5074a420acfcf70a84db103ab38a86`。基线 Chromium 可以从上下文工作台
+打开携带版本号的资产链接，但不能高亮普通 Text/Markdown 知识证据的原文。核验时沿用
+来源事件与原始文件的既有 HTTP 权限，只在 `source-ranges-v1` 的 UTF-8 字节切片与证据
+文字一致时高亮。区间切断字符或引文不一致时显示提示。资产链接继续读取引用中的版本号。
+
+- Linux，Node 24.22.1，Playwright 1.62.1 和 Chromium 156.0.8078.79 headless。
+  构建后的 UI 经 Node relay 访问 loopback 合成 HTTP 夹具。主干在等待内联文档高亮时失败，
+  修复后两轮通过。测试在当前版已有 v2 时打开 v1，并检查内联与上传来源的非零字节范围、
+  中文、emoji、组合字符、UTF-8 BOM、两种拒绝高亮情形及 reader 不请求原文。
+- UI 类型检查、20 项 UI 测试、严格全目标全特性 Clippy、Rust 格式检查通过。
+  既有资产页签与私有 Run PDF 的合成 Chromium 回归通过。此次知识来源核验只覆盖
+  Text/Markdown，PDF 页内定位仍以原 Run 验证记录为准。
+- 另外用上述版本 Chromium、构建后的 Node UI、Rust 1.98.0 构建的同一代码和 CI
+  钉住的 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`（Rust 1.99.1）联验通过。
+  内联 Text 与上传 Markdown 分别使用 fresh SQLite/AnySeek、临时 workspace 和合成文档。
+  浏览器预览 v1 后通过真实 API 发布 v2；v1 证据来自实际 `/v1/context`，其非零范围从
+  字节 2400 开始。核验高亮精确匹配中文、emoji 和组合字符；点击证据后读取 v1，正文
+  无 v2 内容。未拦截 HTTP。角色和异常区间的断言来自上面的合成 HTTP 回归。
+
+使用上文相同的 UI 构建和 Playwright 安装方式，从仓库根目录复跑浏览器验证。
+
+```sh
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-context-knowledge-browser.cjs
+```
+
+实际读屏、实体触屏未执行。真实产品客户端、模型及正式试点保持暂停。
