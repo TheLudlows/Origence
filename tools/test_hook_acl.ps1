@@ -84,6 +84,9 @@ try {
         key_env = 'ORIGENCE_ACL_TEST_KEY'
     } | ConvertTo-Json | Set-Content -LiteralPath $profile -Encoding utf8NoBOM
     Assert-PrivateAcl $profile
+    $preflight = Join-Path $PSScriptRoot 'check_hook_acl.ps1'
+    $check = & $preflight -PrivateRoot $root -ProfilePath $profile | ConvertFrom-Json
+    if ($check.queue -ne 'absent') { throw 'Expected preflight without a queue.' }
     $events = Get-Content (Join-Path $PSScriptRoot '../tests/fixtures/client-hooks/codex.json') -Raw | ConvertFrom-Json -AsHashtable
     $events.start.cwd = $project
     $events.stop.cwd = $project
@@ -101,6 +104,8 @@ try {
     $result = Invoke-Hook 'capture' ($events.stop | ConvertTo-Json -Depth 20 -Compress)
     if (-not $result.Err.Contains('cannot publish hook queue')) { throw 'Expected controlled rename failure.' }
     Assert-PrivateAcl $staging
+    $check = & $preflight -PrivateRoot $root -ProfilePath $profile | ConvertFrom-Json
+    if ($check.queue -ne 'checked') { throw 'Expected staging preflight.' }
     Assert-PrivateAcl $state
     if ([System.IO.File]::ReadAllText($state) -ne $before) { throw 'Failed rename altered published state.' }
     $held.Dispose(); $held = $null
@@ -116,6 +121,24 @@ try {
     if ([System.IO.File]::ReadAllText($state) -ne $before) { throw 'Offline send changed pending bytes.' }
     if ($before.Contains('FIXTURE_PRIVATE') -or $before.Contains('fixture-only-acl-token')) { throw 'Unexpected sensitive fixture field in spool.' }
 
+    $snapshot = @{}
+    foreach ($path in @($profile, $state)) {
+        $snapshot[$path] = @((Get-FileHash -LiteralPath $path).Hash, (Get-Acl -LiteralPath $path).Sddl)
+    }
+    $check = & $preflight -PrivateRoot $root -ProfilePath $profile | ConvertFrom-Json
+    if ($check.status -ne 'SUPPORTED_ACL_SNAPSHOT') { throw 'Expected supported ACL snapshot.' }
+    foreach ($path in $snapshot.Keys) {
+        if ((Get-FileHash -LiteralPath $path).Hash -ne $snapshot[$path][0] -or
+            (Get-Acl -LiteralPath $path).Sddl -ne $snapshot[$path][1]) { throw 'Preflight modified fixture.' }
+    }
+    # Standalone preflight rejects unknown entries without touching them.
+    $unknown = Join-Path $queue 'unknown.txt'
+    [System.IO.File]::WriteAllText($unknown, 'fixture-only')
+    $rejected = $false
+    try { & $preflight -PrivateRoot $root -ProfilePath $profile | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Preflight accepted unknown queue entry.' }
+    Remove-Item -LiteralPath $unknown
+
     # Empty detector control only: no profile, Hook invocation, credential or queued data here.
     $control = Join-Path $root 'empty-detector-control'
     [void][System.IO.Directory]::CreateDirectory($control)
@@ -126,6 +149,31 @@ try {
     $rejected = $false
     try { Assert-PrivateAcl $control } catch { $rejected = $true }
     if (-not $rejected) { throw 'ACL assertion failed to detect the wider empty control.' }
+    $controlProfile = Join-Path $control 'disabled.json'
+    [System.IO.File]::WriteAllText($controlProfile, '{"enabled":false}')
+    $rejected = $false
+    try { & $preflight -PrivateRoot $root -ProfilePath $controlProfile | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Preflight accepted wider parent ACL.' }
+    # Directory junction is test-only, outside the real profile path; no Hook runs here.
+    $junction = Join-Path $root 'profile-link'
+    [void](New-Item -ItemType Junction -Path $junction -Target $profiles)
+    try {
+        $rejected = $false
+        try { & $preflight -PrivateRoot $root -ProfilePath (Join-Path $junction 'project.json') | Out-Null } catch { $rejected = $true }
+        if (-not $rejected) { throw 'Preflight accepted a junction ancestor.' }
+    } finally { [System.IO.Directory]::Delete($junction) }
+    $danglingProfile = Join-Path $profiles 'dangling.json'
+    [System.IO.File]::WriteAllText($danglingProfile, '{"enabled":false}')
+    $target = Join-Path $root 'removed-junction-target'
+    [void][System.IO.Directory]::CreateDirectory($target)
+    $danglingQueue = $danglingProfile + '.queue'
+    [void](New-Item -ItemType Junction -Path $danglingQueue -Target $target)
+    [System.IO.Directory]::Delete($target)
+    try {
+        $rejected = $false
+        try { & $preflight -PrivateRoot $root -ProfilePath $danglingProfile | Out-Null } catch { $rejected = $true }
+        if (-not $rejected) { throw 'Preflight treated dangling queue junction as absent.' }
+    } finally { [System.IO.Directory]::Delete($danglingQueue) }
     Write-Output 'PASS: caller-managed private DACL inherited by synthetic Hook queue, staging and locks across retry/restart; ACL detector rejects empty wider control. Product ACL enforcement, second-user access and real clients NOT_TESTED.'
 } finally {
     if ($held) { $held.Dispose() }
