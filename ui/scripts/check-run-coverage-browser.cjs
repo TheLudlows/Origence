@@ -9,6 +9,11 @@ const empty = { run_id: "55555555-5555-4555-8555-555555555555", summary: "合成
 const unknown = "已加载事件中未见采集声明，覆盖未知";
 const pageResult = (items) => ({ items, next_after: null });
 let pageFailure;
+let nextPrefixReply;
+const prefixRequests = [];
+const runPrefix = (sequence) => ({
+  run_id: populated.run_id, through_sequence: sequence, digest: String(sequence).repeat(64),
+});
 
 const upstream = createServer((req, res) => {
   const url = new URL(req.url, "http://fixture.invalid");
@@ -22,6 +27,16 @@ const upstream = createServer((req, res) => {
     return send({ id: populated.run_id, workspace_id: empty.run_id, role: "reader" });
   if (url.pathname === "/v1/runs") return send(pageResult([populated, empty]));
   if (url.pathname === `/v1/runs/${populated.run_id}/verifications`) return send(pageResult([]));
+  if (url.pathname === `/v1/runs/${populated.run_id}/prefix`) {
+    const sequence = Number(url.searchParams.get("through_sequence"));
+    prefixRequests.push(sequence);
+    if (nextPrefixReply) {
+      const hold = nextPrefixReply;
+      nextPrefixReply = undefined;
+      return hold((payload, status) => { if (!res.destroyed) send(payload, status); });
+    }
+    return send(runPrefix(sequence));
+  }
   if (url.pathname === `/v1/runs/${empty.run_id}`) return send({ run: empty, events: [], next_after: null });
   if (url.pathname === `/v1/runs/${populated.run_id}`) {
     const next = url.searchParams.get("after") === "1";
@@ -40,6 +55,64 @@ async function listen(server) {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   return `http://127.0.0.1:${server.address().port}`;
+}
+
+async function checkFixedPrefix(page) {
+  const details = page.locator("section").filter({ has: page.getByRole("heading", { name: "节点与上下文证据", exact: true }) });
+  const prefix = details.getByRole("button", { name: "获取此处的固定前缀摘要" });
+  const digest = (sequence) => details.getByText(String(sequence).repeat(64), { exact: false });
+  const event = (sequence) => page.locator(`.timeline button[data-sequence="${sequence}"]`);
+  const launch = async () => {
+    const hold = Promise.withResolvers();
+    nextPrefixReply = hold.resolve;
+    const timer = setTimeout(() => hold.reject(new Error("Expected a prefix request")), 4000);
+    try {
+      const [respond] = await Promise.all([hold.promise, prefix.press("Enter")]);
+      return respond;
+    } finally {
+      clearTimeout(timer);
+      nextPrefixReply = undefined;
+    }
+  };
+
+  for (const staleStatus of [200, 403]) {
+    await event(1).press("Enter");
+    const firstRequest = (request) => request.url().includes("/prefix?through_sequence=1");
+    const settled = Promise.race([
+      page.waitForEvent("requestfinished", { predicate: firstRequest }).then(() => "finished"),
+      page.waitForEvent("requestfailed", { predicate: firstRequest }).then(() => "aborted"),
+    ]);
+    const respond = await launch();
+    await event(2).press("Enter");
+    await prefix.press("Enter");
+    await digest(2).waitFor();
+    respond(staleStatus === 200 ? runPrefix(1) : { error: { message: "旧选择拒绝" } }, staleStatus);
+    const disposition = await settled;
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    assert.equal(await event(2).getAttribute("aria-pressed"), "true");
+    assert.equal(await digest(1).count(), 0, "Late prefix must not be shown under another selected event");
+    assert.equal(await page.getByText("旧选择拒绝", { exact: true }).count(), 0, "Old failure must not alert a different event");
+    assert.equal(disposition, "aborted", "Switching events must cancel the earlier lookup");
+  }
+
+  const previousCount = prefixRequests.length;
+  const deny = await launch();
+  await details.getByRole("status").filter({ hasText: "正在读取固定前缀摘要…" }).waitFor();
+  assert.equal(await digest(2).count(), 0, "Fresh read must remove the earlier prefix while pending");
+  await prefix.evaluate((control) => control.click());
+  deny({ error: { message: "本次前缀无权读取" } }, 403);
+  await details.getByRole("status").filter({ hasText: "本次前缀无权读取" }).waitFor();
+  assert.equal(prefixRequests.length, previousCount + 1);
+  assert.equal(await digest(2).count(), 0);
+  assert.equal(await prefix.evaluate((control) => control === document.activeElement), true);
+
+  const wrong = await launch();
+  wrong(runPrefix(1), 200);
+  await details.getByRole("status").filter({ hasText: "固定前缀响应与当前 Run 或事件不一致" }).waitFor();
+  assert.equal(await digest(1).count(), 0);
+  await prefix.press("Enter");
+  await digest(2).waitFor();
+  assert.equal(await digest(2).count(), 1);
 }
 
 async function checkCoverage(page, origin) {
@@ -80,6 +153,7 @@ async function checkCoverage(page, origin) {
   assert.equal(await page.locator(".timeline button").count(), 2);
   await page.getByText(/合成声明详情/).waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
+  await checkFixedPrefix(page);
 
   await openRun(empty);
   await coverage.getByText(unknown, { exact: true }).waitFor();
@@ -106,7 +180,7 @@ async function checkCoverage(page, origin) {
       page.setDefaultTimeout(4000);
       await checkCoverage(page, origin);
       await page.close();
-      console.log(`PASS ${width}px: ordered declarations, pagination, 403, retry, Run switch, 401 logout`);
+      console.log(`PASS ${width}px: ordered declarations, fixed-prefix isolation, pagination, 403, retry, Run switch, 401 logout`);
     }
   } finally {
     await browser?.close();
