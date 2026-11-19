@@ -1,6 +1,8 @@
 #[cfg(feature = "local-storage")]
 mod catalog;
 #[cfg(feature = "local-storage")]
+mod client_hooks;
+#[cfg(feature = "local-storage")]
 mod content_storage;
 #[cfg(feature = "local-storage")]
 mod support;

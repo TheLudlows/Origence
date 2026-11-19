@@ -9,6 +9,14 @@ pub struct HostClient {
 }
 impl HostClient {
     pub fn new(base: &str, token: String) -> Result<Self> {
+        Self::with_timeout(
+            Self::parse_base(base)?,
+            token,
+            std::time::Duration::from_secs(60),
+        )
+    }
+
+    pub(crate) fn parse_base(base: &str) -> Result<reqwest::Url> {
         let base = reqwest::Url::parse(base)
             .map_err(|_| AppError::Invalid("invalid server URL".into()))?;
         let local = matches!(
@@ -23,9 +31,17 @@ impl HostClient {
         {
             return Err(AppError::Invalid("server URL requires HTTPS (HTTP allowed on loopback) and no credentials/query/fragment".into()));
         }
+        Ok(base)
+    }
+
+    pub(crate) fn with_timeout(
+        base: reqwest::Url,
+        token: String,
+        timeout: std::time::Duration,
+    ) -> Result<Self> {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(std::time::Duration::from_secs(60))
+            .timeout(timeout)
             .build()
             .map_err(anyhow::Error::from)?;
         Ok(Self { base, token, http })
