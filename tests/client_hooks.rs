@@ -12,6 +12,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Barrier, Mutex},
+    time::Duration,
 };
 use uuid::Uuid;
 
@@ -353,6 +354,7 @@ async fn client_hooks_opt_in_and_project_boundary() {
 
 #[tokio::test]
 async fn client_hooks_connection_refused_then_sender_restart() {
+    let sender_timeout = Duration::from_secs(30);
     let socket = tokio::net::TcpSocket::new_v4().unwrap();
     socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
     let peer = HttpFixture::new(socket.local_addr().unwrap());
@@ -365,7 +367,8 @@ async fn client_hooks_connection_refused_then_sender_restart() {
     let queue_path = fixture.queue_dir().join("queue-v1.json");
     let original = fs::read(&queue_path).unwrap();
     let original_state: Value = serde_json::from_slice(&original).unwrap();
-    let event_id = &original_state["pending"][0]["event_id"];
+    let queued = &original_state["pending"][0];
+    let event_id = &queued["event_id"];
     let flush = || {
         let mut command = tokio::process::Command::from(fixture.cli());
         command
@@ -374,9 +377,15 @@ async fn client_hooks_connection_refused_then_sender_restart() {
             .kill_on_drop(true);
         command
     };
-    let offline = flush().output().await.unwrap();
-    assert!(offline.status.success(), "{offline:?}");
-    let report: Value = serde_json::from_slice(&offline.stdout).unwrap();
+    let run_sender = |phase| async move {
+        let output = tokio::time::timeout(sender_timeout, flush().output())
+            .await
+            .unwrap_or_else(|_| panic!("{phase} sender timed out"))
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let report = run_sender("offline").await;
     assert_eq!(report["blocked"], "host_unavailable");
     assert_eq!(fs::read(&queue_path).unwrap(), original);
 
@@ -384,20 +393,31 @@ async fn client_hooks_connection_refused_then_sender_restart() {
     peer.log.lock().unwrap().gate = Some(gate.clone());
     peer.serve(socket.listen(16).unwrap());
     let mut interrupted = flush().spawn().unwrap();
-    tokio::select! {
-        () = gate.entered.notified() => {}
-        outcome = interrupted.wait() => panic!("sender exited before the peer received the append: {outcome:?}"),
-    }
-    assert_eq!(&peer.log.lock().unwrap().appends[0].1["event_id"], event_id);
-    // The peer has received the append but cannot return the receipt until released.
-    interrupted.kill().await.unwrap();
-    assert!(!interrupted.wait().await.unwrap().success());
+    let reached_peer = tokio::select! {
+        biased;
+        outcome = interrupted.wait() => Err(format!("sender exited before termination: {outcome:?}")),
+        () = gate.entered.notified() => Ok(()),
+        () = tokio::time::sleep(sender_timeout) => Err("sender did not reach the peer in time".into()),
+    };
+    let before_kill = interrupted.try_wait();
+    // Keep the receipt gated until the child has been killed and reaped.
+    tokio::time::timeout(sender_timeout, interrupted.kill())
+        .await
+        .expect("sender did not exit after termination")
+        .unwrap();
     gate.resume.notify_one();
+    reached_peer.unwrap();
+    assert!(before_kill.unwrap().is_none(), "sender was already stopped");
+    assert!(!interrupted.try_wait().unwrap().unwrap().success());
+    {
+        let log = peer.log.lock().unwrap();
+        assert_eq!(log.appends.len(), 1);
+        assert_eq!(json!(log.appends[0].0), queued["run_id"]);
+        assert_eq!(&log.appends[0].1["event_id"], event_id);
+    }
     assert_eq!(fs::read(&queue_path).unwrap(), original);
 
-    let restarted = flush().output().await.unwrap();
-    assert!(restarted.status.success(), "{restarted:?}");
-    let report: Value = serde_json::from_slice(&restarted.stdout).unwrap();
+    let report = run_sender("restarted").await;
     assert_eq!(report["sent"], 1);
     assert_eq!(report["blocked"], Value::Null);
     assert_eq!(
