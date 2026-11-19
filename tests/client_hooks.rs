@@ -620,14 +620,13 @@ async fn client_hooks_bound_queue_concurrent_capture_and_separate_sender_lock() 
     let profile = Arc::new(fixture.profile());
     let data = event(Client::Codex, "start", &fixture.project).to_string();
     let barrier = Barrier::new(8);
-    let mut results = std::thread::scope(|scope| {
+    let capture_start = || profile.enqueue(Client::Codex, TOKEN, &fixture.project, data.as_bytes());
+    let results = std::thread::scope(|scope| {
         let threads: Vec<_> = (0..8)
             .map(|_| {
                 scope.spawn(|| {
                     barrier.wait();
-                    profile
-                        .enqueue(Client::Codex, TOKEN, &fixture.project, data.as_bytes())
-                        .unwrap()
+                    capture_start()
                 })
             })
             .collect();
@@ -636,14 +635,44 @@ async fn client_hooks_bound_queue_concurrent_capture_and_separate_sender_lock() 
             .map(|t| t.join().unwrap())
             .collect::<Vec<_>>()
     });
-    results.retain(|capture| capture == &Capture::Queued);
-    assert_eq!(results.len(), 1);
+    let mut queued = 0;
+    for result in results {
+        match result {
+            Ok(Capture::Queued) => queued += 1,
+            Ok(Capture::Duplicate) => {}
+            Err(error) if error.to_string() == "hook queue busy" => {
+                // Every competing capture has finished. The same event must now deduplicate.
+                assert_eq!(capture_start().unwrap(), Capture::Duplicate);
+            }
+            other => panic!("unexpected concurrent capture outcome: {other:?}"),
+        }
+    }
+    assert_eq!(queued, 1);
+
+    let before = fixture.queue();
+    assert_eq!(before["pending"].as_array().unwrap().len(), 1);
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(fixture.queue_dir().join("queue.lock"))
+        .unwrap();
+    lock.try_lock().unwrap();
+    let stop = event(Client::Codex, "stop", &fixture.project).to_string();
+    let error = profile
+        .enqueue(Client::Codex, TOKEN, &fixture.project, stop.as_bytes())
+        .unwrap_err();
+    assert_eq!(error.to_string(), "hook queue busy");
+    assert_eq!(fixture.queue(), before);
+    drop(lock);
 
     let gate = Arc::new(Gate::default());
     peer.log.lock().unwrap().gate = Some(gate.clone());
     let profile = fixture.profile();
-    let sender = tokio::spawn(profile.flush(TOKEN.into()));
-    gate.entered.notified().await;
+    let mut sender = tokio::spawn(profile.flush(TOKEN.into()));
+    tokio::select! {
+        () = gate.entered.notified() => {}
+        outcome = &mut sender => panic!("sender finished before the fixture append: {outcome:?}"),
+    }
     assert_eq!(fixture.profile().flush(TOKEN.into()).await.unwrap().sent, 0);
     assert_eq!(
         fixture.enqueue(Client::Codex, TOKEN, "stop"),
