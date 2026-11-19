@@ -1661,6 +1661,12 @@ GitHub CI 的 `node-ui` 运行 `npm test`，包括构建及 Node 测试。Chromi
 - UI 类型检查、20 项 UI 测试、严格全目标全特性 Clippy、Rust 格式检查通过。
   既有资产页签与私有 Run PDF 的合成 Chromium 回归通过。此次知识来源核验只覆盖
   Text/Markdown，PDF 页内定位仍以原 Run 验证记录为准。
+- 另外用上述版本 Chromium、构建后的 Node UI、Rust 1.98.0 构建的同一代码和 CI
+  钉住的 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`（Rust 1.99.1）联验通过。
+  内联 Text 与上传 Markdown 分别使用 fresh SQLite/AnySeek、临时 workspace 和合成文档。
+  浏览器预览 v1 后通过真实 API 发布 v2；v1 证据来自实际 `/v1/context`，其非零范围从
+  字节 2400 开始。核验高亮精确匹配中文、emoji 和组合字符；点击证据后读取 v1，正文
+  无 v2 内容。未拦截 HTTP。角色和异常区间的断言来自上面的合成 HTTP 回归。
 
 使用上文相同的 UI 构建和 Playwright 安装方式，从仓库根目录复跑浏览器验证。
 
