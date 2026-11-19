@@ -1,0 +1,31 @@
+{
+  "pilot_item": "P6",
+  "status": "NOT_RUN",
+  "case_id": null,
+  "scenario": null,
+  "client": null,
+  "arm": null,
+  "run_prefix": {
+    "run_id": null,
+    "through_sequence": null,
+    "prefix_digest": null,
+    "basis_sequences": []
+  },
+  "evidence_index": {
+    "ref": null,
+    "sha256": null
+  },
+  "independent_original": {
+    "status": "NOT_RUN",
+    "ref": null,
+    "sha256": null
+  },
+  "owner_transcription": {
+    "status": "NOT_RUN",
+    "verification_id": null,
+    "receipt_ref": null,
+    "receipt_sha256": null,
+    "withdrawal_status": null
+  },
+  "unknowns": []
+}

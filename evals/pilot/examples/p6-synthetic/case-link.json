@@ -1,0 +1,34 @@
+{
+  "pilot_item": "P6",
+  "status": "NOT_RUN",
+  "case_id": "public-synthetic-p6",
+  "scenario": "expense_review",
+  "client": "codex",
+  "arm": "reuse",
+  "run_prefix": {
+    "run_id": "00000000-0000-4000-8000-000000000006",
+    "through_sequence": 2,
+    "prefix_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "basis_sequences": [
+      1,
+      2
+    ]
+  },
+  "evidence_index": {
+    "ref": "index.json",
+    "sha256": "c5c6d7fa0ecab8b2e3f366ec382165828a67749e99ee96753d539e39c376b8a0"
+  },
+  "independent_original": {
+    "status": "NOT_RUN",
+    "ref": null,
+    "sha256": null
+  },
+  "owner_transcription": {
+    "status": "NOT_RUN",
+    "verification_id": null,
+    "receipt_ref": null,
+    "receipt_sha256": null,
+    "withdrawal_status": null
+  },
+  "unknowns": []
+}

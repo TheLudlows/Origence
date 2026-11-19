@@ -39,7 +39,7 @@ python evals/pilot/pilot.py score "$held_out_observations" --freeze "$trusted_fr
 | P3 报销复核 | Codex 首做、Claude Code 复做未见题。制度负责人核对金额、重复票据、缺材料和适用制度版本。只给复核意见。 |
 | P4 更正与撤回 | 更正到 v2 后按精确引用读 v1；候选编辑后重新审阅。撤回来源后检查 get/search/context/package、关联 Run 和准备重放。分别核对新会话、缓存及受管在线重载。 |
 | P5 隔离 | 同 key 跨端归档；异 key（含管理员）读私有会话、候选和 Run 均应拒绝。验证跨 tenant/workspace 同名隔离、凭据轮换及撤权后的读取和重放。 |
-| P6 追溯 | 逐题关联输入、精确准备 bundle、实际交付、原生加载、工具、输出及独立判定。按场景、客户端和基线/复用分组，缺失观察记 UNKNOWN。 |
+| P6 追溯 | 逐题关联输入、精确准备 bundle、实际交付、原生加载、工具、输出及独立判定。按场景、客户端和基线/复用分组，已执行但缺失观察记 UNKNOWN，未执行记 NOT_RUN。[独立签认原件与 Run 核验关联](P6-EVIDENCE.md) |
 | P7 恢复 | 依下节演练停写、同版本恢复与清理。DBA、制度负责人和独立验收人分别签认。 |
 
 隔离、撤回、版本检查须零违规。Windows/Linux 分开登记；小样本报告计数和描述性差值。业务结果、证据覆盖和 Skill 加载分别核验。
