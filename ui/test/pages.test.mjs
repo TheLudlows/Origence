@@ -648,6 +648,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     const first = ["1", "codex_hook", "未采集", "客户端上报；未经独立验证"];
     assert.deepEqual(rows(), [first]);
     assert.match(panel.textContent, /整轮覆盖仍未知.*还有后续事件/u);
+    const hasVerification = () => document.body.textContent.includes("暂无外部核验记录");
+    await wait(hasVerification);
 
     coveragePageDenied = true;
     click("加载后续事件");
@@ -655,11 +657,15 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(panel.hidden, true);
     assert.deepEqual(rows(), []);
     assert.ok(!panel.textContent.includes(unknown));
+    assert.equal(hasVerification(), false);
 
     coveragePageDenied = false;
     click("加载后续事件");
     await wait(() => !panel.hidden && rows().length === 1);
     assert.ok(!document.body.textContent.includes("synthetic trace denied"));
+    await wait(hasVerification);
+    const selected = document.querySelector('.timeline [aria-pressed="true"]');
+    assert.equal(selected.dataset.sequence, "1");
     click("加载后续事件");
     await wait(() => rows().length === 4);
     assert.deepEqual(coverageCursors, ["0", "1", "0", "1"]);
@@ -671,6 +677,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(panel.querySelector("img"), null);
     assert.ok(!panel.textContent.includes("还有后续事件"));
     assert.equal(document.querySelectorAll(".timeline button.event").length, 4);
+    assert.equal(document.querySelector('.timeline [aria-pressed="true"]'), selected);
+    assert.equal(document.querySelectorAll('.timeline [aria-pressed="false"]').length, 3);
 
     holdTrace = true;
     location.hash = `#runs/${ids.run}`;
