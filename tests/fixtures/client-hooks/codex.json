@@ -1,0 +1,48 @@
+{
+  "start": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "codex-test-session",
+    "turn_id": "codex-test-turn",
+    "model": "FIXTURE_PRIVATE_MODEL",
+    "permission_mode": "default",
+    "transcript_path": "/FIXTURE_PRIVATE_TRANSCRIPT.jsonl",
+    "prompt": "FIXTURE_PRIVATE_PROMPT"
+  },
+  "shell": {
+    "hook_event_name": "PostToolUse",
+    "session_id": "codex-test-session",
+    "turn_id": "codex-test-turn",
+    "tool_name": "Bash",
+    "tool_use_id": "fixture-shell-1",
+    "tool_input": {"command": "FIXTURE_PRIVATE_ARGUMENT"},
+    "tool_response": "Wall time: 0.123 seconds\nProcess exited with code 1\nFIXTURE_PRIVATE_OUTPUT",
+    "duration_ms": 123,
+    "transcript_path": "/FIXTURE_PRIVATE_TRANSCRIPT.jsonl"
+  },
+  "mcp_error": {
+    "hook_event_name": "PostToolUse",
+    "session_id": "codex-test-session",
+    "turn_id": "codex-test-turn",
+    "tool_name": "mcp__origence__context_search",
+    "tool_use_id": "fixture-mcp-2",
+    "tool_input": {"query": "FIXTURE_PRIVATE_ARGUMENT"},
+    "tool_response": {
+      "content": [{"type": "text", "text": "FIXTURE_PRIVATE_OUTPUT"}],
+      "structuredContent": {"token": "FIXTURE_PRIVATE_CREDENTIAL"},
+      "isError": true
+    }
+  },
+  "stop": {
+    "hook_event_name": "Stop",
+    "session_id": "codex-test-session",
+    "turn_id": "codex-test-turn",
+    "stop_hook_active": false,
+    "last_assistant_message": "FIXTURE_PRIVATE_REPLY"
+  },
+  "interrupt": {
+    "hook_event_name": "Interrupt",
+    "session_id": "codex-test-session",
+    "turn_id": "codex-second-turn",
+    "permission_mode": "default"
+  }
+}

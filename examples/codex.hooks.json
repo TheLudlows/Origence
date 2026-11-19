@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/origence client-hook --profile /absolute/path/to/private/profiles/project.json capture --client codex",
+            "commandWindows": "C:/Tools/origence.exe client-hook --profile C:/Private/origence/project.json capture --client codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|mcp__origence__context_search|mcp__origence__context_get|mcp__origence__context_run_create|mcp__origence__context_run_report|mcp__origence__context_run_prepare|mcp__origence__context_run_get",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/origence client-hook --profile /absolute/path/to/private/profiles/project.json capture --client codex",
+            "commandWindows": "C:/Tools/origence.exe client-hook --profile C:/Private/origence/project.json capture --client codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/origence client-hook --profile /absolute/path/to/private/profiles/project.json capture --client codex",
+            "commandWindows": "C:/Tools/origence.exe client-hook --profile C:/Private/origence/project.json capture --client codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/origence client-hook --profile /absolute/path/to/private/profiles/project.json capture --client codex",
+            "commandWindows": "C:/Tools/origence.exe client-hook --profile C:/Private/origence/project.json capture --client codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
