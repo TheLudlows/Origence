@@ -8,7 +8,7 @@
 
 | PRD 条款与原文要求摘要 | Issue / pilot 关联 | 尚待真实证据 |
 | --- | --- | --- |
-| prd-v0.3.A1 私有会话：同逻辑 key 双端读取同一归档问答；轮换接续，独立 key 拒绝 | [#87](https://github.com/TheLudlows/Origence/issues/87)；P1/P5 | 两真实客户端同归档、独立 Run，另 key/管理员拒绝和轮换/撤销记录；不是配置注册或离线协议替代 |
+| prd-v0.3.A1 私有会话：同逻辑 key 双端读取同一归档问答；轮换接续，独立 key 拒绝 | [#87](https://github.com/TheLudlows/Origence/issues/87) · P1/P5。Windows 接入 readiness 已在 `4160fd5` 通过，覆盖双端互读、独立 Run、权限隔离、轮换与撤销。[验证记录](../../docs/VALIDATION.md#2026-11-18--87-双客户端归档互读与独立-run) | 正式试点须在最终整合提交和新库上按冻结配置复核，并由独立验收人签认。这些正式试点证据仍待采集。 |
 | prd-v0.3.A2 长期记忆：同条件已发布事实更正后新任务用更新值；不同条件仍分别定位来源 | [#90](https://github.com/TheLudlows/Origence/issues/90)；P4/P5（须补专门事实步骤） | 两环境/条件事实，只改一项；另一获权 key 实查新值、未改值与各自精确来源。现有报销金额题不能代替事实写入/筛选/分页验证 |
 | prd-v0.3.A3 知识与文档：新任务查 v2，旧 Run 读有效 v1，撤回 v1 来源后旧链接拒绝正文 | #90；P3/P4 | 原始 PDF 页与引用核对、真实入库/发布、新旧 Run 精确引用、撤回后旧链接阻断及 v2 独立有效；补更新失败旧版仍可用、并发冲突证据 |
 | prd-v0.3.A4 反馈与 Learning：归档问答、反馈、显式 Improve；已发布经验带条件，成员可召回正文，私有支持指针只属 owner | [#88](https://github.com/TheLudlows/Origence/issues/88)，#87 的显式反馈链；P2/P3/P5/P6（须补完整 Learning 步骤） | 同一真实经历→反馈→显式 Improve→发布 Learning 的来源/条件链；另一成员召回正文及私有支持指针拒绝。直接创建 Skill 候选不能替代此链 |
