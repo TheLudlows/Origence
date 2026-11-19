@@ -286,6 +286,16 @@ impl Models {
         .map_err(|e| AppError::Internal(e.into()))?
     }
     pub async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        self.embed_observed(text, |_| {}).await
+    }
+
+    /// Optionally consume the response's reported input usage without changing
+    /// embedding validation, request count, or behavior of other model callers.
+    pub(crate) async fn embed_observed(
+        &self,
+        text: &str,
+        observe: impl FnOnce(Option<u32>),
+    ) -> Result<Vec<f32>> {
         let model = self
             .embedding_model
             .as_ref()
@@ -295,7 +305,17 @@ impl Models {
                 "embeddings",
                 json!({"model":model,"input":text,"dimensions":self.dimension}),
             )
-            .await?;
+            .await;
+        // Record response usage even if the result subsequently fails vector validation.
+        // Missing/malformed usage must neither fail retrieval nor turn into a zero.
+        observe(
+            response
+                .as_ref()
+                .ok()
+                .and_then(|value| value["usage"]["prompt_tokens"].as_u64())
+                .and_then(|value| u32::try_from(value).ok()),
+        );
+        let response = response?;
         let values: Vec<f32> = serde_json::from_value(response["data"][0]["embedding"].clone())
             .map_err(|_| AppError::Unavailable("invalid embedding".into()))?;
         if values.len() != self.dimension

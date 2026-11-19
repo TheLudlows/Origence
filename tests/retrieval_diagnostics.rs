@@ -11,6 +11,225 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 #[tokio::test]
+async fn context_query_embedding_usage_is_scoped_privately_and_replayed() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    let model_calls = Arc::new(AtomicUsize::new(0));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let model_base = format!("http://{}", listener.local_addr().unwrap());
+    let handler = {
+        let model_calls = model_calls.clone();
+        move |axum::Json(body): axum::Json<Value>| {
+            let model_calls = model_calls.clone();
+            async move {
+                model_calls.fetch_add(1, Ordering::SeqCst);
+                let input = body["input"].as_str().unwrap();
+                let mut response = json!({"data":[{"embedding":[1.0,0.5,0.25]}],"unused_provider_body":"PRIVATE MODEL RESPONSE"});
+                let usage = match input {
+                    "PRIVATE QUERY known" => Some(json!(7)),
+                    "explicit zero" => Some(json!(0)),
+                    "malformed usage" => Some(json!("0")),
+                    "out of range usage" => Some(json!(u64::MAX)),
+                    "invalid vector" => {
+                        response["data"][0]["embedding"] = json!([0, 0, 0]);
+                        Some(json!(4))
+                    }
+                    _ => None,
+                };
+                response["usage"] = json!({"total_tokens":99,"completion_tokens":99});
+                if let Some(usage) = usage {
+                    response["usage"]["prompt_tokens"] = usage;
+                }
+                axum::Json(response)
+            }
+        }
+    };
+    let app = axum::Router::new().route("/embeddings", axum::routing::post(handler));
+    let model_host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let models = Models::configured(
+        model_base.clone(),
+        "private-fixture-model-key".into(),
+        Some("private-fixture-model-label".into()),
+        None,
+        3,
+    )
+    .unwrap();
+    let fingerprint = origence::storage::hash(models.profile.as_ref().unwrap());
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), models).await.unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let store = service.engine.relational();
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "query embedding usage")
+        .await
+        .unwrap();
+    let owner = store.issue_key(scope, "writer").await.unwrap();
+    let outsider = store.issue_key(scope, "admin").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = origence::api::router(service);
+    let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let client = HostClient::new(&base, owner.token).unwrap();
+    let outsider = HostClient::new(&base, outsider.token).unwrap();
+    let run = Uuid::new_v4();
+    let run_path = format!("/v1/runs/{run}");
+    let context_path = format!("{run_path}/context");
+    let get = |path: String| {
+        let client = &client;
+        async move { client.call(Method::GET, &path, None, None).await.unwrap() }
+    };
+    let prepare = |request: Value| {
+        let (client, path) = (&client, &context_path);
+        async move { client.call(Method::POST, path, Some(&request), None).await }
+    };
+    let request =
+        |query, mode| json!({"event_id":Uuid::new_v4(),"context":{"query":query,"mode":mode}});
+    let observation = |value: &Value| value["retrieval"]["context_query_embedding"].clone();
+    let expected = |tokens: Value| {
+        json!({
+            "model_config_sha256":fingerprint,
+            "provider_reported_prompt_tokens":tokens,
+        })
+    };
+
+    client
+        .call(
+            Method::POST,
+            "/v1/runs",
+            Some(&json!({"run_id":run,"summary":"Synthetic private Run"})),
+            None,
+        )
+        .await
+        .unwrap();
+    let forged = json!({
+        "event_id": Uuid::new_v4(),
+        "reporter": "client",
+        "observed_at_ms": 0,
+        "event": {
+            "kind": "context_prepared",
+            "retrieval": {"context_query_embedding":expected(json!(42))},
+        },
+    });
+    assert!(
+        client
+            .call(
+                Method::POST,
+                &format!("{run_path}/events"),
+                Some(&forged),
+                None
+            )
+            .await
+            .is_err()
+    );
+    let known = request("PRIVATE QUERY known", "hybrid");
+    assert!(
+        outsider
+            .call(Method::POST, &context_path, Some(&known), None)
+            .await
+            .is_err()
+    );
+    assert_eq!(model_calls.load(Ordering::SeqCst), 0);
+    let first = prepare(known.clone()).await.unwrap();
+    assert_eq!(
+        model_calls.load(Ordering::SeqCst),
+        1,
+        "one query embedding for all routes"
+    );
+    assert_eq!(observation(&first["bundle"]), expected(json!(7)));
+    let prefix_path = format!("{run_path}/prefix?through_sequence=1");
+    let prefix = get(prefix_path.clone()).await;
+    assert_eq!(prepare(known).await.unwrap(), first);
+    assert_eq!(get(prefix_path).await, prefix);
+    assert_eq!(
+        model_calls.load(Ordering::SeqCst),
+        1,
+        "successful replay did not call the endpoint"
+    );
+
+    let preview = client
+        .call(
+            Method::POST,
+            "/v1/context",
+            Some(&json!({"query":"explicit zero","mode":"vector"})),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(observation(&preview), expected(json!(0)));
+    assert_eq!(
+        get(run_path.clone()).await["events"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "preview does not append to a Run"
+    );
+    for (query, tokens) in [
+        ("explicit zero", json!(0)),
+        ("missing prompt usage", Value::Null),
+        ("malformed usage", Value::Null),
+        ("out of range usage", Value::Null),
+    ] {
+        let result = prepare(request(query, "vector")).await.unwrap();
+        assert_eq!(observation(&result["bundle"]), expected(tokens));
+    }
+    let model_calls_before_keyword = model_calls.load(Ordering::SeqCst);
+    let keyword = prepare(request("keyword only", "keyword")).await.unwrap();
+    assert!(
+        keyword["bundle"]["retrieval"]
+            .get("context_query_embedding")
+            .is_none()
+    );
+    assert_eq!(
+        model_calls.load(Ordering::SeqCst),
+        model_calls_before_keyword
+    );
+    assert!(matches!(
+        prepare(request("invalid vector", "vector")).await,
+        Err(origence::error::AppError::Unavailable(_))
+    ));
+
+    let trace = get(run_path.clone()).await;
+    let events = trace["events"].as_array().unwrap();
+    assert_eq!(events.len(), 7);
+    assert_eq!(observation(&events[0]["report"]), expected(json!(7)));
+    assert_eq!(observation(&events[1]["report"]), expected(json!(0)));
+    assert_eq!(observation(&events[2]["report"]), expected(Value::Null));
+    assert!(
+        events[5]["report"]["retrieval"]
+            .get("context_query_embedding")
+            .is_none()
+    );
+    let failed = &events[6];
+    assert_eq!(failed["report"]["kind"], "context_preparation_failed");
+    assert_eq!(observation(&failed["report"]), expected(json!(4)));
+    assert!(
+        outsider
+            .call(Method::GET, &run_path, None, None)
+            .await
+            .is_err()
+    );
+    let trace = trace.to_string();
+    for private in [
+        "PRIVATE QUERY",
+        "PRIVATE MODEL RESPONSE",
+        &model_base,
+        "private-fixture-model-key",
+        "private-fixture-model-label",
+    ] {
+        assert!(!trace.contains(private));
+    }
+    model_host.abort();
+    host.abort();
+}
+
+#[tokio::test]
 async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
     let dir = tempfile::tempdir().unwrap();
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();

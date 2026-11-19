@@ -66,6 +66,26 @@ independent verification of the evidence. See [API](../API.md#检索诊断).
 Query diagnostics v2 include the current embedding-space SHA256 (or null), checked
 against the admitted space on every response in addition to the analysis digest.
 
+### Context query embedding input usage
+
+An observed request to the configured embedding endpoint may contribute one
+`retrieval.context_query_embedding` to the preparation's existing retrieval
+evidence, even when the embedding or later retrieval fails. It has
+`model_config_sha256` (hash of the configured embedding profile, not proof of the
+effective model) and `provider_reported_prompt_tokens` (only an unsigned 32-bit
+integer from the endpoint's `usage.prompt_tokens`). Explicit zero remains zero.
+Unknown or unusable counts are null. Omission means no observation (for example,
+keyword mode or older evidence), not zero. The optional field is omitted when
+serializing old bundles, preserving their existing digests.
+
+This is the provider's reported input usage as observed by Origence, not an
+independent measurement, client's Agent usage, Run total, or billable amount.
+Ordinary Context previews are not attached to a Run. Only the existing preparation
+recording path archives this evidence; it may not contain all physical requests
+(e.g., duplicate attempts before a receipt is recorded). No pricing or aggregation
+is inferred. No query, vector, endpoint URL, model name, or credentials are stored
+in this observation.
+
 ## Exact asset-version recorded associations
 
 `GET /v1/assets/{asset_id}/runs?version=N&after=UUID&limit=25` is a read-only

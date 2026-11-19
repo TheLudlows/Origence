@@ -104,9 +104,9 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   );
   cards.append(
     panel(
-      "业务成功率 / 端到端 P95 / Token / 成本",
+      "业务成功率 / 端到端 P95 / Agent Token / 成本",
       el("div", "stat-value", "未采集"),
-      el("p", "muted", "没有计量数据时保留未知"),
+      el("p", "muted", "单次上下文准备的查询向量用量不代表整轮计量。"),
     ),
   );
   if (runs.status === "fulfilled") {
@@ -212,6 +212,28 @@ function eventOrigin(event: RunEvent): [string, string] {
   }
 }
 
+function contextQueryEmbedding(event: RunEvent) {
+  if (!(event.evidence_origin === "server_prepared" && event.report.kind === "context_prepared") &&
+      !(event.evidence_origin === "server_observed" && event.report.kind === "context_preparation_failed")) return null;
+  const retrieval = event.report.retrieval as {
+    context_query_embedding?: {
+      model_config_sha256?: unknown;
+      provider_reported_prompt_tokens?: unknown;
+    };
+  } | null | undefined;
+  const fingerprint = retrieval?.context_query_embedding?.model_config_sha256;
+  const tokens = retrieval?.context_query_embedding?.provider_reported_prompt_tokens;
+  const config = typeof fingerprint === "string" && /^[0-9a-f]{64}$/.test(fingerprint) ? fingerprint : null;
+  const known = config !== null && typeof tokens === "number" &&
+    Number.isInteger(tokens) && tokens >= 0 && tokens <= 0xffffffff;
+  return el("div", "notice",
+    el("strong", "", "上下文查询向量化 · 输入 Token"),
+    el("p", "", known ? `${tokens.toLocaleString()} Token（模型服务上报）` : "未知（没有可用的模型服务上报）"),
+    config ? el("p", "muted", "查询向量配置 SHA-256：", el("span", "mono", config)) : null,
+    el("p", "muted", "仅此事件的 Origence 查询向量请求，不是 Agent 或整轮用量，不计算成本。"),
+  );
+}
+
 const coverageStatus = new Map([
   ["reported", "已上报"],
   ["partial", "部分采集"],
@@ -274,6 +296,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const report = event.report,
       kind = report.kind ?? String(report.event?.kind ?? "reported");
     const eventBody = report.event ?? report;
+    const embedding = contextQueryEmbedding(event);
     details.replaceChildren(
       el("h2", "", kind),
       badge(eventOrigin(event)[1]),
@@ -282,6 +305,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         "mono muted",
         `sequence ${event.sequence} · ${date(event.recorded_at_ms)}`,
       ),
+      ...(embedding ? [embedding] : []),
       code(eventBody),
     );
     const refs = Array.isArray(report.citations)
