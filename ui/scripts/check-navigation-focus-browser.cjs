@@ -39,8 +39,12 @@ async function checkResponsiveNavigation(page, width) {
     assert.equal(await isFocused(control), true, `Focus after ${key}: ${await control.innerText()}`);
     assert.ok(await control.evaluate((node) => {
       const { left, right, top, bottom } = node.getBoundingClientRect();
-      return node.matches(':focus-visible') && getComputedStyle(node).outlineStyle === 'solid' &&
-        left >= 0 && right <= innerWidth && top >= 0 && bottom <= innerHeight;
+      const { outlineStyle, outlineWidth, outlineOffset } = getComputedStyle(node);
+      const stroke = Number.parseFloat(outlineWidth);
+      const outset = Math.max(0, stroke + Number.parseFloat(outlineOffset));
+      return node.matches(':focus-visible') && outlineStyle === 'solid' && stroke > 0 &&
+        left - outset >= 0 && right + outset <= innerWidth &&
+        top - outset >= 0 && bottom + outset <= innerHeight;
     }), `Visible focus after ${key}: ${await control.innerText()}`);
   };
 
@@ -60,6 +64,7 @@ async function checkResponsiveNavigation(page, width) {
   assert.equal(await nav.locator('[aria-current="page"]').count(), 1);
   await step('Tab', main.getByLabel('任务与查询'));
   await expectLayout();
+  return page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
 }
 
 async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCount) {
@@ -142,22 +147,25 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   const dist = resolve(__dirname, '../dist');
   const { createUiServer } = await import(pathToFileURL(resolve(dist, 'server.js')));
   const manual = process.argv.includes('--serve');
-  let onKnowledgeRequest, onOverviewRequest, manualAttempts = 0;
-  const holdOverview = () => {
-    assert.equal(onOverviewRequest, undefined);
+  let manualAttempts = 0;
+  const pendingRequests = new Map();
+  const holdRequest = (name) => {
+    assert.equal(pendingRequests.has(name), false);
     const { promise, resolve } = Promise.withResolvers();
-    onOverviewRequest = resolve;
+    pendingRequests.set(name, resolve);
     return async () => {
       const deadline = setTimeout(() => resolve(null), 4000);
       try {
         const send = await promise;
-        assert.ok(send, 'Fixture did not receive the overview request');
+        assert.ok(send, `Fixture did not receive the ${name} request`);
         return send;
       } finally {
         clearTimeout(deadline);
+        pendingRequests.delete(name);
       }
     };
   };
+  const holdOverview = () => holdRequest('overview');
   const upstream = createServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     const url = new URL(request.url, 'http://fixture.invalid');
@@ -189,9 +197,9 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
       if (manual) {
         const attempt = ++manualAttempts;
         setTimeout(() => sendOverview(attempt === 3 || attempt >= 5), 1200);
-      } else if (onOverviewRequest) {
-        const notify = onOverviewRequest;
-        onOverviewRequest = undefined;
+      } else if (pendingRequests.has('overview')) {
+        const notify = pendingRequests.get('overview');
+        pendingRequests.delete('overview');
         notify(sendOverview);
       } else {
         sendOverview(true);
@@ -200,9 +208,9 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
     }
     if (url.pathname === '/v1/assets' || url.pathname === '/v1/runs') {
       const sendPage = () => response.end('{"items":[],"next_after":null}');
-      if (url.searchParams.get('kind') === 'knowledge' && onKnowledgeRequest) {
-        const notify = onKnowledgeRequest;
-        onKnowledgeRequest = undefined;
+      if (url.searchParams.get('kind') === 'knowledge' && pendingRequests.has('knowledge')) {
+        const notify = pendingRequests.get('knowledge');
+        pendingRequests.delete('knowledge');
         notify(sendPage);
         return;
       }
@@ -241,13 +249,13 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
       await expectMain('运行总览');
       await checkOverviewRetry(page, receiveInitial, holdOverview, () => overviewRequests);
       console.log('PASS ' + width + 'px: keyboard retry, focus during latency and repeated error, recovery with and without focus on Retry');
-      const heldKnowledge = new Promise((resolve) => { onKnowledgeRequest = resolve; });
+      const receiveKnowledge = holdRequest('knowledge');
       await nav(/知识管理/).press('Enter');
       await expectMain('知识管理');
       const query = page.getByLabel('查询', { exact: true });
       await query.fill('持续输入');
+      const releaseKnowledge = await receiveKnowledge();
       const response = page.waitForResponse((r) => r.url().includes('kind=knowledge'));
-      const releaseKnowledge = await heldKnowledge;
       releaseKnowledge();
       await response;
       await page.getByText('没有匹配的资产', { exact: true }).waitFor();
@@ -304,14 +312,16 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
       await page.close();
     }
     for (const width of [736, 375]) {
+      const backgrounds = new Map();
       for (const colorScheme of ['light', 'dark']) {
         const page = await browser.newPage({ viewport: { width, height: 768 }, colorScheme });
         page.setDefaultTimeout(4000);
         await connectOverview(page, origin);
-        await checkResponsiveNavigation(page, width);
-        console.log(`PASS ${width}px ${colorScheme}: responsive navigation, Tab order in both directions, route landing and visible focus`);
+        backgrounds.set(colorScheme, await checkResponsiveNavigation(page, width));
         await page.close();
       }
+      assert.notEqual(backgrounds.get('light'), backgrounds.get('dark'), `${width}px: light and dark rendered the same page background`);
+      console.log(`PASS ${width}px light/dark: distinct backgrounds, responsive navigation, Tab order in both directions, route landing and visible focus`);
     }
   } finally {
     await browser?.close();
