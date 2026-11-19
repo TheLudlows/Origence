@@ -686,10 +686,17 @@ ins {
 @media (any-pointer: coarse) {
   button,
   button.link,
-  button.icon-button,
-  select,
-  input {
+  button.icon-button {
+    min-width: 44px;
     min-height: 44px;
+  }
+  select,
+  input,
+  .source summary {
+    min-height: 44px;
+  }
+  .source summary {
+    padding-block: 10px;
   }
   input,
   textarea,

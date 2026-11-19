@@ -456,6 +456,28 @@ Run 引用在当前资产 v2 时仍打开固定 v1；撤回来源立即清除正
 验证页内 chunks 的连续 UTF-8 范围、parser 和来源权限，不能用当前解析器重解释旧偏移。
 这些合同未在本批臆造实现，#76 仍未完成。
 
+## 2026-11-19 — #76 窄屏触控靶区与交互（Chromium 模拟）
+
+基于 main `2ad69260522676ecf70f9cd86fc3e3e47d453c8a`。在 Chromium 的粗指针触屏模拟中，
+320 / 375 / 736 CSS px 下的「退出」原为 38×44 px，上下文来源展开控件只有约 24 px 高。
+修复仅在粗指针条件下生效：按钮最小 44×44 px，原生来源展开控件最小高度 44 px，
+保留原有展开标记。私有会话选框虽小，包裹它的 47 px 整行标签可点按，未修改。
+
+Linux、Node 24.22.3、Playwright 1.57.0 / Chromium 153.0.8010.0。构建后的 UI 经真实
+Node relay 对接 loopback 合成 HTTP。三种宽度（浅 / 深 / 浅色）原尺寸断言均失败、修复后
+通过。使用浏览器 tap 验证新增知识对话框 Close 后焦点归还、重新打开不保留草稿；
+私有会话整行边缘可反复切换，提交时如实带上 session；来源可从目标边缘展开/收起，
+固定 v1 链接和路由焦点正确；最后点按退出清空私有界面。检查页面无整页横向溢出。
+既有导航键盘/焦点与上下文知识原文 Chromium 回归、UI 类型检查及 21 项 Node 测试通过。
+
+```sh
+npm --prefix ui run build
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-narrow-touch-browser.cjs
+```
+
+这不是实体触屏、真实屏幕阅读器或完整 #76 验收。未运行真实客户端、模型、试点或部署。
+
 ## 2026-11-17：Run 事件来源标签与真实浏览器定向验收（本地）
 
 基线 main `01d4f82b20c986278b077e8660f9bbc0538e8d6c`。仅修改 UI 事件标签及详情：
