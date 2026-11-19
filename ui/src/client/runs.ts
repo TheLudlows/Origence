@@ -21,7 +21,11 @@ import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
 import { runPdfPreview, sourcePreview } from "./source.js";
 import { runCreationTrend } from "./run-creation-trend.js";
 
-export function citation(ref: Provenance, ctx: ViewContext, pdf?: { path?: string }) {
+export function citation(
+  ref: Provenance,
+  ctx: ViewContext,
+  { pdf, knowledgeQuote }: { pdf?: { path?: string }; knowledgeQuote?: string } = {},
+) {
   const source = el("div");
   const pdfPath = pdf?.path;
   const openPdf = pdfPath && ctx.role !== "reader"
@@ -51,7 +55,7 @@ export function citation(ref: Provenance, ctx: ViewContext, pdf?: { path?: strin
       ? openPdf ?? el("p", "muted", "没有可用于核验的页内来源。")
       : ref.source_event_id && ctx.role !== "reader"
         ? button("核验原始引用", () =>
-            sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx),
+            sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx, knowledgeQuote),
           )
         : null,
     source,
@@ -304,7 +308,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         r.reference.asset_version === ref.asset_version &&
         r.source_event_id === ref.source_event_id,
       );
-      details.append(citation(ref, ctx, { path: archived && pdfPath(archived) }));
+      details.append(citation(ref, ctx, { pdf: { path: archived && pdfPath(archived) } }));
     }
     for (const ref of event.references) {
       if (archivedPdf(ref) && !shown.has(ref.evidence_ref_id)) {
@@ -314,7 +318,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
           asset_version: ref.reference.asset_version,
           source_event_id: ref.source_event_id,
           locator: ref.locator,
-        }, ctx, { path: pdfPath(ref) }));
+        }, ctx, { pdf: { path: pdfPath(ref) } }));
       }
       details.append(code(ref));
     }

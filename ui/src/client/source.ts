@@ -8,14 +8,16 @@ import {
   type ViewContext,
 } from "./components.js";
 
+// Keep a UTF-8 BOM as text. The parser includes its bytes in source ranges.
+const sourceDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
 /** Reject invalid UTF-8 boundaries instead of highlighting a different character. */
 export function byteRange(
   text: string,
   start: number,
   end: number,
 ): [string, string, string] {
-  const bytes = new TextEncoder().encode(text),
-    decode = new TextDecoder("utf-8", { fatal: true });
+  const bytes = new TextEncoder().encode(text);
   if (
     !Number.isInteger(start) ||
     !Number.isInteger(end) ||
@@ -25,9 +27,9 @@ export function byteRange(
   )
     throw new Error("引用区间超出原文");
   return [
-    decode.decode(bytes.slice(0, start)),
-    decode.decode(bytes.slice(start, end)),
-    decode.decode(bytes.slice(end)),
+    sourceDecoder.decode(bytes.slice(0, start)),
+    sourceDecoder.decode(bytes.slice(start, end)),
+    sourceDecoder.decode(bytes.slice(end)),
   ];
 }
 
@@ -57,16 +59,42 @@ export async function sourcePreview(
   sourceId: string,
   locator: Record<string, unknown>,
   ctx: ViewContext,
+  knowledgeQuote?: string,
 ) {
   try {
-    const source = await api.get<{ content: string; file_id?: string }>(
-      `/v1/events/${sourceId}`,
-      ctx.signal,
-    );
+    const source = await api.get<{
+      kind?: string;
+      content: string;
+      file_id?: string | null;
+    }>(`/v1/events/${sourceId}`, ctx.signal);
     if (ctx.signal.aborted) return;
     const content = el("pre", "code");
     const page = locator.page ?? locator.page_number;
+    const readFile = (id: string) =>
+      api.request<Blob>(`/v1/files/${id}`, { signal: ctx.signal, blob: true });
+    let unverified = false;
     if (
+      !page &&
+      knowledgeQuote !== undefined &&
+      source.kind === "knowledge" &&
+      locator.parser === "source-ranges-v1"
+    ) {
+      const blob = source.file_id ? await readFile(source.file_id) : undefined;
+      const bytes = await blob?.arrayBuffer();
+      if (ctx.signal.aborted) return;
+      const { byte_start: start, byte_end: end } = locator;
+      try {
+        if (typeof start !== "number" || typeof end !== "number")
+          throw new Error("引用区间无效");
+        const original = bytes ? sourceDecoder.decode(bytes) : source.content;
+        const [before, quote, after] = byteRange(original, start, end);
+        if (!quote || quote !== knowledgeQuote) throw new Error("引用与原文不匹配");
+        content.append(before, el("mark", "", quote), after);
+      } catch {
+        unverified = true;
+        content.textContent = source.content;
+      }
+    } else if (
       !page &&
       (locator.byte_basis === "source_utf8" || locator.source_span === true)
     ) {
@@ -78,16 +106,18 @@ export async function sourcePreview(
       content.append(before, el("mark", "", quote), after);
     } else content.textContent = source.content;
     target.replaceChildren(
-      panel("原始来源", code(locator), page ? null : content),
+      panel(
+        "原始来源",
+        code(locator),
+        page ? null : content,
+        unverified ? el("p", "muted", "无法核对原文字节区间，未高亮引用。") : null,
+      ),
     );
     if (source.file_id)
       target.append(
         button("下载原始文件", async () => {
           try {
-            const blob = await api.request<Blob>(
-              `/v1/files/${source.file_id}`,
-              { signal: ctx.signal, blob: true },
-            );
+            const blob = await readFile(source.file_id!);
             const url = URL.createObjectURL(blob),
               link = el("a");
             link.href = url;
@@ -108,7 +138,7 @@ export async function sourcePreview(
         ),
       );
   } catch (e) {
-    message(target, e);
+    if (!ctx.signal.aborted) message(target, e);
   }
 }
 

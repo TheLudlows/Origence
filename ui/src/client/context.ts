@@ -113,7 +113,9 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
               badge(item.semantic_status ?? item.normalization_status),
             ),
             code(item.content),
-            citation(item.provenance, ctx),
+            citation(item.provenance, ctx, {
+              knowledgeQuote: item.route === "knowledge" ? item.content : undefined,
+            }),
           );
           items.append(detail);
         }
