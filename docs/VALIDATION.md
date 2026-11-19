@@ -1609,3 +1609,40 @@ NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
 
 本轮使用合成数据进行 Chromium 和 DOM 验证。实际读屏和实体触屏仍待验收，真实客户端、
 模型和正式试点保持暂停，#76 保持开放。
+
+## 2026-11-19 — #76 中间宽度主导航键盘回归
+
+基于 `origin/main` 的 `5c3a423f013fec0141fb8278612fa305e3805612`。此前 736/375 px 的
+历史布局验证和资产详情页签已有证据。可复跑的主导航及焦点脚本此前使用 1024/320 px。
+在原脚本中增加 736/375 px × 浅/深色的四个自动化场景。
+
+- 从「运行总览」经 Shift+Tab 与 Tab 双向穿越五个主导航入口及相邻的退出、主题控件。
+  核对焦点顺序、`focus-visible`、轮廓和控件位于视口内。用 Enter 激活「上下文工作台」，
+  验证主区域接收焦点、唯一 `aria-current` 更新，下一次 Tab 进入「任务与查询」。
+- 在总览和工作台读取真实元素位置。736 px 主导航在工作区侧面，375 px 主导航在工作区
+  上方，两页均无整页横向溢出。
+- Linux，Node 24.22.1，Playwright 1.62.1 驱动真实 Chromium 156.0.8078.79 headless。
+  使用已构建 UI 与 Node relay，数据来自 loopback 合成 HTTP 夹具。四个新增场景连续
+  两轮通过，原 1024/320 px 路由、对话框及总览重试焦点回归同轮通过。
+- UI 类型检查、20 项 UI 测试、Rust 1.98.0 格式检查、严格全目标全特性 Clippy 和
+  `git diff --check` 通过。该基线的[主干 CI](https://github.com/TheLudlows/Origence/actions/runs/44441569348)
+  四项通过。Chromium 脚本按下方命令单独运行。
+
+用上文相同的 UI 构建和 Playwright 安装方式，从仓库根目录复跑。
+
+```sh
+NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
+  node ui/scripts/check-navigation-focus-browser.cjs
+```
+
+本轮验证键盘输入和浏览器布局。实际读屏与实体触屏仍待验收。真实客户端、模型及正式试点
+未运行，#76 保持开放。
+
+复审 #110 时加强了两个可渲染断言：在每个宽度比较两种方案下工作台的计算背景色，
+并核对每次键盘聚焦时轮廓宽度大于零且轮廓位于视口内。延迟知识目录夹具沿用 4 秒请求
+时限，未捕获请求时明确失败。旧脚本在临时强制浅色并移除焦点轮廓时仍通过；新版脚本
+分别识别这两种退化与缺失的知识目录请求。无注入的真实 Chromium 四组场景和原
+1024/320 px 回归连续两轮通过，UI 类型检查及 20 项 UI 测试通过。
+
+GitHub CI 的 `node-ui` 运行 `npm test`，包括构建及 Node 测试。Chromium 焦点脚本按
+上述命令在本地单独执行；`node-ui` 的结果只涵盖其实际运行的构建及 Node 测试。
