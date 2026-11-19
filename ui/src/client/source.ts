@@ -54,25 +54,53 @@ export function textDelta(before: string, after: string) {
   };
 }
 
+export function sourcePreviewTarget() {
+  const announcement = el("div", "muted");
+  announcement.setAttribute("role", "status");
+  announcement.setAttribute("aria-atomic", "true");
+  const result = el("div");
+  return {
+    root: el("div", "", announcement, result),
+    announcement,
+    result,
+    request: undefined as AbortController | undefined,
+  };
+}
+
 export async function sourcePreview(
-  target: HTMLElement,
+  target: ReturnType<typeof sourcePreviewTarget>,
   sourceId: string,
   locator: Record<string, unknown>,
   ctx: ViewContext,
   knowledgeQuote?: string,
 ) {
+  target.request?.abort();
+  const request = new AbortController();
+  target.request = request;
+  const signal = AbortSignal.any([ctx.signal, request.signal]);
+  const current = () => !signal.aborted && target.root.isConnected;
+  const announce = (text: string, error = false) => {
+    target.announcement.className = error ? "error" : "muted";
+    target.announcement.textContent = text;
+  };
+  const fail = (action: string, error: unknown) =>
+    announce(`${action}：${error instanceof Error ? error.message : "操作失败，请重试"}`, true);
+  announce("正在读取原始来源…");
+  target.result.replaceChildren();
   try {
     const source = await api.get<{
       kind?: string;
       content: string;
       file_id?: string | null;
-    }>(`/v1/events/${sourceId}`, ctx.signal);
-    if (ctx.signal.aborted) return;
+    }>(`/v1/events/${sourceId}`, signal);
+    if (!current()) return;
     const content = el("pre", "code");
     const page = locator.page ?? locator.page_number;
     const readFile = (id: string) =>
-      api.request<Blob>(`/v1/files/${id}`, { signal: ctx.signal, blob: true });
-    let unverified = false;
+      api.request<Blob>(`/v1/files/${id}`, { signal, blob: true });
+    let outcome = page
+      ? "已读取来源，未提供可核验的 PDF 页内文本。"
+      : "已读取原始来源。";
     if (
       !page &&
       knowledgeQuote !== undefined &&
@@ -81,7 +109,7 @@ export async function sourcePreview(
     ) {
       const blob = source.file_id ? await readFile(source.file_id) : undefined;
       const bytes = await blob?.arrayBuffer();
-      if (ctx.signal.aborted) return;
+      if (!current()) return;
       const { byte_start: start, byte_end: end } = locator;
       try {
         if (typeof start !== "number" || typeof end !== "number")
@@ -90,8 +118,9 @@ export async function sourcePreview(
         const [before, quote, after] = byteRange(original, start, end);
         if (!quote || quote !== knowledgeQuote) throw new Error("引用与原文不匹配");
         content.append(before, el("mark", "", quote), after);
+        outcome = "已核对原文字节区间，已高亮引用。";
       } catch {
-        unverified = true;
+        outcome = "无法核对原文字节区间，未高亮引用。";
         content.textContent = source.content;
       }
     } else if (
@@ -104,20 +133,15 @@ export async function sourcePreview(
         Number(locator.byte_end),
       );
       content.append(before, el("mark", "", quote), after);
+      outcome = "已定位原文字节区间，已高亮引用。";
     } else content.textContent = source.content;
-    target.replaceChildren(
-      panel(
-        "原始来源",
-        code(locator),
-        page ? null : content,
-        unverified ? el("p", "muted", "无法核对原文字节区间，未高亮引用。") : null,
-      ),
-    );
+    target.result.append(panel("原始来源", code(locator), page ? null : content));
     if (source.file_id)
-      target.append(
+      target.result.append(
         button("下载原始文件", async () => {
           try {
             const blob = await readFile(source.file_id!);
+            if (!current()) return;
             const url = URL.createObjectURL(blob),
               link = el("a");
             link.href = url;
@@ -125,20 +149,25 @@ export async function sourcePreview(
             link.click();
             setTimeout(() => URL.revokeObjectURL(url), 10_000);
           } catch (e) {
-            message(target, e);
+            if (current()) {
+              // A newly denied read must not leave the earlier raw source visible.
+              target.result.replaceChildren();
+              fail("原始文件下载失败", e);
+            }
           }
         }),
       );
     if (page)
-      target.append(
+      target.result.append(
         el(
           "p",
           "muted",
           `PDF 第 ${String(page)} 页；locator 的字节区间基于页内提取文本，不套用到原始 PDF 字节。当前来源接口未提供可核验的页内文本，无法显示页内原文或高亮；原始文件下载与页内文本是不同内容。`,
         ),
       );
+    announce(outcome);
   } catch (e) {
-    if (!ctx.signal.aborted) message(target, e);
+    if (current()) fail("原始来源读取失败", e);
   }
 }
 
