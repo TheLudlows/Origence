@@ -16,6 +16,7 @@ const original = prefix + quote;
 const locator = { parser: "source-ranges-v1", byte_start: Buffer.byteLength(prefix), byte_end: Buffer.byteLength(original) };
 const assetPath = `/v1/assets/${asset}`;
 const requests = [];
+let nextInlineSource;
 const evidence = (title, event, versionAsset = asset, content = quote, range = locator) => ({
   evidence_id: title, title, content, route: "knowledge", normalization_status: "confirmed",
   provenance: { type: "asset_chunk", asset_id: versionAsset, asset_version: 1, source_event_id: event, locator: range },
@@ -50,7 +51,14 @@ const upstream = createServer((request, response) => {
   }
   if (path.startsWith("/v1/events/") || path.startsWith("/v1/files/")) {
     if (role === "reader") return send({ error: { message: "无权访问原文" } }, 403);
-    if (path === `/v1/events/${source}`) return send({ kind: "knowledge", content: original, file_id: null });
+    if (path === `/v1/events/${source}`) {
+      if (nextInlineSource) {
+        const held = nextInlineSource;
+        nextInlineSource = undefined;
+        return held(send);
+      }
+      return send({ kind: "knowledge", content: original, file_id: null });
+    }
     if (path === `/v1/events/${uploadSource}`) return send({ kind: "knowledge", content: "", file_id: file });
     if (path === `/v1/files/${file}`) {
       response.writeHead(200, { "Content-Type": "application/octet-stream" });
@@ -85,6 +93,63 @@ async function checkMark(detail) {
   assert.equal(await mark.evaluate((node) => node.parentElement.textContent), original);
 }
 
+async function checkSourceAnnouncements(page, detail) {
+  const control = detail.getByRole("button", { name: "核验原始引用" });
+  const status = detail.getByRole("status");
+  assert.equal(await status.count(), 1, "A live region must exist before activation");
+  assert.equal(await status.textContent(), "");
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Accessibility.enable");
+  let statusId;
+  const assertAxStatus = async (expected) => {
+    await status.filter({ hasText: expected }).waitFor();
+    assert.equal(await status.textContent(), expected);
+    const { nodes } = await cdp.send("Accessibility.getFullAXTree");
+    const byId = new Map(nodes.map((node) => [node.nodeId, node]));
+    const text = (node) => !node ? "" : node.role?.value === "StaticText" ? node.name?.value : (
+      node.childIds ?? []).map((id) => text(byId.get(id))).join("");
+    const live = nodes.find((node) => !node.ignored && node.role.value === "status" && text(node) === expected);
+    assert.ok(live, `Missing exposed AX status: ${expected}`);
+    assert.equal(live.properties.find((p) => p.name === "live")?.value.value, "polite");
+    assert.equal(live.properties.find((p) => p.name === "atomic")?.value.value, true);
+    if (statusId !== undefined) assert.equal(live.nodeId, statusId, "Status node must survive completion and retry");
+    statusId = live.nodeId;
+    assert.equal(await control.evaluate((element) => element === document.activeElement), true);
+  };
+
+  const attempt = async ({ denied = false } = {}) => {
+    const pending = Promise.withResolvers();
+    nextInlineSource = pending.resolve;
+    const timer = setTimeout(() => pending.reject(new Error("The source fixture received no request")), 5000);
+    try {
+      const [finish] = await Promise.all([
+        pending.promise,
+        (async () => {
+          await control.press("Enter");
+          await assertAxStatus("正在读取原始来源…");
+          assert.equal(await detail.locator("mark").count(), 0, "Do not show an earlier result on a fresh read");
+        })(),
+      ]);
+      if (denied) finish({ error: { message: "该来源暂不可读" } }, 403);
+      else finish({ kind: "knowledge", content: original, file_id: null });
+    } finally {
+      clearTimeout(timer);
+      nextInlineSource = undefined;
+    }
+  };
+  await attempt();
+  await assertAxStatus("已核对原文字节区间，已高亮引用。");
+  const mark = detail.locator("mark");
+  assert.equal(await mark.textContent(), quote);
+  assert.equal(await mark.evaluate((node) => node.parentElement.textContent), original);
+  await attempt({ denied: true });
+  await assertAxStatus("原始来源读取失败：该来源暂不可读");
+  assert.equal(await mark.count(), 0);
+  await attempt();
+  await assertAxStatus("已核对原文字节区间，已高亮引用。");
+  await cdp.detach();
+}
+
 async function checkPinnedVersion(page, detail) {
   await detail.getByRole("button", { name: /· v1$/ }).click();
   await page.getByRole("heading", { name: "固定历史文档" }).waitFor();
@@ -103,7 +168,7 @@ async function checkPinnedVersion(page, detail) {
     const writer = await browser.newPage({ viewport: { width: 375, height: 768 } });
     writer.setDefaultTimeout(5000);
     const details = await openEvidence(writer, origin, "writer");
-    await checkMark(details("历史内联文档"));
+    await checkSourceAnnouncements(writer, details("历史内联文档"));
     assert.equal(requests.includes(`/v1/files/${file}`), false);
     await details("上传来源").locator("summary").click();
     await checkMark(details("上传来源"));
@@ -113,7 +178,9 @@ async function checkPinnedVersion(page, detail) {
       const unverified = details(title);
       await unverified.locator("summary").click();
       await unverified.getByRole("button", { name: "核验原始引用" }).click();
-      await unverified.getByText("无法核对原文字节区间，未高亮引用。", { exact: true }).waitFor();
+      const status = unverified.getByRole("status").filter({ hasText: "无法核对原文字节区间，未高亮引用。" });
+      await status.waitFor();
+      assert.equal(await status.textContent(), "无法核对原文字节区间，未高亮引用。");
       assert.equal(await unverified.locator("mark").count(), 0);
     }
     await checkPinnedVersion(writer, details("历史内联文档"));
@@ -126,7 +193,7 @@ async function checkPinnedVersion(page, detail) {
     await checkPinnedVersion(reader, readerDetails("历史内联文档"));
     assert.equal(requests.slice(requestCount).some((path) => /^\/v1\/(events|files)\//.test(path)), false);
     assert.deepEqual(requests.filter((path) => path.startsWith(assetPath)), Array(2).fill(`${assetPath}?version=1`));
-    console.log("PASS: exact v1 context links, inline and uploaded UTF-8 source spans, unverified ranges, reader access");
+    console.log("PASS: AX source announcements and focus, exact v1 links, UTF-8 spans, unverified ranges, reader access");
   } finally {
     await browser?.close();
     relay?.closeAllConnections();

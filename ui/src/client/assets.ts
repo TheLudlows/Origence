@@ -21,7 +21,7 @@ import {
   type ViewContext,
 } from "./components.js";
 import type { Asset, Page, Receipt } from "./types.js";
-import { sourcePreview, textDelta } from "./source.js";
+import { sourcePreview, sourcePreviewTarget, textDelta } from "./source.js";
 
 import { editor, capture } from "./asset-editor.js";
 import { trackJob } from "./jobs.js";
@@ -83,7 +83,7 @@ export async function assetsPage(
             ),
           );
         for (const item of matches) {
-          const source = el("div");
+          const source = canWrite(ctx.role) ? sourcePreviewTarget() : null;
           hits.append(
             panel(
               item.title || short(item.asset_id),
@@ -94,7 +94,7 @@ export async function assetsPage(
                 () => ctx.navigate("asset", item.asset_id, item.version),
                 "link",
               ),
-              canWrite(ctx.role)
+              source
                 ? button("核验原始引用", () =>
                     sourcePreview(
                       source,
@@ -104,7 +104,7 @@ export async function assetsPage(
                     ),
                   )
                 : null,
-              source,
+              source?.root,
             ),
           );
         }

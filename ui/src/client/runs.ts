@@ -18,7 +18,7 @@ import {
   type ViewContext,
 } from "./components.js";
 import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
-import { runPdfPreview, sourcePreview } from "./source.js";
+import { runPdfPreview, sourcePreview, sourcePreviewTarget } from "./source.js";
 import { runCreationTrend } from "./run-creation-trend.js";
 
 export function citation(
@@ -27,6 +27,9 @@ export function citation(
   { pdf, knowledgeQuote }: { pdf?: { path?: string }; knowledgeQuote?: string } = {},
 ) {
   const source = el("div");
+  const textSource = !pdf && ref.source_event_id && ctx.role !== "reader"
+    ? sourcePreviewTarget()
+    : null;
   const pdfPath = pdf?.path;
   const openPdf = pdfPath && ctx.role !== "reader"
     ? button("核验 PDF 页内引用", async () => {
@@ -53,12 +56,12 @@ export function citation(
     code(ref),
     pdf
       ? openPdf ?? el("p", "muted", "没有可用于核验的页内来源。")
-      : ref.source_event_id && ctx.role !== "reader"
+      : textSource
         ? button("核验原始引用", () =>
-            sourcePreview(source, ref.source_event_id!, ref.locator ?? {}, ctx, knowledgeQuote),
+            sourcePreview(textSource, ref.source_event_id!, ref.locator ?? {}, ctx, knowledgeQuote),
           )
         : null,
-    source,
+    pdf ? source : textSource?.root,
   );
 }
 
