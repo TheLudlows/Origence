@@ -178,3 +178,25 @@ Claude Code 改用 `--client claude-code`。程序向宿主重新核对 key、�
 
 这是显式导出，不是在线受管加载。撤回会阻止后续下载和导出，不能撤回本地副本或已注入的
 客户端上下文。把导出的目录留在该 workspace 的专用项目中，不要跨空间复用或提交给未获授权的人。
+
+### Windows Hook 启用前只读权限检查
+
+在停止 Hook 和发送器后，用 PowerShell 7 运行：
+
+```powershell
+pwsh -NoProfile -File tools/check_hook_acl.ps1 -PrivateRoot 'C:\Users\me\private-hooks' -ProfilePath 'C:\Users\me\private-hooks\project.json'
+```
+
+检查不读取 profile/队列正文或凭据，不启用 Hook，不改文件、配置或 ACL。成功输出
+`SUPPORTED_ACL_SNAPSHOT`，不代表 profile 配置有效、服务可达或实际客户端已经接入。
+仅支持普通绝对本地 NTFS 路径，拒绝 UNC、设备路径、ADS、歧义路径及路径上的 reparse point。
+私有根须隔断继承且只有当前用户的一条 FullControl Allow ACE，并向文件/子目录继承；
+到 profile 的目录、profile 以及已有队列/锁/暂存文件必须完整继承这一规则。
+owner 仅支持当前用户或本机 Administrators；后者不增加普通用户的 DACL 授权。
+额外 ACE（包括额外 SYSTEM/管理员授权）、自定义受保护子 ACL 或未知队列条目均报告不支持，
+不自动修复，也不表示这些自定义布局一定不安全。队列不存在时只检查创建前提，不创建队列。
+
+这是窄基线的只读时点检查，不是运行时强制校验或完整 Windows 有效权限审计。
+根目录以上的祖先只检查 reparse point，不核验其 ACL；调用方仍须保证祖先位置可信且不能被
+其他普通用户替换。检查不防御管理员/备份特权、并发路径替换或之后的权限变化，也不验证
+其他用户的实际访问。遇到不支持布局请停止启用并自行核对权限，不要据此自动收紧用户目录。
