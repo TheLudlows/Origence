@@ -16,24 +16,30 @@ function utc(ms: number) {
 }
 
 export function runCreationTrend(signal: AbortSignal) {
-  const window = select([
+  const range = select([
     ["24h", "最近 24 小时"],
     ["7d", "最近 7 天"],
   ]);
   const result = el("div");
   const status = el("p");
   status.setAttribute("role", "status");
+  const retry = button("重试读取创建量", () => {
+    if (retry.getAttribute("aria-disabled") !== "true") return load();
+  });
+  retry.hidden = true;
   let pending: AbortController | undefined;
   const load = async () => {
     pending?.abort();
     const request = new AbortController();
     pending = request;
     const requestSignal = AbortSignal.any([signal, request.signal]);
+    // Keep the retry control focusable while its request is in flight.
+    retry.setAttribute("aria-disabled", "true");
     status.textContent = "正在读取创建量…";
     result.replaceChildren();
     try {
       const data = await api.get<RunCreationOverview>(
-        `/v1/runs/overview?window=${encodeURIComponent(window.value)}`,
+        `/v1/runs/overview?window=${encodeURIComponent(range.value)}`,
         requestSignal,
       );
       if (requestSignal.aborted) return;
@@ -52,21 +58,26 @@ export function runCreationTrend(signal: AbortSignal) {
           }),
         ),
       );
+      if (document.activeElement === retry) range.focus();
+      retry.hidden = true;
     } catch (error) {
       if (requestSignal.aborted) return;
       status.textContent = "创建量暂不可用";
       const failure = el("div");
       message(failure, error);
-      result.append(failure, button("重试读取创建量", load));
+      result.append(failure);
+      retry.hidden = false;
+    } finally {
+      if (!requestSignal.aborted) retry.removeAttribute("aria-disabled");
     }
   };
-  window.addEventListener("change", () => void load());
+  range.addEventListener("change", () => void load());
   void load();
   return panel(
     "运行创建趋势",
-    field("统计范围", window),
+    field("统计范围", range),
     el("p", "muted", "统计当前逻辑 key 下服务端记录的新建运行。该数字包含所有结果状态。"),
     status,
-    result,
+    el("div", "", result, retry),
   );
 }

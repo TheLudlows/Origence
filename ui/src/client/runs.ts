@@ -208,6 +208,35 @@ function eventOrigin(event: RunEvent): [string, string] {
   }
 }
 
+const coverageStatus = new Map([
+  ["reported", "已上报"],
+  ["partial", "部分采集"],
+  ["not_collected", "未采集"],
+  ["unknown", "未知"],
+]);
+
+function showCoverage(target: HTMLElement, events: RunEvent[], hasMore: boolean) {
+  const rows = events.flatMap((event) => {
+    const declaration = event.report.event ?? event.report;
+    if (declaration.kind !== "coverage") return [];
+    const status = typeof declaration.status === "string"
+      ? coverageStatus.get(declaration.status) : undefined;
+    return [[
+      event.sequence,
+      typeof declaration.component === "string" ? declaration.component : "未知",
+      status ?? "未知",
+      eventOrigin(event)[1],
+    ]];
+  });
+  target.replaceChildren(
+    el("p", "muted", "采集声明来自上报方，未经独立核验。整轮覆盖仍未知。",
+      hasMore ? " 还有后续事件，此处仅显示已加载事件中的声明。" : null),
+    rows.length
+      ? table(["事件序号", "组件", "声明状态", "来源"], rows)
+      : el("p", "muted", "已加载事件中未见采集声明，覆盖未知"),
+  );
+}
+
 interface ArchivedPdfReference {
   evidence_ref_id: string;
   source_event_id: string;
@@ -230,6 +259,8 @@ function archivedPdf(value: unknown): value is ArchivedPdfReference {
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
   const assessments = el("div");
+  const declarations = el("div", "", el("p", "muted", "正在读取采集声明…"));
+  const coverage = panel("采集声明", declarations);
   let after = 0;
   const timeline = el("div", "timeline"),
     details = el("div"),
@@ -320,6 +351,9 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       summary.textContent = value.run.summary;
       events.push(...value.events);
       after = value.next_after ?? after;
+      error.replaceChildren();
+      showCoverage(declarations, events, value.next_after !== null);
+      coverage.hidden = false;
       timeline.replaceChildren(
         ...events.map((event) => {
           const kind =
@@ -344,10 +378,14 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       if (events[0]) selectEvent(events[0]);
       more.hidden = value.next_after === null;
     } catch (e) {
+      if (ctx.signal.aborted) return;
       events.length = 0;
+      after = 0;
       timeline.replaceChildren();
       details.replaceChildren();
       assessments.replaceChildren();
+      declarations.replaceChildren();
+      coverage.hidden = true;
       summary.textContent = "";
       message(error, e);
     } finally {
@@ -373,6 +411,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       panel("事件顺序", timeline, more),
       panel("节点与上下文证据", details),
     ),
+    coverage,
     panel("外部核验记录", assessments),
     error,
   );
