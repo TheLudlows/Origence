@@ -73,6 +73,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const searches = new Map();
   const catalogQueries = [];
   let overviewUnavailable = false;
+  let jobRetries = 0;
   let failMemory = true,
     unauthorized = false,
     conflictKnowledge = false,
@@ -263,6 +264,11 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       searches.set(body.query, pending);
       return pending.promise;
     }
+    if (path.pathname === `/api/v1/jobs/${ids.job}/retry` && options.method === "POST") {
+      jobRetries++;
+      jobState = "pending";
+      return response({ id: ids.job, state: jobState });
+    }
     if (path.pathname === `/api/v1/jobs/${ids.job}`)
       return response({ state: jobState, outcome: jobState === "completed" ? "published" : null });
     if (path.pathname === "/api/v1/context") {
@@ -307,8 +313,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     }
     await window.happyDOM.close();
   });
-  const wait = async (condition) => {
-    for (let n = 0; n < 100; n++) {
+  const wait = async (condition, attempts = 100) => {
+    for (let n = 0; n < attempts; n++) {
       if (condition()) return;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -478,6 +484,28 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     conflictKnowledge = false;
     target.remove();
     lifetime.abort();
+  });
+  await t.test("retry resumes job polling without another submission", async () => {
+    const { trackJob } = await import("../dist/client/jobs.js");
+    const lifetime = new AbortController();
+    const target = document.createElement("div");
+    const ctx = { signal: lifetime.signal, role: "writer", navigate() {} };
+    document.body.append(target);
+    try {
+      jobState = "failed";
+      await trackJob({ job_id: ids.job, asset_id: ids.asset }, target, ctx);
+      click("重试任务", target);
+      click("重试任务", target);
+      await wait(() => target.textContent.includes("pending"));
+      jobState = "completed";
+      await wait(() => target.textContent.includes("completed"), 600);
+      assert.equal(jobRetries, 1);
+      assert.equal(target.textContent.includes("取消任务"), false);
+    } finally {
+      lifetime.abort();
+      target.remove();
+      jobState = "completed";
+    }
   });
   await t.test(
     "a superseded search cannot overwrite the newer query",

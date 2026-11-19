@@ -22,9 +22,26 @@ export async function trackJob(
   }
   const id = receipt.job_id;
   const state = el("div");
-  const refresh = async () => {
+  let latest: AbortController | undefined;
+  let observation: Promise<Job | undefined>;
+  let polling = false, changing = false;
+  const refresh = () => {
+    const read = new AbortController();
+    latest?.abort();
+    latest = read;
+    observation = observe(read);
+    return observation;
+  };
+  const observe = async (read: AbortController): Promise<Job | undefined> => {
     try {
-      const job = await api.get<Job>(`/v1/jobs/${id}`, ctx.signal);
+      const job = await api.get<Job>(
+        `/v1/jobs/${id}`,
+        AbortSignal.any([ctx.signal, read.signal]),
+      );
+      if (ctx.signal.aborted) return;
+      // A stale poll must neither repaint the status nor decide when to stop.
+      if (latest !== read) return observation;
+      state.removeAttribute("role");
       state.replaceChildren(
         status(job.state),
         job.outcome ? badge(job.outcome) : "",
@@ -64,27 +81,52 @@ export async function trackJob(
           current,
         );
       }
-      const action = async (name: string) => {
-        try {
-          await api.post(
-            `/v1/jobs/${id}/${name}`,
-            {},
-            ctx.signal,
-            crypto.randomUUID(),
-          );
-          await refresh();
-        } catch (error) {
-          message(state, error);
-        }
-      };
       if (["failed", "cancelled"].includes(job.state))
         state.append(button("重试任务", () => action("retry")));
       if (!terminal.has(job.state))
         state.append(button("取消任务", () => action("cancel")));
       return job;
     } catch (error) {
+      if (ctx.signal.aborted) return;
+      if (latest !== read) return observation;
       message(state, error);
-      return undefined;
+    }
+  };
+  const poll = async (observed?: Job) => {
+    if (polling) return;
+    polling = true;
+    try {
+      for (let attempts = 0; attempts < 80 && !ctx.signal.aborted; attempts++) {
+        const job = observed ?? await refresh();
+        if (!job || terminal.has(job.state) || ctx.signal.aborted) return;
+        observed = undefined;
+        await new Promise<void>((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            ctx.signal.removeEventListener("abort", done);
+            resolve();
+          };
+          const timer = setTimeout(done, 1500);
+          ctx.signal.addEventListener("abort", done, { once: true });
+        });
+      }
+    } finally {
+      polling = false;
+    }
+  };
+  const action = async (name: "retry" | "cancel") => {
+    if (changing || ctx.signal.aborted) return;
+    changing = true;
+    try {
+      await api.post(`/v1/jobs/${id}/${name}`, {}, ctx.signal, crypto.randomUUID());
+      if (ctx.signal.aborted) return;
+      const job = await refresh();
+      // Retry starts a new generation after the original terminal state stopped polling.
+      if (name === "retry" && job && !terminal.has(job.state)) void poll(job);
+    } catch (error) {
+      if (!ctx.signal.aborted) message(state, error);
+    } finally {
+      changing = false;
     }
   };
   target.replaceChildren(
@@ -93,17 +135,5 @@ export async function trackJob(
     state,
     button("刷新状态", () => refresh().then(() => {})),
   );
-  for (let attempts = 0; attempts < 80 && !ctx.signal.aborted; attempts++) {
-    const job = await refresh();
-    if (!job || terminal.has(job.state)) return;
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        ctx.signal.removeEventListener("abort", done);
-        resolve();
-      };
-      const timer = setTimeout(done, 1500);
-      ctx.signal.addEventListener("abort", done, { once: true });
-    });
-  }
+  await poll();
 }

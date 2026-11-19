@@ -1677,6 +1677,23 @@ NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
 
 实际读屏、实体触屏未执行。真实产品客户端、模型及正式试点保持暂停。
 
+## 2026-11-19 — #76 入库任务状态刷新与重试（本地）
+
+基于 main `df330cf`。手动刷新会取消尚未完成的旧状态查询；过时响应不更新页面，
+也不决定轮询何时停止。失败后的显式重试会继续轮询同一任务，重复触发不会在同一次
+操作进行中再发出重试。当前版本仍由服务端决定，关闭对话框不取消后台任务。
+
+- Node 24.22.3：`npm --prefix ui run check`、`npm --prefix ui test`（21 项）、
+  `git diff --check` 通过。
+- Chromium 153.0.8010.0：构建后运行
+  `CHROMIUM=<浏览器路径> node ui/scripts/check-knowledge-job-browser.cjs`（需提供 Playwright）。
+  真实 UI relay 对接 loopback HTTP 夹具：失败时仍显示 v1；一次重试后由自动轮询
+  显示发布完成并打开 v2；人为延迟的旧 processing 请求被取消，不覆盖已完成状态；
+  Escape 返回触发器焦点，前进/后退不恢复旧对话框。主干未修版本两项基线回归均失败。
+
+这些是本地合成 HTTP/浏览器结果；不替代前文真实服务检查，也不代表生产、
+真实客户端、实体触屏或读屏验收。未改动服务端接口、存储、权限或部署。
+
 ## 2026-11-19 — #76 上下文查询向量的可追溯输入 Token
 
 基于 main `df330cfdf389eaefec463d745e0aeca779eaf4fe`。在已有的上下文准备检索诊断中记录
