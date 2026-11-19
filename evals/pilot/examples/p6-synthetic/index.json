@@ -1,0 +1,25 @@
+{
+  "scope": "PUBLIC_SYNTHETIC_ONLY",
+  "run_prefix": {
+    "run_id": "00000000-0000-4000-8000-000000000006",
+    "through_sequence": 2,
+    "prefix_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "basis_sequences": [
+      1,
+      2
+    ]
+  },
+  "files": [
+    {
+      "path": "basis.txt",
+      "sha256": "6a4f3a05b52141856bffe3b07585b28efd87bc28158ee81800bcae2269930566",
+      "bytes": 48,
+      "collected_at_utc": "2000-01-01T00:00:00Z",
+      "collector": "synthetic-example",
+      "type": "synthetic_basis_note",
+      "prd_clause": "prd-v0.3.A6",
+      "pilot_item": "P6",
+      "case_id": "public-synthetic-p6"
+    }
+  ]
+}
