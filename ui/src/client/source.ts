@@ -149,7 +149,11 @@ export async function sourcePreview(
             link.click();
             setTimeout(() => URL.revokeObjectURL(url), 10_000);
           } catch (e) {
-            if (current()) fail("原始文件下载失败", e);
+            if (current()) {
+              // A newly denied read must not leave the earlier raw source visible.
+              target.result.replaceChildren();
+              fail("原始文件下载失败", e);
+            }
           }
         }),
       );

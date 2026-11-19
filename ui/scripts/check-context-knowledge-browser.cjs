@@ -17,6 +17,7 @@ const locator = { parser: "source-ranges-v1", byte_start: Buffer.byteLength(pref
 const assetPath = `/v1/assets/${asset}`;
 const requests = [];
 let nextInlineSource;
+let denyOriginalFile = false;
 const evidence = (title, event, versionAsset = asset, content = quote, range = locator) => ({
   evidence_id: title, title, content, route: "knowledge", normalization_status: "confirmed",
   provenance: { type: "asset_chunk", asset_id: versionAsset, asset_version: 1, source_event_id: event, locator: range },
@@ -61,6 +62,7 @@ const upstream = createServer((request, response) => {
     }
     if (path === `/v1/events/${uploadSource}`) return send({ kind: "knowledge", content: "", file_id: file });
     if (path === `/v1/files/${file}`) {
+      if (denyOriginalFile) return send({ error: { message: "该原始文件暂不可读" } }, 403);
       response.writeHead(200, { "Content-Type": "application/octet-stream" });
       return response.end(original);
     }
@@ -173,7 +175,15 @@ async function checkPinnedVersion(page, detail) {
     await details("上传来源").locator("summary").click();
     await checkMark(details("上传来源"));
     assert.ok(requests.includes(`/v1/files/${file}`));
-    assert.equal(await details("上传来源").getByRole("button", { name: "下载原始文件" }).count(), 1);
+    const uploaded = details("上传来源");
+    const download = uploaded.getByRole("button", { name: "下载原始文件" });
+    assert.equal(await download.count(), 1);
+    denyOriginalFile = true;
+    await download.press("Enter");
+    await uploaded.getByRole("status").filter({ hasText: "原始文件下载失败：该原始文件暂不可读" }).waitFor();
+    assert.equal(await uploaded.locator("mark").count(), 0, "A fresh denial must clear the prior raw source");
+    assert.equal(await download.count(), 0);
+    denyOriginalFile = false;
     for (const title of ["引文不匹配", "字节区间切断字符"]) {
       const unverified = details(title);
       await unverified.locator("summary").click();

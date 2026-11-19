@@ -1686,7 +1686,8 @@ NODE_PATH="$browser_deps/node_modules" CHROMIUM=/usr/bin/chromium \
 - Chromium 153.0.8010.0，真实构建 UI 和同源转发，loopback 合成来源。既有上下文知识
   脚本扩展后，在基线无法找到激活前的状态区域；修复后通过。通过 Chromium AX tree 核对
   `status` 节点、`polite`、`atomic`、激活后同一节点的状态更新、403 后重试和焦点。
-  两种不可核验的 UTF-8 情况仍不高亮，reader 不发起原文请求。
+  下载时的新授权拒绝清除旧的原始预览，两种不可核验的 UTF-8 情况仍不高亮，
+  reader 不发起原文请求。
 - Node 24.22.3 类型检查和 21 项测试通过。资产详情页签/对比度和私有 Run PDF 构建浏览器
   回归通过。此次不改固定版本、权限或 PDF 页内核验合同。
 - 这是浏览器无障碍树证据，不是读屏软件或实际语音播报证据。云端没有 Orca/语音调度
