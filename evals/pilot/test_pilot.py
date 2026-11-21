@@ -44,13 +44,26 @@ class PilotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             score(self.data, self.tasks)
 
+    def test_scoring_rejects_invalid_reviewer_and_evidence(self):
+        for reviewer, evidence in ((True, [None]), (True, ["ref"]), (" ", ["ref"]),
+                                   ("reviewer", "ref"), ("reviewer", ["ref", None]), ("reviewer", [" "])):
+            with self.subTest(reviewer=reviewer, evidence=evidence):
+                row = self.data["cases"][0]
+                row.update(outcome="COMPLETED", independent_success=True, reviewer=reviewer,
+                           evidence=evidence, verified_checks=row["required_checks"][:])
+                with self.assertRaisesRegex(ValueError, "nonblank strings"):
+                    score(self.data, self.tasks)
+
     def test_even_all_success_does_not_certify_pilot(self):
         for row in self.data["cases"]:
             row.update(outcome="COMPLETED", independent_success=True, reviewer="synthetic-reviewer", evidence=["fixture-only"], verified_checks=row["required_checks"][:])
-        self.assertEqual(score(self.data, self.tasks)["acceptance"], "NOT_CERTIFIED")
+        result = score(self.data, self.tasks)
+        self.assertEqual(result["groups"]["database_wait/baseline"]["task_success_rate"], 1)
+        self.assertEqual((result["acceptance"], result["evidence_authenticity"], result["metrics_basis"]),
+                         ("NOT_CERTIFIED", "NOT_CHECKED", "OBSERVATION_SHEET_ONLY"))
 
     def test_duplicate_or_unknown_checks_rejected(self):
-        for checks in (["snapshot_support", "snapshot_support"], ["unknown"]):
+        for checks in (["snapshot_support", "snapshot_support"], ["unknown"], {}, [None], ""):
             data = copy.deepcopy(self.data)
             data["cases"][0].update(outcome="COMPLETED", reviewer="reviewer", evidence=["ref"], verified_checks=checks)
             with self.assertRaises(ValueError):

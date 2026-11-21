@@ -135,14 +135,18 @@ def score(data, tasks, *, tasks_hash=None):
         if row["required_checks"] != required:
             raise ValueError("changed frozen check denominator")
         verified = row["verified_checks"]
-        if len(set(verified)) != len(verified) or not set(verified) <= set(required):
+        if (not isinstance(verified, list) or not all(isinstance(item, str) for item in verified)
+                or len(set(verified)) != len(verified) or not set(verified) <= set(required)):
             raise ValueError("invalid verified checks")
         if row["outcome"] not in ("NOT_RUN", "ERROR", "TIMEOUT", "COMPLETED"):
             raise ValueError("invalid outcome")
         if type(row["independent_success"]) is not bool:
             raise ValueError("success must be boolean")
-        if (verified or row["independent_success"]) and (not row["reviewer"] or not row["evidence"]):
-            raise ValueError("verification requires reviewer and evidence references")
+        if verified or row["independent_success"]:
+            reviewer, evidence = row.get("reviewer"), row.get("evidence")
+            if (not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(evidence, list)
+                    or not evidence or not all(isinstance(ref, str) and ref.strip() for ref in evidence)):
+                raise ValueError("verification requires reviewer and evidence references as nonblank strings")
         if row["independent_success"] and (row["outcome"] != "COMPLETED" or set(verified) != set(required)):
             raise ValueError("success requires completed task and all independent checks")
         if row["outcome"] == "NOT_RUN" and verified:
@@ -157,7 +161,8 @@ def score(data, tasks, *, tasks_hash=None):
     for group in groups.values():
         group["task_success_rate"] = group["successes"] / group["tasks"]
         group["verification_coverage"] = group["verified"] / group["required"]
-    return {"acceptance": "NOT_CERTIFIED", "evidence_authenticity": "NOT_CHECKED", "tasks_sha256": tasks_hash,
+    return {"acceptance": "NOT_CERTIFIED", "evidence_authenticity": "NOT_CHECKED",
+            "metrics_basis": "OBSERVATION_SHEET_ONLY", "tasks_sha256": tasks_hash,
             "pending": ["four lanes on one commit", "A1-A7 live evidence", "DBA signoff", "policy owner signoff", "independent signoff"], "groups": groups}
 
 
