@@ -18,24 +18,12 @@
 
 [关联表](examples/p6-synthetic/case-link.json)和[索引](examples/p6-synthetic/index.json)演示精确摘要与字段的关联。Run UUID、前缀摘要和序号均为合成占位；[依据文本](examples/p6-synthetic/basis.txt)仅用于检验文件哈希。样例无独立签认原件或 owner 回执，两栏均为 `NOT_RUN`，不进入任何试点分母。
 
-在仓库根目录用以下 Python 标准库命令核对样例：
+在仓库根目录用 Python 标准库检查关联表、索引和证据文件：
 
 ```sh
-python - <<'PY'
-import hashlib
-import json
-from pathlib import Path
-
-root = Path("evals/pilot/examples/p6-synthetic")
-link = json.loads((root / "case-link.json").read_bytes())
-index_bytes = (root / link["evidence_index"]["ref"]).read_bytes()
-assert hashlib.sha256(index_bytes).hexdigest() == link["evidence_index"]["sha256"]
-index = json.loads(index_bytes)
-assert index["run_prefix"] == link["run_prefix"]
-for item in index["files"]:
-    data = (root / item["path"]).read_bytes()
-    assert len(data) == item["bytes"]
-    assert hashlib.sha256(data).hexdigest() == item["sha256"]
-print("P6 synthetic evidence linkage: OK")
-PY
+python evals/pilot/p6_check.py evals/pilot/examples/p6-synthetic/case-link.json
 ```
+
+成功只表示 `INDEX_LINKAGE_ONLY`。工具检查原始字节的 SHA-256、文件字节数、案号和 P6 项、重复文件及一致的 Run 前缀字段；不会从服务读取或重算 Run 前缀，不核对冻结题、签认原件、owner 回执或身份，也不进行评分。公开样例另外标记 `public_synthetic: true`，必须保持 `NOT_RUN`，不计入正式结果。
+
+以关联表所在目录作为已封存证据包根目录，引用采用 `/` 分隔的相对路径；不接受绝对路径、`..`、链接或 reparse point。仅对已停止写入、无并发替换且可信来源的本地离线副本使用。文件匹配不等于内容真实，不能替代正式人工核验。

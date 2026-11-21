@@ -27,8 +27,9 @@ python evals/pilot/pilot.py score --prepare pilot-prepare-new/observations.json
 python evals/pilot/pilot.py score "$held_out_observations" --freeze "$trusted_freeze"
 ```
 
-模板的空哈希和仅自洽的其他批次会被拒绝。评分器核对冻结值，保管人仍需确认冻结文件来源及签认。
-预登记题全部保留在离线分母中。正式业务成功率和核验覆盖率按 [PRD 口径](PRD-MAPPING.md#计量差异必须披露) 单列。
+模板的空哈希和仅自洽的其他批次会被拒绝。`FROZEN_BATCH` 仅表示题集字节与所传冻结记录的摘要匹配，不证明冻结已获批准。保管人仍需确认冻结文件来源及签认。
+有已核验项或填报成功的观察行须提供非空白的评审人，以及逐项非空白的证据引用。评分器不打开引用或核验身份、内容和签认；输出将组指标标为 `OBSERVATION_SHEET_ONLY`，即使填表满分也不是试点实绩。
+预登记题全部保留在离线分母中。正式业务成功率和核验覆盖率须独立核实，按 [PRD 口径](PRD-MAPPING.md#计量差异必须披露) 单列。
 
 ## 执行矩阵
 
