@@ -20,14 +20,25 @@ def unique_object(pairs):
     return result
 
 
-def read_object(path, expected_hash=None):
+def reject_constant(_):
+    raise ValueError("non-finite JSON number")
+
+
+def read_json(path, expected_hash=None, *, label="index"):
+    if not stat.S_ISREG(path.stat().st_mode):
+        raise ValueError("JSON input must be a regular file")
     with path.open("rb") as handle:
         raw = handle.read(MAX_JSON + 1)
     if len(raw) > MAX_JSON:
         raise ValueError("JSON exceeds 1 MiB")
     if expected_hash is not None and hashlib.sha256(raw).hexdigest() != expected_hash:
-        raise ValueError("index SHA-256 mismatch")
-    result = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+        raise ValueError(f"{label} SHA-256 mismatch")
+    return json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object,
+                      parse_constant=reject_constant)
+
+
+def read_object(path, expected_hash=None, *, label="index"):
+    result = read_json(path, expected_hash, label=label)
     if not isinstance(result, dict):
         raise ValueError("expected JSON object")
     return result
@@ -53,6 +64,11 @@ def package_file(root, ref):
     return path
 
 
+def file_identity(path):
+    meta = path.stat()
+    return meta.st_dev, meta.st_ino
+
+
 def digest(value):
     if not isinstance(value, str) or not SHA256.fullmatch(value):
         raise ValueError("expected lowercase SHA-256")
@@ -73,7 +89,7 @@ def run_prefix(value):
     return (run_id, end, digest(value["prefix_digest"]), tuple(basis))
 
 
-def check(case_link):
+def check_index(case_link):
     root = case_link.parent.resolve(strict=True)
     link_file = package_file(root, case_link.name)
     link = read_object(link_file)
@@ -83,7 +99,8 @@ def check(case_link):
     prefix = run_prefix(link["run_prefix"])
     entry = link["evidence_index"]
     index_file = package_file(root, entry["ref"])
-    if index_file == link_file:
+    link_identity, index_identity = file_identity(link_file), file_identity(index_file)
+    if index_identity == link_identity:
         raise ValueError("index cannot reference the case link")
     index = read_object(index_file, digest(entry["sha256"]))
     if run_prefix(index["run_prefix"]) != prefix:
@@ -96,14 +113,15 @@ def check(case_link):
     files = index["files"]
     if not isinstance(files, list) or not files:
         raise ValueError("expected nonempty evidence file list")
-    seen = {link_file, index_file}
+    seen = {link_identity, index_identity}
     for item in files:
         if item["case_id"] != case_id or item["pilot_item"] != "P6":
             raise ValueError("evidence belongs to another case or pilot item")
         path = package_file(root, item["path"])
-        if path in seen:
+        identity = file_identity(path)
+        if identity in seen:
             raise ValueError("duplicate or reserved evidence file")
-        seen.add(path)
+        seen.add(identity)
         length, checksum = item["bytes"], digest(item["sha256"])
         if type(length) is not int or length < 0 or length != path.stat().st_size:
             raise ValueError("evidence byte count mismatch")
@@ -118,8 +136,13 @@ def check(case_link):
             raise ValueError("evidence byte count mismatch")
         if hasher.hexdigest() != checksum:
             raise ValueError("evidence SHA-256 mismatch")
+    return root, link, index, synthetic
+
+
+def check(case_link):
+    _, _, index, synthetic = check_index(case_link)
     return {"result": "INDEX_LINKAGE_ONLY", "public_synthetic": synthetic,
-            "files_checked": len(files), "evidence_authenticity": "NOT_CHECKED",
+            "files_checked": len(index["files"]), "evidence_authenticity": "NOT_CHECKED",
             "pilot_acceptance": "NOT_CERTIFIED"}
 
 
