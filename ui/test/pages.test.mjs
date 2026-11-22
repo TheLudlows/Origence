@@ -47,7 +47,16 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
     coverageRun: "55555555-5555-4555-8555-555555555555",
+    reportedAsset: "66666666-6666-4666-8666-666666666666",
+    reportedChunk: "77777777-7777-4777-8777-777777777777",
+    reportedRef: "88888888-8888-4888-8888-888888888888",
   };
+  const reportedReference = {
+    kind: "chunk", id: ids.reportedChunk, chunk_id: ids.reportedChunk,
+    asset_id: ids.reportedAsset, asset_version: 1,
+  };
+  const reportedReads = [];
+  let reportedAssetDenied = false;
   let verificationDenied = false;
   let coveragePageDenied = false;
   let holdTrace = false, releaseTrace;
@@ -213,6 +222,31 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
             report: { reporter, kind, delivery_status, retrieval },
             references: [],
           })),
+          {
+            sequence: 7,
+            recorded_at_ms: 1006,
+            evidence_origin: "reported",
+            report: {
+              reporter: "client",
+              event: { kind: "context_reported", references: [reportedReference] },
+            },
+            references: [{
+              evidence_ref_id: ids.reportedRef,
+              reference: reportedReference,
+              source_event_id: ids.source, source_version: 1, version_source_event_id: ids.source,
+              locator: { parser: "source-ranges-v1", byte_start: 0, byte_end: 6 },
+            }],
+          },
+          {
+            sequence: 8,
+            recorded_at_ms: 1007,
+            evidence_origin: "reported",
+            report: {
+              reporter: "client",
+              event: { kind: "context_reported", references: [reportedReference] },
+            },
+            references: [],
+          },
         ],
         next_after: null,
       });
@@ -222,6 +256,18 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return pending.promise;
     }
     if (path.pathname === `/api/v1/assets/${ids.asset}`) return response(asset);
+    if (path.pathname === `/api/v1/assets/${ids.reportedAsset}`) {
+      const version = path.searchParams.get("version");
+      reportedReads.push(version);
+      if (reportedAssetDenied && version === "1")
+        return response({ error: { message: "fixture historical source withdrawn" } }, 404);
+      return response({
+        ...asset, asset_id: ids.reportedAsset, kind: "knowledge", identity: null,
+        version: version === "1" ? 1 : 2,
+        title: version === "1" ? "历史手册" : "当前手册",
+        content: version === "1" ? "仅 v1 原文" : "仅 v2 原文",
+      });
+    }
     if (path.pathname === "/api/v1/memories/identified") {
       writes.push(body);
       keys.push(options.headers.get("Idempotency-Key"));
@@ -593,6 +639,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     const events = [...document.querySelectorAll(".timeline button.event")];
     assert.deepEqual(events.map((event) => event.querySelector(".badge").textContent), [
       "服务端准备成功", "服务端准备失败", "客户端上报", "来源未知", "服务端准备成功", "客户端上报",
+      "客户端上报", "客户端上报",
     ]);
     assert.ok(document.body.textContent.includes("0 Token（模型服务上报）"));
     assert.ok(document.body.textContent.includes("查询向量配置 SHA-256：" + "a".repeat(64)));
@@ -635,6 +682,40 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(document.body.textContent.includes("仅当前逻辑 key 的已记录引用"));
     click(`打开 Run ${ids.run}`);
     await wait(() => location.hash === `#runs/${ids.run}` && document.querySelector("h1")?.textContent === "Run 详情");
+  });
+  await t.test("client-reported non-PDF references open only their authorized archived version", async () => {
+    const select = async (sequence) => {
+      const event = () => document.querySelector(`.timeline button[data-sequence="${sequence}"]`);
+      await wait(event);
+      event().click();
+    };
+    const action = () => [...document.querySelectorAll("button")].filter((b) => b.textContent === "66666666 · v1");
+    await select(8);
+    assert.equal(action().length, 0, "unarchived report payload is not an action");
+    await select(7);
+    assert.equal(action().length, 1);
+    assert.ok(document.body.textContent.includes("客户端上报；未经独立验证"));
+    assert.ok(!document.body.textContent.includes("服务端准备成功；未确认收到或使用"));
+    assert.ok(!document.body.textContent.includes("核验原始引用"));
+    action()[0].click();
+    await wait(() => document.querySelector("h1")?.textContent === "历史手册");
+    assert.equal(location.hash, `#asset/${ids.reportedAsset}?version=1`);
+    assert.ok(document.body.textContent.includes("仅 v1 原文"));
+    assert.ok(!document.body.textContent.includes("仅 v2 原文"));
+
+    try {
+      reportedAssetDenied = true;
+      location.hash = `#runs/${ids.run}`;
+      await select(7);
+      action()[0].click();
+      await wait(() => document.body.textContent.includes("fixture historical source withdrawn"));
+      assert.ok(!document.body.textContent.includes("仅 v1 原文"));
+      assert.ok(!document.body.textContent.includes("仅 v2 原文"));
+      assert.deepEqual(reportedReads, ["1", "1"], "never falls back to latest");
+    } finally {
+      reportedAssetDenied = false;
+      location.hash = `#runs/${ids.run}`;
+    }
   });
   await t.test("Run coverage keeps loaded declarations ordered and clears denied or replaced evidence", async () => {
     const unknown = "已加载事件中未见采集声明，覆盖未知";
