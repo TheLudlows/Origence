@@ -5,10 +5,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from pilot import build_case, cases, generate, input_digest, observations, score, score_file
+from pilot import build_case, cases, generate, input_digest, observations, score, score_file, validate_held_out_expense
 
 
 class PilotTests(unittest.TestCase):
+    @staticmethod
+    def expense_caps(task, oracle):
+        if "synthetic_policy" not in oracle:
+            return task["policy_v1_cap_minor"], task["policy_v2_cap_minor"]
+        return tuple(version["cap_minor"] for version in oracle["synthetic_policy"]["versions"])
+
     def setUp(self):
         self.tasks, self.oracle = cases("test")
         self.data = observations(self.tasks, self.oracle)
@@ -88,6 +94,7 @@ class PilotTests(unittest.TestCase):
                 categories = {name: [] for name in ("normal", "capped", "duplicate", "missing")}
                 for task, answer in zip(tasks[8:], oracle[8:]):
                     value, expected = task["input"], answer["expected"]
+                    v1_cap, v2_cap = self.expense_caps(value, answer)
                     if value["duplicate"]:
                         category = "duplicate"
                         self.assertTrue(value["receipt_present"])
@@ -97,20 +104,20 @@ class PilotTests(unittest.TestCase):
                         category = "missing"
                         self.assertEqual(expected["decision"], "hold")
                         self.assertEqual(expected["payable_minor"], 0)
-                    elif value["claim_minor"] > value["policy_v2_cap_minor"]:
+                    elif value["claim_minor"] > v2_cap:
                         category = "capped"
                         self.assertEqual(expected["decision"], "recommend")
                         self.assertEqual(expected["policy_version"], 2)
-                        self.assertEqual(expected["payable_minor"], value["policy_v2_cap_minor"])
+                        self.assertEqual(expected["payable_minor"], v2_cap)
                         self.assertLess(expected["payable_minor"], value["claim_minor"])
                         # Using v1 would reimburse the full claim: must differ.
-                        self.assertLess(value["claim_minor"], value["policy_v1_cap_minor"])
-                        self.assertNotEqual(expected["payable_minor"], min(value["claim_minor"], value["policy_v1_cap_minor"]))
+                        self.assertLess(value["claim_minor"], v1_cap)
+                        self.assertNotEqual(expected["payable_minor"], min(value["claim_minor"], v1_cap))
                     else:
                         category = "normal"
                         self.assertEqual(expected["decision"], "recommend")
                         self.assertEqual(expected["payable_minor"], value["claim_minor"])
-                    categories[category].append(value)
+                    categories[category].append(v2_cap)
                 for values in categories.values():
                     self.assertEqual(len(values), 2)
                     self.assertNotEqual(values[0], values[1])
@@ -127,7 +134,8 @@ class PilotTests(unittest.TestCase):
                 if scenario == "database_wait":
                     result.append(answer["expected"]["classification"])
                 else:
-                    result.append("duplicate" if value["duplicate"] else "missing" if not value["receipt_present"] else "capped" if value["claim_minor"] > value["policy_v2_cap_minor"] else "normal")
+                    _, cap = self.expense_caps(value, answer)
+                    result.append("duplicate" if value["duplicate"] else "missing" if not value["receipt_present"] else "capped" if value["claim_minor"] > cap else "normal")
             return result
         for split in ("prepare", "held-out"):
             self.assertEqual(cases("seed-a", split, self.excluded), cases("seed-a", split, self.excluded))
@@ -145,11 +153,82 @@ class PilotTests(unittest.TestCase):
             tasks = json.loads((output / "tasks.json").read_text())
             self.assertNotIn("synthetic-holdout-test", json.dumps(tasks))
             self.assertNotIn("held-out", json.dumps(tasks))
-            for task in tasks:
+            oracle = json.loads((output / "oracle.json").read_text())
+            policy_ids = set()
+            for task, answer in zip(tasks, oracle):
                 self.assertEqual(set(task), {"id", "scenario", "synthetic", "input"})
                 self.assertNotIn("expected", task["input"])
                 self.assertNotIn("payable_minor", task["input"])
-            self.assertTrue((output / "oracle.json").exists())
+                if task["scenario"] != "expense_review":
+                    continue
+                public = task["input"]
+                policy = answer["synthetic_policy"]
+                self.assertEqual(set(public), {"policy_id", "claim_date", "currency", "claim_minor",
+                                                "duplicate", "receipt_present", "instruction"})
+                self.assertRegex(public["policy_id"], r"^synthetic-expense-[0-9a-f]{32}$")
+                self.assertNotIn(public["policy_id"], policy_ids)
+                policy_ids.add(public["policy_id"])
+                self.assertEqual(policy["policy_id"], public["policy_id"])
+                self.assertEqual(policy["currency"], public["currency"])
+                applicable = [v for v in policy["versions"] if v["effective_from"] <= public["claim_date"]][-1]
+                self.assertEqual(applicable["version"], answer["expected"]["policy_version"])
+                self.assertNotIn("rule", public)
+                self.assertTrue(policy["rule"])
+            self.assertEqual(len(policy_ids), 8)
+
+    def test_same_visible_claim_can_have_distinct_private_v2_caps(self):
+        capped = {}
+        for number in range(60):
+            tasks, oracle = cases(f"public-claim-relation-{number}", "held-out", self.excluded)
+            for task, answer in zip(tasks[8:], oracle[8:]):
+                value = task["input"]
+                old_cap, cap = self.expense_caps(value, answer)
+                claim = value["claim_minor"]
+                if not value["duplicate"] and value["receipt_present"] and claim > cap:
+                    capped.setdefault((claim, old_cap), set()).add(cap)
+        # Even with the visible amount, category and old cap, a fixed relation
+        # must not reveal the private new cap.
+        self.assertTrue(any(len(caps) > 1 for caps in capped.values()))
+
+    def test_matching_freeze_cannot_admit_legacy_answer_bearing_held_out_expense(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generate("public-test-legacy", root / "prepare")
+            path = root / "prepare"
+            manifest_path = path / "manifest.json"
+            manifest = json.loads(manifest_path.read_bytes())
+            manifest["split"] = "held-out"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            sheet = path / "observations.json"
+            rows = json.loads(sheet.read_bytes())
+            rows["split"] = "held-out"
+            sheet.write_text(json.dumps(rows), encoding="utf-8")
+            freeze = root / "test-freeze.json"
+            freeze.write_text(json.dumps({"data": {"tasks_sha256": rows["tasks_sha256"]}}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "separated synthetic task format"):
+                score_file(sheet, freeze_path=freeze)
+
+    def test_held_out_expense_checks_every_preregistered_case(self):
+        tasks, _ = cases("public-test-expense-integrity", "held-out", self.excluded)
+        for mutate, message in (
+            (lambda rows: rows.pop(), "missing preregistered"),
+            (lambda rows: rows[-1].update(scenario="database_wait"), "mismatched or duplicate"),
+            (lambda rows: rows.append(rows[-1]), "mismatched or duplicate"),
+            (lambda rows: rows[-1].update(answer=1), "separated synthetic task format"),
+            (lambda rows: rows[-1]["input"].update(policy_id=rows[-2]["input"]["policy_id"]), "repeats a synthetic policy"),
+        ):
+            with self.subTest(message=message):
+                rows = copy.deepcopy(tasks)
+                mutate(rows)
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_held_out_expense(rows, synthetic_only=True)
+
+    def test_independent_policy_case_does_not_require_synthetic_shape(self):
+        tasks, _ = cases("public-test-independent-shape", "held-out", self.excluded)
+        tasks[-1].update(synthetic=False, input={"policy_reference": "policy-ref", "claimed_amount": 100})
+        validate_held_out_expense(tasks, synthetic_only=False)
+        with self.assertRaisesRegex(ValueError, "separated synthetic task format"):
+            validate_held_out_expense(tasks, synthetic_only=True)
 
     def test_output_never_overwrites(self):
         with tempfile.TemporaryDirectory() as tmp:
