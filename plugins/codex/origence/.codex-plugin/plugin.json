@@ -1,0 +1,6 @@
+{
+  "name": "origence",
+  "version": "0.1.0",
+  "description": "Search and read published Origence workspace materials.",
+  "mcpServers": "./.mcp.json"
+}

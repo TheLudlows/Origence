@@ -5,6 +5,72 @@
 两个客户端都通过本地 stdio 进程访问运行中的 Origence HTTP 宿主。客户端不直接访问
 SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 
+## 安装 `origence` 插件
+
+准备一台客户端可访问的 Origence HTTP 宿主、本机 `origence` 可执行文件及支持插件
+Marketplace 的客户端。请 workspace 管理员签发个人 `reader` key。管理员可在已经
+通过 `OC_API_KEY` 获得授权的终端执行 `origence key-create <WORKSPACE_ID> --role reader`，
+通过受保护的渠道交付签发的 key。创建命令使用下文的 `OC_SERVER_URL`。
+
+安装后，从配置了 `PATH`、`OC_SERVER_URL` 和 `OC_API_KEY` 的终端启动客户端。
+`OC_SERVER_URL` 与 `origence --server-url` 使用同一参数，默认是
+`http://127.0.0.1:8080`。远程宿主使用 HTTPS。以下为 Windows PowerShell 示例，
+将安装目录和端口换成本机值；目录中的空格无需额外转义。Windows 使用 `origence.exe`，
+Linux/macOS 将含 `origence` 的目录放在 `PATH` 前面。
+
+```powershell
+$origenceExe = (Get-Item -LiteralPath 'C:\Program Files\Origence\origence.exe').FullName
+$env:Path = (Split-Path -Parent $origenceExe) + [IO.Path]::PathSeparator + $env:Path
+$env:OC_SERVER_URL = 'http://127.0.0.1:18080'
+$secret = Read-Host 'OC_API_KEY' -AsSecureString
+$env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
+```
+
+### Claude Code
+
+```sh
+claude plugin install origence --marketplace TheLudlows/Origence
+```
+
+测试本地检出时，把 `TheLudlows/Origence` 换成仓库根目录的绝对路径。重新启动 `claude`，
+用 `/mcp` 或 `claude mcp list` 检查来自插件的 Origence 连接。客户端或组织要求确认时，
+审查该插件并按提示授权检索工具。卸载使用 `claude plugin uninstall origence@origence-tools`，
+可选执行 `claude plugin marketplace remove origence-tools`。
+[Claude Code 插件命令](https://code.claude.com/docs/en/plugins/cli-reference)
+
+### Codex
+
+```sh
+codex plugin marketplace add TheLudlows/Origence
+codex plugin add origence@origence-tools
+```
+
+测试本地检出时，Marketplace 来源可换成仓库根目录的绝对路径。在新的 `codex` 会话中用
+`/mcp` 查看是否已连接。`codex plugin list` 核对安装，连接和工具权限由客户端另外处理。
+卸载使用 `codex plugin remove origence@origence-tools`，可选执行
+`codex plugin marketplace remove origence-tools`。
+[Codex 插件命令](https://learn.chatgpt.com/docs/cli/reference#codex-plugin)
+
+### 验证连接和排查
+
+在新会话调用 `context_session`，将返回的 `key_id` 和 `session_id` 与该 workspace 的
+预期归档身份核对。工作区 UUID 可用同一 key 调用 `GET /v1/whoami` 核对。用
+`context_search` 的 `keyword` 模式搜索管理员已发布的已知资料，再用命中结果的
+`asset_id` 和 `version` 调用 `context_get`。两端均可使用这三个工具完成验证。
+
+| 现象 | 检查方式 |
+| --- | --- |
+| 找不到 `origence` | 在启动客户端的同一终端运行 `Get-Command origence -CommandType Application`（Windows）或 `command -v origence`。确认路径指向所选二进制。 |
+| API 连接失败 | 核对 `OC_SERVER_URL` 和端口。直接运行 `origence mcp` 可在 stderr 看启动错误，连接成功时该进程等待 stdio 输入。 |
+| `OC_API_KEY is required` | 用带有 workspace key 的环境重新启动客户端。 |
+| `authentication required` | 请管理员核对 key 所属 workspace、有效性及撤销状态。 |
+| 显示两个 Origence 服务 | 检查历史手工注册，停用重复入口后再试。 |
+
+安装包只有检索 MCP 配置，没有 Run Hook。需要采集时，另按[项目显式启用](#按项目启用私有-run-hook)，
+并为该项目使用 `writer` 权限的凭据。
+
+## 手工 MCP 接入
+
 1. 使用项目所属 workspace 的个人 API key，通过启动环境提供 `OC_API_KEY`。
    不要把密钥写进配置文件、提交到项目或贴进对话。
 2. 将示例的 `command` 改为本地 Origence 可执行文件的绝对路径，将

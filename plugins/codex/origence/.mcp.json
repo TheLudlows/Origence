@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "origence": {
+      "command": "origence",
+      "args": ["mcp"],
+      "env_vars": ["OC_API_KEY", "OC_SERVER_URL", "PATH"],
+      "enabled_tools": ["context_session", "context_search", "context_get"]
+    }
+  }
+}

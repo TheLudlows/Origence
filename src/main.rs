@@ -463,8 +463,10 @@ async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> 
         !matches!(command, Command::WorkspaceCreate { .. }),
         "workspace-create requires --offline and a stopped host"
     );
-    let token =
-        std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
+    let token = std::env::var("OC_API_KEY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("OC_API_KEY is required"))?;
     let client = HostClient::new(&server_url, token)?;
     let (method, path, body) = match command {
         Command::Mcp => return mcp::run_remote(client).await,
