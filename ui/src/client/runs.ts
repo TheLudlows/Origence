@@ -266,7 +266,7 @@ function showCoverage(target: HTMLElement, events: RunEvent[], hasMore: boolean)
   );
 }
 
-interface ArchivedPdfReference {
+interface ArchivedAssetReference {
   evidence_ref_id: string;
   source_event_id: string;
   locator: Record<string, unknown>;
@@ -276,13 +276,14 @@ function pdfLocator(locator?: Record<string, unknown>) {
   return locator?.page != null ||
     (typeof locator?.parser === "string" && locator.parser.startsWith("pdf-"));
 }
-function archivedPdf(value: unknown): value is ArchivedPdfReference {
-  const item = value as Partial<ArchivedPdfReference> | null;
+function archivedAsset(value: unknown): value is ArchivedAssetReference {
+  const item = value as Partial<ArchivedAssetReference> | null;
   return typeof item?.evidence_ref_id === "string" &&
     typeof item.source_event_id === "string" &&
     typeof item.reference?.chunk_id === "string" &&
     typeof item.reference.asset_id === "string" &&
-    Number.isSafeInteger(item.reference.asset_version) && item.reference.asset_version > 0 && pdfLocator(item.locator);
+    Number.isInteger(item.reference.asset_version) &&
+    item.reference.asset_version > 0 && item.reference.asset_version <= 2147483647;
 }
 
 function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
@@ -366,9 +367,11 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])
       : [];
-    const pdfRefs = event.references.filter(archivedPdf);
+    const pdfRefs = event.references.filter(
+      (ref): ref is ArchivedAssetReference => archivedAsset(ref) && pdfLocator(ref.locator),
+    );
     const shown = new Set<string>();
-    const pdfPath = (ref: ArchivedPdfReference) => {
+    const pdfPath = (ref: ArchivedAssetReference) => {
       shown.add(ref.evidence_ref_id);
       const query = new URLSearchParams({
         sequence: String(event.sequence),
@@ -390,14 +393,27 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       details.append(citation(ref, ctx, { pdf: { path: archived && pdfPath(archived) } }));
     }
     for (const ref of event.references) {
-      if (archivedPdf(ref) && !shown.has(ref.evidence_ref_id)) {
-        details.append(citation({
-          type: "asset_chunk",
-          asset_id: ref.reference.asset_id,
-          asset_version: ref.reference.asset_version,
-          source_event_id: ref.source_event_id,
-          locator: ref.locator,
-        }, ctx, { pdf: { path: pdfPath(ref) } }));
+      if (archivedAsset(ref)) {
+        const isPdf = pdfLocator(ref.locator);
+        if (isPdf && !shown.has(ref.evidence_ref_id)) {
+          details.append(citation({
+            type: "asset_chunk",
+            asset_id: ref.reference.asset_id,
+            asset_version: ref.reference.asset_version,
+            source_event_id: ref.source_event_id,
+            locator: ref.locator,
+          }, ctx, { pdf: { path: pdfPath(ref) } }));
+        } else if (!isPdf && event.evidence_origin === "reported" &&
+          report.event?.kind === "context_reported") {
+          // Only an archived reference can link a client report to an asset.
+          // Opening it still rechecks access to that exact historical version.
+          const { asset_id, asset_version } = ref.reference;
+          details.append(button(
+            `${short(asset_id)} · v${asset_version}`,
+            () => ctx.navigate("asset", asset_id, asset_version),
+            "link",
+          ));
+        }
       }
       details.append(code(ref));
     }
