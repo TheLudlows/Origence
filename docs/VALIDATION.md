@@ -1,9 +1,17 @@
 # Origence · 当前验证
 
-最近一次本地核验为 2026-11-21，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
+最近一次本地核验为 2026-11-23，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-23 · Origence 管理本地 AnySeek
+
+基线 `a01fc9c`。Linux 本地 Rust 1.98.0 格式检查和 `git diff --check` 通过。PowerShell 7.4.13 下 16 项 Python 工具回归通过，其中 5 项覆盖 Windows 开发脚本参数转发、空格路径、UI 就绪顺序和失败处理。
+
+`3a9e58d` 的 Linux CI 严格 Clippy、默认 Rust 测试与真实 AnySeek `6a46fc7` 联调通过。`serve --local` 通过首次初始化、端口冲突、全文写入与更新、SIGTERM 退出、同目录重启后的当前与历史正文及检索、已绑定 Catalog 缺失时拒绝重建。原独立 AnySeek 的 HTTP、MCP 和 UI 烟测也通过。[CI #482](https://github.com/TheLudlows/Origence/actions/runs/45109060442)
+
+Windows CI 的原生构建、Clippy 和本地生命周期测试通过。Windows 前台 Ctrl+C 和真实 AnySeek 子进程重开尚未在 Windows 终端实测。
 
 ## 2026-11-21 · #91 冻结题与 P6 回执离线关联
 
