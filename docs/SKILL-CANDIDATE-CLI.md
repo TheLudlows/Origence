@@ -17,15 +17,15 @@ not real task data or credentials. Choose exactly one fixed source:
 
 ```sh
 origence-skill run-source RUN_UUID 3
-# Or an already published Improve → Learning result (exact asset version):
+# Or an already published Improve → Learning result at a specific version:
 origence-skill asset-source LEARNING_ASSET_UUID 1
 ```
 
 Copy that JSON object into `source` in a private `selection.json`. Run sequences
-are immutable prefix endpoints, not “latest” or an implicit entire Run. The asset
-selector also accepts authorized exact knowledge/memory versions. It returns only
-the address/hash; no source prose or private Learning supports are copied to the
-candidate. Existing source visibility and Learning-support checks remain in force.
+are immutable prefix endpoints, not “latest” or an implicit entire Run. The
+`asset-source` command also accepts authorized exact knowledge or memory versions.
+It returns the address and hash. Source prose and private Learning support stay
+outside the candidate. Existing source visibility and Learning-support checks apply.
 This CLI does not run Improve or extract a private turn; select an existing Run
 prefix or published Learning instead.
 

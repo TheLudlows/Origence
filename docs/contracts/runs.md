@@ -88,7 +88,8 @@ recording path archives this evidence; it may not contain all physical requests
 is inferred. No query, vector, endpoint URL, model name, or credentials are stored
 in this observation.
 
-## Exact asset-version recorded associations
+<a id="exact-asset-version-recorded-associations"></a>
+## Recorded Run associations for an exact content version
 
 `GET /v1/assets/{asset_id}/runs?version=N&after=UUID&limit=25` is a read-only
 current-logical-key lookup. A positive `version` is required; no implicit latest.
@@ -98,14 +99,14 @@ The response contains `asset_id`, `asset_version`, `items` (`run_id`,
 `coverage:"recorded_references"`. It exposes no Run summary, query, body or quote.
 
 The lookup table is a projection maintained atomically with accepted client
-context-reference and server-prepared events. One pointer per owner/asset/version/
+context-reference and server-prepared events. One pointer per owner, content item, version, and
 Run retains the first immutable archived reference as its proof. Retries do not
-create duplicates. The scope/owner/asset/version/Run primary key supports a bounded
+create duplicates. The primary key (scope, owner, content item, version, and Run) supports a bounded
 range read; there is no scan of all Runs or JSON search. In one authorized read
-snapshot the server checks the exact asset version, sources, logical owner/private
+snapshot the server checks the exact content item version, sources, logical owner/private
 session, authoritative event reference identity and current reference visibility.
 The projection alone grants no access. An invisible/missing proof is omitted
-conservatively, even if a later event also mentions that asset; the endpoint does
+conservatively, even if a later event also mentions that content item; the endpoint does
 not search other events to replace withdrawn evidence. Cursor advancement counts
 examined pointers, so an empty page can still have `next_after`.
 
@@ -113,8 +114,8 @@ These are recorded associations, not complete capture or proof of receipt/use.
 The response does not grant access to a full trace: opening the Run rechecks the
 trace's own sources, including unrelated references. A workspace administrator
 cannot enumerate another logical key's associations; credential rotation retains
-ownership. Asset/source withdrawal denies the lookup. The UI clears stale results
-on retry, provides empty/error states, and clears the displayed asset on 403/404.
+ownership. Withdrawal of the item or its source denies the lookup. The UI clears stale results
+on retry, provides empty/error states, and clears the displayed content item on 403/404.
 
 This fresh-only schema adds `oc_run_asset_refs`; exact schema admission rejects
 an existing database without the table without creating it or rewriting evidence.
@@ -164,7 +165,7 @@ or `reporter=user/test` label does not grant private Run access.
 `GET /v1/runs/{run}/pdf-source?sequence=N&evidence_ref_id=UUID` resolves an
 archived PDF citation from that Run event. The UUID is server assigned and read
 from the event's archive references. The query accepts neither a file ID nor an
-asset version, page, range or parser supplied by the caller. The route requires
+content item version, page, range or parser supplied by the caller. The route requires
 the existing original-source Write permission and the current logical Run owner.
 It checks the event's current reference visibility, the exact published member
 and root sources, and the original file before and after file/parse work.

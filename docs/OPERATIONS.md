@@ -146,7 +146,7 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 ## 离线记忆身份检查
 
-原生 SQLite 新库包含完整身份 schema，身份存于 oc_assets，删除资产仍保留占位；详见[存储不变量](contracts/storage.md)。
+原生 SQLite 新库包含完整身份 schema，身份存于 oc_assets，删除内容条目仍保留占位；详见[存储不变量](contracts/storage.md)。
 
 `identity-check` 对已有数据库执行
 只读同版本检查，包括格式标记和完整 authority schema，不创建或修复任何表。
@@ -211,7 +211,7 @@ SQLite 随程序编译，无需安装 SQLite 服务或客户端库。可写连�
 
 ## 检索分段诊断
 
-设置 RUST_LOG=error,origence::search_timing=debug 可记录成功 Search 的 authorization_ms、embedding_ms、eligibility_ms、vector_ms、branches_ms、verification_ms、total_ms，以及 vector_batches/native_count/returned_count。日志不含 query、证据、用户/资产 ID、路径或凭据。默认 info 不输出这些 debug 事件。
+设置 RUST_LOG=error,origence::search_timing=debug 可记录成功 Search 的 authorization_ms、embedding_ms、eligibility_ms、vector_ms、branches_ms、verification_ms、total_ms，以及 vector_batches/native_count/returned_count。日志不含 query、证据、用户/内容条目 ID、路径或凭据。默认 info 不输出这些 debug 事件。
 
 branches_ms 包含候选装载、融合及已启用的辅助分支；verification_ms 是最终新权限快照及身份复核。total_ms 从输入校验后计到结果序列化前后的一部分，不包含外层 HTTP 编码或网络；不能当 HTTP 端到端延迟。失败和身份不存在的提前返回不生成该完成事件，故不能用这些事件统计错误率。完整 HTTP 耗时须另行测量。本次只增加计时，Worker、超时、取消、关闭、隔离和读取权限保证不变。
 

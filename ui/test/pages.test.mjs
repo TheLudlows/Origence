@@ -453,6 +453,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   await t.test("new knowledge sends null version preconditions", async () => {
     click("▤知识管理");
     await wait(() => document.querySelector("h1")?.textContent === "知识管理");
+    assert.ok(document.body.textContent.includes("已发布知识"));
+    assert.ok(control("内容 ID"));
     click("＋ 新建 / 上传");
     const modal = document.querySelector("dialog");
     control("文档标题", modal).value = "发布手册";
@@ -460,6 +462,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     modal.querySelector("form").requestSubmit();
     await wait(() => modal.textContent.includes("completed"));
     assert.equal(writes.at(-1).title, "发布手册");
+    assert.ok(modal.textContent.includes("查看内容"));
     click("关闭", modal);
     click("＋ 新建 / 上传");
     const upload = document.querySelector("dialog");
@@ -479,12 +482,13 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   await t.test("memory filters are server predicates and preserve empty-page continuation", async () => {
     click("◇记忆管理");
     await wait(() => document.querySelector("h1")?.textContent === "记忆管理");
+    assert.ok(document.body.textContent.includes("已发布记忆"));
     control("主体类型").value = "service";
     control("主体 ID").value = "Atlas";
     control("属性").value = "release.rule";
     control("完整适用条件").value = '{"env":"staging"}';
     click("应用目录筛选");
-    await wait(() => document.body.textContent.includes("本批暂无匹配资产"));
+    await wait(() => document.body.textContent.includes("本批暂无匹配的记忆"));
     const first = catalogQueries.at(-1);
     assert.equal(first.has("after"), false);
     assert.deepEqual(JSON.parse(first.get("memory_filter")), {subject:{kind:"service",stable_id:"Atlas"},predicate:"release.rule",context:{env:"staging"}});
@@ -507,7 +511,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     for (const state of ["failed", "superseded"]) {
       jobState = state;
       await trackJob({job_id: ids.job, asset_id: ids.asset}, target, ctx);
-      click("读取当前资产", target);
+      click("读取当前版本", target);
       await wait(() => target.textContent.includes("当前已发布 v1"));
       assert.equal(target.textContent.includes("重试任务"), state === "failed");
       assert.equal(target.textContent.includes("取消任务"), false);
@@ -675,6 +679,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         location.hash.includes("?version=1") &&
         document.querySelector("h1")?.textContent === asset.title,
     );
+    assert.ok(document.body.textContent.includes("删除记忆"));
   });
   await t.test("asset association uses the displayed exact version and returns to Run", async () => {
     click("读取已记录引用");
@@ -700,6 +705,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     action()[0].click();
     await wait(() => document.querySelector("h1")?.textContent === "历史手册");
     assert.equal(location.hash, `#asset/${ids.reportedAsset}?version=1`);
+    assert.ok(document.body.textContent.includes("删除知识"));
     assert.ok(document.body.textContent.includes("仅 v1 原文"));
     assert.ok(!document.body.textContent.includes("仅 v2 原文"));
 

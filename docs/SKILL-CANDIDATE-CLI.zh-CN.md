@@ -10,11 +10,11 @@
 
 ```sh
 origence-skill run-source RUN_UUID 3
-# Or an already published Improve → Learning result (exact asset version):
+# 或选择已发布的 Improve → Learning 结果的固定版本
 origence-skill asset-source LEARNING_ASSET_UUID 1
 ```
 
-将该 JSON 对象复制为私有 `selection.json` 的 `source`。Run 序号指向不可变前缀端点，不能隐式使用最新或完整 Run。资产选择也接受已获授权的精确知识或记忆版本。它只返回地址和哈希，来源正文及私有 Learning 依据不复制进候选。现有来源可见性和 Learning 依据检查继续生效。CLI 不运行 Improve 或提取私有轮次，应选择已存在的 Run 前缀或已发布 Learning。
+将该 JSON 对象复制为私有 `selection.json` 的 `source`。Run 序号指向不可变前缀端点，不能隐式使用最新或完整 Run。`asset-source` 也接受已获授权的精确知识或记忆版本。它只返回地址和哈希，来源正文及私有 Learning 依据不复制进候选。现有来源可见性和 Learning 依据检查继续生效。CLI 不运行 Improve 或提取私有轮次，应选择已存在的 Run 前缀或已发布 Learning。
 
 ```json
 {

@@ -35,9 +35,10 @@ flowchart TD
 
 HTTP and the single Worker share one `StorageEngine`. The SQLite authority holds the data directory's exclusive OS lock. CLI/MCP forward to the running host by default, and offline access opens the directory exclusively. Local mode opens the AnySeek Catalog in the Origence process through the Rust SDK. Cloud mode connects to standalone AnySeek over HTTP using a credential held only by the host. Both modes choose a tenant UUID namespace and workspace collection from the authenticated Scope. AnySeek stores published text and retrieval indexes. Origence determines employee permissions and source validity. [Operations and deployment](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
-## A1. Assets, sources, and publication
+<a id="a1-assets-sources-and-publication"></a>
+## A1. Content, sources, and publication
 
-Source events and original Blobs, assets and versions, chunks, summaries, graph objects, SessionTurn, and Learning have separate lifecycles. Preserve original input, historical versions, immutable locators, and parser markers. Indexes are not authoritative for sources. Business versions, source versions, index generations, and technical AnySeek Record/group versions are distinct. Explicit input and controlled extraction reuse a publication path. Commands are idempotent, and retrying a write with a new ID cannot resolve an unknown result.
+Source events and original Blobs, content items and versions, chunks, summaries, graph objects, SessionTurn, and Learning have separate lifecycles. Preserve original input, historical versions, immutable locators, and parser markers. Indexes are not authoritative for sources. Business versions, source versions, index generations, and technical AnySeek Record/group versions are distinct. Explicit input and controlled extraction reuse a publication path. Commands are idempotent, and retrying a write with a new ID cannot resolve an unknown result.
 
 <a id="storage-design"></a>
 ## A2. Storage, isolation, and consistency
@@ -75,7 +76,7 @@ AnySeek checks batches of all authorized candidates for missing or duplicate IDs
 <a id="storage-queue"></a>
 ### A2.5 Single Worker and recovery
 
-Job leases carry creator, scope, generation, and run_token. After model calls, parsing, or external indexing, the final transaction rechecks creator permission, cancellation, sources, current asset version, and run identity. Explicit cancellation blocks late publication without guaranteeing immediate stop of blocking parsing or in-flight remote writes. The existing queue owns bounded durable retry. Database and internal failures and explicitly transient dependencies can be retried. Model and configuration failures keep their classifications. `spawn_blocking` is not a second business Worker.
+Job leases carry creator, scope, generation, and run_token. After model calls, parsing, or external indexing, the final transaction rechecks creator permission, cancellation, sources, current content item version, and run identity. Explicit cancellation blocks late publication without guaranteeing immediate stop of blocking parsing or in-flight remote writes. The existing queue owns bounded durable retry. Database and internal failures and explicitly transient dependencies can be retried. Model and configuration failures keep their classifications. `spawn_blocking` is not a second business Worker.
 
 <a id="storage-consistency"></a>
 ### A2.6 Cross-storage publication and cleanup
@@ -117,4 +118,4 @@ DDL defines the physical schema. See [storage invariants](../contracts/storage.e
 
 ## A6. Protocol boundaries
 
-See [API](../API.en.md) for HTTP and library DTOs. MCP exposes workspace asset retrieval, explicit private archiving, and Run tools. Run tools forward over HTTP to a running host. Skill download and native client loading are recorded separately. The server cannot recall explicit exported copies. [Dual-client integration](../CLIENTS.en.md)
+See [API](../API.en.md) for HTTP and library DTOs. MCP exposes retrieval for memory, knowledge, and Learning, explicit private archiving, and Run tools. Run tools forward over HTTP to a running host. Skill download and native client loading are recorded separately. The server cannot recall explicit exported copies. [Dual-client integration](../CLIENTS.en.md)

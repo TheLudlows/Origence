@@ -304,7 +304,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Read a published asset or historical version if the asset and source remain valid."
+        description = "Read a published memory or knowledge item, including a historical version, if the item and its source remain valid."
     )]
     async fn context_get(
         &self,

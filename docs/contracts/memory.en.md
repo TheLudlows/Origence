@@ -12,13 +12,13 @@ This document defines explicit memory domain rules. See [controlled extraction](
 | subject | kind + stable_id. Names, aliases, and similarity are not unique identities. |
 | predicate | A controlled property managed by the workspace. Valid syntax does not indicate registration. |
 | context | Explicit applicability conditions, canonically encoded and exactly matched. Different conditions such as production and test stay separate. |
-| asset_id | Stable asset ID. Identity binding is immutable and reserved after deletion. |
+| asset_id | Stable memory entry ID. Identity binding is immutable and reserved after deletion. |
 | source/evidence | Original event, exact quote/locator, parser, and source version |
 | expected_version | Concurrent write condition. It does not establish truth, validity period, or authority. |
 
 [MemoryIdentity](../../src/memory_identity.rs) encodes version, scope, subject, predicate, and sorted context in a fixed JSON tuple, then hashes with SHA-256 and prefix `memory-identity:v1:`. It does not fold case or Unicode or include body, principal, or version preconditions.
 
-Semantic similarity grants no right to overwrite, bind aliases, or merge subjects. `fact_key` has a separate entry point and cannot silently change a bound structured asset.
+Semantic similarity grants no right to overwrite, bind aliases, or merge subjects. `fact_key` has a separate entry point and cannot silently change a bound structured memory entry.
 
 ## Property registry
 
@@ -34,11 +34,11 @@ Input includes original content, optional identity, operation, value, and a verb
 - `negate/propose/ambiguous` or absent identity produces independent unnormalized evidence without changing the current fact.
 - Multiple distinct values in single-value input retain conflict. Unknown properties and missing required conditions are rejected.
 
-Writes require expected_version, with 0 for no publication. Determinate facts recheck at acceptance and Worker publication. Version races become superseded. Unnormalized evidence never updates a suggested identity and its input version is not an update precondition for that identity. Persist source, idempotent response, asset, and job in one transaction. Retry reuses the durable plan.
+Writes require expected_version, with 0 for no publication. Determinate facts recheck at acceptance and Worker publication. Version races become superseded. Unnormalized evidence never updates a suggested identity and its input version is not an update precondition for that identity. Persist source, idempotent response, memory entry, and job in one transaction. Retry reuses the durable plan.
 
 ## Publication, retrieval, and withdrawal
 
-Determinate facts reuse the identified asset. Uncertain evidence uses an independent memory asset with no fact_key or identity. A chunk retains status and original member sources and byte ranges. search/resolve return normalization_status. Exact identity filtering limits current facts before top-k and rechecks sources, tombstone, version, and permissions before return.
+Determinate facts reuse the identified memory entry. Uncertain evidence uses an independent memory entry with no fact_key or identity. A chunk retains status and original member sources and byte ranges. search/resolve return normalization_status. Exact identity filtering limits current facts before top-k and rechecks sources, tombstone, version, and permissions before return.
 
 Multi-value facts publish one complete version. Withdrawing the current operation source or any earlier member source hides the full snapshot, without automatic historical fallback. Retained members cannot be reattributed to a new source. If the current publication source is still valid, explicit supplement can rebuild the still-supported set. If that publication source is invalid, resubmit facts and do not backfill from history. Generic restore cannot bypass semantic writes. Historical text and locators are unchanged.
 

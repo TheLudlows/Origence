@@ -13,6 +13,8 @@ Origence manages memory, knowledge, Skills, and traces. It provides HTTP and MCP
 - **Skills** package reusable methods through private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
 - **Trace** stores private Run records, including server-side context preparation, reported Skill loads, tools and results, external assessment records, and collection gaps.
 
+Authorized workspace members can reuse published memory, knowledge, and Skills.
+
 Context preparation selects authorized evidence for a task. AnySeek supports full-text, vector, and one-hop graph retrieval, with authorization and source checks in Origence.
 
 ## Quick start

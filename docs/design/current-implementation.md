@@ -38,9 +38,10 @@ flowchart TD
 
 HTTP 与单 Worker 共享一个 `StorageEngine`。SQLite authority 持有数据目录的独占 OS 锁。CLI/MCP 默认转发到运行中的宿主，离线访问要求独占打开。本地模式在 Origence 进程内通过 Rust SDK 打开 AnySeek Catalog，云上模式通过 HTTP 访问独立的 AnySeek，服务凭据只由宿主持有。两种模式均按已鉴权的 Scope 选择 tenant UUID 命名空间和 workspace 集合。AnySeek 保存已发布正文与检索索引，员工权限和业务来源仍由 Origence 判定。[运行与部署](../OPERATIONS.md#anyseek-全文与向量)
 
-## A1. 资产、来源与发布
+<a id="a1-资产来源与发布"></a>
+## A1. 内容、来源与发布
 
-Source event/原始 Blob、asset/version、chunk、summary、图对象、SessionTurn 和 Learning
+Source event/原始 Blob、内容条目及其版本、chunk、summary、图对象、SessionTurn 和 Learning
 分别管理生命周期。原始输入、历史版本、不可变 locator 与 parser 标记保留；索引不是来源权威。
 业务版本、来源版本、索引 generation 与 AnySeek Record/group 技术版本分开处理。
 显式输入与受控提取复用同一发布路径；重复命令幂等，未知结果不能靠新 ID 猜测补写。
@@ -98,7 +99,7 @@ metadata 或存储错误明确失败；正文与 locator 从 AnySeek payload 读
 ### A2.5 单 Worker 与恢复
 
 领取任务携带 creator、scope、generation、run_token。模型/解析/外部索引后，最终事务
-复核 creator 权限、取消、来源、当前资产版本与运行身份。显式取消阻断迟到发布，
+复核 creator 权限、取消、来源、当前内容条目版本与运行身份。显式取消阻断迟到发布，
 不保证立即停止 blocking 解析或已发出的远端写入。
 原队列管理有上限的持久重试；数据库/内部故障及显式临时依赖错误可重试，
 模型与配置错误保持原分类。源码中的 `spawn_blocking` 不构成第二个业务 Worker。
@@ -163,5 +164,5 @@ Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上�
 
 ## A6. 协议边界
 
-HTTP 与库 DTO 见 [API](../API.md)。MCP 提供 workspace 资产检索、显式私有会话归档与 Run 工具。Run 工具经 HTTP 转发给运行中的宿主。Skill 下载和客户端原生加载各自记录，
+HTTP 与库 DTO 见 [API](../API.md)。MCP 提供记忆、知识和 Learning 的检索、显式私有会话归档与 Run 工具。Run 工具经 HTTP 转发给运行中的宿主。Skill 下载和客户端原生加载各自记录，
 显式导出的副本不会由服务端追回。见[双客户端接入](../CLIENTS.md)。

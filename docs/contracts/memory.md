@@ -14,7 +14,7 @@
 | subject | kind + stable_id；名字、别名和相似度不作为唯一身份 |
 | predicate | workspace 管理的受控属性；语法有效不等于已登记 |
 | context | 显式适用条件，规范编码并精确匹配，不合并生产/测试等不同条件 |
-| asset_id | 稳定资产标识，身份绑定不可变，删除后占位仍保留 |
+| asset_id | 稳定记忆条目标识，身份绑定不可变，删除后占位仍保留 |
 | source/evidence | 原始事件、精确 quote/locator、parser 与来源版本 |
 | expected_version | 并发写条件，不证明真值、适用期或来源权威性 |
 
@@ -23,7 +23,7 @@ predicate 与排序后的 context，再 SHA-256，前缀为 `memory-identity:v1:
 不折叠大小写或 Unicode，不把正文、principal 或版本条件加入身份。
 
 语义近似不授予覆盖权、别名绑定或跨主体合并权。`fact_key` 保留独立入口，
-不能静默改写已绑定的结构化资产。
+不能静默改写已绑定的结构化记忆条目。
 
 ## 属性目录
 
@@ -45,11 +45,11 @@ predicate 与排序后的 context，再 SHA-256，前缀为 `memory-identity:v1:
 
 写入必须给 expected_version，0 表示尚未发布。确定事实在受理与 Worker 发布时双重
 校验；版本竞争导致 superseded。未归一化证据不更新建议身份，其输入版本不成为
-建议身份的更新条件。来源、幂等响应、资产和作业同事务登记，重试复用持久计划。
+建议身份的更新条件。来源、幂等响应、记忆条目和作业同事务登记，重试复用持久计划。
 
 ## 发布、检索与撤回
 
-确定事实复用身份资产；不确定证据使用无 fact_key/身份的独立 memory 资产。
+确定事实复用已绑定身份的记忆条目；不确定证据使用无 fact_key/身份的独立 记忆条目。
 chunk 保留状态、原始成员来源及字节范围，search/resolve 返回 normalization_status。
 精确身份过滤在 top-k 前限定当前事实，返回前复核来源、墓碑、版本和权限。
 

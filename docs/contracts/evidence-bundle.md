@@ -20,14 +20,14 @@ source bindings and any necessary provider/data/spending approval exist.
 Memory, ordinary knowledge and Learning use independent current-chunk candidate
 pools. Type, scope, exact identity and complete source visibility are checked
 before branch caps and native vector top-k. One query embedding is shared by
-all enabled asset routes. Keyword uses the existing all-query-terms matching
+all enabled content retrieval routes. Keyword uses the existing all-query-terms matching
 rule; hybrid is deterministic RRF60. Each route has at most 100 candidates per
 branch and an explicit returned candidate limit 1–100. This version deliberately
 uses original chunks only, with no summary or graph branches. Search/resolve
 remain available for their existing components.
 
 Optional exact memory identity applies only to memory, including supported
-explicit conflict counterparts. Historical asset versions never become current
+explicit conflict counterparts. Historical content item versions never become current
 retrieval candidates. Session references still preserve the exact historical
 versions actually used when archived.
 
@@ -48,7 +48,7 @@ claim of linearizability with a withdrawal committed after the read snapshot.
 
 ## Typed provenance and applicability
 
-Asset citations include chunk/asset/version, original source and source version,
+Content item citations include chunk, content item, and version, original source and source version,
 version-root source event, and immutable locator. These three version/source
 concepts are deliberately distinct. Session provenance is a tagged real
 (session_id, turn_id, source_event_id) tuple with archived references, never a
@@ -63,7 +63,7 @@ Otherwise applicability is explicitly `unverified`. No model interprets,
 broadens or infers applicability.
 
 The current archive API accepts only chunk/entity/relation `used_evidence`.
-Asset bundle citations can be mapped to exact chunk references. Session-turn
+Content citations in a bundle can be mapped to exact chunk references. Session-turn
 citations cannot round-trip into that contract. The response, retained session
 block and API documentation explicitly disclose this unsupported case; callers
 must not invent chunk IDs or claim complete archive coverage.

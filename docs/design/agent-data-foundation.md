@@ -27,7 +27,7 @@ flowchart TB
     ACCESS --> AUTH[workspace 与用户 key ID 权限]
     subgraph DATA[统一数据底座]
         PRIVATE[私有会话归档：绑定逻辑 key]
-        ASSET[workspace 资产：记忆、知识和已发布 Skill]
+        PUBLISHED[已发布的记忆、知识和技能]
         RUN[Trace：私有 Run 及其事件与核验证据]
     end
     subgraph SERVICES[数据服务]
@@ -36,12 +36,12 @@ flowchart TB
         REVIEW[提交选定审阅包、用户审视与批准发布]
         VIEW[任务追溯、反馈与采集缺口]
     end
-    ASSET --> SERVE
-    ASSET --> LEARN
+    PUBLISHED --> SERVE
+    PUBLISHED --> LEARN
     PRIVATE --> SERVE
     PRIVATE --> LEARN
     LEARN --> REVIEW
-    REVIEW -->|发布获准 Skill| ASSET
+    REVIEW -->|发布获准 Skill| PUBLISHED
     AUTH --> SERVE
     AUTH --> REVIEW
     AUTH --> RUN
@@ -49,7 +49,7 @@ flowchart TB
     RUN --> VIEW
     SERVE --> SEARCH[AnySeek：全文检索与向量检索]
     SERVE --> STORE[SQLite：权威数据、权限、版本与任务]
-    ASSET --> BLOB[Blob：原始文件]
+    PUBLISHED --> BLOB[Blob：原始文件]
     SERVE -. 上下文准备及精确引用 .-> RUN
     ACCESS -. 客户端按能力上报 .-> RUN
     RUN -->|执行经验与反馈| LEARN
@@ -77,11 +77,11 @@ flowchart TB
 | 层次 | 内容与访问边界 |
 | --- | --- |
 | 私有记录 | 已提交的会话轮次与反馈、Run 及上下文快照、未发布候选，按逻辑 key 隔离 |
-| workspace 资产 | 正式沉淀的长期记忆、事实、知识与已发布 Skill；供同 workspace 的获授权用户/Agent 复用 |
+| 已发布的记忆、知识和技能 | 供工作区内获授权的用户与 Agent 复用 |
 
 同一 workspace 内，稳定的逻辑 `key_id` 映射到唯一 `session_id`；认证凭据与该逻辑身份分别管理，密钥明文不作为存储身份。
 新建独立 key 产生独立会话；经过明确授权的密钥轮换可接续原逻辑 key 与会话，不能按用户名自动合并。
-撤销凭据或 key 阻断对应访问；会话历史、已沉淀资产和来源撤回分别按各自生命周期处理，不随凭据撤销自动删除。
+撤销凭据或 key 阻断对应访问；会话历史、已发布的记忆、知识和技能，以及来源撤回分别按各自生命周期处理，不随凭据撤销自动删除。
 同一逻辑 key 在 Claude Code/Codex 中访问同一 Origence 归档会话记录；需要独立记录的 Agent 使用不同 key。
 同一会话可包含多个任务/Run。会话归属由服务端认证派生，传入其他 session ID 不能切换所有权。
 所有私有入口和上下文组装都校验逻辑 key 归属及当前权限。获准审阅者通过选定审阅包查看明确披露的内容。
@@ -90,8 +90,8 @@ flowchart TB
 显式 SessionTurn 路由继续要求 writer，并额外匹配当前 key 的 session；读取权限与归属检查不能互相替代。
 平台保存已提交的记录并提供查询，不同步或恢复客户端原生聊天、上下文窗口、工具/进程/环境状态，也不重放操作。
 
-从私有记录沉淀时显式生成 workspace 资产并确定共享正文，保留受控来源关联；原会话与轨迹继续私有。
-记忆/事实/知识遵守相应写入与发布权限，Skill 还必须经过用户批准。未沉淀的候选不作为共享长期资产。
+从私有记录发布记忆、知识或技能时，显式选择要共享的正文并保留受控来源关联。原会话与轨迹继续私有。
+记忆/事实/知识遵守相应写入与发布权限，Skill 还必须经过用户批准。未发布的候选仍为私有。
 私有内容对外共享须校验读取、披露与发布权限；审阅者只获准查看选定审阅包，workspace 发布角色不自动获得原始会话。
 审阅包区分待发布工件（正文、manifest、参考资料）和必要脱敏依据；批准绑定精确修订、全部工件摘要、依据摘要及目标 workspace/版本/范围。
 发布只共享清单中的获准工件，审阅依据不默认随包公开。
@@ -141,7 +141,7 @@ Agent 或平台从授权记忆和已记录的执行经历提炼目标、前提�
 ## 5. Trace：运行证据
 
 Trace 以 **Run** 关联任务摘要、上下文准备、Skill 版本、工具事件、结果、反馈与采集覆盖。
-Run 和事件沿用所属会话的逻辑 key 隔离。用户可将获准披露的结果或经验另行发布为 workspace 资产。
+Run 和事件沿用所属会话的逻辑 key 隔离。用户可将获准披露的结果或经验另行发布到工作区。
 
 | 证据来源 | 能记录什么 |
 | --- | --- |
@@ -163,11 +163,11 @@ Run 和事件沿用所属会话的逻辑 key 隔离。用户可将获准披露�
 | --- | --- | --- |
 | 数据准备 | 接入资料、保留原文、解析/切块、生成查询与文档向量 | 保存文本、向量与检索 metadata，维护索引 |
 | 检索 | 派生授权范围、发起全文/向量查询、复核来源与版本、组装引用 | 全文匹配、向量相似检索与候选排序 |
-| 资产、上下文与 Trace | 资产生命周期、经验提炼、Skill 审阅发布、上下文组装与运行证据 | 保存发布后的检索正文并提供候选 |
+| 内容、上下文与 Trace | 内容生命周期、经验提炼、Skill 审阅发布、上下文组装与运行证据 | 保存发布后的检索正文并提供候选 |
 | 持久化 | SQLite 保存权限、版本元数据、Skill 包、Trace 和持久任务，Blob 保存原始文件 | 按稳定记录身份持久化发布正文、摘要与索引 |
 
 Origence 选择并固定 embedding 模型/profile 和维度，AnySeek 执行向量检索。
-检索 metadata 携带完整 workspace、资产/来源版本和 generation；候选过滤与最终权威复核保持一致。
+检索 metadata 携带完整 workspace、内容版本、来源版本和 generation；候选过滤与最终权威复核保持一致。
 私有材料不默认进入 workspace 共享召回；检索/读取私有材料时额外复核 owner key 与 session，不能仅按 workspace 放行。
 本地宿主通过 AnySeek Rust SDK 打开磁盘 Catalog。独立部署时，Origence 持有 AnySeek URL 和服务凭据。
 两种模式都从已鉴权 Scope 派生命名空间与集合。独立模式通过 `X-AnySeek-Tenant` 传 tenant UUID。每个 workspace 使用独立
@@ -184,14 +184,14 @@ Origence 不维护第二套全文/向量引擎，构建依赖和部署配置遵�
 
 | 顺序 | 要完成什么 | 验收结果 |
 | --- | --- | --- |
-| 1. 统一检索与双客户端接入 | 全文/向量接 AnySeek，落实逻辑 key→归档会话绑定与 workspace 资产隔离 | 同 key 跨客户端可查询同一归档、独立 key 隔离、获授权轮换可接续；workspace 检索返回有效引用 |
+| 1. 统一检索与双客户端接入 | 全文/向量接 AnySeek，落实逻辑 key→归档会话绑定与工作区间的检索隔离 | 同 key 跨客户端可查询同一归档、独立 key 隔离、获授权轮换可接续；workspace 检索返回有效引用 |
 | 2. Skill 经验沉淀 | 接入记忆/运行依据，生成候选，提供用户审视、修改和发布 | 研发/业务各一个 Skill 可追溯依据，经有发布权用户批准后发布，并能在两客户端复用 |
 | 3. Trace 与任务核验 | 固定上下文清单，关联 Skill、可观察工具、结果和反馈 | 真实任务可读地串联已采集证据，并显式显示未采集部分 |
 
 Run 和结果记录随接入过程逐步补齐，供 Skill 提炼使用；第 3 步完成统一追溯体验。
 
 每步同时核验：权限隔离、来源更新/撤回、精确版本引用、重复请求与重开恢复。
-跨 key 直接读取、Bundle/检索、Run 查询、工件和来源跳转均不能泄露私有内容；跨 workspace 不可共享资产。
+跨 key 直接读取、Bundle/检索、Run 查询、工件和来源跳转均不能泄露私有内容；内容仅在所属工作区内按授权共享。
 Skill 还需核验候选修改后批准失效、支持来源失效后的读取/分发行为。
 同时验证未授权提交/审阅被拒、包摘要或发布目标变化使批准失效、执行扩展被拒，以及跨 workspace 的本地加载隔离。
 会话验收只覆盖归档/查询、授权轮换、撤销阻断和数据保留；客户端工作现场恢复不列为能力或验收项。
@@ -218,7 +218,7 @@ Skill 还需核验候选修改后批准失效、支持来源失效后的读取/�
 
 | 参考 | 采用的边界 |
 | --- | --- |
-| [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)、[LangMem](https://langchain-ai.github.io/langmem/concepts/conceptual_guide/) | 私有任务状态与跨任务资产分开，事实、经历和方法分别表达 |
+| [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)、[LangMem](https://langchain-ai.github.io/langmem/concepts/conceptual_guide/) | 私有任务状态与跨任务复用的内容分开，事实、经历和方法分别表达 |
 | [Letta Skills](https://docs.letta.com/configuration/skills) | 从执行经历形成可复用方法，按 workspace 发布并保留人工批准 |
 | [Agent Skills](https://agentskills.io/specification)、[Claude Code](https://code.claude.com/docs/en/skills)、[Codex](https://learn.chatgpt.com/docs/build-skills) | 通用文本包与客户端加载分开验收，发布不授予工具执行权限 |
 | [Langfuse Sessions](https://langfuse.com/docs/observability/features/sessions)、[LangSmith Threads](https://docs.langchain.com/langsmith/threads) | 用 session/Run 关联证据，区分真实采集与缺口，不提供工作现场恢复 |
