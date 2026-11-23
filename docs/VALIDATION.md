@@ -5,6 +5,12 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-23 · AnySeek Rust SDK 嵌入式存储
+
+Linux / Rust 1.98.0，AnySeek SDK 固定为 `342dcbc`。Origence 默认套件 459 项通过，16 项 Python 工具回归通过，其中 5 项使用 PowerShell 7.4.13。独立 HTTP 模式通过 8 项真实 AnySeek 合同测试，以及 HTTP/stdio MCP、固定版本检索与重启验证。SDK 的公开 Rust 用例覆盖独占打开、租户隔离、原子替换幂等、关闭和重开。[AnySeek SDK PR](https://github.com/TheLudlows/anyseek/pull/218)
+
+嵌入式模式以空 `PATH` 启动真实 Origence。验证了发布与更新、关键词检索、Run 诊断无 HTTP 状态、精确回放、退出重开后保留当前和历史正文，以及持久绑定的 Catalog 丢失时拒绝重建。补充 Rust 用例覆盖同一条记录的向量召回、图一跳、正文读取与删除。真实 Windows Terminal 退出操作未在本地测试。
+
 ## 2026-11-23 · Origence 管理本地 AnySeek
 
 基线 `a01fc9c`。Linux 本地 Rust 1.98.0 格式检查和 `git diff --check` 通过。PowerShell 7.4.13 下 16 项 Python 工具回归通过，其中 5 项覆盖 Windows 开发脚本参数转发、空格路径、UI 就绪顺序和失败处理。

@@ -54,7 +54,7 @@ pub struct IndexProgress {
     pub sampling: String,
 }
 
-/// Exactly one observed HTTP query attempt, including metadata preflights.
+/// One observed AnySeek query through HTTP or the embedded SDK, including preflights.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueryObservation {
     pub request_id: Uuid,

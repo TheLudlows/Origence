@@ -15,10 +15,8 @@ Context preparation selects authorized evidence for a task. AnySeek supports ful
 
 ## Quick start
 
-Requires Rust **1.98.0** and a compatible `anyseek_server` executable. Build or
-install the [pinned AnySeek version](docs/OPERATIONS.md#anyseek-全文与向量) and
-put it on `PATH`, or pass its path with `--anyseek-bin`. Choose a fresh data
-directory for this quick start.
+Requires Rust **1.98.0**. The default build links the AnySeek Rust SDK for local storage.
+Choose a fresh data directory for this quick start.
 
 ```sh
 cargo build --locked
@@ -28,10 +26,9 @@ export OC_DATA_DIR="$(mktemp -d)"
 ```
 
 Use the workspace token returned by `workspace-create` to access the API.
-Origence starts AnySeek on `127.0.0.1:8081` in local storage mode, under
-`$OC_DATA_DIR/anyseek`. It generates the service credential and initializes
-workspace collections on first use. Use `origence serve` with the [external
-AnySeek configuration](docs/OPERATIONS.md#anyseek-全文与向量) for a separately
+Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
+initializes workspace collections on first use. Use `origence serve` with the
+[external AnySeek configuration](docs/OPERATIONS.md#anyseek-全文与向量) for a separately
 managed service.
 
 ## Management UI

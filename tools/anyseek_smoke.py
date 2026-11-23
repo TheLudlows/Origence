@@ -142,45 +142,43 @@ def mcp_contract(binary, env, directory):
     return env, token, asset, old
 
 
-def managed_contract(binary, anyseek_binary):
-    with tempfile.TemporaryDirectory(prefix="origence managed anyseek ") as directory:
+def embedded_contract(binary):
+    with tempfile.TemporaryDirectory(prefix="origence embedded anyseek ") as directory:
         env = isolated_env(directory)
         for name in ("OC_ANYSEEK_URL", "OC_ANYSEEK_API_KEY", "MASTER_KEY_SECRET"):
             env.pop(name, None)
-        env["ANYSEEK_STORAGE_BACKEND"] = "s3"
+        env.update(ANYSEEK_STORAGE_BACKEND="s3", PATH="")
+        serve_args = ["--local"]
         workspace = subprocess.run([binary, "--offline", "workspace-create", "local smoke"],
                                    env=env, check=True, capture_output=True, timeout=30)
         token = json.loads(workspace.stdout)["token"]
-        with socket.socket() as sock:
-            sock.bind(("127.0.0.1", 0))
-            sock.listen()
-            port = sock.getsockname()[1]
-            serve_args = ["--local", "--anyseek-bin", anyseek_binary, "--anyseek-port", str(port)]
-            collision = subprocess.run([binary, "serve", "--bind", "127.0.0.1:0", *serve_args],
-                                       env=env, capture_output=True, timeout=10)
-            require(collision.returncode != 0 and b"loopback port is unavailable" in collision.stderr,
-                    "managed startup did not reject an occupied AnySeek port")
-            require(not (Path(directory) / "anyseek").exists(), "port collision initialized a Catalog")
-
-        old = "Managed local search requires approval."
-        new = "Managed local search requires review."
+        old = "Embedded local search requires approval."
+        new = "Embedded local search requires review."
         with Host(binary, env, token, [token], serve_args) as host:
             asset = host.publish(old)
-            require(host.publish(new) == asset, "managed local update changed asset ID")
+            require(host.publish(new) == asset, "embedded local update changed asset ID")
+            run_id = str(uuid.uuid4())
+            host.request("/v1/runs", {"run_id": run_id, "summary": "Verify SDK retrieval"})
+            request = {"event_id": str(uuid.uuid4()), "context": {"query": "embedded review"}}
+            prepared = host.request(f"/v1/runs/{run_id}/context", request)
+            observations = prepared["bundle"]["retrieval"]["requests"]
+            require(observations and any(item["mode"] == "lexical" and item["backend"] for item in observations)
+                    and all(item["http_status"] is None for item in observations), "SDK diagnostics used an HTTP status or omitted retrieval")
+            require(host.request(f"/v1/runs/{run_id}/context", request) == prepared, "SDK replay changed retrieval observations")
             host.process.send_signal(signal.SIGTERM)
-            require(host.process.wait(timeout=45) == 0, "managed local shutdown failed")
+            require(host.process.wait(timeout=45) == 0, "embedded local shutdown failed")
             host.check_stderr()
 
         with Host(binary, env, token, [token], serve_args) as host:
             require(host.request(f"/v1/assets/{asset}?version=1")["content"] == old,
-                    "managed local restart lost historical content")
+                    "embedded local restart lost historical content")
             require(host.request(f"/v1/assets/{asset}")["content"] == new,
-                    "managed local restart lost current content")
-            found = host.request("/v1/search", {"query": "managed review", "mode": "keyword"})
+                    "embedded local restart lost current content")
+            found = host.request("/v1/search", {"query": "embedded review", "mode": "keyword"})
             require(found["hits"] and found["hits"][0]["asset_id"] == asset,
-                    "managed local restart lost the lexical index")
+                    "embedded local restart lost the lexical index")
             host.process.send_signal(signal.SIGTERM)
-            require(host.process.wait(timeout=45) == 0, "reopened managed local shutdown failed")
+            require(host.process.wait(timeout=45) == 0, "reopened embedded local shutdown failed")
             host.check_stderr()
 
         index = Path(directory) / "anyseek"
@@ -188,25 +186,26 @@ def managed_contract(binary, anyseek_binary):
         missing = subprocess.run([binary, "serve", "--bind", "127.0.0.1:0", *serve_args],
                                  env=env, capture_output=True, timeout=10)
         require(missing.returncode != 0 and b"data directory is missing" in missing.stderr,
-                "managed startup accepted a missing Catalog for an existing binding")
-        require(not index.exists(), "managed startup recreated a lost Catalog")
+                "embedded startup accepted a missing Catalog for an existing binding")
+        require(not index.exists(), "embedded startup recreated a lost Catalog")
 
-    print("PASS: Origence manages local AnySeek, rejects a port collision, and preserves current/historical text and search across restart", flush=True)
+    print("PASS: embedded AnySeek SDK publication, diagnostics, replay, restart, and refusal to recreate a lost Catalog", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--anyseek-binary", required=True)
+    parser.add_argument("--anyseek-binary")
     parser.add_argument("--test-executable", action="append", default=[])
     parser.add_argument("--cargo-tests", action="store_true", help="run the real-backend Rust target through Cargo")
     parser.add_argument("--binary")
-    parser.add_argument("--managed", action="store_true", help="run the managed local startup and restart contract on Unix")
+    parser.add_argument("--embedded", action="store_true", help="run the in-process local startup and restart contract on Unix")
     parser.add_argument("--run", nargs=argparse.REMAINDER, help="run another isolated smoke/eval command against this fixture")
     args = parser.parse_args()
-    if args.managed:
-        require(args.binary, "--managed needs an Origence binary")
-        managed_contract(str(Path(args.binary).resolve()), str(Path(args.anyseek_binary).resolve()))
+    if args.embedded:
+        require(args.binary, "--embedded needs an Origence binary")
+        embedded_contract(str(Path(args.binary).resolve()))
         return
+    require(args.anyseek_binary, "external mode needs --anyseek-binary")
     require(args.test_executable or args.binary or args.cargo_tests or args.run, "provide a test executable, Cargo tests or Origence binary")
     with tempfile.TemporaryDirectory(prefix="origence-anyseek-") as directory:
         with socket.socket() as sock:

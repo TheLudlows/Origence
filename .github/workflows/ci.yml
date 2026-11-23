@@ -142,8 +142,8 @@ jobs:
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 tools/ui_smoke.py --binary target/debug/origence --ui-entry ui/dist/server.js
       - name: AnySeek public library, HTTP and MCP contracts (no models)
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --cargo-tests --binary target/debug/origence
-      - name: Managed local AnySeek startup and restart
-        run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --managed --binary target/debug/origence
+      - name: Embedded AnySeek SDK startup and restart
+        run: python3 tools/anyseek_smoke.py --embedded --binary target/debug/origence
       # Evaluation evidence is run-specific, never part of the Cargo target cache.
       - name: Keyword retrieval seed evaluation (no model calls)
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 evals/run.py --binary target/debug/origence --commit "${{ github.sha }}" --output "$RUNNER_TEMP/origence-keyword-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"

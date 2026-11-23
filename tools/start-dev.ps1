@@ -1,13 +1,10 @@
 #requires -Version 7.4
 [CmdletBinding()]
 param(
-    [string]$AnySeekExe = $env:OC_ANYSEEK_BIN,
-    [string]$AnySeekDataDir = $env:OC_ANYSEEK_DATA_DIR,
     [string]$DataDir = $env:OC_DATA_DIR,
     [string]$OrigenceExe = (Join-Path $PSScriptRoot '../target/debug/origence.exe'),
     [switch]$Ui,
     [string]$NodeExe = 'node',
-    [ValidateRange(1, 65535)][int]$AnySeekPort = 8081,
     [ValidateRange(1, 65535)][int]$ApiPort = 8080,
     [ValidateRange(1, 65535)][int]$UiPort = 3000,
     [ValidateRange(1, 600)][int]$StartupTimeoutSeconds = 60,
@@ -103,7 +100,7 @@ function Wait-Ready([string]$Url, [string]$Name) {
 
 try {
     $OrigenceExe = Require-Path $OrigenceExe Leaf 'Origence executable'
-    $ports = @($AnySeekPort, $ApiPort)
+    $ports = @($ApiPort)
     if ($Ui) { $ports += $UiPort }
     if (@($ports | Select-Object -Unique).Count -ne $ports.Count) { throw 'Service ports must be distinct.' }
     foreach ($port in $ports) { Assert-FreePort $port }
@@ -111,14 +108,7 @@ try {
         $NodeExe = (Get-Command $NodeExe -CommandType Application -ErrorAction Stop).Source
         $uiEntry = Require-Path (Join-Path $root 'ui/dist/server.js') Leaf 'Built UI entry'
     }
-    $arguments = @('serve', '--local', '--bind', "127.0.0.1:$ApiPort", '--anyseek-port', "$AnySeekPort")
-    if ($AnySeekExe) {
-        $binary = (Get-Command $AnySeekExe -CommandType Application -ErrorAction Stop).Source
-        $arguments += @('--anyseek-bin', $binary)
-    }
-    if ($AnySeekDataDir) {
-        $arguments += @('--anyseek-data-dir', $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($AnySeekDataDir))
-    }
+    $arguments = @('serve', '--local', '--bind', "127.0.0.1:$ApiPort")
     if ($DataDir) {
         $arguments += @('--data-dir', $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DataDir))
     }
@@ -141,7 +131,7 @@ try {
         try {
             if (-not $child.Process.HasExited -and -not $child.Process.WaitForExit($ShutdownTimeoutSeconds * 1000)) {
                 Write-Warning "$($child.Name) did not stop within the grace period; forcing this owned process only."
-                if (-not $child.Process.HasExited) { $child.Process.Kill($true) }
+                if (-not $child.Process.HasExited) { $child.Process.Kill() }
                 if (-not $child.Process.WaitForExit(5000)) {
                     Write-Warning "$($child.Name) exit is unconfirmed; inspect owned PID $($child.Process.Id) manually."
                 }

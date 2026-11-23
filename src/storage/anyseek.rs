@@ -21,6 +21,8 @@ use std::{
 use uuid::Uuid;
 
 mod graph;
+#[cfg(feature = "local-storage")]
+mod local;
 pub use graph::{GraphEdgeCandidate, GraphEntityCandidate, GraphPublication};
 
 const FORMAT: &str = "origence-content-sha256-v1";
@@ -43,17 +45,36 @@ const META: &[&str] = &[
 ];
 
 /// Server-owned connection details. Credentials are deliberately not Debug.
-#[derive(Clone)]
 pub struct AnySeekConfig {
-    base: Url,
-    key: HeaderValue,
+    endpoint: Endpoint,
     embedding: Option<(String, usize)>,
+}
+
+enum Endpoint {
+    Http {
+        base: Url,
+        key: HeaderValue,
+    },
+    #[cfg(feature = "local-storage")]
+    Embedded,
 }
 
 impl AnySeekConfig {
     #[cfg(feature = "local-storage")]
+    pub(crate) fn embedded() -> Self {
+        Self {
+            endpoint: Endpoint::Embedded,
+            embedding: None,
+        }
+    }
+
+    #[cfg(feature = "local-storage")]
     pub(crate) fn binding_identity(&self) -> Value {
-        json!({"format":"origence-content-backend-v2","backend":"anyseek","endpoint":self.base.as_str(),"routing":"tenant-uuid/workspace-ws-simple-uuid-v1","embedding":self.embedding})
+        let endpoint = match &self.endpoint {
+            Endpoint::Http { base, .. } => base.as_str(),
+            Endpoint::Embedded => "embedded:local-catalog-v1",
+        };
+        json!({"format":"origence-content-backend-v2","backend":"anyseek","endpoint":endpoint,"routing":"tenant-uuid/workspace-ws-simple-uuid-v1","embedding":self.embedding})
     }
 
     /// CLI configuration. Libraries pass an explicit config instead of reading
@@ -110,8 +131,7 @@ impl AnySeekConfig {
             HeaderValue::from_str(key).map_err(|_| invalid("invalid AnySeek service key"))?;
         key.set_sensitive(true);
         Ok(Self {
-            base,
-            key,
+            endpoint: Endpoint::Http { base, key },
             embedding: None,
         })
     }
@@ -124,10 +144,59 @@ fn loopback(base: &Url) -> bool {
     )
 }
 
-/// Immutable lexical/vector publications stored behind a trusted service key.
+enum Backend {
+    Http {
+        base: Url,
+        key: HeaderValue,
+        client: reqwest::Client,
+    },
+    #[cfg(feature = "local-storage")]
+    Embedded(anyseek::sdk::LocalEngine),
+}
+
+enum Request {
+    Live,
+    List,
+    Info,
+    Create(Value),
+    Query(Value),
+    GroupVersion(String),
+    ReplaceGroup(Value),
+}
+
+impl Request {
+    fn http(self, scope: Option<Scope>) -> StorageResult<(Method, String, Option<Value>)> {
+        let root = "/api/v1/index";
+        let collection = || {
+            scope
+                .map(AnySeekFullTextStore::collection)
+                .map(|id| format!("{root}/{id}"))
+                .ok_or_else(inconsistent)
+        };
+        Ok(match self {
+            Self::Live => (Method::GET, "/api/v1/live".into(), None),
+            Self::List => (Method::GET, root.into(), None),
+            Self::Info => (Method::GET, collection()?, None),
+            Self::Create(body) => (Method::POST, root.into(), Some(body)),
+            Self::Query(body) => (Method::POST, format!("{}/query", collection()?), Some(body)),
+            Self::GroupVersion(group) => (
+                Method::GET,
+                format!("{}/group?group_id={group}", collection()?),
+                None,
+            ),
+            Self::ReplaceGroup(body) => (
+                Method::POST,
+                format!("{}/group/replace", collection()?),
+                Some(body),
+            ),
+        })
+    }
+}
+
+/// Immutable lexical/vector publications stored in AnySeek.
 pub struct AnySeekFullTextStore {
-    config: AnySeekConfig,
-    http: reqwest::Client,
+    backend: Backend,
+    embedding: Option<(String, usize)>,
     checked_config: OnceLock<crate::retrieval_diagnostics::CheckedConfig>,
     checked_scopes: tokio::sync::Mutex<HashSet<(Uuid, Uuid)>>,
     #[cfg(feature = "local-storage")]
@@ -310,20 +379,71 @@ impl AnySeekFullTextStore {
 
     /// Construct a bounded client; collections follow authenticated workspace scopes.
     pub fn new(config: AnySeekConfig) -> StorageResult<Self> {
-        let mut http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(30));
-        if loopback(&config.base) {
-            http = http.no_proxy();
+        match config.endpoint {
+            Endpoint::Http { base, key } => {
+                let mut http = reqwest::Client::builder()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .timeout(Duration::from_secs(30));
+                if loopback(&base) {
+                    http = http.no_proxy();
+                }
+                let client = http.build().map_err(|_| unavailable())?;
+                Ok(Self::new_backend(
+                    Backend::Http { base, key, client },
+                    config.embedding,
+                ))
+            }
+            #[cfg(feature = "local-storage")]
+            Endpoint::Embedded => Err(invalid("embedded AnySeek requires a data directory")),
         }
-        Ok(Self {
-            config,
-            http: http.build().map_err(|_| unavailable())?,
+    }
+
+    fn new_backend(backend: Backend, embedding: Option<(String, usize)>) -> Self {
+        Self {
+            backend,
+            embedding,
             checked_config: OnceLock::new(),
             checked_scopes: tokio::sync::Mutex::new(HashSet::new()),
             #[cfg(feature = "local-storage")]
             binding: None,
-        })
+        }
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn open_configured(
+        config: AnySeekConfig,
+        root: &std::path::Path,
+        allow_create: bool,
+    ) -> StorageResult<Self> {
+        if matches!(config.endpoint, Endpoint::Embedded) {
+            if !allow_create
+                && !tokio::fs::try_exists(root)
+                    .await
+                    .map_err(|_| unavailable())?
+            {
+                return Err(StorageError::Conflict(
+                    "local AnySeek data directory is missing for the existing backend binding"
+                        .into(),
+                ));
+            }
+            let engine = anyseek::sdk::LocalEngine::open(root, allow_create)
+                .await
+                .map_err(|_| unavailable())?;
+            Ok(Self::new_backend(
+                Backend::Embedded(engine),
+                config.embedding,
+            ))
+        } else {
+            Self::new(config)
+        }
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn shutdown(&self) -> StorageResult<()> {
+        if let Backend::Embedded(engine) = &self.backend {
+            engine.shutdown().await.map_err(|_| unavailable())?;
+        }
+        Ok(())
     }
 
     #[cfg(feature = "local-storage")]
@@ -361,47 +481,32 @@ impl AnySeekFullTextStore {
         Ok(config)
     }
     pub async fn check_vector(&self, profile: &str, dimension: usize) -> StorageResult<()> {
-        if self.config.embedding.as_ref() != Some(&(profile.to_owned(), dimension)) {
+        if self.embedding.as_ref() != Some(&(profile.to_owned(), dimension)) {
             return Err(inconsistent());
         }
         self.check().await
     }
 
-    async fn request(
-        &self,
-        scope: Scope,
-        method: Method,
-        suffix: &str,
-        body: Option<Value>,
-    ) -> StorageResult<(StatusCode, Value)> {
+    async fn request(&self, scope: Scope, request: Request) -> StorageResult<(StatusCode, Value)> {
         self.ensure_scope(scope).await?;
-        let mode = body
-            .as_ref()
-            .map(|body| {
-                if body.get("query_vector").is_some() {
-                    "vector"
-                } else if body["query"].as_str().is_some_and(|s| !s.is_empty()) {
-                    "lexical"
-                } else {
-                    "browse"
-                }
-            })
-            .unwrap_or("browse");
-        let mut observation = (suffix == "/query").then(|| {
-            crate::retrieval_diagnostics::QueryObservation::new(
+        let mut observation = if let Request::Query(body) = &request {
+            let mode = if body.get("query_vector").is_some() {
+                "vector"
+            } else if body["query"].as_str().is_some_and(|s| !s.is_empty()) {
+                "lexical"
+            } else {
+                "browse"
+            };
+            Some(crate::retrieval_diagnostics::QueryObservation::new(
                 mode,
                 self.checked_config.get().cloned(),
-            )
-        });
+            ))
+        } else {
+            None
+        };
         let started = std::time::Instant::now();
         let result = self
-            .request_inner(
-                Some(scope),
-                method,
-                &format!("/api/v1/index/{}{}", Self::collection(scope), suffix),
-                body,
-                &mut observation,
-            )
+            .request_inner(Some(scope), request, &mut observation)
             .await;
         if let Some(mut entry) = observation {
             entry.elapsed(started);
@@ -423,16 +528,29 @@ impl AnySeekFullTextStore {
     async fn request_inner(
         &self,
         scope: Option<Scope>,
-        method: Method,
-        path: &str,
+        request: Request,
+        observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
+    ) -> StorageResult<(StatusCode, Value)> {
+        match &self.backend {
+            Backend::Http { base, key, client } => {
+                let (method, path, body) = request.http(scope)?;
+                let url = base.join(&path).map_err(|_| unavailable())?;
+                let request = client.request(method, url).header("apikey", key.clone());
+                Self::request_http(scope, request, body, observation).await
+            }
+            #[cfg(feature = "local-storage")]
+            Backend::Embedded(engine) => {
+                Box::pin(local::request(engine, scope, request, observation)).await
+            }
+        }
+    }
+
+    async fn request_http(
+        scope: Option<Scope>,
+        mut request: reqwest::RequestBuilder,
         body: Option<Value>,
         observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
     ) -> StorageResult<(StatusCode, Value)> {
-        let url = self.config.base.join(path).map_err(|_| unavailable())?;
-        let mut request = self
-            .http
-            .request(method, url)
-            .header("apikey", self.config.key.clone());
         if let Some(scope) = scope {
             request = request.header("X-AnySeek-Tenant", scope.tenant_id.to_string());
         }
@@ -494,6 +612,14 @@ impl AnySeekFullTextStore {
             .await
             .map_err(|_| unavailable())?
             .map_err(|_| unavailable())?;
+        Self::observe_result(&value, observation)?;
+        Ok((status, value))
+    }
+
+    fn observe_result(
+        value: &Value,
+        observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
+    ) -> StorageResult<()> {
         if let Some(entry) = observation {
             let backend: crate::retrieval_diagnostics::BackendQuery =
                 serde_json::from_value(value["diagnostics"].clone()).map_err(|_| unavailable())?;
@@ -513,14 +639,12 @@ impl AnySeekFullTextStore {
             entry.backend = Some(backend);
             entry.outcome = "response_received_not_authority_verified".into();
         }
-        Ok((status, value))
+        Ok(())
     }
 
     /// Service health needs no configured tenant or placeholder collection.
     pub async fn check(&self) -> StorageResult<()> {
-        let (status, version) = self
-            .request_inner(None, Method::GET, "/api/v1/live", None, &mut None)
-            .await?;
+        let (status, version) = self.request_inner(None, Request::Live, &mut None).await?;
         if !status.is_success()
             || version
                 .as_str()
@@ -557,9 +681,8 @@ impl AnySeekFullTextStore {
     /// Existing committed scopes pass create=false: missing data is never repaired.
     pub async fn check_scope(&self, scope: Scope, create: bool) -> StorageResult<()> {
         let mut scopes = self.checked_scopes.lock().await;
-        let path = format!("/api/v1/index/{}", Self::collection(scope));
         let (mut status, mut info) = self
-            .request_inner(Some(scope), Method::GET, &path, None, &mut None)
+            .request_inner(Some(scope), Request::Info, &mut None)
             .await?;
         let uninitialized = create && !scopes.contains(&(scope.tenant_id, scope.workspace_id));
         // AnySeek hides unknown scoped IDs behind 403. Confirm absence through
@@ -567,7 +690,7 @@ impl AnySeekFullTextStore {
         // grants permission to provision or reuse a collection.
         let absent = if uninitialized && status == StatusCode::FORBIDDEN {
             let (listed, collections) = self
-                .request_inner(Some(scope), Method::GET, "/api/v1/index", None, &mut None)
+                .request_inner(Some(scope), Request::List, &mut None)
                 .await?;
             if !listed.is_success() {
                 return Err(unavailable());
@@ -583,7 +706,7 @@ impl AnySeekFullTextStore {
             status == StatusCode::NOT_FOUND
         };
         if uninitialized && absent {
-            let config = match &self.config.embedding {
+            let config = match &self.embedding {
                 Some((_, d)) => Self::vector_collection_config(*d)?,
                 None => Self::collection_config(),
             };
@@ -595,24 +718,18 @@ impl AnySeekFullTextStore {
                         scope.tenant_id,
                         scope.workspace_id,
                         &config,
-                        &self.config.embedding
+                        &self.embedding
                     ))
                     .map_err(|_| inconsistent())?
                 )
             );
-            let body = json!({"operation_id":{"epoch":epoch,"nonce":nonce},"collection_id":Self::collection(scope),"config":config,"embedding_space_id":self.config.embedding.as_ref().map(|(p,_)|p)});
+            let body = json!({"operation_id":{"epoch":epoch,"nonce":nonce},"collection_id":Self::collection(scope),"config":config,"embedding_space_id":self.embedding.as_ref().map(|(p,_)|p)});
             // A race or lost create response is settled only by a strict read.
             let created = self
-                .request_inner(
-                    Some(scope),
-                    Method::POST,
-                    "/api/v1/index",
-                    Some(body),
-                    &mut None,
-                )
+                .request_inner(Some(scope), Request::Create(body), &mut None)
                 .await;
             (status, info) = self
-                .request_inner(Some(scope), Method::GET, &path, None, &mut None)
+                .request_inner(Some(scope), Request::Info, &mut None)
                 .await?;
             if !status.is_success() {
                 created?;
@@ -622,7 +739,7 @@ impl AnySeekFullTextStore {
         if !status.is_success() {
             return Err(unavailable());
         }
-        let expected = match &self.config.embedding {
+        let expected = match &self.embedding {
             Some((_, d)) => Self::vector_collection_config(*d)?,
             None => Self::collection_config(),
         };
@@ -631,7 +748,6 @@ impl AnySeekFullTextStore {
             || info["text_normalization"] != "None"
             || info["vector_dimensions"]
                 != self
-                    .config
                     .embedding
                     .as_ref()
                     .map_or(Value::Null, |(_, d)| json!(d))
@@ -655,7 +771,6 @@ impl AnySeekFullTextStore {
                 .is_none_or(|n| n == 0)
             || info["embedding_space_id"]
                 != self
-                    .config
                     .embedding
                     .as_ref()
                     .map_or(Value::Null, |(p, _)| json!(p))
@@ -667,7 +782,7 @@ impl AnySeekFullTextStore {
         let checked = crate::retrieval_diagnostics::CheckedConfig {
             engine_version: info["version"].as_str().unwrap().to_owned(),
             analysis_fingerprint: info["analysis"]["fingerprint"].as_str().unwrap().to_owned(),
-            embedding_space_sha256: self.config.embedding.as_ref().map(|(p, _)| hash(p)),
+            embedding_space_sha256: self.embedding.as_ref().map(|(p, _)| hash(p)),
             max_candidates: info["limits"]["max_candidates"].as_u64().unwrap(),
             max_records: info["limits"]["max_records"].as_u64().unwrap(),
         };
@@ -698,7 +813,7 @@ impl AnySeekFullTextStore {
         } else {
             META.to_vec()
         };
-        let (status, result) = self.request(scope, Method::POST, "/query", Some(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
+        let (status, result) = self.request(scope, Request::Query(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
         if !status.is_success() {
             return Err(unavailable());
         }
@@ -717,12 +832,7 @@ impl AnySeekFullTextStore {
             return Err(inconsistent());
         }
         let (status, result) = self
-            .request(
-                scope,
-                Method::GET,
-                &format!("/group?group_id={group}"),
-                None,
-            )
+            .request(scope, Request::GroupVersion(group.to_owned()))
             .await?;
         if status == StatusCode::NOT_FOUND {
             return Ok(None);
@@ -821,7 +931,7 @@ impl AnySeekFullTextStore {
         }
         let mut vector_map = HashMap::new();
         for vector in vectors {
-            if self.config.embedding.as_ref() != Some(&(vector.profile.clone(), vector.dimension))
+            if self.embedding.as_ref() != Some(&(vector.profile.clone(), vector.dimension))
                 || vector.embedding.len() != vector.dimension
                 || vector.embedding.iter().any(|v| !v.is_finite())
                 || vector.embedding.iter().all(|v| *v == 0.0)
@@ -921,9 +1031,7 @@ impl AnySeekFullTextStore {
         let next_version = expected_version.checked_add(1).ok_or_else(inconsistent)?;
         let nonce = format!("origence:{}", hash(format!("{expected_version}:{digest}")));
         let request = json!({"operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,"expected_group_version":expected_version,"records":records});
-        let (status, result) = self
-            .request(scope, Method::POST, "/group/replace", Some(request))
-            .await?;
+        let (status, result) = self.request(scope, Request::ReplaceGroup(request)).await?;
         if !status.is_success() {
             return Err(unavailable());
         }
@@ -1043,7 +1151,7 @@ impl AnySeekFullTextStore {
         mut query: VectorQuery,
         expected: &HashMap<Uuid, SourceVersion>,
     ) -> StorageResult<Vec<VectorHit>> {
-        if self.config.embedding.as_ref() != Some(&(query.profile.clone(), query.dimension))
+        if self.embedding.as_ref() != Some(&(query.profile.clone(), query.dimension))
             || query.embedding.len() != query.dimension
             || query.embedding.iter().any(|v| !v.is_finite())
             || query.embedding.iter().all(|v| *v == 0.0)
@@ -1103,7 +1211,7 @@ impl AnySeekFullTextStore {
         filters.push(filter("profile", [query.profile.clone()]));
         filters.push(filter("dimension", [query.dimension.to_string()]));
         filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
-        let (status, result) = self.request(query.scope, Method::POST, "/query", Some(json!({"query_vector":query.embedding,"all":true,"filter":filters,"fields":META,"length":query.limit,"count":true}))).await?;
+        let (status, result) = self.request(query.scope, Request::Query(json!({"query_vector":query.embedding,"all":true,"filter":filters,"fields":META,"length":query.limit,"count":true}))).await?;
         if !status.is_success() || !result["hits"].is_array() {
             return Err(unavailable());
         }
@@ -1220,7 +1328,7 @@ impl AnySeekFullTextStore {
                         .map_err(|_| unavailable())?
                 )
             );
-            let (status,result)=self.request(scope, Method::POST,"/group/replace",Some(json!({"operation_id":{"epoch":operation_epoch()?,"nonce":nonce},"group_id":group,"expected_group_version":version,"records":retained}))).await?;
+            let (status,result)=self.request(scope, Request::ReplaceGroup(json!({"operation_id":{"epoch":operation_epoch()?,"nonce":nonce},"group_id":group,"expected_group_version":version,"records":retained}))).await?;
             if !status.is_success() {
                 return Err(unavailable());
             }
@@ -1268,10 +1376,124 @@ mod unified_tests {
         );
         #[cfg(feature = "local-storage")]
         assert_eq!(
-            store().config.binding_identity()["embedding"],
+            AnySeekConfig::embedded()
+                .with_embedding("fixed-profile".into(), 2)
+                .unwrap()
+                .binding_identity()["embedding"],
             json!(["fixed-profile", 2])
         );
     }
+    #[cfg(feature = "local-storage")]
+    #[tokio::test]
+    async fn embedded_vector_and_graph_share_the_local_record() {
+        use crate::types::{Entity, GraphExtraction, Relation};
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = AnySeekFullTextStore::open_configured(
+            AnySeekConfig::embedded()
+                .with_embedding("local:v1".into(), 2)
+                .unwrap(),
+            &dir.path().join("anyseek"),
+            true,
+        )
+        .await
+        .unwrap();
+        let scope = Scope {
+            tenant_id: Uuid::new_v4(),
+            workspace_id: Uuid::new_v4(),
+        };
+        let id = Uuid::new_v4();
+        let source = SourceVersion {
+            source_id: Uuid::new_v4(),
+            version: 1,
+        };
+        let graph = GraphPublication {
+            source,
+            generation: 1,
+            graph: GraphExtraction {
+                entities: ["connection", "timeout"]
+                    .into_iter()
+                    .map(|name| Entity {
+                        name: name.into(),
+                        entity_type: "concept".into(),
+                        description: String::new(),
+                    })
+                    .collect(),
+                relations: vec![Relation {
+                    source: "connection".into(),
+                    predicate: "raises".into(),
+                    target: "timeout".into(),
+                }],
+            },
+        };
+        let full_text = FullTextEntry {
+            id,
+            source,
+            generation: 1,
+            search_terms: "connection timeout".into(),
+            payload: super::super::ChunkPayload {
+                content: "连接超时".into(),
+                locator: json!({}),
+                summary: None,
+            },
+        };
+        let vector = VectorEntry {
+            id,
+            source,
+            generation: 1,
+            profile: "local:v1".into(),
+            dimension: 2,
+            embedding: vec![0.1, 0.3],
+        };
+        store
+            .upsert_with_graph(
+                scope,
+                vec![full_text],
+                vec![vector],
+                Some(graph),
+                operation_epoch().unwrap(),
+            )
+            .await
+            .unwrap();
+        let query = VectorQuery {
+            scope,
+            artifact_ids: Some(vec![id]),
+            generation: 1,
+            profile: "local:v1".into(),
+            dimension: 2,
+            embedding: vec![0.1, 0.3],
+            limit: 1,
+        };
+        assert_eq!(
+            store
+                .search_vector(query, &[(id, source)].into())
+                .await
+                .unwrap()[0]
+                .id,
+            id
+        );
+        let seeds = store
+            .graph_seed_candidates(scope, "connection")
+            .await
+            .unwrap();
+        assert_eq!(seeds.len(), 1);
+        let neighbors = store.graph_neighbors(scope, &[seeds[0].id]).await.unwrap();
+        assert_eq!(neighbors[0].to_name, "timeout");
+        assert_eq!(
+            store.read_payloads(scope, &[id]).await.unwrap()[&id].content,
+            "连接超时"
+        );
+        store.delete_objects(scope, vec![id]).await.unwrap();
+        assert!(
+            store
+                .graph_seed_candidates(scope, "connection")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        store.shutdown().await.unwrap();
+    }
+
     #[cfg(feature = "local-storage")]
     #[test]
     fn binding_pins_workspace_routing_and_allows_service_credential_rotation() {

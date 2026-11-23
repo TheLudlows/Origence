@@ -54,28 +54,46 @@ impl Service {
     pub async fn open_with_anyseek(
         dir: impl AsRef<Path>,
         models: Models,
+        anyseek: crate::storage::anyseek::AnySeekConfig,
+    ) -> Result<Self> {
+        Self::open(dir.as_ref(), models, anyseek).await
+    }
+
+    /// Open Origence with its in-process AnySeek catalog under `dir/anyseek`.
+    pub async fn open_embedded(dir: impl AsRef<Path>, models: Models) -> Result<Self> {
+        Self::open(
+            dir.as_ref(),
+            models,
+            crate::storage::anyseek::AnySeekConfig::embedded(),
+        )
+        .await
+    }
+
+    async fn open(
+        dir: &Path,
+        models: Models,
         mut anyseek: crate::storage::anyseek::AnySeekConfig,
     ) -> Result<Self> {
         if let Some(profile) = &models.profile {
             anyseek = anyseek.with_embedding(profile.clone(), models.embedding_dimension())?;
         }
-        tokio::fs::create_dir_all(dir.as_ref())
+        tokio::fs::create_dir_all(dir)
             .await
             .map_err(anyhow::Error::from)?;
-        let dir = tokio::fs::canonicalize(dir.as_ref())
+        let dir = tokio::fs::canonicalize(dir)
             .await
             .map_err(anyhow::Error::from)?;
         let relational = Arc::new(SqliteStore::open(dir.join("context.db")).await?);
         let published = relational.has_committed_full_text().await?;
         let binding =
             crate::storage::retrieval_store::binding::prepare(&dir, &anyseek, published).await?;
+        let blobs = LocalBlobStore::open(dir.join("blobs")).await?;
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
-            RetrievalStore::open_bound(anyseek, binding).await?,
-            LocalBlobStore::open(dir.join("blobs")).await?,
+            RetrievalStore::open_bound(anyseek, binding, &dir).await?,
+            blobs,
         ));
-        engine.check().await?;
         let service = Self {
             engine,
             models,
@@ -84,9 +102,18 @@ impl Service {
         // Empty fresh stores legitimately have no native tables. Once a live
         // publication committed, a missing required surface is a storage failure,
         // never an empty corpus or permission to recreate authoritative data.
-        service.check_committed_surfaces().await?;
-        service.engine.relational().recover_jobs().await?;
-        crate::worker::cleanup(&service).await?;
+        let initialized = async {
+            service.engine.check().await?;
+            service.check_committed_surfaces().await?;
+            service.engine.relational().recover_jobs().await?;
+            crate::worker::cleanup(&service).await?;
+            Ok(())
+        }
+        .await;
+        if let Err(error) = initialized {
+            let _ = service.engine.shutdown().await;
+            return Err(error);
+        }
         Ok(service)
     }
     pub async fn ready(&self) -> bool {

@@ -44,8 +44,6 @@ class StartDevTests(unittest.TestCase):
         shutil.copy(Path(__file__).with_name('start-dev.ps1'), self.root/'tools/start-dev.ps1')
         (self.root/'ui/dist').mkdir(parents=True)
         (self.root/'ui/dist/server.js').touch()
-        self.anyseek = self.root/'anyseek executable'
-        self.anyseek.touch(); self.anyseek.chmod(0o700)
         (self.root/'records').mkdir()
         self.env = dict(os.environ, MASTER_KEY_SECRET='disposable-master', OC_ANYSEEK_API_KEY='disposable-key', DEV_TEST_SECRET='MUST_NOT_LEAK_471', DEV_TEST_RECORD=str(self.root/'records'))
         for category in ['CACHE','CONFIG','DATA']:
@@ -53,7 +51,7 @@ class StartDevTests(unittest.TestCase):
         for role in ['origence','node']:
             path=self.root/role; path.write_text(FAKE); path.chmod(0o700)
         sockets=[]
-        for _ in range(3):
+        for _ in range(2):
             sock=socket.socket(); sock.bind(('127.0.0.1',0)); sockets.append(sock)
         self.ports=[s.getsockname()[1] for s in sockets]
         for sock in sockets: sock.close()
@@ -71,7 +69,7 @@ class StartDevTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_launcher(self, mode, ui=False):
-        command=[os.environ['ORIGENCE_TEST_PWSH'],'-NoProfile','-File',str(self.root/'tools/start-dev.ps1'),'-AnySeekExe',str(self.anyseek),'-AnySeekDataDir',str(self.root/'index data'),'-OrigenceExe',str(self.root/'origence'),'-DataDir',str(self.root/'api data'),'-AnySeekPort',str(self.ports[0]),'-ApiPort',str(self.ports[1]),'-UiPort',str(self.ports[2]),'-StartupTimeoutSeconds','2','-ShutdownTimeoutSeconds','1']
+        command=[os.environ['ORIGENCE_TEST_PWSH'],'-NoProfile','-File',str(self.root/'tools/start-dev.ps1'),'-OrigenceExe',str(self.root/'origence'),'-DataDir',str(self.root/'api data'),'-ApiPort',str(self.ports[0]),'-UiPort',str(self.ports[1]),'-StartupTimeoutSeconds','2','-ShutdownTimeoutSeconds','1']
         if ui: command+=['-Ui','-NodeExe',str(self.root/'node')]
         result=subprocess.run(command,env=dict(self.env,DEV_TEST_MODE=mode),capture_output=True,text=True,timeout=20)
         output=result.stdout+result.stderr
@@ -92,9 +90,8 @@ class StartDevTests(unittest.TestCase):
         self.assertIn('Origence exited (code 24)',output)
         self.assertEqual(len(list((self.root/'records').iterdir())),2)
         args=json.loads((self.root/'records/origence').read_text())['args']
-        self.assertEqual(args, ['serve','--local','--bind',f'127.0.0.1:{self.ports[1]}',
-                                '--anyseek-port',str(self.ports[0]),'--anyseek-bin',str(self.anyseek),
-                                '--anyseek-data-dir',str(self.root/'index data'),'--data-dir',str(self.root/'api data')])
+        self.assertEqual(args, ['serve','--local','--bind',f'127.0.0.1:{self.ports[0]}',
+                                '--data-dir',str(self.root/'api data')])
 
     def test_early_exit(self):
         self.assertIn('Origence exited (code 23)',self.run_launcher('exit',True))
@@ -110,9 +107,9 @@ class StartDevTests(unittest.TestCase):
 
     def test_occupied_port_does_not_start_or_stop_services(self):
         with socket.socket() as occupied:
-            occupied.bind(('127.0.0.1',self.ports[1]));occupied.listen()
+            occupied.bind(('127.0.0.1',self.ports[0]));occupied.listen()
             self.assertIn('unavailable',self.run_launcher('ready'))
-            self.assertEqual(occupied.getsockname()[1],self.ports[1])
+            self.assertEqual(occupied.getsockname()[1],self.ports[0])
             self.assertFalse(list((self.root/'records').iterdir()))
 
 

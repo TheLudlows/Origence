@@ -6,11 +6,12 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub(crate) const FILE: &str = "full-text-backend.json";
+const FILE: &str = "full-text-backend.json";
 const MAX_BYTES: usize = 4096;
 
 pub(crate) struct Binding {
     selected: serde_json::Value,
+    pub(super) existing: bool,
     dir: PathBuf,
     analysis: tokio::sync::Mutex<Option<String>>,
 }
@@ -22,7 +23,7 @@ fn unavailable() -> StorageError {
     StorageError::Unavailable("retrieval backend binding unavailable".into())
 }
 
-/// Validate before opening the remote backend. A missing binding must never
+/// Validate before opening the retrieval backend. A missing binding must never
 /// reinterpret already-published local full-text as a remote projection.
 pub(crate) async fn prepare(
     dir: &Path,
@@ -58,6 +59,7 @@ pub(crate) async fn prepare(
             Ok(Binding {
                 selected: expected,
                 dir: dir.to_owned(),
+                existing: true,
                 analysis: tokio::sync::Mutex::new(fingerprint),
             })
         }
@@ -72,6 +74,7 @@ pub(crate) async fn prepare(
             Ok(Binding {
                 selected: expected,
                 dir: dir.to_owned(),
+                existing: false,
                 analysis: tokio::sync::Mutex::new(None),
             })
         }

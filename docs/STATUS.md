@@ -21,7 +21,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 
 ## Origence 本地启动
 
-`origence serve --local` 由 Origence 启动本地磁盘模式的 AnySeek，管理认证探测与子进程生命周期。默认 Catalog 位于 `OC_DATA_DIR/anyseek`。Windows 开发脚本调用同一入口，再按需启动 Node UI。独立 AnySeek 的接入配置见 [运维说明](OPERATIONS.md#anyseek-全文与向量)。
+`origence serve --local` 通过 Rust SDK 在同一进程打开 AnySeek 本地 Catalog，目录为 `OC_DATA_DIR/anyseek`。启动恢复、已发布集合核验及正常关闭由同一宿主管理。Windows 开发脚本调用此入口，再按需启动 Node UI。独立 AnySeek 的接入配置见 [运维说明](OPERATIONS.md#anyseek-全文与向量)。
 
 ## #105 客户端 Hook 本地切片
 

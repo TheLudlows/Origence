@@ -12,7 +12,7 @@ use origence::{
     types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
-use std::{future::Future, num::NonZeroU16, path::PathBuf, pin::Pin, time::Duration};
+use std::{future::Future, path::PathBuf, pin::Pin, time::Duration};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -48,18 +48,9 @@ enum Command {
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
-        /// Start and manage a local-disk AnySeek instance on loopback.
+        /// Open AnySeek in this process via its local-disk Rust SDK.
         #[arg(long)]
         local: bool,
-        /// AnySeek executable for local mode (defaults to anyseek_server on PATH).
-        #[arg(long, env = "OC_ANYSEEK_BIN", requires = "local")]
-        anyseek_bin: Option<PathBuf>,
-        /// AnySeek Catalog directory (defaults to <data-dir>/anyseek).
-        #[arg(long, env = "OC_ANYSEEK_DATA_DIR", requires = "local")]
-        anyseek_data_dir: Option<PathBuf>,
-        /// Stable loopback port for the local AnySeek instance (defaults to 8081).
-        #[arg(long, env = "OC_ANYSEEK_PORT", requires = "local")]
-        anyseek_port: Option<NonZeroU16>,
     },
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
@@ -164,7 +155,8 @@ fn init_tracing() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| "origence=info".into())
                 // Upstream diagnostics may contain document internals. The
                 // worker records our sanitized error code instead.
-                .add_directive("pdf_oxide=off".parse()?),
+                .add_directive("pdf_oxide=off".parse()?)
+                .add_directive("anyseek=off".parse()?),
         )
         .init();
     Ok(())
@@ -206,30 +198,19 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{output}");
             Ok(())
         }),
-        Command::Serve {
-            bind,
-            local,
-            anyseek_bin,
-            anyseek_data_dir,
-            anyseek_port,
-        } => Box::pin(async move {
+        Command::Serve { bind, local } => Box::pin(async move {
             let models = Models::from_env()?;
-            if local {
-                let anyseek = host::LocalAnySeek {
-                    binary: anyseek_bin.unwrap_or_else(|| {
-                        format!("anyseek_server{}", std::env::consts::EXE_SUFFIX).into()
-                    }),
-                    data_dir: anyseek_data_dir.unwrap_or_else(|| data_dir.join("anyseek")),
-                    port: anyseek_port.map(NonZeroU16::get).unwrap_or(8081),
-                };
-                let listener = tokio::net::TcpListener::bind(bind).await?;
-                host::serve_local(&data_dir, models, listener, anyseek).await
+            let service = if local {
+                Service::open_embedded(&data_dir, models).await?
             } else {
-                let service =
-                    Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?)
-                        .await?;
-                let listener = tokio::net::TcpListener::bind(bind).await?;
-                host::serve_http(service, listener, host::shutdown_signal()).await
+                Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?).await?
+            };
+            match tokio::net::TcpListener::bind(bind).await {
+                Ok(listener) => host::serve_http(service, listener, host::shutdown_signal()).await,
+                Err(error) => {
+                    service.engine.shutdown().await?;
+                    Err(error.into())
+                }
             }
         }),
         Command::IdentityCheck => Box::pin(async move {
