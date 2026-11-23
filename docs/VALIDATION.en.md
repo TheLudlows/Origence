@@ -1179,3 +1179,24 @@ Based on main `41cb852b468d1eba2574f27e6f355687043c9a70`, using a fresh local Or
 - With Rust 1.98.0, 231 library tests and formatting passed. The repository's live AnySeek HTTP/MCP smoke and restart checks passed. With Python 3.12.14, 58 pilot tests and 42 evaluation tests passed. The public P6 evidence index check returned `INDEX_LINKAGE_ONLY`.
 
 This was a public synthetic engineering preflight. No live clients or models were called, and the formal pilot and independent sign-off remain `NOT_RUN`.
+
+## 2026-11-23 — Separate embedding and extraction model configuration
+
+Based on main `9cc1e929bc0c657f8b9e7408461eda25374ac2e6`. Each model route can
+use its own URL and API key. Models on the shared URL retain legacy configuration
+behavior. Dedicated URLs receive only their own keys. The embedding profile
+still uses the original embedding URL, model name, and dimension. The extraction
+job fingerprint uses the selected extraction endpoint.
+
+- Linux with Rust 1.98.0 passed all-features `cargo check`, formatting, strict
+  all-targets/all-features Clippy, and `git diff --check`. The 4 `models::tests`
+  passed against two loopback HTTP fixtures. They verify request routing and
+  credentials, preserve the legacy profile, and preserve the embedding profile
+  when only the extraction URL changes.
+- All 8 `semantic_capture::` tests, 21 `learning_loop::` tests, and
+  `local_host_api_cli_mcp_models_and_recovery` passed. The last test injected
+  invalid dedicated URLs and synthetic keys into the parent environment and
+  verified that the child used the fixture's legacy settings.
+- Docker Compose v2.40.3 `config` confirmed that the fixture `.env` passes both
+  URLs and keys to the host service. Model calls used synthetic loopback fixtures.
+  Live providers and container deployment were outside this validation.

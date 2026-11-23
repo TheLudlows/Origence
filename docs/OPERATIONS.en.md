@@ -84,19 +84,35 @@ Each publication is limited to 64 chunks and 2 MiB of encoded request data. Text
 
 ## Local embedding service
 
+Set `OC_ENABLE_MODELS=true` and configure the model names you need. Origence
+reads its process environment at startup. Set variables in the environment when
+running the binary directly, or in `.env` for Compose.
+
+| Purpose | Base URL | API key | Model name |
+| --- | --- | --- | --- |
+| Embedding | `OC_EMBEDDING_BASE_URL` | `OC_EMBEDDING_API_KEY` | `OC_EMBEDDING_MODEL` |
+| Extraction, summaries, graph extraction, and Improve | `OC_EXTRACTION_BASE_URL` | `OC_EXTRACTION_API_KEY` | `OC_EXTRACTION_MODEL` |
+
+A model with a blank dedicated URL uses `OC_MODEL_BASE_URL` and falls back to
+`OC_MODEL_API_KEY` if its dedicated key is blank. A dedicated URL uses only its
+own key. A blank key on that route sends no Authorization header. Base URLs may
+include `/v1` and require HTTPS or loopback HTTP. The extraction model needs
+`chat/completions` with JSON output. Embedding also needs `OC_EMBEDDING_DIMENSION`.
+Changes to the extraction URL or key alone preserve the embedding profile.
+
 This example uses Ollama's BGE-M3 to provide OpenAI-compatible embeddings.
 
 ```powershell
 $env:OC_ENABLE_MODELS = 'true'
-$env:OC_MODEL_BASE_URL = 'http://127.0.0.1:11434/v1'
-$env:OC_MODEL_API_KEY = 'ollama'
+$env:OC_EMBEDDING_BASE_URL = 'http://127.0.0.1:11434/v1'
+$env:OC_EMBEDDING_API_KEY = 'ollama'
 $env:OC_EMBEDDING_MODEL = 'bge-m3'
 $env:OC_EMBEDDING_DIMENSION = '1024'
 ```
 
 ollama serves as a placeholder key for the local service. The commands configure the current PowerShell session. Repeat them in a new terminal or configure persistent environment variables. A running host does not refresh automatically. Download bge-m3 first and keep Ollama running. The endpoint is POST /v1/embeddings. This configuration supplies no extraction or generation model.
 
-Changing the model or dimension does not rebuild old vectors. Use a separate temporary data directory for evaluation. Re-import or republish business data under the existing profile constraints. See [evaluation instructions](../evals/README.en.md) for entry points. Historical experiments on an old backend are not current AnySeek quality measurements.
+Changing the embedding URL, model, or dimension does not rebuild old vectors. Use a separate temporary data directory for evaluation. Re-import or republish business data under the existing profile constraints. See [evaluation instructions](../evals/README.en.md) for entry points. Historical experiments on an old backend are not current AnySeek quality measurements.
 
 ## Offline memory identity check
 
