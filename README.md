@@ -15,19 +15,24 @@ Context preparation selects authorized evidence for a task. AnySeek supports ful
 
 ## Quick start
 
-Requires Rust **1.98.0** and a compatible AnySeek service. Follow the
-[AnySeek setup](docs/OPERATIONS.md#anyseek-全文与向量) to configure the service URL
-and credentials. Origence initializes each workspace collection on first use.
-Choose a fresh data directory for this quick start.
+Requires Rust **1.98.0** and a compatible `anyseek_server` executable. Build or
+install the [pinned AnySeek version](docs/OPERATIONS.md#anyseek-全文与向量) and
+put it on `PATH`, or pass its path with `--anyseek-bin`. Choose a fresh data
+directory for this quick start.
 
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
 ./target/debug/origence --offline workspace-create demo
-./target/debug/origence serve
+./target/debug/origence serve --local
 ```
 
 Use the workspace token returned by `workspace-create` to access the API.
+Origence starts AnySeek on `127.0.0.1:8081` in local storage mode, under
+`$OC_DATA_DIR/anyseek`. It generates the service credential and initializes
+workspace collections on first use. Use `origence serve` with the [external
+AnySeek configuration](docs/OPERATIONS.md#anyseek-全文与向量) for a separately
+managed service.
 
 ## Management UI
 
@@ -69,4 +74,4 @@ Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent compa
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md). The JOIN-free SQL constraint remains in force; its former automatic guard and tests have been removed.
 
-Windows native development (no WSL): [one-command launcher and separate first-time setup](docs/WINDOWS-DEV.md).
+Windows native development (no WSL): [local startup and optional UI launcher](docs/WINDOWS-DEV.md).

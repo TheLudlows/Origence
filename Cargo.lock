@@ -1711,9 +1711,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "clap",
  "fs2",
  "jieba-rs",
+ "libc",
  "pdf_oxide",
  "pulldown-cmark",
  "reqwest",
@@ -1729,6 +1731,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -43,6 +43,7 @@ const META: &[&str] = &[
 ];
 
 /// Server-owned connection details. Credentials are deliberately not Debug.
+#[derive(Clone)]
 pub struct AnySeekConfig {
     base: Url,
     key: HeaderValue,
@@ -90,12 +91,8 @@ impl AnySeekConfig {
     /// Require HTTPS except on loopback; do not accept URL credentials or paths.
     pub fn new(base: &str, key: &str) -> StorageResult<Self> {
         let base = Url::parse(base).map_err(|_| invalid("invalid AnySeek URL"))?;
-        let local = matches!(
-            base.host_str(),
-            Some("localhost" | "127.0.0.1" | "[::1]" | "::1")
-        );
         if base.host_str().is_none()
-            || (base.scheme() != "https" && !(local && base.scheme() == "http"))
+            || (base.scheme() != "https" && !(loopback(&base) && base.scheme() == "http"))
             || !base.username().is_empty()
             || base.password().is_some()
             || base.query().is_some()
@@ -118,6 +115,13 @@ impl AnySeekConfig {
             embedding: None,
         })
     }
+}
+
+fn loopback(base: &Url) -> bool {
+    matches!(
+        base.host_str(),
+        Some("localhost" | "127.0.0.1" | "[::1]" | "::1")
+    )
 }
 
 /// Immutable lexical/vector publications stored behind a trusted service key.
@@ -306,14 +310,15 @@ impl AnySeekFullTextStore {
 
     /// Construct a bounded client; collections follow authenticated workspace scopes.
     pub fn new(config: AnySeekConfig) -> StorageResult<Self> {
-        let http = reqwest::Client::builder()
+        let mut http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|_| unavailable())?;
+            .timeout(Duration::from_secs(30));
+        if loopback(&config.base) {
+            http = http.no_proxy();
+        }
         Ok(Self {
             config,
-            http,
+            http: http.build().map_err(|_| unavailable())?,
             checked_config: OnceLock::new(),
             checked_scopes: tokio::sync::Mutex::new(HashSet::new()),
             #[cfg(feature = "local-storage")]

@@ -1,8 +1,8 @@
 #requires -Version 7.4
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][string]$AnySeekExe,
-    [Parameter(Mandatory)][string]$AnySeekDataDir,
+    [string]$AnySeekExe = $env:OC_ANYSEEK_BIN,
+    [string]$AnySeekDataDir = $env:OC_ANYSEEK_DATA_DIR,
     [string]$DataDir = $env:OC_DATA_DIR,
     [string]$OrigenceExe = (Join-Path $PSScriptRoot '../target/debug/origence.exe'),
     [switch]$Ui,
@@ -13,8 +13,7 @@ param(
     [ValidateRange(1, 600)][int]$StartupTimeoutSeconds = 60,
     [ValidateRange(1, 300)][int]$ShutdownTimeoutSeconds = 30
 )
-# No provisioning, shell expansion, external console, or child output logging.
-# Foreground pwsh in Windows Terminal/Console is required for shared Ctrl+C.
+# Origence owns AnySeek. This script adds the optional Node UI in the same console.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $children = [System.Collections.Generic.List[object]]::new()
@@ -28,7 +27,7 @@ $http.MaxResponseContentBufferSize = 1048576
 
 function Require-Path([string]$Value, [string]$Kind, [string]$Label) {
     if (-not $Value -or -not (Test-Path -LiteralPath $Value -PathType $Kind)) {
-        throw "$Label must already exist; see docs/WINDOWS-DEV.md for separate initialization."
+        throw "$Label must already exist; see docs/WINDOWS-DEV.md."
     }
     return (Resolve-Path -LiteralPath $Value).Path
 }
@@ -53,7 +52,7 @@ function Start-Owned([string]$Name, [string]$Exe, [string[]]$Arguments, [hashtab
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
     foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
-    # Do not pass backend/admin/model credentials to the UI or the wrong child.
+    # Do not pass backend/admin/model credentials to either child.
     foreach ($envName in @($info.Environment.Keys)) {
         if ($envName -like 'OC_*' -or $envName -like 'ORIGENCE_*' -or
             $envName -like 'ANYSEEK_*' -or $envName -eq 'MASTER_KEY_SECRET') {
@@ -74,10 +73,6 @@ function Test-Ready([string]$Url, [string]$Kind) {
     $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, $Url)
     $response = $null
     try {
-        if ($Kind -eq 'AnySeek') {
-            try { $request.Headers.Add('apikey', $env:OC_ANYSEEK_API_KEY) }
-            catch { throw 'AnySeek key is not a valid HTTP header value.' }
-        }
         try { $response = $http.SendAsync($request).GetAwaiter().GetResult() }
         catch { return $false }
         $status = [int]$response.StatusCode
@@ -89,9 +84,6 @@ function Test-Ready([string]$Url, [string]$Kind) {
             $text = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             if ($Kind -eq 'UI') { return $text.Contains('<html') }
             $body = $text | ConvertFrom-Json
-            if ($Kind -eq 'AnySeek') {
-                return $body -is [string] -and $body -cmatch '^[A-Za-z0-9.+_-]{1,64}$'
-            }
             return $body.status -eq 'ready'
         } catch { return $false }
     } finally {
@@ -110,18 +102,7 @@ function Wait-Ready([string]$Url, [string]$Name) {
 }
 
 try {
-    $AnySeekExe = Require-Path $AnySeekExe Leaf 'AnySeek executable'
     $OrigenceExe = Require-Path $OrigenceExe Leaf 'Origence executable'
-    $AnySeekDataDir = Require-Path $AnySeekDataDir Container 'AnySeek data directory'
-    $DataDir = Require-Path $DataDir Container 'Origence data directory'
-    if ($DataDir -eq $AnySeekDataDir) { throw 'Use separate existing directories for Origence and AnySeek.' }
-    if (-not (Get-ChildItem -LiteralPath $AnySeekDataDir -Force | Select-Object -First 1)) {
-        throw 'AnySeek data directory is empty; initialize separately.'
-    }
-    [void](Require-Path (Join-Path $DataDir 'context.db') Leaf 'Initialized Origence context.db')
-    foreach ($name in @('MASTER_KEY_SECRET','OC_ANYSEEK_API_KEY')) {
-        if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Set $name in this process environment; values are never printed." }
-    }
     $ports = @($AnySeekPort, $ApiPort)
     if ($Ui) { $ports += $UiPort }
     if (@($ports | Select-Object -Unique).Count -ne $ports.Count) { throw 'Service ports must be distinct.' }
@@ -130,16 +111,18 @@ try {
         $NodeExe = (Get-Command $NodeExe -CommandType Application -ErrorAction Stop).Source
         $uiEntry = Require-Path (Join-Path $root 'ui/dist/server.js') Leaf 'Built UI entry'
     }
-    $backend = "http://127.0.0.1:$AnySeekPort"
-    Start-Owned 'AnySeek' $AnySeekExe @('local_ip=127.0.0.1', "local_port=$AnySeekPort", "index_path=$AnySeekDataDir") @{
-        MASTER_KEY_SECRET = $env:MASTER_KEY_SECRET; ANYSEEK_STORAGE_BACKEND = 'local'; RUST_LOG = 'error'
+    $arguments = @('serve', '--local', '--bind', "127.0.0.1:$ApiPort", '--anyseek-port', "$AnySeekPort")
+    if ($AnySeekExe) {
+        $binary = (Get-Command $AnySeekExe -CommandType Application -ErrorAction Stop).Source
+        $arguments += @('--anyseek-bin', $binary)
     }
-    Wait-Ready "$backend/api/v1/live" 'AnySeek'
-    Start-Owned 'Origence' $OrigenceExe @('serve', '--bind', "127.0.0.1:$ApiPort") @{
-        OC_DATA_DIR = $DataDir; OC_FULL_TEXT_BACKEND = 'anyseek'; OC_ENABLE_MODELS = 'false'
-        OC_ANYSEEK_URL = $backend; OC_ANYSEEK_API_KEY = $env:OC_ANYSEEK_API_KEY
-        RUST_LOG = 'error'
+    if ($AnySeekDataDir) {
+        $arguments += @('--anyseek-data-dir', $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($AnySeekDataDir))
     }
+    if ($DataDir) {
+        $arguments += @('--data-dir', $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DataDir))
+    }
+    Start-Owned 'Origence' $OrigenceExe $arguments @{ OC_ENABLE_MODELS = 'false'; RUST_LOG = 'error' }
     Wait-Ready "http://127.0.0.1:$ApiPort/health/ready" 'Origence'
     if ($Ui) {
         Start-Owned 'UI' $NodeExe @($uiEntry) @{
@@ -158,7 +141,7 @@ try {
         try {
             if (-not $child.Process.HasExited -and -not $child.Process.WaitForExit($ShutdownTimeoutSeconds * 1000)) {
                 Write-Warning "$($child.Name) did not stop within the grace period; forcing this owned process only."
-                if (-not $child.Process.HasExited) { $child.Process.Kill() }
+                if (-not $child.Process.HasExited) { $child.Process.Kill($true) }
                 if (-not $child.Process.WaitForExit(5000)) {
                     Write-Warning "$($child.Name) exit is unconfirmed; inspect owned PID $($child.Process.Id) manually."
                 }

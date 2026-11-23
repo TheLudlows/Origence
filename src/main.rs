@@ -6,11 +6,13 @@ use origence::{
     host, mcp,
     models::Models,
     service::Service,
-    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore},
+    storage::{
+        KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore, anyseek::AnySeekConfig,
+    },
     types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
-use std::{future::Future, path::PathBuf, pin::Pin, time::Duration};
+use std::{future::Future, num::NonZeroU16, path::PathBuf, pin::Pin, time::Duration};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -41,11 +43,23 @@ enum Command {
         #[arg(long)]
         with_space: bool,
     },
-    /// Run the HTTP API and its single durable worker in one process.
+    /// Run the HTTP API and its single durable worker.
     #[command(alias = "api")]
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
+        /// Start and manage a local-disk AnySeek instance on loopback.
+        #[arg(long)]
+        local: bool,
+        /// AnySeek executable for local mode (defaults to anyseek_server on PATH).
+        #[arg(long, env = "OC_ANYSEEK_BIN", requires = "local")]
+        anyseek_bin: Option<PathBuf>,
+        /// AnySeek Catalog directory (defaults to <data-dir>/anyseek).
+        #[arg(long, env = "OC_ANYSEEK_DATA_DIR", requires = "local")]
+        anyseek_data_dir: Option<PathBuf>,
+        /// Stable loopback port for the local AnySeek instance (defaults to 8081).
+        #[arg(long, env = "OC_ANYSEEK_PORT", requires = "local")]
+        anyseek_port: Option<NonZeroU16>,
     },
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
@@ -192,19 +206,31 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{output}");
             Ok(())
         }),
-        Command::Serve { bind } => Box::pin(async move {
-            let service = Service::open_with_anyseek(
-                &data_dir,
-                Models::from_env()?,
-                origence::storage::anyseek::AnySeekConfig::from_env()?,
-            )
-            .await?;
-            let listener = tokio::net::TcpListener::bind(bind).await?;
-            println!(
-                "{}",
-                json!({"listening":listener.local_addr()?.to_string()})
-            );
-            host::serve(service, listener, host::shutdown_signal()).await
+        Command::Serve {
+            bind,
+            local,
+            anyseek_bin,
+            anyseek_data_dir,
+            anyseek_port,
+        } => Box::pin(async move {
+            let models = Models::from_env()?;
+            if local {
+                let anyseek = host::LocalAnySeek {
+                    binary: anyseek_bin.unwrap_or_else(|| {
+                        format!("anyseek_server{}", std::env::consts::EXE_SUFFIX).into()
+                    }),
+                    data_dir: anyseek_data_dir.unwrap_or_else(|| data_dir.join("anyseek")),
+                    port: anyseek_port.map(NonZeroU16::get).unwrap_or(8081),
+                };
+                let listener = tokio::net::TcpListener::bind(bind).await?;
+                host::serve_local(&data_dir, models, listener, anyseek).await
+            } else {
+                let service =
+                    Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?)
+                        .await?;
+                let listener = tokio::net::TcpListener::bind(bind).await?;
+                host::serve_http(service, listener, host::shutdown_signal()).await
+            }
         }),
         Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(
@@ -366,12 +392,9 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
 async fn run_offline(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     let token =
         std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
-    let service = Service::open_with_anyseek(
-        &data_dir,
-        Models::from_env()?,
-        origence::storage::anyseek::AnySeekConfig::from_env()?,
-    )
-    .await?;
+    let service =
+        Service::open_with_anyseek(&data_dir, Models::from_env()?, AnySeekConfig::from_env()?)
+            .await?;
     let auth = service.auth(&token).await?;
     let result = offline_command(&service, &auth, token, command).await?;
     service.engine.shutdown().await?;

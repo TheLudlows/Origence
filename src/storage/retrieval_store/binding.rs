@@ -6,7 +6,7 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-const FILE: &str = "full-text-backend.json";
+pub(crate) const FILE: &str = "full-text-backend.json";
 const MAX_BYTES: usize = 4096;
 
 pub(crate) struct Binding {

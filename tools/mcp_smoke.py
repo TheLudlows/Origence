@@ -451,8 +451,8 @@ def exercise_private_archive(mcp, other_mcp, reader_mcp, turn):
 
 
 class Host(Child):
-    def __init__(self, binary, env, token, forbidden):
-        super().__init__([binary, "serve", "--bind", "127.0.0.1:0"], env, forbidden)
+    def __init__(self, binary, env, token, forbidden, serve_args=()):
+        super().__init__([binary, "serve", "--bind", "127.0.0.1:0", *serve_args], env, forbidden)
         self.token = token
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:

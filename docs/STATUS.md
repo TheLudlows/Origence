@@ -19,6 +19,10 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
+## Origence 本地启动
+
+`origence serve --local` 由 Origence 启动本地磁盘模式的 AnySeek，管理认证探测与子进程生命周期。默认 Catalog 位于 `OC_DATA_DIR/anyseek`。Windows 开发脚本调用同一入口，再按需启动 Node UI。独立 AnySeek 的接入配置见 [运维说明](OPERATIONS.md#anyseek-全文与向量)。
+
 ## #105 客户端 Hook 本地切片
 
 Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提示上下文。
