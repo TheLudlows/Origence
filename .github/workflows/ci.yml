@@ -102,6 +102,17 @@ jobs:
           cargo test --locked -j 2 --no-fail-fast
           # The integration tests build the CLI that the smoke steps reuse.
           test -x target/debug/origence
+      - name: Embedded AnySeek SDK startup and restart
+        run: python3 tools/anyseek_smoke.py --embedded --binary target/debug/origence
+      - name: Cloud host uses the remote AnySeek adapter
+        run: |
+          cargo test --locked --no-default-features --features local-storage --test anyseek -j 2
+          test -x target/debug/origence
+          cargo tree --locked --no-default-features --features local-storage --edges normal,build --prefix none > /tmp/cloud-dependencies.txt
+          if grep -Eq '^anyseek v' /tmp/cloud-dependencies.txt; then
+            cat /tmp/cloud-dependencies.txt
+            exit 1
+          fi
       - name: Fetch the pinned real AnySeek fixture
         uses: actions/checkout@v4
         with:

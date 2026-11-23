@@ -15,19 +15,25 @@ Context preparation selects authorized evidence for a task. AnySeek supports ful
 
 ## Quick start
 
-Requires Rust **1.98.0** and a compatible AnySeek service. Follow the
-[AnySeek setup](docs/OPERATIONS.md#anyseek-全文与向量) to configure the service URL
-and credentials. Origence initializes each workspace collection on first use.
+Requires Rust **1.98.0**. The default build links the AnySeek Rust SDK for local storage.
 Choose a fresh data directory for this quick start.
 
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
 ./target/debug/origence --offline workspace-create demo
-./target/debug/origence serve
+./target/debug/origence serve --local
 ```
 
 Use the workspace token returned by `workspace-create` to access the API.
+Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
+initializes workspace collections on first use.
+
+## Cloud deployment
+
+The Docker build uses the remote AnySeek client. Configure `OC_ANYSEEK_URL` and
+`OC_ANYSEEK_API_KEY` for the deployed service. Start the container with its default
+command or use `origence serve` on a cloud host. [Cloud configuration](docs/OPERATIONS.md#云上部署与独立-anyseek)
 
 ## Management UI
 
@@ -54,7 +60,7 @@ Library callers can use parsing, identity and value contracts, models, Blob stor
 cargo test --no-default-features
 ```
 
-Enable `sqlite` for the standalone authority adapter or `local-storage` (the default) for the complete host. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
+Enable `sqlite` for the standalone authority adapter, `local-storage` for the remote-only host, or `embedded-anyseek` for the default native build with local SDK support. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
 
 ## Documentation
 
@@ -69,4 +75,4 @@ Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent compa
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md). The JOIN-free SQL constraint remains in force; its former automatic guard and tests have been removed.
 
-Windows native development (no WSL): [one-command launcher and separate first-time setup](docs/WINDOWS-DEV.md).
+Windows native development (no WSL): [local startup and optional UI launcher](docs/WINDOWS-DEV.md).

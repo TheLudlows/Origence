@@ -54,6 +54,33 @@ fn query(
     )
 }
 
+#[cfg(all(feature = "local-storage", not(feature = "embedded-anyseek")))]
+#[test]
+fn cloud_host_requires_remote_configuration_and_rejects_local_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let command = || {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        command
+            .args(["serve", "--bind", "127.0.0.1:0"])
+            .env("OC_DATA_DIR", dir.path())
+            .env("OC_ENABLE_MODELS", "false")
+            .env_remove("OC_ANYSEEK_URL")
+            .env_remove("OC_ANYSEEK_API_KEY")
+            .env_remove("OC_FULL_TEXT_BACKEND");
+        command
+    };
+    let missing = command().output().unwrap();
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr)
+            .contains("AnySeek URL and service key are required")
+    );
+    let local = command().arg("--local").output().unwrap();
+    assert_eq!(local.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&local.stderr).contains("--local"));
+    assert_eq!(dir.path().read_dir().unwrap().count(), 0);
+}
+
 #[test]
 fn connection_rejects_unsafe_origins_and_invalid_service_keys() {
     for base in [

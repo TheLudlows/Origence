@@ -198,7 +198,7 @@ impl AnySeekFullTextStore {
         filters.extend(extra);
         let mut fields = META.to_vec();
         fields.extend(["graph", "graph_keys", "endpoint_ids"]);
-        let (status,result)=self.request(scope, Method::POST,"/query",Some(json!({"query":"","filter":filters,"fields":fields,"length":MAX_GRAPH_ROWS+1,"count":true}))).await?;
+        let (status,result)=self.request(scope, Request::Query(json!({"query":"","filter":filters,"fields":fields,"length":MAX_GRAPH_ROWS+1,"count":true}))).await?;
         if !status.is_success() {
             return Err(unavailable());
         }

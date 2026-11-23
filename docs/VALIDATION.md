@@ -1,9 +1,29 @@
 # Origence · 当前验证
 
-最近一次本地核验为 2026-11-21，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
+最近一次本地核验为 2026-11-23，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-23 · 本地与云上 AnySeek 构建
+
+Linux / Rust 1.98.0。默认构建通过 459 项 Rust 测试和嵌入式 CLI 发布、Run 回放及重启验证。云上构建使用 `--no-default-features --features local-storage`。Cargo 依赖树中未链接 AnySeek SDK，6 项常规 AnySeek 测试通过，包含缺少远端配置时拒绝启动和拒绝 `--local`。8 项独立 AnySeek 合同测试通过，真实服务的 HTTP 与 MCP 联验覆盖发布、固定版本读回和重启。
+
+检查了 Dockerfile 的构建配置与 Compose 的默认入口。当前环境无 Docker 引擎，验证使用与 Dockerfile 相同构建特性的宿主二进制。
+
+## 2026-11-23 · AnySeek Rust SDK 嵌入式存储
+
+Linux / Rust 1.98.0，AnySeek SDK 固定为 `5626dad`。Origence 默认套件 459 项通过，16 项 Python 工具回归通过，其中 5 项使用 PowerShell 7.4.13。独立 HTTP 模式通过 8 项真实 AnySeek 合同测试，以及 HTTP/stdio MCP、固定版本检索与重启验证。SDK 的公开 Rust 用例覆盖独占打开、租户隔离、原子替换幂等、关闭和重开。[AnySeek SDK PR](https://github.com/TheLudlows/anyseek/pull/218)
+
+嵌入式模式以空 `PATH` 启动真实 Origence。验证了发布与更新、关键词检索、Run 诊断无 HTTP 状态、精确回放、退出重开后保留当前和历史正文，以及持久绑定的 Catalog 丢失时拒绝重建。补充 Rust 用例覆盖同一条记录的向量召回、图一跳、正文读取与删除。AnySeek 的五项快照与恢复专项通过，覆盖跨帧快照、原始字段顺序、写入回执以及向量与深层 JSON 数据重开。真实 Windows Terminal 退出操作未在本地测试。
+
+## 2026-11-23 · Origence 管理本地 AnySeek
+
+基线 `a01fc9c`。Linux 本地 Rust 1.98.0 格式检查和 `git diff --check` 通过。PowerShell 7.4.13 下 16 项 Python 工具回归通过，其中 5 项覆盖 Windows 开发脚本参数转发、空格路径、UI 就绪顺序和失败处理。
+
+`3a9e58d` 的 Linux CI 严格 Clippy、默认 Rust 测试与真实 AnySeek `6a46fc7` 联调通过。`serve --local` 通过首次初始化、端口冲突、全文写入与更新、SIGTERM 退出、同目录重启后的当前与历史正文及检索、已绑定 Catalog 缺失时拒绝重建。原独立 AnySeek 的 HTTP、MCP 和 UI 烟测也通过。[CI #482](https://github.com/TheLudlows/Origence/actions/runs/45109060442)
+
+Windows CI 的原生构建、Clippy 和本地生命周期测试通过。Windows 前台 Ctrl+C 和真实 AnySeek 子进程重开尚未在 Windows 终端实测。
 
 ## 2026-11-21 · #91 冻结题与 P6 回执离线关联
 

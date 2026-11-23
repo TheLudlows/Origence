@@ -49,9 +49,10 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 ## 检索诊断
 
 Search、Resolve 与 EvidenceBundle 返回 `retrieval:{requests,omitted_requests}`。
-每条是一次真实 AnySeek `/query` HTTP 尝试，包含 Origence/后端请求标识、路由、
-实际模式（browse/lexical/vector/hybrid）、客户端往返微秒、HTTP 状态、安全错误码、
-返回候选数量及可获得的后端诊断。browse 包括候选预检，不能当作语义召回。
+每条记录一次真实 AnySeek 查询，包含 Origence 和后端请求标识、路由、
+实际模式（browse/lexical/vector/hybrid）、调用耗时、安全错误码、返回候选数量及可获得的后端诊断。
+独立服务查询记录 HTTP 状态。嵌入式 SDK 查询的 `http_status` 为 null，SDK 调用失败时记录 `sdk_error`。
+browse 包括候选预检。
 
 后端诊断格式为 v2，含服务版本、分析配置摘要、embedding 空间 SHA256（未配置为 null）、
 查询耗时与 `visible_seq`，以及查询后另行采样的

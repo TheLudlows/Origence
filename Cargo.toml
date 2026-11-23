@@ -11,6 +11,7 @@ autotests = false
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart"] }
+anyseek = { git = "https://github.com/TheLudlows/anyseek.git", rev = "5626dadfd5414b294a3cf0f6b845f5261760f68b", default-features = false, optional = true }
 clap = { version = "4", features = ["derive", "env"] }
 fs2 = { version = "0.4", optional = true }
 jieba-rs = "0.7"
@@ -29,11 +30,13 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+
 [dev-dependencies]
 tempfile = "3"
 
 [features]
-default = ["local-storage"]
+default = ["embedded-anyseek"]
+embedded-anyseek = ["local-storage", "dep:anyseek"]
 local-storage = ["sqlite"]
 sqlite = ["dep:rusqlite", "dep:fs2"]
 # Historical fixture diagnostics are opt-in and are not production acceptance.

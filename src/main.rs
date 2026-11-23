@@ -6,7 +6,9 @@ use origence::{
     host, mcp,
     models::Models,
     service::Service,
-    storage::{KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore},
+    storage::{
+        KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore, anyseek::AnySeekConfig,
+    },
     types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
@@ -41,11 +43,15 @@ enum Command {
         #[arg(long)]
         with_space: bool,
     },
-    /// Run the HTTP API and its single durable worker in one process.
+    /// Run the HTTP API and its single durable worker.
     #[command(alias = "api")]
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
+        #[cfg(feature = "embedded-anyseek")]
+        /// Open AnySeek in this process via its local-disk Rust SDK.
+        #[arg(long)]
+        local: bool,
     },
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
@@ -150,7 +156,8 @@ fn init_tracing() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| "origence=info".into())
                 // Upstream diagnostics may contain document internals. The
                 // worker records our sanitized error code instead.
-                .add_directive("pdf_oxide=off".parse()?),
+                .add_directive("pdf_oxide=off".parse()?)
+                .add_directive("anyseek=off".parse()?),
         )
         .init();
     Ok(())
@@ -192,19 +199,28 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{output}");
             Ok(())
         }),
-        Command::Serve { bind } => Box::pin(async move {
-            let service = Service::open_with_anyseek(
-                &data_dir,
-                Models::from_env()?,
-                origence::storage::anyseek::AnySeekConfig::from_env()?,
-            )
-            .await?;
-            let listener = tokio::net::TcpListener::bind(bind).await?;
-            println!(
-                "{}",
-                json!({"listening":listener.local_addr()?.to_string()})
-            );
-            host::serve(service, listener, host::shutdown_signal()).await
+        Command::Serve {
+            bind,
+            #[cfg(feature = "embedded-anyseek")]
+            local,
+        } => Box::pin(async move {
+            let models = Models::from_env()?;
+            #[cfg(feature = "embedded-anyseek")]
+            let service = if local {
+                Service::open_embedded(&data_dir, models).await?
+            } else {
+                Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?).await?
+            };
+            #[cfg(not(feature = "embedded-anyseek"))]
+            let service =
+                Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?).await?;
+            match tokio::net::TcpListener::bind(bind).await {
+                Ok(listener) => host::serve_http(service, listener, host::shutdown_signal()).await,
+                Err(error) => {
+                    service.engine.shutdown().await?;
+                    Err(error.into())
+                }
+            }
         }),
         Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(
@@ -366,12 +382,9 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
 async fn run_offline(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     let token =
         std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
-    let service = Service::open_with_anyseek(
-        &data_dir,
-        Models::from_env()?,
-        origence::storage::anyseek::AnySeekConfig::from_env()?,
-    )
-    .await?;
+    let service =
+        Service::open_with_anyseek(&data_dir, Models::from_env()?, AnySeekConfig::from_env()?)
+            .await?;
     let auth = service.auth(&token).await?;
     let result = offline_command(&service, &auth, token, command).await?;
     service.engine.shutdown().await?;

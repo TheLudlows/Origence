@@ -8,72 +8,87 @@ use uuid::Uuid;
 pub(crate) mod binding;
 
 pub struct RetrievalStore {
-    remote: AnySeekFullTextStore,
+    backend: AnySeekFullTextStore,
 }
 impl RetrievalStore {
     pub(crate) async fn open_bound(
         anyseek: AnySeekConfig,
         binding: binding::Binding,
     ) -> StorageResult<Self> {
-        let remote = AnySeekFullTextStore::new(anyseek)?;
-        remote.check().await?;
-        binding.commit_initial().await?;
+        #[cfg(feature = "embedded-anyseek")]
+        let backend = AnySeekFullTextStore::open_configured(
+            anyseek,
+            &binding.dir.join("anyseek"),
+            !binding.existing,
+        )
+        .await?;
+        #[cfg(not(feature = "embedded-anyseek"))]
+        let backend = AnySeekFullTextStore::new(anyseek)?;
+        let initialized = async {
+            backend.check().await?;
+            binding.commit_initial().await
+        }
+        .await;
+        if let Err(error) = initialized {
+            let _ = backend.shutdown().await;
+            return Err(error);
+        }
         Ok(Self {
-            remote: remote.with_binding(binding),
+            backend: backend.with_binding(binding),
         })
     }
     pub(crate) async fn check_scope(&self, scope: Scope) -> StorageResult<()> {
-        self.remote.check_scope(scope, false).await
+        self.backend.check_scope(scope, false).await
     }
     pub(crate) async fn read_payloads(
         &self,
         scope: Scope,
         ids: &[Uuid],
     ) -> StorageResult<HashMap<Uuid, ChunkPayload>> {
-        self.remote.read_payloads(scope, ids).await
+        self.backend.read_payloads(scope, ids).await
     }
     pub async fn open(anyseek: AnySeekConfig) -> StorageResult<Self> {
         Ok(Self {
-            remote: AnySeekFullTextStore::new(anyseek)?,
+            backend: AnySeekFullTextStore::new(anyseek)?,
         })
     }
     pub async fn check_full_text_available(&self) -> StorageResult<()> {
-        self.remote.check().await
+        self.backend.check().await
     }
     pub async fn check_vector_available(
         &self,
         profile: &str,
         dimension: usize,
     ) -> StorageResult<()> {
-        self.remote.check_vector(profile, dimension).await
+        self.backend.check_vector(profile, dimension).await
     }
     pub(crate) async fn search_authorized(
         &self,
         query: VectorQuery,
         expected: &HashMap<Uuid, SourceVersion>,
     ) -> StorageResult<Vec<VectorHit>> {
-        self.remote.search_vector(query, expected).await
+        self.backend.search_vector(query, expected).await
     }
     pub(crate) async fn search_full_text_authorized(
         &self,
         query: FullTextQuery,
         expected: &HashMap<Uuid, SourceVersion>,
     ) -> StorageResult<Vec<FullTextHit>> {
-        self.remote.search(query, expected).await
+        self.backend.search(query, expected).await
     }
     pub(crate) async fn graph_seed_candidates(
         &self,
         scope: Scope,
         terms: &str,
     ) -> StorageResult<Vec<GraphEntityCandidate>> {
-        self.remote.graph_seed_candidates(scope, terms).await
+        self.backend.graph_seed_candidates(scope, terms).await
     }
     pub(crate) async fn graph_neighbors(
         &self,
         scope: Scope,
         seeds: &[Uuid],
     ) -> StorageResult<Vec<GraphEdgeCandidate>> {
-        self.remote.graph_neighbors(scope, seeds).await
+        self.backend.graph_neighbors(scope, seeds).await
     }
     pub(crate) async fn upsert_publication(
         &self,
@@ -83,7 +98,7 @@ impl RetrievalStore {
         graph: Option<super::anyseek::GraphPublication>,
         epoch: Option<u64>,
     ) -> StorageResult<()> {
-        self.remote
+        self.backend
             .upsert_with_graph(
                 scope,
                 entries,
@@ -101,10 +116,10 @@ impl Lifecycle for RetrievalStore {
         self.check().await
     }
     async fn check(&self) -> StorageResult<()> {
-        self.remote.check().await
+        self.backend.check().await
     }
     async fn shutdown(&self) -> StorageResult<()> {
-        Ok(())
+        self.backend.shutdown().await
     }
 }
 impl VectorStore for RetrievalStore {
@@ -141,7 +156,7 @@ impl VectorStore for RetrievalStore {
         ))
     }
     async fn delete_objects(&self, scope: Scope, ids: Vec<Uuid>) -> StorageResult<()> {
-        self.remote.delete_objects(scope, ids).await
+        self.backend.delete_objects(scope, ids).await
     }
     async fn delete_source(&self, _scope: Scope, _source: SourceVersion) -> StorageResult<()> {
         Err(StorageError::InvalidArgument(

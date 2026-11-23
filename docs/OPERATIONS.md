@@ -1,6 +1,6 @@
 # 本地运维说明
 
-适用单宿主 SQLite 权威数据、Blob 和独立 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与恢复)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
+适用单宿主 SQLite 权威数据、Blob 和 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与恢复)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围
 
@@ -17,7 +17,7 @@
 | --- | --- |
 | `context.db` 及 SQLite WAL | 权限、原始来源事件、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
-| AnySeek workspace collection（远端） | 已发布分块正文、摘要/模型版本与定位信息，以及同条 Record 的全文/向量/图索引；必须单独备份 |
+| `anyseek/` | 本地模式默认的 AnySeek Catalog 与 workspace collections，含正文、摘要和全文/向量/图索引。独立部署时按 AnySeek 规则单独备份 |
 | `full-text-backend.json` | AnySeek endpoint、tenant/workspace 自动路由规则和 embedding profile/维度绑定；不含 key，随整目录备份 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
@@ -59,16 +59,36 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 全文、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。已发布正文与摘要文本由同一 AnySeek collection 持久保存。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
-1. 准备支持整组替换、analysis、查询 diagnostics v2、服务凭据和 UUID 租户头的 AnySeek（Catalog 7；版本见 CI pin）。
-2. 配置 URL 与服务间凭据，使用独立新 Origence 数据目录启动：
+### Origence 本地模式
 
 ```sh
-export OC_ANYSEEK_URL=http://127.0.0.1:8081
-# 通过宿主私密环境设置 OC_ANYSEEK_API_KEY（AnySeek 服务间凭据）。
-# 不启用 embedding 时可设 OC_ENABLE_MODELS=false 验证全文。
+origence serve --local
 ```
 
-不再配置 `OC_ANYSEEK_TENANT` 或 `OC_ANYSEEK_COLLECTION`。每个数据请求从服务端已鉴权
+Origence 在当前进程通过 AnySeek Rust SDK 打开 `OC_DATA_DIR/anyseek`。AnySeek 以本地磁盘模式运行，
+workspace 的集合在首次使用时创建。启动恢复和存储核验完成后，Origence 才开放自己的 HTTP API。
+本地模式使用独立的后端绑定，选择全新 Origence 数据目录。已有嵌入式绑定时，Catalog 缺失会拒绝启动。
+
+退出时 Origence 停止接收请求，让 Worker 收尾，再等待 SDK 排空 AnySeek 已接收的操作并释放目录锁。
+SDK 查询采用 AnySeek 的准入和资源预算，运行于同一进程。进程异常退出后，下一次启动执行持久日志恢复。
+强制终止进程可能中断正常关闭。原 HTTP 模式的请求超时只用于独立服务连接。
+
+### 云上部署与独立 AnySeek
+
+云上镜像只编译远端 AnySeek 客户端。默认入口执行 `origence serve`，通过 `OC_ANYSEEK_URL` 和
+`OC_ANYSEEK_API_KEY` 连接独立部署的 AnySeek 服务。任一配置缺失时，宿主启动失败。
+远端地址使用 Origence 容器可达的 HTTPS origin。服务间凭据由部署环境注入。
+
+```sh
+export OC_ANYSEEK_URL=https://anyseek.example.internal
+# 通过部署环境注入 OC_ANYSEEK_API_KEY。
+docker compose up --build -d host
+```
+
+云上裸机可用 `cargo build --release --locked --no-default-features --features local-storage --bin origence`
+构建远端模式的二进制。独立服务的 CI 兼容版本为 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
+
+每个数据请求从服务端已鉴权
 Scope 取得 `tenant_id`，作为 `X-AnySeek-Tenant`；`workspace_id` 转为
 `ws_<去掉连字符的 UUID>` 集合名。一个 workspace 对应一个集合，同租户不同 workspace
 使用不同集合，不同租户使用不同命名空间。客户端和模型不能指定 AnySeek 路由或服务凭据。
@@ -160,7 +180,7 @@ SQLite 随程序编译，无需安装 SQLite 服务或客户端库。可写连�
 元数据精简、格式与只读 WAL 检查边界见[存储契约](contracts/storage.md#sqlite-与最小元数据)。
 
 1. 正常停止宿主，确认进程结束且无离线客户端持有数据目录。
-2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、AnySeek 绑定、blobs 和关联文件；记录二进制版本和非敏感模型配置。按 AnySeek 操作指南另存对应 collection 的同版本备份；不要认为本地目录包含 AnySeek 的正文、摘要、全文、向量或图索引。
+2. 将**整个** `OC_DATA_DIR` 复制到备份位置，包含 SQLite 及其 WAL、AnySeek 绑定、blobs 和关联文件；记录二进制版本和非敏感模型配置。使用嵌入式模式时一并保存其中的 `anyseek/`。独立部署时按 AnySeek 操作指南另存对应 collection 的同版本备份。
 3. 恢复到独立目录，先用同版本离线工具检查，再启动并检查 ready、样本 get/search 和 job 状态。
 
 不要在线分别复制数据库或只备份 context.db；当前没有在线跨库快照协议。历史专用测试库曾完成停机整库备份恢复，生产备份恢复及断电仍待独立验收。逻辑删除保留原文，备份也包含原文。
@@ -210,6 +230,5 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 ## Windows 原生开发联启
 
-已初始化的本机 AnySeek + Origence 可用 [`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一
-PowerShell 7.4+ 控制台启动，可选 Node UI。首次初始化、readiness、凭据和停止限制见该文档；
-开发入口禁用模型，不替代生产服务管理或迁移。
+使用 `origence.exe serve --local` 启动 API 和本地 AnySeek。需要 Node UI 时可使用
+[`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一 PowerShell 7.4+ 控制台联启。脚本入口禁用模型。

@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-from mcp_smoke import Host, Mcp, require
+from mcp_smoke import Host, Mcp, isolated_env, require
 
 
 def call(base, path, key, body=None):
@@ -142,14 +142,70 @@ def mcp_contract(binary, env, directory):
     return env, token, asset, old
 
 
+def embedded_contract(binary):
+    with tempfile.TemporaryDirectory(prefix="origence embedded anyseek ") as directory:
+        env = isolated_env(directory)
+        for name in ("OC_ANYSEEK_URL", "OC_ANYSEEK_API_KEY", "MASTER_KEY_SECRET"):
+            env.pop(name, None)
+        env.update(ANYSEEK_STORAGE_BACKEND="s3", PATH="")
+        serve_args = ["--local"]
+        workspace = subprocess.run([binary, "--offline", "workspace-create", "local smoke"],
+                                   env=env, check=True, capture_output=True, timeout=30)
+        token = json.loads(workspace.stdout)["token"]
+        old = "Embedded local search requires approval."
+        new = "Embedded local search requires review."
+        with Host(binary, env, token, [token], serve_args) as host:
+            asset = host.publish(old)
+            require(host.publish(new) == asset, "embedded local update changed asset ID")
+            run_id = str(uuid.uuid4())
+            host.request("/v1/runs", {"run_id": run_id, "summary": "Verify SDK retrieval"})
+            request = {"event_id": str(uuid.uuid4()), "context": {"query": "embedded review"}}
+            prepared = host.request(f"/v1/runs/{run_id}/context", request)
+            observations = prepared["bundle"]["retrieval"]["requests"]
+            require(observations and any(item["mode"] == "lexical" and item["backend"] for item in observations)
+                    and all(item["http_status"] is None for item in observations), "SDK diagnostics used an HTTP status or omitted retrieval")
+            require(host.request(f"/v1/runs/{run_id}/context", request) == prepared, "SDK replay changed retrieval observations")
+            host.process.send_signal(signal.SIGTERM)
+            require(host.process.wait(timeout=45) == 0, "embedded local shutdown failed")
+            host.check_stderr()
+
+        with Host(binary, env, token, [token], serve_args) as host:
+            require(host.request(f"/v1/assets/{asset}?version=1")["content"] == old,
+                    "embedded local restart lost historical content")
+            require(host.request(f"/v1/assets/{asset}")["content"] == new,
+                    "embedded local restart lost current content")
+            found = host.request("/v1/search", {"query": "embedded review", "mode": "keyword"})
+            require(found["hits"] and found["hits"][0]["asset_id"] == asset,
+                    "embedded local restart lost the lexical index")
+            host.process.send_signal(signal.SIGTERM)
+            require(host.process.wait(timeout=45) == 0, "reopened embedded local shutdown failed")
+            host.check_stderr()
+
+        index = Path(directory) / "anyseek"
+        index.rename(index.with_name("retained-catalog"))
+        missing = subprocess.run([binary, "serve", "--bind", "127.0.0.1:0", *serve_args],
+                                 env=env, capture_output=True, timeout=10)
+        require(missing.returncode != 0 and b"data directory is missing" in missing.stderr,
+                "embedded startup accepted a missing Catalog for an existing binding")
+        require(not index.exists(), "embedded startup recreated a lost Catalog")
+
+    print("PASS: embedded AnySeek SDK publication, diagnostics, replay, restart, and refusal to recreate a lost Catalog", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--anyseek-binary", required=True)
+    parser.add_argument("--anyseek-binary")
     parser.add_argument("--test-executable", action="append", default=[])
     parser.add_argument("--cargo-tests", action="store_true", help="run the real-backend Rust target through Cargo")
     parser.add_argument("--binary")
+    parser.add_argument("--embedded", action="store_true", help="run the in-process local startup and restart contract on Unix")
     parser.add_argument("--run", nargs=argparse.REMAINDER, help="run another isolated smoke/eval command against this fixture")
     args = parser.parse_args()
+    if args.embedded:
+        require(args.binary, "--embedded needs an Origence binary")
+        embedded_contract(str(Path(args.binary).resolve()))
+        return
+    require(args.anyseek_binary, "external mode needs --anyseek-binary")
     require(args.test_executable or args.binary or args.cargo_tests or args.run, "provide a test executable, Cargo tests or Origence binary")
     with tempfile.TemporaryDirectory(prefix="origence-anyseek-") as directory:
         with socket.socket() as sock:
@@ -175,7 +231,8 @@ def main():
                     subprocess.run([str(Path(executable).resolve()), "--ignored", "--nocapture", "--test-threads=1"],
                                    env=env, check=True, timeout=300)
                 if args.cargo_tests:
-                    subprocess.run(["cargo", "test", "--locked", "--test", "anyseek", "--", "--ignored", "--nocapture", "--test-threads=1"],
+                    subprocess.run(["cargo", "test", "--locked", "--no-default-features", "--features", "local-storage",
+                                    "--test", "anyseek", "--", "--ignored", "--nocapture", "--test-threads=1"],
                                    env=env, check=True, timeout=300, cwd=Path(__file__).resolve().parent.parent)
                 if args.run:
                     subprocess.run(args.run, env=env, check=True, timeout=600)
