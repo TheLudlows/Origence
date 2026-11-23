@@ -7,6 +7,12 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-23 · 控制台新建子工作区
+
+基线 `8226b4c1492c2a8f480977f10fbddc7379aaca18`。Linux、Rust 1.98.0 下通过格式检查、`local-storage` 全目标严格 Clippy 和 `cargo test --locked --no-default-features --features local-storage --test local`（208 项）。真实 SQLite 与 HTTP 测试覆盖管理员能力、受限分页、同 UUID 重试、跨租户拒绝、子工作区角色、私有 Run 隔离和凭据撤销。新增 SQL 仅查询按租户及父工作区限定的 `oc_workspaces`，创建复用现有事务和审计。
+
+Node 24.22.1 下通过类型检查和 26 项 UI 测试。Chromium 156 模拟回执丢失后以同一 UUID 重试，验证创建、自动切换、刷新和未授权工作区隐藏入口。另用临时 SQLite 控制台账号和真实 Origence HTTP 复核未授权创建拒绝、重试和子工作区目录读取。联测停用模型。
+
 ## 2026-11-23 · 控制台账号 SQLite 配置表
 
 基线账号提交 `6a47e21edb2965418e9dbcd65089c3fb8aea145b`。Linux、Node 24.22.1 下通过 `npm run check`、`npm test`（26 项）和 `git diff --check`。SQLite 测试覆盖重开后读取、改密保留授权、撤销、账号删除、重复凭据和错误工作区绑定。Chromium 156 通过登录、切换、刷新及退出。通过实际 CLI 初始化临时配置库，再以真实 Origence HTTP、两个临时工作区和停用模型的配置验证登录及分别读取两个授权工作区的 `whoami`。

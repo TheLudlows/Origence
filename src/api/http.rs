@@ -9,7 +9,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -23,6 +23,8 @@ pub fn router(service: Service) -> Router {
         )
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
+        .route("/v1/workspaces/owned", get(list_owned_workspaces))
+        .route("/v1/workspaces/owned/{id}", put(create_owned_workspace))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
         .route("/admin/keys", post(issue_key))
@@ -77,7 +79,23 @@ fn key(h: &HeaderMap) -> Result<&str> {
         .ok_or_else(|| AppError::Invalid("Idempotency-Key is required for mutations".into()))
 }
 pub(super) async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
-    s.auth(token(h)?).await
+    let caller = s.auth(token(h)?).await?;
+    let Some(target) = h.get("X-Origence-Workspace") else {
+        return Ok(caller);
+    };
+    let id = target
+        .to_str()
+        .ok()
+        .and_then(|id| Uuid::parse_str(id).ok())
+        .ok_or_else(|| AppError::Invalid("invalid workspace selector".into()))?;
+    if id == caller.workspace_id {
+        return Ok(caller);
+    }
+    match s.lookup_owned_workspace(&caller, id).await {
+        Ok(Some(scoped)) => Ok(scoped),
+        Ok(None) | Err(AppError::Conflict(_)) => Err(AppError::NotFound),
+        Err(error) => Err(error),
+    }
 }
 async fn ready(State(s): State<Service>) -> impl IntoResponse {
     if s.ready().await {
@@ -358,6 +376,46 @@ async fn file(
 
 async fn whoami(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
     Ok(Json(json!(auth(&s, &h).await?)))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedWorkspacePage {
+    after: Option<Uuid>,
+    limit: Option<u32>,
+}
+
+async fn list_owned_workspaces(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Query(page): Query<OwnedWorkspacePage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.list_managed_workspaces(
+            &auth(&s, &h).await?,
+            page.after.unwrap_or_default(),
+            page.limit.unwrap_or(50),
+        )
+        .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedWorkspaceInput {
+    name: String,
+}
+
+async fn create_owned_workspace(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(input): Json<OwnedWorkspaceInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.create_managed_workspace(&auth(&s, &h).await?, id, &input.name)
+            .await?,
+    ))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

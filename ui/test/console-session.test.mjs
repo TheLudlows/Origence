@@ -55,6 +55,10 @@ test("account sessions survive reload and enforce grants, tenant credentials, re
       return res.end("{}");
     }
     if (req.url === "/v1/whoami") return res.end(JSON.stringify(identity));
+    if (req.url?.startsWith("/v1/workspaces/owned?")) {
+      res.statusCode = 403;
+      return res.end("{}");
+    }
     forwarded.push({ authorization, path: req.url, method: req.method, cookie: req.headers.cookie });
     res.end(JSON.stringify({ scoped_workspace: identity.workspace_id }));
   }), t);

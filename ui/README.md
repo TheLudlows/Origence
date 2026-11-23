@@ -43,6 +43,12 @@ PowerShell 可以把 `Read-Host -MaskInput` 的输出传给同一个 `set-passwo
 
 控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。单工作区开发仍可在未配置账号数据库时，用个人 API key 从 loopback 连接。
 
+### 新建子工作区
+
+使用当前工作区的管理员凭据执行 `origence key-create <工作区 ID> --role admin --allow-owned-workspaces`，将得到的 key 作为受信控制台服务凭据配置给获授权的本地账号。该授权涵盖根工作区及其所有直接子工作区。
+
+登录后，在有此授权的根工作区点击 **新建工作区**，填写名称并提交。成功后，控制台更新列表并切换至新工作区。在子工作区内，该凭据具有 writer 权限，创建入口显示在有创建授权的根工作区。新的根工作区仍由操作员离线初始化。
+
 开发时修改源代码后运行 `npm run build`；`npm run dev` 会监听编译产物并重启服务。
 服务也支持 `--host`、`--port` 参数，便于接入已有预览工具。
 

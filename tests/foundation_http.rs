@@ -464,3 +464,207 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
     host.abort();
     service.engine.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let root = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let other = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    for scope in [root, other] {
+        store
+            .create_workspace(scope.tenant_id, scope.workspace_id, "Root")
+            .await
+            .unwrap();
+    }
+    let allow = origence::storage::KeyCapabilities {
+        allow_owned_workspaces: true,
+    };
+    let manager = store
+        .issue_key_with_capabilities(root, "admin", allow)
+        .await
+        .unwrap();
+    let other_manager = store
+        .issue_key_with_capabilities(other, "admin", allow)
+        .await
+        .unwrap();
+    let ordinary = store.issue_key(root, "admin").await.unwrap();
+    let writer = store
+        .issue_key_with_capabilities(root, "writer", allow)
+        .await
+        .unwrap();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let serve =
+        tokio::spawn(axum::serve(listener, origence::api::router(service.clone())).into_future());
+    let http = reqwest::Client::new();
+    let call = |method, path: &str, token: &str| {
+        http.request(method, format!("{base}{path}"))
+            .bearer_auth(token)
+    };
+
+    let child = Uuid::from_u128(100);
+    let second = Uuid::from_u128(200);
+    let path = format!("/v1/workspaces/owned/{child}");
+    for key in [&ordinary.token, &writer.token] {
+        assert_eq!(
+            call(Method::PUT, &path, key)
+                .json(&json!({"name":"试点"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            call(Method::GET, "/v1/workspaces/owned", key)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    for (id, name) in [(child, "试点"), (second, "Second"), (child, "试点")] {
+        let receipt = call(
+            Method::PUT,
+            &format!("/v1/workspaces/owned/{id}"),
+            &manager.token,
+        )
+        .json(&json!({"name":name}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+        assert_eq!(receipt["workspace_id"], json!(id));
+    }
+    let list = |path: String, token: &str| call(Method::GET, &path, token).send();
+    let first_page: Value = list("/v1/workspaces/owned?limit=1".into(), &manager.token)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        first_page,
+        json!({"items":[{"workspace_id":child,"name":"试点"}],"next_after":child})
+    );
+    let last_page: Value = list(
+        format!("/v1/workspaces/owned?limit=1&after={child}"),
+        &manager.token,
+    )
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(
+        last_page,
+        json!({"items":[{"workspace_id":second,"name":"Second"}],"next_after":null})
+    );
+    let empty: Value = list("/v1/workspaces/owned".into(), &other_manager.token)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(empty["items"], json!([]));
+
+    let scoped = |method, path: &str, token: &str| {
+        call(method, path, token).header("X-Origence-Workspace", child.to_string())
+    };
+    let username: Value = scoped(Method::GET, "/v1/whoami", &manager.token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(username["workspace_id"], json!(child));
+    assert_eq!(username["id"], json!(manager.key_id));
+    assert_eq!(username["role"], "writer");
+    assert_eq!(
+        scoped(Method::GET, "/v1/whoami", &other_manager.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        scoped(Method::POST, "/admin/keys", &manager.token)
+            .json(&json!({"workspace_id":child,"role":"admin"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        scoped(
+            Method::PUT,
+            &format!("/v1/workspaces/owned/{}", Uuid::new_v4()),
+            &manager.token
+        )
+        .json(&json!({"name":"Grandchild"}))
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+
+    let run = Uuid::new_v4();
+    let run_path = format!("/v1/runs/{run}");
+    scoped(Method::POST, "/v1/runs", &manager.token)
+        .json(&json!({"run_id":run,"summary":"private child run"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        call(Method::GET, &run_path, &manager.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    scoped(Method::GET, &run_path, &manager.token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    store.revoke_key(manager.key_id).await.unwrap();
+    assert_eq!(
+        scoped(Method::GET, &run_path, &manager.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    serve.abort();
+}

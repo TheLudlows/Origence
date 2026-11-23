@@ -4,6 +4,12 @@
 
 The latest local verification was 2026-11-23. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-23 · Console child workspace creation
+
+Base `8226b4c1492c2a8f480977f10fbddc7379aaca18`. On Linux with Rust 1.98.0, formatting, strict `local-storage` Clippy for all targets, and `cargo test --locked --no-default-features --features local-storage --test local` passed (208 tests). Real SQLite and HTTP covered administrator capability, bounded pagination, same-UUID retry, cross-tenant denial, derived roles, private Run isolation, and credential revocation. The new SQL reads only `oc_workspaces` scoped by tenant and parent. Creation reuses the existing transaction and audit path.
+
+Node 24.22.1 passed type checking and all 26 UI tests. Chromium 156 verified retry with the original UUID after a simulated lost receipt, automatic workspace switching, reload, and hiding the entry in unauthorized workspaces. A temporary SQLite console account and real Origence HTTP covered unauthorized creation, retry, and the child catalog with models disabled.
+
 ## 2026-11-23 · SQLite configuration tables for console accounts
 
 Base account commit `6a47e21edb2965418e9dbcd65089c3fb8aea145b`. On Linux with Node 24.22.1, type checking, all 26 Node tests, and `git diff --check` passed. SQLite tests covered reopening, password changes that retain grants, revocation, account removal, duplicate credentials, and incorrect workspace mappings. Chromium 156 passed login, workspace switching, reload, and sign-out. The provisioning CLI and real Origence HTTP verified SQLite-backed login and scoped access to two temporary workspaces with models disabled.

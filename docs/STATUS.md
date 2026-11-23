@@ -17,7 +17,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、按项目启用的 Codex 和 Claude Code Hook 与采集缺口、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端真实 Hook 加载与实际事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核；按预算组装证据。真实引擎本地回归通过 | 当前后端的模型检索质量、容量与延迟验收 |
 | 私有归档与反馈 | 双客户端显式归档互读、逻辑 key 隔离与轮换撤销已验证；支持显式反馈和 Improve → Learning | 在 P0 双场景任务中核对归档和反馈证据 |
-| Node.js 管理界面 | 五页 UI，受限目录、异步入库、固定版本与来源、按当前 key 的 Run 创建数及趋势；已有 Chromium 定向验证 | 实际屏幕阅读器、实体触屏、生产计量与告警。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
+| Node.js 管理界面 | 五页 UI，授权新建子工作区、受限目录、异步入库、固定版本与来源、按当前 key 的 Run 创建数及趋势。已有 Chromium 定向验证 | 实际屏幕阅读器、实体触屏、生产计量与告警。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
