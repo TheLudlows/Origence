@@ -4,6 +4,10 @@
 
 The latest local verification was 2026-11-23. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-23 · SQLite configuration tables for console accounts
+
+Base account commit `6a47e21edb2965418e9dbcd65089c3fb8aea145b`. On Linux with Node 24.22.1, type checking, all 26 Node tests, and `git diff --check` passed. SQLite tests covered reopening, password changes that retain grants, revocation, account removal, duplicate credentials, and incorrect workspace mappings. Chromium 156 passed login, workspace switching, reload, and sign-out. The provisioning CLI and real Origence HTTP verified SQLite-backed login and scoped access to two temporary workspaces with models disabled.
+
 ## 2026-11-23 · Local console accounts and workspace switching
 
 Base `b182b84ca4d1e73b32b931713280671f13cac974`. On Linux and Node 24.22.1, `npm run check`, `npm test` (25 tests), and `git diff --check` passed. Seven Chromium 156 checks covered account login, workspace switching on a narrow viewport, reload, sign-out, navigation, sources, knowledge ingestion, and Run reads. HTTP fixtures covered unauthorized workspaces, revoked grants, stale tab sessions, and key isolation between accounts.

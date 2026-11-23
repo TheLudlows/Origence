@@ -3,8 +3,14 @@ import { once } from "node:events";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createUiServer } from "../dist/server.js";
-import { hashConsolePassword, loadConsoleAccounts } from "../dist/console-accounts.js";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  configureConsoleAccount,
+  hashConsolePassword,
+  initializeConsoleAccounts,
+  loadConsoleAccounts,
+} from "../dist/console-accounts.js";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,6 +29,14 @@ async function listen(server, t) {
     server.close();
   });
   return `http://127.0.0.1:${server.address().port}`;
+}
+
+async function accountDatabase(t) {
+  const dir = await mkdtemp(join(tmpdir(), "origence-console-config-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const db = join(dir, "accounts.db");
+  initializeConsoleAccounts(db);
+  return db;
 }
 
 test("account sessions survive reload and enforce grants, tenant credentials, revocation, and sign-out", async (t) => {
@@ -47,17 +61,15 @@ test("account sessions survive reload and enforce grants, tenant credentials, re
   const [aliceHash, bobHash] = await Promise.all([
     hashConsolePassword(alicePassword), hashConsolePassword(bobPassword),
   ]);
+  const database = await accountDatabase(t);
+  configureConsoleAccount(database, { kind: "set-password", username: "alice", passwordHash: aliceHash });
+  configureConsoleAccount(database, { kind: "set-password", username: "bob", passwordHash: bobHash });
+  configureConsoleAccount(database, { kind: "grant", username: "alice", workspaceId: a, name: "Alpha", keyEnv: "ALICE_A" });
+  configureConsoleAccount(database, { kind: "grant", username: "alice", workspaceId: b, name: "Beta", keyEnv: "ALICE_B" });
+  configureConsoleAccount(database, { kind: "grant", username: "bob", workspaceId: b, name: "Beta", keyEnv: "BOB_B" });
   const ui = await listen(createUiServer({
     apiBaseUrl: upstream,
-    accounts: [
-      { username: "alice", passwordHash: aliceHash, grants: [
-        { workspaceId: a, name: "Alpha", authorization: "Bearer alice-a" },
-        { workspaceId: b, name: "Beta", authorization: "Bearer alice-b" },
-      ] },
-      { username: "bob", passwordHash: bobHash, grants: [
-        { workspaceId: b, name: "Beta", authorization: "Bearer bob-b" },
-      ] },
-    ],
+    accounts: loadConsoleAccounts(database, { ALICE_A: "alice-a", ALICE_B: "alice-b", BOB_B: "bob-b" }),
   }), t);
   const signIn = (data, cookie, origin = ui) => fetch(ui + sessionPath, {
     method: "POST",
@@ -122,20 +134,23 @@ test("account sessions survive reload and enforce grants, tenant credentials, re
 });
 
 test("account provisioning rejects reusable keys and login rejects mismatched workspace identities", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "origence-console-config-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const file = join(dir, "accounts.json");
+  const database = await accountDatabase(t);
   const hash = await hashConsolePassword(alicePassword);
-  const alice = {
-    username: "alice", password_hash: hash,
-    workspaces: [{ workspace_id: a, name: "Alpha", key_env: "ALICE_KEY" }],
-  };
-  await writeFile(file, JSON.stringify({ accounts: [alice, {
-    ...alice, username: "bob", workspaces: [{ workspace_id: b, name: "Beta", key_env: "ALICE_KEY" }],
-  }] }));
-  await assert.rejects(loadConsoleAccounts(file, { ALICE_KEY: "fixture-key" }), /requires its own API key/);
-  await writeFile(file, JSON.stringify({ accounts: [alice] }));
-  const accounts = await loadConsoleAccounts(file, { ALICE_KEY: "fixture-key" });
+  configureConsoleAccount(database, { kind: "set-password", username: "alice", passwordHash: hash });
+  configureConsoleAccount(database, { kind: "set-password", username: "bob", passwordHash: hash });
+  configureConsoleAccount(database, { kind: "grant", username: "alice", workspaceId: a, name: "Alpha", keyEnv: "ALICE_KEY" });
+  assert.throws(() =>
+    configureConsoleAccount(database, { kind: "grant", username: "bob", workspaceId: b, name: "Beta", keyEnv: "ALICE_KEY" }),
+    /UNIQUE constraint failed/,
+  );
+  configureConsoleAccount(database, { kind: "grant", username: "bob", workspaceId: b, name: "Beta", keyEnv: "BOB_KEY" });
+  assert.throws(
+    () => loadConsoleAccounts(database, { ALICE_KEY: "same-fixture-key", BOB_KEY: "same-fixture-key" }),
+    /requires its own API key/,
+  );
+  configureConsoleAccount(database, { kind: "revoke", username: "bob", workspaceId: b });
+  const accounts = loadConsoleAccounts(database, { ALICE_KEY: "fixture-key" });
+  assert.equal(accounts.find((account) => account.username === "bob").grants.length, 0);
   const upstream = await listen(createServer((_req, res) => {
     res.end(JSON.stringify({ id: a, workspace_id: b, role: "reader" }));
   }), t);
@@ -143,8 +158,35 @@ test("account provisioning rejects reusable keys and login rejects mismatched wo
   const login = await fetch(ui + sessionPath, {
     method: "POST",
     headers: { Origin: ui, "Content-Type": "application/json" },
-    body: JSON.stringify({ username: alice.username, password: alicePassword }),
+    body: JSON.stringify({ username: "alice", password: alicePassword }),
   });
   assert.equal(login.status, 502);
   assert.equal(login.headers.get("set-cookie"), null);
+});
+
+test("configuration tables retain password hashes and workspace references across reopen", async (t) => {
+  const database = await accountDatabase(t);
+  assert.throws(() => initializeConsoleAccounts(database), { code: "EEXIST" });
+  assert.deepEqual(loadConsoleAccounts(database, {}), []);
+  assert.throws(
+    () => configureConsoleAccount(database, { kind: "grant", username: "unknown", workspaceId: a, name: "Alpha", keyEnv: "ALPHA_KEY" }),
+    /FOREIGN KEY constraint failed/,
+  );
+  const original = await hashConsolePassword(alicePassword);
+  const replacement = await hashConsolePassword(bobPassword);
+  configureConsoleAccount(database, { kind: "set-password", username: "alice", passwordHash: original });
+  configureConsoleAccount(database, { kind: "grant", username: "alice", workspaceId: a, name: "Alpha", keyEnv: "ALPHA_KEY" });
+  configureConsoleAccount(database, { kind: "set-password", username: "alice", passwordHash: replacement });
+  const db = new DatabaseSync(database, { readOnly: true });
+  try {
+    const account = db.prepare("SELECT username, password_hash FROM oc_console_accounts").get();
+    const grant = db.prepare("SELECT username, workspace_id, name, key_env FROM oc_console_workspace_grants").get();
+    assert.deepEqual({ ...account }, { username: "alice", password_hash: replacement });
+    assert.deepEqual({ ...grant }, { username: "alice", workspace_id: a, name: "Alpha", key_env: "ALPHA_KEY" });
+  } finally {
+    db.close();
+  }
+  assert.equal(loadConsoleAccounts(database, { ALPHA_KEY: "fixture-key" })[0].grants.length, 1);
+  configureConsoleAccount(database, { kind: "remove-account", username: "alice" });
+  assert.deepEqual(loadConsoleAccounts(database, {}), []);
 });

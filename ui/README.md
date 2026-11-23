@@ -22,39 +22,26 @@ npm start
 
 ### 本地账号与工作区
 
-在 `ui` 中构建后，运行以下命令生成密码哈希。密码从标准输入读取，至少 15 个字符。
+使用私有 SQLite 配置库，例如 `../.data/console-accounts.db`。其中 `oc_console_accounts` 保存用户名和 scrypt 密码哈希，`oc_console_workspace_grants` 保存账号对应的工作区 ID、显示名和后端 key 的环境变量名。配置库由 Node 控制台维护，独立于 Origence 的业务库 `context.db`。
+
+构建后在 `ui` 目录执行以下命令。密码从标准输入读取，至少 15 个字符。
 
 ```bash
+mkdir -p ../.data
+node scripts/console-accounts.mjs --db ../.data/console-accounts.db init
 read -rsp 'Password: ' console_password
-printf '%s\n' "$console_password" | node scripts/hash-console-password.mjs
+printf '%s\n' "$console_password" | node scripts/console-accounts.mjs --db ../.data/console-accounts.db set-password alice
 unset console_password
+node scripts/console-accounts.mjs --db ../.data/console-accounts.db grant alice 11111111-1111-4111-8111-111111111111 "研发" ORIGENCE_ALICE_ENGINEERING_KEY
 ```
 
-PowerShell 可用 `Read-Host -MaskInput | node scripts/hash-console-password.mjs`。
+PowerShell 可以把 `Read-Host -MaskInput` 的输出传给同一个 `set-password` 命令。
 
-通过已有的 [Origence 凭据管理接口](../docs/API.md#接口)，为每个账号在每个已授权工作区签发一把独立且权限适当的 key。用私有环境变量注入 key，把工作区 ID、显示名、环境变量名及密码哈希写进例如 `../.data/console-accounts.json` 的私有文件。每个账号可以多配几项工作区。
+使用已有的 [Origence 凭据管理接口](../docs/API.md#接口)，为每个账号及工作区授权签发一把独立且权限适当的 key，并由服务端环境注入，如 `ORIGENCE_ALICE_ENGINEERING_KEY`。在 `.env` 设置 `ORIGENCE_UI_ACCOUNTS_DB=../.data/console-accounts.db` 后启动控制台。再次运行 `set-password` 可改密，`grant` 可更新已有授权，`revoke USERNAME WORKSPACE_ID` 可撤销一项授权，`remove-account USERNAME` 可删除账号及其授权。重启控制台应用配置或 key 轮换。
 
-```json
-{
-  "accounts": [
-    {
-      "username": "alice",
-      "password_hash": "<生成的 scrypt-v1 密码哈希>",
-      "workspaces": [
-        {
-          "workspace_id": "11111111-1111-4111-8111-111111111111",
-          "name": "研发",
-          "key_env": "ORIGENCE_ALICE_ENGINEERING_KEY"
-        }
-      ]
-    }
-  ]
-}
-```
+用户用账号登录后可切换获授权的工作区。后台核验每把 key 的工作区和权限，上游会拒绝已撤销的 key。Agent 继续用自己的 API token 接入。私有会话和 Run 按逻辑 key 隔离。要延续自己的私有记录，应绑定该账号本人原有的同一逻辑 key。
 
-在 `.env` 设置 `ORIGENCE_UI_ACCOUNTS_FILE=../.data/console-accounts.json` 后启动控制台。配置由运营者维护，修改账号、工作区授权或轮换 key 后重启控制台即可生效。后台会核验每把 key 绑定的工作区和权限。账号有多个仍有效的工作区时，界面提供切换菜单。已撤销的 key 在下次请求及刷新时由上游拒绝。独立 key 的私有会话与 Run 继续按逻辑 key 隔离，如需延续自己的私有记录，应绑定该账号本人原有的同一逻辑 key。
-
-控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。单工作区开发仍可在未配置账号文件时，用个人 API key 从 loopback 连接。
+控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。单工作区开发仍可在未配置账号数据库时，用个人 API key 从 loopback 连接。
 
 开发时修改源代码后运行 `npm run build`；`npm run dev` 会监听编译产物并重启服务。
 服务也支持 `--host`、`--port` 参数，便于接入已有预览工具。

@@ -20,39 +20,26 @@ npm start
 
 ### Local accounts and workspaces
 
-Build the UI, then generate a password hash from standard input. Use at least 15 characters.
+Use a private SQLite configuration database such as `../.data/console-accounts.db`. The `oc_console_accounts` table stores usernames and scrypt password hashes. The `oc_console_workspace_grants` table stores workspace IDs, display names, and the names of environment variables that hold upstream keys. The Node console owns this database separately from Origence's business database, `context.db`.
+
+Build the UI, then run these commands from `ui`. The account command reads the password from standard input. Use at least 15 characters.
 
 ```bash
+mkdir -p ../.data
+node scripts/console-accounts.mjs --db ../.data/console-accounts.db init
 read -rsp 'Password: ' console_password
-printf '%s\n' "$console_password" | node scripts/hash-console-password.mjs
+printf '%s\n' "$console_password" | node scripts/console-accounts.mjs --db ../.data/console-accounts.db set-password alice
 unset console_password
+node scripts/console-accounts.mjs --db ../.data/console-accounts.db grant alice 11111111-1111-4111-8111-111111111111 "Engineering" ORIGENCE_ALICE_ENGINEERING_KEY
 ```
 
-In PowerShell, use `Read-Host -MaskInput | node scripts/hash-console-password.mjs`.
+In PowerShell, pipe `Read-Host -MaskInput` into the same `set-password` command.
 
-Use the existing [Origence key management API](../docs/API.en.md#endpoints) to issue a separate key with the appropriate role for each account and workspace grant. Inject each key through a private environment variable. Store workspace IDs, labels, variable names, and password hashes in a private file such as `../.data/console-accounts.json`.
+Use the [Origence key management API](../docs/API.en.md#endpoints) to issue a separate key with the appropriate role for each account and workspace grant. Inject each key in a private environment variable such as `ORIGENCE_ALICE_ENGINEERING_KEY`. Set `ORIGENCE_UI_ACCOUNTS_DB=../.data/console-accounts.db` in `.env` before starting the console. Run `set-password` again to change a password, `grant` to update a grant, `revoke USERNAME WORKSPACE_ID` to remove a grant, or `remove-account USERNAME` to remove an account and all its grants. Restart the console to apply configuration or key rotation.
 
-```json
-{
-  "accounts": [
-    {
-      "username": "alice",
-      "password_hash": "<generated scrypt-v1 hash>",
-      "workspaces": [
-        {
-          "workspace_id": "11111111-1111-4111-8111-111111111111",
-          "name": "Engineering",
-          "key_env": "ORIGENCE_ALICE_ENGINEERING_KEY"
-        }
-      ]
-    }
-  ]
-}
-```
+Signed-in users can switch among their granted workspaces. The upstream checks each key's workspace and role and denies revoked keys. Agents continue to use their own API tokens. Private sessions and Runs retain logical-key isolation. To preserve access to an account holder's existing private records, grant their own original logical key.
 
-Set `ORIGENCE_UI_ACCOUNTS_FILE=../.data/console-accounts.json` in `.env` before starting the console. Operators manage accounts and grants in the file. Restart the console to apply configuration or key rotation. The upstream checks each key's workspace and role. An account with multiple active grants can switch workspaces. Revoked keys are denied by the upstream on subsequent requests and refreshes. Private sessions and Runs retain logical-key isolation. To preserve access to an account holder's existing private records, grant their own original logical key.
-
-An eight-hour in-memory console session survives page reloads. The browser receives a random HttpOnly, SameSite=Strict cookie. HTTPS also enables Secure. The tab stores only the selected workspace ID in sessionStorage. Sign-out, expiry, or Node restart requires login again. Without an account file, loopback development can still connect with a personal API key.
+An eight-hour in-memory console session survives page reloads. The browser receives a random HttpOnly, SameSite=Strict cookie. HTTPS also enables Secure. The tab stores only the selected workspace ID in sessionStorage. Sign-out, expiry, or Node restart requires login again. Without a console account database, loopback development can still connect with a personal API key.
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
