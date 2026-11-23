@@ -116,19 +116,33 @@ SQLite 在远端提交后才发布权威版本。超时未知时检查当前组�
 
 ## 本地 embedding 服务
 
-以下以 Ollama 的 BGE-M3 提供兼容 OpenAI API 的 embedding 为例：
+设置 `OC_ENABLE_MODELS=true` 启用模型功能，再填写所需的模型名。Origence 启动时从
+服务进程环境读取配置。直接运行二进制时设置进程环境，Compose 可在 `.env` 中配置。
+
+| 用途 | 服务地址 | API key | 模型名 |
+| --- | --- | --- | --- |
+| Embedding | `OC_EMBEDDING_BASE_URL` | `OC_EMBEDDING_API_KEY` | `OC_EMBEDDING_MODEL` |
+| 提取、摘要、图提取和 Improve | `OC_EXTRACTION_BASE_URL` | `OC_EXTRACTION_API_KEY` | `OC_EXTRACTION_MODEL` |
+
+任一专用地址为空时，该模型沿用 `OC_MODEL_BASE_URL`，其专用 key 为空时沿用
+`OC_MODEL_API_KEY`。填写专用地址后，该地址只使用对应的专用 key，留空即不发送
+Authorization。接口基址可包含 `/v1`，使用 HTTPS 或本机 loopback HTTP。
+提取模型需支持 `chat/completions` 的 JSON 输出。Embedding 另需设置
+`OC_EMBEDDING_DIMENSION`，只改变提取服务地址或 key 时，Embedding profile 保持不变。
+
+以下以 Ollama 的 BGE-M3 提供兼容 OpenAI API 的 embedding 为例。
 
 ```powershell
 $env:OC_ENABLE_MODELS = 'true'
-$env:OC_MODEL_BASE_URL = 'http://127.0.0.1:11434/v1'
-$env:OC_MODEL_API_KEY = 'ollama'
+$env:OC_EMBEDDING_BASE_URL = 'http://127.0.0.1:11434/v1'
+$env:OC_EMBEDDING_API_KEY = 'ollama'
 $env:OC_EMBEDDING_MODEL = 'bge-m3'
 $env:OC_EMBEDDING_DIMENSION = '1024'
 ```
 
 ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话；新终端需重新设置或显式配置持久环境，已运行宿主不会自动刷新。先下载 bge-m3 并保持 Ollama 运行，接口为 POST /v1/embeddings；该配置不提供抽取或生成模型。
 
-更换模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。运行入口见 [评估说明](../evals/README.md)；旧引擎上的历史实验不能当作当前 AnySeek 质量结果。
+更换 Embedding 地址、模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。运行入口见 [评估说明](../evals/README.md)；旧引擎上的历史实验不能当作当前 AnySeek 质量结果。
 
 ## 离线记忆身份检查
 

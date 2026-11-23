@@ -224,7 +224,12 @@ pub async fn open_service(
 
 pub fn command_env(command: &mut tokio::process::Command, dir: &Path, dimension: Option<usize>) {
     let remote = fixture(dir, dimension);
+    // Keep model fixtures on loopback even when the parent has dedicated endpoints.
     command
+        .env_remove("OC_EMBEDDING_BASE_URL")
+        .env_remove("OC_EMBEDDING_API_KEY")
+        .env_remove("OC_EXTRACTION_BASE_URL")
+        .env_remove("OC_EXTRACTION_API_KEY")
         .env("OC_FULL_TEXT_BACKEND", "anyseek")
         .env("OC_ANYSEEK_URL", &remote.base)
         .env("OC_ANYSEEK_API_KEY", "test-owned-key");

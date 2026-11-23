@@ -1704,3 +1704,17 @@ AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。未修复版本首次准备
   `INDEX_LINKAGE_ONLY`。
 
 本轮为公开合成工程预检。未调用真实客户端或模型，正式试点及独立签认仍为 `NOT_RUN`。
+
+## 2026-11-23 — Embedding 与提取模型独立配置
+
+基于 main `9cc1e929bc0c657f8b9e7408461eda25374ac2e6`。两条模型请求链路可分别配置地址和
+Key。沿用共享地址时保留旧配置语义，专用地址只接收本链路的 Key。Embedding profile
+仍取原 Embedding 地址、模型名和维度，提取任务的配置指纹取所选提取端点。
+
+- Linux，Rust 1.98.0。全特性 `cargo check`、格式、严格全目标全特性 Clippy 与 `git diff --check`
+  通过。`models::tests` 4 项通过，使用两个 loopback HTTP 夹具核对实际请求和凭据；旧配置
+  的 profile 原样保留，只切换提取地址时 Embedding profile 保持不变。
+- `semantic_capture::` 8 项、`learning_loop::` 21 项、`local_host_api_cli_mcp_models_and_recovery`
+  1 项通过。最后一项在父进程注入无效的专用地址和合成 Key，子进程仍使用自带的旧式测试配置。
+- Docker Compose v2.40.3 使用测试 `.env` 执行 `config`，确认两个专用地址和 Key 均传入
+  host 服务。模型调用仅使用本地合成协议夹具；未连接真实模型服务或部署容器。
