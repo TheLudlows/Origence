@@ -1,5 +1,7 @@
 # 公开合成样例预检
 
+**简体中文** · [English](PREFLIGHT.en.md)
+
 从仓库根目录运行，使用 Python 3.11 或更高版本、已安装并获授权的两个客户端、新建的测试 workspace 和尚不存在的报告文件。以下命令会调用真实模型。Codex 使用已有的 OpenAI 登录；Claude Code 从环境或可选的 `--claude-settings PATH` 读取供应商配置。
 
 ## 复跑原生 Skill 加载

@@ -1,5 +1,7 @@
 # Origence · 当前平台设计
 
+**简体中文** · [English](current-implementation.en.md)
+
 更新：2026-11-18。代码基线为 main `4160fd5`。本文描述当前架构与不变量。接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
@@ -34,10 +36,7 @@ flowchart TD
     W --> P[按配置调用模型与解析器]
 ```
 
-HTTP 与单 Worker 共享一个 `StorageEngine`；SQLite authority 持有数据目录的独占 OS 锁。
-CLI/MCP 默认转发到运行中的宿主；离线访问要求独占打开。AnySeek 是独立 HTTP 服务，
-AnySeek 服务凭据只由宿主持有；数据请求按已鉴权 Scope 发送 tenant UUID 命名空间并选择 workspace 集合。
-它保存已发布正文与检索索引，不判定员工权限或业务来源是否有效。
+HTTP 与单 Worker 共享一个 `StorageEngine`。SQLite authority 持有数据目录的独占 OS 锁。CLI/MCP 默认转发到运行中的宿主，离线访问要求独占打开。本地模式在 Origence 进程内通过 Rust SDK 打开 AnySeek Catalog，云上模式通过 HTTP 访问独立的 AnySeek，服务凭据只由宿主持有。两种模式均按已鉴权的 Scope 选择 tenant UUID 命名空间和 workspace 集合。AnySeek 保存已发布正文与检索索引，员工权限和业务来源仍由 Origence 判定。[运行与部署](../OPERATIONS.md#anyseek-全文与向量)
 
 ## A1. 资产、来源与发布
 
@@ -54,17 +53,14 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
 | RelationalStore / JobQueue | 权限、原始来源、版本指针/哈希、身份、审计、任务、owner 与发布账本 | 原生 SQLite `context.db` |
-| RetrievalStore | 带作用域、来源、generation 的分块正文/摘要及全文、向量和一跳图索引 | AnySeek HTTP |
+| RetrievalStore | 带作用域、来源、generation 的分块正文/摘要及全文、向量和一跳图索引 | 本地 AnySeek Rust SDK 或独立 AnySeek HTTP 服务 |
 | Trace / Skill | 私有 Run 事件及核验记录、Skill 候选和发布包 | 原生 SQLite `context.db` |
 | BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
 
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
 
-核心库默认特性关闭后不依赖 SQLite。纯数据契约、解析、模型、Blob 与原生 AnySeek
-接口可独立使用；`sqlite` feature 提供权威事务适配器，`local-storage` 组合完整服务。
-服务端仍必须持久化并核验权限、正文/版本、来源、幂等和恢复状态。空读集合不触碰
-不参与本次判断的表，完整结构健康由初始化与显式检查负责。
+关闭默认特性后，核心库不依赖 SQLite。纯数据契约、解析、模型、Blob 与 AnySeek 远端客户端可独立使用。`sqlite` 提供权威事务适配器，`local-storage` 组合仅使用远端 AnySeek 的宿主，`embedded-anyseek` 为默认原生构建启用本地 SDK。服务端仍必须持久化并核验权限、正文/版本、来源、幂等和恢复状态。空读集合不触碰不参与本次判断的表，初始化与显式检查负责验证完整结构。
 
 `StorageEngine` 是组装结构，持有 `RelationalStore`、`JobQueue`、`VectorStore`、
 和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/SQLite 事务，
@@ -76,9 +72,7 @@ Source event/原始 Blob、asset/version、chunk、summary、图对象、Session
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-顺序：独占打开并校验 SQLite → 校验 AnySeek 绑定与服务凭据 → 持久化路由绑定
-→ 装配并检查投影/Blob → 检查已提交 workspace 集合 → 恢复作业、清理孤儿 → 开放服务。检查失败保持不可用。
-只创建新结构，不自动升级、重建丢失索引或转换已有数据。
+启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。检查失败保持不可用。只创建新结构，不自动升级、重建丢失索引或转换已有数据。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
 `full-text-backend.json` 的 `origence-content-backend-v2` 格式保存格式、endpoint、tenant/workspace 路由规则和模型 profile/维度，排除 API key。
@@ -125,8 +119,7 @@ AnySeek 用一组 Record 原子写入一个不可变发布的 chunk，其中一�
 <a id="storage-configuration"></a>
 ### A2.7 配置与失败边界
 
-宿主必须配置 AnySeek；库调用方使用 `Service::open_with_anyseek(dir, models, config)`。
-未知后端、缺配置和存储错误不静默降级。只有请求允许的模型失败可按原契约降为 keyword。
+宿主须选择本地嵌入式或远端 AnySeek。远端模式的库调用方使用 `Service::open_with_anyseek(dir, models, config)`。未知后端、缺少远端配置和存储错误不静默降级。只有请求允许的模型失败可按原契约降为 keyword。
 
 AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序须在实际后端与任务集上独立评估。
 每个发布最多 64 个 chunk Record，完整编码请求至多 2 MiB，图元数据不占独立 Record；超限整份拒绝。候选、响应、超时和解析限制见
@@ -150,7 +143,7 @@ Improve 显式提案、核验并经普通知识发布 Learning，保留适用条
 
 EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字节预算；session
 默认关闭且仅当前 key 的 writer 可读。仅识别明确单值身份冲突，不推断一般文本矛盾。
-会话引用不能伪造为现有 chunk/entity/relation 归档引用。具体规则见[记忆](../contracts/memory.md)、[学习](../contracts/learning.md)和[上下文](../contracts/evidence-bundle.md)契约。
+会话引用不能伪造为现有 chunk/entity/relation 归档引用。具体规则见[记忆](../contracts/memory.md)、[学习](../contracts/learning.zh-CN.md)和[上下文](../contracts/evidence-bundle.zh-CN.md)契约。
 
 ## A4. Skill 与 Run
 
@@ -158,14 +151,14 @@ Skill 候选由调用方提交。选定经历 CLI 可根据调用方提供的方
 例如 Run 前缀或已发布 Learning 版本。候选/修订与备注私有，所有者选定
 审阅包交付指定审阅者，批准绑定精确包与目标。发布版本不可变、分发时重新核验来源，
 显式导出两种客户端目录格式；原生加载与离线副本回收不属于导出证明。
-细节见 [Skill 契约](../contracts/skills.md)和[选定经历 CLI](../SKILL-CANDIDATE-CLI.md)。
+细节见 [Skill 契约](../contracts/skills.zh-CN.md)和[选定经历 CLI](../SKILL-CANDIDATE-CLI.zh-CN.md)。
 
-Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上下文，客户端上报工具、Skill、结果和工件引用。工件上报保存外部 ID 与摘要。Run 所有者可以为精确前缀转录外部评估，保留独立的来源标记。客户端未上报的活动保持未知。见 [Run 契约](../contracts/runs.md)和[外部核验契约](../contracts/run-verification.md)。
+Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上下文，客户端上报工具、Skill、结果和工件引用。工件上报保存外部 ID 与摘要。Run 所有者可以为精确前缀转录外部评估，保留独立的来源标记。客户端未上报的活动保持未知。见 [Run 契约](../contracts/runs.md)和[外部核验契约](../contracts/run-verification.zh-CN.md)。
 
 ## A5. 数据模型与约束来源
 
 物理 schema 以 DDL 为准，身份占位、独立生命周期与恢复要求见[存储不变量](../contracts/storage.md)。
-所有新查询遵守 [AGENTS](../../AGENTS.md) 的无 JOIN、事务和来源约束；
+所有新查询遵守 [AGENTS](../../AGENTS.zh-CN.md) 的无 JOIN、事务和来源约束；
 原文保留、同版本备份恢复、持久化与重试仍是要求，旧库升级与数据迁移不在当前范围。
 
 ## A6. 协议边界

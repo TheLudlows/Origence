@@ -1,5 +1,7 @@
 # Explicit Improve → Learning
 
+**English** · [简体中文](learning.zh-CN.md)
+
 ## Scope and authority
 
 This contract defines the explicit session feedback loop. It targets

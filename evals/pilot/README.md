@@ -1,5 +1,7 @@
 # #91 双场景试点验收
 
+**简体中文** · [English](README.en.md)
+
 数据库排障由 Claude Code 首做、Codex 复做。报销复核由 Codex 首做、Claude Code 复做。两个方向已完成公开合成演练，正式未见题试点及独立签认仍为 **NOT_RUN**。[Issue #91](https://github.com/TheLudlows/Origence/issues/91)
 
 | 要做什么 | 入口 |

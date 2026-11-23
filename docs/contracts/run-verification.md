@@ -1,5 +1,7 @@
 # Run verification records (P0, #89)
 
+**English** · [简体中文](run-verification.zh-CN.md)
+
 Baseline: `293e2bf6af3b180d43c8050731047b552ac07519`.
 
 The first release records **owner-transcribed external assessments** only. It does
@@ -49,11 +51,7 @@ acceptance is claimed.
 
 ## PRD and ingestion boundary
 
-This slice maps only to “Run 所有者记录外部签认依据”: the owner transcribes
-external assessment claims and references. It does not implement independent
-sign-off, allow a user to certify their own business outcome, or calculate a
-verified business pass rate. Even `conclusion:passed` stays an unverified external
-claim with `platform_verification:not_performed`; #89 remains open.
+This slice maps only to “the Run owner records external sign-off evidence”: the owner transcribes external assessment claims and references. It does not implement independent sign-off, allow a user to certify their own business outcome, or calculate a verified business pass rate. Even `conclusion:passed` stays an unverified external claim with `platform_verification:not_performed`; #89 remains open.
 
 #87 handles explicit client collection and preparation using the existing Run
 interfaces, and explicitly does not change verification semantics. No existing

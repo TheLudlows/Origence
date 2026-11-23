@@ -1,5 +1,7 @@
 # Claude Code 与 Codex 接入
 
+**简体中文** · [English](CLIENTS.en.md)
+
 两个客户端都通过本地 stdio 进程访问运行中的 Origence HTTP 宿主。客户端不直接访问
 SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 
@@ -53,7 +55,7 @@ approval_mode = "approve"
 3. 用 `context_run_report` 明确上报观察到的 Skill 加载、工具、结果和采集缺口。重试保留原 `event_id` 和请求内容。
 4. 用 `context_run_get` 分页查看当前逻辑 key 的 Run 轨迹。
 
-服务端回执记录上下文准备，客户端上报保留报告方，未采集活动保持未知。外部核验使用针对精确 Run 前缀的 HTTP 接口。详见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.md)。
+服务端回执记录上下文准备，客户端上报保留报告方，未采集活动保持未知。外部核验使用针对精确 Run 前缀的 HTTP 接口。详见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.zh-CN.md)。
 
 Claude Code 和 Codex 使用相同的 MCP 接口。排查一次跨客户端任务时，可按下表核对记录。
 

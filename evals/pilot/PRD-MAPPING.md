@@ -1,5 +1,7 @@
 # PRD v0.3 与试点执行清单
 
+**简体中文** · [English](PRD-MAPPING.en.md)
+
 依据 PRD v0.3 第 5、11、12 章（印刷页 6、13、14）。Library 原件版本为 0，文件 ID 和 SHA-256 见[冻结表](freeze.template.json)。以下映射待联合审阅。
 
 ## 逐条对应与缺口

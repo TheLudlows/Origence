@@ -1,5 +1,7 @@
 # Skill review, publication and distribution
 
+**English** · [简体中文](skills.zh-CN.md)
+
 This contract defines the public-library/SQLite workflow. A reported successful
 outcome does not independently establish that a method works. A client supplies a
 draft derived from authorized, exact asset versions or immutable private Run
@@ -52,7 +54,7 @@ tool permissions.
 ## Client boundary
 
 Approved package export writes the Claude Code or Codex project layout after a fresh
-scope/version/source check; see [CLIENTS](../CLIENTS.md). Export is an explicit file
+scope/version/source check; see [CLIENTS](../CLIENTS.en.md). Export is an explicit file
 copy. Managed loading, revocation of existing offline copies, and automatic candidate
 mining are not implemented. Current results belong in [VALIDATION](../VALIDATION.md).
 Private Run references retain the restrictions in the [Run contract](runs.md).

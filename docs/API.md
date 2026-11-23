@@ -1,5 +1,7 @@
 # Origence API 与库接口
 
+**简体中文** · [English](API.en.md)
+
 适用本地宿主 SQLite 控制状态以及 AnySeek 正文、摘要、全文、向量与一跳图投影。本文负责 HTTP v1 与公开库接口契约；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
 按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份)。
@@ -29,7 +31,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
 结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
 外部核验记录由 Run 所有者针对精确前缀通过 HTTP 提交，保留转录来源与核验身份的声明状态。
-详情见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.md)。
+详情见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.zh-CN.md)。
 
 | Skill 接口 | 输入与结果 |
 | --- | --- |
@@ -44,7 +46,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 
 候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
 调用方提交候选，也可用选定经历 CLI 将手工填写的方法绑定到一个精确依据。包格式和边界见
-[Skill 契约](contracts/skills.md)和[选定经历 CLI](SKILL-CANDIDATE-CLI.md)。
+[Skill 契约](contracts/skills.zh-CN.md)和[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)。
 
 ## 检索诊断
 
@@ -99,14 +101,12 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 - 无元数据库核心：`default-features = false`，提供类型、解析、模型、Blob 与 AnySeek 接口。
 - SQLite 权威适配器：`default-features = false, features = ["sqlite"]`。
-- 完整 HTTP/MCP 宿主：默认 `local-storage`，自动启用 `sqlite`。
+- 完整 HTTP/MCP 宿主默认启用 `embedded-anyseek`，包含 `local-storage` 和 `sqlite`。云上远端宿主关闭默认特性并启用 `local-storage`。
 
 核心独立检查用 `cargo test --no-default-features`；原 authority-only 检查现在显式使用
 `cargo test --no-default-features --features sqlite`，仍运行其完整授权/队列/恢复回归。
 
-宿主通过 `Service::open_with_anyseek(dir, models, config)` 组装服务；通用调用方使用
-公开 Service/DTO，事务与关联查询留在存储适配器。完整签名以 [lib.rs](../src/lib.rs)
-导出的模块和源码为准。
+本地嵌入式宿主通过 `Service::open_embedded(dir, models)` 组装服务。远端 AnySeek 宿主使用 `Service::open_with_anyseek(dir, models, config)`。通用调用方使用公开 Service/DTO，事务与关联查询留在存储适配器。完整签名以 [lib.rs](../src/lib.rs) 导出的模块和源码为准。
 
 旧的独立图存储接口和图遍历已移除；
 `StorageEngine::new` 不再接收图存储，`SqliteStore::cleanup_plan` 只返回待清理的 chunk ID。
@@ -508,7 +508,7 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 或声称此类引用已完整归档。Learning 发布给 reader 的引用只有支持标识/范围，
 不返回支撑轮次的原始问答或 quote。
 
-详见 [EvidenceBundle 契约](contracts/evidence-bundle.md)。真实 Agent
+详见 [EvidenceBundle 契约](contracts/evidence-bundle.zh-CN.md)。真实 Agent
 对照需独立执行；fixture 仅验证工具/模型交互框架，不是任务收益结果。
 
 ### 资产固定版本的已记录 Run 引用

@@ -1,5 +1,7 @@
 # 本地运维说明
 
+**简体中文** · [English](OPERATIONS.en.md)
+
 适用单宿主 SQLite 权威数据、Blob 和 AnySeek 检索。按操作阅读：[启动与凭据](#初始化与凭据) · [AnySeek](#anyseek-全文与向量) · [模型](#本地-embedding-服务) · [恢复](#失败与恢复) · [备份](#备份与恢复)。进度与实测边界见 [STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。
 
 ## 当前阶段范围

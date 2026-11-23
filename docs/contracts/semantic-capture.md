@@ -1,7 +1,9 @@
 # 受控对话提取
 
+**简体中文** · [English](semantic-capture.en.md)
+
 调用方显式提供原文与允许目标，模型只能在该范围内提议；确定性规则见
-[记忆身份与语义](memory.md)。会话反馈学习见 [Improve / Learning](learning.md)。
+[记忆身份与语义](memory.md)。会话反馈学习见 [Improve / Learning](learning.zh-CN.md)。
 
 ## 契约
 

@@ -1,5 +1,7 @@
 # Windows 原生开发启动
 
+**简体中文** · [English](WINDOWS-DEV.en.md)
+
 在 Windows Terminal 或原生控制台运行，使用 MSVC 构建 Origence。需要 UI 时再安装 Node.js 24 和 PowerShell 7.4+。
 
 ## 启动 API 与嵌入式 AnySeek

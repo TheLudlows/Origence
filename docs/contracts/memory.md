@@ -1,5 +1,7 @@
 # 记忆身份与语义
 
+**简体中文** · [English](memory.en.md)
+
 本文维护显式记忆的领域规则；受限模型提取见[受控提取](semantic-capture.md)，
 接口见 [API](../API.md)，物理身份占位见[存储不变量](storage.md)。
 来源有效、语法有效和版本匹配均不等于事实为真。
@@ -56,6 +58,6 @@ chunk 保留状态、原始成员来源及字节范围，search/resolve 返回 n
 可重建仍有支持的集合；当前发布来源本身失效时须重新提供事实，不从历史自动补回。
 通用 restore 不能绕过语义写入规则，历史正文与 locator 不改写。
 
-Learning 的条件与完整支持链见[学习契约](learning.md)；召回预算、确定性冲突与
-会话引用限制见 [EvidenceBundle](evidence-bundle.md)。工程测试结果统一见
+Learning 的条件与完整支持链见[学习契约](learning.zh-CN.md)；召回预算、确定性冲突与
+会话引用限制见 [EvidenceBundle](evidence-bundle.zh-CN.md)。工程测试结果统一见
 [VALIDATION](../VALIDATION.md)，不在本契约维护阶段进度或历史数量。

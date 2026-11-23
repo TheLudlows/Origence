@@ -1,12 +1,14 @@
 # S1：真实本地模型检索与独立消融（2026-10-10）
 
+**简体中文** · [English](README.en.md)
+
 工程检索实验与证据归档完成；新增标签的独立人工复核仍未完成。完整平台 300 用例协议、Agent 任务成功率及生产质量不由本结果验收。
 
 代码：`77d43a859d9c83c93d3a88d4fb0c7928a10d4f16`，tree `6420a9d8e001d469c890266092731d1531130e11`。本地 Linux、Cargo Debug、真实 HTTP 宿主与新临时 workspace；全六组共 1,800 次 search 和 1,728 次 resolve，请求/resolve 错误均为 0。结果归属于此代码 SHA；随后文档/审计归档提交不冒充模型重跑。
 
 36 篇合成文档、300 题（开发 200 / 留出 100；可答 288 / 无答案 12）。两组金标来源不重叠，但查询同一 36 篇候选语料；原 100 题保留既有人工标签，新增 200 题由助手编写并核对原文，无独立人工复核。数据与配置在检索评分前冻结，未依据留出分数改标签或调阈值。
 
-BGE-small-zh-v1.5（512 维、CLS/L2、对称无指令）与 Qwen2.5-0.5B-Instruct（float32 CPU、greedy）；完整 revision、模型文件 hash、运行依赖、二进制 hash、硬件和命令见 [environment](environment.json)、[models](models.json) 与 [冻结数据说明](../../v2/README.md)。
+BGE-small-zh-v1.5（512 维、CLS/L2、对称无指令）与 Qwen2.5-0.5B-Instruct（float32 CPU、greedy）；完整 revision、模型文件 hash、运行依赖、二进制 hash、硬件和命令见 [environment](environment.json)、[models](models.json) 与 [冻结数据说明](../../v2/README.zh-CN.md)。
 
 ## 同语料对照
 

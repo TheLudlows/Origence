@@ -1,5 +1,7 @@
 # S1 retrieval experiment v2
 
+**English** · [简体中文](README.zh-CN.md)
+
 Frozen before retrieval inference: 300 questions (200 development, 100 held out),
 36 synthetic source documents, 288 answerable and 12 no-answer questions.
 Every answerable question has source/version/whole-document locator and verbatim
@@ -85,4 +87,4 @@ production workload evaluation. Those remain separate S2–S4/operations work.
 
 ## Executed results
 
-[Local CPU experiment at 77d43a8](../results/local-77d43a8-v2/README.md) retains the six-configuration results, development/held-out breakdown, paired ablation deltas, all failures, independent quotation/budget audit and compressed raw responses with SHA-256. Additional labels still need independent human review.
+[Local CPU experiment at 77d43a8](../results/local-77d43a8-v2/README.en.md) retains the six-configuration results, development/held-out breakdown, paired ablation deltas, all failures, independent quotation/budget audit and compressed raw responses with SHA-256. Additional labels still need independent human review.
