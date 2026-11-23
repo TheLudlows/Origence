@@ -6,8 +6,19 @@ export interface Identity {
 export interface User {
   id: string;
   workspace_id: string;
-  tenant_id: string;
   role: string;
+}
+export interface ConsoleWorkspace extends User {
+  name: string;
+}
+export interface ConsoleSession {
+  account: string | null;
+  binding: string;
+  workspaces: ConsoleWorkspace[];
+}
+export interface ConsoleSessionResponse {
+  mode: "account" | "key";
+  session: ConsoleSession | null;
 }
 export interface Asset {
   asset_id: string;

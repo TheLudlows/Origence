@@ -10,13 +10,14 @@ import {
   input,
   message,
   panel,
+  select,
   short,
   submit,
   type ViewContext,
 } from "./components.js";
 import { contextPage } from "./context.js";
 import { overview, runsPage } from "./runs.js";
-import type { User } from "./types.js";
+import type { ConsoleSession, ConsoleSessionResponse, ConsoleWorkspace } from "./types.js";
 
 const mount = document.getElementById("app")!;
 const pages = [
@@ -26,7 +27,10 @@ const pages = [
   ["knowledge", "▤", "知识管理"],
   ["contexts", "⊞", "上下文工作台"],
 ] as const;
-let user: User | undefined;
+const sessionPath = "/console/session";
+const workspaceStorageKey = "origence.selectedWorkspace";
+let session: ConsoleSession | null = null;
+let user: ConsoleWorkspace | undefined;
 let route = new AbortController();
 
 function focusRoute(target: HTMLElement) {
@@ -43,21 +47,85 @@ function navigate(page: string, id?: string, version?: number) {
   else location.hash = hash;
 }
 
-function logout() {
-  api.setToken("");
+function clearView() {
+  api.setWorkspace();
+  session = null;
   user = undefined;
   route.abort();
   document.querySelectorAll("dialog").forEach((dialog) => dialog.close());
   mount.replaceChildren();
-  login();
 }
 
-function login() {
-  const token = input("输入当前用户的 Origence API key", "", "password");
-  token.required = true;
-  token.autocomplete = "off";
+async function logout() {
+  clearView();
+  try {
+    const result = await api.request<ConsoleSessionResponse>(sessionPath, { method: "DELETE" });
+    sessionStorage.removeItem(workspaceStorageKey);
+    login(result.mode);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    const detail = el("div");
+    mount.replaceChildren(panel("暂时无法退出", detail, button("重试退出", logout)));
+    message(detail, error);
+  }
+}
+
+function chooseWorkspace(workspace: ConsoleWorkspace, changing = false) {
+  if (!session) return;
+  api.setWorkspace(workspace.workspace_id, session.binding);
+  sessionStorage.setItem(workspaceStorageKey, workspace.workspace_id);
+  user = workspace;
+  if (changing) {
+    route.abort();
+    mount.replaceChildren();
+    navigate("overview");
+  } else void render();
+}
+
+function showSession(result: ConsoleSessionResponse) {
+  session = result.session;
+  if (!session) {
+    login(result.mode);
+    return;
+  }
+  const previous = sessionStorage.getItem(workspaceStorageKey);
+  const selected = session.workspaces.find((workspace) => workspace.workspace_id === previous);
+  const workspace = selected ?? session.workspaces[0];
+  if (workspace) {
+    chooseWorkspace(workspace, !!previous && !selected);
+    return;
+  }
+  mount.replaceChildren(panel(
+    "你还没有获授权的工作区",
+    el("p", "muted", "请联系管理员分配工作区权限。"),
+    button("重新读取工作区", restoreSession),
+    button("退出", logout),
+  ));
+}
+
+async function restoreSession() {
+  clearView();
+  mount.replaceChildren(el("p", "muted", "正在检查登录会话…"));
+  try {
+    showSession(await api.get<ConsoleSessionResponse>(sessionPath));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    const detail = el("div");
+    mount.replaceChildren(panel("暂时无法读取登录会话", detail, button("重试", restoreSession), button("退出", logout)));
+    message(detail, error);
+  }
+}
+
+function login(mode: ConsoleSessionResponse["mode"]) {
+  const accountLogin = mode === "account";
+  const username = input("输入账号");
+  username.required = true;
+  username.autocomplete = "username";
+  const secret = input(accountLogin ? "输入密码" : "输入个人 Origence API key", "", "password");
+  secret.required = true;
+  secret.autocomplete = accountLogin ? "current-password" : "off";
   const error = el("div");
-  const connect = submit("连接工作空间");
+  const connect = submit(accountLogin ? "登录" : "连接工作空间");
   mount.replaceChildren(
     el(
       "div",
@@ -70,31 +138,31 @@ function login() {
         el("span", "accent", "."),
       ),
       panel(
-        "连接 Origence",
+        accountLogin ? "登录 Origence" : "连接 Origence",
         el("h1", "", "Agent 上下文工作台"),
         el(
           "p",
           "muted",
-          "使用你自己的 API key。凭据仅在当前页面内存保留，刷新后需重新连接。",
+          accountLogin ? "登录后可以切换已获授权的工作区。" : "使用个人 API key 连接本地开发工作区。",
         ),
         form(
           async () => {
             connect.disabled = true;
             error.replaceChildren();
             try {
-              api.setToken(token.value.trim());
-              user = await api.get<User>("/v1/whoami");
-              token.value = "";
-              await render();
+              const result = await api.post<ConsoleSessionResponse>(sessionPath,
+                accountLogin ? { username: username.value.trim(), password: secret.value } : { key: secret.value.trim() },
+              );
+              secret.value = "";
+              showSession(result);
             } catch (e) {
-              api.setToken("");
-              user = undefined;
               message(error, e);
             } finally {
               connect.disabled = false;
             }
           },
-          field("API key", token),
+          accountLogin ? field("账号", username) : null,
+          field(accountLogin ? "密码" : "API key", secret),
           connect,
         ),
         error,
@@ -104,7 +172,7 @@ function login() {
 }
 
 async function render() {
-  if (!user) return;
+  if (!user || !session) return;
   route.abort();
   route = new AbortController();
   document.querySelectorAll("dialog").forEach((dialog) => dialog.close());
@@ -158,6 +226,13 @@ async function render() {
     "icon-button",
   );
   theme.setAttribute("aria-label", "切换明暗主题");
+  const workspaces = session.workspaces;
+  const workspacePicker = select(workspaces.map((workspace) => [workspace.workspace_id, workspace.name]), user.workspace_id);
+  workspacePicker.setAttribute("aria-label", "工作区");
+  workspacePicker.addEventListener("change", () => {
+    const next = workspaces.find((workspace) => workspace.workspace_id === workspacePicker.value);
+    if (next && next.workspace_id !== user?.workspace_id) chooseWorkspace(next, true);
+  });
   const content = el("main", "content");
   const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
   mount.replaceChildren(
@@ -176,9 +251,8 @@ async function render() {
         ),
         el(
           "div",
-          "workspace",
-          el("small", "", "WORKSPACE"),
-          el("p", "mono", short(user.workspace_id)),
+          workspaces.length > 1 ? "workspace multiple-workspaces" : "workspace",
+          workspaces.length > 1 ? field("工作区", workspacePicker) : el("p", "", user.name === user.workspace_id ? short(user.workspace_id) : user.name),
         ),
         nav,
         el(
@@ -188,8 +262,8 @@ async function render() {
           el(
             "div",
             "",
-            el("strong", "", user.role),
-            el("small", "mono", short(user.id)),
+            el("strong", "", session.account ?? user.role),
+            el("small", "mono", session.account ? user.role : short(user.id)),
           ),
           button("退出", logout, "sidebar-exit"),
         ),
@@ -203,7 +277,7 @@ async function render() {
           el(
             "div",
             "breadcrumb",
-            "工程工作空间",
+            user.name === user.workspace_id ? short(user.workspace_id) : user.name,
             el("span", "muted", "/"),
             title,
           ),
@@ -230,7 +304,7 @@ async function render() {
   } catch (error) {
     if (ctx.signal.aborted) return;
     if (error instanceof ApiError && error.status === 401) {
-      logout();
+      void restoreSession();
       return;
     }
     content.replaceChildren(
@@ -247,15 +321,10 @@ window.addEventListener("hashchange", () => {
   void render();
 });
 window.addEventListener("origence:unauthorized", () => {
-  if (user) logout();
+  if (user) void restoreSession();
 });
-window.addEventListener("pagehide", () => {
-  api.setToken("");
-  route.abort();
-  user = undefined;
-  mount.replaceChildren();
-});
+window.addEventListener("pagehide", clearView);
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) login();
+  if (event.persisted) void restoreSession();
 });
-login();
+void restoreSession();

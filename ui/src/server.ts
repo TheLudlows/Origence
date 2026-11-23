@@ -6,6 +6,9 @@ import {
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { loadConsoleAccounts, type ConsoleAccount } from "./console-accounts.js";
+import { checkedConsoleIdentity, consoleSessionPath, ConsoleSessions } from "./console-session.js";
+import { HttpError } from "./http-error.js";
 
 const MAX_BODY = 10 * 1024 * 1024;
 const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
@@ -39,15 +42,7 @@ export interface ServerOptions {
   apiBaseUrl: string;
   publicOrigin?: string;
   timeoutMs?: number;
-}
-
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
+  accounts?: readonly ConsoleAccount[];
 }
 
 async function body(req: IncomingMessage): Promise<Buffer | undefined> {
@@ -89,6 +84,16 @@ export function createUiServer(options: ServerOptions) {
   const publicOrigin = options.publicOrigin
     ? new URL(options.publicOrigin).origin
     : undefined;
+  const sessions = new ConsoleSessions(options.accounts, async (authorization, signal) => {
+    const response = await fetch(new URL("/v1/whoami", upstream), {
+      headers: { authorization },
+      redirect: "manual",
+      signal,
+    });
+    if (response.status === 401 || response.status === 403) return null;
+    if (!response.ok) throw new HttpError(502, "暂时无法核验工作区权限");
+    return checkedConsoleIdentity(await response.json());
+  });
   return createServer(async (req, res) => {
     try {
       const host = req.headers.host ?? "";
@@ -109,6 +114,20 @@ export function createUiServer(options: ServerOptions) {
       const target = new URL(req.url ?? "/", origin);
       if (target.origin !== origin) throw new HttpError(400, "无效请求地址");
       if (target.pathname.startsWith("/api/")) {
+        const abort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableFinished) abort.abort();
+        });
+        const signal = AbortSignal.any([
+          abort.signal,
+          AbortSignal.timeout(options.timeoutMs ?? 30_000),
+        ]);
+        if (target.pathname === consoleSessionPath) {
+          const session = await sessions.handle(req, res, new URL(origin), signal);
+          res.writeHead(200, { ...security, "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(session));
+          return;
+        }
         const path = target.pathname.slice(4);
         if (
           !rules.some(
@@ -116,22 +135,13 @@ export function createUiServer(options: ServerOptions) {
           )
         )
           throw new HttpError(404, "接口不被允许");
-        if (
-          !path.startsWith("/health/") &&
-          !req.headers.authorization?.startsWith("Bearer ")
-        )
-          throw new HttpError(401, "请先连接 Origence");
-        const payload = await body(req);
-        const abort = new AbortController();
-        res.on("close", () => {
-          if (!res.writableFinished) abort.abort();
-        });
         const headers = new Headers();
-        for (const name of [
-          "authorization",
-          "content-type",
-          "idempotency-key",
-        ]) {
+        const authorization = req.headers.authorization;
+        if (authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
+        else if (!path.startsWith("/health/"))
+          headers.set("authorization", sessions.authorization(req, new URL(origin)));
+        const payload = await body(req);
+        for (const name of ["content-type", "idempotency-key"]) {
           const value = req.headers[name];
           if (typeof value === "string") headers.set(name, value);
         }
@@ -140,10 +150,7 @@ export function createUiServer(options: ServerOptions) {
           headers,
           body: payload ? new Uint8Array(payload) : undefined,
           redirect: "manual",
-          signal: AbortSignal.any([
-            abort.signal,
-            AbortSignal.timeout(options.timeoutMs ?? 30_000),
-          ]),
+          signal,
         });
         if (response.status >= 300 && response.status < 400)
           throw new HttpError(502, "上游返回了不支持的重定向");
@@ -213,9 +220,13 @@ if (
   );
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid ORIGENCE_UI_PORT");
+  const accountDatabase = process.env.ORIGENCE_UI_ACCOUNTS_DB;
+  if (!accountDatabase && process.env.ORIGENCE_UI_ACCOUNTS_FILE)
+    throw new Error("Configure local console accounts with ORIGENCE_UI_ACCOUNTS_DB");
   const server = createUiServer({
     apiBaseUrl: process.env.ORIGENCE_API_BASE_URL ?? "http://127.0.0.1:8080",
     publicOrigin: process.env.ORIGENCE_UI_ORIGIN,
+    accounts: accountDatabase ? loadConsoleAccounts(accountDatabase, process.env) : undefined,
   });
   server.listen(
     port,
