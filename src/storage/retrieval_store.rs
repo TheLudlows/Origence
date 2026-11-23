@@ -14,11 +14,16 @@ impl RetrievalStore {
     pub(crate) async fn open_bound(
         anyseek: AnySeekConfig,
         binding: binding::Binding,
-        dir: &std::path::Path,
     ) -> StorageResult<Self> {
-        let backend =
-            AnySeekFullTextStore::open_configured(anyseek, &dir.join("anyseek"), !binding.existing)
-                .await?;
+        #[cfg(feature = "embedded-anyseek")]
+        let backend = AnySeekFullTextStore::open_configured(
+            anyseek,
+            &binding.dir.join("anyseek"),
+            !binding.existing,
+        )
+        .await?;
+        #[cfg(not(feature = "embedded-anyseek"))]
+        let backend = AnySeekFullTextStore::new(anyseek)?;
         let initialized = async {
             backend.check().await?;
             binding.commit_initial().await

@@ -35,8 +35,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tempfile = "3"
 
 [features]
-default = ["local-storage"]
-local-storage = ["sqlite", "dep:anyseek"]
+default = ["embedded-anyseek"]
+embedded-anyseek = ["local-storage", "dep:anyseek"]
+local-storage = ["sqlite"]
 sqlite = ["dep:rusqlite", "dep:fs2"]
 # Historical fixture diagnostics are opt-in and are not production acceptance.
 manual-diagnostics = ["sqlite"]

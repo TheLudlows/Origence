@@ -11,8 +11,9 @@ const MAX_BYTES: usize = 4096;
 
 pub(crate) struct Binding {
     selected: serde_json::Value,
+    #[cfg(feature = "embedded-anyseek")]
     pub(super) existing: bool,
-    dir: PathBuf,
+    pub(super) dir: PathBuf,
     analysis: tokio::sync::Mutex<Option<String>>,
 }
 
@@ -59,6 +60,7 @@ pub(crate) async fn prepare(
             Ok(Binding {
                 selected: expected,
                 dir: dir.to_owned(),
+                #[cfg(feature = "embedded-anyseek")]
                 existing: true,
                 analysis: tokio::sync::Mutex::new(fingerprint),
             })
@@ -74,6 +76,7 @@ pub(crate) async fn prepare(
             Ok(Binding {
                 selected: expected,
                 dir: dir.to_owned(),
+                #[cfg(feature = "embedded-anyseek")]
                 existing: false,
                 analysis: tokio::sync::Mutex::new(None),
             })

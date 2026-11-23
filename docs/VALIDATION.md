@@ -5,6 +5,12 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-23 · 本地与云上 AnySeek 构建
+
+Linux / Rust 1.98.0。默认构建通过 459 项 Rust 测试和嵌入式 CLI 发布、Run 回放及重启验证。云上构建使用 `--no-default-features --features local-storage`。Cargo 依赖树中未链接 AnySeek SDK，6 项常规 AnySeek 测试通过，包含缺少远端配置时拒绝启动和拒绝 `--local`。8 项独立 AnySeek 合同测试通过，真实服务的 HTTP 与 MCP 联验覆盖发布、固定版本读回和重启。
+
+检查了 Dockerfile 的构建配置与 Compose 的默认入口。当前环境无 Docker 引擎，验证使用与 Dockerfile 相同构建特性的宿主二进制。
+
 ## 2026-11-23 · AnySeek Rust SDK 嵌入式存储
 
 Linux / Rust 1.98.0，AnySeek SDK 固定为 `5626dad`。Origence 默认套件 459 项通过，16 项 Python 工具回归通过，其中 5 项使用 PowerShell 7.4.13。独立 HTTP 模式通过 8 项真实 AnySeek 合同测试，以及 HTTP/stdio MCP、固定版本检索与重启验证。SDK 的公开 Rust 用例覆盖独占打开、租户隔离、原子替换幂等、关闭和重开。[AnySeek SDK PR](https://github.com/TheLudlows/anyseek/pull/218)

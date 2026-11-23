@@ -48,6 +48,7 @@ enum Command {
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
+        #[cfg(feature = "embedded-anyseek")]
         /// Open AnySeek in this process via its local-disk Rust SDK.
         #[arg(long)]
         local: bool,
@@ -198,13 +199,21 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{output}");
             Ok(())
         }),
-        Command::Serve { bind, local } => Box::pin(async move {
+        Command::Serve {
+            bind,
+            #[cfg(feature = "embedded-anyseek")]
+            local,
+        } => Box::pin(async move {
             let models = Models::from_env()?;
+            #[cfg(feature = "embedded-anyseek")]
             let service = if local {
                 Service::open_embedded(&data_dir, models).await?
             } else {
                 Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?).await?
             };
+            #[cfg(not(feature = "embedded-anyseek"))]
+            let service =
+                Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?).await?;
             match tokio::net::TcpListener::bind(bind).await {
                 Ok(listener) => host::serve_http(service, listener, host::shutdown_signal()).await,
                 Err(error) => {

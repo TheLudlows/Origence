@@ -27,9 +27,13 @@ export OC_DATA_DIR="$(mktemp -d)"
 
 Use the workspace token returned by `workspace-create` to access the API.
 Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
-initializes workspace collections on first use. Use `origence serve` with the
-[external AnySeek configuration](docs/OPERATIONS.md#anyseek-全文与向量) for a separately
-managed service.
+initializes workspace collections on first use.
+
+## Cloud deployment
+
+The Docker build uses the remote AnySeek client. Configure `OC_ANYSEEK_URL` and
+`OC_ANYSEEK_API_KEY` for the deployed service. Start the container with its default
+command or use `origence serve` on a cloud host. [Cloud configuration](docs/OPERATIONS.md#云上部署与独立-anyseek)
 
 ## Management UI
 
@@ -56,7 +60,7 @@ Library callers can use parsing, identity and value contracts, models, Blob stor
 cargo test --no-default-features
 ```
 
-Enable `sqlite` for the standalone authority adapter or `local-storage` (the default) for the complete host. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
+Enable `sqlite` for the standalone authority adapter, `local-storage` for the remote-only host, or `embedded-anyseek` for the default native build with local SDK support. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
 
 ## Documentation
 

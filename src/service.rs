@@ -59,6 +59,7 @@ impl Service {
         Self::open(dir.as_ref(), models, anyseek).await
     }
 
+    #[cfg(feature = "embedded-anyseek")]
     /// Open Origence with its in-process AnySeek catalog under `dir/anyseek`.
     pub async fn open_embedded(dir: impl AsRef<Path>, models: Models) -> Result<Self> {
         Self::open(
@@ -91,7 +92,7 @@ impl Service {
         let engine = Arc::new(StorageEngine::new(
             relational.clone(),
             relational,
-            RetrievalStore::open_bound(anyseek, binding, &dir).await?,
+            RetrievalStore::open_bound(anyseek, binding).await?,
             blobs,
         ));
         let service = Self {

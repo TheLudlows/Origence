@@ -21,7 +21,7 @@ use std::{
 use uuid::Uuid;
 
 mod graph;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "embedded-anyseek")]
 mod local;
 pub use graph::{GraphEdgeCandidate, GraphEntityCandidate, GraphPublication};
 
@@ -55,12 +55,12 @@ enum Endpoint {
         base: Url,
         key: HeaderValue,
     },
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "embedded-anyseek")]
     Embedded,
 }
 
 impl AnySeekConfig {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "embedded-anyseek")]
     pub(crate) fn embedded() -> Self {
         Self {
             endpoint: Endpoint::Embedded,
@@ -72,6 +72,7 @@ impl AnySeekConfig {
     pub(crate) fn binding_identity(&self) -> Value {
         let endpoint = match &self.endpoint {
             Endpoint::Http { base, .. } => base.as_str(),
+            #[cfg(feature = "embedded-anyseek")]
             Endpoint::Embedded => "embedded:local-catalog-v1",
         };
         json!({"format":"origence-content-backend-v2","backend":"anyseek","endpoint":endpoint,"routing":"tenant-uuid/workspace-ws-simple-uuid-v1","embedding":self.embedding})
@@ -150,7 +151,7 @@ enum Backend {
         key: HeaderValue,
         client: reqwest::Client,
     },
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "embedded-anyseek")]
     Embedded(anyseek::sdk::LocalEngine),
 }
 
@@ -393,7 +394,7 @@ impl AnySeekFullTextStore {
                     config.embedding,
                 ))
             }
-            #[cfg(feature = "local-storage")]
+            #[cfg(feature = "embedded-anyseek")]
             Endpoint::Embedded => Err(invalid("embedded AnySeek requires a data directory")),
         }
     }
@@ -409,7 +410,7 @@ impl AnySeekFullTextStore {
         }
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "embedded-anyseek")]
     pub(crate) async fn open_configured(
         config: AnySeekConfig,
         root: &std::path::Path,
@@ -440,6 +441,7 @@ impl AnySeekFullTextStore {
 
     #[cfg(feature = "local-storage")]
     pub(crate) async fn shutdown(&self) -> StorageResult<()> {
+        #[cfg(feature = "embedded-anyseek")]
         if let Backend::Embedded(engine) = &self.backend {
             engine.shutdown().await.map_err(|_| unavailable())?;
         }
@@ -538,7 +540,7 @@ impl AnySeekFullTextStore {
                 let request = client.request(method, url).header("apikey", key.clone());
                 Self::request_http(scope, request, body, observation).await
             }
-            #[cfg(feature = "local-storage")]
+            #[cfg(feature = "embedded-anyseek")]
             Backend::Embedded(engine) => {
                 Box::pin(local::request(engine, scope, request, observation)).await
             }
@@ -1376,14 +1378,15 @@ mod unified_tests {
         );
         #[cfg(feature = "local-storage")]
         assert_eq!(
-            AnySeekConfig::embedded()
+            AnySeekConfig::new("http://127.0.0.1:1", "test")
+                .unwrap()
                 .with_embedding("fixed-profile".into(), 2)
                 .unwrap()
                 .binding_identity()["embedding"],
             json!(["fixed-profile", 2])
         );
     }
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "embedded-anyseek")]
     #[tokio::test]
     async fn embedded_vector_and_graph_share_the_local_record() {
         use crate::types::{Entity, GraphExtraction, Relation};

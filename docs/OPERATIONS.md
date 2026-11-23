@@ -73,17 +73,22 @@ workspace 的集合在首次使用时创建。启动恢复和存储核验完成�
 SDK 查询采用 AnySeek 的准入和资源预算，运行于同一进程。进程异常退出后，下一次启动执行持久日志恢复。
 强制终止进程可能中断正常关闭。原 HTTP 模式的请求超时只用于独立服务连接。
 
-### 独立部署 AnySeek
+### 云上部署与独立 AnySeek
 
-以 `origence serve` 启动时，由操作者提供服务 URL 和凭据。独立服务的 CI 兼容版本为 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
+云上镜像只编译远端 AnySeek 客户端。默认入口执行 `origence serve`，通过 `OC_ANYSEEK_URL` 和
+`OC_ANYSEEK_API_KEY` 连接独立部署的 AnySeek 服务。任一配置缺失时，宿主启动失败。
+远端地址使用 Origence 容器可达的 HTTPS origin。服务间凭据由部署环境注入。
 
 ```sh
-export OC_ANYSEEK_URL=http://127.0.0.1:8081
-# 通过宿主私密环境设置 OC_ANYSEEK_API_KEY（AnySeek 服务间凭据）。
-# 不启用 embedding 时可设 OC_ENABLE_MODELS=false 验证全文。
+export OC_ANYSEEK_URL=https://anyseek.example.internal
+# 通过部署环境注入 OC_ANYSEEK_API_KEY。
+docker compose up --build -d host
 ```
 
-不再配置 `OC_ANYSEEK_TENANT` 或 `OC_ANYSEEK_COLLECTION`。每个数据请求从服务端已鉴权
+云上裸机可用 `cargo build --release --locked --no-default-features --features local-storage --bin origence`
+构建远端模式的二进制。独立服务的 CI 兼容版本为 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
+
+每个数据请求从服务端已鉴权
 Scope 取得 `tenant_id`，作为 `X-AnySeek-Tenant`；`workspace_id` 转为
 `ws_<去掉连字符的 UUID>` 集合名。一个 workspace 对应一个集合，同租户不同 workspace
 使用不同集合，不同租户使用不同命名空间。客户端和模型不能指定 AnySeek 路由或服务凭据。

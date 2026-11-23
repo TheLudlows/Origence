@@ -231,7 +231,8 @@ def main():
                     subprocess.run([str(Path(executable).resolve()), "--ignored", "--nocapture", "--test-threads=1"],
                                    env=env, check=True, timeout=300)
                 if args.cargo_tests:
-                    subprocess.run(["cargo", "test", "--locked", "--test", "anyseek", "--", "--ignored", "--nocapture", "--test-threads=1"],
+                    subprocess.run(["cargo", "test", "--locked", "--no-default-features", "--features", "local-storage",
+                                    "--test", "anyseek", "--", "--ignored", "--nocapture", "--test-threads=1"],
                                    env=env, check=True, timeout=300, cwd=Path(__file__).resolve().parent.parent)
                 if args.run:
                     subprocess.run(args.run, env=env, check=True, timeout=600)
