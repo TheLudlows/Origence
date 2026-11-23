@@ -1,5 +1,7 @@
 # Origence
 
+**English** · [简体中文](README.zh-CN.md)
+
 **The unified data foundation for AI agents.**
 
 Origence manages memory, knowledge, Skills, and traces. It provides HTTP and MCP interfaces and a management UI. The first pilot targets internal engineering and business teams using Claude Code and Codex.
@@ -33,11 +35,11 @@ initializes workspace collections on first use.
 
 The Docker build uses the remote AnySeek client. Configure `OC_ANYSEEK_URL` and
 `OC_ANYSEEK_API_KEY` for the deployed service. Start the container with its default
-command or use `origence serve` on a cloud host. [Cloud configuration](docs/OPERATIONS.md#云上部署与独立-anyseek)
+command or use `origence serve` on a cloud host. [Cloud configuration](docs/OPERATIONS.en.md#cloud-deployment-with-standalone-anyseek)
 
 ## Management UI
 
-The lightweight [Node.js management UI](ui/README.md) calls Origence's HTTP API
+The lightweight [Node.js management UI](ui/README.en.md) calls Origence's HTTP API
 for memory, knowledge, context previews and private Run evidence. Requires Node.js 24.
 
 ```sh
@@ -64,15 +66,15 @@ Enable `sqlite` for the standalone authority adapter, `local-storage` for the re
 
 ## Documentation
 
-[Product goals and roadmap](docs/ROADMAP.md) · [Documentation index](docs/README.md) · [API and library interfaces](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Project status](docs/STATUS.md)
+[Product goals and roadmap](docs/ROADMAP.en.md) · [Documentation index](docs/README.en.md) · [API and library interfaces](docs/API.en.md) · [Operations](docs/OPERATIONS.en.md) · [Project status](docs/STATUS.en.md)
 
 Private archives, Run traces, and unpublished candidates belong to a logical API key.
-Published memory, knowledge, and Skills belong to a workspace and are available to authorized members. See the [architecture](docs/design/agent-data-foundation.md).
+Published memory, knowledge, and Skills belong to a workspace and are available to authorized members. See the [architecture](docs/design/agent-data-foundation.en.md).
 
-The selected-experience CLI binds a drafted Skill method to one exact source, such as a Run prefix or a published Learning version. Real-client pilot acceptance remains open. See the [CLI guide](docs/SKILL-CANDIDATE-CLI.md), [client setup](docs/CLIENTS.md), and [pilot acceptance issue](https://github.com/TheLudlows/Origence/issues/91).
+The selected-experience CLI binds a drafted Skill method to one exact source, such as a Run prefix or a published Learning version. Real-client pilot acceptance remains open. See the [CLI guide](docs/SKILL-CANDIDATE-CLI.md), [client setup](docs/CLIENTS.en.md), and [pilot acceptance issue](https://github.com/TheLudlows/Origence/issues/91).
 
 Evaluation entry points: [retrieval](evals/retrieval/README.md) and [Agent comparison](evals/agent/README.md).
 
 Implementation rules for contributors and coding agents: [AGENTS.md](AGENTS.md). The JOIN-free SQL constraint remains in force; its former automatic guard and tests have been removed.
 
-Windows native development (no WSL): [local startup and optional UI launcher](docs/WINDOWS-DEV.md).
+Windows native development (no WSL): [local startup and optional UI launcher](docs/WINDOWS-DEV.en.md).

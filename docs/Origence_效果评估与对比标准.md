@@ -1,5 +1,7 @@
 # Origence 效果评估与对比标准
 
+**简体中文** · [English](Origence_%E6%95%88%E6%9E%9C%E8%AF%84%E4%BC%B0%E4%B8%8E%E5%AF%B9%E6%AF%94%E6%A0%87%E5%87%86.en.md)
+
 本文给出统一数据底座中记忆与知识的评估方法与门槛。完整智能体试点包含私有归档、Skill 复用和 Trace 核验，按产品路线图的 P0 条件验收。见[产品路线图](ROADMAP.md#分阶段推进)和 [P0 验收 #91](https://github.com/TheLudlows/Origence/issues/91)。
 
 S1 的 300 题是特定版本的历史工程检索实验。竞品实测、完整智能体评测和企业试点尚待进行。当前结果见 [STATUS](STATUS.md)、[VALIDATION](VALIDATION.md) 和 [evals](../evals/README.md)。

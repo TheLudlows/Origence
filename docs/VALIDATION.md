@@ -1,5 +1,7 @@
 # Origence · 当前验证
 
+**简体中文** · [English](VALIDATION.en.md)
+
 最近一次本地核验为 2026-11-23，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
@@ -156,7 +158,7 @@ Rust 1.98.0 的 `cargo fmt --all -- --check`、`cargo clippy --offline --locked 
 
 ### 自动化结果
 
-Linux，Node 24.22.1 / Rust 1.98.0：
+Linux，Node 24.22.1 与 Rust 1.98.0：
 
 - `npm --prefix ui run check`、`npm --prefix ui test`：构建、19 项通过。
   复用同一 pages fixture，保留 Run/PDF/关联等既有断言；新增筛选续翻与任务/409 子用例。
@@ -1057,216 +1059,98 @@ Run 诊断持久化验收，通过。全部新建临时数据，不调用外部�
 跨请求权限缓存、事务内模型/文件/AnySeek IO 或业务元数据。DDL/格式未改变。
 本轮未重复容器 release 构建；既有 SQLite 容器互操作证据按原提交保留。远端结果见 PR。
 
-## 2026-11-17 · PR #83 synchronization with merged SQLite #81
+## 2026-11-17 · PR #83 与合并后的 SQLite #81 同步。
 
-Merged main `f62168b4cbedfbe6a3a97dbb3161f9e6375fb2df` into the existing #83
-head `537fdbd982740c1283f3ef0e01dc47ef6a651347` without rewriting history.
-Coordinated Run storage with SqliteTx/sqlite_db/sqlite_err and updated the tests'
-old driver paths. Client events and server-prepared events both retain the reverse
-projection insert in their existing write transaction. Fresh-only schema admission,
-first-reference coverage and current-logical-key/source guards are unchanged.
+将 main `f62168b4cbedfbe6a3a97dbb3161f9e6375fb2df` 合并到现有的 #83 head `537fdbd982740c1283f3ef0e01dc47ef6a651347` 中，无需重写历史记录。协调了 Run 存储与 SqliteTx/sqlite_db/sqlite_err 的关系，并更新了测试中的旧驱动路径。客户端事件和服务器准备的事件都保留了反向投影插入操作。仅针对新模式的准入、首次引用覆盖以及当前逻辑键/来源保护保持不变。
 
-Promoted the narrowly scoped combination diagnostic into the existing catalog
-regression: an injected projection-insert failure rolls back the client event and
-server-prepared event, then retrying the same server event ID succeeds and yields
-the exact v2 association. Withdrawing independent v1 leaves that v2 association
-visible. This proves ordinary transaction failure handling, not power-loss durability.
+将范围较窄的诊断功能提升为现有目录的回归功能：注入的投影插入失败会导致客户端事件和服务器准备的事件回滚，但重新尝试相同的服务器事件 ID 后，仍然可以成功获得精确的 v2 关联。撤销独立的 v1 后，该 v2 关联仍然可见。这证明了普通的事务处理方式，而不是由于断电导致的持久性问题。
 
-Executed on the actual synchronized worktree, Linux / Rust 1.98.0 / Node 24.22.1:
+在实际同步的工作树上进行测试，操作系统为 Linux / Rust 1.98.0 / Node 24.22.1：
 
-- `cargo test --locked --test local asset_run_references_are_exact_bounded_private_and_withdrawal_gated`:
-  1 passed, 189 filtered (fixed version, other-admin/key/workspace isolation,
-  rotation, pagination/limits, authoritative proof recheck, reopen, withdrawal,
-  client/prepared projection rollback and successful retry).
-- `cargo test --locked --test local workspace_schema_rejection`:
-  5 passed, 185 filtered.
-- `cargo test --locked --no-default-features --features sqlite --test local workspace_schema_rejection`:
-  5 passed, 74 filtered; includes missing reverse table and old-layout rejection
-  without repair. These integration tests use the existing protocol peer for
-  AnySeek and are not real-engine ranking acceptance.
-- `cargo build --locked`: passed.
-- `cargo clippy --locked --all-targets -- -D warnings`: passed.
-- `cargo clippy --locked --no-default-features --features sqlite --all-targets -- -D warnings`: passed.
-- `cargo clippy --locked --no-default-features --all-targets -- -D warnings`: passed.
-- `cargo fmt --all -- --check`, `git diff --check`: passed.
-- `npm --prefix ui run check`; `npm --prefix ui test`: passed, 16 UI tests.
+- `cargo test --locked --test local asset_run_references_are_exact_bounded_private_and_withdrawal_gated`：通过 1 次，过滤 189 次（修复了版本问题、其他管理员/密钥/工作区隔离、轮换、分页/限制、权威证明重新检查、重新开放、撤销、客户端/准备性投影回滚以及成功的重试）。
+- `cargo test --locked --test local workspace_schema_rejection`：通过 5 次，过滤 185 次。
+- `cargo test --locked --no-default-features --features sqlite --test local workspace_schema_rejection`：通过 5 次，过滤 74 次；包括缺失的反向表和旧布局的拒绝情况，但没有修复。这些集成测试使用了现有的协议对等性，并不是真正的引擎排名验收测试。
+- `cargo build --locked`：通过。
+- `cargo clippy --locked --all-targets -- -D warnings`：通过。
+- `cargo clippy --locked --no-default-features --features sqlite --all-targets -- -D warnings`: 已通过。
+- `cargo clippy --locked --no-default-features --all-targets -- -D warnings`: 已通过。
+- `cargo fmt --all -- --check`, `git diff --check`: 已通过。
+- `npm --prefix ui run check`; `npm --prefix ui test`: 已通过，共进行了16次UI测试。
 
-Real AnySeek pin `d813b915b7f12e7139ca316adc15699688493196`, models disabled,
-fresh temporary v4 data, disposable keys, rebuilt synchronized Origence binary:
+真实的AnySeek密钥为`d813b915b7f12e7139ca316adc15699688493196`。禁用模型，使用新的临时v4数据，使用一次性密钥，重新构建同步的Origence二进制文件。
 
-- `python3 tools/anyseek_smoke.py --anyseek-binary "$ANYSEEK_BINARY" --run python3 tools/mcp_smoke.py --binary "$ORIGENCE_BINARY"`:
-  passed both host-forwarding and offline MCP (protocol/schema/tools, safe errors,
-  live/invalid/revoked credentials, EOF and reopen).
-- Reused the real Chromium fixture via the same AnySeek launcher with the
-  synchronized UI/server. Chromium 156.0.8078.79 passed Run -> fixed v1 after v2
-  publication -> recorded association -> same Run; v2 and another same-workspace
-  admin cannot enumerate v1-owned associations. Browser source withdrawal,
-  association refresh, stale citation re-click, URL reload and Run reopen all
-  deny old content; server preparation failure remains server-observed/not-prepared.
-  No route interception, production data, paid models, screenshots or credentials
-  were added to this commit.
+- `python3 tools/anyseek_smoke.py --anyseek-binary "$ANYSEEK_BINARY" --run python3 tools/mcp_smoke.py --binary "$ORIGENCE_BINARY"`: 同时通过了主机转发和离线MCP（协议/模式/工具，安全错误，有效/无效/撤销的凭证，EOF和重新打开）。
+- 使用相同的AnySeek启动器重新使用了真实的Chromium测试环境。Chromium 156.0.8078.79通过了运行->修复v1->发布v2->记录关联->再次运行；v2和另一个相同工作空间的管理员无法枚举v1拥有的关联。浏览器源代码撤回，关联刷新，过时的引用重新点击，URL重新加载和运行重新打开都会拒绝旧的内容；服务器准备失败仍然被服务器观察到/未准备好。没有路由拦截，生产数据，付费模型，截图或凭证被添加到这个提交中。
 
-Windows and full combined CI were not run locally. GitHub results must be checked
-on the new pushed HEAD; the old separate PR green runs and the earlier temporary
-combination tree are not evidence that this new HEAD passed remote CI. No complete
-#76/native Claude Code/Codex task or production acceptance is claimed.
+Windows和完整的合并CI没有在本地运行。GitHub的结果必须在新的推送的HEAD上进行检查；旧的单独PR绿色运行，以及之前的临时组合树并不能证明这个新的HEAD通过了远程CI。没有完整的
+#76/native Claude Code/Codex任务或生产验收被声称。
 
-## 2026-11-17 · Windows-native development launcher (local)
+## 2026-11-17 · Windows原生开发启动器（本地）
 
-Independent branch based on main `c70a1aaa0b3cb75872109406dc17b1b461d1f771`
-(includes SQLite #81 and reverse references #83); no older feature branches included.
-`tools/start-dev.ps1` targets foreground PowerShell 7.4+ and prebuilt native executables.
-It requires already provisioned separate data directories, ordinary Tenant key and
-collection; no startup provisioning, migrations, directory creation, overwrite,
-remote writes, secret arguments or persistent logs. Loopback only, models disabled.
-AnySeek readiness reads the authorized collection metadata; Origence's own full
-backend admission and /health/ready gate the optional UI. Startup/HTTP/grace waits
-are bounded. Only owned Process handles are stopped; no process-name/port killing.
+独立的分支基于主 `c70a1aaa0b3cb75872109406dc17b1b461d1f771` 分支（包含 SQLite #81 和反向引用 #83）；没有更早的特性分支被包含进来。`tools/start-dev.ps1` 针对的是 PowerShell 7.4 及以上版本，并且需要预先构建好的本地可执行文件。该脚本要求已经预先配置好了数据目录、普通的租户密钥和收集机制；不需要进行启动配置、迁移、目录创建、覆盖、远程写入、秘密参数或持久性日志等操作。仅限 Loopback 模型使用。AnySeek 可以读取授权的收集元数据；Origence 自己的完整后端准入和 /health/ready 机制可以处理可选的 UI。启动/HTTP/grace 等待时间是有限的。只有被拥有的进程会被停止；不会通过进程名/端口来终止进程。
 
-Commands and results:
+命令和结果：
 
-- PowerShell 7.4.6 Linux parser check of start-dev.ps1: passed. Initial pwsh startup
-  could not create its default cache on the read-only home; XDG_CACHE_HOME,
-  XDG_CONFIG_HOME and XDG_DATA_HOME were set to disposable paths for validation.
-- `ORIGENCE_TEST_PWSH=/path/to/pwsh python3 -m unittest discover -s tools -p test_start_dev.py -v`:
-  7 passed on Linux pwsh. Fake HTTP subprocesses verify ready/API/UI ordering,
-  early exit, not-ready timeout, auth denial, redirect refusal, missing-data refusal,
-  occupied-port noninterference, owned-process cleanup, spaced argument paths,
-  credential separation and suppression of deliberately secret-bearing child output.
-  These are process/HTTP contract fixtures, not real backend or Windows results.
-- `python3 -m unittest discover -s tools -p 'test_*.py'`: 11 passed, 7 opt-in launcher
-  cases skipped without ORIGENCE_TEST_PWSH. No CI scope/configuration changed.
-- `cargo build --locked`, `cargo clippy --locked --all-targets -- -D warnings`,
-  `cargo fmt --all -- --check`, `git diff --check`: passed under Rust 1.98.0.
-- `npm ci --ignore-scripts --prefix ui` (disposable cache), `npm --prefix ui run build`:
-  passed with Node 24.22.1.
+- PowerShell 7.4.6 的 Linux 解析器检查通过，检查目标为 start-dev.ps1。pwsh 首次启动时无法在只读主目录内创建默认缓存。验证使用临时的 XDG_CACHE_HOME、XDG_CONFIG_HOME 和 XDG_DATA_HOME。
+- `ORIGENCE_TEST_PWSH=/path/to/pwsh python3 -m unittest discover -s tools -p test_start_dev.py -v`：在 Linux pwsh 上通过了 7 个测试用例。假的 HTTP 子进程用于验证 API/UI 的顺序、提前退出、未准备好的超时、认证拒绝、重定向拒绝、缺少数据拒绝、占用端口不干扰、拥有的进程清理、参数路径分隔、凭据分离以及故意隐藏秘密的子输出。这些都是进程/HTTP 的测试夹具，而不是真实的后端或 Windows 的结果。
+- `python3 -m unittest discover -s tools -p 'test_*.py'`：通过了 11 个测试用例，其中 7 个是在没有使用 ORIGENCE_TEST_PWSH 的情况下进行的。没有更改 CI 范围/配置。
+- `cargo build --locked`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo fmt --all -- --check`, `git diff --check`：在 Rust 1.98.0 环境下通过了测试。
+- `npm ci --ignore-scripts --prefix ui` (一次性使用缓存), `npm --prefix ui run build`: 使用 Node 24.22.1 执行。
 
-Real local validation used pwsh 7.4.6 on Linux, actual AnySeek built at
-`d813b915b7f12e7139ca316adc15699688493196`, Origence rebuilt from this worktree,
-and the built Node UI. A separate fixture explicitly created a temporary Tenant,
-ordinary key/collection and offline workspace, stopped bootstrap AnySeek, then
-invoked the unmodified launcher with paths containing spaces. Twice it observed
-all readiness gates, authenticated /v1/whoami retaining the same workspace, UI
-HTTP 200, group SIGINT shutdown without force warnings, closed ports and retained
-context.db; the second start reused the first data. Captured parent output was
-checked not to contain master secret, master key, ordinary key or workspace token.
-No production data, paid model/provider calls, Windows emulation or WSL was used.
-The local real-service harness is external to the repository; the reproducible
-manual setup/commands and Windows checklist are in WINDOWS-DEV.md.
+实际的本地验证是在 Linux 上使用 pwsh 7.4.6 进行的。实际的 AnySeek 构建是在 `d813b915b7f12e7139ca316adc15699688493196` 中完成的。原始代码是从这个工作树重建的，而构建的 Node UI 也是从这个工作树重建的。一个单独的测试环境专门创建了一个临时的租户、普通密钥/集合和离线工作区，然后停止了 AnySeek 的启动过程，接着调用了未修改的启动器，并使用了包含空格的路径。两次都检查了所有准备就绪的条件，认证了 /v1/whoami，保持相同的工作区，UI 返回了 HTTP 200 响应，组信号中断关闭了程序，没有发出强制关闭的警告，关闭了端口并保留了 context.db 文件。第二次启动时使用了第一次的数据。捕获的父输出被检查了，以确保不包含 master secret、master key、ordinary key 或 workspace token。没有使用任何生产数据、付费模型/提供商调用、Windows 仿真或 WSL。本地真实服务环境是外部仓库之外的；可复现的手动设置/命令和 Windows 检查清单保存在 WINDOWS-DEV.md 文件中。
 
-Validation found and corrected a PowerShell case-insensitive variable collision
-that replaced the component display name with an environment variable name.
-The real bootstrap fixture also initially precreated an empty AnySeek directory:
-the pinned engine interpreted that as recovery and exited. Documentation now uses
-an absent path for explicit first initialization, while the launcher requires an
-existing nonempty initialized directory. No automatic repair was added.
+验证发现并修复了一个 PowerShell 中的不区分大小写的变量冲突问题，该问题导致组件显示名称被环境变量名称替代了。实际的启动环境最初还创建了一个空的 AnySeek 目录：固定的引擎将这一行为解释为恢复操作并退出。文档现在使用了一个不存在的路径来进行第一次初始化，而启动器则需要一个已初始化的非空目录。没有添加自动修复功能。
 
-Not executed: native Windows/MSVC/Windows Terminal Ctrl+C, ready-stage interruption
-on Windows, Windows process-reuse races, production recovery or power-loss tests.
-Shared-console Ctrl+C is best effort until verified there. If signal delivery fails
-or grace expires, owned-process termination is explicitly a forced stop; closing
-or killing the parent terminal may bypass finally and leave children alive. The
-launcher is not a production service supervisor. No remote PR/push/deployment.
+未执行原生 Windows/MSVC/Windows Terminal Ctrl+C、Windows 就绪阶段中断或进程复用竞态、生产恢复或断电测试。共享控制台 Ctrl+C 尚待实测，当前按尽力交付处理。信号无法送达或宽限期超时时，终止所拥有的进程明确属于强制停止。关闭或杀死父终端可能绕过 finally 并留下子进程。启动器不作为生产服务监管器。未发起远程 PR、推送或部署。
 
-## 2026-11-17 — #87 minimal MCP Run host adapter (local only)
+## 2026-11-17 — #87 最小 MCP Run 宿主适配器（仅本地）
 
-Base and read-only latest-main check: `293e2bf6af3b180d43c8050731047b552ac07519`.
-Independent branch `p0/mcp-host-adapter`, worktree `/workspace/origence-mcp`.
-Read repository AGENTS.md, current status/design, Run contract and client/API
-implementation; no repository `.agents/skills` exists and workspace `.agents`
-is empty. Interface and two-host observation boundaries are frozen in
-[the host contract example](../examples/run-host-contract.md).
+基线和只读核对的最新 main 均为 `293e2bf6af3b180d43c8050731047b552ac07519`。独立分支 `p0/mcp-host-adapter`，工作树 `/workspace/origence-mcp`。阅读了仓库 AGENTS.md、当前状态和设计、Run 契约及客户端/API 实现。仓库内无 `.agents/skills`，工作区 `.agents` 为空。接口和双宿主观察范围冻结于[宿主契约示例](../examples/run-host-contract.zh-CN.md)。
 
-Four MCP tools delegate through typed HostClient methods to existing Run HTTP
-routes. Shared DTOs, Run storage, authentication, SQL, navigation, CI and STATUS
-are unchanged. Manual execution-input review found no added SQL or storage calls;
-all authority/source/version/replay decisions stay on the existing HTTP path.
-Embedded local MCP explicitly rejects these new Run operations with a server-URL
-requirement; the documented remote CLI/MCP path is covered.
+四个 MCP 工具用有类型的 HostClient 方法调用现有 Run HTTP 路由。共享 DTO、Run 存储、认证、SQL、导航、CI 和 STATUS 均未改动。手动审查执行输入确认未新增 SQL 或存储调用。权威、来源、版本和重放决策仍通过现有 HTTP 链路。嵌入式本地 MCP 明确拒绝这些新 Run 操作并要求提供服务地址，已验证文档所述的远端 CLI/MCP 路径。
 
-Linux, Rust `1.98.0 (88d9e12ae 2026-08-18)`, rmcp `1.8.0`, models disabled,
-fresh temporary SQLite, synthetic content and loopback AnySeek protocol fixture:
+Linux，Rust `1.98.0 (88d9e12ae 2026-08-18)`，rmcp `1.8.0`。禁用模型，使用独立的新建临时 SQLite 库、合成数据与 loopback AnySeek 协议夹具：
 
-- `cargo fmt --all -- --check`: passed.
-- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo test --test local mcp_runs -- --nocapture`: 1 passed.
-- `cargo test --test local foundation_http -- --nocapture`: 1 passed.
-- `cargo test --test local retrieval_diagnostics -- --nocapture`: 2 passed.
-- `git diff --check`: passed.
+- `cargo fmt --all -- --check`：通过。
+- `cargo clippy --all-targets --all-features -- -D warnings`：通过。
+- `cargo test --test local mcp_runs -- --nocapture`：1 项通过。
+- `cargo test --test local foundation_http -- --nocapture`：1 项通过。
+- `cargo test --test local retrieval_diagnostics -- --nocapture`：2 项通过。
+- `git diff --check`：通过。
 
-The new test launches two actual Origence stdio processes and verifies tool
-listing, same-logical-key archive and turn readback, independent Run IDs, other
-writer/admin denial, unchanged retries and changed-payload conflicts, all seven
-existing report variants, explicit unknown, rejection of forged server events,
-HTTP preparation success/replay/failure, source withdrawal, credential rotation
-and revocation of the replacement credential on an already-open MCP connection.
-Initial test failure was a fixture mistake: it revoked the old credential ID
-after rotation. The corrected test revokes the returned new credential ID;
-server key semantics were not changed. Final rerun passed.
+新用例启动两个真实 Origence stdio 进程，核对工具列表、同一逻辑 Key 归档与轮次读回、独立 Run ID、其他 writer 或管理员被拒、未变请求重试与载荷变更冲突、全部七种既有报告、明确未知状态、拒绝伪造服务端事件、HTTP 准备成功/重放/失败、来源撤回、凭据轮换，以及已打开 MCP 连接感知新凭据撤销。首次失败来自夹具错误，轮换后撤销了旧的凭据 ID。修正为撤销返回的新凭据 ID，未改变服务端 Key 语义。最终复跑通过。
 
-These synthetic peers are not Claude Code/Codex task evidence. Claude Code is
-not installed in this environment; no real host/model task was invoked. Actual
-two-host/version-frozen task observations, native Windows and enterprise task
-outcomes remain unaccepted. No production credentials/data, paid model calls,
-migration, push, PR, Issue update, merge or deployment was performed.
+合成协议对端不能作为 Claude Code 或 Codex 任务证据。此环境没有安装 Claude Code，未调用真实宿主或模型任务。真实双宿主、冻结版本的任务观察、原生 Windows 和企业任务结果仍未验收。未使用生产凭据或数据、付费模型，也未执行迁移、推送、提 PR、更新 Issue、合入或部署。
 
-### #87 publication follow-up — explicit HTTP feedback/Improve and MCP gates
+### #87 发布跟进 — 显式 HTTP 反馈与 Improve 以及 MCP 校验
 
-Continues local implementation `3877322753ff8bd2b921f5fe1a43e6a33352b108`.
-Read #87 and #89: the four Run tools do not replace explicit turn archival,
-session/evidence feedback or Improve, and do not add independent verification.
-[Runnable synthetic HTTP commands](../examples/run-host-contract.md#explicit-archive--feedback--improve-over-existing-http)
-use the same logical-key session and preserve explicit opt-in for Improve.
-Run feedback remains a report; helpful feedback is not verified task success.
-No service API, persistence, generic DTO, CI, navigation or STATUS change.
+延续本地实现 `3877322753ff8bd2b921f5fe1a43e6a33352b108`。已阅读 #87 和 #89。四个 Run 工具不替代显式轮次归档、会话或证据反馈、Improve，也未增加独立核验。[可执行的合成 HTTP 命令](../examples/run-host-contract.zh-CN.md#通过既有-http-显式归档--反馈--improve)使用同一逻辑 Key 会话，保留显式同意 Improve。Run 反馈仍属于报告，有用反馈不代表任务成功经独立验证。服务 API、持久化、通用 DTO、CI、导航和 STATUS 均未改动。
 
-New protocol coverage: MCP archive → HostClient HTTP feedback → readback,
-idempotent feedback and changed-payload conflict, other writer/admin denial,
-explicit Improve with disabled models returning unavailable and leaving no accepted
-improvement. The existing 20 local synthetic-model Learning regressions cover
-positive Improve HTTP acceptance, processing, exact citations, recovery and source
-withdrawal. No real provider or paid model is used.
+新协议覆盖 MCP 归档 → HostClient HTTP 反馈 → 读回，反馈幂等和载荷变更冲突，其他 writer 或管理员被拒，以及禁用模型时显式 Improve 返回不可用且不产生已接受的改进。现有 20 个本地合成模型 Learning 回归覆盖 Improve 的 HTTP 接受、处理、精确引用、恢复及来源撤回。未调用真实供应商或付费模型。
 
-The old exact seven-tool gates were updated to the exact eleven-tool contract,
-including required fields and nested context schema. Report is now explicitly an
-object in the adapter schema and still decoded into the existing strict Run DTO.
-The first full smoke found a second stale assumption: revoked calls defaulted to
-retrieval `{query}` arguments. Valid per-Run-tool arguments now exercise the same
-strict unauthenticated error assertion for every tool; no error gate was relaxed.
+将原来的精确七工具检查更新为精确十一工具契约，包括必填字段及嵌套上下文模式。适配器模式明确将 Report 定义为对象，仍按现有严格 Run DTO 解码。第一次完整冒烟发现另一处旧假设，撤销后的调用默认用检索 `{query}` 参数。现在用每个 Run 工具的合法参数验证同样严格的未认证错误，未放宽错误断言。
 
-Final local results (Linux, declared Origence Rust 1.98.0):
+最终本地结果（Linux，Origence 所声明的 Rust 1.98.0）：
 
-- `cargo test --test local mcp_runs -- --nocapture`: 1 passed.
-- `cargo test --test local local_host_api_cli_mcp_models_and_recovery -- --nocapture`: 1 passed.
-- `cargo test --test local learning_loop -- --nocapture`: 20 passed (local synthetic model fixture).
-- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
-- `cargo build --locked`, `cargo fmt --all -- --check`, `git diff --check`: passed.
-- `PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py`: 3 passed.
-- Actual stdio eleven-tool schema check with a temporary synthetic auth stub: passed.
-- `python3 tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary target/debug/origence`: passed host-forwarding and offline modes, all protocol negotiations, exact schemas/tool lists, sanitized errors, live revocation, EOF and reopen.
+- `cargo test --test local mcp_runs -- --nocapture`：1 项通过。
+- `cargo test --test local local_host_api_cli_mcp_models_and_recovery -- --nocapture`：1 项通过。
+- `cargo test --test local learning_loop -- --nocapture`：20 项通过（本地合成模型夹具）。
+- `cargo clippy --all-targets --all-features -- -D warnings`：通过。
+- `cargo build --locked`、`cargo fmt --all -- --check`、`git diff --check`：通过。
+- `PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py`：3 项通过。
+- 真实 stdio 十一工具模式检查通过，使用临时合成认证桩。
+- `python3 tools/anyseek_smoke.py --anyseek-binary /workspace/anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary target/debug/origence`：宿主转发、离线模式、全部协议协商、精确模式和工具列表、脱敏错误、存量连接凭据撤销、EOF 与重开均通过。
 
-The smoke used a clean checkout of the CI-pinned real AnySeek source
-`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`, rebuilt with Rust 1.99.1,
-`--locked --no-default-features --bin anyseek_server -j 2`. Binary SHA256:
-`8e9eb15edd86fb38b4a837476ed219bc6c7bc85a89d9f7460bb4c18316a57beb`.
-Upstream build warnings were not changed. All databases, collections, content and
-credentials were disposable synthetic fixtures. This is real service/protocol
-coverage, not real Claude Code/Codex task or independent business-result evidence.
+冒烟使用干净检出的 CI 固定 AnySeek 真实源码 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`，以 Rust 1.99.1 和 `--locked --no-default-features --bin anyseek_server -j 2` 重新构建。二进制 SHA256 为 `8e9eb15edd86fb38b4a837476ed219bc6c7bc85a89d9f7460bb4c18316a57beb`。保留上游构建警告。数据库、集合、内容与凭据均为一次性合成夹具。覆盖实际服务和协议，真实 Claude Code/Codex 任务及独立业务结果另需验收。
 
-Immediately before publication, remote main remained
-`293e2bf6af3b180d43c8050731047b552ac07519`; no branch-matching PR existed.
-No rebase or force push is needed. User authorization now permits a normal push
-and independent draft PR with Refs #87; the earlier local-only record above is
-historical. Exact published HEAD and CI state are recorded in the PR/handoff.
-Real two-host/version-frozen tasks and Windows remain unaccepted. No Issue update,
-merge or deployment is authorized by this follow-up.
+发布前立即确认远端 main 仍为 `293e2bf6af3b180d43c8050731047b552ac07519`，没有与本分支匹配的 PR。不需要 rebase 或强制推送。用户当时已授权正常推送并开独立草稿 PR（Refs #87），前面的仅本地记录仍作为历史保留。发布的精确 HEAD 及 CI 状态记录于 PR 和交接说明。真实双宿主、版本冻结任务及 Windows 仍未验收。该次跟进未授权更新 Issue、合入或部署。
 
 ## 2026-11-17 — #89 Run 外部核验记录（本地 P0 切片）
 
 - 已 fetch 核实 main/base：`293e2bf6af3b180d43c8050731047b552ac07519`。
   实现与下列测试对应提交：`5965f50848a17a6206c91110ffee8d2636efd32c`；
   独立分支 `p0/run-verification`，工作树 `/workspace/Origence-run-verification`。
-- 合同见 [run-verification](contracts/run-verification.md)。仅 owner 转录外部结论，
+- 合同见 [run-verification](contracts/run-verification.zh-CN.md)。仅 owner 转录外部结论，
   不将 `reporter=user/test`、外部核验者标签、自报成功或 prepared 状态解释为认证角色/平台验真。
   前缀摘要、记录凭据、服务端时间、声称核验者/时间、结论、依据序号/摘要和可撤销状态分别保存。
   版本未知不填 latest；核验者角色不授予 Run 正文权。MCP/接入工具接口未改变。
@@ -1328,34 +1212,13 @@ merge or deployment is authorized by this follow-up.
 原 Run CLI 回归及格式/Clippy 通过。详见 [#88 追加记录](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md#learning-source-follow-up-2026-11-17-draft-pr-94)。
 未变更产品代码，不代表真实客户端或业务验收。
 
-## 2026-11-18 — #95 coordinated integration after #93/#94
+## 2026-11-18 — #93/#94 之后的 #95 联合整合
 
-Merged main `a56246406a0688f646a45a85cc2954fb14a8d28a` into original #95
-`dfbaade8eb8848d6085cf5b9f61f986f2c8b9428` without rewriting history. Only this
-validation history conflicted; both entries remain. Automatic module/UI-test
-merges preserve the existing source, exact-prefix, logical-key and fresh-only
-schema contracts; no implementation change was needed.
-Linux Rust 1.98.0: fmt and diff checks, `cargo test --locked --lib run_verification`
-(2), `cargo test --locked --test local run_verification` (2),
-`cargo test --locked --test local workspace_schema_rejection` (6), and
-`cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
-Node UI build/tests: 19 passed. All database fixtures were newly created temporary
-stores, not old stores converted to the new schema. No external model or production
-material was used. New exact-HEAD CI is required before merging; full pilot remains NOT_RUN.
+将 main `a56246406a0688f646a45a85cc2954fb14a8d28a` 正常合入原 #95 `dfbaade8eb8848d6085cf5b9f61f986f2c8b9428`。冲突仅发生于此验证历史，保留两份记录。模块和 UI 测试的自动合并保留来源、精确前缀、逻辑 Key 和仅新建库的模式契约，无需改动实现。Linux Rust 1.98.0 下格式与 diff 检查、`cargo test --locked --lib run_verification`（2 项）、`cargo test --locked --test local run_verification`（2 项）、`cargo test --locked --test local workspace_schema_rejection`（6 项）及 `cargo clippy --locked --all-targets --all-features -- -D warnings` 均通过。Node UI 构建和测试通过 19 项。所有数据库夹具均为新建临时库，未转换旧库。未使用外部模型或生产资料。合入前仍需新精确 HEAD 的 CI，完整试点仍为 NOT_RUN。
 
-## 2026-11-18 — #96 coordinated integration after #93–#95
+## 2026-11-18 — #93–#95 之后的 #96 联合整合
 
-Merged main `e78b6ba5f3d6fcb4730789981a092c85cdc4c12a` into original #96
-`07ddb1640c652bdd82c8ba168fe86bac9563cfa9` without history rewriting. Only this
-validation history conflicted; all records remain. No MCP/HTTP, storage, DTO or
-CI behavior changed during resolution.
-Linux Rust 1.98.0: fmt/diff checks, `cargo test --locked --test local mcp_runs::`
-(1), `cargo test --locked --test local foundation_http::` (2), full-feature
-all-target strict Clippy, and `cargo build --locked --bins` passed.
-`PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py`:
-3 passed. Databases and protocol/model fixtures were fresh and synthetic. These
-checks do not certify real native clients or business outcomes. The new exact-HEAD
-CI must pass before merge; actual final main will be independently retested.
+将 main `e78b6ba5f3d6fcb4730789981a092c85cdc4c12a` 正常合入原 #96 `07ddb1640c652bdd82c8ba168fe86bac9563cfa9`。冲突仅发生于此验证历史，保留全部记录。解决冲突未改变 MCP/HTTP、存储、DTO 或 CI 行为。Linux Rust 1.98.0 下格式和 diff 检查、`cargo test --locked --test local mcp_runs::`（1 项）、`cargo test --locked --test local foundation_http::`（2 项）、全特性全目标严格 Clippy、`cargo build --locked --bins` 均通过。`PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py` 通过 3 项。数据库和协议或模型夹具均为新建合成实例。真实原生客户端或业务结果需另行验收。合入前新精确 HEAD 的 CI 必须通过，最终实际 main 需独立复测。
 
 ## 2026-11-18 — #76 路由焦点与编辑对话框名称（本地）
 

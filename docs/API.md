@@ -1,5 +1,7 @@
 # Origence API 与库接口
 
+**简体中文** · [English](API.en.md)
+
 适用本地宿主 SQLite 控制状态以及 AnySeek 正文、摘要、全文、向量与一跳图投影。本文负责 HTTP v1 与公开库接口契约；进度见 [STATUS](STATUS.md)，操作步骤见 [OPERATIONS](OPERATIONS.md)，精确版本验证见 [VALIDATION](VALIDATION.md)。
 
 按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份)。
@@ -29,7 +31,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
 结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
 外部核验记录由 Run 所有者针对精确前缀通过 HTTP 提交，保留转录来源与核验身份的声明状态。
-详情见 [Run 契约](contracts/runs.md)和[外部核验契约](contracts/run-verification.md)。
+详情见 [Run 契约](contracts/runs.zh-CN.md)和[外部核验契约](contracts/run-verification.zh-CN.md)。
 
 | Skill 接口 | 输入与结果 |
 | --- | --- |
@@ -44,7 +46,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 
 候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
 调用方提交候选，也可用选定经历 CLI 将手工填写的方法绑定到一个精确依据。包格式和边界见
-[Skill 契约](contracts/skills.md)和[选定经历 CLI](SKILL-CANDIDATE-CLI.md)。
+[Skill 契约](contracts/skills.zh-CN.md)和[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)。
 
 ## 检索诊断
 
@@ -99,14 +101,12 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 - 无元数据库核心：`default-features = false`，提供类型、解析、模型、Blob 与 AnySeek 接口。
 - SQLite 权威适配器：`default-features = false, features = ["sqlite"]`。
-- 完整 HTTP/MCP 宿主：默认 `local-storage`，自动启用 `sqlite`。
+- 完整 HTTP/MCP 宿主默认启用 `embedded-anyseek`，包含 `local-storage` 和 `sqlite`。云上远端宿主关闭默认特性并启用 `local-storage`。
 
 核心独立检查用 `cargo test --no-default-features`；原 authority-only 检查现在显式使用
 `cargo test --no-default-features --features sqlite`，仍运行其完整授权/队列/恢复回归。
 
-宿主通过 `Service::open_with_anyseek(dir, models, config)` 组装服务；通用调用方使用
-公开 Service/DTO，事务与关联查询留在存储适配器。完整签名以 [lib.rs](../src/lib.rs)
-导出的模块和源码为准。
+本地嵌入式宿主通过 `Service::open_embedded(dir, models)` 组装服务。远端 AnySeek 宿主使用 `Service::open_with_anyseek(dir, models, config)`。通用调用方使用公开 Service/DTO，事务与关联查询留在存储适配器。完整签名以 [lib.rs](../src/lib.rs) 导出的模块和源码为准。
 
 旧的独立图存储接口和图遍历已移除；
 `StorageEngine::new` 不再接收图存储，`SqliteStore::cleanup_plan` 只返回待清理的 chunk ID。
@@ -153,7 +153,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 含 `start_ms`、`end_ms`、`created_runs`，包括零计数。
 起止为 Unix 毫秒，窗口和桶均左闭右开，以本次服务端读取时刻为终点向前滚动。
 此计数随授权轮换保留，事件、重试和证据撤回不会新增或抹去创建记录。
-窗口参数不能覆盖鉴权范围。详情见 [Run 合同](contracts/runs.md#run-creation-overview)。
+窗口参数不能覆盖鉴权范围。详情见 [Run 合同](contracts/runs.zh-CN.md#run-创建总览)。
 该接口使用新建的 SQLite 权威库。新版拒绝缺少创建时间索引的旧库，旧版也拒绝
 含新索引的库。两个方向均在修改数据库前拒绝。
 
@@ -197,7 +197,7 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `GET /v1/events/{id}` | writer 及以上读取有效来源原文 `{event_id,kind,content,file_id,created_at}`；reader 403，跨 scope/已撤回/文件已删除 404 |
 | `DELETE /v1/events/{id}` | 撤回来源，阻断所有引用该来源的版本，不自动回退到旧版本 |
 | `DELETE /v1/files/{id}` | 阻断原文件，撤回所有引用该文件的事件 |
-| `GET /v1/jobs/{id}` | operation/state/generation/outcome/result/error_code |
+| `GET /v1/jobs/{id}` | 操作/状态/生成/结果/错误代码 |
 | `POST /v1/jobs/{id}/cancel` | 标记 cancelled，增加 generation/run_token，旧执行不能提交；已完成任务不能取消，cleanup 不能取消 |
 | `POST /v1/jobs/{id}/retry` | 仅 failed/cancelled 且来源、资产仍有效；新 generation 原子入队；cleanup 重试需 admin |
 | `POST /v1/sessions/{session_id}/turns` | `{turn_id,question,answer,used_evidence:[]}` → 同步归档标识；writer 及以上，详见会话归档节 |
@@ -242,7 +242,7 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 私有 Run 的固定 PDF 引用可用 `GET /v1/runs/{id}/pdf-source?sequence=N&evidence_ref_id=UUID`
 读取已核对的页内提取文本。该接口要求 Run 所有权和现有原件权限，返回精确资产版本、
 已知页码及可验证的文本片段，或明确无页内定位。`original=true` 获取该引用的原件。
-详情见 [Run 契约](contracts/runs.md#pdf-page-preview-from-a-private-run)。
+详情见 [Run 契约](contracts/runs.zh-CN.md#私有-run-的-pdf-页预览)。
 
 向量必须与 profile 一致，不混用不同模型/维度。模型查询失败且 `allow_partial=true` 才退回关键词，同时返回 `effective_mode` 和 warnings；否则 503。纯关键词发布的历史内容没有向量，不会出现在 vector 结果中，hybrid 的关键词分支仍可召回。无 profile 自动补齐或 reranker；向量查询在 AnySeek 中对授权候选排名；不承诺对原后端或生产分布具有同等排序与性能。
 
@@ -508,7 +508,7 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 或声称此类引用已完整归档。Learning 发布给 reader 的引用只有支持标识/范围，
 不返回支撑轮次的原始问答或 quote。
 
-详见 [EvidenceBundle 契约](contracts/evidence-bundle.md)。真实 Agent
+详见 [EvidenceBundle 契约](contracts/evidence-bundle.zh-CN.md)。真实 Agent
 对照需独立执行；fixture 仅验证工具/模型交互框架，不是任务收益结果。
 
 ### 资产固定版本的已记录 Run 引用
@@ -519,4 +519,4 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 `created_at_ms`）、`next_after`、`scope: current_logical_key`、`coverage: recorded_references`。
 空页仍可能有下一游标；源或资产不可读时拒绝访问。索引定位首条已归档引用并复核权威事件，
 不可读的关联保守省略，不承诺完整采集或整个 Run 的其他引用可读。
-详见 [Run 合同](contracts/runs.md#exact-asset-version-recorded-associations)。
+详见 [Run 合同](contracts/runs.zh-CN.md#精确资产版本的已记录-run-关联)。

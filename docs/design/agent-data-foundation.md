@@ -1,5 +1,7 @@
 # Origence · 智能体统一数据底座架构规划
 
+**简体中文** · [English](agent-data-foundation.en.md)
+
 首版合同基线为 v0.8（2026-11-16）。本文描述目标架构与首版验收。
 
 产品演进见[路线图](../ROADMAP.md)。当前实现架构、接口和进度分别见[平台设计](current-implementation.md)、
@@ -95,7 +97,7 @@ flowchart TB
 发布只共享清单中的获准工件，审阅依据不默认随包公开。
 修改任一绑定内容须重新审阅，发布前重新核验权限与来源；发布只共享获准内容，原始会话及其引用仍受私有边界约束。
 
-`EvidenceBundle` 按任务、权限和预算组装记忆、知识和 Learning，调用方可按权限加入自己的归档轮次。准备记录保存精确引用、缺失和裁剪信息。见[上下文组装契约](../contracts/evidence-bundle.md)。
+`EvidenceBundle` 按任务、权限和预算组装记忆、知识和 Learning，调用方可按权限加入自己的归档轮次。准备记录保存精确引用、缺失和裁剪信息。见[上下文组装契约](../contracts/evidence-bundle.zh-CN.md)。
 
 宿主通过独立的 Skill 下载或导出入口取得有效的已发布包，再按自身机制加载。Run 中的加载事件来自客户端上报。候选进入专门的用户审阅入口。
 

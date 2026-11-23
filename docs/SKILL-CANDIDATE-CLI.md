@@ -1,5 +1,7 @@
 # Selected-experience Skill CLI (#88)
 
+**English** · [简体中文](SKILL-CANDIDATE-CLI.zh-CN.md)
+
 `origence-skill` is an independent entry point over the existing authenticated HTTP
 API. It does not open a database, invoke a model, mine Runs, submit a review, or
 publish as a side effect of drafting. The host must already be running. Use the

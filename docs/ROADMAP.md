@@ -1,5 +1,7 @@
 # Origence · 产品目标与长期路线图
 
+**简体中文** · [English](ROADMAP.en.md)
+
 **Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。** 智能体可以读取符合当前任务与权限的数据，也可以提交任务记录，让用户查证结果并决定哪些经验值得复用。
 
 本文描述产品目标与阶段验收。首版面向企业研发与业务团队，在内网以 Claude Code 和 Codex 试点。首版技术合同、当前实现进度和具体验证分别见[架构规划](design/agent-data-foundation.md)、[STATUS](STATUS.md) 和 [VALIDATION](VALIDATION.md)。

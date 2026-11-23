@@ -1,5 +1,7 @@
 # EvidenceBundle
 
+**English** · [简体中文](evidence-bundle.zh-CN.md)
+
 ## Scope
 
 This contract defines read-only context assembly over memory, knowledge, Learning,

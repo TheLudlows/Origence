@@ -1,5 +1,7 @@
 # Minimal host Run adapter — Issue #87
 
+**English** · [简体中文](run-host-contract.zh-CN.md)
+
 Frozen against main `293e2bf6af3b180d43c8050731047b552ac07519`.
 Use the adjacent Codex/Claude Code stdio configurations with `--server-url` and
 an inherited `OC_API_KEY`. Do not commit tokens. The local embedded MCP mode does

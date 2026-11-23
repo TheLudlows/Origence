@@ -1,10 +1,12 @@
 # P6 独立签认与 Run 核验证据
 
+**简体中文** · [English](P6-EVIDENCE.en.md)
+
 逐题、逐 Run 使用一个受限证据包。以[空白关联表](p6-case-link.template.json)登记题号、场景、客户端、基线/复用臂和 Run。证据包沿用[执行手册的索引](RUNBOOK.md#真实闭环与精确加载证据)，并将下列材料关联到同一份封存索引。
 
 正式核验从[签认表](signoff.template.json)的 `freeze_sha256` 开始。独立核验人先核对它与独立保管人提供的冻结记录原始字节 SHA-256 一致，再核对该记录的 `data.tasks_sha256` 与实际 `tasks.json` 原始字节一致。按[题集与评分表](RUNBOOK.md#题集与评分表)核对观察表与同一题集的绑定。在该观察表内用题号、场景和臂定位唯一一行。按评分器的 `input_digest` 重算证据包内实际交付的题目输入，与该行 `input_sha256` 比对，并从交付记录核对同一 Run。题号与臂可以在不同批次复用。
 
-1. **固定 Run 依据。** 由有权的 Run owner 按 [#89 契约](../../docs/contracts/run-verification.md)读取指定位置的不可变前缀，保留回执及引用事件。将 Run ID、`through_sequence`、前缀回执的 `digest`（填作 `prefix_digest`）和 `basis_sequences` 抄入索引。逐条核对依据序号在该前缀内且为正整数、互不重复，并保留事件与资产精确版本及来源的对应关系。只在获授权的范围内提供证据。
+1. **固定 Run 依据。** 由有权的 Run owner 按 [#89 契约](../../docs/contracts/run-verification.zh-CN.md)读取指定位置的不可变前缀，保留回执及引用事件。将 Run ID、`through_sequence`、前缀回执的 `digest`（填作 `prefix_digest`）和 `basis_sequences` 抄入索引。逐条核对依据序号在该前缀内且为正整数、互不重复，并保留事件与资产精确版本及来源的对应关系。只在获授权的范围内提供证据。
 2. **封存原始索引字节。** 索引登记上述四个字段和材料的相对路径、SHA-256、字节数、UTC 时间、采集人、证据类型、适用条款、执行项和题号。逐项核对字节后，对最终索引文件的原始字节计算 SHA-256，填写 `evidence_index.sha256`。保留原始文件及换行。索引摘要与 Run 前缀摘要分别核对。
 3. **保留独立签认原件。** 独立核对人使用已有签认方式，在原件或原件明确引用的附件中确认同一 Run ID、序号、前缀摘要、依据序号及索引 SHA-256。原件同时保留其身份、独立性、核验时间、核验范围、判断和理由。按已有受限渠道向获授权者核对原件来源，并登记原件引用和自身 SHA-256。摘要用于核对字节，独立身份和判断依据由核对人及原件确认。
 4. **分别记录 owner 转录和回执。** 有写权限的 Run owner 按契约转录结论与依据。核对回执顶层 `run_id` 及 `assessment` 内的 `verification_id`、`through_sequence`、`prefix_digest`、`basis_sequences`，并将 `assessment.conclusion` 与独立原件核对。保留回执引用、摘要和撤回状态。原件、索引摘要和文件引用留在受限证据包，提交沿用现有严格 DTO。回执应保留 `evidence_origin:owner_transcribed_external`、`verifier_authentication:unverified_claim`、`platform_verification:not_performed`。单列服务准备、客户端自报、可观察的实际使用与独立判断。服务准备 v2 或客户端自报成功时，实际使用版本仍可能为 UNKNOWN。

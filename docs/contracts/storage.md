@@ -1,5 +1,7 @@
 # 存储不变量
 
+**简体中文** · [English](storage.en.md)
+
 本文维护当前代码必须保留的数据语义。组件分工见[实现架构](../design/current-implementation.md)，
 初始化、故障处理和备份步骤见 [OPERATIONS](../OPERATIONS.md)。
 完整字段与约束以 [authority schema](../../src/storage/sqlite/schema.rs) 及其引入的 DDL 为准，
@@ -7,14 +9,7 @@
 
 ## AnySeek 连接边界
 
-AnySeek 只配置 endpoint 和服务间凭据。数据请求由已鉴权 `Scope` 自动路由：
-`X-AnySeek-Tenant = tenant_id` 的规范 UUID 字符串，collection 为 `ws_<workspace_id.simple()>`。
-无默认 namespace/collection 配置或跨 workspace 回退；所有受保护请求传递 `apikey`。
-服务启动只检查服务连通性/凭据与已发布 workspace 集合；新 workspace 首次使用时创建
-固定 schema 集合，创建未知结果通过严格回读判定。已发布集合缺失、不兼容或分析摘要变化
-必须失败，不能以空集合继续服务。候选内容仍需通过 Origence 权威范围与来源/版本复核。
-后端绑定 `origence-content-backend-v2` 固定 endpoint、路由规则、模型空间及首次使用时的分析摘要，不含服务凭据；
-已有发布但没有已初始化摘要时拒绝打开。AnySeek 不保存或签发租户 Key。
+本地模式在宿主进程内通过 Rust SDK 打开 `OC_DATA_DIR/anyseek`。云上模式配置远端 endpoint 和服务间凭据。两者都由已鉴权 `Scope` 自动路由到规范 UUID 字符串的 tenant_id 和 `ws_<workspace_id.simple()>` 集合，无默认命名空间、集合配置或跨 workspace 回退。远端数据请求用 `X-AnySeek-Tenant = tenant_id` 和 `apikey`。启动时打开本地 Catalog 或检查远端连通性及凭据，并检查已有发布的 workspace 集合。新 workspace 首次使用时创建固定 schema 集合，创建结果未知时严格回读。已发布集合缺失、不兼容或分析摘要变化必须失败，不能以空集合继续服务。候选仍须通过 Origence 的权威范围、来源和版本复核。`origence-content-backend-v2` 后端绑定固定目标、路由、模型空间和首次使用时的分析摘要，不含服务凭据。已有发布但没有已初始化摘要时拒绝打开。AnySeek 不保存或签发租户 Key。
 
 ## SQLite 与最小元数据
 
@@ -23,10 +18,7 @@ features，仅启用 bundled），不引入 ORM 或独立异步数据库依赖�
 `SqliteStore` / `SqliteTx` 是唯一的本地关系实现；引擎标记为 `origence-sqlite-v2`，
 没有旧引擎的适配器、别名或回退路径。
 
-SQLite 是可选的库能力：`--no-default-features` 的核心接口、解析、模型、Blob 和
-AnySeek 适配器不编译或访问 SQLite；`--features sqlite` 仅启用权威适配器，默认
-`local-storage` 组合完整宿主及 SQLite。完整宿主仍使用 SQLite 保存原始来源事件、权限、
-归属、版本指针、幂等、持久任务和恢复事实。已发布正文与摘要文本保存在 AnySeek。
+SQLite 是可选库能力。`--no-default-features` 的核心接口、解析、模型、Blob 和远端 AnySeek 适配器不编译或访问 SQLite。`--features sqlite` 启用权威适配器，`local-storage` 组合仅连接远端 AnySeek 的完整宿主及 SQLite，默认 `embedded-anyseek` 增加本地 SDK。完整宿主仍用 SQLite 保存原始来源事件、权限、归属、版本指针、幂等、持久任务及恢复事实。AnySeek 保存已发布正文和摘要文本。
 
 请求只读取实际参与操作的元数据：空批次和空检索词直接返回空结果；缺少上游候选时，
 不查询下游索引、Summary、来源或 owner。Learning 不存在、前置条件不成立或父任务
@@ -122,15 +114,12 @@ run_token 各自独立，不得相互充当身份。
 资产版本、原始来源版本和快照根来源分别表达，不能按当前解析器重新解释历史偏移。
 撤回先在权威数据中阻断读取，再清理投影；逻辑删除不等于物理擦除。
 
-所有关联查询遵守 [AGENTS](../../AGENTS.md#sql-query-constraints) 的单表读取和同事务
+所有关联查询遵守 [AGENTS](../../AGENTS.zh-CN.md#sql-查询约束) 的单表读取和同事务
 Rust 关联约束。模型、解析、文件和远端索引 IO 在权威事务外执行；返回及提交前复核授权。
 
 ## 初始化与恢复
 
-只创建当前完整 schema；格式标记不能替代完整 DDL 校验。不兼容结构拒绝打开，
-不自动补表、迁移、改写或删除既有数据。更换模型/索引目标不重解释已持久化计划。
-同版本重开、原计划重试与停机整目录备份恢复保留；AnySeek collection 另行备份，
-本地目录和远端索引没有共同事务或在线一致快照。
+只创建当前完整 schema，格式标记不能替代完整 DDL 校验。不兼容结构拒绝打开，不自动补表、迁移、改写或删除已有数据。更换模型或索引目标不重解释持久化计划。保留同版本重开、原计划重试及停机备份恢复。嵌入式 Catalog 随整个 Origence 目录备份。独立服务的 AnySeek collection 另行备份，Origence 目录和远端索引没有共同事务或在线一致快照。
 
 原始字段盘点、合表评审和测量留在
 [固定历史版本](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/contracts)，

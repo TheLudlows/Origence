@@ -1,5 +1,7 @@
 # Origence implementation constraints
 
+**English** · [简体中文](AGENTS.zh-CN.md)
+
 Read the relevant design, `docs/STATUS.md`, and current code before changing an
 implementation. Prefer the smallest change that meets the documented behavior.
 

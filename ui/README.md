@@ -1,5 +1,7 @@
 # Origence 管理界面
 
+**简体中文** · [English](README.en.md)
+
 Node.js 24 + TypeScript，使用浏览器原生 ES modules 和 DOM。
 没有运行时 npm 依赖；Node 内置 HTTP 服务提供静态资源和受限的同源 API 转发。
 业务、权限、持久化与 Worker 继续由 Origence Web API 提供。

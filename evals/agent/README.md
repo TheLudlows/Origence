@@ -1,5 +1,7 @@
 # S4 bounded Agent comparison
 
+**English** · [简体中文](README.zh-CN.md)
+
 **Live model/product comparison: NOT_RUN.** The generated local fixture run is a deterministic
 harness check only. It does not establish an Origence retrieval result, model
 quality, task-completion improvement, semantic entailment, or production readiness.
