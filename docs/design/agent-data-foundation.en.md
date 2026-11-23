@@ -145,7 +145,7 @@ Add Run and result recording through integration for Skill distillation. Step 3 
 
 Each step also verifies isolation, source update and withdrawal, precise version references, retries, and reopen recovery. Cross-key direct reads, Bundle/search, Run queries, artifact access, and source links must not leak private content. Workspaces do not share assets. Skills also check invalidation of approval after editing and denial of reads or distribution after support invalidation. Verify unauthorized submission/review denial, approval invalidation after digest or destination changes, rejection of execution extensions, and isolation of local loading across workspaces. Session acceptance covers archive and querying, authorized rotation, revocation, and retention. Client environment restoration is outside acceptance. Retrieval replacement uses public library, HTTP/MCP, and real AnySeek tests. Client outcomes use frozen task comparisons. Documentation and protocol fixtures do not show real-task success.
 
-See [STATUS](../STATUS.en.md) for current code and open work and [VALIDATION](../VALIDATION.md) for results.
+See [STATUS](../STATUS.en.md) for current code and open work and [VALIDATION](../VALIDATION.en.md) for results.
 
 ## 8. Confirmed decisions and pilot preparations
 

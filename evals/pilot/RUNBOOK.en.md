@@ -61,7 +61,7 @@ An independent person freezes official tasks, verification material, and scoring
 | P6 Traceability | Associate input with each issue, prepare bundles precisely, deliver actual outputs, load natively, tools, outputs, and make independent judgments. Group by scenario, client, and baseline/multiplication. Mark UNKNOWN for executed but missing observation records, and NOT_RUN for unexecuted records. [Independent verification of origin and Run validation is linked](P6-EVIDENCE.en.md). |
 | P7 Recovery | Stop writing according to the next section's experiment, and restore and clean up to the same version. DBAs, system owners, and independent testers sign off separately. |
 
-Zero violations are required for isolation, withdrawal, and version checks. Register Windows/Linux separately; report counts and descriptive differences for small samples. Verify business results, evidence coverage, and Skill loading separately. |
+Zero violations are required for isolation, withdrawal, and version checks. Register Windows/Linux separately; report counts and descriptive differences for small samples. Verify business results, evidence coverage, and Skill loading separately.
 
 ## Real closed-loop and precise loading evidence
 

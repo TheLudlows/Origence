@@ -15,4 +15,4 @@ The caller supplies original text and allowed targets explicitly. The model can 
 - Revalidate the current source and collection member sources on every recovery and before final commit. Reuse whole-snapshot withdrawal from memory semantics. A locator retains original references and sources. Add extraction metadata semantic-capture:v1 and the model name without replacing existing member sources.
 - No additional worker, automatic scheduling, retry loop, hard cancellation guarantee, or database upgrade. Existing governance applies to failures, cancellation, revocation, restart, search, and withdrawal.
 
-See [VALIDATION](../VALIDATION.md) for exact runs. A model stub verifies engineering contracts only. It does not establish real model classification quality.
+See [VALIDATION](../VALIDATION.en.md) for exact runs. A model stub verifies engineering contracts only. It does not establish real model classification quality.

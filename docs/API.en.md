@@ -2,7 +2,7 @@
 
 **English** · [简体中文](API.md)
 
-Covers the SQLite control state of a local host and AnySeek projections for text, summaries, full text, vectors, and one-hop graphs. This page defines the HTTP v1 and public library contracts. See [STATUS](STATUS.en.md) for progress, [OPERATIONS](OPERATIONS.en.md) for procedures, and [VALIDATION](VALIDATION.md) for exact revision evidence.
+Covers the SQLite control state of a local host and AnySeek projections for text, summaries, full text, vectors, and one-hop graphs. This page defines the HTTP v1 and public library contracts. See [STATUS](STATUS.en.md) for progress, [OPERATIONS](OPERATIONS.en.md) for procedures, and [VALIDATION](VALIDATION.en.md) for exact revision evidence.
 
 Jump to [library interfaces](#rust-library-interfaces) · [endpoints](#endpoints) · [job and read visibility](#jobs-and-read-visibility) · [retrieval](#retrieval) · [explicit identity](#explicit-memory-identity).
 
@@ -55,7 +55,7 @@ A workspace's full-text, vector, and one-hop graph candidates use one AnySeek co
 
 Before external I/O, the publication plan persists the original operation epoch. Each immutable publication is limited to 64 chunk Records and 2 MiB of encoded request data. Graph metadata attaches to one deterministic existing chunk and adds no Record. The publication commits as one group. A new business version uses a separate group. On unknown network outcomes inspect the complete group, and jobs reuse the durable plan. Residual indexes cannot revive withdrawn sources. Queries filter by scope, full source identity, and authorized chunk IDs and recheck authoritative state before return. Vector candidates also check the model profile and dimension. A failed dependency returns unavailable and never becomes empty retrieval.
 
-See [OPERATIONS](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval) for deployment and directory binding and [VALIDATION](VALIDATION.md) for results.
+See [OPERATIONS](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval) for deployment and directory binding and [VALIDATION](VALIDATION.en.md) for results.
 
 ## Rust library interfaces
 

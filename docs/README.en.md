@@ -19,7 +19,7 @@ The first release targets pilot use by internal engineering and business teams o
 | HTTP, MCP, and public library interfaces | [API](API.en.md) |
 | Configuration, deployments, failures, backup and restore | [OPERATIONS](OPERATIONS.en.md) |
 | Claude Code / Codex integration and Skill export | [CLIENTS](CLIENTS.en.md) |
-| Test results, failures, and verification limits for precise revisions | [VALIDATION](VALIDATION.md) |
+| Test results, failures, and verification limits for precise revisions | [VALIDATION](VALIDATION.en.md) |
 
 The target architecture describes the product to be delivered. Implementation status is maintained in STATUS, and test results in VALIDATION. Domain contracts do not repeat milestone schedules or historical test counts.
 
@@ -43,4 +43,4 @@ The [evaluation and comparison standard](Origence_%E6%95%88%E6%9E%9C%E8%AF%84%E4
 
 Earlier integration logs, resolved architecture reviews, inventory records, dependency audits, and per-milestone acceptance documents are no longer active documentation. For reference, see the [pinned revision before cleanup](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs). Dated original verification artifacts are in the [archive at the pinned commit](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/evidence). See [STATUS](STATUS.en.md) for current progress.
 
-Documentation uses Simplified Chinese and English pairs. Use the links at the top of paired pages to switch languages. Update both versions in the same change and keep sections, tables, commands, parameters, numbers, and verification conclusions aligned. Code examples and original evidence use the same content.
+Each document comes in Simplified Chinese and English. Use the links at the top to switch languages. Update both versions in the same change and keep sections, tables, commands, parameters, numbers, and verification conclusions aligned. Code examples and original evidence use the same content.

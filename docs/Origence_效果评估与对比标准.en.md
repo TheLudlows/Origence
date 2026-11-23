@@ -4,9 +4,9 @@
 
 This document sets evaluation methods and thresholds for memory and knowledge in the unified data foundation. Full Agent pilots include private archives, Skill reuse, and Trace verification and are accepted under the product roadmap's P0 conditions. See the [product roadmap](ROADMAP.en.md#milestones) and [P0 acceptance #91](https://github.com/TheLudlows/Origence/issues/91).
 
-S1's 300 questions are specific versions of historical engineering retrieval experiments. Competitor measurements, complete intelligent agent evaluations, and enterprise pilots are still underway. Current results can be found in [STATUS](STATUS.en.md), [VALIDATION](VALIDATION.md), and [evals](../evals/README.en.md).
+S1's 300 questions are specific versions of historical engineering retrieval experiments. Competitor measurements, complete intelligent agent evaluations, and enterprise pilots are still underway. Current results can be found in [STATUS](STATUS.en.md), [VALIDATION](VALIDATION.en.md), and [evals](../evals/README.en.md).
 
-Reading order: [metrics](#3-six-core-metrics) → [governance gates](#4-hard-barriers-for-enterprise-scenarios) → [fair comparisons](#6-three-fair-comparison-trails-) → [statistics](#8-experimental-control-and-statistics) → [report template](#10-report-template-for-the-first-round-of-work).
+Reading order: [metrics](#3-six-core-metrics) → [governance gates](#4-hard-barriers-for-enterprise-scenarios) → [fair comparisons](#6-three-fair-comparison-trails) → [statistics](#8-experimental-control-and-statistics) → [report template](#10-report-template-for-the-first-round-of-work).
 
 ## 1. What to evaluate
 
@@ -68,11 +68,11 @@ The following are the acceptance requirements for this project, not a unified ce
 | G7 Traceability | Read the original version through the returned reference | The source exists, its version matches, and access is authorized |
 | G8 Budget and Error Contract | Minimal budget, dependency failures, no answers | Does not exceed the declared budget; does not pretend to be a complete success |
 
-Reporting "observed 0 leaks in N scenarios, M executions" should not be interpreted as a mathematical guarantee of zero risk. It needs to cover concurrency, caching, historical versions, and error information; it cannot only test one happy path. |
+Reporting "observed 0 leaks in N scenarios, M executions" should not be interpreted as a mathematical guarantee of zero risk. It needs to cover concurrency, caching, historical versions, and error information; it cannot only test one happy path.
 
 ## 5. Corporate Evaluation Set
 
-The following 300 questions are suggested components of a complete corporate quality set, with additional governance/fault sets; it cannot be assumed that coverage is achieved just because S1 also has 300 questions, nor is statistical sufficiency guaranteed. |
+The following 300 questions are suggested components of a complete corporate quality set, with additional governance/fault sets; it cannot be assumed that coverage is achieved just because S1 also has 300 questions, nor is statistical sufficiency guaranteed.
 
 | Type | Initial Number of Questions | Examples |
 | --- | --- | --- |
@@ -84,17 +84,17 @@ The following 300 questions are suggested components of a complete corporate qua
 | No Answers, Negations, and Distractions | 40 | Approvals Not Present in Data, Negated Incorrect Statements |
 | Real Team Tasks | 40 | Organize Publishing Inspection Lists, Handover Projects, Respond to Change Justifications |
 
-Governance/Fault Testing Covers Collisions Data, Duplicate Events, Withdrawals, Deletions, and Worker Interruptions across Multiple Workspaces, Not Included in the 300-question Ordinary Q&A Calculation. |
+Governance/Fault Testing Covers Collisions Data, Duplicate Events, Withdrawals, Deletions, and Worker Interruptions across Multiple Workspaces, Not Included in the 300-question Ordinary Q&A Calculation.
 
 Split development, validation, and test sets by workspace, project, or complete incident history, for example 20%/20%/60%. Keep paraphrases about the same document in one set. For temporal reasoning tests, expose only events that were permitted to be seen before the query time. Once the dataset is large enough, expand the frozen test set. Determine the sample count from the target effect size and confidence interval width.
 
-Each Use Case Preserves question, as_of, workspace, input_history, scheduled authorization/updates/withdrawals, gold_facts, necessary evidence, allowed outputs, prohibited outputs, and business assertions. Production Data Is First Prepared According to Corporate Authorization and Masking Strategies. |
+Each Use Case Preserves question, as_of, workspace, input_history, scheduled authorization/updates/withdrawals, gold_facts, necessary evidence, allowed outputs, prohibited outputs, and business assertions. Production Data Is First Prepared According to Corporate Authorization and Masking Strategies.
 
-## 6. Three Fair Comparison Trails |
+## 6. Three Fair Comparison Trails
 
-### 6.1 Trail A: Controlled Retrieval |
+### 6.1 Trail A: Controlled Retrieval
 
-Fixed Authorized Corpus/Source ID, Answer Model/Tip Words, Final Token Budget, and Hardware Limits; Embedding Should Be Consistent, with Differences Made Explicit. Different Blocking/Indexing/Graph Construction Are Allowed, with Additional Fixed Block Ablations. Abstracts/Graphs Precalculated Are Counted as Import Costs. Only Systems That Return Final Answers Enter the End-to-End Trail, Not Pretending Generated Answers As Retrieval Evidence. |
+Fixed Authorized Corpus/Source ID, Answer Model/Tip Words, Final Token Budget, and Hardware Limits; Embedding Should Be Consistent, with Differences Made Explicit. Different Blocking/Indexing/Graph Construction Are Allowed, with Additional Fixed Block Ablations. Abstracts/Graphs Precalculated Are Counted as Import Costs. Only Systems That Return Final Answers Enter the End-to-End Trail, Not Pretending Generated Answers As Retrieval Evidence.
 
 ### 6.2 Trail B: Native Memory Lifecycle
 

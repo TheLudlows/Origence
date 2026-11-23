@@ -2,7 +2,7 @@
 
 **English** · [简体中文](current-implementation.md)
 
-Updated 2026-11-18. Code baseline is main `4160fd5`. This page describes the current architecture and invariants. See [API](../API.en.md) for contracts, [OPERATIONS](../OPERATIONS.en.md) for operation and recovery, [STATUS](../STATUS.en.md) for progress, and [VALIDATION](../VALIDATION.md) for acceptance. A1–A6 numbers and explicit anchors are retained for source-code references. Historical designs are in Git. The [architecture plan](agent-data-foundation.en.md) describes first-release goals and acceptance contracts.
+Updated 2026-11-18. Code baseline is main `4160fd5`. This page describes the current architecture and invariants. See [API](../API.en.md) for contracts, [OPERATIONS](../OPERATIONS.en.md) for operation and recovery, [STATUS](../STATUS.en.md) for progress, and [VALIDATION](../VALIDATION.en.md) for acceptance. A1–A6 numbers and explicit anchors are retained for source-code references. Historical designs are in Git. The [architecture plan](agent-data-foundation.en.md) describes first-release goals and acceptance contracts.
 
 ## 1. Product scope
 
@@ -97,7 +97,7 @@ AnySeek reuses original tokenization and encodes each term with SHA-256, preserv
 <a id="storage-acceptance"></a>
 ### A2.8 Acceptance
 
-Record engineering regressions, actual engine and stdio MCP, real Claude Code clients, and real task outcomes separately. Prior passing revisions do not establish the current head. Average quality cannot offset isolation and source validity failures. See [VALIDATION](../VALIDATION.md) for entry points and precise results and STATUS for gaps.
+Record engineering regressions, actual engine and stdio MCP, real Claude Code clients, and real task outcomes separately. Prior passing revisions do not establish the current head. Average quality cannot offset isolation and source validity failures. See [VALIDATION](../VALIDATION.en.md) for entry points and precise results and STATUS for gaps.
 
 ## A3. Identity, sessions, and conditional experience
 

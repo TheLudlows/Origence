@@ -18,7 +18,7 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 | Private archives and feedback | Cross-client explicit archive reads, logical-key isolation, rotation, and revocation were verified. Supports explicit feedback and Improve → Learning. | Verify archive and feedback evidence in the two P0 scenarios |
 | Node.js management UI | Five pages, scoped catalog, asynchronous ingestion, pinned versions and sources, and Run creation counts and trends per current key. Targeted Chromium checks exist. | Actual screen readers and physical touchscreens, production metering and alerts. [Management UI #76](https://github.com/TheLudlows/Origence/issues/76) |
 
-See [VALIDATION](VALIDATION.md) for exact environments, commits, and results.
+See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 ## Origence local and cloud startup
 
@@ -44,11 +44,11 @@ Local relational data and durable jobs use only rusqlite and bundled SQLite. The
 
 ## #76 Related Runs local implementation
 
-Synced with main `f62168b` (#81 SQLite). Asset details can read Run references recorded by the current logical key for a specific asset version. The bounded index commits with events. Reads recheck authoritative references, asset, source, and ownership and return no Run body. Pinned v1 round trips, isolation from another administrator, withdrawal, pagination, and reopening are verified in [VALIDATION](VALIDATION.md). The index retains proof of the first reference and does not establish complete collection or trace readability. The new schema is fresh-only and rejects legacy databases without migrating them. The change merged in #83. Subsequently #99 added PDF page text locators, and #100 added Run creation counts and trends.
+Synced with main `f62168b` (#81 SQLite). Asset details can read Run references recorded by the current logical key for a specific asset version. The bounded index commits with events. Reads recheck authoritative references, asset, source, and ownership and return no Run body. Pinned v1 round trips, isolation from another administrator, withdrawal, pagination, and reopening are verified in [VALIDATION](VALIDATION.en.md). The index retains proof of the first reference and does not establish complete collection or trace readability. The new schema is fresh-only and rejects legacy databases without migrating them. The change merged in #83. Subsequently #99 added PDF page text locators, and #100 added Run creation counts and trends.
 
 ## Retrieval module separation (merged in PR #79)
 
-Synced with main `3d474d9` with #77 UI and #78 diagnostics. Ranking and fusion for individual lanes are in `retrieval::rank`. SQLite transaction methods own the final publication and pre-return checks. Search and EvidenceBundle retain their separate retrieval, original snapshot boundaries, and external I/O order, as well as mainline diagnostic collection and Run replay protections. See [VALIDATION](VALIDATION.md) for post-merge and historical results.
+Synced with main `3d474d9` with #77 UI and #78 diagnostics. Ranking and fusion for individual lanes are in `retrieval::rank`. SQLite transaction methods own the final publication and pre-return checks. Search and EvidenceBundle retain their separate retrieval, original snapshot boundaries, and external I/O order, as well as mainline diagnostic collection and Run replay protections. See [VALIDATION](VALIDATION.en.md) for post-merge and historical results.
 
 ## Retrieval configuration and diagnostics
 
@@ -56,7 +56,7 @@ This implementation is based on main `44e06df`. It checks analysis configuration
 
 ## Targeted local Run UI verification
 
-Local changes based on `01d4f82` distinguish preparation success, server-observed preparation failure, and client reports. Real Chromium verified Run → pinned v1 → source withdrawal, clicking an old reference again, and denial for another key. See [VALIDATION](VALIDATION.md) for exact scope. This is local verification. Remaining #76 requirements are open.
+Local changes based on `01d4f82` distinguish preparation success, server-observed preparation failure, and client reports. Real Chromium verified Run → pinned v1 → source withdrawal, clicking an old reference again, and denial for another key. See [VALIDATION](VALIDATION.en.md) for exact scope. This is local verification. Remaining #76 requirements are open.
 
 ## Next steps
 

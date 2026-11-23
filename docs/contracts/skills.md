@@ -56,7 +56,7 @@ tool permissions.
 Approved package export writes the Claude Code or Codex project layout after a fresh
 scope/version/source check; see [CLIENTS](../CLIENTS.en.md). Export is an explicit file
 copy. Managed loading, revocation of existing offline copies, and automatic candidate
-mining are not implemented. Current results belong in [VALIDATION](../VALIDATION.md).
+mining are not implemented. Current results belong in [VALIDATION](../VALIDATION.en.md).
 Private Run references retain the restrictions in the [Run contract](runs.md).
 
 ## Selected-experience drafting entry point

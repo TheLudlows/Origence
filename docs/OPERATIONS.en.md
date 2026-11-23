@@ -2,7 +2,7 @@
 
 **English** · [简体中文](OPERATIONS.md)
 
-Applies to a single host using SQLite as the authority, Blob storage, and AnySeek retrieval. Jump to [startup and credentials](#initialization-and-credentials) · [AnySeek](#anyseek-full-text-and-vector-retrieval) · [models](#local-embedding-service) · [failure recovery](#failures-and-recovery) · [backup](#backup-and-restore). See [STATUS](STATUS.en.md) and [VALIDATION](VALIDATION.md) for progress and tested boundaries.
+Applies to a single host using SQLite as the authority, Blob storage, and AnySeek retrieval. Jump to [startup and credentials](#initialization-and-credentials) · [AnySeek](#anyseek-full-text-and-vector-retrieval) · [models](#local-embedding-service) · [failure recovery](#failures-and-recovery) · [backup](#backup-and-restore). See [STATUS](STATUS.en.md) and [VALIDATION](VALIDATION.en.md) for progress and tested boundaries.
 
 ## Current scope
 
