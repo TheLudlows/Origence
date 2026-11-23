@@ -11,6 +11,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     "Node",
     "HTMLElement",
     "location",
+    "sessionStorage",
     "Event",
     "SubmitEvent",
     "matchMedia",
@@ -82,6 +83,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const searches = new Map();
   const catalogQueries = [];
   let overviewUnavailable = false;
+  let signedIn = false;
   let jobRetries = 0;
   let failMemory = true,
     unauthorized = false,
@@ -99,18 +101,23 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         status,
         headers: { "content-type": "application/json" },
       });
+    if (path.pathname === "/api/console/session") {
+      if (options.method === "POST") {
+        assert.deepEqual(body, { key: "disposable-fixture-key" });
+        signedIn = true;
+      }
+      if (options.method === "DELETE") signedIn = false;
+      return response({ mode: "key", session: signedIn && !unauthorized ? {
+        account: null,
+        binding: "fixture-session-binding",
+        workspaces: [{ id: ids.source, workspace_id: ids.asset, role: "admin", name: ids.asset }],
+      } : null });
+    }
     if (unauthorized)
       return response({ error: { message: "authentication required" } }, 401);
-    assert.equal(
-      options.headers.get("Authorization"),
-      "Bearer disposable-fixture-key",
-    );
-    if (path.pathname === "/api/v1/whoami")
-      return response({
-        id: ids.source,
-        workspace_id: ids.asset,
-        role: "admin",
-      });
+    assert.equal(options.headers.get("Authorization"), null);
+    assert.equal(options.headers.get("X-Origence-Workspace"), ids.asset);
+    assert.equal(options.headers.get("X-Origence-Session"), "fixture-session-binding");
     if (path.pathname === "/api/health/ready")
       return response({ status: "ready" });
     if (path.pathname === "/api/v1/runs/overview") {
@@ -385,6 +392,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   );
   await import("../dist/client/app.js");
   await t.test("login and real-scope overview", async () => {
+    await wait(() => document.querySelector("input[type=password]"));
     control("API key").value = "disposable-fixture-key";
     document.querySelector("form").requestSubmit();
     await wait(
@@ -414,7 +422,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     click("重试读取创建量", trend);
     await wait(() => trend.textContent.includes("新建运行 31 条"));
     assert.equal(window.localStorage.length, 0);
-    assert.equal(window.sessionStorage.length, 0);
+    assert.equal(window.sessionStorage.length, 1);
+    assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
   });
   await t.test(
     "memory form retries the same operation without silent version overwrite",

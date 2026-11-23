@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-23. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-23 · Local console accounts and workspace switching
+
+Base `b182b84ca4d1e73b32b931713280671f13cac974`. On Linux and Node 24.22.1, `npm run check`, `npm test` (25 tests), and `git diff --check` passed. Seven Chromium 156 checks covered account login, workspace switching on a narrow viewport, reload, sign-out, navigation, sources, knowledge ingestion, and Run reads. HTTP fixtures covered unauthorized workspaces, revoked grants, stale tab sessions, and key isolation between accounts.
+
+The real Origence HTTP server and Node console validated file-based account login, `whoami` for two temporary workspaces, session restoration, and sign-out with models disabled. The full `tools/ui_smoke.py` received a 502 while polling a publication job. The main-branch UI failed at the same step against the same backend and local AnySeek `6614bbf`. Rust 1.98.0 formatting and strict `local-storage` Clippy passed.
+
+After rebasing the account changes onto terminology commit `dfb2b2dbb59164cbe0f0cbc23bd515188e9ca329`, the UI rebuilt successfully and passed type checking and all 25 tests. Chromium verified the updated knowledge catalog heading after account login, workspace switching, and reload. The UI source and generated distribution were checked for legacy labels.
+
 ## 2026-11-23 · Memory, knowledge, and Skills terminology
 
 Base `b182b84ca4d1e73b32b931713280671f13cac974`. On Linux with Node 24.22.1, `npm run check` and all 22 `npm test` tests passed. Chromium 156 passed the knowledge-ingestion retry, keyboard navigation and focus, and narrow-screen touch emulation checks. Synthetic HTTP responses covered the catalogs, job receipts, and pinned-version details.

@@ -28,7 +28,9 @@ const upstream = createServer((req, res) => {
   if (req.headers.authorization !== "Bearer synthetic-owner")
     return send({ error: { message: "合成凭据无效" } }, 401);
   if (url.pathname === "/v1/whoami")
-    return send({ id: populated.run_id, workspace_id: empty.run_id, role: "reader" });
+    return pageFailure === 401
+      ? send({ error: { message: "合成凭据已撤销" } }, 401)
+      : send({ id: populated.run_id, workspace_id: empty.run_id, role: "reader" });
   if (url.pathname === "/v1/runs") return send(pageResult([populated, empty]));
   if (url.pathname === `/v1/runs/${populated.run_id}/verifications`) {
     verificationRequests++;

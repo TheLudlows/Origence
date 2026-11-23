@@ -9,11 +9,19 @@ export class ApiError extends Error {
 
 export class Api {
   private token = "";
+  private workspace?: string;
+  private sessionBinding?: string;
   private scope = new AbortController();
   setToken(token: string) {
+    this.setWorkspace();
+    this.token = token;
+  }
+  setWorkspace(workspace?: string, sessionBinding?: string) {
     this.scope.abort();
     this.scope = new AbortController();
-    this.token = token;
+    this.token = "";
+    this.workspace = workspace;
+    this.sessionBinding = sessionBinding;
   }
   async request<T>(
     path: string,
@@ -27,7 +35,10 @@ export class Api {
   ): Promise<T> {
     const { method = "GET", data, signal, key, blob } = options;
     const scope = this.scope;
-    const headers = new Headers({ Authorization: `Bearer ${this.token}` });
+    const headers = new Headers();
+    if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
+    if (this.workspace) headers.set("X-Origence-Workspace", this.workspace);
+    if (this.sessionBinding) headers.set("X-Origence-Session", this.sessionBinding);
     const binary = data instanceof Blob;
     if (data !== undefined)
       headers.set(
@@ -45,9 +56,10 @@ export class Api {
         data === undefined ? undefined : binary ? data : JSON.stringify(data),
       signal: requestSignal,
       cache: "no-store",
+      credentials: "same-origin",
     });
     requestSignal.throwIfAborted();
-    if (response.status === 401)
+    if (response.status === 401 && path !== "/console/session")
       window.dispatchEvent(new Event("origence:unauthorized"));
     if (!response.ok) {
       let message = `请求失败 (${response.status})`;
