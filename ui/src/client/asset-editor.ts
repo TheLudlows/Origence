@@ -124,7 +124,7 @@ export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
       body.append(
         empty(
           "此记忆尚未绑定身份",
-          "请创建明确的新身份；不能通过编辑替旧资产改绑身份。",
+          "若要使用明确的身份，请新建一条记忆。",
         ),
       );
       return;

@@ -70,7 +70,7 @@ async function testWidth(browser, origin, width, colorScheme) {
     await page.goto(origin + "/#knowledge");
     await page.getByLabel("API key").fill(token);
     await page.getByRole("button", { name: "连接工作空间" }).tap();
-    await page.getByRole("heading", { name: "没有匹配的资产" }).waitFor();
+    await page.getByRole("heading", { name: "没有匹配的知识" }).waitFor();
     await assertViewport(page, width);
     const logout = page.getByRole("button", { name: "退出", exact: true });
     sizes.logout = await targetSize(logout);

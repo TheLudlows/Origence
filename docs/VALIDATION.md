@@ -7,6 +7,12 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-23 · 记忆、知识和技能的名称
+
+基线 `b182b84ca4d1e73b32b931713280671f13cac974`。Linux、Node 24.22.1 下通过 `npm run check` 和 `npm test`（22 项）。Chromium 156 通过知识入库失败与重试、键盘导航与焦点、窄屏触控模拟三组回归。目录、任务回执和固定版本详情使用合成 HTTP 响应验证。
+
+Rust 1.98.0 下通过 `cargo fmt --all -- --check`、`cargo clippy --locked --no-default-features --features local-storage --all-targets -- -D warnings` 和 `cargo test --locked --no-default-features --features local-storage --test local mcp`（3 项），包括 MCP `context_get` 以 `asset_id` 读回记忆。核对了中英文 Run 契约链接和现有 HTTP 路径示例。
+
 ## 2026-11-23 · 本地与云上 AnySeek 构建
 
 Linux / Rust 1.98.0。默认构建通过 459 项 Rust 测试和嵌入式 CLI 发布、Run 回放及重启验证。云上构建使用 `--no-default-features --features local-storage`。Cargo 依赖树中未链接 AnySeek SDK，6 项常规 AnySeek 测试通过，包含缺少远端配置时拒绝启动和拒绝 `--local`。8 项独立 AnySeek 合同测试通过，真实服务的 HTTP 与 MCP 联验覆盖发布、固定版本读回和重启。

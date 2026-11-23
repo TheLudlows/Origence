@@ -116,7 +116,7 @@ Changing the embedding URL, model, or dimension does not rebuild old vectors. Us
 
 ## Offline memory identity check
 
-New native SQLite databases have the complete identity schema. Identities are recorded in oc_assets, and deleted assets retain their reservations. See [storage invariants](contracts/storage.en.md).
+New native SQLite databases have the complete identity schema. Identities are recorded in oc_assets, and deleted content items retain their reservations. See [storage invariants](contracts/storage.en.md).
 
 `identity-check` performs read-only, same-version validation of an existing database, including the format marker and complete authority schema. It does not create or repair tables.
 
@@ -168,7 +168,7 @@ Library callers specify an observation deadline via `wait_message_batch`. After 
 
 ## Retrieval stage diagnostics
 
-Set RUST_LOG=error,origence::search_timing=debug to log authorization_ms, embedding_ms, eligibility_ms, vector_ms, branches_ms, verification_ms, total_ms, and vector_batches/native_count/returned_count for successful searches. Logs omit queries, evidence, user and asset IDs, paths, and credentials. The default info level does not emit these debug events.
+Set RUST_LOG=error,origence::search_timing=debug to log authorization_ms, embedding_ms, eligibility_ms, vector_ms, branches_ms, verification_ms, total_ms, and vector_batches/native_count/returned_count for successful searches. Logs omit queries, evidence, user and content item IDs, paths, and credentials. The default info level does not emit these debug events.
 
 branches_ms covers candidate loading, fusion, and enabled auxiliary branches. verification_ms measures the final fresh authorization snapshot and identity check. total_ms covers the period after input validation through part of result serialization. It excludes outer HTTP encoding and network time. Measure end-to-end HTTP latency separately. Failures and early returns for unknown identities produce no completion event, so these events cannot measure error rates. This change adds timing only and preserves Worker, timeout, cancellation, shutdown, isolation, and read-permission guarantees.
 

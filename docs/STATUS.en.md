@@ -44,7 +44,7 @@ Local relational data and durable jobs use only rusqlite and bundled SQLite. The
 
 ## #76 Related Runs local implementation
 
-Synced with main `f62168b` (#81 SQLite). Asset details can read Run references recorded by the current logical key for a specific asset version. The bounded index commits with events. Reads recheck authoritative references, asset, source, and ownership and return no Run body. Pinned v1 round trips, isolation from another administrator, withdrawal, pagination, and reopening are verified in [VALIDATION](VALIDATION.en.md). The index retains proof of the first reference and does not establish complete collection or trace readability. The new schema is fresh-only and rejects legacy databases without migrating them. The change merged in #83. Subsequently #99 added PDF page text locators, and #100 added Run creation counts and trends.
+Synced with main `f62168b` (#81 SQLite). Content details can read Run references recorded by the current logical key for a specific content item version. The bounded index commits with events. Reads recheck authoritative references, content item, source, and ownership and return no Run body. Pinned v1 round trips, isolation from another administrator, withdrawal, pagination, and reopening are verified in [VALIDATION](VALIDATION.en.md). The index retains proof of the first reference and does not establish complete collection or trace readability. The new schema is fresh-only and rejects legacy databases without migrating them. The change merged in #83. Subsequently #99 added PDF page text locators, and #100 added Run creation counts and trends.
 
 ## Retrieval module separation (merged in PR #79)
 
@@ -65,7 +65,7 @@ Local changes based on `01d4f82` distinguish preparation success, server-observe
 
 ## Scope and evidence
 
-Targets newly created databases. Same-version durability, restart and retry, and backup/restore remain required. Original sessions, Runs, and unpublished candidates are private to their logical key. Workspace membership grants no access to another key's original archive. Published long-term assets are reusable by authorized members in the same workspace while supporting sources remain valid. Private session evidence can limit Skill review or distribution to other keys. See the [Run contract](contracts/runs.md). The first workspaces use uniform membership scope. Enterprise identity and per-document ACLs are not implemented. The platform supports archiving and query without restoring a client's work environment. Publishing a Skill conveys no tool execution permission.
+Targets newly created databases. Same-version durability, restart and retry, and backup/restore remain required. Original sessions, Runs, and unpublished candidates are private to their logical key. Workspace membership grants no access to another key's original archive. Authorized members in the same workspace can reuse published memory, knowledge, and Skills while supporting sources remain valid. Private session evidence can limit Skill review or distribution to other keys. See the [Run contract](contracts/runs.md). The first workspaces use uniform membership scope. Enterprise identity and per-document ACLs are not implemented. The platform supports archiving and query without restoring a client's work environment. Publishing a Skill conveys no tool execution permission.
 
 ## Local Windows development launcher
 

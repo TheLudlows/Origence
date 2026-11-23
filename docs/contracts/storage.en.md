@@ -38,10 +38,10 @@ Parse AnySeek payload outside transactions and compare chunk hash and full locat
 
 ## Identity reservations
 
-- `oc_assets.identity_key` and `identity_json` are both null or both present on a memory asset. `oc_memory_identity_slot` enforces uniqueness across complete scope and preserves reservations after deletion.
+- `oc_assets.identity_key` and `identity_json` are both null or both present on a memory entry. `oc_memory_identity_slot` enforces uniqueness across complete scope and preserves reservations after deletion.
 - `fact_key` is a separate fact slot. Normal structured writes set it to the same canonical identity key, but the two columns cannot be merged, and legacy fact_key is not a full identity.
-- Identity stays bound to the asset. Historical restore does not change it, and deletion does not release the reservation.
-- A selected structured identity must validate type, application fields, canonical key, and text consistency. Corruption is not repaired. Check identity mismatch before tombstones so inconsistent assets do not look like ordinary deletion conflicts. Corrupt structured identity is Unavailable. Native column type errors remain Backend. Absence of an identity means unbound.
+- Identity stays bound to the content item. Historical restore does not change it, and deletion does not release the reservation.
+- A selected structured identity must validate type, application fields, canonical key, and text consistency. Corruption is not repaired. Check identity mismatch before tombstones so inconsistent content items do not look like ordinary deletion conflicts. Corrupt structured identity is Unavailable. Native column type errors remain Backend. Absence of an identity means unbound.
 - Exact identity lookup depends on the schema-guaranteed `oc_memory_identity_slot` index. No silent fallback if it is missing. Combine batched reads in the same transaction without replacing them with row-by-row queries.
 
 ## Independent lifecycles
@@ -49,20 +49,20 @@ Parse AnySeek payload outside transactions and compare chunk hash and full locat
 | Object | Semantics to preserve |
 | --- | --- |
 | Original event / Blob | Immutable input, file bytes, and independent source withdrawal |
-| Asset / version | Stable asset identity, current version pointer, and append-only historical text |
+| Content item / version | Stable content item identity, current version pointer, and append-only historical text |
 | Command / job | Call idempotency, async work, cancel/retry, and creator reauthorization |
 | artifact owner | Exact source/version ownership of an artifact. Shared artifacts may have multiple owners. |
 | index entry | Index readiness and dimension for artifact, field, profile, and generation |
 | publication ledger | External publication status and recovery identity for source, version, surface, and generation |
 | Private session / Run / Skill | Logical-key ownership, immutable events and revisions, review permissions, and published versions |
 
-`index entry` and `publication ledger` have distinct keys, states, and lifecycles. They cannot substitute for each other. ready plus committed does not establish visibility. Reads still check permissions, current asset version, sources, owner, and semantic snapshot or Learning supports. Job generation, business version, model profile, and execution run_token are independent identities.
+`index entry` and `publication ledger` have distinct keys, states, and lifecycles. They cannot substitute for each other. ready plus committed does not establish visibility. Reads still check permissions, current content item version, sources, owner, and semantic snapshot or Learning supports. Job generation, business version, model profile, and execution run_token are independent identities.
 
 All publication paths generate text and summary terms once in a blocking task outside transactions and freeze them with the plan. Retry must reuse original terms. Missing fields mean a corrupt plan and do not trigger tokenization. Persist the complete plan and pending ledger first, then write text, summary, locators, and indexes to the same AnySeek Record outside the transaction and revalidate and commit authoritatively. Prepared MessageBatch plans persist with a lightweight receipt digest. Same-generation recovery reuses the plan and verifies the digest. Missing or corrupt data fails explicitly. The digest neither replaces actual index and ledger checks nor rescans all vectors. Job attempts and error text remain with the queue, and the job controls retry limits and execution fencing.
 
 ## Sources and validity
 
-Preserve historical locators, parser markers, pages, UTF-8 byte ranges, model provenance, and original support sources. Asset version, original source version, and root source of the snapshot are separate. Never reinterpret historical offsets using the current parser. Withdrawal blocks reads in authority first and then cleans projections. Logical removal does not erase bytes.
+Preserve historical locators, parser markers, pages, UTF-8 byte ranges, model provenance, and original support sources. Content item version, original source version, and root source of the snapshot are separate. Never reinterpret historical offsets using the current parser. Withdrawal blocks reads in authority first and then cleans projections. Logical removal does not erase bytes.
 
 All relation composition follows the single-table reads and same-transaction Rust rules in [AGENTS](../../AGENTS.md#sql-query-constraints). Model, parsing, files, and remote index I/O run outside the authority transaction. Recheck authorization before return and commit.
 

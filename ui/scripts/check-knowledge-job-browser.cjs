@@ -121,14 +121,14 @@ async function scenario(browser, initialState, run) {
     const scenarioName = process.argv[2];
     if (!scenarioName || scenarioName === "retry") await scenario(browser, "failed", async ({ page, dialog, complete }) => {
       await dialog.getByText("synthetic_error", { exact: true }).waitFor();
-      await dialog.getByRole("button", { name: "读取当前资产" }).click();
+      await dialog.getByRole("button", { name: "读取当前版本" }).click();
       await dialog.getByText(`当前已发布 v1 · ${oldTitle}`, { exact: true }).waitFor();
       await dialog.getByRole("button", { name: "重试任务" }).press("Enter");
       await dialog.getByText("pending", { exact: true }).waitFor();
       complete();
       // There is no manual refresh: retry must resume polling until the server publishes.
       await dialog.getByText("completed", { exact: true }).waitFor();
-      await dialog.getByRole("button", { name: "查看资产 →", exact: true }).click();
+      await dialog.getByRole("button", { name: "查看内容 →", exact: true }).click();
       await page.getByRole("heading", { name: newTitle }).waitFor();
       await page.getByRole("tabpanel", { name: "正文" }).getByText(newContent, { exact: true }).waitFor();
       await dialog.waitFor({ state: "detached" });

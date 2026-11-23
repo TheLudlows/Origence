@@ -258,7 +258,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
       const response = page.waitForResponse((r) => r.url().includes('kind=knowledge'));
       releaseKnowledge();
       await response;
-      await page.getByText('没有匹配的资产', { exact: true }).waitFor();
+      await page.getByText('没有匹配的知识', { exact: true }).waitFor();
       assert.equal(await query.evaluate((node) => node === document.activeElement), true);
       assert.equal(await query.inputValue(), '持续输入');
 

@@ -4,6 +4,12 @@
 
 The latest local verification was 2026-11-23. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-23 · Memory, knowledge, and Skills terminology
+
+Base `b182b84ca4d1e73b32b931713280671f13cac974`. On Linux with Node 24.22.1, `npm run check` and all 22 `npm test` tests passed. Chromium 156 passed the knowledge-ingestion retry, keyboard navigation and focus, and narrow-screen touch emulation checks. Synthetic HTTP responses covered the catalogs, job receipts, and pinned-version details.
+
+On Rust 1.98.0, `cargo fmt --all -- --check`, `cargo clippy --locked --no-default-features --features local-storage --all-targets -- -D warnings`, and `cargo test --locked --no-default-features --features local-storage --test local mcp` passed (3 tests). This covered reading a memory through MCP `context_get` with `asset_id`. The bilingual Run contract links and existing HTTP route examples were also checked.
+
 ## 2026-11-23 · Local and cloud AnySeek builds
 
 Linux / Rust 1.98.0. The default build passed 459 Rust tests plus embedded CLI publication, Run replay, and restart checks. The cloud build uses `--no-default-features --features local-storage`. Its Cargo dependency tree excludes the AnySeek SDK. All 6 normal AnySeek tests passed, including refusing to start without remote settings and rejecting `--local`. All 8 standalone AnySeek contract tests passed. Real HTTP and MCP covered publication, pinned-version readback, and restart.

@@ -4,7 +4,7 @@
 
 This contract defines the public-library/SQLite workflow. A reported successful
 outcome does not independently establish that a method works. A client supplies a
-draft derived from authorized, exact asset versions or immutable private Run
+draft derived from authorized, exact content item versions or immutable private Run
 prefixes. No operation auto-publishes.
 
 ## Contract
@@ -63,7 +63,7 @@ Private Run references retain the restrictions in the [Run contract](runs.md).
 
 The independent [Skill CLI](../SKILL-CANDIDATE-CLI.md) deterministically prefills a
 private editable candidate from one explicitly selected fixed Run prefix or exact
-asset/Learning version plus owner-confirmed disclosed prose. It reuses existing
+memory, knowledge, or Learning version plus owner-confirmed disclosed prose. It reuses existing
 candidate/review/publication endpoints. Selected basis is revision-bound in a
 private notes envelope; submitting a different basis for that envelope conflicts
 until the owner appends a candidate revision. No private supports are auto-copied,

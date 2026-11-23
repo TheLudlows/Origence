@@ -137,7 +137,7 @@ async function render() {
     focusRoute(error);
     return;
   }
-  const title = pages.find(([key]) => key === page)?.[2] ?? "资产详情";
+  const title = pages.find(([key]) => key === page)?.[2] ?? "内容详情";
   const nav = el("nav");
   nav.setAttribute("aria-label", "主导航");
   for (const [key, icon, label] of pages) {

@@ -123,7 +123,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
       el(
         "p",
         "muted",
-        "Origence 展示服务端准备回执和客户端显式上报。没有上报的模型、工具与客户端活动保持未知。共享资产不公开他人的私有会话或 Run。",
+        "Origence 展示服务端准备回执和客户端显式上报。没有上报的模型、工具与客户端活动保持未知。已发布的记忆、知识和技能按授权共享，私有会话和 Run 按各自的逻辑 key 隔离。",
       ),
     ),
   );

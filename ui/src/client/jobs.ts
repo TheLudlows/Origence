@@ -53,7 +53,7 @@ export async function trackJob(
         job.result?.memories?.[0]?.asset_id;
       if (asset && job.state === "completed")
         state.append(
-          button("查看资产 →", () => ctx.navigate("asset", asset), "link"),
+          button("查看内容 →", () => ctx.navigate("asset", asset), "link"),
         );
       if (asset && ["failed", "cancelled", "superseded"].includes(job.state)) {
         const current = el("div");
@@ -61,15 +61,15 @@ export async function trackJob(
           el(
             "p",
             "muted",
-            "任务状态不代表当前资产版本。重新读取以确认仍可访问的已发布内容。",
+            "此前发布的版本可能仍可读取。",
           ),
-          button("读取当前资产", async () => {
+          button("读取当前版本", async () => {
             try {
               const latest = await api.get<Asset>(`/v1/assets/${asset}`, ctx.signal);
               current.replaceChildren(
                 el("p", "", `当前已发布 v${latest.version} · ${latest.title}`),
                 button(
-                  "查看当前资产 →",
+                  "查看当前版本 →",
                   () => ctx.navigate("asset", asset),
                   "link",
                 ),

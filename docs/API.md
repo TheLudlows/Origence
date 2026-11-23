@@ -124,25 +124,27 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | reader | 已发布内容 get/search/resolve |
 | writer | reader + 上传/原文件下载/知识入库/结构化记忆发布/capture/会话归档与反馈/任务查询；取消、重试自己任务 |
 | reviewer | writer + 版本恢复/操作其他主体任务 |
-| admin | reviewer + 资产删除/来源撤回/文件删除/失败清理任务重试 |
+| admin | reviewer + 内容条目删除/来源撤回/文件删除/失败清理任务重试 |
 
 原始文件和任务可能涉及未发布数据，reader 不能读取。记忆与 capture 由 writer 授权直接发布，发布任务提交时重新核验权限与来源。
 
 ## 接口
 
+本节的「内容条目」指可单独读取和版本化的记忆或知识，通过 `asset_id` 标识。已发布 Skill 使用独立接口。
+
 ### 管理界面只读目录
 
 - `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`：reader 以上，
-  workspace 来自认证；按资产 UUID 升序扫描当前已发布、未删除的候选，逐条复用
-  普通资产读取的完整来源/语义/可见性检查。返回 `{items,next_after}`，items 仅为
-  资产元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
+  workspace 来自认证；按 `asset_id` 升序扫描当前已发布、未删除的候选，逐条复用
+  读取单条内容时采用的完整来源、语义和可见性检查。返回 `{items,next_after}`，items 仅为
+  内容条目元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
 - `GET /v1/runs?limit=25&after=<UUID>`：reader 以上，只返回当前逻辑 key 的 Run
   ID、脱敏 summary 与创建时间，不授予管理员读取其他 key 私有记录的权限。
   获授权的凭据轮换延续逻辑身份；响应含 `scope:"current_logical_key"`。
 
 两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
 按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
-资产页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
+目录页可能因来源失效而少于 limit，甚至为空；只要 next_after 非 null 仍可继续。
 分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
 
 运行总览使用独立的 `GET /v1/runs/overview?window=24h|7d`，默认 `24h`。
@@ -165,16 +167,16 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 - `predicate` 可省略；提供时按现有身份规范校验并精确匹配。
 - `context` 可省略表示不限；提供时比较完整字符串键值集合，键顺序无关，大小写/Unicode
   原样比较。`{}` 只匹配空条件，不是通配符，也不是子集条件。
-- `identified` 可省略表示不限，`true` 只匹配已保存的显式身份，`false` 只匹配无身份资产；
+- `identified` 可省略表示不限，`true` 只匹配已保存的显式身份，`false` 只匹配无身份内容条目；
   `false` 不能同时指定主体/属性/条件。未知身份不会推断。未知字段或非法组合拒绝。
 - 仅 `kind=memory` 接受此字段，JSON 字符串最大 16,384 字节。
 
 筛选目录仍是实时、有界的候选游标接口，而不是全量计数：单次按 scoped 主键从 after
 检查最多 100 个候选（另取一个 lookahead），包含非记忆、未发布或隐藏候选；在返回前
-完成精确筛选及正常资产来源/语义可见性复核。`limit` 是返回上限；可能少于 limit 或为空，
+完成精确筛选及记忆条目的来源和语义可见性复核。`limit` 是返回上限；可能少于 limit 或为空，
 只要 `next_after` 非 null 就应继续，变更筛选须清空游标。不会为凑满一页无限扫描。
 未指定 `memory_filter` 的既有目录行为不变。记忆 UI 通过此服务端筛选分页，不以本页
-文本过滤或搜索命中冒充目录；知识页的“筛选已加载的资产”仍明确是本地筛选。
+文本过滤或搜索命中冒充目录；知识页的“筛选已加载的知识”仍明确是本地筛选。
 
 Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打开数据库或执行 CLI。
 
@@ -182,12 +184,12 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | --- | --- |
 | `GET /health/live` | 进程存活，无鉴权 |
 | `GET /health/ready` | 单 Worker 正在运行且本地存储检查通过；不是外部模型健康检查 |
-| `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ asset/source/job 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
-| `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → asset/source/job；同 scope 下相同身份复用资产；`conflict` 表示已有版本 |
-| `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与资产 GET 相同的当前已发布视图；不需要 Idempotency-Key，不创建资产 |
+| `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ `asset_id` / `source_event_id` / `job_id` 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
+| `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`；同 scope 下相同身份复用内容条目；`conflict` 表示已有版本 |
+| `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与 `GET /v1/assets/{id}` 相同的当前已发布视图；不需要 Idempotency-Key，不创建内容条目 |
 | `POST /v1/captures/semantic` | `{content,targets:[{identity,expected_version,allow_update:false}]}` → source/job；受限模型分类并复用 记忆语义，详见下节 |
 | `POST /v1/captures` | `{content}` → source/job；抽取结果逐条直接发布，结果见任务 `result.memories` |
-| `POST /v1/captures/identified` | `{identity,content}` → asset/source/job；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |
+| `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
 | `POST /v1/files?name=...&format=...` | 原始二进制请求体，非 multipart；返回 file_id；文件名仅作元数据 |
 | `GET /v1/files/{id}` | 校验 hash 后返回 attachment/octet-stream，存储路径由 scope 和内容 hash 生成 |
@@ -199,7 +201,7 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `DELETE /v1/files/{id}` | 阻断原文件，撤回所有引用该文件的事件 |
 | `GET /v1/jobs/{id}` | 操作/状态/生成/结果/错误代码 |
 | `POST /v1/jobs/{id}/cancel` | 标记 cancelled，增加 generation/run_token，旧执行不能提交；已完成任务不能取消，cleanup 不能取消 |
-| `POST /v1/jobs/{id}/retry` | 仅 failed/cancelled 且来源、资产仍有效；新 generation 原子入队；cleanup 重试需 admin |
+| `POST /v1/jobs/{id}/retry` | 仅 failed/cancelled 且来源、内容条目仍有效；新 generation 原子入队；cleanup 重试需 admin |
 | `POST /v1/sessions/{session_id}/turns` | `{turn_id,question,answer,used_evidence:[]}` → 同步归档标识；writer 及以上，详见会话归档节 |
 | `GET /v1/sessions/{session_id}/turns/{turn_id}` | writer 及以上读取完整有效问答、归档引用与反馈 |
 | `POST /v1/sessions/{session_id}/turns/{turn_id}/feedback` | `{feedback_id,target,rating,comment?}` → 同步记录标识；不调权、不触发模型 |
@@ -221,11 +223,11 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 
 ## 版本冲突
 
-更新受理时记录资产当前版本，Worker 提交前复核；期间发生其他发布则任务为 superseded，不覆盖先发布的版本，应重新读取后再提交。发布计划/账本保证重放不重复发布。显式身份入口还支持[调用方版本前置条件](#显式写入的调用方版本前置条件)。
+更新受理时记录内容条目当前版本，Worker 提交前复核；期间发生其他发布则任务为 superseded，不覆盖先发布的版本，应重新读取后再提交。发布计划/账本保证重放不重复发布。显式身份入口还支持[调用方版本前置条件](#显式写入的调用方版本前置条件)。
 
 ## 任务与读取可见性
 
-`pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 asset/version。之后仍可能被更新、删除或来源撤回。
+`pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 `asset_id` 和 `version`。之后仍可能被更新、删除或来源撤回。
 
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
 
@@ -240,7 +242,7 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 返回 hits 含 asset_id/version/chunk_id/source_event_id/locator/score。locator 给出原文 UTF-8 字节区间、行号，PDF 另有页号。只取当前已发布版本，显式历史版本走 get。
 
 私有 Run 的固定 PDF 引用可用 `GET /v1/runs/{id}/pdf-source?sequence=N&evidence_ref_id=UUID`
-读取已核对的页内提取文本。该接口要求 Run 所有权和现有原件权限，返回精确资产版本、
+读取已核对的页内提取文本。该接口要求 Run 所有权和现有原件权限，返回精确内容条目版本、
 已知页码及可验证的文本片段，或明确无页内定位。`original=true` 获取该引用的原件。
 详情见 [Run 契约](contracts/runs.zh-CN.md#私有-run-的-pdf-页预览)。
 
@@ -270,9 +272,9 @@ search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默
 
 subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定标识，不是 API key 主体。身份包含鉴权 scope、主体、predicate 和排序后的 context，不包含内容或版本。未知字段拒绝，predicate 采用小写 ASCII 命名；条件值按原样比较，不做别名或语义归一化。相同身份追加版本；不同主体、条件或 workspace 分开。并发写入沿用 expected_version 乐观冲突检查，最终状态以 job 为准。
 
-资产读取增加 `identity` 字段；旧记忆/知识为 null。身份绑定资产且不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的资产，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
+内容条目读取增加 `identity` 字段；旧记忆/知识为 null。记忆条目的身份绑定不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的内容条目，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
 
-lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何资产/来源/任务。缺失身份表不是合法的未命中或空结果。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
+lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何内容条目/来源/任务。缺失身份表不是合法的未命中或空结果。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
 
 新建库始终包含完整身份 schema；启动拒绝缺表或不兼容库，不提供缺表时仅开放旧接口的降级模式，也不自动安装或升级。只读检查步骤见 [OPERATIONS](OPERATIONS.md#离线记忆身份检查)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索，CLI 默认不带该过滤。
 
@@ -280,19 +282,19 @@ lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精�
 
 `/v1/captures/identified` 接受与显式记忆写入相同的 `{identity,content}`；content 是待抽取原文。身份完全来自调用方，scope 来自 key，模型不能指定主体、属性、条件或 workspace。受理时记录当前 expected_version，抽取期间发生其他发布会沿现有版本治理 supersede，不能覆盖较新版本。未配置抽取模型时返回 503；缺失身份 schema 的库在启动时拒绝打开。
 
-模型输出必须提供原文精确 quote 和 UTF-8 byte_start/byte_end，服务器校验边界和内容一致；发布正文就是该原文片段，search locator 的 source_span=true 标明区间指向来源原文。重复相同 quote 合并；多个不同 quote 视为单身份歧义，任务 failed/INVALID_ARGUMENT，不更新版本。零片段完成且 result.memories=[]，受理时预留的资产可能仍无已发布版本。来源事件保留原始输入。
+模型输出必须提供原文精确 quote 和 UTF-8 byte_start/byte_end，服务器校验边界和内容一致；发布正文就是该原文片段，search locator 的 source_span=true 标明区间指向来源原文。重复相同 quote 合并；多个不同 quote 视为单身份歧义，任务 failed/INVALID_ARGUMENT，不更新版本。零片段完成且 result.memories=[]，受理时预留的内容条目可能仍无已发布版本。来源事件保留原始输入。
 
 此切片不做自动主体推断、别名归一化、任意语义归并或多值属性合并。原文区间验证证明可追溯性，不能证明模型的语义选择或事实真假；否定/提议识别仍依赖模型，需真实评估。原有 capture 接口保持旧 fact_key 模型。
 
 ## 身份状态与来源核验
 
-资产 get 增加 normalization_status：记忆有显式身份绑定时为 explicit_identity；记忆语义/受控提取 保留的冲突、否定、提议和歧义证据为 unnormalized；旧 fact_key 记忆为 legacy_unidentified；知识资产为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一资产身份。旧记忆不会因该字段被自动归一化。
+`GET /v1/assets/{id}` 返回 normalization_status：记忆有显式身份绑定时为 explicit_identity；记忆语义/受控提取 保留的冲突、否定、提议和歧义证据为 unnormalized；旧 fact_key 记忆为 legacy_unidentified；知识条目为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一内容条目身份。旧记忆不会因该字段被自动归一化。
 
-writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。记忆语义 已提供未归一化资产的独立状态；自动身份归并尚未实现。
+writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。记忆语义 已提供未归一化记忆的独立状态；自动身份归并尚未实现。
 
 ## 检索与上下文身份标注
 
-search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用资产读取含义；完整身份取自 SQLite 资产绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
+search 的每个 hit 增加 identity（无绑定为 null）与 normalization_status（explicit_identity/unnormalized/legacy_unidentified/not_applicable），沿用内容条目读取含义；完整身份取自 SQLite 内容条目绑定，不接受模型或向量库宣称的身份。返回前仍复核当前版本、scope 与来源。
 
 resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normalization_status，context_policy=identity-provenance-v1；图引用格式不变。引用/标题/标注/正文均计入字节预算，整块保留或省略，因此标注可能减少正文容量。状态只表示身份绑定，不表示真值、有效期或置信度；冲突识别和类型预算未实现。
 
@@ -300,11 +302,11 @@ resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normali
 
 search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,context:{}}`，省略时沿用混合检索。启用后只保留当前 scope 内完整身份精确相同的 memory；排除旧未识别记忆、知识块和图扩展。字段在模型调用前校验，不接受别名/语义近似/部分条件匹配；未知字段拒绝，非法身份 422，未命中为空结果。身份不替代鉴权，结果仍受当前版本、来源和墓碑规则约束。完整当前 schema 中没有显式绑定则不匹配；缺失身份表属于存储错误，不作为空结果返回，也不自动升级。
 
-完整身份先定位授权资产，keyword/vector 候选限定于该资产后排序和截断，最终重新校验版本、来源、墓碑及权限。无身份查询仍有各分支候选上限；身份限定不保证语义召回。只需定位当前资产时用 lookup。响应回显 memory_identity，resolve 透传过滤；HTTP/MCP 支持，CLI 默认不带过滤。
+完整身份先定位授权内容条目，keyword/vector 候选限定于该内容条目后排序和截断，最终重新校验版本、来源、墓碑及权限。无身份查询仍有各分支候选上限；身份限定不保证语义召回。只需定位当前内容条目时用 lookup。响应回显 memory_identity，resolve 透传过滤；HTTP/MCP 支持，CLI 默认不带过滤。
 
 ## 显式写入的调用方版本前置条件
 
-memories/identified 和 captures/identified 可选 expected_version（非负整数）。0 表示当前尚无已发布版本（可能已有未发布占位资产）；正数必须与受理事务中当前版本相同。不匹配返回 409，事务回滚且不新建来源或任务；负数 422。省略或 null 保持按受理时版本追加的旧行为，不是“必须创建”。
+memories/identified 和 captures/identified 可选 expected_version（非负整数）。0 表示当前尚无已发布版本（可能已有未发布占位内容条目）；正数必须与受理事务中当前版本相同。不匹配返回 409，事务回滚且不新建来源或任务；负数 422。省略或 null 保持按受理时版本追加的旧行为，不是“必须创建”。
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
 
@@ -344,7 +346,7 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 }
 ~~~
 
-content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开区间。最多 32 条 statement/集合成员，value 为 1–256 字节且无边界空白/控制字符，quote 最多 8192 字节；content 继续受既有文本限制。值以精确字符串区分，不自动折叠同义词或 Unicode。identity 的完整稳定主体、属性及条件共同定位资产；必需条件缺失或属性未登记返回 422。
+content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开区间。最多 32 条 statement/集合成员，value 为 1–256 字节且无边界空白/控制字符，quote 最多 8192 字节；content 继续受既有文本限制。值以精确字符串区分，不自动折叠同义词或 Unicode。identity 的完整稳定主体、属性及条件共同定位内容条目；必需条件缺失或属性未登记返回 422。
 
 | operation | 行为 |
 | --- | --- |
@@ -359,9 +361,9 @@ content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开�
 
 不确定证据在 search/resolve/get 标为 normalization_status=unnormalized，locator.semantic_status 为 proposed/negated/ambiguous/conflict；建议身份仅在 locator.suggested_identity 中，不被当作绑定身份。确定事实保留 explicit_identity 标记。精确 memory_identity 检索不会包含建议身份证据。
 
-语义 locator 使用 parser=memory-semantics:v1，包含 semantic_value、原始 source_event_id/source_version、byte_basis=source_utf8、byte_start/end 和完整 support_sources。SearchHit.source_event_id 指向该 quote 的原始事件；hit.version 是当前资产快照版本，原始来源版本看 locator.source_version。get/lookup 的 semantic_values 列出各成员的来源，不把快照 content 的拼接偏移当作原文偏移。
+语义 locator 使用 parser=memory-semantics:v1，包含 semantic_value、原始 source_event_id/source_version、byte_basis=source_utf8、byte_start/end 和完整 support_sources。SearchHit.source_event_id 指向该 quote 的原始事件；hit.version 是当前内容条目快照版本，原始来源版本看 locator.source_version。get/lookup 的 semantic_values 列出各成员的来源，不把快照 content 的拼接偏移当作原文偏移。
 
-多值采用整快照有效性：任一支持来源或本次操作来源撤回，整个快照立即退出 search/resolve/get/lookup，不回退历史。后续显式 supplement 可从仍有效的成员重建新版本；这种修复即使值重复也会产生发布任务。若撤回的是当前快照自身的发布来源，既有清理会移除该版 chunk；后续写入必须重新提供要保留的事实，不从历史自动补回。通用 restore 禁止恢复语义资产，应提交新的语义写入。旧版本原文与定位不改写。此规则偏保守，不代表逐成员独立发布或自动恢复。
+多值采用整快照有效性：任一支持来源或本次操作来源撤回，整个快照立即退出 search/resolve/get/lookup，不回退历史。后续显式 supplement 可从仍有效的成员重建新版本；这种修复即使值重复也会产生发布任务。若撤回的是当前快照自身的发布来源，既有清理会移除该版 chunk；后续写入必须重新提供要保留的事实，不从历史自动补回。通用 restore 禁止恢复语义记忆，应提交新的语义写入。旧版本原文与定位不改写。此规则偏保守，不代表逐成员独立发布或自动恢复。
 
 ## 对话语义捕获
 
@@ -384,7 +386,7 @@ content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开�
 
 首先由 admin 注册相应属性目录。每个 target 的属性必须已注册且包含所有必需条件；expected_version 必填，0 表示无已发布版本。受理时检查所有目标的版本，任一不匹配即返回 409，且不创建来源或任务。相同身份不能重复列入 targets。allow_update 默认 false，只能为单值属性打开；即便打开，也只在模型分类为明确 update 时生效。模型把不同值分类为 assert 时，仍保留为 conflict 证据。
 
-受理后不持续锁定整个 targets 列表：进入记忆语义的确定性候选在路由时核对所用目标版本；计划保存后，Worker 在重试/恢复及最终提交前复核实际路由资产的版本、来源与可见性，包含 duplicate 结果是否仍为有效当前事实。未被候选使用的 target，以及未归一化证据仅作为 suggested_identity 保留的目标，不作为最终提交的身份版本前置条件。否定、提议、歧义和未获 allow_update 授权而降级的 update 不更新建议身份；确定性 assert 路由为 conflict 前仍检查目标版本，之后独立发布 conflict 证据。实际确定事实版本竞争失败时，整个任务 superseded，不部分发布。
+受理后不持续锁定整个 targets 列表：进入记忆语义的确定性候选在路由时核对所用目标版本；计划保存后，Worker 在重试/恢复及最终提交前复核实际路由到的记忆条目的版本、来源与可见性，包含 duplicate 结果是否仍为有效当前事实。未被候选使用的 target，以及未归一化证据仅作为 suggested_identity 保留的目标，不作为最终提交的身份版本前置条件。否定、提议、歧义和未获 allow_update 授权而降级的 update 不更新建议身份；确定性 assert 路由为 conflict 前仍检查目标版本，之后独立发布 conflict 证据。实际确定事实版本竞争失败时，整个任务 superseded，不部分发布。
 
 content 上限 64 KiB UTF-8，最多 20 个 targets；空 targets 合法，但所有结果只能是未归一化证据。模型输出最多 20 个候选、总计 32 个 statements，每个非空目标最多一个候选（冲突 statements 合并在同一候选中）。引用上限 8192 字节、value 上限 256 字节、集合最终上限 32 成员。模型只能返回目标索引/null、operation 和带精确原文区间的 statements；未知字段、重复目标、非法区间或超限导致整批失败，不部分发布。调用参数错误返回 422，版本/幂等冲突返回 409，模型未配置返回 503；受理后的模型失败记入 job，不在错误响应或日志中输出原文/模型诊断。
 
@@ -418,10 +420,10 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 ```
 
 - question、answer 均须非空白，各不超过 65,536 UTF-8 字节。used_evidence 必填，显式 `[]` 表示未使用证据；缺省不是空数组。最多 64 条，不接受完全相同的重复引用。只提交实际用于回答的子集。
-- 引用 kind 为 chunk/entity/relation。chunk 的 id 必须等于 chunk_id；图引用的 id 是实体/关系 ID，chunk_id 由调用方选择为该次实际使用的支持片段。asset_version 是正整数的精确历史资产版本，不是当前版本别名。
-- 服务端核验片段、资产版本、根来源、所有记忆语义快照支持来源与所属 scope。图引用还需匹配 kind/id/根来源/版本的 owner 和 committed graph ledger。当前图所有权是来源/版本级；所选片段必须属于同一支持来源/版本，本接口不声称已有逐片段图抽取对齐证明。
+- 引用 kind 为 chunk/entity/relation。chunk 的 id 必须等于 chunk_id；图引用的 id 是实体/关系 ID，chunk_id 由调用方选择为该次实际使用的支持片段。asset_version 是正整数的精确历史内容条目版本，不是当前版本别名。
+- 服务端核验片段、内容条目版本、根来源、所有记忆语义快照支持来源与所属 scope。图引用还需匹配 kind/id/根来源/版本的 owner 和 committed graph ledger。当前图所有权是来源/版本级；所选片段必须属于同一支持来源/版本，本接口不声称已有逐片段图抽取对齐证明。
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
-- GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该资产快照根来源，reference.asset_version 是实际使用的资产版本，三者不能互相替代。
+- GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该内容条目快照根来源，reference.asset_version 是实际使用的内容条目版本，三者不能互相替代。
 
 归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执，任一引用失败则回滚。
 
@@ -437,7 +439,7 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 
 rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
 
-治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的资产删除、根来源撤回、记忆语义 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；显式学习入口见下节 Improve → Learning。逻辑撤回保留原始持久化记录，不等于物理擦除。
+治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的内容条目删除、根来源撤回、记忆语义 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；显式学习入口见下节 Improve → Learning。逻辑撤回保留原始持久化记录，不等于物理擦除。
 
 ## 显式 Improve → Learning
 
@@ -449,11 +451,11 @@ rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断�
 
 反馈使用 workspace 内事务分配的单调 feedback_sequence，身份仍是 tenant/workspace/principal/feedback_id。时间戳相同或回退不影响批次。每次冻结最多 32 条反馈、128 KiB JSON 输入；首条过大报错，不消费水位。提议与核验的每次完整序列化模型输入也限制为 128 KiB；核验加入候选后若超界，在发出请求前失败且不消费水位，可取消后缩小批次重试。冻结时已失效的轮次只保存跳过标识，不保留隐藏正文。同一 session 最多一个 accepted/publishing run；重放相同命令或 improve_id 复用领域结果，改变请求返回 409。
 
-Worker 先提议、持久化，再独立核验、持久化，最后一次事务登记知识资产、Learning 支持及普通 Ingest 子任务。最多 8 个候选，statement/why 分别不超过 8192/4096 UTF-8 字节，每个候选 1–32 条精确支持，每条 quote 最多 4096 UTF-8 字节。支持绑定冻结批次内的 turn_id、principal_id、feedback_id、question/answer 字段与 UTF-8 quote 范围；模型 conditions 必须与调用方逐项完全相同。核验 reason 只接受有限安全代码。helpful 不证明事实，unhelpful 不授权否定或覆盖记忆。
+Worker 先提议、持久化，再独立核验、持久化，最后一次事务登记知识条目、Learning 支持及普通 Ingest 子任务。最多 8 个候选，statement/why 分别不超过 8192/4096 UTF-8 字节，每个候选 1–32 条精确支持，每条 quote 最多 4096 UTF-8 字节。支持绑定冻结批次内的 turn_id、principal_id、feedback_id、question/answer 字段与 UTF-8 quote 范围；模型 conditions 必须与调用方逐项完全相同。核验 reason 只接受有限安全代码。helpful 不证明事实，unhelpful 不授权否定或覆盖记忆。
 
 所有 accepted 子任务发布完成后，才原子推进完成水位；空候选、拒绝与精确重复均有明确结果。精确 novelty 只比较 statement 与 conditions，不声称语义级去重。跨 session 并发或已保存核验的重放，还在登记事务中检查有效的 accepted/published 预留；冲突时整笔登记回滚、父任务为 superseded、水位不前移。显式 cancel 该未完成 run 后用新的 improve_id 再发起即可，不能通过 generic retry 绕开预留。每个 Learning 独立原子发布，多个 Learning 不承诺同时可见。失败子任务保持原 asset/source/job 标识，按现有 `/v1/jobs/{id}/retry` 重试；持久化的阶段结果复用。远端模型响应返回与本地提交之间若进程崩溃，调用可能重试，不承诺模型网络调用 exactly-once。
 
-Improve 的父模型任务完成后，run 可能仍为 publishing。此时对父任务调用既有 cancel 会取消未完成子任务并释放 run，水位不前移；已发布 Learning 保留有效性与可见性。取消的 run/子任务不能 retry；以新的 improve_id 再次显式发起，精确已发布重复不再创建新资产。已完成 run 不能取消。来源永久失效时可采用此取消/新请求路径，不因临时失败静默消费反馈。
+Improve 的父模型任务完成后，run 可能仍为 publishing。此时对父任务调用既有 cancel 会取消未完成子任务并释放 run，水位不前移；已发布 Learning 保留有效性与可见性。取消的 run/子任务不能 retry；以新的 improve_id 再次显式发起，精确已发布重复不再创建新内容条目。已完成 run 不能取消。来源永久失效时可采用此取消/新请求路径，不因临时失败静默消费反馈。
 
 Learning 是独立 knowledge，不是 memory identity。每个 chunk 的 locator.learning 保存 conditions 和支持标识，resolve 将条件与片段一起渲染并计入预算；当前只为 Learning 生成 keyword/vector，不生成可能丢失适用条件的 summary/graph，其他知识的配置不变。普通 knowledge 更新与 restore 不能重写 Learning。
 
@@ -498,11 +500,11 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 位置去重，合并 keyword/vector 路径，不合并相似文字。
 
 所有标题、引用、条件、来源、冲突警告和分隔符都计入实际 UTF-8 上下文预算；
-整块保留，不截断中文/emoji，不保留孤立引用。三个资产路由共享一次 embedding，
+整块保留，不截断中文/emoji，不保留孤立引用。记忆、知识和 Learning 三条路由共享一次 embedding，
 各自独立候选过滤/预算。此版只用原文 chunk，不引入 summary/graph 路径。
 稳定轮询与各路由上限是中性工程默认，不代表已验证的最佳质量权重。
 
-**归档限制**：资产 item 可转换为原有 chunk used_evidence。session_turn 引用
+**归档限制**：记忆、知识和 Learning 条目 可转换为原有 chunk used_evidence。session_turn 引用
 目前不能作为 `SessionTurn.used_evidence`（该合约只支持 chunk/entity/relation）；
 响应与会话正文标记 `unsupported_session_turn_reference`，调用方不得伪造 chunk
 或声称此类引用已完整归档。Learning 发布给 reader 的引用只有支持标识/范围，
@@ -511,12 +513,13 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 详见 [EvidenceBundle 契约](contracts/evidence-bundle.zh-CN.md)。真实 Agent
 对照需独立执行；fixture 仅验证工具/模型交互框架，不是任务收益结果。
 
-### 资产固定版本的已记录 Run 引用
+<a id="资产固定版本的已记录-run-引用"></a>
+### 固定内容版本的已记录 Run 引用
 
 `GET /v1/assets/{asset_id}/runs?version=1&limit=25&after={run_uuid}`：`version` 必填且为正数；
 `limit` 为 1–100，默认 25；`after` 可省略，按 Run UUID 稳定翻页。仅当前 logical key，
 管理员没有他人的 Run 读取特权。返回 `asset_id`、`asset_version`、`items`（仅 `run_id`、
 `created_at_ms`）、`next_after`、`scope: current_logical_key`、`coverage: recorded_references`。
-空页仍可能有下一游标；源或资产不可读时拒绝访问。索引定位首条已归档引用并复核权威事件，
+空页仍可能有下一游标；源或内容条目不可读时拒绝访问。索引定位首条已归档引用并复核权威事件，
 不可读的关联保守省略，不承诺完整采集或整个 Run 的其他引用可读。
-详见 [Run 合同](contracts/runs.zh-CN.md#精确资产版本的已记录-run-关联)。
+详见 [Run 合同](contracts/runs.zh-CN.md#精确内容版本的已记录-run-关联)。

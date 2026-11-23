@@ -34,11 +34,12 @@ export async function assetsPage(
   kind: Asset["kind"],
   ctx: ViewContext,
 ) {
-  const title = kind === "memory" ? "记忆管理" : "知识管理";
+  const kindLabel = kind === "memory" ? "记忆" : "知识";
+  const title = `${kindLabel}管理`;
   const list = el("div");
   const error = el("div");
   const search = input("筛选本页：标题、主体、属性或条件");
-  const query = input("检索全部可见内容");
+  const query = input("检索可见的记忆与知识");
   query.required = true;
   const mode = select([
     ["keyword", "关键词"],
@@ -70,7 +71,7 @@ export async function assetsPage(
           el(
             "p",
             "muted",
-            `“${searchQuery}” · 混合资产前 50 项命中中的${title}结果 · 实际模式 ${result.effective_mode ?? mode.value}`,
+            `“${searchQuery}” · 记忆与知识的前 50 项命中，仅显示${kindLabel} · 实际模式 ${result.effective_mode ?? mode.value}`,
           ),
         );
         for (const warning of result.warnings ?? [])
@@ -157,7 +158,7 @@ export async function assetsPage(
       "精确匹配、区分大小写；条件比较完整键值集合。未知身份不推断主体。每次最多检查 100 个候选，空页仍可能有下一页。",
     ),
   );
-  const direct = input("资产 UUID");
+  const direct = input("内容 UUID");
   const jobId = input("任务 UUID");
   let items: Asset[] = [],
     after: string | null = null;
@@ -202,7 +203,7 @@ export async function assetsPage(
             rows,
           )
         : empty(
-            after ? "本批暂无匹配资产" : "没有匹配的资产",
+            after ? `本批暂无匹配的${kindLabel}` : `没有匹配的${kindLabel}`,
             after
               ? "仍有候选可检查，请加载下一页。只显示已发布且来源有效的匹配内容。"
               : "此处仅显示当前权限下已发布且来源有效的内容。",
@@ -250,14 +251,14 @@ export async function assetsPage(
           )
         : null,
     ),
-    panel("已发布资产", kind === "memory" ? applyFilter : labelControl(search, "筛选已加载的资产"), list, more),
+    panel(`已发布${kindLabel}`, kind === "memory" ? applyFilter : labelControl(search, "筛选已加载的知识"), list, more),
     panel("检索预览", retrieve, hits),
     panel(
       "通过标识打开",
       form(
         () => ctx.navigate("asset", direct.value.trim()),
-        field("资产 ID", direct),
-        submit("打开资产"),
+        field("内容 ID", direct),
+        submit("打开内容"),
       ),
       canWrite(ctx.role)
         ? form(
@@ -372,6 +373,7 @@ export async function assetDetail(
     ctx.signal,
   );
   if (ctx.signal.aborted) return;
+  const kindLabel = asset.kind === "memory" ? "记忆" : "知识";
   const error = el("div");
   const related = panel(
     `关联 Run · v${asset.version}`,
@@ -398,7 +400,7 @@ export async function assetDetail(
     } catch (e) {
       if (ctx.signal.aborted || request !== relatedRequest) return;
       if (e instanceof ApiError && [403, 404].includes(e.status)) {
-        root.replaceChildren(empty("内容不可读取", "资产或来源已不可读，请重新检查权限和来源状态。"));
+        root.replaceChildren(empty("内容不可读取", `${kindLabel}或来源已不可读，请重新检查权限和来源状态。`));
         return;
       }
       message(relatedResult, e);
@@ -472,7 +474,7 @@ export async function assetDetail(
         key: crypto.randomUUID(),
       });
       root.replaceChildren(
-        empty("内容已阻断", "来源或资产已撤回，后续访问以服务端状态为准。"),
+        empty("内容已阻断", `${kindLabel}或来源已撤回，后续访问以服务端状态为准。`),
       );
     } catch (e) {
       message(error, e);
@@ -518,8 +520,8 @@ export async function assetDetail(
   versionStatus.classList.add("asset-version-status");
   root.append(
     heading(
-      asset.title || "记忆详情",
-      `${asset.kind === "memory" ? "记忆" : "知识"} · v${asset.version} · ${id}`,
+      asset.title || `${kindLabel}详情`,
+      `${kindLabel} · v${asset.version} · ${id}`,
       button("返回列表", () => ctx.navigate(asset.kind)),
       canWrite(ctx.role) ? button("更新内容", update, "primary") : null,
     ),
@@ -556,7 +558,7 @@ export async function assetDetail(
       el(
         "p",
         "muted",
-        "资产版本与来源版本分别保留；原始来源需要独立读取权限。",
+        `${kindLabel}版本与来源版本分别保留，原始来源需要独立读取权限。`,
       ),
       asset.semantic_values ? code(asset.semantic_values) : null,
       el(
@@ -574,7 +576,7 @@ export async function assetDetail(
           : null,
         ctx.role === "admin"
           ? button(
-              "删除资产",
+              `删除${kindLabel}`,
               () => mutate(`/v1/assets/${id}`, "DELETE"),
               "danger",
             )
