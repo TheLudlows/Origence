@@ -482,6 +482,25 @@ mod tests {
         }
     }
     #[test]
+    fn prepared_bundle_preserves_score_in_the_persisted_snapshot() {
+        let mut candidate = item(1, "Rust");
+        candidate.score = 1.976_628_661_155_700_7;
+        let mut prepared = bundle(32000);
+        render(&mut prepared, vec![candidate]);
+        let original = serde_json::to_string(&prepared).unwrap();
+
+        // Prepared runs store the bundle in a JSON value, then decode it to
+        // EvidenceBundle before checking the digest over its serialization.
+        let payload = serde_json::json!({"replay_bundle": prepared});
+        let stored = serde_json::to_string(&payload).unwrap();
+        let recovered: serde_json::Value = serde_json::from_str(&stored).unwrap();
+        let replayed: EvidenceBundle =
+            serde_json::from_value(recovered["replay_bundle"].clone()).unwrap();
+
+        assert_eq!(serde_json::to_string(&replayed).unwrap(), original);
+    }
+
+    #[test]
     fn whole_utf8_blocks_and_citations_share_exact_budget() {
         let candidate = item(1, "Rust");
         let mut full = bundle(32000);
