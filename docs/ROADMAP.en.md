@@ -4,7 +4,7 @@
 
 **Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace.** Agents can read data that matches the current task and their permissions. They can submit task records for users to verify outcomes and decide which experiences to reuse.
 
-This document describes product goals and milestone acceptance. The initial release pilots Claude Code and Codex on enterprise intranets for engineering and business teams. See the [architecture plan](design/agent-data-foundation.md) for the first release's technical contracts, [STATUS](STATUS.en.md) for implementation progress, and [VALIDATION](VALIDATION.md) for specific verification evidence.
+This document describes product goals and milestone acceptance. The initial release pilots Claude Code and Codex on enterprise intranets for engineering and business teams. See the [architecture plan](design/agent-data-foundation.en.md) for the first release's technical contracts, [STATUS](STATUS.en.md) for implementation progress, and [VALIDATION](VALIDATION.md) for specific verification evidence.
 
 ## Core data
 
@@ -36,5 +36,5 @@ Progress through milestones depends on data reliability, reuse of experience, an
 ## Scope and open decisions
 
 - The agent host handles inference, task orchestration, and business tool execution. Skill publication and tool execution each follow their own authorization rules.
-- Keep the established split of [SQLite for authoritative data, AnySeek for retrieval, and Blob for original files](design/agent-data-foundation.md). A new retrieval or database engine is outside this roadmap. The current stage targets new databases. Same-version recovery still needs verification.
+- Keep the established split of [SQLite for authoritative data, AnySeek for retrieval, and Blob for original files](design/agent-data-foundation.en.md). A new retrieval or database engine is outside this roadmap. The current stage targets new databases. Same-version recovery still needs verification.
 - Managed deployment, production cost thresholds, ContextBase interoperability, and Agent one integration are separate decisions based on demand and are not committed deliverables.

@@ -2,7 +2,7 @@
 
 **English** · [简体中文](STATUS.md)
 
-Updated 2026-11-19, with main [`2094f81`](https://github.com/TheLudlows/Origence/commit/2094f81c990aaf7d69d4ff09295c1a2a837c4ba1) as the integration baseline. Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. See the [product roadmap](ROADMAP.en.md) and [architecture plan](design/agent-data-foundation.md) for first-release goals.
+Updated 2026-11-19, with main [`2094f81`](https://github.com/TheLudlows/Origence/commit/2094f81c990aaf7d69d4ff09295c1a2a837c4ba1) as the integration baseline. Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. See the [product roadmap](ROADMAP.en.md) and [architecture plan](design/agent-data-foundation.en.md) for first-release goals.
 
 AML evaluation-protocol HTTP endpoints and startup switches have been removed. Owning workspaces and message batches remain available via the [common Rust library APIs](API.en.md#common-owning-workspace-and-message-batch-library-apis).
 

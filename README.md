@@ -69,7 +69,7 @@ Enable `sqlite` for the standalone authority adapter, `local-storage` for the re
 [Product goals and roadmap](docs/ROADMAP.en.md) · [Documentation index](docs/README.en.md) · [API and library interfaces](docs/API.en.md) · [Operations](docs/OPERATIONS.en.md) · [Project status](docs/STATUS.en.md)
 
 Private archives, Run traces, and unpublished candidates belong to a logical API key.
-Published memory, knowledge, and Skills belong to a workspace and are available to authorized members. See the [architecture](docs/design/agent-data-foundation.md).
+Published memory, knowledge, and Skills belong to a workspace and are available to authorized members. See the [architecture](docs/design/agent-data-foundation.en.md).
 
 The selected-experience CLI binds a drafted Skill method to one exact source, such as a Run prefix or a published Learning version. Real-client pilot acceptance remains open. See the [CLI guide](docs/SKILL-CANDIDATE-CLI.md), [client setup](docs/CLIENTS.en.md), and [pilot acceptance issue](https://github.com/TheLudlows/Origence/issues/91).
 

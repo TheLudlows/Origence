@@ -18,7 +18,7 @@ python tools/anyseek_smoke.py --anyseek-binary ANYSEEK_BINARY --run python evals
 
 ## 手工启动 Windows 服务的前提
 
-为本轮指定全新的 `-DataDir`、`-AnySeekDataDir` 和 workspace，先按当前版本初始化，再用 `tools/start-dev.ps1` 启动。保留已有数据库。旧库缺少 `oc_run_verifications` 时应记录为 schema 不兼容，改用新库。登记初始化二进制摘要、schema 和 workspace UUID。
+为本轮指定全新的 `-DataDir` 和 workspace。先按当前版本初始化，再用 `tools/start-dev.ps1` 启动，嵌入式 AnySeek 使用同一数据根目录。保留已有数据库。旧库缺少 `oc_run_verifications` 时记录为 schema 不兼容，改用新库。登记初始化二进制摘要、schema 和 workspace UUID。
 
 ## 独立检索预检（未评分）
 

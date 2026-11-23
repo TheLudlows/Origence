@@ -6,7 +6,7 @@ Based on PRD v0.3 chapters 5, 11, and 12 (printed pages 6, 13, and 14). The Libr
 
 ## Requirement mapping and gaps
 
-The sign-off record uses `prd_matrix` for A1–A7 and `matrix` for pilot P1–P7. The table links them. A* in old pilot records means the execution item used at that time. Same-version restoration in P7 is a separate sign-off condition. The official two-scenario pilot is NOT_RUN. [Execution matrix](RUNBOOK.md#执行矩阵) · [Preflight results](VALIDATION.md)
+The sign-off record uses `prd_matrix` for A1–A7 and `matrix` for pilot P1–P7. The table links them. A* in old pilot records means the execution item used at that time. Same-version restoration in P7 is a separate sign-off condition. The official two-scenario pilot is NOT_RUN. [Execution matrix](RUNBOOK.en.md#execution-matrix) · [Preflight results](VALIDATION.en.md)
 
 | PRD requirement and source summary | Issue / pilot link | Real evidence still required |
 | --- | --- | --- |

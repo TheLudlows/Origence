@@ -1,5 +1,7 @@
 # #91 本地验证记录
 
+**简体中文** · [English](VALIDATION.en.md)
+
 ## 公开双场景跨客户端复做（2026-11-18）
 
 Windows 使用产品主干 `e024b78`、AnySeek `6a46fc7`、Claude Code 2.1.327（报告模型 `glm-5.3`）和 Codex 0.170.0（指定 `gpt-6.2-sol`）。每个方向使用独立的新库、workspace、首做 writer、复做 writer 和审阅凭据。首做端从公开题面提取结构化规则，测试程序校验规则后，以首做 Run 的不可变前缀为依据提交候选。测试审阅账户明确批准并发布。两份 Skill 均为 v1，报销规则对应题面制度 v2。[完整的最终运行记录](public-handoff.windows.json)
@@ -51,7 +53,7 @@ Rust 1.98.0 的 `cargo fmt --all -- --check`、`cargo clippy --offline --locked 
 OPERATIONS、评估标准和相关 client_skill/runs 实现。基线与 `/workspace/.agents`
 未发现 `.agents/skills`，未声称加载任何缺失 Skill。
 
-- `python3 -m unittest discover -s evals/pilot -p 'test_*.py' -v`：10 tests PASS。
+- `python3 -m unittest discover -s evals/pilot -p 'test_*.py' -v`：10 项测试通过。
 - `python3 evals/pilot/pilot.py generate --seed public-development-1 --output /tmp/origence-pilot-91-smoke`：成功生成 16 题和 32 条 baseline/reuse 空观察记录。
 - `python3 evals/pilot/pilot.py score /tmp/origence-pilot-91-smoke/observations.json`：4 组各 8 题、32 必要检查，成功/核验均 0；返回 NOT_CERTIFIED / NOT_CHECKED。这是未跑登记，不是产品失败率或模型成绩。
 - `cargo fmt --all -- --check`：未执行成功，环境 `cargo: command not found`。Rust toolchain 声明为 1.98.0；Clippy/Rust suite 同样未运行。本路不改 Rust、生产 SQL、服务/DTO、UI、CI 或共享状态。

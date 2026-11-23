@@ -65,7 +65,7 @@ cargo test --no-default-features
 
 选定经验 CLI 将拟定的 Skill 方法绑定到一个精确来源，例如 Run 前缀或已发布的 Learning 版本。真实客户端试点验收尚未完成。见 [CLI 指南](docs/SKILL-CANDIDATE-CLI.zh-CN.md)、[客户端配置](docs/CLIENTS.md)和[试点验收议题](https://github.com/TheLudlows/Origence/issues/91)。
 
-评估入口包括[检索](evals/retrieval/README.zh-CN.md)和 [Agent 对照](evals/agent/README.md)。
+评估入口包括[检索](evals/retrieval/README.zh-CN.md)和 [Agent 对照](evals/agent/README.zh-CN.md)。
 
 贡献者与编码智能体的实现规则见 [AGENTS.md](AGENTS.zh-CN.md)。SQL 禁用 JOIN 的约束继续生效，原自动检查和测试已移除。
 

@@ -1,7 +1,9 @@
 # Private Run trace
 
+**English** · [简体中文](runs.zh-CN.md)
+
 Trace is a core data domain in Origence. Run is the unit of storage and access for
-private execution evidence. See the [architecture plan](../design/agent-data-foundation.md).
+private execution evidence. See the [architecture plan](../design/agent-data-foundation.en.md).
 Run creation and append are authorized relational transactions. Each Run is bound
 to a server-assigned private session and stable logical key. Workspace admin is
 not an implicit private archive reader. Credential rotation preserves logical
@@ -62,7 +64,7 @@ failure event with only a safe error code and content-free observations. Failed
 attempts are immutable; recovery uses a new event ID. Trace and prefix reads retain
 all existing owner and source guards. Backend progress is sampled after retrieval;
 it is not an atomic read of the result, an Origence transaction, delivery proof, or
-independent verification of the evidence. See [API](../API.md#检索诊断).
+independent verification of the evidence. See [API](../API.en.md#retrieval-diagnostics).
 Query diagnostics v2 include the current embedding-space SHA256 (or null), checked
 against the admitted space on every response in addition to the analysis digest.
 

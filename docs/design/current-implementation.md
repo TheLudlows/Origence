@@ -153,7 +153,7 @@ Skill 候选由调用方提交。选定经历 CLI 可根据调用方提供的方
 显式导出两种客户端目录格式；原生加载与离线副本回收不属于导出证明。
 细节见 [Skill 契约](../contracts/skills.zh-CN.md)和[选定经历 CLI](../SKILL-CANDIDATE-CLI.zh-CN.md)。
 
-Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上下文，客户端上报工具、Skill、结果和工件引用。工件上报保存外部 ID 与摘要。Run 所有者可以为精确前缀转录外部评估，保留独立的来源标记。客户端未上报的活动保持未知。见 [Run 契约](../contracts/runs.md)和[外部核验契约](../contracts/run-verification.zh-CN.md)。
+Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上下文，客户端上报工具、Skill、结果和工件引用。工件上报保存外部 ID 与摘要。Run 所有者可以为精确前缀转录外部评估，保留独立的来源标记。客户端未上报的活动保持未知。见 [Run 契约](../contracts/runs.zh-CN.md)和[外部核验契约](../contracts/run-verification.zh-CN.md)。
 
 ## A5. 数据模型与约束来源
 

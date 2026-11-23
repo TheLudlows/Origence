@@ -18,7 +18,7 @@ Replace the script above with `evals/pilot/public_handoff.py` and use a differen
 
 ## Prerequisites for manual Windows service startup
 
-Select a fresh `-DataDir`, `-AnySeekDataDir`, and workspace for this run. Initialize with the current version and start using `tools/start-dev.ps1`. Preserve existing databases. If a legacy database lacks `oc_run_verifications`, record it as schema-incompatible and use a new database. Record the initialization binary digest, schema, and workspace UUID.
+Use a fresh `-DataDir` and workspace for this run. Initialize with the current version and then start `tools/start-dev.ps1`. The embedded AnySeek instance uses the same data root. Preserve existing databases. If an old database lacks `oc_run_verifications`, record the schema incompatibility and use a new database. Record the initialization binary hash, schema, and workspace UUID.
 
 ## Separate retrieval preflight (unscored)
 

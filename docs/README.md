@@ -33,7 +33,7 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 | [Improve / Learning](contracts/learning.zh-CN.md) | 显式反馈学习、适用条件与完整支持链 |
 | [EvidenceBundle](contracts/evidence-bundle.zh-CN.md) | 分路召回、预算、冲突与引用 |
 | [Skill](contracts/skills.zh-CN.md) | 私有候选、选定审阅包、批准、发布与分发 |
-| [Trace / Run](contracts/runs.md) | 私有轨迹、上下文准备记录、客户端报告与采集缺口 |
+| [Trace / Run](contracts/runs.zh-CN.md) | 私有轨迹、上下文准备记录、客户端报告与采集缺口 |
 | [Run 外部核验](contracts/run-verification.zh-CN.md) | 对精确 Run 前缀的外部评估记录与撤回 |
 | [存储不变量](contracts/storage.md) | 身份占位、发布账本、原始证据与同版本恢复 |
 | [所属 workspace 与消息批次](API.md#通用所属-workspace-与消息批次库接口) | 通用库接口、派生授权和批次发布状态 |
@@ -47,4 +47,4 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 需要追溯时查看[清理前的固定版本](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs)。
 带日期的原始验证工件可在[固定提交的归档](https://github.com/TheLudlows/Origence/tree/0a1a56c1da74e78be0118782b04a3f5a37251060/docs/evidence)中查阅。当前进度见 [STATUS](STATUS.md)。
 
-每份文档均有简体中文和英文版本，可使用页首链接切换。提交文档变更时同时更新两版，保持章节、表格、命令、参数、数值和验证结论逐项对应。代码示例和原始证据使用同一份内容。
+文档提供简体中文和英文版本，可使用配对页面的页首链接切换。提交文档变更时同时更新两版，保持章节、表格、命令、参数、数值和验证结论逐项对应。代码示例和原始证据使用同一份内容。

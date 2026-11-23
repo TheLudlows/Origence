@@ -1,5 +1,7 @@
 # 试点执行、恢复与清理手册
 
+**简体中文** · [English](RUNBOOK.en.md)
+
 ## 开跑前
 
 使用[冻结表](freeze.template.json)登记整合 SHA、服务和客户端二进制哈希、OS、实际模型修订及配置、SQLite 和 AnySeek 版本、Blob 清单、时间与费用预算。单独初始化测试资源，记录逻辑 key 别名。数据负责人签认合成或脱敏范围；DBA 和制度负责人在开跑前签认两场景的 rubric、阈值和停止条件。缺少必需配置或签认时记 BLOCKED。

@@ -2,7 +2,7 @@
 
 **English** · [简体中文](current-implementation.md)
 
-Updated 2026-11-18. Code baseline is main `4160fd5`. This page describes the current architecture and invariants. See [API](../API.en.md) for contracts, [OPERATIONS](../OPERATIONS.en.md) for operation and recovery, [STATUS](../STATUS.en.md) for progress, and [VALIDATION](../VALIDATION.md) for acceptance. A1–A6 numbers and explicit anchors are retained for source-code references. Historical designs are in Git. The [architecture plan](agent-data-foundation.md) describes first-release goals and acceptance contracts.
+Updated 2026-11-18. Code baseline is main `4160fd5`. This page describes the current architecture and invariants. See [API](../API.en.md) for contracts, [OPERATIONS](../OPERATIONS.en.md) for operation and recovery, [STATUS](../STATUS.en.md) for progress, and [VALIDATION](../VALIDATION.md) for acceptance. A1–A6 numbers and explicit anchors are retained for source-code references. Historical designs are in Git. The [architecture plan](agent-data-foundation.en.md) describes first-release goals and acceptance contracts.
 
 ## 1. Product scope
 
