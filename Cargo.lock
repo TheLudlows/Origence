@@ -137,7 +137,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 [[package]]
 name = "anyseek"
 version = "3.4.1"
-source = "git+https://github.com/TheLudlows/anyseek.git?rev=342dcbc1c05676a7e129e0b6eff8c2253ef5df11#342dcbc1c05676a7e129e0b6eff8c2253ef5df11"
+source = "git+https://github.com/TheLudlows/anyseek.git?rev=c4cf6b3d183d9fbe004e0c408c5ed3e8faa4935f#c4cf6b3d183d9fbe004e0c408c5ed3e8faa4935f"
 dependencies = [
  "ahash",
  "axum",

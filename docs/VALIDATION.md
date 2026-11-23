@@ -7,7 +7,7 @@
 
 ## 2026-11-23 · AnySeek Rust SDK 嵌入式存储
 
-Linux / Rust 1.98.0，AnySeek SDK 固定为 `342dcbc`。Origence 默认套件 459 项通过，16 项 Python 工具回归通过，其中 5 项使用 PowerShell 7.4.13。独立 HTTP 模式通过 8 项真实 AnySeek 合同测试，以及 HTTP/stdio MCP、固定版本检索与重启验证。SDK 的公开 Rust 用例覆盖独占打开、租户隔离、原子替换幂等、关闭和重开。[AnySeek SDK PR](https://github.com/TheLudlows/anyseek/pull/218)
+Linux / Rust 1.98.0，AnySeek SDK 固定为 `c4cf6b3`。Origence 默认套件 459 项通过，16 项 Python 工具回归通过，其中 5 项使用 PowerShell 7.4.13。独立 HTTP 模式通过 8 项真实 AnySeek 合同测试，以及 HTTP/stdio MCP、固定版本检索与重启验证。SDK 的公开 Rust 用例覆盖独占打开、租户隔离、原子替换幂等、关闭和重开。[AnySeek SDK PR](https://github.com/TheLudlows/anyseek/pull/218)
 
 嵌入式模式以空 `PATH` 启动真实 Origence。验证了发布与更新、关键词检索、Run 诊断无 HTTP 状态、精确回放、退出重开后保留当前和历史正文，以及持久绑定的 Catalog 丢失时拒绝重建。补充 Rust 用例覆盖同一条记录的向量召回、图一跳、正文读取与删除。真实 Windows Terminal 退出操作未在本地测试。
 
