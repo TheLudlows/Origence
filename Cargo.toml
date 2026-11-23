@@ -11,7 +11,7 @@ autotests = false
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart"] }
-anyseek = { git = "https://github.com/TheLudlows/anyseek.git", rev = "c4cf6b3d183d9fbe004e0c408c5ed3e8faa4935f", default-features = false, optional = true }
+anyseek = { git = "https://github.com/TheLudlows/anyseek.git", rev = "5626dadfd5414b294a3cf0f6b845f5261760f68b", default-features = false, optional = true }
 clap = { version = "4", features = ["derive", "env"] }
 fs2 = { version = "0.4", optional = true }
 jieba-rs = "0.7"
