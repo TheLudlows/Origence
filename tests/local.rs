@@ -35,6 +35,8 @@ mod sqlite_store;
 mod sqlite_visibility;
 mod storage_contract;
 mod storage_recovery;
+#[cfg(feature = "local-storage")]
+mod workspace_access;
 mod workspace_schema_rejection;
 
 #[cfg(feature = "local-storage")]

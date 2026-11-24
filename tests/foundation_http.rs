@@ -45,7 +45,10 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         .call(Method::GET, "/v1/session", None, None)
         .await
         .unwrap();
-    assert_eq!(http_session, session_from_stdio(&base, &writer.token).await);
+    assert_eq!(
+        http_session,
+        session_from_stdio(&base, &writer.token, None).await
+    );
     assert!(matches!(
         reviewer_client
             .call(Method::GET, &run_path, None, None)
@@ -196,13 +199,19 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
 }
 
 // Actual CLI transport; no provider account or native model client is needed.
-async fn session_from_stdio(base: &str, key: &str) -> Value {
+pub(crate) async fn session_from_stdio(base: &str, key: &str, workspace: Option<Uuid>) -> Value {
     use std::{process::Stdio, time::Duration};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     tokio::time::timeout(Duration::from_secs(20), async {
-        let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"))
+        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        command
             .args(["--server-url", base, "mcp"])
             .env("OC_API_KEY", key)
+            .env_remove("OC_WORKSPACE_ID");
+        if let Some(workspace) = workspace {
+            command.args(["--workspace", &workspace.to_string()]);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .kill_on_drop(true)

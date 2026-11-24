@@ -19,8 +19,12 @@ SQLite、Blob 或 AnySeek，也不需要它们的凭据。
      `codex mcp list` 只能核对配置是否注册，不能验证实际连接。
 
 用 `context_search` 搜索一份已发布资料，再用 `context_get` 读取指定版本并核对
-来源引用。显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
-一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端使用同一 key，调用
+来源引用。`context_session` 返回当前 `workspace_id`。在线 MCP 启动时可以加
+`mcp --workspace <UUID>` 或设置 `OC_WORKSPACE_ID`。同一把 key 可用于其获授权的各
+workspace。省略选项时使用服务端默认项。该选项作用于当前 MCP 连接。
+
+显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
+一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用
 `context_session` 会得到同一个平台归档，再用 `context_turn_get` 按 turn UUID
 读取（需 writer 权限）。给两个客户端分别签发独立 key 时，它们的归档互不可见。平台不会自动同步
 客户端的本地聊天记录，也不会恢复客户端的工作现场。

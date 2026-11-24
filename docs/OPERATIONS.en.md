@@ -44,7 +44,7 @@ The old implementation used a subprocess to terminate parsing after a hard 30-se
 
 ## Initialization and credentials
 
-Run `origence --offline workspace-create NAME`, save the returned token, and then start the host. Online `key-create` and `key-revoke` use `/admin/keys` within the token's workspace and require admin. Offline administration uses OS authorization, requires no API token, and needs exclusive access to the data directory.
+Run `origence --offline workspace-create NAME`, save the returned token, and then start the host. To create another workspace in the same tenant, add `--in-tenant-of <existing-workspace-UUID>` to the offline command. Online `key-create` and `key-revoke` use the credential's default workspace. See [identity and credential management](API.en.md#identity-and-credential-management) for granting and revoking access in another workspace. Offline administration uses OS authorization and needs exclusive access to the data directory.
 
 Origence reads process environment variables. It does not load `.env` automatically. Compose reads `.env`. Keep model credentials, API tokens, and `.env` out of Git. See origence --help for command arguments and the next section for local model setup.
 

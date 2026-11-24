@@ -26,6 +26,15 @@ pub struct AuthorizedScope {
     pub role: String,
 }
 
+/// A workspace explicitly available to an authenticated credential.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceAccess {
+    pub workspace_id: Uuid,
+    pub name: String,
+    pub role: String,
+    pub is_default: bool,
+}
+
 /// Explicit capabilities granted when an administrator issues a key.
 /// Rotation never inherits these from another key or from the admin role.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

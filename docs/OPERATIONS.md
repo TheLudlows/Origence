@@ -52,7 +52,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## 初始化与凭据
 
-先执行 `origence --offline workspace-create NAME`，保存返回的 token，再启动宿主。在线 `key-create`/`key-revoke` 通过 `/admin/keys` 限定在 token 所属 workspace 内；需 admin。离线管理依赖操作系统授权，不要求 API token，必须独占数据目录。
+先执行 `origence --offline workspace-create NAME`，保存返回的 token，再启动宿主。要在同一租户创建另一个 workspace，在离线命令中加 `--in-tenant-of <现有 workspace UUID>`。在线 `key-create`/`key-revoke` 默认使用凭据的默认 workspace。其他工作区的授权和撤销见 [身份与密钥管理](API.md#身份与密钥管理)。离线管理依赖操作系统授权，必须独占数据目录。
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 

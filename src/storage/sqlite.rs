@@ -71,6 +71,7 @@ mod versions;
 #[cfg(test)]
 mod versions_tests;
 mod visibility;
+mod workspace_grants;
 
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::ledger::{LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey};
