@@ -41,6 +41,12 @@ Signed-in users can switch among their granted workspaces. The upstream checks e
 
 An eight-hour in-memory console session survives page reloads. The browser receives a random HttpOnly, SameSite=Strict cookie. HTTPS also enables Secure. The tab stores only the selected workspace ID in sessionStorage. Sign-out, expiry, or Node restart requires login again. Without a console account database, loopback development can still connect with a personal API key.
 
+### Create a child workspace
+
+With the root workspace's admin credential, run `origence key-create <workspace ID> --role admin --allow-owned-workspaces`. Configure the returned key as a trusted console service credential for the authorized local account. The grant covers the root and all its immediate children.
+
+Sign in, select the authorized root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace. The credential has writer access in the child. Operators initialize new root workspaces offline.
+
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
 ## Pages

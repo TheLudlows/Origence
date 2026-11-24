@@ -317,6 +317,12 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
 
+## 控制台子工作区
+
+- `GET /v1/workspaces/owned?limit=50&after=<UUID>` 以 `items` 和 `next_after` 列出当前根工作区的直接子工作区。每项包含 `workspace_id` 和 `name`。`limit` 范围 1–100。
+- `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。请求重复使用同一 UUID 时读回已有子工作区。UUID 已关联不同父工作区时返回冲突。
+- 两个接口均要求直接绑定根工作区、当前为 admin 且签发时显式允许 `allow_owned_workspaces` 的受信凭据。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。具有派生能力的受信根凭据也可选择已存在的直接子工作区，以派生的 reader 或 writer 身份访问。目标不在该派生范围时返回 404。子工作区的记录仍按作用域和逻辑 key 隔离。
+
 ## 通用所属 workspace 与消息批次库接口
 
 以下能力通过公开 Rust Service API 使用。

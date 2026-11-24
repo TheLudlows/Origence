@@ -21,7 +21,9 @@ async function listen(server) {
 async function run() {
   const { createUiServer } = await import("../dist/server.js");
   const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const upstream = createServer((req, res) => {
+  const children = new Map();
+  const creationAttempts = [];
+  const upstream = createServer(async (req, res) => {
     const grant = grants.find((item) => item.authorization === req.headers.authorization);
     const path = new URL(req.url, "http://fixture.invalid").pathname;
     const send = (value, status = 200) => {
@@ -31,12 +33,29 @@ async function run() {
     if (path === "/health/ready") return send({ status: "ready" });
     if (!grant) return send({}, 401);
     if (path === "/v1/whoami")
-      return send({ id: grant.workspaceId, workspace_id: grant.workspaceId, role: "reader" });
-    if (path === "/v1/assets")
+      return send({ id: grant.workspaceId, workspace_id: grant.workspaceId, role: grant.workspaceId === alpha ? "admin" : "reader" });
+    if (path === "/v1/workspaces/owned")
+      return grant.workspaceId === alpha ? send({ items: [...children.values()], next_after: null }) : send({}, 403);
+    if (req.method === "PUT" && path.startsWith("/v1/workspaces/owned/")) {
+      if (grant.workspaceId !== alpha || req.headers["x-origence-workspace"]) return send({}, 403);
+      const id = path.split("/").at(-1);
+      const parts = [];
+      for await (const part of req) parts.push(part);
+      const { name } = JSON.parse(Buffer.concat(parts).toString());
+      creationAttempts.push(id);
+      children.set(id, { workspace_id: id, name });
+      if (creationAttempts.length === 1) return send({ error: { message: "模拟提交回执丢失" } }, 502);
+      return send({ workspace_id: id });
+    }
+    if (path === "/v1/assets") {
+      const scoped = req.headers["x-origence-workspace"];
+      const child = scoped ? children.get(scoped) : undefined;
+      if (scoped && (!child || grant.workspaceId !== alpha)) return send({}, 403);
       return send({ next_after: null, items: [{
-        asset_id: grant.workspaceId, kind: "knowledge",
-        title: `${grant.name}知识夹具`, version: 1, source_event_id: excluded,
+        asset_id: child?.workspace_id ?? grant.workspaceId, kind: "knowledge",
+        title: `${child?.name ?? grant.name}知识夹具`, version: 1, source_event_id: excluded,
       }] });
+    }
     if (path === "/v1/runs") return send({ items: [], next_after: null });
     return send({}, 404);
   });
@@ -82,12 +101,31 @@ async function run() {
       readableCookies: "",
     });
     assert.equal((await context.cookies()).find((cookie) => cookie.name.startsWith("origence-console-")).httpOnly, true);
+    const newWorkspace = page.getByRole("button", { name: "新建工作区", exact: true });
+    assert.equal(await newWorkspace.count(), 0);
+    await picker.selectOption(alpha);
+    await newWorkspace.click();
+    const createDialog = page.getByRole("dialog", { name: "新建工作区", exact: true });
+    await createDialog.getByLabel("工作区名称", { exact: true }).fill("试点");
+    const create = createDialog.getByRole("button", { name: "创建工作区", exact: true });
+    await create.click();
+    await createDialog.getByText("模拟提交回执丢失", { exact: true }).waitFor();
+    await create.click();
+    await createDialog.waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: /知识管理/ }).click();
+    await page.getByText("试点知识夹具", { exact: true }).waitFor();
+    assert.deepEqual(creationAttempts, [creationAttempts[0], creationAttempts[0]]);
+    assert.equal(children.size, 1);
+    assert.equal(await newWorkspace.count(), 0);
+    await page.reload();
+    await page.getByText("试点知识夹具", { exact: true }).waitFor();
+    assert.equal(await picker.inputValue(), creationAttempts[0]);
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await page.getByLabel("账号", { exact: true }).waitFor();
     await page.reload();
     await page.getByLabel("账号", { exact: true }).waitFor();
     assert.equal(await page.getByText("运营知识夹具", { exact: true }).count(), 0);
-    console.log("PASS local account, authorized workspace switch, mobile reload, and sign-out (synthetic HTTP, Chromium)");
+    console.log("PASS console login, scoped workspace creation and retry, mobile switch, reload, and sign-out (synthetic HTTP, Chromium)");
   } finally {
     await browser?.close();
     for (const server of [ui, upstream]) {

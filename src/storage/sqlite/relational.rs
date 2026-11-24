@@ -91,12 +91,7 @@ impl RelationalStore for SqliteStore {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<AuthorizedScope> {
-        if name.trim().is_empty() || name.len() > 256 || name.contains('\0') {
-            return Err(StorageError::InvalidArgument(
-                "workspace name must contain 1..256 UTF-8 bytes without NUL",
-            ));
-        }
-        self.owned_workspace(auth, workspace_id, Some(name))
+        self.owned_workspace(auth, workspace_id, Some(name), Permission::Write)
             .await?
             .ok_or(StorageError::NotFound)
     }
@@ -106,7 +101,8 @@ impl RelationalStore for SqliteStore {
         auth: AuthorizedScope,
         workspace_id: Uuid,
     ) -> StorageResult<Option<AuthorizedScope>> {
-        self.owned_workspace(auth, workspace_id, None).await
+        self.owned_workspace(auth, workspace_id, None, Permission::Read)
+            .await
     }
 
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()> {
@@ -124,18 +120,57 @@ impl RelationalStore for SqliteStore {
 }
 
 impl SqliteStore {
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn list_managed_workspaces(
+        &self,
+        auth: AuthorizedScope,
+        after: Uuid,
+        limit: u32,
+    ) -> StorageResult<Vec<(Uuid, String)>> {
+        let mut tx = self.begin_scoped(auth, false, None).await?;
+        tx.require_owned_workspace_root(Permission::Delete).await?;
+        let rows = sqlite_db::query_as(
+            "SELECT id,name FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? \
+             AND id>? ORDER BY id LIMIT ?",
+        )
+        .bind(tx.scope.tenant_id)
+        .bind(tx.scope.workspace_id)
+        .bind(after)
+        .bind(limit)
+        .fetch_all(&mut *tx.tx)
+        .await
+        .map_err(sqlite_err)?;
+        tx.commit().await?;
+        Ok(rows)
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn create_managed_workspace(
+        &self,
+        auth: AuthorizedScope,
+        workspace_id: Uuid,
+        name: &str,
+    ) -> StorageResult<AuthorizedScope> {
+        self.owned_workspace(auth, workspace_id, Some(name), Permission::Delete)
+            .await?
+            .ok_or(StorageError::NotFound)
+    }
+
     async fn owned_workspace(
         &self,
         auth: AuthorizedScope,
         workspace_id: Uuid,
         create: Option<&str>,
+        permission: Permission,
     ) -> StorageResult<Option<AuthorizedScope>> {
+        if create
+            .is_some_and(|name| name.trim().is_empty() || name.len() > 256 || name.contains('\0'))
+        {
+            return Err(StorageError::InvalidArgument(
+                "workspace name must contain 1..256 UTF-8 bytes without NUL",
+            ));
+        }
         let mut tx = self.begin_scoped(auth, create.is_some(), None).await?;
-        let permission = if create.is_some() {
-            Permission::Write
-        } else {
-            Permission::Read
-        };
         // A forged/remapped AuthContext is insufficient. The live key must be
         // bound directly to this root, explicitly capable, and not revoked.
         let role = tx.require_owned_workspace_root(permission).await?;

@@ -9,7 +9,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -24,6 +24,8 @@ pub fn router(service: Service) -> Router {
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
         .route("/v1/workspaces", get(workspaces))
+        .route("/v1/workspaces/owned", get(list_owned_workspaces))
+        .route("/v1/workspaces/owned/{id}", put(create_owned_workspace))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
         .route("/admin/keys", post(issue_key))
@@ -102,7 +104,22 @@ pub(super) async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
             "X-Origence-Workspace must occur once".into(),
         ));
     }
-    s.auth_workspace(token, workspace).await
+    let explicit = s.auth_workspace(token, workspace).await;
+    let (Some(target), Err(AppError::Forbidden)) = (workspace, &explicit) else {
+        return explicit;
+    };
+    // The console can additionally use a live root key with owned-workspace
+    // capability. The lookup checks that the target is its direct child.
+    let root = match s.auth(token).await {
+        Ok(root) => root,
+        Err(AppError::Invalid(_)) => return explicit,
+        Err(error) => return Err(error),
+    };
+    match s.lookup_owned_workspace(&root, target).await {
+        Ok(Some(scoped)) => Ok(scoped),
+        Ok(None) | Err(AppError::Conflict(_)) => Err(AppError::NotFound),
+        Err(error) => Err(error),
+    }
 }
 async fn ready(State(s): State<Service>) -> impl IntoResponse {
     if s.ready().await {
@@ -391,6 +408,45 @@ async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedWorkspacePage {
+    after: Option<Uuid>,
+    limit: Option<u32>,
+}
+
+async fn list_owned_workspaces(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Query(page): Query<OwnedWorkspacePage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.list_managed_workspaces(
+            &auth(&s, &h).await?,
+            page.after.unwrap_or_default(),
+            page.limit.unwrap_or(50),
+        )
+        .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedWorkspaceInput {
+    name: String,
+}
+
+async fn create_owned_workspace(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(input): Json<OwnedWorkspaceInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.create_managed_workspace(&auth(&s, &h).await?, id, &input.name)
+            .await?,
+    ))
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WorkspaceGrantInput {

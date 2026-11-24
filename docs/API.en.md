@@ -243,6 +243,12 @@ memories/identified and captures/identified accept optional nonnegative expected
 
 Pass lookup's version to the write endpoint to cover the concurrency window between read and admission. After acceptance, the Worker still checks the admitted version. A change fails the job, and admission does not promise synchronous publication. A successful replay of the same idempotency key and request returns the original admission before checking later changes. A different expected_version changes the request and conflicts. Omitted and null are excluded from the canonical payload to preserve replay of existing keys.
 
+## Console child workspaces
+
+- `GET /v1/workspaces/owned?limit=50&after=<UUID>` lists the root's immediate children as `items` and `next_after`. Each item includes `workspace_id` and `name`. The limit ranges from 1 to 100.
+- `PUT /v1/workspaces/owned/{id}` accepts `{name}` and returns `{workspace_id}`. Reusing the UUID reads back the existing child. A UUID already owned by a different workspace returns a conflict.
+- Both endpoints require a trusted, live admin credential bound directly to the root with the explicit `allow_owned_workspaces` capability. Business requests using `X-Origence-Workspace` check explicit grants first. A trusted root credential with that capability can also select an existing direct child with its derived reader or writer role. Targets outside that derived scope return 404. Records remain isolated by scope and logical key.
+
 ## Common owning workspace and message batch library APIs
 
 The following capabilities are available through the public Rust Service API.

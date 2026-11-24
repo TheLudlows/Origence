@@ -4,6 +4,17 @@
 
 The latest local verification was 2026-11-24. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-24 · #132 main sync and CI fix
+
+Synced main `9924ec3f31eccacc2c164129be01640923f61547`. The SQLite-only Clippy command reproduced
+`dead_code` on two host-only methods. Gating them on `local-storage` fixed strict Clippy.
+The SQLite-only suite passed 245 tests, with five external AnySeek cases ignored as configured.
+The full host's `cargo test --locked --no-default-features --features local-storage --test local`
+passed 210 tests. Strict Clippy and formatting passed.
+The combined HTTP regression checks a derived writer and an explicit reader on the same child
+workspace, and verifies denial for an ungranted key and a root key from another tenant.
+Node type checking, all 26 UI tests, and the Chromium 156 create, retry, switch, reload, and logout fixture passed.
+
 ## 2026-11-24 · Multi-workspace API access
 
 Based on main `8226b4c1492c2a8f480977f10fbddc7379aaca18`. Linux, Rust 1.98.0, fresh temporary databases.
@@ -19,6 +30,12 @@ Native in-chat switching and Windows plugin installation in both clients remain 
 During review of #134, a loopback fixture emulated an older host ignoring `X-Origence-Workspace`.
 The original MCP process started and read the default workspace. The fixed CLI rejects this response
 before serving stdio tools, and the regression checks that its error omits the test credential.
+
+## 2026-11-23 · Console child workspace creation
+
+Base `8226b4c1492c2a8f480977f10fbddc7379aaca18`. On Linux with Rust 1.98.0, formatting, strict `local-storage` Clippy for all targets, and `cargo test --locked --no-default-features --features local-storage --test local` passed (208 tests). Real SQLite and HTTP covered administrator capability, bounded pagination, same-UUID retry, cross-tenant denial, derived roles, private Run isolation, and credential revocation. The new SQL reads only `oc_workspaces` scoped by tenant and parent. Creation reuses the existing transaction and audit path.
+
+Node 24.22.1 passed type checking and all 26 UI tests. Chromium 156 verified retry with the original UUID after a simulated lost receipt, automatic workspace switching, reload, and hiding the entry in unauthorized workspaces. A temporary SQLite console account and real Origence HTTP covered unauthorized creation, retry, and the child catalog with models disabled.
 
 ## 2026-11-23 · SQLite configuration tables for console accounts
 

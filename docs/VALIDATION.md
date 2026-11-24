@@ -7,6 +7,18 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-24 · #132 同步主干与修复 CI
+
+同步 main `9924ec3f31eccacc2c164129be01640923f61547`。原分支的 SQLite-only 全目标
+Clippy 可复现两个宿主专用方法触发的 `dead_code`。为方法加上 `local-storage` 条件后，
+`cargo clippy --locked --no-default-features --features sqlite --all-targets -- -D warnings`
+通过，SQLite-only 套件 245 项通过，5 项外部 AnySeek 测试按原配置跳过。
+完整宿主的 `cargo test --locked --no-default-features --features local-storage --test local`
+通过 210 项，严格 Clippy 和格式检查均通过。
+合并后的 HTTP 回归验证同一子工作区可用受信根凭据派生 writer，也可给普通 key 显式授予
+reader。未获授权的普通 key 和跨租户根凭据均被拒绝。
+Node 类型检查、26 项 UI 测试以及 Chromium 156 下的创建、重试、切换、刷新和退出通过。
+
 ## 2026-11-24 · 多 workspace API 授权
 
 基于 main `8226b4c1492c2a8f480977f10fbddc7379aaca18`。Linux、Rust 1.98.0，临时新库。
@@ -21,6 +33,12 @@
 检视 #134 时，用回环夹具模拟忽略 `X-Origence-Workspace` 的旧宿主。原提交中 MCP
 成功启动后读取了默认工作区。修复后，实际 CLI 会在公开 stdio 工具前拒绝该响应，
 回归还核对了错误输出未包含测试凭据。
+
+## 2026-11-23 · 控制台新建子工作区
+
+基线 `8226b4c1492c2a8f480977f10fbddc7379aaca18`。Linux、Rust 1.98.0 下通过格式检查、`local-storage` 全目标严格 Clippy 和 `cargo test --locked --no-default-features --features local-storage --test local`（208 项）。真实 SQLite 与 HTTP 测试覆盖管理员能力、受限分页、同 UUID 重试、跨租户拒绝、子工作区角色、私有 Run 隔离和凭据撤销。新增 SQL 仅查询按租户及父工作区限定的 `oc_workspaces`，创建复用现有事务和审计。
+
+Node 24.22.1 下通过类型检查和 26 项 UI 测试。Chromium 156 模拟回执丢失后以同一 UUID 重试，验证创建、自动切换、刷新和未授权工作区隐藏入口。另用临时 SQLite 控制台账号和真实 Origence HTTP 复核未授权创建拒绝、重试和子工作区目录读取。联测停用模型。
 
 ## 2026-11-23 · 控制台账号 SQLite 配置表
 
