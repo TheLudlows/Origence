@@ -22,6 +22,7 @@ SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 来源引用。`context_session` 返回当前 `workspace_id`。在线 MCP 启动时可以加
 `mcp --workspace <UUID>` 或设置 `OC_WORKSPACE_ID`。同一把 key 可用于其获授权的各
 workspace。省略选项时使用服务端默认项。该选项作用于当前 MCP 连接。
+显式指定时，MCP 启动前会核对宿主返回的 workspace。若宿主未确认目标，客户端会退出并提示核对服务版本和转发配置。
 
 显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用

@@ -8,13 +8,17 @@ The latest local verification was 2026-11-24. Each section identifies its exact 
 
 Based on main `8226b4c1492c2a8f480977f10fbddc7379aaca18`. Linux, Rust 1.98.0, fresh temporary databases.
 `cargo test --locked --offline --no-default-features --features local-storage --lib --test local`
-passed 235 library tests and 208 integration tests. The new regression uses real SQLite, Origence HTTP, a stdio
+passed 235 library tests and 209 integration tests. The new regression uses real SQLite, Origence HTTP, a stdio
 MCP process, and an AnySeek protocol fixture. It checks scoped search, workspace roles, tenant and archive
 isolation, revocation without fallback, and grant and session continuity after rotation. A separate
 default-feature build passed the same-tenant bootstrap and two scoped stdio session, search, and pinned
 version reads on embedded AnySeek with models disabled. Formatting,
 strict Clippy on all `local-storage` targets, and the SQLite-only library check passed.
 Native in-chat switching and Windows plugin installation in both clients remain to be verified.
+
+During review of #134, a loopback fixture emulated an older host ignoring `X-Origence-Workspace`.
+The original MCP process started and read the default workspace. The fixed CLI rejects this response
+before serving stdio tools, and the regression checks that its error omits the test credential.
 
 ## 2026-11-23 · SQLite configuration tables for console accounts
 

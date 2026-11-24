@@ -7,7 +7,46 @@ use origence::{
 };
 use reqwest::{Method, StatusCode};
 use serde_json::json;
+use std::time::Duration;
 use uuid::Uuid;
+
+#[tokio::test]
+async fn mcp_refuses_explicit_workspace_when_host_ignores_selection() {
+    let default_workspace = Uuid::new_v4();
+    let requested_workspace = Uuid::new_v4();
+    let router = axum::Router::new().route(
+        "/v1/whoami",
+        axum::routing::get(move |headers: axum::http::HeaderMap| async move {
+            assert_eq!(
+                headers["X-Origence-Workspace"],
+                requested_workspace.to_string()
+            );
+            axum::Json(json!({"workspace_id":default_workspace,"role":"reader"}))
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let key = "oc_synthetic_workspace_startup_check";
+    let output = tokio::time::timeout(
+        Duration::from_secs(20),
+        tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"))
+            .args(["--server-url", &base, "mcp", "--workspace"])
+            .arg(requested_workspace.to_string())
+            .env("OC_API_KEY", key)
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .expect("MCP startup exceeded its time budget")
+    .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(stderr.contains("Origence host did not confirm the selected workspace"));
+    assert!(!stderr.contains(key));
+    host.abort();
+}
 
 async fn bootstrap(dir: &std::path::Path, name: &str, existing: Option<Uuid>) -> serde_json::Value {
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
