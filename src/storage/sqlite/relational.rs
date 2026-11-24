@@ -9,25 +9,9 @@ impl RelationalStore for SqliteStore {
     }
 
     async fn authenticate(&self, token: &str) -> StorageResult<AuthorizedScope> {
-        if token.len() < 32 || token.len() > 256 {
-            return Err(StorageError::Forbidden);
-        }
-        let row: Option<(Uuid, Uuid, Uuid, String)> = sqlite_db::query_as(
-            "SELECT tenant_id, workspace_id, id, role FROM oc_api_keys WHERE token_hash = ? AND NOT revoked",
-        )
-        .bind(hash(token))
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sqlite_err)?;
-        let (tenant_id, workspace_id, principal_id, role) = row.ok_or(StorageError::Forbidden)?;
-        Ok(AuthorizedScope {
-            scope: Scope {
-                tenant_id,
-                workspace_id,
-            },
-            principal_id,
-            role,
-        })
+        self.authenticate_workspace(token, None)
+            .await?
+            .ok_or(StorageError::Forbidden)
     }
 
     async fn create_workspace(
@@ -223,7 +207,7 @@ impl SqliteTx {
         let role: Option<String> = sqlite_db::query_scalar(
             "SELECT role FROM oc_api_keys \
              WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked \
-               AND allow_owned_workspaces=1",
+               AND default_access AND allow_owned_workspaces=1",
         )
         .bind(self.principal_id)
         .bind(self.scope.tenant_id)

@@ -6,6 +6,7 @@ pub struct HostClient {
     base: reqwest::Url,
     token: String,
     http: reqwest::Client,
+    workspace: Option<uuid::Uuid>,
 }
 impl HostClient {
     pub fn new(base: &str, token: String) -> Result<Self> {
@@ -44,7 +45,37 @@ impl HostClient {
             .timeout(timeout)
             .build()
             .map_err(anyhow::Error::from)?;
-        Ok(Self { base, token, http })
+        Ok(Self {
+            base,
+            token,
+            http,
+            workspace: None,
+        })
+    }
+
+    /// Bind this client copy to one explicit scope for all subsequent requests.
+    pub fn with_workspace(mut self, workspace: uuid::Uuid) -> Self {
+        self.workspace = Some(workspace);
+        self
+    }
+
+    /// Before serving requests, confirm that the host honored the selection.
+    /// Older hosts can return 200 for whoami while ignoring the workspace header.
+    pub(crate) async fn verify_identity(&self) -> Result<()> {
+        let identity = self
+            .call(reqwest::Method::GET, "/v1/whoami", None, None)
+            .await?;
+        if let Some(expected) = self.workspace {
+            let actual = identity["workspace_id"]
+                .as_str()
+                .and_then(|id| uuid::Uuid::parse_str(id).ok());
+            if actual != Some(expected) {
+                return Err(AppError::Invalid(
+                    "Origence host did not confirm the selected workspace".into(),
+                ));
+            }
+        }
+        Ok(())
     }
     /// Create a private Run. The UUID is the durable retry identity.
     pub async fn create_run(&self, input: &crate::run::RunInput) -> Result<Value> {
@@ -110,6 +141,9 @@ impl HostClient {
         }
         let url = self.base.join(path).map_err(anyhow::Error::from)?;
         let mut request = self.http.request(method, url).bearer_auth(&self.token);
+        if let Some(workspace) = self.workspace {
+            request = request.header("X-Origence-Workspace", workspace.to_string());
+        }
         if let Some(body) = body {
             request = request.json(body);
         }

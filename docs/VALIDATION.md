@@ -2,10 +2,25 @@
 
 **简体中文** · [English](VALIDATION.en.md)
 
-最近一次本地核验为 2026-11-23，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
+最近一次本地核验为 2026-11-24，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-24 · 多 workspace API 授权
+
+基于 main `8226b4c1492c2a8f480977f10fbddc7379aaca18`。Linux、Rust 1.98.0，临时新库。
+`cargo test --locked --offline --no-default-features --features local-storage --lib --test local`
+通过 235 项库测试和 209 项集成测试。新增回归用真实 SQLite、Origence HTTP、stdio MCP
+进程及 AnySeek 协议夹具。验证同一 key 切换查询范围、同关键词只命中当前工作区、不同角色、
+跨租户拒绝、会话隔离、撤销不回退、轮换保留授权及会话。默认特性构建后另用内嵌 AnySeek
+和停用模型的临时库实测 CLI 同租户创建工作区，及两条 stdio 连接的会话、检索和指定版本读取。格式、严格 Clippy
+（`local-storage` 全目标）及 SQLite-only 库检查通过。原生 Claude Code/Codex
+会话内切换和 Windows 双客户端安装不在这一轮的实测范围内。
+
+检视 #134 时，用回环夹具模拟忽略 `X-Origence-Workspace` 的旧宿主。原提交中 MCP
+成功启动后读取了默认工作区。修复后，实际 CLI 会在公开 stdio 工具前拒绝该响应，
+回归还核对了错误输出未包含测试凭据。
 
 ## 2026-11-23 · 控制台账号 SQLite 配置表
 

@@ -79,14 +79,14 @@ flowchart TB
 | 私有记录 | 已提交的会话轮次与反馈、Run 及上下文快照、未发布候选，按逻辑 key 隔离 |
 | 已发布的记忆、知识和技能 | 供工作区内获授权的用户与 Agent 复用 |
 
-同一 workspace 内，稳定的逻辑 `key_id` 映射到唯一 `session_id`；认证凭据与该逻辑身份分别管理，密钥明文不作为存储身份。
+同一逻辑 `key_id` 可在同租户多个 workspace 获得各自的角色。每次请求明确选择或使用凭据默认 workspace。每个 workspace 与逻辑 key 的组合映射到唯一 `session_id`。认证凭据与逻辑身份分别管理，密钥明文不作为存储身份。
 新建独立 key 产生独立会话；经过明确授权的密钥轮换可接续原逻辑 key 与会话，不能按用户名自动合并。
 撤销凭据或 key 阻断对应访问；会话历史、已发布的记忆、知识和技能，以及来源撤回分别按各自生命周期处理，不随凭据撤销自动删除。
-同一逻辑 key 在 Claude Code/Codex 中访问同一 Origence 归档会话记录；需要独立记录的 Agent 使用不同 key。
+Claude Code 和 Codex 在同一 workspace 使用同一逻辑 key 时访问同一 Origence 归档会话。需要独立记录的 Agent 使用不同 key。
 同一会话可包含多个任务/Run。会话归属由服务端认证派生，传入其他 session ID 不能切换所有权。
 所有私有入口和上下文组装都校验逻辑 key 归属及当前权限。获准审阅者通过选定审阅包查看明确披露的内容。
-实现合同：`GET /v1/session` 返回认证逻辑 key 的 `{session_id,key_id}`，无调用方可选归属。
-`POST /admin/keys/{id}/rotate` 仅允许当前 admin 在凭据所属 workspace 内轮换；返回新凭据，旧凭据立即失效。
+实现合同：`GET /v1/session` 返回由服务端解析的 `{workspace_id,key_id,session_id}`。
+`POST /admin/keys/{id}/rotate` 由签发 workspace 的 admin 发起，轮换其他 key 时须同时具备该 key 所有额外 workspace 的 admin 权限。新凭据保留授权，旧凭据立即失效。
 显式 SessionTurn 路由继续要求 writer，并额外匹配当前 key 的 session；读取权限与归属检查不能互相替代。
 平台保存已提交的记录并提供查询，不同步或恢复客户端原生聊天、上下文窗口、工具/进程/环境状态，也不重放操作。
 

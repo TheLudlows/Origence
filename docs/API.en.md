@@ -6,11 +6,13 @@ Covers the SQLite control state of a local host and AnySeek projections for text
 
 Jump to [library interfaces](#rust-library-interfaces) · [endpoints](#endpoints) · [job and read visibility](#jobs-and-read-visibility) · [retrieval](#retrieval) · [explicit identity](#explicit-memory-identity).
 
-Every `/v1/*` request requires `Authorization: Bearer TOKEN`. The key determines the workspace. Clients cannot override it. Existing command-style mutations need a 1–200 ASCII character `Idempotency-Key`. Run and Skill use the stable IDs, revisions, and digests below. The idempotency scope is workspace + key principal + operation/target + idempotency key. Repeating an identical request reuses the result. The same key with different contents returns 409. Idempotent responses include identifiers and state only. Replaying after deletion neither re-writes data nor returns deleted text.
+Every `/v1/*` request requires `Authorization: Bearer TOKEN`. Business requests can send `X-Origence-Workspace: <UUID>` to select a workspace authorized for that logical key. Omission selects the workspace set at issuance. An unauthorized explicit selection returns 403. An unavailable default or invalid header returns 422. Use `GET /v1/workspaces` to list the key's current grants.
+
+Existing command-style mutations need a 1–200 ASCII character `Idempotency-Key`. Run and Skill use the stable IDs, revisions, and digests below. The idempotency scope is workspace + key principal + operation/target + idempotency key. Repeating an identical request reuses the result. The same key with different contents returns 409. Idempotent responses include identifiers and state only. Replaying after deletion neither re-writes data nor returns deleted text.
 
 ## Private sessions, Trace, and Skills
 
-`GET /v1/session` derives the logical key and server session ID from authentication and can create their first binding. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. An administrator can call `POST /admin/keys/{id}/rotate` for an active credential in the current workspace. The new credential retains its original logical key and revokes the old credential. Store the returned new token securely. A separately issued key cannot read the original archive. Clients use the same boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
+`GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a separate private session for each workspace and logical key. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. Admins can rotate credentials in their issuing workspace. Rotating another key also requires admin access in every additional workspace granted to that key. The replacement retains the original logical key and its grants and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
 
 Trace is stored as private Runs. Run entry points derive the logical key from authentication and apply current permissions and source validity checks.
 
@@ -144,9 +146,14 @@ Knowledge updates change the current version and title only after asynchronous p
 
 | Method and path | Semantics |
 | --- | --- |
-| `GET /v1/whoami` | Returns authenticated key id, tenant_id, workspace_id, and role |
-| `POST /admin/keys` | Admin sends `{workspace_id,role}`. Workspace must match the current token. Returns `{key_id,token}`. |
-| `DELETE /admin/keys/{id}` | Admin revokes a key within the same workspace, including its own. Later calls are rejected. |
+| `GET /v1/whoami` | Returns credential id, tenant_id, selected workspace_id, and effective role. |
+| `GET /v1/workspaces` | Lists explicit active grants with workspace_id, name, role, and is_default. |
+| `POST /admin/keys` | Admin sends `{workspace_id,role}`. The workspace must match the request's selected workspace and becomes the new key's default. Returns `{key_id,token}`. |
+| `PUT /admin/workspace-key-grants/{logical_key_id}` | A workspace admin assigns `{role}` in the selected workspace to a logical key from the same tenant. |
+| `DELETE /admin/workspace-key-grants/{logical_key_id}` | A workspace admin removes access to the selected workspace. |
+| `DELETE /admin/keys/{id}` | An admin in the issuing workspace revokes the credential for all workspaces. |
+
+Grant endpoints use the stable `key_id` returned by `GET /v1/session`. Trusted service access to owned workspaces remains available through the dedicated library interface.
 
 `/admin/keys` also needs a Bearer token. It omits the business idempotency cache to avoid storing plaintext tokens. Issuance returns the token once, and repeated POST creates a different key. After a lost response, check database key IDs through offline administration and revoke redundant credentials. Offline workspace and key commands use `--offline` and OS directory permissions and fail to open while the host is running.
 
