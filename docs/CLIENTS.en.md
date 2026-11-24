@@ -4,13 +4,85 @@
 
 Both clients connect to a running Origence HTTP host through a local stdio process. They neither access SQLite, Blob, or AnySeek directly nor need credentials for them.
 
+## Install the `origence` plugin
+
+Prepare a reachable Origence HTTP host, the Origence binary, and a client version
+that supports plugin marketplaces. Ask the workspace administrator to issue a
+personal `reader` key. An authenticated administrator can run
+`origence key-create <WORKSPACE_ID> --role reader` with `OC_API_KEY` and
+`OC_SERVER_URL` set in their environment, then deliver the new key privately.
+
+Launch the client from the terminal that sets `PATH`, `OC_SERVER_URL`, and
+`OC_API_KEY`. `OC_SERVER_URL` supplies the same address as `--server-url` and
+defaults to `http://127.0.0.1:8080`. Use HTTPS for a remote host. The Windows
+PowerShell example accepts spaces in the binary directory. On Linux or macOS,
+prepend the directory containing `origence` to `PATH`.
+
+```powershell
+$origenceExe = (Get-Item -LiteralPath 'C:\Program Files\Origence\origence.exe').FullName
+$env:Path = (Split-Path -Parent $origenceExe) + [IO.Path]::PathSeparator + $env:Path
+$env:OC_SERVER_URL = 'http://127.0.0.1:18080'
+$secret = Read-Host 'OC_API_KEY' -AsSecureString
+$env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
+```
+
+### Claude Code
+
+```sh
+claude plugin install origence --marketplace TheLudlows/Origence
+```
+
+For a local checkout, substitute the absolute path to the repository root.
+Restart `claude` and inspect the plugin's connection with `/mcp` or
+`claude mcp list`. Review the source and approve the retrieval tools if prompted.
+Run `claude plugin uninstall origence@origence-tools` to uninstall. You can also
+run `claude plugin marketplace remove origence-tools` to remove the catalog.
+[Claude Code plugin commands](https://code.claude.com/docs/en/plugins/cli-reference)
+
+### Codex
+
+```sh
+codex plugin marketplace add TheLudlows/Origence
+codex plugin add origence@origence-tools
+```
+
+For a local checkout, pass the absolute path to the repository root to
+`marketplace add`. Start a fresh `codex` session and inspect `/mcp`. Use
+`codex plugin list` to confirm installation. The client handles connection
+and tool approvals separately. Run `codex plugin remove origence@origence-tools`
+to uninstall and optionally `codex plugin marketplace remove origence-tools`.
+[Codex plugin commands](https://learn.chatgpt.com/docs/cli/reference#codex-plugin)
+
+### Verify the connection and troubleshoot
+
+Call `context_session` and compare the returned `key_id` and `session_id` with
+the expected archive identity for the workspace. Use `GET /v1/whoami` with the
+same key to confirm the workspace UUID. Use `context_search` in `keyword` mode
+to find a known published item. Pass the hit's `asset_id` and `version` to
+`context_get`. Both clients can run these three checks.
+
+| Symptom | Check |
+| --- | --- |
+| Cannot find `origence` | Run `Get-Command origence -CommandType Application` (Windows) or `command -v origence` in the same terminal. Check it resolves to the intended binary. |
+| Cannot connect to the API | Verify `OC_SERVER_URL` and the port. Run `origence mcp` in the same terminal to see startup errors on stderr. A successful process waits for stdio input. |
+| `OC_API_KEY is required` | Relaunch the client with the workspace key in its environment. |
+| `authentication required` | Ask the administrator to verify the key is valid and belongs to the intended workspace. |
+| Two Origence servers appear | Check for an older standalone registration and disable the duplicate. |
+
+These packages ship MCP configuration only. To record Runs, explicitly
+[enable hooks per project](#enable-private-run-hooks-per-project) with a `writer` key.
+
+## Manual MCP setup
+
 1. Use a personal API key from the project's workspace and set `OC_API_KEY` in the launch environment. Keep credentials out of configuration files, project commits, and conversations.
 2. Set `command` in the example to the absolute path of the local Origence executable. Set `--server-url` to the reachable host address. On Windows, point to `origence.exe`.
 3. Install the configuration for your client.
    - **Claude Code**. Put the [JSON example](../examples/claude-code.mcp.json) in project `.mcp.json` or merge `mcpServers.origence` into the existing configuration. Use `/mcp` in Claude Code to check the connection.
    - **Codex**. Merge `[mcp_servers.origence]` from the [TOML example](../examples/codex.mcp.toml) into personal Codex configuration or a trusted project's `.codex/config.toml`. Keep `env_vars = ["OC_API_KEY"]` to pass the credential explicitly. `codex mcp list` checks registration only. Test the connection separately.
 
-Search for published material with `context_search`. Read a specific version with `context_get` and check its source references. Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same key can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. The platform does not automatically sync local client chats or restore the local work environment. Retrieved content is external evidence and has no authority to issue instructions.
+Search for published material with `context_search`. Read a specific version with `context_get` and check its source references. `context_session` reports the current `workspace_id`. For an online MCP connection, pass `mcp --workspace <UUID>` or set `OC_WORKSPACE_ID` to select a workspace the key can access. Otherwise the server uses the credential's default. The selection applies to that MCP connection. MCP verifies an explicit selection at startup and exits if the host returns a different workspace or omits its ID.
+
+Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. The platform does not automatically sync local client chats or restore the local work environment. Retrieved content is external evidence and has no authority to issue instructions.
 
 See [P0 acceptance #91](https://github.com/TheLudlows/Origence/issues/91) for real-task validation progress on both clients.
 

@@ -142,21 +142,7 @@ impl Service {
         Ok(())
     }
     pub async fn auth(&self, token: &str) -> Result<AuthContext> {
-        let a = self
-            .engine
-            .relational()
-            .authenticate(token)
-            .await
-            .map_err(|e| match e {
-                StorageError::Forbidden => AppError::Unauthorized,
-                e => e.into(),
-            })?;
-        Ok(AuthContext {
-            id: a.principal_id,
-            tenant_id: a.scope.tenant_id,
-            workspace_id: a.scope.workspace_id,
-            role: a.role,
-        })
+        self.auth_workspace(token, None).await
     }
     pub(crate) async fn read(&self, a: &AuthContext, permission: Permission) -> Result<SqliteTx> {
         Ok(self

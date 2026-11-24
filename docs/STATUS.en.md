@@ -28,6 +28,10 @@ See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both report recognized metadata through the same private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#enable-private-run-hooks-per-project) for setup, coverage, and interruption behavior. Local fixtures cover the public CLI, HTTP, and MCP. Real client hooks, models, and official pilot acceptance are pending. Automatic conversation body archiving remains follow-up work in [#105](https://github.com/TheLudlows/Origence/issues/105).
 
+## Multi-workspace API credentials
+
+A logical key can have separate roles in several workspaces in the same tenant. HTTP supports explicit selection and grant listing. Online MCP connections can select a workspace at startup. Private archives remain scoped by workspace and logical key. Native in-chat switching, automatic plugin configuration, and automatic conversation capture are pending. See [identity and credential management](API.en.md#identity-and-credential-management).
+
 ## AnySeek service credential and workspace collections
 
 Configure only `OC_ANYSEEK_URL` and `OC_ANYSEEK_API_KEY`. The authenticated tenant UUID is the AnySeek namespace, and the workspace UUID maps to a `ws_<无连字符 UUID>` collection (UUID without hyphens). No separate tenant or collection setup is needed. First use initializes the fixed schema and strictly verifies it by readback after concurrent creation or lost responses. Startup checks previously published collections and does not silently create replacements for missing collections or configuration drift. Binding `origence-content-backend-v2` pins text format, routing, and model configuration. The analysis digest is persisted on first collection use. AnySeek does not issue tenant keys. Origence user permissions and private sessions retain their original semantics. See VALIDATION.

@@ -33,6 +33,12 @@ Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提�
 本地夹具覆盖公开 CLI、HTTP 和 MCP。真实客户端 Hook、模型与正式试点仍待验收。
 自动会话正文归档保留在 [#105 后续规划](https://github.com/TheLudlows/Origence/issues/105)。
 
+## 多 workspace API 凭据
+
+同一逻辑 key 可在同租户的多个 workspace 获得各自的角色。HTTP 支持显式 workspace
+选择与授权枚举，在线 MCP 支持在连接启动时指定 workspace。私有归档仍按 workspace 和
+逻辑 key 隔离。原生客户端会话内切换、插件自动配置及归档采集仍待接入。见 [API](API.md#身份与密钥管理)。
+
 ## AnySeek 服务凭据与 workspace 集合
 
 只配置 `OC_ANYSEEK_URL` 与 `OC_ANYSEEK_API_KEY`；已鉴权 tenant UUID 直接作为

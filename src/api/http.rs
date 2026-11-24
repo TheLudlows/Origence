@@ -23,12 +23,17 @@ pub fn router(service: Service) -> Router {
         )
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
+        .route("/v1/workspaces", get(workspaces))
         .route("/v1/workspaces/owned", get(list_owned_workspaces))
         .route("/v1/workspaces/owned/{id}", put(create_owned_workspace))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
         .route("/admin/keys", post(issue_key))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
+        .route(
+            "/admin/workspace-key-grants/{logical_key_id}",
+            axum::routing::put(set_workspace_key_grant).delete(revoke_workspace_key_grant),
+        )
         .route("/admin/memory-properties", post(register_memory_property))
         .route("/v1/memory-properties/{predicate}", get(memory_property))
         .route("/v1/memories", post(memory))
@@ -79,19 +84,38 @@ fn key(h: &HeaderMap) -> Result<&str> {
         .ok_or_else(|| AppError::Invalid("Idempotency-Key is required for mutations".into()))
 }
 pub(super) async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
-    let caller = s.auth(token(h)?).await?;
-    let Some(target) = h.get("X-Origence-Workspace") else {
-        return Ok(caller);
-    };
-    let id = target
-        .to_str()
-        .ok()
-        .and_then(|id| Uuid::parse_str(id).ok())
-        .ok_or_else(|| AppError::Invalid("invalid workspace selector".into()))?;
-    if id == caller.workspace_id {
-        return Ok(caller);
+    let token = token(h)?;
+    let mut selections = h.get_all("x-origence-workspace").iter();
+    let workspace = selections
+        .next()
+        .map(|value| {
+            value
+                .to_str()
+                .ok()
+                .and_then(|id| Uuid::parse_str(id).ok())
+                .filter(|id| !id.is_nil())
+                .ok_or_else(|| {
+                    AppError::Invalid("X-Origence-Workspace must be a workspace UUID".into())
+                })
+        })
+        .transpose()?;
+    if selections.next().is_some() {
+        return Err(AppError::Invalid(
+            "X-Origence-Workspace must occur once".into(),
+        ));
     }
-    match s.lookup_owned_workspace(&caller, id).await {
+    let explicit = s.auth_workspace(token, workspace).await;
+    let (Some(target), Err(AppError::Forbidden)) = (workspace, &explicit) else {
+        return explicit;
+    };
+    // The console can additionally use a live root key with owned-workspace
+    // capability. The lookup checks that the target is its direct child.
+    let root = match s.auth(token).await {
+        Ok(root) => root,
+        Err(AppError::Invalid(_)) => return explicit,
+        Err(error) => return Err(error),
+    };
+    match s.lookup_owned_workspace(&root, target).await {
         Ok(Some(scoped)) => Ok(scoped),
         Ok(None) | Err(AppError::Conflict(_)) => Err(AppError::NotFound),
         Err(error) => Err(error),
@@ -378,6 +402,12 @@ async fn whoami(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
     Ok(Json(json!(auth(&s, &h).await?)))
 }
 
+async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
+    Ok(Json(
+        json!({"workspaces": s.workspace_access(token(&h)?).await?}),
+    ))
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OwnedWorkspacePage {
@@ -415,6 +445,36 @@ async fn create_owned_workspace(
     Ok(Json(
         s.create_managed_workspace(&auth(&s, &h).await?, id, &input.name)
             .await?,
+    ))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceGrantInput {
+    role: String,
+}
+
+async fn set_workspace_key_grant(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(input): Json<WorkspaceGrantInput>,
+) -> Result<Json<Value>> {
+    let a = auth(&s, &h).await?;
+    s.set_workspace_key_grant(&a, id, Some(&input.role)).await?;
+    Ok(Json(
+        json!({"workspace_id":a.workspace_id,"logical_key_id":id,"role":input.role}),
+    ))
+}
+
+async fn revoke_workspace_key_grant(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let a = auth(&s, &h).await?;
+    s.set_workspace_key_grant(&a, id, None).await?;
+    Ok(Json(
+        json!({"workspace_id":a.workspace_id,"logical_key_id":id,"revoked":true}),
     ))
 }
 #[derive(Deserialize)]

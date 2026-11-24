@@ -2,7 +2,34 @@
 
 **English** · [简体中文](VALIDATION.md)
 
-The latest local verification was 2026-11-23. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+The latest local verification was 2026-11-24. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+
+## 2026-11-24 · #132 main sync and CI fix
+
+Synced main `9924ec3f31eccacc2c164129be01640923f61547`. The SQLite-only Clippy command reproduced
+`dead_code` on two host-only methods. Gating them on `local-storage` fixed strict Clippy.
+The SQLite-only suite passed 245 tests, with five external AnySeek cases ignored as configured.
+The full host's `cargo test --locked --no-default-features --features local-storage --test local`
+passed 210 tests. Strict Clippy and formatting passed.
+The combined HTTP regression checks a derived writer and an explicit reader on the same child
+workspace, and verifies denial for an ungranted key and a root key from another tenant.
+Node type checking, all 26 UI tests, and the Chromium 156 create, retry, switch, reload, and logout fixture passed.
+
+## 2026-11-24 · Multi-workspace API access
+
+Based on main `8226b4c1492c2a8f480977f10fbddc7379aaca18`. Linux, Rust 1.98.0, fresh temporary databases.
+`cargo test --locked --offline --no-default-features --features local-storage --lib --test local`
+passed 235 library tests and 209 integration tests. The new regression uses real SQLite, Origence HTTP, a stdio
+MCP process, and an AnySeek protocol fixture. It checks scoped search, workspace roles, tenant and archive
+isolation, revocation without fallback, and grant and session continuity after rotation. A separate
+default-feature build passed the same-tenant bootstrap and two scoped stdio session, search, and pinned
+version reads on embedded AnySeek with models disabled. Formatting,
+strict Clippy on all `local-storage` targets, and the SQLite-only library check passed.
+Native in-chat switching and Windows plugin installation in both clients remain to be verified.
+
+During review of #134, a loopback fixture emulated an older host ignoring `X-Origence-Workspace`.
+The original MCP process started and read the default workspace. The fixed CLI rejects this response
+before serving stdio tools, and the regression checks that its error omits the test credential.
 
 ## 2026-11-23 · Console child workspace creation
 
@@ -1203,6 +1230,41 @@ Based on main `41cb852b468d1eba2574f27e6f355687043c9a70`, using a fresh local Or
 - With Rust 1.98.0, 231 library tests and formatting passed. The repository's live AnySeek HTTP/MCP smoke and restart checks passed. With Python 3.12.14, 58 pilot tests and 42 evaluation tests passed. The public P6 evidence index check returned `INDEX_LINKAGE_ONLY`.
 
 This was a public synthetic engineering preflight. No live clients or models were called, and the formal pilot and independent sign-off remain `NOT_RUN`.
+
+## 2026-11-23 — Origence MCP plugin installation and retrieval
+
+Based on main `8226b4c1492c2a8f480977f10fbddc7379aaca18`. The real Claude Code
+**2.1.330** and Codex CLI **0.171.0** installed from a local marketplace on Linux.
+Codex CLI **0.167.0-alpha.4** also passed. Origence was built with Rust 1.98.0 and
+published a synthetic item with embedded AnySeek before issuing a `reader` key.
+
+- Claude Code used `claude plugin install origence --marketplace <REPO>`.
+  Codex used `codex plugin marketplace add <REPO>` and
+  `codex plugin add origence@origence-tools`. Both used fresh projects and
+  isolated settings. The binary directory contained spaces and the host used a
+  dynamic loopback port.
+- Both called `context_session`, `context_search`, and `context_get`. The session
+  matched the reader key's binding and `/v1/whoami` confirmed the workspace.
+  Search found published v1 and the exact hit ID and version returned the expected
+  content. Codex used its real app-server and Claude Code used a synthetic local
+  Messages response to drive its real tool calls. Uninstall passed for both.
+- The packages contain no Hook definitions and the private Run list stayed empty.
+  A missing executable was detected by PATH lookup. Direct MCP launch diagnostics
+  distinguished missing and invalid keys and an unreachable API. The fixture
+  checked that output did not contain the test keys.
+- `cargo build --locked --offline --bin origence`, formatting, strict
+  all-targets/all-features Clippy, and `git diff --check` passed.
+
+For a native Windows rerun, install the CLI executables and run from PowerShell:
+
+```powershell
+cargo build --locked --bin origence
+python tools/plugin_smoke.py --binary .\target\debug\origence.exe --claude (Get-Command claude.exe).Source --codex (Get-Command codex.exe).Source
+```
+
+Native Windows execution is pending. The available executor ran Linux; remote
+marketplace fetching, desktop GUI, real model providers, and the formal pilot
+were outside this validation.
 
 ## 2026-11-23 — Separate embedding and extraction model configuration
 

@@ -6,15 +6,17 @@
 
 按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份)。
 
-所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。workspace 来自 key，客户端不能指定 workspace。原有命令式修改接口需 1–200 个 ASCII 字符的 `Idempotency-Key`；Run/Skill 使用下文的稳定 ID、修订号与摘要；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
+所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。业务请求可以附带 `X-Origence-Workspace: <UUID>`，由服务端校验该逻辑 key 在目标 workspace 的角色。省略时使用 key 签发时的默认 workspace。显式选择未获授权时返回 403，缺少可用默认项或请求头无效时返回 422。使用 `GET /v1/workspaces` 查询当前 key 的有效授权。
+
+原有命令式修改接口需 1–200 个 ASCII 字符的 `Idempotency-Key`；Run/Skill 使用下文的稳定 ID、修订号与摘要；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 
 ## 私有会话、Trace 与 Skill
 
-`GET /v1/session` 从认证派生逻辑 key 与服务端 session ID（首次可创建绑定）。已有
+`GET /v1/session` 返回 `{workspace_id,key_id,session_id}`，均从认证推导，首次可创建会话绑定。已有
 `/v1/sessions/{session_id}/turns`、反馈和 Improve 接口只接受当前 key 的归档，
-并保留 writer 权限。发布后的 Learning 正文和条件可被同 workspace 召回，但归档、
-Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可以对当前空间的活跃凭据调用
-`POST /admin/keys/{id}/rotate`，新凭据延续原逻辑 key 并撤销旧凭据；响应中的新 token
+并保留 writer 权限。同一个逻辑 key 在各 workspace 对应独立会话。发布后的 Learning 正文和条件可被同 workspace 召回，但归档、
+Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可以在凭据签发的 workspace 调用
+`POST /admin/keys/{id}/rotate`。轮换其他 key 还须在该 key 获授权的所有额外 workspace 拥有 admin 权限。新凭据延续原逻辑 key 和工作区授权，并撤销旧凭据；响应中的新 token
 应安全保存。独立签发的新 key 不能读取原归档。客户端通过
 [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.md) 使用同一边界。
 
@@ -215,9 +217,14 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 
 | 方法和路径 | 语义 |
 | --- | --- |
-| `GET /v1/whoami` | 返回已认证 key 的 id、tenant_id、workspace_id、role |
-| `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须等于当前 token 所属 workspace，返回 `{key_id,token}` |
-| `DELETE /admin/keys/{id}` | admin 撤销同 workspace 的 key，允许撤销自身；后续调用拒绝 |
+| `GET /v1/whoami` | 返回已认证凭据的 id、tenant_id、选中的 workspace_id 和有效 role |
+| `GET /v1/workspaces` | 列出本 key 当前显式获授权的工作区，每项含 workspace_id、name、role 和 is_default |
+| `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须是请求选中的 workspace，成为新 key 的默认项。返回 `{key_id,token}` |
+| `PUT /admin/workspace-key-grants/{logical_key_id}` | 目标 workspace 的 admin 通过 `{role}` 更新同租户逻辑 key 在此工作区的授权 |
+| `DELETE /admin/workspace-key-grants/{logical_key_id}` | 目标 workspace 的 admin 只撤销此工作区的授权 |
+| `DELETE /admin/keys/{id}` | 签发 workspace 的 admin 撤销整个凭据，后续所有工作区调用都会拒绝 |
+
+工作区授权接口使用 `GET /v1/session` 返回的稳定 `key_id`。受信服务的所属 workspace 能力仍通过专用库接口使用。
 
 `/admin/keys` 同样要求 Bearer token，但不使用业务幂等缓存，避免保存明文 token。发行结果只返回一次，重复 POST 会创建不同 key；若响应丢失，需要离线管理核对数据库中的 key ID 并撤销多余凭据。离线 workspace/key 管理通过 `--offline` 和操作系统目录权限授权，宿主运行时拒绝打开。
 
@@ -314,7 +321,7 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 - `GET /v1/workspaces/owned?limit=50&after=<UUID>` 以 `items` 和 `next_after` 列出当前根工作区的直接子工作区。每项包含 `workspace_id` 和 `name`。`limit` 范围 1–100。
 - `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。请求重复使用同一 UUID 时读回已有子工作区。UUID 已关联不同父工作区时返回冲突。
-- 两个接口均要求直接绑定根工作区、当前为 admin 且签发时显式允许 `allow_owned_workspaces` 的受信凭据。`X-Origence-Workspace` 可由有派生授权的受信根凭据选择已存在的直接子工作区，普通业务请求用派生的 reader 或 writer 身份执行。子工作区的记录仍按作用域和逻辑 key 隔离。
+- 两个接口均要求直接绑定根工作区、当前为 admin 且签发时显式允许 `allow_owned_workspaces` 的受信凭据。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。具有派生能力的受信根凭据也可选择已存在的直接子工作区，以派生的 reader 或 writer 身份访问。目标不在该派生范围时返回 404。子工作区的记录仍按作用域和逻辑 key 隔离。
 
 ## 通用所属 workspace 与消息批次库接口
 

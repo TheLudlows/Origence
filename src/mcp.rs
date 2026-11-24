@@ -395,9 +395,7 @@ pub async fn run(service: Service, token: String) -> anyhow::Result<()> {
 }
 
 pub async fn run_remote(client: crate::client::HostClient) -> anyhow::Result<()> {
-    client
-        .call(reqwest::Method::GET, "/v1/whoami", None, None)
-        .await?;
+    client.verify_identity().await?;
     ContextMcp {
         service: None,
         client: Some(client),

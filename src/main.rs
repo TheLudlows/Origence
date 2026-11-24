@@ -56,6 +56,9 @@ enum Command {
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
         name: String,
+        /// Create in the tenant of this existing workspace.
+        #[arg(long)]
+        in_tenant_of: Option<Uuid>,
     },
     KeyCreate {
         workspace_id: Uuid,
@@ -71,7 +74,11 @@ enum Command {
     /// Offline inspection of the current SQLite identity schema; never migrates a database.
     IdentityCheck,
     /// Stdio MCP for shared retrieval and explicit private archives.
-    Mcp,
+    Mcp {
+        /// Select an authorized workspace for this online MCP connection.
+        #[arg(long, env = "OC_WORKSPACE_ID")]
+        workspace: Option<Uuid>,
+    },
     /// Capture opt-in client hooks or send their private queue to the host.
     ClientHook {
         #[arg(long)]
@@ -341,10 +348,13 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     tokio::fs::create_dir_all(&data_dir).await?;
     let store = SqliteStore::open(data_dir.join("context.db")).await?;
     let result = match command {
-        Command::WorkspaceCreate { name } => {
+        Command::WorkspaceCreate { name, in_tenant_of } => {
             anyhow::ensure!(!name.trim().is_empty(), "name is required");
             let scope = Scope {
-                tenant_id: Uuid::new_v4(),
+                tenant_id: match in_tenant_of {
+                    Some(workspace) => store.workspace_scope(workspace).await?.tenant_id,
+                    None => Uuid::new_v4(),
+                },
                 workspace_id: Uuid::new_v4(),
             };
             store
@@ -403,7 +413,11 @@ fn offline_command<'a>(
     command: Command,
 ) -> CommandFuture<'a, Option<serde_json::Value>> {
     match command {
-        Command::Mcp => Box::pin(async move {
+        Command::Mcp { workspace } => Box::pin(async move {
+            anyhow::ensure!(
+                workspace.is_none(),
+                "MCP workspace selection requires an online host"
+            );
             mcp::run(service.clone(), token).await?;
             Ok(None)
         }),
@@ -463,11 +477,19 @@ async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> 
         !matches!(command, Command::WorkspaceCreate { .. }),
         "workspace-create requires --offline and a stopped host"
     );
-    let token =
-        std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
+    let token = std::env::var("OC_API_KEY")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("OC_API_KEY is required"))?;
     let client = HostClient::new(&server_url, token)?;
     let (method, path, body) = match command {
-        Command::Mcp => return mcp::run_remote(client).await,
+        Command::Mcp { workspace } => {
+            let client = match workspace {
+                Some(workspace) => client.with_workspace(workspace),
+                None => client,
+            };
+            return mcp::run_remote(client).await;
+        }
         Command::SkillExport {
             client: target,
             project,

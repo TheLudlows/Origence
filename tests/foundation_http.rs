@@ -45,7 +45,10 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         .call(Method::GET, "/v1/session", None, None)
         .await
         .unwrap();
-    assert_eq!(http_session, session_from_stdio(&base, &writer.token).await);
+    assert_eq!(
+        http_session,
+        session_from_stdio(&base, &writer.token, None).await
+    );
     assert!(matches!(
         reviewer_client
             .call(Method::GET, &run_path, None, None)
@@ -196,13 +199,19 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
 }
 
 // Actual CLI transport; no provider account or native model client is needed.
-async fn session_from_stdio(base: &str, key: &str) -> Value {
+pub(crate) async fn session_from_stdio(base: &str, key: &str, workspace: Option<Uuid>) -> Value {
     use std::{process::Stdio, time::Duration};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     tokio::time::timeout(Duration::from_secs(20), async {
-        let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"))
+        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        command
             .args(["--server-url", base, "mcp"])
             .env("OC_API_KEY", key)
+            .env_remove("OC_WORKSPACE_ID");
+        if let Some(workspace) = workspace {
+            command.args(["--workspace", &workspace.to_string()]);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .kill_on_drop(true)
@@ -603,6 +612,47 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
     assert_eq!(username["workspace_id"], json!(child));
     assert_eq!(username["id"], json!(manager.key_id));
     assert_eq!(username["role"], "writer");
+    assert_eq!(
+        scoped(Method::GET, "/v1/whoami", &ordinary.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let child_admin = store
+        .issue_key(
+            Scope {
+                workspace_id: child,
+                ..root
+            },
+            "admin",
+        )
+        .await
+        .unwrap();
+    call(
+        Method::PUT,
+        &format!("/admin/workspace-key-grants/{}", ordinary.key_id),
+        &child_admin.token,
+    )
+    .json(&json!({"role":"reader"}))
+    .send()
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap();
+    let granted: Value = scoped(Method::GET, "/v1/whoami", &ordinary.token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(granted["workspace_id"], json!(child));
+    assert_eq!(granted["id"], json!(ordinary.key_id));
+    assert_eq!(granted["role"], "reader");
     assert_eq!(
         scoped(Method::GET, "/v1/whoami", &other_manager.token)
             .send()

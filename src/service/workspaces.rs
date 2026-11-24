@@ -1,5 +1,13 @@
 //! Generic one-level workspace access and explicit key capability issuance.
 use super::*;
+use crate::storage::WorkspaceAccess;
+
+fn authentication_error(error: StorageError) -> AppError {
+    match error {
+        StorageError::Forbidden => AppError::Unauthorized,
+        other => other.into(),
+    }
+}
 
 fn context(auth: AuthorizedScope) -> AuthContext {
     AuthContext {
@@ -11,6 +19,48 @@ fn context(auth: AuthorizedScope) -> AuthContext {
 }
 
 impl Service {
+    /// Authenticate a key and resolve an explicit workspace or its default.
+    pub async fn auth_workspace(
+        &self,
+        token: &str,
+        workspace: Option<Uuid>,
+    ) -> Result<AuthContext> {
+        self.engine
+            .relational()
+            .authenticate_workspace(token, workspace)
+            .await
+            .map_err(authentication_error)?
+            .map(context)
+            .ok_or_else(|| {
+                if workspace.is_some() {
+                    AppError::Forbidden
+                } else {
+                    AppError::Invalid("select an authorized workspace".into())
+                }
+            })
+    }
+
+    pub async fn workspace_access(&self, token: &str) -> Result<Vec<WorkspaceAccess>> {
+        self.engine
+            .relational()
+            .workspace_access(token)
+            .await
+            .map_err(authentication_error)
+    }
+
+    /// Set or revoke a logical key's grant in the authenticated workspace.
+    pub async fn set_workspace_key_grant(
+        &self,
+        auth: &AuthContext,
+        logical_key_id: Uuid,
+        role: Option<&str>,
+    ) -> Result<()> {
+        let mut tx = self.write(auth, Permission::Delete).await?;
+        tx.set_workspace_key_grant(logical_key_id, role).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub(crate) async fn list_managed_workspaces(
         &self,
         auth: &AuthContext,
