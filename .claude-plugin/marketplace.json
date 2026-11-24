@@ -1,0 +1,12 @@
+{
+  "name": "origence-tools",
+  "description": "Origence workspace retrieval plugins.",
+  "owner": { "name": "TheLudlows" },
+  "plugins": [
+    {
+      "name": "origence",
+      "description": "Search and read published Origence workspace materials.",
+      "source": "./plugins/claude-code/origence"
+    }
+  ]
+}

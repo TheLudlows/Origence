@@ -1214,6 +1214,41 @@ Based on main `41cb852b468d1eba2574f27e6f355687043c9a70`, using a fresh local Or
 
 This was a public synthetic engineering preflight. No live clients or models were called, and the formal pilot and independent sign-off remain `NOT_RUN`.
 
+## 2026-11-23 — Origence MCP plugin installation and retrieval
+
+Based on main `8226b4c1492c2a8f480977f10fbddc7379aaca18`. The real Claude Code
+**2.1.330** and Codex CLI **0.171.0** installed from a local marketplace on Linux.
+Codex CLI **0.167.0-alpha.4** also passed. Origence was built with Rust 1.98.0 and
+published a synthetic item with embedded AnySeek before issuing a `reader` key.
+
+- Claude Code used `claude plugin install origence --marketplace <REPO>`.
+  Codex used `codex plugin marketplace add <REPO>` and
+  `codex plugin add origence@origence-tools`. Both used fresh projects and
+  isolated settings. The binary directory contained spaces and the host used a
+  dynamic loopback port.
+- Both called `context_session`, `context_search`, and `context_get`. The session
+  matched the reader key's binding and `/v1/whoami` confirmed the workspace.
+  Search found published v1 and the exact hit ID and version returned the expected
+  content. Codex used its real app-server and Claude Code used a synthetic local
+  Messages response to drive its real tool calls. Uninstall passed for both.
+- The packages contain no Hook definitions and the private Run list stayed empty.
+  A missing executable was detected by PATH lookup. Direct MCP launch diagnostics
+  distinguished missing and invalid keys and an unreachable API. The fixture
+  checked that output did not contain the test keys.
+- `cargo build --locked --offline --bin origence`, formatting, strict
+  all-targets/all-features Clippy, and `git diff --check` passed.
+
+For a native Windows rerun, install the CLI executables and run from PowerShell:
+
+```powershell
+cargo build --locked --bin origence
+python tools/plugin_smoke.py --binary .\target\debug\origence.exe --claude (Get-Command claude.exe).Source --codex (Get-Command codex.exe).Source
+```
+
+Native Windows execution is pending. The available executor ran Linux; remote
+marketplace fetching, desktop GUI, real model providers, and the formal pilot
+were outside this validation.
+
 ## 2026-11-23 — Separate embedding and extraction model configuration
 
 Based on main `9cc1e929bc0c657f8b9e7408461eda25374ac2e6`. Each model route can

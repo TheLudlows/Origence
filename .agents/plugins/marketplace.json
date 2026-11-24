@@ -1,0 +1,11 @@
+{
+  "name": "origence-tools",
+  "plugins": [
+    {
+      "name": "origence",
+      "source": { "source": "local", "path": "./plugins/codex/origence" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
+      "category": "Productivity"
+    }
+  ]
+}

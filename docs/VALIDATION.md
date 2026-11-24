@@ -1738,6 +1738,37 @@ AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。未修复版本首次准备
 
 本轮为公开合成工程预检。未调用真实客户端或模型，正式试点及独立签认仍为 `NOT_RUN`。
 
+## 2026-11-23 — Origence MCP 插件安装与检索
+
+基于 main `8226b4c1492c2a8f480977f10fbddc7379aaca18`。在 Linux 上使用真正的
+Claude Code **2.1.330** 和 Codex CLI **0.171.0**，从本地检出的 Marketplace 安装。
+Codex CLI **0.167.0-alpha.4** 也通过同一流程。Origence 用 Rust 1.98.0 构建，
+在临时工作区用内嵌 AnySeek 发布合成资料，再签发 `reader` key。
+
+- Claude Code 用 `claude plugin install origence --marketplace <REPO>` 安装，
+  Codex 用 `codex plugin marketplace add <REPO>` 和
+  `codex plugin add origence@origence-tools` 安装。两端使用新项目和独立配置，
+  由插件注册 MCP。二进制目录包含空格，宿主使用动态 loopback 端口。
+- 两端均调用 `context_session`、`context_search` 和 `context_get`。会话与真实
+  reader key 绑定匹配，并用 `/v1/whoami` 核对 workspace。搜索命中已发布的 v1，
+  按命中的资产和版本读取正文。Codex 使用真实 app-server 工具调用，Claude Code
+  使用本地合成 Messages 响应驱动真实工具调用，无厂商模型请求。卸载与移除目录均通过。
+- 默认包不含 Hook 文件或声明，试验后私有 Run 为空。缺少二进制时 PATH 查询不到；
+  直接启动 MCP 分别复现空 key、无效 key、API 不可达的已知诊断，检查输出未包含测试 key。
+- `cargo build --locked --offline --bin origence`、`cargo fmt --all -- --check`、
+  严格全目标全特性 Clippy 和 `git diff --check` 通过。
+
+复跑使用仓库根目录下的 `tools/plugin_smoke.py`。在 Windows 原生 PowerShell 中，
+构建 Origence 并安装桌面 CLI 对应的可执行文件后执行：
+
+```powershell
+cargo build --locked --bin origence
+python tools/plugin_smoke.py --binary .\target\debug\origence.exe --claude (Get-Command claude.exe).Source --codex (Get-Command codex.exe).Source
+```
+
+**Windows 原生双客户端未执行。** 当前执行器仅有 Linux。远端 Marketplace 拉取和桌面 GUI
+未验证，CLI 上使用的是本地 Marketplace。以上是合成检索验收，未动生产数据或正式试点。
+
 ## 2026-11-23 — Embedding 与提取模型独立配置
 
 基于 main `9cc1e929bc0c657f8b9e7408461eda25374ac2e6`。两条模型请求链路可分别配置地址和
