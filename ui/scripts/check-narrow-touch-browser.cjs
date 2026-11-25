@@ -1,4 +1,5 @@
 // Browser-only touch regression through the built UI, relay and loopback HTTP fixture.
+const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -68,8 +69,7 @@ async function testWidth(browser, origin, width, colorScheme) {
   const sizes = {};
   try {
     await page.goto(origin + "/#knowledge");
-    await page.getByLabel("API key").fill(token);
-    await page.getByRole("button", { name: "连接工作空间" }).tap();
+    await fixtureSignIn(page, token, "touch");
     await page.getByRole("heading", { name: "没有匹配的知识" }).waitFor();
     await assertViewport(page, width);
     const logout = page.getByRole("button", { name: "退出", exact: true });
@@ -131,7 +131,7 @@ async function testWidth(browser, origin, width, colorScheme) {
     assert.equal(await focused(main), true);
     await assertViewport(page, width);
     await tapEdge(logout, { right: true, bottom: true });
-    await page.getByLabel("API key").waitFor();
+    await page.getByLabel("账号", { exact: true }).waitFor();
     assert.equal(await main.count(), 0);
     return sizes;
   } finally {
@@ -143,7 +143,7 @@ async function testWidth(browser, origin, width, colorScheme) {
   const { createUiServer } = await import("../dist/server.js");
   let browser, relay;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream) });
+    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(assetId, [token]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const failures = [];

@@ -1,4 +1,5 @@
 // Browser-only regression using the built UI, relay, and loopback synthetic HTTP.
+const { fixtureAccounts, fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
 const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { once } = require('node:events');
@@ -15,8 +16,7 @@ const isFocused = (control) => control.evaluate((node) => document.activeElement
 
 async function connectOverview(page, origin) {
   await page.goto(origin + '/#overview');
-  await page.getByLabel('API key').fill('synthetic-key');
-  await page.getByRole('button', { name: '连接工作空间' }).press('Enter');
+  await fixtureSignIn(page, 'synthetic-key');
 }
 
 async function checkResponsiveNavigation(page, width) {
@@ -221,10 +221,10 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   });
   let ui, browser;
   try {
-    ui = createUiServer({ apiBaseUrl: await listen(upstream) });
+    ui = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts('22222222-2222-4222-8222-222222222222', ['synthetic-key']) });
     const origin = await listen(ui, manual ? Number(process.env.ORIGENCE_FIXTURE_PORT ?? 0) : 0);
     if (manual) {
-      console.log(origin + '/#overview · API key synthetic-key · fixture responses: 503, 503, 200, 503, then 200');
+      console.log(origin + '/#overview · account fixture-synthetic-key · password ' + password + ' · fixture responses: 503, 503, 200, 503, then 200');
       await Promise.race([once(process, 'SIGINT'), once(process, 'SIGTERM')]);
       return;
     }

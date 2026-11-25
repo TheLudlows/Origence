@@ -1,4 +1,5 @@
 // Deterministic Chromium regression against a loopback HTTP fixture through the real UI relay.
+const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -67,15 +68,14 @@ async function scenario(browser, initialState, run) {
     }
     return send({}, 404);
   });
-  const relay = createUiServer({ apiBaseUrl: await listen(upstream) });
+  const relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(assetId, [token]) });
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.setDefaultTimeout(5_000);
   try {
     await page.goto(`${await listen(relay)}/#knowledge`);
-    await page.getByLabel("API key").fill(token);
-    await page.getByRole("button", { name: "连接工作空间" }).press("Enter");
+    await fixtureSignIn(page, token);
     await page.getByRole("button", { name: "查看详情 →" }).click();
     await page.getByRole("heading", { name: oldTitle }).waitFor();
     const update = page.getByRole("button", { name: "更新内容" });

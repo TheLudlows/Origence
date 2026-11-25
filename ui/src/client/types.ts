@@ -13,12 +13,13 @@ export interface ConsoleWorkspace extends User {
   can_create_owned_workspaces?: boolean;
 }
 export interface ConsoleSession {
-  account: string | null;
+  account: string;
   binding: string;
   workspaces: ConsoleWorkspace[];
 }
 export interface ConsoleSessionResponse {
-  mode: "account" | "key";
+  mode: "account";
+  setupRequired?: true;
   session: ConsoleSession | null;
 }
 export interface Asset {

@@ -1,4 +1,5 @@
 // Standalone Chromium regression through the built UI and loopback HTTP relay.
+const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -78,8 +79,7 @@ async function listen(server) {
 
 async function openEvidence(page, origin, role) {
   await page.goto(`${origin}/#contexts`);
-  await page.getByLabel("API key").fill(`synthetic-${role}`);
-  await page.getByRole("button", { name: "连接工作空间" }).click();
+  await fixtureSignIn(page, `synthetic-${role}`, "mouse");
   await page.getByLabel("任务与查询").fill("合成发布手册");
   await page.getByRole("button", { name: "预览上下文" }).click();
   const details = (title) => page.locator("details").filter({ hasText: title });
@@ -164,7 +164,7 @@ async function checkPinnedVersion(page, detail) {
   const { createUiServer } = await import("../dist/server.js");
   let browser, relay;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream) });
+    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(file, ["synthetic-reader", "synthetic-writer"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const writer = await browser.newPage({ viewport: { width: 375, height: 768 } });

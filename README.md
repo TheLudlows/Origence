@@ -51,7 +51,8 @@ npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:3000` and connect with your own API key. Set
+Open `http://127.0.0.1:3000` and sign in with your console account. For a fresh installation, see
+[creating the first console account](ui/README.en.md#local-accounts-and-workspaces). Set
 `ORIGENCE_API_BASE_URL` when Origence is not at `http://127.0.0.1:8080`.
 
 ## Rust library and storage

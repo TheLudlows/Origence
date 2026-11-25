@@ -2,7 +2,17 @@
 
 **English** · [简体中文](VALIDATION.md)
 
-The latest local verification was 2026-11-24. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+The latest local verification was 2026-11-25. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+
+## 2026-11-25 · Default console account sign-in
+
+Based on main `c3a28a851b06e4831eae16ff1cff630316f3d3bc`. On Linux with Node 24.22.1, type
+checking, 27 UI tests and the diff check passed. Tests covered startup with no account database setting,
+API-key sign-in rejection, creation of the default account database, and account authentication. An
+isolated Node console and synthetic HTTP upstream also passed Chromium 156 checks for the fresh setup
+prompt, first account provisioning without database flags, sign-in, reload and sign-out. Seven existing
+Chromium scripts passed for workspace accounts, asset tabs, knowledge evidence, knowledge jobs,
+narrow viewports, navigation focus and Run coverage. All data and credentials were synthetic.
 
 ## 2026-11-24 · #132 main sync and CI fix
 

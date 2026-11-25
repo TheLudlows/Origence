@@ -45,7 +45,7 @@ npm run build
 npm start
 ```
 
-打开 `http://127.0.0.1:3000` 并用自己的 API Key 连接。Origence 地址与 `http://127.0.0.1:8080` 不同时，设置 `ORIGENCE_API_BASE_URL`。
+打开 `http://127.0.0.1:3000` 并用控制台账号登录。首次安装请[创建第一个控制台账号](ui/README.md#本地账号与工作区)。Origence 地址与 `http://127.0.0.1:8080` 不同时，设置 `ORIGENCE_API_BASE_URL`。
 
 ## Rust 库与存储
 

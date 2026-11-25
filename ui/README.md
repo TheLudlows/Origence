@@ -14,34 +14,31 @@ Node.js 24 + TypeScript，使用浏览器原生 ES modules 和 DOM。
 cd ui
 npm ci --ignore-scripts
 npm run build
-cp .env.example .env
 npm start
 ```
 
-`npm start` 读取本目录的 `.env`，也支持由部署系统注入环境变量。对外提供服务时将 `ORIGENCE_UI_ORIGIN` 设为准确的 HTTPS origin，并让反向代理保留该 Host。默认仅允许 loopback Host。上游 origin 只接受 HTTP(S) 域名及端口，且转发不跟随重定向。
+`npm start` 使用内置默认值。需要覆盖时，可使用本目录的 `.env` 或部署环境变量。对外提供服务时将 `ORIGENCE_UI_ORIGIN` 设为准确的 HTTPS origin，并让反向代理保留该 Host。默认仅允许 loopback Host。上游 origin 只接受 HTTP(S) 域名及端口，且转发不跟随重定向。
 
 ### 本地账号与工作区
 
-使用私有 SQLite 配置库，例如 `../.data/console-accounts.db`。其中 `oc_console_accounts` 保存用户名和 scrypt 密码哈希，`oc_console_workspace_grants` 保存账号对应的工作区 ID、显示名和后端 key 的环境变量名。配置库由 Node 控制台维护，独立于 Origence 的业务库 `context.db`。
+控制台默认使用账号和密码登录。账号库默认位于仓库根目录的 `.data/console-accounts.db`，需要指定其他位置时才设置 `ORIGENCE_UI_ACCOUNTS_DB`。首次启动尚无账号时，登录页会提示联系管理员。
 
-构建后在 `ui` 目录执行以下命令。密码从标准输入读取，至少 15 个字符。
+构建后在 `ui` 目录设置第一个账号的密码和工作区授权。`set-password` 会按需创建私有账号库。密码从标准输入读取，至少 15 个字符。
 
 ```bash
-mkdir -p ../.data
-node scripts/console-accounts.mjs --db ../.data/console-accounts.db init
 read -rsp 'Password: ' console_password
-printf '%s\n' "$console_password" | node scripts/console-accounts.mjs --db ../.data/console-accounts.db set-password alice
+printf '%s\n' "$console_password" | node scripts/console-accounts.mjs set-password alice
 unset console_password
-node scripts/console-accounts.mjs --db ../.data/console-accounts.db grant alice 11111111-1111-4111-8111-111111111111 "研发" ORIGENCE_ALICE_ENGINEERING_KEY
+node scripts/console-accounts.mjs grant alice 11111111-1111-4111-8111-111111111111 "研发" ORIGENCE_ALICE_ENGINEERING_KEY
 ```
 
 PowerShell 可以把 `Read-Host -MaskInput` 的输出传给同一个 `set-password` 命令。
 
-使用已有的 [Origence 凭据管理接口](../docs/API.md#接口)，为每个账号及工作区授权签发一把独立且权限适当的 key，并由服务端环境注入，如 `ORIGENCE_ALICE_ENGINEERING_KEY`。在 `.env` 设置 `ORIGENCE_UI_ACCOUNTS_DB=../.data/console-accounts.db` 后启动控制台。再次运行 `set-password` 可改密，`grant` 可更新已有授权，`revoke USERNAME WORKSPACE_ID` 可撤销一项授权，`remove-account USERNAME` 可删除账号及其授权。重启控制台应用配置或 key 轮换。
+使用已有的 [Origence 凭据管理接口](../docs/API.md#接口)，为每个账号及工作区授权签发一把独立且权限适当的 key，并由服务端环境注入，如 `ORIGENCE_ALICE_ENGINEERING_KEY`。账号库保存 scrypt 密码哈希和工作区授权，后端 key 仅由服务端读取。再次运行 `set-password` 可改密，`grant` 可更新已有授权，`revoke USERNAME WORKSPACE_ID` 可撤销一项授权，`remove-account USERNAME` 可删除账号及其授权。若控制台已启动，重启后加载账号改动或轮换后的 key。
 
 用户用账号登录后可切换获授权的工作区。后台核验每把 key 的工作区和权限，上游会拒绝已撤销的 key。Agent 继续用自己的 API token 接入。私有会话和 Run 按逻辑 key 隔离。要延续自己的私有记录，应绑定该账号本人原有的同一逻辑 key。
 
-控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。单工作区开发仍可在未配置账号数据库时，用个人 API key 从 loopback 连接。
+控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。
 
 ### 新建子工作区
 

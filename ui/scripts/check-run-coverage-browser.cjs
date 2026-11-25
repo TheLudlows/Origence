@@ -1,4 +1,5 @@
 // Browser regression using the built UI, relay, and loopback synthetic HTTP.
+const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -158,8 +159,7 @@ async function checkCoverage(page, origin) {
   const first = ["1", "codex_hook", "未采集", "客户端上报；未经独立验证"];
 
   await page.goto(`${origin}/#runs/${populated.run_id}`);
-  await page.getByLabel("API key").fill("synthetic-owner");
-  await page.getByRole("button", { name: "连接工作空间" }).press("Enter");
+  await fixtureSignIn(page, "synthetic-owner");
   await coverage.getByText("codex_hook", { exact: true }).waitFor();
   assert.deepEqual(await rows(), [first]);
   assert.match(await coverage.innerText(), /整轮覆盖仍未知[\s\S]*还有后续事件/);
@@ -223,7 +223,7 @@ async function checkCoverage(page, origin) {
   finishRefresh(401);
   await staleVerificationCanceled;
   assert.equal(await verification.count(), 1);
-  assert.equal(await page.getByLabel("API key").count(), 0);
+  assert.equal(await page.getByLabel("账号", { exact: true }).count(), 0);
   await more.press("Enter");
   await event(2).waitFor();
   assert.equal(await focused(more), true);
@@ -239,7 +239,7 @@ async function checkCoverage(page, origin) {
   await coverage.getByText("codex_hook", { exact: true }).waitFor();
   pageFailure = 401;
   await more.press("Enter");
-  await page.getByLabel("API key").waitFor();
+  await page.getByText("你还没有获授权的工作区", { exact: true }).waitFor();
   assert.equal(await coverage.count(), 0);
   assert.equal(await page.getByText("codex_hook", { exact: true }).count(), 0);
   pageFailure = undefined;
@@ -249,7 +249,7 @@ async function checkCoverage(page, origin) {
   const { createUiServer } = await import("../dist/server.js");
   let relay, browser;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream) });
+    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(empty.run_id, ["synthetic-owner"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     for (const width of [1024, 320]) {
@@ -257,7 +257,7 @@ async function checkCoverage(page, origin) {
       page.setDefaultTimeout(4000);
       await checkCoverage(page, origin);
       await page.close();
-      console.log(`PASS ${width}px: ordered declarations, fixed-prefix isolation, pagination, 403, retry, Run switch, 401 logout`);
+      console.log(`PASS ${width}px: ordered declarations, fixed-prefix isolation, pagination, 403, retry, Run switch, revoked workspace access`);
     }
   } finally {
     await browser?.close();
