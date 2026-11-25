@@ -86,6 +86,11 @@ enum Command {
         #[command(subcommand)]
         action: HookAction,
     },
+    /// Capture Run metadata for an installed client plugin.
+    PluginHook {
+        #[arg(long, value_enum)]
+        client: HookClient,
+    },
     /// Export one approved Skill copy into a Claude Code or Codex project.
     SkillExport {
         #[arg(long, value_enum)]
@@ -239,6 +244,16 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             Ok(())
         }),
         Command::ClientHook { profile, action } => Box::pin(run_client_hook(profile, action)),
+        Command::PluginHook { client } => Box::pin(async move {
+            if client_hook::capture_plugin_event(client, &server_url)
+                .await
+                .is_err()
+            {
+                eprintln!("Origence plugin hook: Run observation could not be delivered");
+            }
+            println!("{{}}");
+            Ok(())
+        }),
         command @ (Command::WorkspaceCreate { .. }
         | Command::KeyCreate { .. }
         | Command::KeyRevoke { .. })

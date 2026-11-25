@@ -7,10 +7,11 @@ SQLite、Blob 或 AnySeek，也不需要它们的凭据。
 
 ## 安装 `origence` 插件
 
-准备一台客户端可访问的 Origence HTTP 宿主、本机 `origence` 可执行文件及支持插件
-Marketplace 的客户端。请 workspace 管理员签发个人 `reader` key。管理员可在已经
-通过 `OC_API_KEY` 获得授权的终端执行 `origence key-create <WORKSPACE_ID> --role reader`，
-通过受保护的渠道交付签发的 key。创建命令使用下文的 `OC_SERVER_URL`。
+准备一台客户端可访问的 Origence HTTP 宿主、支持 `origence plugin-hook` 的本机可执行文件及支持插件
+Marketplace 的客户端。插件同时安装检索 MCP 和默认启用的私有 Run Hook。请工作区管理员签发
+个人 key。只需检索时使用 `reader`，需要 Run 上报时使用 `writer`。管理员可在已授权的终端执行
+`origence key-create <WORKSPACE_ID> --role reader` 或 `--role writer`，通过受保护的渠道交付 key。
+创建命令使用下文的 `OC_SERVER_URL`。
 
 安装后，从配置了 `PATH`、`OC_SERVER_URL` 和 `OC_API_KEY` 的终端启动客户端。
 `OC_SERVER_URL` 与 `origence --server-url` 使用同一参数，默认是
@@ -33,8 +34,8 @@ claude plugin install origence --marketplace TheLudlows/Origence
 ```
 
 测试本地检出时，把 `TheLudlows/Origence` 换成仓库根目录的绝对路径。重新启动 `claude`，
-用 `/mcp` 或 `claude mcp list` 检查来自插件的 Origence 连接。客户端或组织要求确认时，
-审查该插件并按提示授权检索工具。卸载使用 `claude plugin uninstall origence@origence-tools`，
+用 `/mcp` 或 `claude mcp list` 检查来自插件的 Origence 连接，用 `/hooks` 核对插件 Hook。
+客户端或组织要求确认时，审查插件并按提示授权。卸载使用 `claude plugin uninstall origence@origence-tools`，
 可选执行 `claude plugin marketplace remove origence-tools`。
 [Claude Code 插件命令](https://code.claude.com/docs/en/plugins/cli-reference)
 
@@ -46,7 +47,8 @@ codex plugin add origence@origence-tools
 ```
 
 测试本地检出时，Marketplace 来源可换成仓库根目录的绝对路径。在新的 `codex` 会话中用
-`/mcp` 查看是否已连接。`codex plugin list` 核对安装，连接和工具权限由客户端另外处理。
+`/mcp` 查看是否已连接。`codex plugin list` 核对安装。在 `/hooks` 审查并信任插件 Hook，
+由 Codex 的信任流程和管理策略决定何时允许运行。
 卸载使用 `codex plugin remove origence@origence-tools`，可选执行
 `codex plugin marketplace remove origence-tools`。
 [Codex 插件命令](https://learn.chatgpt.com/docs/cli/reference#codex-plugin)
@@ -66,8 +68,18 @@ codex plugin add origence@origence-tools
 | `authentication required` | 请管理员核对 key 所属 workspace、有效性及撤销状态。 |
 | 显示两个 Origence 服务 | 检查历史手工注册，停用重复入口后再试。 |
 
-安装包只有检索 MCP 配置，没有 Run Hook。需要采集时，另按[项目显式启用](#按项目启用私有-run-hook)，
-并为该项目使用 `writer` 权限的凭据。
+### 验证默认 Run Hook
+
+用具有写权限的 key 启动客户端并完成一轮提示，再在同一工作区用该逻辑 key 检查私有 Run。
+Hook 与 MCP 共用 `OC_API_KEY`、`OC_SERVER_URL` 和可选的 `OC_WORKSPACE_ID`，省略工作区时
+使用该 key 的默认工作区。Hook 只记录受支持事件的结构化元数据，跳过缺少可靠标识的事件。
+会话正文、原始 transcript、工具参数和原始输出均不采集。
+
+安装后无需另写项目 Hook 配置或启动发送器。每次 Hook 用至多两秒确认身份并尝试上报，
+已入队的记录可在同项目、工作区和凭据的后续 Hook 重试。在身份确认前无法连接时，当前观察会跳过。
+队列位于客户端的插件数据目录，Windows 的目录权限由客户端和用户环境管理。
+如果只保留检索，在启动前设置 `OC_PLUGIN_RUN_HOOK=0`。已有手工 Hook 的项目应选定一个入口。
+继续使用原有项目配置时，关闭插件 Hook 并沿用下文的独立发送器。
 
 ## 手工 MCP 接入
 
@@ -154,7 +166,8 @@ Codex 使用 OpenAI provider，可用 `--codex-credential-store` 选择已有登
 
 ## 按项目启用私有 Run Hook
 
-默认关闭。每个项目使用一个由自己管理的 [Origence profile](../examples/client-hook.profile.json)。
+这是自管配置方式。每个项目使用一个由自己管理的 [Origence profile](../examples/client-hook.profile.json)，
+示例 profile 初始关闭。
 在项目外的私有目录保存副本。Unix 上目录设为 `0700`、文件设为 `0600`，Windows 上使用仅当前用户可读写的目录和 ACL。
 Windows 版本不会创建、收紧或检查 DACL；已有宽权限目录或文件不会被程序拒绝。
 这是调用方管理的前置条件，不是程序强制的权限保证。

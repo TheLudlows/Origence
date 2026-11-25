@@ -14,7 +14,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。见[记忆契约](contracts/memory.md) | P0 真实任务验收 |
 | 知识 | Text、Markdown、PDF 入库，版本读取与比较、发布与撤回；更新失败保留原发布版本。见 [API](API.md#接口) | P0 真实任务验收 |
 | Skill | [选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载及两种客户端目录格式导出。Windows 公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
-| Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、按项目启用的 Codex 和 Claude Code Hook 与采集缺口、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端真实 Hook 加载与实际事件覆盖、端到端证据核对及独立签认 |
+| Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核；按预算组装证据。真实引擎本地回归通过 | 当前后端的模型检索质量、容量与延迟验收 |
 | 私有归档与反馈 | 双客户端显式归档互读、逻辑 key 隔离与轮换撤销已验证；支持显式反馈和 Improve → Learning | 在 P0 双场景任务中核对归档和反馈证据 |
 | Node.js 管理界面 | 五页 UI，默认账号登录、授权新建子工作区、受限目录、异步入库、固定版本与来源、按当前 key 的 Run 创建数及趋势。已有 Chromium 定向验证 | 实际屏幕阅读器、实体触屏、生产计量与告警。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
@@ -28,16 +28,16 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 ## #105 客户端 Hook 本地切片
 
 Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提示上下文。
-两者通过同一私有队列和 Run API 上报可识别的元数据。MCP 仅在调用方显式传递
-同一 Run 标识时合用。接入、事件覆盖和中断边界见[客户端接入](CLIENTS.md#按项目启用私有-run-hook)。
-本地夹具覆盖公开 CLI、HTTP 和 MCP。真实客户端 Hook、模型与正式试点仍待验收。
+两端插件默认安装检索 MCP 和私有 Run Hook。Hook 按 MCP 的工作区选择使用有写权限的凭据，
+并通过有界私有队列和 Run API 上报元数据。MCP 仅在调用方显式传递同一 Run 标识时合用。
+接入与事件边界见[客户端接入](CLIENTS.md#验证默认-run-hook)。Windows 原生安装、真实模型与正式试点仍待验收。
 自动会话正文归档保留在 [#105 后续规划](https://github.com/TheLudlows/Origence/issues/105)。
 
 ## 多 workspace API 凭据
 
 同一逻辑 key 可在同租户的多个 workspace 获得各自的角色。HTTP 支持显式 workspace
 选择与授权枚举，在线 MCP 支持在连接启动时指定 workspace。私有归档仍按 workspace 和
-逻辑 key 隔离。原生客户端会话内切换、插件自动配置及归档采集仍待接入。见 [API](API.md#身份与密钥管理)。
+逻辑 key 隔离。原生客户端会话内切换和自动会话正文归档仍待接入。见 [API](API.md#身份与密钥管理)。
 
 ## AnySeek 服务凭据与 workspace 集合
 

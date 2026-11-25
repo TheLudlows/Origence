@@ -1,11 +1,11 @@
 {
   "name": "origence-tools",
-  "description": "Origence workspace retrieval plugins.",
+  "description": "Origence workspace retrieval and private Run plugins.",
   "owner": { "name": "TheLudlows" },
   "plugins": [
     {
       "name": "origence",
-      "description": "Search and read published Origence workspace materials.",
+      "description": "Retrieve Origence workspace materials and report private Run metadata.",
       "source": "./plugins/claude-code/origence"
     }
   ]

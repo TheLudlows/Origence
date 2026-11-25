@@ -111,6 +111,7 @@ fn event(client: Client, name: &str, cwd: &Path) -> Value {
 #[derive(Default)]
 struct Requests {
     sessions: usize,
+    plugin_scopes: Vec<Uuid>,
     creates: Vec<Value>,
     appends: Vec<(Uuid, Value)>,
     append_bodies: Vec<Bytes>,
@@ -130,6 +131,7 @@ struct Gate {
 struct HttpFixture {
     base: String,
     key: Uuid,
+    workspace: Uuid,
     log: Arc<Mutex<Requests>>,
 }
 
@@ -145,12 +147,14 @@ impl HttpFixture {
         Self {
             base: format!("http://{address}"),
             key: Uuid::new_v4(),
+            workspace: Uuid::new_v4(),
             log: Arc::new(Mutex::new(Requests::default())),
         }
     }
 
     fn serve(&self, listener: tokio::net::TcpListener) {
         let app = Router::new()
+            .route("/v1/whoami", get(whoami))
             .route("/v1/session", get(session))
             .route("/v1/runs", post(create))
             .route("/v1/runs/{run}/events", post(append))
@@ -165,6 +169,18 @@ fn reply(status: StatusCode, json: Value) -> Reply {
     (status, Json(json))
 }
 
+async fn whoami(State(peer): State<HttpFixture>, headers: HeaderMap) -> Reply {
+    let role = if headers["authorization"].to_str().unwrap() == format!("Bearer {TOKEN}") {
+        "writer"
+    } else {
+        "reader"
+    };
+    reply(
+        StatusCode::OK,
+        json!({"id": peer.key, "tenant_id": peer.key, "workspace_id": peer.workspace, "role": role}),
+    )
+}
+
 async fn session(State(peer): State<HttpFixture>, headers: HeaderMap) -> Reply {
     let mut log = peer.log.lock().unwrap();
     log.sessions += 1;
@@ -174,11 +190,22 @@ async fn session(State(peer): State<HttpFixture>, headers: HeaderMap) -> Reply {
     if headers["authorization"].to_str().unwrap() != format!("Bearer {TOKEN}") {
         return reply(StatusCode::UNAUTHORIZED, json!({}));
     }
-    reply(StatusCode::OK, json!({"key_id": peer.key}))
+    reply(
+        StatusCode::OK,
+        json!({"key_id": peer.key, "workspace_id": peer.workspace}),
+    )
 }
 
-async fn create(State(peer): State<HttpFixture>, Json(run): Json<Value>) -> Reply {
+async fn create(
+    State(peer): State<HttpFixture>,
+    headers: HeaderMap,
+    Json(run): Json<Value>,
+) -> Reply {
     let mut log = peer.log.lock().unwrap();
+    if let Some(scope) = headers.get("x-origence-workspace") {
+        log.plugin_scopes
+            .push(scope.to_str().unwrap().parse().unwrap());
+    }
     log.creates.push(run.clone());
     if log.conflict_create {
         return reply(StatusCode::CONFLICT, json!({}));
@@ -216,6 +243,87 @@ async fn append(
         StatusCode::OK,
         json!({"run_id": run, "event_id": report["event_id"], "sequence": sequence}),
     )
+}
+
+#[tokio::test]
+async fn installed_hook_pins_workspace_and_retries_without_exposing_event_payload() {
+    use tokio::io::AsyncWriteExt;
+    let peer = HttpFixture::start().await;
+    let fixture = HookFixture::new();
+    let data = fixture.config.parent().unwrap();
+    let run = |client, input: Value, key, workspace: Option<String>, enabled| {
+        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        command
+            .current_dir(&fixture.project)
+            .env("OC_API_KEY", key)
+            .env_remove("OC_WORKSPACE_ID")
+            .env("OC_PLUGIN_RUN_HOOK", enabled)
+            .env("PLUGIN_DATA", data)
+            .env("CLAUDE_PLUGIN_DATA", data)
+            .args([
+                "--server-url",
+                &peer.base,
+                "plugin-hook",
+                "--client",
+                client,
+            ])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        if let Some(workspace) = workspace {
+            command.env("OC_WORKSPACE_ID", workspace);
+        }
+        async move {
+            let mut child = command.spawn().unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(input.to_string().as_bytes())
+                .await
+                .unwrap();
+            let output = child.wait_with_output().await.unwrap();
+            assert!(output.status.success());
+            assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "{}");
+            assert!(!String::from_utf8(output.stderr).unwrap().contains(TOKEN));
+        }
+    };
+
+    let codex = event(Client::Codex, "start", &fixture.project);
+    let selected = peer.workspace.to_string();
+    run(
+        "codex",
+        codex.clone(),
+        OTHER_TOKEN,
+        Some(selected.clone()),
+        "1",
+    )
+    .await;
+    run("codex", codex.clone(), TOKEN, Some(selected.clone()), "0").await;
+    run(
+        "codex",
+        codex.clone(),
+        TOKEN,
+        Some(Uuid::new_v4().to_string()),
+        "1",
+    )
+    .await;
+    assert_eq!(fs::read_dir(data).unwrap().count(), 0);
+    assert!(peer.log.lock().unwrap().creates.is_empty());
+
+    peer.log.lock().unwrap().lose_append_receipt = true;
+    run("codex", codex.clone(), TOKEN, Some(selected.clone()), "1").await;
+    run("codex", codex, TOKEN, Some(selected), "1").await;
+    let mut claude = event(Client::ClaudeCode, "start", &fixture.project);
+    claude["prompt"] = json!("excluded-prompt-contents");
+    run("claude-code", claude, TOKEN, None, "1").await;
+
+    let log = peer.log.lock().unwrap();
+    assert_eq!(log.plugin_scopes, [peer.workspace; 3]);
+    assert_eq!(log.appends.len(), 3);
+    assert_eq!(log.append_bodies[0], log.append_bodies[1]);
+    assert_ne!(log.appends[1].0, log.appends[2].0);
+    assert!(!String::from_utf8_lossy(&log.append_bodies[2]).contains("excluded-prompt-contents"));
 }
 
 #[tokio::test]

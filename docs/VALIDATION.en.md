@@ -4,6 +4,22 @@
 
 The latest local verification was 2026-11-25. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-25 · Default plugin Run hooks
+
+Based on main `b7ce2679ddadda045f35fb108b63cc822a68029c`, on Linux with Rust 1.98.0.
+Formatting, Clippy with all targets and features and `-D warnings`, and all 211 local tests passed,
+including six hook regressions.
+The CLI fixture covered explicit and default workspace selection, mismatched scope, reader access,
+the disable switch, retry after receipt loss, and exclusion of raw prompt text.
+
+`python3 tools/plugin_smoke.py --binary target/debug/origence --claude <CLI> --codex <CLI>`
+installed both plugins from a local marketplace in fresh projects using Claude Code 2.1.330 and Codex
+0.171.0. Reader retrieval, writer prompt and Stop events, absence of handwritten project config,
+uninstall, and startup diagnostics passed. Claude Code also recorded the plugin's own search and
+get calls. Codex first showed four enabled hooks awaiting trust. The fixture allowed them for a
+single isolated turn. Both model endpoints were scripted on loopback. Native Windows installation,
+remote marketplace fetches, and complete lifecycle coverage remain unverified.
+
 ## 2026-11-25 · Visible workspace list after sign-in
 
 Based on main `cadce521a09a65e9c59f8feb50c192f5b7649c41`. On Linux with Node 24.22.1,

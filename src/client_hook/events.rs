@@ -102,7 +102,7 @@ impl HookInput<'_> {
         Tool::ALL
             .iter()
             .copied()
-            .find(|tool| tool.allowed(client) && tool.name() == name)
+            .find(|tool| tool.allowed(client) && tool.matches(name))
     }
 }
 
@@ -161,6 +161,16 @@ impl Tool {
 
     fn is_mcp(self) -> bool {
         self.name().starts_with("mcp__")
+    }
+
+    fn matches(self, name: &str) -> bool {
+        self.name() == name
+            || self
+                .name()
+                .strip_prefix("mcp__origence__")
+                .is_some_and(|suffix| {
+                    name.strip_prefix("mcp__plugin_origence_origence__") == Some(suffix)
+                })
     }
 
     fn allowed(self, client: Client) -> bool {

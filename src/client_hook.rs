@@ -1,10 +1,12 @@
-//! Opt-in client command hooks and their separately run HTTP sender.
+//! Client Run metadata capture and delivery.
 mod events;
+mod plugin;
 mod queue;
 
 use crate::{client::HostClient, error::AppError, run::RunInput};
 use anyhow::{Context, ensure};
 use events::HookInput;
+pub use plugin::capture_plugin_event;
 use queue::{Queue, Record};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -65,6 +67,7 @@ pub struct Profile {
     project: PathBuf,
     server: reqwest::Url,
     logical_key: Uuid,
+    workspace: Option<Uuid>,
     key_env: String,
     queue: Queue,
 }
@@ -132,6 +135,7 @@ impl Profile {
             project,
             server,
             logical_key,
+            workspace: None,
             key_env,
             queue: Queue::new(parent.join(queue_name)),
         }))
@@ -160,15 +164,21 @@ impl Profile {
             }
         };
         let identity = digest(
-            b"origence-client-hook-run-v1",
-            &[
+            if self.workspace.is_some() {
+                b"origence-plugin-hook-run-v1"
+            } else {
+                b"origence-client-hook-run-v1"
+            },
+            [
                 client.namespace(),
                 self.project.as_os_str().as_encoded_bytes(),
                 self.server.as_str().as_bytes(),
                 self.logical_key.as_bytes(),
                 session,
                 turn,
-            ],
+            ]
+            .into_iter()
+            .chain(self.workspace.iter().map(|id| id.as_bytes().as_slice())),
         );
         Some(client.run_input(derived_uuid(identity)))
     }
@@ -188,6 +198,15 @@ impl Profile {
         let body = read_bounded(stdin, HOOK_LIMIT)?;
         let input: HookInput<'_> = serde_json::from_slice(&body)
             .map_err(|_| anyhow::anyhow!("invalid client hook input"))?;
+        self.enqueue_input(client, token, &input)
+    }
+
+    fn enqueue_input(
+        &self,
+        client: Client,
+        token: &str,
+        input: &HookInput<'_>,
+    ) -> anyhow::Result<Capture> {
         if !input
             .cwd
             .as_deref()
@@ -205,12 +224,16 @@ impl Profile {
         ) else {
             return Ok(Capture::MissingIdentity);
         };
-        let Some(source) = observation.source_id(&input) else {
+        let Some(source) = observation.source_id(input) else {
             return Ok(Capture::MissingIdentity);
         };
         let event_id = derived_uuid(digest(
             b"origence-client-hook-event-v1",
-            &[run.run_id.as_bytes(), observation.event_key(&input), source],
+            [
+                run.run_id.as_bytes().as_slice(),
+                observation.event_key(input),
+                source,
+            ],
         ));
         let observed_at_ms =
             i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis())?;
@@ -239,13 +262,15 @@ impl Profile {
     fn binding(&self, token: &str) -> Uuid {
         derived_uuid(digest(
             b"origence-client-hook-queue-binding-v1",
-            &[
+            [
                 self.project.as_os_str().as_encoded_bytes(),
                 self.server.as_str().as_bytes(),
                 self.logical_key.as_bytes(),
                 self.key_env.as_bytes(),
                 token.as_bytes(),
-            ],
+            ]
+            .into_iter()
+            .chain(self.workspace.iter().map(|id| id.as_bytes().as_slice())),
         ))
     }
 
@@ -254,15 +279,9 @@ impl Profile {
     pub async fn flush(self, token: String) -> anyhow::Result<Flush> {
         ensure!(valid_token(&token), "invalid hook credential");
         let binding = self.binding(&token);
-        let queue = self.queue;
-        let clients = self.clients;
-        let Some(batch) = queue
-            .blocking(move |queue| queue.batch(binding, &clients, BATCH_SIZE))
-            .await?
-        else {
+        let Some(batch) = self.batch(binding).await? else {
             return Ok(Flush::default());
         };
-        let _sender_lock = batch.sender_lock;
         let mut report = Flush {
             held: batch.held,
             ..Flush::default()
@@ -271,7 +290,7 @@ impl Profile {
             return Ok(report);
         }
 
-        let client = HostClient::with_timeout(self.server, token, Duration::from_secs(5))?;
+        let client = HostClient::with_timeout(self.server.clone(), token, Duration::from_secs(5))?;
         // The credential-bound fingerprint pins the queued token. Recheck its
         // authoritative logical owner before submitting any Run or event.
         let session = client
@@ -293,10 +312,27 @@ impl Profile {
             }
         }
 
+        self.deliver(&client, batch, report).await
+    }
+
+    async fn batch(&self, binding: Uuid) -> anyhow::Result<Option<queue::Batch>> {
+        let clients = self.clients.clone();
+        self.queue
+            .blocking(move |queue| queue.batch(binding, &clients, BATCH_SIZE))
+            .await
+    }
+
+    async fn deliver(
+        &self,
+        client: &HostClient,
+        batch: queue::Batch,
+        mut report: Flush,
+    ) -> anyhow::Result<Flush> {
+        let _sender_lock = batch.sender_lock;
         let mut created = HashSet::new();
         for record in batch.records {
             let run = record.observation.client().run_input(record.run_id);
-            let result = send_record(&client, &mut created, &run, &record).await;
+            let result = send_record(client, &mut created, &run, &record).await;
             match result {
                 Ok(_) => report.sent += 1,
                 Err(AppError::Conflict(_) | AppError::Invalid(_) | AppError::NotFound) => {
@@ -307,7 +343,7 @@ impl Profile {
                     break;
                 }
             }
-            queue
+            self.queue
                 .blocking(move |queue| queue.acknowledge(record.event_id))
                 .await?;
         }
@@ -390,7 +426,7 @@ fn valid_token(token: &str) -> bool {
     !token.is_empty() && token.len() <= 1024 && token.bytes().all(|b| b.is_ascii_graphic())
 }
 
-fn digest(domain: &[u8], values: &[&[u8]]) -> [u8; 32] {
+fn digest<'a>(domain: &[u8], values: impl IntoIterator<Item = &'a [u8]>) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(domain);
     for value in values {
