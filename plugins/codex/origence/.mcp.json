@@ -3,7 +3,7 @@
     "origence": {
       "command": "origence",
       "args": ["mcp"],
-      "env_vars": ["OC_API_KEY", "OC_SERVER_URL", "PATH"],
+      "env_vars": ["OC_API_KEY", "OC_SERVER_URL", "OC_WORKSPACE_ID", "PATH"],
       "enabled_tools": ["context_session", "context_search", "context_get"]
     }
   }

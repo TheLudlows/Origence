@@ -6,11 +6,13 @@ Both clients connect to a running Origence HTTP host through a local stdio proce
 
 ## Install the `origence` plugin
 
-Prepare a reachable Origence HTTP host, the Origence binary, and a client version
-that supports plugin marketplaces. Ask the workspace administrator to issue a
-personal `reader` key. An authenticated administrator can run
-`origence key-create <WORKSPACE_ID> --role reader` with `OC_API_KEY` and
-`OC_SERVER_URL` set in their environment, then deliver the new key privately.
+Prepare a reachable Origence HTTP host, a local binary that supports
+`origence plugin-hook`, and a client that supports plugin marketplaces. The plugin
+installs retrieval MCP and enables the private Run hook by default. Ask the workspace
+administrator to issue a personal `reader` key for retrieval or a `writer` key for
+Run reporting. An authenticated administrator can run
+`origence key-create <WORKSPACE_ID> --role reader` or use `--role writer`, with
+`OC_API_KEY` and `OC_SERVER_URL` set, then deliver the new key privately.
 
 Launch the client from the terminal that sets `PATH`, `OC_SERVER_URL`, and
 `OC_API_KEY`. `OC_SERVER_URL` supplies the same address as `--server-url` and
@@ -34,7 +36,7 @@ claude plugin install origence --marketplace TheLudlows/Origence
 
 For a local checkout, substitute the absolute path to the repository root.
 Restart `claude` and inspect the plugin's connection with `/mcp` or
-`claude mcp list`. Review the source and approve the retrieval tools if prompted.
+`claude mcp list`. Check the bundled hooks in `/hooks`. Review the plugin and approve it if prompted.
 Run `claude plugin uninstall origence@origence-tools` to uninstall. You can also
 run `claude plugin marketplace remove origence-tools` to remove the catalog.
 [Claude Code plugin commands](https://code.claude.com/docs/en/plugins/cli-reference)
@@ -48,8 +50,8 @@ codex plugin add origence@origence-tools
 
 For a local checkout, pass the absolute path to the repository root to
 `marketplace add`. Start a fresh `codex` session and inspect `/mcp`. Use
-`codex plugin list` to confirm installation. The client handles connection
-and tool approvals separately. Run `codex plugin remove origence@origence-tools`
+`codex plugin list` to confirm installation. Review and trust the bundled hooks in
+`/hooks` when required by Codex or your organization. Run `codex plugin remove origence@origence-tools`
 to uninstall and optionally `codex plugin marketplace remove origence-tools`.
 [Codex plugin commands](https://learn.chatgpt.com/docs/cli/reference#codex-plugin)
 
@@ -69,8 +71,21 @@ to find a known published item. Pass the hit's `asset_id` and `version` to
 | `authentication required` | Ask the administrator to verify the key is valid and belongs to the intended workspace. |
 | Two Origence servers appear | Check for an older standalone registration and disable the duplicate. |
 
-These packages ship MCP configuration only. To record Runs, explicitly
-[enable hooks per project](#enable-private-run-hooks-per-project) with a `writer` key.
+### Verify the default Run hook
+
+Start the client with a key that can write. Complete a prompt and inspect private Runs in
+the same workspace with that logical key. The hook uses the same `OC_API_KEY`,
+`OC_SERVER_URL`, and optional `OC_WORKSPACE_ID` as MCP. It uses the key's default workspace
+when the selector is omitted. It captures structured metadata from supported events with
+reliable identifiers. Conversation text, transcripts, tool arguments and raw output stay out of collection.
+
+The installed hook requires no project configuration or separate sender. Each invocation
+has a two-second budget for identity verification and delivery. Enqueued observations can
+retry on later hooks for the same project, workspace and credential. An observation is
+skipped if identity cannot be verified before enqueueing. Queues live in client plugin data.
+On Windows, directory permissions are managed by the client and user environment. Set
+`OC_PLUGIN_RUN_HOOK=0` before startup to keep retrieval only or to continue using an
+existing manual project configuration and its separate sender.
 
 ## Manual MCP setup
 
@@ -132,7 +147,7 @@ Claude Code runs with `--bare` and reads Anthropic credentials and endpoint from
 
 ## Enable private Run hooks per project
 
-Hooks are off by default. Use a project-specific [Origence profile](../examples/client-hook.profile.json) and store a copy in a private directory outside the project. On Unix, use directory mode `0700` and file mode `0600`. On Windows, use a directory and ACL readable and writable only by the current user. The Windows build does not create, tighten, or inspect the DACL and does not reject files or directories with broad permissions. This is a caller-managed prerequisite. Windows CI `tools/test_hook_acl.ps1` explicitly creates a private DACL only in an isolated temporary directory. Synthetic hook inputs check that queue, temporary, and lock files inherit the permissions across failed retries and a new process. The broad-permission negative case checks only the test ACL inspector and does not run the hook or show that the product would reject broad permissions. This check does not verify actual access by other identities, administrator privileges, real client installation, event coverage, or power-loss durability. Fill in the project's absolute local path, service origin, logical key UUID, and project-specific credential variable name. `GET /v1/session` or MCP `context_session` with the same credential returns the logical `key_id`, stable across rotation. Pass that project's writer credential to both client and sender through their launch environments. Profile and client examples contain only environment variable names or profile paths. Select `codex`, `claude_code`, or both under `clients` and set `enabled` to `true`.
+For a self-managed setup, use a project-specific [Origence profile](../examples/client-hook.profile.json) and store a copy in a private directory outside the project. On Unix, use directory mode `0700` and file mode `0600`. On Windows, use a directory and ACL readable and writable only by the current user. The Windows build does not create, tighten, or inspect the DACL and does not reject files or directories with broad permissions. This is a caller-managed prerequisite. Windows CI `tools/test_hook_acl.ps1` explicitly creates a private DACL only in an isolated temporary directory. Synthetic hook inputs check that queue, temporary, and lock files inherit the permissions across failed retries and a new process. The broad-permission negative case checks only the test ACL inspector and does not run the hook or show that the product would reject broad permissions. This check does not verify actual access by other identities, administrator privileges, real client installation, event coverage, or power-loss durability. Fill in the project's absolute local path, service origin, logical key UUID, and project-specific credential variable name. `GET /v1/session` or MCP `context_session` with the same credential returns the logical `key_id`, stable across rotation. Pass that project's writer credential to both client and sender through their launch environments. Profile and client examples contain only environment variable names or profile paths. Select `codex`, `claude_code`, or both under `clients` and set `enabled` to `true`.
 
 - **Codex**. Merge handlers for the chosen events from the [hook example](../examples/codex.hooks.json) into the project's `.codex/hooks.json`. If inline hooks already exist, use the same format and avoid duplicate declarations at the same level. Replace executable and profile absolute paths and quote spaces according to the hook shell. Trust the project through Codex, then inspect and trust the selected hook definitions in `/hooks`. [Official Codex hook docs](https://learn.chatgpt.com/docs/hooks)
 - **Claude Code**. Merge handlers for the chosen events from the [hook example](../examples/claude-code.hooks.json) into the project's `.claude/settings.local.json`. Replace absolute paths in `command` and `args`. On Windows, use `origence.exe` and escape paths for JSON. Verify sources and handlers under `/hooks`. [Official Claude Code hook docs](https://code.claude.com/docs/en/hooks)

@@ -7,6 +7,21 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-25 · 插件默认安装 Run Hook
+
+基于 main `b7ce2679ddadda045f35fb108b63cc822a68029c`，Linux 与 Rust 1.98.0。
+`cargo fmt --all -- --check`、全目标全特性 Clippy（`-D warnings`）和 211 项本地测试通过，
+其中包含六项 Hook 回归。
+CLI 夹具覆盖显式和默认工作区、拒绝不匹配的工作区、reader、关闭开关、回执丢失后重试原始事件，
+以及过滤原始提示文本。
+
+从本地 Marketplace 在新项目安装真实 Claude Code 2.1.330 和 Codex 0.171.0。执行
+`python3 tools/plugin_smoke.py --binary target/debug/origence --claude <CLI> --codex <CLI>`，
+两个客户端均通过 reader 检索已发布版本、writer 上报 prompt 与 Stop 元数据、项目无手写配置、
+卸载和启动诊断。Claude Code 另捕获插件自身的搜索和读取事件。Codex 先验证四个默认开启的 Hook
+处于待信任状态，再仅为隔离夹具轮次允许执行。模型响应来自本地合成端点，未使用真实模型或生产数据。
+Windows 原生安装、远端 Marketplace 和完整生命周期覆盖待验收。
+
 ## 2026-11-25 · 登录后直接显示工作区
 
 基于 main `cadce521a09a65e9c59f8feb50c192f5b7649c41`。Linux、Node 24.22.1 下

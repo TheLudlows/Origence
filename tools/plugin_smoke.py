@@ -54,7 +54,7 @@ def calls(lookup, expected_session, asset):
     require(item["version"] == 1 and item["content"] == CONTENT, "Pinned get returned unexpected data")
 
 
-def codex_client(cli, project, env, forbidden, expected_session, asset):
+def codex_client(cli, project, env, forbidden, expected_session, asset, writer_env):
     execute([cli, "plugin", "marketplace", "add", str(REPO)], project, env, forbidden)
     execute([cli, "plugin", "add", PLUGIN], project, env, forbidden)
     config = Path(env["CODEX_HOME"]) / "config.toml"
@@ -82,6 +82,11 @@ def codex_client(cli, project, env, forbidden, expected_session, asset):
         child.process.stdin.write(b'{"method":"initialized"}\n')
         child.process.stdin.flush()
         thread = rpc("thread/start", {"cwd": str(project), "ephemeral": True})["thread"]["id"]
+        hook_entries = rpc("hooks/list", {"threadId": thread})["data"]
+        hooks = [hook for entry in hook_entries for hook in entry["hooks"] if hook.get("pluginId") == PLUGIN]
+        require(len(hooks) == 4 and all(hook["enabled"] and hook["source"] == "plugin" for hook in hooks),
+                "Codex did not discover the four enabled plugin hooks")
+        require(all(hook["trustStatus"] == "untrusted" for hook in hooks), "Fresh Codex hooks must still require review")
         status = rpc("mcpServerStatus/list", {"threadId": thread})
         servers = [entry for entry in status["data"] if set(entry["tools"]) == set(TOOLS)]
         require(len(servers) == 1, "Codex did not discover the plugin's reader tools")
@@ -90,8 +95,52 @@ def codex_client(cli, project, env, forbidden, expected_session, asset):
             "server": server, "tool": name, "threadId": thread, "arguments": arguments,
         })), expected_session, asset)
         child.check_stderr()
+    codex_hook_turn(cli, project, writer_env, forbidden)
     execute([cli, "plugin", "remove", PLUGIN], project, env, forbidden)
     execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
+
+
+class ScriptedCodex(BaseHTTPRequestHandler):
+    """Loopback Responses stream with a fixed text completion and no tool calls."""
+    def log_message(self, *_args):
+        pass
+
+    def do_POST(self):
+        if self.path != "/v1/responses":
+            self.send_error(404)
+            return
+        self.rfile.read(int(self.headers["Content-Length"]))
+        message = {"id": "msg_fixture", "type": "message", "role": "assistant", "status": "completed",
+                   "content": [{"type": "output_text", "text": "Origence hook fixture complete", "annotations": []}]}
+        response = {"id": "resp_fixture", "object": "response", "status": "completed", "output": [message],
+                    "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}}
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for name, data in (("response.output_item.done", {"output_index": 0, "item": message}),
+                           ("response.completed", {"response": response})):
+            self.wfile.write(f"event: {name}\ndata: {json.dumps({'type': name, **data})}\n\n".encode())
+
+
+def codex_hook_turn(cli, project, env, forbidden):
+    with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedCodex) as model:
+        thread = threading.Thread(target=model.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # The isolated fixture installs only the reviewed Origence package. Retain Codex's
+            # default untrusted state above, then allow these hooks for this synthetic turn only.
+            output = execute([cli, "exec", "--ephemeral", "--json", "--sandbox", "read-only",
+                              "--dangerously-bypass-hook-trust", "-m", "gpt-5.4-mini",
+                              "-c", 'model_provider="fixture"', "-c", 'model_providers.fixture.name="Fixture"',
+                              "-c", f'model_providers.fixture.base_url="http://127.0.0.1:{model.server_port}/v1"',
+                              "-c", 'model_providers.fixture.env_key="ORIGENCE_CODEX_FIXTURE_KEY"',
+                              "-c", 'approval_policy="never"', "ORIGENCE_FIXTURE_PRIVATE_PROMPT"],
+                             project, dict(env, ORIGENCE_CODEX_FIXTURE_KEY="fixture-local-only"), forbidden)
+            require(any(json.loads(line).get("type") == "turn.completed" for line in output.splitlines()),
+                    "Codex did not complete the synthetic turn")
+        finally:
+            model.shutdown()
+            thread.join()
 
 
 class ScriptedClaude(BaseHTTPRequestHandler):
@@ -193,11 +242,30 @@ def diagnostics(binary, project, env, forbidden):
 def check_packages():
     for client, manifest_dir in (("claude-code", ".claude-plugin"), ("codex", ".codex-plugin")):
         package = REPO / "plugins" / client / "origence"
-        require({path.name for path in package.iterdir()} == {manifest_dir, ".mcp.json"},
-                "Plugin contains components other than its manifest and MCP configuration")
+        require({path.name for path in package.iterdir()} == {manifest_dir, ".mcp.json", "hooks"},
+                "Plugin must ship MCP and Hook configurations")
         manifest = json.loads((package / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
-        require(manifest.get("mcpServers") == "./.mcp.json" and "hooks" not in manifest,
-                "Default plugin must not declare hooks")
+        require(manifest.get("mcpServers") == "./.mcp.json", "Plugin is missing its MCP declaration")
+        if client == "codex":
+            require(manifest.get("hooks") == "./hooks/hooks.json", "Plugin is missing its Hook declaration")
+        hooks = json.loads((package / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        require({"UserPromptSubmit", "PostToolUse", "Stop"} <= hooks.keys(), "Plugin is missing lifecycle events")
+
+
+def check_hook_run(host, summary, component, forbidden):
+    matches = [run for run in host.request("/v1/runs?limit=10")["items"] if run["summary"] == summary]
+    require(len(matches) == 1, "Plugin did not create one private Run for the synthetic prompt")
+    trace = host.request(f"/v1/runs/{matches[0]['run_id']}")
+    sanitized(trace, [*forbidden, "ORIGENCE_FIXTURE_PRIVATE_PROMPT", "Use the installed Origence tools"])
+    events = [item["report"]["event"] for item in trace["events"]]
+    require(any(event["kind"] == "coverage" and event["component"] == component for event in events),
+            "Plugin Run is missing the prompt coverage event")
+    require(any(event["kind"] == "result_reported" and event["outcome"] == "unknown" for event in events),
+            "Plugin Run is missing the terminal observation")
+    if component == "claude_code_hook":
+        tools = {event["tool"] for event in events if event["kind"] == "tool_reported"}
+        require({"mcp__origence__context_search", "mcp__origence__context_get"} <= tools,
+                "Plugin did not observe its own allowlisted MCP calls")
 
 
 def main():
@@ -223,6 +291,7 @@ def main():
         with Host(str(binary), host_env, admin, [admin], serve_args=("--local",)) as host:
             asset = host.publish(CONTENT)
             reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})["token"]
+            writer = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "writer"})["token"]
             host.token = reader
             require(host.request("/v1/whoami")["workspace_id"] == workspace["workspace_id"],
                     "Reader fixture is in the wrong workspace")
@@ -231,7 +300,7 @@ def main():
             path_name = next(name for name in env if name.upper() == "PATH")
             env["PATH"] = str(binary_dir) + os.pathsep + env.pop(path_name)
             env.update(HOME=temporary, USERPROFILE=temporary, OC_SERVER_URL=host.base, OC_API_KEY=reader)
-            forbidden = [admin, reader]
+            forbidden = [admin, reader, writer]
             diagnostics(binary, root, env, forbidden)
             for label, cli, run in (("Codex", args.codex, codex_client), ("Claude Code", args.claude, claude_client)):
                 project = root / f"{label} project"
@@ -241,12 +310,26 @@ def main():
                 execute(["git", "init", "-q"], project, env, forbidden)
                 client_env = dict(env, CODEX_HOME=str(config), CLAUDE_CONFIG_DIR=str(config))
                 print(execute([cli, "--version"], project, client_env, forbidden).strip(), flush=True)
-                run(cli, project, client_env, forbidden, session, asset)
+                writer_env = dict(client_env, OC_API_KEY=writer, OC_WORKSPACE_ID=workspace["workspace_id"])
+                if label == "Codex":
+                    run(cli, project, client_env, forbidden, session, asset, writer_env)
+                else:
+                    run(cli, project, client_env, forbidden, session, asset)
+                    host.token = writer
+                    run(cli, project, writer_env, forbidden, host.request("/v1/session"), asset)
+                    host.token = reader
                 require(not (project / ".mcp.json").exists() and not (project / ".codex/config.toml").exists(),
                         "Client project contains standalone MCP registration")
-                print(f"PASS {label}: install, reader session, search, exact version, uninstall", flush=True)
-            require(host.request("/v1/runs?limit=1")["items"] == [], "Unexpected Run activity")
-            print("PASS startup diagnostics and MCP-only packages", flush=True)
+                require(not (project / ".claude/settings.local.json").exists() and not (project / ".codex/hooks.json").exists(),
+                        "Client project contains standalone Hook registration")
+                require(host.request("/v1/runs?limit=1")["items"] == [], "Unexpected reader Run activity")
+                host.token = writer
+                summary = "Codex turn (hook metadata only)" if label == "Codex" else "Claude Code prompt (hook metadata only)"
+                component = "codex_hook" if label == "Codex" else "claude_code_hook"
+                check_hook_run(host, summary, component, forbidden)
+                host.token = reader
+                print(f"PASS {label}: install, reader session, search, exact version, writer Run hook, uninstall", flush=True)
+            print("PASS startup diagnostics, packaged hooks, and reader isolation", flush=True)
 
 
 if __name__ == "__main__":

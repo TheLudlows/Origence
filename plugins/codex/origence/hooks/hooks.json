@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 3,
+            "command": "origence plugin-hook --client codex",
+            "commandWindows": "origence.exe plugin-hook --client codex"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 3,
+            "command": "origence plugin-hook --client codex",
+            "commandWindows": "origence.exe plugin-hook --client codex"
+          }
+        ],
+        "matcher": "^(Bash|apply_patch|mcp__(origence|plugin_origence_origence)__(context_search|context_get|context_run_create|context_run_report|context_run_prepare|context_run_get))$"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 3,
+            "command": "origence plugin-hook --client codex",
+            "commandWindows": "origence.exe plugin-hook --client codex"
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 3,
+            "command": "origence plugin-hook --client codex",
+            "commandWindows": "origence.exe plugin-hook --client codex"
+          }
+        ]
+      }
+    ]
+  }
+}
