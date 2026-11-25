@@ -6,7 +6,7 @@ import {
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConsoleAccounts, workspaceIdPattern, type ConsoleAccount } from "./console-accounts.js";
+import { loadConfiguredConsoleAccounts, workspaceIdPattern, type ConsoleAccount } from "./console-accounts.js";
 import { checkedConsoleIdentity, consoleSessionPath, ConsoleSessions, type OwnedWorkspace } from "./console-session.js";
 import { HttpError } from "./http-error.js";
 
@@ -111,7 +111,7 @@ export function createUiServer(options: ServerOptions) {
   const publicOrigin = options.publicOrigin
     ? new URL(options.publicOrigin).origin
     : undefined;
-  const sessions = new ConsoleSessions(options.accounts, async (authorization, signal) => {
+  const sessions = new ConsoleSessions(options.accounts ?? [], async (authorization, signal) => {
     const response = await fetch(new URL("/v1/whoami", upstream), {
       headers: { authorization },
       redirect: "manual",
@@ -258,7 +258,7 @@ if (
   const server = createUiServer({
     apiBaseUrl: process.env.ORIGENCE_API_BASE_URL ?? "http://127.0.0.1:8080",
     publicOrigin: process.env.ORIGENCE_UI_ORIGIN,
-    accounts: accountDatabase ? loadConsoleAccounts(accountDatabase, process.env) : undefined,
+    accounts: loadConfiguredConsoleAccounts(process.env),
   });
   server.listen(
     port,

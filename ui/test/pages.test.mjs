@@ -103,12 +103,12 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       });
     if (path.pathname === "/api/console/session") {
       if (options.method === "POST") {
-        assert.deepEqual(body, { key: "disposable-fixture-key" });
+        assert.deepEqual(body, { username: "fixture-user", password: "disposable-fixture-password" });
         signedIn = true;
       }
       if (options.method === "DELETE") signedIn = false;
-      return response({ mode: "key", session: signedIn && !unauthorized ? {
-        account: null,
+      return response({ mode: "account", session: signedIn && !unauthorized ? {
+        account: "fixture-user",
         binding: "fixture-session-binding",
         workspaces: [{ id: ids.source, workspace_id: ids.asset, role: "admin", name: ids.asset }],
       } : null });
@@ -393,7 +393,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   await import("../dist/client/app.js");
   await t.test("login and real-scope overview", async () => {
     await wait(() => document.querySelector("input[type=password]"));
-    control("API key").value = "disposable-fixture-key";
+    control("账号").value = "fixture-user";
+    control("密码").value = "disposable-fixture-password";
     document.querySelector("form").requestSubmit();
     await wait(
       () =>
@@ -787,7 +788,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     await wait(() => coveragePanel()?.textContent.includes(unknown));
   });
   await t.test(
-    "revoked credentials clear private UI and return to login",
+    "an invalid account session clears private UI and returns to login",
     async () => {
       location.hash = `#runs/${ids.coverageRun}`;
       await wait(() => coveragePanel()?.textContent.includes("codex_hook"));

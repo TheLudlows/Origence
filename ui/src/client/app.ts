@@ -61,7 +61,7 @@ async function logout() {
   try {
     const result = await api.request<ConsoleSessionResponse>(sessionPath, { method: "DELETE" });
     sessionStorage.removeItem(workspaceStorageKey);
-    login(result.mode);
+    login(result.setupRequired);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
     const detail = el("div");
@@ -85,7 +85,7 @@ function chooseWorkspace(workspace: ConsoleWorkspace, changing = false) {
 function showSession(result: ConsoleSessionResponse) {
   session = result.session;
   if (!session) {
-    login(result.mode);
+    login(result.setupRequired);
     return;
   }
   const previous = sessionStorage.getItem(workspaceStorageKey);
@@ -163,16 +163,15 @@ function createWorkspace(parent: ConsoleWorkspace, binding: string, parentSignal
   dialog.showModal();
 }
 
-function login(mode: ConsoleSessionResponse["mode"]) {
-  const accountLogin = mode === "account";
+function login(setupRequired?: true) {
   const username = input("输入账号");
   username.required = true;
   username.autocomplete = "username";
-  const secret = input(accountLogin ? "输入密码" : "输入个人 Origence API key", "", "password");
+  const secret = input("输入密码", "", "password");
   secret.required = true;
-  secret.autocomplete = accountLogin ? "current-password" : "off";
+  secret.autocomplete = "current-password";
   const error = el("div");
-  const connect = submit(accountLogin ? "登录" : "连接工作空间");
+  const connect = submit("登录");
   mount.replaceChildren(
     el(
       "div",
@@ -185,21 +184,22 @@ function login(mode: ConsoleSessionResponse["mode"]) {
         el("span", "accent", "."),
       ),
       panel(
-        accountLogin ? "登录 Origence" : "连接 Origence",
+        "登录 Origence",
         el("h1", "", "Agent 上下文工作台"),
         el(
           "p",
           "muted",
-          accountLogin ? "登录后可以切换已获授权的工作区。" : "使用个人 API key 连接本地开发工作区。",
+          setupRequired ? "控制台尚未创建账号，请联系管理员。" : "登录后可以切换已获授权的工作区。",
         ),
         form(
           async () => {
             connect.disabled = true;
             error.replaceChildren();
             try {
-              const result = await api.post<ConsoleSessionResponse>(sessionPath,
-                accountLogin ? { username: username.value.trim(), password: secret.value } : { key: secret.value.trim() },
-              );
+              const result = await api.post<ConsoleSessionResponse>(sessionPath, {
+                username: username.value.trim(),
+                password: secret.value,
+              });
               secret.value = "";
               showSession(result);
             } catch (e) {
@@ -208,8 +208,8 @@ function login(mode: ConsoleSessionResponse["mode"]) {
               connect.disabled = false;
             }
           },
-          accountLogin ? field("账号", username) : null,
-          field(accountLogin ? "密码" : "API key", secret),
+          field("账号", username),
+          field("密码", secret),
           connect,
         ),
         error,
@@ -314,8 +314,8 @@ async function render() {
           el(
             "div",
             "",
-            el("strong", "", session.account ?? user.role),
-            el("small", "mono", session.account ? user.role : short(user.id)),
+            el("strong", "", session.account),
+            el("small", "mono", user.role),
           ),
           button("退出", logout, "sidebar-exit"),
         ),

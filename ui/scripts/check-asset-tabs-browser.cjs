@@ -1,4 +1,5 @@
 // Standalone Chromium regression with the built UI, relay, and loopback HTTP fixture.
+const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -329,7 +330,7 @@ async function feedbackChecks(page, displayedVersion, measurements) {
   const { createUiServer } = await import("../dist/server.js");
   let relay, browser;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream) });
+    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(sourceId, ["synthetic-reader", "synthetic-writer"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     for (const width of [1024, 736, 375, 320]) {
@@ -342,8 +343,7 @@ async function feedbackChecks(page, displayedVersion, measurements) {
             if (request.url().endsWith(`/api${sourcePath}`)) sourceRequests.push(request);
           });
           await page.goto(`${origin}/#asset/${assetId}?version=3`);
-          await page.getByLabel("API key").fill(`synthetic-${role}`);
-          await page.getByRole("button", { name: "连接工作空间" }).press("Enter");
+          await fixtureSignIn(page, `synthetic-${role}`);
           await page.getByRole("heading", { name: "合成文档 v3" }).waitFor();
           await page.getByText(contents[3], { exact: true }).waitFor();
           const measurements = {};

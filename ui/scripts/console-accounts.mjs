@@ -1,11 +1,13 @@
 import { parseArgs } from "node:util";
 import {
   configureConsoleAccount,
+  consoleAccountsPath,
   hashConsolePassword,
   initializeConsoleAccounts,
+  prepareConsoleAccounts,
 } from "../dist/console-accounts.js";
 
-const usage = `Usage: node scripts/console-accounts.mjs --db PATH COMMAND
+const usage = `Usage: node scripts/console-accounts.mjs [--db PATH] COMMAND
   init
   set-password USERNAME                 read password from stdin
   grant USERNAME WORKSPACE_ID NAME KEY_ENV
@@ -29,12 +31,12 @@ try {
     allowPositionals: true,
   });
   const [command, username, workspaceId, name, keyEnv] = positionals;
-  const path = values.db;
-  if (!path) throw new Error(usage);
+  const path = consoleAccountsPath(values.db ?? process.env.ORIGENCE_UI_ACCOUNTS_DB);
   const length = positionals.length;
   if (command === "init" && length === 1) initializeConsoleAccounts(path);
   else if (command === "set-password" && length === 2) {
     const passwordHash = await hashConsolePassword(await readPassword());
+    prepareConsoleAccounts(path);
     configureConsoleAccount(path, { kind: command, username, passwordHash });
   } else if (command === "grant" && length === 5)
     configureConsoleAccount(path, { kind: command, username, workspaceId, name, keyEnv });

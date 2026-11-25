@@ -18,7 +18,7 @@ const roleNames = new Set(["reader", "writer", "reviewer", "admin"]);
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 interface Session {
-  account: string | null;
+  account: string;
   binding: string;
   grants: readonly ConsoleGrant[];
   routes: Map<string, WorkspaceRoute>;
@@ -84,18 +84,22 @@ async function loginPayload(req: IncomingMessage): Promise<Record<string, unknow
 export class ConsoleSessions {
   private readonly sessions = new Map<string, Session>();
   private readonly accounts: ReadonlyMap<string, ConsoleAccount>;
-  private readonly mode: ConsoleSessionResponse["mode"];
   private readonly attempts = new Map<string, { count: number; expiresAt: number }>();
   private verifying = 0;
   private readonly dummyHash = `scrypt-v1$${randomBytes(16).toString("hex")}$${randomBytes(32).toString("hex")}`;
 
   constructor(
-    accounts: readonly ConsoleAccount[] | undefined,
+    accounts: readonly ConsoleAccount[],
     private readonly identify: (authorization: string, signal: AbortSignal) => Promise<User | null>,
     private readonly listOwned: (authorization: string, signal: AbortSignal) => Promise<OwnedWorkspace[] | null>,
   ) {
-    this.mode = accounts === undefined ? "key" : "account";
-    this.accounts = new Map(accounts?.map((account) => [account.username, account]));
+    this.accounts = new Map(accounts.map((account) => [account.username, account]));
+  }
+
+  private signedOut(): ConsoleSessionResponse {
+    return this.accounts.size
+      ? { mode: "account", session: null }
+      : { mode: "account", session: null, setupRequired: true };
   }
 
   private current(req: IncomingMessage, origin: URL) {
@@ -130,14 +134,10 @@ export class ConsoleSessions {
     const current = this.current(req, origin);
     const existingId = cookieId(req, origin);
     if (req.method === "GET") {
-      if (!current) return { mode: this.mode, session: null };
+      if (!current) return this.signedOut();
       const session = await this.profile(current, signal);
-      if (this.current(req, origin) !== current) return { mode: this.mode, session: null };
-      if (current.account === null && !session.workspaces.length) {
-        this.sessions.delete(existingId);
-        return { mode: this.mode, session: null };
-      }
-      return { mode: this.mode, session };
+      if (this.current(req, origin) !== current) return this.signedOut();
+      return { mode: "account", session };
     }
     if (req.method !== "POST" && req.method !== "DELETE")
       throw new HttpError(405, "方法不被允许");
@@ -146,17 +146,13 @@ export class ConsoleSessions {
     if (req.method === "DELETE") {
       if (current) this.sessions.delete(existingId);
       setCookie(res, origin, "", 0);
-      return { mode: this.mode, session: null };
+      return this.signedOut();
     }
     if (origin.protocol !== "https:" && !loopbackHosts.has(origin.hostname))
       throw new HttpError(403, "远程控制台登录需要 HTTPS");
     const payload = await loginPayload(req);
-    const session = this.mode === "account"
-      ? await this.accountSession(payload, origin)
-      : await this.keySession(payload, origin, signal);
+    const session = await this.accountSession(payload, origin);
     const profile = await this.profile(session, signal);
-    if (session.account === null && !profile.workspaces.length)
-      throw new HttpError(401, "API key 无效或已撤销");
     signal.throwIfAborted();
     const now = Date.now();
     for (const [id, entry] of this.sessions) {
@@ -168,7 +164,7 @@ export class ConsoleSessions {
     const id = randomBytes(32).toString("base64url");
     this.sessions.set(id, session);
     setCookie(res, origin, id, sessionSeconds);
-    return { mode: this.mode, session: profile };
+    return { mode: "account", session: profile };
   }
 
   private async profile(session: Session, signal: AbortSignal): Promise<ConsoleSession> {
@@ -184,7 +180,7 @@ export class ConsoleSessions {
       const route: WorkspaceRoute = { authorization: grant.authorization };
       workspaces.push(workspace);
       routes.set(user.workspace_id, route);
-      if (session.account === null || user.role !== "admin") continue;
+      if (user.role !== "admin") continue;
       const owned = await this.listOwned(grant.authorization, signal);
       if (owned === null) continue;
       workspace.can_create_owned_workspaces = true;
@@ -206,6 +202,8 @@ export class ConsoleSessions {
     const { username, password } = payload;
     if (typeof username !== "string" || username.length > 64 || !validPasswordInput(password))
       throw new HttpError(400, "无效的登录请求");
+    if (!this.accounts.size)
+      throw new HttpError(503, "控制台尚未创建账号，请联系管理员");
     const account = this.accounts.get(username);
     const bucket = account?.username ?? "";
     const now = Date.now();
@@ -228,23 +226,7 @@ export class ConsoleSessions {
     }
   }
 
-  private async keySession(
-    payload: Record<string, unknown>,
-    origin: URL,
-    signal: AbortSignal,
-  ): Promise<Session> {
-    if (!loopbackHosts.has(origin.hostname))
-      throw new HttpError(403, "请为此控制台配置本地账号");
-    const { key } = payload;
-    if (typeof key !== "string" || !/^[\x21-\x7e]{1,512}$/.test(key))
-      throw new HttpError(400, "无效的 API key");
-    const authorization = `Bearer ${key}`;
-    const user = await this.identify(authorization, signal);
-    if (!user) throw new HttpError(401, "API key 无效或已撤销");
-    return this.session(null, [{ workspaceId: user.workspace_id, name: user.workspace_id, authorization }], origin);
-  }
-
-  private session(account: string | null, grants: readonly ConsoleGrant[], origin: URL): Session {
+  private session(account: string, grants: readonly ConsoleGrant[], origin: URL): Session {
     return {
       account,
       binding: randomBytes(16).toString("base64url"),

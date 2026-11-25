@@ -1,6 +1,8 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
-import { closeSync, openSync } from "node:fs";
+import { closeSync, mkdirSync, openSync } from "node:fs";
+import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 
 export const workspaceIdPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const accountPattern = /^[a-zA-Z0-9_.@-]{1,64}$/;
@@ -53,6 +55,32 @@ const sqliteOptions = { enableForeignKeyConstraints: true, timeout: 5000 };
 const keyEnvPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const maxGrants = 32;
 
+export function consoleAccountsPath(override: string | undefined) {
+  return override || fileURLToPath(new URL("../../.data/console-accounts.db", import.meta.url));
+}
+
+function hasErrorCode(error: unknown, code: string) {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+
+export function loadConfiguredConsoleAccounts(env: NodeJS.ProcessEnv): readonly ConsoleAccount[] {
+  const override = env.ORIGENCE_UI_ACCOUNTS_DB;
+  try {
+    return loadConsoleAccounts(consoleAccountsPath(override), env);
+  } catch (error) {
+    if (!override && hasErrorCode(error, "ENOENT")) return [];
+    throw error;
+  }
+}
+
+export function prepareConsoleAccounts(path: string) {
+  try {
+    initializeConsoleAccounts(path);
+  } catch (error) {
+    if (!hasErrorCode(error, "EEXIST")) throw error;
+  }
+}
+
 export type ConsoleAccountChange =
   | { kind: "set-password"; username: string; passwordHash: string }
   | { kind: "grant"; username: string; workspaceId: string; name: string; keyEnv: string }
@@ -60,6 +88,7 @@ export type ConsoleAccountChange =
   | { kind: "remove-account"; username: string };
 
 export function initializeConsoleAccounts(path: string) {
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   closeSync(openSync(path, "wx", 0o600));
   const db = new DatabaseSync(path, sqliteOptions);
   try {

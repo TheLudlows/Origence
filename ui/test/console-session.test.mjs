@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createUiServer } from "../dist/server.js";
@@ -10,9 +11,10 @@ import {
   loadConsoleAccounts,
 } from "../dist/console-accounts.js";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const a = "11111111-1111-4111-8111-111111111111";
 const b = "22222222-2222-4222-8222-222222222222";
@@ -38,6 +40,44 @@ async function accountDatabase(t) {
   initializeConsoleAccounts(db);
   return db;
 }
+
+test("default console account login needs no database path or initialization command", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "origence-console-default-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  for (const folder of ["dist", "scripts"]) await mkdir(join(dir, "ui", folder), { recursive: true });
+  const accountsModule = join(dir, "ui", "dist", "console-accounts.js");
+  const accountsCli = join(dir, "ui", "scripts", "console-accounts.mjs");
+  await cp(new URL("../dist/console-accounts.js", import.meta.url), accountsModule);
+  await cp(new URL("../scripts/console-accounts.mjs", import.meta.url), accountsCli);
+  await cp(new URL("../package.json", import.meta.url), join(dir, "ui", "package.json"));
+  const { loadConfiguredConsoleAccounts } = await import(pathToFileURL(accountsModule).href);
+  assert.deepEqual(loadConfiguredConsoleAccounts({}), []);
+  assert.throws(() => loadConfiguredConsoleAccounts({ ORIGENCE_UI_ACCOUNTS_DB: join(dir, "wrong-path.db") }), { code: "ENOENT" });
+
+  const ui = await listen(createUiServer({ apiBaseUrl: "http://127.0.0.1:1" }), t);
+  assert.deepEqual(await (await fetch(ui + sessionPath)).json(), {
+    mode: "account", session: null, setupRequired: true,
+  });
+  const signIn = (origin, credentials) => fetch(origin + sessionPath, {
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+  });
+  assert.equal((await signIn(ui, { key: "fixture-key" })).status, 400);
+  const credentials = { username: "alice", password: alicePassword };
+  assert.equal((await signIn(ui, credentials)).status, 503);
+
+  const env = { ...process.env };
+  delete env.ORIGENCE_UI_ACCOUNTS_DB;
+  execFileSync(process.execPath, [accountsCli, "set-password", credentials.username], {
+    cwd: dir, env, input: credentials.password + "\n",
+  });
+  const accounts = loadConfiguredConsoleAccounts({});
+  const configured = await listen(createUiServer({ apiBaseUrl: "http://127.0.0.1:1", accounts }), t);
+  const login = await signIn(configured, credentials);
+  assert.equal(login.status, 200);
+  assert.equal((await login.json()).session.account, credentials.username);
+});
 
 test("account sessions survive reload and enforce grants, tenant credentials, revocation, and sign-out", async (t) => {
   const identities = new Map([
