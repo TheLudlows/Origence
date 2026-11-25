@@ -24,8 +24,9 @@ async function checkResponsiveNavigation(page, width) {
   const nav = page.getByRole('navigation', { name: '主导航' });
   const theme = page.getByRole('button', { name: '切换明暗主题' });
   const exit = page.getByRole('button', { name: '退出', exact: true });
-  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '上下文工作台'];
+  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '上下文工作台', 'API Key'];
   const buttons = labels.map((label) => nav.getByRole('button', { name: new RegExp(label + '$') }));
+  const context = buttons[labels.indexOf('上下文工作台')];
   const expectLayout = async () => {
     const navigation = await nav.boundingBox();
     const header = await page.locator('.topbar').boundingBox();
@@ -57,10 +58,11 @@ async function checkResponsiveNavigation(page, width) {
   for (const control of [...buttons.slice(1), exit, theme]) await step('Tab', control);
   await step('Shift+Tab', exit);
   await step('Shift+Tab', buttons.at(-1));
+  await step('Shift+Tab', context);
   await page.keyboard.press('Enter');
   await main.getByRole('heading', { name: '上下文工作台', exact: true }).waitFor();
   assert.equal(await isFocused(main), true);
-  assert.equal(await buttons.at(-1).getAttribute('aria-current'), 'page');
+  assert.equal(await context.getAttribute('aria-current'), 'page');
   assert.equal(await nav.locator('[aria-current="page"]').count(), 1);
   await step('Tab', main.getByLabel('任务与查询'));
   await expectLayout();

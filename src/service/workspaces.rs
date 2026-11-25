@@ -156,4 +156,28 @@ impl Service {
         tx.commit().await?;
         Ok(json!(key))
     }
+
+    pub async fn list_issued_keys(
+        &self,
+        auth: &AuthContext,
+        after: Uuid,
+        limit: u32,
+    ) -> Result<Value> {
+        let mut tx = self.read(auth, Permission::Delete).await?;
+        let page = tx.list_issued_keys(after, limit).await?;
+        tx.commit().await?;
+        Ok(page)
+    }
+
+    pub async fn list_workspace_key_grants(
+        &self,
+        auth: &AuthContext,
+        after: Uuid,
+        limit: u32,
+    ) -> Result<Value> {
+        let mut tx = self.read(auth, Permission::Delete).await?;
+        let page = tx.list_workspace_key_grants(after, limit).await?;
+        tx.commit().await?;
+        Ok(page)
+    }
 }

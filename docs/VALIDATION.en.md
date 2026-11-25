@@ -4,6 +4,19 @@
 
 The latest local verification was 2026-11-25. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-25 · Console API key management
+
+Based on main `b8dc33b77f474f5fc453061c755b9c710c0576ea`. On Linux with Rust 1.98.0, formatting,
+all-target all-feature Clippy with `-D warnings`, 212 local tests, Node type checking, and 28 UI tests
+passed. Public library and HTTP regressions checked pagination, admin authorization, workspace and
+tenant isolation, rotation, and inactive grants after revocation.
+
+`node ui/scripts/check-key-management-browser.cjs <ORIGENCE_BINARY>` used Chromium 156 against the
+Node console and a disposable Origence `serve --local` host. It checked issuance, copying, role changes,
+restoring default access, rotation, revocation, cross-workspace grants, reader denial, and one-time token
+display. Upstream authentication confirmed old-token rejection. Browser storage and host logs contained
+no fixture token. The account, focus, and narrow viewport scripts passed. Native Windows was not run.
+
 ## 2026-11-25 · Default plugin Run hooks
 
 Based on main `b7ce2679ddadda045f35fb108b63cc822a68029c`, on Linux with Rust 1.98.0.

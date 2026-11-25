@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createUiServer } from "../dist/server.js";
+import { hashConsolePassword } from "../dist/console-accounts.js";
 import { byteRange, textDelta } from "../dist/client/source.js";
 
 async function listen(server, t) {
@@ -90,7 +91,8 @@ test("proxy rejects unknown methods, ambient origins, redirects and oversized bo
     t,
   );
   const ui = await listen(createUiServer({ apiBaseUrl: upstream }), t);
-  assert.equal((await fetch(ui + "/api/admin/keys")).status, 404);
+  assert.equal((await fetch(ui + "/api/admin/keys", { headers: { Authorization: "Bearer private" } })).status, 401);
+  assert.equal((await fetch(ui + "/api/admin/memory-properties")).status, 404);
   assert.equal((await fetch(ui + "/api/v1/whoami")).status, 401);
   assert.equal(
     (
@@ -144,6 +146,51 @@ test("upstream timeouts are bounded", async (t) => {
     t,
   );
   assert.equal((await fetch(ui + "/api/health/ready")).status, 504);
+});
+
+test("key management uses the selected account admin grant and protects its credential", async (t) => {
+  const adminWorkspace = "11111111-1111-4111-8111-111111111111";
+  const readerWorkspace = "22222222-2222-4222-8222-222222222222";
+  const adminId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const password = "synthetic-console-password";
+  const calls = [];
+  const upstream = await listen(createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    if (req.url === "/v1/whoami") {
+      const admin = req.headers.authorization === "Bearer synthetic-admin";
+      return res.end(JSON.stringify({ id: admin ? adminId : readerWorkspace,
+        workspace_id: admin ? adminWorkspace : readerWorkspace, role: admin ? "admin" : "reader" }));
+    }
+    if (req.url.startsWith("/v1/workspaces/owned?")) {
+      res.statusCode = 403;
+      return res.end("{}");
+    }
+    calls.push([req.url, req.method, req.headers.authorization, req.headers["x-origence-workspace"], req.headers.cookie]);
+    res.end(JSON.stringify({ items: [], next_after: null }));
+  }), t);
+  const ui = await listen(createUiServer({ apiBaseUrl: upstream, accounts: [{
+    username: "fixture", passwordHash: await hashConsolePassword(password), grants: [
+      { workspaceId: adminWorkspace, name: "Admin", authorization: "Bearer synthetic-admin" },
+      { workspaceId: readerWorkspace, name: "Reader", authorization: "Bearer synthetic-reader" },
+    ],
+  }] }), t);
+  const login = await fetch(ui + "/api/console/session", {
+    method: "POST", headers: { Origin: ui, "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "fixture", password }),
+  });
+  const { session } = await login.json();
+  const headers = { Cookie: login.headers.get("Set-Cookie").split(";")[0], "X-Origence-Session": session.binding,
+    "X-Origence-Workspace": adminWorkspace, Authorization: "Bearer untrusted-browser-value" };
+  const keys = ui + "/api/admin/keys";
+  const list = await fetch(keys + "?limit=1", { headers });
+  assert.equal(list.status, 200);
+  assert.equal(list.headers.get("Cache-Control"), "no-store");
+  assert.equal((await fetch(keys, { headers: { ...headers, "X-Origence-Workspace": readerWorkspace } })).status, 403);
+  assert.equal((await fetch(keys, { headers: { ...headers, "X-Origence-Workspace": adminId } })).status, 403);
+  assert.equal((await fetch(keys, { method: "POST", headers })).status, 403);
+  assert.equal((await fetch(`${keys}/${adminId.toUpperCase()}/rotate`, { method: "POST", headers: { ...headers, Origin: ui } })).status, 409);
+  assert.equal((await fetch(`${keys}/${adminId}`, { method: "DELETE", headers: { ...headers, Origin: ui } })).status, 409);
+  assert.deepEqual(calls, [["/admin/keys?limit=1", "GET", "Bearer synthetic-admin", adminWorkspace, undefined]]);
 });
 
 test("UTF-8 source highlighting preserves Chinese, emoji and combining characters", () => {

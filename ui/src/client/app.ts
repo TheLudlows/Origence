@@ -15,6 +15,7 @@ import {
   type ViewContext,
 } from "./components.js";
 import { contextPage } from "./context.js";
+import { keysPage } from "./keys.js";
 import { overview, runsPage } from "./runs.js";
 import type { ConsoleSession, ConsoleSessionResponse, ConsoleWorkspace } from "./types.js";
 
@@ -25,6 +26,7 @@ const pages = [
   ["memory", "◇", "记忆管理"],
   ["knowledge", "▤", "知识管理"],
   ["contexts", "⊞", "上下文工作台"],
+  ["keys", "⚿", "API Key"],
 ] as const;
 const sessionPath = "/console/session";
 const workspaceStorageKey = "origence.selectedWorkspace";
@@ -255,6 +257,7 @@ async function render() {
   const nav = el("nav");
   nav.setAttribute("aria-label", "主导航");
   for (const [key, icon, label] of pages) {
+    if (key === "keys" && user.role !== "admin") continue;
     const link = button("", () => navigate(key), "nav-item");
     link.append(el("span", "nav-icon", icon), label);
     if (key === page) link.setAttribute("aria-current", "page");
@@ -350,6 +353,7 @@ async function render() {
     else if (page === "memory" || page === "knowledge")
       await assetsPage(content, page, ctx);
     else if (page === "contexts") contextPage(content, ctx);
+    else if (page === "keys") keysPage(content, ctx, activeWorkspace);
     else if (page === "asset" && id)
       await assetDetail(content, id, version, ctx);
     else content.append(heading("页面不存在", "请使用左侧导航选择功能。"));

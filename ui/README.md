@@ -40,6 +40,15 @@ PowerShell 可以把 `Read-Host -MaskInput` 的输出传给同一个 `set-passwo
 
 控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。
 
+### API Key 管理
+
+用管理员账号登录并选择工作区后，在侧栏进入 **API Key**。可查看本区签发的凭据、创建与调整权限、
+轮换或撤销。为同租户的其他工作区签发的 Key 添加权限时，在目标工作区输入其逻辑 Key ID。
+移除额外授权只撤销当前工作区的访问。轮换会立即使旧 token 失效，保留逻辑 Key ID 和原授权。
+
+创建和轮换后请在结果弹窗复制 token。关闭弹窗或离开页面后需要再次轮换才能取得新的 token。
+当前控制台会话所用凭据通过原有管理员流程维护。轮换其他 Key 时，当前凭据还须在该 Key 的额外授权工作区有管理员权限。
+
 ### 新建子工作区
 
 使用当前工作区的管理员凭据执行 `origence key-create <工作区 ID> --role admin --allow-owned-workspaces`，将得到的 key 作为受信控制台服务凭据配置给获授权的本地账号。该授权涵盖根工作区及其所有直接子工作区。

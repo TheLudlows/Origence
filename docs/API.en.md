@@ -148,12 +148,17 @@ Knowledge updates change the current version and title only after asynchronous p
 | --- | --- |
 | `GET /v1/whoami` | Returns credential id, tenant_id, selected workspace_id, and effective role. |
 | `GET /v1/workspaces` | Lists explicit active grants with workspace_id, name, role, and is_default. |
+| `GET /admin/keys` | An admin lists unrevoked credentials issued by the selected workspace. Returns credential and logical IDs, role, default access, owned-workspace capability, and creation time. |
 | `POST /admin/keys` | Admin sends `{workspace_id,role}`. The workspace must match the request's selected workspace and becomes the new key's default. Returns `{key_id,token}`. |
+| `POST /admin/keys/{id}/rotate` | The issuing workspace's admin rotates the current credential ID, subject to authorization for its additional grants. Keeps the logical ID and returns a new `{key_id,token}`. |
+| `GET /admin/workspace-key-grants` | An admin lists explicit additional grants in the selected workspace, with each logical ID, role, and credential activity status. |
 | `PUT /admin/workspace-key-grants/{logical_key_id}` | A workspace admin assigns `{role}` in the selected workspace to a logical key from the same tenant. |
 | `DELETE /admin/workspace-key-grants/{logical_key_id}` | A workspace admin removes access to the selected workspace. |
 | `DELETE /admin/keys/{id}` | An admin in the issuing workspace revokes the credential for all workspaces. |
 
 Grant endpoints use the stable `key_id` returned by `GET /v1/session`. Trusted service access to owned workspaces remains available through the dedicated library interface.
+
+Both admin lists take `limit` (1–100, default 50) and a UUID `after` cursor and return `{items,next_after}`.
 
 `/admin/keys` also needs a Bearer token. It omits the business idempotency cache to avoid storing plaintext tokens. Issuance returns the token once, and repeated POST creates a different key. After a lost response, check database key IDs through offline administration and revoke redundant credentials. Offline workspace and key commands use `--offline` and OS directory permissions and fail to open while the host is running.
 
