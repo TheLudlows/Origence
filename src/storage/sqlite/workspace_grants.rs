@@ -2,6 +2,7 @@
 //! row; additional grants belong to its stable logical identity.
 use super::*;
 use crate::storage::WorkspaceAccess;
+use std::collections::HashSet;
 
 struct LiveCredential {
     tenant_id: Uuid,
@@ -137,6 +138,77 @@ impl SqliteStore {
 }
 
 impl SqliteTx {
+    /// Enumerate this workspace's current credentials without exposing token hashes.
+    pub async fn list_issued_keys(&mut self, after: Uuid, limit: u32) -> StorageResult<Value> {
+        self.check_permission(Permission::Delete).await?;
+        let count = key_page_size(limit)?;
+        let rows: Vec<(Uuid, Uuid, String, bool, bool, i64)> = sqlite_db::query_as(
+            "SELECT id,logical_key_id,role,default_access,allow_owned_workspaces,created_at
+             FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND NOT revoked AND id>?
+             ORDER BY id LIMIT ?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(after)
+        .bind(i64::from(limit) + 1)
+        .fetch_all(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let next_after = (rows.len() > count).then(|| rows[count - 1].0);
+        let items: Vec<_> = rows.into_iter().take(count).map(|(key_id, logical_key_id, role, default_access, allow_owned_workspaces, created_at_ms)| {
+            json!({"key_id":key_id,"logical_key_id":logical_key_id,"role":role,"default_access":default_access,
+                   "allow_owned_workspaces":allow_owned_workspaces,"created_at_ms":created_at_ms})
+        }).collect();
+        Ok(json!({"items":items,"next_after":next_after}))
+    }
+
+    /// List explicit incoming grants. A revoked key's grant remains visible as inactive.
+    pub async fn list_workspace_key_grants(
+        &mut self,
+        after: Uuid,
+        limit: u32,
+    ) -> StorageResult<Value> {
+        self.check_permission(Permission::Delete).await?;
+        let count = key_page_size(limit)?;
+        let rows: Vec<(Uuid, String)> = sqlite_db::query_as(
+            "SELECT logical_key_id,role FROM oc_workspace_key_grants
+             WHERE tenant_id=? AND workspace_id=? AND logical_key_id>?
+             ORDER BY logical_key_id LIMIT ?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(after)
+        .bind(i64::from(limit) + 1)
+        .fetch_all(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let next_after = (rows.len() > count).then(|| rows[count - 1].0);
+        let shown = &rows[..rows.len().min(count)];
+        let active: HashSet<Uuid> = if shown.is_empty() {
+            HashSet::new()
+        } else {
+            let placeholders = vec!["?"; shown.len()].join(",");
+            let sql = format!(
+                "SELECT logical_key_id FROM oc_api_keys WHERE tenant_id=? AND NOT revoked AND logical_key_id IN ({placeholders})"
+            );
+            let mut query = sqlite_db::query_scalar(&sql).bind(self.scope.tenant_id);
+            for (id, _) in shown {
+                query = query.bind(*id);
+            }
+            query
+                .fetch_all(&mut *self.tx)
+                .await
+                .map_err(sqlite_err)?
+                .into_iter()
+                .collect()
+        };
+        let items: Vec<_> = shown
+            .iter()
+            .map(|(id, role)| json!({"logical_key_id":id,"role":role,"active":active.contains(id)}))
+            .collect();
+        Ok(json!({"items":items,"next_after":next_after}))
+    }
+
     /// Manage the logical key's access to this workspace under its current admin.
     pub async fn set_workspace_key_grant(
         &mut self,
@@ -224,4 +296,13 @@ impl SqliteTx {
         }
         Ok(())
     }
+}
+
+fn key_page_size(limit: u32) -> StorageResult<usize> {
+    if !(1..=100).contains(&limit) {
+        return Err(StorageError::InvalidArgument(
+            "key page limit must be 1–100",
+        ));
+    }
+    Ok(limit as usize)
 }

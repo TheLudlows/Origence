@@ -28,6 +28,9 @@ interface Session {
 
 interface WorkspaceRoute {
   authorization: string;
+  workspaceId: string;
+  principalId: string;
+  role: string;
   scopedWorkspace?: string;
   canCreateOwned?: boolean;
 }
@@ -177,7 +180,9 @@ export class ConsoleSessions {
       if (user.workspace_id !== grant.workspaceId)
         throw new HttpError(502, "控制台配置的工作区与上游身份不匹配");
       const workspace: ConsoleWorkspace = { ...user, name: grant.name };
-      const route: WorkspaceRoute = { authorization: grant.authorization };
+      const route: WorkspaceRoute = {
+        authorization: grant.authorization, workspaceId: user.workspace_id, principalId: user.id, role: user.role,
+      };
       workspaces.push(workspace);
       routes.set(user.workspace_id, route);
       if (user.role !== "admin") continue;
@@ -190,6 +195,9 @@ export class ConsoleSessions {
         workspaces.push({ ...child, id: user.id, role: "writer" });
         routes.set(child.workspace_id, {
           authorization: grant.authorization,
+          workspaceId: child.workspace_id,
+          principalId: user.id,
+          role: "writer",
           scopedWorkspace: child.workspace_id,
         });
       }

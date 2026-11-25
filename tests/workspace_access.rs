@@ -62,6 +62,144 @@ async fn bootstrap(dir: &std::path::Path, name: &str, existing: Option<Uuid>) ->
 }
 
 #[tokio::test]
+async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecycle() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = bootstrap(dir.path(), "A", None).await;
+    let a_id: Uuid = a["workspace_id"].as_str().unwrap().parse().unwrap();
+    let b = bootstrap(dir.path(), "B", Some(a_id)).await;
+    let other = bootstrap(dir.path(), "Other tenant", None).await;
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let a_token = a["token"].as_str().unwrap();
+    let a_admin = service.auth(a_token).await.unwrap();
+    let b_admin = service.auth(b["token"].as_str().unwrap()).await.unwrap();
+    let reader = service.issue_key(&a_admin, "reader").await.unwrap();
+    let writer = service.issue_key(&a_admin, "writer").await.unwrap();
+    let token = writer["token"].as_str().unwrap();
+    let logical: Uuid = writer["key_id"].as_str().unwrap().parse().unwrap();
+    service
+        .set_workspace_key_grant(&b_admin, logical, Some("reader"))
+        .await
+        .unwrap();
+
+    let issued = service
+        .list_issued_keys(&a_admin, Uuid::nil(), 100)
+        .await
+        .unwrap();
+    assert_eq!(issued["items"].as_array().unwrap().len(), 3);
+    assert!(!issued.to_string().contains(token));
+    assert!(!issued.to_string().contains("token_hash"));
+    let grants = service
+        .list_workspace_key_grants(&b_admin, Uuid::nil(), 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        grants["items"],
+        json!([{"logical_key_id":logical,"role":"reader","active":true}])
+    );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let client = |key: &str| HostClient::new(&base, key.into()).unwrap();
+    let a_client = client(a_token);
+    let b_client = client(b["token"].as_str().unwrap());
+    let foreign = client(other["token"].as_str().unwrap());
+    let read_client = client(reader["token"].as_str().unwrap());
+    let keys = "/admin/keys";
+    let grants = "/admin/workspace-key-grants";
+    for path in [keys, grants] {
+        assert!(matches!(
+            read_client.call(Method::GET, path, None, None).await,
+            Err(AppError::Forbidden)
+        ));
+        assert!(matches!(
+            a_client
+                .call(Method::GET, &format!("{path}?limit=0"), None, None)
+                .await,
+            Err(AppError::Invalid(_))
+        ));
+    }
+    let first = a_client
+        .call(Method::GET, "/admin/keys?limit=1", None, None)
+        .await
+        .unwrap();
+    let next = first["next_after"].as_str().unwrap();
+    assert_eq!(first["items"][0]["key_id"], next);
+    let rest = a_client
+        .call(Method::GET, &format!("{keys}?after={next}"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(rest["items"].as_array().unwrap().len(), 2);
+    assert!(
+        rest["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["key_id"] != next)
+    );
+    assert_eq!(
+        foreign.call(Method::GET, keys, None, None).await.unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        foreign.call(Method::GET, grants, None, None).await.unwrap()["items"],
+        json!([])
+    );
+
+    let rotate = format!("{keys}/{logical}/rotate");
+    assert!(matches!(
+        a_client.call(Method::POST, &rotate, None, None).await,
+        Err(AppError::Forbidden)
+    ));
+    service
+        .set_workspace_key_grant(&b_admin, a_admin.id, Some("admin"))
+        .await
+        .unwrap();
+    let rotated = a_client
+        .call(Method::POST, &rotate, None, None)
+        .await
+        .unwrap();
+    let replacement = rotated["key_id"].as_str().unwrap();
+    assert!(matches!(
+        service.auth(token).await,
+        Err(AppError::Unauthorized)
+    ));
+    let refreshed = a_client.call(Method::GET, keys, None, None).await.unwrap();
+    let row = refreshed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["key_id"] == replacement)
+        .unwrap();
+    assert_eq!(row["logical_key_id"], logical.to_string());
+    assert!(
+        !refreshed
+            .to_string()
+            .contains(rotated["token"].as_str().unwrap())
+    );
+    a_client
+        .call(Method::DELETE, &format!("{keys}/{replacement}"), None, None)
+        .await
+        .unwrap();
+    let incoming = b_client
+        .call(Method::GET, grants, None, None)
+        .await
+        .unwrap();
+    let row = incoming["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["logical_key_id"] == logical.to_string())
+        .unwrap();
+    assert_eq!(row["active"], false);
+    host.abort();
+}
+
+#[tokio::test]
 async fn one_credential_uses_live_workspace_grants_without_sharing_private_archives() {
     let dir = tempfile::tempdir().unwrap();
     let admin_a = bootstrap(dir.path(), "Engineering", None).await;

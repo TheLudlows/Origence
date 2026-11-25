@@ -7,7 +7,7 @@ use axum::{
     Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
     routing::{get, post, put},
 };
@@ -28,8 +28,12 @@ pub fn router(service: Service) -> Router {
         .route("/v1/workspaces/owned/{id}", put(create_owned_workspace))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
-        .route("/admin/keys", post(issue_key))
+        .route("/admin/keys", get(list_keys).post(issue_key))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
+        .route(
+            "/admin/workspace-key-grants",
+            get(list_workspace_key_grants),
+        )
         .route(
             "/admin/workspace-key-grants/{logical_key_id}",
             axum::routing::put(set_workspace_key_grant).delete(revoke_workspace_key_grant),
@@ -410,7 +414,7 @@ async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct OwnedWorkspacePage {
+struct WorkspacePage {
     after: Option<Uuid>,
     limit: Option<u32>,
 }
@@ -418,7 +422,7 @@ struct OwnedWorkspacePage {
 async fn list_owned_workspaces(
     State(s): State<Service>,
     h: HeaderMap,
-    Query(page): Query<OwnedWorkspacePage>,
+    Query(page): Query<WorkspacePage>,
 ) -> Result<Json<Value>> {
     Ok(Json(
         s.list_managed_workspaces(
@@ -485,24 +489,58 @@ struct KeyInput {
     #[serde(default)]
     allow_owned_workspaces: bool,
 }
+
+async fn list_keys(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Query(page): Query<WorkspacePage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.list_issued_keys(
+            &auth(&s, &h).await?,
+            page.after.unwrap_or_default(),
+            page.limit.unwrap_or(50),
+        )
+        .await?,
+    ))
+}
+
+async fn list_workspace_key_grants(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Query(page): Query<WorkspacePage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.list_workspace_key_grants(
+            &auth(&s, &h).await?,
+            page.after.unwrap_or_default(),
+            page.limit.unwrap_or(50),
+        )
+        .await?,
+    ))
+}
+
 async fn issue_key(
     State(s): State<Service>,
     h: HeaderMap,
     Json(input): Json<KeyInput>,
-) -> Result<Json<Value>> {
+) -> Result<impl IntoResponse> {
     let a = auth(&s, &h).await?;
     if input.workspace_id != a.workspace_id {
         return Err(AppError::Forbidden);
     }
-    Ok(Json(
-        s.issue_key_with_capabilities(
-            &a,
-            &input.role,
-            crate::storage::KeyCapabilities {
-                allow_owned_workspaces: input.allow_owned_workspaces,
-            },
-        )
-        .await?,
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(
+            s.issue_key_with_capabilities(
+                &a,
+                &input.role,
+                crate::storage::KeyCapabilities {
+                    allow_owned_workspaces: input.allow_owned_workspaces,
+                },
+            )
+            .await?,
+        ),
     ))
 }
 async fn revoke_key(
@@ -596,6 +634,9 @@ async fn rotate_key(
     State(s): State<Service>,
     h: HeaderMap,
     Path(id): Path<Uuid>,
-) -> Result<Json<Value>> {
-    Ok(Json(s.rotate_key(&auth(&s, &h).await?, id).await?))
+) -> Result<impl IntoResponse> {
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(s.rotate_key(&auth(&s, &h).await?, id).await?),
+    ))
 }

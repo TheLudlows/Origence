@@ -13,6 +13,13 @@ import { HttpError } from "./http-error.js";
 const MAX_BODY = 10 * 1024 * 1024;
 const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const createWorkspacePath = new RegExp(`^/v1/workspaces/owned/${uuid}$`);
+const managedKeyPath = new RegExp(`^/admin/keys/(${uuid})(?:/rotate)?$`);
+const keyRules: [string, RegExp][] = [
+  ["GET", /^\/admin\/(keys|workspace-key-grants)$/],
+  ["POST", new RegExp(`^/admin/keys(?:/${uuid}/rotate)?$`)],
+  ["DELETE", new RegExp(`^/admin/(?:keys|workspace-key-grants)/${uuid}$`)],
+  ["PUT", new RegExp(`^/admin/workspace-key-grants/${uuid}$`)],
+];
 const rules: [string, RegExp][] = [
   ["GET", /^\/health\/(live|ready)$/],
   ["GET", /^\/v1\/(whoami|session|assets|runs)$/],
@@ -156,7 +163,9 @@ export function createUiServer(options: ServerOptions) {
           return;
         }
         const path = target.pathname.slice(4);
+        const managingKeys = keyRules.some(([method, pattern]) => method === req.method && pattern.test(path));
         if (
+          !managingKeys &&
           !rules.some(
             ([method, pattern]) => method === req.method && pattern.test(path),
           )
@@ -165,12 +174,18 @@ export function createUiServer(options: ServerOptions) {
         const headers = new Headers();
         const authorization = req.headers.authorization;
         const creatingWorkspace = req.method === "PUT" && createWorkspacePath.test(path);
-        if (!creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
+        if (!managingKeys && !creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
         else if (!path.startsWith("/health/")) {
           const workspace = sessions.authorization(req, new URL(origin));
           if (creatingWorkspace && !workspace.canCreateOwned) throw new HttpError(403, "当前工作区未授权创建子工作区");
           headers.set("authorization", workspace.authorization);
-          if (workspace.scopedWorkspace) headers.set("X-Origence-Workspace", workspace.scopedWorkspace);
+          if (managingKeys) {
+            if (workspace.role !== "admin") throw new HttpError(403, "只有工作区管理员可以管理 API Key");
+            const targetId = managedKeyPath.exec(path)?.[1];
+            if (targetId?.toLowerCase() === workspace.principalId.toLowerCase())
+              throw new HttpError(409, "请在控制台外维护当前会话使用的凭据");
+            headers.set("X-Origence-Workspace", workspace.workspaceId);
+          } else if (workspace.scopedWorkspace) headers.set("X-Origence-Workspace", workspace.scopedWorkspace);
         }
         const payload = await body(req);
         for (const name of ["content-type", "idempotency-key"]) {

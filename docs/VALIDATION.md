@@ -7,6 +7,17 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-25 · 控制台 API Key 管理
+
+基于 main `b8dc33b77f474f5fc453061c755b9c710c0576ea`。Linux 下，Rust 1.98.0 格式检查、
+全目标全特性 Clippy（`-D warnings`）、212 项本地测试、Node 类型检查和 28 项 UI 测试通过。
+公开库与 HTTP 回归覆盖分页、管理员权限、工作区及租户隔离、轮换与已撤销授权状态。
+
+Chromium 156 通过 `node ui/scripts/check-key-management-browser.cjs <ORIGENCE_BINARY>` 连接真实 Node
+控制台和临时 Origence `serve --local`。验证登录后创建、复制、调整权限、恢复本区授权、轮换、撤销、
+跨工作区授权及移除、reader 拒绝和明文清除。旧 token 的失效由上游实测，浏览器存储及宿主日志
+未含夹具 token。账号切换、导航焦点和窄屏脚本通过。均使用合成数据，Windows 原生未运行。
+
 ## 2026-11-25 · 插件默认安装 Run Hook
 
 基于 main `b7ce2679ddadda045f35fb108b63cc822a68029c`，Linux 与 Rust 1.98.0。

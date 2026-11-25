@@ -219,12 +219,16 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | --- | --- |
 | `GET /v1/whoami` | 返回已认证凭据的 id、tenant_id、选中的 workspace_id 和有效 role |
 | `GET /v1/workspaces` | 列出本 key 当前显式获授权的工作区，每项含 workspace_id、name、role 和 is_default |
+| `GET /admin/keys` | 管理员列出所选工作区签发的未撤销凭据。只返回凭据 ID、逻辑 Key ID、权限、默认访问状态、子工作区能力和创建时间 |
 | `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须是请求选中的 workspace，成为新 key 的默认项。返回 `{key_id,token}` |
+| `POST /admin/keys/{id}/rotate` | 签发工作区管理员轮换当前凭据 ID。按额外授权复核管理员权限，保留逻辑 Key ID，返回新 `{key_id,token}` |
+| `GET /admin/workspace-key-grants` | 管理员列出所选工作区的显式额外授权，每项含逻辑 Key ID、权限及凭据是否仍有效 |
 | `PUT /admin/workspace-key-grants/{logical_key_id}` | 目标 workspace 的 admin 通过 `{role}` 更新同租户逻辑 key 在此工作区的授权 |
 | `DELETE /admin/workspace-key-grants/{logical_key_id}` | 目标 workspace 的 admin 只撤销此工作区的授权 |
 | `DELETE /admin/keys/{id}` | 签发 workspace 的 admin 撤销整个凭据，后续所有工作区调用都会拒绝 |
 
 工作区授权接口使用 `GET /v1/session` 返回的稳定 `key_id`。受信服务的所属 workspace 能力仍通过专用库接口使用。
+两个管理员列表支持 `limit`（1–100，默认 50）和 UUID `after`，返回 `{items,next_after}`。
 
 `/admin/keys` 同样要求 Bearer token，但不使用业务幂等缓存，避免保存明文 token。发行结果只返回一次，重复 POST 会创建不同 key；若响应丢失，需要离线管理核对数据库中的 key ID 并撤销多余凭据。离线 workspace/key 管理通过 `--offline` 和操作系统目录权限授权，宿主运行时拒绝打开。
 

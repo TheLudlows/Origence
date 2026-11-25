@@ -46,6 +46,19 @@ Sign in, select the authorized root, and use **新建工作区** to enter a name
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
+### API key management
+
+Sign in as an administrator, select a workspace, and open **API Key** in the sidebar. The page lists
+credentials issued there and lets administrators create them, change roles, rotate, or revoke them.
+To grant access using a key issued in another workspace in the same tenant, enter its logical key ID
+in the target workspace. Removing an additional grant removes access to that workspace. Rotation
+immediately invalidates the old token and keeps the logical key ID and its grants.
+
+Copy the new token from the creation or rotation dialog. To obtain another token after leaving the
+dialog, rotate the credential again. Maintain the current console session's backing credential through
+the existing administrator workflow. Rotating another key requires the caller's credential to have
+administrator rights in that key's additional workspaces.
+
 ## Pages
 
 - **Overview** shows service readiness and counts and trends of Run creations for the current logical key. Uncollected latency and cost are shown as unknown.
