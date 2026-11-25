@@ -6,11 +6,13 @@ const { chromium } = require("playwright");
 const alpha = "11111111-1111-4111-8111-111111111111";
 const beta = "22222222-2222-4222-8222-222222222222";
 const excluded = "33333333-3333-4333-8333-333333333333";
+const existingChild = "44444444-4444-4444-8444-444444444444";
 const password = "console-fixture-密码-01";
 const grants = [
   { workspaceId: alpha, name: "研发", authorization: "Bearer synthetic-alpha" },
   { workspaceId: beta, name: "运营", authorization: "Bearer synthetic-beta" },
 ];
+const otherGrant = { workspaceId: excluded, name: "另一个账号的工作区", authorization: "Bearer synthetic-excluded" };
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -21,10 +23,10 @@ async function listen(server) {
 async function run() {
   const { createUiServer } = await import("../dist/server.js");
   const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const children = new Map();
+  const children = new Map([[existingChild, { workspace_id: existingChild, name: "已有子工作区" }]]);
   const creationAttempts = [];
   const upstream = createServer(async (req, res) => {
-    const grant = grants.find((item) => item.authorization === req.headers.authorization);
+    const grant = [...grants, otherGrant].find((item) => item.authorization === req.headers.authorization);
     const path = new URL(req.url, "http://fixture.invalid").pathname;
     const send = (value, status = 200) => {
       res.writeHead(status, { "Content-Type": "application/json" });
@@ -61,9 +63,13 @@ async function run() {
   });
   let ui, browser;
   try {
+    const passwordHash = await hashConsolePassword(password);
     ui = createUiServer({
       apiBaseUrl: await listen(upstream),
-      accounts: [{ username: "fixture", passwordHash: await hashConsolePassword(password), grants }],
+      accounts: [
+        { username: "fixture", passwordHash, grants },
+        { username: "other", passwordHash, grants: [otherGrant] },
+      ],
     });
     const base = await listen(ui);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
@@ -78,10 +84,14 @@ async function run() {
     await page.getByText("研发知识夹具", { exact: true }).waitFor();
     await page.getByRole("heading", { name: "已发布知识", exact: true }).waitFor();
     assert.doesNotMatch(await page.locator("main").innerText(), /资产/);
-    const picker = page.getByLabel("工作区", { exact: true });
-    await picker.waitFor();
-    assert.deepEqual(await picker.locator("option").allTextContents(), ["研发", "运营"]);
-    await picker.selectOption(beta);
+    const workspaces = page.getByRole("list", { name: "工作区", exact: true });
+    const workspace = (name) => workspaces.getByRole("button", { name, exact: true });
+    await workspaces.waitFor();
+    assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["研发", "已有子工作区", "运营"]);
+    for (const name of ["研发", "已有子工作区", "运营"]) assert.equal(await workspace(name).isVisible(), true);
+    assert.equal(await workspace("研发").getAttribute("aria-current"), "true");
+    assert.equal(await workspace("另一个账号的工作区").count(), 0);
+    await workspace("运营").press("Enter");
     await page.getByRole("heading", { name: "运行总览", exact: true }).waitFor();
     await page.getByRole("button", { name: /知识管理/ }).click();
     await page.getByText("运营知识夹具", { exact: true }).waitFor();
@@ -90,7 +100,7 @@ async function run() {
     await page.getByText("运营知识夹具", { exact: true }).waitFor();
     await page.getByRole("heading", { name: "已发布知识", exact: true }).waitFor();
     assert.doesNotMatch(await page.locator("main").innerText(), /资产/);
-    assert.equal(await picker.inputValue(), beta);
+    assert.equal(await workspace("运营").getAttribute("aria-current"), "true");
     assert.deepEqual(await page.evaluate(() => ({
       storage: { ...sessionStorage },
       localStorageSize: localStorage.length,
@@ -103,7 +113,7 @@ async function run() {
     assert.equal((await context.cookies()).find((cookie) => cookie.name.startsWith("origence-console-")).httpOnly, true);
     const newWorkspace = page.getByRole("button", { name: "新建工作区", exact: true });
     assert.equal(await newWorkspace.count(), 0);
-    await picker.selectOption(alpha);
+    await workspace("研发").tap();
     await newWorkspace.click();
     const createDialog = page.getByRole("dialog", { name: "新建工作区", exact: true });
     await createDialog.getByLabel("工作区名称", { exact: true }).fill("试点");
@@ -115,17 +125,24 @@ async function run() {
     await page.getByRole("button", { name: /知识管理/ }).click();
     await page.getByText("试点知识夹具", { exact: true }).waitFor();
     assert.deepEqual(creationAttempts, [creationAttempts[0], creationAttempts[0]]);
-    assert.equal(children.size, 1);
+    assert.equal(children.size, 2);
+    assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["研发", "已有子工作区", "试点", "运营"]);
     assert.equal(await newWorkspace.count(), 0);
     await page.reload();
     await page.getByText("试点知识夹具", { exact: true }).waitFor();
-    assert.equal(await picker.inputValue(), creationAttempts[0]);
+    assert.equal(await workspace("试点").getAttribute("aria-current"), "true");
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await page.getByLabel("账号", { exact: true }).waitFor();
     await page.reload();
     await page.getByLabel("账号", { exact: true }).waitFor();
     assert.equal(await page.getByText("运营知识夹具", { exact: true }).count(), 0);
-    console.log("PASS console login, scoped workspace creation and retry, mobile switch, reload, and sign-out (synthetic HTTP, Chromium)");
+    await page.getByLabel("账号", { exact: true }).fill("other");
+    await page.getByLabel("密码", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await workspaces.waitFor();
+    assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["另一个账号的工作区"]);
+    assert.equal(await workspace("另一个账号的工作区").getAttribute("aria-current"), "true");
+    console.log("PASS console login, visible workspace lists with account isolation, scoped creation and retry, keyboard and mobile switching, reload, and sign-out (synthetic HTTP, Chromium)");
   } finally {
     await browser?.close();
     for (const server of [ui, upstream]) {

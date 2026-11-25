@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-25. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-25 · Visible workspace list after sign-in
+
+Based on main `cadce521a09a65e9c59f8feb50c192f5b7649c41`. On Linux with Node 24.22.1,
+type checking, 27 UI tests and the diff check passed. Chromium 156 with synthetic accounts verified
+that the sidebar shows every granted workspace, including an existing child. A separate account saw
+only its single workspace. Keyboard switching, mobile touch emulation, child creation retry, restoring
+the active workspace on reload, and sign-out passed. Navigation focus and narrow viewport scripts passed.
+
 ## 2026-11-25 · Default console account sign-in
 
 Based on main `c3a28a851b06e4831eae16ff1cff630316f3d3bc`. On Linux with Node 24.22.1, type
