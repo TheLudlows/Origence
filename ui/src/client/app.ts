@@ -10,7 +10,6 @@ import {
   input,
   message,
   panel,
-  select,
   short,
   submit,
   type ViewContext,
@@ -273,13 +272,18 @@ async function render() {
     "icon-button",
   );
   theme.setAttribute("aria-label", "切换明暗主题");
-  const workspaces = session.workspaces;
-  const workspacePicker = select(workspaces.map((workspace) => [workspace.workspace_id, workspace.name]), user.workspace_id);
-  workspacePicker.setAttribute("aria-label", "工作区");
-  workspacePicker.addEventListener("change", () => {
-    const next = workspaces.find((workspace) => workspace.workspace_id === workspacePicker.value);
-    if (next && next.workspace_id !== user?.workspace_id) chooseWorkspace(next, true);
-  });
+  const workspaceHeading = el("h2", "", "工作区");
+  workspaceHeading.id = "workspace-list-title";
+  const workspaceList = el("ul", "workspace-list");
+  workspaceList.setAttribute("role", "list");
+  workspaceList.setAttribute("aria-labelledby", workspaceHeading.id);
+  for (const workspace of session.workspaces) {
+    const item = button(workspace.name, () => {
+      if (workspace.workspace_id !== user?.workspace_id) chooseWorkspace(workspace, true);
+    }, "nav-item");
+    if (workspace.workspace_id === user.workspace_id) item.setAttribute("aria-current", "true");
+    workspaceList.append(el("li", "", item));
+  }
   const content = el("main", "content");
   const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
   const activeWorkspace = user;
@@ -298,11 +302,7 @@ async function render() {
           "origence",
           el("span", "accent", "."),
         ),
-        el(
-          "div",
-          workspaces.length > 1 ? "workspace multiple-workspaces" : "workspace",
-          workspaces.length > 1 ? field("工作区", workspacePicker) : el("p", "", user.name === user.workspace_id ? short(user.workspace_id) : user.name),
-        ),
+        el("div", "workspace", workspaceHeading, workspaceList),
         activeWorkspace.can_create_owned_workspaces
           ? button("新建工作区", () => createWorkspace(activeWorkspace, binding, ctx.signal), "nav-item")
           : null,

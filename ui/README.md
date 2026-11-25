@@ -36,7 +36,7 @@ PowerShell 可以把 `Read-Host -MaskInput` 的输出传给同一个 `set-passwo
 
 使用已有的 [Origence 凭据管理接口](../docs/API.md#接口)，为每个账号及工作区授权签发一把独立且权限适当的 key，并由服务端环境注入，如 `ORIGENCE_ALICE_ENGINEERING_KEY`。账号库保存 scrypt 密码哈希和工作区授权，后端 key 仅由服务端读取。再次运行 `set-password` 可改密，`grant` 可更新已有授权，`revoke USERNAME WORKSPACE_ID` 可撤销一项授权，`remove-account USERNAME` 可删除账号及其授权。若控制台已启动，重启后加载账号改动或轮换后的 key。
 
-用户用账号登录后可切换获授权的工作区。后台核验每把 key 的工作区和权限，上游会拒绝已撤销的 key。Agent 继续用自己的 API token 接入。私有会话和 Run 按逻辑 key 隔离。要延续自己的私有记录，应绑定该账号本人原有的同一逻辑 key。
+用户用账号登录后，侧栏直接列出该账号可以访问的全部工作区，标出当前项，点击即可切换。列表包含账号直接获授权的工作区及通过根工作区授权可访问的子工作区。后台核验每把 key 的工作区和权限，上游会拒绝已撤销的 key。Agent 继续用自己的 API token 接入。私有会话和 Run 按逻辑 key 隔离。要延续自己的私有记录，应绑定该账号本人原有的同一逻辑 key。
 
 控制台通过 8 小时有效的服务端内存会话恢复普通页面刷新。浏览器使用 HttpOnly、SameSite=Strict 的随机 Cookie，HTTPS 入口额外启用 Secure。同一标签页只在 sessionStorage 保存所选工作区 ID。主动退出、会话到期或 Node 服务重启后需重新登录。
 
