@@ -123,11 +123,13 @@ Same-schema reopen retains associations. No migration or backfill is performed.
 
 ## Run creation overview
 
-`GET /v1/runs/overview?window=24h|7d` requires the same Read authority as
-the Run directory. It counts each durable Run row once within the authenticated
-tenant, workspace and logical key. Credential rotation retains the same
-logical owner. A workspace administrator sees their own counts. A reader
-with no Run records receives zeroes, without creating a session.
+`GET /v1/runs` and `GET /v1/runs/overview?window=24h|7d` use the effective role in
+the selected workspace. An admin lists and counts all workspace Runs. Other roles
+list and count their own Runs. The directory shows the Run ID, logical owner,
+creation time and latest reported outcome. A missing or unknown result is unknown.
+Summaries and trace details remain owner-only. Each durable Run row counts once,
+and credential rotation retains its logical owner. Empty scopes receive zeroes
+without creating a session.
 
 A single service clock reading supplies the end of the rolling window. The
 interval is `[end_ms - duration_ms, end_ms)` in UTC Unix milliseconds.
@@ -146,7 +148,8 @@ end-to-end latency, tokens and cost require separate observations.
 The existing primary key sorts by Run UUID. The new covering index
 `oc_runs_owner_created_at` supports each bounded owner/time count and avoids
 reading Run bodies. A request takes at most 24 disjoint index range counts
-over at most seven days. Work still scales with matching index entries.
+over at most seven days. Admin reports group creation counts in a single covering
+index scan of the selected workspace. Work scales with the entries scanned.
 The index is installed only on fresh SQLite authority databases. The new
 binary rejects a database missing the index during read-only schema admission.
 The previous binary also rejects a database containing the new index. Keep

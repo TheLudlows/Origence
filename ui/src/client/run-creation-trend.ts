@@ -8,6 +8,7 @@ interface RunCreationBucket {
 }
 
 interface RunCreationOverview extends RunCreationBucket {
+  scope: "workspace" | "current_logical_key";
   series: RunCreationBucket[];
 }
 
@@ -46,6 +47,7 @@ export function runCreationTrend(signal: AbortSignal) {
       const scale = Math.max(1, ...data.series.map((bucket) => bucket.created_runs));
       status.textContent = `新建运行 ${data.created_runs.toLocaleString("zh-CN")} 条`;
       result.append(
+        el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
         el("p", "muted", `UTC ${utc(data.start_ms)}（含）至 ${utc(data.end_ms)}（不含）`),
         table(
           ["桶起点（UTC，含）", "桶终点（UTC，不含）", "创建数", "相对趋势"],
@@ -76,7 +78,6 @@ export function runCreationTrend(signal: AbortSignal) {
   return panel(
     "运行创建趋势",
     field("统计范围", range),
-    el("p", "muted", "统计当前逻辑 key 下服务端记录的新建运行。该数字包含所有结果状态。"),
     status,
     el("div", "", result, retry),
   );

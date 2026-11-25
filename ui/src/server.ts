@@ -81,9 +81,10 @@ async function listOwnedWorkspaces(upstream: URL, authorization: string, signal:
     if (page === null || !Array.isArray(page.items) || page.items.length > 100)
       throw new HttpError(502, "子工作区列表无效");
     for (const item of page.items) {
-      if (!item || typeof item.workspace_id !== "string" || !workspaceIdPattern.test(item.workspace_id) || typeof item.name !== "string")
+      if (!item || typeof item.workspace_id !== "string" || !workspaceIdPattern.test(item.workspace_id) ||
+          typeof item.name !== "string" || !["reader", "writer", "reviewer", "admin"].includes(item.role))
         throw new HttpError(502, "子工作区列表无效");
-      items.push({ workspace_id: item.workspace_id, name: item.name });
+      items.push({ workspace_id: item.workspace_id, name: item.name, role: item.role });
     }
     if (page.next_after === null) break;
     if (typeof page.next_after !== "string" || !workspaceIdPattern.test(page.next_after) || (after && page.next_after <= after))

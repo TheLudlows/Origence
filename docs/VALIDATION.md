@@ -7,6 +7,24 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-25 · 工作区管理员查看 Run 状态与统计
+
+基于 `607bcdb7b03b9299a9741b4b24014ae9e5b43245` 和同工作区中的子工作区权限改动。Windows 原生使用 Rust 1.98.0 和 Node.js 24.15.0。
+
+- `cargo fmt --all --check`、`cargo clippy --locked --offline --no-default-features --features local-storage --all-targets -- -D warnings` 和 `git diff --check` 通过。
+- `cargo test --locked --offline --target-dir target/run-admin-check --test local --quiet` 通过 212 项测试。公开 Rust 库和真实 HTTP/SQLite 覆盖管理员 UUID 分页、其他所有者最新上报状态、摘要隐藏、详情 404、非管理员范围、工作区及租户隔离，以及 24 小时和 7 天窗口。手工核对了新增 SQL，每条只访问一个关系，列表、状态与趋势在各自的授权读事务中处理。数据库结构未变。
+- `npm.cmd run check` 与 `npm.cmd test` 通过，后者通过 28 项测试。DOM 测试验证管理员可见他人的上报状态及所属 Key，且该行没有详情入口。
+- 本地开发 API 以同一数据目录优雅重启。真实 Node 控制台 `admin` 登录后返回工作区列表范围，直接 API 验证 `writer` 返回个人范围。两个服务均就绪。本次未运行 Linux 或 Chromium 验收。
+
+## 2026-11-25 · 根工作区管理员创建子工作区
+
+基于 `607bcdb7b03b9299a9741b4b24014ae9e5b43245`。Windows 原生环境使用 Rust 1.98.0 和 Node.js 24.15.0。
+
+- `cargo fmt --all --check` 与 `cargo clippy --locked --offline --no-default-features --features local-storage --all-targets -- -D warnings` 通过。
+- `cargo test --locked --offline --no-default-features --features local-storage --test local --quiet` 通过 212 项测试。真实 SQLite 和 HTTP 覆盖普通及显式授权的根管理员创建、同 UUID 重试、子工作区 writer 授权、已有子工作区隔离，以及 writer 和子工作区管理员创建被拒绝。公开库的所属工作区回归继续覆盖显式能力。
+- `npm.cmd run check` 与 `npm.cmd test` 通过，后者通过 28 项测试。控制台代理用 HTTP 夹具核验根管理员创建、子工作区角色和错误作用域拒绝。
+- 手工核对变更的 SQLite 执行语句，每条只访问一个关系，列表和创建都使用原事务。未运行本次 Chromium 验收。WSL 仅安装 Docker Desktop 的内部发行版，Linux 容器引擎不可用，本次未运行 Linux 回归。
+
 ## 2026-11-25 · 控制台 API Key 管理
 
 基于 main `b8dc33b77f474f5fc453061c755b9c710c0576ea`。Linux 下，Rust 1.98.0 格式检查、

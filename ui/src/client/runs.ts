@@ -21,6 +21,8 @@ import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
 import { runPdfPreview, sourcePreview, sourcePreviewTarget } from "./source.js";
 import { runCreationTrend } from "./run-creation-trend.js";
 
+type RunDirectory = Page<Run> & { scope: "workspace" | "current_logical_key" };
+
 export function citation(
   ref: Provenance,
   ctx: ViewContext,
@@ -74,15 +76,18 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
     ),
   );
   const cards = el("div", "stats");
-  const list = panel("当前 key 的运行");
-  root.append(cards, runCreationTrend(ctx.signal), list);
+  const recent = el("div");
+  root.append(cards, runCreationTrend(ctx.signal), recent);
   const results = await Promise.allSettled([
     api.get<{ status: string }>("/health/ready", ctx.signal),
-    api.get<Page<Run>>("/v1/runs?limit=25", ctx.signal),
+    api.get<RunDirectory>("/v1/runs?limit=25", ctx.signal),
   ]);
   if (ctx.signal.aborted) return;
   const health = results[0],
     runs = results[1];
+  const workspaceWide = runs.status === "fulfilled" && runs.value.scope === "workspace";
+  const list = panel(workspaceWide ? "当前工作区的运行" : "当前 Key 的运行");
+  recent.append(list);
   cards.append(
     panel(
       "服务就绪状态",
@@ -102,7 +107,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
         "stat-value",
         runs.status === "fulfilled" ? runs.value.items.length : "—",
       ),
-      el("p", "muted", "仅当前身份；不代表全部运行总数"),
+      el("p", "muted", workspaceWide ? "当前工作区列表的第一页" : "当前 Key 列表的第一页"),
     ),
   );
   cards.append(
@@ -113,7 +118,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
     ),
   );
   if (runs.status === "fulfilled") {
-    list.append(runTable(runs.value.items, ctx));
+    list.append(runTable(runs.value.items, workspaceWide, ctx));
     if (runs.value.next_after)
       list.append(el("p", "muted", "还有更多运行，请进入调用链路分页查看。"));
   } else message(list, runs.reason);
@@ -123,25 +128,30 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
       el(
         "p",
         "muted",
-        "Origence 展示服务端准备回执和客户端显式上报。没有上报的模型、工具与客户端活动保持未知。已发布的记忆、知识和技能按授权共享，私有会话和 Run 按各自的逻辑 key 隔离。",
+        "Origence 展示服务端准备回执和客户端显式上报。没有上报的活动保持未知。Run 详情仅向所属 Key 开放。",
       ),
     ),
   );
 }
 
-function runTable(items: Run[], ctx: ViewContext) {
+function runTable(items: Run[], workspaceWide: boolean, ctx: ViewContext) {
   if (!items.length)
     return empty(
       "还没有可读取的运行",
-      "使用当前逻辑 key 上报的任务会显示在这里。",
+      workspaceWide ? "当前工作区上报的运行会显示在这里。" : "使用当前 Key 上报的运行会显示在这里。",
     );
+  const statuses = { reported_success: "上报成功", reported_failure: "上报失败", unknown: "未知" };
   return table(
-    ["任务", "Run ID", "创建时间", "操作"],
+    ["任务", "Run ID", ...(workspaceWide ? ["所属 Key"] : []), "创建时间", "状态", "操作"],
     items.map((run) => [
-      run.summary,
+      run.summary ?? "私有任务",
       el("span", "mono", short(run.run_id)),
+      ...(workspaceWide ? [run.owner_key_id ? el("span", "mono", run.owner_key_id) : "—"] : []),
       date(run.created_at_ms),
-      button("查看链路 →", () => ctx.navigate("runs", run.run_id), "link"),
+      statuses[run.status] ?? statuses.unknown,
+      run.is_owner === false
+        ? "仅所有者可查看链路"
+        : button("查看链路 →", () => ctx.navigate("runs", run.run_id), "link"),
     ]),
   );
 }
@@ -159,18 +169,28 @@ export async function runsPage(
     error = el("div"),
     direct = input("Run UUID");
   let after: string | null = null;
+  let scope: RunDirectory["scope"] | undefined;
   const items: Run[] = [];
   const load = async () => {
     more.disabled = true;
     try {
-      const page = await api.get<Page<Run>>(
-        `/v1/runs?limit=25${after ? "&after=" + after : ""}`,
+      const path = "/v1/runs?limit=25";
+      let page = await api.get<RunDirectory>(
+        `${path}${after ? "&after=" + after : ""}`,
         ctx.signal,
       );
       if (ctx.signal.aborted) return;
+      if (scope !== undefined && page.scope !== scope) {
+        items.length = 0;
+        after = null;
+        list.replaceChildren();
+        page = await api.get<RunDirectory>(path, ctx.signal);
+        if (ctx.signal.aborted) return;
+      }
+      scope = page.scope;
       items.push(...page.items);
       after = page.next_after;
-      list.replaceChildren(runTable(items, ctx));
+      list.replaceChildren(runTable(items, page.scope === "workspace", ctx));
       more.hidden = !after;
     } catch (e) {
       message(error, e);
@@ -180,7 +200,7 @@ export async function runsPage(
   };
   const more = button("加载下一页", load);
   root.append(
-    heading("调用链路", "只展示当前逻辑 key 有权访问的 Run。"),
+    heading("调用链路", "查看运行状态与有权读取的链路。"),
     panel("运行记录", list, more),
     panel(
       "打开指定 Run",

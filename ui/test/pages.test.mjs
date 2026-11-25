@@ -51,6 +51,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     reportedAsset: "66666666-6666-4666-8666-666666666666",
     reportedChunk: "77777777-7777-4777-8777-777777777777",
     reportedRef: "88888888-8888-4888-8888-888888888888",
+    otherRun: "99999999-9999-4999-8999-999999999999",
+    otherKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   };
   const reportedReference = {
     kind: "chunk", id: ids.reportedChunk, chunk_id: ids.reportedChunk,
@@ -128,6 +130,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       const size = window === "24h" ? 24 : 7;
       const width = window === "24h" ? 3_600_000 : 86_400_000;
       return response({
+        scope: "workspace",
         start_ms: 0,
         end_ms: size * width,
         created_runs: window === "24h" ? 31 : 34,
@@ -149,8 +152,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     }
     if (path.pathname === "/api/v1/runs")
       return response({
+        scope: "workspace",
         items: [
-          { run_id: ids.run, summary: "fixture task", created_at_ms: 1000 },
+          { run_id: ids.run, owner_key_id: ids.source, is_owner: true, summary: "fixture task", created_at_ms: 1000, status: "unknown" },
+          { run_id: ids.otherRun, owner_key_id: ids.otherKey, is_owner: false, summary: null, created_at_ms: 1100, status: "reported_failure" },
         ],
         next_after: null,
       });
@@ -402,6 +407,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         document.body.textContent.includes("fixture task"),
     );
     assert.equal(document.querySelector("h1").textContent, "运行总览");
+    const otherRun = [...document.querySelectorAll("tbody tr")].find((row) => row.textContent.includes(ids.otherKey));
+    assert.ok(otherRun.textContent.includes("私有任务"));
+    assert.ok(otherRun.textContent.includes("上报失败"));
+    assert.equal(otherRun.querySelector("button"), null);
     const trend = [...document.querySelectorAll("section")].find(
       (section) => section.querySelector("h2")?.textContent === "运行创建趋势",
     );

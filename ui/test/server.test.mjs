@@ -151,6 +151,7 @@ test("upstream timeouts are bounded", async (t) => {
 test("key management uses the selected account admin grant and protects its credential", async (t) => {
   const adminWorkspace = "11111111-1111-4111-8111-111111111111";
   const readerWorkspace = "22222222-2222-4222-8222-222222222222";
+  const child = "33333333-3333-4333-8333-333333333333";
   const adminId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const password = "synthetic-console-password";
   const calls = [];
@@ -162,8 +163,7 @@ test("key management uses the selected account admin grant and protects its cred
         workspace_id: admin ? adminWorkspace : readerWorkspace, role: admin ? "admin" : "reader" }));
     }
     if (req.url.startsWith("/v1/workspaces/owned?")) {
-      res.statusCode = 403;
-      return res.end("{}");
+      return res.end(JSON.stringify({ items: [{ workspace_id: child, name: "Child", role: "reader" }], next_after: null }));
     }
     calls.push([req.url, req.method, req.headers.authorization, req.headers["x-origence-workspace"], req.headers.cookie]);
     res.end(JSON.stringify({ items: [], next_after: null }));
@@ -179,6 +179,8 @@ test("key management uses the selected account admin grant and protects its cred
     body: JSON.stringify({ username: "fixture", password }),
   });
   const { session } = await login.json();
+  assert.equal(session.workspaces.find((workspace) => workspace.workspace_id === adminWorkspace).can_create_owned_workspaces, true);
+  assert.equal(session.workspaces.find((workspace) => workspace.workspace_id === child).role, "reader");
   const headers = { Cookie: login.headers.get("Set-Cookie").split(";")[0], "X-Origence-Session": session.binding,
     "X-Origence-Workspace": adminWorkspace, Authorization: "Bearer untrusted-browser-value" };
   const keys = ui + "/api/admin/keys";
@@ -190,7 +192,14 @@ test("key management uses the selected account admin grant and protects its cred
   assert.equal((await fetch(keys, { method: "POST", headers })).status, 403);
   assert.equal((await fetch(`${keys}/${adminId.toUpperCase()}/rotate`, { method: "POST", headers: { ...headers, Origin: ui } })).status, 409);
   assert.equal((await fetch(`${keys}/${adminId}`, { method: "DELETE", headers: { ...headers, Origin: ui } })).status, 409);
-  assert.deepEqual(calls, [["/admin/keys?limit=1", "GET", "Bearer synthetic-admin", adminWorkspace, undefined]]);
+  const create = { method: "PUT", headers: { ...headers, Origin: ui, "Content-Type": "application/json" }, body: JSON.stringify({ name: "New child" }) };
+  const path = `/v1/workspaces/owned/${child}`;
+  assert.equal((await fetch(ui + "/api" + path, create)).status, 200);
+  assert.equal((await fetch(ui + "/api" + path, { ...create, headers: { ...create.headers, "X-Origence-Workspace": child } })).status, 403);
+  assert.deepEqual(calls, [
+    ["/admin/keys?limit=1", "GET", "Bearer synthetic-admin", adminWorkspace, undefined],
+    [path, "PUT", "Bearer synthetic-admin", undefined, undefined],
+  ]);
 });
 
 test("UTF-8 source highlighting preserves Chinese, emoji and combining characters", () => {

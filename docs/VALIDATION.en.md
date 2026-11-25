@@ -4,6 +4,24 @@
 
 The latest local verification was 2026-11-25. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-25 · Workspace Run status and statistics for administrators
+
+Based on `607bcdb7b03b9299a9741b4b24014ae9e5b43245` and the child workspace authorization changes in the same checkout. Native Windows with Rust 1.98.0 and Node.js 24.15.0.
+
+- `cargo fmt --all --check`, `cargo clippy --locked --offline --no-default-features --features local-storage --all-targets -- -D warnings`, and `git diff --check` passed.
+- `cargo test --locked --offline --target-dir target/run-admin-check --test local --quiet` passed 212 tests. Public Rust library and real HTTP/SQLite checks covered admin UUID pagination, the latest reported result from another owner, hidden summaries, 404 on private detail, non-admin scope, workspace and tenant isolation, and the 24-hour and seven-day windows. Manual review verified that each new SQL statement accesses one relation and that the catalog, status and trend use their authorized read transactions. The database schema is unchanged.
+- `npm.cmd run check` and `npm.cmd test` passed, with 28 tests. The DOM fixture verified another owner's reported status and logical key with no detail action on the row.
+- The local development API restarted gracefully with the same data directory. An authenticated Node console request returned the workspace scope for `admin`, and direct HTTP returned the logical-key scope for `writer`. Both services reported ready. Linux and Chromium acceptance were not run for this change.
+
+## 2026-11-25 · Child workspace creation by root administrators
+
+Based on `607bcdb7b03b9299a9741b4b24014ae9e5b43245`. Native Windows with Rust 1.98.0 and Node.js 24.15.0.
+
+- `cargo fmt --all --check` and `cargo clippy --locked --offline --no-default-features --features local-storage --all-targets -- -D warnings` passed.
+- `cargo test --locked --offline --no-default-features --features local-storage --test local --quiet` passed 212 tests. Real SQLite and HTTP covered creation by ordinary and explicitly granted root admins, same-UUID retries, writer access to the new child, isolation of existing children, and denial for writers and child admins. Public-library owned-workspace regressions continued to cover the explicit capability.
+- `npm.cmd run check` and `npm.cmd test` passed, with 28 tests. The console proxy used an HTTP fixture to check root-admin creation, the effective child role, and denial from an unauthorized workspace.
+- Manual review confirmed that each changed SQLite statement accesses one relation and that listing and creation use their original transaction boundaries. Chromium acceptance was not run for this change. WSL only had Docker Desktop's internal distribution, and the Linux container engine was unavailable, so Linux regression tests were not run.
+
 ## 2026-11-25 · Console API key management
 
 Based on main `b8dc33b77f474f5fc453061c755b9c710c0576ea`. On Linux with Rust 1.98.0, formatting,

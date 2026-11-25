@@ -98,7 +98,8 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         cursor = next;
     }
     assert_eq!(visible_count, 2);
-    let run = Uuid::new_v4();
+    let run = Uuid::from_u128(1);
+    let other_run = Uuid::from_u128(2);
     s.create_run(
         &admin,
         RunInput {
@@ -111,15 +112,46 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     s.create_run(
         &other,
         RunInput {
-            run_id: Uuid::new_v4(),
+            run_id: other_run,
             summary: "other private task".into(),
         },
     )
     .await
     .unwrap();
+    for (kind, outcome) in [
+        ("result_reported", "success"),
+        ("result_reported", "failure"),
+        ("feedback", "success"),
+    ] {
+        s.append_run_event(
+            &other,
+            other_run,
+            serde_json::from_value(json!({
+                "event_id":Uuid::new_v4(),"reporter":"client","observed_at_ms":0,
+                "event":{"kind":kind,"outcome":outcome,"summary":"private report"}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    }
     let runs = s.list_runs(&admin, Uuid::nil(), 1).await.unwrap();
+    assert_eq!(runs["scope"], "workspace");
     assert_eq!(runs["items"].as_array().unwrap().len(), 1);
     assert_eq!(runs["items"][0]["run_id"], run.to_string());
+    assert_eq!(runs["items"][0]["summary"], "private task");
+    assert_eq!(runs["items"][0]["is_owner"], true);
+    assert_eq!(runs["items"][0]["status"], "unknown");
+    assert_eq!(runs["next_after"], json!(run));
+    let next = s.list_runs(&admin, run, 1).await.unwrap();
+    assert_eq!(
+        next,
+        json!({"scope":"workspace","next_after":null,"items":[{
+            "run_id":other_run,"owner_key_id":other_key.key_id,"is_owner":false,"summary":null,
+            "created_at_ms":next["items"][0]["created_at_ms"],"status":"reported_failure"
+        }]})
+    );
+    assert!(s.run_trace(&admin, other_run, 0, 25).await.is_err());
     assert!(
         s.list_runs(&reader, Uuid::nil(), 25).await.unwrap()["items"]
             .as_array()
@@ -143,6 +175,10 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .unwrap();
     let outsider_key = store.issue_key(separate, "admin").await.unwrap();
     let outsider = s.auth(&outsider_key.token).await.unwrap();
+    assert_eq!(
+        s.list_runs(&outsider, Uuid::nil(), 25).await.unwrap()["items"],
+        json!([])
+    );
     assert!(
         s.list_assets(&outsider, "memory", Uuid::nil(), 25)
             .await
@@ -168,6 +204,27 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     let app = origence::api::router(s.clone());
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let http = reqwest::Client::new();
+    let admin_list: Value = http
+        .get(format!("{base}/v1/runs?after={run}"))
+        .bearer_auth(rotated["token"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(admin_list, next);
+    assert_eq!(
+        http.get(format!("{base}/v1/runs/{other_run}"))
+            .bearer_auth(rotated["token"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
     for path in ["/v1/assets?kind=knowledge&limit=1", "/v1/runs?limit=1"] {
         let result = http
             .get(format!("{base}{path}"))
@@ -785,10 +842,14 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
     let app = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let http = reqwest::Client::new();
-    for (token, expected) in [
-        (replacement["token"].as_str().unwrap(), 26),
-        (&admin.token, 0),
-        (&reader.token, 0),
+    for (token, expected, scope) in [
+        (
+            replacement["token"].as_str().unwrap(),
+            26,
+            "current_logical_key",
+        ),
+        (&admin.token, 26, "workspace"),
+        (&reader.token, 0, "current_logical_key"),
     ] {
         for (query, buckets) in [("", 24), ("?window=7d", 7)] {
             let value: Value = http
@@ -803,6 +864,7 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
                 .await
                 .unwrap();
             assert_eq!(value["created_runs"], expected);
+            assert_eq!(value["scope"], scope);
             let series = value["series"].as_array().unwrap();
             assert_eq!(series.len(), buckets);
             assert_eq!(

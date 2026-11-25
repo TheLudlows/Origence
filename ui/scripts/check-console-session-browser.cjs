@@ -37,7 +37,7 @@ async function run() {
     if (path === "/v1/whoami")
       return send({ id: grant.workspaceId, workspace_id: grant.workspaceId, role: grant.workspaceId === alpha ? "admin" : "reader" });
     if (path === "/v1/workspaces/owned")
-      return grant.workspaceId === alpha ? send({ items: [...children.values()], next_after: null }) : send({}, 403);
+      return grant.workspaceId === alpha ? send({ items: [...children.values()].map((child) => ({ ...child, role: "writer" })), next_after: null }) : send({}, 403);
     if (req.method === "PUT" && path.startsWith("/v1/workspaces/owned/")) {
       if (grant.workspaceId !== alpha || req.headers["x-origence-workspace"]) return send({}, 403);
       const id = path.split("/").at(-1);

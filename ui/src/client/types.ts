@@ -42,8 +42,11 @@ export interface Page<T> {
 }
 export interface Run {
   run_id: string;
-  summary: string;
+  owner_key_id: string;
+  is_owner: boolean;
+  summary: string | null;
   created_at_ms: number;
+  status: "reported_success" | "reported_failure" | "unknown";
 }
 export interface RunEvent {
   sequence: number;

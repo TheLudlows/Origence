@@ -17,7 +17,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核；按预算组装证据。真实引擎本地回归通过 | 当前后端的模型检索质量、容量与延迟验收 |
 | 私有归档与反馈 | 双客户端显式归档互读、逻辑 key 隔离与轮换撤销已验证；支持显式反馈和 Improve → Learning | 在 P0 双场景任务中核对归档和反馈证据 |
-| Node.js 管理界面 | 默认账号登录、授权新建子工作区、管理员 API Key 管理、受限目录、异步入库、固定版本与来源、按当前 key 的 Run 创建数及趋势。已有 Chromium 定向验证 | 实际屏幕阅读器、实体触屏、生产计量与告警。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
+| Node.js 管理界面 | 默认账号登录、根工作区管理员新建直接子工作区、管理员 API Key 管理、受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。管理员可查看当前工作区全部 Run 的状态和统计。已有 Chromium 定向验证 | 实际屏幕阅读器、实体触屏、生产计量与告警。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
@@ -111,7 +111,7 @@ CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检�
 ## 范围与证据
 
 只面向新建数据库；同版本持久化、重启/重试与备份恢复仍是要求。
-原始会话、Run 和未发布候选按逻辑 key 私有隔离；workspace 成员身份不授予他人原始归档访问权。
+原始会话、Run 详情和未发布候选按逻辑 key 私有隔离。工作区管理员可查看本区的 Run 元数据、上报状态与创建统计。
 本工作区获授权的成员可以复用已发布的记忆、知识和技能，支持来源仍需有效；Skill 的
 私有会话依据可能限制其他 key 的审阅或分发，详见 [Run 契约](contracts/runs.zh-CN.md)。
 首批采用成员授权范围一致的 workspace；企业身份与差异文档 ACL 尚未实现。

@@ -38,6 +38,7 @@ interface WorkspaceRoute {
 export interface OwnedWorkspace {
   workspace_id: string;
   name: string;
+  role: string;
 }
 
 function cookieName(origin: URL) {
@@ -192,12 +193,12 @@ export class ConsoleSessions {
       route.canCreateOwned = true;
       for (const child of owned) {
         if (directIds.has(child.workspace_id) || routes.has(child.workspace_id)) continue;
-        workspaces.push({ ...child, id: user.id, role: "writer" });
+        workspaces.push({ ...child, id: user.id });
         routes.set(child.workspace_id, {
           authorization: grant.authorization,
           workspaceId: child.workspace_id,
           principalId: user.id,
-          role: "writer",
+          role: child.role,
           scopedWorkspace: child.workspace_id,
         });
       }

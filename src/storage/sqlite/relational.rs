@@ -1,6 +1,11 @@
 //! RelationalStore entry points: authentication, workspaces and API keys.
 use super::*;
 
+enum OwnedWorkspaceAuthorization {
+    Capability(Permission),
+    Administrator,
+}
+
 impl RelationalStore for SqliteStore {
     type Tx = SqliteTx;
 
@@ -91,9 +96,14 @@ impl RelationalStore for SqliteStore {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<AuthorizedScope> {
-        self.owned_workspace(auth, workspace_id, Some(name), Permission::Write)
-            .await?
-            .ok_or(StorageError::NotFound)
+        self.owned_workspace(
+            auth,
+            workspace_id,
+            Some(name),
+            OwnedWorkspaceAuthorization::Capability(Permission::Write),
+        )
+        .await?
+        .ok_or(StorageError::NotFound)
     }
 
     async fn lookup_owned_workspace(
@@ -101,8 +111,13 @@ impl RelationalStore for SqliteStore {
         auth: AuthorizedScope,
         workspace_id: Uuid,
     ) -> StorageResult<Option<AuthorizedScope>> {
-        self.owned_workspace(auth, workspace_id, None, Permission::Read)
-            .await
+        self.owned_workspace(
+            auth,
+            workspace_id,
+            None,
+            OwnedWorkspaceAuthorization::Capability(Permission::Read),
+        )
+        .await
     }
 
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()> {
@@ -126,20 +141,56 @@ impl SqliteStore {
         auth: AuthorizedScope,
         after: Uuid,
         limit: u32,
-    ) -> StorageResult<Vec<(Uuid, String)>> {
-        let mut tx = self.begin_scoped(auth, false, None).await?;
-        tx.require_owned_workspace_root(Permission::Delete).await?;
-        let rows = sqlite_db::query_as(
-            "SELECT id,name FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? \
-             AND id>? ORDER BY id LIMIT ?",
-        )
-        .bind(tx.scope.tenant_id)
-        .bind(tx.scope.workspace_id)
-        .bind(after)
-        .bind(limit)
-        .fetch_all(&mut *tx.tx)
-        .await
-        .map_err(sqlite_err)?;
+    ) -> StorageResult<Vec<(Uuid, String, String)>> {
+        let mut tx = self
+            .begin_scoped(auth, false, Some(Permission::Delete))
+            .await?;
+        tx.require_root_workspace().await?;
+        let (logical_id, home, home_role, default_access, capable) =
+            tx.managed_workspace_key().await?;
+        let rows = if capable && home == tx.scope.workspace_id && default_access {
+            sqlite_db::query_as(
+                "SELECT id,name,'writer' FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? \
+                 AND id>? ORDER BY id LIMIT ?",
+            )
+            .bind(tx.scope.tenant_id)
+            .bind(tx.scope.workspace_id)
+            .bind(after)
+            .bind(limit)
+            .fetch_all(&mut *tx.tx)
+            .await
+            .map_err(sqlite_err)?
+        } else {
+            let mut grants = super::workspace_grants::additional_grants(
+                &mut tx.tx,
+                tx.scope.tenant_id,
+                logical_id,
+            )
+            .await?;
+            if default_access && home != tx.scope.workspace_id {
+                grants.push((home, home_role));
+                grants.sort_unstable_by_key(|(id, _)| *id);
+            }
+            let mut rows = Vec::new();
+            for (id, role) in grants.into_iter().filter(|(id, _)| *id > after) {
+                let name: Option<String> = sqlite_db::query_scalar(
+                    "SELECT name FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? AND id=?",
+                )
+                .bind(tx.scope.tenant_id)
+                .bind(tx.scope.workspace_id)
+                .bind(id)
+                .fetch_optional(&mut *tx.tx)
+                .await
+                .map_err(sqlite_err)?;
+                if let Some(name) = name {
+                    rows.push((id, name, role));
+                    if rows.len() == limit as usize {
+                        break;
+                    }
+                }
+            }
+            rows
+        };
         tx.commit().await?;
         Ok(rows)
     }
@@ -151,9 +202,14 @@ impl SqliteStore {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<AuthorizedScope> {
-        self.owned_workspace(auth, workspace_id, Some(name), Permission::Delete)
-            .await?
-            .ok_or(StorageError::NotFound)
+        self.owned_workspace(
+            auth,
+            workspace_id,
+            Some(name),
+            OwnedWorkspaceAuthorization::Administrator,
+        )
+        .await?
+        .ok_or(StorageError::NotFound)
     }
 
     async fn owned_workspace(
@@ -161,7 +217,7 @@ impl SqliteStore {
         auth: AuthorizedScope,
         workspace_id: Uuid,
         create: Option<&str>,
-        permission: Permission,
+        authorization: OwnedWorkspaceAuthorization,
     ) -> StorageResult<Option<AuthorizedScope>> {
         if create
             .is_some_and(|name| name.trim().is_empty() || name.len() > 256 || name.contains('\0'))
@@ -170,10 +226,28 @@ impl SqliteStore {
                 "workspace name must contain 1..256 UTF-8 bytes without NUL",
             ));
         }
-        let mut tx = self.begin_scoped(auth, create.is_some(), None).await?;
-        // A forged/remapped AuthContext is insufficient. The live key must be
-        // bound directly to this root, explicitly capable, and not revoked.
-        let role = tx.require_owned_workspace_root(permission).await?;
+        let required = match authorization {
+            OwnedWorkspaceAuthorization::Administrator => Some(Permission::Delete),
+            OwnedWorkspaceAuthorization::Capability(_) => None,
+        };
+        let mut tx = self.begin_scoped(auth, create.is_some(), required).await?;
+        let (role, explicit_key) = match authorization {
+            OwnedWorkspaceAuthorization::Administrator => {
+                tx.require_root_workspace().await?;
+                let (logical_id, home, _, active, capable) = tx.managed_workspace_key().await?;
+                let derived = home == tx.scope.workspace_id && active && capable;
+                ("writer", (!derived).then_some(logical_id))
+            }
+            OwnedWorkspaceAuthorization::Capability(permission) => {
+                let root_role = tx.require_owned_workspace_root(permission).await?;
+                let role = if Permission::Write.granted_by(&root_role) {
+                    "writer"
+                } else {
+                    "reader"
+                };
+                (role, None)
+            }
+        };
         if workspace_id == tx.scope.workspace_id {
             return Err(StorageError::Conflict("workspace cannot own itself".into()));
         }
@@ -186,14 +260,23 @@ impl SqliteStore {
         .fetch_optional(&mut *tx.tx)
         .await
         .map_err(sqlite_err)?;
-        let found = match existing {
+        let scope = Scope {
+            workspace_id,
+            ..tx.scope
+        };
+        let target_role = match existing {
             Some((tenant, owner)) => {
                 if tenant != tx.scope.tenant_id || owner != Some(tx.scope.workspace_id) {
                     return Err(StorageError::Conflict(
                         "workspace ownership does not match".into(),
                     ));
                 }
-                true
+                Some(match authorization {
+                    OwnedWorkspaceAuthorization::Administrator => {
+                        tx.live_role_in_scope(tx.principal_id, scope).await?
+                    }
+                    OwnedWorkspaceAuthorization::Capability(_) => role.into(),
+                })
             }
             None => match create {
                 Some(name) => {
@@ -209,25 +292,29 @@ impl SqliteStore {
                     .execute(&mut *tx.tx)
                     .await
                     .map_err(sqlite_err)?;
+                    if let Some(logical_id) = explicit_key {
+                        sqlite_db::query(
+                            "INSERT INTO oc_workspace_key_grants(tenant_id,workspace_id,logical_key_id,role)
+                             VALUES(?,?,?,'writer')",
+                        )
+                        .bind(tx.scope.tenant_id)
+                        .bind(workspace_id)
+                        .bind(logical_id)
+                        .execute(&mut *tx.tx)
+                        .await
+                        .map_err(sqlite_err)?;
+                    }
                     tx.audit("workspace.create_owned", workspace_id, json!({}))
                         .await?;
-                    true
+                    Some(role.into())
                 }
-                None => false,
+                None => None,
             },
         };
-        let authorized = found.then(|| AuthorizedScope {
-            scope: Scope {
-                tenant_id: tx.scope.tenant_id,
-                workspace_id,
-            },
+        let authorized = target_role.map(|role| AuthorizedScope {
+            scope,
             principal_id: tx.principal_id,
-            role: if Permission::Write.granted_by(&role) {
-                "writer"
-            } else {
-                "reader"
-            }
-            .into(),
+            role,
         });
         tx.commit().await?;
         Ok(authorized)
@@ -235,6 +322,19 @@ impl SqliteStore {
 }
 
 impl SqliteTx {
+    async fn managed_workspace_key(&mut self) -> StorageResult<(Uuid, Uuid, String, bool, bool)> {
+        sqlite_db::query_as(
+            "SELECT logical_key_id,workspace_id,role,default_access,allow_owned_workspaces=1
+             FROM oc_api_keys WHERE id=? AND tenant_id=? AND NOT revoked",
+        )
+        .bind(self.principal_id)
+        .bind(self.scope.tenant_id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?
+        .ok_or(StorageError::Forbidden)
+    }
+
     async fn require_owned_workspace_root(
         &mut self,
         permission: Permission,
@@ -251,6 +351,15 @@ impl SqliteTx {
         .await
         .map_err(sqlite_err)?;
         let role = role.ok_or(StorageError::Forbidden)?;
+        if !permission.granted_by(&role) {
+            return Err(StorageError::Forbidden);
+        }
+        self.require_root_workspace().await?;
+        self.required.push(permission);
+        Ok(role)
+    }
+
+    async fn require_root_workspace(&mut self) -> StorageResult<()> {
         let root: Option<Uuid> = sqlite_db::query_scalar(
             "SELECT id FROM oc_workspaces \
              WHERE tenant_id=? AND id=? AND owner_workspace_id IS NULL",
@@ -260,10 +369,9 @@ impl SqliteTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        if root.is_none() || !permission.granted_by(&role) {
+        if root.is_none() {
             return Err(StorageError::Forbidden);
         }
-        self.required.push(permission);
-        Ok(role)
+        Ok(())
     }
 }

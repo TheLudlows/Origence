@@ -40,9 +40,7 @@ An eight-hour in-memory console session survives page reloads. The browser recei
 
 ### Create a child workspace
 
-With the root workspace's admin credential, run `origence key-create <workspace ID> --role admin --allow-owned-workspaces`. Configure the returned key as a trusted console service credential for the authorized local account. The grant covers the root and all its immediate children.
-
-Sign in, select the authorized root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace. The credential has writer access in the child. Operators initialize new root workspaces offline.
+Sign in as a root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
@@ -61,7 +59,7 @@ administrator rights in that key's additional workspaces.
 
 ## Pages
 
-- **Overview** shows service readiness and counts and trends of Run creations for the current logical key. Uncollected latency and cost are shown as unknown.
+- **Overview** shows service readiness and Run creation counts and trends. Admins see the selected workspace's Run list, reported outcomes and counts. Other roles see their own Runs. Summaries and trace details are owner-only. Uncollected latency and cost appear as unknown.
 - **Tracing** displays each Run's private Trace, including event order, reporters, preparation receipts, precise references, PDF page locators, and external verification records. The preparation event can show query embedding input tokens reported by the model service. Without a report it shows unknown. It does not represent the full Agent turn's usage or cost.
 - **Memory** displays the visible asset catalog and supports pagination, filtering, search, explicit and semantic writes, text extraction, provenance, and fixed-version comparison.
 - **Knowledge** supports Text/Markdown/PDF uploads, asynchronous publication, updates, job lookup, retry and cancellation, and authorized restore or withdrawal.

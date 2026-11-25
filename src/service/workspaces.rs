@@ -78,13 +78,13 @@ impl Service {
         let has_next = rows.len() > limit as usize;
         rows.truncate(limit as usize);
         let next_after = if has_next {
-            rows.last().map(|(id, _)| *id)
+            rows.last().map(|(id, _, _)| *id)
         } else {
             None
         };
         let items: Vec<_> = rows
             .into_iter()
-            .map(|(workspace_id, name)| json!({"workspace_id":workspace_id,"name":name}))
+            .map(|(workspace_id, name, role)| json!({"workspace_id":workspace_id,"name":name,"role":role}))
             .collect();
         Ok(json!({"items":items,"next_after":next_after}))
     }

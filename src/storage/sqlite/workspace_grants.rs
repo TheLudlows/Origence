@@ -56,7 +56,7 @@ pub(super) async fn grant_role(
     .map_err(sqlite_err)
 }
 
-async fn additional_grants(
+pub(super) async fn additional_grants(
     conn: &mut Connection,
     tenant_id: Uuid,
     logical_id: Uuid,

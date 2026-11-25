@@ -112,37 +112,71 @@ impl SqliteTx {
             return Err(StorageError::InvalidArgument("invalid catalog page"));
         }
         let owner = self.private_key_id().await?;
-        let rows: Vec<(Uuid, String, i64)> = sqlite_db::query_as(
-            "SELECT run_id,input,created_at FROM oc_runs WHERE tenant_id=? AND workspace_id=? \
-             AND owner_key_id=? AND run_id>? ORDER BY run_id LIMIT ?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(owner)
-        .bind(after)
-        .bind((limit + 1) as i64)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
+        let workspace_wide = self.live_role().await? == "admin";
+        let sql = if workspace_wide {
+            "SELECT run_id,owner_key_id,CASE WHEN owner_key_id=?3 THEN input END,created_at \
+             FROM oc_runs WHERE tenant_id=?1 AND workspace_id=?2 AND run_id>?4 ORDER BY run_id LIMIT ?5"
+        } else {
+            "SELECT run_id,owner_key_id,input,created_at FROM oc_runs \
+             WHERE tenant_id=?1 AND workspace_id=?2 AND owner_key_id=?3 AND run_id>?4 ORDER BY run_id LIMIT ?5"
+        };
+        let rows: Vec<(Uuid, Uuid, Option<String>, i64)> = sqlite_db::query_as(sql)
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(owner)
+            .bind(after)
+            .bind((limit + 1) as i64)
+            .fetch_all(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)?;
         let more = rows.len() > limit;
         let mut cursor = after;
         let mut items = Vec::new();
-        for (id, input, created) in rows.into_iter().take(limit) {
+        for (id, run_owner, input, created) in rows.into_iter().take(limit) {
             cursor = id;
-            let input: crate::run::RunInput = serde_json::from_str(&input)
+            let input: Option<crate::run::RunInput> = input
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
                 .map_err(|_| StorageError::Unavailable("invalid run record".into()))?;
-            items.push(json!({"run_id":id,"summary":input.summary,"created_at_ms":created}));
+            let outcome: Option<String> = sqlite_db::query_scalar(
+                "SELECT json_extract(payload,'$.event.outcome') FROM oc_run_events \
+                 WHERE tenant_id=? AND workspace_id=? AND run_id=? \
+                 AND json_extract(payload,'$.event.kind')='result_reported' ORDER BY sequence DESC LIMIT 1",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(id)
+            .fetch_optional(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)?
+            .flatten();
+            let status = match outcome.as_deref() {
+                Some("success") => "reported_success",
+                Some("failure") => "reported_failure",
+                _ => "unknown",
+            };
+            items.push(json!({
+                "run_id":id, "owner_key_id":run_owner, "is_owner":owner==run_owner,
+                "summary":input.map(|input| input.summary), "created_at_ms":created, "status":status
+            }));
         }
-        Ok(json!({"items":items,"next_after":more.then_some(cursor),"scope":"current_logical_key"}))
+        let scope = if workspace_wide {
+            "workspace"
+        } else {
+            "current_logical_key"
+        };
+        Ok(json!({"items":items,"next_after":more.then_some(cursor),"scope":scope}))
     }
 
-    /// Count authoritative Run records for the same logical key as the catalog.
+    /// Count authoritative Run records in the caller's catalog scope.
     pub async fn run_creation_overview_at(
         &mut self,
         window: &str,
         end_ms: i64,
     ) -> StorageResult<Value> {
-        let owner = self.private_key_id().await?;
+        self.check_permission(Permission::Read).await?;
+        let workspace_wide = self.live_role().await? == "admin";
         let (buckets, width_ms) = match window {
             "24h" => (24, 3_600_000),
             "7d" => (7, 86_400_000),
@@ -152,26 +186,57 @@ impl SqliteTx {
             .checked_sub(i64::from(buckets) * width_ms)
             .filter(|start| *start >= 0)
             .ok_or(StorageError::InvalidArgument("invalid Run overview time"))?;
-        let mut total = 0;
-        let mut series = Vec::with_capacity(buckets as usize);
-        for bucket in 0..buckets {
-            let start = start_ms + i64::from(bucket) * width_ms;
-            let end = start + width_ms;
-            // The non-overlapping seeks use the covering index in this read snapshot.
-            let count: i64 = sqlite_db::query_scalar(COUNT_RUNS_CREATED)
-                .bind(self.scope.tenant_id)
-                .bind(self.scope.workspace_id)
-                .bind(owner)
-                .bind(start)
-                .bind(end)
-                .fetch_one(&mut *self.tx)
-                .await
-                .map_err(sqlite_err)?;
-            total += count;
-            series.push(json!({"start_ms":start, "end_ms":end, "created_runs":count}));
+        let mut counts = vec![0_i64; buckets as usize];
+        if workspace_wide {
+            // Group in one covering-index scan of this workspace, regardless of the number of buckets.
+            let groups: Vec<(i64, i64)> = sqlite_db::query_as(
+                "SELECT CAST((created_at-?3)/?5 AS INTEGER) AS bucket,COUNT(*) \
+                 FROM oc_runs INDEXED BY oc_runs_owner_created_at \
+                 WHERE tenant_id=?1 AND workspace_id=?2 AND created_at>=?3 AND created_at<?4 \
+                 GROUP BY bucket",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(start_ms)
+            .bind(end_ms)
+            .bind(width_ms)
+            .fetch_all(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)?;
+            for (bucket, count) in groups {
+                counts[bucket as usize] = count;
+            }
+        } else {
+            let owner = self.private_key_id().await?;
+            for (bucket, count) in counts.iter_mut().enumerate() {
+                let start = start_ms + bucket as i64 * width_ms;
+                *count = sqlite_db::query_scalar(COUNT_RUNS_CREATED)
+                    .bind(self.scope.tenant_id)
+                    .bind(self.scope.workspace_id)
+                    .bind(owner)
+                    .bind(start)
+                    .bind(start + width_ms)
+                    .fetch_one(&mut *self.tx)
+                    .await
+                    .map_err(sqlite_err)?;
+            }
         }
+        let total: i64 = counts.iter().sum();
+        let series: Vec<_> = counts
+            .into_iter()
+            .enumerate()
+            .map(|(bucket, count)| {
+                let start = start_ms + bucket as i64 * width_ms;
+                json!({"start_ms":start, "end_ms":start+width_ms, "created_runs":count})
+            })
+            .collect();
+        let scope = if workspace_wide {
+            "workspace"
+        } else {
+            "current_logical_key"
+        };
         Ok(json!({
-            "scope":"current_logical_key", "window":window, "timezone":"UTC",
+            "scope":scope, "window":window, "timezone":"UTC",
             "start_ms":start_ms, "end_ms":end_ms, "created_runs":total, "series":series
         }))
     }

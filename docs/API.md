@@ -140,9 +140,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
   workspace 来自认证；按 `asset_id` 升序扫描当前已发布、未删除的候选，逐条复用
   读取单条内容时采用的完整来源、语义和可见性检查。返回 `{items,next_after}`，items 仅为
   内容条目元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
-- `GET /v1/runs?limit=25&after=<UUID>`：reader 以上，只返回当前逻辑 key 的 Run
-  ID、脱敏 summary 与创建时间，不授予管理员读取其他 key 私有记录的权限。
-  获授权的凭据轮换延续逻辑身份；响应含 `scope:"current_logical_key"`。
+- `GET /v1/runs?limit=25&after=<UUID>`：当前工作区的 `admin` 可查看该工作区的全部 Run，响应为 `scope:"workspace"`。其他角色查看当前逻辑 key 的 Run，响应为 `scope:"current_logical_key"`。每项含 `run_id`、`owner_key_id`、`is_owner`、`created_at_ms`、`status` 和 `summary`。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。其他 key 的 `summary` 为 `null`，详情和证据端点继续校验所有权。获授权的凭据轮换延续逻辑身份。
 
 两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
 按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
@@ -150,8 +148,8 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 分页是逐次授权的实时读取，不宣称跨请求冻结快照。读取不创建会话或任何发布任务。
 
 运行总览使用独立的 `GET /v1/runs/overview?window=24h|7d`，默认 `24h`。
-仅统计当前 tenant、workspace 和逻辑 key 的持久化 Run 创建记录。
-响应包含 `scope:"current_logical_key"`、`window`、`timezone:"UTC"`、
+按 Run 列表的鉴权范围统计持久化 Run 创建记录。
+响应包含 `scope`、`window`、`timezone:"UTC"`、
 `start_ms`、`end_ms`、`created_runs` 和 `series`。
 `series` 按时间升序返回 24 个一小时桶或 7 个 24 小时桶，每桶
 含 `start_ms`、`end_ms`、`created_runs`，包括零计数。
@@ -323,9 +321,10 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 ## 控制台子工作区
 
-- `GET /v1/workspaces/owned?limit=50&after=<UUID>` 以 `items` 和 `next_after` 列出当前根工作区的直接子工作区。每项包含 `workspace_id` 和 `name`。`limit` 范围 1–100。
-- `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。请求重复使用同一 UUID 时读回已有子工作区。UUID 已关联不同父工作区时返回冲突。
-- 两个接口均要求直接绑定根工作区、当前为 admin 且签发时显式允许 `allow_owned_workspaces` 的受信凭据。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。具有派生能力的受信根凭据也可选择已存在的直接子工作区，以派生的 reader 或 writer 身份访问。目标不在该派生范围时返回 404。子工作区的记录仍按作用域和逻辑 key 隔离。
+- 两个接口均要求调用方在当前根工作区拥有 `admin` 角色，包括通过显式工作区授权获得该角色的 Key。子工作区层级为一层。
+- `GET /v1/workspaces/owned?limit=50&after=<UUID>` 以 `items` 和 `next_after` 列出当前根工作区下该 Key 可访问的直接子工作区。每项包含 `workspace_id`、`name` 和有效 `role`。`limit` 范围 1–100。
+- `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。普通管理员创建时，同一事务为其逻辑 Key 添加新子工作区的 `writer` 授权。重复使用同一 UUID 时，有权访问该子工作区的调用方可读回回执，已有名称和授权保持原值。UUID 已关联不同父工作区时返回冲突。
+- `allow_owned_workspaces` 继续控制受信根凭据对子工作区的派生访问。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。具有派生能力的受信根凭据也可选择已存在的直接子工作区，以派生的 reader 或 writer 身份访问。目标不在该派生范围时返回 404。子工作区的记录按作用域和逻辑 key 隔离。
 
 ## 通用所属 workspace 与消息批次库接口
 

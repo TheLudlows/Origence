@@ -523,7 +523,8 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
     let child = Uuid::from_u128(100);
     let second = Uuid::from_u128(200);
     let path = format!("/v1/workspaces/owned/{child}");
-    for key in [&ordinary.token, &writer.token] {
+    {
+        let key = &writer.token;
         assert_eq!(
             call(Method::PUT, &path, key)
                 .json(&json!({"name":"试点"}))
@@ -570,7 +571,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .unwrap();
     assert_eq!(
         first_page,
-        json!({"items":[{"workspace_id":child,"name":"试点"}],"next_after":child})
+        json!({"items":[{"workspace_id":child,"name":"试点","role":"writer"}],"next_after":child})
     );
     let last_page: Value = list(
         format!("/v1/workspaces/owned?limit=1&after={child}"),
@@ -585,7 +586,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
     .unwrap();
     assert_eq!(
         last_page,
-        json!({"items":[{"workspace_id":second,"name":"Second"}],"next_after":null})
+        json!({"items":[{"workspace_id":second,"name":"Second","role":"writer"}],"next_after":null})
     );
     let empty: Value = list("/v1/workspaces/owned".into(), &other_manager.token)
         .await
@@ -596,6 +597,93 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .await
         .unwrap();
     assert_eq!(empty["items"], json!([]));
+
+    let ordinary_child = Uuid::from_u128(300);
+    let ordinary_path = format!("/v1/workspaces/owned/{ordinary_child}");
+    for name in ["Ordinary child", "Retry with a different name"] {
+        assert_eq!(
+            call(Method::PUT, &ordinary_path, &ordinary.token)
+                .json(&json!({"name":name}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+    }
+    let ordinary_page: Value = list("/v1/workspaces/owned?limit=1".into(), &ordinary.token)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        ordinary_page,
+        json!({"items":[{"workspace_id":ordinary_child,"name":"Ordinary child","role":"writer"}],"next_after":null})
+    );
+    let creator: Value = call(Method::GET, "/v1/whoami", &ordinary.token)
+        .header("X-Origence-Workspace", ordinary_child.to_string())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(creator["role"], "writer");
+    let delegated_child = Uuid::from_u128(400);
+    let delegated = store.issue_key(root, "reader").await.unwrap();
+    let delegated_root = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..root
+    };
+    store
+        .create_workspace(
+            root.tenant_id,
+            delegated_root.workspace_id,
+            "Delegated root",
+        )
+        .await
+        .unwrap();
+    let delegated_root_admin = store.issue_key(delegated_root, "admin").await.unwrap();
+    call(
+        Method::PUT,
+        &format!("/admin/workspace-key-grants/{}", delegated.key_id),
+        &delegated_root_admin.token,
+    )
+    .json(&json!({"role":"admin"}))
+    .send()
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap();
+    call(
+        Method::PUT,
+        &format!("/v1/workspaces/owned/{delegated_child}"),
+        &delegated.token,
+    )
+    .header(
+        "X-Origence-Workspace",
+        delegated_root.workspace_id.to_string(),
+    )
+    .json(&json!({"name":"Delegated child"}))
+    .send()
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap();
+    assert_eq!(
+        call(Method::PUT, &path, &ordinary.token)
+            .json(&json!({"name":"Existing inaccessible child"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
 
     let scoped = |method, path: &str, token: &str| {
         call(method, path, token).header("X-Origence-Workspace", child.to_string())
@@ -630,6 +718,19 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         )
         .await
         .unwrap();
+    assert_eq!(
+        call(
+            Method::PUT,
+            &format!("/v1/workspaces/owned/{}", Uuid::new_v4()),
+            &child_admin.token
+        )
+        .json(&json!({"name":"Grandchild"}))
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::FORBIDDEN
+    );
     call(
         Method::PUT,
         &format!("/admin/workspace-key-grants/{}", ordinary.key_id),
