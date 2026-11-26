@@ -24,6 +24,9 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--commit', required=True)
     parser.add_argument('--download-models', action='store_true')
+    parser.add_argument('--local', action='store_true', help='use the embedded AnySeek Catalog')
+    parser.add_argument('--original-only', action='store_true',
+                        help='compare keyword, vector and original hybrid without extraction')
     args = parser.parse_args()
     root = Path(args.dataset)
     manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
@@ -33,7 +36,7 @@ def main():
     config = manifest['fixed_experiment']
     model_dir = Path(args.model_dir)
     paths = {}
-    for kind in ['embedding', 'extraction']:
+    for kind in (['embedding'] if args.original_only else ['embedding', 'extraction']):
         paths[kind] = model_dir / config[kind].split('/')[-1]
         if args.download_models:
             from huggingface_hub import snapshot_download
@@ -48,9 +51,10 @@ def main():
         command = [sys.executable, str(Path(__file__).with_name('local_models.py')),
                    '--embedding-path', str(paths['embedding']), '--embedding-model', config['embedding'],
                    '--embedding-revision', config['embedding_revision'],
-                   '--extraction-path', str(paths['extraction']), '--extraction-model', config['extraction'],
-                   '--extraction-revision', config['extraction_revision'], '--port', '0',
-                   '--cache', str(work / 'projections'), '--metadata', str(work / 'models.json')]
+                   '--port', '0', '--cache', str(work / 'projections'), '--metadata', str(work / 'models.json')]
+        if not args.original_only:
+            command.extend(['--extraction-path', str(paths['extraction']), '--extraction-model', config['extraction'],
+                            '--extraction-revision', config['extraction_revision']])
         try:
             server = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
             address = json.loads(server.stdout.readline())['listening']
@@ -59,11 +63,12 @@ def main():
             # All S1 sources fit one text chunk. Cache keys use the same exact
             # prompts as Models; cached responses remain unaltered model outputs.
             model_source = (Path(__file__).parent.parent / 'src' / 'models.rs').read_text(encoding='utf-8')
-            prompts = {name: json.loads(re.search(r'pub const ' + name + r': &str = ("(?:[^"\\]|\\.)*");', model_source).group(1))
-                       for name in ['SUMMARY_PROMPT','GRAPH_EXTRACTION_PROMPT']}
+            prompts = {} if args.original_only else {
+                name: json.loads(re.search(r'pub const ' + name + r': &str = ("(?:[^"\\]|\\.)*");', model_source).group(1))
+                for name in ['SUMMARY_PROMPT', 'GRAPH_EXTRACTION_PROMPT']}
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             documents = [json.loads(line) for line in (root / 'corpus.jsonl').read_text(encoding='utf-8').splitlines()]
-            for index, doc in enumerate(documents):
+            for index, doc in enumerate(documents if prompts else []):
                 for kind, prompt in prompts.items():
                     body = {'model':config['extraction'],'temperature':0,
                             'messages':[{'role':'system','content':prompt},{'role':'user','content':doc['content']}]}
@@ -87,21 +92,28 @@ def main():
                 if name.startswith('OC_'):
                     del env[name]
             env.update(OC_ENABLE_MODELS='true', OC_MODEL_BASE_URL='http://' + address + '/v1',
-                       OC_EMBEDDING_MODEL=config['embedding'], OC_EMBEDDING_DIMENSION='512',
-                       OC_EXTRACTION_MODEL=config['extraction'])
+                       OC_EMBEDDING_MODEL=config['embedding'], OC_EMBEDDING_DIMENSION='512')
+            if not args.original_only:
+                env['OC_EXTRACTION_MODEL'] = config['extraction']
             evaluate = [sys.executable, str(Path(__file__).with_name('run.py')), '--binary', args.binary,
                         '--corpus', str(root / 'corpus.jsonl'), '--cases', str(root / 'cases.jsonl'),
-                        '--matrix', '--allow-model-calls', '--require-evidence', '--k', str(config['k']),
+                        '--matrix', 'original' if args.original_only else 'all',
+                        '--allow-model-calls', '--require-evidence', '--k', str(config['k']),
                         '--budget', str(config['budget_utf8_bytes']), '--commit', args.commit,
                         '--model-metadata', str(work / 'models.json'), '--output', str(output)]
             evaluate.extend(['--usage-url', 'http://' + address + '/metadata'])
+            if args.local:
+                evaluate.append('--local')
+            if args.original_only:
+                evaluate.append('--resolve-no-answer')
             result = subprocess.run(evaluate, env=env)
             if output.exists():
                 shutil.copyfile(work / 'models.json', output / 'models.json')
-                shutil.copytree(work / 'projections', output / 'generated-projections')
                 shutil.copyfile(root / 'manifest.json', output / 'dataset-manifest.json')
-                (output / 'preparation.json').write_text(json.dumps({'policy':'real model projections prepared offline and cached before import; generation time excluded from import latency',
-                    'prompt_sha256':{k:hashlib.sha256(v.encode()).hexdigest() for k,v in prompts.items()}},indent=2),encoding='utf-8')
+                if not args.original_only:
+                    shutil.copytree(work / 'projections', output / 'generated-projections')
+                    (output / 'preparation.json').write_text(json.dumps({'policy':'real model projections prepared offline and cached before import; generation time excluded from import latency',
+                        'prompt_sha256':{k:hashlib.sha256(v.encode()).hexdigest() for k,v in prompts.items()}},indent=2),encoding='utf-8')
             raise SystemExit(result.returncode)
         finally:
             if server is not None:
