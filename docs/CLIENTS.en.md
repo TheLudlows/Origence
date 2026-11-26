@@ -2,7 +2,29 @@
 
 **English** · [简体中文](CLIENTS.md)
 
-Both clients connect to a running Origence HTTP host through a local stdio process. They neither access SQLite, Blob, or AnySeek directly nor need credentials for them.
+Claude Code and Codex can connect to the Origence HTTP MCP endpoint or install the local stdio plugin.
+
+## Direct HTTP MCP
+
+The Origence HTTP host serves Streamable HTTP MCP at `/mcp`. Set `OC_API_KEY` in the environment
+that launches the client. A `reader` key suffices for retrieval. The following commands use the local
+default port. For a remote host use its HTTPS endpoint.
+
+```powershell
+claude mcp add --transport http origence-http http://127.0.0.1:8080/mcp --header 'Authorization: Bearer ${OC_API_KEY}'
+```
+
+```powershell
+codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-var OC_API_KEY
+```
+
+Launch the client from that terminal, check `/mcp`, and call `context_session` to confirm `workspace_id`.
+Direct clients use the credential's default workspace unless their HTTP requests supply the
+`X-Origence-Workspace` header for an authorized workspace. `OC_WORKSPACE_ID` applies to the stdio adapter.
+
+Direct retrieval and explicit tool calls require no local Origence binary. The bundled automatic Run
+hook still uses the binary. If the old stdio registration is installed, disable it from `/mcp` to avoid
+duplicate tools. See [remote MCP deployment](OPERATIONS.en.md#remote-mcp).
 
 ## Install the `origence` plugin
 

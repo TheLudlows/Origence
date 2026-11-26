@@ -3,6 +3,7 @@ use super::*;
 
 enum OwnedWorkspaceAuthorization {
     Capability(Permission),
+    #[cfg(feature = "local-storage")]
     Administrator,
 }
 
@@ -227,11 +228,13 @@ impl SqliteStore {
             ));
         }
         let required = match authorization {
+            #[cfg(feature = "local-storage")]
             OwnedWorkspaceAuthorization::Administrator => Some(Permission::Delete),
             OwnedWorkspaceAuthorization::Capability(_) => None,
         };
         let mut tx = self.begin_scoped(auth, create.is_some(), required).await?;
-        let (role, explicit_key) = match authorization {
+        let (role, explicit_key): (&str, Option<Uuid>) = match authorization {
+            #[cfg(feature = "local-storage")]
             OwnedWorkspaceAuthorization::Administrator => {
                 tx.require_root_workspace().await?;
                 let (logical_id, home, _, active, capable) = tx.managed_workspace_key().await?;
@@ -272,6 +275,7 @@ impl SqliteStore {
                     ));
                 }
                 Some(match authorization {
+                    #[cfg(feature = "local-storage")]
                     OwnedWorkspaceAuthorization::Administrator => {
                         tx.live_role_in_scope(tx.principal_id, scope).await?
                     }
@@ -322,6 +326,7 @@ impl SqliteStore {
 }
 
 impl SqliteTx {
+    #[cfg(feature = "local-storage")]
     async fn managed_workspace_key(&mut self) -> StorageResult<(Uuid, Uuid, String, bool, bool)> {
         sqlite_db::query_as(
             "SELECT logical_key_id,workspace_id,role,default_access,allow_owned_workspaces=1

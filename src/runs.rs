@@ -152,3 +152,65 @@ impl Service {
         Ok(result)
     }
 }
+
+impl Service {
+    /// Prepare context for a private Run and return its immutable recorded result.
+    pub async fn prepare_run_context(
+        &self,
+        caller: &AuthContext,
+        run: Uuid,
+        event_id: Uuid,
+        context: crate::evidence::EvidenceInput,
+    ) -> Result<Value> {
+        if event_id.is_nil() {
+            return Err(AppError::Invalid("event_id must not be nil".into()));
+        }
+        caller.require("write")?;
+        self.check_run_owner(caller, run).await?;
+        context
+            .validate()
+            .map_err(|e| AppError::Invalid(e.into()))?;
+        let request_digest = crate::storage::hash(
+            serde_json::to_vec(&context)
+                .map_err(|_| AppError::Invalid("invalid context request".into()))?,
+        );
+        if let Some(prepared) = self
+            .replay_run_context_prepared(caller, run, event_id, &request_digest)
+            .await?
+        {
+            return prepared_context_response(prepared);
+        }
+        let (result, observations) = self.observed_evidence_bundle(caller, context).await;
+        let bundle = match result {
+            Ok(bundle) => bundle,
+            Err(error) => {
+                if let Some(prepared) = self
+                    .record_run_context_failed(
+                        caller,
+                        run,
+                        event_id,
+                        &request_digest,
+                        error.code(),
+                        &observations,
+                    )
+                    .await?
+                {
+                    return prepared_context_response(prepared);
+                }
+                return Err(error);
+            }
+        };
+        let preparation = self
+            .record_run_context_prepared(caller, run, event_id, &request_digest, &bundle)
+            .await?;
+        prepared_context_response(preparation)
+    }
+}
+
+fn prepared_context_response(mut preparation: Value) -> Result<Value> {
+    let bundle = preparation
+        .as_object_mut()
+        .and_then(|v| v.remove("recorded_bundle"))
+        .ok_or_else(|| AppError::Unavailable("invalid prepared context snapshot".into()))?;
+    Ok(serde_json::json!({"bundle":bundle,"preparation":preparation}))
+}

@@ -16,6 +16,11 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 pub fn router(service: Service) -> Router {
+    router_with_mcp(service, super::McpHttpConfig::default())
+}
+
+pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router {
+    let mcp = super::mcp_http::router(service.clone(), config);
     Router::new()
         .route(
             "/health/live",
@@ -75,6 +80,7 @@ pub fn router(service: Service) -> Router {
         .merge(super::foundation::routes())
         .layer(DefaultBodyLimit::max(crate::parsing::MAX_FILE))
         .with_state(service)
+        .merge(mcp)
 }
 fn token(h: &HeaderMap) -> Result<&str> {
     h.get("Authorization")

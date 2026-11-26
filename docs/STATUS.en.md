@@ -24,6 +24,10 @@ See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 `origence serve --local` opens the AnySeek Catalog at `OC_DATA_DIR/anyseek` in the same process through the Rust SDK. The host handles startup recovery, verification of published collections, and graceful shutdown. The Windows development script uses this entry point and optionally starts the Node UI. The cloud image runs `origence serve` against standalone AnySeek. The deployment environment provides the address and credential. [Operations guide](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
+## Streamable HTTP MCP
+
+Origence serves `/mcp`. Claude Code and Codex can connect directly with an API key for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The plugin's automatic Run hook still reports through a local command. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
+
 ## #105 Local client hook implementation
 
 Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. Native Windows installation, real models, and official pilot acceptance are pending. Automatic conversation body archiving remains follow-up work in [#105](https://github.com/TheLudlows/Origence/issues/105).
