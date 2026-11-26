@@ -9,7 +9,7 @@ impl SqliteTx {
         self.live_role_for_principal(self.principal_id).await
     }
 
-    pub(super) async fn live_role_for_principal(
+    pub(crate) async fn live_role_for_principal(
         &mut self,
         principal_id: Uuid,
     ) -> StorageResult<String> {

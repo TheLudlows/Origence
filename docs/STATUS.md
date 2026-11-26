@@ -30,6 +30,9 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 Claude Code 和 Codex 插件通过 Origence 服务端的 `/mcp` 检索和调用工具。检索无需安装本地 Origence。服务端按请求校验凭据和工作区权限，未指定工作区时使用凭据的默认工作区。
 插件自动 Run Hook 仍经本地命令上报。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
 
+工作区管理员可在控制台「Agent 连接」查看正在处理的 MCP 请求和最近五分钟的活动，
+按凭据汇总并显示握手识别的客户端类型。观测限于当前服务进程。见 [Agent 连接接口](API.md#agent-连接)。
+
 ## #105 客户端 Hook 本地切片
 
 Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提示上下文。

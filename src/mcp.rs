@@ -1,4 +1,5 @@
 use crate::{
+    agent_presence::{AgentPresence, ClientKind},
     service::Service,
     session::SessionTurnInput,
     types::{AuthContext, ResolveInput, SearchInput},
@@ -10,12 +11,14 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub(crate) struct ContextMcp {
     service: Service,
     identity: AuthContext,
+    agent_presence: Arc<AgentPresence>,
     tool_router: ToolRouter<Self>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -75,10 +78,15 @@ fn run_uuid(value: &str) -> std::result::Result<Uuid, ErrorData> {
 }
 #[tool_router]
 impl ContextMcp {
-    pub(crate) fn new(service: Service, identity: AuthContext) -> Self {
+    pub(crate) fn new(
+        service: Service,
+        identity: AuthContext,
+        agent_presence: Arc<AgentPresence>,
+    ) -> Self {
         Self {
             service,
             identity,
+            agent_presence,
             tool_router: Self::tool_router(),
         }
     }
@@ -278,6 +286,10 @@ impl rmcp::ServerHandler for ContextMcp {
             "2025-06-18" => ProtocolVersion::V_2025_06_18,
             _ => ProtocolVersion::V_2025_11_25,
         };
+        let _activity = self.agent_presence.begin(
+            &self.identity,
+            Some(ClientKind::from_client_name(&request.client_info.name)),
+        );
         context.peer.set_peer_info(request);
         Ok(self.get_info().with_protocol_version(version))
     }
@@ -296,10 +308,28 @@ impl rmcp::ServerHandler for ContextMcp {
             .map
             .get(context.name())
             .ok_or_else(|| ErrorData::invalid_params("tool not found", None))?;
+        let _activity = self.agent_presence.begin(&self.identity, None);
         // rmcp 1.8 converts argument decoding errors into isError tool results.
         // Preserve the existing JSON-RPC error envelope by invoking the enabled
         // route directly; its generated parameter decoding and auth are unchanged.
         (route.call)(context).await
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> std::result::Result<ListToolsResult, ErrorData> {
+        let _activity = self.agent_presence.begin(&self.identity, None);
+        Ok(ListToolsResult::with_all_items(self.tool_router.list_all()))
+    }
+
+    async fn ping(
+        &self,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> std::result::Result<(), ErrorData> {
+        let _activity = self.agent_presence.begin(&self.identity, None);
+        Ok(())
     }
 
     fn get_info(&self) -> ServerInfo {

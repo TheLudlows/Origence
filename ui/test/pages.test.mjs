@@ -85,6 +85,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const searches = new Map();
   const catalogQueries = [];
   let overviewUnavailable = false;
+  let agentState = "active";
   let signedIn = false;
   let jobRetries = 0;
   let failMemory = true,
@@ -122,6 +123,14 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(options.headers.get("X-Origence-Session"), "fixture-session-binding");
     if (path.pathname === "/api/health/ready")
       return response({ status: "ready" });
+    if (path.pathname === "/api/admin/agents") {
+      if (agentState === "unavailable") return response({ error: { message: "连接列表不可读取" } }, 503);
+      return response({ workspace_id: ids.asset, window_seconds: 300, capacity_reached: false,
+        items: agentState === "active" ? [{ role: "writer", observation: {
+          credential_id: ids.otherKey, client_kinds: ["codex", "claude_code"],
+          last_seen_at_ms: 1000, active_requests: 2,
+        } }] : [] });
+    }
     if (path.pathname === "/api/v1/runs/overview") {
       if (overviewUnavailable)
         return response({ error: { message: "overview unavailable" } }, 503);
@@ -461,6 +470,20 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(window.localStorage.length, 0);
     assert.equal(window.sessionStorage.length, 1);
     assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
+  });
+  await t.test("administrator Agent list distinguishes active requests, failures, and empty results", async () => {
+    click("◉Agent 连接");
+    await wait(() => document.body.textContent.includes("Codex、Claude Code"));
+    assert.equal(document.querySelector("h1").textContent, "Agent 连接");
+    assert.ok(document.body.textContent.includes("正在处理（2）"));
+    assert.ok(document.body.textContent.includes(ids.otherKey));
+    agentState = "unavailable";
+    click("刷新");
+    await wait(() => document.body.textContent.includes("连接列表不可读取"));
+    assert.ok(!document.body.textContent.includes(ids.otherKey));
+    agentState = "empty";
+    click("刷新");
+    await wait(() => document.body.textContent.includes("暂无 Agent 活动"));
   });
   await t.test(
     "memory form retries the same operation without silent version overwrite",

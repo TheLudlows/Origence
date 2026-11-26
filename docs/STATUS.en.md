@@ -28,6 +28,11 @@ See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The plugin's automatic Run hook still reports through a local command. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
 
+Workspace administrators can open **Agent connections** to see in-flight MCP
+requests and activity from the last five minutes, grouped by credential with
+the client kinds seen in handshakes. Observations are local to the serving
+process. See the [Agent connections API](API.en.md#agent-connections).
+
 ## #105 Local client hook implementation
 
 Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. The native Windows runner passed installation, workspace selection, pinned retrieval, and the default hook with synthetic data. See [VALIDATION](VALIDATION.en.md). The formal freeze is blocked on tasks, model authorization, and independent roles. Automatic conversation body archiving remains follow-up work in [#105](https://github.com/TheLudlows/Origence/issues/105).

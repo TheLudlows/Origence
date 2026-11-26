@@ -192,12 +192,18 @@ test("key management uses the selected account admin grant and protects its cred
   assert.equal((await fetch(keys, { method: "POST", headers })).status, 403);
   assert.equal((await fetch(`${keys}/${adminId.toUpperCase()}/rotate`, { method: "POST", headers: { ...headers, Origin: ui } })).status, 409);
   assert.equal((await fetch(`${keys}/${adminId}`, { method: "DELETE", headers: { ...headers, Origin: ui } })).status, 409);
+  const agents = ui + "/api/admin/agents";
+  assert.equal((await fetch(agents, { headers })).status, 200);
+  assert.equal((await fetch(agents, { headers: { ...headers, "X-Origence-Workspace": readerWorkspace } })).status, 403);
+  assert.equal((await fetch(agents, { headers: { Authorization: "Bearer synthetic-admin" } })).status, 401);
+  assert.equal((await fetch(agents, { method: "POST", headers })).status, 404);
   const create = { method: "PUT", headers: { ...headers, Origin: ui, "Content-Type": "application/json" }, body: JSON.stringify({ name: "New child" }) };
   const path = `/v1/workspaces/owned/${child}`;
   assert.equal((await fetch(ui + "/api" + path, create)).status, 200);
   assert.equal((await fetch(ui + "/api" + path, { ...create, headers: { ...create.headers, "X-Origence-Workspace": child } })).status, 403);
   assert.deepEqual(calls, [
     ["/admin/keys?limit=1", "GET", "Bearer synthetic-admin", adminWorkspace, undefined],
+    ["/admin/agents", "GET", "Bearer synthetic-admin", adminWorkspace, undefined],
     [path, "PUT", "Bearer synthetic-admin", undefined, undefined],
   ]);
 });
