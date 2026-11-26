@@ -151,6 +151,71 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   assert.equal(requestCount(), 5);
 }
 
+async function checkCreationChart(page, hasTouch) {
+  const chart = page.getByRole('figure', { name: '新建 Run 数' });
+  const range = page.getByRole('combobox', { name: '统计范围' });
+  const bars = chart.getByRole('button');
+  const details = page.locator('details.run-creation-buckets');
+  const summary = details.locator('summary');
+  const readout = chart.locator('.run-chart-readout');
+  const exactStart = /1970\/01\/01 GMT\+8 08:00:00\.123（含）/;
+  const focusBucket = async (key, index) => {
+    await page.keyboard.press(key);
+    const bar = bars.nth(index);
+    assert.equal(await isFocused(bar), true, `${key} should focus bucket ${index}`);
+    assert.equal(await readout.innerText(), await bar.getAttribute('aria-label'));
+  };
+
+  assert.equal(await bars.count(), 7, '7-day view');
+  await range.selectOption('24h');
+  await page.getByText('新建运行 3 条', { exact: true }).waitFor();
+  assert.equal(await bars.count(), 24);
+  assert.match(await chart.locator('.run-chart-ticks').innerText(), /^08:00/);
+  assert.match(await chart.locator('.run-chart-time').innerText(), /Asia\/Shanghai/);
+  assert.match(await bars.first().getAttribute('aria-label'), exactStart);
+  await details.locator('table').waitFor({ state: 'hidden' });
+  const geometry = await chart.evaluate((node) => {
+    const marks = [...node.querySelectorAll('.run-chart-mark')].slice(0, 3)
+      .map((mark) => mark.getBoundingClientRect());
+    const baseline = node.querySelector('.run-chart-baseline').getBoundingClientRect();
+    const ticks = [...node.querySelectorAll('.run-chart-ticks span')]
+      .map((tick) => tick.getBoundingClientRect());
+    return {
+      heights: marks.map((mark) => mark.height),
+      fromBaseline: marks.every((mark) => Math.abs(mark.bottom - baseline.bottom) <= 1),
+      distinctTicks: ticks.slice(1).every((tick, index) => ticks[index].right < tick.left),
+      chartFits: node.getBoundingClientRect().right <= innerWidth &&
+        document.documentElement.scrollWidth === innerWidth,
+    };
+  });
+  assert.ok(geometry.heights[0] > 0);
+  assert.equal(geometry.heights[1], 0);
+  assert.equal(geometry.heights[2], 2 * geometry.heights[0]);
+  assert.ok(geometry.fromBaseline && geometry.distinctTicks && geometry.chartFits, JSON.stringify(geometry));
+  await range.focus();
+  await focusBucket('Tab', 0);
+  assert.match(await readout.innerText(), exactStart);
+  assert.ok(await bars.first().evaluate((bar) =>
+    bar.matches(':focus-visible') && getComputedStyle(bar).outlineStyle === 'solid'));
+  await focusBucket('ArrowRight', 1);
+  assert.match(await readout.innerText(), /新建 0 个 Run$/);
+  await focusBucket('End', 23);
+  await focusBucket('Home', 0);
+  await focusBucket('ArrowRight', 1);
+  await focusBucket('ArrowLeft', 0);
+  await page.keyboard.press('Tab');
+  assert.equal(await isFocused(summary), true);
+  await page.keyboard.press('Enter');
+  await details.locator('table').waitFor();
+  assert.equal(await details.getByRole('row').count(), 25);
+  assert.match(await details.getByRole('cell').first().innerText(), /GMT\+8 08:00:00\.123/);
+  assert.equal(await details.getByRole('row').nth(1).getByRole('cell').last().innerText(), '1');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
+  if (hasTouch) await bars.nth(2).tap();
+  else await bars.nth(2).hover();
+  assert.match(await readout.innerText(), /新建 2 个 Run$/);
+}
+
 (async () => {
   const dist = resolve(__dirname, '../dist');
   const { createUiServer } = await import(pathToFileURL(resolve(dist, 'server.js')));
@@ -197,7 +262,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
         const created = days ? 4 : 3;
         response.end(JSON.stringify({
           scope: 'workspace',
-          start_ms: 0, end_ms: buckets * duration, created_runs: created,
+          start_ms: 123, end_ms: 123 + buckets * duration, created_runs: created,
           metering: days
             ? { duration_p95_ms: null, duration_runs: 0, agent_tokens: null, token_runs: 0, costs: [] }
             : {
@@ -205,7 +270,8 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
                 costs: [{ basis: 'estimated', currency: 'USD', micros: '75', runs: 1 }],
               },
           series: Array.from({ length: buckets }, (_, index) => ({
-            start_ms: index * duration, end_ms: (index + 1) * duration, created_runs: index === 0 ? created : 0,
+            start_ms: 123 + index * duration, end_ms: 123 + (index + 1) * duration,
+            created_runs: index === 0 ? created - 2 : index === 2 ? 2 : 0,
           })),
         }));
       };
@@ -246,7 +312,13 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
     const { chromium } = require('playwright');
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     for (const width of [1024, 320]) {
-      const page = await browser.newPage({ viewport: { width, height: 768 } });
+      const hasTouch = width === 320;
+      const page = await browser.newPage({
+        viewport: { width, height: 768 },
+        timezoneId: 'Asia/Shanghai',
+        colorScheme: hasTouch ? 'dark' : 'light',
+        hasTouch,
+      });
       page.setDefaultTimeout(4000);
       let overviewRequests = 0;
       page.on('request', (request) => {
@@ -264,6 +336,8 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
       await expectMain('运行总览');
       await checkOverviewRetry(page, receiveInitial, holdOverview, () => overviewRequests);
       console.log('PASS ' + width + 'px: keyboard retry, focus during latency and repeated error, recovery with and without focus on Retry');
+      await checkCreationChart(page, hasTouch);
+      console.log(`PASS ${width}px: creation chart counts and baseline, local times, keyboard, ${hasTouch ? 'emulated tap' : 'hover'}, and collapsed details`);
       const receiveKnowledge = holdRequest('knowledge');
       await nav(/知识管理/).press('Enter');
       await expectMain('知识管理');

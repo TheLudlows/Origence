@@ -370,6 +370,119 @@ form > button {
   overflow-x: auto;
   max-width: 100%;
 }
+.run-creation-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.run-chart {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.run-chart-label {
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.run-chart-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 144px auto;
+  gap: 10px 8px;
+}
+.run-chart-scale {
+  display: grid;
+}
+.run-chart-scale span {
+  grid-area: 1 / 1;
+  align-self: end;
+  justify-self: end;
+  position: relative;
+  transform: translateY(50%);
+}
+.run-chart-scale,
+.run-chart-ticks,
+.run-chart-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+.run-chart-plot,
+.run-chart-ticks {
+  display: grid;
+  grid-template-columns: repeat(var(--run-chart-columns), minmax(0, 1fr));
+}
+.run-chart-plot {
+  position: relative;
+}
+.run-chart-guides,
+.run-chart-guides span {
+  position: absolute;
+  inset-inline: 0;
+  pointer-events: none;
+}
+.run-chart-guides {
+  inset-block: 0;
+}
+.run-chart-guides span {
+  border-top: 1px solid var(--line);
+}
+.run-chart-guides .run-chart-baseline {
+  border-color: var(--muted);
+}
+.run-chart-ticks {
+  grid-column: 2;
+  text-align: center;
+  white-space: nowrap;
+}
+.run-chart-ticks span {
+  grid-row: 1;
+  justify-self: center;
+}
+.run-chart-ticks span:first-child {
+  justify-self: start;
+}
+.run-chart-ticks span:last-child {
+  justify-self: end;
+}
+.run-chart-time {
+  margin-top: 4px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.run-chart-bar {
+  position: relative;
+  display: flex;
+  align-items: end;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+}
+.run-chart-bar:focus-visible {
+  outline-offset: -2px;
+}
+.run-chart-mark {
+  width: min(70%, 48px);
+  min-height: 1px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  pointer-events: none;
+}
+.run-chart-mark.is-zero {
+  min-height: 0;
+}
+.run-chart-readout {
+  margin-top: 10px;
+  min-height: 3.2em;
+  overflow-wrap: anywhere;
+}
+.run-creation-buckets summary {
+  width: fit-content;
+  cursor: pointer;
+}
 table {
   border-collapse: collapse;
   width: 100%;

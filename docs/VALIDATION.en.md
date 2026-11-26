@@ -4,6 +4,23 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Run creation chart
+
+Based on main `78f08ab95494eb9cca9944e3a87fa0181374e1ef`. Node.js 24.22.1 type checking and 30 UI
+tests passed. Chromium 156.0.8078.79 used loopback synthetic data at 1024px in light mode and
+320px in dark mode to check the 24-hour and 7-day intervals, zero baseline and proportional columns,
+local timestamps with millisecond boundaries, keyboard and hover, an emulated tap, collapsed
+details, and retry focus. The 736px and 375px light and dark navigation checks passed. Under
+Rust 1.98.0, formatting, strict Clippy, and two local integration tests for Run counts and metering passed.
+
+```sh
+npm --prefix ui run check
+npm --prefix ui test
+NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
+  node ui/scripts/check-navigation-focus-browser.cjs
+cargo test --locked --no-default-features --features local-storage --test local catalog::run_
+```
+
 ## 2026-11-26 · Separate Agent setup and local deployment
 
 On main `13e2a4cb7bea7e97f67525d138453b6f9a0fdba1`, Linux tested native Claude Code, Codex, and

@@ -86,6 +86,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const searches = new Map();
   const catalogQueries = [];
   let overviewUnavailable = false;
+  let overviewEmpty = false;
   let agentState = "active";
   let signedIn = false;
   let jobRetries = 0;
@@ -139,11 +140,12 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       assert.ok(window === "24h" || window === "7d");
       const size = window === "24h" ? 24 : 7;
       const width = window === "24h" ? 3_600_000 : 86_400_000;
+      const created = overviewEmpty ? 0 : window === "24h" ? 31 : 34;
       return response({
         scope: "workspace",
         start_ms: 0,
         end_ms: size * width,
-        created_runs: window === "24h" ? 31 : 34,
+        created_runs: created,
         metering: window === "24h" ? {
           duration_p95_ms: 1500, duration_runs: 2,
           agent_tokens: "0", token_runs: 1,
@@ -155,7 +157,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         series: Array.from({ length: size }, (_, index) => ({
           start_ms: index * width,
           end_ms: (index + 1) * width,
-          created_runs: index === 0 ? (window === "24h" ? 31 : 34) : 0,
+          created_runs: index === 0 ? created : 0,
         })),
       });
     }
@@ -456,11 +458,18 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     const rows = (scope) => [...scope.querySelectorAll("tbody tr")].map(
       (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent),
     );
-    const buckets = () => trend.querySelectorAll(".run-creation-buckets tbody tr");
+    const details = () => trend.querySelector("details.run-creation-buckets");
+    const bars = () => [...trend.querySelectorAll(".run-chart-bar")];
     const metering = () => [...trend.querySelectorAll("section")].find(
       (section) => section.querySelector("h2")?.textContent === "运行计量",
     );
-    assert.equal(buckets().length, 24);
+    assert.equal(bars().length, 24);
+    assert.equal(bars().filter((bar) => bar.tabIndex === 0).length, 1);
+    assert.match(bars()[0].getAttribute("aria-label"), /新建 31 个 Run$/);
+    assert.match(bars()[1].getAttribute("aria-label"), /新建 0 个 Run$/);
+    assert.equal(details().open, false);
+    assert.equal(rows(details()).length, 24);
+    assert.equal(rows(details())[0][2], "31");
     assert.deepEqual(rows(metering()), [
       ["端到端耗时 P95", "1,500 ms", "2"],
       ["Agent Token 总量", "0", "1"],
@@ -472,7 +481,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     range.value = "7d";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("新建运行 34 条"));
-    assert.equal(buckets().length, 7);
+    assert.equal(bars().length, 7);
+    assert.equal(rows(details()).length, 7);
     assert.deepEqual(rows(metering()), [
       ["端到端耗时 P95", "未知", "0"],
       ["Agent Token 总量", "未知", "0"],
@@ -483,11 +493,20 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("创建量暂不可用"));
     assert.equal(trend.querySelectorAll("tbody tr").length, 0);
+    assert.equal(bars().length, 0);
     assert.equal(metering(), undefined);
     assert.ok(document.body.textContent.includes("fixture task"));
     overviewUnavailable = false;
     click("重试读取创建量", trend);
     await wait(() => trend.textContent.includes("新建运行 31 条"));
+    overviewEmpty = true;
+    range.value = "7d";
+    range.dispatchEvent(new Event("change"));
+    await wait(() => trend.textContent.includes("新建运行 0 条"));
+    assert.equal(bars().length, 7);
+    assert.equal(trend.querySelector(".run-chart-baseline").style.bottom, "0%");
+    assert.equal(trend.querySelectorAll(".run-chart-mark.is-zero").length, 7);
+    overviewEmpty = false;
     assert.equal(window.localStorage.length, 0);
     assert.equal(window.sessionStorage.length, 1);
     assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
