@@ -54,6 +54,10 @@ def fresh_windows_environment():
     advapi = ctypes.windll.advapi32
     userenv = ctypes.windll.userenv
     kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    advapi.OpenProcessToken.argtypes = (wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE))
+    userenv.CreateEnvironmentBlock.argtypes = (ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.BOOL)
+    userenv.DestroyEnvironmentBlock.argtypes = (ctypes.c_void_p,)
     token = wintypes.HANDLE()
     block = ctypes.c_void_p()
     require(advapi.OpenProcessToken(kernel.GetCurrentProcess(), 0x000A, ctypes.byref(token)),
