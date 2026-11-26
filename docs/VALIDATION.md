@@ -7,6 +7,17 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · Agent 接入与本地部署拆分
+
+基于 main `13e2a4cb7bea7e97f67525d138453b6f9a0fdba1` 在 Linux 上复跑原生 Claude Code、Codex
+与 Chromium。部署先启动 API 和控制台，两端随后通过 Agent 入口接入，Codex 使用非默认 API 端口。
+核对了旧安装记录升级、重复安装、无效 Key、Hook Run 读回、各自卸载、用户修改的 Codex MCP
+条目保留和重建备份。Node 类型检查和 30 项 UI 测试、Rust 格式和严格 Clippy 通过。
+Windows 原生验收已纳入这条测试，拆分后尚未在 Windows 或 macOS 运行。[复跑说明](INSTALLER.md)
+
+命令为 `python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude --codex /path/to/codex`。
+加 `--browser` 并设置 `NODE_PATH` 与 `CHROMIUM` 可复跑浏览器。
+
 ## 2026-11-26 · Origence 本地安装器
 
 基于 main `b4e8879fa952b5afd729fd5b89a630c6d5705696`，Linux x86_64、Rust 1.98.0、

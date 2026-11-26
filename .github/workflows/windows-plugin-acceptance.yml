@@ -8,7 +8,9 @@ on:
     paths:
       - '.github/workflows/windows-plugin-acceptance.yml'
       - 'bin/origence-setup*'
+      - 'bin/origence-deploy*'
       - 'tools/install.mjs'
+      - 'tools/deploy.mjs'
       - 'tools/installer/**'
       - 'tools/installer_smoke.py'
 
@@ -75,4 +77,4 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/plugin_smoke.py --binary $binary --claude $claude --codex $codex --bind '127.0.0.1:0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/installer_smoke.py --binary $binary --claude $claude --allow-windows-user-env
+          python tools/installer_smoke.py --binary $binary --claude $claude --codex $codex --allow-windows-user-env
