@@ -18,6 +18,11 @@
 - 原生 Claude Code 2.1.330 和 Codex CLI 0.171.0 使用[直连命令](CLIENTS.md#直连-http-mcp)。两端用临时设置目录、非默认端口以及仅通过 `OC_API_KEY` 传递的合成 reader Key，客户端 `PATH` 无 `origence`。两端均实际调用 `context_session`、`context_search` 和 `context_get`，返回正确工作区与命中的指定发布版本。Claude Code 使用回环的脚本化模型响应，Codex 通过 app-server 直接发起工具调用。
 - 本轮未在 Windows、外部 HTTPS 代理或真实模型上验收，未重跑插件 Hook。HTTPS origin 与非默认端口匹配由本地 HTTP 协议测试覆盖。
 
+PR #139 首次 `fast-check` 与主干 `85d6264` 均在仅启用 `sqlite` 的 Clippy 步骤报 `Administrator` 分支未使用。
+修复使管理员工作区路径及其专用查询与入口一起由 `local-storage` 编译特性控制。Linux 上仅启用 `sqlite` 时，
+全目标 Clippy 以警告为错误通过，测试通过 245 项，另有 5 项既有测试保持忽略。
+[PR 首次失败日志](https://github.com/TheLudlows/Origence/actions/runs/45771086287/job/139743624086) · [主干失败日志](https://github.com/TheLudlows/Origence/actions/runs/45642868907/job/139305927994)
+
 ## 2026-11-25 · 工作区管理员查看 Run 状态与统计
 
 基于 `607bcdb7b03b9299a9741b4b24014ae9e5b43245` 和同工作区中的子工作区权限改动。Windows 原生使用 Rust 1.98.0 和 Node.js 24.15.0。

@@ -11,6 +11,9 @@ Based on main `85d6264ab720437d8620d3cdb5289ace85a5942c`, Linux x86_64 with Rust
 - Native Claude Code 2.1.330 and Codex CLI 0.171.0 used the [direct connection commands](CLIENTS.en.md#direct-http-mcp). Each used temporary settings, a non-default port, a synthetic reader key supplied through `OC_API_KEY`, and a client `PATH` without `origence`. Both called `context_session`, `context_search`, and `context_get` and returned the expected workspace and pinned published version. Claude Code used scripted model responses on loopback. Codex called the tools through its app-server.
 - Windows, an external HTTPS proxy, live models, and plugin hooks were outside this run. A local HTTP protocol test covers matching a configured HTTPS origin and non-default port.
 
+The first PR #139 `fast-check` and main `85d6264` both failed SQLite-only Clippy because the `Administrator` variant was unused. The fix compiles the administrator workspace path and its dedicated query under the same `local-storage` feature as the entry point. SQLite-only all-target Clippy with warnings denied passed on Linux, along with 245 tests and 5 existing ignored cases.
+[Initial PR failure](https://github.com/TheLudlows/Origence/actions/runs/45771086287/job/139743624086) · [Main failure](https://github.com/TheLudlows/Origence/actions/runs/45642868907/job/139305927994)
+
 ## 2026-11-25 · Workspace Run status and statistics for administrators
 
 Based on `607bcdb7b03b9299a9741b4b24014ae9e5b43245` and the child workspace authorization changes in the same checkout. Native Windows with Rust 1.98.0 and Node.js 24.15.0.
