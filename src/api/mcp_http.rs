@@ -1,17 +1,24 @@
 //! Native, request-scoped Streamable HTTP MCP transport.
 use super::http::auth;
-use crate::{error::AppError, mcp::ContextMcp, service::Service};
+use crate::{
+    agent_presence::{ACTIVITY_WINDOW, AgentPresence},
+    error::{AppError, Result},
+    mcp::ContextMcp,
+    service::{Service, scope},
+    storage::{DomainTx, Permission, StorageError},
+};
 use axum::{
-    Router,
+    Json, Router,
     body::{Body, to_bytes},
     extract::{Request, State},
-    http::{HeaderValue, Method, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::any,
+    routing::{any, get},
 };
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::never::NeverSessionManager,
 };
+use serde_json::json;
 use std::sync::Arc;
 
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
@@ -67,16 +74,44 @@ struct Endpoint {
     service: Service,
     config: McpHttpConfig,
     sessions: Arc<NeverSessionManager>,
+    presence: Arc<AgentPresence>,
 }
 
 pub(super) fn router(service: Service, config: McpHttpConfig) -> Router {
     Router::new()
         .route("/mcp", any(handle))
+        .route("/admin/agents", get(active_agents))
         .with_state(Endpoint {
             service,
             config,
             sessions: Arc::new(NeverSessionManager::default()),
+            presence: Arc::new(AgentPresence::default()),
         })
+}
+
+async fn active_agents(
+    State(endpoint): State<Endpoint>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse> {
+    let admin = auth(&endpoint.service, &headers).await?;
+    let mut tx = endpoint.service.read(&admin, Permission::Delete).await?;
+    let (observations, capacity_reached) = endpoint.presence.snapshot(scope(&admin));
+    let mut items = Vec::with_capacity(observations.len());
+    for observation in observations {
+        match tx.live_role_for_principal(observation.credential_id).await {
+            Ok(role) => items.push(json!({"role":role,"observation":observation})),
+            Err(StorageError::Forbidden) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    tx.commit().await?;
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(json!({
+            "workspace_id":admin.workspace_id, "window_seconds":ACTIVITY_WINDOW.as_secs(),
+            "capacity_reached":capacity_reached, "items":items
+        })),
+    ))
 }
 
 async fn handle(State(endpoint): State<Endpoint>, request: Request) -> Response {
@@ -132,7 +167,13 @@ async fn dispatch(endpoint: Endpoint, mut request: Request) -> Response {
         return StatusCode::PAYLOAD_TOO_LARGE.into_response();
     };
     let service = StreamableHttpService::new(
-        move || Ok(ContextMcp::new(endpoint.service.clone(), identity.clone())),
+        move || {
+            Ok(ContextMcp::new(
+                endpoint.service.clone(),
+                identity.clone(),
+                endpoint.presence.clone(),
+            ))
+        },
         endpoint.sessions,
         endpoint.config.transport,
     );

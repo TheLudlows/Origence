@@ -4,6 +4,78 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Codex commands and Claude SDK cancellation
+
+Tested `2396dfa3ffd303c0cbfbd63068930fb36926ab8b` on main
+`b4e8879fa952b5afd729fd5b89a630c6d5705696`, Linux x86_64, Rust 1.98.0 and
+Node.js 24. Formatting, strict local-storage Clippy, 236 library tests, 215
+local integration tests, Node type checking, and 30 UI tests passed. Twelve
+managed Run fixtures covered command correlation, missing fields, explicit
+zero, byte-identical retry, the metadata allowlist, out-of-order cancellation
+receipts and results, other prompts, older receipts, timeouts and late
+cancellation. The pinned SDK was installed and its `query` export verified.
+
+A loopback check ran the actual Origence HTTP host, temporary SQLite, the Node
+relay and Chromium. Synthetic Codex notifications went through the CLI and
+were replayed. A Claude SDK fixture exercised all three cancellation stages.
+Chromium showed exit codes, durations, unknown values, acknowledgement and
+confirmed interruption separately. Private payloads were absent from the Run
+and the business outcome stayed unknown. This check used synthetic protocol
+events. Managed execution with native clients and live models is unverified.
+
+## 2026-11-26 · #89 End-to-end expense trace preflight
+
+Based on main `3984085ca5872dc68ea44b062e2d0791f92102a3`, using Linux x86_64, Rust 1.98.0,
+Codex 0.171.0, and Chromium 156.0.8078.79. The native Codex app-server used HTTP MCP to create a Run,
+prepare policy v2, and record a synthetic completion report for 120 units and unknown model-use coverage.
+The fixture derived a failed external transcription from the v2 cap of 80, bound it to the first two events,
+and verified a successful identical replay and 409 for a conflicting conclusion.
+
+The built console used its Node proxy and account sessions to read the same Run from live Origence.
+Chromium distinguished preparation, client report, owner-transcribed failure, and unknown model use. After v3
+published, the Run still opened v2. A second key was denied the private Run. Withdrawing the v2 source
+blocked reads of both the Run and pinned v2 while v3 remained readable. This was an engineering preflight
+with synthetic data and no model generation or independent sign-off. The formal #91 pilot remains
+`NOT_RUN`. [Reproduction (Chinese)](../evals/pilot/P6-EVIDENCE.md#端到端追溯预检)
+
+All 214 local Rust integration tests, 28 UI tests, and 58 pilot tooling tests passed on the same baseline,
+along with the existing Chromium check for the verification UI.
+After syncing main `39d8075e90914e0c51f2416e9309847b3679b419`, the rebuilt Origence and console passed
+the end-to-end trace preflight, the existing Chromium verification check, 215 local Rust integration tests,
+Node type checking, 29 UI tests, and 58 pilot tooling tests.
+
+## 2026-11-26 · Admin Agent connections
+
+Tested `fd7209dadcde3559e5271d4b8a1c269e202bf943` on main
+`3984085ca5872dc68ea44b062e2d0791f92102a3`, Linux x86_64 and Rust 1.98.0.
+Formatting, strict `--no-default-features --features local-storage --all-targets`
+Clippy, 236 unit tests, and 215 local integration tests passed. MCP and admin
+API tests checked grouping, empty results, administrator access, tenant isolation,
+workspace grant removal, key rotation, and rebuilding the HTTP router. The unit
+test checked concurrent request counts and idle expiration.
+
+Node type checking and 29 UI tests passed. Chromium exercised sidebar keyboard
+navigation at 320, 375, 736, and 1024px. An additional loopback test used the
+actual Origence HTTP host, the Node relay, and a temporary SQLite console
+account. It verified grouping from synthetic MCP handshakes and denied access
+after switching to a reader workspace, including direct navigation.
+
+## 2026-11-26 · #76 whole-Run metering
+
+Tested source `abff834cf610d2dcc5c453e34893f32b5c55e5cb` on main
+`c6e0b8437f2b4c983deb24e565b403deaccb271d`, Linux x86_64 and Rust 1.98.0.
+Formatting, strict `--no-default-features --features local-storage --all-targets`
+Clippy and all 214 `--test local` integration tests passed. Real SQLite,
+loopback HTTP and Streamable HTTP MCP covered nearest-rank P95, window
+boundaries, exact micro-unit totals, zeros and missing data, permission
+isolation, key rotation, replay and old-schema rejection. The SQL review
+checked that projection writes, grouping and ranking each use one relation.
+
+Node.js type checking and 28 tests passed. Chromium with a loopback fixture
+verified display, window switches, removal of stale values on errors and
+retry. The executor supplies whole-Run metrics. This verification used test
+usage and charges with no live model or provider bill.
+
 ## 2026-11-26 · Native Windows plugins and pilot preparation
 
 Product baseline main `318e17178a8c4a24d3000bc3caa6d3250019eb10`, with acceptance script revision

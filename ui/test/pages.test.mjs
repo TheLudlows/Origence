@@ -48,6 +48,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
     coverageRun: "55555555-5555-4555-8555-555555555555",
+    managedRun: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     reportedAsset: "66666666-6666-4666-8666-666666666666",
     reportedChunk: "77777777-7777-4777-8777-777777777777",
     reportedRef: "88888888-8888-4888-8888-888888888888",
@@ -85,6 +86,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   const searches = new Map();
   const catalogQueries = [];
   let overviewUnavailable = false;
+  let agentState = "active";
   let signedIn = false;
   let jobRetries = 0;
   let failMemory = true,
@@ -122,6 +124,14 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(options.headers.get("X-Origence-Session"), "fixture-session-binding");
     if (path.pathname === "/api/health/ready")
       return response({ status: "ready" });
+    if (path.pathname === "/api/admin/agents") {
+      if (agentState === "unavailable") return response({ error: { message: "连接列表不可读取" } }, 503);
+      return response({ workspace_id: ids.asset, window_seconds: 300, capacity_reached: false,
+        items: agentState === "active" ? [{ role: "writer", observation: {
+          credential_id: ids.otherKey, client_kinds: ["codex", "claude_code"],
+          last_seen_at_ms: 1000, active_requests: 2,
+        } }] : [] });
+    }
     if (path.pathname === "/api/v1/runs/overview") {
       if (overviewUnavailable)
         return response({ error: { message: "overview unavailable" } }, 503);
@@ -134,6 +144,14 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         start_ms: 0,
         end_ms: size * width,
         created_runs: window === "24h" ? 31 : 34,
+        metering: window === "24h" ? {
+          duration_p95_ms: 1500, duration_runs: 2,
+          agent_tokens: "0", token_runs: 1,
+          costs: [
+            { basis: "estimated", currency: "USD", micros: "12345", runs: 1 },
+            { basis: "billed", currency: "CNY", micros: "9007199254740993", runs: 2 },
+          ],
+        } : { duration_p95_ms: null, duration_runs: 0, agent_tokens: null, token_runs: 0, costs: [] },
         series: Array.from({ length: size }, (_, index) => ({
           start_ms: index * width,
           end_ms: (index + 1) * width,
@@ -171,6 +189,26 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       }], next_after: null });
     if (path.pathname === `/api/v1/runs/${ids.coverageRun}/verifications`)
       return response({ items: [], next_after: null });
+    if (path.pathname === `/api/v1/runs/${ids.managedRun}/verifications`)
+      return response({ items: [], next_after: null });
+    if (path.pathname === `/api/v1/runs/${ids.managedRun}`) {
+      return response({
+        run: { run_id: ids.managedRun, summary: "managed fixture" },
+        events: [
+          { kind: "codex_command_reported", status: "failed", exit_code: 0 },
+          { kind: "claude_interrupt_reported", observation: { stage: "receipt", status: "prompt_still_queued" } },
+          { kind: "claude_interrupt_reported", observation: { stage: "result", status: "unknown" } },
+          { kind: "claude_interrupt_reported", observation: { stage: "result", status: "interrupted" } },
+        ].map((event, index) => ({
+          sequence: index + 1,
+          evidence_origin: "reported",
+          recorded_at_ms: 1000,
+          report: { reporter: "client", event },
+          references: [],
+        })),
+        next_after: null,
+      });
+    }
     if (path.pathname === `/api/v1/runs/${ids.coverageRun}`) {
       const after = path.searchParams.get("after");
       coverageCursors.push(after);
@@ -415,18 +453,37 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       (section) => section.querySelector("h2")?.textContent === "运行创建趋势",
     );
     await wait(() => trend.textContent.includes("新建运行 31 条"));
-    assert.equal(trend.querySelectorAll("tbody tr").length, 24);
+    const rows = (scope) => [...scope.querySelectorAll("tbody tr")].map(
+      (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent),
+    );
+    const buckets = () => trend.querySelectorAll(".run-creation-buckets tbody tr");
+    const metering = () => [...trend.querySelectorAll("section")].find(
+      (section) => section.querySelector("h2")?.textContent === "运行计量",
+    );
+    assert.equal(buckets().length, 24);
+    assert.deepEqual(rows(metering()), [
+      ["端到端耗时 P95", "1,500 ms", "2"],
+      ["Agent Token 总量", "0", "1"],
+      ["费用估算", "USD 0.012345", "1"],
+      ["账单金额", "CNY 9,007,199,254.740993", "2"],
+    ]);
     assert.ok(document.body.textContent.includes("fixture task"));
     const range = control("统计范围", trend);
     range.value = "7d";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("新建运行 34 条"));
-    assert.equal(trend.querySelectorAll("tbody tr").length, 7);
+    assert.equal(buckets().length, 7);
+    assert.deepEqual(rows(metering()), [
+      ["端到端耗时 P95", "未知", "0"],
+      ["Agent Token 总量", "未知", "0"],
+      ["费用", "未知", "0"],
+    ]);
     overviewUnavailable = true;
     range.value = "24h";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("创建量暂不可用"));
     assert.equal(trend.querySelectorAll("tbody tr").length, 0);
+    assert.equal(metering(), undefined);
     assert.ok(document.body.textContent.includes("fixture task"));
     overviewUnavailable = false;
     click("重试读取创建量", trend);
@@ -434,6 +491,20 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(window.localStorage.length, 0);
     assert.equal(window.sessionStorage.length, 1);
     assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
+  });
+  await t.test("administrator Agent list distinguishes active requests, failures, and empty results", async () => {
+    click("◉Agent 连接");
+    await wait(() => document.body.textContent.includes("Codex、Claude Code"));
+    assert.equal(document.querySelector("h1").textContent, "Agent 连接");
+    assert.ok(document.body.textContent.includes("正在处理（2）"));
+    assert.ok(document.body.textContent.includes(ids.otherKey));
+    agentState = "unavailable";
+    click("刷新");
+    await wait(() => document.body.textContent.includes("连接列表不可读取"));
+    assert.ok(!document.body.textContent.includes(ids.otherKey));
+    agentState = "empty";
+    click("刷新");
+    await wait(() => document.body.textContent.includes("暂无 Agent 活动"));
   });
   await t.test(
     "memory form retries the same operation without silent version overwrite",
@@ -741,6 +812,21 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       reportedAssetDenied = false;
       location.hash = `#runs/${ids.run}`;
     }
+  });
+  await t.test("managed Run events show command fields and separate cancellation receipts from results", async () => {
+    location.hash = `#runs/${ids.managedRun}`;
+    const event = sequence => document.querySelector(`button.event[data-sequence="${sequence}"]`);
+    await wait(() => event(1)?.textContent.includes("Codex · 命令结果"));
+    event(1).click();
+    assert.match(document.querySelector("main").textContent, /退出码　0/);
+    assert.match(document.querySelector("main").textContent, /命令耗时　未知/);
+    event(2).click();
+    assert.ok(document.querySelector("main").textContent.includes("目标提示仍在队列"));
+    assert.ok(!document.querySelector("main").textContent.includes("确认中断"));
+    event(3).click();
+    assert.match(document.querySelector("main").textContent, /取消结果[\s\S]*未知/);
+    event(4).click();
+    assert.ok(document.querySelector("main").textContent.includes("确认中断"));
   });
   await t.test("Run coverage keeps loaded declarations ordered and clears denied or replaced evidence", async () => {
     const unknown = "已加载事件中未见采集声明，覆盖未知";

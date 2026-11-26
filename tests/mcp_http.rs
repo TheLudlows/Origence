@@ -91,6 +91,213 @@ async fn workspace(service: &Service, tenant_id: Uuid) -> Scope {
 }
 
 #[tokio::test]
+async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let scope = workspace(&service, Uuid::new_v4()).await;
+    let selected = workspace(&service, scope.tenant_id).await;
+    let other = workspace(&service, Uuid::new_v4()).await;
+    let store = service.engine.relational();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let selected_admin = store.issue_key(selected, "admin").await.unwrap();
+    let other_admin = store.issue_key(other, "admin").await.unwrap();
+    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let writer = store.issue_key(scope, "writer").await.unwrap();
+    let invalid = store.issue_key(scope, "reader").await.unwrap();
+    let grant_admin = service.auth(&selected_admin.token).await.unwrap();
+    service
+        .set_workspace_key_grant(&grant_admin, writer.key_id, Some("reader"))
+        .await
+        .unwrap();
+
+    let peer = Peer::start(service.clone(), McpHttpConfig::default()).await;
+    let endpoint = peer.url.replace("/mcp", "/admin/agents");
+    let list = |token: &str| peer.client.get(&endpoint).bearer_auth(token).send();
+    let initialize = |token: &str, name: &str| {
+        peer.post(rpc("initialize", json!({
+        "protocolVersion":PROTOCOL,"capabilities":{},
+        "clientInfo":{"name":name,"version":"private version fixture","title":"private title fixture"}
+    }))).bearer_auth(token)
+    };
+    assert_eq!(
+        peer.client.get(&endpoint).send().await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        list(&reader.token).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        initialize(&invalid.token, "codex")
+            .header("Origin", "http://untrusted.example")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        initialize(&invalid.token, "codex")
+            .header("X-Origence-Workspace", other.workspace_id.to_string())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        list(&admin.token)
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["items"],
+        json!([])
+    );
+
+    for name in ["codex-mcp-client", "claude-code", "codex-mcp-client"] {
+        let response = initialize(&writer.token, name).send().await.unwrap();
+        assert!(response.headers().get("mcp-session-id").is_none());
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["result"]["protocolVersion"],
+            PROTOCOL
+        );
+    }
+    assert!(
+        initialize(&reader.token, "private label fixture")
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["result"]
+            .is_object()
+    );
+    peer.call(
+        &writer.token,
+        Some(selected.workspace_id),
+        "context_session",
+        json!({}),
+    )
+    .await
+    .unwrap();
+    let response = list(&admin.token).await.unwrap();
+    assert_eq!(response.headers()["Cache-Control"], "no-store");
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["workspace_id"], json!(scope.workspace_id));
+    assert_eq!(body["window_seconds"], 300);
+    let rows = body["items"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    let writer_row = rows
+        .iter()
+        .find(|r| r["observation"]["credential_id"] == json!(writer.key_id))
+        .unwrap();
+    assert_eq!(writer_row["role"], "writer");
+    assert_eq!(writer_row["observation"]["active_requests"], 0);
+    assert!(
+        writer_row["observation"]["last_seen_at_ms"]
+            .as_i64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(
+        writer_row["observation"]["client_kinds"],
+        json!(["codex", "claude_code"])
+    );
+    let reader_row = rows
+        .iter()
+        .find(|r| r["observation"]["credential_id"] == json!(reader.key_id))
+        .unwrap();
+    assert_eq!(reader_row["observation"]["client_kinds"], json!(["other"]));
+    for private in [
+        &writer.token,
+        &reader.token,
+        "private label fixture",
+        "private title fixture",
+        "private version fixture",
+    ] {
+        assert!(!body.to_string().contains(private));
+    }
+
+    let body: Value = list(&selected_admin.token)
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
+    assert_eq!(body["items"][0]["role"], "reader");
+    assert_eq!(body["items"][0]["observation"]["client_kinds"], json!([]));
+    assert_eq!(
+        list(&other_admin.token)
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["items"],
+        json!([])
+    );
+    service
+        .set_workspace_key_grant(&grant_admin, writer.key_id, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        list(&selected_admin.token)
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["items"],
+        json!([])
+    );
+
+    let admin_auth = service.auth(&admin.token).await.unwrap();
+    let replacement = service
+        .rotate_key(&admin_auth, writer.key_id)
+        .await
+        .unwrap();
+    let body: Value = list(&admin.token).await.unwrap().json().await.unwrap();
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        body["items"][0]["observation"]["credential_id"],
+        json!(reader.key_id)
+    );
+    let replacement_token = replacement["token"].as_str().unwrap();
+    assert!(
+        initialize(replacement_token, "codex")
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["result"]
+            .is_object()
+    );
+    let body: Value = list(&admin.token).await.unwrap().json().await.unwrap();
+    assert_eq!(body["items"].as_array().unwrap().len(), 2);
+    assert!(
+        body["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["observation"]["credential_id"] == replacement["key_id"])
+    );
+    let restarted = Peer::start(service.clone(), McpHttpConfig::default()).await;
+    let response = restarted
+        .client
+        .get(restarted.url.replace("/mcp", "/admin/agents"))
+        .bearer_auth(&admin.token)
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(response["items"], json!([]));
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn streamable_http_negotiates_and_checks_auth_host_origin_method_and_size() {
     let directory = tempfile::tempdir().unwrap();
     let service = open_service(directory.path(), Models::disabled())

@@ -11,6 +11,241 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 #[tokio::test]
+async fn run_metering_scopes_reports_retries_and_exact_totals() {
+    use origence::{client::HostClient, error::AppError, storage::sqlite_db as db};
+    use reqwest::Method;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let elsewhere = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    for scope in [scope, elsewhere] {
+        store
+            .create_workspace(scope.tenant_id, scope.workspace_id, "metering")
+            .await
+            .unwrap();
+    }
+    let owner = store.issue_key(scope, "writer").await.unwrap();
+    let other = store.issue_key(scope, "writer").await.unwrap();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let outsider = store.issue_key(elsewhere, "admin").await.unwrap();
+    let owner_auth = service.auth(&owner.token).await.unwrap();
+    let end = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+        - 1000;
+    let day = 86_400_000;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let client = |token: &str| HostClient::new(&base, token.to_owned()).unwrap();
+    let owner_http = client(&owner.token);
+    let other_http = client(&other.token);
+    let admin_http = client(&admin.token);
+    let outsider_http = client(&outsider.token);
+
+    let create = |client: HostClient, scope: Scope, created_at: i64| {
+        let store = &store;
+        async move {
+            let run = Uuid::new_v4();
+            client
+                .call(
+                    Method::POST,
+                    "/v1/runs",
+                    Some(&json!({"run_id":run,"summary":"private metering test"})),
+                    None,
+                )
+                .await
+                .unwrap();
+            // Stable event window boundaries in a disposable database.
+            db::query(
+                "UPDATE oc_runs SET created_at=? WHERE tenant_id=? AND workspace_id=? AND run_id=?",
+            )
+            .bind(created_at)
+            .bind(scope.tenant_id)
+            .bind(scope.workspace_id)
+            .bind(run)
+            .execute(store.pool())
+            .await
+            .unwrap();
+            run
+        }
+    };
+    let report = |mut event: Value| {
+        event["kind"] = json!("metering_reported");
+        json!({"event_id":Uuid::new_v4(),"reporter":"client","observed_at_ms":end,"event":event})
+    };
+    let overview = |client: HostClient| async move {
+        client
+            .call(Method::GET, "/v1/runs/overview", None, None)
+            .await
+            .unwrap()
+    };
+    let first = create(owner_http.clone(), scope, end - day).await;
+    let events = format!("/v1/runs/{first}/events");
+    let zero = report(
+        json!({"duration_ms":0,"agent_tokens":0,"estimated_cost":{"currency":"USD","micros":0}}),
+    );
+    let receipt = owner_http
+        .call(Method::POST, &events, Some(&zero), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        owner_http
+            .call(Method::POST, &events, Some(&zero), None)
+            .await
+            .unwrap(),
+        receipt
+    );
+    for client in [&other_http, &admin_http, &outsider_http] {
+        assert!(matches!(
+            client.call(Method::POST, &events, Some(&zero), None).await,
+            Err(AppError::NotFound)
+        ));
+    }
+    let rejected = report(json!({"agent_tokens":1,"billed_cost":{"currency":"USD","micros":7}}));
+    assert!(matches!(
+        owner_http
+            .call(Method::POST, &events, Some(&rejected), None)
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    for invalid in [
+        json!({}),
+        json!({"duration_ms":-1}),
+        json!({"agent_tokens":1,"transcript":"forbidden payload"}),
+        json!({"estimated_cost":{"currency":"usd","micros":0}}),
+        json!({"billed_cost":{"currency":"USD","micros":9_007_199_254_740_992_u64}}),
+    ] {
+        assert!(
+            owner_http
+                .call(Method::POST, &events, Some(&report(invalid)), None)
+                .await
+                .is_err()
+        );
+    }
+    let billed =
+        report(json!({"billed_cost":{"currency":"USD","micros":9_007_199_254_740_991_u64}}));
+    let second = owner_http
+        .call(Method::POST, &events, Some(&billed), None)
+        .await
+        .unwrap();
+    assert_eq!(second["sequence"], 2);
+    let trace = owner_http
+        .call(Method::GET, &format!("/v1/runs/{first}"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(trace["events"].as_array().unwrap().len(), 2);
+    assert_eq!(trace["events"][1]["report"], billed);
+
+    for duration in (10..200).step_by(10) {
+        let run = create(owner_http.clone(), scope, end - 1).await;
+        owner_http
+            .call(
+                Method::POST,
+                &format!("/v1/runs/{run}/events"),
+                Some(&report(json!({"duration_ms":duration}))),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let unknown = create(owner_http.clone(), scope, end - 1).await;
+    owner_http.call(Method::POST, &format!("/v1/runs/{unknown}/events"), Some(&json!({
+        "event_id":Uuid::new_v4(),"reporter":"client","observed_at_ms":end,
+        "event":{"kind":"result_reported","outcome":"success","summary":"a result without meters"}
+    })), None).await.unwrap();
+    for created_at in [end - day - 1, end] {
+        let run = create(owner_http.clone(), scope, created_at).await;
+        owner_http
+            .call(
+                Method::POST,
+                &format!("/v1/runs/{run}/events"),
+                Some(&report(json!({"duration_ms":900,"agent_tokens":100}))),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let run = create(other_http.clone(), scope, end - 1).await;
+    other_http.call(Method::POST, &format!("/v1/runs/{run}/events"), Some(&report(json!({
+        "duration_ms":2000,"agent_tokens":17,"estimated_cost":{"currency":"CNY","micros":1500000},
+        "billed_cost":{"currency":"USD","micros":2}
+    }))), None).await.unwrap();
+
+    let mut tx = store
+        .begin(store.authenticate(&owner.token).await.unwrap())
+        .await
+        .unwrap();
+    let fixed = tx.run_creation_overview_at("24h", end).await.unwrap();
+    assert_eq!(fixed["created_runs"], 21);
+    assert_eq!(
+        fixed["metering"],
+        json!({
+            "duration_p95_ms":180,"duration_runs":20,"agent_tokens":"0","token_runs":1,
+            "costs":[{"basis":"estimated","currency":"USD","micros":"0","runs":1},
+                     {"basis":"billed","currency":"USD","micros":"9007199254740991","runs":1}]
+        })
+    );
+    let week = tx.run_creation_overview_at("7d", end).await.unwrap();
+    assert_eq!(week["created_runs"], 22);
+    assert_eq!(week["metering"]["duration_runs"], 21);
+    drop(tx);
+
+    // Use the 7d window for the HTTP and credential checks so no fixtures move.
+    let read = |client: HostClient| async move {
+        client
+            .call(Method::GET, "/v1/runs/overview?window=7d", None, None)
+            .await
+            .unwrap()
+    };
+    let workspace = read(admin_http.clone()).await;
+    assert_eq!(workspace["scope"], "workspace");
+    assert_eq!(workspace["metering"]["agent_tokens"], "217");
+    assert_eq!(
+        workspace["metering"]["costs"],
+        json!([
+            {"basis":"estimated","currency":"CNY","micros":"1500000","runs":1},
+            {"basis":"estimated","currency":"USD","micros":"0","runs":1},
+            {"basis":"billed","currency":"USD","micros":"9007199254740993","runs":2}
+        ])
+    );
+    assert_eq!(overview(other_http).await["metering"]["agent_tokens"], "17");
+    assert_eq!(
+        overview(outsider_http).await["metering"],
+        json!({
+            "duration_p95_ms":null,"duration_runs":0,"agent_tokens":null,"token_runs":0,"costs":[]
+        })
+    );
+    let admin_auth = service.auth(&admin.token).await.unwrap();
+    let rotated = service.rotate_key(&admin_auth, owner.key_id).await.unwrap();
+    assert!(
+        owner_http
+            .call(Method::GET, "/v1/runs/overview", None, None)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        read(client(rotated["token"].as_str().unwrap())).await["metering"]["agent_tokens"],
+        "200"
+    );
+    assert!(service.run_trace(&owner_auth, first, 0, 10).await.is_err());
+    host.abort();
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     let dir = tempfile::tempdir().unwrap();
     let s = open_service(dir.path(), Models::disabled()).await.unwrap();

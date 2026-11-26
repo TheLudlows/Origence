@@ -19,6 +19,15 @@ CREATE TABLE oc_run_asset_refs (
     run_id BLOB NOT NULL, event_id BLOB NOT NULL, evidence_ref_id BLOB NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,owner_key_id,asset_id,asset_version,run_id)
 );
+CREATE TABLE oc_run_measurements (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
+    owner_key_id BLOB NOT NULL, created_at INTEGER NOT NULL,
+    metric INTEGER NOT NULL CHECK(metric BETWEEN 0 AND 3),
+    value INTEGER NOT NULL CHECK(value>=0), currency TEXT NOT NULL,
+    PRIMARY KEY(tenant_id,workspace_id,run_id,metric)
+);
+CREATE INDEX oc_run_measurements_workspace_created ON oc_run_measurements(tenant_id,workspace_id,created_at);
+CREATE INDEX oc_run_measurements_owner_created ON oc_run_measurements(tenant_id,workspace_id,owner_key_id,created_at);
 CREATE TABLE oc_run_verifications (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
     verification_id BLOB NOT NULL, payload TEXT NOT NULL, record TEXT NOT NULL,

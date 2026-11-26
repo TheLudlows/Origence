@@ -49,6 +49,37 @@ Origence 对已配置 embedding 端点的请求可产生一条 `retrieval.contex
 
 既有主键按 Run UUID 排序。覆盖索引 `oc_runs_owner_created_at` 支持有界的所有者和时间范围计数。个人请求最多执行 24 次互不重叠的索引区间计数，覆盖不超过七天。管理员请求在所选工作区内扫描一次覆盖索引并分桶。工作量随扫描项增长，两种查询均只读索引。数据库结构准入要求此索引。
 
+### 整轮计量
+
+执行方取得整轮数据后，用 `POST /v1/runs/{run}/events` 或 MCP `context_run_report` 上报。仍须拥有 Run 和写权限。
+
+```json
+{
+  "event_id": "67ba4d8c-8dd0-4f93-a784-085f4e095d27",
+  "reporter": "client",
+  "observed_at_ms": 1795651200000,
+  "event": {
+    "kind": "metering_reported",
+    "duration_ms": 1820,
+    "agent_tokens": 1246,
+    "estimated_cost": {"currency": "USD", "micros": 2300}
+  }
+}
+```
+
+- `duration_ms` 是执行方用单调时钟测得的任务起点至最终返回时长。`agent_tokens` 是执行方从完整模型用量记录取得的整轮输入和输出总量。两者均为无符号 32 位整数。模型未提供完整用量时省略，Origence 的查询向量输入 Token 不加入这个总数。
+- `estimated_cost` 与 `billed_cost` 分别接收执行方提供的费用估算和能归属到这个 Run 的账单金额。两者都使用三字母大写币种和非负整数微单位（每单位一百万微单位），单次不超过 `9007199254740991`。Origence 不查询账单或自行换算。事件保留认证凭据、报告方和观察时间，以便追溯。
+- 每次至少提供一项。每个 Run 的每项只接受一次，同事件 ID 和同载荷重试返回原回执。可以用新事件补齐原先缺失的项，例如账单晚到。新事件重复上报任何已存在项时，整笔拒绝并返回 409。明确上报的零值保留。
+- `GET /v1/runs/overview` 的 `metering` 汇总该窗口内**创建**的 Run，包含当前已收到的计量。`duration_p95_ms` 采用已上报耗时的最近秩 P95，`duration_runs` 为样本数。`agent_tokens` 为已上报 Token 总数，`token_runs` 为样本数。无样本时数值为 null。费用按 `basis`（`estimated` 或 `billed`）和 `currency` 分组，每组返回 `micros` 和 `runs`。Token 和费用总量用十进制字符串精确返回。不同币种、估算与账单不相加。
+
+计量来源为调用方显式上报。现有 Codex/Claude Code Hook 没有完整计量数据，插件不会自动生成这类事件。管理员在工作区总览只读聚合，Run 原始事件仍由所属逻辑 Key 私有读取。计量投影同事件一起写入并按创建时间和权限范围索引，查询不扫描 Run 正文。SQLite 只在新库安装该结构，旧库按既有准入规则拒绝打开。
+
+## 受管客户端观测
+
+受管任务可通过现有私有 Run HTTP 或 MCP 事件入口上报
+`codex_command_reported` 与 `claude_interrupt_reported`。沿用 Run 权限、幂等和前缀规则。
+命令状态和取消过程属于客户端观察，Run 的业务结果仍由独立结果事件决定。见[受管 Run 上报](../MANAGED-RUNS.md)。
+
 ## 外部核验记录
 
 所有者转录的外部核验遵循独立[核验契约](run-verification.zh-CN.md)，绑定精确 Run 前缀并保留归因、依据、未知使用版本和撤回信息。这不是平台认证，声称的核验人或 `reporter=user/test` 标签不授予私有 Run 读取权。

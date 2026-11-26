@@ -28,9 +28,32 @@ pub enum RunEvent {
         tool: String,
         summary: String,
     },
+    /// Metadata from a completed command item on a bound Codex App Server turn.
+    CodexCommandReported {
+        status: CodexCommandStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u32>,
+    },
+    /// A stage observed by the owner of a single Claude Agent SDK turn.
+    ClaudeInterruptReported {
+        observation: ClaudeInterruptObservation,
+    },
     ResultReported {
         outcome: RunOutcome,
         summary: String,
+    },
+    /// A caller-observed total for the whole Run. Omitted metrics stay unknown.
+    MeteringReported {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent_tokens: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        estimated_cost: Option<RunCost>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        billed_cost: Option<RunCost>,
     },
     Feedback {
         outcome: RunOutcome,
@@ -53,6 +76,60 @@ pub enum RunEvent {
         status: CoverageStatus,
         summary: String,
     },
+}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexCommandStatus {
+    Completed,
+    Failed,
+    Declined,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ClaudeInterruptObservation {
+    Requested,
+    Receipt { status: ClaudeInterruptReceipt },
+    Result { status: ClaudeInterruptResult },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaudeInterruptReceipt {
+    Acknowledged,
+    PromptStillQueued,
+    AcknowledgedWithoutDetails,
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaudeInterruptResult {
+    Interrupted,
+    Completed,
+    OtherTerminal,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RunCost {
+    /// Three-letter uppercase currency code.
+    pub currency: String,
+    /// Millionths of one currency unit.
+    pub micros: u64,
+}
+impl RunCost {
+    fn validate(&self) -> Result<(), &'static str> {
+        if self.currency.len() != 3
+            || !self.currency.bytes().all(|b| b.is_ascii_uppercase())
+            || self.micros > 9_007_199_254_740_991
+        {
+            return Err("invalid Run cost");
+        }
+        Ok(())
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -92,6 +169,9 @@ impl RunEventInput {
             return Err("invalid event identity or observation time");
         }
         match &self.event {
+            // Narrow DTOs with no raw strings. These are client observations,
+            // so they must never enter the business-outcome catalog projection.
+            RunEvent::CodexCommandReported { .. } | RunEvent::ClaudeInterruptReported { .. } => {}
             RunEvent::ContextReported { references } => {
                 if references.len() > 64 {
                     return Err("too many context references");
@@ -140,6 +220,23 @@ impl RunEventInput {
             RunEvent::ResultReported { summary, .. } | RunEvent::Feedback { summary, .. } => {
                 if summary.len() > 4096 {
                     return Err("invalid event summary");
+                }
+            }
+            RunEvent::MeteringReported {
+                duration_ms,
+                agent_tokens,
+                estimated_cost,
+                billed_cost,
+            } => {
+                if duration_ms.is_none()
+                    && agent_tokens.is_none()
+                    && estimated_cost.is_none()
+                    && billed_cost.is_none()
+                {
+                    return Err("empty Run metering report");
+                }
+                for cost in [estimated_cost, billed_cost].into_iter().flatten() {
+                    cost.validate()?;
                 }
             }
         }

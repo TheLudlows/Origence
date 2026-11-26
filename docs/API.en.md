@@ -90,6 +90,29 @@ Original files and jobs can expose unpublished data, so reader cannot access the
 
 A content item here is a versioned memory or knowledge entry identified by `asset_id`. Published Skills use separate endpoints.
 
+### Agent connections
+
+`GET /admin/agents` requires an administrator in the workspace selected by the
+Bearer credential and optional `X-Origence-Workspace` header. The response has
+`workspace_id`, `window_seconds` (300), `capacity_reached`, and `items`. Each
+item has its current `role` and an `observation` with `credential_id`,
+`last_seen_at_ms`, `active_requests`, and `client_kinds`. New reads exclude
+revoked credentials, old credentials after rotation, and removed grants.
+
+Clients sharing a credential in the same workspace are grouped. The registry
+observes MCP handshakes, pings, tool lists, and requests dispatched to a tool.
+Handshake names map to `codex`, `claude_code`, or `other` for display.
+The list of client kinds is empty when a handshake has not been observed for
+the credential group. Observations retain only the listed fields, including
+the credential UUID and the normalized client kind.
+
+Origence uses stateless Streamable HTTP. The list covers in-flight requests
+and activity observed by this process in the last five minutes. Observations
+are cleared on restart. Each process tracks up to 128 workspaces and 128
+credentials per workspace. `capacity_reached` signals possible omissions,
+and MCP requests still proceed. The console refreshes every 15 seconds and
+also offers a manual refresh.
+
 ### Read-only management catalogs
 
 - `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`. Reader and above, with workspace from authentication. Scan current published nondeleted candidates by ascending `asset_id` and reuse the full ordinary source, semantic, and visibility checks for each. Returns `{items,next_after}`. Items contain metadata only, without text or semantic quotes. Invalid sources are excluded and other storage errors fail explicitly.
@@ -97,7 +120,7 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 
 Both endpoints default to limit=50, range 1–100. With no after, begin at the start. Unknown parameters fail. Ordering is by UUID instead of creation time. `next_after` is the last scanned candidate, not a total. Pages may have fewer than limit or be empty if sources are invalid. Continue while next_after is non-null. Each page is a live authorized read without a frozen snapshot across requests. Reads create neither sessions nor publishing jobs.
 
-Overview uses separate `GET /v1/runs/overview?window=24h|7d`, default `24h`. It counts durable Run creations in the caller's Run catalog scope. Returns `scope`, `window`, `timezone:"UTC"`, `start_ms`, `end_ms`, `created_runs`, and `series`. `series` contains 24 one-hour buckets or 7 24-hour buckets in ascending time. Each bucket has `start_ms`, `end_ms`, and `created_runs`, including zero counts. Bounds are Unix milliseconds. Windows and buckets are half-open and roll backward from the current server read time. Counts survive authorized rotation. Events, retries, and evidence withdrawals do not add or remove creations. Window parameters cannot override authorization scope. See the [Run contract](contracts/runs.md#run-creation-overview). This endpoint requires the existing creation-time index in the SQLite authority database.
+Overview uses separate `GET /v1/runs/overview?window=24h|7d`, default `24h`. It counts durable Run creations in the caller's Run catalog scope. Returns `scope`, `window`, `timezone:"UTC"`, `start_ms`, `end_ms`, `created_runs`, `series` and `metering`. `series` contains 24 one-hour buckets or 7 24-hour buckets in ascending time. Each bucket has `start_ms`, `end_ms`, and `created_runs`, including zero counts. Bounds are Unix milliseconds. Windows and buckets are half-open and roll backward from the current server read time. Counts survive authorized rotation. Events, retries, and evidence withdrawals do not add or remove creations. Window parameters cannot override authorization scope. These queries use scope/time indexes in the SQLite authority database. See [Run overview](contracts/runs.md#run-creation-overview) and [whole-Run metering reports](contracts/runs.md#whole-run-metering).
 
 Memory catalogs support `memory_filter=<URL 编码 JSON>` (URL-encoded JSON), for example `{"subject":{"kind":"service","stable_id":"Atlas"},"predicate":"release.rule","context":{"env":"production"}}`. The library entry point is `Service::list_memories(auth, &MemoryCatalogFilter, after, limit)`.
 

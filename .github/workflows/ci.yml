@@ -28,6 +28,8 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm test
+      - name: Managed agent Run protocol fixtures
+        run: node --test ../tools/managed-run/managed-run.test.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: node-ui-dist

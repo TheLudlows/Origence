@@ -27,3 +27,4 @@
 - 公开题生成和离线评分脚本复跑完成。准备表有 16 题、32 行观察，输出 `PREPARATION_ONLY`，可核查题集字节或观察表结构。58 项 Python 试点测试通过。公开题集不进入正式分母。
 - #89 同一 Run 的 HTTP 回归通过。Chromium 核对准备 v2 的导航目标、客户端自报成功、固定前缀和依据序号、Owner 转录的三类外部结论，以及撤回或越权时清除内容。实际使用版本仍为未知。P6 的公开合成索引检查返回 `INDEX_LINKAGE_ONLY`。
 - #76 已复跑 320/375/736px 触控模拟、明暗主题下的资产页签和焦点，以及 1024/320px 的 Run 采集声明。28 项 UI 测试通过。
+- [#76](https://github.com/TheLudlows/Origence/issues/76) 已按运行计量范围结项。读屏、实体触屏和告警已移出首版验收。冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。

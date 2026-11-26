@@ -1,4 +1,5 @@
 use crate::{
+    agent_presence::{AgentPresence, ClientKind},
     service::Service,
     session::SessionTurnInput,
     types::{AuthContext, ResolveInput, SearchInput},
@@ -10,12 +11,14 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub(crate) struct ContextMcp {
     service: Service,
     identity: AuthContext,
+    agent_presence: Arc<AgentPresence>,
     tool_router: ToolRouter<Self>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -49,7 +52,8 @@ struct RunAppendInput {
     run_id: String,
     /// Existing RunEventInput: event_id, reporter, observed_at_ms, event.
     /// event.kind: context_reported, tool_reported, result_reported, feedback,
-    /// skill_loaded_reported, artifact_reported, coverage. Never server events.
+    /// skill_loaded_reported, artifact_reported, coverage, metering_reported,
+    /// codex_command_reported, claude_interrupt_reported. Never server events.
     report: serde_json::Map<String, serde_json::Value>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -75,10 +79,15 @@ fn run_uuid(value: &str) -> std::result::Result<Uuid, ErrorData> {
 }
 #[tool_router]
 impl ContextMcp {
-    pub(crate) fn new(service: Service, identity: AuthContext) -> Self {
+    pub(crate) fn new(
+        service: Service,
+        identity: AuthContext,
+        agent_presence: Arc<AgentPresence>,
+    ) -> Self {
         Self {
             service,
             identity,
+            agent_presence,
             tool_router: Self::tool_router(),
         }
     }
@@ -98,7 +107,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Append an explicit existing RunEventInput report. Reports are claims, not verified execution. Omitted activity is unknown; use coverage with unknown/partial/not_collected. Reuse event_id and identical payload on retry. Never submit credentials or raw tool output."
+        description = "Append an explicit RunEventInput report. Reports are claims, not verified execution. For metering_reported, provide measured whole-Run duration_ms and/or agent_tokens, or independently sourced estimated_cost or billed_cost objects (currency and integer micros). Omit unknown metrics. Reuse event_id and identical payload on retry. Never submit credentials or raw tool output."
     )]
     async fn context_run_report(
         &self,
@@ -278,6 +287,10 @@ impl rmcp::ServerHandler for ContextMcp {
             "2025-06-18" => ProtocolVersion::V_2025_06_18,
             _ => ProtocolVersion::V_2025_11_25,
         };
+        let _activity = self.agent_presence.begin(
+            &self.identity,
+            Some(ClientKind::from_client_name(&request.client_info.name)),
+        );
         context.peer.set_peer_info(request);
         Ok(self.get_info().with_protocol_version(version))
     }
@@ -296,10 +309,28 @@ impl rmcp::ServerHandler for ContextMcp {
             .map
             .get(context.name())
             .ok_or_else(|| ErrorData::invalid_params("tool not found", None))?;
+        let _activity = self.agent_presence.begin(&self.identity, None);
         // rmcp 1.8 converts argument decoding errors into isError tool results.
         // Preserve the existing JSON-RPC error envelope by invoking the enabled
         // route directly; its generated parameter decoding and auth are unchanged.
         (route.call)(context).await
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> std::result::Result<ListToolsResult, ErrorData> {
+        let _activity = self.agent_presence.begin(&self.identity, None);
+        Ok(ListToolsResult::with_all_items(self.tool_router.list_all()))
+    }
+
+    async fn ping(
+        &self,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> std::result::Result<(), ErrorData> {
+        let _activity = self.agent_presence.begin(&self.identity, None);
+        Ok(())
     }
 
     fn get_info(&self) -> ServerInfo {

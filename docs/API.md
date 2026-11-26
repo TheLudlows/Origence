@@ -134,6 +134,24 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 本节的「内容条目」指可单独读取和版本化的记忆或知识，通过 `asset_id` 标识。已发布 Skill 使用独立接口。
 
+### Agent 连接
+
+`GET /admin/agents` 仅供当前工作区管理员读取。工作区按 Bearer 凭据和可选
+`X-Origence-Workspace` 解析。返回 `workspace_id`、`window_seconds`（300）、
+`capacity_reached` 和 `items`。每项有当前 `role` 及 `observation`，包含
+`credential_id`、`last_seen_at_ms`、`active_requests` 和 `client_kinds`。
+撤销凭据、轮换旧凭据或移除工作区授权后，旧观测不会出现在新列表中。
+
+同一工作区中共用凭据的 MCP 客户端显示为一组。活跃请求数与最近活动来自
+服务处理的握手、ping、工具列表和已分派到工具的请求。握手声明映射为
+`codex`、`claude_code` 或 `other`。没有观察到握手时，客户端类型列表为空。
+客户端类型仅用于显示。观测记录只保留上述字段，包含凭据 UUID 和归一化类型。
+
+Origence 使用无状态 Streamable HTTP。列表显示当前进程正在处理的请求和最近五分钟观测到的活动。
+进程重启清空观测，每进程最多跟踪 128 个工作区，每区最多 128 个凭据。
+达到容量时返回 `capacity_reached` 提示观测可能不完整，MCP 请求正常处理。
+控制台每 15 秒刷新，也可以手动刷新。
+
 ### 管理界面只读目录
 
 - `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`：reader 以上，
@@ -150,12 +168,13 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 运行总览使用独立的 `GET /v1/runs/overview?window=24h|7d`，默认 `24h`。
 按 Run 列表的鉴权范围统计持久化 Run 创建记录。
 响应包含 `scope`、`window`、`timezone:"UTC"`、
-`start_ms`、`end_ms`、`created_runs` 和 `series`。
+`start_ms`、`end_ms`、`created_runs`、`series` 和 `metering`。
 `series` 按时间升序返回 24 个一小时桶或 7 个 24 小时桶，每桶
 含 `start_ms`、`end_ms`、`created_runs`，包括零计数。
 起止为 Unix 毫秒，窗口和桶均左闭右开，以本次服务端读取时刻为终点向前滚动。
 此计数随授权轮换保留，事件、重试和证据撤回不会新增或抹去创建记录。
 窗口参数不能覆盖鉴权范围。详情见 [Run 合同](contracts/runs.zh-CN.md#run-创建总览)。
+整轮耗时、Agent Token、估算与账单金额使用现有 Run 事件入口上报，见[整轮计量](contracts/runs.zh-CN.md#整轮计量)。
 该接口使用新建的 SQLite 权威库。新版拒绝缺少创建时间索引的旧库，旧版也拒绝
 含新索引的库。两个方向均在修改数据库前拒绝。
 
