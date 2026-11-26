@@ -276,6 +276,10 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
         json!({"kind":"tool_reported","tool":"synthetic tool","summary":"observed fixture call"}),
         json!({"kind":"result_reported","outcome":"unknown","summary":"no real task"}),
         json!({"kind":"metering_reported","duration_ms":125,"agent_tokens":32,"estimated_cost":{"currency":"USD","micros":990}}),
+        json!({"kind":"codex_command_reported","status":"failed","exit_code":1,"duration_ms":0}),
+        json!({"kind":"claude_interrupt_reported","observation":{"stage":"requested"}}),
+        json!({"kind":"claude_interrupt_reported","observation":{"stage":"receipt","status":"acknowledged"}}),
+        json!({"kind":"claude_interrupt_reported","observation":{"stage":"result","status":"interrupted"}}),
         json!({"kind":"feedback","outcome":"failure","summary":"synthetic feedback"}),
         json!({"kind":"skill_loaded_reported","skill_id":Uuid::new_v4(),"version":1,"digest":"a".repeat(64)}),
         json!({"kind":"artifact_reported","artifact_id":Uuid::new_v4(),"summary":"synthetic artifact"}),
@@ -291,6 +295,43 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
         assert_eq!(last["evidence_origin"], "reported");
     }
     let client = HostClient::new(&base, owner.token.clone()).unwrap();
+    let catalog = client
+        .call(reqwest::Method::GET, "/v1/runs", None, None)
+        .await
+        .unwrap();
+    let row = catalog["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["run_id"] == json!(run))
+        .unwrap();
+    assert_eq!(row["status"], "unknown");
+    let forged = json!({"event_id":Uuid::new_v4(),"reporter":"client","observed_at_ms":0,
+        "event":{"kind":"codex_command_reported","status":"failed","aggregated_output":"private"}});
+    assert!(
+        client
+            .call(
+                reqwest::Method::POST,
+                &format!("/v1/runs/{run}/events"),
+                Some(&forged),
+                None
+            )
+            .await
+            .is_err()
+    );
+    let forged = json!({"event_id":Uuid::new_v4(),"reporter":"client","observed_at_ms":0,
+        "event":{"kind":"claude_interrupt_reported","observation":{"stage":"receipt","status":"acknowledged","still_queued":["private"]}}});
+    assert!(
+        client
+            .call(
+                reqwest::Method::POST,
+                &format!("/v1/runs/{run}/events"),
+                Some(&forged),
+                None
+            )
+            .await
+            .is_err()
+    );
     let metering = client
         .call(reqwest::Method::GET, "/v1/runs/overview", None, None)
         .await
