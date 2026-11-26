@@ -1,5 +1,6 @@
 * text=auto eol=lf
 /bin/origence-setup.cmd text eol=crlf
+/bin/origence-deploy.cmd text eol=crlf
 
 # Exclude evaluation data from GitHub Linguist's language-byte statistics.
 # Keep executable tests/runners counted and diffs visible; this does not

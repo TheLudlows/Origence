@@ -14,6 +14,17 @@
 44 项 Python 评估测试、Rust 格式与严格 Clippy、逐题复算、权限和来源撤回验证通过。
 [复跑报告与证据](../evals/retrieval/results/local-6201881-v2/README.md)
 
+## 2026-11-26 · Agent 接入与本地部署拆分
+
+基于 main `13e2a4cb7bea7e97f67525d138453b6f9a0fdba1` 在 Linux 上复跑原生 Claude Code、Codex
+与 Chromium。部署先启动 API 和控制台，两端随后通过 Agent 入口接入，Codex 使用非默认 API 端口。
+核对了旧安装记录升级、重复安装、无效 Key、Hook Run 读回、各自卸载、用户修改的 Codex MCP
+条目保留和重建备份。Node 类型检查和 30 项 UI 测试、Rust 格式和严格 Clippy 通过。
+Windows 原生验收已纳入这条测试，拆分后尚未在 Windows 或 macOS 运行。[复跑说明](INSTALLER.md)
+
+命令为 `python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude --codex /path/to/codex`。
+加 `--browser` 并设置 `NODE_PATH` 与 `CHROMIUM` 可复跑浏览器。
+
 ## 2026-11-26 · Origence 本地安装器
 
 基于 main `b4e8879fa952b5afd729fd5b89a630c6d5705696`，Linux x86_64、Rust 1.98.0、
@@ -45,6 +56,16 @@ Rust 格式检查与严格 Clippy 通过。
 从仓库外调用安装入口，重新开 Bash 和 Zsh 核对 PATH，再从仓库外卸载。重复卸载跳过，
 用户设置恢复，数据库和备份保留。后端帮助无安装子命令，Rust 格式与严格 Clippy、
 Node 类型检查及 30 项 UI 测试通过。Windows .cmd 入口接入原生验收，尚未运行。
+
+基于 main `620188115c89b20bc1411f5ec1e48b93f68548eb`，修复提交
+`4e3d95fc3ea495e6beaf7138d4cec6c52a894dc6` 在 Windows Server 2025（10.0.26100）、
+Node.js 24 和原生 Claude Code 2.1.330 上通过安装器验收。
+缺少 `origence.exe` 时提示检查 `--origence`，未创建工作区数据。通过 `.cmd` 首次安装后，
+Claude Code 连接同一工作区的 MCP，控制台登录和 Hook Run 回读成功。新进程加载了用户注册表中的
+凭据和 PATH。重复安装复用服务及测试 Run，错误 Key 返回 401，强制重装保留原数据库备份。
+从检出目录外卸载后，用户注册表的值与类型恢复，Claude Code 插件移除，数据库及备份保留，重复卸载跳过。
+同一提交在 Linux 上通过原生 Claude Code 与 Chromium 验收、Rust 格式检查与严格 Clippy。
+Windows 与 Linux 使用回环服务和合成数据，未调用真实模型。[Windows 验收](https://github.com/TheLudlows/Origence/actions/runs/45813998221)
 
 ## 2026-11-26 · Codex 命令与 Claude SDK 取消
 

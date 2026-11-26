@@ -4,6 +4,19 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Separate Agent setup and local deployment
+
+On main `13e2a4cb7bea7e97f67525d138453b6f9a0fdba1`, Linux tested native Claude Code, Codex, and
+Chromium. Deployment started the API and console. Agent setup connected both clients while the
+console was running, with Codex using a non-default API port. The smoke test checked legacy journal
+upgrade, repeat install, invalid credentials, Hook Run readback, independent rollback, retention
+of a user-edited Codex MCP entry, and data backup. Node type checking, 30 UI tests, Rust formatting,
+and strict Clippy passed. The native Windows workflow includes the split test, which has yet to
+run on Windows or macOS. [Installation guide](INSTALLER.en.md)
+
+Run `python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude --codex /path/to/codex`.
+Add `--browser` and set `NODE_PATH` and `CHROMIUM` for Chromium.
+
 ## 2026-11-26 · Origence local installer
 
 Based on main `b4e8879fa952b5afd729fd5b89a630c6d5705696`, Linux x86_64, Rust 1.98.0,
@@ -36,6 +49,19 @@ ran outside the checkout. Repeated uninstall skipped. Rollback restored user set
 the database and backup. The backend help had no setup commands. Rust formatting, strict Clippy,
 Node type checking and 30 UI tests passed. The Windows .cmd entry is wired into the native workflow
 and has yet to run.
+
+Using main `620188115c89b20bc1411f5ec1e48b93f68548eb` as the base, fix commit
+`4e3d95fc3ea495e6beaf7138d4cec6c52a894dc6` passed installer acceptance
+on Windows Server 2025 (10.0.26100), Node.js 24, and native Claude Code 2.1.330. A missing
+`origence.exe` produced the `--origence` diagnostic before workspace data was created. A first install
+through `.cmd` verified the Claude MCP connection, console sign-in, and Hook Run readback. A new
+process received the credentials and PATH from the user registry. Reruns reused services and the
+probe Run, an invalid key returned 401, and forced reinstallation backed up the original database.
+Uninstall from outside the checkout restored the original registry values and types, removed the
+Claude Code plugin, and preserved the database and backup. Repeated uninstall skipped. The same
+commit passed the native Claude Code and Chromium acceptance on Linux, Rust formatting, and strict
+Clippy. These runs used loopback services and synthetic data with no live model calls.
+[Windows acceptance](https://github.com/TheLudlows/Origence/actions/runs/45813998221)
 
 ## 2026-11-26 · Codex commands and Claude SDK cancellation
 

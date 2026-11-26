@@ -18,10 +18,17 @@ export function check(condition, message) {
 
 function powershell(script, input, options = {}) {
   // Passing the static program as an encoded command works under the default
-  // Windows PowerShell policy. Values, including secrets, travel over stdin.
+  // Windows PowerShell policy. Use the UTF-8 pipe directly: a hidden process
+  // may have no console whose code page can be changed.
+  const program = `
+$ErrorActionPreference = 'Stop'
+$utf8 = [Text.UTF8Encoding]::new($false)
+$reader = [IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8)
+$request = $reader.ReadToEnd() | ConvertFrom-Json
+${script}`;
   return spawnSync("powershell.exe", [
     "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand",
-    Buffer.from(script, "utf16le").toString("base64"),
+    Buffer.from(program, "utf16le").toString("base64"),
   ], { ...options, input: JSON.stringify(input), encoding: "utf8", windowsHide: true });
 }
 
@@ -34,10 +41,6 @@ export function windowsSettings(input) {
 export function execute(file, args, { cwd, env, input, timeout = 60_000, diagnosis } = {}) {
   const options = { cwd, env, input, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024 };
   const wrapper = `
-$ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$request = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $arguments = @($request.arguments)
 & ([string]$request.file) @arguments
 exit $LASTEXITCODE
@@ -165,7 +168,7 @@ export function writeUserEnvironment(state, vars, dirs) {
   const machine = windowsSettings({ action: "machine-path" }).value;
   const userPath = prependPath(current.Path?.value, dirs);
   const effectivePath = [machine, userPath].filter(Boolean).join(delimiter);
-  for (const name of ["origence", "origence-setup"]) {
+  for (const name of ["origence", "origence-setup", "origence-deploy"]) {
     check(executable(name, effectivePath) === executable(name, userPath),
       `A different ${name} is earlier in the Windows machine PATH. Fix its priority before installing.`);
   }

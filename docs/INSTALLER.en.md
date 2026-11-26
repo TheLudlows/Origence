@@ -1,66 +1,54 @@
-# Origence local installer
+# Origence Agent setup and local deployment
 
 **English** · [简体中文](INSTALLER.md)
 
-Run from the Origence checkout or a distribution containing `bin/`, `tools/`, `ui/`, and the plugin marketplace. Use PowerShell on Windows, or Bash or Zsh on Linux and macOS. Requires Node.js 24 with npm. The installer uses available Origence and Claude Code executables. It builds missing Origence from the checkout and can install the pinned Claude Code package into its private directory. A source build needs the repository's Rust toolchain and native build tools. Use `--origence` for a prebuilt executable. The installer builds the Node console if needed. First-time dependency fetches require access to their registries.
+Run from a checkout or distribution containing `bin/`, `tools/`, `ui/`, and the plugin marketplaces. Both commands need Node.js 24 with npm. Building Origence requires the repository's Rust toolchain and native build tools. Use `--origence <path>` to reuse an existing executable. First-time dependency fetching requires access to the relevant registries.
 
-## Install
+| Task | Command | Inputs |
+| --- | --- | --- |
+| Connect Claude Code or Codex to Origence | `origence-setup` | Client selection, running API URL, workspace key |
+| Run Origence and its console locally | `origence-deploy` | New workspace name, or existing API URL and workspace key |
 
-For an existing API, launch setup from the checkout or distribution and enter the endpoint and workspace key. The key prompt hides input.
+## Connect an Agent
 
-```sh
-./bin/origence-setup install
-```
-
-Use this launcher in Windows PowerShell.
+Run the appropriate launcher from the checkout root.
 
 ```powershell
-.\bin\origence-setup.cmd install
+.\bin\origence-setup.cmd install --agent claude
+.\bin\origence-setup.cmd install --agent codex
 ```
-
-The rest of the examples use `origence-setup`. On first install, substitute the launcher path for your platform above.
-
-You can also use `origence-setup install --endpoint https://origence.example.com --token '<WORKSPACE_KEY>'`. Command-line secrets can appear in history and process listings. For automation, supply `OC_SERVER_URL` and `OC_API_KEY` in the launch environment and run:
 
 ```sh
-origence-setup install --from-env
+./bin/origence-setup install --agent claude
+./bin/origence-setup install --agent codex
 ```
 
-Remote APIs use HTTPS. For a stopped local instance, use its existing data directory via `--data-dir` or `OC_DATA_DIR`. The installer can also find an already initialized `.data/context.db` in the checkout. Get an existing workspace key from its administrator. The local console account is named `admin` and has the exact permissions of the supplied key. Readers can sign in and retrieve material. Private Run reporting needs writer, reviewer, or admin permission.
+Use `--agent both` to connect both clients with one endpoint and key. Claude Code is the default. Setup reuses each available client CLI or installs its pinned version through npm. Use `--claude` or `--codex` for an executable outside PATH. [Client integration](CLIENTS.en.md)
 
-For a fresh instance, leave the key prompt blank and supply a workspace name, or run:
+Enter the API URL and workspace key when prompted. The key is hidden while typing. The default URL is `http://127.0.0.1:8080`. Use HTTPS for remote APIs and omit the `/mcp` suffix. Automation can supply `OC_SERVER_URL` and `OC_API_KEY` with `--from-env`. To keep keys out of command history, use the prompt or the environment. A reader key supports retrieval. Run hook reporting needs write access and uses the local Origence executable.
+
+Setup verifies the workspace and tools served over HTTP MCP, installs the plugin, and saves the user environment and PATH for the clients and hooks. It checks the registered entry in Codex and uses the vendor CLI for non-default URLs. Conflicting existing MCP entries are reported for the user to resolve. The Agent command uses a running API and needs no console port.
+
+Restart the terminal and clients, then use `/mcp` to check the connection and `context_session` to confirm the workspace. Follow Codex's trust flow in `/hooks` for the installed hooks. To change the endpoint or key, use `--force` and select all currently connected Agents because they share that configuration.
+
+Run `origence-setup uninstall` from a restarted terminal, or use the platform launcher above with `uninstall`. This rolls back the Agent plugins, MCP overrides, and environment changes it owns. Local services and the console account are managed by the deployment command.
+
+## Deploy the local API and console
+
+Use `--init` for a fresh local workspace. The console defaults to `127.0.0.1:3000`. Use `--ui-port` if needed. To reuse a workspace, omit `--init` and provide its original endpoint and key. For a stopped service, use `--data-dir` or `OC_DATA_DIR` to specify the existing directory.
+
+```powershell
+.\bin\origence-deploy.cmd install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
+```
 
 ```sh
-origence-setup install --init demo --endpoint http://127.0.0.1:8080
+./bin/origence-deploy install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
-The initial key is displayed once during interactive setup. Interactive success prints the console password. Automation can use `--credentials-file <new path outside Git>` or explicitly request `--show-secrets`. The optional file contains the plaintext password and key. Keep it private and outside Git. Installer state is private to the current user. Unix credential files use mode `0600` and Windows files use a current-user ACL. Programs launched as the current user can read their user environment.
+Deployment starts or reuses the API, provisions a console account, and verifies that signing in uses the same workspace and key. The supplied key determines console permissions. Interactive initialization prints the new key and console password. In automation, use `--credentials-file <new path outside Git>` or explicitly pass `--show-secrets`. Keep the generated credentials private. Add `--verify-write` to record and read one labeled test Run through the console. Reruns use the same probe Run.
 
-The installer prints structured step results and verifies the real API readiness and identity, MCP initialization and all 11 tools, the browser console root and account session, and the connection reported by Claude Code itself. It compares the workspace and logical key returned by the API, MCP, and console. It records the confirmed workspace so stale scope configuration cannot redirect the plugin.
+Repeated commands reuse the deployment. Only an explicit `--force --init <name>` replaces the workspace. It renames an existing data directory to a backup first. Stop any external services using that directory before reinitializing.
 
-## Verify, rerun, and uninstall
+Run `./bin/origence-deploy uninstall` or `.\bin\origence-deploy.cmd uninstall` from the checkout. It stops deployment-managed processes and removes its console account. Databases, backups, exported credentials, and Agent plugins are retained. Existing all-in-one journals are read by ownership. To roll back a former all-in-one install completely, run both uninstall commands. Private state and service logs are under `%LOCALAPPDATA%\Origence\installer` on Windows or `~/.origence/installer` on Unix.
 
-Restart your terminal and Claude Code. Use `Test-Path Env:OC_API_KEY` in PowerShell or `test -n "$OC_API_KEY"` in Bash or Zsh to check that the key loaded, and run `origence --version`. Use Claude Code's `/mcp` and `/hooks` to check the plugin. Sign in at the printed UI address, which defaults to `http://127.0.0.1:3000`. Complete a Claude Code turn with a writable key to see the resulting Run in that workspace. Add `--verify-write` to create and read a labeled connectivity Run through the console account. Repeated checks use the same Run for the same workspace and logical key.
-
-Reruns reuse the workspace, account, plugin, and listeners. Use `--force` to refresh settings and reset the console password, including when changing the endpoint or key. Only `--force --init <name>` initializes a replacement workspace. It renames an existing data directory to a timestamped backup first. Stop all external Origence processes before reinitializing. The installer checks the listener and existing database lock, and stops its own processes exclusively. Managed processes survive closing the terminal. Rerun the installer to restart them after a reboot.
-
-After restarting the terminal, run uninstall from any directory.
-
-```sh
-origence-setup uninstall
-```
-
-If the shortcut is unavailable, run `uninstall` with the launcher path above from the current checkout. The existing `node tools/install.mjs --uninstall` entry point also works.
-
-Installer state and service logs are under `%LOCALAPPDATA%\Origence\installer` on Windows or
-`~/.origence/installer` on Unix. Uninstall restores the recorded user environment and PATH changes, removes the installer-created account and Claude plugin, and stops managed processes. It preserves backend data, backups, and exported credential files. Windows uses the current-user registry. Unix startup files source a private environment file. Unrelated PATH entries and shell edits are retained.
-
-| Result | What to check |
-| --- | --- |
-| Endpoint unreachable or not ready | Check the URL, local data directory, or remote certificate. Logs for managed processes are in the private installer directory. |
-| HTTP 401 or 403 | Check the key's workspace, validity and permissions. Existing data requires a key for that workspace. |
-| Console port occupied | Select another port with `--ui-port <port>`. The installer leaves external console servers in place. |
-| The Run hook produces no record | Check `origence --version`, write permissions, the `/hooks` view, and any `OC_PLUGIN_RUN_HOOK=0` setting. |
-| Plugin disabled by policy | Review and enable Origence in Claude Code or contact your organization administrator. |
-
-[Claude Code plugin commands](https://code.claude.com/docs/en/plugins/cli-reference) · [Client integration](CLIENTS.en.md)
+[Operations and recovery](OPERATIONS.en.md) · [Claude Code and Codex integration](CLIENTS.en.md)

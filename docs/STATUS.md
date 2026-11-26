@@ -25,7 +25,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 
 `origence serve --local` 通过 Rust SDK 在同一进程打开 AnySeek 本地 Catalog，目录为 `OC_DATA_DIR/anyseek`。启动恢复、已发布集合核验及正常关闭由同一宿主管理。Windows 开发脚本调用此入口，再按需启动 Node UI。云上镜像使用 `origence serve` 连接独立部署的 AnySeek，地址与凭据由部署环境提供。[运维说明](OPERATIONS.md#anyseek-全文与向量)
 
-独立的 `origence-setup` 安装器用 API 地址与工作区 Key 接入 Claude Code 和控制台。它可启动本地服务、配置账号和用户环境、验证同一工作区的 HTTP MCP，并支持保留数据的卸载。[安装说明](INSTALLER.md)
+`origence-setup` 只接入 Claude Code 和 Codex，使用已有 API 和工作区 Key。`origence-deploy` 管理本地 API、工作区初始化和控制台。两者独立卸载并保留数据。[安装说明](INSTALLER.md)
 
 ## Streamable HTTP MCP
 

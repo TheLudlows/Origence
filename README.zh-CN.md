@@ -19,7 +19,7 @@ Origence 管理记忆、知识、Skill 和运行轨迹，提供 HTTP、MCP 接�
 
 ## 快速开始
 
-用[本地安装器](docs/INSTALLER.md)一次配置 Claude Code 插件与控制台。
+[安装指南](docs/INSTALLER.md)分别说明 Claude Code / Codex 接入和本地控制台部署。
 
 需要 Rust **1.98.0**。默认构建链接 AnySeek Rust SDK，用于本地存储。快速开始请使用全新的数据目录。
 

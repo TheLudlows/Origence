@@ -12,17 +12,22 @@ from urllib.request import Request, urlopen
 import uuid
 
 from mcp_smoke import isolated_env, require, sanitized
+from plugin_smoke import codex_session, tool_value
 
 REPO = Path(__file__).resolve().parents[1]
 WINDOWS = os.name == "nt"
 PLUGIN = "origence@origence-tools"
 SETUP = REPO / "bin" / ("origence-setup.cmd" if WINDOWS else "origence-setup")
+DEPLOY = REPO / "bin" / ("origence-deploy.cmd" if WINDOWS else "origence-deploy")
 VARIABLES = ("OC_API_KEY", "OC_SERVER_URL", "OC_WORKSPACE_ID", "Path")
 
 
-def port():
+def port(preferred=0):
     with socket.socket() as reserved:
-        reserved.bind(("127.0.0.1", 0))
+        try:
+            reserved.bind(("127.0.0.1", preferred))
+        except OSError:
+            reserved.bind(("127.0.0.1", 0))
         return reserved.getsockname()[1]
 
 
@@ -54,6 +59,10 @@ def fresh_windows_environment():
     advapi = ctypes.windll.advapi32
     userenv = ctypes.windll.userenv
     kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    advapi.OpenProcessToken.argtypes = (wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE))
+    userenv.CreateEnvironmentBlock.argtypes = (ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.BOOL)
+    userenv.DestroyEnvironmentBlock.argtypes = (ctypes.c_void_p,)
     token = wintypes.HANDLE()
     block = ctypes.c_void_p()
     require(advapi.OpenProcessToken(kernel.GetCurrentProcess(), 0x000A, ctypes.byref(token)),
@@ -81,6 +90,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
     # On Windows the public launcher is a .cmd file. Its test arguments are fixture values.
     shell = WINDOWS and entry[0].lower().endswith(".cmd")
     child = subprocess.run([*entry, *commands], env=env, cwd=cwd, shell=shell,
+                           creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0,
                            capture_output=True, text=True, encoding="utf-8", timeout=150)
     sanitized(child.stdout + child.stderr, forbidden)
     require(child.returncode == expected, "Unexpected installer result: " + child.stdout[-3000:])
@@ -129,152 +139,198 @@ def check_browser(env, credentials, run, forbidden):
     print(child.stdout.strip())
 
 
-def check_existing_api(binary, claude, root, env, credentials, forbidden):
-    profile = root / "existing-api profile"
-    profile.mkdir()
-    profile_env = dict(env, HOME=str(profile), USERPROFILE=str(profile), APPDATA=str(profile),
-                       LOCALAPPDATA=str(profile), CLAUDE_CONFIG_DIR=str(profile / "claude config"))
-    endpoint = credentials["endpoint"]
-    ui_port = port()
-    try:
-        connected = installer(profile_env, ["--endpoint", endpoint, "--token", credentials["token"],
-                              "--origence", str(binary), "--claude", str(claude), "--ui-port", str(ui_port)],
-                              forbidden)
-        require(connected["api"]["status"] == "skipped" and
-                connected["whoami"]["detail"]["workspace_id"] == credentials["workspace_id"] and
-                "bootstrap" not in connected,
-                "Endpoint and token alone must bind a fresh install to existing data")
-    finally:
-        installer(profile_env, ["--uninstall"], forbidden)
-    who, _ = request(endpoint + "/v1/whoami", headers={"Authorization": "Bearer " + credentials["token"]})
-    require(who["workspace_id"] == credentials["workspace_id"], "Uninstall stopped or changed the external API")
+def check_codex(codex, project, env, credentials, forbidden):
+    project.mkdir()
+    with codex_session(str(codex), project, env, forbidden) as (rpc, thread):
+        entries = rpc("mcpServerStatus/list", {"threadId": thread})["data"]
+        require(sum(item["name"] == "origence" for item in entries) == 1,
+                "Codex must load exactly one Origence MCP endpoint")
+        result = tool_value(rpc("mcpServer/tool/call", {
+            "server": "origence", "tool": "context_session", "threadId": thread, "arguments": {},
+        }))
+        require(result["workspace_id"] == credentials["workspace_id"], "Codex resolved the wrong workspace")
 
 
-def smoke(binary, claude, root, browser):
+def smoke(binary, claude, codex, root, browser):
     env = isolated_env(str(root))
     env.pop("OC_DATA_DIR", None)
     env.update(HOME=str(root), USERPROFILE=str(root), LOCALAPPDATA=str(root), APPDATA=str(root),
-               CLAUDE_CONFIG_DIR=str(root / "claude config"), OC_WORKSPACE_ID=str(uuid.uuid4()),
-               CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1", DISABLE_TELEMETRY="1")
+               CLAUDE_CONFIG_DIR=str(root / "claude config"), CODEX_HOME=str(root / "codex config"),
+               OC_WORKSPACE_ID=str(uuid.uuid4()), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1",
+               DISABLE_TELEMETRY="1")
+    Path(env["CODEX_HOME"]).mkdir()
     env.pop("ZDOTDIR", None)
-    state_dir = root / ("Origence" if WINDOWS else ".origence") / "installer"
+    state = root / ("Origence" if WINDOWS else ".origence") / "installer" / "state.json"
     rc = root / ".bashrc"
     previous_shell = "export OC_API_KEY=prior-shell-value\n# unrelated edit"
     registry_before = registry_values() if WINDOWS else None
     if not WINDOWS:
         rc.write_text(previous_shell, encoding="utf-8")
     data = root / "instance data"
-    output = root / "private credentials.json"
+    output = root / "private credentials 验收.json"
+    ui_port = port(3000)
     endpoint = f"http://127.0.0.1:{port()}"
-    ui_port = port()
     while endpoint.endswith(f":{ui_port}"):
-        ui_port = port()
-    paths = ["--endpoint", endpoint, "--ui-port", str(ui_port), "--data-dir", str(data),
-             "--origence", str(binary), "--claude", str(claude)]
+        endpoint = f"http://127.0.0.1:{port()}"
+    deploy_args = ["--endpoint", endpoint, "--ui-port", str(ui_port), "--data-dir", str(data),
+                   "--origence", str(binary)]
+    setup_args = ["--agent", "both", "--origence", str(binary), "--claude", str(claude), "--codex", str(codex)]
+    deploy_cmd = [str(DEPLOY)]
+    setup_cmd = [str(SETUP)]
     forbidden = []
     try:
-        absent = installer(env, [*paths, "--origence", str(root / "missing" / "origence"), "--init", "Missing"],
-                           [], expected=1)
-        require("executable could not be found" in absent["installation"]["detail"],
-                "Missing Origence executable must be diagnosed")
+        alone = installer(env, ["uninstall"], [], entry=setup_cmd, cwd=root)
+        require(alone["uninstall"]["status"] == "skipped", "Empty setup must be a no-op")
+        absent = installer(env, ["install", *deploy_args, "--origence", str(root / "missing" / "origence"),
+                                 "--init", "Missing"], [], expected=1, entry=deploy_cmd, cwd=root)
+        require("requested Origence executable could not be found" in absent["installation"]["detail"]
+                and not data.exists(), "Missing Origence executable must be diagnosed before creating a workspace")
         invalid = "invalid-installer-fixture-key"
-        unreachable = installer(env, [*paths, "--token", invalid], [invalid], expected=1)
-        require("unreachable" in unreachable["installation"]["detail"] and not data.exists(),
-                "An unreachable uninitialized API must not create a blank workspace")
-        first = installer(env, ["install", *paths, "--init", "Installer synthetic", "--verify-write",
-                                "--credentials-file", str(output)], forbidden, entry=[str(SETUP)], cwd=root)
+        unreachable = installer(dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=invalid),
+                                ["install", "--from-env", *setup_args], [invalid],
+                                expected=1, entry=setup_cmd, cwd=root)
+        require("could not reach" in unreachable["installation"]["detail"] and not data.exists() and not state.exists(),
+                "Agent setup against an unreachable API must not deploy a service or save state")
+        first = installer(env, ["install", *deploy_args, "--init", "Installer synthetic", "--verify-write",
+                                "--credentials-file", str(output)], forbidden, entry=deploy_cmd, cwd=root)
         credentials = json.loads(output.read_text(encoding="utf-8"))
         forbidden = [credentials["token"], credentials["password"]]
         sanitized(first, forbidden)
-        require(len(credentials["password"]) >= 15, "Console password is too short")
-        require(first["http-mcp"]["detail"]["tools"] == 11 and first["claude-code"]["status"] == "success",
-                "MCP tool catalog and the native client must connect")
+        require(len(credentials["password"]) >= 15 and first["console-account"]["status"] == "success",
+                "Deployment must provision a working console account")
+        require("claude-code" not in first and "codex" not in first and "agent" not in json.loads(state.read_text(encoding="utf-8")),
+                "Deployment must not configure either agent")
+        if WINDOWS:
+            require(registry_values() == registry_before, "Deployment must leave the registry environment alone")
+        else:
+            require(output.stat().st_mode & 0o077 == 0 and rc.read_text(encoding="utf-8") == previous_shell,
+                    "Deployment must protect exported credentials and leave shell config alone")
+        env_key = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=credentials["token"])
+        deployed = json.loads(state.read_text(encoding="utf-8"))["deploy"]
+        second = installer(env_key, ["install", "--from-env", "--verify-write"], forbidden, entry=deploy_cmd, cwd=root)
+        require(second["api"]["status"] == second["ui"]["status"] == "skipped" and
+                second["write-check"]["detail"] == first["write-check"]["detail"],
+                "Deployment rerun must reuse its API, console and probe")
+        failure = installer(dict(env_key, OC_API_KEY=invalid), ["install", "--from-env", *setup_args],
+                            [*forbidden, invalid], expected=1, entry=setup_cmd, cwd=root)
+        require("401" in failure["installation"]["detail"], "Rejected key must yield an actionable 401")
+
+        # The console is already listening. Agent setup only needs the API.
+        claude_only = installer(env_key, ["install", "--from-env", "--agent", "claude", "--origence", str(binary),
+                                         "--claude", str(claude)], forbidden, entry=setup_cmd, cwd=root)
+        require("claude-code" in claude_only and "codex" not in claude_only,
+                "Selecting Claude must leave Codex untouched")
+        split = json.loads(state.read_text(encoding="utf-8"))
+        legacy = {"version": 1, **split["deploy"],
+                  **{name: split["agent"][name] for name in ("claude", "shell", "registry") if name in split["agent"]}}
+        state.write_text(json.dumps(legacy), encoding="utf-8")
+        connected = installer(env_key, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        require(connected["http-mcp"]["detail"]["tools"] == 11 and connected["claude-code"]["status"] == "success"
+                and connected["codex"]["status"] == "success" and "ui" not in connected and "api" not in connected,
+                "Agent setup must connect both clients without starting a UI or an API")
+        replay = json.loads(state.read_text(encoding="utf-8"))
+        require(replay["version"] == 2 and replay["deploy"] == deployed,
+                "Agent setup must migrate a legacy journal without changing deployment settings")
+        installer(env_key, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        require(json.loads(state.read_text(encoding="utf-8")) == replay,
+                "Agent setup rerun must reuse the same settings and ownership")
+        actual = None
         if not WINDOWS:
-            require(output.stat().st_mode & 0o077 == 0, "Credentials file must be private")
             check = ('test "$OC_API_KEY" = "$EXPECTED" && test "$OC_WORKSPACE_ID" = "$WORKSPACE"'
-                     ' && origence --version && origence-setup --help')
+                     ' && origence --version && origence-setup --help && origence-deploy --help')
+            shell_env = dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"])
             subprocess.run(["bash", "--noprofile", "--rcfile", str(rc), "-ic", check], cwd=root,
-                           env=dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"]),
-                           capture_output=True, timeout=15, check=True)
+                           env=shell_env, capture_output=True, timeout=15, check=True)
             if shutil.which("zsh"):
-                subprocess.run(["zsh", "-ic", check], cwd=root,
-                               env=dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"]),
+                subprocess.run(["zsh", "-ic", check], cwd=root, env=shell_env,
                                capture_output=True, timeout=15, check=True)
         else:
             actual = fresh_windows_environment()
             require(actual["OC_API_KEY"] == credentials["token"] and actual["OC_SERVER_URL"] == endpoint and
-                    actual["OC_WORKSPACE_ID"] == credentials["workspace_id"],
-                    "A fresh Windows user environment did not receive the credentials and workspace")
+                    actual["OC_WORKSPACE_ID"] == credentials["workspace_id"], "New Windows sessions must receive settings")
             origence = shutil.which("origence.exe", path=actual["PATH"])
-            require(origence is not None and Path(origence).resolve() == binary.resolve(),
-                    "A fresh Windows environment did not find the configured Origence binary")
-            subprocess.run([origence, "--version"], cwd=root, env=actual, capture_output=True, timeout=15, check=True)
-            setup = shutil.which("origence-setup.cmd", path=actual["PATH"])
-            require(setup is not None and Path(setup).resolve() == SETUP, "Windows PATH is missing origence-setup")
-        env_key = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=credentials["token"])
-        second = installer(env_key, ["--from-env", "--verify-write"], forbidden)
-        require(second["api"]["status"] == second["ui"]["status"] == "skipped" and
-                second["write-check"]["detail"] == first["write-check"]["detail"],
-                "Rerun did not reuse the listener, account and probe Run")
-        failure = installer(dict(env_key, OC_API_KEY=invalid), ["--from-env", "--force"],
-                            [*forbidden, invalid], expected=1)
-        require("401" in failure["installation"]["detail"], "Rejected key must yield an actionable 401")
-        hook_run = check_hook(binary, root / "synthetic project", env, credentials)
+            require(origence is not None and Path(origence).resolve() == binary.resolve(), "Windows PATH is missing Origence")
+            for launch in (SETUP, DEPLOY):
+                found = shutil.which(launch.name, path=actual["PATH"])
+                require(found is not None and Path(found).resolve() == launch, "Windows PATH is missing " + launch.name)
+        scoped = dict(env_key, OC_WORKSPACE_ID=credentials["workspace_id"])
+        check_codex(codex, root / "Codex synthetic project", scoped, credentials, forbidden)
+        hook_run = check_hook(binary, root / "Claude synthetic project", env, credentials)
         if browser:
             check_browser(env, credentials, hook_run, forbidden)
-        check_existing_api(binary, claude, root, env, credentials, forbidden)
-        reader, _ = request(endpoint + "/admin/keys", headers={"Authorization": "Bearer " + credentials["token"]},
-                            payload={"workspace_id": credentials["workspace_id"], "role": "reader"})
-        forbidden.append(reader["token"])
-        read_only = installer(dict(env_key, OC_API_KEY=reader["token"]),
-                              ["--from-env", "--force", "--verify-write"], forbidden)
-        require(read_only["whoami"]["detail"]["role"] == "reader" and
-                read_only["write-check"]["status"] == "skipped" and read_only["api"]["status"] == "skipped",
-                "An existing listener and a reader key must support login without a write")
-        # Explicit replacement stores the old directory before creating any workspace.
+
+        if WINDOWS:
+            # The Windows runner obtains its Node version on the job PATH.
+            node = Path(shutil.which("node.exe", path=env["PATH"])).parent
+            launch_path = os.pathsep.join((str(node), actual["PATH"]))
+            installer(dict(env, PATH=launch_path), ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
+            require(registry_values() == registry_before, "Setup uninstall must restore original registry values")
+        else:
+            with rc.open("a", encoding="utf-8") as handle:
+                handle.write("\n# added after agent setup")
+            installer(env, [], forbidden, cwd=root,
+                      entry=["bash", "--noprofile", "--rcfile", str(rc), "-ic", "origence-setup uninstall"])
+            require(rc.read_text(encoding="utf-8") == previous_shell + "\n# added after agent setup",
+                    "Setup uninstall must restore shell settings and preserve later edits")
+        require(json.loads(state.read_text(encoding="utf-8"))["deploy"] == deployed,
+                "Setup uninstall altered deployment ownership or settings")
+        identity, _ = request(endpoint + "/v1/whoami", headers={"Authorization": "Bearer " + credentials["token"]})
+        require(identity["workspace_id"] == credentials["workspace_id"], "Setup uninstall stopped the deployed API")
+        with urlopen(credentials["ui"] + "/", timeout=10) as response:
+            require(response.status == 200, "Setup uninstall stopped the deployed console")
+        for cli in (claude, codex):
+            inventory = subprocess.run([str(cli), "plugin", "list", "--json"], cwd=root, env=env,
+                                       capture_output=True, encoding="utf-8", timeout=30, check=True)
+            sanitized(inventory.stdout + inventory.stderr, forbidden)
+            require(PLUGIN not in inventory.stdout, "Agent uninstall left an owned plugin installed")
+        inventory = subprocess.run([str(codex), "mcp", "list", "--disable", "plugins", "--json"], cwd=root, env=env,
+                                   capture_output=True, encoding="utf-8", timeout=30, check=True)
+        require(not any(item["name"] == "origence" for item in json.loads(inventory.stdout)),
+                "Agent uninstall left its owned Codex override")
+        repeat = installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
+        require(repeat["uninstall"]["status"] == "skipped", "Rerunning Agent uninstall must skip")
+
         (data / "preserve-me").write_text("backup fixture", encoding="utf-8")
-        replacement = installer(env, [*paths, "--force", "--init", "Other synthetic"], forbidden)
+        replacement = installer(env, ["install", *deploy_args, "--force", "--init", "Other synthetic"],
+                                forbidden, entry=deploy_cmd, cwd=root)
         backup = Path(replacement["backup"]["detail"])
         require((backup / "preserve-me").read_text(encoding="utf-8") == "backup fixture" and
                 replacement["whoami"]["detail"]["workspace_id"] != credentials["workspace_id"],
                 "Force plus init must preserve the original data and bind the new workspace")
-        config = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))["config"]
+        config = json.loads(state.read_text(encoding="utf-8"))["deploy"]["config"]
         forbidden.extend([config["token"], config["password"]])
         sanitized(replacement, forbidden)
-        if not WINDOWS:
-            with rc.open("a", encoding="utf-8") as handle:
-                handle.write("\n# added after installation")
-        if WINDOWS:
-            removed = installer(dict(env, PATH=actual["PATH"]), ["uninstall"], forbidden, entry=[setup], cwd=root)
-        else:
-            removed = installer(env, [], forbidden, cwd=root,
-                                entry=["bash", "--noprofile", "--rcfile", str(rc), "-ic", "origence-setup uninstall"])
-        require(removed["uninstall"]["status"] == "success",
-                "origence-setup must roll back from outside the repository")
-        repeated = installer(env, ["uninstall"], forbidden, entry=[str(SETUP)], cwd=root)
-        require(repeated["uninstall"]["status"] == "skipped", "Rerunning uninstall must be a no-op")
+        new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
+        installer(new_env, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        agent = json.loads(state.read_text(encoding="utf-8"))["agent"]
+        installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
+        remaining = json.loads(state.read_text(encoding="utf-8"))
+        require("deploy" not in remaining and remaining["agent"] == agent,
+                "Deployment uninstall must leave Agent settings and ownership alone")
         require((data / "context.db").is_file() and (backup / "context.db").is_file(),
-                "Uninstall must preserve both live and backed-up data")
-        if WINDOWS:
-            require(registry_values() == registry_before, "Uninstall must restore Windows user registry values and kinds")
-        else:
-            require(rc.read_text(encoding="utf-8") == previous_shell + "\n# added after installation",
-                    "Uninstall must restore the old shell settings and preserve later edits")
-        require(not (state_dir / "state.json").exists(), "Uninstall retained active installer settings")
-        install_list = subprocess.run([str(claude), "plugin", "list", "--json"], cwd=root, env=env,
-                                      capture_output=True, encoding="utf-8", timeout=30, check=True)
-        require(not any(item.get("id") == PLUGIN for item in json.loads(install_list.stdout)),
-                "Uninstall left the installer-owned plugin enabled")
-        print("PASS standalone setup, native Claude MCP, UI login, Hook Run, idempotence, 401, backup, and uninstall rollback")
+                "Deployment uninstall must preserve both live and backed-up data")
+        user_url = "http://127.0.0.1:20123/mcp"
+        subprocess.run([str(codex), "mcp", "add", "origence", "--url", user_url, "--bearer-token-env-var",
+                        "OC_API_KEY"], cwd=root, env=env, capture_output=True, timeout=30, check=True)
+        result = installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
+        require(result["codex-mcp"]["status"] == "skipped", "Uninstall must preserve a user-edited Codex entry")
+        inventory = subprocess.run([str(codex), "mcp", "get", "origence", "--json"], cwd=root, env=env,
+                                   capture_output=True, encoding="utf-8", timeout=30, check=True)
+        require(json.loads(inventory.stdout)["transport"]["url"] == user_url,
+                "Agent uninstall removed a user-edited Codex entry")
+        require(not state.exists(), "Both uninstalls left an active journal")
+        print("PASS split deployment and Agent setup, native Claude/Codex MCP, Hook Run, backups, and isolated rollback")
     finally:
-        if (state_dir / "state.json").exists():
-            installer(env, ["--uninstall"], forbidden)
+        if state.exists():
+            installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
+            installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--claude", type=Path, required=True)
+    parser.add_argument("--codex", type=Path, required=True)
     parser.add_argument("--browser", action="store_true", help="Also use Playwright Chromium to inspect the Hook Run.")
     parser.add_argument("--allow-windows-user-env", action="store_true",
                         help="Permit registry writes and restoration in a disposable Windows runner account.")
@@ -290,4 +346,4 @@ if __name__ == "__main__":
             shutil.copy2(args.binary, binary)
         else:
             binary.symlink_to(args.binary.absolute())
-        smoke(binary, args.claude.absolute(), root, args.browser)
+        smoke(binary, args.claude.absolute(), args.codex.absolute(), root, args.browser)
