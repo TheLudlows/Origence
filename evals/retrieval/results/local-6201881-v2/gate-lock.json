@@ -1,0 +1,12 @@
+{
+  "calibration": "development",
+  "rule": "withhold successful output when the highest authorized native vector hit is below the threshold",
+  "threshold": 0.5508528947830201,
+  "meets_development_guardrail": true,
+  "max_development_loss": 0.01,
+  "candidate_count": 8,
+  "raw_sha256": {
+    "vector": "cc1b9d2b093b9227d9d846770dde9b894a8638137889804dc01a0c8640c38ae2",
+    "hybrid-original": "35d87e4be9a9790f283409bf75e2061f4d48cdd0ea53deabdd94dea0818785db"
+  }
+}

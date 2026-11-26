@@ -127,7 +127,11 @@ def main():
     parser.add_argument("--allow-model-calls", action="store_true",
                         help="Explicitly enable model calls using OC_* configuration; may incur cost")
     parser.add_argument("--components", choices=["original", "summary", "graph", "all"], default="all")
-    parser.add_argument("--matrix", action="store_true", help="Compare six branches on one immutable publication")
+    parser.add_argument("--matrix", nargs="?", const="all", choices=["all", "original"],
+                        help="Compare all six branches, or keyword/vector/original hybrid, on one publication")
+    parser.add_argument("--local", action="store_true", help="Use the embedded AnySeek Catalog")
+    parser.add_argument("--resolve-no-answer", action="store_true",
+                        help="Also collect resolve outcomes and timings on no-answer cases")
     parser.add_argument("--budget", type=int, default=2000, help="Shared resolve UTF-8 byte budget (not exact model tokens)")
     parser.add_argument("--require-evidence", action="store_true")
     parser.add_argument("--model-metadata", help="JSON with model revisions, inference policy and local inference cost")
@@ -183,10 +187,14 @@ def main():
             if key.startswith("OC_"):
                 del env[key]
         env["OC_ENABLE_MODELS"] = "false"
-    configure_fixture(env)
+    if not args.local:
+        configure_fixture(env)
     manifest = {"schema_version": 2, "commit": args.commit, "platform": platform.platform(),
                 "mode": "matrix" if args.matrix else args.mode, "k": args.k,
+                "matrix_variant": args.matrix,
                 "components": args.components, "budget_bytes": args.budget, "model_calls_enabled": args.allow_model_calls,
+                "anyseek_backend": "embedded" if args.local else "http",
+                "resolve_no_answer": args.resolve_no_answer,
                 "corpus_sha256": hashlib.sha256(Path(args.corpus).read_bytes()).hexdigest(),
                 "cases_sha256": hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
                 "embedding_model": env.get("OC_EMBEDDING_MODEL"),
@@ -213,8 +221,10 @@ def main():
             if bootstrap.returncode:
                 raise RuntimeError("workspace bootstrap failed")
             token = json.loads(bootstrap.stdout)["token"]
-            process = subprocess.Popen([binary, "serve", "--bind", "127.0.0.1:0"], env=env,
-                                       stdout=hostlog, stderr=hostlog, text=True)
+            serve = [binary, "serve", "--bind", "127.0.0.1:0"]
+            if args.local:
+                serve.append("--local")
+            process = subprocess.Popen(serve, env=env, stdout=hostlog, stderr=hostlog, text=True)
             try:
                 deadline = time.monotonic() + 120
                 base = None
@@ -288,6 +298,8 @@ def main():
                                   ("hybrid-summary", "hybrid", "summary"),
                                   ("hybrid-graph", "hybrid", "graph"),
                                   ("hybrid-all", "hybrid", "all")] if args.matrix else [(args.mode, args.mode, args.components)]
+                if args.matrix == "original":
+                    configurations = configurations[:3]
                 comparisons = {}
                 for label, mode, components in configurations:
                     usage_before_query = usage()
@@ -323,7 +335,7 @@ def main():
                                     record["false_positive"] = None
                             record["elapsed_ms"] = (time.perf_counter() - started) * 1000
                             started = time.perf_counter()
-                            if record["status"] == "ok" and evidence:
+                            if record["status"] == "ok" and (evidence or args.resolve_no_answer):
                                 try:
                                     context = request("/v1/resolve", {k: v for k, v in body.items() if k != "limit"}
                                                       | {"budget_tokens": args.budget})
@@ -335,7 +347,7 @@ def main():
                                                    "fully_covered": int(coverage == 1), "context_bytes": rendered_bytes})
                                 except (RuntimeError, urllib.error.URLError, TimeoutError, KeyError, ValueError):
                                     record.update({"resolve_status": "error", "coverage": 0, "fully_covered": 0})
-                            elif evidence:
+                            elif evidence or args.resolve_no_answer:
                                 record.update({"resolve_status": "not_run", "coverage": 0, "fully_covered": 0})
                             record["resolve_elapsed_ms"] = (time.perf_counter() - started) * 1000
                             records.append(record)

@@ -7,6 +7,13 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · #149 中文检索质量回归
+
+主干 `6201881` 的 S1 v2 三模式共完成 900 次 search 和 900 次 resolve，错误为 0。
+试验门槛下，两种语义模式的留出误召回仍各为 4/4，原文覆盖降至 98.96%。
+44 项 Python 评估测试、Rust 格式与严格 Clippy、逐题复算、权限和来源撤回验证通过。
+[复跑报告与证据](../evals/retrieval/results/local-6201881-v2/README.md)
+
 ## 2026-11-26 · Agent 接入与本地部署拆分
 
 基于 main `13e2a4cb7bea7e97f67525d138453b6f9a0fdba1` 在 Linux 上复跑原生 Claude Code、Codex

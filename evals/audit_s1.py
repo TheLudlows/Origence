@@ -10,22 +10,26 @@ parser.add_argument('--dataset',default='evals/retrieval/v2')
 args=parser.parse_args()
 root=Path(args.run)
 dataset=Path(args.dataset)
-frozen=json.loads((dataset/'manifest.json').read_text())
+frozen=json.loads((dataset/'manifest.json').read_bytes())
 for name,digest in frozen['sha256'].items():
     assert hashlib.sha256((dataset/name).read_bytes()).hexdigest()==digest,name
-gold={c['id']:c for c in map(json.loads,(dataset/'cases.jsonl').read_text().splitlines())}
+gold={c['id']:c for c in map(json.loads,(dataset/'cases.jsonl').read_bytes().splitlines())}
 configs={'keyword':('keyword',False,False),'vector':('vector',False,False),'hybrid-original':('hybrid',False,False),'hybrid-summary':('hybrid',True,False),'hybrid-graph':('hybrid',False,True),'hybrid-all':('hybrid',True,True)}
-mapping={r['asset_id']:r['source_id'] for r in json.loads((root/'imports.json').read_text())}
-corpus={d['id']:d for d in map(json.loads,(dataset/'corpus.jsonl').read_text().splitlines())}
+run_manifest=json.loads((root/'manifest.json').read_bytes())
+if run_manifest.get('matrix_variant')=='original':
+    configs={name:configs[name] for name in ('keyword','vector','hybrid-original')}
+mapping={r['asset_id']:r['source_id'] for r in json.loads((root/'imports.json').read_bytes())}
+corpus={d['id']:d for d in map(json.loads,(dataset/'corpus.jsonl').read_bytes().splitlines())}
 assert len(mapping)==36 and set(mapping.values())==set(corpus)
-comparison=json.loads((root/'comparison.json').read_text())
+comparison=json.loads((root/'comparison.json').read_bytes())
+assert set(comparison)==set(configs)
 checks={}
 for name,(mode,summaries,graph) in configs.items():
-    rows=list(map(json.loads,(root/name/'results.jsonl').read_text().splitlines()))
+    rows=list(map(json.loads,(root/name/'results.jsonl').read_bytes().splitlines()))
     assert len(rows)==300 and {r['id'] for r in rows}==set(gold)
     metrics=[]
     scored=[]
-    manifest=json.loads((root/name/'manifest.json').read_text())
+    manifest=json.loads((root/name/'manifest.json').read_bytes())
     assert manifest['k']==5 and manifest['budget_bytes']==2000
     assert manifest['corpus_sha256']==frozen['sha256']['corpus.jsonl']
     assert manifest['cases_sha256']==frozen['sha256']['cases.jsonl']
@@ -42,6 +46,11 @@ for name,(mode,summaries,graph) in configs.items():
         relevant=set(case['relevant_source_ids'])
         if not relevant:
             assert r['false_positive']==bool(ranked)
+            if manifest.get('resolve_no_answer'):
+                assert r['resolve_status']=='ok'
+                context=r['context']
+                assert context['effective_mode']==mode and context['active_components']==response['active_components']
+                assert len(context['rendered_context'].encode())==context['count']<=2000
             continue
         recall=len(relevant.intersection(ranked))/len(relevant)
         ranks=[i+1 for i,x in enumerate(ranked) if x in relevant]
@@ -79,6 +88,16 @@ for name,(mode,summaries,graph) in configs.items():
             assert abs(expected[key]-sum(v[i] for v in subset)/len(subset))<1e-12,(name,split,key)
         negatives=[r for r in rows if r['split']==split and not r['relevant_source_ids']]
         assert expected['no_answer_false_positives']==sum(bool(r['ranked_source_ids']) for r in negatives)
+        split_rows = [row for row in rows if row['split'] == split]
+        for status_field, elapsed_field, metric in (
+            ('status', 'elapsed_ms', 'successful_request_latency_ms'),
+            ('resolve_status', 'resolve_elapsed_ms', 'successful_resolve_latency_ms'),
+        ):
+            timings = sorted(row[elapsed_field] for row in split_rows if row.get(status_field) == 'ok')
+            for quantile in (50, 95, 99):
+                rank = math.ceil(quantile * len(timings) / 100)
+                value = timings[rank - 1] if timings else None
+                assert expected[metric][f'p{quantile}'] == value, (name, split, metric, quantile)
     assert comparison[name]['no_answer_false_positives']==sum(bool(r['ranked_source_ids']) for r in rows if not r['relevant_source_ids'])
     assert comparison[name]['fully_covered_at_budget']==sum(v[4]==1 for v in metrics)/len(metrics)
     checks[name]={'cases':len(rows),'answerable':len(metrics),'errors':0,'independent_metric_recalculation':'all per-case and aggregate values match','disabled_components':'verified on actual search/resolve responses'}

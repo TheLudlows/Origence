@@ -1,0 +1,1 @@
+PASS: three modes preserve workspace and source withdrawal; model outage returns HTTP 503
