@@ -35,7 +35,8 @@ Claude Code 和 Codex 插件通过 Origence 服务端的 `/mcp` 检索和调用�
 Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提示上下文。
 两端插件默认安装检索 MCP 和私有 Run Hook。Hook 按 MCP 的工作区选择使用有写权限的凭据，
 并通过有界私有队列和 Run API 上报元数据。MCP 仅在调用方显式传递同一 Run 标识时合用。
-接入与事件边界见[客户端接入](CLIENTS.md#验证默认-run-hook)。Windows 原生安装、真实模型与正式试点仍待验收。
+接入与事件边界见[客户端接入](CLIENTS.md#验证默认-run-hook)。原生 Windows runner 已通过合成数据的安装、跨工作区检索、
+历史版本读取和默认 Hook，见 [VALIDATION](VALIDATION.md)。正式冻结因题集、模型授权和独立角色缺失而阻塞。
 自动会话正文归档保留在 [#105 后续规划](https://github.com/TheLudlows/Origence/issues/105)。
 
 ## 多 workspace API 凭据

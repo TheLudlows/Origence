@@ -7,6 +7,23 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · Windows 原生插件与试点准备
+
+产品基线为 main `318e17178a8c4a24d3000bc3caa6d3250019eb10`，验收脚本提交
+`7116d909df38d3248de9914fc47c3f713d63ba60`。GitHub 原生 Windows Server 2025 x64
+（NT 10.0.26100.0）用 Rust 1.98.0 构建并运行 `tools/plugin_smoke.py`。Claude Code 2.1.330 和
+Codex 0.171.0 均从本地 Marketplace 安装，在默认 8080 端口与非默认回环端口通过。
+两端以同一 reader Key 分别检索默认和选定工作区，搜索命中 v2 时仍能精确读回历史 v1，且检索不需要
+客户端 PATH 中的 Origence。writer Hook 只在选定工作区留下私有 Run。验证了 reader 不留 Run、卸载、
+无效和缺失凭据诊断。CI 日志含三个原生二进制的 SHA-256。
+[Windows 运行](https://github.com/TheLudlows/Origence/actions/runs/45778860377)
+
+Linux 对同一夹具复跑，两种端口通过。客户端执行使用合成数据、隔离设置与回环脚本模型。
+#89 的 HTTP 回归与 Chromium 检查通过，覆盖准备 v2、精确前缀、外部核验转录、撤回和越权。
+#76 的 Chromium 触控模拟、键盘焦点、无障碍状态和 28 项 UI 测试通过。实际读屏与实体触屏仍是待验收项。
+#91 完成 58 项 Python 试点测试和公开准备表复跑，正式冻结因材料、模型授权和独立角色缺失标记为
+`BLOCKED`。正式双场景试点及独立签认为 `NOT_RUN`。 [冻结准备记录](../evals/pilot/FREEZE-READINESS.md)
+
 ## 2026-11-26 · 客户端插件切换到 HTTP MCP
 
 基于 PR #139 的 `3d99e7e1c6220a2e7810e4b2921a707730cff6e4`。Linux x86_64，Rust 1.98.0。

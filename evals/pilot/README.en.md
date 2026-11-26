@@ -6,6 +6,7 @@ Claude Code makes the first attempt for database troubleshooting and Codex repea
 
 | Task | Where to start |
 | --- | --- |
+| Check current freeze fields, blockers, and synthetic preflight | [Freeze readiness (Chinese)](FREEZE-READINESS.md) |
 | Generate development tasks or seal unseen tasks, then fill out and check scoring sheets | [Runbook](RUNBOOK.en.md#question-sets-and-scoring-tables) |
 | Run a public preflight with real clients | [Reproduction commands](PREFLIGHT.en.md) |
 | Freeze conditions, run P1–P7, recover, and clean up | [Runbook](RUNBOOK.en.md) · [Freeze template](freeze.template.json) · [Sign-off template](signoff.template.json) |

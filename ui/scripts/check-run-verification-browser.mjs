@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createUiServer } from '../dist/server.js';
 const run = '22222222-2222-4222-8222-222222222222';
+const asset = '11111111-1111-4111-8111-111111111111';
 let withdrawn = false;
 const upstream = createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -28,9 +29,9 @@ const upstream = createServer((req, res) => {
   })), next_after: null });
   return send({ run: { run_id: run, summary: 'synthetic private run' }, next_after: null, events: [
     { sequence: 1, recorded_at_ms: 1000, evidence_origin: 'server_prepared',
-      report: { kind: 'context_prepared', citations: [{ type: 'asset_chunk', asset_version: 2 }] }, references: [] },
+      report: { kind: 'context_prepared', citations: [{ type: 'asset_chunk', asset_id: asset, asset_version: 2 }] }, references: [] },
     { sequence: 2, recorded_at_ms: 2000, evidence_origin: 'reported',
-      report: { reporter: 'user', event: { kind: 'result_reported', outcome: 'success' } }, references: [] },
+      report: { reporter: 'client', event: { kind: 'result_reported', outcome: 'success' } }, references: [] },
   ] });
 });
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -82,32 +83,44 @@ try {
     const { api } = await import('/client/api.js'); api.setToken(${JSON.stringify(key)});
     const { runsPage } = await import('/client/runs.js');
     document.body.replaceChildren(); const root = document.createElement('main'); document.body.append(root);
-    await runsPage(root, { signal: new AbortController().signal, role: 'admin', navigate() {} }, '${run}');
+    await runsPage(root, {
+      signal: new AbortController().signal, role: 'admin',
+      navigate(...args) { window.fixtureNavigation = args; },
+    }, '${run}');
     return root.innerText;
   })()`);
-  const text = await render('synthetic-owner');
+  async function waitForBody(marker) {
+    for (let i = 0; i < 100; i++) {
+      const text = await evaluate('document.body.innerText');
+      if (text.includes(marker)) return text;
+      await delay(50);
+    }
+    assert.fail(`Browser never rendered ${marker}`);
+  }
+  await render('synthetic-owner');
+  const text = await waitForBody('外部结论：无法确定');
   for (const expected of ['服务端准备成功', '外部结论：通过', '外部结论：失败', '外部结论：无法确定',
-    '已撤销的外部核验', '实际使用的 Skill 版本：未知', '平台未核验其结论', '<img src=x> external assessor']) {
+    '已撤销的外部核验', '实际使用的 Skill 版本：未知', '平台未核验其结论', '<img src=x> external assessor',
+    '固定前缀：1–2', '依据事件：1, 2', 'a'.repeat(64)]) {
     assert.ok(text.includes(expected), expected);
   }
   assert.equal(await evaluate('document.querySelectorAll("img").length'), 0);
-  assert.ok(await evaluate(`document.querySelector('.timeline button:nth-child(2)').click(); document.body.innerText.includes('user；未经独立验证') && document.body.innerText.includes('success')`));
+  assert.deepEqual(await evaluate(`
+    document.querySelector('.timeline button[data-sequence="1"]').click();
+    [...document.querySelectorAll('button')].find(b => b.textContent.endsWith('· v2')).click();
+    window.fixtureNavigation
+  `), ['asset', asset, 2]);
+  assert.ok(await evaluate(`document.querySelector('.timeline button:nth-child(2)').click(); document.body.innerText.includes('客户端上报；未经独立验证') && document.body.innerText.includes('success')`));
   withdrawn = true;
   await evaluate(`document.querySelectorAll('button').forEach(b => { if(b.textContent === '刷新核验记录') b.click(); })`);
-  let after;
-  for (let i = 0; i < 100; i++) {
-    after = await evaluate('document.body.innerText');
-    if (after.includes('synthetic source withdrawn')) break;
-    await delay(50);
-  }
-  assert.ok(after.includes('synthetic source withdrawn'));
+  const after = await waitForBody('synthetic source withdrawn');
   assert.ok(!after.includes('synthetic private assessment'));
   withdrawn = false;
   const denied = await render('synthetic-other');
   assert.ok(denied.includes('synthetic key denied'));
   assert.ok(!denied.includes('synthetic private run'));
   assert.ok(!denied.includes('synthetic private assessment'));
-  console.log('PASS Chromium: distinct preparation/report/external conclusions; unverified attribution; unknown version; retraction; escaped text; withdrawn-source refresh clears assessment; cross-Key denial.');
+  console.log('PASS Chromium: fixed v2 navigation and prefix; distinct preparation/report/external conclusions; unverified attribution; unknown version; retraction; escaped text; withdrawn-source refresh clears assessment; cross-Key denial.');
 } finally {
   socket?.close();
   if (browser && browser.exitCode === null) { const stopped = once(browser, 'exit'); browser.kill(); await stopped; }
