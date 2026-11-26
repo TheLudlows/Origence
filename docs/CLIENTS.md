@@ -4,6 +4,8 @@
 
 Claude Code 和 Codex 通过 Origence 服务端的 Streamable HTTP MCP 检索。可直接注册端点，或安装带自动 Run Hook 的插件。
 
+用[本地安装器](INSTALLER.md)一次配置 API 和 Key，自动完成 Claude Code 插件、Run Hook 环境和控制台账号。
+
 ## 直连 HTTP MCP
 
 HTTP 宿主提供 Streamable HTTP MCP 端点 `/mcp`。在客户端的启动环境设置工作区 API Key

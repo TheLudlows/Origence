@@ -4,6 +4,39 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Origence local installer
+
+Based on main `b4e8879fa952b5afd729fd5b89a630c6d5705696`, Linux x86_64, Rust 1.98.0,
+Node.js 24.22.1, native Claude Code 2.1.330 and Chromium 156.0.8078.79.
+The installer started the live local API and console on non-default ports with spaces in the binary
+and data paths. MCP initialization, all 11 tools, and session identity passed. Claude Code reported
+the installed plugin connected. Chromium signed in with the generated account and read the Run
+recorded by the real hook executable from a synthetic event. New Bash and Zsh processes loaded the
+persisted settings. Reruns reused listeners and the probe Run, the reader key skipped the write,
+an invalid key returned 401, reinitialization backed up the old database, and uninstall restored
+shell settings while preserving a subsequent unrelated edit. A new install reused a running API
+and left it up on uninstall. A clean distribution built the console and installed the pinned Claude
+package via npm. Strict Clippy, 215 local Rust integration tests, Node type checking, 29 UI tests,
+and the existing native two-client synthetic plugin check on a non-default port passed.
+
+Reproduce with `python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude`.
+Set `NODE_PATH` and `CHROMIUM` and add `--browser` for the Chromium check. The run used loopback
+and synthetic events with no live model. The native Windows acceptance workflow can exercise registry
+rollback and fresh process inheritance. Windows and macOS paths have not yet been executed for this installer.
+[Installer guide](INSTALLER.en.md)
+
+On installer commit `6f8bf7a`, reran the Linux native Claude Code and Chromium acceptance.
+`origence uninstall` rolled back shell and PATH changes from outside the checkout and preserved the database
+and backup. A repeated call skipped, and legacy state pointed to the script. Rust formatting and strict Clippy passed.
+
+Based on main `2c8a7147a7b4f2c6fadd447a256a726d65ba3abc`, standalone `origence-setup install`
+and `origence-setup uninstall` passed the native Claude Code and Chromium integration on Linux.
+Setup launched outside the checkout, new Bash and Zsh processes found it on PATH, and uninstall
+ran outside the checkout. Repeated uninstall skipped. Rollback restored user settings and preserved
+the database and backup. The backend help had no setup commands. Rust formatting, strict Clippy,
+Node type checking and 30 UI tests passed. The Windows .cmd entry is wired into the native workflow
+and has yet to run.
+
 ## 2026-11-26 · Codex commands and Claude SDK cancellation
 
 Tested `2396dfa3ffd303c0cbfbd63068930fb36926ab8b` on main
