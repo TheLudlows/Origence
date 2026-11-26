@@ -1,7 +1,9 @@
-$ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$request = [Console]::In.ReadToEnd() | ConvertFrom-Json
+function Write-Json($value) {
+    $writer = [IO.StreamWriter]::new([Console]::OpenStandardOutput(), $utf8)
+    $writer.WriteLine((ConvertTo-Json -InputObject $value -Compress -Depth 4))
+    $writer.Flush()
+}
+
 if ($request.action -eq 'protect') {
     $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User
     if ($request.file) {
@@ -20,7 +22,7 @@ if ($request.action -eq 'protect') {
 $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
 try {
     if ($request.action -eq 'machine-path') {
-        @{ value = [Environment]::GetEnvironmentVariable('Path', 'Machine') } | ConvertTo-Json -Compress
+        Write-Json @{ value = [Environment]::GetEnvironmentVariable('Path', 'Machine') }
     } elseif ($request.action -eq 'read') {
         $values = @{}
         foreach ($name in $request.names) {
@@ -29,7 +31,7 @@ try {
                 @{ value = [string]$value; kind = $key.GetValueKind($name).ToString() }
             } else { $null }
         }
-        ConvertTo-Json -InputObject $values -Compress -Depth 4
+        Write-Json $values
     } elseif ($request.action -eq 'write') {
         foreach ($value in $request.values.PSObject.Properties) {
             if ($null -eq $value.Value) { $key.DeleteValue($value.Name, $false) }
