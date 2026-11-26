@@ -168,7 +168,7 @@ export function writeUserEnvironment(state, vars, dirs) {
   const machine = windowsSettings({ action: "machine-path" }).value;
   const userPath = prependPath(current.Path?.value, dirs);
   const effectivePath = [machine, userPath].filter(Boolean).join(delimiter);
-  for (const name of ["origence", "origence-setup"]) {
+  for (const name of ["origence", "origence-setup", "origence-deploy"]) {
     check(executable(name, effectivePath) === executable(name, userPath),
       `A different ${name} is earlier in the Windows machine PATH. Fix its priority before installing.`);
   }

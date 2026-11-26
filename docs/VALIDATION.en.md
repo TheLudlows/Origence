@@ -4,6 +4,19 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Separate Agent setup and local deployment
+
+On main `13e2a4cb7bea7e97f67525d138453b6f9a0fdba1`, Linux tested native Claude Code, Codex, and
+Chromium. Deployment started the API and console. Agent setup connected both clients while the
+console was running, with Codex using a non-default API port. The smoke test checked legacy journal
+upgrade, repeat install, invalid credentials, Hook Run readback, independent rollback, retention
+of a user-edited Codex MCP entry, and data backup. Node type checking, 30 UI tests, Rust formatting,
+and strict Clippy passed. The native Windows workflow includes the split test, which has yet to
+run on Windows or macOS. [Installation guide](INSTALLER.en.md)
+
+Run `python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude --codex /path/to/codex`.
+Add `--browser` and set `NODE_PATH` and `CHROMIUM` for Chromium.
+
 ## 2026-11-26 · Origence local installer
 
 Based on main `b4e8879fa952b5afd729fd5b89a630c6d5705696`, Linux x86_64, Rust 1.98.0,

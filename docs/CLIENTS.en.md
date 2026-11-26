@@ -4,7 +4,7 @@
 
 Claude Code and Codex use Origence's Streamable HTTP MCP endpoint for retrieval. Register it directly or install the plugin with an automatic Run hook.
 
-Use the [local installer](INSTALLER.en.md) to configure the Claude Code plugin, Run hook environment, and console account with one API endpoint and key.
+Use [`origence-setup`](INSTALLER.en.md#connect-an-agent) to configure the Claude Code or Codex plugin and Run hook environment. Use `origence-deploy` to run the API and console locally.
 
 ## Direct HTTP MCP
 
