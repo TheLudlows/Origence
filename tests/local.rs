@@ -45,6 +45,8 @@ mod pdf_fixture;
 mod retrieval_diagnostics;
 
 #[cfg(feature = "local-storage")]
+mod mcp_http;
+#[cfg(feature = "local-storage")]
 mod mcp_runs;
 
 #[cfg(feature = "local-storage")]

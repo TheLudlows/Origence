@@ -48,6 +48,19 @@ Run `origence --offline workspace-create NAME`, save the returned token, and the
 
 Origence reads process environment variables. It does not load `.env` automatically. Compose reads `.env`. Keep model credentials, API tokens, and `.env` out of Git. See origence --help for command arguments and the next section for local model setup.
 
+## Remote MCP
+
+`origence serve` exposes `/mcp` on the same listener. The endpoint accepts loopback Host values by
+default. For remote use, terminate TLS at a reverse proxy, preserve the external `Host`, and set
+`OC_MCP_PUBLIC_ORIGIN=https://origence.example.com`. Include a non-default HTTPS port in both the
+origin and the forwarded Host. Restrict the upstream listener to the trusted proxy. Native clients
+normally omit `Origin`. A request that carries one must match the configured HTTPS origin exactly.
+
+The Streamable HTTP endpoint is stateless. Every POST rechecks the bearer key and workspace and
+has a 1 MiB request-body limit. It returns JSON and does not allocate transport session IDs. GET and
+DELETE return 405. Origence's `context_session` archive remains scoped to the workspace and logical
+key. See [client commands](CLIENTS.en.md#direct-http-mcp).
+
 ## AnySeek full-text and vector retrieval
 
 Full-text, vector, and one-hop graph candidates come only from AnySeek. SQLite decides versions, permissions, sources, and visibility. Published text and summary text are persisted in the same AnySeek collection. Claude Code and Codex need only an Origence key. See [client integration](CLIENTS.en.md).

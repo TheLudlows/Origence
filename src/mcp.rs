@@ -1,7 +1,7 @@
 use crate::{
     service::Service,
     session::SessionTurnInput,
-    types::{ResolveInput, SearchInput},
+    types::{AuthContext, ResolveInput, SearchInput},
 };
 use rmcp::{
     ErrorData, ServiceExt,
@@ -17,6 +17,7 @@ pub struct ContextMcp {
     service: Option<Service>,
     client: Option<crate::client::HostClient>,
     token: String,
+    http_identity: Option<AuthContext>,
     tool_router: ToolRouter<Self>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -81,30 +82,53 @@ impl ContextMcp {
             service: Some(service),
             client: None,
             token,
+            http_identity: None,
             tool_router: Self::tool_router(),
         }
     }
-    fn run_client(&self) -> std::result::Result<&crate::client::HostClient, ErrorData> {
-        self.client
+
+    pub(crate) fn from_http(service: Service, identity: AuthContext) -> Self {
+        Self {
+            service: Some(service),
+            client: None,
+            token: String::new(),
+            http_identity: Some(identity),
+            tool_router: Self::tool_router(),
+        }
+    }
+
+    async fn local(&self) -> std::result::Result<(&Service, AuthContext), ErrorData> {
+        let service = self.service.as_ref().expect("local MCP service");
+        let identity = match &self.http_identity {
+            Some(auth) => auth.clone(),
+            None => service.auth(&self.token).await.map_err(mcp_error)?,
+        };
+        Ok((service, identity))
+    }
+
+    fn host_run(&self) -> std::result::Result<(&Service, &AuthContext), ErrorData> {
+        self.service
             .as_ref()
+            .zip(self.http_identity.as_ref())
             .ok_or_else(|| ErrorData::invalid_request("Run tools require --server-url", None))
     }
 
     #[tool(
-        description = "Create a private task Run via the host. Reuse run_id and identical summary on retry. Each task gets a separate Run; same logical key shares its archive. Requires --server-url and writer access."
+        description = "Create a private task Run via the host. Reuse run_id and identical summary on retry. Each task gets a separate Run; same logical key shares its archive. Requires writer access."
     )]
     async fn context_run_create(
         &self,
         Parameters(input): Parameters<RunCreateInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
-        result(
-            self.run_client()?
-                .create_run(&crate::run::RunInput {
-                    run_id: run_uuid(&input.run_id)?,
-                    summary: input.summary,
-                })
-                .await,
-        )
+        let run = crate::run::RunInput {
+            run_id: run_uuid(&input.run_id)?,
+            summary: input.summary,
+        };
+        if let Some(client) = &self.client {
+            return result(client.create_run(&run).await);
+        }
+        let (service, auth) = self.host_run()?;
+        result(service.create_run(auth, run).await)
     }
 
     #[tool(
@@ -118,27 +142,30 @@ impl ContextMcp {
             serde_json::Value::Object(input.report),
         )
         .map_err(|_| ErrorData::invalid_params("invalid RunEventInput", None))?;
-        result(
-            self.run_client()?
-                .append_run_event(run_uuid(&input.run_id)?, &report)
-                .await,
-        )
+        let run = run_uuid(&input.run_id)?;
+        if let Some(client) = &self.client {
+            return result(client.append_run_event(run, &report).await);
+        }
+        let (service, auth) = self.host_run()?;
+        result(service.append_run_event(auth, run, report).await)
     }
 
     #[tool(
-        description = "Prepare context for an owned Run through the authoritative HTTP path. Records server preparation or safe failure; does not prove delivery or model use. Retry the same event_id/context; recovery after failure requires a new event_id."
+        description = "Prepare context for an owned Run. Records server preparation or safe failure; does not prove delivery or model use. Retry the same event_id/context; recovery after failure requires a new event_id."
     )]
     async fn context_run_prepare(
         &self,
         Parameters(input): Parameters<RunPrepareInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
+        let run = run_uuid(&input.run_id)?;
+        let event = run_uuid(&input.event_id)?;
+        if let Some(client) = &self.client {
+            return result(client.prepare_run_context(run, event, &input.context).await);
+        }
+        let (service, auth) = self.host_run()?;
         result(
-            self.run_client()?
-                .prepare_run_context(
-                    run_uuid(&input.run_id)?,
-                    run_uuid(&input.event_id)?,
-                    &input.context,
-                )
+            service
+                .prepare_run_context(auth, run, event, input.context)
                 .await,
         )
     }
@@ -150,15 +177,13 @@ impl ContextMcp {
         &self,
         Parameters(input): Parameters<RunReadInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
-        result(
-            self.run_client()?
-                .run_trace(
-                    run_uuid(&input.run_id)?,
-                    input.after,
-                    input.limit.unwrap_or(50),
-                )
-                .await,
-        )
+        let run = run_uuid(&input.run_id)?;
+        let limit = input.limit.unwrap_or(50);
+        if let Some(client) = &self.client {
+            return result(client.run_trace(run, input.after, limit).await);
+        }
+        let (service, auth) = self.host_run()?;
+        result(service.run_trace(auth, run, input.after, limit).await)
     }
 
     #[tool(
@@ -180,8 +205,7 @@ impl ContextMcp {
                     .await,
             );
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         result(service.search(&auth, input).await)
     }
     #[tool(
@@ -203,8 +227,7 @@ impl ContextMcp {
                     .await,
             );
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         let bundle = service
             .evidence_bundle(&auth, input)
             .await
@@ -230,8 +253,7 @@ impl ContextMcp {
                     .await,
             );
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         result(service.resolve(&auth, input).await)
     }
     #[tool(
@@ -248,8 +270,7 @@ impl ContextMcp {
                     .await,
             );
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         result(service.private_session(&auth).await)
     }
 
@@ -267,8 +288,7 @@ impl ContextMcp {
             let path = format!("/v1/sessions/{session}/turns/{turn}");
             return result(client.call(reqwest::Method::GET, &path, None, None).await);
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         let session = session_id(service.private_session(&auth).await.map_err(mcp_error)?)
             .map_err(mcp_error)?;
         result(service.session_turn(&auth, session, turn).await)
@@ -296,8 +316,7 @@ impl ContextMcp {
                     .await,
             );
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         let session = session_id(service.private_session(&auth).await.map_err(mcp_error)?)
             .map_err(mcp_error)?;
         result(service.archive_turn(&auth, &key, session, input.turn).await)
@@ -322,8 +341,7 @@ impl ContextMcp {
             );
             return result(client.call(reqwest::Method::GET, &path, None, None).await);
         }
-        let service = self.service.as_ref().expect("local MCP service");
-        let auth = service.auth(&self.token).await.map_err(mcp_error)?;
+        let (service, auth) = self.local().await?;
         let id = Uuid::parse_str(&input.asset_id)
             .map_err(|_| ErrorData::invalid_params("asset_id must be a UUID", None))?;
         result(service.get(&auth, id, input.version).await)
@@ -357,6 +375,25 @@ fn result(
 }
 #[tool_handler(router = self.tool_router)]
 impl rmcp::ServerHandler for ContextMcp {
+    async fn initialize(
+        &self,
+        request: InitializeRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> std::result::Result<InitializeResult, ErrorData> {
+        let mut info = self.get_info();
+        // The SDK's stateless transport does not run its stdio handshake negotiation.
+        if self.http_identity.is_some() {
+            let version = match request.protocol_version.as_str() {
+                "2025-03-26" => ProtocolVersion::V_2025_03_26,
+                "2025-06-18" => ProtocolVersion::V_2025_06_18,
+                _ => ProtocolVersion::V_2025_11_25,
+            };
+            info = info.with_protocol_version(version);
+        }
+        context.peer.set_peer_info(request);
+        Ok(info)
+    }
+
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -400,6 +437,7 @@ pub async fn run_remote(client: crate::client::HostClient) -> anyhow::Result<()>
         service: None,
         client: Some(client),
         token: String::new(),
+        http_identity: None,
         tool_router: ContextMcp::tool_router(),
     }
     .serve(rmcp::transport::stdio())

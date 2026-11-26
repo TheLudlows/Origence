@@ -37,7 +37,7 @@ tempfile = "3"
 [features]
 default = ["embedded-anyseek"]
 embedded-anyseek = ["local-storage", "dep:anyseek"]
-local-storage = ["sqlite"]
+local-storage = ["sqlite", "rmcp/transport-streamable-http-server"]
 sqlite = ["dep:rusqlite", "dep:fs2"]
 # Historical fixture diagnostics are opt-in and are not production acceptance.
 manual-diagnostics = ["sqlite"]

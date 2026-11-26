@@ -2,10 +2,21 @@
 
 **简体中文** · [English](VALIDATION.en.md)
 
-最近一次本地核验为 2026-11-25，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
+最近一次本地核验为 2026-11-26，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-26 · Streamable HTTP MCP
+
+基于 main `85d6264ab720437d8620d3cdb5289ace85a5942c`，Linux x86_64，Rust 1.98.0。
+格式检查通过。全特性与云端构建（`--no-default-features --features local-storage`）均通过了全目标 Clippy，警告视为错误。
+`cargo test --locked --offline` 通过 470 项，8 项既有真实 AnySeek 契约保持忽略。
+新增两项真 HTTP 回归覆盖协议协商、Host 和 Origin、请求大小限制、凭据撤销、多工作区隔离、reader
+写入拒绝、私有归档与通过公开库重放 Run 准备回执。
+
+- 原生 Claude Code 2.1.330 和 Codex CLI 0.171.0 使用[直连命令](CLIENTS.md#直连-http-mcp)。两端用临时设置目录、非默认端口以及仅通过 `OC_API_KEY` 传递的合成 reader Key，客户端 `PATH` 无 `origence`。两端均实际调用 `context_session`、`context_search` 和 `context_get`，返回正确工作区与命中的指定发布版本。Claude Code 使用回环的脚本化模型响应，Codex 通过 app-server 直接发起工具调用。
+- 本轮未在 Windows、外部 HTTPS 代理或真实模型上验收，未重跑插件 Hook。HTTPS origin 与非默认端口匹配由本地 HTTP 协议测试覆盖。
 
 ## 2026-11-25 · 工作区管理员查看 Run 状态与统计
 

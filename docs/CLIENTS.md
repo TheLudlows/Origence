@@ -2,8 +2,27 @@
 
 **简体中文** · [English](CLIENTS.en.md)
 
-两个客户端都通过本地 stdio 进程访问运行中的 Origence HTTP 宿主。客户端不直接访问
-SQLite、Blob 或 AnySeek，也不需要它们的凭据。
+Claude Code 和 Codex 可以直接连接 Origence 的 HTTP MCP，也可以安装通过本地 stdio 接入的插件。
+
+## 直连 HTTP MCP
+
+HTTP 宿主提供 Streamable HTTP MCP 端点 `/mcp`。在客户端的启动环境设置工作区 API Key
+`OC_API_KEY`。只检索已发布资料用 `reader` 权限。以下使用本机默认端口，远程部署时换成实际 HTTPS 地址。
+
+```powershell
+claude mcp add --transport http origence-http http://127.0.0.1:8080/mcp --header 'Authorization: Bearer ${OC_API_KEY}'
+```
+
+```powershell
+codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-var OC_API_KEY
+```
+
+在同一终端启动客户端，用 `/mcp` 检查连接，并调用 `context_session` 核对 `workspace_id`。
+默认使用凭据的默认工作区。要选择其他已授权工作区，在 HTTP MCP 请求中配置 `X-Origence-Workspace`
+请求头。`OC_WORKSPACE_ID` 由 stdio 适配器解释，直连的工作区选择来自请求头。
+
+直连的检索和显式工具调用无需本机 `origence`。当前自动 Run Hook 由下文的插件提供，仍需要本机二进制。
+已有 stdio 注册时，可在 `/mcp` 禁用旧的 Origence 项以免工具重复。[远程部署配置](OPERATIONS.md#远程-mcp)
 
 ## 安装 `origence` 插件
 

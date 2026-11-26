@@ -56,6 +56,17 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 
+## 远程 MCP
+
+`origence serve` 在同一个监听地址提供 `/mcp`。默认仅接受回环 `Host`。远程部署时，用反向代理终止 TLS、
+保留外部 `Host`，并设置 `OC_MCP_PUBLIC_ORIGIN=https://origence.example.com`。非默认 HTTPS 端口需保留在
+Host 和 origin 内。后端监听地址只向受信反向代理开放。原生客户端通常不发送 `Origin`。带 `Origin`
+的请求必须精确匹配配置的 HTTPS origin。
+
+`/mcp` 是无状态 Streamable HTTP。每个 POST 均重验 Bearer Key 和工作区权限，单个请求体上限 1 MiB。
+响应使用 JSON，不分配传输层会话 ID。用于 SSE 或传输会话关闭的 GET、DELETE 返回 405。
+`context_session` 返回的业务归档仍由工作区和逻辑 Key 隔离。[客户端命令](CLIENTS.md#直连-http-mcp)
+
 ## AnySeek 全文与向量
 
 全文、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。已发布正文与摘要文本由同一 AnySeek collection 持久保存。Claude Code/Codex

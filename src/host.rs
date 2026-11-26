@@ -8,16 +8,34 @@ pub async fn serve_http(
     listener: TcpListener,
     shutdown: impl Future<Output = ()>,
 ) -> anyhow::Result<()> {
+    serve_http_with_mcp(service, listener, api::McpHttpConfig::default(), shutdown).await
+}
+
+pub async fn serve_http_with_mcp(
+    service: Service,
+    listener: TcpListener,
+    mcp: api::McpHttpConfig,
+    shutdown: impl Future<Output = ()>,
+) -> anyhow::Result<()> {
     println!(
         "{}",
         serde_json::json!({"listening":listener.local_addr()?.to_string()})
     );
-    serve(service, listener, shutdown).await
+    serve_with_mcp(service, listener, mcp, shutdown).await
 }
 
 pub async fn serve(
     service: Service,
     listener: TcpListener,
+    shutdown: impl Future<Output = ()>,
+) -> anyhow::Result<()> {
+    serve_with_mcp(service, listener, api::McpHttpConfig::default(), shutdown).await
+}
+
+async fn serve_with_mcp(
+    service: Service,
+    listener: TcpListener,
+    mcp: api::McpHttpConfig,
     shutdown: impl Future<Output = ()>,
 ) -> anyhow::Result<()> {
     if let Err(error) = service.engine.check().await {
@@ -29,7 +47,7 @@ pub async fn serve(
     let mut worker = tokio::spawn(worker::run(service.clone(), rx));
     let api_service = service.clone();
     let mut server = tokio::spawn(async move {
-        axum::serve(listener, api::router(api_service))
+        axum::serve(listener, api::router_with_mcp(api_service, mcp))
             .with_graceful_shutdown(async move {
                 let mut rx = api_stop;
                 let _ = rx.wait_for(|v| *v).await;

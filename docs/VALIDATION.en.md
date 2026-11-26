@@ -2,7 +2,14 @@
 
 **English** · [简体中文](VALIDATION.md)
 
-The latest local verification was 2026-11-25. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+
+## 2026-11-26 · Streamable HTTP MCP
+
+Based on main `85d6264ab720437d8620d3cdb5289ace85a5942c`, Linux x86_64 with Rust 1.98.0. Format and all-target Clippy with warnings denied passed for all features and the cloud build (`--no-default-features --features local-storage`). `cargo test --locked --offline` passed 470 tests with 8 existing live AnySeek contracts ignored. Two new live HTTP regressions cover negotiation, Host and Origin checks, request size, credential revocation, workspace isolation, reader write denial, private archives, and replaying a Run preparation receipt through the public Rust library.
+
+- Native Claude Code 2.1.330 and Codex CLI 0.171.0 used the [direct connection commands](CLIENTS.en.md#direct-http-mcp). Each used temporary settings, a non-default port, a synthetic reader key supplied through `OC_API_KEY`, and a client `PATH` without `origence`. Both called `context_session`, `context_search`, and `context_get` and returned the expected workspace and pinned published version. Claude Code used scripted model responses on loopback. Codex called the tools through its app-server.
+- Windows, an external HTTPS proxy, live models, and plugin hooks were outside this run. A local HTTP protocol test covers matching a configured HTTPS origin and non-default port.
 
 ## 2026-11-25 · Workspace Run status and statistics for administrators
 
