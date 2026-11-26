@@ -7,6 +7,28 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · Origence 本地安装器
+
+基于 main `b4e8879fa952b5afd729fd5b89a630c6d5705696`，Linux x86_64、Rust 1.98.0、
+Node.js 24.22.1、原生 Claude Code 2.1.330、Chromium 156.0.8078.79。
+安装器用非默认端口、带空格的可执行文件与数据路径启动真实本地服务和控制台。通过 MCP
+`initialize`、11 个工具和 `context_session` 核对身份，Claude Code 自己报告插件连接成功。
+Chromium 用生成的账号密码登录，读到了真实 Hook 入口接收合成事件后写下的 Run。
+Bash 和 Zsh 新进程验证持久化环境与 PATH。重复运行复用服务和 Run 探针，Reader 跳过写入，
+错误 Key 返回 401，重建保留原库，卸载恢复原 shell 配置并保留随后独立添加的内容。
+测试还用新配置接入已运行的 API，卸载保留该服务。在无 UI 构建产物与 Claude Code 的临时发行目录，
+安装器构建了控制台并通过 npm 安装了固定客户端。215 项 Rust 本地集成测试、严格 Clippy、
+Node 类型检查和 29 项 UI 测试通过。已有原生双客户端插件合成验收也在非默认端口通过。
+
+```sh
+python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude
+NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
+  python3 tools/installer_smoke.py --binary target/debug/origence --claude /path/to/claude --browser
+```
+
+合成记录通过回环发送。本轮未使用真实模型，Windows 用户注册表和新进程继承由原生 Windows
+验收工作流覆盖，当前未实际运行该安装器的 Windows 或 macOS 验收。[安装说明](INSTALLER.md)
+
 ## 2026-11-26 · #89 报销 Run 端到端追溯预检
 
 基于 main `3984085ca5872dc68ea44b062e2d0791f92102a3`，Linux x86_64、Rust 1.98.0、

@@ -1,14 +1,21 @@
 name: Windows plugin acceptance (synthetic)
 
 on:
+  workflow_dispatch:
   push:
     branches: [test/windows-plugin-acceptance]
+  pull_request:
+    paths:
+      - '.github/workflows/windows-plugin-acceptance.yml'
+      - 'tools/install.mjs'
+      - 'tools/installer/**'
+      - 'tools/installer_smoke.py'
 
 permissions:
   contents: read
 
 concurrency:
-  group: windows-plugin-acceptance
+  group: windows-plugin-acceptance-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -47,7 +54,7 @@ jobs:
           $clientDir = Join-Path $env:RUNNER_TEMP 'origence-plugin-clients'
           npm.cmd install --prefix $clientDir --ignore-scripts --no-audit --no-fund '@anthropic-ai/claude-code@2.1.330' '@openai/codex@0.171.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Verify default and non-default HTTP endpoints with both installed plugins
+      - name: Verify HTTP plugins and the local installer on native Windows
         shell: pwsh
         run: |
           $clientDir = Join-Path $env:RUNNER_TEMP 'origence-plugin-clients/node_modules'
@@ -66,3 +73,5 @@ jobs:
           python tools/plugin_smoke.py --binary $binary --claude $claude --codex $codex
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/plugin_smoke.py --binary $binary --claude $claude --codex $codex --bind '127.0.0.1:0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/installer_smoke.py --binary $binary --claude $claude --allow-windows-user-env

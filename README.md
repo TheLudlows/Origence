@@ -19,6 +19,8 @@ Context preparation selects authorized evidence for a task. AnySeek supports ful
 
 ## Quick start
 
+For one-step Claude Code and console setup, see the [local installer](docs/INSTALLER.en.md).
+
 Requires Rust **1.98.0**. The default build links the AnySeek Rust SDK for local storage.
 Choose a fresh data directory for this quick start.
 
