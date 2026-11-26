@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated real AnySeek + Origence HTTP/stdio MCP acceptance; no model calls.
+"""Isolated real AnySeek + Origence HTTP MCP acceptance; no model calls.
 
 Run with --anyseek-binary PATH and --test-executable PATH and/or --binary PATH.
 Credentials and data live only in this invocation's environment/temp directory.
@@ -113,32 +113,29 @@ def mcp_contract(binary, env, directory):
         require(recorded[0]["report"]["retrieval"] == prepared["bundle"]["retrieval"],
                 "real Run trace lost observations")
         reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})
-        mcp_env = dict(env, OC_API_KEY=reader["token"])
-        with Mcp([binary, "--server-url", host.base, "mcp"], mcp_env, forbidden + [reader["token"]]) as client:
-            client.initialize("2025-03-26", "2025-03-26")
-            found = client.tool("context_search", {"query": "token approval", "mode": "keyword"})
-            require(found["hits"] and found["hits"][0]["asset_id"] == asset, "MCP search missed AnySeek publication")
-            require(found["hits"][0]["locator"], "MCP search omitted source locator")
-            require(client.tool("context_get", {"asset_id": asset})["content"] == old, "MCP get lost source content")
-            require(host.publish("AnySeek smoke policy now requires token review.") == asset, "update changed asset ID")
-            require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
-                    "updated corpus changed an existing preparation receipt")
-            require(client.tool("context_search", {"query": "approval"})["hits"] == [], "superseded version remained searchable")
-            require(client.tool("context_get", {"asset_id": asset, "version": 1})["content"] == old, "historical source changed")
-            host.request("/admin/keys/" + reader["key_id"], method="DELETE")
-            client.error("context_search", {"query": "token"}, -32600, "UNAUTHENTICATED: authentication required")
-            client.shutdown()
-    # Reopen the same authorities and projection with a fresh MCP process.
+        client = Mcp(host.base, reader["token"], forbidden + [reader["token"]])
+        client.initialize("2025-03-26", "2025-03-26")
+        found = client.tool("context_search", {"query": "token approval", "mode": "keyword"})
+        require(found["hits"] and found["hits"][0]["asset_id"] == asset, "MCP search missed AnySeek publication")
+        require(found["hits"][0]["locator"], "MCP search omitted source locator")
+        require(client.tool("context_get", {"asset_id": asset})["content"] == old, "MCP get lost source content")
+        require(host.publish("AnySeek smoke policy now requires token review.") == asset, "update changed asset ID")
+        require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
+                "updated corpus changed an existing preparation receipt")
+        require(client.tool("context_search", {"query": "approval"})["hits"] == [], "superseded version remained searchable")
+        require(client.tool("context_get", {"asset_id": asset, "version": 1})["content"] == old, "historical source changed")
+        host.request("/admin/keys/" + reader["key_id"], method="DELETE")
+        client.unauthorized("tools/call", {"name": "context_search", "arguments": {"query": "token"}})
+    # Reopen the same authorities and projection through its HTTP MCP endpoint.
     with Host(binary, env, token, forbidden) as host:
         require(host.request(f"/v1/runs/{run_id}")["events"] == recorded, "reopen changed recorded Run observations")
         require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
                 "reopen changed the private preparation snapshot")
-        with Mcp([binary, "--server-url", host.base, "mcp"], env, forbidden) as client:
-            client.initialize("2025-03-26", "2025-03-26")
-            require(client.tool("context_search", {"query": "token review"})["hits"][0]["asset_id"] == asset,
-                    "reopen lost AnySeek publication")
-            client.shutdown()
-    print("PASS: real AnySeek -> Origence HTTP/stdio MCP search, read, citations, update, history, key revocation and reopen; Run diagnostic correlation, retry and durability", flush=True)
+        client = Mcp(host.base, token, forbidden)
+        client.initialize("2025-03-26", "2025-03-26")
+        require(client.tool("context_search", {"query": "token review"})["hits"][0]["asset_id"] == asset,
+                "reopen lost AnySeek publication")
+    print("PASS: real AnySeek -> Origence HTTP MCP search, read, citations, update, history, key revocation and reopen; Run diagnostic correlation, retry and durability", flush=True)
     return env, token, asset, old
 
 

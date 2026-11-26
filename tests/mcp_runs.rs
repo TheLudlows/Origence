@@ -1,4 +1,4 @@
-//! Synthetic stdio clients, not Claude Code/Codex task acceptance.
+//! Run and private archive contracts over HTTP MCP with synthetic credentials.
 use crate::support::{fixture, open_service};
 use origence::{
     client::HostClient,
@@ -6,76 +6,25 @@ use origence::{
     storage::{RelationalStore, Scope},
 };
 use serde_json::{Value, json};
-use std::{process::Stdio, time::Duration};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use uuid::Uuid;
-struct Peer {
-    child: tokio::process::Child,
-    input: tokio::process::ChildStdin,
-    output: Lines<BufReader<tokio::process::ChildStdout>>,
-    id: u64,
+
+struct Peer<'a> {
+    endpoint: crate::mcp_http::Peer,
+    key: &'a str,
 }
-impl Peer {
-    async fn start(base: &str, key: &str) -> Self {
-        let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"))
-            .args(["--server-url", base, "mcp"])
-            .env("OC_API_KEY", key)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let mut p = Self {
-            input: child.stdin.take().unwrap(),
-            output: BufReader::new(child.stdout.take().unwrap()).lines(),
-            child,
-            id: 0,
-        };
-        let reply = p.rpc("initialize",json!({"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"synthetic-protocol-peer","version":"1"}})).await;
-        assert!(reply.get("result").is_some(), "{reply}");
-        p.input
-            .write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
-            .await
-            .unwrap();
-        p
-    }
-    async fn rpc(&mut self, method: &str, params: Value) -> Value {
-        self.id += 1;
-        let msg = json!({"jsonrpc":"2.0","id":self.id,"method":method,"params":params});
-        self.input
-            .write_all(format!("{msg}\n").as_bytes())
-            .await
-            .unwrap();
-        serde_json::from_str(
-            &tokio::time::timeout(Duration::from_secs(20), self.output.next_line())
-                .await
-                .unwrap()
-                .unwrap()
-                .unwrap(),
-        )
-        .unwrap()
-    }
-    async fn call(&mut self, name: &str, arguments: Value) -> Result<Value, Value> {
-        let v = self
-            .rpc("tools/call", json!({"name":name,"arguments":arguments}))
-            .await;
-        if v.get("error").is_some() {
-            return Err(v["error"].clone());
+impl<'a> Peer<'a> {
+    fn new(base: &str, key: &'a str) -> Self {
+        Self {
+            endpoint: crate::mcp_http::Peer::at(format!("{base}/mcp")),
+            key,
         }
-        assert_ne!(v["result"]["isError"], true, "{v}");
-        Ok(serde_json::from_str(v["result"]["content"][0]["text"].as_str().unwrap()).unwrap())
     }
-    async fn stop(mut self) {
-        drop(self.input);
-        assert!(
-            tokio::time::timeout(Duration::from_secs(10), self.child.wait())
-                .await
-                .unwrap()
-                .unwrap()
-                .success()
-        );
+
+    async fn call(&self, name: &str, arguments: Value) -> Result<Value, Value> {
+        self.endpoint.call(self.key, None, name, arguments).await
     }
 }
+
 #[tokio::test]
 async fn mcp_runs_private_retry_rotation_and_unknown() {
     let dir = tempfile::tempdir().unwrap();
@@ -96,9 +45,20 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let mut a = Peer::start(&base, &owner.token).await;
-    let mut b = Peer::start(&base, &owner.token).await;
-    let catalog = a.rpc("tools/list", json!({})).await;
+    let a = Peer::new(&base, &owner.token);
+    let b = Peer::new(&base, &owner.token);
+    let catalog: Value = a
+        .endpoint
+        .post(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}))
+        .bearer_auth(&owner.token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     for name in [
         "context_run_create",
         "context_run_report",
@@ -285,7 +245,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .is_empty()
     );
     for token in [&other.token, &admin.token] {
-        let mut denied = Peer::start(&base, token).await;
+        let denied = Peer::new(&base, token);
         assert!(denied.call("context_run_get", read.clone()).await.is_err());
         assert!(
             denied
@@ -309,7 +269,6 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
                 .is_err()
         );
         assert!(denied.call("context_run_report",json!({"run_id":run,"report":{"event_id":Uuid::new_v4(),"reporter":"test","observed_at_ms":0,"event":{"kind":"result_reported","outcome":"unknown","summary":"denied"}}})).await.is_err());
-        denied.stop().await;
     }
     // Every declared client event retains its exact payload and report attribution.
     for event in [
@@ -372,7 +331,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
         .await
         .unwrap();
     assert!(a.call("context_run_get", read.clone()).await.is_err());
-    let mut replacement = Peer::start(&base, rotated["token"].as_str().unwrap()).await;
+    let replacement = Peer::new(&base, rotated["token"].as_str().unwrap());
     assert_eq!(
         session,
         replacement
@@ -437,9 +396,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .await
             .is_err()
     );
-    replacement.stop().await;
-    a.stop().await;
-    b.stop().await;
+
     host.abort();
     let _ = host.await;
     service.engine.shutdown().await.unwrap();
@@ -472,7 +429,7 @@ async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() 
     let fixture = HookFixture::new();
     fixture.configure(&base, writer.key_id, &["codex", "claude_code"]);
 
-    let mut mcp = Peer::start(&base, &writer.token).await;
+    let mcp = Peer::new(&base, &writer.token);
     assert_eq!(
         fixture.enqueue(Client::Codex, &writer.token, "start"),
         Capture::Queued
@@ -518,7 +475,6 @@ async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() 
         .unwrap();
     assert_eq!(trace["events"].as_array().unwrap().len(), 2);
     assert_eq!(trace["unreported_activity"], "unknown");
-    mcp.stop().await;
 
     let owner = HostClient::new(&base, writer.token.clone()).unwrap();
     let admin_client = HostClient::new(&base, admin.token).unwrap();

@@ -26,7 +26,7 @@ See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 ## Streamable HTTP MCP
 
-Origence serves `/mcp`. Claude Code and Codex can connect directly with an API key for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The plugin's automatic Run hook still reports through a local command. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
+The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The plugin's automatic Run hook still reports through a local command. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
 
 ## #105 Local client hook implementation
 

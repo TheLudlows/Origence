@@ -2,7 +2,7 @@
 
 **English** · [简体中文](CLIENTS.md)
 
-Claude Code and Codex can connect to the Origence HTTP MCP endpoint or install the local stdio plugin.
+Claude Code and Codex use Origence's Streamable HTTP MCP endpoint for retrieval. Register it directly or install the plugin with an automatic Run hook.
 
 ## Direct HTTP MCP
 
@@ -20,34 +20,34 @@ codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-v
 
 Launch the client from that terminal, check `/mcp`, and call `context_session` to confirm `workspace_id`.
 Direct clients use the credential's default workspace unless their HTTP requests supply the
-`X-Origence-Workspace` header for an authorized workspace. `OC_WORKSPACE_ID` applies to the stdio adapter.
+`X-Origence-Workspace` header for an authorized workspace. The plugins below take this header from `OC_WORKSPACE_ID`.
 
-Direct retrieval and explicit tool calls require no local Origence binary. The bundled automatic Run
-hook still uses the binary. If the old stdio registration is installed, disable it from `/mcp` to avoid
-duplicate tools. See [remote MCP deployment](OPERATIONS.en.md#remote-mcp).
+Retrieval and explicit tool calls require no local Origence binary. The bundled automatic Run hook uses the binary. See [remote MCP deployment](OPERATIONS.en.md#remote-mcp).
 
 ## Install the `origence` plugin
 
-Prepare a reachable Origence HTTP host, a local binary that supports
-`origence plugin-hook`, and a client that supports plugin marketplaces. The plugin
-installs retrieval MCP and enables the private Run hook by default. Ask the workspace
-administrator to issue a personal `reader` key for retrieval or a `writer` key for
-Run reporting. An authenticated administrator can run
-`origence key-create <WORKSPACE_ID> --role reader` or use `--role writer`, with
-`OC_API_KEY` and `OC_SERVER_URL` set, then deliver the new key privately.
+Prepare a reachable Origence HTTP host and a client that supports plugin marketplaces. The plugin installs HTTP
+MCP and enables the private Run hook by default. Ask the workspace administrator for a personal API key.
+Use a `reader` key to retrieve material, or a `writer` key and a local executable that supports
+`origence plugin-hook` to report Runs. An authenticated administrator can run
+`origence key-create <WORKSPACE_ID> --role reader` or `--role writer`, then deliver the new key privately.
+For retrieval alone, you can [register the endpoint directly](#direct-http-mcp).
 
-Launch the client from the terminal that sets `PATH`, `OC_SERVER_URL`, and
-`OC_API_KEY`. `OC_SERVER_URL` supplies the same address as `--server-url` and
-defaults to `http://127.0.0.1:8080`. Use HTTPS for a remote host. The Windows
-PowerShell example accepts spaces in the binary directory. On Linux or macOS,
-prepend the directory containing `origence` to `PATH`.
+Launch the client from the terminal that sets `OC_API_KEY`. The default API origin is
+`http://127.0.0.1:8080`. Use HTTPS for remote hosts. Example in PowerShell:
+
+```powershell
+$env:OC_SERVER_URL = 'http://127.0.0.1:8080'
+$secret = Read-Host 'OC_API_KEY' -AsSecureString
+$env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
+```
+
+For automatic Run reporting, add the Origence executable's directory to `PATH` before launch. The Windows
+example handles spaces in the directory:
 
 ```powershell
 $origenceExe = (Get-Item -LiteralPath 'C:\Program Files\Origence\origence.exe').FullName
 $env:Path = (Split-Path -Parent $origenceExe) + [IO.Path]::PathSeparator + $env:Path
-$env:OC_SERVER_URL = 'http://127.0.0.1:18080'
-$secret = Read-Host 'OC_API_KEY' -AsSecureString
-$env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
 ```
 
 ### Claude Code
@@ -56,6 +56,7 @@ $env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
 claude plugin install origence --marketplace TheLudlows/Origence
 ```
 
+The plugin appends `/mcp` to `OC_SERVER_URL`. Set the origin with no trailing slash or `/mcp` suffix.
 For a local checkout, substitute the absolute path to the repository root.
 Restart `claude` and inspect the plugin's connection with `/mcp` or
 `claude mcp list`. Check the bundled hooks in `/hooks`. Review the plugin and approve it if prompted.
@@ -69,6 +70,16 @@ run `claude plugin marketplace remove origence-tools` to remove the catalog.
 codex plugin marketplace add TheLudlows/Origence
 codex plugin add origence@origence-tools
 ```
+
+The Codex plugin uses a fixed localhost default. For a different port or origin, register a server of the same name to override the bundled endpoint:
+
+```powershell
+codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_API_KEY
+```
+
+To select a workspace through `OC_WORKSPACE_ID` with this override, add the `env_http_headers` section from the
+[example](../examples/codex.mcp.toml) to that server's configuration. When using the automatic Run hook, set
+`OC_SERVER_URL` to the same API origin. To remove the override, run `codex mcp remove origence`.
 
 For a local checkout, pass the absolute path to the repository root to
 `marketplace add`. Start a fresh `codex` session and inspect `/mcp`. Use
@@ -87,37 +98,36 @@ to find a known published item. Pass the hit's `asset_id` and `version` to
 
 | Symptom | Check |
 | --- | --- |
-| Cannot find `origence` | Run `Get-Command origence -CommandType Application` (Windows) or `command -v origence` in the same terminal. Check it resolves to the intended binary. |
-| Cannot connect to the API | Verify `OC_SERVER_URL` and the port. Run `origence mcp` in the same terminal to see startup errors on stderr. A successful process waits for stdio input. |
-| `OC_API_KEY is required` | Relaunch the client with the workspace key in its environment. |
-| `authentication required` | Ask the administrator to verify the key is valid and belongs to the intended workspace. |
+| Hook cannot find `origence` | Run `Get-Command origence -CommandType Application` (Windows) or `command -v origence` in the same terminal. Check it resolves to the intended binary. |
+| Cannot connect to MCP | Check the configured `/mcp` URL from the client's `/mcp` screen and the same server's `/health/ready` endpoint. For remote hosts, check the proxy's Host configuration. |
+| Missing API key | Relaunch the client with the workspace key in its environment. |
+| `401` or `authentication required` | Ask the administrator to verify the key is valid and belongs to the intended workspace. |
 | Two Origence servers appear | Check for an older standalone registration and disable the duplicate. |
 
 ### Verify the default Run hook
 
 Start the client with a key that can write. Complete a prompt and inspect private Runs in
-the same workspace with that logical key. The hook uses the same `OC_API_KEY`,
-`OC_SERVER_URL`, and optional `OC_WORKSPACE_ID` as MCP. It uses the key's default workspace
-when the selector is omitted. It captures structured metadata from supported events with
+the same workspace with that logical key. Use the same API origin, key and workspace for MCP and the hook.
+The hook gets its origin from `OC_SERVER_URL` and its workspace from `OC_WORKSPACE_ID`. Omitting the selector uses the key's default workspace. It captures structured metadata from supported events with
 reliable identifiers. Conversation text, transcripts, tool arguments and raw output stay out of collection.
 
 The installed hook requires no project configuration or separate sender. Each invocation
 has a two-second budget for identity verification and delivery. Enqueued observations can
 retry on later hooks for the same project, workspace and credential. An observation is
 skipped if identity cannot be verified before enqueueing. Queues live in client plugin data.
-On Windows, directory permissions are managed by the client and user environment. Set
-`OC_PLUGIN_RUN_HOOK=0` before startup to keep retrieval only or to continue using an
-existing manual project configuration and its separate sender.
+On Windows, directory permissions are managed by the client and user environment. With the local binary
+installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 
 ## Manual MCP setup
 
 1. Use a personal API key from the project's workspace and set `OC_API_KEY` in the launch environment. Keep credentials out of configuration files, project commits, and conversations.
-2. Set `command` in the example to the absolute path of the local Origence executable. Set `--server-url` to the reachable host address. On Windows, point to `origence.exe`.
+2. Set the reachable origin in the example. Claude Code reads `OC_SERVER_URL`. For Codex, enter the full URL including `/mcp`.
 3. Install the configuration for your client.
-   - **Claude Code**. Put the [JSON example](../examples/claude-code.mcp.json) in project `.mcp.json` or merge `mcpServers.origence` into the existing configuration. Use `/mcp` in Claude Code to check the connection.
-   - **Codex**. Merge `[mcp_servers.origence]` from the [TOML example](../examples/codex.mcp.toml) into personal Codex configuration or a trusted project's `.codex/config.toml`. Keep `env_vars = ["OC_API_KEY"]` to pass the credential explicitly. `codex mcp list` checks registration only. Test the connection separately.
+   - **Claude Code**. Put the [JSON example](../examples/claude-code.mcp.json) in project `.mcp.json` or merge `mcpServers.origence` into the existing configuration.
+   - **Codex**. Merge the [TOML example](../examples/codex.mcp.toml) into your personal configuration or a trusted project's `.codex/config.toml`. Keep `bearer_token_env_var = "OC_API_KEY"`.
 
-Search for published material with `context_search`. Read a specific version with `context_get` and check its source references. `context_session` reports the current `workspace_id`. For an online MCP connection, pass `mcp --workspace <UUID>` or set `OC_WORKSPACE_ID` to select a workspace the key can access. Otherwise the server uses the credential's default. The selection applies to that MCP connection. MCP verifies an explicit selection at startup and exits if the host returns a different workspace or omits its ID.
+Use the client's `/mcp` screen to check the connection and call `context_session` to confirm its `workspace_id`.
+To select another authorized workspace, set `OC_WORKSPACE_ID` before launching. Both examples map it to the HTTP selection header.
 
 Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. The platform does not automatically sync local client chats or restore the local work environment. Retrieved content is external evidence and has no authority to issue instructions.
 

@@ -92,7 +92,7 @@ async fn handle(State(endpoint): State<Endpoint>, request: Request) -> Response 
     response
 }
 
-async fn dispatch(endpoint: Endpoint, request: Request) -> Response {
+async fn dispatch(endpoint: Endpoint, mut request: Request) -> Response {
     let mut origins = request.headers().get_all(header::ORIGIN).iter();
     if origins
         .next()
@@ -114,6 +114,13 @@ async fn dispatch(endpoint: Endpoint, request: Request) -> Response {
     {
         return StatusCode::BAD_REQUEST.into_response();
     }
+    // Claude Code expands the optional plugin setting to an empty header when
+    // no workspace is selected. Leave duplicate and malformed selections to auth.
+    let workspace_header = "x-origence-workspace";
+    let mut selections = request.headers().get_all(workspace_header).iter();
+    if selections.next().is_some_and(HeaderValue::is_empty) && selections.next().is_none() {
+        request.headers_mut().remove(workspace_header);
+    }
     let identity = match auth(&endpoint.service, request.headers()).await {
         Ok(identity) => identity,
         Err(error) => return error.into_response(),
@@ -125,12 +132,7 @@ async fn dispatch(endpoint: Endpoint, request: Request) -> Response {
         return StatusCode::PAYLOAD_TOO_LARGE.into_response();
     };
     let service = StreamableHttpService::new(
-        move || {
-            Ok(ContextMcp::from_http(
-                endpoint.service.clone(),
-                identity.clone(),
-            ))
-        },
+        move || Ok(ContextMcp::new(endpoint.service.clone(), identity.clone())),
         endpoint.sessions,
         endpoint.config.transport,
     );

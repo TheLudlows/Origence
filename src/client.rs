@@ -1,4 +1,4 @@
-//! Authenticated host access for CLI/MCP; never opens the host's database files.
+//! Authenticated host access for CLI and hooks; never opens the host's database files.
 use crate::error::{AppError, Result};
 use serde_json::Value;
 #[derive(Clone)]
@@ -59,24 +59,6 @@ impl HostClient {
         self
     }
 
-    /// Before serving requests, confirm that the host honored the selection.
-    /// Older hosts can return 200 for whoami while ignoring the workspace header.
-    pub(crate) async fn verify_identity(&self) -> Result<()> {
-        let identity = self
-            .call(reqwest::Method::GET, "/v1/whoami", None, None)
-            .await?;
-        if let Some(expected) = self.workspace {
-            let actual = identity["workspace_id"]
-                .as_str()
-                .and_then(|id| uuid::Uuid::parse_str(id).ok());
-            if actual != Some(expected) {
-                return Err(AppError::Invalid(
-                    "Origence host did not confirm the selected workspace".into(),
-                ));
-            }
-        }
-        Ok(())
-    }
     /// Create a private Run. The UUID is the durable retry identity.
     pub async fn create_run(&self, input: &crate::run::RunInput) -> Result<Value> {
         self.call(

@@ -147,7 +147,7 @@ jobs:
           path: ui/dist/
       - name: No-model HTTP smoke against a fresh AnySeek fixture
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 tools/smoke.py --binary target/debug/origence
-      - name: MCP stdio local and host-forwarding contracts (no models)
+      - name: Streamable HTTP MCP contracts (no models)
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 tools/mcp_smoke.py --binary target/debug/origence
       - name: Node UI to Origence API contracts (no models)
         run: python3 tools/anyseek_smoke.py --anyseek-binary .anyseek-fixture/target/debug/anyseek_server --run python3 tools/ui_smoke.py --binary target/debug/origence --ui-entry ui/dist/server.js

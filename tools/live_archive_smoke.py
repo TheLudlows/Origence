@@ -47,8 +47,8 @@ def claude_command(args, directory, host, names, env):
                CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1", DISABLE_ERROR_REPORTING="1")
     config = directory / "mcp.json"
     config.write_text(json.dumps({"mcpServers": {"origence": {
-        "command": str(args.binary), "args": ["--server-url", host.base, "mcp"],
-        "env": {"OC_API_KEY": "${OC_API_KEY}"}}}}), encoding="utf-8")
+        "type": "http", "url": host.base + "/mcp",
+        "headers": {"Authorization": "Bearer ${OC_API_KEY}"}}}}), encoding="utf-8")
     return [args.claude, "--bare", "-p", "--no-session-persistence", "--strict-mcp-config",
             "--mcp-config", str(config), "--model", args.claude_model, "--tools", "",
             "--allowedTools", ",".join("mcp__origence__" + n for n in names),
@@ -59,9 +59,8 @@ def codex_command(args, directory, host, names, env):
     for key in ("CODEX_HOME", "OPENAI_API_KEY"):
         if key in os.environ:
             env[key] = os.environ[key]
-    server = ("mcp_servers={origence={command=" + json.dumps(str(args.binary)) + ",args=" +
-              json.dumps(["--server-url", host.base, "mcp"]) +
-              ',env_vars=["OC_API_KEY"],required=true,enabled_tools=' + json.dumps(names) + "}}")
+    server = ("mcp_servers={origence={url=" + json.dumps(host.base + "/mcp") +
+              ',bearer_token_env_var="OC_API_KEY",required=true,enabled_tools=' + json.dumps(names) + "}}")
     cmd = [args.codex, "exec", "--ephemeral", "--json", "--ignore-user-config",
            "--skip-git-repo-check", "--sandbox", "read-only", "-m", args.codex_model,
            "-c", 'model_provider="openai"', "-c", 'approval_policy="never"', "-c", server,

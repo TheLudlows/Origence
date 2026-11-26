@@ -2,7 +2,9 @@
 
 **简体中文** · [English](run-host-contract.md)
 
-基线固定于 main `293e2bf6af3b180d43c8050731047b552ac07519`。使用同目录 Codex/Claude Code stdio 配置，包含 `--server-url` 和继承的 `OC_API_KEY`。不要提交令牌。嵌入式本地 MCP 未实现 Run 工具，调用会明确提示需要 `--server-url`。既有归档工具在两种模式下都可用。
+下文记录历史 stdio 验收。当前使用 [Streamable HTTP MCP](../docs/CLIENTS.md#直连-http-mcp)。
+
+基线固定于 main `293e2bf6af3b180d43c8050731047b552ac07519`。当时的 Codex/Claude Code stdio 配置使用 `--server-url` 和继承的 `OC_API_KEY`。不要提交令牌。嵌入式本地 MCP 未实现 Run 工具，调用会明确提示需要 `--server-url`。既有归档工具在两种模式下都可用。
 
 | MCP 工具 | 参数 | HTTP 映射 |
 | --- | --- | --- |

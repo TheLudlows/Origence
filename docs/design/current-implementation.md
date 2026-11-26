@@ -11,13 +11,13 @@ A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方
 
 Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。当前提供记忆与知识的写入和检索、Skill 候选与审批发布、私有 Run 记录与查询，以及上下文组装和显式会话学习。
 
-Claude Code 和 Codex 是首版试点宿主，现有入口包括 stdio MCP、显式归档与 Run 工具、已批准 Skill 的目录导出。试点进度见 [STATUS](../STATUS.md)。
+Claude Code 和 Codex 是首版试点宿主，现有入口包括 Streamable HTTP MCP、显式归档与 Run 工具、已批准 Skill 的目录导出。试点进度见 [STATUS](../STATUS.md)。
 
 ## 2. 当前架构
 
 ```mermaid
 flowchart TD
-    C[Claude Code / Codex] --> M[stdio MCP]
+    C[Claude Code / Codex] --> M[Streamable HTTP MCP]
     M --> H[Origence HTTP 宿主]
     H --> S[Service：认证、作用域、用例和证据]
     S --> A[SQLite：权威数据、任务、发布账本]
@@ -36,7 +36,7 @@ flowchart TD
     W --> P[按配置调用模型与解析器]
 ```
 
-HTTP 与单 Worker 共享一个 `StorageEngine`。SQLite authority 持有数据目录的独占 OS 锁。CLI/MCP 默认转发到运行中的宿主，离线访问要求独占打开。本地模式在 Origence 进程内通过 Rust SDK 打开 AnySeek Catalog，云上模式通过 HTTP 访问独立的 AnySeek，服务凭据只由宿主持有。两种模式均按已鉴权的 Scope 选择 tenant UUID 命名空间和 workspace 集合。AnySeek 保存已发布正文与检索索引，员工权限和业务来源仍由 Origence 判定。[运行与部署](../OPERATIONS.md#anyseek-全文与向量)
+HTTP 与单 Worker 共享一个 `StorageEngine`。SQLite authority 持有数据目录的独占 OS 锁。客户端 MCP 直连宿主的 `/mcp`。CLI 离线访问要求独占打开。本地模式在 Origence 进程内通过 Rust SDK 打开 AnySeek Catalog，云上模式通过 HTTP 访问独立的 AnySeek，服务凭据只由宿主持有。两种模式均按已鉴权的 Scope 选择 tenant UUID 命名空间和 workspace 集合。AnySeek 保存已发布正文与检索索引，员工权限和业务来源仍由 Origence 判定。[运行与部署](../OPERATIONS.md#anyseek-全文与向量)
 
 <a id="a1-资产来源与发布"></a>
 ## A1. 内容、来源与发布
@@ -130,7 +130,7 @@ AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定�
 <a id="storage-acceptance"></a>
 ### A2.8 验收
 
-工程回归、真实引擎/stdio MCP、真实 Claude Code 客户端、真实任务效果分别记录。
+工程回归、真实引擎/Streamable HTTP MCP、真实 Claude Code 客户端、真实任务效果分别记录。
 旧版本通过不外推到当前 head。治理隔离和来源有效性不能由平均质量分抵消。
 验收入口与精确结果统一在 [VALIDATION](../VALIDATION.md)，当前缺口统一在 STATUS。
 

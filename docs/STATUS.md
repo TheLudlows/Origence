@@ -27,8 +27,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 
 ## Streamable HTTP MCP
 
-Origence 服务端提供 `/mcp`。Claude Code 和 Codex 可直接用 API Key 接入检索与其他显式工具调用，
-无须安装本地 Origence。服务端按请求校验凭据和工作区权限，未指定工作区时使用凭据的默认工作区。
+Claude Code 和 Codex 插件通过 Origence 服务端的 `/mcp` 检索和调用工具。检索无需安装本地 Origence。服务端按请求校验凭据和工作区权限，未指定工作区时使用凭据的默认工作区。
 插件自动 Run Hook 仍经本地命令上报。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
 
 ## #105 客户端 Hook 本地切片

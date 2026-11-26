@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 const PROTOCOL: &str = "2025-11-25";
 
-struct Peer {
+pub(crate) struct Peer {
     url: String,
     client: reqwest::Client,
 }
@@ -25,6 +25,10 @@ impl Peer {
                 .await
                 .unwrap()
         });
+        Self::at(url)
+    }
+
+    pub(crate) fn at(url: String) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(15))
             .build()
@@ -32,7 +36,7 @@ impl Peer {
         Self { url, client }
     }
 
-    fn post(&self, message: Value) -> RequestBuilder {
+    pub(crate) fn post(&self, message: Value) -> RequestBuilder {
         self.client
             .post(&self.url)
             .header("Accept", "application/json, text/event-stream")
@@ -40,7 +44,7 @@ impl Peer {
             .json(&message)
     }
 
-    async fn call(
+    pub(crate) async fn call(
         &self,
         token: &str,
         workspace: Option<Uuid>,
@@ -54,6 +58,10 @@ impl Peer {
             request = request.header("X-Origence-Workspace", id.to_string());
         }
         let response = request.send().await.unwrap();
+        if response.status() == StatusCode::UNAUTHORIZED {
+            assert_eq!(response.headers()["www-authenticate"], "Bearer");
+            return Err(json!({"http_status": 401}));
+        }
         assert_eq!(response.status(), 200);
         let reply: Value = response.json().await.unwrap();
         if let Some(error) = reply.get("error") {
@@ -240,6 +248,48 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
     assert_eq!(other_session["workspace_id"], b.workspace_id.to_string());
     assert_eq!(session["key_id"], other_session["key_id"]);
     assert_ne!(session["session_id"], other_session["session_id"]);
+
+    let session_request = || {
+        peer.post(rpc(
+            "tools/call",
+            json!({"name":"context_session","arguments":{}}),
+        ))
+        .bearer_auth(token)
+    };
+    let reply: Value = session_request()
+        .header("X-Origence-Workspace", "")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(reply["result"]["content"][0]["text"].as_str().unwrap())
+            .unwrap(),
+        session
+    );
+    assert_eq!(
+        session_request()
+            .header("X-Origence-Workspace", "invalid-workspace")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        session_request()
+            .header("X-Origence-Workspace", "")
+            .header("X-Origence-Workspace", b.workspace_id.to_string())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
 
     let hits = peer
         .call(

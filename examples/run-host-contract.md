@@ -2,8 +2,10 @@
 
 **English** · [简体中文](run-host-contract.zh-CN.md)
 
+This is the historical stdio acceptance record. Current configurations use [Streamable HTTP MCP](../docs/CLIENTS.en.md#direct-http-mcp).
+
 Frozen against main `293e2bf6af3b180d43c8050731047b552ac07519`.
-Use the adjacent Codex/Claude Code stdio configurations with `--server-url` and
+The tested Codex/Claude Code stdio configurations ran with `--server-url` and
 an inherited `OC_API_KEY`. Do not commit tokens. The local embedded MCP mode does
 not implement Run tools: they return an explicit `--server-url` requirement.
 The existing archive tools remain available in both modes.

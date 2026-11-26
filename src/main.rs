@@ -3,7 +3,7 @@ use origence::{
     client::HostClient,
     client_hook::{self, Client as HookClient, Profile as HookProfile},
     client_skill::{SkillClient, export_skill},
-    host, mcp,
+    host,
     models::Models,
     service::Service,
     storage::{
@@ -76,12 +76,6 @@ enum Command {
     },
     /// Offline inspection of the current SQLite identity schema; never migrates a database.
     IdentityCheck,
-    /// Stdio MCP for shared retrieval and explicit private archives.
-    Mcp {
-        /// Select an authorized workspace for this online MCP connection.
-        #[arg(long, env = "OC_WORKSPACE_ID")]
-        workspace: Option<Uuid>,
-    },
     /// Capture opt-in client hooks or send their private queue to the host.
     ClientHook {
         #[arg(long)]
@@ -423,52 +417,39 @@ async fn run_offline(data_dir: PathBuf, command: Command) -> anyhow::Result<()> 
         Service::open_with_anyseek(&data_dir, Models::from_env()?, AnySeekConfig::from_env()?)
             .await?;
     let auth = service.auth(&token).await?;
-    let result = offline_command(&service, &auth, token, command).await?;
+    let result = offline_command(&service, &auth, command).await?;
     service.engine.shutdown().await?;
-    if let Some(v) = result {
-        println!("{v}");
-    }
+    println!("{result}");
     Ok(())
 }
 
-// Search/resolve/MCP futures also remain independent: their construction and
+// Search/resolve futures also remain independent: their construction and
 // serialization temporaries do not share run_offline's poll frame.
 fn offline_command<'a>(
     service: &'a Service,
     auth: &'a AuthContext,
-    token: String,
     command: Command,
-) -> CommandFuture<'a, Option<serde_json::Value>> {
+) -> CommandFuture<'a, serde_json::Value> {
     match command {
-        Command::Mcp { workspace } => Box::pin(async move {
-            anyhow::ensure!(
-                workspace.is_none(),
-                "MCP workspace selection requires an online host"
-            );
-            mcp::run(service.clone(), token).await?;
-            Ok(None)
-        }),
         Command::Search {
             query,
             mode,
             limit,
             allow_partial,
         } => Box::pin(async move {
-            Ok(Some(
-                service
-                    .search(
-                        auth,
-                        SearchInput {
-                            components: Default::default(),
-                            memory_identity: None,
-                            query,
-                            mode,
-                            limit,
-                            allow_partial,
-                        },
-                    )
-                    .await?,
-            ))
+            Ok(service
+                .search(
+                    auth,
+                    SearchInput {
+                        components: Default::default(),
+                        memory_identity: None,
+                        query,
+                        mode,
+                        limit,
+                        allow_partial,
+                    },
+                )
+                .await?)
         }),
         Command::Resolve {
             query,
@@ -476,24 +457,22 @@ fn offline_command<'a>(
             budget_tokens,
             allow_partial,
         } => Box::pin(async move {
-            Ok(Some(
-                service
-                    .resolve(
-                        auth,
-                        ResolveInput {
-                            components: Default::default(),
-                            memory_identity: None,
-                            query,
-                            mode,
-                            budget_tokens,
-                            allow_partial,
-                        },
-                    )
-                    .await?,
-            ))
+            Ok(service
+                .resolve(
+                    auth,
+                    ResolveInput {
+                        components: Default::default(),
+                        memory_identity: None,
+                        query,
+                        mode,
+                        budget_tokens,
+                        allow_partial,
+                    },
+                )
+                .await?)
         }),
         Command::Get { asset_id, version } => {
-            Box::pin(async move { Ok(Some(service.get(auth, asset_id, version).await?)) })
+            Box::pin(async move { Ok(service.get(auth, asset_id, version).await?) })
         }
         _ => unreachable!(),
     }
@@ -510,13 +489,6 @@ async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> 
         .ok_or_else(|| anyhow::anyhow!("OC_API_KEY is required"))?;
     let client = HostClient::new(&server_url, token)?;
     let (method, path, body) = match command {
-        Command::Mcp { workspace } => {
-            let client = match workspace {
-                Some(workspace) => client.with_workspace(workspace),
-                None => client,
-            };
-            return mcp::run_remote(client).await;
-        }
         Command::SkillExport {
             client: target,
             project,

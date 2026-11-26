@@ -2,7 +2,7 @@
 
 **简体中文** · [English](CLIENTS.en.md)
 
-Claude Code 和 Codex 可以直接连接 Origence 的 HTTP MCP，也可以安装通过本地 stdio 接入的插件。
+Claude Code 和 Codex 通过 Origence 服务端的 Streamable HTTP MCP 检索。可直接注册端点，或安装带自动 Run Hook 的插件。
 
 ## 直连 HTTP MCP
 
@@ -19,31 +19,31 @@ codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-v
 
 在同一终端启动客户端，用 `/mcp` 检查连接，并调用 `context_session` 核对 `workspace_id`。
 默认使用凭据的默认工作区。要选择其他已授权工作区，在 HTTP MCP 请求中配置 `X-Origence-Workspace`
-请求头。`OC_WORKSPACE_ID` 由 stdio 适配器解释，直连的工作区选择来自请求头。
+请求头。下文的插件使用启动环境中的 `OC_WORKSPACE_ID` 填充此请求头。
 
-直连的检索和显式工具调用无需本机 `origence`。当前自动 Run Hook 由下文的插件提供，仍需要本机二进制。
-已有 stdio 注册时，可在 `/mcp` 禁用旧的 Origence 项以免工具重复。[远程部署配置](OPERATIONS.md#远程-mcp)
+检索和显式工具调用无需本机 `origence`。插件中的自动 Run Hook 需要本机二进制。[远程部署配置](OPERATIONS.md#远程-mcp)
 
 ## 安装 `origence` 插件
 
-准备一台客户端可访问的 Origence HTTP 宿主、支持 `origence plugin-hook` 的本机可执行文件及支持插件
-Marketplace 的客户端。插件同时安装检索 MCP 和默认启用的私有 Run Hook。请工作区管理员签发
-个人 key。只需检索时使用 `reader`，需要 Run 上报时使用 `writer`。管理员可在已授权的终端执行
-`origence key-create <WORKSPACE_ID> --role reader` 或 `--role writer`，通过受保护的渠道交付 key。
-创建命令使用下文的 `OC_SERVER_URL`。
+准备一台客户端可访问的 Origence HTTP 宿主和支持插件 Marketplace 的客户端。插件安装 HTTP MCP，并默认启用私有
+Run Hook。请工作区管理员签发个人 Key。只需检索时使用 `reader` 并可[直接注册端点](#直连-http-mcp)。
+使用自动 Run Hook 时准备 `writer` Key 和支持 `origence plugin-hook` 的本机可执行文件。管理员可执行
+`origence key-create <WORKSPACE_ID> --role reader` 或 `--role writer`，通过受保护的渠道交付 Key。
 
-安装后，从配置了 `PATH`、`OC_SERVER_URL` 和 `OC_API_KEY` 的终端启动客户端。
-`OC_SERVER_URL` 与 `origence --server-url` 使用同一参数，默认是
-`http://127.0.0.1:8080`。远程宿主使用 HTTPS。以下为 Windows PowerShell 示例，
-将安装目录和端口换成本机值；目录中的空格无需额外转义。Windows 使用 `origence.exe`，
-Linux/macOS 将含 `origence` 的目录放在 `PATH` 前面。
+从设置了 `OC_API_KEY` 的终端启动客户端。默认宿主是 `http://127.0.0.1:8080`。
+远程宿主使用 HTTPS。PowerShell 示例：
+
+```powershell
+$env:OC_SERVER_URL = 'http://127.0.0.1:8080'
+$secret = Read-Host 'OC_API_KEY' -AsSecureString
+$env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
+```
+
+启用自动 Run 上报时，在启动前将 `origence` 所在目录加入 `PATH`。Windows 示例支持目录中的空格：
 
 ```powershell
 $origenceExe = (Get-Item -LiteralPath 'C:\Program Files\Origence\origence.exe').FullName
 $env:Path = (Split-Path -Parent $origenceExe) + [IO.Path]::PathSeparator + $env:Path
-$env:OC_SERVER_URL = 'http://127.0.0.1:18080'
-$secret = Read-Host 'OC_API_KEY' -AsSecureString
-$env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
 ```
 
 ### Claude Code
@@ -52,6 +52,7 @@ $env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
 claude plugin install origence --marketplace TheLudlows/Origence
 ```
 
+插件用 `OC_SERVER_URL` 拼接 `/mcp`，设置地址时省略末尾的斜杠和 `/mcp`。
 测试本地检出时，把 `TheLudlows/Origence` 换成仓库根目录的绝对路径。重新启动 `claude`，
 用 `/mcp` 或 `claude mcp list` 检查来自插件的 Origence 连接，用 `/hooks` 核对插件 Hook。
 客户端或组织要求确认时，审查插件并按提示授权。卸载使用 `claude plugin uninstall origence@origence-tools`，
@@ -64,6 +65,16 @@ claude plugin install origence --marketplace TheLudlows/Origence
 codex plugin marketplace add TheLudlows/Origence
 codex plugin add origence@origence-tools
 ```
+
+Codex 插件内的 URL 固定为本机默认地址。使用其他端口或域名时，用同名服务器覆盖插件提供的地址：
+
+```powershell
+codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_API_KEY
+```
+
+同名覆盖后，若要用 `OC_WORKSPACE_ID` 选择工作区，把 [示例](../examples/codex.mcp.toml) 中的
+`env_http_headers` 节加入该服务器配置。使用自动 Run Hook 时，`OC_SERVER_URL` 应指向同一 API 宿主。
+移除覆盖配置使用 `codex mcp remove origence`。
 
 测试本地检出时，Marketplace 来源可换成仓库根目录的绝对路径。在新的 `codex` 会话中用
 `/mcp` 查看是否已连接。`codex plugin list` 核对安装。在 `/hooks` 审查并信任插件 Hook，
@@ -81,45 +92,39 @@ codex plugin add origence@origence-tools
 
 | 现象 | 检查方式 |
 | --- | --- |
-| 找不到 `origence` | 在启动客户端的同一终端运行 `Get-Command origence -CommandType Application`（Windows）或 `command -v origence`。确认路径指向所选二进制。 |
-| API 连接失败 | 核对 `OC_SERVER_URL` 和端口。直接运行 `origence mcp` 可在 stderr 看启动错误，连接成功时该进程等待 stdio 输入。 |
-| `OC_API_KEY is required` | 用带有 workspace key 的环境重新启动客户端。 |
-| `authentication required` | 请管理员核对 key 所属 workspace、有效性及撤销状态。 |
+| Hook 找不到 `origence` | 在启动客户端的同一终端运行 `Get-Command origence -CommandType Application`（Windows）或 `command -v origence`。确认路径指向所选二进制。 |
+| MCP 连接失败 | 在客户端的 `/mcp` 核对实际 `/mcp` URL。访问同一宿主的 `/health/ready` 检查服务是否就绪，远程接入同时核对反向代理的 Host 配置。 |
+| 缺少 API Key | 用带有 workspace key 的环境重新启动客户端。 |
+| `401` 或 `authentication required` | 请管理员核对 key 所属 workspace、有效性及撤销状态。 |
 | 显示两个 Origence 服务 | 检查历史手工注册，停用重复入口后再试。 |
 
 ### 验证默认 Run Hook
 
 用具有写权限的 key 启动客户端并完成一轮提示，再在同一工作区用该逻辑 key 检查私有 Run。
-Hook 与 MCP 共用 `OC_API_KEY`、`OC_SERVER_URL` 和可选的 `OC_WORKSPACE_ID`，省略工作区时
-使用该 key 的默认工作区。Hook 只记录受支持事件的结构化元数据，跳过缺少可靠标识的事件。
+对 MCP 和 Hook 使用同一 `OC_API_KEY`、API 宿主和工作区。Hook 从 `OC_SERVER_URL` 和可选的
+`OC_WORKSPACE_ID` 读取目标，省略工作区时使用该 Key 的默认工作区。Hook 只记录受支持事件的结构化元数据，跳过缺少可靠标识的事件。
 会话正文、原始 transcript、工具参数和原始输出均不采集。
 
 安装后无需另写项目 Hook 配置或启动发送器。每次 Hook 用至多两秒确认身份并尝试上报，
 已入队的记录可在同项目、工作区和凭据的后续 Hook 重试。在身份确认前无法连接时，当前观察会跳过。
 队列位于客户端的插件数据目录，Windows 的目录权限由客户端和用户环境管理。
-如果只保留检索，在启动前设置 `OC_PLUGIN_RUN_HOOK=0`。已有手工 Hook 的项目应选定一个入口。
+已安装本机二进制时，可在启动前设置 `OC_PLUGIN_RUN_HOOK=0` 停止上报。
 继续使用原有项目配置时，关闭插件 Hook 并沿用下文的独立发送器。
 
 ## 手工 MCP 接入
 
 1. 使用项目所属 workspace 的个人 API key，通过启动环境提供 `OC_API_KEY`。
    不要把密钥写进配置文件、提交到项目或贴进对话。
-2. 将示例的 `command` 改为本地 Origence 可执行文件的绝对路径，将
-   `--server-url` 改为客户端能访问的宿主地址。Windows 上指向 `origence.exe`。
+2. 在示例中填写客户端能访问的宿主。Claude Code 可从 `OC_SERVER_URL` 读取宿主，Codex 需要填写带
+   `/mcp` 的完整 URL。
 3. 按客户端放置配置：
-   - **Claude Code**：将 [JSON 示例](../examples/claude-code.mcp.json) 放到项目
-     `.mcp.json`，或把 `mcpServers.origence` 合并进现有配置。在 Claude Code
-     中使用 `/mcp` 检查连接。
-   - **Codex**：将 [TOML 示例](../examples/codex.mcp.toml) 中的
-     `[mcp_servers.origence]` 合并到个人 Codex 配置，或放入受信任项目的
-     `.codex/config.toml`。保留 `env_vars = ["OC_API_KEY"]` 以显式传递凭据；
-     `codex mcp list` 只能核对配置是否注册，不能验证实际连接。
+   - **Claude Code**：将 [JSON 示例](../examples/claude-code.mcp.json) 放到项目 `.mcp.json`，
+     或把 `mcpServers.origence` 合并进现有配置。
+   - **Codex**：将 [TOML 示例](../examples/codex.mcp.toml) 的 `[mcp_servers.origence]` 配置放入
+     个人 Codex 配置或受信任项目的 `.codex/config.toml`，保留 `bearer_token_env_var = "OC_API_KEY"`。
 
-用 `context_search` 搜索一份已发布资料，再用 `context_get` 读取指定版本并核对
-来源引用。`context_session` 返回当前 `workspace_id`。在线 MCP 启动时可以加
-`mcp --workspace <UUID>` 或设置 `OC_WORKSPACE_ID`。同一把 key 可用于其获授权的各
-workspace。省略选项时使用服务端默认项。该选项作用于当前 MCP 连接。
-显式指定时，MCP 启动前会核对宿主返回的 workspace。若宿主未确认目标，客户端会退出并提示核对服务版本和转发配置。
+在客户端用 `/mcp` 检查连接。调用 `context_session` 核对 `workspace_id`。如需选择其他有权访问的工作区，
+可在启动前设置 `OC_WORKSPACE_ID`。两份示例均将该值映射为 HTTP 请求头。
 
 显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用

@@ -1,9 +1,12 @@
 {
   "mcpServers": {
     "origence": {
-      "type": "stdio",
-      "command": "origence",
-      "args": ["mcp"]
+      "type": "http",
+      "url": "${OC_SERVER_URL:-http://127.0.0.1:8080}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${OC_API_KEY}",
+        "X-Origence-Workspace": "${OC_WORKSPACE_ID:-}"
+      }
     }
   }
 }

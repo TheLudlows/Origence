@@ -7,6 +7,21 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · 客户端插件切换到 HTTP MCP
+
+基于 PR #139 的 `3d99e7e1c6220a2e7810e4b2921a707730cff6e4`。Linux x86_64，Rust 1.98.0。
+全特性、SQLite 和云端构建通过全目标 Clippy，警告视为错误。默认 Rust 套件通过 469 项，
+8 项既有真实 AnySeek 契约在默认套件中保持忽略。移除了模拟旧宿主忽略工作区选择的 stdio 启动测试。
+实际 HTTP 测试继续覆盖默认工作区、显式范围、无权选择、撤销，以及插件省略工作区时发送的空请求头。
+
+- `python3 tools/mcp_smoke.py --binary target/debug/origence --local` 验证协议协商、全部工具 schema、安全错误、
+  私有归档、凭据撤销与宿主重启后的读取。
+- `python3 tools/plugin_smoke.py --binary target/debug/origence` 用 Claude Code 2.1.330 与 Codex 0.171.0
+  验证安装、无本机 Origence 的检索、指定版本读取及卸载。加入本机二进制后，用合成 writer Key 验证默认 Run Hook。
+  以 `--bind 127.0.0.1:0` 复跑，验证 Claude Code 地址变量和 Codex 同名地址覆盖。客户端使用隔离设置目录与脚本化回环模型，
+  未运行 Windows 客户端、外部 HTTPS 代理或真实模型。
+- 本机旧版独立 AnySeek `6614bbf` 在资料发布阶段返回依赖不可用，未进入 MCP 测试。CI 固定的 `6a46fc7` 待在 GitHub 验证。
+
 ## 2026-11-26 · Streamable HTTP MCP
 
 基于 main `85d6264ab720437d8620d3cdb5289ace85a5942c`，Linux x86_64，Rust 1.98.0。

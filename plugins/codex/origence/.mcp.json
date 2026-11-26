@@ -1,9 +1,11 @@
 {
   "mcpServers": {
     "origence": {
-      "command": "origence",
-      "args": ["mcp"],
-      "env_vars": ["OC_API_KEY", "OC_SERVER_URL", "OC_WORKSPACE_ID", "PATH"],
+      "url": "http://127.0.0.1:8080/mcp",
+      "bearer_token_env_var": "OC_API_KEY",
+      "env_http_headers": {
+        "X-Origence-Workspace": "OC_WORKSPACE_ID"
+      },
       "enabled_tools": ["context_session", "context_search", "context_get"]
     }
   }
