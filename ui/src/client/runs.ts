@@ -71,7 +71,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   root.append(
     heading(
       "运行总览",
-      "追溯任务、上下文与每一条运行证据。",
+      "查看新建运行、已上报的计量和调用记录。",
       button("查看调用链 →", () => ctx.navigate("runs"), "primary"),
     ),
   );
@@ -88,15 +88,16 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   const workspaceWide = runs.status === "fulfilled" && runs.value.scope === "workspace";
   const list = panel(workspaceWide ? "当前工作区的运行" : "当前 Key 的运行");
   recent.append(list);
+  const ready = health.status === "fulfilled" && health.value.status === "ready";
   cards.append(
     panel(
       "服务就绪状态",
       el(
         "div",
-        "stat-value",
-        health.status === "fulfilled" ? health.value.status : "不可用",
+        ready ? "stat-value stat-health is-ready" : "stat-value stat-health",
+        ready ? "就绪" : health.status === "fulfilled" ? health.value.status : "不可用",
       ),
-      el("p", "muted", "Worker 与本地存储；不代表模型健康"),
+      el("p", "muted", "检查 Worker 与本地存储。模型健康需单独核对。"),
     ),
   );
   cards.append(
@@ -141,7 +142,8 @@ function runTable(items: Run[], workspaceWide: boolean, ctx: ViewContext) {
       el("span", "mono", short(run.run_id)),
       ...(workspaceWide ? [run.owner_key_id ? el("span", "mono", run.owner_key_id) : "—"] : []),
       date(run.created_at_ms),
-      statuses[run.status] ?? statuses.unknown,
+      badge(statuses[run.status] ?? statuses.unknown,
+        run.status === "reported_success" ? "good" : run.status === "reported_failure" ? "danger" : ""),
       run.is_owner === false
         ? "仅所有者可查看链路"
         : button("查看链路 →", () => ctx.navigate("runs", run.run_id), "link"),
