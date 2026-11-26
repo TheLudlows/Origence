@@ -26,40 +26,6 @@ env:
   PYTHONUTF8: "1"
 
 jobs:
-  windows-installer-probe:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Inspect isolated installer ACL failure
-        shell: pwsh
-        run: |
-          @'
-          import { spawnSync } from 'node:child_process';
-          import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-          import { tmpdir } from 'node:os';
-          import { join } from 'node:path';
-          const target = mkdtempSync(join(tmpdir(), 'Origence ACL probe '));
-          const script = `
-          $ErrorActionPreference = 'Stop'
-          $utf8 = [Text.UTF8Encoding]::new($false)
-          $reader = [IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8)
-          $request = $reader.ReadToEnd() | ConvertFrom-Json
-          ${readFileSync('tools/installer/windows.ps1', 'utf8')}`;
-          const legacy = spawnSync('git', ['show', 'origin/main:tools/installer/windows.ps1'], { encoding: 'utf8' }).stdout;
-          try {
-            for (const [name, code] of [['legacy', legacy], ['pipe', script]]) {
-              if (!code) continue;
-              const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(code, 'utf16le').toString('base64')];
-              const result = spawnSync('powershell.exe', args, {
-                input: JSON.stringify({ action: 'protect', path: target }), windowsHide: true, encoding: 'utf8', timeout: 20000
-              });
-              console.log(name, JSON.stringify({ status: result.status, error: result.error?.code, stderr: result.stderr, stdout: result.stdout }));
-            }
-          } finally { rmSync(target, { recursive: true, force: true }); }
-          '@ | node --input-type=module
   windows-plugin:
     runs-on: windows-latest
     timeout-minutes: 30

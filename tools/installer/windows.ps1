@@ -7,16 +7,20 @@ function Write-Json($value) {
 if ($request.action -eq 'protect') {
     $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User
     if ($request.file) {
+        $item = [IO.FileInfo]::new($request.path)
         $acl = [Security.AccessControl.FileSecurity]::new()
         $rule = [Security.AccessControl.FileSystemAccessRule]::new($owner, 'FullControl', 'Allow')
     } else {
+        $item = [IO.DirectoryInfo]::new($request.path)
         $acl = [Security.AccessControl.DirectorySecurity]::new()
         $rule = [Security.AccessControl.FileSystemAccessRule]::new($owner, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
     }
     $acl.SetOwner($owner)
     $acl.SetAccessRuleProtection($true, $false)
     $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $request.path -AclObject $acl
+    # Use the .NET Framework API so Windows PowerShell need not load a
+    # security module from the parent shell's PSModulePath.
+    $item.SetAccessControl($acl)
     exit
 }
 $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
