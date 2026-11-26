@@ -16,7 +16,7 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 | Trace | Private Runs, preparation receipts, explicit HTTP/MCP reporting, default Run hooks in the Codex and Claude Code plugins, owner-transcribed external verification, exact version citations, and archived PDF page locators. [Run contract](contracts/runs.md) | Full event coverage on both clients, end-to-end evidence verification, independent sign-off |
 | Retrieval and context assembly | AnySeek full-text, vector, and one-hop graph candidates with authoritative revalidation. Evidence assembly follows budgets. Local real-engine regressions passed. | Model retrieval quality, capacity, and latency acceptance on the current backend |
 | Private archives and feedback | Cross-client explicit archive reads, logical-key isolation, rotation, and revocation were verified. Supports explicit feedback and Improve → Learning. | Verify archive and feedback evidence in the two P0 scenarios |
-| Node.js management UI | Default account sign-in, direct child workspace creation by root workspace administrators, administrator API key management, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. Admins can see Run statuses and statistics for their workspace. Targeted Chromium checks exist. | Actual screen readers and physical touchscreens, production metering and alerts. [Management UI #76](https://github.com/TheLudlows/Origence/issues/76) |
+| Node.js management UI | Account sign-in, workspace management, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. The overview also shows executor-reported whole-Run P95, Agent tokens, costs and sample counts. | First release acceptance is scoped to metering. Screen-reader, physical touchscreen and alert acceptance are out of scope. [Management UI #76](https://github.com/TheLudlows/Origence/issues/76) |
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
@@ -68,8 +68,7 @@ Local changes based on `01d4f82` distinguish preparation success, server-observe
 
 ## Next steps
 
-1. Continue [#76](https://github.com/TheLudlows/Origence/issues/76) screen-reader and physical touchscreen acceptance and collect missing evidence using the existing acceptance checklist.
-2. Freeze clients, models, and task materials under [#91](https://github.com/TheLudlows/Origence/issues/91), verify archives, Skill reuse, and Trace, and obtain independent sign-off.
+Freeze clients, models, and task materials under [#91](https://github.com/TheLudlows/Origence/issues/91), verify archives, Skill reuse, and Trace, and obtain independent sign-off.
 
 ## Scope and evidence
 

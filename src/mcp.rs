@@ -49,7 +49,7 @@ struct RunAppendInput {
     run_id: String,
     /// Existing RunEventInput: event_id, reporter, observed_at_ms, event.
     /// event.kind: context_reported, tool_reported, result_reported, feedback,
-    /// skill_loaded_reported, artifact_reported, coverage. Never server events.
+    /// skill_loaded_reported, artifact_reported, coverage, metering_reported. Never server events.
     report: serde_json::Map<String, serde_json::Value>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -98,7 +98,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Append an explicit existing RunEventInput report. Reports are claims, not verified execution. Omitted activity is unknown; use coverage with unknown/partial/not_collected. Reuse event_id and identical payload on retry. Never submit credentials or raw tool output."
+        description = "Append an explicit RunEventInput report. Reports are claims, not verified execution. For metering_reported, provide measured whole-Run duration_ms and/or agent_tokens, or independently sourced estimated_cost or billed_cost objects (currency and integer micros). Omit unknown metrics. Reuse event_id and identical payload on retry. Never submit credentials or raw tool output."
     )]
     async fn context_run_report(
         &self,

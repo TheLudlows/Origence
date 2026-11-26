@@ -10,10 +10,53 @@ interface RunCreationBucket {
 interface RunCreationOverview extends RunCreationBucket {
   scope: "workspace" | "current_logical_key";
   series: RunCreationBucket[];
+  metering?: {
+    duration_p95_ms: number | null;
+    duration_runs: number;
+    agent_tokens: string | null;
+    token_runs: number;
+    costs: {
+      basis: "estimated" | "billed";
+      currency: string;
+      micros: string;
+      runs: number;
+    }[];
+  };
 }
 
 function utc(ms: number) {
   return new Date(ms).toISOString().replace("T", " ").replace("Z", "");
+}
+
+function amount(currency: string, micros: string) {
+  const units = BigInt(micros);
+  const whole = (units / 1_000_000n).toLocaleString("zh-CN");
+  const fraction = (units % 1_000_000n).toString().padStart(6, "0");
+  return `${currency} ${whole}.${fraction}`;
+}
+
+function metering(data: RunCreationOverview) {
+  const metrics = data.metering;
+  if (!metrics) return panel("运行计量", el("p", "muted", "当前服务未返回计量数据。"));
+  const duration = metrics.duration_p95_ms === null
+    ? "未知" : `${metrics.duration_p95_ms.toLocaleString("zh-CN")} ms`;
+  const tokens = metrics.agent_tokens === null
+    ? "未知" : BigInt(metrics.agent_tokens).toLocaleString("zh-CN");
+  const costs = metrics.costs.map(({ basis, currency, micros, runs }) => [
+    basis === "billed" ? "账单金额" : "费用估算",
+    amount(currency, micros),
+    runs,
+  ]);
+  return panel(
+    "运行计量",
+    el("p", "muted", `统计窗口内创建的 ${data.created_runs.toLocaleString("zh-CN")} 个 Run。只汇总已上报的整轮计量，费用按币种和来源分别列出。`),
+    table(["指标", "已上报数值", "覆盖 Run 数"], [
+      ["端到端耗时 P95", duration, metrics.duration_runs],
+      ["Agent Token 总量", tokens, metrics.token_runs],
+      ...costs,
+      ...(costs.length ? [] : [["费用", "未知", 0]]),
+    ]),
+  );
 }
 
 export function runCreationTrend(signal: AbortSignal) {
@@ -48,8 +91,9 @@ export function runCreationTrend(signal: AbortSignal) {
       status.textContent = `新建运行 ${data.created_runs.toLocaleString("zh-CN")} 条`;
       result.append(
         el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
+        metering(data),
         el("p", "muted", `UTC ${utc(data.start_ms)}（含）至 ${utc(data.end_ms)}（不含）`),
-        table(
+        el("div", "run-creation-buckets", table(
           ["桶起点（UTC，含）", "桶终点（UTC，不含）", "创建数", "相对趋势"],
           data.series.map((bucket) => {
             const bar = el("meter");
@@ -58,7 +102,7 @@ export function runCreationTrend(signal: AbortSignal) {
             bar.setAttribute("aria-hidden", "true");
             return [utc(bucket.start_ms), utc(bucket.end_ms), bucket.created_runs, bar];
           }),
-        ),
+        )),
       );
       if (document.activeElement === retry) range.focus();
       retry.hidden = true;

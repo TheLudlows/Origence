@@ -187,7 +187,25 @@ impl SqliteTx {
             .filter(|start| *start >= 0)
             .ok_or(StorageError::InvalidArgument("invalid Run overview time"))?;
         let mut counts = vec![0_i64; buckets as usize];
-        if workspace_wide {
+        let owner = if workspace_wide {
+            None
+        } else {
+            Some(self.private_key_id().await?)
+        };
+        if let Some(owner) = owner {
+            for (bucket, count) in counts.iter_mut().enumerate() {
+                let start = start_ms + bucket as i64 * width_ms;
+                *count = sqlite_db::query_scalar(COUNT_RUNS_CREATED)
+                    .bind(self.scope.tenant_id)
+                    .bind(self.scope.workspace_id)
+                    .bind(owner)
+                    .bind(start)
+                    .bind(start + width_ms)
+                    .fetch_one(&mut *self.tx)
+                    .await
+                    .map_err(sqlite_err)?;
+            }
+        } else {
             // Group in one covering-index scan of this workspace, regardless of the number of buckets.
             let groups: Vec<(i64, i64)> = sqlite_db::query_as(
                 "SELECT CAST((created_at-?3)/?5 AS INTEGER) AS bucket,COUNT(*) \
@@ -206,20 +224,6 @@ impl SqliteTx {
             for (bucket, count) in groups {
                 counts[bucket as usize] = count;
             }
-        } else {
-            let owner = self.private_key_id().await?;
-            for (bucket, count) in counts.iter_mut().enumerate() {
-                let start = start_ms + bucket as i64 * width_ms;
-                *count = sqlite_db::query_scalar(COUNT_RUNS_CREATED)
-                    .bind(self.scope.tenant_id)
-                    .bind(self.scope.workspace_id)
-                    .bind(owner)
-                    .bind(start)
-                    .bind(start + width_ms)
-                    .fetch_one(&mut *self.tx)
-                    .await
-                    .map_err(sqlite_err)?;
-            }
         }
         let total: i64 = counts.iter().sum();
         let series: Vec<_> = counts
@@ -237,7 +241,8 @@ impl SqliteTx {
         };
         Ok(json!({
             "scope":scope, "window":window, "timezone":"UTC",
-            "start_ms":start_ms, "end_ms":end_ms, "created_runs":total, "series":series
+            "start_ms":start_ms, "end_ms":end_ms, "created_runs":total, "series":series,
+            "metering":self.run_metering(owner, start_ms, end_ms).await?
         }))
     }
 }

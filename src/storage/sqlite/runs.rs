@@ -143,7 +143,7 @@ impl SqliteTx {
         input: &RunEventInput,
     ) -> StorageResult<Value> {
         self.check_permission(Permission::Write).await?;
-        self.owned_run(run).await?;
+        let (_, _, created) = self.owned_run(run).await?;
         input.validate().map_err(StorageError::InvalidArgument)?;
         let payload = encode(input)?;
         let digest = hash(&payload);
@@ -170,6 +170,7 @@ impl SqliteTx {
         if last >= 10000 {
             return Err(StorageError::InvalidArgument("run event budget exceeded"));
         }
+        self.record_run_metering(run, created, &input.event).await?;
         let seq = last + 1;
         sqlite_db::query("INSERT INTO oc_run_events(tenant_id,workspace_id,run_id,event_id,sequence,reporter_principal_id,payload,payload_hash,references_json,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.event_id).bind(seq).bind(self.principal_id).bind(payload).bind(digest).bind(encode(&refs)?).bind(now_ms())

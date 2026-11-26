@@ -134,6 +134,14 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         start_ms: 0,
         end_ms: size * width,
         created_runs: window === "24h" ? 31 : 34,
+        metering: window === "24h" ? {
+          duration_p95_ms: 1500, duration_runs: 2,
+          agent_tokens: "0", token_runs: 1,
+          costs: [
+            { basis: "estimated", currency: "USD", micros: "12345", runs: 1 },
+            { basis: "billed", currency: "CNY", micros: "9007199254740993", runs: 2 },
+          ],
+        } : { duration_p95_ms: null, duration_runs: 0, agent_tokens: null, token_runs: 0, costs: [] },
         series: Array.from({ length: size }, (_, index) => ({
           start_ms: index * width,
           end_ms: (index + 1) * width,
@@ -415,18 +423,37 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       (section) => section.querySelector("h2")?.textContent === "运行创建趋势",
     );
     await wait(() => trend.textContent.includes("新建运行 31 条"));
-    assert.equal(trend.querySelectorAll("tbody tr").length, 24);
+    const rows = (scope) => [...scope.querySelectorAll("tbody tr")].map(
+      (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent),
+    );
+    const buckets = () => trend.querySelectorAll(".run-creation-buckets tbody tr");
+    const metering = () => [...trend.querySelectorAll("section")].find(
+      (section) => section.querySelector("h2")?.textContent === "运行计量",
+    );
+    assert.equal(buckets().length, 24);
+    assert.deepEqual(rows(metering()), [
+      ["端到端耗时 P95", "1,500 ms", "2"],
+      ["Agent Token 总量", "0", "1"],
+      ["费用估算", "USD 0.012345", "1"],
+      ["账单金额", "CNY 9,007,199,254.740993", "2"],
+    ]);
     assert.ok(document.body.textContent.includes("fixture task"));
     const range = control("统计范围", trend);
     range.value = "7d";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("新建运行 34 条"));
-    assert.equal(trend.querySelectorAll("tbody tr").length, 7);
+    assert.equal(buckets().length, 7);
+    assert.deepEqual(rows(metering()), [
+      ["端到端耗时 P95", "未知", "0"],
+      ["Agent Token 总量", "未知", "0"],
+      ["费用", "未知", "0"],
+    ]);
     overviewUnavailable = true;
     range.value = "24h";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("创建量暂不可用"));
     assert.equal(trend.querySelectorAll("tbody tr").length, 0);
+    assert.equal(metering(), undefined);
     assert.ok(document.body.textContent.includes("fixture task"));
     overviewUnavailable = false;
     click("重试读取创建量", trend);

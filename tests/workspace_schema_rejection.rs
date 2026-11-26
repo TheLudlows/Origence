@@ -221,17 +221,21 @@ async fn missing_run_verification_table_is_rejected_without_migration() {
 }
 
 #[tokio::test]
-async fn missing_run_creation_index_is_rejected_without_repair() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("authority.db");
-    let store = SqliteStore::open(&path).await.unwrap();
-    db::query("DROP INDEX oc_runs_owner_created_at")
-        .execute(store.pool())
-        .await
-        .unwrap();
-    store.shutdown().await.unwrap();
-    drop(store);
-    let before = tokio::fs::read(&path).await.unwrap();
-    assert!(SqliteStore::open(&path).await.is_err());
-    assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
+async fn missing_run_statistics_schema_is_rejected_without_repair() {
+    for remove in [
+        "DROP INDEX oc_runs_owner_created_at",
+        "DROP TABLE oc_run_measurements",
+        "DROP INDEX oc_run_measurements_owner_created",
+        "DROP INDEX oc_run_measurements_workspace_created",
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("authority.db");
+        let store = SqliteStore::open(&path).await.unwrap();
+        db::query(remove).execute(store.pool()).await.unwrap();
+        store.shutdown().await.unwrap();
+        drop(store);
+        let before = tokio::fs::read(&path).await.unwrap();
+        assert!(SqliteStore::open(&path).await.is_err(), "{remove}");
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
+    }
 }
