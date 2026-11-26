@@ -37,6 +37,19 @@ the database and backup. The backend help had no setup commands. Rust formatting
 Node type checking and 30 UI tests passed. The Windows .cmd entry is wired into the native workflow
 and has yet to run.
 
+Using main `620188115c89b20bc1411f5ec1e48b93f68548eb` as the base, fix commit
+`4e3d95fc3ea495e6beaf7138d4cec6c52a894dc6` passed installer acceptance
+on Windows Server 2025 (10.0.26100), Node.js 24, and native Claude Code 2.1.330. A missing
+`origence.exe` produced the `--origence` diagnostic before workspace data was created. A first install
+through `.cmd` verified the Claude MCP connection, console sign-in, and Hook Run readback. A new
+process received the credentials and PATH from the user registry. Reruns reused services and the
+probe Run, an invalid key returned 401, and forced reinstallation backed up the original database.
+Uninstall from outside the checkout restored the original registry values and types, removed the
+Claude Code plugin, and preserved the database and backup. Repeated uninstall skipped. The same
+commit passed the native Claude Code and Chromium acceptance on Linux, Rust formatting, and strict
+Clippy. These runs used loopback services and synthetic data with no live model calls.
+[Windows acceptance](https://github.com/TheLudlows/Origence/actions/runs/45813998221)
+
 ## 2026-11-26 · Codex commands and Claude SDK cancellation
 
 Tested `2396dfa3ffd303c0cbfbd63068930fb36926ab8b` on main
