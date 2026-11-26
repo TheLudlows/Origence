@@ -206,6 +206,9 @@ nav {
   display: grid;
   gap: 7px;
 }
+.sidebar nav .nav-item {
+  scroll-margin-block: 5px;
+}
 .nav-item {
   justify-content: flex-start;
   background: transparent;
