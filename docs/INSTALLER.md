@@ -36,9 +36,13 @@ node tools/install.mjs --init demo --endpoint http://127.0.0.1:8080
 
 重复执行相同命令会复用工作区、账号、插件和服务。更换 Key 或已安装的地址时加 `--force`。它会刷新安装配置和控制台密码。只有同时指定 `--force --init <名称>` 才会初始化新工作区；现有数据目录先改名为带时间戳的备份。重建前应停止所有外部 Origence 进程。安装器检查本地监听与已有数据库锁，且只停止自己启动的进程。自管服务在关闭安装终端后继续运行，重新登录或重启机器后可再次运行安装器启动。
 
+在任意目录运行
+
 ```sh
-node tools/install.mjs --uninstall
+origence uninstall
 ```
+
+短命令使用安装时记录的 Node 和安装器脚本。若用的是旧版二进制，或安装目录已移动，可从现有检出目录运行 `node tools/install.mjs --uninstall`。
 
 安装器的私有状态和服务日志位于 Windows 的 `%LOCALAPPDATA%\Origence\installer` 或 Unix 的
 `~/.origence/installer`。卸载撤销所记录的用户环境和 PATH 修改，移除本次安装增加的 Claude 插件和控制台账号，停止安装器启动的进程。保留数据目录、备份和显式导出的凭据文件。在 Windows 使用当前用户注册表，在 Unix 通过 shell 启动文件加载私有环境文件。由用户独立修改的 PATH 条目或启动脚本内容会保留。

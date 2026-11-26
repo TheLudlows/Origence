@@ -36,9 +36,13 @@ Restart your terminal and Claude Code. Use `Test-Path Env:OC_API_KEY` in PowerSh
 
 Reruns reuse the workspace, account, plugin, and listeners. Use `--force` to refresh settings and reset the console password, including when changing the endpoint or key. Only `--force --init <name>` initializes a replacement workspace. It renames an existing data directory to a timestamped backup first. Stop all external Origence processes before reinitializing. The installer checks the listener and existing database lock, and stops its own processes exclusively. Managed processes survive closing the terminal. Rerun the installer to restart them after a reboot.
 
+Run from any directory.
+
 ```sh
-node tools/install.mjs --uninstall
+origence uninstall
 ```
+
+The shortcut uses the Node executable and installer script recorded during setup. With an older binary or after moving the installer directory, run `node tools/install.mjs --uninstall` from the current checkout.
 
 Installer state and service logs are under `%LOCALAPPDATA%\Origence\installer` on Windows or
 `~/.origence/installer` on Unix. Uninstall restores the recorded user environment and PATH changes, removes the installer-created account and Claude plugin, and stops managed processes. It preserves backend data, backups, and exported credential files. Windows uses the current-user registry. Unix startup files source a private environment file. Unrelated PATH entries and shell edits are retained.

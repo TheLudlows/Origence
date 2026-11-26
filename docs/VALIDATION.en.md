@@ -25,6 +25,10 @@ and synthetic events with no live model. The native Windows acceptance workflow 
 rollback and fresh process inheritance. Windows and macOS paths have not yet been executed for this installer.
 [Installer guide](INSTALLER.en.md)
 
+On installer commit `6f8bf7a`, reran the Linux native Claude Code and Chromium acceptance.
+`origence uninstall` rolled back shell and PATH changes from outside the checkout and preserved the database
+and backup. A repeated call skipped, and legacy state pointed to the script. Rust formatting and strict Clippy passed.
+
 ## 2026-11-26 · #89 End-to-end expense trace preflight
 
 Based on main `3984085ca5872dc68ea44b062e2d0791f92102a3`, using Linux x86_64, Rust 1.98.0,

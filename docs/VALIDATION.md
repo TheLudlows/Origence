@@ -29,6 +29,10 @@ NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
 合成记录通过回环发送。本轮未使用真实模型，Windows 用户注册表和新进程继承由原生 Windows
 验收工作流覆盖，当前未实际运行该安装器的 Windows 或 macOS 验收。[安装说明](INSTALLER.md)
 
+在安装器提交 `6f8bf7a` 上复跑 Linux 原生 Claude Code 和 Chromium 验收。新版 `origence uninstall`
+可在仓库外卸载，恢复 shell 和 PATH，保留数据库与备份。重复卸载返回跳过，旧安装状态提示使用脚本入口。
+Rust 格式检查与严格 Clippy 通过。
+
 ## 2026-11-26 · #89 报销 Run 端到端追溯预检
 
 基于 main `3984085ca5872dc68ea44b062e2d0791f92102a3`，Linux x86_64、Rust 1.98.0、

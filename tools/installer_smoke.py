@@ -75,8 +75,9 @@ def fresh_windows_environment():
         kernel.CloseHandle(token)
 
 
-def installer(env, commands, forbidden, expected=0):
-    child = subprocess.run(["node", str(REPO / "tools/install.mjs"), *commands], env=env, cwd=REPO,
+def installer(env, commands, forbidden, expected=0, *, binary=None, cwd=REPO):
+    entry = [str(binary)] if binary else ["node", str(REPO / "tools/install.mjs")]
+    child = subprocess.run([*entry, *commands], env=env, cwd=cwd,
                            capture_output=True, text=True, encoding="utf-8", timeout=150)
     sanitized(child.stdout + child.stderr, forbidden)
     require(child.returncode == expected, "Unexpected installer result: " + child.stdout[-3000:])
@@ -237,7 +238,11 @@ def smoke(binary, claude, root, browser):
         if not WINDOWS:
             with rc.open("a", encoding="utf-8") as handle:
                 handle.write("\n# added after installation")
-        installer(env, ["--uninstall"], forbidden)
+        removed = installer(env, ["uninstall"], forbidden, binary=binary, cwd=root)
+        require(removed["uninstall"]["status"] == "success",
+                "The CLI shortcut must roll back from outside the repository")
+        repeated = installer(env, ["uninstall"], forbidden, binary=binary, cwd=root)
+        require(repeated["uninstall"]["status"] == "skipped", "Rerunning uninstall must be a no-op")
         require((data / "context.db").is_file() and (backup / "context.db").is_file(),
                 "Uninstall must preserve both live and backed-up data")
         if WINDOWS:
@@ -250,7 +255,7 @@ def smoke(binary, claude, root, browser):
                                       capture_output=True, encoding="utf-8", timeout=30, check=True)
         require(not any(item.get("id") == PLUGIN for item in json.loads(install_list.stdout)),
                 "Uninstall left the installer-owned plugin enabled")
-        print("PASS native Claude MCP, UI login, private Hook Run, idempotence, 401, backup, and user environment rollback")
+        print("PASS native Claude MCP, UI login, Hook Run, idempotence, 401, backup, and CLI uninstall rollback")
     finally:
         if (state_dir / "state.json").exists():
             installer(env, ["--uninstall"], forbidden)

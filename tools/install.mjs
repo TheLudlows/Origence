@@ -23,6 +23,7 @@ const tokenPattern = /^[\x21-\x7e]{1,512}$/;
 
 const usage = `Usage: node tools/install.mjs [--endpoint URL] [--token KEY | --from-env]
        node tools/install.mjs --init NAME [--endpoint URL]
+       origence uninstall
        node tools/install.mjs --uninstall
 
 --from-env               Read OC_SERVER_URL and OC_API_KEY
@@ -397,6 +398,8 @@ async function install(state, args) {
   execute(binary, ["--version"], { env, diagnosis: "Origence could not be executed" });
   execute(binary, ["plugin-hook", "--help"], { env, diagnosis: "The Origence binary does not support Claude Code hooks" });
   status("executables", "success", "Origence and Claude Code are available.");
+  state.value.uninstaller = { node: process.execPath, script: fileURLToPath(import.meta.url) };
+  state.save();
   if (initialize) {
     const bootstrapResult = await bootstrap(state, binary, endpoint, dataDir, init, args.force, env);
     token = bootstrapResult.token;
