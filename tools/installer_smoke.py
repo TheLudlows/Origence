@@ -175,8 +175,9 @@ def smoke(binary, claude, root, browser):
     try:
         absent = installer(env, [*paths, "--origence", str(root / "missing" / "origence"), "--init", "Missing"],
                            [], expected=1)
-        require("executable could not be found" in absent["installation"]["detail"],
-                "Missing Origence executable must be diagnosed")
+        diagnosis = absent["installation"]["detail"]
+        require("executable could not be found" in diagnosis,
+                "Missing Origence executable must be diagnosed. Installer returned: " + diagnosis)
         invalid = "invalid-installer-fixture-key"
         unreachable = installer(env, [*paths, "--token", invalid], [invalid], expected=1)
         require("unreachable" in unreachable["installation"]["detail"] and not data.exists(),
