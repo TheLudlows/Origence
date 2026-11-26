@@ -14,6 +14,7 @@ const MAX_BODY = 10 * 1024 * 1024;
 const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const createWorkspacePath = new RegExp(`^/v1/workspaces/owned/${uuid}$`);
 const managedKeyPath = new RegExp(`^/admin/keys/(${uuid})(?:/rotate)?$`);
+const agentPath = "/admin/agents";
 const keyRules: [string, RegExp][] = [
   ["GET", /^\/admin\/(keys|workspace-key-grants)$/],
   ["POST", new RegExp(`^/admin/keys(?:/${uuid}/rotate)?$`)],
@@ -165,8 +166,10 @@ export function createUiServer(options: ServerOptions) {
         }
         const path = target.pathname.slice(4);
         const managingKeys = keyRules.some(([method, pattern]) => method === req.method && pattern.test(path));
+        const viewingAgents = req.method === "GET" && path === agentPath;
         if (
           !managingKeys &&
+          !viewingAgents &&
           !rules.some(
             ([method, pattern]) => method === req.method && pattern.test(path),
           )
@@ -175,13 +178,14 @@ export function createUiServer(options: ServerOptions) {
         const headers = new Headers();
         const authorization = req.headers.authorization;
         const creatingWorkspace = req.method === "PUT" && createWorkspacePath.test(path);
-        if (!managingKeys && !creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
+        if (!managingKeys && !viewingAgents && !creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
         else if (!path.startsWith("/health/")) {
           const workspace = sessions.authorization(req, new URL(origin));
           if (creatingWorkspace && !workspace.canCreateOwned) throw new HttpError(403, "当前工作区未授权创建子工作区");
           headers.set("authorization", workspace.authorization);
-          if (managingKeys) {
-            if (workspace.role !== "admin") throw new HttpError(403, "只有工作区管理员可以管理 API Key");
+          if (managingKeys || viewingAgents) {
+            if (workspace.role !== "admin")
+              throw new HttpError(403, viewingAgents ? "只有工作区管理员可以查看 Agent 连接" : "只有工作区管理员可以管理 API Key");
             const targetId = managedKeyPath.exec(path)?.[1];
             if (targetId?.toLowerCase() === workspace.principalId.toLowerCase())
               throw new HttpError(409, "请在控制台外维护当前会话使用的凭据");

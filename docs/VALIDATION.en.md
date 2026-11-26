@@ -21,6 +21,25 @@ with synthetic data and no model generation or independent sign-off. The formal 
 
 All 214 local Rust integration tests, 28 UI tests, and 58 pilot tooling tests passed on the same baseline,
 along with the existing Chromium check for the verification UI.
+After syncing main `39d8075e90914e0c51f2416e9309847b3679b419`, the rebuilt Origence and console passed
+the end-to-end trace preflight, the existing Chromium verification check, 215 local Rust integration tests,
+Node type checking, 29 UI tests, and 58 pilot tooling tests.
+
+## 2026-11-26 · Admin Agent connections
+
+Tested `fd7209dadcde3559e5271d4b8a1c269e202bf943` on main
+`3984085ca5872dc68ea44b062e2d0791f92102a3`, Linux x86_64 and Rust 1.98.0.
+Formatting, strict `--no-default-features --features local-storage --all-targets`
+Clippy, 236 unit tests, and 215 local integration tests passed. MCP and admin
+API tests checked grouping, empty results, administrator access, tenant isolation,
+workspace grant removal, key rotation, and rebuilding the HTTP router. The unit
+test checked concurrent request counts and idle expiration.
+
+Node type checking and 29 UI tests passed. Chromium exercised sidebar keyboard
+navigation at 320, 375, 736, and 1024px. An additional loopback test used the
+actual Origence HTTP host, the Node relay, and a temporary SQLite console
+account. It verified grouping from synthetic MCP handshakes and denied access
+after switching to a reader workspace, including direct navigation.
 
 ## 2026-11-26 · #76 whole-Run metering
 

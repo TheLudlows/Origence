@@ -1,4 +1,5 @@
 import { api, ApiError } from "./api.js";
+import { agentsPage } from "./agents.js";
 import { assetDetail, assetsPage } from "./assets.js";
 import {
   button,
@@ -27,6 +28,7 @@ const pages = [
   ["knowledge", "▤", "知识管理"],
   ["contexts", "⊞", "上下文工作台"],
   ["keys", "⚿", "API Key"],
+  ["agents", "◉", "Agent 连接"],
 ] as const;
 const sessionPath = "/console/session";
 const workspaceStorageKey = "origence.selectedWorkspace";
@@ -257,7 +259,7 @@ async function render() {
   const nav = el("nav");
   nav.setAttribute("aria-label", "主导航");
   for (const [key, icon, label] of pages) {
-    if (key === "keys" && user.role !== "admin") continue;
+    if ((key === "keys" || key === "agents") && user.role !== "admin") continue;
     const link = button("", () => navigate(key), "nav-item");
     link.append(el("span", "nav-icon", icon), label);
     if (key === page) link.setAttribute("aria-current", "page");
@@ -354,6 +356,7 @@ async function render() {
       await assetsPage(content, page, ctx);
     else if (page === "contexts") contextPage(content, ctx);
     else if (page === "keys") keysPage(content, ctx, activeWorkspace);
+    else if (page === "agents") agentsPage(content, ctx, activeWorkspace.workspace_id);
     else if (page === "asset" && id)
       await assetDetail(content, id, version, ctx);
     else content.append(heading("页面不存在", "请使用左侧导航选择功能。"));
