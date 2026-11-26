@@ -244,6 +244,8 @@ Hook 保持客户端原流程，可能在 Hook 诊断输出中留下固定的跳
 
 ### 事件和关联边界
 
+由应用直接驱动的任务可用[受管 Run 上报](MANAGED-RUNS.md)记录 Codex App Server 命令完成数据及 Claude Agent SDK 取消结果。
+
 | 客户端 | 关联键 | 可记录的观察 | 覆盖缺口 |
 | --- | --- | --- | --- |
 | Codex | `session_id` 和 `turn_id` | `UserPromptSubmit`、允许名单内的 `PostToolUse`、`Stop`、主线程 `Interrupt`。Origence MCP 工具只使用结构化结果中实际给出的 `isError` | Bash 与补丁工具状态保留未知，无 Hook 耗时字段。无子代理生命周期、托管工具或异常进程退出来推定终止 |

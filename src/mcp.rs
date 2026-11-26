@@ -52,7 +52,8 @@ struct RunAppendInput {
     run_id: String,
     /// Existing RunEventInput: event_id, reporter, observed_at_ms, event.
     /// event.kind: context_reported, tool_reported, result_reported, feedback,
-    /// skill_loaded_reported, artifact_reported, coverage, metering_reported. Never server events.
+    /// skill_loaded_reported, artifact_reported, coverage, metering_reported,
+    /// codex_command_reported, claude_interrupt_reported. Never server events.
     report: serde_json::Map<String, serde_json::Value>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]

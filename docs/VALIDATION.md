@@ -33,6 +33,19 @@ NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
 可在仓库外卸载，恢复 shell 和 PATH，保留数据库与备份。重复卸载返回跳过，旧安装状态提示使用脚本入口。
 Rust 格式检查与严格 Clippy 通过。
 
+## 2026-11-26 · Codex 命令与 Claude SDK 取消
+
+在 main `b4e8879fa952b5afd729fd5b89a630c6d5705696` 上验证
+`2396dfa3ffd303c0cbfbd63068930fb36926ab8b`。Linux x86_64、Rust 1.98.0、Node.js 24。
+格式检查、严格 local-storage Clippy、236 项库测试、215 项本地集成测试、Node 类型检查和
+30 项界面测试通过。12 项受管 Run 夹具通过，覆盖命令关联、缺字段、零值、逐字节重试、安全白名单、
+取消回执与结果乱序、其他提示、旧回执、超时及取消与正常完成竞态。已安装锁定的 SDK 并验证 `query` 导出。
+
+用临时 SQLite、实际 Origence HTTP、Node 转发与 Chromium 串联验证。合成 Codex 命令通知通过
+命令入口上报并重放，SDK 夹具通过应用取消信号上报三阶段。浏览器核对退出码、耗时、未知值、取消回执和
+确认中断分别显示。私有输入未进入 Run，业务状态保持未知。本轮使用合成协议事件，
+尚未用原生客户端和真实模型执行受管任务。
+
 ## 2026-11-26 · #89 报销 Run 端到端追溯预检
 
 基于 main `3984085ca5872dc68ea44b062e2d0791f92102a3`，Linux x86_64、Rust 1.98.0、

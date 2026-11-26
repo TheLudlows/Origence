@@ -16,7 +16,7 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 | Trace | Private Runs, preparation receipts, explicit HTTP/MCP reporting, default Run hooks in the Codex and Claude Code plugins, owner-transcribed external verification, exact version citations, and archived PDF page locators. [Run contract](contracts/runs.md) | Full event coverage on both clients, end-to-end evidence verification, independent sign-off |
 | Retrieval and context assembly | AnySeek full-text, vector, and one-hop graph candidates with authoritative revalidation. Evidence assembly follows budgets. Local real-engine regressions passed. | Model retrieval quality, capacity, and latency acceptance on the current backend |
 | Private archives and feedback | Cross-client explicit archive reads, logical-key isolation, rotation, and revocation were verified. Supports explicit feedback and Improve → Learning. | Verify archive and feedback evidence in the two P0 scenarios |
-| Node.js management UI | Account sign-in, workspace management, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. The overview also shows executor-reported whole-Run P95, Agent tokens, costs and sample counts. | First release acceptance is scoped to metering. Screen-reader, physical touchscreen and alert acceptance are out of scope. [Management UI #76](https://github.com/TheLudlows/Origence/issues/76) |
+| Node.js management UI | Account sign-in, workspace management, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. The overview also shows executor-reported whole-Run P95, Agent tokens, costs and sample counts. [#76](https://github.com/TheLudlows/Origence/issues/76) closed with metering as its final scope. | End-to-end traceability on frozen tasks is part of [#91](https://github.com/TheLudlows/Origence/issues/91). |
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
@@ -38,6 +38,9 @@ process. See the [Agent connections API](API.en.md#agent-connections).
 ## #105 Local client hook implementation
 
 Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. The native Windows runner passed installation, workspace selection, pinned retrieval, and the default hook with synthetic data. See [VALIDATION](VALIDATION.en.md). The formal freeze is blocked on tasks, model authorization, and independent roles. Automatic conversation body archiving remains follow-up work in [#105](https://github.com/TheLudlows/Origence/issues/105).
+
+Applications driving either client can use [managed Run reporting](MANAGED-RUNS.en.md)
+for Codex App Server command metadata and Claude Agent SDK cancellation.
 
 ## Multi-workspace API credentials
 
@@ -71,11 +74,11 @@ This implementation is based on main `44e06df`. It checks analysis configuration
 
 ## Targeted local Run UI verification
 
-Local changes based on `01d4f82` distinguish preparation success, server-observed preparation failure, and client reports. Real Chromium verified Run → pinned v1 → source withdrawal, clicking an old reference again, and denial for another key. See [VALIDATION](VALIDATION.en.md) for exact scope. This is local verification. Remaining #76 requirements are open.
+Local changes based on `01d4f82` distinguish preparation success, server-observed preparation failure, and client reports. Real Chromium verified Run → pinned v1 → source withdrawal, clicking an old reference again, and denial for another key. See [VALIDATION](VALIDATION.en.md) for the scope of that local check.
 
 ## Next steps
 
-Freeze clients, models, and task materials under [#91](https://github.com/TheLudlows/Origence/issues/91), verify archives, Skill reuse, and Trace, and obtain independent sign-off.
+Freeze clients, models, and task materials under [#91](https://github.com/TheLudlows/Origence/issues/91). Verify archives, Skill reuse, and traceability from Run through context or Skill to result, then obtain independent sign-off.
 
 ## Scope and evidence
 

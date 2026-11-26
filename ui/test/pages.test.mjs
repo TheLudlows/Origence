@@ -48,6 +48,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
     coverageRun: "55555555-5555-4555-8555-555555555555",
+    managedRun: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     reportedAsset: "66666666-6666-4666-8666-666666666666",
     reportedChunk: "77777777-7777-4777-8777-777777777777",
     reportedRef: "88888888-8888-4888-8888-888888888888",
@@ -188,6 +189,26 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       }], next_after: null });
     if (path.pathname === `/api/v1/runs/${ids.coverageRun}/verifications`)
       return response({ items: [], next_after: null });
+    if (path.pathname === `/api/v1/runs/${ids.managedRun}/verifications`)
+      return response({ items: [], next_after: null });
+    if (path.pathname === `/api/v1/runs/${ids.managedRun}`) {
+      return response({
+        run: { run_id: ids.managedRun, summary: "managed fixture" },
+        events: [
+          { kind: "codex_command_reported", status: "failed", exit_code: 0 },
+          { kind: "claude_interrupt_reported", observation: { stage: "receipt", status: "prompt_still_queued" } },
+          { kind: "claude_interrupt_reported", observation: { stage: "result", status: "unknown" } },
+          { kind: "claude_interrupt_reported", observation: { stage: "result", status: "interrupted" } },
+        ].map((event, index) => ({
+          sequence: index + 1,
+          evidence_origin: "reported",
+          recorded_at_ms: 1000,
+          report: { reporter: "client", event },
+          references: [],
+        })),
+        next_after: null,
+      });
+    }
     if (path.pathname === `/api/v1/runs/${ids.coverageRun}`) {
       const after = path.searchParams.get("after");
       coverageCursors.push(after);
@@ -791,6 +812,21 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       reportedAssetDenied = false;
       location.hash = `#runs/${ids.run}`;
     }
+  });
+  await t.test("managed Run events show command fields and separate cancellation receipts from results", async () => {
+    location.hash = `#runs/${ids.managedRun}`;
+    const event = sequence => document.querySelector(`button.event[data-sequence="${sequence}"]`);
+    await wait(() => event(1)?.textContent.includes("Codex · 命令结果"));
+    event(1).click();
+    assert.match(document.querySelector("main").textContent, /退出码　0/);
+    assert.match(document.querySelector("main").textContent, /命令耗时　未知/);
+    event(2).click();
+    assert.ok(document.querySelector("main").textContent.includes("目标提示仍在队列"));
+    assert.ok(!document.querySelector("main").textContent.includes("确认中断"));
+    event(3).click();
+    assert.match(document.querySelector("main").textContent, /取消结果[\s\S]*未知/);
+    event(4).click();
+    assert.ok(document.querySelector("main").textContent.includes("确认中断"));
   });
   await t.test("Run coverage keeps loaded declarations ordered and clears denied or replaced evidence", async () => {
     const unknown = "已加载事件中未见采集声明，覆盖未知";
