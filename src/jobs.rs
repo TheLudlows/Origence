@@ -27,6 +27,7 @@ pub enum JobKind {
     SemanticPublish,
     SemanticExtract,
     Improve,
+    ConsolidateMemory,
     Cleanup,
 }
 impl JobKind {
@@ -40,6 +41,7 @@ impl JobKind {
             Self::SemanticPublish => "semantic_publish",
             Self::SemanticExtract => "semantic_extract",
             Self::Improve => "improve",
+            Self::ConsolidateMemory => "consolidate_memory",
             Self::Cleanup => "cleanup",
         }
     }
@@ -57,6 +59,7 @@ impl TryFrom<&str> for JobKind {
             "semantic_publish" => Ok(Self::SemanticPublish),
             "semantic_extract" => Ok(Self::SemanticExtract),
             "improve" => Ok(Self::Improve),
+            "consolidate_memory" => Ok(Self::ConsolidateMemory),
             "cleanup" => Ok(Self::Cleanup),
             _ => Err(AppError::Invalid("unknown job operation".into())),
         }
@@ -130,6 +133,10 @@ pub enum JobPayload {
         extraction_model: String,
         embedding_profile: Option<String>,
     },
+    ConsolidateMemory {
+        extraction_profile: String,
+        extraction_model: String,
+    },
     Cleanup {
         target: String,
         id: Uuid,
@@ -153,12 +160,11 @@ impl JobPayload {
             JobKind::Extract => "legacy_extract",
             _ => kind.as_str(),
         };
-        // Recovery plans can contain every chunk embedding. The typed input
-        // codec ignores that separate envelope field; do not deep-clone it on
-        // the executor merely to have Serde discard it again.
+        // Recovery fields are read by their workers, independently of the
+        // accepted job inputs. Avoid cloning them just to discard them.
         let mut fields: serde_json::Map<String, Value> = object
             .iter()
-            .filter(|(key, _)| key.as_str() != "publication")
+            .filter(|(key, _)| !matches!(key.as_str(), "publication" | "consolidation_plan"))
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
         fields.insert("__job_payload_kind".into(), json!(discriminator));
@@ -212,6 +218,12 @@ impl JobPayload {
                 }
                 Ok(())
             }
+            Self::ConsolidateMemory {
+                extraction_profile,
+                extraction_model,
+            } if extraction_profile.trim().is_empty() || extraction_model.trim().is_empty() => {
+                Err(invalid_payload())
+            }
             _ => Ok(()),
         }
     }
@@ -226,6 +238,7 @@ impl JobPayload {
             Self::SemanticPublish { .. } => JobKind::SemanticPublish,
             Self::SemanticExtract { .. } => JobKind::SemanticExtract,
             Self::Improve { .. } => JobKind::Improve,
+            Self::ConsolidateMemory { .. } => JobKind::ConsolidateMemory,
             Self::Cleanup { .. } => JobKind::Cleanup,
         }
     }
@@ -257,7 +270,7 @@ impl JobPayload {
             Self::MessageBatchIngest { accepted_spec, .. } => {
                 Some(&accepted_spec.embedding_profile)
             }
-            Self::Cleanup { .. } => None,
+            Self::ConsolidateMemory { .. } | Self::Cleanup { .. } => None,
         }
     }
 
@@ -284,6 +297,7 @@ impl JobPayload {
             Self::LegacyExtract { .. }
             | Self::SemanticExtract { .. }
             | Self::Improve { .. }
+            | Self::ConsolidateMemory { .. }
             | Self::Cleanup { .. } => None,
         }
     }
@@ -437,6 +451,14 @@ mod tests {
                 json!({"schema_version":1,"session_id":"00000000-0000-0000-0000-000000000001","improve_id":"00000000-0000-0000-0000-000000000002","extraction_profile":"improve:v1","extraction_model":"model","embedding_profile":null}),
             ),
             (
+                JobPayload::ConsolidateMemory {
+                    extraction_profile: "consolidate:v1".into(),
+                    extraction_model: "model".into(),
+                },
+                "consolidate_memory",
+                json!({"schema_version":1,"extraction_profile":"consolidate:v1","extraction_model":"model"}),
+            ),
+            (
                 JobPayload::Cleanup {
                     target: "event".into(),
                     id: Uuid::from_u128(1),
@@ -450,7 +472,7 @@ mod tests {
     #[test]
     fn all_job_variants_preserve_golden_version_one_payloads() {
         let fixtures = fixtures();
-        assert_eq!(fixtures.len(), 10);
+        assert_eq!(fixtures.len(), 11);
         for (typed, operation, golden) in fixtures {
             let (kind, encoded) = typed.clone().encode().unwrap();
             assert_eq!(kind.as_str(), operation);
@@ -514,6 +536,10 @@ mod tests {
                     "extraction_profile",
                     "extraction_model",
                 ][..],
+            ),
+            (
+                "consolidate_memory",
+                &["extraction_profile", "extraction_model"][..],
             ),
         ] {
             let golden = fixtures()

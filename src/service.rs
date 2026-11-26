@@ -661,6 +661,9 @@ impl Service {
         if changed == 0 {
             return Err(AppError::NotFound);
         }
+        if target == "event" {
+            tx.retract_consolidation_source(id).await?;
+        }
         tx.cancel_affected_jobs().await?;
         let job = Self::enqueue(
             &mut tx,

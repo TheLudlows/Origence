@@ -959,6 +959,8 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
             "context_run_get",
             "context_bundle",
             "context_get",
+            "context_memory_recall",
+            "context_memory_retain",
             "context_resolve",
             "context_search",
             "context_session",

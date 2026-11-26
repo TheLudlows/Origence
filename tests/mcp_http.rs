@@ -395,6 +395,8 @@ async fn streamable_http_negotiates_and_checks_auth_host_origin_method_and_size(
     for tool in [
         "context_session",
         "context_search",
+        "context_memory_retain",
+        "context_memory_recall",
         "context_get",
         "context_run_prepare",
     ] {
@@ -406,6 +408,98 @@ async fn streamable_http_negotiates_and_checks_auth_host_origin_method_and_size(
                 .any(|entry| entry["name"] == tool)
         );
     }
+}
+
+#[tokio::test]
+async fn memory_tools_use_workspace_permissions_and_publish_cited_conclusions() {
+    let content = "Atlas 报销政策，中国，每晚最多报 80 元。";
+    let identity = json!({
+        "subject":{"kind":"project","stable_id":"Atlas"},
+        "predicate":"hotel.limit",
+        "context":{"country":"中国","unit":"每晚"}
+    });
+    let model_result = json!({"facts":[{
+        "identity":identity,
+        "statement":{"value":"80 元","quote":content,"byte_start":0,"byte_end":content.len()}
+    }]});
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let model_url = format!("http://{}", listener.local_addr().unwrap());
+    let model_server = tokio::spawn(async move {
+        let routes = axum::Router::new().route(
+            "/chat/completions",
+            axum::routing::post(move || {
+                let content = model_result.to_string();
+                async move { axum::Json(json!({"choices":[{"message":{"content":content}}]})) }
+            }),
+        );
+        axum::serve(listener, routes).await.unwrap();
+    });
+    let models = Models::configured(
+        model_url,
+        "fixture".into(),
+        None,
+        Some("memory-fixture".into()),
+        3,
+    )
+    .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let service = open_service(directory.path(), models).await.unwrap();
+    let scope = workspace(&service, Uuid::new_v4()).await;
+    let other = workspace(&service, scope.tenant_id).await;
+    let store = service.engine.relational();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let writer = store.issue_key(scope, "writer").await.unwrap();
+    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let other_reader = store.issue_key(other, "reader").await.unwrap();
+    service
+        .register_memory_property(
+            &service.auth(&admin.token).await.unwrap(),
+            "mcp-retain-property-fixture",
+            serde_json::from_value(json!({
+                "predicate":"hotel.limit","cardinality":"single","required_context":["country","unit"]
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let peer = Peer::start(service.clone(), McpHttpConfig::default()).await;
+    let input = json!({"idempotency_key":"mcp-retain-fixture","content":content});
+    let error = peer
+        .call(&reader.token, None, "context_memory_retain", input.clone())
+        .await
+        .unwrap_err();
+    assert!(error["message"].as_str().unwrap().starts_with("FORBIDDEN:"));
+    let receipt = peer
+        .call(&writer.token, None, "context_memory_retain", input.clone())
+        .await
+        .unwrap();
+    assert_eq!(receipt["state"], "accepted");
+    assert_eq!(
+        peer.call(&writer.token, None, "context_memory_retain", input)
+            .await
+            .unwrap(),
+        receipt
+    );
+    assert!(origence::worker::process_next(&service).await.unwrap());
+
+    let recall = json!({"identity":identity});
+    let result = peer
+        .call(&reader.token, None, "context_memory_recall", recall.clone())
+        .await
+        .unwrap();
+    assert_eq!(result["version"], 1);
+    assert_eq!(result["state"], json!({"status":"current","value":"80 元"}));
+    assert_eq!(
+        result["evidence"][0]["source_event_id"],
+        receipt["source_event_id"]
+    );
+    let error = peer
+        .call(&other_reader.token, None, "context_memory_recall", recall)
+        .await
+        .unwrap_err();
+    assert!(error["message"].as_str().unwrap().starts_with("NOT_FOUND:"));
+    model_server.abort();
 }
 
 #[tokio::test]

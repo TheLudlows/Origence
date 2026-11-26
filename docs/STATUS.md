@@ -2,7 +2,7 @@
 
 **简体中文** · [English](STATUS.en.md)
 
-更新于 2026-11-19，整合基线为 main [`2094f81`](https://github.com/TheLudlows/Origence/commit/2094f81c990aaf7d69d4ff09295c1a2a837c4ba1)。
+更新于 2026-11-26，整合基线为 main [`a5fbcd2`](https://github.com/TheLudlows/Origence/commit/a5fbcd230795e2132362b6d5ae9a0240a8b36e53)。
 Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。首版目标见[产品路线图](ROADMAP.md)与[架构规划](design/agent-data-foundation.md)。
 
 AML 评测协议的 HTTP 入口与启动开关已移除。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
@@ -11,7 +11,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。见[记忆契约](contracts/memory.md) | P0 真实任务验收 |
+| 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。HTTP、MCP 和 Rust 库可追加新原文，后台归纳长期记忆并按完整身份读取。见[记忆契约](contracts/memory.md)及[长期记忆归纳](contracts/memory-consolidation.md) | P0 真实任务验收、归纳提取的真实模型质量和客户端试点 |
 | 知识 | Text、Markdown、PDF 入库，版本读取与比较、发布与撤回；更新失败保留原发布版本。见 [API](API.md#接口) | P0 真实任务验收 |
 | Skill | [选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载及两种客户端目录格式导出。Windows 公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |

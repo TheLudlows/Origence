@@ -141,6 +141,9 @@ The Node.js UI uses these and the HTTP endpoints below. It never opens databases
 | `POST /v1/memories` | `{fact_key,content}` (`publish_if_authorized` is deprecated and accepted without effect) → `asset_id`, `source_event_id`, and `job_id`, `state:"accepted"`. `conflict` indicates append to an existing fact. |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`. The same scoped identity reuses the content item. `conflict` indicates an existing version. |
 | `POST /v1/memories/lookup` | Complete `{subject,predicate,context:{}}`, readable by reader. Returns the same current published view as `GET /v1/assets/{id}`. No Idempotency-Key or content item creation. |
+| `POST /v1/memories/retain` | Writer submits `{content}` with `Idempotency-Key`. Returns `{state:"accepted",source_event_id,job_id}` and queues long-term memory consolidation. MCP tool `context_memory_retain` accepts `content` and `idempotency_key`. |
+| `POST /v1/memories/long-term/lookup` | Reader submits `{identity,version?,as_of_ms?}` for exact scoped lookup. Returns `{memory_id,version,identity,state,timeline,evidence}`. MCP tool `context_memory_recall` takes the same fields. See [the consolidation contract](contracts/memory-consolidation.md). |
+| `GET /v1/memories/long-term/{id}` | Reader uses the job's `memory_id` to read the same memory view. Optional query parameters are `version` and `as_of_ms`. |
 | `POST /v1/captures/semantic` | `{content,targets:[{identity,expected_version,allow_update:false}]}` → source/job. Bounded model classification reuses memory semantics, described below. |
 | `POST /v1/captures` | `{content}` → source/job. Extracted facts publish individually. See job `result.memories`. |
 | `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`. Caller supplies the complete identity and the model only extracts source spans. Requires an extraction model. |
@@ -192,6 +195,8 @@ Admission records the current content item version, which the Worker rechecks be
 ## Jobs and read visibility
 
 `pending → processing → completed/failed/superseded`. Transient storage failure follows `processing → retry_wait → processing`. Cancellation is `cancelled`. Only completed + outcome=published indicates atomic commit of that version and index. capture result.memories lists each extracted fact's content item and version. Later updates, deletions, or source withdrawals can still occur.
+
+Successful long-term memory jobs finish with `completed` and `outcome=consolidated`. `result.memories` lists the `memory_id` and `version` created by the job. It is empty when the input contains no eligible facts. Exact long-term memory lookup runs independently of indexed content publication.
 
 A deletion response is `{id,blocked:true,cleanup_job_id,originals_retained:true}`. Once the logical deletion commits, new reads are blocked regardless of index cleanup. Already delivered data cannot be recalled. Requests started before deletion can finish first.
 
