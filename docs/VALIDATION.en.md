@@ -29,6 +29,14 @@ On installer commit `6f8bf7a`, reran the Linux native Claude Code and Chromium a
 `origence uninstall` rolled back shell and PATH changes from outside the checkout and preserved the database
 and backup. A repeated call skipped, and legacy state pointed to the script. Rust formatting and strict Clippy passed.
 
+Based on main `2c8a7147a7b4f2c6fadd447a256a726d65ba3abc`, standalone `origence-setup install`
+and `origence-setup uninstall` passed the native Claude Code and Chromium integration on Linux.
+Setup launched outside the checkout, new Bash and Zsh processes found it on PATH, and uninstall
+ran outside the checkout. Repeated uninstall skipped. Rollback restored user settings and preserved
+the database and backup. The backend help had no setup commands. Rust formatting, strict Clippy,
+Node type checking and 30 UI tests passed. The Windows .cmd entry is wired into the native workflow
+and has yet to run.
+
 ## 2026-11-26 · Codex commands and Claude SDK cancellation
 
 Tested `2396dfa3ffd303c0cbfbd63068930fb36926ab8b` on main

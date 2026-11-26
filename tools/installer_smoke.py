@@ -16,6 +16,7 @@ from mcp_smoke import isolated_env, require, sanitized
 REPO = Path(__file__).resolve().parents[1]
 WINDOWS = os.name == "nt"
 PLUGIN = "origence@origence-tools"
+SETUP = REPO / "bin" / ("origence-setup.cmd" if WINDOWS else "origence-setup")
 VARIABLES = ("OC_API_KEY", "OC_SERVER_URL", "OC_WORKSPACE_ID", "Path")
 
 
@@ -75,9 +76,11 @@ def fresh_windows_environment():
         kernel.CloseHandle(token)
 
 
-def installer(env, commands, forbidden, expected=0, *, binary=None, cwd=REPO):
-    entry = [str(binary)] if binary else ["node", str(REPO / "tools/install.mjs")]
-    child = subprocess.run([*entry, *commands], env=env, cwd=cwd,
+def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
+    entry = entry or ["node", str(REPO / "tools/install.mjs")]
+    # On Windows the public launcher is a .cmd file. Its test arguments are fixture values.
+    shell = WINDOWS and entry[0].lower().endswith(".cmd")
+    child = subprocess.run([*entry, *commands], env=env, cwd=cwd, shell=shell,
                            capture_output=True, text=True, encoding="utf-8", timeout=150)
     sanitized(child.stdout + child.stderr, forbidden)
     require(child.returncode == expected, "Unexpected installer result: " + child.stdout[-3000:])
@@ -178,8 +181,8 @@ def smoke(binary, claude, root, browser):
         unreachable = installer(env, [*paths, "--token", invalid], [invalid], expected=1)
         require("unreachable" in unreachable["installation"]["detail"] and not data.exists(),
                 "An unreachable uninitialized API must not create a blank workspace")
-        first = installer(env, [*paths, "--init", "Installer synthetic", "--verify-write",
-                                "--credentials-file", str(output)], forbidden)
+        first = installer(env, ["install", *paths, "--init", "Installer synthetic", "--verify-write",
+                                "--credentials-file", str(output)], forbidden, entry=[str(SETUP)], cwd=root)
         credentials = json.loads(output.read_text(encoding="utf-8"))
         forbidden = [credentials["token"], credentials["password"]]
         sanitized(first, forbidden)
@@ -188,7 +191,8 @@ def smoke(binary, claude, root, browser):
                 "MCP tool catalog and the native client must connect")
         if not WINDOWS:
             require(output.stat().st_mode & 0o077 == 0, "Credentials file must be private")
-            check = 'test "$OC_API_KEY" = "$EXPECTED" && test "$OC_WORKSPACE_ID" = "$WORKSPACE" && origence --version'
+            check = ('test "$OC_API_KEY" = "$EXPECTED" && test "$OC_WORKSPACE_ID" = "$WORKSPACE"'
+                     ' && origence --version && origence-setup --help')
             subprocess.run(["bash", "--noprofile", "--rcfile", str(rc), "-ic", check], cwd=root,
                            env=dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"]),
                            capture_output=True, timeout=15, check=True)
@@ -205,6 +209,8 @@ def smoke(binary, claude, root, browser):
             require(origence is not None and Path(origence).resolve() == binary.resolve(),
                     "A fresh Windows environment did not find the configured Origence binary")
             subprocess.run([origence, "--version"], cwd=root, env=actual, capture_output=True, timeout=15, check=True)
+            setup = shutil.which("origence-setup.cmd", path=actual["PATH"])
+            require(setup is not None and Path(setup).resolve() == SETUP, "Windows PATH is missing origence-setup")
         env_key = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=credentials["token"])
         second = installer(env_key, ["--from-env", "--verify-write"], forbidden)
         require(second["api"]["status"] == second["ui"]["status"] == "skipped" and
@@ -238,10 +244,14 @@ def smoke(binary, claude, root, browser):
         if not WINDOWS:
             with rc.open("a", encoding="utf-8") as handle:
                 handle.write("\n# added after installation")
-        removed = installer(env, ["uninstall"], forbidden, binary=binary, cwd=root)
+        if WINDOWS:
+            removed = installer(dict(env, PATH=actual["PATH"]), ["uninstall"], forbidden, entry=[setup], cwd=root)
+        else:
+            removed = installer(env, [], forbidden, cwd=root,
+                                entry=["bash", "--noprofile", "--rcfile", str(rc), "-ic", "origence-setup uninstall"])
         require(removed["uninstall"]["status"] == "success",
-                "The CLI shortcut must roll back from outside the repository")
-        repeated = installer(env, ["uninstall"], forbidden, binary=binary, cwd=root)
+                "origence-setup must roll back from outside the repository")
+        repeated = installer(env, ["uninstall"], forbidden, entry=[str(SETUP)], cwd=root)
         require(repeated["uninstall"]["status"] == "skipped", "Rerunning uninstall must be a no-op")
         require((data / "context.db").is_file() and (backup / "context.db").is_file(),
                 "Uninstall must preserve both live and backed-up data")
@@ -255,7 +265,7 @@ def smoke(binary, claude, root, browser):
                                       capture_output=True, encoding="utf-8", timeout=30, check=True)
         require(not any(item.get("id") == PLUGIN for item in json.loads(install_list.stdout)),
                 "Uninstall left the installer-owned plugin enabled")
-        print("PASS native Claude MCP, UI login, Hook Run, idempotence, 401, backup, and CLI uninstall rollback")
+        print("PASS standalone setup, native Claude MCP, UI login, Hook Run, idempotence, 401, backup, and uninstall rollback")
     finally:
         if (state_dir / "state.json").exists():
             installer(env, ["--uninstall"], forbidden)

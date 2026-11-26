@@ -163,11 +163,14 @@ export function writeUserEnvironment(state, vars, dirs) {
   const current = windowsSettings({ action: "read", names });
   const journal = state.value.registry ??= {};
   const machine = windowsSettings({ action: "machine-path" }).value;
-  const expected = executable("origence", prependPath(current.Path?.value, dirs));
-  check(executable("origence", [machine, prependPath(current.Path?.value, dirs)].filter(Boolean).join(delimiter)) === expected,
-    "A different Origence is earlier in the Windows machine PATH. Select that binary or fix its priority before installing.");
+  const userPath = prependPath(current.Path?.value, dirs);
+  const effectivePath = [machine, userPath].filter(Boolean).join(delimiter);
+  for (const name of ["origence", "origence-setup"]) {
+    check(executable(name, effectivePath) === executable(name, userPath),
+      `A different ${name} is earlier in the Windows machine PATH. Fix its priority before installing.`);
+  }
   const installed = Object.fromEntries(Object.entries(vars).map(([name, value]) => [name, { value, kind: "String" }]));
-  installed.Path = { value: prependPath(current.Path?.value, dirs), kind: current.Path?.kind ?? "ExpandString" };
+  installed.Path = { value: userPath, kind: current.Path?.kind ?? "ExpandString" };
   for (const name of names) {
     const previous = journal[name];
     const before = previous ? previous.before : current[name];

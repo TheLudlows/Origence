@@ -15,8 +15,6 @@ use serde_json::json;
 use std::{future::Future, path::PathBuf, pin::Pin, time::Duration};
 use uuid::Uuid;
 
-mod installer_cli;
-
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
@@ -58,8 +56,6 @@ enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Roll back the local installer and preserve data.
-    Uninstall,
     /// Offline bootstrap: create a workspace and print its admin token once.
     WorkspaceCreate {
         name: String,
@@ -244,7 +240,6 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 }
             }
         }),
-        Command::Uninstall => Box::pin(installer_cli::uninstall()),
         Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(
                 offline,

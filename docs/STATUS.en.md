@@ -24,7 +24,7 @@ See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 `origence serve --local` opens the AnySeek Catalog at `OC_DATA_DIR/anyseek` in the same process through the Rust SDK. The host handles startup recovery, verification of published collections, and graceful shutdown. The Windows development script uses this entry point and optionally starts the Node UI. The cloud image runs `origence serve` against standalone AnySeek. The deployment environment provides the address and credential. [Operations guide](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
-The local installer uses an API endpoint and workspace key to connect Claude Code and the console. It can start local services, provision an account, verify HTTP MCP in the same workspace, and roll back user settings while preserving data. [Installer guide](INSTALLER.en.md)
+The standalone `origence-setup` installer uses an API endpoint and workspace key to connect Claude Code and the console. It can start local services, provision an account, verify HTTP MCP in the same workspace, and roll back user settings while preserving data. [Installer guide](INSTALLER.en.md)
 
 ## Streamable HTTP MCP
 

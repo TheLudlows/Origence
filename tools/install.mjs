@@ -21,10 +21,9 @@ const defaultEndpoint = "http://127.0.0.1:8080";
 const status = (step, state, detail) => console.log(JSON.stringify({ step, status: state, detail }));
 const tokenPattern = /^[\x21-\x7e]{1,512}$/;
 
-const usage = `Usage: node tools/install.mjs [--endpoint URL] [--token KEY | --from-env]
-       node tools/install.mjs --init NAME [--endpoint URL]
-       origence uninstall
-       node tools/install.mjs --uninstall
+const usage = `Usage: origence-setup install [--endpoint URL] [--token KEY | --from-env]
+       origence-setup install --init NAME [--endpoint URL]
+       origence-setup uninstall
 
 --from-env               Read OC_SERVER_URL and OC_API_KEY
 --init NAME              Explicitly initialize a new local workspace
@@ -39,16 +38,26 @@ const usage = `Usage: node tools/install.mjs [--endpoint URL] [--token KEY | --f
 --credentials-file PATH  Write a new private JSON file outside Git (never overwrites)`;
 
 function options() {
+  const args = process.argv.slice(2);
+  const command = ["install", "uninstall"].includes(args[0]) ? args.shift() : undefined;
   const strings = ["endpoint", "token", "init", "data-dir", "ui-port", "origence", "claude", "credentials-file"];
   const bools = ["from-env", "force", "verify-write", "show-secrets", "uninstall", "help"];
+  let values;
   try {
-    return parseArgs({ options: Object.fromEntries([
+    ({ values } = parseArgs({ args, options: Object.fromEntries([
       ...strings.map(name => [name, { type: "string" }]),
       ...bools.map(name => [name, { type: "boolean" }]),
-    ]) }).values;
+    ]) }));
   } catch {
-    throw new Error("Invalid arguments. Run node tools/install.mjs --help.");
+    throw new Error("Invalid arguments. Run origence-setup --help.");
   }
+  check(command !== "install" || !values.uninstall, "Use origence-setup uninstall to roll back the installation.");
+  if (command === "uninstall" || values.uninstall) {
+    check(Object.keys(values).every(name => name === "uninstall" || name === "help"),
+      "Uninstall accepts no setup options.");
+    values.uninstall = true;
+  }
+  return values;
 }
 
 async function ask(prompt, secret = false) {
@@ -390,7 +399,9 @@ async function install(state, args) {
 
   const binary = origenceBinary(args.origence ?? old?.binary);
   const claude = claudeBinary(state, args.claude ?? state.value.claude?.executable);
-  const dirs = [...new Set([dirname(binary), dirname(claude)])];
+  const launchers = join(repo, "bin");
+  check(executable(join(launchers, "origence-setup")), "The installer package is missing its origence-setup launcher.");
+  const dirs = [...new Set([launchers, dirname(binary), dirname(claude)])];
   const path = prependPath(process.env.PATH, dirs);
   check(executable("origence", path) === binary, "Select a binary named origence (origence.exe on Windows) for the plugin hook PATH.");
   const env = { ...withoutWorkspaceKey(process.env), PATH: path };
@@ -398,8 +409,6 @@ async function install(state, args) {
   execute(binary, ["--version"], { env, diagnosis: "Origence could not be executed" });
   execute(binary, ["plugin-hook", "--help"], { env, diagnosis: "The Origence binary does not support Claude Code hooks" });
   status("executables", "success", "Origence and Claude Code are available.");
-  state.value.uninstaller = { node: process.execPath, script: fileURLToPath(import.meta.url) };
-  state.save();
   if (initialize) {
     const bootstrapResult = await bootstrap(state, binary, endpoint, dataDir, init, args.force, env);
     token = bootstrapResult.token;
@@ -473,7 +482,7 @@ async function install(state, args) {
     status("run-hook", "skipped", "The plugin includes the Run hook. This reader key cannot report Runs.");
   else status("run-hook", "success", "The installed plugin includes the default Run hook. Use Claude Code to generate a Run.");
   writeUserEnvironment(state, vars, dirs);
-  status("user-environment", "success", "Saved user environment and PATH. Restart the terminal application and Claude Code.");
+  status("user-environment", "success", "Saved user environment and PATH. Restart your terminal and Claude Code. To roll back, run origence-setup uninstall.");
   const credentials = { endpoint: endpoint.origin, workspace_id: who.workspace_id, role: who.role, ui,
     username: account, password: config.password, token };
   if (args["credentials-file"]) saveCredentials(args["credentials-file"], credentials);

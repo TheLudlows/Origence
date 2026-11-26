@@ -33,6 +33,12 @@ NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
 可在仓库外卸载，恢复 shell 和 PATH，保留数据库与备份。重复卸载返回跳过，旧安装状态提示使用脚本入口。
 Rust 格式检查与严格 Clippy 通过。
 
+基于 main `2c8a7147a7b4f2c6fadd447a256a726d65ba3abc`，独立 `origence-setup install`
+和 `origence-setup uninstall` 在 Linux 上通过原生 Claude Code 与 Chromium 联调。
+从仓库外调用安装入口，重新开 Bash 和 Zsh 核对 PATH，再从仓库外卸载。重复卸载跳过，
+用户设置恢复，数据库和备份保留。后端帮助无安装子命令，Rust 格式与严格 Clippy、
+Node 类型检查及 30 项 UI 测试通过。Windows .cmd 入口接入原生验收，尚未运行。
+
 ## 2026-11-26 · Codex 命令与 Claude SDK 取消
 
 在 main `b4e8879fa952b5afd729fd5b89a630c6d5705696` 上验证
