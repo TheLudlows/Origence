@@ -478,10 +478,12 @@ class Host(Child):
             self.close()
             raise
 
-    def request(self, path, body=None, method=None, authenticated=True):
+    def request(self, path, body=None, method=None, authenticated=True, *, workspace=None):
         headers = {}
         if authenticated:
             headers["Authorization"] = "Bearer " + self.token
+        if workspace is not None:
+            headers["X-Origence-Workspace"] = workspace
         if body is not None:
             headers.update({"Content-Type": "application/json", "Idempotency-Key": uuid.uuid4().hex})
         request = urllib.request.Request(self.base + path, method=method, headers=headers,

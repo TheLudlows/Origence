@@ -1,0 +1,68 @@
+name: Windows plugin acceptance (synthetic)
+
+on:
+  push:
+    branches: [test/windows-plugin-acceptance]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-plugin-acceptance
+  cancel-in-progress: true
+
+env:
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
+  PYTHONUTF8: "1"
+
+jobs:
+  windows-plugin:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v3-sqlite
+          cache-on-failure: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Origence for native Windows
+        shell: pwsh
+        run: ./tools/build.ps1 -Action Build -Jobs 2
+      - name: Install pinned vendor CLI packages
+        shell: pwsh
+        run: |
+          $clientDir = Join-Path $env:RUNNER_TEMP 'origence-plugin-clients'
+          npm.cmd install --prefix $clientDir --ignore-scripts --no-audit --no-fund '@anthropic-ai/claude-code@2.1.330' '@openai/codex@0.171.0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify default and non-default HTTP endpoints with both installed plugins
+        shell: pwsh
+        run: |
+          $clientDir = Join-Path $env:RUNNER_TEMP 'origence-plugin-clients/node_modules'
+          $claude = (Get-ChildItem -Recurse -File (Join-Path $clientDir '@anthropic-ai/claude-code-win32-x64') -Filter 'claude.exe' |
+            Select-Object -First 1).FullName
+          $codex = (Get-ChildItem -Recurse -File (Join-Path $clientDir '@openai/codex-win32-x64') -Filter 'codex.exe' |
+            Select-Object -First 1).FullName
+          if (-not $claude -or -not $codex) { throw 'The pinned Windows native executables are missing.' }
+          $env:CLAUDE_CODE_GIT_BASH_PATH = Join-Path $env:ProgramFiles 'Git/bin/bash.exe'
+          $binary = (Resolve-Path './target/debug/origence.exe').Path
+          [Environment]::OSVersion.VersionString
+          git rev-parse HEAD
+          Get-FileHash -Algorithm SHA256 -LiteralPath $binary, $claude, $codex | ForEach-Object {
+            '{0} {1}' -f (Split-Path -Leaf $_.Path), $_.Hash.ToLowerInvariant()
+          }
+          python tools/plugin_smoke.py --binary $binary --claude $claude --codex $codex
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/plugin_smoke.py --binary $binary --claude $claude --codex $codex --bind '127.0.0.1:0'
