@@ -1,26 +1,32 @@
-$ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$request = [Console]::In.ReadToEnd() | ConvertFrom-Json
+function Write-Json($value) {
+    $writer = [IO.StreamWriter]::new([Console]::OpenStandardOutput(), $utf8)
+    $writer.WriteLine((ConvertTo-Json -InputObject $value -Compress -Depth 4))
+    $writer.Flush()
+}
+
 if ($request.action -eq 'protect') {
     $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User
     if ($request.file) {
+        $item = [IO.FileInfo]::new($request.path)
         $acl = [Security.AccessControl.FileSecurity]::new()
         $rule = [Security.AccessControl.FileSystemAccessRule]::new($owner, 'FullControl', 'Allow')
     } else {
+        $item = [IO.DirectoryInfo]::new($request.path)
         $acl = [Security.AccessControl.DirectorySecurity]::new()
         $rule = [Security.AccessControl.FileSystemAccessRule]::new($owner, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
     }
     $acl.SetOwner($owner)
     $acl.SetAccessRuleProtection($true, $false)
     $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $request.path -AclObject $acl
+    # Use the .NET Framework API so Windows PowerShell need not load a
+    # security module from the parent shell's PSModulePath.
+    $item.SetAccessControl($acl)
     exit
 }
 $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
 try {
     if ($request.action -eq 'machine-path') {
-        @{ value = [Environment]::GetEnvironmentVariable('Path', 'Machine') } | ConvertTo-Json -Compress
+        Write-Json @{ value = [Environment]::GetEnvironmentVariable('Path', 'Machine') }
     } elseif ($request.action -eq 'read') {
         $values = @{}
         foreach ($name in $request.names) {
@@ -29,7 +35,7 @@ try {
                 @{ value = [string]$value; kind = $key.GetValueKind($name).ToString() }
             } else { $null }
         }
-        ConvertTo-Json -InputObject $values -Compress -Depth 4
+        Write-Json $values
     } elseif ($request.action -eq 'write') {
         foreach ($value in $request.values.PSObject.Properties) {
             if ($null -eq $value.Value) { $key.DeleteValue($value.Name, $false) }

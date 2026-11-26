@@ -39,6 +39,16 @@ Rust 格式检查与严格 Clippy 通过。
 用户设置恢复，数据库和备份保留。后端帮助无安装子命令，Rust 格式与严格 Clippy、
 Node 类型检查及 30 项 UI 测试通过。Windows .cmd 入口接入原生验收，尚未运行。
 
+基于 main `620188115c89b20bc1411f5ec1e48b93f68548eb`，修复提交
+`4e3d95fc3ea495e6beaf7138d4cec6c52a894dc6` 在 Windows Server 2025（10.0.26100）、
+Node.js 24 和原生 Claude Code 2.1.330 上通过安装器验收。
+缺少 `origence.exe` 时提示检查 `--origence`，未创建工作区数据。通过 `.cmd` 首次安装后，
+Claude Code 连接同一工作区的 MCP，控制台登录和 Hook Run 回读成功。新进程加载了用户注册表中的
+凭据和 PATH。重复安装复用服务及测试 Run，错误 Key 返回 401，强制重装保留原数据库备份。
+从检出目录外卸载后，用户注册表的值与类型恢复，Claude Code 插件移除，数据库及备份保留，重复卸载跳过。
+同一提交在 Linux 上通过原生 Claude Code 与 Chromium 验收、Rust 格式检查与严格 Clippy。
+Windows 与 Linux 使用回环服务和合成数据，未调用真实模型。[Windows 验收](https://github.com/TheLudlows/Origence/actions/runs/45813998221)
+
 ## 2026-11-26 · Codex 命令与 Claude SDK 取消
 
 在 main `b4e8879fa952b5afd729fd5b89a630c6d5705696` 上验证

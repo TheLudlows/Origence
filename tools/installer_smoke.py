@@ -54,6 +54,10 @@ def fresh_windows_environment():
     advapi = ctypes.windll.advapi32
     userenv = ctypes.windll.userenv
     kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    advapi.OpenProcessToken.argtypes = (wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE))
+    userenv.CreateEnvironmentBlock.argtypes = (ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.BOOL)
+    userenv.DestroyEnvironmentBlock.argtypes = (ctypes.c_void_p,)
     token = wintypes.HANDLE()
     block = ctypes.c_void_p()
     require(advapi.OpenProcessToken(kernel.GetCurrentProcess(), 0x000A, ctypes.byref(token)),
@@ -81,6 +85,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
     # On Windows the public launcher is a .cmd file. Its test arguments are fixture values.
     shell = WINDOWS and entry[0].lower().endswith(".cmd")
     child = subprocess.run([*entry, *commands], env=env, cwd=cwd, shell=shell,
+                           creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0,
                            capture_output=True, text=True, encoding="utf-8", timeout=150)
     sanitized(child.stdout + child.stderr, forbidden)
     require(child.returncode == expected, "Unexpected installer result: " + child.stdout[-3000:])
@@ -164,7 +169,7 @@ def smoke(binary, claude, root, browser):
     if not WINDOWS:
         rc.write_text(previous_shell, encoding="utf-8")
     data = root / "instance data"
-    output = root / "private credentials.json"
+    output = root / "private credentials 验收.json"
     endpoint = f"http://127.0.0.1:{port()}"
     ui_port = port()
     while endpoint.endswith(f":{ui_port}"):
@@ -175,8 +180,12 @@ def smoke(binary, claude, root, browser):
     try:
         absent = installer(env, [*paths, "--origence", str(root / "missing" / "origence"), "--init", "Missing"],
                            [], expected=1)
-        require("executable could not be found" in absent["installation"]["detail"],
-                "Missing Origence executable must be diagnosed")
+        diagnosis = absent["installation"]["detail"]
+        require(absent["installation"]["status"] == "failure" and
+                diagnosis == "The requested Origence executable could not be found. Check --origence." and
+                not data.exists(),
+                "Missing Origence executable must be diagnosed. Installer returned: " + diagnosis)
+        print("PASS missing Origence executable diagnosed before creating workspace data")
         invalid = "invalid-installer-fixture-key"
         unreachable = installer(env, [*paths, "--token", invalid], [invalid], expected=1)
         require("unreachable" in unreachable["installation"]["detail"] and not data.exists(),
@@ -245,7 +254,10 @@ def smoke(binary, claude, root, browser):
             with rc.open("a", encoding="utf-8") as handle:
                 handle.write("\n# added after installation")
         if WINDOWS:
-            removed = installer(dict(env, PATH=actual["PATH"]), ["uninstall"], forbidden, entry=[setup], cwd=root)
+            # CI's Node.js 24 is supplied on the job PATH, not the user's registry PATH.
+            node = Path(shutil.which("node.exe", path=env["PATH"])).parent
+            launch_path = os.pathsep.join((str(node), actual["PATH"]))
+            removed = installer(dict(env, PATH=launch_path), ["uninstall"], forbidden, entry=[setup], cwd=root)
         else:
             removed = installer(env, [], forbidden, cwd=root,
                                 entry=["bash", "--noprofile", "--rcfile", str(rc), "-ic", "origence-setup uninstall"])
