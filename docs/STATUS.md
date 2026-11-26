@@ -17,7 +17,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核；按预算组装证据。真实引擎本地回归通过 | 当前后端的模型检索质量、容量与延迟验收 |
 | 私有归档与反馈 | 双客户端显式归档互读、逻辑 key 隔离与轮换撤销已验证；支持显式反馈和 Improve → Learning | 在 P0 双场景任务中核对归档和反馈证据 |
-| Node.js 管理界面 | 账号登录、工作区管理、受限目录、异步入库、固定版本与来源、Run 列表和创建趋势。运行总览另显示执行方上报的整轮 P95、Agent Token、费用和样本数。 | 首版验收范围为运行计量。读屏、实体触屏与告警不纳入本期。见 [管理界面 #76](https://github.com/TheLudlows/Origence/issues/76) |
+| Node.js 管理界面 | 账号登录、工作区管理、受限目录、异步入库、固定版本与来源、Run 列表和创建趋势。运行总览另显示执行方上报的整轮 P95、Agent Token、费用和样本数。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已按运行计量范围结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
@@ -111,12 +111,12 @@ CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检�
 ## 本地 Run UI 定向验证
 
 基于 `01d4f82` 的本地改动区分准备成功、服务端观察到准备失败与客户端上报。
-真实 Chromium 已验证 Run → 固定 v1 → 来源撤回、旧引用再次点击及另一个 key 拒绝；
-精确范围见 [VALIDATION](VALIDATION.md)。仅本地验证，#76 的其余规格仍未完成。
+真实 Chromium 已验证 Run → 固定 v1 → 来源撤回、旧引用再次点击及另一个 key 拒绝。
+此处记录当时的本地验证。精确范围见 [VALIDATION](VALIDATION.md)。
 
 ## 下一步
 
-按 [#91](https://github.com/TheLudlows/Origence/issues/91) 冻结客户端、模型和任务材料，验证归档、Skill 复用和 Trace，并完成独立签认。
+按 [#91](https://github.com/TheLudlows/Origence/issues/91) 冻结客户端、模型和任务材料，验证归档、Skill 复用，以及从 Run 经上下文或 Skill 到结果的追溯，并完成独立签认。
 
 ## 范围与证据
 
