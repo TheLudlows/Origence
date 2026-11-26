@@ -254,7 +254,10 @@ def smoke(binary, claude, root, browser):
             with rc.open("a", encoding="utf-8") as handle:
                 handle.write("\n# added after installation")
         if WINDOWS:
-            removed = installer(dict(env, PATH=actual["PATH"]), ["uninstall"], forbidden, entry=[setup], cwd=root)
+            # CI's Node.js 24 is supplied on the job PATH, not the user's registry PATH.
+            node = Path(shutil.which("node.exe", path=env["PATH"])).parent
+            launch_path = os.pathsep.join((str(node), actual["PATH"]))
+            removed = installer(dict(env, PATH=launch_path), ["uninstall"], forbidden, entry=[setup], cwd=root)
         else:
             removed = installer(env, [], forbidden, cwd=root,
                                 entry=["bash", "--noprofile", "--rcfile", str(rc), "-ic", "origence-setup uninstall"])

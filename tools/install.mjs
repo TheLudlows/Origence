@@ -187,7 +187,8 @@ function connectClaude(state, claude, env, endpoint) {
   }
   const listing = pluginCommand(state, claude, env, ["mcp", "list"]);
   const server = listing.split(/\r?\n/).find(line => line.includes("plugin:origence:origence:"));
-  check(server?.includes(endpoint + "/mcp") && /(?:✔|✓)\s*Connected\b/i.test(server),
+  // Claude Code uses a different check mark on Windows consoles.
+  check(server?.includes(endpoint + "/mcp") && /[✔✓√]\s*Connected\s*$/i.test(server),
     "Claude Code did not connect to the installed HTTP MCP endpoint. Check for disabled plugins, managed settings or conflicting MCP configuration.");
   status("claude-code", "success", "The user-scope plugin reports its HTTP MCP server connected.");
 }
