@@ -6,6 +6,7 @@
 
 | 要做什么 | 入口 |
 | --- | --- |
+| 核对本轮已登记的冻结字段、缺项与合成预检 | [冻结准备记录](FREEZE-READINESS.md) |
 | 生成开发题或封存未见题、填写和核对评分表 | [执行手册](RUNBOOK.md#题集与评分表) |
 | 运行真实客户端的公开预检 | [复跑命令](PREFLIGHT.md) |
 | 冻结条件、执行 P1–P7、恢复和清理 | [执行手册](RUNBOOK.md) · [冻结表](freeze.template.json) · [签认表](signoff.template.json) |

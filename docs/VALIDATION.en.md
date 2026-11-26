@@ -4,6 +4,24 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Native Windows plugins and pilot preparation
+
+Product baseline main `318e17178a8c4a24d3000bc3caa6d3250019eb10`, with acceptance script revision
+`7116d909df38d3248de9914fc47c3f713d63ba60`. GitHub's native x64 Windows Server 2025 runner
+(NT 10.0.26100.0) built Origence with Rust 1.98.0 and ran `tools/plugin_smoke.py`. Claude Code 2.1.330
+and Codex 0.171.0 installed from the local marketplace and passed on port 8080 and a non-default loopback port.
+One reader key worked in the default and explicitly selected workspaces. Each client found v2 and retrieved pinned
+v1 without Origence on its PATH. The writer hook recorded a private Run only in the selected workspace.
+The test also covered no reader Run activity, uninstall, and missing and invalid credentials. The log lists the three
+native binary SHA-256 digests. [Windows run](https://github.com/TheLudlows/Origence/actions/runs/45778860377)
+
+The same fixture passed on Linux on both ports. The clients used isolated settings, synthetic data, and scripted
+loopback models. #89 passed the HTTP and Chromium checks for prepared v2, the exact prefix, transcribed conclusions,
+withdrawal, and cross-key denial. #76 passed Chromium touch emulation, focus and accessibility-state checks, and 28 UI tests.
+Actual screen readers and physical touchscreens still await acceptance. #91 passed 58 Python pilot tests and a public
+preparation-sheet run. The formal freeze is `BLOCKED` on materials, model authorization, and independent roles. The
+official trial and independent sign-off are `NOT_RUN`. [Freeze readiness (Chinese)](../evals/pilot/FREEZE-READINESS.md)
+
 ## 2026-11-26 · Client plugins move to HTTP MCP
 
 Based on PR #139 at `3d99e7e1c6220a2e7810e4b2921a707730cff6e4`, Linux x86_64 with Rust 1.98.0. All-target Clippy with warnings denied passed for all features, SQLite-only and the cloud build. The default Rust suite passed 469 tests with 8 existing live AnySeek contracts ignored. The stdio startup test for old hosts that ignored workspace selection was removed. Live HTTP tests still cover default and explicit scope, disallowed selection, revocation, and an empty header from a plugin with no workspace selection.

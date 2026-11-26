@@ -1,0 +1,134 @@
+{
+  "status": "BLOCKED",
+  "issue": "https://github.com/TheLudlows/Origence/issues/91",
+  "baseline_sha": "293e2bf6af3b180d43c8050731047b552ac07519",
+  "joint_contract_revision": null,
+  "integration_sha": "318e17178a8c4a24d3000bc3caa6d3250019eb10",
+  "four_lane_delivery_shas": [
+    "48cfa7c643b8c077ad33c55981def51979afde05",
+    "a56246406a0688f646a45a85cc2954fb14a8d28a",
+    "e78b6ba5f3d6fcb4730789981a092c85cdc4c12a",
+    "9c4ed2ea6fdf17ed8b931ddcddf4f081c4367719"
+  ],
+  "synthetic_only": true,
+  "fresh_database_only": true,
+  "clients": {
+    "claude_code": {
+      "version": null,
+      "binary_sha256": null,
+      "os": null,
+      "native_load_evidence_capability": null
+    },
+    "codex": {
+      "version": null,
+      "binary_sha256": null,
+      "os": null,
+      "native_load_evidence_capability": null
+    }
+  },
+  "services": {
+    "origence": {
+      "version": null,
+      "binary_sha256": null,
+      "config_sha256": null
+    },
+    "sqlite": {
+      "version": null,
+      "binary_sha256": null,
+      "config_sha256": null
+    },
+    "anyseek": {
+      "version": null,
+      "binary_sha256": null,
+      "config_sha256": null
+    }
+  },
+  "models": {
+    "claude_code_chat": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    },
+    "codex_chat": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    },
+    "embedding": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    },
+    "summary": {
+      "provider": null,
+      "model_id": null,
+      "immutable_revision": null,
+      "config_sha256": null,
+      "authorized_budget": null
+    }
+  },
+  "data": {
+    "tasks_sha256": null,
+    "oracle_commitment_sha256": null,
+    "seed_custodian": null,
+    "contaminated": null,
+    "scope_aliases": [],
+    "resource_inventory_ref": null
+  },
+  "criteria": {
+    "database_wait_success_threshold": null,
+    "expense_success_threshold": null,
+    "verification_coverage_threshold": null,
+    "max_time_seconds": null,
+    "max_cost": null,
+    "governance_violations_allowed": 0
+  },
+  "approvals": {
+    "dba": null,
+    "policy_owner": null,
+    "independent_evaluator": null
+  },
+  "acceptance_mapping": {
+    "prd_revision": "v0.3",
+    "prd_requested_library_id": "libfile_0283272d2e948191aa958616af7dcd24",
+    "prd_pdf_sha256": "bdfed146e6879fbf4a8a28d4139ae474e2544400458e4bfc4196c768bf73a7a7",
+    "prd_namespace": "prd-v0.3.A1-A7",
+    "pilot_namespace": "pilot.P1-P7",
+    "mapping_ref": "PRD-MAPPING.md",
+    "status": "PENDING_JOINT_REVIEW"
+  },
+  "preflight": {
+    "checklist_ref": "PREFLIGHT.md",
+    "scored": false,
+    "status": "NOT_RUN",
+    "evidence_ref": null
+  },
+  "loading_evidence": {
+    "server_authorized_fetch_or_export": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "native_client_loading": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "content_in_model_context": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "local_residuals_after_withdrawal": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    },
+    "managed_online_reload": {
+      "status": "NOT_RUN",
+      "evidence_ref": null
+    }
+  }
+}

@@ -1,5 +1,6 @@
 """Exercise installed CLI plugins with a private, synthetic Origence workspace."""
 import argparse
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -18,7 +19,6 @@ from mcp_smoke import Child, Host, Mcp, isolated_env, require, sanitized
 PLUGIN = "origence@origence-tools"
 TOOLS = ("context_session", "context_search", "context_get")
 QUERY = "PluginFixtureKeyword"
-CONTENT = QUERY + " uses a published workspace policy."
 REPO = Path(__file__).resolve().parent.parent
 
 
@@ -42,20 +42,31 @@ def tool_value(result):
     return json.loads(next(block["text"] for block in result["content"] if block["type"] == "text"))
 
 
-def published_hit(hits, asset):
-    hit = next((item for item in hits if item["asset_id"] == asset), None)
-    require(hit is not None and hit["version"] == 1, "Search missed the published version")
-    return {"asset_id": hit["asset_id"], "version": hit["version"]}
+@dataclass(frozen=True)
+class WorkspaceProbe:
+    session: dict
+    asset: str
+    original: str
+    current: str
 
 
-def calls(lookup, expected_session, asset):
-    require(lookup(TOOLS[0], {}) == expected_session, "Unexpected logical key or session")
+def published_hit(hits, probe):
+    require(len(hits) == 1 and hits[0]["asset_id"] == probe.asset,
+            "Search missed the selected workspace or returned another workspace's material")
+    require(hits[0]["version"] == 2 and hits[0]["content"] == probe.current,
+            "Search did not return the current published version")
+    return {"asset_id": probe.asset, "version": 1}
+
+
+def calls(lookup, probe):
+    require(lookup(TOOLS[0], {}) == probe.session, "Unexpected workspace, logical key or session")
     hits = lookup(TOOLS[1], {"query": QUERY, "mode": "keyword"})["hits"]
-    item = lookup(TOOLS[2], published_hit(hits, asset))
-    require(item["version"] == 1 and item["content"] == CONTENT, "Pinned get returned unexpected data")
+    item = lookup(TOOLS[2], published_hit(hits, probe))
+    require(item["version"] == 1 and item["content"] == probe.original,
+            "Pinned get did not return the historical version")
 
 
-def codex_client(cli, project, env, forbidden, expected_session, asset, writer_env, base):
+def codex_client(cli, project, env, forbidden, default, switched, writer_env, base):
     execute([cli, "plugin", "marketplace", "add", str(REPO)], project, env, forbidden)
     execute([cli, "plugin", "add", PLUGIN], project, env, forbidden)
     config = Path(env["CODEX_HOME"]) / "config.toml"
@@ -64,6 +75,19 @@ def codex_client(cli, project, env, forbidden, expected_session, asset, writer_e
     if not bundled:
         execute([cli, "mcp", "add", "origence", "--url", base + "/mcp", "--bearer-token-env-var",
                  "OC_API_KEY"], project, env, forbidden)
+        with config.open("a", encoding="utf-8") as stream:
+            stream.write('\n[mcp_servers.origence.env_http_headers]\nX-Origence-Workspace = "OC_WORKSPACE_ID"\n')
+    codex_tools(cli, project, env, forbidden, default, bundled)
+    codex_tools(cli, project, dict(env, OC_WORKSPACE_ID=switched.session["workspace_id"]),
+                forbidden, switched, bundled)
+    codex_hook_turn(cli, project, writer_env, forbidden)
+    if not bundled:
+        execute([cli, "mcp", "remove", "origence"], project, env, forbidden)
+    execute([cli, "plugin", "remove", PLUGIN], project, env, forbidden)
+    execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
+
+
+def codex_tools(cli, project, env, forbidden, probe, bundled):
     with Child([cli, "app-server", "--listen", "stdio://"], dict(env, OC_DATA_DIR=str(project)), forbidden) as child:
         request_id = 0
 
@@ -101,13 +125,8 @@ def codex_client(cli, project, env, forbidden, expected_session, asset, writer_e
         server = servers[0]["name"]
         calls(lambda name, arguments: tool_value(rpc("mcpServer/tool/call", {
             "server": server, "tool": name, "threadId": thread, "arguments": arguments,
-        })), expected_session, asset)
+        })), probe)
         child.check_stderr()
-    codex_hook_turn(cli, project, writer_env, forbidden)
-    if not bundled:
-        execute([cli, "mcp", "remove", "origence"], project, env, forbidden)
-    execute([cli, "plugin", "remove", PLUGIN], project, env, forbidden)
-    execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
 
 
 class ScriptedCodex(BaseHTTPRequestHandler):
@@ -176,7 +195,7 @@ class ScriptedClaude(BaseHTTPRequestHandler):
                 return
             if offset == 2:
                 hits = tool_value({"content": results[-1]["content"]})["hits"]
-                arguments = published_hit(hits, self.server.asset)
+                arguments = published_hit(hits, self.server.probe)
             else:
                 arguments = ({}, {"query": QUERY, "mode": "keyword"})[offset]
             block = {"type": "tool_use", "id": f"toolu_fixture_{offset}", "name": matching[0], "input": {}}
@@ -203,12 +222,20 @@ class ScriptedClaude(BaseHTTPRequestHandler):
             self.wfile.write(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode())
 
 
-def claude_client(cli, project, env, forbidden, expected_session, asset):
+def claude_client(cli, project, env, forbidden, default, switched, writer_env, writer_probe):
     execute([cli, "plugin", "install", "origence", "--marketplace", str(REPO)], project, env, forbidden)
     require(not (project / ".mcp.json").exists(), "Unexpected project MCP file")
+    claude_turn(cli, project, env, forbidden, default)
+    claude_turn(cli, project, dict(env, OC_WORKSPACE_ID=switched.session["workspace_id"]), forbidden, switched)
+    claude_turn(cli, project, writer_env, forbidden, writer_probe)
+    execute([cli, "plugin", "uninstall", PLUGIN], project, env, forbidden)
+    execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
+
+
+def claude_turn(cli, project, env, forbidden, probe):
     with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedClaude) as model:
         model.results = {}
-        model.asset = asset
+        model.probe = probe
         thread = threading.Thread(target=model.serve_forever, daemon=True)
         thread.start()
         try:
@@ -227,12 +254,10 @@ def claude_client(cli, project, env, forbidden, expected_session, asset):
             def lookup(name, arguments):
                 result = model.results[TOOLS.index(name)]
                 return tool_value({"content": result["content"]})
-            calls(lookup, expected_session, asset)
+            calls(lookup, probe)
         finally:
             model.shutdown()
             thread.join()
-    execute([cli, "plugin", "uninstall", PLUGIN], project, env, forbidden)
-    execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
 
 
 def diagnostics(base, forbidden):
@@ -267,10 +292,10 @@ def check_packages():
         require({"UserPromptSubmit", "PostToolUse", "Stop"} <= hooks.keys(), "Plugin is missing lifecycle events")
 
 
-def check_hook_run(host, summary, component, forbidden):
-    matches = [run for run in host.request("/v1/runs?limit=10")["items"] if run["summary"] == summary]
+def check_hook_run(host, summary, component, forbidden, workspace):
+    matches = [run for run in host.request("/v1/runs?limit=10", workspace=workspace)["items"] if run["summary"] == summary]
     require(len(matches) == 1, "Plugin did not create one private Run for the synthetic prompt")
-    trace = host.request(f"/v1/runs/{matches[0]['run_id']}")
+    trace = host.request(f"/v1/runs/{matches[0]['run_id']}", workspace=workspace)
     sanitized(trace, [*forbidden, "ORIGENCE_FIXTURE_PRIVATE_PROMPT", "Use the installed Origence tools"])
     events = [item["report"]["event"] for item in trace["events"]]
     require(any(event["kind"] == "coverage" and event["component"] == component for event in events),
@@ -281,6 +306,22 @@ def check_hook_run(host, summary, component, forbidden):
         tools = {event["tool"] for event in events if event["kind"] == "tool_reported"}
         require({"mcp__origence__context_search", "mcp__origence__context_get"} <= tools,
                 "Plugin did not observe its own allowlisted MCP calls")
+
+
+def bootstrap(binary, data, env, name, home=None):
+    command = [binary, "--offline", "workspace-create", name]
+    if home is not None:
+        command.extend(["--in-tenant-of", home])
+    result = subprocess.run(command, cwd=data, env=env, capture_output=True, check=True, timeout=60)
+    return json.loads(result.stdout)
+
+
+def publish_probe(host, label):
+    original = QUERY + f" {label} policy requires one approval."
+    current = QUERY + f" {label} policy requires two approvals."
+    asset = host.publish(original)
+    require(host.publish(current) == asset, "Updating the fixture created a different asset")
+    return asset, original, current
 
 
 def main():
@@ -301,27 +342,45 @@ def main():
         binary = binary_dir / ("origence.exe" if os.name == "nt" else "origence")
         shutil.copy2(args.binary, binary)
         host_env = isolated_env(str(data))
-        bootstrap = subprocess.run([binary, "--offline", "workspace-create", "Plugin fixture"],
-                                   cwd=data, env=host_env, capture_output=True, check=True, timeout=60)
-        workspace = json.loads(bootstrap.stdout)
-        admin = workspace["token"]
-        with Host(str(binary), host_env, admin, [admin], serve_args=("--local",), bind=args.bind) as host:
-            asset = host.publish(CONTENT)
-            reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})["token"]
-            writer = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "writer"})["token"]
-            host.token = reader
-            require(host.request("/v1/whoami")["workspace_id"] == workspace["workspace_id"],
-                    "Reader fixture is in the wrong workspace")
-            session = host.request("/v1/session")
+        home = bootstrap(binary, data, host_env, "Plugin default workspace")
+        alternate = bootstrap(binary, data, host_env, "Plugin selected workspace", home["workspace_id"])
+        with Host(str(binary), host_env, home["token"], [home["token"], alternate["token"]],
+                  serve_args=("--local",), bind=args.bind) as host:
+            first_asset = publish_probe(host, "default workspace")
+            reader = host.request("/admin/keys", {"workspace_id": home["workspace_id"], "role": "reader"})
+            writer = host.request("/admin/keys", {"workspace_id": home["workspace_id"], "role": "writer"})
+            host.token = alternate["token"]
+            second_asset = publish_probe(host, "selected workspace")
+            for key, role in ((reader, "reader"), (writer, "writer")):
+                host.request(f"/admin/workspace-key-grants/{key['key_id']}", {"role": role}, method="PUT")
+            selected = alternate["workspace_id"]
+            host.token = reader["token"]
+            default = WorkspaceProbe(host.request("/v1/session"), *first_asset)
+            switched = WorkspaceProbe(host.request("/v1/session", workspace=selected), *second_asset)
+            require(default.session["workspace_id"] == home["workspace_id"] and
+                    switched.session["workspace_id"] == selected and
+                    default.session["key_id"] == switched.session["key_id"] and
+                    default.session["session_id"] != switched.session["session_id"],
+                    "Fixture failed to isolate archives under the same logical key")
+            host.token = writer["token"]
+            writer_probe = WorkspaceProbe(host.request("/v1/session", workspace=selected), *second_asset)
             env = child_environment()
             path_name = next(name for name in env if name.upper() == "PATH")
             if path_name != "PATH":
                 env["PATH"] = env.pop(path_name)
             require(shutil.which(binary.name, path=env["PATH"]) is None, "Reader test requires a PATH without Origence")
-            env.update(HOME=temporary, USERPROFILE=temporary, OC_API_KEY=reader)
+            env.update(HOME=temporary, USERPROFILE=temporary, OC_API_KEY=reader["token"])
+            # Each Windows client uses disposable configuration and cache roots.
+            if os.name == "nt":
+                for variable in ("APPDATA", "LOCALAPPDATA"):
+                    path = root / variable
+                    path.mkdir()
+                    env[variable] = str(path)
+                if "CLAUDE_CODE_GIT_BASH_PATH" in os.environ:
+                    env["CLAUDE_CODE_GIT_BASH_PATH"] = os.environ["CLAUDE_CODE_GIT_BASH_PATH"]
             if host.base != "http://127.0.0.1:8080":
                 env["OC_SERVER_URL"] = host.base
-            forbidden = [admin, reader, writer]
+            forbidden = [home["token"], alternate["token"], reader["token"], writer["token"]]
             diagnostics(host.base, forbidden)
             for label, cli, run in (("Codex", args.codex, codex_client), ("Claude Code", args.claude, claude_client)):
                 project = root / f"{label} project"
@@ -331,26 +390,27 @@ def main():
                 execute(["git", "init", "-q"], project, env, forbidden)
                 client_env = dict(env, CODEX_HOME=str(config), CLAUDE_CONFIG_DIR=str(config))
                 print(execute([cli, "--version"], project, client_env, forbidden).strip(), flush=True)
-                writer_env = dict(client_env, OC_API_KEY=writer, OC_WORKSPACE_ID=workspace["workspace_id"],
+                writer_env = dict(client_env, OC_API_KEY=writer["token"], OC_WORKSPACE_ID=selected,
                                   PATH=str(binary_dir) + os.pathsep + client_env["PATH"])
                 if label == "Codex":
-                    run(cli, project, client_env, forbidden, session, asset, writer_env, host.base)
+                    run(cli, project, client_env, forbidden, default, switched, writer_env, host.base)
                 else:
-                    run(cli, project, client_env, forbidden, session, asset)
-                    host.token = writer
-                    run(cli, project, writer_env, forbidden, host.request("/v1/session"), asset)
-                    host.token = reader
+                    run(cli, project, client_env, forbidden, default, switched, writer_env, writer_probe)
                 require(not (project / ".mcp.json").exists() and not (project / ".codex/config.toml").exists(),
                         "Client project contains standalone MCP registration")
                 require(not (project / ".claude/settings.local.json").exists() and not (project / ".codex/hooks.json").exists(),
                         "Client project contains standalone Hook registration")
-                require(host.request("/v1/runs?limit=1")["items"] == [], "Unexpected reader Run activity")
-                host.token = writer
+                host.token = reader["token"]
+                require(all(host.request("/v1/runs?limit=1", workspace=scope)["items"] == []
+                            for scope in (None, selected)), "Unexpected reader Run activity")
+                host.token = writer["token"]
+                require(host.request("/v1/runs?limit=1")["items"] == [],
+                        "Writer Hook reported into the default workspace")
                 summary = "Codex turn (hook metadata only)" if label == "Codex" else "Claude Code prompt (hook metadata only)"
                 component = "codex_hook" if label == "Codex" else "claude_code_hook"
-                check_hook_run(host, summary, component, forbidden)
-                host.token = reader
-                print(f"PASS {label}: install, reader session, search, exact version, writer Run hook, uninstall", flush=True)
+                check_hook_run(host, summary, component, forbidden, selected)
+                print(f"PASS {label}: install, same-key default and selected workspace, historical v1 while v2 is published, "
+                      "writer Run hook in selected workspace, uninstall", flush=True)
             print("PASS startup diagnostics, packaged hooks, and reader isolation", flush=True)
 
 

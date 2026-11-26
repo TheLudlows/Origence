@@ -30,7 +30,7 @@ The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval a
 
 ## #105 Local client hook implementation
 
-Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. Native Windows installation, real models, and official pilot acceptance are pending. Automatic conversation body archiving remains follow-up work in [#105](https://github.com/TheLudlows/Origence/issues/105).
+Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. The native Windows runner passed installation, workspace selection, pinned retrieval, and the default hook with synthetic data. See [VALIDATION](VALIDATION.en.md). The formal freeze is blocked on tasks, model authorization, and independent roles. Automatic conversation body archiving remains follow-up work in [#105](https://github.com/TheLudlows/Origence/issues/105).
 
 ## Multi-workspace API credentials
 
