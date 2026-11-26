@@ -24,8 +24,94 @@ interface RunCreationOverview extends RunCreationBucket {
   };
 }
 
-function utc(ms: number) {
-  return new Date(ms).toISOString().replace("T", " ").replace("Z", "");
+const exactTime = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3,
+  hourCycle: "h23", timeZoneName: "shortOffset",
+});
+const localZone = exactTime.resolvedOptions().timeZone;
+
+function creationChart(buckets: RunCreationBucket[], daily: boolean) {
+  if (!buckets.length) return el("p", "muted", "暂无时段数据。");
+
+  const peak = Math.max(...buckets.map((bucket) => bucket.created_runs));
+  const step = Math.max(1, Math.ceil(peak / 4));
+  const top = Math.max(step, Math.ceil(peak / step) * step);
+  const scale = el("div", "run-chart-scale");
+  const guides = el("div", "run-chart-guides");
+  const ticks = el("div", "run-chart-ticks");
+  for (const visual of [scale, guides, ticks]) visual.setAttribute("aria-hidden", "true");
+  for (let value = 0; value <= top; value += step) {
+    const position = `${value / top * 100}%`;
+    const label = el("span", "", value.toLocaleString("zh-CN"));
+    const line = el("span", value === 0 ? "run-chart-baseline" : "");
+    label.style.bottom = position;
+    line.style.bottom = position;
+    scale.append(label);
+    guides.append(line);
+  }
+
+  const tickTime = new Intl.DateTimeFormat("zh-CN", daily
+    ? { month: "numeric", day: "numeric" }
+    : { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const readout = el("p", "run-chart-readout", "悬停、点击或用方向键查看各时段的创建量。");
+  const plot = el("div", "run-chart-plot", guides);
+  plot.setAttribute("role", "group");
+  plot.setAttribute("aria-label", "各时段新建 Run 数，使用左右方向键切换时段");
+  const bars = buckets.map((bucket, index) => {
+    const label = `${exactTime.format(bucket.start_ms)}（含）至 ${exactTime.format(bucket.end_ms)}（不含），新建 ${bucket.created_runs.toLocaleString("zh-CN")} 个 Run`;
+    const show = () => { readout.textContent = label; };
+    const mark = el("span", bucket.created_runs === 0 ? "run-chart-mark is-zero" : "run-chart-mark");
+    mark.style.height = `${bucket.created_runs / top * 100}%`;
+    const bar = button("", show, "run-chart-bar");
+    bar.append(mark);
+    bar.setAttribute("aria-label", label);
+    bar.tabIndex = index === 0 ? 0 : -1;
+    bar.addEventListener("pointerenter", show);
+    bar.addEventListener("focus", () => {
+      plot.querySelector<HTMLElement>('[tabindex="0"]')?.setAttribute("tabindex", "-1");
+      bar.tabIndex = 0;
+      show();
+    });
+    if (index % (daily ? 2 : 6) === 0 || index === buckets.length - 1) {
+      const tick = el("span", "", tickTime.format(bucket.start_ms));
+      tick.style.gridColumn = String(index + 1);
+      ticks.append(tick);
+    }
+    return bar;
+  });
+  plot.append(...bars);
+  plot.addEventListener("keydown", (event) => {
+    const current = bars.findIndex((bar) => bar === event.target);
+    if (current === -1) return;
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft": next = Math.max(0, current - 1); break;
+      case "ArrowRight": next = Math.min(bars.length - 1, current + 1); break;
+      case "Home": next = 0; break;
+      case "End": next = bars.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    bars[next]?.focus();
+  });
+  const chart = el("figure", "run-chart",
+    el("figcaption", "run-chart-label", "新建 Run 数"),
+    el("div", "run-chart-grid", scale, plot, ticks),
+    el("p", "run-chart-time", `时段起点（本地时间 · ${localZone}）`),
+    readout,
+  );
+  chart.style.setProperty("--run-chart-columns", String(bars.length));
+  return chart;
+}
+
+function creationDetails(buckets: RunCreationBucket[]) {
+  return el("details", "run-creation-buckets",
+    el("summary", "", "查看明细"),
+    table(["时段开始（含）", "时段结束（不含）", "新建 Run 数"], buckets.map((bucket) => [
+      exactTime.format(bucket.start_ms), exactTime.format(bucket.end_ms), bucket.created_runs,
+    ])),
+  );
 }
 
 function amount(currency: string, micros: string) {
@@ -64,7 +150,7 @@ export function runCreationTrend(signal: AbortSignal) {
     ["24h", "最近 24 小时"],
     ["7d", "最近 7 天"],
   ]);
-  const result = el("div");
+  const result = el("div", "run-creation-result");
   const status = el("p");
   status.setAttribute("role", "status");
   const retry = button("重试读取创建量", () => {
@@ -87,22 +173,13 @@ export function runCreationTrend(signal: AbortSignal) {
         requestSignal,
       );
       if (requestSignal.aborted) return;
-      const scale = Math.max(1, ...data.series.map((bucket) => bucket.created_runs));
       status.textContent = `新建运行 ${data.created_runs.toLocaleString("zh-CN")} 条`;
       result.append(
         el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
+        el("p", "muted", `${exactTime.format(data.start_ms)}（含）至 ${exactTime.format(data.end_ms)}（不含）`),
+        creationChart(data.series, range.value === "7d"),
+        creationDetails(data.series),
         metering(data),
-        el("p", "muted", `UTC ${utc(data.start_ms)}（含）至 ${utc(data.end_ms)}（不含）`),
-        el("div", "run-creation-buckets", table(
-          ["桶起点（UTC，含）", "桶终点（UTC，不含）", "创建数", "相对趋势"],
-          data.series.map((bucket) => {
-            const bar = el("meter");
-            bar.max = scale;
-            bar.value = bucket.created_runs;
-            bar.setAttribute("aria-hidden", "true");
-            return [utc(bucket.start_ms), utc(bucket.end_ms), bucket.created_runs, bar];
-          }),
-        )),
       );
       if (document.activeElement === retry) range.focus();
       retry.hidden = true;

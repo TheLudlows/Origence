@@ -7,6 +7,22 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · 运行创建趋势柱状图
+
+基于 main `78f08ab95494eb9cca9944e3a87fa0181374e1ef`，Node.js 24.22.1 类型检查和 30 项 UI
+测试通过。Chromium 156.0.8078.79 使用回环合成数据，在 1024px 浅色和 320px 深色窗口中验证 24
+小时与 7 天时段、零基线与柱高、浏览器本地时间和毫秒边界、键盘和悬停、模拟触点、默认折叠明细
+及请求失败后的重试焦点。736px 和 375px 的明暗主题导航回归通过。Rust 1.98.0 格式检查、
+严格 Clippy 与创建统计、运行计量两项本地集成测试通过。
+
+```sh
+npm --prefix ui run check
+npm --prefix ui test
+NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
+  node ui/scripts/check-navigation-focus-browser.cjs
+cargo test --locked --no-default-features --features local-storage --test local catalog::run_
+```
+
 ## 2026-11-26 · #149 中文检索质量回归
 
 主干 `6201881` 的 S1 v2 三模式共完成 900 次 search 和 900 次 resolve，错误为 0。
