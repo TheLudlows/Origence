@@ -156,6 +156,42 @@ The previous binary also rejects a database containing the new index. Keep
 each data directory with its matching binary. Both rejections preserve the
 existing data, and there is no migration.
 
+### Whole-Run metering
+
+An authorized Run owner can append a `metering_reported` event through
+`POST /v1/runs/{run}/events` or MCP `context_run_report`. Supply at least
+one of the following fields once the whole-Run measurement is available:
+
+- `duration_ms`: elapsed milliseconds from the execution start to its final
+  return, measured with the executor's monotonic clock.
+- `agent_tokens`: complete input and output token total from execution model
+  usage records. Leave this absent if the total is incomplete. Both duration
+  and tokens use unsigned 32-bit integers.
+- `estimated_cost` and `billed_cost`: an executor-supplied estimate and
+  a charge attributable to this Run, respectively. Each has a three-letter
+  uppercase `currency` and integer `micros` between 0 and 9,007,199,254,740,991.
+  One currency unit is 1,000,000 micros. Origence records the claim with the
+  authenticated principal, reporter and observation time.
+
+Each metric is immutable once reported. The same event ID and payload return
+the original receipt. A new event can fill missing metrics, including a delayed
+bill. A new event that repeats any already recorded metric is rejected in full
+with 409. Explicit zero values are retained.
+
+Overview returns `metering` for Runs **created** in the selected window, using
+the measurements received so far. `duration_p95_ms` is the nearest-rank P95 of
+the `duration_runs` samples. `agent_tokens` sums the `token_runs` observations.
+Both values are null without samples. Each `costs` group gives the
+`basis` (`estimated` or `billed`), `currency`, `micros` and contributing
+`runs`. Aggregate token and cost values are exact decimal integer strings.
+Currency and basis groups are presented separately, without exchange rates.
+
+The caller supplies metering. The current Codex and Claude Code Hooks do not
+have complete whole-Run measurements. The query embedding observation remains
+separate. Workspace administrators read aggregates while raw Run events remain
+owner-only. The event and its time- and scope-indexed metering projection commit
+together on fresh SQLite databases. Reads do not scan Run bodies.
+
 ## External verification records
 
 Owner-transcribed external assessments use a separate [verification contract](run-verification.md).

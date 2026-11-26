@@ -115,6 +115,9 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   await page.keyboard.press('Space');
   (await receiveSuccess())(true);
   await trend.getByText('新建运行 3 条', { exact: true }).waitFor();
+  await trend.getByRole('row', { name: '端到端耗时 P95 2,345 ms 2' }).waitFor();
+  await trend.getByRole('row', { name: 'Agent Token 总量 0 1' }).waitFor();
+  await trend.getByRole('row', { name: '费用估算 USD 0.000075 1' }).waitFor();
   await retry.waitFor({ state: 'hidden' });
   const recovered = {
     focusedRange: await isFocused(range),
@@ -130,6 +133,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   await range.press('ArrowDown');
   (await receiveRangeFailure())(false);
   await error.waitFor();
+  assert.equal(await trend.getByText('USD 0.000075', { exact: true }).count(), 0);
   assert.equal(await isFocused(range), true);
   await focusRetry();
   const receiveBackgroundSuccess = holdOverview();
@@ -140,6 +144,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   assert.equal(await isFocused(openTrace), true);
   sendBackgroundSuccess(true);
   await trend.getByText('新建运行 4 条', { exact: true }).waitFor();
+  await trend.getByRole('row', { name: '端到端耗时 P95 未知 0' }).waitFor();
   await retry.waitFor({ state: 'hidden' });
   assert.equal(await isFocused(openTrace), true);
   assert.equal(requestCount(), 5);
@@ -190,7 +195,14 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
         const duration = days ? 86_400_000 : 3_600_000;
         const created = days ? 4 : 3;
         response.end(JSON.stringify({
+          scope: 'workspace',
           start_ms: 0, end_ms: buckets * duration, created_runs: created,
+          metering: days
+            ? { duration_p95_ms: null, duration_runs: 0, agent_tokens: null, token_runs: 0, costs: [] }
+            : {
+                duration_p95_ms: 2345, duration_runs: 2, agent_tokens: '0', token_runs: 1,
+                costs: [{ basis: 'estimated', currency: 'USD', micros: '75', runs: 1 }],
+              },
           series: Array.from({ length: buckets }, (_, index) => ({
             start_ms: index * duration, end_ms: (index + 1) * duration, created_runs: index === 0 ? created : 0,
           })),

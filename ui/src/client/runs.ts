@@ -110,13 +110,6 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
       el("p", "muted", workspaceWide ? "当前工作区列表的第一页" : "当前 Key 列表的第一页"),
     ),
   );
-  cards.append(
-    panel(
-      "业务成功率 / 端到端 P95 / Agent Token / 成本",
-      el("div", "stat-value", "未采集"),
-      el("p", "muted", "单次上下文准备的查询向量用量不代表整轮计量。"),
-    ),
-  );
   if (runs.status === "fulfilled") {
     list.append(runTable(runs.value.items, workspaceWide, ctx));
     if (runs.value.next_after)

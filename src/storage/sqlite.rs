@@ -57,6 +57,7 @@ mod read_model_tests;
 mod relational;
 #[cfg(feature = "local-storage")]
 pub(crate) mod retrieval;
+mod run_metering;
 mod run_verification;
 mod runs;
 mod schema;
