@@ -192,6 +192,14 @@ separate. Workspace administrators read aggregates while raw Run events remain
 owner-only. The event and its time- and scope-indexed metering projection commit
 together on fresh SQLite databases. Reads do not scan Run bodies.
 
+## Managed client observations
+
+Managed integrations can append `codex_command_reported` and
+`claude_interrupt_reported` using the same private HTTP or MCP Run event API.
+They preserve the existing Run authorization, replay, and prefix rules.
+Command status and cancellation are client observations and leave the Run's
+business outcome unchanged. See [managed Run reporting](../MANAGED-RUNS.en.md).
+
 ## External verification records
 
 Owner-transcribed external assessments use a separate [verification contract](run-verification.md).

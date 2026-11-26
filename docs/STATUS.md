@@ -42,6 +42,8 @@ Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提�
 历史版本读取和默认 Hook，见 [VALIDATION](VALIDATION.md)。正式冻结因题集、模型授权和独立角色缺失而阻塞。
 自动会话正文归档保留在 [#105 后续规划](https://github.com/TheLudlows/Origence/issues/105)。
 
+应用直接驱动的任务还可使用[受管 Run 上报](MANAGED-RUNS.md)。Codex App Server 提供命令状态及可用的退出码和耗时，Claude Agent SDK 提供取消回执及对应轮次的结果。
+
 ## 多 workspace API 凭据
 
 同一逻辑 key 可在同租户的多个 workspace 获得各自的角色。HTTP 支持显式 workspace

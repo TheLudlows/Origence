@@ -74,6 +74,12 @@ Origence 对已配置 embedding 端点的请求可产生一条 `retrieval.contex
 
 计量来源为调用方显式上报。现有 Codex/Claude Code Hook 没有完整计量数据，插件不会自动生成这类事件。管理员在工作区总览只读聚合，Run 原始事件仍由所属逻辑 Key 私有读取。计量投影同事件一起写入并按创建时间和权限范围索引，查询不扫描 Run 正文。SQLite 只在新库安装该结构，旧库按既有准入规则拒绝打开。
 
+## 受管客户端观测
+
+受管任务可通过现有私有 Run HTTP 或 MCP 事件入口上报
+`codex_command_reported` 与 `claude_interrupt_reported`。沿用 Run 权限、幂等和前缀规则。
+命令状态和取消过程属于客户端观察，Run 的业务结果仍由独立结果事件决定。见[受管 Run 上报](../MANAGED-RUNS.md)。
+
 ## 外部核验记录
 
 所有者转录的外部核验遵循独立[核验契约](run-verification.zh-CN.md)，绑定精确 Run 前缀并保留归因、依据、未知使用版本和撤回信息。这不是平台认证，声称的核验人或 `reporter=user/test` 标签不授予私有 Run 读取权。

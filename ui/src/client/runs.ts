@@ -228,6 +228,57 @@ function eventOrigin(event: RunEvent): [string, string] {
   }
 }
 
+const codexCommandStatuses = new Map([
+  ["completed", "已完成"], ["failed", "失败"], ["declined", "已拒绝"],
+]);
+const claudeInterruptStages = new Map([
+  ["requested", "Claude Code · 已发起取消"],
+  ["receipt", "Claude Code · 取消回执"],
+  ["result", "Claude Code · 取消结果"],
+]);
+const claudeInterruptStatuses = new Map([
+  ["acknowledged", "已收到 SDK 回执"],
+  ["prompt_still_queued", "目标提示仍在队列"],
+  ["acknowledged_without_details", "SDK 已回应，回执详情未知"],
+  ["unavailable", "SDK 回执不可用"],
+  ["interrupted", "确认中断"],
+  ["completed", "轮次已完成"],
+  ["other_terminal", "轮次因其他原因结束"],
+]);
+
+function interruptObservation(report: Record<string, unknown>) {
+  return report.observation as { stage?: unknown; status?: unknown } | undefined;
+}
+
+function runEventLabel(event: RunEvent) {
+  const report = event.report.event;
+  if (event.evidence_origin === "reported" && report?.kind === "codex_command_reported")
+    return "Codex · 命令结果";
+  if (event.evidence_origin === "reported" && report?.kind === "claude_interrupt_reported")
+    return claudeInterruptStages.get(String(interruptObservation(report)?.stage)) ?? "Claude Code · 取消观察";
+  return event.report.kind ?? String(report?.kind ?? "reported");
+}
+
+function managedObservation(event: RunEvent): HTMLElement | null {
+  const report = event.report.event;
+  if (event.evidence_origin !== "reported" || !report) return null;
+  const number = (value: unknown, unit = "") =>
+    typeof value === "number" && Number.isSafeInteger(value) ? `${value}${unit}` : "未知";
+  if (report.kind === "codex_command_reported") {
+    return el("div", "notice",
+      el("p", "", "命令状态　", codexCommandStatuses.get(String(report.status)) ?? "未知"),
+      el("p", "", "退出码　", number(report.exit_code)),
+      el("p", "", "命令耗时　", number(report.duration_ms, " ms")),
+    );
+  }
+  if (report.kind === "claude_interrupt_reported") {
+    const observation = interruptObservation(report);
+    return el("p", "notice", observation?.stage === "requested" ? "Origence 已通过 SDK 发起取消。"
+      : claudeInterruptStatuses.get(String(observation?.status)) ?? "未知");
+  }
+  return null;
+}
+
 function contextQueryEmbedding(event: RunEvent) {
   if (!(event.evidence_origin === "server_prepared" && event.report.kind === "context_prepared") &&
       !(event.evidence_origin === "server_observed" && event.report.kind === "context_preparation_failed")) return null;
@@ -362,12 +413,11 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     selected?.abort();
     selected = new AbortController();
     const selectionSignal = AbortSignal.any([ctx.signal, selected.signal]);
-    const report = event.report,
-      kind = report.kind ?? String(report.event?.kind ?? "reported");
+    const report = event.report;
     const eventBody = report.event ?? report;
     const embedding = contextQueryEmbedding(event);
     details.replaceChildren(
-      el("h2", "", kind),
+      el("h2", "", runEventLabel(event)),
       badge(eventOrigin(event)[1]),
       el(
         "p",
@@ -375,7 +425,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         `sequence ${event.sequence} · ${date(event.recorded_at_ms)}`,
       ),
       ...(embedding ? [embedding] : []),
-      code(eventBody),
+      managedObservation(event) ?? code(eventBody),
     );
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])
@@ -441,13 +491,12 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       );
   };
   const eventRow = (event: RunEvent) => {
-    const kind = event.report.kind ?? String(event.report.event?.kind ?? "reported");
     const row = button("", () => selectEvent(event), "event");
     row.dataset.sequence = String(event.sequence);
     row.setAttribute("aria-pressed", "false");
     row.append(
       el("span", "event-index", event.sequence),
-      el("div", "", el("strong", "", kind), el("small", "muted", date(event.recorded_at_ms))),
+      el("div", "", el("strong", "", runEventLabel(event)), el("small", "muted", date(event.recorded_at_ms))),
       badge(eventOrigin(event)[0]),
     );
     return row;

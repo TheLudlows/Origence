@@ -28,6 +28,18 @@ pub enum RunEvent {
         tool: String,
         summary: String,
     },
+    /// Metadata from a completed command item on a bound Codex App Server turn.
+    CodexCommandReported {
+        status: CodexCommandStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u32>,
+    },
+    /// A stage observed by the owner of a single Claude Agent SDK turn.
+    ClaudeInterruptReported {
+        observation: ClaudeInterruptObservation,
+    },
     ResultReported {
         outcome: RunOutcome,
         summary: String,
@@ -65,6 +77,41 @@ pub enum RunEvent {
         summary: String,
     },
 }
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexCommandStatus {
+    Completed,
+    Failed,
+    Declined,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "stage", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ClaudeInterruptObservation {
+    Requested,
+    Receipt { status: ClaudeInterruptReceipt },
+    Result { status: ClaudeInterruptResult },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaudeInterruptReceipt {
+    Acknowledged,
+    PromptStillQueued,
+    AcknowledgedWithoutDetails,
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaudeInterruptResult {
+    Interrupted,
+    Completed,
+    OtherTerminal,
+    Unknown,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct RunCost {
@@ -122,6 +169,9 @@ impl RunEventInput {
             return Err("invalid event identity or observation time");
         }
         match &self.event {
+            // Narrow DTOs with no raw strings. These are client observations,
+            // so they must never enter the business-outcome catalog projection.
+            RunEvent::CodexCommandReported { .. } | RunEvent::ClaudeInterruptReported { .. } => {}
             RunEvent::ContextReported { references } => {
                 if references.len() > 64 {
                     return Err("too many context references");

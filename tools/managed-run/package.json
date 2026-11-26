@@ -1,0 +1,14 @@
+{
+  "name": "@origence/managed-run",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test managed-run.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.332"
+  }
+}

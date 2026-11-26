@@ -4,6 +4,25 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Codex commands and Claude SDK cancellation
+
+Tested `2396dfa3ffd303c0cbfbd63068930fb36926ab8b` on main
+`b4e8879fa952b5afd729fd5b89a630c6d5705696`, Linux x86_64, Rust 1.98.0 and
+Node.js 24. Formatting, strict local-storage Clippy, 236 library tests, 215
+local integration tests, Node type checking, and 30 UI tests passed. Twelve
+managed Run fixtures covered command correlation, missing fields, explicit
+zero, byte-identical retry, the metadata allowlist, out-of-order cancellation
+receipts and results, other prompts, older receipts, timeouts and late
+cancellation. The pinned SDK was installed and its `query` export verified.
+
+A loopback check ran the actual Origence HTTP host, temporary SQLite, the Node
+relay and Chromium. Synthetic Codex notifications went through the CLI and
+were replayed. A Claude SDK fixture exercised all three cancellation stages.
+Chromium showed exit codes, durations, unknown values, acknowledgement and
+confirmed interruption separately. Private payloads were absent from the Run
+and the business outcome stayed unknown. This check used synthetic protocol
+events. Managed execution with native clients and live models is unverified.
+
 ## 2026-11-26 · #89 End-to-end expense trace preflight
 
 Based on main `3984085ca5872dc68ea44b062e2d0791f92102a3`, using Linux x86_64, Rust 1.98.0,

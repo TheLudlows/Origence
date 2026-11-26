@@ -198,6 +198,8 @@ The sender uses the existing private Run API. Before each batch it confirms the 
 
 ### Events and correlation boundaries
 
+Applications driving either client can use [managed Run reporting](MANAGED-RUNS.en.md) for Codex App Server command completion and Claude Agent SDK cancellation.
+
 | Client | Correlation keys | Recorded observations | Coverage gaps |
 | --- | --- | --- | --- |
 | Codex | `session_id` and `turn_id` | `UserPromptSubmit`, allowlisted `PostToolUse`, `Stop`, and main-thread `Interrupt`. Origence MCP tools use only `isError` actually supplied in structured results. | Bash and patch tool results stay unknown. Hook timing is unavailable. Subagent lifecycle, managed tools, or abnormal process exits are not used to infer termination. |
