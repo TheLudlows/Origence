@@ -14,7 +14,7 @@ mod improvements;
 mod jobs;
 pub mod learning;
 #[cfg(feature = "local-storage")]
-pub mod mcp;
+mod mcp;
 pub mod memory_identity;
 pub mod memory_semantics;
 pub mod messages;

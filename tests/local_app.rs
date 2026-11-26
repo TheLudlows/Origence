@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, BufReader},
     process::{Child, Command},
 };
 use uuid::Uuid;
@@ -169,23 +169,6 @@ async fn start(dir: &std::path::Path, model: &str) -> (Child, String) {
     .await
     .unwrap();
     (child, base)
-}
-async fn rpc(
-    input: &mut tokio::process::ChildStdin,
-    output: &mut tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
-    value: Value,
-) -> Value {
-    input
-        .write_all(format!("{value}\n").as_bytes())
-        .await
-        .unwrap();
-    input.flush().await.unwrap();
-    let line = tokio::time::timeout(Duration::from_secs(10), output.next_line())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    serde_json::from_str(&line).unwrap()
 }
 fn pdf() -> Vec<u8> {
     super::pdf_fixture::text_pdf(&["Release approval evidence", "Second page provenance"])
@@ -939,7 +922,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let (mut host, base) = start(dir.path(), &model).await;
     let recovered = job(&http, &base, token, id(&crashed, "job_id"), "completed").await;
     assert_eq!(recovered["result"]["version"], 1);
-    // Remote MCP coexists with the exclusive host and reauthorizes each call.
+    // The running host exposes tools and reauthorizes each request.
     let key = post(
         &http,
         &base,
@@ -948,28 +931,19 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         json!({"workspace_id":bootstrap["workspace_id"],"role":"reader"}),
     )
     .await;
-    let mut mcp = command(dir.path())
-        .env("OC_API_KEY", key["token"].as_str().unwrap())
-        .env("OC_SERVER_URL", &base)
-        .arg("mcp")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut input = mcp.stdin.take().unwrap();
-    let mut output = BufReader::new(mcp.stdout.take().unwrap()).lines();
-    let hello=rpc(&mut input,&mut output,json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}})).await;
-    assert!(hello.get("result").is_some());
-    input
-        .write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
+    let reader = key["token"].as_str().unwrap();
+    let peer = crate::mcp_http::Peer::at(format!("{base}/mcp"));
+    let tools: Value = peer
+        .post(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}))
+        .bearer_auth(reader)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
         .await
         .unwrap();
-    let tools = rpc(
-        &mut input,
-        &mut output,
-        json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
-    )
-    .await;
     let tool_names: std::collections::BTreeSet<_> = tools["result"]["tools"]
         .as_array()
         .unwrap()
@@ -993,13 +967,25 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         ])
     );
 
-    let recalled=rpc(&mut input,&mut output,json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"context_search","arguments":{"query":"Atlas","mode":"hybrid"}}})).await;
-    let recalled: Value =
-        serde_json::from_str(recalled["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let recalled = peer
+        .call(
+            reader,
+            None,
+            "context_search",
+            json!({"query":"Atlas","mode":"hybrid"}),
+        )
+        .await
+        .unwrap();
     assert_eq!(recalled["graph"]["entities"].as_array().unwrap().len(), 2);
-    let assembled=rpc(&mut input,&mut output,json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"context_resolve","arguments":{"query":"Atlas","mode":"hybrid","budget_tokens":3000}}})).await;
-    let assembled: Value =
-        serde_json::from_str(assembled["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let assembled = peer
+        .call(
+            reader,
+            None,
+            "context_resolve",
+            json!({"query":"Atlas","mode":"hybrid","budget_tokens":3000}),
+        )
+        .await
+        .unwrap();
     assert!(assembled["count"].as_u64().unwrap() <= 3000);
     assert!(
         assembled["sources"]
@@ -1022,20 +1008,22 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .json()
         .await
         .unwrap();
-    let bundle_rpc = json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"context_bundle","arguments":context_request}});
-    let via_mcp = rpc(&mut input, &mut output, bundle_rpc.clone()).await;
-    let via_mcp: Value =
-        serde_json::from_str(via_mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let via_mcp = peer
+        .call(reader, None, "context_bundle", context_request.clone())
+        .await
+        .unwrap();
     assert_eq!(
         crate::support::without_retrieval_observations(&direct_bundle),
         crate::support::without_retrieval_observations(&via_mcp)
     );
     assert!(!via_mcp["items"].as_array().unwrap().is_empty());
-    let get = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context_get","arguments":{"asset_id":published["asset_id"]}}});
-    let result = rpc(&mut input, &mut output, get.clone()).await;
-    assert!(result.get("error").is_none(), "{result}");
+    let get = json!({"asset_id":published["asset_id"]});
+    let result = peer
+        .call(reader, None, "context_get", get.clone())
+        .await
+        .unwrap();
     assert!(
-        result["result"]["content"][0]["text"]
+        result["content"]
             .as_str()
             .unwrap()
             .contains("Release approval required")
@@ -1049,19 +1037,15 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         Value::Null,
     )
     .await;
-    assert!(
-        rpc(&mut input, &mut output, get)
-            .await
-            .get("error")
-            .is_some()
+    assert_eq!(
+        peer.call(reader, None, "context_get", get).await,
+        Err(json!({"http_status":401}))
     );
-    assert!(
-        rpc(&mut input, &mut output, bundle_rpc)
-            .await
-            .get("error")
-            .is_some()
+    assert_eq!(
+        peer.call(reader, None, "context_bundle", context_request)
+            .await,
+        Err(json!({"http_status":401}))
     );
-    stop(&mut mcp).await;
     stop(&mut host).await;
     // No silent offline fallback when host is gone.
     let unavailable = command(dir.path())

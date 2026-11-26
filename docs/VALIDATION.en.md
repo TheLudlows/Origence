@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Client plugins move to HTTP MCP
+
+Based on PR #139 at `3d99e7e1c6220a2e7810e4b2921a707730cff6e4`, Linux x86_64 with Rust 1.98.0. All-target Clippy with warnings denied passed for all features, SQLite-only and the cloud build. The default Rust suite passed 469 tests with 8 existing live AnySeek contracts ignored. The stdio startup test for old hosts that ignored workspace selection was removed. Live HTTP tests still cover default and explicit scope, disallowed selection, revocation, and an empty header from a plugin with no workspace selection.
+
+- `python3 tools/mcp_smoke.py --binary target/debug/origence --local` passed negotiation, all tool schemas, safe errors, private archives, revocation, and reads after host restart.
+- `python3 tools/plugin_smoke.py --binary target/debug/origence` used Claude Code 2.1.330 and Codex 0.171.0. Both installed the plugin, retrieved a pinned published version without Origence on the client PATH, reported a Run through the default hook with the binary and a synthetic writer key, and uninstalled. A rerun with `--bind 127.0.0.1:0` verified the Claude Code origin variable and Codex's same-name endpoint override. The clients used isolated settings and scripted loopback model responses. Windows clients, an external HTTPS proxy, and live models were outside this run.
+- The older standalone AnySeek `6614bbf` available locally returned a dependency error during fixture publication, before any MCP request. The CI-pinned `6a46fc7` still awaits GitHub verification.
+
 ## 2026-11-26 · Streamable HTTP MCP
 
 Based on main `85d6264ab720437d8620d3cdb5289ace85a5942c`, Linux x86_64 with Rust 1.98.0. Format and all-target Clippy with warnings denied passed for all features and the cloud build (`--no-default-features --features local-storage`). `cargo test --locked --offline` passed 470 tests with 8 existing live AnySeek contracts ignored. Two new live HTTP regressions cover negotiation, Host and Origin checks, request size, credential revocation, workspace isolation, reader write denial, private archives, and replaying a Run preparation receipt through the public Rust library.

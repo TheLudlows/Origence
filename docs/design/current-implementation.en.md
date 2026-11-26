@@ -8,13 +8,13 @@ Updated 2026-11-18. Code baseline is main `4160fd5`. This page describes the cur
 
 Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. It currently provides memory and knowledge writes and retrieval, Skill candidates and approved publication, private Run recording and reading, context assembly, and explicit session learning.
 
-Claude Code and Codex are the initial pilot hosts. Entry points include stdio MCP, explicit archive and Run tools, and directory exports of approved Skills. See [STATUS](../STATUS.en.md) for pilot progress.
+Claude Code and Codex are the initial pilot hosts. Entry points include Streamable HTTP MCP, explicit archive and Run tools, and directory exports of approved Skills. See [STATUS](../STATUS.en.md) for pilot progress.
 
 ## 2. Current architecture
 
 ```mermaid
 flowchart TD
-    C[Claude Code / Codex] --> M[stdio MCP]
+    C[Claude Code / Codex] --> M[Streamable HTTP MCP]
     M --> H[Origence HTTP host]
     H --> S[Service authentication, scope, use cases, and evidence]
     S --> A[SQLite authority, jobs, and publication ledger]
@@ -33,7 +33,7 @@ flowchart TD
     W --> P[Configured models and parsers]
 ```
 
-HTTP and the single Worker share one `StorageEngine`. The SQLite authority holds the data directory's exclusive OS lock. CLI/MCP forward to the running host by default, and offline access opens the directory exclusively. Local mode opens the AnySeek Catalog in the Origence process through the Rust SDK. Cloud mode connects to standalone AnySeek over HTTP using a credential held only by the host. Both modes choose a tenant UUID namespace and workspace collection from the authenticated Scope. AnySeek stores published text and retrieval indexes. Origence determines employee permissions and source validity. [Operations and deployment](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
+HTTP and the single Worker share one `StorageEngine`. The SQLite authority holds the data directory's exclusive OS lock. MCP clients connect directly to the host's `/mcp` endpoint. Offline CLI access opens the directory exclusively. Local mode opens the AnySeek Catalog in the Origence process through the Rust SDK. Cloud mode connects to standalone AnySeek over HTTP using a credential held only by the host. Both modes choose a tenant UUID namespace and workspace collection from the authenticated Scope. AnySeek stores published text and retrieval indexes. Origence determines employee permissions and source validity. [Operations and deployment](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
 <a id="a1-assets-sources-and-publication"></a>
 ## A1. Content, sources, and publication
@@ -98,7 +98,7 @@ AnySeek reuses original tokenization and encodes each term with SHA-256, preserv
 <a id="storage-acceptance"></a>
 ### A2.8 Acceptance
 
-Record engineering regressions, actual engine and stdio MCP, real Claude Code clients, and real task outcomes separately. Prior passing revisions do not establish the current head. Average quality cannot offset isolation and source validity failures. See [VALIDATION](../VALIDATION.en.md) for entry points and precise results and STATUS for gaps.
+Record engineering regressions, actual engine and Streamable HTTP MCP, real Claude Code clients, and real task outcomes separately. Prior passing revisions do not establish the current head. Average quality cannot offset isolation and source validity failures. See [VALIDATION](../VALIDATION.en.md) for entry points and precise results and STATUS for gaps.
 
 ## A3. Identity, sessions, and conditional experience
 

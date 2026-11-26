@@ -1,12 +1,8 @@
-"""Black-box, no-model MCP stdio regression against a built Origence binary.
+"""Black-box Streamable HTTP MCP regression against a built Origence binary.
 
 Run: python3 tools/mcp_smoke.py --binary target/debug/origence
 
-Only synthetic data and newly issued keys in a temporary database are used.
-Subprocesses are intentional here: library calls cannot test the actual CLI,
-stdio framing, startup authentication, or EOF shutdown. Each child has bounded
-response/startup/shutdown waits and is reaped, including on failure. Production
-code does not spawn a child. No MCP client package or provider is required.
+Runs the actual HTTP host with temporary data, scoped keys and no models.
 """
 import argparse
 from anyseek_fixture_env import configure_fixture
@@ -30,15 +26,11 @@ QUERY = "MCPWIREPOLICY"
 OLD_CONTENT = QUERY + " requires one approval. Café 审批."
 CONTENT = QUERY + " requires two approvals. Café 审批."
 BAD_INPUT = "MCP_UNTRUSTED_INPUT_MUST_NOT_LEAK"
-# rmcp 1.8.0 recognizes these clients; unknown versions use Origence's retained
-# 0.8.x advertised version. This is deliberately a wire-level assertion.
 PROTOCOLS = (
-    ("2024-11-05", "2024-11-05"),
     ("2025-03-26", "2025-03-26"),
     ("2025-06-18", "2025-06-18"),
     ("2025-11-25", "2025-11-25"),
-    ("2026-07-28", "2026-07-28"),
-    ("2099-01-01", "2025-03-26"),
+    ("2099-01-01", "2025-11-25"),
 )
 TOOL_FIELDS = {
     "context_search": {
@@ -165,26 +157,50 @@ class Child:
         self.close()
 
 
-class Mcp(Child):
-    def __init__(self, command, env, forbidden):
-        super().__init__(command, env, forbidden)
+class Mcp:
+    def __init__(self, base, token, forbidden):
+        self.url = base + "/mcp"
+        self.token = token
+        self.forbidden = forbidden
         self.next_id = 0
+        self.protocol = "2025-11-25"
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def send(self, message):
-        data = json.dumps(message, ensure_ascii=False).encode("utf-8") + b"\n"
+    def send(self, message, *, expected_status=200):
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        }
+        if message["method"] != "initialize":
+            headers["MCP-Protocol-Version"] = self.protocol
+        if self.token:
+            headers["Authorization"] = "Bearer " + self.token
+        request = urllib.request.Request(self.url, data=json.dumps(message).encode(), headers=headers)
         try:
-            self.process.stdin.write(data)
-            self.process.stdin.flush()
-        except (BrokenPipeError, OSError):
-            raise RuntimeError("MCP closed stdin unexpectedly") from None
+            response = self.opener.open(request, timeout=TIMEOUT)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            require(response.status == expected_status, f"Unexpected MCP HTTP status {response.status}")
+            body = response.read(MAX_BYTES + 1)
+            require(len(body) <= MAX_BYTES, "MCP response exceeded size limit")
+            require("Mcp-Session-Id" not in response.headers, "MCP must be stateless")
+            if expected_status == 401:
+                require(response.headers.get("WWW-Authenticate") == "Bearer", "missing bearer challenge")
+                sanitized(body.decode("utf-8"), self.forbidden)
+                return None
+            if expected_status == 202:
+                require(not body, "MCP notification returned a body")
+                return None
+            require(response.headers.get_content_type() == "application/json", "expected a JSON response")
+            return json.loads(body)
 
     def request(self, method, params=None):
         self.next_id += 1
         message = {"jsonrpc": "2.0", "id": self.next_id, "method": method}
         if params is not None:
             message["params"] = params
-        self.send(message)
-        response = self.receive()
+        response = self.send(message)
         require(response.get("jsonrpc") == "2.0", "invalid JSON-RPC version")
         require(response.get("id") == self.next_id, "JSON-RPC response ID mismatch")
         require(("result" in response) != ("error" in response), "invalid JSON-RPC response envelope")
@@ -204,7 +220,8 @@ class Mcp(Child):
         require(set(info.get("capabilities", {})) == {"tools"}, "MCP advertised unexpected capabilities")
         require(bool(info.get("serverInfo", {}).get("name")), "missing MCP server identity")
         require("untrusted evidence" in info.get("instructions", ""), "missing untrusted-evidence instruction")
-        self.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        self.protocol = expected
+        self.send({"jsonrpc": "2.0", "method": "notifications/initialized"}, expected_status=202)
         require(self.success("ping") == {}, "MCP ping did not return an empty result")
 
     def tool(self, name, arguments):
@@ -242,21 +259,10 @@ class Mcp(Child):
             require(error["message"] == message, "argument error changed its exact message")
         require(error.get("data") is None, "argument error exposed diagnostic data")
 
-    def shutdown(self):
-        # EOF is the stdio transport shutdown mechanism, not a fabricated MCP
-        # shutdown method. A timeout/kill is a failure, never a successful exit.
-        self.process.stdin.close()
-        try:
-            code = self.process.wait(timeout=TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("MCP did not exit after stdin EOF") from None
-        self.reader.join(timeout=TIMEOUT)
-        require(not self.reader.is_alive(), "MCP stdout reader did not finish")
-        require(self.reader_error is None, self.reader_error)
-        require(code == 0, "MCP returned nonzero after stdin EOF")
-        require(self.lines.get(timeout=TIMEOUT) == b"" and self.lines.empty(),
-                "MCP emitted unexpected stdout during shutdown")
-        self.check_stderr()
+
+    def unauthorized(self, method, params):
+        message = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+        self.send(message, expected_status=401)
 
 
 def dereference(root, node):
@@ -451,8 +457,8 @@ def exercise_private_archive(mcp, other_mcp, reader_mcp, turn):
 
 
 class Host(Child):
-    def __init__(self, binary, env, token, forbidden, serve_args=()):
-        super().__init__([binary, "serve", "--bind", "127.0.0.1:0", *serve_args], env, forbidden)
+    def __init__(self, binary, env, token, forbidden, serve_args=(), bind="127.0.0.1:0"):
+        super().__init__([binary, "serve", "--bind", bind, *serve_args], env, forbidden)
         self.token = token
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:
@@ -501,38 +507,21 @@ class Host(Child):
             time.sleep(0.2)
 
 
-def invalid_startup(command, env, forbidden):
-    # Keep stdin open: an unauthenticated server must fail before handshake, not
-    # merely exit because the test disconnected it.
-    with Mcp(command, env, forbidden) as mcp:
-        try:
-            code = mcp.process.wait(timeout=TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("invalid/revoked token did not fail before initialization") from None
-        require(code != 0, "invalid/revoked token was accepted at MCP startup")
-        mcp.reader.join(timeout=TIMEOUT)
-        require(mcp.lines.get(timeout=TIMEOUT) == b"" and mcp.lines.empty(),
-                "unauthenticated MCP wrote protocol output")
-        require("authentication required" in mcp.check_stderr(),
-                "MCP startup failed for an unexpected reason")
-
-
-def protocols(command, env, forbidden, expected_schemas=None):
-    schemas = expected_schemas
+def protocols(base, token, forbidden):
+    schemas = None
     for requested, expected in PROTOCOLS:
-        with Mcp(command, env, forbidden) as mcp:
-            mcp.initialize(requested, expected)
-            found = check_tools(mcp)
-            if schemas is None:
-                schemas = found
-            require(schemas == found, "tool schemas changed across transport modes or protocol versions")
-            mcp.shutdown()
-    return schemas
+        mcp = Mcp(base, token, forbidden)
+        mcp.initialize(requested, expected)
+        found = check_tools(mcp)
+        if schemas is None:
+            schemas = found
+        require(schemas == found, "tool schemas changed across protocol versions")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, help="built Origence executable (with local-storage)")
+    parser.add_argument("--local", action="store_true", help="use the embedded AnySeek Catalog")
     args = parser.parse_args()
     binary = str(Path(args.binary).resolve())
     require(Path(binary).is_file(), "Origence binary does not exist; build it first")
@@ -551,77 +540,44 @@ def main():
         turn = {"turn_id": str(uuid.uuid4()), "question": "What changed here?",
                 "answer": "This archive is private.", "used_evidence": []}
         forbidden.append(turn["answer"])
-        with Host(binary, env, token, forbidden) as host:
+        serve_args = ("--local",) if args.local else ()
+        with Host(binary, env, token, forbidden, serve_args=serve_args) as host:
             asset_id = host.publish(OLD_CONTENT)
             require(host.publish(CONTENT) == asset_id, "fixture update created a second asset")
             reader = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "reader"})
-            offline_reader = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "reader"})
             other_writer = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "writer"})
-            forbidden.extend([reader["token"], offline_reader["token"], other_writer["token"]])
-            # Remote MCP receives a deliberately separate, empty data
-            # directory: forwarding must not accidentally open the host's DB.
-            remote_env = dict(env, OC_API_KEY=reader["token"], OC_DATA_DIR=str(Path(directory) / "remote-unused"))
-            Path(remote_env["OC_DATA_DIR"]).mkdir()
-            command = [binary, "--server-url", host.base, "mcp"]
-            schemas = protocols(command, remote_env, forbidden)
-            invalid_startup(command, dict(remote_env, OC_API_KEY=bad_token), forbidden)
-            with Mcp(command, remote_env, forbidden) as mcp:
-                mcp.initialize("2025-03-26", "2025-03-26")
-                exercise(mcp, asset_id, workspace_id)
-                mcp.error("context_bundle", {"query": QUERY, "routes": [{"route": "session"}]},
-                          -32600, "FORBIDDEN: permission denied")
-                writer_env = dict(remote_env, OC_API_KEY=token)
-                other_env = dict(remote_env, OC_API_KEY=other_writer["token"])
-                with Mcp(command, writer_env, forbidden) as writer_mcp, Mcp(command, other_env, forbidden) as other_mcp:
-                    writer_mcp.initialize("2025-03-26", "2025-03-26")
-                    other_mcp.initialize("2025-03-26", "2025-03-26")
-                    writer_session = exercise_private_archive(writer_mcp, other_mcp, mcp, turn)
-                    other_mcp.shutdown()
-                    writer_mcp.shutdown()
-                revoked = host.request("/admin/keys/" + reader["key_id"], method="DELETE")
-                require(revoked.get("revoked") is True, "MCP reader key revocation failed")
-                for name in TOOL_FIELDS:
-                    arguments = {
-                        "context_run_create": {"run_id": str(uuid.uuid4()), "summary": "synthetic revoked task"},
-                        "context_run_prepare": {"run_id": str(uuid.uuid4()), "event_id": str(uuid.uuid4()), "context": {"query": QUERY}},
-                        "context_run_report": {"run_id": str(uuid.uuid4()), "report": {
-                            "event_id": str(uuid.uuid4()), "reporter": "test", "observed_at_ms": 0,
-                            "event": {"kind": "coverage", "component": "external tools", "status": "unknown", "summary": "not observed"}}},
-                        "context_run_get": {"run_id": str(uuid.uuid4())},
-                        "context_get": {"asset_id": asset_id}, "context_session": {},
-                        "context_turn_get": {"turn_id": turn["turn_id"]},
-                        "context_turn_archive": {"turn": turn},
-                    }.get(name, {"query": QUERY})
-                    mcp.error(name, arguments, -32600, "UNAUTHENTICATED: authentication required")
-                mcp.shutdown()
-            invalid_startup(command, remote_env, forbidden)
-            require(list(Path(remote_env["OC_DATA_DIR"]).iterdir()) == [],
-                    "host-forwarding MCP unexpectedly created local storage")
-            host.check_stderr()
-        print("PASS: host-forwarding MCP, version negotiation, schemas, tools, safe errors, live revocation, EOF", flush=True)
-        # The host is now stopped. Honor its exclusive DB lock; do not mutate
-        # SQLite behind an offline MCP process to simulate key revocation.
-        offline = [binary, "--offline", "mcp"]
-        invalid_startup(offline, dict(env, OC_API_KEY=bad_token), forbidden)
-        invalid_startup(offline, dict(env, OC_API_KEY=reader["token"]), forbidden)
-        offline_env = dict(env, OC_API_KEY=offline_reader["token"])
-        protocols(offline, offline_env, forbidden, schemas)
-        with Mcp(offline, offline_env, forbidden) as mcp:
-            mcp.initialize("2025-03-26", "2025-03-26")
+            forbidden.extend([reader["token"], other_writer["token"]])
+            protocols(host.base, reader["token"], forbidden)
+            init = {"protocolVersion": "2025-11-25", "capabilities": {},
+                    "clientInfo": {"name": "unauthenticated fixture", "version": "1"}}
+            for rejected_token in (None, bad_token):
+                Mcp(host.base, rejected_token, forbidden).unauthorized("initialize", init)
+            mcp = Mcp(host.base, reader["token"], forbidden)
+            mcp.initialize("2025-11-25", "2025-11-25")
             exercise(mcp, asset_id, workspace_id)
             mcp.error("context_bundle", {"query": QUERY, "routes": [{"route": "session"}]},
                       -32600, "FORBIDDEN: permission denied")
-            mcp.shutdown()
-        # Reopen after EOF proves the process released the exclusive DB lock.
-        with Mcp(offline, env, forbidden) as mcp:
-            mcp.initialize("2025-03-26", "2025-03-26")
+            writer_mcp = Mcp(host.base, token, forbidden)
+            other_mcp = Mcp(host.base, other_writer["token"], forbidden)
+            for peer in (writer_mcp, other_mcp):
+                peer.initialize("2025-11-25", "2025-11-25")
+            writer_session = exercise_private_archive(writer_mcp, other_mcp, mcp, turn)
+            revoked = host.request("/admin/keys/" + reader["key_id"], method="DELETE")
+            require(revoked.get("revoked") is True, "MCP reader key revocation failed")
+            for name in TOOL_FIELDS:
+                mcp.unauthorized("tools/call", {"name": name, "arguments": {}})
+            mcp.unauthorized("initialize", init)
+            host.check_stderr()
+        with Host(binary, env, token, forbidden, serve_args=serve_args) as host:
+            mcp = Mcp(host.base, token, forbidden)
+            mcp.initialize("2025-11-25", "2025-11-25")
             require(mcp.tool("context_session", {})["session_id"] == writer_session and
                     mcp.tool("context_turn_get", {"turn_id": turn["turn_id"]})["answer"] == turn["answer"],
-                    "archive changed after switching from host-forwarding to offline transport")
+                    "archive changed after host restart")
             require(mcp.tool("context_get", {"asset_id": asset_id})["content"] == CONTENT,
-                    "offline MCP failed to reopen after clean shutdown")
-            mcp.shutdown()
-        print("PASS: offline MCP, version negotiation, matching schemas/tools, safe errors, invalid/revoked startup, EOF/reopen")
+                    "MCP failed to reopen after host restart")
+        print("PASS: HTTP MCP version negotiation, schemas, tools, safe errors, live revocation and reopen",
+              flush=True)
 
 
 if __name__ == "__main__":

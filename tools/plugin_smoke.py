@@ -10,9 +10,10 @@ import subprocess
 import tempfile
 import threading
 import time
+from urllib.error import URLError
 
 from live_archive_smoke import child_environment
-from mcp_smoke import Child, Host, isolated_env, require, sanitized
+from mcp_smoke import Child, Host, Mcp, isolated_env, require, sanitized
 
 PLUGIN = "origence@origence-tools"
 TOOLS = ("context_session", "context_search", "context_get")
@@ -54,11 +55,15 @@ def calls(lookup, expected_session, asset):
     require(item["version"] == 1 and item["content"] == CONTENT, "Pinned get returned unexpected data")
 
 
-def codex_client(cli, project, env, forbidden, expected_session, asset, writer_env):
+def codex_client(cli, project, env, forbidden, expected_session, asset, writer_env, base):
     execute([cli, "plugin", "marketplace", "add", str(REPO)], project, env, forbidden)
     execute([cli, "plugin", "add", PLUGIN], project, env, forbidden)
     config = Path(env["CODEX_HOME"]) / "config.toml"
     require("mcp_servers" not in config.read_text(encoding="utf-8"), "Unexpected standalone MCP config")
+    bundled = base == "http://127.0.0.1:8080"
+    if not bundled:
+        execute([cli, "mcp", "add", "origence", "--url", base + "/mcp", "--bearer-token-env-var",
+                 "OC_API_KEY"], project, env, forbidden)
     with Child([cli, "app-server", "--listen", "stdio://"], dict(env, OC_DATA_DIR=str(project)), forbidden) as child:
         request_id = 0
 
@@ -88,7 +93,10 @@ def codex_client(cli, project, env, forbidden, expected_session, asset, writer_e
                 "Codex did not discover the four enabled plugin hooks")
         require(all(hook["trustStatus"] == "untrusted" for hook in hooks), "Fresh Codex hooks must still require review")
         status = rpc("mcpServerStatus/list", {"threadId": thread})
-        servers = [entry for entry in status["data"] if set(entry["tools"]) == set(TOOLS)]
+        servers = [entry for entry in status["data"] if entry["name"] == "origence"]
+        if bundled:
+            require(len(servers) == 1 and set(servers[0]["tools"]) == set(TOOLS),
+                    "Codex did not restrict the bundled server to the retrieval tools")
         require(len(servers) == 1, "Codex did not discover the plugin's reader tools")
         server = servers[0]["name"]
         calls(lambda name, arguments: tool_value(rpc("mcpServer/tool/call", {
@@ -96,6 +104,8 @@ def codex_client(cli, project, env, forbidden, expected_session, asset, writer_e
         })), expected_session, asset)
         child.check_stderr()
     codex_hook_turn(cli, project, writer_env, forbidden)
+    if not bundled:
+        execute([cli, "mcp", "remove", "origence"], project, env, forbidden)
     execute([cli, "plugin", "remove", PLUGIN], project, env, forbidden)
     execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
 
@@ -225,18 +235,21 @@ def claude_client(cli, project, env, forbidden, expected_session, asset):
     execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
 
 
-def diagnostics(binary, project, env, forbidden):
-    missing = dict(env, OC_API_KEY="")
-    execute([binary, "mcp"], project, missing, forbidden, "OC_API_KEY is required")
-    invalid_token = "invalid-plugin-fixture"
-    execute([binary, "mcp"], project, dict(env, OC_API_KEY=invalid_token),
-            [*forbidden, invalid_token], "authentication required")
+def diagnostics(base, forbidden):
+    params = {"protocolVersion": "2025-11-25", "capabilities": {},
+              "clientInfo": {"name": "plugin smoke", "version": "1"}}
+    bad_token = "invalid-plugin-fixture"
+    for token in (None, bad_token):
+        Mcp(base, token, [*forbidden, bad_token]).unauthorized("initialize", params)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))  # Reserve the port without listening.
-        offline = dict(env, OC_SERVER_URL=f"http://127.0.0.1:{sock.getsockname()[1]}")
-        execute([binary, "mcp"], project, offline, forbidden, "local host request failed")
-    require(shutil.which(binary.name, path=str(project / "absent")) is None,
-            "Unexpected binary in missing-path fixture")
+        unreachable = f"http://127.0.0.1:{sock.getsockname()[1]}"
+        try:
+            Mcp(unreachable, bad_token, forbidden).initialize("2025-11-25", "2025-11-25")
+        except URLError:
+            pass
+        else:
+            raise RuntimeError("An unreachable MCP URL reported a connection")
 
 
 def check_packages():
@@ -246,6 +259,8 @@ def check_packages():
                 "Plugin must ship MCP and Hook configurations")
         manifest = json.loads((package / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
         require(manifest.get("mcpServers") == "./.mcp.json", "Plugin is missing its MCP declaration")
+        server = json.loads((package / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["origence"]
+        require("command" not in server and server["url"].endswith("/mcp"), "Plugin must use HTTP MCP")
         if client == "codex":
             require(manifest.get("hooks") == "./hooks/hooks.json", "Plugin is missing its Hook declaration")
         hooks = json.loads((package / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
@@ -273,7 +288,9 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--codex", default="codex")
     parser.add_argument("--claude", default="claude")
+    parser.add_argument("--bind", default="127.0.0.1:8080", help="loopback address for the test host")
     args = parser.parse_args()
+    require(args.bind.startswith("127.0.0.1:"), "Plugin smoke requires an IPv4 loopback address")
     check_packages()
     with tempfile.TemporaryDirectory(prefix="origence plugin ") as temporary:
         root = Path(temporary)
@@ -288,7 +305,7 @@ def main():
                                    cwd=data, env=host_env, capture_output=True, check=True, timeout=60)
         workspace = json.loads(bootstrap.stdout)
         admin = workspace["token"]
-        with Host(str(binary), host_env, admin, [admin], serve_args=("--local",)) as host:
+        with Host(str(binary), host_env, admin, [admin], serve_args=("--local",), bind=args.bind) as host:
             asset = host.publish(CONTENT)
             reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})["token"]
             writer = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "writer"})["token"]
@@ -298,10 +315,14 @@ def main():
             session = host.request("/v1/session")
             env = child_environment()
             path_name = next(name for name in env if name.upper() == "PATH")
-            env["PATH"] = str(binary_dir) + os.pathsep + env.pop(path_name)
-            env.update(HOME=temporary, USERPROFILE=temporary, OC_SERVER_URL=host.base, OC_API_KEY=reader)
+            if path_name != "PATH":
+                env["PATH"] = env.pop(path_name)
+            require(shutil.which(binary.name, path=env["PATH"]) is None, "Reader test requires a PATH without Origence")
+            env.update(HOME=temporary, USERPROFILE=temporary, OC_API_KEY=reader)
+            if host.base != "http://127.0.0.1:8080":
+                env["OC_SERVER_URL"] = host.base
             forbidden = [admin, reader, writer]
-            diagnostics(binary, root, env, forbidden)
+            diagnostics(host.base, forbidden)
             for label, cli, run in (("Codex", args.codex, codex_client), ("Claude Code", args.claude, claude_client)):
                 project = root / f"{label} project"
                 config = root / f"{label} settings"
@@ -310,9 +331,10 @@ def main():
                 execute(["git", "init", "-q"], project, env, forbidden)
                 client_env = dict(env, CODEX_HOME=str(config), CLAUDE_CONFIG_DIR=str(config))
                 print(execute([cli, "--version"], project, client_env, forbidden).strip(), flush=True)
-                writer_env = dict(client_env, OC_API_KEY=writer, OC_WORKSPACE_ID=workspace["workspace_id"])
+                writer_env = dict(client_env, OC_API_KEY=writer, OC_WORKSPACE_ID=workspace["workspace_id"],
+                                  PATH=str(binary_dir) + os.pathsep + client_env["PATH"])
                 if label == "Codex":
-                    run(cli, project, client_env, forbidden, session, asset, writer_env)
+                    run(cli, project, client_env, forbidden, session, asset, writer_env, host.base)
                 else:
                     run(cli, project, client_env, forbidden, session, asset)
                     host.token = writer

@@ -1,4 +1,6 @@
 [mcp_servers.origence]
-command = "/absolute/path/to/origence"
-args = ["--server-url", "http://127.0.0.1:8080", "mcp"]
-env_vars = ["OC_API_KEY"]
+url = "http://127.0.0.1:8080/mcp"
+bearer_token_env_var = "OC_API_KEY"
+
+[mcp_servers.origence.env_http_headers]
+X-Origence-Workspace = "OC_WORKSPACE_ID"

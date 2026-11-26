@@ -47,7 +47,7 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         .unwrap();
     assert_eq!(
         http_session,
-        session_from_stdio(&base, &writer.token, None).await
+        session_from_mcp(&base, &writer.token, None).await
     );
     assert!(matches!(
         reviewer_client
@@ -198,59 +198,11 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
     service.engine.shutdown().await.unwrap();
 }
 
-// Actual CLI transport; no provider account or native model client is needed.
-pub(crate) async fn session_from_stdio(base: &str, key: &str, workspace: Option<Uuid>) -> Value {
-    use std::{process::Stdio, time::Duration};
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    tokio::time::timeout(Duration::from_secs(20), async {
-        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
-        command
-            .args(["--server-url", base, "mcp"])
-            .env("OC_API_KEY", key)
-            .env_remove("OC_WORKSPACE_ID");
-        if let Some(workspace) = workspace {
-            command.args(["--workspace", &workspace.to_string()]);
-        }
-        let mut child = command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let mut input = child.stdin.take().unwrap();
-        let mut output = BufReader::new(child.stdout.take().unwrap()).lines();
-        let initial = json!({
-            "jsonrpc":"2.0","id":1,"method":"initialize","params":{
-                "protocolVersion":"2025-03-26","capabilities":{},
-                "clientInfo":{"name":"origence-foundation-fixture","version":"1"}
-            }
-        });
-        input
-            .write_all(format!("{initial}\n").as_bytes())
-            .await
-            .unwrap();
-        let info: Value =
-            serde_json::from_str(&output.next_line().await.unwrap().unwrap()).unwrap();
-        assert_eq!(info["result"]["protocolVersion"], "2025-03-26");
-        let initialized = json!({"jsonrpc":"2.0","method":"notifications/initialized"});
-        let params = json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
-            "params":{"name":"context_session","arguments":{}}});
-        input
-            .write_all(format!("{initialized}\n{params}\n").as_bytes())
-            .await
-            .unwrap();
-        let response: Value =
-            serde_json::from_str(&output.next_line().await.unwrap().unwrap()).unwrap();
-        assert_eq!(response["id"], 2);
-        let session =
-            serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
-                .unwrap();
-        drop(input);
-        assert!(child.wait().await.unwrap().success());
-        session
-    })
-    .await
-    .expect("stdio MCP test exceeded its time budget")
+pub(crate) async fn session_from_mcp(base: &str, key: &str, workspace: Option<Uuid>) -> Value {
+    crate::mcp_http::Peer::at(format!("{base}/mcp"))
+        .call(key, workspace, "context_session", json!({}))
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
