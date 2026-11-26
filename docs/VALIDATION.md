@@ -7,6 +7,18 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · #76 整轮运行计量
+
+在 main `c6e0b8437f2b4c983deb24e565b403deaccb271d` 上验证
+`abff834cf610d2dcc5c453e34893f32b5c55e5cb`。Linux x86_64，Rust 1.98.0。
+格式检查、`--no-default-features --features local-storage --all-targets` Clippy（警告视为错误）和
+214 项 `--test local` 集成测试通过。真实 SQLite/回环 HTTP 和 Streamable HTTP MCP 覆盖了
+P95 的最近秩、窗口边界、精确微单位汇总、零值和缺报、权限隔离、Key 轮换、重复上报及旧库拒绝。
+人工核对应用 SQL：投影写入、分组与排名查询分别访问单表。
+
+Node.js 类型检查及 28 项测试通过。Chromium 用回环合成数据验证总览显示、切换窗口、请求失败清理旧统计及重试。
+整轮计量由执行方上报。本次验证使用测试计量数据，未使用真实模型或账单。
+
 ## 2026-11-26 · Windows 原生插件与试点准备
 
 产品基线为 main `318e17178a8c4a24d3000bc3caa6d3250019eb10`，验收脚本提交

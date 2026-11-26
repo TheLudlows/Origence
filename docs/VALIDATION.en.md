@@ -4,6 +4,22 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · #76 whole-Run metering
+
+Tested source `abff834cf610d2dcc5c453e34893f32b5c55e5cb` on main
+`c6e0b8437f2b4c983deb24e565b403deaccb271d`, Linux x86_64 and Rust 1.98.0.
+Formatting, strict `--no-default-features --features local-storage --all-targets`
+Clippy and all 214 `--test local` integration tests passed. Real SQLite,
+loopback HTTP and Streamable HTTP MCP covered nearest-rank P95, window
+boundaries, exact micro-unit totals, zeros and missing data, permission
+isolation, key rotation, replay and old-schema rejection. The SQL review
+checked that projection writes, grouping and ranking each use one relation.
+
+Node.js type checking and 28 tests passed. Chromium with a loopback fixture
+verified display, window switches, removal of stale values on errors and
+retry. The executor supplies whole-Run metrics. This verification used test
+usage and charges with no live model or provider bill.
+
 ## 2026-11-26 · Native Windows plugins and pilot preparation
 
 Product baseline main `318e17178a8c4a24d3000bc3caa6d3250019eb10`, with acceptance script revision
