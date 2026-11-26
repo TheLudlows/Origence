@@ -30,6 +30,23 @@ python evals/pilot/p6_check.py evals/pilot/examples/p6-synthetic/case-link.json
 
 以关联表所在目录作为已封存证据包根目录，引用采用 `/` 分隔的相对路径；不接受绝对路径、`..`、链接或 reparse point。仅对已停止写入、无并发替换且可信来源的本地离线副本使用。文件匹配不等于内容真实，不能替代正式人工核验。
 
+## 端到端追溯预检
+
+安装 Node.js 24、Chromium、Playwright 和 Codex。构建支持内嵌 AnySeek 的默认 Origence 二进制及控制台，
+再从仓库根目录复跑。Playwright 可装在独立目录，按实际位置设置 `NODE_PATH` 和 `CHROMIUM`。
+
+```sh
+cargo build --locked --bin origence
+npm --prefix ui ci --ignore-scripts
+npm --prefix ui run build
+NODE_PATH=/path/to/browser-tests/node_modules CHROMIUM=/path/to/chromium \
+  python3 tools/ui_trace_smoke.py --binary target/debug/origence --codex /path/to/codex
+```
+
+脚本在临时目录运行本地服务，使用合成凭据、制度版本与报告。Codex app-server 发送真实 MCP 请求，
+Chromium 通过控制台登录后查看同一个 Run。核验覆盖固定 v2、重放冲突、外部结论的来源标记、跨 Key 拒绝及来源撤回。
+正式题集、模型使用证据和独立业务签认继续按 P6 正式流程登记。
+
 ## 逐题冻结绑定的离线结构检查
 
 只有在已有交付记录、独立原件和 owner 回执后才能运行此项。用此前通过可信渠道取得的冻结记录 SHA-256，不要从待核对证据包自行现算并充作可信摘要。明确阻塞或已污染的冻结批次会被拒绝；匹配摘要不代表冻结条件已获批准。冻结记录、题集和观察表由操作者显式指定；其余引用相对关联表目录。命令只读已封存的本地离线副本：

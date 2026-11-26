@@ -4,6 +4,24 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · #89 End-to-end expense trace preflight
+
+Based on main `3984085ca5872dc68ea44b062e2d0791f92102a3`, using Linux x86_64, Rust 1.98.0,
+Codex 0.171.0, and Chromium 156.0.8078.79. The native Codex app-server used HTTP MCP to create a Run,
+prepare policy v2, and record a synthetic completion report for 120 units and unknown model-use coverage.
+The fixture derived a failed external transcription from the v2 cap of 80, bound it to the first two events,
+and verified a successful identical replay and 409 for a conflicting conclusion.
+
+The built console used its Node proxy and account sessions to read the same Run from live Origence.
+Chromium distinguished preparation, client report, owner-transcribed failure, and unknown model use. After v3
+published, the Run still opened v2. A second key was denied the private Run. Withdrawing the v2 source
+blocked reads of both the Run and pinned v2 while v3 remained readable. This was an engineering preflight
+with synthetic data and no model generation or independent sign-off. The formal #91 pilot remains
+`NOT_RUN`. [Reproduction (Chinese)](../evals/pilot/P6-EVIDENCE.md#端到端追溯预检)
+
+All 214 local Rust integration tests, 28 UI tests, and 58 pilot tooling tests passed on the same baseline,
+along with the existing Chromium check for the verification UI.
+
 ## 2026-11-26 · #76 whole-Run metering
 
 Tested source `abff834cf610d2dcc5c453e34893f32b5c55e5cb` on main

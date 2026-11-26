@@ -1,5 +1,6 @@
 """Exercise installed CLI plugins with a private, synthetic Origence workspace."""
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -87,7 +88,8 @@ def codex_client(cli, project, env, forbidden, default, switched, writer_env, ba
     execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
 
 
-def codex_tools(cli, project, env, forbidden, probe, bundled):
+@contextmanager
+def codex_session(cli, project, env, forbidden):
     with Child([cli, "app-server", "--listen", "stdio://"], dict(env, OC_DATA_DIR=str(project)), forbidden) as child:
         request_id = 0
 
@@ -111,6 +113,12 @@ def codex_tools(cli, project, env, forbidden, probe, bundled):
         child.process.stdin.write(b'{"method":"initialized"}\n')
         child.process.stdin.flush()
         thread = rpc("thread/start", {"cwd": str(project), "ephemeral": True})["thread"]["id"]
+        yield rpc, thread
+        child.check_stderr()
+
+
+def codex_tools(cli, project, env, forbidden, probe, bundled):
+    with codex_session(cli, project, env, forbidden) as (rpc, thread):
         hook_entries = rpc("hooks/list", {"threadId": thread})["data"]
         hooks = [hook for entry in hook_entries for hook in entry["hooks"] if hook.get("pluginId") == PLUGIN]
         require(len(hooks) == 4 and all(hook["enabled"] and hook["source"] == "plugin" for hook in hooks),
@@ -126,7 +134,6 @@ def codex_tools(cli, project, env, forbidden, probe, bundled):
         calls(lambda name, arguments: tool_value(rpc("mcpServer/tool/call", {
             "server": server, "tool": name, "threadId": thread, "arguments": arguments,
         })), probe)
-        child.check_stderr()
 
 
 class ScriptedCodex(BaseHTTPRequestHandler):
