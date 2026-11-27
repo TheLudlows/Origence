@@ -284,6 +284,8 @@ resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`�
 
 原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。SQLite owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
+省略 `mode` 时使用关键词检索，所有查询词项须出现在同一索引分块内。hybrid 的原文关键词分支也采用这条规则。OR 匹配仅用于 #149 冻结语料的基准实验。[实验 #154](https://github.com/TheLudlows/Origence/pull/154)
+
 search/resolve 可选 `components:{summaries:true,graph:true}`，两个字段默认均为 true，仅 hybrid 且未限定 memory_identity 时启用。可独立关闭摘要、图分支做同库消融，原文 keyword/vector 分支始终保留；省略 components 保持旧行为。响应 `active_components` 表示实际启用的分支（不代表已有产物或命中）。resolve 沿用相同开关和现有来源/字节预算检查；HTTP 与 MCP 共用此契约。
 
 图分支用 AnySeek 元数据过滤找名称包含查询词的实体，再按任一初始实体 ID 查询入边或出边。候选会按来源、版本和 generation 经 SQLite 复核，撤回或未发布的投影不能当作证据。关系在响应中保留原有方向；扩展出来的实体不会继续扩展。图字段不作为全文词项或向量，不增加参与 BM25 统计的记录。候选超过服务端上限会明确报错，不静默截断。图候选预算在引擎侧独立于响应的最多 20 个实体和 20 条关系；此路径不改变 `/v1/context`，也不新增独立图查询 API。
