@@ -7,6 +7,26 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 从 Run 详情起草 Skill 候选
+
+基于 main `1a8544b647613864582354bc9f5942e69426b463`。Linux x86_64、Rust 1.98.0、
+Node.js 24.22.1、Chromium 156.0.8078.79。用临时目录、回环服务和合成数据启动真实控制台及
+Origence。通过账号登录和调用链路验证精确事件前缀、显式披露、保存回执丢失后幂等重试、
+重新打开候选、仅改依据即使旧批准失效，以及窄屏布局。通过同一个宿主验证指定审阅者隔离、
+发布权限、分发包内容、跨工作区拒绝和来源撤回。正式试点和原生客户端加载未执行。
+
+```sh
+cargo fmt --package origence -- --check
+cargo build --locked --bin origence --bin origence-skill
+cargo clippy --locked --all-features --all-targets -- -D warnings
+cargo test --locked --no-default-features --features local-storage --lib --test skill-workflow
+npm --prefix ui run check
+npm --prefix ui test
+python3 tools/ui_skill_smoke.py --binary target/debug/origence
+node ui/scripts/check-run-coverage-browser.cjs
+node ui/scripts/check-run-verification-browser.mjs
+```
+
 ## 2026-11-27 · 统一长期记忆写入和召回（本地）
 
 基于 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`，Linux x86_64，Rust 1.98.0。

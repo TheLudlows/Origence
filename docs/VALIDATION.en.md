@@ -4,6 +4,17 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Draft Skill candidates from Run details
+
+Based on main `1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Rust 1.98.0,
+Node.js 24.22.1, and Chromium 156.0.8078.79. The real console and Origence ran on loopback
+with a fresh temporary directory and synthetic data. Account sign-in and Run navigation
+verified the exact prefix, explicit disclosure, idempotent retry after a lost save response,
+reopening the candidate, invalidation of approval after a basis-only edit, and narrow layout.
+The same host verified reviewer isolation, publication permission, package contents,
+cross-workspace denial, and source withdrawal. The official pilot and native client loading
+were outside this run. See the [commands](VALIDATION.md#2026-11-27--从-run-详情起草-skill-候选).
+
 ## 2026-11-27 · Simplify standalone evidence capture and display
 
 Based on local extraction commit `0d84a6c99ad6271af8c74f4274c0b3489e2f043d`. Local HTTP
