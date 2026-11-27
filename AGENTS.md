@@ -5,6 +5,14 @@
 Read the relevant design, `docs/STATUS.md`, and current code before changing an
 implementation. Prefer the smallest change that meets the documented behavior.
 
+## Cleanup after changes
+
+For feature changes, fixes, refactors, removals, renames, documentation, or tests,
+follow [cleanup-after-change](.agents/skills/cleanup-after-change/SKILL.md) when
+deciding test changes and before delivery. Limit cleanup to the authorized change
+and its direct consequences, preserving the project rules and compatibility
+commitments below. Pure questions and read-only analysis do not trigger it.
+
 ## Current-stage database scope
 
 - Target fresh databases for current design, implementation, testing, and
@@ -86,3 +94,4 @@ implementation. Prefer the smallest change that meets the documented behavior.
 - Run formatting, Clippy with warnings denied, and relevant tests under the
   declared Rust toolchain. Record exact results and limitations in
   `docs/VALIDATION.md`; keep status current and historical evidence unchanged.
+
