@@ -519,17 +519,28 @@ mod service_contract {
             .await
             .unwrap();
         assert_eq!(job["state"], "completed", "{job}");
-        let input =
-            || serde_json::from_value(json!({"query":"token 鉴权","mode":"keyword"})).unwrap();
-        let hits = service.search(&auth, input()).await.unwrap();
-        assert!(!hits["hits"].as_array().unwrap().is_empty());
+        let input = |query: &str| serde_json::from_value(json!({"query":query})).unwrap();
+        let hits = service.search(&auth, input("token 鉴权")).await.unwrap();
+        assert_eq!(hits["hits"].as_array().unwrap().len(), 1);
+        assert_eq!(hits["hits"][0]["asset_id"], accepted["asset_id"]);
+        assert_eq!(
+            hits["hits"][0]["source_event_id"],
+            accepted["source_event_id"]
+        );
         let id = serde_json::from_value(hits["hits"][0]["asset_id"].clone()).unwrap();
         assert_eq!(
             service.get(&auth, id, None).await.unwrap()["content"],
             "# Token 鉴权\n\n接口必须校验 token。"
         );
+        for query in ["token fixtureabsent", "fixtureabsent fixturemissing"] {
+            assert_eq!(
+                service.search(&auth, input(query)).await.unwrap()["hits"],
+                json!([]),
+                "query with missing terms: {query}"
+            );
+        }
         assert_eq!(
-            service.search(&other, input()).await.unwrap()["hits"],
+            service.search(&other, input("token 鉴权")).await.unwrap()["hits"],
             json!([])
         );
         assert!(service.get(&other, id, None).await.is_err());
@@ -552,7 +563,7 @@ mod service_contract {
             .unwrap();
         let auth = service.auth(&token).await.unwrap();
         assert!(
-            !service.search(&auth, input()).await.unwrap()["hits"]
+            !service.search(&auth, input("token 鉴权")).await.unwrap()["hits"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -562,7 +573,7 @@ mod service_contract {
             .await
             .unwrap();
         assert_eq!(
-            service.search(&auth, input()).await.unwrap()["hits"],
+            service.search(&auth, input("token 鉴权")).await.unwrap()["hits"],
             json!([])
         );
         while worker::process_next(&service).await.unwrap() {}

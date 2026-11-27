@@ -26,6 +26,20 @@ PR #165 复核加入同工作区、同完整身份的已确认显式值。修复
 修复后，HTTP/MCP 返回的归纳主题在应用预算前排除同身份显式值，覆盖历史、当前、未知、同日冲突和预算省略。
 另验证额外条件形成独立身份，以及未来冲突仅在选定时点冲突时才进入响应的冲突字段。
 
+## 2026-11-27 · 恢复 AnySeek 默认关键词 AND
+
+在 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7` 上复现缺词误命中，原有真实后端合约为 7 项通过、1 项失败。
+修复基于 main `1a8544b647613864582354bc9f5942e69426b463`，在 Linux x86_64 使用 Rust 1.98.0。
+独立 AnySeek 使用 CI 固定的 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 和 Rust 1.99.1 从源码构建。
+
+`python3 tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --cargo-tests --binary <origence>`
+通过全部 8 项真实后端合约。公开 Rust 库、HTTP 和 Streamable HTTP MCP 的默认关键词查询均覆盖全词命中、
+部分缺词及全部缺词，并验证跨工作区隔离、密钥撤销、来源撤回、引用定位、发布与 Run 重放及重启。
+默认特性 Rust 套件 484 项通过、8 项真实后端合约另行执行。格式检查、全目标严格 Clippy、
+嵌入式 AnySeek 启动与重启，以及独立 HTTP、MCP 和 Node UI 冒烟通过。
+24 题合成关键词种子评估完成，查询错误为 0。
+本轮使用合成数据，无模型调用。Windows、真实模型检索质量和正式试点仍待验收。
+
 ## 2026-11-27 · 统一长期记忆写入和召回（本地）
 
 基于 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`，Linux x86_64，Rust 1.98.0。

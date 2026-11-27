@@ -115,9 +115,18 @@ def mcp_contract(binary, env, directory):
         reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})
         client = Mcp(host.base, reader["token"], forbidden + [reader["token"]])
         client.initialize("2025-03-26", "2025-03-26")
-        found = client.tool("context_search", {"query": "token approval", "mode": "keyword"})
-        require(found["hits"] and found["hits"][0]["asset_id"] == asset, "MCP search missed AnySeek publication")
-        require(found["hits"][0]["locator"], "MCP search omitted source locator")
+        terms = {"query": "token approval"}
+        http_hits = host.request("/v1/search", terms)["hits"]
+        mcp_hits = client.tool("context_search", terms)["hits"]
+        require([hit["asset_id"] for hit in http_hits] == [asset], "HTTP keyword search missed AnySeek publication")
+        require([hit["asset_id"] for hit in mcp_hits] == [asset], "MCP keyword search missed AnySeek publication")
+        require(mcp_hits[0]["locator"] and mcp_hits[0]["locator"] == http_hits[0]["locator"] and
+                mcp_hits[0]["source_event_id"] == http_hits[0]["source_event_id"], "HTTP and MCP source citations differ")
+        for query in ("token fixtureabsent", "fixtureabsent fixturemissing"):
+            require(host.request("/v1/search", {"query": query})["hits"] == [],
+                    f"HTTP keyword search matched a query with missing terms: {query}")
+            require(client.tool("context_search", {"query": query})["hits"] == [],
+                    f"MCP keyword search matched a query with missing terms: {query}")
         require(client.tool("context_get", {"asset_id": asset})["content"] == old, "MCP get lost source content")
         require(host.publish("AnySeek smoke policy now requires token review.") == asset, "update changed asset ID")
         require(host.request(f"/v1/runs/{run_id}/context", preparation_request) == prepared,
@@ -135,7 +144,7 @@ def mcp_contract(binary, env, directory):
         client.initialize("2025-03-26", "2025-03-26")
         require(client.tool("context_search", {"query": "token review"})["hits"][0]["asset_id"] == asset,
                 "reopen lost AnySeek publication")
-    print("PASS: real AnySeek -> Origence HTTP MCP search, read, citations, update, history, key revocation and reopen; Run diagnostic correlation, retry and durability", flush=True)
+    print("PASS: real AnySeek -> Origence HTTP and MCP default keyword AND, read, citations, update, history, key revocation and reopen; Run diagnostic correlation, retry and durability", flush=True)
     return env, token, asset, old
 
 
@@ -249,7 +258,16 @@ def main():
                         found = host.request("/v1/search", {"query":"token review", "mode":"keyword"})
                         require(found["hits"] and found["hits"][0]["asset_id"] == asset,
                                 "AnySeek restart lost the matching content index")
-                    print("PASS: AnySeek process restart preserves historical/current body and its index", flush=True)
+                        source = found["hits"][0]["source_event_id"]
+                        host.request(f"/v1/events/{source}", {}, method="DELETE")
+                        terms = {"query": "token review"}
+                        require(host.request("/v1/search", terms)["hits"] == [],
+                                "HTTP keyword search returned a withdrawn source")
+                        client = Mcp(host.base, token, [token, key])
+                        client.initialize("2025-03-26", "2025-03-26")
+                        require(client.tool("context_search", terms)["hits"] == [],
+                                "MCP keyword search returned a withdrawn source")
+                    print("PASS: AnySeek process restart preserves historical/current body and its index; HTTP and MCP exclude withdrawn sources", flush=True)
             finally:
                 if process.poll() is None:
                     process.send_signal(signal.SIGTERM)

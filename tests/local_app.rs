@@ -485,12 +485,14 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let lookup: Value = lookup.json().await.unwrap();
     assert_eq!(lookup["asset_id"], first["asset_id"]);
     assert_eq!(lookup["version"], 1);
+    // Both evidence records contain these terms, so both qualify for keyword AND.
+    let shared_query = "生产发布";
     let recalled = post(
         &http,
         &base,
         reader["token"].as_str().unwrap(),
         "/v1/search",
-        json!({"query":"生产发布需要双人审批","mode":"keyword"}),
+        json!({"query":shared_query,"mode":"keyword"}),
     )
     .await;
     let hit = recalled["hits"]
@@ -517,7 +519,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         &base,
         reader["token"].as_str().unwrap(),
         "/v1/resolve",
-        json!({"query":"生产发布需要双人审批","budget_tokens":3000}),
+        json!({"query":shared_query,"budget_tokens":3000}),
     )
     .await;
     let cited = context["sources"]
