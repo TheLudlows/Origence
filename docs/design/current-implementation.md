@@ -9,10 +9,10 @@ A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方
 
 ## 1. 产品边界
 
-Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。当前提供记忆与知识的写入和检索、Skill 候选与审批发布、私有 Run 记录与查询，以及上下文组装和显式会话学习。
+Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。当前提供记忆与知识的写入和检索、Skill 候选与审批发布、Run 记录与授权查询，以及上下文组装和显式会话学习。
 
 - Origence 负责保存、授权交付和追溯数据。Claude Code 与 Codex 负责推理、编排、加载 Skill 及执行工具。Origence 可为数据处理调用配置好的模型，并记录显式提交的会话轮次。客户端管理原生聊天、工具进程和工作现场。Skill 发布后，工具调用仍由执行端鉴权。
-- 私有问答、反馈、Run 和未发布候选由 workspace 内的稳定逻辑 key 隔离。授权轮换可接续原归档。已发布的记忆、知识、Learning 和 Skill 按 workspace 授权共享。跨越私有与共享边界需要相应的显式提交、来源复核和发布流程。
+- 私有问答、反馈和未发布候选由 workspace 内的稳定逻辑 Key 隔离。授权轮换可接续原归档。Run 所有者和本工作区管理员可读取已记录的链路，Run 写入和重放仍要求归属。已发布的记忆、知识、Learning 和 Skill 按 workspace 授权共享。发布原始私有内容需要相应的显式提交、来源复核和发布流程。
 - 首版试点使用 Claude Code 和 Codex。服务端准备记录、客户端上报和所有者转录的外部核验分别保存。未采集的活动保持未知。真实任务效果和独立签认按试点验收。[STATUS](../STATUS.md) · [P0 试点 #91](https://github.com/TheLudlows/Origence/issues/91)
 
 ## 2. 当前架构
@@ -143,7 +143,7 @@ Origence 对分词结果逐词做 SHA-256 编码后交给 AnySeek，保留 AND �
 
 显式记忆身份由 scope + subject + predicate + 规范 context 决定，语义相似不授予覆盖权。
 单值/多值、冲突证据和整快照来源撤回见 [身份规格](../contracts/memory.md)。
-SessionTurn 显式归档实际使用的证据。归档和 Run 绑定当前 workspace 的稳定逻辑 key；独立 key 不共享，授权轮换可延续。Feedback 幂等但不自动调权。
+SessionTurn 显式归档实际使用的证据。私有归档和 Run 绑定当前 workspace 的稳定逻辑 Key，授权轮换可延续归属。管理员可以读取本工作区的 Run 链路。Feedback 幂等且保持原有授权。
 Improve 显式提案、核验并经普通知识发布 Learning，保留适用条件和完整支持闭包。
 它不等于自动学习所有交互，也没有独立 Guidance 生命周期。
 工作区 writer 也可用人工确认或固定知识版本直接发布经验，走同一发布通道。

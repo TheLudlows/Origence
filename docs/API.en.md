@@ -14,17 +14,19 @@ Existing command-style mutations need a 1–200 ASCII character `Idempotency-Key
 
 `GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a separate private session for each workspace and logical key. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. Admins can rotate credentials in their issuing workspace. Rotating another key also requires admin access in every additional workspace granted to that key. The replacement retains the original logical key and its grants and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
 
-Trace is stored as private Runs. Run entry points derive the logical key from authentication and apply current permissions and source validity checks.
+Trace is stored in Runs owned by logical keys. Run entry points derive the key from authentication and apply current permissions and source validity checks.
 
 | Run endpoint | Input and result |
 | --- | --- |
 | `POST /v1/runs` | Writer supplies a stable `run_id` and redacted `summary`, bound to the current archive |
 | `POST /v1/runs/{id}/events` | Stable `event_id`, timestamp, reporter, and named event. An identical retry returns the original sequence. |
 | `POST /v1/runs/{id}/context` | `event_id` and `context` (EvidenceBundle request). Returns the bundle and a server preparation receipt. |
-| `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the current key, including explicit collection boundaries |
+| `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the owner or an admin in the Run's workspace. `is_owner` identifies whether the current logical key owns the Run. |
 | `GET /v1/runs/{id}/prefix?through_sequence=N` | Immutable prefix digest for the current key, usable as Skill evidence |
 
 The server receipt proves preparation of the exact context, without proving client receipt or model use. The client reports tools, loads, results, feedback, and artifact references. Unreported activities remain unknown. When any source becomes invalid, reference verification prevents further delivery. The Run owner submits external verification over HTTP for an exact prefix, retaining the reported transcript source and verifier identity status. See the [Run contract](contracts/runs.md) and [external verification contract](contracts/run-verification.md).
+
+Trace reads include the text recorded in the Run. Original private archives, internal replay snapshots, fixed prefixes, original PDF verification, and external verification records retain their existing authorization.
 
 | Skill endpoint | Input and result |
 | --- | --- |
@@ -117,7 +119,7 @@ also offers a manual refresh.
 ### Read-only management catalogs
 
 - `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`. Reader and above, with workspace from authentication. Scan current published nondeleted candidates by ascending `asset_id` and reuse the full ordinary source, semantic, and visibility checks for each. Returns `{items,next_after}`. Items contain metadata only, without text or semantic quotes. Invalid sources are excluded and other storage errors fail explicitly.
-- `GET /v1/runs?limit=25&after=<UUID>`. An admin lists Runs in the selected workspace (`scope:"workspace"`). Other roles list their own Runs (`scope:"current_logical_key"`). Each row includes `run_id`, `owner_key_id`, `is_owner`, `created_at_ms`, `status`, and `summary`. The latest `result_reported` event supplies `reported_success`, `reported_failure`, or `unknown`. Other keys' summaries are `null`. Details and evidence endpoints still verify ownership. Authorized rotation preserves logical ownership.
+- `GET /v1/runs?limit=25&after=<UUID>`. An admin lists Runs in the selected workspace (`scope:"workspace"`). Other roles list their own Runs (`scope:"current_logical_key"`). Each row includes `run_id`, `owner_key_id`, `is_owner`, `can_read_trace`, `created_at_ms`, `status`, and `summary`. `can_read_trace` reflects role and ownership. The trace request also revalidates sources. The latest `result_reported` event supplies `reported_success`, `reported_failure`, or `unknown`. Other keys' summaries are `null` in the directory. Administrators can open the trace to read the summary and events. Authorized rotation preserves logical ownership.
 
 Both endpoints default to limit=50, range 1–100. With no after, begin at the start. Unknown parameters fail. Ordering is by UUID instead of creation time. `next_after` is the last scanned candidate, not a total. Pages may have fewer than limit or be empty if sources are invalid. Continue while next_after is non-null. Each page is a live authorized read without a frozen snapshot across requests. Reads create neither sessions nor publishing jobs.
 

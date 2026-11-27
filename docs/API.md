@@ -27,11 +27,12 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 | `POST /v1/runs` | writer 提交稳定的 `run_id` 与脱敏 `summary`，绑定当前归档 |
 | `POST /v1/runs/{id}/events` | 稳定 `event_id`、时间、报告方与具名事件；相同重试返回原序号 |
 | `POST /v1/runs/{id}/context` | `event_id` 和 `context`（EvidenceBundle 请求）；返回 bundle 和服务端准备回执 |
-| `GET /v1/runs/{id}?after=0&limit=50` | 当前 key 的分页追溯，包含明确的采集边界 |
+| `GET /v1/runs/{id}?after=0&limit=50` | 所属 Key 或本工作区管理员读取分页链路。`is_owner` 标明当前 Key 的归属。 |
 | `GET /v1/runs/{id}/prefix?through_sequence=N` | 当前 key 的不可变前缀摘要，可作为 Skill 依据 |
 
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
 结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
+链路读取包含 Run 已记录的正文。私有归档原文、内部重放快照、固定前缀、原始 PDF 核验和外部核验记录继续使用各自的授权。
 外部核验记录由 Run 所有者针对精确前缀通过 HTTP 提交，保留转录来源与核验身份的声明状态。
 详情见 [Run 契约](contracts/runs.zh-CN.md)和[外部核验契约](contracts/run-verification.zh-CN.md)。
 
@@ -160,7 +161,7 @@ Origence 使用无状态 Streamable HTTP。列表显示当前进程正在处理�
   workspace 来自认证；按 `asset_id` 升序扫描当前已发布、未删除的候选，逐条复用
   读取单条内容时采用的完整来源、语义和可见性检查。返回 `{items,next_after}`，items 仅为
   内容条目元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
-- `GET /v1/runs?limit=25&after=<UUID>`：当前工作区的 `admin` 可查看该工作区的全部 Run，响应为 `scope:"workspace"`。其他角色查看当前逻辑 key 的 Run，响应为 `scope:"current_logical_key"`。每项含 `run_id`、`owner_key_id`、`is_owner`、`created_at_ms`、`status` 和 `summary`。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。其他 key 的 `summary` 为 `null`，详情和证据端点继续校验所有权。获授权的凭据轮换延续逻辑身份。
+- `GET /v1/runs?limit=25&after=<UUID>`：当前工作区的 `admin` 可查看该工作区的全部 Run，响应为 `scope:"workspace"`。其他角色查看当前逻辑 Key 的 Run，响应为 `scope:"current_logical_key"`。每项含 `run_id`、`owner_key_id`、`is_owner`、`can_read_trace`、`created_at_ms`、`status` 和 `summary`。`can_read_trace` 表示当前角色与归属允许打开链路，详情请求仍复核来源。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。目录中的其他 Key 的 `summary` 为 `null`。管理员可打开详情读取摘要和事件。获授权的凭据轮换延续逻辑身份。
 
 两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
 按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
@@ -580,7 +581,7 @@ version_root_source_event_id。`session_turn` 保留真实会话、轮次、归�
 
 `GET /v1/assets/{asset_id}/runs?version=1&limit=25&after={run_uuid}`：`version` 必填且为正数；
 `limit` 为 1–100，默认 25；`after` 可省略，按 Run UUID 稳定翻页。仅当前 logical key，
-管理员没有他人的 Run 读取特权。返回 `asset_id`、`asset_version`、`items`（仅 `run_id`、
+管理员也仅能通过此接口枚举当前 Key 的关联。返回 `asset_id`、`asset_version`、`items`（仅 `run_id`、
 `created_at_ms`）、`next_after`、`scope: current_logical_key`、`coverage: recorded_references`。
 空页仍可能有下一游标；源或内容条目不可读时拒绝访问。索引定位首条已归档引用并复核权威事件，
 不可读的关联保守省略，不承诺完整采集或整个 Run 的其他引用可读。

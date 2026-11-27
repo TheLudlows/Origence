@@ -6,10 +6,10 @@ Product and storage boundaries reviewed against main `d4867aa` on 2026-11-27. Se
 
 ## 1. Product scope
 
-Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. It currently provides memory and knowledge writes and retrieval, Skill candidates and approved publication, private Run recording and reading, context assembly, and explicit session learning.
+Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. It currently provides memory and knowledge writes and retrieval, Skill candidates and approved publication, Run recording and authorized reading, context assembly, and explicit session learning.
 
 - Origence stores, delivers, and traces authorized data. Claude Code and Codex handle inference, orchestration, Skill loading, and tool execution. Origence can call configured models for its data processing and record explicitly submitted turns. Agent hosts manage their native chats, tool processes, and working state. Tool calls still require execution-side authorization after Skill publication.
-- Private Q&A, feedback, Runs, and unpublished candidates are isolated by stable logical key within each workspace. Authorized rotation preserves access to the same archive. Published memory, knowledge, Learning, and Skills are shared under workspace authorization. Moving private material into shared use requires explicit submission, source validation, and the applicable publication workflow.
+- Private Q&A, feedback, and unpublished candidates are isolated by stable logical key within each workspace. Authorized rotation preserves access to the same archive. Run owners and workspace administrators can read recorded traces. Run writes and replay require ownership. Published memory, knowledge, Learning, and Skills are shared under workspace authorization. Publishing original private material requires explicit submission, source validation, and the applicable publication workflow.
 - Claude Code and Codex are the initial pilot hosts. Server preparation, client reports, and owner-transcribed external assessments are recorded separately. Uncollected activity stays unknown. The pilot evaluates real task outcomes and independent assessment. [STATUS](../STATUS.en.md) · [P0 pilot #91](https://github.com/TheLudlows/Origence/issues/91)
 
 ## 2. Current architecture

@@ -54,6 +54,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     reportedChunk: "77777777-7777-4777-8777-777777777777",
     reportedRef: "88888888-8888-4888-8888-888888888888",
     otherRun: "99999999-9999-4999-8999-999999999999",
+    legacyRun: "99999999-9999-4999-8999-999999999998",
     otherKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   };
   const reportedReference = {
@@ -178,12 +179,24 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         next_after: null,
       });
     }
+    if (path.pathname === `/api/v1/runs/${ids.otherRun}`)
+      return response({
+        run: { run_id: ids.otherRun, summary: "Other Key execution" },
+        is_owner: false,
+        events: [{
+          sequence: 1, evidence_origin: "reported", recorded_at_ms: 1000,
+          report: { reporter: "client", event: { kind: "result_reported", outcome: "failure", summary: "Other Key recorded result" } },
+          references: [],
+        }],
+        next_after: null,
+      });
     if (path.pathname === "/api/v1/runs")
       return response({
         scope: "workspace",
         items: [
           { run_id: ids.run, owner_key_id: ids.source, is_owner: true, summary: "fixture task", created_at_ms: 1000, status: "unknown" },
-          { run_id: ids.otherRun, owner_key_id: ids.otherKey, is_owner: false, summary: null, created_at_ms: 1100, status: "reported_failure" },
+          { run_id: ids.otherRun, owner_key_id: ids.otherKey, is_owner: false, can_read_trace: true, summary: null, created_at_ms: 1100, status: "reported_failure" },
+          { run_id: ids.legacyRun, owner_key_id: ids.run, is_owner: false, summary: null, created_at_ms: 1200, status: "unknown" },
         ],
         next_after: null,
       });
@@ -470,9 +483,9 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(document.body.textContent.includes("服务就绪状态"));
     assert.ok(!document.body.textContent.includes("本页运行数"));
     const otherRun = [...document.querySelectorAll("tbody tr")].find((row) => row.textContent.includes(ids.otherKey));
-    assert.ok(otherRun.textContent.includes("私有任务"));
+    assert.ok(otherRun.textContent.includes("其他 Key 的任务"));
     assert.ok(otherRun.textContent.includes("上报失败"));
-    assert.equal(otherRun.querySelector("button"), null);
+    assert.equal(otherRun.querySelector("button").textContent, "查看链路 →");
     const trend = [...document.querySelectorAll("section")].find(
       (section) => section.querySelector("h2")?.textContent === "运行创建趋势",
     );
@@ -511,6 +524,20 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(window.localStorage.length, 0);
     assert.equal(window.sessionStorage.length, 1);
     assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
+  });
+  await t.test("administrator opens another Key's trace with read-only controls", async () => {
+    click("调用链路");
+    const otherRow = () => [...document.querySelectorAll("main tbody tr")].find((row) => row.textContent.includes(ids.otherKey));
+    await wait(otherRow);
+    assert.ok(document.querySelector("main tbody").textContent.includes("仅所有者可查看链路"));
+    click("查看链路 →", otherRow());
+    await wait(() => document.body.textContent.includes("Other Key recorded result"));
+    const main = document.querySelector("main");
+    assert.ok(main.textContent.includes("Other Key execution"));
+    assert.ok(!main.textContent.includes("获取此处的固定前缀摘要"));
+    assert.ok([...main.querySelectorAll("section")].filter((section) =>
+      ["外部核验记录", "Skill 候选"].includes(section.querySelector("h2")?.textContent),
+    ).every((section) => section.hidden));
   });
   await t.test("administrator Agent list distinguishes active requests, failures, and empty results", async () => {
     click("Agent 连接");

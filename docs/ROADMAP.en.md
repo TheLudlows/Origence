@@ -21,7 +21,7 @@ This document describes product goals and milestone acceptance. The initial rele
 - **Private archives and reusable experiences** retain explicitly submitted conversations and feedback. A logical key can query its own archive. In the explicit Improve workflow, eligible feedback can form Learning, and selected experiences can serve as the basis for Skill candidates.
 - **Traceability and evaluation** use Trace to verify evidence for specific tasks and compare versions and outcomes on fixed tasks. Fact maintenance, knowledge publication, and Skill review can proceed independently.
 
-The platform exposes these functions through HTTP, MCP, and the management UI. Logical keys isolate private archives, Runs, and unpublished candidates. Published memory, knowledge, and Skills belong to a workspace, are available to authorized members, and follow source, version, and withdrawal rules.
+The platform exposes these functions through HTTP, MCP, and the management UI. Logical keys isolate private archives and unpublished candidates. Run owners and workspace administrators can read recorded traces. Published memory, knowledge, and Skills belong to a workspace, are available to authorized members, and follow source, version, and withdrawal rules.
 
 ## Milestones
 

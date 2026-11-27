@@ -423,8 +423,7 @@ impl SqliteTx {
     }
 
     /// Validate exact immutable provenance without following Learning edges.
-    /// The iterative Learning guard is the only caller which may use this
-    /// helper without the public writer-only archive permission check.
+    /// Used by the Learning guard and by callers validating a trusted citation.
     pub(super) async fn require_turn_visible_local(
         &mut self,
         session: Uuid,
@@ -472,6 +471,15 @@ impl SqliteTx {
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_private_session(session).await?;
         self.check_permission(Permission::Write).await?;
+        self.validate_turn_support(session, turn).await
+    }
+
+    /// Recheck source and dependency proofs for an already scoped turn citation.
+    pub(super) async fn validate_turn_support(
+        &mut self,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         let (source, evidence) = self.require_turn_visible_local(session, turn).await?;
         self.require_archived_evidence_set_visible(&evidence)
             .await?;

@@ -8,9 +8,9 @@ See the [roadmap](../ROADMAP.en.md) for product evolution, [platform design](cur
 
 ## 1. Positioning and first-release scope
 
-**Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace.** Context assembly selects data the agent is authorized to use for the task. Trace records execution evidence in private Runs for review and experience distillation.
+**Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace.** Context assembly selects data the agent is authorized to use for the task. Trace records execution evidence in Runs for review and experience distillation.
 
-The first release targets enterprise engineering and business teams, piloting on intranets through local **Claude Code and Codex** CLIs. Users select evidence from memory and execution experience to form reviewable Skill candidates. Publication requires approval by a user with publishing rights. Session archives and Runs are private by logical key. Each logical key binds one session within a workspace. Published memory, knowledge, and Skills belong to a workspace, are reused according to permissions, and are isolated across workspaces. Sessions support platform archiving and authorized reads, without restoring client work environments.
+The first release targets enterprise engineering and business teams, piloting on intranets through local **Claude Code and Codex** CLIs. Users select evidence from memory and execution experience to form reviewable Skill candidates. Publication requires approval by a user with publishing rights. Session archives are private to their logical keys. Each logical key binds one session within a workspace. That key owns the Runs it creates, and workspace administrators can read their recorded traces. Published memory, knowledge, and Skills belong to a workspace, are reused according to permissions, and are isolated across workspaces. Sessions support platform archiving and authorized reads, without restoring client work environments.
 
 ## 2. Overall architecture
 
@@ -22,7 +22,7 @@ flowchart TB
     subgraph DATA[Unified data foundation]
         PRIVATE[Private archives bound to logical key]
         PUBLISHED[Published memory, knowledge, and Skills]
-        RUN[Trace private Runs, events, and verification]
+        RUN[Trace Runs, events, and verification]
     end
     subgraph SERVICES[Data services]
         SERVE[Context selection, read, and delivery]
@@ -67,7 +67,7 @@ Record task status in explicitly submitted turns, task summaries, or event repor
 
 | Scope | Data and access |
 | --- | --- |
-| Private records | Submitted turns and feedback, Runs and context snapshots, and unpublished candidates, isolated by logical key |
+| Private records | Submitted turns and feedback, Run replay snapshots, and unpublished candidates, isolated by logical key |
 | Published memory, knowledge, and Skills | Available to authorized users and agents in the workspace |
 
 One logical `key_id` can hold a separate role in several workspaces in the same tenant. Each request uses an authorized workspace selection or the credential's default. Each workspace and logical key pair maps to one `session_id`. Credentials and logical identity are managed separately. Plaintext keys are not storage identities. New independent keys create independent sessions. Explicitly authorized rotation retains the logical key and session. Usernames do not merge sessions automatically. Revocation blocks corresponding access. Session history, published memory, knowledge, and Skills, and source withdrawals follow their own lifecycles and are not removed on credential revocation. Claude Code and Codex with the same logical key and workspace access the same Origence archive. Use separate keys for independent Agent records. One session can contain multiple tasks and Runs. Ownership is derived from server authentication and cannot be changed by passing another session ID. Private endpoints and context assembly verify logical ownership and current permissions. Authorized reviewers see only expressly disclosed content in a selected review package. `GET /v1/session` returns the server-resolved `{workspace_id,key_id,session_id}`. `POST /admin/keys/{id}/rotate` requires admin permission in the issuing workspace. Rotating another key also requires admin access in each additional workspace granted to that key. The replacement retains its grants and immediately invalidates the old credential. Explicit SessionTurn routes still require writer and also match the current key's session. Read permissions and ownership are separate. The platform preserves submitted records and provides queries without syncing or restoring client chats, context windows, tool/process/environment state, or replaying actions.
@@ -143,7 +143,7 @@ Reuse the existing publication ledger, single durable Worker, original-plan reco
 
 Add Run and result recording through integration for Skill distillation. Step 3 completes the unified tracing experience.
 
-Each step also verifies isolation, source update and withdrawal, precise version references, retries, and reopen recovery. Cross-key direct reads, Bundle/search, Run queries, artifact access, and source links must not leak private content. Content is shared within its own workspace. Skills also check invalidation of approval after editing and denial of reads or distribution after support invalidation. Verify unauthorized submission/review denial, approval invalidation after digest or destination changes, rejection of execution extensions, and isolation of local loading across workspaces. Session acceptance covers archive and querying, authorized rotation, revocation, and retention. Client environment restoration is outside acceptance. Retrieval replacement uses public library, HTTP/MCP, and real AnySeek tests. Client outcomes use frozen task comparisons. Documentation and protocol fixtures do not show real-task success.
+Each step also verifies isolation, source update and withdrawal, precise version references, retries, and reopen recovery. Direct reads, Bundle/search, artifact access, and source links enforce private data access. Recorded Run traces are available to the owner and workspace administrators. Skills also check invalidation of approval after editing and denial of reads or distribution after support invalidation. Verify unauthorized submission/review denial, approval invalidation after digest or destination changes, rejection of execution extensions, and isolation of local loading across workspaces. Session acceptance covers archive and querying, authorized rotation, revocation, and retention. Client environment restoration is outside acceptance. Retrieval replacement uses public library, HTTP/MCP, and real AnySeek tests. Client outcomes use frozen task comparisons. Documentation and protocol fixtures do not show real-task success.
 
 See [STATUS](../STATUS.en.md) for current code and open work and [VALIDATION](../VALIDATION.en.md) for results.
 

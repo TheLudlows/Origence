@@ -244,9 +244,21 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .unwrap()
             .is_empty()
     );
+    let workspace_admin = Peer::new(&base, &admin.token);
+    let admin_trace = workspace_admin
+        .call("context_run_get", read.clone())
+        .await
+        .unwrap();
+    assert_eq!(admin_trace["is_owner"], false);
+    assert_eq!(admin_trace["events"], trace["events"]);
+    assert!(
+        Peer::new(&base, &other.token)
+            .call("context_run_get", read.clone())
+            .await
+            .is_err()
+    );
     for token in [&other.token, &admin.token] {
         let denied = Peer::new(&base, token);
-        assert!(denied.call("context_run_get", read.clone()).await.is_err());
         assert!(
             denied
                 .call("context_turn_get", json!({"turn_id":turn}))
@@ -477,6 +489,8 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic Run proof")
         .await
         .unwrap();
+    let admin_key = store.issue_key(scope, "admin").await.unwrap();
+    let admin = service.auth(&admin_key.token).await.unwrap();
     let key = store.issue_key(scope, "writer").await.unwrap();
     let owner = service.auth(&key.token).await.unwrap();
     let session = service.private_session(&owner).await.unwrap();
@@ -567,7 +581,24 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     .await
     .unwrap();
     assert!(proof.is_empty());
-    service.run_trace(&owner, run, 0, 1).await.unwrap();
+    let owner_trace = service.run_trace(&owner, run, 0, 1).await.unwrap();
+    let admin_trace = service.run_trace(&admin, run, 0, 1).await.unwrap();
+    assert_eq!(admin_trace["is_owner"], false);
+    assert_eq!(admin_trace["events"], owner_trace["events"]);
+    assert_eq!(
+        admin_trace["events"][0]["report"]["citations"][0]["turn_id"],
+        json!(turn)
+    );
+    assert!(!admin_trace.to_string().contains(answer));
+    assert!(
+        admin_trace["events"][0]["report"]
+            .get("replay_bundle")
+            .is_none()
+    );
+    assert!(matches!(
+        service.source_event(&admin, source).await,
+        Err(AppError::NotFound)
+    ));
     service.run_prefix(&owner, run, 1).await.unwrap();
 
     // Pause one preparer during shared retrieval. The winner commits before
@@ -653,6 +684,10 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
         1
     );
     assert_eq!(trace["events"][0]["references"], json!([]));
+    assert_eq!(
+        service.run_trace(&admin, run, 0, 10).await.unwrap()["events"],
+        trace["events"]
+    );
     assert!(matches!(
         service.prepare_run_context(&owner, run, event, input).await,
         Err(AppError::NotFound)

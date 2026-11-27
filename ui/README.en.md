@@ -34,7 +34,7 @@ In PowerShell, pipe `Read-Host -MaskInput` into the same `set-password` command.
 
 Use the [Origence key management API](../docs/API.en.md#endpoints) to issue a separate key with the appropriate role for each account and workspace grant. Inject each key into the console server environment, for example as `ORIGENCE_ALICE_ENGINEERING_KEY`. The account database stores scrypt password hashes and workspace grants. Run `set-password` again to change a password, `grant` to update a grant, `revoke USERNAME WORKSPACE_ID` to remove a grant, or `remove-account USERNAME` to remove an account and all its grants. If the console is running, restart it to load account changes or rotated keys.
 
-After sign-in, the sidebar lists every workspace the account can access and highlights the current one. Select a workspace to switch to it. The list includes direct account grants and child workspaces accessible through a granted root. The upstream checks each key's workspace and role and denies revoked keys. Agents continue to use their own API tokens. Private sessions and Runs retain logical-key isolation. To preserve access to an account holder's existing private records, grant their own original logical key.
+After sign-in, the sidebar lists every workspace the account can access and highlights the current one. Select a workspace to switch to it. The list includes direct account grants and child workspaces accessible through a granted root. The upstream checks each key's workspace and role and denies revoked keys. Agents continue to use their own API tokens. Private sessions and Run writes require the owning logical key. To preserve access to an account holder's existing private records, grant their own original logical key.
 
 An eight-hour in-memory console session survives page reloads. The browser receives a random HttpOnly, SameSite=Strict cookie. HTTPS also enables Secure. The tab stores only the selected workspace ID in sessionStorage. Sign-out, expiry, or Node restart requires login again.
 
@@ -59,7 +59,7 @@ administrator rights in that key's additional workspaces.
 
 ## Pages
 
-- **Overview** shows service readiness and Run creation counts and trends. Admins see the selected workspace's Run list, reported outcomes and counts. Other roles see their own Runs. Summaries and trace details are owner-only.
+- **Overview** shows service readiness and Run creation counts and trends. Admins can read the selected workspace's Run list, reported outcomes, counts, and full recorded traces. Other roles see their own Runs.
 - **Tracing** displays each Run's private Trace, including event order, reporters, preparation receipts, precise references, PDF page locators, and external verification records. The preparation event can show query embedding input tokens reported by the model service. Without a report it shows unknown. It does not represent the full Agent turn's usage or cost.
 - **Memory** displays the visible asset catalog and supports pagination, filtering, search, explicit and semantic writes, text extraction, provenance, and fixed-version comparison.
 - **Knowledge** supports Text/Markdown/PDF uploads, asynchronous publication, updates, job lookup, retry and cancellation, and authorized restore or withdrawal.

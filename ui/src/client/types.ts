@@ -44,6 +44,7 @@ export interface Run {
   run_id: string;
   owner_key_id: string;
   is_owner: boolean;
+  can_read_trace?: boolean;
   summary: string | null;
   created_at_ms: number;
   status: "reported_success" | "reported_failure" | "unknown";
@@ -64,6 +65,7 @@ export interface RunEvent {
 }
 export interface Trace {
   run: { run_id: string; summary: string };
+  is_owner?: boolean;
   events: RunEvent[];
   next_after: number | null;
   coverage_notice: string;

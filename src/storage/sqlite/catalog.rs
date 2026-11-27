@@ -158,6 +158,7 @@ impl SqliteTx {
             };
             items.push(json!({
                 "run_id":id, "owner_key_id":run_owner, "is_owner":owner==run_owner,
+                "can_read_trace":workspace_wide || owner==run_owner,
                 "summary":input.map(|input| input.summary), "created_at_ms":created, "status":status
             }));
         }

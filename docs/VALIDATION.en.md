@@ -4,6 +4,20 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Read-only workspace administrator access to Run traces
+
+Based on `eef2134` on Windows with Rust 1.98.0, Node 24.15.0, and fresh test databases.
+`cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` passed.
+`cargo test --locked --lib` passed 233 tests. `cargo test --locked --test local --no-run` exited 1 while updating
+`origence.exe` held open by the running service. The newly built `local` test executable passed 20 relevant integration tests.
+The public library, HTTP, and MCP checks covered access to recorded event bodies for same-workspace admins,
+isolation for other roles and workspaces, pagination, prefix and write restrictions, denial of original private source access,
+and preservation of event positions with unavailable-source counts after withdrawal.
+
+`npm.cmd --prefix ui test` passed 33 tests, including an administrator opening another key's trace with read-only controls
+and link behavior with older API responses. `check-navigation-focus-browser.cjs` passed in local Chrome.
+The live UI served the asset that reads the backend authorization flag. Linux and live API deployment were untested.
+
 ## 2026-11-27 · Remove the metering panel from the Run overview
 
 On the Windows working tree based on `eef2134`, with Node 24.15.0 and Rust 1.98.0,

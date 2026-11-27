@@ -45,6 +45,18 @@ impl SqliteTx {
         &mut self,
         source: Uuid,
     ) -> StorageResult<Option<(Uuid, Uuid)>> {
+        let turn = self.native_archive_turn_for_source_local(source).await?;
+        if let Some((session, _)) = turn {
+            self.require_private_session(session).await?;
+        }
+        Ok(turn)
+    }
+
+    /// Resolve stored provenance in this scope without reading the archive body.
+    pub(super) async fn native_archive_turn_for_source_local(
+        &mut self,
+        source: Uuid,
+    ) -> StorageResult<Option<(Uuid, Uuid)>> {
         let turn: Option<(Uuid, Uuid)> = sqlite_db::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -54,7 +66,6 @@ impl SqliteTx {
                 .await?
                 .is_some()
         {
-            self.require_private_session(session).await?;
             return Ok(Some((session, turn)));
         }
         Ok(None)

@@ -20,7 +20,7 @@ impl SqliteTx {
         let owner = self.private_key_id().await?;
         self.private_session_for(owner).await
     }
-    async fn private_session_for(&mut self, owner: Uuid) -> StorageResult<Option<Uuid>> {
+    pub(super) async fn private_session_for(&mut self, owner: Uuid) -> StorageResult<Option<Uuid>> {
         sqlite_db::query_scalar("SELECT session_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND logical_key_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
     }

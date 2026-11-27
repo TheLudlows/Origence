@@ -7,6 +7,19 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 工作区管理员只读查看 Run 链路
+
+基于 `eef2134`，使用 Windows、Rust 1.98.0、Node 24.15.0 和新建的测试数据库。
+`cargo fmt --all -- --check` 与 `cargo clippy --locked --all-targets -- -D warnings` 通过，
+`cargo test --locked --lib` 通过 233 项。`cargo test --locked --test local --no-run` 在更新被在线服务占用的 `origence.exe` 时退出 1。
+直接执行该轮生成的 `local` 测试二进制，20 项相关集成测试通过。
+公共库、HTTP 和 MCP 验证了本区管理员可以读取他人已记录的事件正文，其他角色和其他工作区管理员受到隔离。
+回归覆盖分页、固定前缀和写入限制、原始私有来源读取拒绝，以及撤回后保留事件位置和不可用数量。
+
+`npm.cmd --prefix ui test` 通过 33 项，本机 Chrome 的 `check-navigation-focus-browser.cjs` 通过。
+页面测试覆盖管理员打开其他 Key 的详情时显示可用的只读操作，以及旧 API 响应中的入口回退。
+在线 UI 已返回读取后端授权的前端资源。本轮未执行 Linux 验证或切换在线 API。
+
 ## 2026-11-27 · 移除运行总览的计量卡片
 
 基于 `eef2134` 的 Windows 工作树，使用 Node 24.15.0 和 Rust 1.98.0。

@@ -1,5 +1,6 @@
-//! JOIN-free private Run storage; ownership is checked before replay and readback.
+//! JOIN-free Run storage. Only trace readback supports workspace administrator access.
 use super::*;
+use crate::evidence::EvidenceProvenance;
 use crate::run::{RunEvent, RunEventInput, RunInput};
 use crate::session::ArchivedEvidence;
 pub(super) const SCHEMA: &str = include_str!("../run-schema.sql");
@@ -8,6 +9,14 @@ fn encode<T: serde::Serialize>(v: &T) -> StorageResult<String> {
 }
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s).map_err(|_| StorageError::Unavailable("invalid run record".into()))
+}
+
+fn prepared_citations(payload: &Value) -> StorageResult<Vec<EvidenceProvenance>> {
+    if payload["kind"] != "context_prepared" {
+        return Ok(Vec::new());
+    }
+    serde_json::from_value(payload["citations"].clone())
+        .map_err(|_| StorageError::Unavailable("invalid prepared citations".into()))
 }
 impl SqliteTx {
     // A bounded lookup projection, never a replacement for the immutable event.
@@ -95,12 +104,15 @@ impl SqliteTx {
         Ok(created)
     }
 
-    pub(crate) async fn owned_run(&mut self, run: Uuid) -> StorageResult<(Uuid, String, i64)> {
-        self.check_permission(Permission::Read).await?;
-        let key = self.private_key_id().await?;
+    async fn run_record(&mut self, run: Uuid) -> StorageResult<(Uuid, Uuid, String, i64)> {
         let row:Option<(Uuid,Uuid,String,i64)>=sqlite_db::query_as("SELECT session_id,owner_key_id,input,created_at FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        let (session, owner, input, created) = row.ok_or(StorageError::NotFound)?;
+        row.ok_or(StorageError::NotFound)
+    }
+
+    pub(crate) async fn owned_run(&mut self, run: Uuid) -> StorageResult<(Uuid, String, i64)> {
+        let key = self.private_key_id().await?;
+        let (session, owner, input, created) = self.run_record(run).await?;
         if owner != key {
             return Err(StorageError::NotFound);
         }
@@ -184,7 +196,30 @@ impl SqliteTx {
         after: i64,
         limit: usize,
     ) -> StorageResult<Value> {
-        let (session, input, created) = self.owned_run(run).await?;
+        self.read_run_trace(run, after, limit, false).await
+    }
+
+    pub async fn run_trace(&mut self, run: Uuid, after: i64, limit: usize) -> StorageResult<Value> {
+        self.read_run_trace(run, after, limit, true).await
+    }
+
+    async fn read_run_trace(
+        &mut self,
+        run: Uuid,
+        after: i64,
+        limit: usize,
+        allow_admin: bool,
+    ) -> StorageResult<Value> {
+        let key = self.private_key_id().await?;
+        let (session, owner, input, created) = self.run_record(run).await?;
+        let is_owner = owner == key;
+        if !is_owner && (!allow_admin || self.live_role().await? != "admin") {
+            return Err(StorageError::NotFound);
+        }
+        if self.private_session_for(owner).await? != Some(session) {
+            return Err(StorageError::NotFound);
+        }
+        let admin_session = (!is_owner).then_some(session);
         if after < 0 || limit == 0 || limit > 100 {
             return Err(StorageError::InvalidArgument("invalid run page"));
         }
@@ -196,12 +231,16 @@ impl SqliteTx {
         for (seq, principal, payload, references, recorded) in rows.into_iter().take(limit) {
             let mut refs: Vec<ArchivedEvidence> = decode(&references)?;
             let mut report: Value = decode(&payload)?;
-            let removed = self.retracted_archive_citations(&report).await?;
+            let citations = prepared_citations(&report)?;
+            let removed = self
+                .retracted_archive_citations(&citations, admin_session)
+                .await?;
             if removed == 0 {
                 for reference in &refs {
                     self.require_run_reference_visible(reference).await?;
                 }
-                self.validate_prepared_payload(&report).await?;
+                self.validate_prepared_citations(&citations, admin_session)
+                    .await?;
             } else {
                 // A historical trace keeps the event, while replay and Skill
                 // publication still require the original evidence to be live.
@@ -216,28 +255,37 @@ impl SqliteTx {
             cursor = seq;
         }
         Ok(
-            json!({"run":decode::<RunInput>(&input)?,"session_id":session,"created_at_ms":created,"events":events,"next_after":if more{Some(cursor)}else{None},"unreported_activity":"unknown","coverage_notice":"Only explicitly recorded events are visible; MCP cannot observe unrelated client or tool activity."}),
+            json!({"run":decode::<RunInput>(&input)?,"is_owner":is_owner,"session_id":session,"created_at_ms":created,"events":events,"next_after":if more{Some(cursor)}else{None},"unreported_activity":"unknown","coverage_notice":"Only explicitly recorded events are visible; MCP cannot observe unrelated client or tool activity."}),
         )
     }
-    async fn retracted_archive_citations(&mut self, report: &Value) -> StorageResult<usize> {
-        if report["kind"] != "context_prepared" {
-            return Ok(0);
-        }
+    async fn retracted_archive_citations(
+        &mut self,
+        citations: &[EvidenceProvenance],
+        admin_session: Option<Uuid>,
+    ) -> StorageResult<usize> {
         let mut removed = 0;
-        for citation in
-            decode::<Vec<crate::evidence::EvidenceProvenance>>(&report["citations"].to_string())?
-        {
-            if let crate::evidence::EvidenceProvenance::SessionTurn {
+        for citation in citations {
+            if let EvidenceProvenance::SessionTurn {
                 session_id,
                 turn_id,
                 source_event_id,
                 ..
-            } = citation
-                && self.native_archive_turn_for_source(source_event_id).await?
-                    == Some((session_id, turn_id))
-                && !self.archive_source_active(source_event_id).await?
+            } = *citation
             {
-                removed += 1;
+                let address = if let Some(run_session) = admin_session {
+                    if run_session != session_id {
+                        return Err(StorageError::NotFound);
+                    }
+                    self.native_archive_turn_for_source_local(source_event_id)
+                        .await?
+                } else {
+                    self.native_archive_turn_for_source(source_event_id).await?
+                };
+                if address == Some((session_id, turn_id))
+                    && !self.archive_source_active(source_event_id).await?
+                {
+                    removed += 1;
+                }
             }
         }
         Ok(removed)
@@ -293,7 +341,6 @@ impl SqliteTx {
 }
 
 pub(super) fn redact_archive_replay(payload: &mut Value) -> StorageResult<bool> {
-    use crate::evidence::EvidenceProvenance;
     if payload["kind"] != "context_prepared" || payload["replay_bundle_digest"].is_string() {
         return Ok(false);
     }
@@ -400,22 +447,35 @@ impl SqliteTx {
     }
 
     async fn validate_prepared_payload(&mut self, payload: &Value) -> StorageResult<()> {
-        if payload["kind"] != "context_prepared" {
-            return Ok(());
-        }
-        let citations: Vec<crate::evidence::EvidenceProvenance> =
-            serde_json::from_value(payload["citations"].clone())
-                .map_err(|_| StorageError::Unavailable("invalid prepared citations".into()))?;
+        self.validate_prepared_citations(&prepared_citations(payload)?, None)
+            .await
+    }
+
+    async fn validate_prepared_citations(
+        &mut self,
+        citations: &[EvidenceProvenance],
+        admin_session: Option<Uuid>,
+    ) -> StorageResult<()> {
         for citation in citations {
-            if let crate::evidence::EvidenceProvenance::SessionTurn {
+            if let EvidenceProvenance::SessionTurn {
                 session_id,
                 turn_id,
                 source_event_id,
                 ..
-            } = citation
-                && self.require_turn_visible(session_id, turn_id).await? != source_event_id
+            } = *citation
             {
-                return Err(StorageError::NotFound);
+                let current_source = if let Some(run_session) = admin_session {
+                    if run_session != session_id {
+                        return Err(StorageError::NotFound);
+                    }
+                    // Validate the immutable citation without opening the private body.
+                    self.validate_turn_support(session_id, turn_id).await?.0
+                } else {
+                    self.require_turn_visible(session_id, turn_id).await?
+                };
+                if current_source != source_event_id {
+                    return Err(StorageError::NotFound);
+                }
             }
         }
         Ok(())
@@ -430,7 +490,6 @@ impl SqliteTx {
         request_digest: &str,
         bundle: &crate::evidence::EvidenceBundle,
     ) -> StorageResult<Value> {
-        use crate::evidence::EvidenceProvenance;
         self.check_permission(Permission::Write).await?;
         self.owned_run(run).await?;
         if event_id.is_nil()

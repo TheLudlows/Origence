@@ -164,7 +164,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Read your private Run trace, with current authorization and source checks. after is a sequence cursor; limit defaults to 50 (maximum 100). Missing events mean unknown, never complete capture."
+        description = "Read a Run trace you own or, as a workspace admin, any Run in the selected workspace. Source checks still apply. after is a sequence cursor; limit defaults to 50 (maximum 100). Missing events mean unknown, never complete capture."
     )]
     async fn context_run_get(
         &self,
