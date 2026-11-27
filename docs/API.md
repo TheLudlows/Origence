@@ -260,8 +260,6 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 
 `pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 `asset_id` 和 `version`。之后仍可能被更新、删除或来源撤回。
 
-长期记忆归纳的成功作业为 `completed` 且 `outcome=consolidated`。`result.memories` 列出此次生成的 `memory_id` 和 `version`，没有可归纳事实时为空。按主题查询独立于内容条目的索引发布。
-
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
 
 所有业务写事务以 SQLite `BEGIN IMMEDIATE` 开始，原子提交业务、幂等、审计和入队。模型/文件/原生索引 IO 在关系事务外执行。最终提交再次校验权限、墓碑、来源、预期版本、generation 和 run_token；密钥撤销与写事务串行化。此本地适配器无 RLS，scope 由适配器显式绑定。

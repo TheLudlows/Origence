@@ -2059,3 +2059,7 @@ Key。沿用共享地址时保留旧配置语义，专用地址只接收本链�
   的协议协商、工具参数、撤权和重开检查。Python 工具套件运行 16 项，11 项通过、5 项跳过。
 
 真实提取模型的语义质量、Windows 和真实客户端验收待执行。
+
+PR #160 清理后在 Linux / Rust 1.98.0 复跑 `local-storage` 的 `local` 和
+`memory-consolidation` 测试目标，共 222 项通过。默认特性的 `jobs::tests` 6 项通过。
+全目标全特性 Clippy、格式检查与 `git diff --check` 通过。

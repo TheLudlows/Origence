@@ -4,8 +4,6 @@
 
 This document defines explicit memory domain rules. See [controlled extraction](semantic-capture.en.md) for bounded model extraction, [API](../API.en.md) for interfaces, and [storage invariants](storage.en.md) for physical identity reservations. A valid source, valid syntax, and matching version do not establish truth.
 
-See [long-term memory consolidation](memory-consolidation.md) for appending source text and deriving versioned conclusions from its evidence.
-
 ## Identity and update rights
 
 | Field | Rule |

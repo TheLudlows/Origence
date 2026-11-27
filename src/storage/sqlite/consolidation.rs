@@ -1,7 +1,7 @@
 //! Scoped source facts and durable evidence revisions for derived memories.
 use super::*;
 use crate::{
-    consolidation::{Evidence, GroundedFact, MemoryRevision, MemoryView},
+    consolidation::{Evidence, GroundedFact, MemoryRevision, MemoryView, RETAIN_SOURCE_KIND},
     memory_identity::MemoryIdentity,
     memory_semantics::{Cardinality, MemoryProperty},
 };
@@ -10,7 +10,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const MAX_CONSOLIDATION_PROPERTIES: usize = 128;
 const MAX_ACTIVE_FACTS_PER_MEMORY: i64 = 256;
-const SOURCE_KIND: &str = "memory_retain";
 
 struct TopicSlot {
     id: Uuid,
@@ -21,24 +20,6 @@ struct TopicSlot {
 type IndexedFact<'a> = (i64, &'a GroundedFact);
 
 impl SqliteTx {
-    async fn has_memory_consolidation(&mut self) -> StorageResult<bool> {
-        sqlite_db::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_long_term_memories')",
-        )
-        .fetch_one(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)
-    }
-
-    pub(crate) async fn require_memory_consolidation(&mut self) -> StorageResult<()> {
-        if !self.has_memory_consolidation().await? {
-            return Err(StorageError::Unavailable(
-                "memory consolidation requires a new database".into(),
-            ));
-        }
-        Ok(())
-    }
-
     pub(crate) async fn consolidation_properties(&mut self) -> StorageResult<Vec<MemoryProperty>> {
         let definitions: Vec<String> = sqlite_db::query_scalar(
             "SELECT definition FROM oc_memory_properties
@@ -105,7 +86,7 @@ impl SqliteTx {
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
         .bind(source)
-        .bind(SOURCE_KIND)
+        .bind(RETAIN_SOURCE_KIND)
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?
@@ -138,47 +119,8 @@ impl SqliteTx {
             grouped.entry(key).or_default().push((ordinal as i64, fact));
         }
 
-        let existing: Vec<(i64, Uuid, String, Option<i64>, i32)> = sqlite_db::query_as(
-            "SELECT ordinal,memory_id,statement,effective_at_ms,introduced_version
-             FROM oc_long_term_memory_facts
-             WHERE tenant_id=? AND workspace_id=? AND source_event_id=?
-             ORDER BY ordinal LIMIT ?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(source)
-        .bind(facts.len() as i64 + 1)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        if !existing.is_empty() {
-            if existing.len() != facts.len() {
-                return Err(inconsistent_replay());
-            }
-            let mut revisions = Vec::with_capacity(grouped.len());
-            for (key, entries) in grouped {
-                let memory_id = self
-                    .long_term_slot(&key)
-                    .await?
-                    .ok_or_else(inconsistent_replay)?
-                    .id;
-                let version = existing[entries[0].0 as usize].4;
-                for (ordinal, fact) in entries {
-                    let row = &existing[ordinal as usize];
-                    if row.0 != ordinal
-                        || row.1 != memory_id
-                        || row.2 != encode(&fact.statement)?
-                        || row.3 != fact.effective_at_ms
-                        || row.4 != version
-                    {
-                        return Err(inconsistent_replay());
-                    }
-                }
-                revisions.push(MemoryRevision { memory_id, version });
-            }
-            return Ok(revisions);
-        }
-
+        // Facts and the completed receipt commit together. Queue recovery
+        // can replay the saved extraction plan only before that commit.
         let mut revisions = Vec::with_capacity(grouped.len());
         for (key, entries) in grouped {
             let topic = match self.long_term_slot(&key).await? {
@@ -233,21 +175,6 @@ impl SqliteTx {
 
     /// Called after the original event is tombstoned, in that same transaction.
     pub(crate) async fn retract_consolidation_source(&mut self, source: Uuid) -> StorageResult<()> {
-        let retained: bool = sqlite_db::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM oc_events
-             WHERE tenant_id=? AND workspace_id=? AND id=? AND kind=? AND state='retracted')",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(source)
-        .bind(SOURCE_KIND)
-        .fetch_one(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        if !retained || !self.has_memory_consolidation().await? {
-            return Ok(());
-        }
-
         let affected: Vec<Uuid> = sqlite_db::query_scalar(
             "SELECT DISTINCT memory_id FROM oc_long_term_memory_facts
              WHERE tenant_id=? AND workspace_id=? AND source_event_id=? AND withdrawn_version IS NULL
@@ -293,7 +220,6 @@ impl SqliteTx {
         version: Option<i32>,
         as_of_ms: i64,
     ) -> StorageResult<Option<MemoryView>> {
-        self.require_memory_consolidation().await?;
         let key = identity
             .key(self.scope)
             .map_err(|_| StorageError::InvalidArgument("invalid long-term memory identity"))?;
@@ -309,7 +235,6 @@ impl SqliteTx {
         version: Option<i32>,
         as_of_ms: i64,
     ) -> StorageResult<Option<MemoryView>> {
-        self.require_memory_consolidation().await?;
         let row: Option<(String, i32, String)> = sqlite_db::query_as(
             "SELECT identity_key,current_version,identity_json FROM oc_long_term_memories
              WHERE tenant_id=? AND workspace_id=? AND id=?",
@@ -408,7 +333,7 @@ impl SqliteTx {
         let mut query = sqlite_db::query_scalar(&sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
-            .bind(SOURCE_KIND);
+            .bind(RETAIN_SOURCE_KIND);
         for source in sources {
             query = query.bind(*source);
         }
@@ -522,8 +447,4 @@ impl SqliteTx {
 fn encode(value: &impl serde::Serialize) -> StorageResult<String> {
     serde_json::to_string(value)
         .map_err(|_| StorageError::Unavailable("long-term memory encoding failed".into()))
-}
-
-fn inconsistent_replay() -> StorageError {
-    StorageError::Conflict("retained source has a different consolidation plan".into())
 }

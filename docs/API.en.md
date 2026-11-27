@@ -196,8 +196,6 @@ Admission records the current content item version, which the Worker rechecks be
 
 `pending → processing → completed/failed/superseded`. Transient storage failure follows `processing → retry_wait → processing`. Cancellation is `cancelled`. Only completed + outcome=published indicates atomic commit of that version and index. capture result.memories lists each extracted fact's content item and version. Later updates, deletions, or source withdrawals can still occur.
 
-Successful long-term memory jobs finish with `completed` and `outcome=consolidated`. `result.memories` lists the `memory_id` and `version` created by the job. It is empty when the input contains no eligible facts. Exact long-term memory lookup runs independently of indexed content publication.
-
 A deletion response is `{id,blocked:true,cleanup_job_id,originals_retained:true}`. Once the logical deletion commits, new reads are blocked regardless of index cleanup. Already delivered data cannot be recalled. Requests started before deletion can finish first.
 
 Business write transactions start with SQLite `BEGIN IMMEDIATE` and atomically commit business state, idempotency, audit, and enqueue. Model/file/native index I/O runs outside the relational transaction. Final commit revalidates permissions, tombstones, sources, expected version, generation, and run_token. Key revocation serializes with write transactions. This local adapter has no RLS and binds scope explicitly.

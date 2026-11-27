@@ -11,11 +11,7 @@ pub(super) async fn process(
     payload: &JobPayload,
     mut read: SqliteTx,
 ) -> Result<()> {
-    let JobPayload::ConsolidateMemory {
-        extraction_profile,
-        extraction_model,
-    } = payload
-    else {
+    let JobPayload::ConsolidateMemory { extraction_profile } = payload else {
         return Err(AppError::Invalid(
             "invalid memory consolidation operation".into(),
         ));
@@ -33,7 +29,6 @@ pub(super) async fn process(
     } else {
         if service.models.consolidation_extraction_profile().as_deref()
             != Some(extraction_profile.as_str())
-            || service.models.summary_model() != Some(extraction_model.as_str())
         {
             return Err(AppError::Unavailable(
                 "worker extraction profile differs from accepted job".into(),

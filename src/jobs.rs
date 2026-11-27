@@ -135,7 +135,6 @@ pub enum JobPayload {
     },
     ConsolidateMemory {
         extraction_profile: String,
-        extraction_model: String,
     },
     Cleanup {
         target: String,
@@ -218,10 +217,9 @@ impl JobPayload {
                 }
                 Ok(())
             }
-            Self::ConsolidateMemory {
-                extraction_profile,
-                extraction_model,
-            } if extraction_profile.trim().is_empty() || extraction_model.trim().is_empty() => {
+            Self::ConsolidateMemory { extraction_profile }
+                if extraction_profile.trim().is_empty() =>
+            {
                 Err(invalid_payload())
             }
             _ => Ok(()),
@@ -453,10 +451,9 @@ mod tests {
             (
                 JobPayload::ConsolidateMemory {
                     extraction_profile: "consolidate:v1".into(),
-                    extraction_model: "model".into(),
                 },
                 "consolidate_memory",
-                json!({"schema_version":1,"extraction_profile":"consolidate:v1","extraction_model":"model"}),
+                json!({"schema_version":1,"extraction_profile":"consolidate:v1"}),
             ),
             (
                 JobPayload::Cleanup {
@@ -537,10 +534,7 @@ mod tests {
                     "extraction_model",
                 ][..],
             ),
-            (
-                "consolidate_memory",
-                &["extraction_profile", "extraction_model"][..],
-            ),
+            ("consolidate_memory", &["extraction_profile"][..]),
         ] {
             let golden = fixtures()
                 .into_iter()

@@ -2,7 +2,7 @@
 
 **English** · [简体中文](STATUS.md)
 
-Updated 2026-11-26, with main [`a5fbcd2`](https://github.com/TheLudlows/Origence/commit/a5fbcd230795e2132362b6d5ae9a0240a8b36e53) as the integration baseline. Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. See the [product roadmap](ROADMAP.en.md) and [architecture plan](design/agent-data-foundation.en.md) for first-release goals.
+Updated 2026-11-19, with main [`2094f81`](https://github.com/TheLudlows/Origence/commit/2094f81c990aaf7d69d4ff09295c1a2a837c4ba1) as the integration baseline. Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. See the [product roadmap](ROADMAP.en.md) and [architecture plan](design/agent-data-foundation.en.md) for first-release goals.
 
 AML evaluation-protocol HTTP endpoints and startup switches have been removed. Owning workspaces and message batches remain available via the [common Rust library APIs](API.en.md#common-owning-workspace-and-message-batch-library-apis).
 
@@ -10,7 +10,7 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 
 | Area | Implemented | Pending |
 | --- | --- | --- |
-| Memory | Explicit writes and versioned corrections, identity conditions and exact filtering, controlled extraction, source references and withdrawal. HTTP, MCP, and Rust callers can append source text for automatic long-term consolidation and read the results by exact identity. See [memory semantics](contracts/memory.en.md) and [long-term consolidation](contracts/memory-consolidation.md). | P0 real-task acceptance, extraction quality with a real model, and client pilot |
+| Memory | Explicit writes and versioned corrections, identity conditions and exact filtering, controlled extraction, source references and withdrawal. See the [memory contract](contracts/memory.en.md). [Long-term consolidation](contracts/memory-consolidation.md) supports appending text and querying versioned conclusions. | P0 real-task acceptance, consolidation quality with a real model |
 | Knowledge | Text, Markdown, and PDF ingestion, version reads and comparison, publication and withdrawal. Failed updates retain the original published version. See [API](API.en.md#endpoints). | P0 real-task acceptance |
 | Skill | [Selected-experience CLI](SKILL-CANDIDATE-CLI.md), selected review packages, exact approval, immutable publication, online downloads, and exports for both client directory formats. A public Windows example verified native loading in both clients and refusal of new exports after source withdrawal. [Test record](../evals/pilot/native-skill.windows.json) | Cross-client reuse and independent verification with unseen tasks in both scenarios, managed online reload |
 | Trace | Private Runs, preparation receipts, explicit HTTP/MCP reporting, default Run hooks in the Codex and Claude Code plugins, owner-transcribed external verification, exact version citations, and archived PDF page locators. [Run contract](contracts/runs.md) | Full event coverage on both clients, end-to-end evidence verification, independent sign-off |
