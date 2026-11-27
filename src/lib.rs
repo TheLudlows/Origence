@@ -18,6 +18,8 @@ mod improvements;
 mod jobs;
 pub mod learning;
 #[cfg(feature = "local-storage")]
+pub mod long_term_memory;
+#[cfg(feature = "local-storage")]
 mod mcp;
 pub mod memory_identity;
 pub mod memory_semantics;

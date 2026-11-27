@@ -18,7 +18,10 @@ use crate::{
     parsing,
     service::{Service, scope},
     session::ArchivedEvidence,
-    storage::sqlite::retrieval::{NativePublicationProof, NativeRankedCandidate},
+    storage::sqlite::{
+        SqliteTx,
+        retrieval::{NativePublicationProof, NativeRankedCandidate},
+    },
     storage::{DomainTx, FullTextQuery, Permission, VectorQuery},
     types::{AuthContext, SearchHit},
 };
@@ -88,6 +91,27 @@ pub(crate) struct ContextCandidate {
 pub(crate) struct ContextCandidateResult {
     pub candidates: Vec<ContextCandidate>,
     pub ranked_native: Vec<NativeRankedCandidate>,
+}
+
+impl SqliteTx {
+    /// Rebuild the candidate and verify its native content against the final
+    /// relational snapshot. Callers must also verify the ranking participants.
+    pub(crate) async fn refresh_context_candidate(
+        &mut self,
+        candidate: ContextCandidate,
+        identity: Option<&MemoryIdentity>,
+    ) -> Result<ContextCandidate> {
+        let mut fresh = self
+            .context_candidate(candidate.hit.chunk_id, candidate.route, identity)
+            .await?
+            .ok_or_else(|| AppError::Conflict("native context candidate route changed".into()))?;
+        self.verify_content_hits(std::slice::from_ref(&candidate.hit))
+            .await?;
+        fresh.hit.score = candidate.hit.score;
+        fresh.hit.content = candidate.hit.content;
+        fresh.retrieval_routes = candidate.retrieval_routes;
+        Ok(fresh)
+    }
 }
 
 #[derive(Clone, Debug)]

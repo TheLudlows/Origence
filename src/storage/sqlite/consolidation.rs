@@ -2,6 +2,7 @@
 use super::*;
 use crate::{
     consolidation::{Evidence, GroundedFact, MemoryRevision, MemoryView, RETAIN_SOURCE_KIND},
+    long_term_memory::FactSearchRow,
     memory_identity::MemoryIdentity,
     memory_semantics::{Cardinality, MemoryProperty},
 };
@@ -250,6 +251,32 @@ impl SqliteTx {
         };
         let topic = self.decode_long_term_slot(&key, memory_id, current, &stored)?;
         self.read_long_term_memory(topic, version, as_of_ms).await
+    }
+
+    pub(crate) async fn long_term_fact_search_rows(
+        &mut self,
+        limit: usize,
+    ) -> StorageResult<Vec<FactSearchRow>> {
+        let rows: Vec<(Uuid, Uuid, String)> = sqlite_db::query_as(
+            "SELECT memory_id,source_event_id,json_extract(statement,'$.quote')
+             FROM oc_long_term_memory_facts
+             WHERE tenant_id=? AND workspace_id=? AND withdrawn_version IS NULL
+             ORDER BY memory_id,introduced_version,source_event_id,ordinal LIMIT ?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(limit as i64)
+        .fetch_all(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        Ok(rows
+            .into_iter()
+            .map(|(memory_id, source_event_id, quote)| FactSearchRow {
+                memory_id,
+                source_event_id,
+                quote,
+            })
+            .collect())
     }
 
     async fn read_long_term_memory(

@@ -51,6 +51,10 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/memories/lookup", post(lookup_memory))
         .route("/v1/memories/retain", post(retain_memory))
         .route(
+            "/v1/memories/long-term/recall",
+            post(recall_long_term_memories),
+        )
+        .route(
             "/v1/memories/long-term/lookup",
             post(recall_long_term_memory),
         )
@@ -205,10 +209,20 @@ async fn lookup_memory(
 async fn retain_memory(
     State(s): State<Service>,
     h: HeaderMap,
-    Json(input): Json<CaptureInput>,
+    Json(input): Json<crate::long_term_memory::LongTermRetainInput>,
 ) -> Result<Json<Value>> {
     Ok(Json(
-        s.retain_memory(&auth(&s, &h).await?, key(&h)?, input)
+        s.retain_long_term_memory(&auth(&s, &h).await?, key(&h)?, input)
+            .await?,
+    ))
+}
+async fn recall_long_term_memories(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(input): Json<crate::long_term_memory::LongTermRecallInput>,
+) -> Result<Json<crate::long_term_memory::LongTermRecall>> {
+    Ok(Json(
+        s.recall_long_term_memories(&auth(&s, &h).await?, input)
             .await?,
     ))
 }

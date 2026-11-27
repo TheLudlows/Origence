@@ -2125,3 +2125,17 @@ Key。沿用共享地址时保留旧配置语义，专用地址只接收本链�
 PR #160 清理后在 Linux / Rust 1.98.0 复跑 `local-storage` 的 `local` 和
 `memory-consolidation` 测试目标，共 222 项通过。默认特性的 `jobs::tests` 6 项通过。
 全目标全特性 Clippy、格式检查与 `git diff --check` 通过。
+
+## 2026-11-27 — 统一长期记忆写入和召回（本地）
+
+基于 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`，Linux x86_64，Rust 1.98.0。
+合成夹具通过 Rust、HTTP 和 MCP 写入事实和经验并共同召回。覆盖跨入口幂等、同键不同类型冲突、
+私有会话所有权、跨工作区隔离、事实生效时点、经验条件、公开引用重新归档和两类来源撤回。
+
+- 默认特性 `cargo test --locked --offline -j 3 --no-fail-fast --quiet` 通过 484 项，忽略 8 项。
+- 仅 SQLite 的相同 Rust 回归通过 246 项，忽略 5 项。全特性、无默认特性核心和仅 SQLite 的
+  全目标 Clippy 均以警告视为错误通过。格式和 diff 检查通过。
+- `python3 tools/mcp_smoke.py --binary <origence> --local` 通过实际宿主的 MCP 协议、参数和
+  凭据撤销检查。Python 工具套件通过 11 项，跳过 5 项。
+
+模型调用使用合成协议夹具。Windows、真实模型语义质量和真实客户端验收待执行。

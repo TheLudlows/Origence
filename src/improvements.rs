@@ -18,13 +18,25 @@ impl Service {
         session: Uuid,
         input: ImproveInput,
     ) -> Result<Value> {
+        self.admit_improve(a, key, "session.improve", session, input)
+            .await
+    }
+
+    pub(crate) async fn admit_improve(
+        &self,
+        a: &AuthContext,
+        key: &str,
+        command: &str,
+        session: Uuid,
+        input: ImproveInput,
+    ) -> Result<Value> {
         if session.is_nil() {
             return Err(AppError::Invalid("session_id must be non-nil".into()));
         }
         input.validate().map_err(|e| AppError::Invalid(e.into()))?;
         let request = json!({"session_id":session,"input":input});
         let (mut tx, cached) = self
-            .command(a, Permission::Write, "session.improve", key, &request)
+            .command(a, Permission::Write, command, key, &request)
             .await?;
         if cached.is_some() {
             let value = tx.improve_view(input.improve_id).await?;

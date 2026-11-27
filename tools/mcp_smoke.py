@@ -50,8 +50,13 @@ TOOL_FIELDS = {
         "exclude_session_id": "string",
     },
     "context_get": {"asset_id": "string", "version": "integer"},
-    "context_memory_retain": {"content": "string", "idempotency_key": "string"},
-    "context_memory_recall": {"identity": "object", "version": "integer", "as_of_ms": "integer"},
+    "context_memory_retain": {
+        "content": "string", "experience": "object", "idempotency_key": "string",
+    },
+    "context_memory_recall": {
+        "query": "string", "identity": "object", "version": "integer", "as_of_ms": "integer",
+        "limit": "integer", "applicability_context": "array",
+    },
     "context_run_create": {"run_id": "string", "summary": "string"},
     "context_run_prepare": {"run_id": "string", "event_id": "string", "context": "object"},
     "context_run_report": {"run_id": "string", "report": "object"},
@@ -341,8 +346,8 @@ def check_tools(mcp):
             "context_run_report": ["run_id", "report"],
             "context_run_get": ["run_id"],
             "context_get": ["asset_id"], "context_session": [],
-            "context_memory_retain": ["content", "idempotency_key"],
-            "context_memory_recall": ["identity"],
+            "context_memory_retain": ["idempotency_key"],
+            "context_memory_recall": [],
             "context_turn_get": ["turn_id"], "context_turn_archive": ["turn"],
         }.get(name, ["query"])
         properties = schema_object(root, root, TOOL_FIELDS[name], required,
@@ -366,10 +371,22 @@ def check_tools(mcp):
             require(nullable(root, properties["version"]), "get version no longer accepts null")
             continue
         if name == "context_memory_retain":
+            require(all(nullable(root, properties[field]) for field in ("content", "experience")),
+                    "long-term retain source alternatives no longer accept null")
+            experience = schema_object(
+                root, properties["experience"], {"session_id": "string", "improve": "object"},
+                ["session_id", "improve"])
+            improve = schema_object(root, experience["improve"],
+                                    {"improve_id": "string", "conditions": "array",
+                                     "max_feedback": "integer"}, ["improve_id", "conditions"])
+            schema_type(root, improve["conditions"]["items"], "string")
+            require(improve["max_feedback"].get("default") == 32, "feedback limit default changed")
             continue
         if name == "context_memory_recall":
-            require(all(nullable(root, properties[field]) for field in ("version", "as_of_ms")),
-                    "long-term recall version/time no longer accepts null")
+            require(all(nullable(root, properties[field])
+                        for field in ("query", "identity", "version", "as_of_ms", "limit")),
+                    "long-term recall optional fields no longer accept null")
+            schema_type(root, properties["applicability_context"]["items"], "string")
             memory_identity_schema(root, properties["identity"])
             continue
         require(nullable(root, properties["memory_identity"]), "memory identity no longer accepts null")
@@ -433,6 +450,9 @@ def exercise(mcp, asset_id, workspace_id):
             "MCP get did not preserve historical version")
     empty = mcp.tool("context_search", {"query": "MCPDEFINITELYABSENT"})
     require(empty["hits"] == [], "missing query unexpectedly produced search hits")
+    long_term = mcp.tool("context_memory_recall", {"query": QUERY})
+    require(long_term["memories"] == [] and long_term["fact_scan_exhausted"] is False,
+            "long-term recall included ordinary memory content")
     mcp.error("context_get", {"asset_id": BAD_INPUT}, -32602, "asset_id must be a UUID")
     mcp.error("context_get", {"asset_id": str(uuid.uuid4())}, -32600,
               "NOT_FOUND: resource not found")
@@ -442,6 +462,8 @@ def exercise(mcp, asset_id, workspace_id):
               "INVALID_ARGUMENT: budget_tokens must be <=32000")
     mcp.error("context_bundle", {"query": QUERY, "mode": BAD_INPUT}, -32600,
               "INVALID_ARGUMENT: mode or budget invalid")
+    mcp.error("context_memory_retain", {"idempotency_key": "missing-source"}, -32600,
+              "INVALID_ARGUMENT: submit exactly one of content or experience")
     # Exercise SDK parameter decoding as well as application-domain errors.
     mcp.invalid_arguments("context_search", {}, "failed to deserialize parameters: missing field `query`")
     mcp.error("context_missing", {}, -32602, "tool not found")
