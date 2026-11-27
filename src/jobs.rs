@@ -320,13 +320,6 @@ impl JobPayload {
             _ => None,
         }
     }
-
-    pub fn identity(&self) -> Option<&MemoryIdentity> {
-        match self {
-            Self::IdentifiedExtract { identity, .. } => Some(identity),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -490,7 +483,6 @@ mod tests {
             assert_eq!(decoded.expected_version(), typed.expected_version());
             assert_eq!(decoded.title(), typed.title());
             assert_eq!(decoded.target_version(), typed.target_version());
-            assert_eq!(decoded.identity(), typed.identity());
             assert_eq!(decoded.encode().unwrap(), (kind, golden));
         }
     }

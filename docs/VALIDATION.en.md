@@ -17,6 +17,11 @@ The UI tests covered the capture form, standalone evidence details, and fixed re
 Chromium passed the asset tabs and version comparison regression at 320, 375, 736, and
 1024px in both color schemes and reader/writer roles. The verification ran on Linux.
 
+On `a989e7f2fcb4bb5f642ee28590f6ddd914b82e8c`, the two older extraction endpoints now share
+publication logic, and asset reads fetch identity in the existing query. The Rust, Node, and
+Chromium checks above passed again on Linux, including authorization, fixed-version reads,
+withdrawal, and replay.
+
 ## 2026-11-27 · Append extracted evidence
 
 Based on main `c1ab0d5a82b5e098f699288c78dcb6b1f99f0cf2` on Linux x86_64 with Rust 1.98.0.

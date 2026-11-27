@@ -265,25 +265,24 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
             .await?
             .ok_or(AppError::NotFound)?;
         tx.commit().await?;
-        if let JobPayload::IdentifiedExtract { identity, .. } = payload {
+        let drafts = if let JobPayload::IdentifiedExtract { identity, .. } = payload {
             let mut chunks = service.models.extract_identified(&text, identity).await?;
-            let mut tx = service.write(&a, Permission::Write).await?;
+            let mut tx = service.read(&a, Permission::Write).await?;
             guard(&mut tx, claim, payload).await?;
             let asset = claim.asset.ok_or(AppError::NotFound)?;
-            match tx.identity_for_asset(asset).await? {
-                Some(binding) if &binding != identity => {
-                    return Err(AppError::Conflict(
-                        "identified capture asset binding changed".into(),
-                    ));
-                }
-                None => {
-                    for chunk in &mut chunks {
-                        chunk.locator["suggested_identity"] = json!(identity);
-                    }
-                }
-                Some(_) => {}
+            let binding = tx.identity_for_asset(asset).await?;
+            tx.commit().await?;
+            if binding.as_ref().is_some_and(|binding| binding != identity) {
+                return Err(AppError::Conflict(
+                    "identified capture asset binding changed".into(),
+                ));
             }
-            let drafts = if chunks.is_empty() {
+            if binding.is_none() {
+                for chunk in &mut chunks {
+                    chunk.locator["suggested_identity"] = json!(identity);
+                }
+            }
+            if chunks.is_empty() {
                 Vec::new()
             } else {
                 vec![DraftMemory {
@@ -292,52 +291,50 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
                     expected_version: None,
                     chunks,
                 }]
-            };
-            tx.commit().await?;
-            let publication = prepare(service, claim, payload, profile, drafts).await?;
-            return publish_prepared(service, claim, payload, publication).await;
-        }
-        let memories = service.models.extract(&text).await?;
-        // Slot every fact under a short write tx; versions are re-verified at
-        // commit, so a race only supersedes the job without overwriting.
-        let mut tx = service.write(&a, Permission::Write).await?;
-        guard(&mut tx, claim, payload).await?;
-        let mut drafts = Vec::new();
-        let mut seen = std::collections::HashMap::<&str, std::collections::HashSet<&str>>::new();
-        for m in &memories {
-            let facts = seen.entry(&m.fact_key).or_default();
-            let first = facts.is_empty();
-            if !first_extracted_fact(facts, &m.content, claim.job_id) {
-                continue;
             }
-            let bound_asset = if first {
-                let (asset, version) = tx.slot(&m.fact_key).await?;
-                version.is_none().then_some(asset)
-            } else {
-                None
-            };
-            let mut chunks = parsing::chunks(&m.content, "text")?;
-            let (asset, fact_key) = if let Some(asset) = bound_asset {
-                (asset, Some(m.fact_key.clone()))
-            } else {
-                for chunk in &mut chunks {
-                    chunk.locator["suggested_fact_key"] = json!(m.fact_key);
+        } else {
+            let memories = service.models.extract(&text).await?;
+            let mut tx = service.write(&a, Permission::Write).await?;
+            guard(&mut tx, claim, payload).await?;
+            let mut drafts = Vec::new();
+            let mut seen =
+                std::collections::HashMap::<&str, std::collections::HashSet<&str>>::new();
+            for m in &memories {
+                let facts = seen.entry(&m.fact_key).or_default();
+                let first = facts.is_empty();
+                if !first_extracted_fact(facts, &m.content, claim.job_id) {
+                    continue;
                 }
-                let id = graph::entity_id(&format!(
-                    "capture-evidence:{}:{}",
-                    claim.job_id,
-                    drafts.len()
-                ));
-                (tx.reserve_capture_evidence_slot(id).await?, None)
-            };
-            drafts.push(DraftMemory {
-                asset,
-                fact_key,
-                expected_version: None,
-                chunks,
-            });
-        }
-        tx.commit().await?;
+                let mut chunks = parsing::chunks(&m.content, "text")?;
+                let slot = if first {
+                    Some(tx.slot(&m.fact_key).await?)
+                } else {
+                    None
+                };
+                let (asset, fact_key) = match slot {
+                    Some((asset, None)) => (asset, Some(m.fact_key.clone())),
+                    _ => {
+                        for chunk in &mut chunks {
+                            chunk.locator["suggested_fact_key"] = json!(m.fact_key);
+                        }
+                        let id = graph::entity_id(&format!(
+                            "capture-evidence:{}:{}",
+                            claim.job_id,
+                            drafts.len()
+                        ));
+                        (tx.reserve_capture_evidence_slot(id).await?, None)
+                    }
+                };
+                drafts.push(DraftMemory {
+                    asset,
+                    fact_key,
+                    expected_version: None,
+                    chunks,
+                });
+            }
+            tx.commit().await?;
+            drafts
+        };
         let publication = prepare(service, claim, payload, profile, drafts).await?;
         return publish_prepared(service, claim, payload, publication).await;
     }
@@ -944,8 +941,9 @@ async fn publish_prepared(
             result["extractor"] = json!(extractor);
         }
     } else if payload.kind() == JobKind::Extract {
-        let identity = if let (Some(asset), Some(_)) = (claim.asset, payload.identity()) {
-            tx.identity_for_asset(asset).await?
+        let identity = if matches!(payload, JobPayload::IdentifiedExtract { .. }) {
+            tx.identity_for_asset(claim.asset.ok_or(AppError::NotFound)?)
+                .await?
         } else {
             None
         };
