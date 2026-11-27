@@ -141,10 +141,10 @@ The Node.js UI uses these and the HTTP endpoints below. It never opens databases
 | `POST /v1/memories` | `{fact_key,content}` (`publish_if_authorized` is deprecated and accepted without effect) → `asset_id`, `source_event_id`, and `job_id`, `state:"accepted"`. `conflict` indicates append to an existing fact. |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`. The same scoped identity reuses the content item. `conflict` indicates an existing version. |
 | `POST /v1/memories/lookup` | Complete `{subject,predicate,context:{}}`, readable by reader. Returns the same current published view as `GET /v1/assets/{id}`. No Idempotency-Key or content item creation. |
-| `POST /v1/memories/retain` | Writer submits one of `{content}` or `{experience:{session_id,improve}}` with `Idempotency-Key`. Returns a job receipt. Also available as MCP `context_memory_retain`. |
-| `POST /v1/memories/long-term/recall` | Reader submits `{query,identity?,as_of_ms?,limit?,applicability_context?}` and receives `fact` and `experience` results. Use the `query` form of MCP `context_memory_recall`. See [long-term memory](contracts/memory-consolidation.md). |
-| `POST /v1/memories/long-term/lookup` | Reader submits `{identity,version?,as_of_ms?}` for an exact fact, timeline, and source evidence. Use the `identity` form of MCP `context_memory_recall`. |
-| `GET /v1/memories/long-term/{id}` | Reader uses the fact's `memory_id` to read the same detail. Optional query parameters are `version` and `as_of_ms`. |
+| `POST /v1/memories/retain` | Submit fact text or an experience source and receive a job receipt. See the [long-term memory contract](contracts/memory-consolidation.md). |
+| `POST /v1/memories/long-term/recall` | Retrieve facts and experiences together by query. |
+| `POST /v1/memories/long-term/lookup` | Read fact details by exact identity. |
+| `GET /v1/memories/long-term/{id}` | Read fact details by ID. |
 | `POST /v1/captures/semantic` | `{content,targets:[{identity}]}` → source/job. Bounded model classification reuses memory semantics, described below. |
 | `POST /v1/captures` | `{content}` → source/job. Saves extracted evidence individually. See job `result.memories`. |
 | `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`. Caller supplies the complete identity and the model only extracts source spans. Requires an extraction model. |

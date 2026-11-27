@@ -152,6 +152,10 @@ async fn completions(
                     candidate["statement"] =
                         json!(format!("{STATEMENT} Fixture {}.", item["turn"]["turn_id"]))
                 }
+                "multi_chunk" => {
+                    candidate["why"] =
+                        json!("Use evidence from Atlas production parsers. ".repeat(75))
+                }
                 _ => {}
             }
             let mut candidates = vec![candidate];
@@ -478,6 +482,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         .unwrap();
     let mut tool_request = experience.clone();
     tool_request["idempotency_key"] = json!("retain-experience");
+    fixture.set_mode("multi_chunk");
     let accepted = peer
         .call(&token, None, "context_memory_retain", tool_request)
         .await
@@ -507,21 +512,17 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         .unwrap();
     assert_eq!(legacy["job_id"], accepted["job_id"]);
     drain(&s).await;
-    assert_eq!(
-        s.improvement(&owner, improve_id).await.unwrap()["status"],
-        "completed"
-    );
+    let improvement = s.improvement(&owner, improve_id).await.unwrap();
+    assert_eq!(improvement["status"], "completed");
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 1);
 
     let request =
         json!({"query":"parsers","as_of_ms":1796083200000_i64,"applicability_context":[CONDITION]});
-    let qualified = |value: &Value| serde_json::from_value(value.clone()).unwrap();
-    let recalled = serde_json::to_value(
-        s.recall_long_term_memories(&reader, qualified(&request))
-            .await
-            .unwrap(),
-    )
-    .unwrap();
+    let recall = async |auth: &AuthContext| {
+        let input = serde_json::from_value(request.clone()).unwrap();
+        serde_json::to_value(s.recall_long_term_memories(auth, input).await.unwrap()).unwrap()
+    };
+    let recalled = recall(&reader).await;
     assert_eq!(recalled["memories"].as_array().unwrap().len(), 2);
     let fact = &recalled["memories"][0];
     assert_eq!(fact["kind"], "fact");
@@ -537,10 +538,31 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     assert_eq!(lesson["statement"], STATEMENT);
     assert_eq!(lesson["applicability"], "caller_context_exact_match");
     assert_eq!(lesson["citation"]["kind"], "chunk");
+    assert_eq!(
+        lesson["memory_id"],
+        improvement["learnings"][0]["learning_id"]
+    );
+    let indexed = s
+        .search(
+            &reader,
+            serde_json::from_value(json!({"query":"parsers","limit":100})).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        indexed["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|hit| hit["asset_id"] == lesson["citation"]["asset_id"])
+            .count()
+            > 1
+    );
+    let serialized = recalled.to_string();
     for private in [id(&turn, "source_event_id"), id(&turn, "turn_id"), session] {
-        assert!(!recalled.to_string().contains(&private.to_string()));
+        assert!(!serialized.contains(&private.to_string()));
     }
-    assert!(!recalled.to_string().contains(ANSWER));
+    assert!(!serialized.contains(ANSWER));
     let tool_recall = peer
         .call(&token, None, "context_memory_recall", request.clone())
         .await
@@ -566,13 +588,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         archived["used_evidence"][0]["reference"],
         lesson["citation"]
     );
-    assert!(
-        s.recall_long_term_memories(&other_workspace, qualified(&request))
-            .await
-            .unwrap()
-            .memories
-            .is_empty()
-    );
+    assert_eq!(recall(&other_workspace).await["memories"], json!([]));
 
     let mut earlier = request.clone();
     earlier["identity"] = fact["identity"].clone();
@@ -614,12 +630,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     )
     .await
     .unwrap();
-    let remaining = serde_json::to_value(
-        s.recall_long_term_memories(&reader, qualified(&request))
-            .await
-            .unwrap(),
-    )
-    .unwrap();
+    let remaining = recall(&reader).await;
     assert_eq!(remaining["memories"][0]["state"]["value"], "1 reviewer");
     assert_eq!(remaining["memories"][1], *lesson);
     s.delete(
@@ -630,12 +641,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     )
     .await
     .unwrap();
-    let remaining = serde_json::to_value(
-        s.recall_long_term_memories(&reader, qualified(&request))
-            .await
-            .unwrap(),
-    )
-    .unwrap();
+    let remaining = recall(&reader).await;
     assert_eq!(remaining["memories"].as_array().unwrap().len(), 1);
     assert_eq!(remaining["memories"][0]["kind"], "fact");
     assert!(matches!(

@@ -172,6 +172,8 @@ impl MemoryView {
                 .or_default()
                 .insert(&fact.statement.value);
         }
+        let active_date = effective_date_at(by_date.keys().copied(), as_of_ms);
+        let mut current = ConclusionState::Unknown;
         let mut timeline: Vec<MemoryPeriod> = Vec::new();
         for (effective_from_ms, values) in by_date {
             let state = match values.first().filter(|_| values.len() == 1) {
@@ -180,6 +182,9 @@ impl MemoryView {
                 },
                 None => ConclusionState::Conflicting,
             };
+            if Some(effective_from_ms) == active_date {
+                current = state.clone();
+            }
             if timeline
                 .last()
                 .is_none_or(|previous| previous.state != state)
@@ -190,24 +195,25 @@ impl MemoryView {
                 });
             }
         }
-        let state = timeline
-            .iter()
-            .rev()
-            .find(|period| {
-                period
-                    .effective_from_ms
-                    .is_none_or(|start| start <= as_of_ms)
-            })
-            .map_or(ConclusionState::Unknown, |period| period.state.clone());
         Self {
             memory_id: revision.memory_id,
             version: revision.version,
             identity,
-            state,
+            state: current,
             timeline,
             evidence,
         }
     }
+}
+
+/// The outer option distinguishes no applicable evidence from an undated baseline.
+pub(crate) fn effective_date_at(
+    dates: impl Iterator<Item = Option<i64>>,
+    as_of_ms: i64,
+) -> Option<Option<i64>> {
+    dates
+        .filter(|date| date.is_none_or(|date| date <= as_of_ms))
+        .max()
 }
 
 const MAX_CONTENT: usize = 64 * 1024;

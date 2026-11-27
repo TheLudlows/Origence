@@ -206,10 +206,10 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ `asset_id` / `source_event_id` / `job_id` 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`；同 scope 下相同身份复用内容条目；`conflict` 表示已有版本 |
 | `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与 `GET /v1/assets/{id}` 相同的当前已发布视图；不需要 Idempotency-Key，不创建内容条目 |
-| `POST /v1/memories/retain` | writer 提交 `Idempotency-Key`，在 `{content}` 和 `{experience:{session_id,improve}}` 中选一项。返回作业回执。MCP 对应 `context_memory_retain`。 |
-| `POST /v1/memories/long-term/recall` | reader 提交 `{query,identity?,as_of_ms?,limit?,applicability_context?}`，一起召回 `fact` 和 `experience`。MCP 对应 `context_memory_recall` 的 `query` 形式。见[长期记忆](contracts/memory-consolidation.md)。 |
-| `POST /v1/memories/long-term/lookup` | `{identity,version?,as_of_ms?}`，reader 按精确身份读取事实的版本、时间线和证据。MCP 对应 `context_memory_recall` 的 `identity` 形式。 |
-| `GET /v1/memories/long-term/{id}` | reader 按 `memory_id` 读取同一事实详情，查询参数 `version` 和 `as_of_ms` 可选。 |
+| `POST /v1/memories/retain` | 提交事实原文或经验来源，返回作业回执。见[长期记忆契约](contracts/memory-consolidation.md)。 |
+| `POST /v1/memories/long-term/recall` | 按查询词一起召回事实和经验。 |
+| `POST /v1/memories/long-term/lookup` | 按完整身份读取事实详情。 |
+| `GET /v1/memories/long-term/{id}` | 按 ID 读取事实详情。 |
 | `POST /v1/captures/semantic` | `{content,targets:[{identity}]}` → source/job；受限模型分类并复用 记忆语义，详见下节 |
 | `POST /v1/captures` | `{content}` → source/job；逐条保存抽取证据，结果见任务 `result.memories` |
 | `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |

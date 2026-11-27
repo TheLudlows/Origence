@@ -1,7 +1,7 @@
 //! Context assembly keeps final provenance, permission and visibility checks in
 //! one fresh relational snapshot after all embedding/native retrieval IO.
 use crate::{
-    context_retrieval::{ContextCandidate, ContextRoute, ContextSessionTurn},
+    context_retrieval::{ContextCandidate, ContextLimit, ContextRoute, ContextSessionTurn},
     error::{AppError, Result},
     evidence::*,
     service::Service,
@@ -106,7 +106,7 @@ impl Service {
                             &query,
                             kind,
                             input.memory_identity.as_ref(),
-                            route.limit,
+                            ContextLimit::Chunks(route.limit),
                         ),
                     )
                     .await?;

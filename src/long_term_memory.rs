@@ -8,8 +8,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    consolidation::{ConclusionState, MemoryView, RETAIN_SOURCE_KIND},
-    context_retrieval::{CONTEXT_CANDIDATE_LIMIT, ContextRoute},
+    consolidation::{ConclusionState, MemoryView, RETAIN_SOURCE_KIND, effective_date_at},
+    context_retrieval::{ContextLimit, ContextRoute},
     error::{AppError, Result},
     evidence::{conditions_match, validate_applicability_context},
     learning::ImproveInput,
@@ -40,7 +40,7 @@ pub struct LongTermRetainInput {
     pub experience: Option<ExperienceSource>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LongTermRecallInput {
     pub query: String,
@@ -135,12 +135,12 @@ fn rank_facts(rows: Vec<FactSearchRow>, terms: &str) -> Vec<(Uuid, FactMatch)> {
 }
 
 fn recalled_fact(view: MemoryView, as_of_ms: i64, applicability: Applicability) -> RecalledMemory {
-    let date = view
-        .evidence
-        .iter()
-        .map(|evidence| evidence.effective_at_ms)
-        .filter(|date| date.is_none_or(|date| date <= as_of_ms))
-        .max();
+    let date = effective_date_at(
+        view.evidence
+            .iter()
+            .map(|evidence| evidence.effective_at_ms),
+        as_of_ms,
+    );
     let citations = view
         .evidence
         .into_iter()
@@ -238,7 +238,7 @@ impl Service {
                 &query,
                 ContextRoute::Learning,
                 None,
-                CONTEXT_CANDIDATE_LIMIT,
+                ContextLimit::Assets(limit),
             )
             .await?;
         let mut tx = self.read(auth, Permission::Read).await?;
@@ -269,38 +269,32 @@ impl Service {
                 }
             }
         }
-        let mut seen = BTreeSet::new();
         for candidate in experiences.candidates {
             let fresh = tx.refresh_context_candidate(candidate, None).await?;
             let learning = fresh
                 .learning
                 .ok_or_else(|| AppError::Conflict("experience metadata unavailable".into()))?;
-            if seen.insert(learning.learning_id) {
-                let applicability =
-                    if conditions_match(&learning.conditions, &input.applicability_context) {
-                        Applicability::CallerContextExactMatch
-                    } else {
-                        Applicability::Unverified
-                    };
-                memories.push(RecalledMemory::Experience {
-                    memory_id: learning.learning_id,
-                    version: fresh.hit.version,
-                    statement: learning.statement,
-                    why: learning.why,
-                    conditions: learning.conditions,
-                    applicability,
-                    citation: UsedEvidence {
-                        kind: EvidenceKind::Chunk,
-                        id: fresh.hit.chunk_id,
-                        asset_id: fresh.hit.asset_id,
-                        asset_version: fresh.hit.version,
-                        chunk_id: fresh.hit.chunk_id,
-                    },
-                });
-                if seen.len() == limit {
-                    break;
-                }
-            }
+            let applicability =
+                if conditions_match(&learning.conditions, &input.applicability_context) {
+                    Applicability::CallerContextExactMatch
+                } else {
+                    Applicability::Unverified
+                };
+            memories.push(RecalledMemory::Experience {
+                memory_id: learning.learning_id,
+                version: fresh.hit.version,
+                statement: learning.statement,
+                why: learning.why,
+                conditions: learning.conditions,
+                applicability,
+                citation: UsedEvidence {
+                    kind: EvidenceKind::Chunk,
+                    id: fresh.hit.chunk_id,
+                    asset_id: fresh.hit.asset_id,
+                    asset_version: fresh.hit.version,
+                    chunk_id: fresh.hit.chunk_id,
+                },
+            });
         }
         tx.commit().await?;
         Ok(LongTermRecall {

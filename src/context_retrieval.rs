@@ -4,7 +4,7 @@
 //! prepared once, then shared by every enabled document route. No summary,
 //! graph, publication or background work is introduced here.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,11 @@ pub(crate) enum ContextRoute {
 
 pub(crate) const CONTEXT_CANDIDATE_LIMIT: usize = 100;
 pub(crate) const SESSION_SCAN_LIMIT: usize = 512;
+
+pub(crate) enum ContextLimit {
+    Chunks(usize),
+    Assets(usize),
+}
 
 /// One query embedding and one explicit fallback decision for all routes.
 pub(crate) struct ContextQuery {
@@ -193,8 +198,12 @@ impl Service {
         query: &ContextQuery,
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
-        limit: usize,
+        limit: ContextLimit,
     ) -> Result<ContextCandidateResult> {
+        let (limit, unique_assets) = match limit {
+            ContextLimit::Chunks(count) => (count, false),
+            ContextLimit::Assets(count) => (count, true),
+        };
         if !(1..=CONTEXT_CANDIDATE_LIMIT).contains(&limit) {
             return Err(AppError::Invalid("context candidate limit invalid".into()));
         }
@@ -375,7 +384,12 @@ impl Service {
         }
         let fused = fuse_context_branches(branches, query.effective_mode == "hybrid");
         let mut candidates = Vec::new();
+        // Keep all native rank proofs for the caller. Only selected chunks need content reads.
+        let mut assets = HashSet::new();
         for (hit, origins) in fused {
+            if unique_assets && !assets.insert(hit.asset_id) {
+                continue;
+            }
             if let Some(mut candidate) = tx.context_candidate(hit.chunk_id, route, identity).await?
             {
                 candidate.hit.score = hit.score;
