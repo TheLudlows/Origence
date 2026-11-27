@@ -454,13 +454,14 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 }
 ```
 
-- question、answer 均须非空白，各不超过 65,536 UTF-8 字节。used_evidence 必填，显式 `[]` 表示未使用证据；缺省不是空数组。最多 64 条，不接受完全相同的重复引用。只提交实际用于回答的子集。
+- question、answer 均须非空白，各不超过 65,536 UTF-8 字节。`used_evidence` 必填，最多 64 条且不接受重复引用。只提交实际用于回答的子集。`evidence_use` 省略或为 `reported` 时，显式 `[]` 表示未使用证据。
+- 无法观察实际使用时，可提交 `evidence_use:"unknown"` 和 `used_evidence:[]`。轮次 GET 与私有 EvidenceBundle 引用保留 `unknown`，归档正文仍按逻辑 key 隔离。这样的轮次可以记录私有反馈，Improve 将其标记为 `evidence_use_unknown` 并跳过。
 - 引用 kind 为 chunk/entity/relation。chunk 的 id 必须等于 chunk_id；图引用的 id 是实体/关系 ID，chunk_id 由调用方选择为该次实际使用的支持片段。asset_version 是正整数的精确历史内容条目版本，不是当前版本别名。
 - 服务端核验片段、内容条目版本、根来源、所有记忆语义快照支持来源与所属 scope。图引用还需匹配 kind/id/根来源/版本的 owner 和 committed graph ledger。当前图所有权是来源/版本级；所选片段必须属于同一支持来源/版本，本接口不声称已有逐片段图抽取对齐证明。
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该内容条目快照根来源，reference.asset_version 是实际使用的内容条目版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执，任一引用失败则回滚。
+归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文、证据状态和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执，任一引用失败则回滚。
 
 反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
 

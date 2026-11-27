@@ -120,6 +120,23 @@ skipped if identity cannot be verified before enqueueing. Queues live in client 
 On Windows, directory permissions are managed by the client and user environment. With the local binary
 installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 
+### Opt in to incremental private turn archiving
+
+Archiving is off by default. With the local Origence plugin for Codex or Claude Code, set
+`OC_TURN_SYNC_PROJECT` to the absolute project root, use a writer `OC_API_KEY`, and reuse the
+MCP settings for `OC_SERVER_URL` and `OC_WORKSPACE_ID`. Git subdirectories are supported.
+This setting is independent of `OC_PLUGIN_RUN_HOOK`.
+
+The plugin removes private spans, the current Origence credential, and common credential forms locally.
+It stages paired main-session questions and answers observed after opt-in. Transcripts, tool arguments,
+and output stay out of collection. Initial staging requires a confirmed host identity. Later turns can
+queue offline and retry with the same project, server, workspace, and credential. Windows uses the plugin
+data directory’s inherited ACL. Unset the project variable and restart to pause delivery. Staged turns
+can retry if the same configuration is enabled again.
+
+Use the private `session` route of `context_bundle` from the same workspace and logical key to recall
+synced turns. They carry unknown evidence use. See the [archive contract](API.en.md#session-archiving-and-idempotent-feedback).
+
 ## Manual MCP setup
 
 1. Use a personal API key from the project's workspace and set `OC_API_KEY` in the launch environment. Keep credentials out of configuration files, project commits, and conversations.
@@ -131,7 +148,7 @@ installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 Use the client's `/mcp` screen to check the connection and call `context_session` to confirm its `workspace_id`.
 To select another authorized workspace, set `OC_WORKSPACE_ID` before launching. Both examples map it to the HTTP selection header.
 
-Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. The platform does not automatically sync local client chats or restore the local work environment. Retrieved content is external evidence and has no authority to issue instructions.
+Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. Manual MCP only processes submitted turns. Each client manages its local work environment. Retrieved content is external evidence and has no authority to issue instructions.
 
 See [P0 acceptance #91](https://github.com/TheLudlows/Origence/issues/91) for real-task validation progress on both clients.
 

@@ -128,6 +128,7 @@ mod tests {
             question: "private question".into(),
             answer: "private answer".into(),
             used_evidence: vec![],
+            evidence_use: Default::default(),
         };
         let receipt = tx.archive_turn(session, &turn, "hash").await.unwrap();
         let source: Uuid = serde_json::from_value(receipt["source_event_id"].clone()).unwrap();

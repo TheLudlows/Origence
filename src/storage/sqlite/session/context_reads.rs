@@ -235,12 +235,7 @@ impl SqliteTx {
             .ok_or(StorageError::NotFound)?
             .try_get("created_at")
             .map_err(sqlite_err)?;
-        #[derive(serde::Deserialize)]
-        struct Body {
-            question: String,
-            answer: String,
-        }
-        let body: Body = decode(&body)?;
+        let body: crate::session::ArchivedTurnBody = decode(&body)?;
         let (session_id, turn_id) = batch.keys[index];
         Ok(Some(crate::context_retrieval::ContextSessionTurn {
             session_id,
@@ -249,6 +244,7 @@ impl SqliteTx {
             question: body.question,
             answer: body.answer,
             evidence,
+            evidence_use: body.evidence_use,
             created_at,
             score: 0.0,
         }))

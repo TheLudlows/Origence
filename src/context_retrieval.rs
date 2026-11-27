@@ -98,6 +98,7 @@ pub(crate) struct ContextSessionTurn {
     pub question: String,
     pub answer: String,
     pub evidence: Vec<ArchivedEvidence>,
+    pub evidence_use: crate::session::EvidenceUse,
     pub created_at: i64,
     pub score: f64,
 }

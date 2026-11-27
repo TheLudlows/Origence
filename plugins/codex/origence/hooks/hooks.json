@@ -48,6 +48,18 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 3,
+            "command": "origence plugin-hook --client codex",
+            "commandWindows": "origence.exe plugin-hook --client codex"
+          }
+        ]
+      }
     ]
   }
 }

@@ -113,6 +113,20 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 已安装本机二进制时，可在启动前设置 `OC_PLUGIN_RUN_HOOK=0` 停止上报。
 继续使用原有项目配置时，关闭插件 Hook 并沿用下文的独立发送器。
 
+### 按项目开启私有问答增量归档
+
+功能默认关闭。用本机 Origence 插件运行 Codex 或 Claude Code 时，将 `OC_TURN_SYNC_PROJECT` 设为项目根目录的绝对路径，
+提供有写权限的 `OC_API_KEY`，并沿用 MCP 的 `OC_SERVER_URL` 和 `OC_WORKSPACE_ID`。
+Git 项目可从仓库子目录启动。此开关独立于 `OC_PLUGIN_RUN_HOOK`。
+
+插件在本地过滤 `<private>…</private>`、当前 Origence 凭据和常见凭据，只暂存启用后能配对的主会话问答。
+原始会话文件、工具参数和输出不采集。首次暂存前需在线确认归档归属，后续可离线排队。
+重试限于同一项目、服务、工作区和凭据，Windows 使用插件数据目录继承的 ACL。
+移除变量并重启可暂停，已暂存的问答会在同一配置再次启用时重试。
+
+同一工作区和逻辑 key 可通过 `context_bundle` 的私有 `session` 路线召回。
+同步问答的证据使用状态为 `unknown`。见[归档契约](API.md#会话归档与幂等反馈)。
+
 ## 手工 MCP 接入
 
 1. 使用项目所属 workspace 的个人 API key，通过启动环境提供 `OC_API_KEY`。
@@ -131,8 +145,8 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用
 `context_session` 会得到同一个平台归档，再用 `context_turn_get` 按 turn UUID
-读取（需 writer 权限）。给两个客户端分别签发独立 key 时，它们的归档互不可见。平台不会自动同步
-客户端的本地聊天记录，也不会恢复客户端的工作现场。
+读取（需 writer 权限）。给两个客户端分别签发独立 key 时，它们的归档互不可见。手工 MCP 接入只处理
+调用方提交的轮次，客户端的工作现场由各自宿主维护。
 检索内容是外部证据，不是可直接执行的指令。
 
 双客户端真实任务的验收进度见 [P0 验收 #91](https://github.com/TheLudlows/Origence/issues/91)。

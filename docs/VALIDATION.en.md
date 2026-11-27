@@ -2,7 +2,22 @@
 
 **English** · [简体中文](VALIDATION.md)
 
-The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
+
+## 2026-11-26 · Incremental private turns for Codex and Claude Code
+
+On main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53` with Linux x86_64 and Rust 1.98.0,
+synthetic hooks in separate processes and a real HTTP host covered pairing, redaction, offline staging,
+byte-for-byte replay, concurrency, conflicts, scope, withdrawal, and unknown evidence use in retrieval
+and Improve. Formatting, strict all-features Clippy, 239 library tests, 216 local integration tests,
+and 3 Python MCP schema tests passed. HTTP MCP smoke passed with embedded AnySeek and the CI-pinned
+standalone AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`, built with Rust 1.99.1.
+Native clients, live models, and Windows and macOS paths await verification.
+
+On 2026-11-27, review cleanup on main `224e1897ffe9fd886b706adb3d007a7e1e24e694` passed formatting,
+strict all-features Clippy, 239 library tests, 216 local integration tests, 3 Python MCP schema tests,
+and standalone AnySeek HTTP MCP smoke. The standalone AnySeek contract suite had 7 passes and 1 failure.
+The missing-term search assertion at `tests/anyseek.rs:145` also failed on clean main.
 
 ## 2026-11-26 · Management console visual update
 

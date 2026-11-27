@@ -582,12 +582,12 @@ impl SqliteTx {
             // for each reference before writing an unreadable archive.
             self.require_archived_evidence_set_visible(&evidence)
                 .await?;
+            let mut body = json!({"question":input.question,"answer":input.answer});
+            if !input.evidence_use.is_reported() {
+                body["evidence_use"] = json!(input.evidence_use);
+            }
             let source = self
-                .create_event(
-                    "session_turn",
-                    &json!({"question":input.question,"answer":input.answer}).to_string(),
-                    None,
-                )
+                .create_event("session_turn", &body.to_string(), None)
                 .await?;
             sqlite_db::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
@@ -611,15 +611,17 @@ impl SqliteTx {
             .event_content(source, true)
             .await?
             .ok_or(StorageError::NotFound)?;
-        let body: Value = decode(&body)?;
+        let body: crate::session::ArchivedTurnBody = decode(&body)?;
         let (created_by, created_at): (Uuid, i64) = sqlite_db::query_as("SELECT created_by,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
         let evidence = self.turn_evidence(session, turn).await?;
         let feedback = self.feedback_rows(session, turn).await?;
-        Ok(
-            json!({"session_id":session,"turn_id":turn,"source_event_id":source,"question":body["question"],"answer":body["answer"],"used_evidence":evidence,"feedback":feedback,"created_by":created_by,"created_at":created_at}),
-        )
+        let mut view = json!({"session_id":session,"turn_id":turn,"source_event_id":source,"question":body.question,"answer":body.answer,"used_evidence":evidence,"feedback":feedback,"created_by":created_by,"created_at":created_at});
+        if !body.evidence_use.is_reported() {
+            view["evidence_use"] = json!(body.evidence_use);
+        }
+        Ok(view)
     }
 
     async fn feedback_rows(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Vec<Value>> {

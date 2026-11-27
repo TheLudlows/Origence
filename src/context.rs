@@ -277,6 +277,7 @@ fn session_item(turn: ContextSessionTurn) -> EvidenceItem {
             turn_id: turn.turn_id,
             source_event_id: turn.source_event_id,
             used_evidence: turn.evidence,
+            evidence_use: turn.evidence_use,
             created_at: turn.created_at,
         },
         identity: None,

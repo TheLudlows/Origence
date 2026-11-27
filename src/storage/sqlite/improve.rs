@@ -4,7 +4,7 @@ use crate::learning::{
     FrozenFeedback, FrozenSnapshot, FrozenTurn, ImproveInput, ImproveRun, LearningCandidate,
     MAX_CANDIDATES, MAX_SNAPSHOT_BYTES, SkippedFeedback,
 };
-use crate::session::{ArchivedEvidence, FeedbackInput};
+use crate::session::{ArchivedEvidence, ArchivedTurnBody, FeedbackInput};
 
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
 
@@ -345,19 +345,21 @@ impl SqliteTx {
         Ok(())
     }
 
-    async fn frozen_turn(&mut self, session: Uuid, turn: Uuid) -> StorageResult<FrozenTurn> {
+    async fn frozen_turn(
+        &mut self,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<Option<FrozenTurn>> {
         let source = self.require_turn_visible(session, turn).await?;
         let content = self
             .event_content(source, true)
             .await?
             .ok_or(StorageError::NotFound)?;
-        let body: Value = decode(&content)?;
-        let question = body["question"]
-            .as_str()
-            .ok_or_else(|| StorageError::Unavailable("invalid archived turn".into()))?;
-        let answer = body["answer"]
-            .as_str()
-            .ok_or_else(|| StorageError::Unavailable("invalid archived turn".into()))?;
+        let body: ArchivedTurnBody = decode(&content)?;
+        // Shared Learning requires a complete, revocable support chain.
+        if !body.evidence_use.is_reported() {
+            return Ok(None);
+        }
         let rows: Vec<String> = sqlite_db::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -365,14 +367,14 @@ impl SqliteTx {
             .iter()
             .map(|row| decode(row))
             .collect::<StorageResult<_>>()?;
-        Ok(FrozenTurn {
+        Ok(Some(FrozenTurn {
             session_id: session,
             turn_id: turn,
             source_event_id: source,
-            question: question.into(),
-            answer: answer.into(),
+            question: body.question,
+            answer: body.answer,
             used_evidence,
-        })
+        }))
     }
 
     /// Accept and freeze in the same transaction as registration of `job_id`.
@@ -436,8 +438,8 @@ impl SqliteTx {
         let mut snapshot = FrozenSnapshot::default();
         let mut target = lower;
         for (sequence, principal_id, feedback_id, turn_id, body) in rows {
-            match self.frozen_turn(session, turn_id).await {
-                Ok(turn) => {
+            let skip_reason = match self.frozen_turn(session, turn_id).await {
+                Ok(Some(turn)) => {
                     let feedback: FeedbackInput = decode(&body)?;
                     if feedback.feedback_id != feedback_id {
                         return Err(StorageError::Unavailable(
@@ -465,27 +467,24 @@ impl SqliteTx {
                         }
                         break;
                     }
+                    None
                 }
-                Err(StorageError::NotFound) => {
-                    snapshot.skipped.push(SkippedFeedback {
-                        sequence,
-                        principal_id,
-                        feedback_id,
-                        turn_id,
-                        reason: "source_not_visible".into(),
-                    });
-                    if encode(&snapshot)?.len() > MAX_SNAPSHOT_BYTES
-                        || encode(
-                            &json!({"conditions":input.conditions,"feedback":snapshot.items}),
-                        )?
-                        .len()
-                            > MAX_SNAPSHOT_BYTES
-                    {
-                        snapshot.skipped.pop();
-                        break;
-                    }
-                }
+                Ok(None) => Some("evidence_use_unknown"),
+                Err(StorageError::NotFound) => Some("source_not_visible"),
                 Err(error) => return Err(error),
+            };
+            if let Some(reason) = skip_reason {
+                snapshot.skipped.push(SkippedFeedback {
+                    sequence,
+                    principal_id,
+                    feedback_id,
+                    turn_id,
+                    reason: reason.into(),
+                });
+                if encode(&snapshot)?.len() > MAX_SNAPSHOT_BYTES {
+                    snapshot.skipped.pop();
+                    break;
+                }
             }
             target = sequence;
         }
@@ -547,7 +546,11 @@ impl SqliteTx {
         self.check_permission(Permission::Write).await?;
         for item in &run.snapshot.items {
             if item.turn.session_id != run.session_id
-                || self.frozen_turn(run.session_id, item.turn.turn_id).await? != item.turn
+                || self
+                    .frozen_turn(run.session_id, item.turn.turn_id)
+                    .await?
+                    .as_ref()
+                    != Some(&item.turn)
             {
                 return Err(StorageError::NotFound);
             }

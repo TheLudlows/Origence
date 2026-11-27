@@ -149,6 +149,11 @@ pub enum EvidenceProvenance {
         turn_id: Uuid,
         source_event_id: Uuid,
         used_evidence: Vec<crate::session::ArchivedEvidence>,
+        #[serde(
+            default,
+            skip_serializing_if = "crate::session::EvidenceUse::is_reported"
+        )]
+        evidence_use: crate::session::EvidenceUse,
         created_at: i64,
     },
 }

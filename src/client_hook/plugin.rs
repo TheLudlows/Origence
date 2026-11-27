@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 use uuid::Uuid;
@@ -16,17 +17,28 @@ use uuid::Uuid;
 const BUDGET: Duration = Duration::from_secs(2);
 const KEY_ENV: &str = "OC_API_KEY";
 
+#[derive(Default)]
+pub struct PluginHookReport {
+    pub run_delivery_failed: bool,
+    pub turn_sync_notice: Option<&'static str>,
+}
+
 /// A plugin invocation uses the MCP launch environment and the client's writable
 /// plugin data directory. It never accepts an origin, credential or scope from stdin.
-pub async fn capture_plugin_event(client: Client, origin: &str) -> anyhow::Result<()> {
-    if std::env::var_os("OC_PLUGIN_RUN_HOOK").is_some_and(|value| value == "0") {
-        return Ok(());
+pub async fn capture_plugin_event(
+    client: Client,
+    origin: &str,
+) -> anyhow::Result<PluginHookReport> {
+    let run_enabled = std::env::var_os("OC_PLUGIN_RUN_HOOK").is_none_or(|value| value != "0");
+    let archive = std::env::var_os("OC_TURN_SYNC_PROJECT").map(PathBuf::from);
+    if !run_enabled && archive.is_none() {
+        return Ok(PluginHookReport::default());
     }
     let Some(token) = std::env::var(KEY_ENV)
         .ok()
         .filter(|value| valid_token(value))
     else {
-        return Ok(());
+        return Ok(PluginHookReport::default());
     };
     let workspace = std::env::var_os("OC_WORKSPACE_ID")
         .map(|value| {
@@ -40,15 +52,52 @@ pub async fn capture_plugin_event(client: Client, origin: &str) -> anyhow::Resul
         Client::Codex => "PLUGIN_DATA",
         Client::ClaudeCode => "CLAUDE_PLUGIN_DATA",
     };
-    let data = std::env::var_os(data_var).context("client did not provide plugin storage")?;
-    let payload =
-        tokio::task::spawn_blocking(|| read_bounded(std::io::stdin().lock(), HOOK_LIMIT)).await??;
-    tokio::time::timeout(
-        BUDGET,
-        record(client, origin, workspace, token, data.into(), payload),
-    )
-    .await
-    .context("hook delivery deadline elapsed")?
+    let data =
+        PathBuf::from(std::env::var_os(data_var).context("client did not provide plugin storage")?);
+    let payload: Arc<[u8]> =
+        tokio::task::spawn_blocking(|| read_bounded(std::io::stdin().lock(), HOOK_LIMIT))
+            .await??
+            .into();
+    let run = async {
+        if run_enabled {
+            return tokio::time::timeout(
+                BUDGET,
+                record(
+                    client,
+                    origin,
+                    workspace,
+                    token.clone(),
+                    data.clone(),
+                    payload.clone(),
+                ),
+            )
+            .await
+            .context("hook delivery deadline elapsed")?;
+        }
+        Ok(())
+    };
+    let sync = async {
+        match archive {
+            Some(project) => {
+                super::turn_sync::sync_plugin_turn(
+                    client,
+                    origin,
+                    workspace,
+                    token.clone(),
+                    data.clone(),
+                    project,
+                    payload.clone(),
+                )
+                .await
+            }
+            None => Ok(None),
+        }
+    };
+    let (run, sync) = tokio::join!(run, sync);
+    Ok(PluginHookReport {
+        run_delivery_failed: run.is_err(),
+        turn_sync_notice: sync.unwrap_or(Some("synchronization could not finish")),
+    })
 }
 
 async fn record(
@@ -57,7 +106,7 @@ async fn record(
     workspace: Option<Uuid>,
     token: String,
     data: PathBuf,
-    payload: Vec<u8>,
+    payload: Arc<[u8]>,
 ) -> anyhow::Result<()> {
     let (project, payload) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let cwd = std::env::current_dir()?.canonicalize()?;
@@ -143,7 +192,7 @@ async fn record(
     Ok(())
 }
 
-fn project_root(cwd: &Path) -> &Path {
+pub(super) fn project_root(cwd: &Path) -> &Path {
     cwd.ancestors()
         .find(|path| {
             let marker = path.join(".git");
@@ -159,6 +208,22 @@ fn plugin_queue(
     workspace: Uuid,
     key: Uuid,
 ) -> anyhow::Result<super::Queue> {
+    let directory = private_plugin_storage(data, project)?;
+    let scope = derived_uuid(digest(
+        b"origence-plugin-hook-queue-v1",
+        [
+            project.as_os_str().as_encoded_bytes(),
+            origin.as_bytes(),
+            workspace.as_bytes(),
+            key.as_bytes(),
+        ],
+    ));
+    Ok(super::Queue::new(
+        directory.join(format!("run-{scope}.queue")),
+    ))
+}
+
+pub(super) fn private_plugin_storage(data: &Path, project: &Path) -> anyhow::Result<PathBuf> {
     ensure!(data.is_absolute(), "plugin storage path must be absolute");
     let parent = data
         .ancestors()
@@ -186,21 +251,10 @@ fn plugin_queue(
         directory.is_dir() && !directory.starts_with(project),
         "plugin storage must be outside the project"
     );
-    let scope = derived_uuid(digest(
-        b"origence-plugin-hook-queue-v1",
-        [
-            project.as_os_str().as_encoded_bytes(),
-            origin.as_bytes(),
-            workspace.as_bytes(),
-            key.as_bytes(),
-        ],
-    ));
-    Ok(super::Queue::new(
-        directory.join(format!("run-{scope}.queue")),
-    ))
+    Ok(directory)
 }
 
-fn id(value: &Value) -> Option<Uuid> {
+pub(super) fn id(value: &Value) -> Option<Uuid> {
     value
         .as_str()?
         .parse::<Uuid>()

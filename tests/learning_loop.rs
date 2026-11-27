@@ -1290,6 +1290,20 @@ async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_sn
     let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let hidden = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &hidden, Uuid::new_v4()).await;
+    let unknown = s
+        .archive_turn(
+            &a,
+            "turn-with-unknown-evidence",
+            session,
+            serde_json::from_value(json!({
+                "turn_id": Uuid::new_v4(), "question": "Question without observed evidence",
+                "answer": "Private answer", "used_evidence": [], "evidence_use": "unknown"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    feedback(&s, &a, &unknown, Uuid::new_v4()).await;
     let visible = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &visible, Uuid::new_v4()).await;
     s.delete(
@@ -1302,12 +1316,15 @@ async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_sn
     .unwrap();
     drain(&s).await;
     let receipt = improve(&s, &a, session).await;
-    assert_eq!(receipt["skipped_count"], 1);
+    assert_eq!(receipt["skipped_count"], 2);
     let frozen = snapshot(&s, id(&receipt, "improve_id")).await;
     assert_eq!(frozen["items"].as_array().unwrap().len(), 1);
     assert_eq!(frozen["skipped"][0]["turn_id"], hidden["turn_id"]);
     assert!(frozen["skipped"][0].get("question").is_none());
     assert!(frozen["skipped"][0].get("answer").is_none());
+    assert_eq!(frozen["skipped"][1]["turn_id"], unknown["turn_id"]);
+    assert_eq!(frozen["skipped"][1]["reason"], "evidence_use_unknown");
+    assert!(!frozen.to_string().contains("Private answer"));
     s.delete(
         &a,
         "hide-after-freeze",

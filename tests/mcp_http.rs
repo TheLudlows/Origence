@@ -578,13 +578,23 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
     );
 
     let turn = Uuid::new_v4();
-    peer.call(token, None, "context_turn_archive", json!({"turn":{"turn_id":turn,"question":"Synthetic question","answer":"Synthetic answer","used_evidence":[]}})).await.unwrap();
-    assert_eq!(
-        peer.call(token, None, "context_turn_get", json!({"turn_id":turn}))
-            .await
-            .unwrap()["answer"],
-        "Synthetic answer"
-    );
+    peer.call(
+        token,
+        None,
+        "context_turn_archive",
+        json!({"turn": {
+            "turn_id": turn, "question": "Synthetic question", "answer": "Synthetic answer",
+            "used_evidence": [], "evidence_use": "unknown"
+        }}),
+    )
+    .await
+    .unwrap();
+    let archived = peer
+        .call(token, None, "context_turn_get", json!({"turn_id":turn}))
+        .await
+        .unwrap();
+    assert_eq!(archived["answer"], "Synthetic answer");
+    assert_eq!(archived["evidence_use"], "unknown");
     assert!(
         peer.call(
             token,

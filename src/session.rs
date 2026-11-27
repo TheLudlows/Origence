@@ -55,6 +55,32 @@ impl UsedEvidence {
     }
 }
 
+/// Whether the caller can report the evidence used in the turn.
+#[derive(
+    Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceUse {
+    #[default]
+    Reported,
+    Unknown,
+}
+
+impl EvidenceUse {
+    pub(crate) fn is_reported(&self) -> bool {
+        *self == Self::Reported
+    }
+}
+
+#[cfg(feature = "sqlite")]
+#[derive(Deserialize)]
+pub(crate) struct ArchivedTurnBody {
+    pub question: String,
+    pub answer: String,
+    #[serde(default)]
+    pub evidence_use: EvidenceUse,
+}
+
 /// Immutable input for a turn in the session identified by the request path.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -63,8 +89,11 @@ pub struct SessionTurnInput {
     pub turn_id: Uuid,
     pub question: String,
     pub answer: String,
-    /// Required even when empty: an empty list explicitly reports no evidence.
+    /// Required even when empty. With reported coverage, an empty list reports no use.
     pub used_evidence: Vec<UsedEvidence>,
+    /// Legacy requests omit this field and report their evidence explicitly.
+    #[serde(default, skip_serializing_if = "EvidenceUse::is_reported")]
+    pub evidence_use: EvidenceUse,
 }
 
 impl SessionTurnInput {
@@ -82,6 +111,9 @@ impl SessionTurnInput {
         }
         if self.used_evidence.len() > MAX_USED_EVIDENCE {
             return Err("used_evidence must contain at most 64 references");
+        }
+        if !self.evidence_use.is_reported() && !self.used_evidence.is_empty() {
+            return Err("unknown evidence use requires an empty used_evidence list");
         }
         let mut seen = HashSet::with_capacity(self.used_evidence.len());
         for reference in &self.used_evidence {
@@ -223,6 +255,7 @@ mod tests {
             question: "What changed?".into(),
             answer: "The supported value changed.".into(),
             used_evidence: Vec::new(),
+            evidence_use: EvidenceUse::Reported,
         }
     }
 
@@ -255,6 +288,27 @@ mod tests {
             extra[field] = json!(Uuid::new_v4());
             assert!(serde_json::from_value::<SessionTurnInput>(extra).is_err());
         }
+    }
+
+    #[test]
+    fn turn_distinguishes_unknown_evidence_from_an_explicit_empty_report() {
+        let mut unknown = turn();
+        assert!(
+            serde_json::to_value(&unknown)
+                .unwrap()
+                .get("evidence_use")
+                .is_none()
+        );
+        unknown.evidence_use = EvidenceUse::Unknown;
+        assert_eq!(unknown.validate(), Ok(()));
+        let wire = serde_json::to_value(&unknown).unwrap();
+        assert_eq!(wire["evidence_use"], "unknown");
+        assert_eq!(
+            serde_json::from_value::<SessionTurnInput>(wire).unwrap(),
+            unknown
+        );
+        unknown.used_evidence.push(evidence());
+        assert!(unknown.validate().is_err());
     }
 
     #[test]

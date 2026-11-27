@@ -2,10 +2,23 @@
 
 **简体中文** · [English](VALIDATION.en.md)
 
-最近一次本地核验为 2026-11-26，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
+最近一次本地核验为 2026-11-27，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-26 · Codex 与 Claude Code 私有问答增量归档
+
+基于 main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`，Linux x86_64、Rust 1.98.0。
+跨进程合成 Hook 与真实 Origence HTTP 核对配对、脱敏、离线队列、回执丢失后逐字节重试、并发、内容冲突、
+Key 和工作区隔离、来源撤回及未知证据的召回和 Improve 跳过。格式检查、全特性严格 Clippy、239 项库测试、
+216 项本地集成测试和 3 项 Python MCP schema 测试通过。内嵌和 CI 固定的独立 AnySeek
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 的 HTTP MCP 冒烟均通过。独立夹具用 Rust 1.99.1 构建。
+原生客户端、真实模型和 Windows/macOS 路径待验证。
+
+2026-11-27 同步 main `224e1897ffe9fd886b706adb3d007a7e1e24e694` 后复核队列清理。格式检查、全特性严格
+Clippy、239 项库测试、216 项本地集成测试、3 项 Python MCP schema 测试和独立 AnySeek HTTP MCP 冒烟通过。
+独立 AnySeek 合约测试为 7 项通过、1 项失败。`tests/anyseek.rs:145` 的缺词检索断言在未改动的同一主干上复现。
 
 ## 2026-11-26 · 管理控制台视觉更新
 

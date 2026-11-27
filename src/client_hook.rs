@@ -2,11 +2,12 @@
 mod events;
 mod plugin;
 mod queue;
+mod turn_sync;
 
 use crate::{client::HostClient, error::AppError, run::RunInput};
 use anyhow::{Context, ensure};
 use events::HookInput;
-pub use plugin::capture_plugin_event;
+pub use plugin::{PluginHookReport, capture_plugin_event};
 use queue::{Queue, Record};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
