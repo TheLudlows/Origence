@@ -55,7 +55,7 @@ impl Service {
         digest: &str,
         approve: bool,
     ) -> Result<Value> {
-        let mut tx = self.write(auth, Permission::Publish).await?;
+        let mut tx = self.write(auth, Permission::Write).await?;
         tx.decide_skill_review(review, digest, approve).await?;
         tx.commit().await?;
         Ok(json!({"review_id":review,"approved":approve}))
@@ -66,7 +66,7 @@ impl Service {
         review: Uuid,
         digest: &str,
     ) -> Result<SkillPackage> {
-        let mut tx = self.write(auth, Permission::Publish).await?;
+        let mut tx = self.write(auth, Permission::Write).await?;
         let result = tx.publish_skill(review, digest).await?;
         tx.commit().await?;
         Ok(result)
@@ -88,7 +88,7 @@ impl Service {
         id: Uuid,
         version: u32,
     ) -> Result<Value> {
-        let mut tx = self.write(auth, Permission::Publish).await?;
+        let mut tx = self.write(auth, Permission::Write).await?;
         tx.withdraw_skill(id, version).await?;
         tx.commit().await?;
         Ok(json!({"skill_id":id,"version":version,"withdrawn":true}))

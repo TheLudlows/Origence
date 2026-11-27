@@ -376,7 +376,7 @@ function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
 
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
-  const drafting = ["writer", "reviewer", "admin"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
+  const drafting = ["writer", "admin"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
   const assessments = el("div");
   const declarations = el("div", "", el("p", "muted", "正在读取采集声明…"));
   const coverage = panel("采集声明", declarations);

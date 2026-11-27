@@ -119,7 +119,7 @@ def main():
             first = publish_policy(host, 1)
             asset = first["asset_id"]
             second = publish_policy(host, 2, asset)
-            other = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reviewer"})["token"]
+            other = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "writer"})["token"]
             forbidden.append(other)
             run = report_from_codex(host, args.codex, project, owner, forbidden, asset)
             publish_policy(host, 3, asset)

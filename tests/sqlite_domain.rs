@@ -93,7 +93,7 @@ async fn knowledge_asset_and_restore_source() {
     }
 
     let mut tx = store.begin(p.auth.clone()).await.unwrap();
-    tx.check_permission(Permission::Review).await.unwrap();
+    tx.check_permission(Permission::Write).await.unwrap();
     let row = tx.restore_source(asset, 1).await.unwrap();
     assert_eq!(row["current_version"], 1);
     assert_eq!(row["source_event_id"], source.to_string());

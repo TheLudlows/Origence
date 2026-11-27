@@ -42,7 +42,7 @@ async function json(response, operation) {
 export async function identity(endpoint, token) {
   const response = await responseAt(endpoint, "/v1/whoami", { headers: { Authorization: "Bearer " + token } });
   const result = await json(await expect(response, 200, "API identity"), "API identity");
-  check(uuid.test(result.workspace_id) && uuid.test(result.id) && ["admin", "writer", "reader", "reviewer"].includes(result.role),
+  check(uuid.test(result.workspace_id) && uuid.test(result.id) && ["admin", "writer", "reader"].includes(result.role),
     "The API did not return an Origence workspace and key identity.");
   return result;
 }

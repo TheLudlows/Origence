@@ -141,7 +141,7 @@ impl SqliteTx {
             return Err(StorageError::Conflict("Skill revision changed".into()));
         }
         if review.is_nil()
-            || !Permission::Publish
+            || !Permission::Write
                 .granted_by(&self.live_role_for_principal(input.reviewer_id).await?)
         {
             return Err(StorageError::Forbidden);
@@ -206,7 +206,7 @@ impl SqliteTx {
         digest: &str,
         approve: bool,
     ) -> StorageResult<()> {
-        self.check_permission(Permission::Publish).await?;
+        self.check_permission(Permission::Write).await?;
         let (candidate, revision, reviewer, _, stored, decision) =
             self.skill_review_row(review).await?;
         if self.principal_id != reviewer {
@@ -242,7 +242,7 @@ impl SqliteTx {
         review: Uuid,
         digest: &str,
     ) -> StorageResult<SkillPackage> {
-        self.check_permission(Permission::Publish).await?;
+        self.check_permission(Permission::Write).await?;
         let (candidate, revision, reviewer, packet, stored, decision) =
             self.skill_review_row(review).await?;
         if decision != "approved" || stored != digest {
@@ -250,7 +250,7 @@ impl SqliteTx {
                 "exact Skill approval required".into(),
             ));
         }
-        if !Permission::Publish.granted_by(&self.live_role_for_principal(reviewer).await?) {
+        if !Permission::Write.granted_by(&self.live_role_for_principal(reviewer).await?) {
             return Err(StorageError::Forbidden);
         }
         let (owner, current) = self.skill_head(candidate).await?;
@@ -299,7 +299,7 @@ impl SqliteTx {
         Ok(package)
     }
     pub async fn withdraw_skill(&mut self, id: Uuid, version: u32) -> StorageResult<()> {
-        self.check_permission(Permission::Publish).await?;
+        self.check_permission(Permission::Write).await?;
         let result=sqlite_db::query("UPDATE oc_skill_packages SET withdrawn=1 WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(i64::from(version))
             .execute(&mut *self.tx).await.map_err(sqlite_err)?;

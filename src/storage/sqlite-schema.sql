@@ -48,7 +48,7 @@ CREATE TABLE oc_api_keys (
     tenant_id BLOB NOT NULL,
     workspace_id BLOB NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL CHECK (role IN ('reader','writer','reviewer','admin')),
+    role TEXT NOT NULL CHECK (role IN ('reader','writer','admin')),
     default_access INTEGER NOT NULL DEFAULT 1 CHECK (default_access IN (0,1)),
     allow_owned_workspaces INTEGER NOT NULL DEFAULT 0 CHECK (allow_owned_workspaces IN (0,1)),
     revoked INTEGER NOT NULL DEFAULT 0,
@@ -63,7 +63,7 @@ CREATE TABLE oc_workspace_key_grants (
     tenant_id BLOB NOT NULL,
     workspace_id BLOB NOT NULL,
     logical_key_id BLOB NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('reader','writer','reviewer','admin')),
+    role TEXT NOT NULL CHECK (role IN ('reader','writer','admin')),
     PRIMARY KEY (tenant_id, logical_key_id, workspace_id),
     FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id),
     FOREIGN KEY (tenant_id, logical_key_id) REFERENCES oc_api_keys(tenant_id, id)

@@ -42,9 +42,9 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 | `POST /v1/skill-candidates/{id}/reviews/{review}` | 选定审阅者、修订、发布目标和脱敏依据 |
 | `GET /v1/skill-reviews/{review}` | 选定审阅包与决定，不扩展到原会话或 Run |
 | `POST /v1/skill-reviews/{review}/decision` | 指定审阅者使用 `{digest,approve}` 批准或驳回精确内容 |
-| `POST /v1/skill-reviews/{review}/publish` | 有发布权者按 `{digest}` 发布已批准的不可变版本 |
+| `POST /v1/skill-reviews/{review}/publish` | writer 或 admin 按 `{digest}` 发布已批准的不可变版本 |
 | `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
-| `DELETE /v1/skills/{id}/versions/{version}` | 有发布权的角色撤回版本，阻断后续在线导出 |
+| `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续在线导出 |
 
 候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
 调用方提交候选，也可用选定经历 CLI 将手工填写的方法绑定到一个精确依据。包格式和边界见
@@ -127,9 +127,8 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | 角色 | 权限 |
 | --- | --- |
 | reader | 已发布内容 get/search/resolve |
-| writer | reader + 上传/原文件下载/知识入库/结构化记忆发布/capture/会话归档与反馈/任务查询；取消、重试自己任务 |
-| reviewer | writer + 版本恢复/操作其他主体任务 |
-| admin | reviewer + 内容条目删除/来源撤回/文件删除/失败清理任务重试 |
+| writer | reader + 上传、原文件下载、知识入库、结构化记忆发布、提取、会话归档与反馈、获授权任务的查询与控制、版本恢复、Skill 审阅与发布 |
+| admin | writer + 内容条目删除、来源撤回、文件删除、失败清理任务重试和工作区管理 |
 
 原始文件和任务可能涉及未发布数据，reader 不能读取。记忆与 capture 由 writer 授权直接发布，发布任务提交时重新核验权限与来源。
 

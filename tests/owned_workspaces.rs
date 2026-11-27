@@ -239,12 +239,11 @@ async fn owned_access_has_no_admin_or_second_level_capability() {
         .await
         .unwrap();
     let mut tx = store.begin(child.clone()).await.unwrap();
-    for permission in [Permission::Review, Permission::Publish, Permission::Delete] {
-        assert!(matches!(
-            tx.check_permission(permission).await,
-            Err(StorageError::Forbidden)
-        ));
-    }
+    tx.check_permission(Permission::Write).await.unwrap();
+    assert!(matches!(
+        tx.check_permission(Permission::Delete).await,
+        Err(StorageError::Forbidden)
+    ));
     assert!(matches!(
         tx.issue_scoped_key("admin").await,
         Err(StorageError::Forbidden)
@@ -633,7 +632,7 @@ mod retry_tests {
     }
 
     #[tokio::test]
-    async fn live_creator_allows_reviewer_retry_without_transferring_identity() {
+    async fn live_creator_allows_another_writer_to_retry_without_transferring_identity() {
         let dir = tempfile::tempdir().unwrap();
         let service = crate::support::open_service(dir.path(), Models::disabled())
             .await
@@ -641,9 +640,9 @@ mod retry_tests {
         let store = service.engine.relational();
         let (admin, _) = root(store, Uuid::new_v4()).await;
         let (writer, writer_token) = issue(store, &admin, "writer", false).await;
-        let (_, reviewer_token) = issue(store, &admin, "reviewer", false).await;
+        let (_, other_writer_token) = issue(store, &admin, "writer", false).await;
         let writer_auth = service.auth(&writer_token).await.unwrap();
-        let reviewer = service.auth(&reviewer_token).await.unwrap();
+        let other_writer = service.auth(&other_writer_token).await.unwrap();
         let accepted = service
             .knowledge(&writer_auth, "accept", input())
             .await
@@ -655,7 +654,7 @@ mod retry_tests {
             .await
             .unwrap();
         let retried = service
-            .job_action(&reviewer, "retry", job, "retry")
+            .job_action(&other_writer, "retry", job, "retry")
             .await
             .unwrap();
         assert_eq!(retried["state"], "pending");
@@ -667,7 +666,7 @@ mod retry_tests {
         assert_eq!(creator, writer.principal_id);
         assert!(origence::worker::process_next(&service).await.unwrap());
         assert_eq!(
-            service.job(&reviewer, job).await.unwrap()["state"],
+            service.job(&other_writer, job).await.unwrap()["state"],
             "completed"
         );
         service.engine.shutdown().await.unwrap();
@@ -682,10 +681,10 @@ mod retry_tests {
         let store = service.engine.relational();
         let (creator, creator_token) = root(store, Uuid::new_v4()).await;
         let (_, admin_token) = issue(store, &creator, "admin", false).await;
-        let (_, reviewer_token) = issue(store, &creator, "reviewer", false).await;
+        let (_, other_writer_token) = issue(store, &creator, "writer", false).await;
         let original = service.auth(&creator_token).await.unwrap();
         let admin = service.auth(&admin_token).await.unwrap();
-        let reviewer = service.auth(&reviewer_token).await.unwrap();
+        let other_writer = service.auth(&other_writer_token).await.unwrap();
         let accepted = service
             .knowledge(&original, "accept", input())
             .await
@@ -714,7 +713,9 @@ mod retry_tests {
             Err(AppError::NotFound)
         ));
         assert!(matches!(
-            service.job_action(&reviewer, "retry", job, "retry").await,
+            service
+                .job_action(&other_writer, "retry", job, "retry")
+                .await,
             Err(AppError::Forbidden)
         ));
         assert!(matches!(

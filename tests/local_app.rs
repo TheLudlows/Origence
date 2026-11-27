@@ -900,7 +900,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         &base,
         token,
         "/admin/keys",
-        json!({"workspace_id":bootstrap["workspace_id"],"role":"reviewer"}),
+        json!({"workspace_id":bootstrap["workspace_id"],"role":"writer"}),
     )
     .await;
     let revoked=post(&http,&base,actor["token"].as_str().unwrap(),"/v1/memories",json!({"fact_key":"revoked","content":"Never publish revoked work","publish_if_authorized":true})).await;
@@ -1510,9 +1510,14 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
     );
+    let restore_key = s.issue_key(&a, "writer").await.unwrap();
+    let restore_writer = s
+        .auth(restore_key["token"].as_str().unwrap())
+        .await
+        .unwrap();
     let restored = s
         .restore(
-            &a,
+            &restore_writer,
             "restore",
             id(&first, "asset_id"),
             RestoreInput {

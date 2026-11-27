@@ -203,7 +203,7 @@ def run_scenario(args, name, case, record, deadline):
         admin = space["token"]
         with Host(args.binary, env, admin, [admin, env["OC_ANYSEEK_API_KEY"]]) as host:
             keys = {}
-            for client, role in (("codex", "writer"), ("claude-code", "writer"), ("reviewer", "reviewer")):
+            for client, role in (("codex", "writer"), ("claude-code", "writer"), ("reviewer", "writer")):
                 keys[client] = host.request("/admin/keys", {"workspace_id": space["workspace_id"], "role": role})
                 host.forbidden.append(keys[client]["token"])
             rehearse(args, root / name, host, space, keys, name, case, record, deadline)

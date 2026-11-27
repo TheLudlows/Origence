@@ -74,7 +74,7 @@ export async function openRunReporter({
   }
   const identity = await (await request("/v1/whoami")).json()
     .catch(() => { throw new Error("Invalid Origence identity response."); });
-  if (identity?.workspace_id !== workspaceId || !["writer", "reviewer", "admin"].includes(identity.role)) {
+  if (identity?.workspace_id !== workspaceId || !["writer", "admin"].includes(identity.role)) {
     throw new Error("The selected workspace requires an Origence writer credential.");
   }
   const prefix = await request(`${runPath}/prefix?through_sequence=0`);

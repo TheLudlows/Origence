@@ -16,11 +16,11 @@ prefixes. No operation auto-publishes.
   workspace/Skill/version target, and selected redacted basis. Only that reviewer
   and the owner can read this packet. A reviewer gets no implicit raw archive access.
 - `decide_skill_review(review, packet_digest, approve)` requires the appointed
-  live Publish role. A decision is immutable. A new review ID is needed to change
+  credential to have live writer or admin access. A decision is immutable. A new review ID is needed to change
   the decision. Credential rotation requires a new reviewer appointment; candidate
   ownership survives an authorized logical-key rotation.
 - `publish_skill(review, packet_digest)` is a distinct explicit operation. It
-  rechecks current Publish authority, the approving credential, current candidate
+  rechecks current write access, the approving credential, current candidate
   revision, supporting source authority, and exact generated package. Any candidate
   edit invalidates prior approval, including a source or private-note edit.
 - Publication stores bounded immutable package bytes and provenance in the existing

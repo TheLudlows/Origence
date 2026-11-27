@@ -14,7 +14,7 @@ export const consoleSessionPath = "/api/console/session";
 const sessionSeconds = 8 * 60 * 60;
 const loginWindowMs = 10 * 60 * 1000;
 const cookieIdPattern = /^[A-Za-z0-9_-]{43}$/;
-const roleNames = new Set(["reader", "writer", "reviewer", "admin"]);
+const roleNames = new Set(["reader", "writer", "admin"]);
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 interface Session {

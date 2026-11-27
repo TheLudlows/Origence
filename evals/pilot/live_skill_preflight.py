@@ -306,7 +306,7 @@ def probe(args, report):
                 host.forbidden.append(key["token"])
                 return key
 
-            writer, reviewer = issue("writer"), issue("reviewer")
+            writer, reviewer = issue("writer"), issue("writer")
             marker = secrets.token_hex(12)
             name = "expense-check-" + secrets.token_hex(3)
             body = ("For an eligible claim return the smaller of the claim and 100 TEST units. "

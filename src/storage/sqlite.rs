@@ -108,7 +108,7 @@ pub(super) struct MaintenanceLock {
 }
 
 /// Roles an API key may hold (A2.2 role matrix).
-const ROLES: &[&str] = &["reader", "writer", "reviewer", "admin"];
+const ROLES: &[&str] = &["reader", "writer", "admin"];
 
 fn sqlite_err(e: sqlite_db::Error) -> StorageError {
     match e {

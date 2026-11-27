@@ -21,8 +21,8 @@ const keysPath = "/admin/keys";
 const grantsPath = "/admin/workspace-key-grants";
 const uuid = "[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const roles: [string, string][] = [
-  ["reader", "reader · 检索"], ["writer", "writer · 写入与 Run 上报"],
-  ["reviewer", "reviewer · 审阅与发布"], ["admin", "admin · 工作区管理"],
+  ["reader", "reader · 检索"], ["writer", "writer · 写入、审阅、发布及 Run 上报"],
+  ["admin", "admin · 工作区管理"],
 ];
 
 export function keysPage(mount: HTMLElement, ctx: ViewContext, workspace: { workspace_id: string; id: string; name: string }) {

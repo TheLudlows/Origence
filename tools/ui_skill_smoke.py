@@ -27,11 +27,11 @@ def main():
         forbidden = [admin, unrelated["token"]]
         with Host(str(binary), env, admin, forbidden, serve_args=("--local",)) as host:
             keys = {}
-            for role in ("writer", "reviewer", "reader"):
-                keys[role] = host.request("/admin/keys", {
+            for name, role in (("writer", "writer"), ("reviewer", "writer"), ("reader", "reader")):
+                keys[name] = host.request("/admin/keys", {
                     "workspace_id": workspace["workspace_id"], "role": role,
                 })
-                forbidden.append(keys[role]["token"])
+                forbidden.append(keys[name]["token"])
             policy = publish_policy(host, 1)
             data = {"api": host.base, "workspace": workspace["workspace_id"], "keys": keys,
                     "admin": admin, "outsider": unrelated["token"], "query": QUERY,

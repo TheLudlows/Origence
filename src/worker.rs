@@ -63,13 +63,6 @@ fn auth(claim: &ClaimedJob) -> AuthContext {
         role: String::new(),
     }
 }
-fn permission(payload: &JobPayload) -> Permission {
-    if payload.kind() == JobKind::Restore {
-        Permission::Publish
-    } else {
-        Permission::Write
-    }
-}
 fn first_extracted_fact<'a>(
     seen: &mut std::collections::HashSet<&'a str>,
     content: &'a str,
@@ -214,7 +207,7 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
         return Ok(());
     }
     let a = auth(claim);
-    let mut tx = service.read(&a, permission(payload)).await?;
+    let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let profile = payload.embedding_profile().map(str::to_owned);
     if profile.is_some() && profile != service.models.profile {
@@ -567,7 +560,7 @@ async fn prepare(
     // Applicability must survive normal knowledge chunking. Every Learning
     // chunk keeps the same immutable conditions/provenance, including chunks
     // that do not contain the source's leading conditions text.
-    let mut tx = service.read(&auth(claim), permission(payload)).await?;
+    let mut tx = service.read(&auth(claim), Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let mut learning_metadata = Vec::with_capacity(drafts.len());
     for draft in &drafts {
@@ -793,7 +786,7 @@ async fn publish_prepared(
     let graph_projection = graph_publication(claim, payload.kind(), &publication)?;
     let a = auth(claim);
     let entries = ledger(claim, &publication)?;
-    let mut tx = service.write(&a, permission(payload)).await?;
+    let mut tx = service.write(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     tx.save_publication(claim.job_id, &json!(publication))
         .await?;
@@ -846,7 +839,7 @@ async fn publish_prepared(
         .await?;
     // The graph projection was written in the same AnySeek group as chunks.
     // Only the final authority transaction may make those supports visible.
-    let mut tx = service.write(&a, permission(payload)).await?;
+    let mut tx = service.write(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     for memory in &publication.memories {
         let current = tx.asset_current_version(memory.asset).await?;

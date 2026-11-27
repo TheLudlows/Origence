@@ -12,14 +12,14 @@ pub struct AuthContext {
 
 impl AuthContext {
     pub fn require(&self, permission: &str) -> crate::error::Result<()> {
-        let allowed = match permission {
-            "read" => true,
-            "write" => matches!(self.role.as_str(), "writer" | "reviewer" | "admin"),
-            "review" | "publish" => matches!(self.role.as_str(), "reviewer" | "admin"),
-            "delete" => self.role == "admin",
-            _ => false,
+        use crate::storage::Permission;
+        let required = match permission {
+            "read" => Permission::Read,
+            "write" => Permission::Write,
+            "delete" => Permission::Delete,
+            _ => return Err(crate::error::AppError::Forbidden),
         };
-        if allowed {
+        if required.granted_by(&self.role) {
             Ok(())
         } else {
             Err(crate::error::AppError::Forbidden)

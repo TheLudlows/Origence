@@ -237,7 +237,7 @@ async function install(state, args) {
   const consoleSession = await consoleLogin(ui, account, config.password, config.workspace, config.key);
   try {
     status("console-account", "success", { account, workspace_id: config.workspace, role: who.role });
-    if (args["verify-write"] && ["writer", "reviewer", "admin"].includes(who.role)) {
+    if (args["verify-write"] && ["writer", "admin"].includes(who.role)) {
       state.value.probes ??= {};
       const scope = [endpoint.origin, who.workspace_id, who.id].join("/");
       const run = state.value.probes[scope] ??= randomUUID();

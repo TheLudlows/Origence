@@ -75,6 +75,9 @@ async function run(binary) {
     await page.getByText("当前控制台凭据", { exact: true }).waitFor();
     await page.getByRole("button", { name: "创建 API Key", exact: true }).click();
     const create = open("创建 API Key");
+    assert.deepEqual(await create.getByLabel("权限").locator("option").evaluateAll(
+      (options) => options.map((option) => option.value)
+    ), ["reader", "writer", "admin"]);
     await create.getByLabel("权限").selectOption("writer");
     await create.getByRole("button", { name: "创建", exact: true }).click();
     await open("保存新 API Key").waitFor();
@@ -92,16 +95,16 @@ async function run(binary) {
     await row(identity.id).waitFor();
     await row(identity.id).getByRole("button", { name: "调整权限" }).click();
     const role = open("调整工作区授权");
-    await role.getByLabel("权限").selectOption("reviewer");
+    await role.getByLabel("权限").selectOption("reader");
     await role.getByRole("button", { name: "保存授权" }).click();
-    await row(identity.id).getByRole("cell", { name: "reviewer", exact: true }).waitFor();
-    assert.equal((await (await whoami(token)).json()).role, "reviewer");
+    await row(identity.id).getByRole("cell", { name: "reader", exact: true }).waitFor();
+    assert.equal((await (await whoami(token)).json()).role, "reader");
     await row(identity.id).getByRole("button", { name: "移除本区授权" }).click();
     await open("移除工作区授权").getByRole("button", { name: "确认移除" }).click();
     await row(identity.id).getByRole("button", { name: "启用本区访问" }).click();
     assert.equal((await whoami(token, a.workspace_id)).status, 403);
     await role.getByRole("button", { name: "保存授权" }).click();
-    await row(identity.id).getByRole("cell", { name: "reviewer", exact: true }).waitFor();
+    await row(identity.id).getByRole("cell", { name: "reader", exact: true }).waitFor();
     await row(identity.id).getByRole("button", { name: "轮换" }).click();
     await open("轮换 API Key").getByRole("button", { name: "确认轮换" }).click();
     await open("保存新 API Key").waitFor();
@@ -110,7 +113,7 @@ async function run(binary) {
     assert.ok(replacement !== token, "rotation must emit a different token");
     assert.equal((await whoami(token)).status, 401);
     const newIdentity = await (await whoami(replacement)).json();
-    assert.equal(newIdentity.role, "reviewer");
+    assert.equal(newIdentity.role, "reader");
     await page.evaluate(() => { location.hash = "overview"; });
     await secret.waitFor({ state: "detached" });
     const browserData = await page.evaluate(() => JSON.stringify({ session: { ...sessionStorage }, local: { ...localStorage }, cookie: document.cookie }));
