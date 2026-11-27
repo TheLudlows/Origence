@@ -34,8 +34,9 @@ Each `origence-content-sha256-v1` Record represents one chunk. `payload` is stor
 
 SQL retains source and visibility locators, frozen Summary terms, Run/Skill receipts, and recovery plans.
 Private AnySeek collections hold complete Q&A, the turn directory, and search fields. SQLite
-holds workspace and logical-key ownership, session sequence allocation, withdrawal fences, and
-proofs for actual dependencies. Original Q&A can only be recovered from AnySeek. Directory binding
+holds workspace and logical-key ownership, session sequence allocation, command receipts, and
+proofs for actual dependencies. AnySeek deletes each body and its index as one group and retains the
+group version to fence delayed writes. Directory binding
 and collection schema are versioned together.
 [Private archive backup and restore](../OPERATIONS.en.md#private-archive-and-paired-recovery)
 

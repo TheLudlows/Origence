@@ -24,7 +24,7 @@ async function checkResponsiveNavigation(page, width) {
   const nav = page.getByRole('navigation', { name: '主导航' });
   const theme = page.getByRole('button', { name: '切换明暗主题' });
   const exit = page.getByRole('button', { name: '退出', exact: true });
-  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '上下文工作台', 'API Key', 'Agent 连接'];
+  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '上下文工作台', '私有归档', 'API Key', 'Agent 连接'];
   const buttons = labels.map((label) => nav.getByRole('button', { name: new RegExp(label + '$') }));
   const context = buttons[labels.indexOf('上下文工作台')];
   const expectLayout = async () => {
@@ -59,6 +59,7 @@ async function checkResponsiveNavigation(page, width) {
   await step('Shift+Tab', exit);
   await step('Shift+Tab', buttons.at(-1));
   await step('Shift+Tab', buttons.at(-2));
+  await step('Shift+Tab', buttons.at(-3));
   await step('Shift+Tab', context);
   await page.keyboard.press('Enter');
   await main.getByRole('heading', { name: '上下文工作台', exact: true }).waitFor();

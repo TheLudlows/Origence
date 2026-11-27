@@ -20,8 +20,6 @@ async fn database() -> (tempfile::TempDir, Pool) {
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,surface TEXT,state TEXT,generation INTEGER)",
         "CREATE TABLE oc_session_turns(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,source_event_id BLOB)",
         "CREATE TABLE oc_native_archive_proofs(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,evidence_reported INTEGER,body_bytes INTEGER)",
-        "CREATE TABLE oc_native_archive_withdrawals(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB)",
-        "CREATE TABLE oc_withdrawn_private_sessions(tenant_id BLOB,workspace_id BLOB,session_id BLOB)",
         "CREATE TABLE oc_session_turn_evidence(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,evidence_ref_id BLOB,ordinal INTEGER,evidence TEXT)",
     ] {
         db::query(sql).execute(&pool).await.unwrap();

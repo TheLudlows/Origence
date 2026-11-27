@@ -1,22 +1,9 @@
-//! SQLite holds session coordination, used dependency proofs and withdrawal fences.
+//! SQLite holds session coordination and used dependency proofs.
 use super::*;
 
 pub(super) const SCHEMA: &str = include_str!("../native-archive-schema.sql");
 
 impl SqliteTx {
-    pub(super) async fn archive_proof_live(
-        &mut self,
-        session: Uuid,
-        turn: Uuid,
-    ) -> StorageResult<bool> {
-        let proof = self.native_archive_proof_metadata(session, turn).await?;
-        if proof.is_none() {
-            return Ok(false);
-        }
-        Ok(!self.archive_session_withdrawn(session).await?
-            && !self.native_turn_withdrawn(session, turn).await?)
-    }
-
     pub(super) async fn archive_body_metadata(
         &mut self,
         session: Uuid,
@@ -41,23 +28,17 @@ impl SqliteTx {
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
     }
 
-    async fn archive_session_withdrawn(&mut self, session: Uuid) -> StorageResult<bool> {
-        sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_withdrawn_private_sessions WHERE tenant_id=? AND workspace_id=? AND session_id=?)")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
-    }
-
-    async fn native_turn_withdrawn(&mut self, session: Uuid, turn: Uuid) -> StorageResult<bool> {
-        sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_native_archive_withdrawals WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?)")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
-    }
-
-    async fn fence_native_archive(&mut self, session: Uuid, turn: Uuid) -> StorageResult<()> {
-        sqlite_db::query("INSERT INTO oc_native_archive_withdrawals(tenant_id,workspace_id,session_id,turn_id,cleanup_after) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn).bind(now_ms())
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        Ok(())
+    pub(super) async fn archive_source_active(&mut self, source: Uuid) -> StorageResult<bool> {
+        sqlite_db::query_scalar(
+            "SELECT state='active' FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(source)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?
+        .ok_or(StorageError::NotFound)
     }
 
     pub(crate) async fn native_archive_turn_for_source(
@@ -78,13 +59,6 @@ impl SqliteTx {
         }
         Ok(None)
     }
-
-    pub(super) async fn withdraw_archive_source(&mut self, source: Uuid) -> StorageResult<()> {
-        if let Some((session, turn)) = self.native_archive_turn_for_source(source).await? {
-            self.fence_native_archive(session, turn).await?;
-        }
-        Ok(())
-    }
 }
 
 #[cfg(feature = "local-storage")]
@@ -101,10 +75,8 @@ mod host {
             &mut self,
             session: Uuid,
         ) -> StorageResult<ArchiveDomain> {
+            self.check_permission(Permission::Write).await?;
             let owner = self.require_private_session_owner(session).await?;
-            if self.archive_session_withdrawn(session).await? {
-                return Err(StorageError::NotFound);
-            }
             Ok(ArchiveDomain {
                 scope: self.scope,
                 owner,
@@ -139,19 +111,68 @@ mod host {
             Ok(Some(proof))
         }
 
-        pub(crate) async fn native_archive_request_exists(
+        pub(crate) async fn native_archive_live_proof_digest(
             &mut self,
             session: Uuid,
             turn: Uuid,
-        ) -> StorageResult<bool> {
-            self.check_permission(Permission::Write).await?;
-            self.require_private_session(session).await?;
-            // The session is bound to the logical owner, so a replacement
-            // credential must also be able to withdraw its predecessor's turn.
-            sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_commands WHERE tenant_id=? AND workspace_id=? AND operation='session.turn.archive' AND CASE WHEN json_valid(response) THEN (json_extract(response,'$.session_id')=? AND json_extract(response,'$.turn_id')=?) ELSE 0 END)")
+        ) -> StorageResult<Option<(Uuid, String)>> {
+            let Some((source, digest)) = self.native_archive_proof_digest(session, turn).await?
+            else {
+                return Ok(None);
+            };
+            Ok(self
+                .archive_source_active(source)
+                .await?
+                .then_some((source, digest)))
+        }
+
+        pub(crate) async fn event_exists(&mut self, source: Uuid) -> StorageResult<bool> {
+            sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?)")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
+        }
+
+        pub(crate) async fn archive_turn_sequence(
+            &mut self,
+            session: Uuid,
+            turn: Uuid,
+        ) -> StorageResult<Option<i64>> {
+            sqlite_db::query_scalar("SELECT MIN(json_extract(response,'$.sequence')) FROM oc_commands WHERE tenant_id=? AND workspace_id=? AND operation='session.turn.archive' AND json_extract(response,'$.session_id')=? AND json_extract(response,'$.turn_id')=?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
                 .bind(session.to_string()).bind(turn.to_string())
                 .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
+        }
+
+        pub(crate) async fn archive_last_sequence(&mut self, session: Uuid) -> StorageResult<i64> {
+            let sequence = sqlite_db::query_scalar("SELECT last_sequence FROM oc_native_archive_sessions WHERE tenant_id=? AND workspace_id=? AND session_id=?")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
+                .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+            Ok(sequence.unwrap_or(0))
+        }
+
+        pub(crate) async fn archive_delete_page(
+            &mut self,
+            session: Uuid,
+            after: i64,
+            through: i64,
+        ) -> StorageResult<Vec<(i64, String)>> {
+            sqlite_db::query_as("SELECT DISTINCT json_extract(response,'$.sequence') AS sequence,json_extract(response,'$.turn_id') FROM oc_commands WHERE tenant_id=? AND workspace_id=? AND operation='session.turn.archive' AND json_extract(response,'$.session_id')=? AND sequence>? AND sequence<=? ORDER BY sequence LIMIT 16")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
+                .bind(session.to_string()).bind(after).bind(through)
+                .fetch_all(&mut *self.tx).await.map_err(sqlite_err)
+        }
+
+        // The existing source state protects SQLite-only evidence consumers.
+        // Plain archived turns never acquire a relational source row.
+        pub(crate) async fn retract_archive_support(
+            &mut self,
+            session: Uuid,
+            turn: Uuid,
+        ) -> StorageResult<()> {
+            if let Some((source, _)) = self.native_archive_proof_digest(session, turn).await? {
+                self.retract_event_inner(source).await?;
+            }
+            Ok(())
         }
 
         /// Preserve the integer paging cursor without storing a row for each turn.
@@ -159,29 +180,16 @@ mod host {
             &mut self,
             session: Uuid,
         ) -> StorageResult<i64> {
-            self.check_permission(Permission::Write).await?;
             self.archive_domain(session).await?;
-            let current: Option<i64> = sqlite_db::query_scalar("SELECT last_sequence FROM oc_native_archive_sessions WHERE tenant_id=? AND workspace_id=? AND session_id=?")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-                .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-            let sequence = current.unwrap_or(0).checked_add(1).ok_or_else(corrupt)?;
+            let sequence = self
+                .archive_last_sequence(session)
+                .await?
+                .checked_add(1)
+                .ok_or_else(corrupt)?;
             sqlite_db::query("INSERT INTO oc_native_archive_sessions(tenant_id,workspace_id,session_id,last_sequence) VALUES(?,?,?,?) ON CONFLICT DO UPDATE SET last_sequence=excluded.last_sequence")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(sequence)
                 .execute(&mut *self.tx).await.map_err(sqlite_err)?;
             Ok(sequence)
-        }
-
-        pub(crate) async fn require_native_archive_live(
-            &mut self,
-            session: Uuid,
-            turn: Uuid,
-        ) -> StorageResult<ArchiveDomain> {
-            self.check_permission(Permission::Write).await?;
-            let domain = self.archive_domain(session).await?;
-            if self.native_turn_withdrawn(session, turn).await? {
-                return Err(StorageError::NotFound);
-            }
-            Ok(domain)
         }
 
         /// A durable consumer may keep the exact support it used for transactional
@@ -191,7 +199,7 @@ mod host {
             record: &NativeArchiveTurn,
         ) -> StorageResult<()> {
             let (session, turn) = (record.session, record.turn);
-            self.require_native_archive_live(session, turn).await?;
+            self.archive_domain(session).await?;
             let metadata = (
                 record.body.evidence_use.is_reported(),
                 i64::try_from(record.body.model_json_bytes()).map_err(|_| corrupt())?,
@@ -231,111 +239,12 @@ mod host {
                 .bind(metadata.0).bind(metadata.1).execute(&mut *self.tx).await.map_err(sqlite_err)?;
             Ok(())
         }
-
-        pub(crate) async fn withdraw_native_archive(
-            &mut self,
-            session: Uuid,
-            turn: Uuid,
-        ) -> StorageResult<()> {
-            self.check_permission(Permission::Write).await?;
-            self.require_private_session(session).await?;
-            self.fence_native_archive(session, turn).await
-        }
-
-        pub(crate) async fn withdraw_session_native(&mut self, session: Uuid) -> StorageResult<()> {
-            self.check_permission(Permission::Write).await?;
-            self.require_private_session(session).await?;
-            sqlite_db::query("INSERT INTO oc_withdrawn_private_sessions(tenant_id,workspace_id,session_id) VALUES(?,?,?) ON CONFLICT DO NOTHING")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-            sqlite_db::query("UPDATE oc_native_archive_sessions SET cleanup_after=COALESCE(cleanup_after,?) WHERE tenant_id=? AND workspace_id=? AND session_id=?")
-                .bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-            Ok(())
-        }
-    }
-
-    impl SqliteStore {
-        async fn native_archive_cleanup_domain(
-            &self,
-            scope: Scope,
-            session: Uuid,
-        ) -> StorageResult<ArchiveDomain> {
-            let owner = sqlite_db::query_scalar("SELECT logical_key_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND session_id=?")
-                .bind(scope.tenant_id).bind(scope.workspace_id).bind(session)
-                .fetch_optional(&self.pool).await.map_err(sqlite_err)?
-                .ok_or_else(corrupt)?;
-            Ok(ArchiveDomain { scope, owner })
-        }
-
-        pub(crate) async fn withdrawn_native_archive_turns(
-            &self,
-            limit: usize,
-        ) -> StorageResult<Vec<(ArchiveDomain, Uuid, Uuid)>> {
-            let due: Vec<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as("SELECT tenant_id,workspace_id,session_id,turn_id FROM oc_native_archive_withdrawals WHERE cleanup_after<=? ORDER BY cleanup_after,tenant_id,workspace_id,session_id,turn_id LIMIT ?")
-                .bind(now_ms()).bind(limit as i64).fetch_all(&self.pool).await.map_err(sqlite_err)?;
-            let mut targets = Vec::with_capacity(due.len());
-            for (tenant_id, workspace_id, session, turn) in due {
-                let scope = Scope {
-                    tenant_id,
-                    workspace_id,
-                };
-                let domain = self.native_archive_cleanup_domain(scope, session).await?;
-                targets.push((domain, session, turn));
-            }
-            Ok(targets)
-        }
-
-        pub(crate) async fn withdrawn_native_archive_sessions(
-            &self,
-            limit: usize,
-        ) -> StorageResult<Vec<(ArchiveDomain, Uuid)>> {
-            let due: Vec<(Uuid, Uuid, Uuid)> = sqlite_db::query_as("SELECT tenant_id,workspace_id,session_id FROM oc_native_archive_sessions WHERE cleanup_after<=? ORDER BY cleanup_after,tenant_id,workspace_id,session_id LIMIT ?")
-                .bind(now_ms()).bind(limit as i64).fetch_all(&self.pool).await.map_err(sqlite_err)?;
-            let mut targets = Vec::with_capacity(due.len());
-            for (tenant_id, workspace_id, session) in due {
-                let scope = Scope {
-                    tenant_id,
-                    workspace_id,
-                };
-                let domain = self.native_archive_cleanup_domain(scope, session).await?;
-                targets.push((domain, session));
-            }
-            Ok(targets)
-        }
-
-        pub(crate) async fn settle_native_turn_cleanup(
-            &self,
-            scope: Scope,
-            session: Uuid,
-            turn: Uuid,
-            cleaned: bool,
-        ) -> StorageResult<()> {
-            let retry_at = (!cleaned).then(|| now_ms() + 30_000);
-            sqlite_db::query("UPDATE oc_native_archive_withdrawals SET cleanup_after=? WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
-                .bind(retry_at).bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
-                .execute(&self.pool).await.map_err(sqlite_err)?;
-            Ok(())
-        }
-
-        pub(crate) async fn reschedule_native_session_cleanup(
-            &self,
-            scope: Scope,
-            session: Uuid,
-            emptied_page: bool,
-        ) -> StorageResult<()> {
-            let retry_at = now_ms() + if emptied_page { 1_000 } else { 30_000 };
-            sqlite_db::query("UPDATE oc_native_archive_sessions SET cleanup_after=? WHERE tenant_id=? AND workspace_id=? AND session_id=? AND cleanup_after IS NOT NULL")
-                .bind(retry_at).bind(scope.tenant_id).bind(scope.workspace_id).bind(session)
-                .execute(&self.pool).await.map_err(sqlite_err)?;
-            Ok(())
-        }
     }
 }
 
 #[cfg(all(test, feature = "local-storage"))]
 #[tokio::test]
-async fn native_archive_authority_keeps_only_used_proof_and_fences_withdrawal() {
+async fn native_archive_authority_keeps_only_used_proof() {
     use crate::{
         session::{ArchivedTurnBody, EvidenceUse},
         storage::anyseek::private_archive::NativeArchiveTurn,
@@ -358,7 +267,6 @@ async fn native_archive_authority_keeps_only_used_proof_and_fences_withdrawal() 
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let session = tx.private_session_id().await.unwrap();
     let turn = Uuid::new_v4();
-    let owner = tx.archive_domain(session).await.unwrap();
     assert!(!tx.native_archive_initialized(session).await.unwrap());
     let first = tx.allocate_native_archive_sequence(session).await.unwrap();
     assert_eq!(first, 1);
@@ -373,17 +281,13 @@ async fn native_archive_authority_keeps_only_used_proof_and_fences_withdrawal() 
     tx.begin_command("session.turn.archive", "fixture-turn", &digest)
         .await
         .unwrap();
-    tx.finish_command(json!({"session_id":session,"turn_id":turn}))
+    tx.finish_command(json!({"session_id":session,"turn_id":turn,"sequence":first}))
         .await
         .unwrap();
     tx.commit().await.unwrap();
 
     let mut tx = store.begin(auth.clone()).await.unwrap();
-    assert!(
-        tx.native_archive_request_exists(session, turn)
-            .await
-            .unwrap()
-    );
+    assert!(tx.archive_turn_sequence(session, turn).await.unwrap() == Some(first));
     assert_eq!(
         tx.allocate_native_archive_sequence(session).await.unwrap(),
         2
@@ -417,26 +321,10 @@ async fn native_archive_authority_keeps_only_used_proof_and_fences_withdrawal() 
         Some("")
     );
     tx.retract_event(record.source).await.unwrap();
-    assert!(tx.native_turn_withdrawn(session, turn).await.unwrap());
     tx.commit().await.unwrap();
-    assert_eq!(
-        store.withdrawn_native_archive_turns(2).await.unwrap(),
-        [(owner, session, turn)]
-    );
-    store
-        .settle_native_turn_cleanup(scope, session, turn, true)
-        .await
-        .unwrap();
-    assert!(
-        store
-            .withdrawn_native_archive_turns(2)
-            .await
-            .unwrap()
-            .is_empty()
-    );
     let mut tx = store.begin(auth).await.unwrap();
     assert!(matches!(
-        tx.require_native_archive_live(session, turn).await,
+        tx.require_turn_visible(session, turn).await,
         Err(StorageError::NotFound)
     ));
     tx.commit().await.unwrap();

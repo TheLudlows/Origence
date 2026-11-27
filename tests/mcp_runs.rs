@@ -644,9 +644,15 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     assert_eq!(uncited_proofs, 0, "the losing bundle must not add a proof");
 
     service
-        .withdraw_session_archive(&owner, session, Some(turn))
+        .withdraw_session_archive(&owner, session, turn)
         .await
         .unwrap();
+    let trace = service.run_trace(&owner, run, 0, 10).await.unwrap();
+    assert_eq!(
+        trace["events"][0]["report"]["private_sources_unavailable"],
+        1
+    );
+    assert_eq!(trace["events"][0]["references"], json!([]));
     assert!(matches!(
         service.prepare_run_context(&owner, run, event, input).await,
         Err(AppError::NotFound)

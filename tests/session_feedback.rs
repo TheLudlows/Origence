@@ -1023,13 +1023,14 @@ async fn session_withdrawal_and_dependency_withdrawal_have_distinct_effects() {
             .delete(&a, "withdraw-dependency", target_id, kind)
             .await
             .unwrap();
-        assert_eq!(
-            s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
-            "pending"
-        );
         if target == "archive" {
+            assert_eq!(deleted["blocked"], true);
             assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
         } else {
+            assert_eq!(
+                s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
+                "pending"
+            );
             assert_history_survives_dependency_withdrawal(
                 &s, &a, session, &input, &receipt, &feedback,
             )
@@ -1859,10 +1860,7 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
         )
         .await
         .unwrap();
-    assert_eq!(
-        s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
-        "pending"
-    );
+    assert_eq!(deleted["blocked"], true);
     for url in [&turn_url, &feedback_url, &raw_url] {
         let response = http.get(url).bearer_auth(&token).send().await.unwrap();
         assert_eq!(response.status(), 404);

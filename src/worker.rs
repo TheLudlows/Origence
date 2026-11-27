@@ -153,14 +153,7 @@ pub async fn run(
         }
     }
     let _reset = Reset(service.worker_running.clone());
-    let mut next_archive_cleanup = tokio::time::Instant::now();
     while !*stop.borrow() {
-        if tokio::time::Instant::now() >= next_archive_cleanup {
-            if let Err(error) = cleanup_private_archives(&service).await {
-                tracing::warn!(code = error.code(), "private archive cleanup will retry");
-            }
-            next_archive_cleanup = tokio::time::Instant::now() + Duration::from_secs(1);
-        }
         if !process_next(&service).await? {
             tokio::select! {_ = tokio::time::sleep(Duration::from_millis(100))=>{}, _ = stop.changed()=>{}}
         }
@@ -982,44 +975,6 @@ async fn publish_prepared(
     tx.commit().await?;
     Ok(())
 }
-async fn cleanup_private_archives(service: &Service) -> Result<()> {
-    let store = service.engine.relational();
-    let backend = service.engine.vector().private_archive();
-    let mut result = Ok(());
-    for (domain, session, turn) in store.withdrawn_native_archive_turns(16).await? {
-        let deleted = backend.native_archive_delete(domain, session, turn).await;
-        store
-            .settle_native_turn_cleanup(domain.scope, session, turn, deleted.is_ok())
-            .await?;
-        if let Err(error) = deleted {
-            result = Err(error.into());
-        }
-    }
-    for (domain, session) in store.withdrawn_native_archive_sessions(2).await? {
-        let mut removed = false;
-        match backend.native_archive_page(domain, session, 0, 8).await {
-            Ok((_, turns)) => {
-                for turn in turns {
-                    match backend
-                        .native_archive_delete(domain, session, turn.turn)
-                        .await
-                    {
-                        Ok(()) => removed = true,
-                        Err(error) => result = Err(error.into()),
-                    }
-                }
-            }
-            Err(error) => result = Err(error.into()),
-        }
-        // Keep sweeping withdrawn sessions so delayed writes that were
-        // allocated before the withdrawal cannot escape physical cleanup.
-        store
-            .reschedule_native_session_cleanup(domain.scope, session, removed)
-            .await?;
-    }
-    result
-}
-
 /// Runs only before serving requests or on the single worker, never concurrently
 /// with native writes. Visibility is already blocked by the relational tombstone.
 pub async fn cleanup(service: &Service) -> Result<()> {

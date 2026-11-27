@@ -388,13 +388,49 @@ impl AnySeekFullTextStore {
         Ok(())
     }
 
+    /// Offline restore proof for a registered turn absent from the directory.
+    pub(crate) async fn absent_archive_version(
+        &self,
+        domain: ArchiveDomain,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<Option<u64>> {
+        let version = self
+            .native_version(
+                domain,
+                &native_collection(domain),
+                &archive_group(session, turn),
+            )
+            .await?;
+        if version.is_some()
+            && self
+                .native_archive_read(domain, session, turn)
+                .await?
+                .is_some()
+        {
+            return Err(invalid_archive());
+        }
+        Ok(version)
+    }
+
     pub(crate) async fn native_archive_read(
         &self,
         domain: ArchiveDomain,
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Option<NativeArchiveTurn>> {
-        self.read_native_archive(domain, session, turn, false).await
+        self.read_native_archive(domain, session, turn, false, false)
+            .await
+    }
+
+    pub(crate) async fn native_archive_for_admission(
+        &self,
+        domain: ArchiveDomain,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<Option<NativeArchiveTurn>> {
+        self.read_native_archive(domain, session, turn, false, true)
+            .await
     }
 
     /// An index hit proves the group once existed. Withdrawals keep a group
@@ -405,7 +441,8 @@ impl AnySeekFullTextStore {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Option<NativeArchiveTurn>> {
-        self.read_native_archive(domain, session, turn, true).await
+        self.read_native_archive(domain, session, turn, true, false)
+            .await
     }
 
     async fn read_native_archive(
@@ -414,6 +451,7 @@ impl AnySeekFullTextStore {
         session: Uuid,
         turn: Uuid,
         seen_in_index: bool,
+        admitting: bool,
     ) -> StorageResult<Option<NativeArchiveTurn>> {
         let collection = native_collection(domain);
         let group = archive_group(session, turn);
@@ -436,15 +474,20 @@ impl AnySeekFullTextStore {
                 ],"length":3,"count":true
             }),
         ).await?;
+        let withdrawn = if admitting {
+            Err(StorageError::NotFound)
+        } else {
+            Ok(None)
+        };
         let current = self.native_version(domain, &collection, &group).await?;
         if version == 1 && current == Some(2) {
-            return Ok(None);
+            return withdrawn;
         }
         if current != Some(version) {
             return Err(invalid_archive());
         }
         if version == 2 && result.count == 0 {
-            return Ok(None);
+            return withdrawn;
         }
         if version != 1 {
             return Err(invalid_archive());
@@ -455,7 +498,7 @@ impl AnySeekFullTextStore {
             if archive_member(record, &group, &group, "withdrawn")
                 && native_identity(record)? == identity
             {
-                return Ok(None);
+                return withdrawn;
             }
         }
         let (canonical, search) = result.pair(&group)?;

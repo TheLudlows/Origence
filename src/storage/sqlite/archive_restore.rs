@@ -1,4 +1,4 @@
-//! Verify the archive's SQLite evidence and withdrawal records from one snapshot.
+//! Verify the archive's SQLite evidence and allocation counters from one snapshot.
 use super::*;
 use crate::session::ArchiveDomain;
 use std::collections::BTreeSet;
@@ -7,8 +7,7 @@ pub(crate) struct NativeRestoreSession {
     pub(crate) domain: ArchiveDomain,
     pub(crate) session: Uuid,
     pub(crate) last_sequence: i64,
-    pub(crate) withdrawn: bool,
-    pub(crate) withdrawn_turns: BTreeSet<Uuid>,
+    pub(crate) registered: HashMap<Uuid, i64>,
     pub(crate) expected: HashMap<Uuid, (Uuid, String)>,
 }
 
@@ -19,27 +18,15 @@ fn corrupt() -> StorageError {
 async fn read_native_restore_sessions(
     tx: &mut Connection,
 ) -> StorageResult<HashMap<(Uuid, Uuid, Uuid), NativeRestoreSession>> {
-    let withdrawn: BTreeSet<(Uuid, Uuid, Uuid)> = sqlite_db::query_as(
-        "SELECT tenant_id,workspace_id,session_id FROM oc_withdrawn_private_sessions",
-    )
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(sqlite_err)?
-    .into_iter()
-    .collect();
-    let rows: Vec<(Uuid, Uuid, Uuid, i64, bool)> = sqlite_db::query_as(
-        "SELECT tenant_id,workspace_id,session_id,last_sequence,cleanup_after IS NOT NULL FROM oc_native_archive_sessions",
+    let rows: Vec<(Uuid, Uuid, Uuid, i64)> = sqlite_db::query_as(
+        "SELECT tenant_id,workspace_id,session_id,last_sequence FROM oc_native_archive_sessions",
     )
     .fetch_all(&mut *tx)
     .await
     .map_err(sqlite_err)?;
     let mut sessions = HashMap::with_capacity(rows.len());
-    for (tenant_id, workspace_id, session, last_sequence, cleaning) in rows {
+    for (tenant_id, workspace_id, session, last_sequence) in rows {
         let key = (tenant_id, workspace_id, session);
-        let withdrawn = withdrawn.contains(&key);
-        if cleaning != withdrawn {
-            return Err(corrupt());
-        }
         let owner = sqlite_db::query_scalar("SELECT logical_key_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND session_id=?")
             .bind(tenant_id).bind(workspace_id).bind(session)
             .fetch_optional(&mut *tx).await.map_err(sqlite_err)?.ok_or_else(corrupt)?;
@@ -55,24 +42,26 @@ async fn read_native_restore_sessions(
                 },
                 session,
                 last_sequence,
-                withdrawn,
-                withdrawn_turns: BTreeSet::new(),
+                registered: HashMap::new(),
                 expected: HashMap::new(),
             },
         );
     }
-    let tombstones: Vec<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as(
-        "SELECT tenant_id,workspace_id,session_id,turn_id FROM oc_native_archive_withdrawals",
+    let commands: Vec<(Uuid, Uuid, String, String, i64)> = sqlite_db::query_as(
+        "SELECT DISTINCT tenant_id,workspace_id,json_extract(response,'$.session_id'),json_extract(response,'$.turn_id'),json_extract(response,'$.sequence') FROM oc_commands WHERE operation='session.turn.archive'",
     )
-    .fetch_all(tx)
-    .await
-    .map_err(sqlite_err)?;
-    for (tenant_id, workspace_id, session, turn) in tombstones {
-        sessions
-            .get_mut(&(tenant_id, workspace_id, session))
-            .ok_or_else(corrupt)?
-            .withdrawn_turns
-            .insert(turn);
+    .fetch_all(tx).await.map_err(sqlite_err)?;
+    for (tenant, workspace, session, turn, sequence) in commands {
+        let session = Uuid::parse_str(&session).map_err(|_| corrupt())?;
+        let turn = Uuid::parse_str(&turn).map_err(|_| corrupt())?;
+        let entry = sessions
+            .get_mut(&(tenant, workspace, session))
+            .ok_or_else(corrupt)?;
+        if !(1..=entry.last_sequence).contains(&sequence)
+            || entry.registered.insert(turn, sequence).is_some()
+        {
+            return Err(corrupt());
+        }
     }
     Ok(sessions)
 }
@@ -114,11 +103,12 @@ impl SqliteStore {
             if !empty || !crate::retrieval_diagnostics::digest(&request_hash) {
                 return Err(corrupt());
             }
-            if !entry.withdrawn && !entry.withdrawn_turns.contains(&turn) {
-                if state != "active" {
-                    return Err(corrupt());
+            match state.as_str() {
+                "active" => {
+                    entry.expected.insert(turn, (source, request_hash));
                 }
-                entry.expected.insert(turn, (source, request_hash));
+                "retracted" => {}
+                _ => return Err(corrupt()),
             }
         }
         if !native_proofs.is_empty() {

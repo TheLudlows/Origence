@@ -1,3 +1,4 @@
+import { archivePage } from "./archive.js";
 import { api, ApiError } from "./api.js";
 import { agentsPage } from "./agents.js";
 import { assetDetail, assetsPage } from "./assets.js";
@@ -27,6 +28,7 @@ const pages = [
   ["memory", "记忆管理"],
   ["knowledge", "知识管理"],
   ["contexts", "上下文工作台"],
+  ["archive", "私有归档"],
   ["keys", "API Key"],
   ["agents", "Agent 连接"],
 ] as const;
@@ -265,6 +267,7 @@ async function render() {
   const nav = el("nav");
   nav.setAttribute("aria-label", "主导航");
   for (const [key, label] of pages) {
+    if (key === "archive" && user.role === "reader") continue;
     if ((key === "keys" || key === "agents") && user.role !== "admin") continue;
     const link = button("", () => navigate(key), "nav-item");
     const icon = el("span", `nav-icon nav-icon-${key}`);
@@ -365,6 +368,7 @@ async function render() {
     else if (page === "memory" || page === "knowledge")
       await assetsPage(content, page, ctx);
     else if (page === "contexts") contextPage(content, ctx);
+    else if (page === "archive") await archivePage(content, ctx);
     else if (page === "keys") keysPage(content, ctx, activeWorkspace);
     else if (page === "agents") agentsPage(content, ctx, activeWorkspace.workspace_id);
     else if (page === "asset" && id)

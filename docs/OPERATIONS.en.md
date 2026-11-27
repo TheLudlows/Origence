@@ -16,7 +16,7 @@ identity reservations, and publication plans.
 
 | Path | Contents |
 | --- | --- |
-| `context.db` and SQLite WAL | Permissions, sources, versions and hashes, locators, retrieval terms, jobs, ledger, audit, and private archive numbering, withdrawals, and downstream proofs |
+| `context.db` and SQLite WAL | Permissions, sources, versions and hashes, locators, retrieval terms, jobs, ledger, audit, and private archive numbering, command receipts, and downstream proofs |
 | `context.db.lock` | OS lock file for exclusive host access. The file can exist when the lock is no longer held. |
 | `anyseek/` | Default local AnySeek Catalog and shared and private collections, including text, summaries, and full-text, vector, and graph indexes. A standalone deployment is backed up separately according to AnySeek's rules. |
 | `full-text-backend.json` | AnySeek endpoint, automatic tenant/workspace routing rules, and embedding profile and dimension binding. Contains no key and is backed up with the entire directory. |
@@ -205,8 +205,8 @@ Run `origence.exe serve --local` to start the API and local AnySeek. To also sta
 
 ## Private archive and paired recovery
 
-Private archive recovery requires paired SQLite and AnySeek backups. Cleanup fences delayed writes
-using AnySeek group versions and withdrawal markers.
+Private archive recovery requires paired SQLite and AnySeek backups. Direct deletion uses
+AnySeek group versions to fence delayed writes.
 [AnySeek backup retention](#anyseek-full-text-and-vector-retrieval) · [Archive API](API.en.md#session-archiving-and-idempotent-feedback)
 
 1. Stop Origence and AnySeek, record both versions, and back up the complete Origence data directory.
@@ -216,7 +216,7 @@ using AnySeek group versions and withdrawal markers.
    Add `--local` for embedded AnySeek. For standalone AnySeek, set `OC_ANYSEEK_URL` and
    `OC_ANYSEEK_API_KEY` for the isolated service at the bound address. Save the manifest's AnySeek
    version, visible turn count, and `directory_sha256`. The digest covers bodies, ordering, source
-   IDs, and withdrawal fences for sessions with an allocated sequence and their turns.
+   IDs, session sequence allocations, and the AnySeek group versions retained for deleted turns.
 3. Restore the paired directories and binding with the same versions while stopped. Re-run
    `archive-verify` and compare the manifest, then check ordered reads, keyword and vector search,
    and key isolation through the API. Comparison detects a missing group for an ordinary turn

@@ -46,6 +46,8 @@ impl SqliteStore {
             pool,
             path,
             _lock: lock,
+            #[cfg(feature = "local-storage")]
+            archive_dependencies: tokio::sync::Mutex::new(()),
         };
         store.initialize().await?;
         Ok(store)

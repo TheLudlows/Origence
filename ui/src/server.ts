@@ -24,6 +24,8 @@ const keyRules: [string, RegExp][] = [
 const rules: [string, RegExp][] = [
   ["GET", /^\/health\/(live|ready)$/],
   ["GET", /^\/v1\/(whoami|session|assets|runs)$/],
+  ["GET", new RegExp(`^/v1/sessions/${uuid}/turns$`)],
+  ["DELETE", new RegExp(`^/v1/sessions/${uuid}(?:/turns/${uuid})?$`)],
   ["GET", /^\/v1\/runs\/overview$/],
   [
     "POST",

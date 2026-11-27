@@ -1,4 +1,4 @@
-import { api } from "./api.js";
+import { api, ApiError } from "./api.js";
 import {
   button,
   code,
@@ -169,7 +169,10 @@ export async function sourcePreview(
       );
     announce(outcome);
   } catch (e) {
-    if (current()) fail("原始来源读取失败", e);
+    if (current()) {
+      if (e instanceof ApiError && e.status === 404) announce("来源已删除或不可访问。", true);
+      else fail("原始来源读取失败", e);
+    }
   }
 }
 
