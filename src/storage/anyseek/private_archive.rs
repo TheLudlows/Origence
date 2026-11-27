@@ -1,12 +1,8 @@
 //! Private archive collections have no route through workspace asset retrieval.
 use super::*;
-use crate::session::{
-    ArchiveDomain, ArchiveLocator, ArchivedEvidence, ArchivedTurnBody, SessionTurnInput,
-};
+use crate::session::{ArchiveDomain, ArchivedEvidence, ArchivedTurnBody, SessionTurnInput};
 
-const PRIVATE_FORMAT: &str = "origence-private-archive-v1";
 const NATIVE_FORMAT: &str = "origence-private-archive-v2";
-const PRIVATE_FIELDS: &[&str] = &["archive", "kind"];
 const NATIVE_FIELDS: &[&str] = &["archive", "kind", "session", "turn", "source", "sequence"];
 const RECORD_BYTES: usize = 1024 * 1024;
 
@@ -101,7 +97,6 @@ impl ArchiveQuery<'_> {
 struct ArchiveHits {
     hits: Vec<Value>,
     count: usize,
-    visible_seq: u64,
 }
 
 impl ArchiveHits {
@@ -217,21 +212,12 @@ impl AnySeekFullTextStore {
         if count < hits.len() || (count > 0 && visible_seq == 0) {
             return Err(invalid_archive());
         }
-        Ok(ArchiveHits {
-            hits,
-            count,
-            visible_seq,
-        })
+        Ok(ArchiveHits { hits, count })
     }
 
-    fn private_config(&self, native: bool) -> Value {
-        let name = if native {
-            NATIVE_FORMAT
-        } else {
-            PRIVATE_FORMAT
-        };
+    fn private_config(&self) -> Value {
         let mut config = json!({
-            "index_name":name,"tokenizer":"TantivySimpleV1",
+            "index_name":NATIVE_FORMAT,"tokenizer":"TantivySimpleV1",
             "text_normalization":"None","stop_words":"None",
             "schema":[
                 {"field":"archive","field_type":"String","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0},
@@ -240,7 +226,7 @@ impl AnySeekFullTextStore {
                 {"field":"terms","field_type":"Text","store":false,"index_lexical":true,"index_vector":false,"filterable":false,"boost":1.0}
             ]
         });
-        if native {
+        {
             let schema = config["schema"].as_array_mut().unwrap();
             for (field, field_type) in [
                 ("session", "String"),
@@ -270,15 +256,6 @@ impl AnySeekFullTextStore {
         config
     }
 
-    pub(crate) async fn private_collection(
-        &self,
-        domain: ArchiveDomain,
-        create: bool,
-    ) -> StorageResult<bool> {
-        self.archive_collection(domain, &domain.collection(), false, create)
-            .await
-    }
-
     pub(crate) async fn native_archive_collection(
         &self,
         domain: ArchiveDomain,
@@ -291,7 +268,7 @@ impl AnySeekFullTextStore {
         } else {
             None
         };
-        self.archive_collection(domain, &native_collection(domain), true, create)
+        self.archive_collection(domain, &native_collection(domain), create)
             .await
     }
 
@@ -299,7 +276,6 @@ impl AnySeekFullTextStore {
         &self,
         domain: ArchiveDomain,
         id: &str,
-        native: bool,
         create: bool,
     ) -> StorageResult<bool> {
         let (mut status, mut info) = self.archive_request(domain, id, Request::Info).await?;
@@ -325,7 +301,7 @@ impl AnySeekFullTextStore {
         if absent && !create {
             return Ok(false);
         }
-        let config = self.private_config(native);
+        let config = self.private_config();
         let profile = self.embedding.as_ref().map(|(p, _)| p);
         if absent {
             let epoch = operation_epoch()?;
@@ -388,185 +364,6 @@ impl AnySeekFullTextStore {
 
     /// Group version 1 is the only state eligible for delivery. A withdrawal
     /// from an empty group also creates version 1, but has no canonical record.
-    pub(crate) async fn archive_read(
-        &self,
-        locator: &ArchiveLocator,
-        pending: bool,
-    ) -> StorageResult<Option<(ArchivedTurnBody, u64)>> {
-        if !self.private_collection(locator.domain, false).await? {
-            return if pending {
-                Ok(None)
-            } else {
-                Err(invalid_archive())
-            };
-        }
-        let collection = locator.domain.collection();
-        let group = locator.group();
-        let version = self
-            .archive_version(locator.domain, &collection, &group)
-            .await?;
-        if version != Some(1) {
-            return if pending {
-                Ok(None)
-            } else {
-                Err(invalid_archive())
-            };
-        }
-        let result = self
-            .archive_query(
-                locator.domain,
-                &collection,
-                json!({
-                    "query":"","filter":[filter("archive",[group.clone()])],
-                    "fields":["archive","kind","body"],"length":3,"count":true
-                }),
-            )
-            .await?;
-        if result.count == 0 && pending {
-            return Ok(None);
-        }
-        let (record, _) = result.pair(&group)?;
-        let body: ArchivedTurnBody = serde_json::from_value(record["document"]["body"].clone())
-            .map_err(|_| invalid_archive())?;
-        if body.digest() != locator.body_hash {
-            return Err(invalid_archive());
-        }
-        Ok(Some((body, result.visible_seq)))
-    }
-
-    /// Ordinary writes always require version zero. Cleanup uses the same CAS
-    /// even for a never-written pending row, fencing writes accepted late.
-    pub(crate) async fn archive_write(
-        &self,
-        locator: &ArchiveLocator,
-        body: &ArchivedTurnBody,
-        terms: String,
-        embedding: Option<Vec<f32>>,
-    ) -> StorageResult<u64> {
-        self.private_collection(locator.domain, true).await?;
-        let collection = locator.domain.collection();
-        let group = locator.group();
-        let canonical = json!({"archive":group,"kind":"body","body":body});
-        let mut projection = json!({"archive":group,"kind":"search","terms":terms});
-        if let Some(vector) = embedding {
-            projection["vector"] = json!(vector);
-        }
-        let records = archive_records(&group, canonical, projection)?;
-        let nonce = format!("private-archive:{group}");
-        let request = |epoch| {
-            Request::ReplaceGroup(json!({
-                "operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,
-                "expected_group_version":0,"records":records
-            }))
-        };
-        let mut epoch = locator.epoch;
-        let mut response = self
-            .archive_request(locator.domain, &collection, request(epoch))
-            .await;
-        if matches!(response, Ok((StatusCode::GONE, _)))
-            && self
-                .archive_version(locator.domain, &collection, &group)
-                .await?
-                .is_none()
-        {
-            // AnySeek retains operation receipts for the current/previous UTC
-            // day. An absent group at CAS=0 allows a fresh epoch for the same
-            // logical operation and immutable Record IDs.
-            epoch = operation_epoch()?;
-            response = self
-                .archive_request(locator.domain, &collection, request(epoch))
-                .await;
-        }
-        if let Ok((status, result)) = &response
-            && status.is_success()
-            && let Some(seq) = receipt_sequence(result, &group, epoch, &nonce, 1, 2)
-        {
-            return Ok(seq);
-        }
-        if let Some((_, seq)) = self.archive_read(locator, true).await? {
-            return Ok(seq);
-        }
-        response?;
-        Err(transient())
-    }
-
-    pub(crate) async fn archive_delete(&self, locator: &ArchiveLocator) -> StorageResult<()> {
-        self.private_collection(locator.domain, true).await?;
-        let collection = locator.domain.collection();
-        let group = locator.group();
-        for _ in 0..3 {
-            let version = self
-                .archive_version(locator.domain, &collection, &group)
-                .await?
-                .unwrap_or(0);
-            if version > 0 {
-                let result = self
-                    .archive_query(
-                        locator.domain,
-                        &collection,
-                        json!({
-                            "query":"","filter":[filter("archive",[group.clone()])],
-                            "fields":PRIVATE_FIELDS,"length":1,"count":true
-                        }),
-                    )
-                    .await?;
-                if result.count == 0 {
-                    return Ok(());
-                }
-            }
-            if self
-                .replace_withdrawn_archive(locator.domain, &collection, &group, version, Vec::new())
-                .await?
-            {
-                return Ok(());
-            }
-        }
-        Err(transient())
-    }
-
-    pub(crate) async fn archive_search(
-        &self,
-        domain: ArchiveDomain,
-        query: ArchiveQuery<'_>,
-        groups: &[String],
-        limit: usize,
-    ) -> StorageResult<(usize, Vec<(String, f64)>)> {
-        let request = query.request(
-            vec![
-                filter("kind", ["search".to_owned()]),
-                filter("archive", groups.iter().cloned()),
-            ],
-            PRIVATE_FIELDS,
-            limit,
-        );
-        let ArchiveHits { hits, count, .. } = self
-            .archive_query(domain, &domain.collection(), request)
-            .await?;
-        if hits.len() > limit {
-            return Err(invalid_archive());
-        }
-        let mut seen = HashSet::new();
-        let mut out = Vec::with_capacity(hits.len());
-        for hit in &hits {
-            let record = &hit["record"];
-            let group = record["document"]["archive"]
-                .as_str()
-                .ok_or_else(invalid_archive)?;
-            if !groups.iter().any(|id| id == group)
-                || !archive_member(record, &format!("{group}s"), group, "search")
-                || !seen.insert(group)
-            {
-                return Err(invalid_archive());
-            }
-            let score = hit["score"]
-                .as_f64()
-                .filter(|s| s.is_finite())
-                .ok_or_else(invalid_archive)?;
-            out.push((group.to_owned(), score));
-        }
-        Ok((count, out))
-    }
-
     async fn native_version(
         &self,
         domain: ArchiveDomain,

@@ -250,12 +250,6 @@ impl SqliteTx {
                 self.require_run_reference_visible(&r).await?;
             }
         }
-        if let Some(digest) = sqlite_db::query_scalar("SELECT digest FROM oc_archive_legacy_run_prefixes WHERE tenant_id=? AND workspace_id=? AND run_id=? AND through_sequence=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(through_sequence)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
-        {
-            return Ok(digest);
-        }
         Ok(hash(encode(&(
             self.scope.tenant_id,
             self.scope.workspace_id,

@@ -1,3 +1,7 @@
+CREATE TABLE oc_withdrawn_private_sessions (
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, session_id BLOB NOT NULL,
+    PRIMARY KEY (tenant_id, workspace_id, session_id)
+);
 CREATE TABLE oc_native_archive_sessions (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, session_id BLOB NOT NULL,
     last_sequence INTEGER NOT NULL CHECK (last_sequence > 0),

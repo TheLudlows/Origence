@@ -490,8 +490,8 @@ rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断�
 
 原逻辑 key 的 writer 可用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 撤回单轮，
 或用 `DELETE /v1/sessions/{session_id}` 撤回整个会话。admin 也可撤回归档来源
-`DELETE /v1/events/{source_event_id}`。撤回先阻断读回，再异步清理。新归档的私有读回保留历史问答，按当前 owner、工作区权限、轮次撤回和正文完整性判断。新增反馈、Run 引用和 Improve 仍按用途复核其来源。隔离迁移的旧轮次继续使用原来的来源可见性规则。
-[清理与备份](OPERATIONS.md#私有问答归档隔离迁移与配套恢复)
+`DELETE /v1/events/{source_event_id}`。撤回先阻断读回，再异步清理。私有读回保留历史问答，按当前 owner、工作区权限、轮次撤回和正文完整性判断。新增反馈、Run 引用和 Improve 仍按用途复核其来源。
+[清理与备份](OPERATIONS.md#私有问答归档与配套恢复)
 
 私有会话召回默认关闭。启用 session 路由要求实时 writer 权限，未通过时在模型调用前返回 403。
 `session_id` / `exclude_session_id` 仅在启用时可用。关键词、向量及混合检索仅查询

@@ -212,30 +212,14 @@ pub(super) async fn process(
     let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let mut run: ImproveRun = tx.improve_run(*session_id, *improve_id).await?;
-    let mut required = std::collections::HashMap::new();
-    for item in &run.snapshot.items {
-        if item.turn.question.is_empty()
-            && let std::collections::hash_map::Entry::Vacant(slot) =
-                required.entry(item.turn.turn_id)
-        {
-            let legacy = match tx.archive_entry(*session_id, item.turn.turn_id).await {
-                Ok(archive) if archive.locator.source == item.turn.source_event_id => Some(archive),
-                Ok(_) => return Err(AppError::NotFound),
-                Err(StorageError::NotFound) => None,
-                Err(error) => return Err(error.into()),
-            };
-            slot.insert((&item.turn, legacy));
-        }
-    }
     tx.commit().await?;
 
-    let mut hydrated = std::collections::HashMap::with_capacity(required.len());
-    for (turn, (frozen, legacy)) in required {
-        let body = if let Some(entry) = legacy {
-            service.archived_body(&entry).await?
-        } else {
+    let mut hydrated = std::collections::HashMap::new();
+    for item in &run.snapshot.items {
+        let frozen = &item.turn;
+        if let std::collections::hash_map::Entry::Vacant(slot) = hydrated.entry(frozen.turn_id) {
             let archive = service
-                .load_native_archive(&a, *session_id, turn)
+                .load_native_archive(&a, *session_id, frozen.turn_id)
                 .await?
                 .ok_or_else(|| {
                     AppError::Unavailable("private archive record unavailable".into())
@@ -248,19 +232,17 @@ pub(super) async fn process(
                     "private archive does not match frozen Improve evidence".into(),
                 ));
             }
-            archive.body
-        };
-        hydrated.insert(turn, body);
+            slot.insert(archive.body);
+        }
     }
     if !hydrated.is_empty() {
         let mut tx = service.read(&a, Permission::Write).await?;
         guard(&mut tx, claim, payload).await?;
         tx.commit().await?;
         for item in &mut run.snapshot.items {
-            if let Some(body) = hydrated.get(&item.turn.turn_id) {
-                item.turn.question.clone_from(&body.question);
-                item.turn.answer.clone_from(&body.answer);
-            }
+            let body = &hydrated[&item.turn.turn_id];
+            item.turn.question.clone_from(&body.question);
+            item.turn.answer.clone_from(&body.answer);
         }
     }
 

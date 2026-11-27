@@ -77,7 +77,7 @@ Origence 负责判定权限、来源和可见状态。AnySeek 同时持久化正
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。正常启动要求兼容结构，不自动升级、转换数据或重建丢失的集合。紧邻旧版的私有归档有单独的[离线迁移与配套恢复流程](../OPERATIONS.md#私有问答归档隔离迁移与配套恢复)。
+启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。正常启动要求兼容结构，不自动升级、转换数据或重建丢失的集合。私有归档的停机验证见[配套备份恢复](../OPERATIONS.md#私有问答归档与配套恢复)。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
 `full-text-backend.json` 的 `origence-content-backend-v2` 格式保存格式、endpoint、tenant/workspace 路由规则和模型 profile/维度，排除 API key。

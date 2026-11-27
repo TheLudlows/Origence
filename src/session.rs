@@ -30,28 +30,6 @@ impl ArchiveDomain {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg(feature = "local-storage")]
-pub(crate) struct ArchiveLocator {
-    pub domain: ArchiveDomain,
-    pub session: Uuid,
-    pub turn: Uuid,
-    pub source: Uuid,
-    pub body_hash: String,
-    pub epoch: u64,
-}
-
-#[cfg(feature = "local-storage")]
-impl ArchiveLocator {
-    pub(crate) fn group(&self) -> String {
-        // session is unique within the workspace, including across key rotations.
-        format!(
-            "t{}",
-            crate::storage::hash(format!("{}:{}", self.session, self.turn))
-        )
-    }
-}
-
 /// Maximum UTF-8 byte length of each question and answer.
 pub const MAX_SESSION_TEXT_BYTES: usize = 64 * 1024;
 /// Maximum number of distinct evidence references in one turn.
@@ -138,10 +116,6 @@ impl ArchivedTurnBody {
         serde_json::json!(self.question).to_string().len()
             + serde_json::json!(self.answer).to_string().len()
             - 4
-    }
-
-    pub(crate) fn digest(&self) -> String {
-        crate::storage::hash(serde_json::json!(self).to_string())
     }
 }
 

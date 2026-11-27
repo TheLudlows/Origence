@@ -4,6 +4,22 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Private Q&A on fresh databases
+
+Based on `c385544f8723f30f51654ac79d1c64143ff47716` on Linux x86_64 with Rust 1.98.0.
+The standalone AnySeek server used CI pin `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
+
+- `cargo test --locked` passed 481 tests. Eight real-backend AnySeek contracts also passed.
+  All-target Clippy passed with `-D warnings` for SQLite only and all features.
+  Formatting, documentation links, and diff checks passed.
+- `tools/private_archive_smoke.py` exercised the CLI, HTTP, and MCP with both backends.
+  It covered private search and shared search isolation, ordered reads, credential rotation,
+  failed commits and lost receipts, withdrawal races, Run replay, SQLite rejection of
+  private Q&A writes, and a paired restore with `archive-verify`.
+- Synthetic databases from before #168, from #168, and from the preceding #170 commit
+  were rejected by both `serve` and `archive-verify`. The SQLite file SHA-256 remained
+  unchanged. Local validation covered Linux and stopped copies.
+
 ## 2026-11-27 · Native private turn directory and direct experience publication
 
 Based on main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57` on Linux x86_64 with

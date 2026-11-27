@@ -421,10 +421,9 @@ rating accepts only helpful/unhelpful/neutral as the caller's judgment, without 
 An owning writer can withdraw one turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}`
 or the whole session with `DELETE /v1/sessions/{session_id}`. Admins can also withdraw the
 archive source with `DELETE /v1/events/{source_event_id}`. Withdrawal blocks delivery before
-asynchronous cleanup. Private reads of new turns preserve historical Q&A and check live workspace
+asynchronous cleanup. Private reads preserve historical Q&A and check live workspace
 permission, ownership, withdrawal, and integrity. New feedback, Run references, and Improve
-revalidate their sources. Turns imported by the offline migration retain their original
-source visibility rules.
+revalidate their sources.
 [Cleanup and backups](OPERATIONS.en.md#private-archive-and-paired-recovery)
 
 The session route is off by default. A caller without live writer permission receives 403 before model calls.

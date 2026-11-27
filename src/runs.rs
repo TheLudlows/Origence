@@ -157,18 +157,22 @@ impl Service {
         else {
             return Ok(None);
         };
-        let archive = self.load_native_archive(a, *session_id, *turn_id).await?;
-        if let Some(archive) = &archive
-            && (archive.source != *source_event_id
-                || archive.evidence != *used_evidence
-                || archive.body.evidence_use != *evidence_use
-                || archive.created_at != *created_at)
+        let archive = self
+            .load_native_archive(a, *session_id, *turn_id)
+            .await?
+            .ok_or_else(|| {
+                AppError::Unavailable("private archive for Run citation is missing".into())
+            })?;
+        if archive.source != *source_event_id
+            || archive.evidence != *used_evidence
+            || archive.body.evidence_use != *evidence_use
+            || archive.created_at != *created_at
         {
             return Err(AppError::Unavailable(
                 "private archive does not match the recorded Run citation".into(),
             ));
         }
-        Ok(archive)
+        Ok(Some(archive))
     }
 
     async fn restore_archive_run_bundle(
@@ -185,37 +189,9 @@ impl Service {
         let mut bundle: EvidenceBundle =
             serde_json::from_value(preparation["recorded_bundle"].clone())
                 .map_err(|_| invalid_archive_bundle())?;
-        let mut legacy = Vec::new();
-        for (index, item) in bundle.items.iter_mut().enumerate() {
-            if let EvidenceProvenance::SessionTurn {
-                session_id,
-                turn_id,
-                source_event_id,
-                ..
-            } = item.provenance
-            {
-                if let Some(archive) = self.native_run_archive(a, &item.provenance).await? {
-                    item.content = run_archive_content(&archive.body);
-                } else {
-                    legacy.push((index, session_id, turn_id, source_event_id));
-                }
-            }
-        }
-        let mut legacy_bodies = Vec::new();
-        if !legacy.is_empty() {
-            let mut tx = self.read(a, Permission::Write).await?;
-            let mut entries = Vec::new();
-            for (index, session, turn, source) in legacy {
-                if tx.require_turn_visible(session, turn).await? != source {
-                    return Err(AppError::NotFound);
-                }
-                let entry = tx.archive_entry(session, turn).await?;
-                entries.push((index, entry));
-            }
-            tx.commit().await?;
-            for (index, entry) in entries {
-                let body = self.archived_body(&entry).await?;
-                legacy_bodies.push((index, entry, body));
+        for item in &mut bundle.items {
+            if let Some(archive) = self.native_run_archive(a, &item.provenance).await? {
+                item.content = run_archive_content(&archive.body);
             }
         }
         let mut tx = self.read(a, Permission::Write).await?;
@@ -226,11 +202,6 @@ impl Service {
             .await?;
         if current.as_ref() != Some(&preparation) {
             return Err(invalid_archive_bundle());
-        }
-        for (index, entry, body) in legacy_bodies {
-            let fresh = tx.archive_delivery(&entry, body).await?;
-            bundle.items[index].content =
-                format!("Question: {}\nAnswer: {}", fresh.question, fresh.answer);
         }
         bundle.rendered_context = crate::evidence::restore_rendered_context(&bundle);
         if *proof != prepared_bundle_hash(&bundle)? {

@@ -7,6 +7,20 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 新建库的私有问答存储
+
+基于 `c385544f8723f30f51654ac79d1c64143ff47716`，Linux x86_64、Rust 1.98.0。
+独立 AnySeek 使用 CI 固定版本 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
+
+- `cargo test --locked` 通过 481 项。另运行 8 项固定版真实 AnySeek 合约。
+  SQLite-only 和全特性的全目标 Clippy 均通过 `-D warnings`。格式、文档链接和 diff 检查通过。
+- `tools/private_archive_smoke.py` 用实际 CLI、HTTP、MCP 验证了嵌入和独立后端。
+  覆盖私有检索与共享隔离、按序读回、权限轮换、提交失败与丢回执、撤回竞态、
+  Run 重放、SQLite 拒绝存入问答正文和 `archive-verify` 配套恢复。
+- 用前 #168、#168 和 #170 前一提交生成的三个合成库验证拒绝旧 schema。
+  `serve` 和 `archive-verify` 均拒绝打开，SQLite 文件 SHA-256 保持一致。
+  本地验证限 Linux 和停机副本。
+
 ## 2026-11-27 · 原生私有轮次目录与直接发布经验
 
 基于 main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57`，Linux x86_64，

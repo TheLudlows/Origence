@@ -993,13 +993,13 @@ mod tests {
         let session = Uuid::new_v4();
         let turn = Uuid::new_v4();
         let feedback = Uuid::new_v4();
-        let turn_source = tx
-            .create_event("session_turn", "fixture", None)
-            .await
-            .unwrap();
+        let turn_source = tx.create_event("session_turn", "", None).await.unwrap();
         sqlite_db::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,'fixture',?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
             .bind(turn_source).bind(principal).execute(&mut *tx.tx).await.unwrap();
+        sqlite_db::query("INSERT INTO oc_native_archive_proofs(tenant_id,workspace_id,session_id,turn_id,evidence_reported,body_bytes) VALUES(?,?,?,?,1,7)")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
+            .execute(&mut *tx.tx).await.unwrap();
         sqlite_db::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,'fixture','{}',0,1)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(principal).bind(feedback)
             .bind(session).bind(turn).execute(&mut *tx.tx).await.unwrap();

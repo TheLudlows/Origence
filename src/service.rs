@@ -56,7 +56,7 @@ impl Service {
         models: Models,
         anyseek: crate::storage::anyseek::AnySeekConfig,
     ) -> Result<Self> {
-        Self::open(dir.as_ref(), models, anyseek, false).await
+        Self::open(dir.as_ref(), models, anyseek, true).await
     }
 
     #[cfg(feature = "embedded-anyseek")]
@@ -66,7 +66,7 @@ impl Service {
             dir.as_ref(),
             models,
             crate::storage::anyseek::AnySeekConfig::embedded(),
-            false,
+            true,
         )
         .await
     }
@@ -75,7 +75,7 @@ impl Service {
         dir: &Path,
         models: Models,
         mut anyseek: crate::storage::anyseek::AnySeekConfig,
-        archive_maintenance: bool,
+        recover_background_work: bool,
     ) -> Result<Self> {
         if let Some(profile) = &models.profile {
             anyseek = anyseek.with_embedding(profile.clone(), models.embedding_dimension())?;
@@ -87,16 +87,6 @@ impl Service {
             .await
             .map_err(anyhow::Error::from)?;
         let relational = Arc::new(SqliteStore::open(dir.join("context.db")).await?);
-        if !archive_maintenance
-            && relational
-                .archive_migration_phase()
-                .await?
-                .is_some_and(|phase| phase != "complete")
-        {
-            return Err(AppError::Unavailable(
-                "private archive migration awaits offline cutover".into(),
-            ));
-        }
         let published = relational.has_committed_full_text().await?;
         let binding =
             crate::storage::retrieval_store::binding::prepare(&dir, &anyseek, published).await?;
@@ -118,7 +108,7 @@ impl Service {
         let initialized = async {
             service.engine.check().await?;
             service.check_committed_surfaces().await?;
-            if !archive_maintenance {
+            if recover_background_work {
                 service.engine.relational().recover_jobs().await?;
                 crate::worker::cleanup(&service).await?;
             }
@@ -576,10 +566,6 @@ impl Service {
     }
     pub async fn source_event(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
         let mut tx = self.read(a, Permission::Write).await?;
-        if let Some((session, turn)) = tx.archive_for_source(id).await? {
-            tx.commit().await?;
-            return self.archive_source(a, id, session, turn).await;
-        }
         let linked = tx.native_archive_turn_for_source(id).await?;
         if linked.is_none() {
             match tx.event_view(id).await {

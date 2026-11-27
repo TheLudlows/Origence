@@ -6,7 +6,7 @@
 
 ## 当前阶段范围
 
-启动要求完整当前 schema。紧邻旧版的私有归档使用[显式隔离迁移](#私有问答归档隔离迁移与配套恢复)。
+启动要求完整当前 schema。已有数据目录需用创建它的版本打开。
 同版本持久化、重启/重试和备份恢复仍是要求，不兼容结构拒绝打开。
 保留原始来源及备份，不能因使用新目录而删除或覆盖旧数据。
 事务查询、身份占位与发布计划约束见[存储不变量](contracts/storage.md)。
@@ -260,32 +260,19 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 使用 `origence.exe serve --local` 启动 API 和本地 AnySeek。需要 Node UI 时可使用
 [`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一 PowerShell 7.4+ 控制台联启。脚本入口禁用模型。
 
-## 私有问答归档、隔离迁移与配套恢复
+## 私有问答归档与配套恢复
 
-私有归档依赖 SQLite 和 AnySeek 的配套备份。后台清理用 AnySeek 组版本和撤回标记阻断迟到写入。[归档 API](API.md#会话归档与幂等反馈)
+私有问答的恢复依赖 SQLite 与 AnySeek 的配套备份。后台清理用 AnySeek 组版本和撤回标记阻断迟到写入。
+[AnySeek 备份保留策略](#anyseek-全文与向量) · [归档 API](API.md#会话归档与幂等反馈)
 
-仅在隔离副本演练。停止 Origence 和配套 AnySeek，复制整个 Origence 数据目录以及
-独立 AnySeek 的数据目录（嵌入模式的 AnySeek 在 Origence 目录下）。给远端方式提供
-隔离的 AnySeek 服务和与原绑定相同的服务地址，严禁指向真实归档。先保留一对未修改
-备份。以下命令使用隔离数据目录。嵌入模式添加 `--local`。独立模式使用该副本的
-`OC_ANYSEEK_URL` 和 `OC_ANYSEEK_API_KEY`。
+1. 停止 Origence 和配套 AnySeek，记录版本并备份完整 Origence 数据目录。独立模式另备份 AnySeek
+   数据目录，嵌入模式的 AnySeek 在 Origence 目录内。保留原始备份。
+2. 在隔离副本运行 `origence --offline --data-dir <副本> archive-verify --isolated-copy`。
+   嵌入模式加 `--local`。独立模式使用隔离 AnySeek 的 `OC_ANYSEEK_URL` 和
+   `OC_ANYSEEK_API_KEY`，服务地址要与绑定文件一致。保存清单的 AnySeek 版本、
+   可见轮次数和 `directory_sha256`。摘要涵盖正文、顺序、来源与已分配序号的会话和轮次的撤回标记。
+3. 用同版本停机还原配套目录和绑定文件，重新执行 `archive-verify` 比对清单，再通过 API 验证
+   按序分页、关键词、向量和跨 key 隔离。对没有被 Run 或反馈等用途引用的普通轮次，清单对比
+   用于发现整组缺失。尚未提交的正文由调用方携原文重试。
 
-1. `origence --offline --data-dir <副本> archive-migrate copy --isolated-copy --limit 64`。
-   接受 #168 明确支持的前代 authority schema、#168 的原归档结构或已经准备好的副本。
-   对 SQLite 正文按历史 `created_at,turn_id` 顺序分批复制并核对来源、原请求、正文哈希和回读。
-   #168 已在 AnySeek 的历史轮次保留原格式、标识、顺序和撤回。
-2. `origence --offline --data-dir <副本> archive-migrate verify --isolated-copy`。
-   等到 `unconfirmed=0`。保留目录摘要、AnySeek 版本和旧格式的确认与可见水位。
-   对照原有轮次、来源、顺序及哈希，并演练还原。
-3. `origence --offline --data-dir <副本> archive-migrate purge --isolated-copy`。
-   先复验整份目录，显式删去旧正文、冻结的 Q&A、支持引文和 Run 重放正文副本。
-   同一事务记录进入清理阶段，再重建 SQLite 并截断 WAL。中断后重跑本步。
-   成功后才允许正常启动。已经持久化的 Run 核验与 Skill 依赖前缀保存原摘要，
-   仅存在外部的旧前缀承诺可能需要重新取得。
-
-这里验证的是逻辑清除及清理后当前 SQLite 文件的可见内容。SQLite `secure_delete`、
-`VACUUM` 和 WAL 截断无法保证底层数据库页面、历史 WAL、文件系统副本、快照或历史备份的
-物理擦除。切换前备份仍含原文，按现有访问控制与保留策略管理。
-[AnySeek 历史日志和备份由独立保留策略管理。](#anyseek-全文与向量)
-
-停机还原保留 SQLite、AnySeek、绑定文件及所用版本。再次执行 `verify` 对照清单，再检查按序分页、关键词、向量和跨 key 隔离。未提交的正文由调用方重试。在线快照、对象存储及跨版本恢复需独立验证。
+清单表示停机副本的逻辑可见性。在线快照、跨版本恢复和介质物理擦除超出本验证范围。
