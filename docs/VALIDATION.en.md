@@ -90,6 +90,20 @@ keyboard, hover, and touch at 1440, 1024, and 320 pixels.
 `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and
 `git diff --check` passed. The running local console served the updated frontend assets.
 
+## 2026-11-27 · Standalone AnySeek collection limit compatibility
+
+On Linux x86-64 with Rust 1.98.0 and fresh synthetic stores, standalone AnySeek Release
+`74d48d92db27d4fa155ce38004ac079f3bf92835` was paired with Origence `d34804c` and the fix.
+The baseline exited during ordinary asset publication after receiving collection Info without
+`max_records`. The fixed HTTP path ingested, published and found the original text in search.
+Both builds matched the private archive `directory_sha256` before and after paired restore,
+then passed the turn list, readback and withdrawal checks. [AnySeek #229](https://github.com/TheLudlows/anyseek/issues/229)
+
+- `cargo fmt --all -- --check` and `cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
+- `cargo test --locked --test anyseek` passed six cases. Collection checks cover omitted, positive and invalid advertised Record limits and still require a positive `max_candidates`.
+- `python3 tools/anyseek_smoke.py --anyseek-binary <frozen Release> --binary target/debug/origence --test-executable <test binary from the prior command>` passed eight real-backend contracts and the HTTP, MCP, service reopen and withdrawal checks.
+- The legacy Info shape uses a contract fixture. The live probe used the Linux binary above.
+
 ## 2026-11-27 · Remove interval details from the Run overview
 
 Based on `3a341e4` on Windows with Node 24.15.0 and Rust 1.98.0. `npm --prefix ui test` passed all

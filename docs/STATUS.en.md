@@ -20,6 +20,8 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
+Standalone AnySeek deployments accept collection Info after removal of the Record count limit and still validate advertised legacy limits and the query candidate limit. See [VALIDATION](VALIDATION.en.md#2026-11-27--standalone-anyseek-collection-limit-compatibility) for pinned versions and evidence.
+
 ## Single-key workspaces
 
 A fresh database supports offline provisioning of single-key workspaces. The credential signs into both Agents and the console, provides workspace content access, and can delete memories. Original conversation turns support append and read. Successful archival queues automatic extraction on the existing durable worker. Replays keep the same job, including after memory deletion. Offline rotation preserves the workspace, archive, and extraction jobs. A separate deployment administrator key supports read-only inspection across workspaces and moderation of fixed-version global knowledge releases. Approved copies are recalled alongside workspace results. See the [global knowledge API](API.en.md#global-knowledge).

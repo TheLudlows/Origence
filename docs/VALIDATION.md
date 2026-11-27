@@ -82,6 +82,19 @@ Node 语法检查，完整客户端安装烟测脚本通过 Python 语法检查�
 `cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和 `git diff --check` 通过。
 本地运行中的控制台返回了更新后的前端资源。
 
+## 2026-11-27 · 独立 AnySeek 集合限额兼容
+
+在 Linux x86-64、Rust 1.98.0 和合成新库上，使用独立 AnySeek Release
+`74d48d92db27d4fa155ce38004ac079f3bf92835` 对照 Origence `d34804c` 与本次修复。
+基线进程在普通知识发布时收到不含 `max_records` 的集合 Info 后退出。修复后的同一 HTTP
+路径完成入库、发布及原文搜索。两版均通过私有归档配套恢复前后的 `directory_sha256`
+比对，以及恢复后的轮次列表、回读和撤回。[AnySeek #229](https://github.com/TheLudlows/anyseek/issues/229)
+
+- `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets --all-features -- -D warnings` 通过。
+- `cargo test --locked --test anyseek` 通过 6 项。集合检查覆盖缺省、正整数以及非法的已声明上限，并继续校验 `max_candidates`。
+- `python3 tools/anyseek_smoke.py --anyseek-binary <固定 Release> --binary target/debug/origence --test-executable <上步测试程序>` 通过 8 项真实后端契约，并验证 HTTP、MCP、服务重开和撤回。
+- 旧集合 Info 形状使用契约夹具校验。本轮联调使用上述 Linux 固定二进制。
+
 ## 2026-11-27 · 移除运行总览的时段明细
 
 基于 `3a341e4`，使用 Windows、Node 24.15.0 和 Rust 1.98.0。`npm --prefix ui test` 通过 32 项，
