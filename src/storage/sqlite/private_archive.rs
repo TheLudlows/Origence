@@ -79,13 +79,10 @@ impl SqliteTx {
         Ok(())
     }
 
-    pub(super) async fn withdraw_archive_source(&mut self, source: Uuid) -> StorageResult<()> {
-        if cfg!(test) && !archive_schema_present(&mut self.tx).await? {
-            return Ok(());
-        }
-        sqlite_db::query("UPDATE oc_private_archives SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+    pub(crate) async fn native_archive_turn_for_source(
+        &mut self,
+        source: Uuid,
+    ) -> StorageResult<Option<(Uuid, Uuid)>> {
         let turn: Option<(Uuid, Uuid)> = sqlite_db::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -95,6 +92,20 @@ impl SqliteTx {
                 .await?
                 .is_some()
         {
+            self.require_private_session(session).await?;
+            return Ok(Some((session, turn)));
+        }
+        Ok(None)
+    }
+
+    pub(super) async fn withdraw_archive_source(&mut self, source: Uuid) -> StorageResult<()> {
+        if cfg!(test) && !archive_schema_present(&mut self.tx).await? {
+            return Ok(());
+        }
+        sqlite_db::query("UPDATE oc_private_archives SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        if let Some((session, turn)) = self.native_archive_turn_for_source(source).await? {
             self.fence_native_archive(session, turn).await?;
         }
         Ok(())
@@ -111,7 +122,7 @@ mod host {
     use super::*;
     use crate::{
         context_retrieval::ContextSessionTurn,
-        session::{ArchiveDomain, ArchiveLocator, ArchivedTurnBody, EvidenceUse, SessionTurnInput},
+        session::{ArchiveDomain, ArchiveLocator, ArchivedTurnBody, EvidenceUse},
         storage::anyseek::private_archive::NativeArchiveTurn,
     };
 
@@ -178,13 +189,13 @@ mod host {
             &mut self,
             session: Uuid,
         ) -> StorageResult<ArchiveDomain> {
-            self.require_private_session(session).await?;
+            let owner = self.require_private_session_owner(session).await?;
             if self.archive_session_withdrawn(session).await? {
                 return Err(StorageError::NotFound);
             }
             Ok(ArchiveDomain {
                 scope: self.scope,
-                owner: self.private_key_id().await?,
+                owner,
             })
         }
 
@@ -256,14 +267,12 @@ mod host {
             Ok(sequence)
         }
 
-        pub(crate) async fn native_archive_fenced(
+        async fn native_archive_turn_fenced(
             &mut self,
             session: Uuid,
             turn: Uuid,
         ) -> StorageResult<bool> {
-            if self.archive_session_withdrawn(session).await?
-                || self.native_turn_withdrawn(session, turn).await?
-            {
+            if self.native_turn_withdrawn(session, turn).await? {
                 return Ok(true);
             }
             sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND state='withdrawn')")
@@ -275,13 +284,13 @@ mod host {
             &mut self,
             session: Uuid,
             turn: Uuid,
-        ) -> StorageResult<()> {
+        ) -> StorageResult<ArchiveDomain> {
             self.check_permission(Permission::Write).await?;
-            self.require_private_session(session).await?;
-            if self.native_archive_fenced(session, turn).await? {
+            let domain = self.archive_domain(session).await?;
+            if self.native_archive_turn_fenced(session, turn).await? {
                 return Err(StorageError::NotFound);
             }
-            Ok(())
+            Ok(domain)
         }
 
         /// A durable consumer may keep the exact support it used for transactional
@@ -380,66 +389,29 @@ mod host {
                 .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
         }
 
-        pub(crate) async fn stage_archive(
+        pub(crate) async fn retry_legacy_archive(
             &mut self,
             session: Uuid,
-            input: &SessionTurnInput,
+            turn: Uuid,
             request_hash: &str,
             body: &ArchivedTurnBody,
-            epoch: u64,
         ) -> StorageResult<ArchiveEntry> {
-            let domain = self.archive_domain(session).await?;
-            let body_hash = body.digest();
-            let (source, inserted) = self.register_turn(session, input, request_hash).await?;
-            if inserted {
-                let sequence: i64 = sqlite_db::query_scalar("SELECT COALESCE(MAX(turn_sequence),0)+1 FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=?")
-                    .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
-                    .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-                self.insert_archive(
-                    &ArchiveLocator {
-                        domain,
-                        session,
-                        turn: input.turn_id,
-                        source,
-                        body_hash: body_hash.to_owned(),
-                        epoch,
-                    },
-                    sequence,
-                    input.evidence_use,
-                    body.model_json_bytes(),
-                )
-                .await?;
-                self.audit(
-                    "session.turn_pending",
-                    input.turn_id,
-                    json!({"session_id":session,"source_event_id":source}),
-                )
-                .await?;
+            self.check_permission(Permission::Write).await?;
+            let entry = self.archive_entry(session, turn).await?;
+            let (source, digest): (Uuid, String) = sqlite_db::query_as("SELECT source_event_id,request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
+                .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or_else(corrupt)?;
+            if digest != request_hash {
+                return Err(StorageError::Conflict("turn is immutable".into()));
             }
-            let entry = self.archive_entry(session, input.turn_id).await?;
             if entry.locator.source != source
-                || entry.locator.body_hash != body_hash
-                || entry.evidence_use != input.evidence_use
+                || entry.locator.body_hash != body.digest()
+                || entry.evidence_use != body.evidence_use
             {
                 return Err(corrupt());
             }
             self.require_archive_support(&entry).await?;
             Ok(entry)
-        }
-
-        async fn insert_archive(
-            &mut self,
-            locator: &ArchiveLocator,
-            sequence: i64,
-            evidence_use: EvidenceUse,
-            body_bytes: usize,
-        ) -> StorageResult<()> {
-            sqlite_db::query("INSERT INTO oc_private_archives(tenant_id,workspace_id,logical_key_id,session_id,turn_id,source_event_id,group_id,body_hash,body_bytes,operation_epoch,evidence_reported,turn_sequence,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'pending')")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(locator.domain.owner)
-                .bind(locator.session).bind(locator.turn).bind(locator.source).bind(locator.group())
-                .bind(&locator.body_hash).bind(body_bytes as i64).bind(locator.epoch as i64).bind(evidence_use.is_reported()).bind(sequence)
-                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-            Ok(())
         }
 
         async fn require_archive_support(
@@ -591,23 +563,6 @@ mod host {
             Ok(ArchiveDomain { scope, owner })
         }
 
-        pub(crate) async fn native_archive_sessions(
-            &self,
-        ) -> StorageResult<Vec<(ArchiveDomain, Uuid)>> {
-            let rows: Vec<(Uuid, Uuid, Uuid)> = sqlite_db::query_as("SELECT tenant_id,workspace_id,session_id FROM oc_native_archive_sessions WHERE cleanup_after IS NULL ORDER BY tenant_id,workspace_id,session_id")
-                .fetch_all(&self.pool).await.map_err(sqlite_err)?;
-            let mut sessions = Vec::with_capacity(rows.len());
-            for (tenant_id, workspace_id, session) in rows {
-                let scope = Scope {
-                    tenant_id,
-                    workspace_id,
-                };
-                let domain = self.native_archive_cleanup_domain(scope, session).await?;
-                sessions.push((domain, session));
-            }
-            Ok(sessions)
-        }
-
         pub(crate) async fn withdrawn_native_archive_turns(
             &self,
             limit: usize,
@@ -722,21 +677,14 @@ mod host {
                 .collect()
         }
 
-        pub(crate) async fn defer_archive_cleanup(
+        pub(crate) async fn settle_legacy_archive_cleanup(
             &self,
             locator: &ArchiveLocator,
+            cleaned: bool,
         ) -> StorageResult<()> {
-            sqlite_db::query("UPDATE oc_private_archives SET cleanup_after=? WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND state='withdrawn' AND cleanup_done=0")
-                .bind(now_ms() + 30_000).bind(locator.domain.scope.tenant_id).bind(locator.domain.scope.workspace_id)
-                .bind(locator.session).bind(locator.turn).execute(&self.pool).await.map_err(sqlite_err)?;
-            Ok(())
-        }
-
-        pub(crate) async fn finish_archive_cleanup(
-            &self,
-            locator: &ArchiveLocator,
-        ) -> StorageResult<()> {
-            sqlite_db::query("UPDATE oc_private_archives SET cleanup_done=1 WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND state='withdrawn'")
+            let retry_at = (!cleaned).then(|| now_ms() + 30_000);
+            sqlite_db::query("UPDATE oc_private_archives SET cleanup_done=?,cleanup_after=COALESCE(?,cleanup_after) WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND state='withdrawn' AND cleanup_done=0")
+                .bind(cleaned).bind(retry_at)
                 .bind(locator.domain.scope.tenant_id).bind(locator.domain.scope.workspace_id)
                 .bind(locator.session).bind(locator.turn).execute(&self.pool).await.map_err(sqlite_err)?;
             Ok(())
@@ -830,7 +778,7 @@ async fn native_archive_authority_keeps_only_used_proof_and_fences_withdrawal() 
         Some("")
     );
     tx.retract_event(record.source).await.unwrap();
-    assert!(tx.native_archive_fenced(session, turn).await.unwrap());
+    assert!(tx.native_turn_withdrawn(session, turn).await.unwrap());
     tx.commit().await.unwrap();
     assert_eq!(
         store.withdrawn_native_archive_turns(2).await.unwrap(),

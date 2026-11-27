@@ -25,18 +25,6 @@ pub(crate) struct NativeArchiveTurn {
 }
 
 impl NativeArchiveTurn {
-    fn digest(&self, domain: ArchiveDomain) -> String {
-        hash(
-            json!([
-                domain.scope.tenant_id,
-                domain.scope.workspace_id,
-                domain.owner,
-                self
-            ])
-            .to_string(),
-        )
-    }
-
     fn validate(&self) -> StorageResult<()> {
         let input = SessionTurnInput {
             turn_id: self.turn,
@@ -74,14 +62,89 @@ fn archive_group(session: Uuid, turn: Uuid) -> String {
     format!("t{}", hash(format!("{session}:{turn}")))
 }
 
+fn archive_digest(domain: ArchiveDomain, payload: &Value) -> String {
+    hash(
+        json!([
+            domain.scope.tenant_id,
+            domain.scope.workspace_id,
+            domain.owner,
+            payload
+        ])
+        .to_string(),
+    )
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum ArchiveQuery<'a> {
     Keyword(&'a str),
     Vector(&'a [f32]),
 }
 
+impl ArchiveQuery<'_> {
+    fn request(self, filters: Vec<Value>, fields: &[&str], limit: usize) -> Value {
+        let mut request = json!({"filter":filters,"fields":fields,"length":limit,"count":true});
+        match self {
+            Self::Keyword(terms) => {
+                request["query"] = json!(terms);
+                request["operator"] = json!("and");
+                request["search_fields"] = json!(["terms"]);
+            }
+            Self::Vector(vector) => {
+                request["query_vector"] = json!(vector);
+                request["all"] = json!(true);
+            }
+        }
+        request
+    }
+}
+
+struct ArchiveHits {
+    hits: Vec<Value>,
+    count: usize,
+    visible_seq: u64,
+}
+
+impl ArchiveHits {
+    fn pair(&self, group: &str) -> StorageResult<(&Value, &Value)> {
+        if self.count != 2 || self.hits.len() != 2 {
+            return Err(invalid_archive());
+        }
+        let find = |id: &str, kind: &str| {
+            self.hits
+                .iter()
+                .map(|hit| &hit["record"])
+                .find(|record| archive_member(record, id, group, kind))
+                .ok_or_else(invalid_archive)
+        };
+        Ok((find(group, "body")?, find(&format!("{group}s"), "search")?))
+    }
+}
+
 fn invalid_archive() -> StorageError {
     StorageError::Unavailable("private archive contents failed integrity verification".into())
+}
+
+fn archive_records(group: &str, body: Value, search: Value) -> StorageResult<Value> {
+    for document in [&body, &search] {
+        if serde_json::to_vec(document)
+            .map_err(|_| invalid_archive())?
+            .len()
+            > RECORD_BYTES
+        {
+            return Err(invalid("private archive record exceeds 1 MiB"));
+        }
+    }
+    Ok(json!([
+        {"record_id":group,"document":body},
+        {"record_id":format!("{group}s"),"document":search}
+    ]))
+}
+
+fn archive_member(record: &Value, id: &str, group: &str, kind: &str) -> bool {
+    record["record_id"] == id
+        && record["version"] == 1
+        && record["document"]["kind"] == kind
+        && record["document"]["archive"] == group
 }
 
 fn receipt_sequence(
@@ -118,15 +181,6 @@ impl AnySeekFullTextStore {
             .ok_or_else(unavailable)
     }
 
-    async fn private_request(
-        &self,
-        domain: ArchiveDomain,
-        request: Request,
-    ) -> StorageResult<(StatusCode, Value)> {
-        self.archive_request(domain, &domain.collection(), request)
-            .await
-    }
-
     async fn archive_request(
         &self,
         domain: ArchiveDomain,
@@ -135,6 +189,39 @@ impl AnySeekFullTextStore {
     ) -> StorageResult<(StatusCode, Value)> {
         self.request_collection(Some(domain.scope), Some(collection), request, &mut None)
             .await
+    }
+
+    async fn archive_query(
+        &self,
+        domain: ArchiveDomain,
+        collection: &str,
+        query: Value,
+    ) -> StorageResult<ArchiveHits> {
+        let (status, mut value) = self
+            .archive_request(domain, collection, Request::Query(query))
+            .await?;
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            return Err(transient());
+        }
+        if !status.is_success() {
+            return Err(unavailable());
+        }
+        let visible_seq = value["visible_seq"].as_u64().ok_or_else(invalid_archive)?;
+        let count = value["count_total"]
+            .as_u64()
+            .and_then(|count| usize::try_from(count).ok())
+            .ok_or_else(invalid_archive)?;
+        let Value::Array(hits) = value["hits"].take() else {
+            return Err(invalid_archive());
+        };
+        if count < hits.len() || (count > 0 && visible_seq == 0) {
+            return Err(invalid_archive());
+        }
+        Ok(ArchiveHits {
+            hits,
+            count,
+            visible_seq,
+        })
     }
 
     fn private_config(&self, native: bool) -> Value {
@@ -277,15 +364,6 @@ impl AnySeekFullTextStore {
         Ok(true)
     }
 
-    async fn private_version(&self, locator: &ArchiveLocator) -> StorageResult<Option<u64>> {
-        self.archive_version(
-            locator.domain,
-            &locator.domain.collection(),
-            &locator.group(),
-        )
-        .await
-    }
-
     async fn archive_version(
         &self,
         domain: ArchiveDomain,
@@ -322,7 +400,11 @@ impl AnySeekFullTextStore {
                 Err(invalid_archive())
             };
         }
-        let version = self.private_version(locator).await?;
+        let collection = locator.domain.collection();
+        let group = locator.group();
+        let version = self
+            .archive_version(locator.domain, &collection, &group)
+            .await?;
         if version != Some(1) {
             return if pending {
                 Ok(None)
@@ -330,53 +412,26 @@ impl AnySeekFullTextStore {
                 Err(invalid_archive())
             };
         }
-        let group = locator.group();
-        let (status, value) = self
-            .private_request(
+        let result = self
+            .archive_query(
                 locator.domain,
-                Request::Query(json!({
+                &collection,
+                json!({
                     "query":"","filter":[filter("archive",[group.clone()])],
                     "fields":["archive","kind","body"],"length":3,"count":true
-                })),
+                }),
             )
             .await?;
-        if !status.is_success() {
-            return Err(unavailable());
-        }
-        let hits = value["hits"].as_array().ok_or_else(invalid_archive)?;
-        if hits.is_empty() && value["count_total"] == 0 && pending {
+        if result.count == 0 && pending {
             return Ok(None);
         }
-        if hits.len() != 2 || value["count_total"] != 2 {
-            return Err(invalid_archive());
-        }
-        let search_id = format!("{group}s");
-        if !hits.iter().any(|hit| {
-            let record = &hit["record"];
-            record["record_id"] == search_id
-                && record["document"]["archive"] == group
-                && record["document"]["kind"] == "search"
-        }) {
-            return Err(invalid_archive());
-        }
-        let record = hits
-            .iter()
-            .map(|hit| &hit["record"])
-            .find(|record| record["record_id"] == group)
-            .ok_or_else(invalid_archive)?;
-        if record["document"]["archive"] != group || record["document"]["kind"] != "body" {
-            return Err(invalid_archive());
-        }
+        let (record, _) = result.pair(&group)?;
         let body: ArchivedTurnBody = serde_json::from_value(record["document"]["body"].clone())
             .map_err(|_| invalid_archive())?;
         if body.digest() != locator.body_hash {
             return Err(invalid_archive());
         }
-        let seq = value["visible_seq"]
-            .as_u64()
-            .filter(|s| *s > 0)
-            .ok_or_else(invalid_archive)?;
-        Ok(Some((body, seq)))
+        Ok(Some((body, result.visible_seq)))
     }
 
     /// Ordinary writes always require version zero. Cleanup uses the same CAS
@@ -389,27 +444,14 @@ impl AnySeekFullTextStore {
         embedding: Option<Vec<f32>>,
     ) -> StorageResult<u64> {
         self.private_collection(locator.domain, true).await?;
+        let collection = locator.domain.collection();
         let group = locator.group();
         let canonical = json!({"archive":group,"kind":"body","body":body});
         let mut projection = json!({"archive":group,"kind":"search","terms":terms});
         if let Some(vector) = embedding {
             projection["vector"] = json!(vector);
         }
-        if serde_json::to_vec(&canonical)
-            .map_err(|_| invalid_archive())?
-            .len()
-            > RECORD_BYTES
-            || serde_json::to_vec(&projection)
-                .map_err(|_| invalid_archive())?
-                .len()
-                > RECORD_BYTES
-        {
-            return Err(invalid("private archive record exceeds 1 MiB"));
-        }
-        let records = json!([
-            {"record_id":group,"document":canonical},
-            {"record_id":format!("{group}s"),"document":projection}
-        ]);
+        let records = archive_records(&group, canonical, projection)?;
         let nonce = format!("private-archive:{group}");
         let request = |epoch| {
             Request::ReplaceGroup(json!({
@@ -418,15 +460,22 @@ impl AnySeekFullTextStore {
             }))
         };
         let mut epoch = locator.epoch;
-        let mut response = self.private_request(locator.domain, request(epoch)).await;
+        let mut response = self
+            .archive_request(locator.domain, &collection, request(epoch))
+            .await;
         if matches!(response, Ok((StatusCode::GONE, _)))
-            && self.private_version(locator).await?.is_none()
+            && self
+                .archive_version(locator.domain, &collection, &group)
+                .await?
+                .is_none()
         {
             // AnySeek retains operation receipts for the current/previous UTC
             // day. An absent group at CAS=0 allows a fresh epoch for the same
             // logical operation and immutable Record IDs.
             epoch = operation_epoch()?;
-            response = self.private_request(locator.domain, request(epoch)).await;
+            response = self
+                .archive_request(locator.domain, &collection, request(epoch))
+                .await;
         }
         if let Ok((status, result)) = &response
             && status.is_success()
@@ -443,46 +492,34 @@ impl AnySeekFullTextStore {
 
     pub(crate) async fn archive_delete(&self, locator: &ArchiveLocator) -> StorageResult<()> {
         self.private_collection(locator.domain, true).await?;
+        let collection = locator.domain.collection();
         let group = locator.group();
         for _ in 0..3 {
-            let version = self.private_version(locator).await?.unwrap_or(0);
+            let version = self
+                .archive_version(locator.domain, &collection, &group)
+                .await?
+                .unwrap_or(0);
             if version > 0 {
-                let (status, result) = self
-                    .private_request(
+                let result = self
+                    .archive_query(
                         locator.domain,
-                        Request::Query(json!({
+                        &collection,
+                        json!({
                             "query":"","filter":[filter("archive",[group.clone()])],
                             "fields":PRIVATE_FIELDS,"length":1,"count":true
-                        })),
+                        }),
                     )
                     .await?;
-                if !status.is_success() || result["count_total"].as_u64().is_none() {
-                    return Err(unavailable());
-                }
-                if result["count_total"] == 0 {
+                if result.count == 0 {
                     return Ok(());
                 }
             }
-            let epoch = operation_epoch()?;
-            let nonce = format!("private-delete:{group}:{version}");
-            let (status, result) = self
-                .private_request(
-                    locator.domain,
-                    Request::ReplaceGroup(json!({
-                        "operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,
-                        "expected_group_version":version,"records":[]
-                    })),
-                )
-                .await?;
-            if status == StatusCode::CONFLICT {
-                continue;
-            }
-            if status.is_success()
-                && receipt_sequence(&result, &group, epoch, &nonce, version + 1, 0).is_some()
+            if self
+                .replace_withdrawn_archive(locator.domain, &collection, &group, version, Vec::new())
+                .await?
             {
                 return Ok(());
             }
-            return Err(transient());
         }
         Err(transient())
     }
@@ -494,42 +531,30 @@ impl AnySeekFullTextStore {
         groups: &[String],
         limit: usize,
     ) -> StorageResult<(usize, Vec<(String, f64)>)> {
-        let mut body = json!({
-            "filter":[filter("kind",["search".to_owned()]),filter("archive",groups.iter().cloned())],
-            "fields":PRIVATE_FIELDS,"length":limit,"count":true
-        });
-        match query {
-            ArchiveQuery::Keyword(terms) => {
-                body["query"] = json!(terms);
-                body["operator"] = json!("and");
-                body["search_fields"] = json!(["terms"]);
-            }
-            ArchiveQuery::Vector(vector) => {
-                body["query_vector"] = json!(vector);
-                body["all"] = json!(true);
-            }
-        }
-        let (status, value) = self.private_request(domain, Request::Query(body)).await?;
-        if !status.is_success() {
-            return Err(unavailable());
-        }
-        let count = value["count_total"].as_u64().ok_or_else(unavailable)? as usize;
-        let hits = value["hits"].as_array().ok_or_else(unavailable)?;
+        let request = query.request(
+            vec![
+                filter("kind", ["search".to_owned()]),
+                filter("archive", groups.iter().cloned()),
+            ],
+            PRIVATE_FIELDS,
+            limit,
+        );
+        let ArchiveHits { hits, count, .. } = self
+            .archive_query(domain, &domain.collection(), request)
+            .await?;
         if hits.len() > limit {
             return Err(invalid_archive());
         }
+        let mut seen = HashSet::new();
         let mut out = Vec::with_capacity(hits.len());
-        for hit in hits {
+        for hit in &hits {
             let record = &hit["record"];
             let group = record["document"]["archive"]
                 .as_str()
                 .ok_or_else(invalid_archive)?;
-            if group.len() != 65
-                || !group.starts_with('t')
-                || !group[1..].bytes().all(|b| b.is_ascii_hexdigit())
-                || !groups.iter().any(|id| id == group)
-                || record["record_id"] != format!("{group}s")
-                || record["document"]["kind"] != "search"
+            if !groups.iter().any(|id| id == group)
+                || !archive_member(record, &format!("{group}s"), group, "search")
+                || !seen.insert(group)
             {
                 return Err(invalid_archive());
             }
@@ -542,23 +567,13 @@ impl AnySeekFullTextStore {
         Ok((count, out))
     }
 
-    async fn native_request(
-        &self,
-        domain: ArchiveDomain,
-        request: Request,
-    ) -> StorageResult<(StatusCode, Value)> {
-        self.archive_request(domain, &native_collection(domain), request)
-            .await
-    }
-
     async fn native_version(
         &self,
         domain: ArchiveDomain,
+        collection: &str,
         group: &str,
     ) -> StorageResult<Option<u64>> {
-        let version = self
-            .archive_version(domain, &native_collection(domain), group)
-            .await?;
+        let version = self.archive_version(domain, collection, group).await?;
         // Embedded group lookup returns 404 for both an absent group and a
         // missing collection. Verify the collection before reporting absence.
         if version.is_none() {
@@ -582,55 +597,76 @@ impl AnySeekFullTextStore {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Option<NativeArchiveTurn>> {
+        self.read_native_archive(domain, session, turn, false).await
+    }
+
+    /// An index hit proves the group once existed. Withdrawals keep a group
+    /// witness, including when the first write was fenced before it committed.
+    pub(crate) async fn native_archive_read_candidate(
+        &self,
+        domain: ArchiveDomain,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<Option<NativeArchiveTurn>> {
+        self.read_native_archive(domain, session, turn, true).await
+    }
+
+    async fn read_native_archive(
+        &self,
+        domain: ArchiveDomain,
+        session: Uuid,
+        turn: Uuid,
+        seen_in_index: bool,
+    ) -> StorageResult<Option<NativeArchiveTurn>> {
+        let collection = native_collection(domain);
         let group = archive_group(session, turn);
-        let Some(version) = self.native_version(domain, &group).await? else {
-            return Ok(None);
+        let Some(version) = self.native_version(domain, &collection, &group).await? else {
+            return if seen_in_index {
+                Err(invalid_archive())
+            } else {
+                Ok(None)
+            };
         };
         if !(1..=2).contains(&version) {
             return Err(invalid_archive());
         }
-        let (count, hits) = self
-            .native_query(
-                domain,
-                json!({
-                    "query":"","filter":[filter("archive",[group.clone()])],"fields":[
-                        "archive","kind","session","turn","source","sequence","body","digest","metadata"
-                    ],"length":3,"count":true
-                }),
-            )
-            .await?;
-        let current = self.native_version(domain, &group).await?;
+        let result = self.archive_query(
+            domain,
+            &collection,
+            json!({
+                "query":"","filter":[filter("archive",[group.clone()])],"fields":[
+                    "archive","kind","session","turn","source","sequence","body","digest","metadata"
+                ],"length":3,"count":true
+            }),
+        ).await?;
+        let current = self.native_version(domain, &collection, &group).await?;
         if version == 1 && current == Some(2) {
             return Ok(None);
         }
         if current != Some(version) {
             return Err(invalid_archive());
         }
-        if version == 2 && count == 0 && hits.is_empty() {
+        if version == 2 && result.count == 0 {
             return Ok(None);
         }
         if version != 1 {
             return Err(invalid_archive());
         }
-        if count == 1 && hits.len() == 1 {
-            let record = &hits[0]["record"];
-            if matches_native_record(record, &group, &group, "withdrawn", session, turn) {
+        let identity = (session, turn);
+        if result.count == 1 && result.hits.len() == 1 {
+            let record = &result.hits[0]["record"];
+            if archive_member(record, &group, &group, "withdrawn")
+                && native_identity(record)? == identity
+            {
                 return Ok(None);
             }
         }
-        if count != 2 || hits.len() != 2 {
+        let (canonical, search) = result.pair(&group)?;
+        if native_identity(canonical)? != identity || native_identity(search)? != identity {
             return Err(invalid_archive());
         }
-        let find = |id: &str, kind| {
-            hits.iter()
-                .map(|hit| &hit["record"])
-                .find(|record| matches_native_record(record, id, &group, kind, session, turn))
-                .map(|record| &record["document"])
-                .ok_or_else(invalid_archive)
-        };
-        let document = find(&group, "body")?;
-        let projection = find(&format!("{group}s"), "search")?;
-        let mut payload = projection["metadata"].clone();
+        let document = &canonical["document"];
+        let mut payload = search["document"]["metadata"].clone();
         let metadata = payload.as_object_mut().ok_or_else(invalid_archive)?;
         if metadata
             .insert("body".into(), document["body"].clone())
@@ -638,6 +674,7 @@ impl AnySeekFullTextStore {
         {
             return Err(invalid_archive());
         }
+        let digest = archive_digest(domain, &payload);
         let archive: NativeArchiveTurn =
             serde_json::from_value(payload).map_err(|_| invalid_archive())?;
         archive.validate()?;
@@ -645,36 +682,11 @@ impl AnySeekFullTextStore {
             || archive.turn != turn
             || document["source"] != archive.source.to_string()
             || document["sequence"] != archive.sequence
-            || document["digest"] != archive.digest(domain)
+            || document["digest"] != digest
         {
             return Err(invalid_archive());
         }
         Ok(Some(archive))
-    }
-
-    async fn native_query(
-        &self,
-        domain: ArchiveDomain,
-        query: Value,
-    ) -> StorageResult<(usize, Vec<Value>)> {
-        let (status, mut value) = self.native_request(domain, Request::Query(query)).await?;
-        if !status.is_success() {
-            return Err(unavailable());
-        }
-        if value["visible_seq"].as_u64().is_none() {
-            return Err(invalid_archive());
-        }
-        let count = value["count_total"]
-            .as_u64()
-            .and_then(|count| usize::try_from(count).ok())
-            .ok_or_else(invalid_archive)?;
-        let Value::Array(hits) = value["hits"].take() else {
-            return Err(invalid_archive());
-        };
-        if count < hits.len() {
-            return Err(invalid_archive());
-        }
-        Ok((count, hits))
     }
 
     pub(crate) async fn native_archive_source(
@@ -683,9 +695,10 @@ impl AnySeekFullTextStore {
         session: Uuid,
         source: Uuid,
     ) -> StorageResult<Option<NativeArchiveTurn>> {
-        let (count, hits) = self
-            .native_query(
+        let ArchiveHits { hits, count, .. } = self
+            .archive_query(
                 domain,
+                &native_collection(domain),
                 json!({
                     "query":"","fields":NATIVE_FIELDS,"length":2,"count":true,
                     "filter":[filter("kind",["body".into()]),filter("source",[source.to_string()])]
@@ -698,15 +711,16 @@ impl AnySeekFullTextStore {
         if count != 1 || hits.len() != 1 {
             return Err(invalid_archive());
         }
-        let (found_session, turn, _) = native_directory_hit(&hits[0])?;
-        if found_session != session || hits[0]["record"]["document"]["source"] != source.to_string()
-        {
+        let (found_session, turn, found_source, sequence) = native_directory_hit(&hits[0])?;
+        if found_session != session || found_source != source {
             return Err(invalid_archive());
         }
-        let found = self.native_archive_read(domain, session, turn).await?;
+        let found = self
+            .native_archive_read_candidate(domain, session, turn)
+            .await?;
         if found
             .as_ref()
-            .is_some_and(|archive| archive.source != source)
+            .is_some_and(|archive| archive.source != source || archive.sequence != sequence)
         {
             return Err(invalid_archive());
         }
@@ -722,13 +736,17 @@ impl AnySeekFullTextStore {
     ) -> StorageResult<NativeArchiveTurn> {
         archive.validate()?;
         let group = archive_group(archive.session, archive.turn);
+        let mut metadata = json!(archive);
+        let digest = archive_digest(domain, &metadata);
+        let body = metadata
+            .as_object_mut()
+            .and_then(|fields| fields.remove("body"))
+            .ok_or_else(invalid_archive)?;
         let canonical = json!({
             "archive": group, "kind": "body", "session": archive.session, "turn": archive.turn,
-            "source": archive.source, "sequence": archive.sequence, "body": archive.body,
-            "digest": archive.digest(domain)
+            "source": archive.source, "sequence": archive.sequence, "body": body,
+            "digest": digest
         });
-        let mut metadata = json!(archive);
-        metadata.as_object_mut().unwrap().remove("body");
         let mut projection = json!({
             "archive": group, "kind": "search", "session": archive.session, "turn": archive.turn,
             "metadata": metadata, "terms": terms
@@ -736,26 +754,16 @@ impl AnySeekFullTextStore {
         if let Some(vector) = embedding {
             projection["vector"] = json!(vector);
         }
-        for document in [&canonical, &projection] {
-            if serde_json::to_vec(document)
-                .map_err(|_| invalid_archive())?
-                .len()
-                > RECORD_BYTES
-            {
-                return Err(invalid("private archive record exceeds 1 MiB"));
-            }
-        }
+        let records = archive_records(&group, canonical, projection)?;
         let epoch = operation_epoch()?;
         let nonce = format!("private-archive:{group}");
         let response = self
-            .native_request(
+            .archive_request(
                 domain,
+                &native_collection(domain),
                 Request::ReplaceGroup(json!({
                     "operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,
-                    "expected_group_version":0,"records":[
-                        {"record_id":group,"document":canonical},
-                        {"record_id":format!("{group}s"),"document":projection}
-                    ]
+                    "expected_group_version":0,"records":records
                 })),
             )
             .await;
@@ -791,25 +799,28 @@ impl AnySeekFullTextStore {
             self.require_native_collection(domain).await?;
             return Ok((None, Vec::new()));
         }
-        let (_, hits) = self.native_query(domain, json!({
+        let ArchiveHits { hits, count, .. } = self.archive_query(domain, &native_collection(domain), json!({
             "query":"","fields":NATIVE_FIELDS,"length":limit,"count":true,
             "filter":[filter("kind",["body".into()]),filter("session",[session.to_string()]),
                 {"Int":{"field":"sequence","filter":{"start":after + 1,"end":i64::MAX}}}],
             "sort":[{"field":"sequence","order":"Ascending"}]
         })).await?;
-        if hits.len() > limit {
+        if hits.len() != count.min(limit) {
             return Err(invalid_archive());
         }
         let mut next = None;
         let mut turns = Vec::with_capacity(hits.len());
         for hit in &hits {
-            let (found_session, turn, sequence) = native_directory_hit(hit)?;
+            let (found_session, turn, source, sequence) = native_directory_hit(hit)?;
             if found_session != session || sequence <= next.unwrap_or(after) {
                 return Err(invalid_archive());
             }
             next = Some(sequence);
-            if let Some(archive) = self.native_archive_read(domain, session, turn).await? {
-                if archive.sequence != sequence {
+            if let Some(archive) = self
+                .native_archive_read_candidate(domain, session, turn)
+                .await?
+            {
+                if archive.source != source || archive.sequence != sequence {
                     return Err(invalid_archive());
                 }
                 turns.push(archive);
@@ -824,22 +835,14 @@ impl AnySeekFullTextStore {
         query: ArchiveQuery<'_>,
         limit: usize,
     ) -> StorageResult<(usize, Vec<(Uuid, f64)>)> {
-        let mut body = json!({
-            "filter":[filter("kind",["search".to_owned()])],
-            "fields":NATIVE_FIELDS,"length":limit,"count":true
-        });
-        match query {
-            ArchiveQuery::Keyword(terms) => {
-                body["query"] = json!(terms);
-                body["operator"] = json!("and");
-                body["search_fields"] = json!(["terms"]);
-            }
-            ArchiveQuery::Vector(vector) => {
-                body["query_vector"] = json!(vector);
-                body["all"] = json!(true);
-            }
-        }
-        let (count, hits) = self.native_query(domain, body).await?;
+        let request = query.request(
+            vec![filter("kind", ["search".to_owned()])],
+            NATIVE_FIELDS,
+            limit,
+        );
+        let ArchiveHits { hits, count, .. } = self
+            .archive_query(domain, &native_collection(domain), request)
+            .await?;
         if hits.len() > limit {
             return Err(invalid_archive());
         }
@@ -849,14 +852,7 @@ impl AnySeekFullTextStore {
             let record = &hit["record"];
             let (session, turn) = native_identity(record)?;
             let group = archive_group(session, turn);
-            if !matches_native_record(
-                record,
-                &format!("{group}s"),
-                &group,
-                "search",
-                session,
-                turn,
-            ) || !seen.insert(turn)
+            if !archive_member(record, &format!("{group}s"), &group, "search") || !seen.insert(turn)
             {
                 return Err(invalid_archive());
             }
@@ -877,9 +873,13 @@ impl AnySeekFullTextStore {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<()> {
+        let collection = native_collection(domain);
         let group = archive_group(session, turn);
         for _ in 0..3 {
-            let version = self.native_version(domain, &group).await?.unwrap_or(0);
+            let version = self
+                .native_version(domain, &collection, &group)
+                .await?
+                .unwrap_or(0);
             if version == 2 {
                 return Ok(());
             }
@@ -887,81 +887,87 @@ impl AnySeekFullTextStore {
                 return Err(invalid_archive());
             }
             let records = if version == 0 {
-                json!([{"record_id":group,"document":{"archive":group,"kind":"withdrawn","session":session,"turn":turn}}])
+                vec![
+                    json!({"record_id":group,"document":{"archive":group,"kind":"withdrawn","session":session,"turn":turn}}),
+                ]
             } else {
-                json!([])
+                Vec::new()
             };
-            let epoch = operation_epoch()?;
-            let nonce = format!("private-delete:{group}:{version}");
-            let (status, value) = self
-                .native_request(
-                    domain,
-                    Request::ReplaceGroup(json!({
-                        "operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,
-                        "expected_group_version":version,"records":records
-                    })),
-                )
-                .await?;
-            if status == StatusCode::CONFLICT {
-                continue;
-            }
-            if status.is_success()
-                && receipt_sequence(
-                    &value,
-                    &group,
-                    epoch,
-                    &nonce,
-                    version + 1,
-                    usize::from(version == 0),
-                )
-                .is_some()
+            if self
+                .replace_withdrawn_archive(domain, &collection, &group, version, records)
+                .await?
             {
                 return Ok(());
             }
-            return Err(transient());
+        }
+        Err(transient())
+    }
+
+    // False means the group changed between inspection and the CAS.
+    async fn replace_withdrawn_archive(
+        &self,
+        domain: ArchiveDomain,
+        collection: &str,
+        group: &str,
+        version: u64,
+        records: Vec<Value>,
+    ) -> StorageResult<bool> {
+        let next = version.checked_add(1).ok_or_else(invalid_archive)?;
+        let count = records.len();
+        let epoch = operation_epoch()?;
+        let nonce = format!("private-delete:{group}:{version}");
+        let (status, value) = self
+            .archive_request(
+                domain,
+                collection,
+                Request::ReplaceGroup(json!({
+                    "operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,
+                    "expected_group_version":version,"records":records
+                })),
+            )
+            .await?;
+        if status == StatusCode::CONFLICT {
+            return Ok(false);
+        }
+        if status.is_success()
+            && receipt_sequence(&value, group, epoch, &nonce, next, count).is_some()
+        {
+            return Ok(true);
         }
         Err(transient())
     }
 }
 
 fn native_identity(record: &Value) -> StorageResult<(Uuid, Uuid)> {
-    let parse = |field: &str| {
-        record["document"][field]
-            .as_str()
-            .and_then(|id| Uuid::parse_str(id).ok())
-            .filter(|id| !id.is_nil())
-            .ok_or_else(invalid_archive)
-    };
-    Ok((parse("session")?, parse("turn")?))
+    let document = &record["document"];
+    Ok((
+        native_uuid(&document["session"])?,
+        native_uuid(&document["turn"])?,
+    ))
 }
 
-fn matches_native_record(
-    record: &Value,
-    id: &str,
-    group: &str,
-    kind: &str,
-    session: Uuid,
-    turn: Uuid,
-) -> bool {
-    record["record_id"] == id
-        && record["version"] == 1
-        && record["document"]["kind"] == kind
-        && record["document"]["archive"] == group
-        && native_identity(record).is_ok_and(|found| found == (session, turn))
+fn native_uuid(value: &Value) -> StorageResult<Uuid> {
+    value
+        .as_str()
+        .and_then(|id| Uuid::parse_str(id).ok())
+        .filter(|id| !id.is_nil())
+        .ok_or_else(invalid_archive)
 }
 
-fn native_directory_hit(hit: &Value) -> StorageResult<(Uuid, Uuid, i64)> {
+fn native_directory_hit(hit: &Value) -> StorageResult<(Uuid, Uuid, Uuid, i64)> {
     let record = &hit["record"];
     let (session, turn) = native_identity(record)?;
     let group = archive_group(session, turn);
-    if !matches_native_record(record, &group, &group, "body", session, turn) {
+    if !archive_member(record, &group, &group, "body") {
         return Err(invalid_archive());
     }
-    let sequence = record["document"]["sequence"]
+    let document = &record["document"];
+    let source = native_uuid(&document["source"])?;
+    let sequence = document["sequence"]
         .as_i64()
         .filter(|sequence| (1..i64::MAX).contains(sequence))
         .ok_or_else(invalid_archive)?;
-    Ok((session, turn, sequence))
+    Ok((session, turn, source, sequence))
 }
 
 #[cfg(all(test, feature = "embedded-anyseek"))]
@@ -1031,6 +1037,12 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        assert!(matches!(
+            store
+                .native_archive_read_candidate(domain, session, first.turn)
+                .await,
+            Err(StorageError::Unavailable(_))
+        ));
         store
             .native_archive_write(domain, &second, "beta".into(), None)
             .await
@@ -1088,7 +1100,7 @@ mod tests {
             .unwrap();
         assert!(
             store
-                .native_archive_read(domain, session, first.turn)
+                .native_archive_read_candidate(domain, session, first.turn)
                 .await
                 .unwrap()
                 .is_none()

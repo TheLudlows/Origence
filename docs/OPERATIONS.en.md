@@ -17,7 +17,7 @@ reservations, and publication plans.
 
 | Path | Contents |
 | --- | --- |
-| `context.db` and SQLite WAL | Permissions, source events, private archive directory, version pointers and content hashes, locators, summary retrieval terms, idempotency, jobs and recovery plans, owners, ledger, and audit |
+| `context.db` and SQLite WAL | Permissions, sources, versions and hashes, locators, retrieval terms, jobs, ledger, audit, and private archive numbering, withdrawals, and downstream proofs |
 | `context.db.lock` | OS lock file for exclusive host access. The file can exist when the lock is no longer held. |
 | `anyseek/` | Default local AnySeek Catalog and shared and private collections, including text, summaries, and full-text, vector, and graph indexes. A standalone deployment is backed up separately according to AnySeek's rules. |
 | `full-text-backend.json` | AnySeek endpoint, automatic tenant/workspace routing rules, and embedding profile and dimension binding. Contains no key and is backed up with the entire directory. |
@@ -206,19 +206,8 @@ Run `origence.exe serve --local` to start the API and local AnySeek. To also sta
 
 ## Private archive and paired recovery
 
-See the [archive API contract](API.en.md#session-archiving-and-idempotent-feedback) for delivery,
-retrieval, and withdrawal behavior. The complete body fits in a stable Record under the pinned
-1 MiB limit, including JSON escaping. It is committed atomically with its search projection.
-
-AnySeek confirms new turns using committed native records. SQLite holds workspace authorization,
-per-session sequence allocation, withdrawal markers, and proofs used by downstream references.
-Back up both stores. `verify` checks active native turn order, request hashes, and bodies,
-and continues to compare confirmation watermarks for legacy records.
-
-AnySeek accepts the current and previous UTC operation epochs. Resubmit under a fresh epoch
-only after the backend confirms expiry and an absent group. Keep the original nonce and
-use CAS version zero. Withdrawal hides the directory first. Cleanup uses an atomic empty group
-and fences delayed writes with the group version.
+Private archive recovery requires paired SQLite and AnySeek backups. Cleanup fences delayed
+writes using AnySeek group versions and withdrawal markers. [Archive API](API.en.md#session-archiving-and-idempotent-feedback)
 
 Stop Origence and AnySeek and retain an untouched paired backup. Work on an isolated copy of
 the complete data directories. For embedded AnySeek, add `--local`. For standalone AnySeek,
@@ -229,16 +218,17 @@ use the isolated service at the bound address and set `OC_ANYSEEK_URL` and `OC_A
    prepared copy. SQLite bodies copy in batches by their historical order. Turns already in
    AnySeek under #168 retain their original format, IDs, order, and withdrawals.
 2. Run `archive-migrate verify --isolated-copy` with the same global flags. Require
-   `unconfirmed=0` and rehearse restoring the paired backup.
+   `unconfirmed=0`. Retain the directory digest, AnySeek version, and legacy confirmation and
+   visibility watermarks. Compare the original turn IDs, sources, order, and hashes, and rehearse restore.
 3. Run `archive-migrate purge --isolated-copy`. It rechecks the directory before clearing the
    old turn bodies, Improve prose and quotes, and Run replay bodies. Re-run if interrupted.
    Normal startup resumes after SQLite compaction and WAL truncation. Persisted Run verification
    and Skill references retain their prefix digests. An external-only commitment may need renewal.
 
-After a stopped paired restore, compare directory SHA-256, engine version, SQLite confirmation
-sequences, and AnySeek visible sequences. Check ordered reads, keyword and vector search, and key
-isolation. An unwritten pending body requires the original caller payload. Online, object-storage,
-and cross-version backups require separate validation.
+Restore both stores, the binding file, and the recorded versions while stopped. Re-run
+`verify`, then check ordered reads, keyword and vector search, and key isolation. Callers
+retry uncommitted bodies. Online snapshots, object storage, and cross-version restore require
+separate validation.
 
 SQLite `secure_delete`, `VACUUM`, and WAL truncation provide logical cleanup of active files.
 They cannot guarantee physical erasure of storage pages, historical WAL, filesystem copies,

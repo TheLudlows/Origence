@@ -442,7 +442,7 @@ locator 沿用记忆语义原始来源与字节范围，自动提取的新成员
 
 ## 会话归档与幂等反馈
 
-SessionTurn 是不可变的问答档案，由调用方在回答完成后明确提交。`state:"archived"` 表示归档已提交，`state:"recorded"` 表示反馈已提交。学习需要显式调用下文的 [Improve](#显式-improve--learning)。
+SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"` 分别表示归档和反馈已提交。经验可[直接提交](contracts/memory-consolidation.md#写入)，也可显式调用 [Improve](#显式-improve--learning) 从归档和反馈中提炼。
 
 归档轮次和反馈的读写均要求 writer 或更高权限，并且 `session_id` 必须是认证逻辑 key 的绑定会话。tenant、workspace 与逻辑 key 均来自认证，读写和重试都检查凭据是否仍然有效。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil。POST 要求 `Idempotency-Key`。未知字段、缺少必要字段、未知枚举均拒绝。
 
@@ -470,7 +470,7 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该内容条目快照根来源，reference.asset_version 是实际使用的内容条目版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在授权逻辑 key 下，相同正文、证据状态及有序引用返回原标识。改变内容返回 409。AnySeek 原子提交新轮次的正文、目录和检索投影，归档成功由原生记录确认。SQLite 保存每会话的序号分配与凭据归属，以及反馈、Run 和发布实际引用的证据。回执丢失可按稳定轮次 ID 和请求哈希确认。未写入的轮次由调用方携原请求重试。
+归档成功返回 HTTP 200 和 `{session_id,turn_id,source_event_id,state:"archived"}`。同一授权逻辑 key 下，重试相同轮次、正文及有序证据返回原标识，改变请求内容返回 409。AnySeek 原子提交正文和投影。回执丢失时，携原请求重试。
 
 按稳定 ID 读取使用 `GET /v1/sessions/{session_id}/turns/{turn_id}`，按目录顺序分页使用
 `GET /v1/sessions/{session_id}/turns?after=0&limit=16`。以返回的 `next_after` 请求下一页。
@@ -547,9 +547,8 @@ memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_o
 requested/effective mode、总预算/实际字节及各路由候选/保留/省略计数。
 每个 item 保留类型、检索分支、条件/适用状态、语义身份、得分种类和稳定引用。
 `provenance.type=asset_chunk` 明确区分 asset_version、原始 source_version、
-version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/归档来源
-与历史 used_evidence，不伪造 chunk。来源及转引完整可见性在预算前和最终渲染
-快照中核验，撤回不等待物理清理。有效性仅表示通过该读取快照的可见性检查。
+version_root_source_event_id。`session_turn` 保留真实会话、轮次、归档来源和历史引用。
+共享候选在预算前和最终快照中复核来源，私有候选遵循上文的会话规则。有效性表示通过读取快照的可见性检查。
 
 仅对明确单值身份、同条件下的 confirmed/conflict 值做确定性冲突分组；组内所有
 候选与警告整体保留或整体省略。普通文本、不同条件及多值集合不推断互斥。

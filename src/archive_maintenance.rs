@@ -7,6 +7,7 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
+use uuid::Uuid;
 
 #[derive(Clone, Copy)]
 pub enum Stage {
@@ -21,15 +22,8 @@ pub async fn run_embedded(dir: &Path, models: Models, stage: Stage) -> Result<Va
 }
 
 pub async fn run(dir: &Path, models: Models, config: AnySeekConfig, stage: Stage) -> Result<Value> {
-    let limit = match stage {
-        Stage::Copy { limit } if (1..=1024).contains(&limit) => {
-            SqliteStore::prepare_archive_migration(&dir.join("context.db")).await?;
-            limit
-        }
-        Stage::Copy { .. } => return Err(AppError::Invalid("copy limit must be 1..1024".into())),
-        _ => 0,
-    };
-    if !tokio::fs::metadata(dir.join("context.db"))
+    let authority = dir.join("context.db");
+    if !tokio::fs::metadata(&authority)
         .await
         .is_ok_and(|m| m.is_file())
     {
@@ -37,6 +31,14 @@ pub async fn run(dir: &Path, models: Models, config: AnySeekConfig, stage: Stage
             "private archive maintenance requires an existing authority database".into(),
         ));
     }
+    let limit = match stage {
+        Stage::Copy { limit } if (1..=1024).contains(&limit) => {
+            SqliteStore::prepare_archive_migration(&authority).await?;
+            limit
+        }
+        Stage::Copy { .. } => return Err(AppError::Invalid("copy limit must be 1..1024".into())),
+        _ => 0,
+    };
     let service = Service::open(dir, models, config, true).await?;
     let result = reconcile(&service, stage, limit).await;
     let shutdown = service.engine.shutdown().await;
@@ -58,7 +60,8 @@ async fn reconcile(service: &Service, stage: Stage, limit: usize) -> Result<Valu
     let mut proofs = Vec::new();
     let mut watermarks = BTreeMap::<String, u64>::new();
     let mut confirmed = BTreeMap::<String, u64>::new();
-    for (domain, session, turn, source, sequence) in store.archive_migration_directory().await? {
+    let directory = store.archive_migration_directory().await?;
+    for (domain, session, turn, source, sequence) in directory.legacy {
         let copy = can_copy && copied < limit;
         let item = store
             .migration_archive(domain, session, turn, source, sequence, can_copy, copy)
@@ -138,7 +141,30 @@ async fn reconcile(service: &Service, stage: Stage, limit: usize) -> Result<Valu
         ));
     }
     let mut native_archived = 0;
-    for (domain, session) in store.native_archive_sessions().await? {
+    for mut entry in directory.native {
+        let domain = entry.domain;
+        let session = entry.session;
+        let collection = format!("native:{}", domain.collection());
+        // Bind logical fences and the allocator without depending on when the
+        // worker physically deletes withdrawn records.
+        proofs.push((
+            collection.clone(),
+            entry.last_sequence,
+            session,
+            Uuid::nil(),
+            Uuid::nil(),
+            String::new(),
+            hash(json!(entry.withdrawn_turns).to_string()),
+            if entry.withdrawn {
+                "withdrawn_session"
+            } else {
+                "session"
+            }
+            .into(),
+        ));
+        if entry.withdrawn {
+            continue;
+        }
         if !backend.native_archive_collection(domain, false).await? {
             return Err(AppError::Unavailable(
                 "private archive collection missing".into(),
@@ -150,15 +176,30 @@ async fn reconcile(service: &Service, stage: Stage, limit: usize) -> Result<Valu
                 .native_archive_page(domain, session, after, 32)
                 .await?;
             for row in rows {
+                if row.sequence > entry.last_sequence {
+                    return Err(AppError::Unavailable(
+                        "native archive sequence is ahead of its authority allocator".into(),
+                    ));
+                }
+                if entry.withdrawn_turns.contains(&row.turn) {
+                    continue;
+                }
+                if let Some((source, digest)) = entry.expected.remove(&row.turn)
+                    && (source != row.source || digest != row.request_hash)
+                {
+                    return Err(AppError::Unavailable(
+                        "native archive does not match its recorded dependency proof".into(),
+                    ));
+                }
                 native_archived += 1;
                 proofs.push((
-                    format!("native:{}", domain.collection()),
+                    collection.clone(),
                     row.sequence,
                     session,
                     row.turn,
                     row.source,
-                    row.request_hash,
-                    row.body.digest(),
+                    row.request_hash.clone(),
+                    hash(json!(row).to_string()),
                     "archived".into(),
                 ));
             }
@@ -171,6 +212,11 @@ async fn reconcile(service: &Service, stage: Stage, limit: usize) -> Result<Valu
                 }
                 None => break,
             }
+        }
+        if !entry.expected.is_empty() {
+            return Err(AppError::Unavailable(
+                "native archive referenced by a recorded dependency proof is missing".into(),
+            ));
         }
     }
     if matches!(stage, Stage::Purge) {

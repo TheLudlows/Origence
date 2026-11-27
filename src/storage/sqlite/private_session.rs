@@ -18,15 +18,18 @@ impl SqliteTx {
     /// Read the authenticated key's binding without creating a session.
     pub async fn bound_private_session(&mut self) -> StorageResult<Option<Uuid>> {
         let owner = self.private_key_id().await?;
+        self.private_session_for(owner).await
+    }
+    async fn private_session_for(&mut self, owner: Uuid) -> StorageResult<Option<Uuid>> {
         sqlite_db::query_scalar("SELECT session_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND logical_key_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
     }
     /// Resolve or create the server-assigned session in a write transaction.
     pub async fn private_session_id(&mut self) -> StorageResult<Uuid> {
-        if let Some(id) = self.bound_private_session().await? {
+        let owner = self.private_key_id().await?;
+        if let Some(id) = self.private_session_for(owner).await? {
             return Ok(id);
         }
-        let owner = self.private_key_id().await?;
         let id = Uuid::new_v4();
         sqlite_db::query("INSERT INTO oc_key_sessions(tenant_id,workspace_id,logical_key_id,session_id) VALUES(?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).bind(id).execute(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -34,10 +37,19 @@ impl SqliteTx {
     }
     /// Workspace membership never confers another key's private session access.
     pub async fn require_private_session(&mut self, session: Uuid) -> StorageResult<()> {
-        if self.bound_private_session().await? != Some(session) {
+        self.require_private_session_owner(session)
+            .await
+            .map(|_| ())
+    }
+    pub(super) async fn require_private_session_owner(
+        &mut self,
+        session: Uuid,
+    ) -> StorageResult<Uuid> {
+        let owner = self.private_key_id().await?;
+        if self.private_session_for(owner).await? != Some(session) {
             return Err(StorageError::NotFound);
         }
-        Ok(())
+        Ok(owner)
     }
     /// Rotate one live credential, retaining its logical identity and all archives.
     pub async fn rotate_scoped_key(&mut self, id: Uuid) -> StorageResult<IssuedKey> {

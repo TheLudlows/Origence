@@ -356,7 +356,7 @@ impl SqliteTx {
         basis: &crate::learning::ExperienceBasis,
     ) -> StorageResult<Value> {
         if self
-            .learning_registration_duplicate(candidate)
+            .find_learning_duplicate(candidate, true)
             .await?
             .is_some()
         {
@@ -724,7 +724,7 @@ impl SqliteTx {
         // the same statement. Serialize the final novelty check with registration
         // in this existing write transaction; do not mutate the frozen decision.
         if self
-            .learning_registration_duplicate(candidate)
+            .find_learning_duplicate(candidate, true)
             .await?
             .is_some()
         {
@@ -904,39 +904,33 @@ impl SqliteTx {
             "turn_id":support.turn_id,"field":support.field,"byte_start":support.byte_start,
             "byte_end":support.byte_end,"feedback_id":support.feedback_id,"principal_id":support.principal_id
         })).collect();
-        let mut result = json!({"statement":candidate.statement,"why":candidate.why,
-            "conditions":candidate.conditions,"supports":supports});
-        let object = result
-            .as_object_mut()
-            .ok_or_else(|| StorageError::Unavailable("invalid learning record".into()))?;
-        object.extend(serde_json::Map::from_iter([
-            ("learning_id".into(), json!(learning)),
-            ("asset_id".into(), json!(asset)),
-            ("source_event_id".into(), json!(source)),
-            ("ingest_job_id".into(), json!(job)),
-            ("status".into(), json!(status)),
-        ]));
+        let mut result = json!({
+            "statement":candidate.statement,"why":candidate.why,
+            "conditions":candidate.conditions,"supports":supports,
+            "learning_id":learning,"asset_id":asset,"source_event_id":source,
+            "ingest_job_id":job,"status":status
+        });
         if let (Some(improve), Some(session)) = (improve, session) {
-            object.insert("improve_id".into(), json!(improve));
-            object.insert("session_id".into(), json!(session));
+            result["improve_id"] = json!(improve);
+            result["session_id"] = json!(session);
         } else {
-            let publication = self.experience_provenance(learning).await?;
-            object.insert("publication".into(), json!(publication));
+            result["publication"] = json!(self.experience_provenance(learning).await?);
         }
         Ok(result)
     }
 }
 
 impl SqliteTx {
-    /// Live accepted rows reserve their exact statement until publication or an
-    /// explicit cancellation. This runs under the same write lock as insertion,
-    /// closing both cross-session queue ordering and saved-verification races.
-    async fn learning_registration_duplicate(
+    /// Registration checks accepted reservations under the same write lock as
+    /// insertion. An earlier novelty check only considers published lessons.
+    async fn find_learning_duplicate(
         &mut self,
         candidate: &LearningCandidate,
+        include_accepted: bool,
     ) -> StorageResult<Option<Uuid>> {
-        let rows: Vec<(Uuid, Uuid, Uuid, String)> = sqlite_db::query_as("SELECT id,asset_id,source_event_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND status IN ('accepted','published') ORDER BY created_at,id")
+        let rows: Vec<(Uuid, Uuid, Uuid, String)> = sqlite_db::query_as("SELECT id,asset_id,source_event_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND (status='published' OR (? AND status='accepted')) ORDER BY created_at,id")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(fingerprint(candidate)?)
+            .bind(include_accepted)
             .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         for (id, asset, source, body) in rows {
             let stored: LearningCandidate = decode(&body)?;
@@ -944,10 +938,13 @@ impl SqliteTx {
             {
                 continue;
             }
-            match self
-                .guard_learning_publication(Some(asset), Some(source))
-                .await
-            {
+            let visible = if include_accepted {
+                self.guard_learning_publication(Some(asset), Some(source))
+                    .await
+            } else {
+                self.require_learning_asset_visible(asset).await
+            };
+            match visible {
                 Ok(()) => return Ok(Some(id)),
                 Err(StorageError::NotFound) => continue,
                 Err(error) => return Err(error),
@@ -963,22 +960,7 @@ impl SqliteTx {
     ) -> StorageResult<Option<Uuid>> {
         self.check_permission(Permission::Write).await?;
         self.require_improve().await?;
-        let rows: Vec<(Uuid, Uuid, String)> = sqlite_db::query_as("SELECT id,asset_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND fingerprint=? AND status='published' ORDER BY created_at,id")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(fingerprint(candidate)?)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
-        for (id, asset, body) in rows {
-            let stored: LearningCandidate = decode(&body)?;
-            if stored.statement != candidate.statement || stored.conditions != candidate.conditions
-            {
-                continue;
-            }
-            match self.require_learning_asset_visible(asset).await {
-                Ok(()) => return Ok(Some(id)),
-                Err(StorageError::NotFound) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(None)
+        self.find_learning_duplicate(candidate, false).await
     }
 
     /// Sanitized provenance attached to each ordinary knowledge chunk locator.

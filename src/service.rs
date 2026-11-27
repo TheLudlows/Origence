@@ -580,19 +580,32 @@ impl Service {
             tx.commit().await?;
             return self.archive_source(a, id, session, turn).await;
         }
-        match tx.event_view(id).await {
-            Ok(value) if value["kind"] != "session_turn" => {
-                tx.commit().await?;
-                return Ok(value);
+        let linked = tx.native_archive_turn_for_source(id).await?;
+        if linked.is_none() {
+            match tx.event_view(id).await {
+                Ok(value) if value["kind"] != "session_turn" => {
+                    tx.commit().await?;
+                    return Ok(value);
+                }
+                Ok(_) | Err(StorageError::NotFound) => {}
+                Err(err) => return Err(err.into()),
             }
-            Ok(_) | Err(crate::storage::StorageError::NotFound) => {}
-            Err(err) => return Err(err.into()),
         }
         tx.commit().await?;
-        let record = self
-            .load_native_archive_source(a, id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        let record = match linked {
+            Some((session, turn)) => self
+                .load_native_archive(a, session, turn)
+                .await?
+                .ok_or_else(|| {
+                    AppError::Unavailable(
+                        "private archive record referenced by a proof is missing".into(),
+                    )
+                })?,
+            None => self
+                .load_native_archive_source(a, id)
+                .await?
+                .ok_or(AppError::NotFound)?,
+        };
         Ok(json!({
             "event_id":record.source,"kind":"session_turn","content":json!(record.body).to_string(),
             "file_id":null,"created_at":record.created_at
@@ -690,12 +703,15 @@ impl Service {
         if let Some(v) = cached {
             return Ok(v);
         }
-        let mut changed = match target {
+        let changed = match target {
             "asset" => tx.delete_asset(id).await?,
             "event" => tx.retract_event(id).await?,
             _ => tx.delete_file(id).await?,
         };
-        if target == "event" && changed == 0 {
+        if changed == 0 {
+            if target != "event" {
+                return Err(AppError::NotFound);
+            }
             tx.rollback().await?;
             let record = self
                 .load_native_archive_source(a, id)
@@ -713,12 +729,15 @@ impl Service {
             if let Some(v) = cached {
                 return Ok(v);
             }
-            retry.attach_native_archive_proof(&record).await?;
-            changed = retry.retract_event(id).await?;
+            // Leave a fence even if no downstream consumer created a
+            // relational source. A source linked in the meantime retracts
+            // through the ordinary event path inside this same transaction.
+            if retry.retract_event(id).await? == 0 {
+                retry
+                    .withdraw_native_archive(record.session, record.turn)
+                    .await?;
+            }
             tx = retry;
-        }
-        if changed == 0 {
-            return Err(AppError::NotFound);
         }
         if target == "event" {
             tx.retract_consolidation_source(id).await?;

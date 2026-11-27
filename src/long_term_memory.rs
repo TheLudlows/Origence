@@ -30,17 +30,13 @@ const MAX_FACT_QUERY_TERMS: usize = 32;
 const MAX_RECALL_PER_KIND: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FeedbackExperienceSource {
-    #[schemars(with = "String")]
-    pub session_id: Uuid,
-    pub improve: ImproveInput,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum ExperienceSource {
-    Feedback(FeedbackExperienceSource),
+    Feedback {
+        #[schemars(with = "String")]
+        session_id: Uuid,
+        improve: ImproveInput,
+    },
     Direct(DirectExperienceInput),
 }
 
@@ -242,15 +238,15 @@ impl Service {
                 self.retain_memory(auth, key, CaptureInput { content })
                     .await
             }
-            (None, Some(ExperienceSource::Feedback(source))) => {
-                self.admit_improve(
-                    auth,
-                    key,
-                    RETAIN_SOURCE_KIND,
-                    source.session_id,
-                    source.improve,
-                )
-                .await
+            (
+                None,
+                Some(ExperienceSource::Feedback {
+                    session_id,
+                    improve,
+                }),
+            ) => {
+                self.admit_improve(auth, key, RETAIN_SOURCE_KIND, session_id, improve)
+                    .await
             }
             (None, Some(ExperienceSource::Direct(input))) => {
                 self.retain_experience(auth, key, input).await
@@ -290,27 +286,37 @@ impl Service {
             conditions: input.conditions,
             supports: Vec::new(),
         };
+        let (asset, source, job) =
+            Self::stage_learning_ingest(&mut tx, &candidate, self.models.profile.clone()).await?;
+        let receipt = tx
+            .create_direct_learning(asset, source, job, &candidate, &input.basis)
+            .await?;
+        Self::finish(tx, receipt).await
+    }
+
+    pub(crate) async fn stage_learning_ingest(
+        tx: &mut SqliteTx,
+        candidate: &LearningCandidate,
+        embedding_profile: Option<String>,
+    ) -> Result<(Uuid, Uuid, Uuid)> {
         let title = "Conditional learning";
         let source = tx
             .create_event("learning", &candidate.render_text(), None)
             .await?;
         let asset = tx.insert_knowledge_asset(title).await?;
         let job = Self::enqueue(
-            &mut tx,
+            tx,
             JobPayload::Ingest {
                 format: "text".into(),
                 title: title.into(),
                 expected_version: None,
-                embedding_profile: self.models.profile.clone(),
+                embedding_profile,
             },
             Some(asset),
             Some(source),
         )
         .await?;
-        let receipt = tx
-            .create_direct_learning(asset, source, job, &candidate, &input.basis)
-            .await?;
-        Self::finish(tx, receipt).await
+        Ok((asset, source, job))
     }
 
     /// Retrieve both memory kinds with one query and one final authorized

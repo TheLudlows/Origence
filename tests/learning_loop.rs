@@ -466,6 +466,13 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
         .await
         .unwrap();
     assert_eq!(accepted["status"], "accepted");
+    let jobs_before_duplicate = count(&s, "oc_jobs").await;
+    assert!(matches!(
+        s.retain_long_term_memory(&writer, "direct-document-duplicate", parse(&request))
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    assert_eq!(count(&s, "oc_jobs").await, jobs_before_duplicate);
     let peer = super::mcp_http::Peer::at(format!("{base}/mcp"));
     let mut tool = request.clone();
     tool["idempotency_key"] = json!("direct-document");

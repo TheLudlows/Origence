@@ -11,7 +11,7 @@
 
 ## 写入
 
-工作区 writer 使用 `Idempotency-Key` 请求头或 MCP 的 `idempotency_key` 提供 1–200 个 ASCII 字符的重试键。请求体从以下两种选一项。同键同请求复用原作业，同键改为另一种来源会冲突。
+工作区 writer 使用 1–200 个 ASCII 字符作为 HTTP `Idempotency-Key` 或 MCP `idempotency_key`。以下请求体任选一项。同键同请求复用原作业，修改请求返回冲突。
 
 - `{content}` 提交事实原文，最大 64 KiB。原文、归纳作业和 `{state:"accepted",source_event_id,job_id}` 回执在同一事务保存。
 - `{experience:{statement,why,conditions,basis}}` 直接提交已选定的做法、理由和适用条件。依据可为 `{kind:"asset_version",asset_id,version,content_sha256}`，固定本工作区已发布的知识版本和摘要，也可为 `{kind:"human_confirmation"}`，由提交者声明人工确认。系统记录提交凭据身份及时间。直接提交经过既有知识入库作业，无需私有会话或归档问答。回执含 `learning_id`、`asset_id`、`source_event_id`、`job_id` 和 `status:"accepted"`。作业发布后才进入召回。

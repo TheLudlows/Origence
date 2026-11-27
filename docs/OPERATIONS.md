@@ -17,7 +17,7 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db` 及 SQLite WAL | 权限、来源事件、私有归档目录、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
+| `context.db` 及 SQLite WAL | 权限、来源、版本与哈希、定位符、召回词项、任务、账本、审计和归档的序号、撤回及下游引用证据 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
 | `anyseek/` | 本地模式默认的 AnySeek Catalog 与共享、私有集合，含正文、摘要和全文/向量/图索引。独立部署时按 AnySeek 规则单独备份 |
 | `full-text-backend.json` | AnySeek endpoint、tenant/workspace 自动路由规则和 embedding profile/维度绑定；不含 key，随整目录备份 |
@@ -262,15 +262,7 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 ## 私有问答归档、隔离迁移与配套恢复
 
-[归档、检索和撤回的 API 契约](API.md#会话归档与幂等反馈) 定义调用方可见行为。
-完整问答使用稳定 Record ID，并与检索投影原子提交。现行正文字节上限即使经 JSON
-转义也低于固定 AnySeek 版本的 1 MiB 单 Record 上限。
-
-新轮次由原生 AnySeek 记录确认。SQLite 保存工作区授权、每会话序号分配、撤回标记和实际被下游引用的校验证据。备份须包含两套存储。`verify` 核对活跃原生轮次的顺序、请求哈希和正文，并继续检查旧格式记录的确认水位。
-
-AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期且原 group 仍不存在时，
-才能用同一 nonce、新 epoch 和版本 0 CAS 重交正文。撤回先隐藏 SQLite 目录，
-后台以原子空 group 清理活跃记录，并用 group 版本阻断迟到写入。
+私有归档依赖 SQLite 和 AnySeek 的配套备份。后台清理用 AnySeek 组版本和撤回标记阻断迟到写入。[归档 API](API.md#会话归档与幂等反馈)
 
 仅在隔离副本演练。停止 Origence 和配套 AnySeek，复制整个 Origence 数据目录以及
 独立 AnySeek 的数据目录（嵌入模式的 AnySeek 在 Origence 目录下）。给远端方式提供
@@ -283,8 +275,8 @@ AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期�
    对 SQLite 正文按历史 `created_at,turn_id` 顺序分批复制并核对来源、原请求、正文哈希和回读。
    #168 已在 AnySeek 的历史轮次保留原格式、标识、顺序和撤回。
 2. `origence --offline --data-dir <副本> archive-migrate verify --isolated-copy`。
-   等到 `unconfirmed=0`。保留验证清单中的目录摘要、AnySeek 版本及各活跃私有集合的
-   SQLite 确认水位和 AnySeek 查询可见水位。对照原先的轮次、来源引用、顺序和 Hash，并演练备份还原和读取。
+   等到 `unconfirmed=0`。保留目录摘要、AnySeek 版本和旧格式的确认与可见水位。
+   对照原有轮次、来源、顺序及哈希，并演练还原。
 3. `origence --offline --data-dir <副本> archive-migrate purge --isolated-copy`。
    先复验整份目录，显式删去旧正文、冻结的 Q&A、支持引文和 Run 重放正文副本。
    同一事务记录进入清理阶段，再重建 SQLite 并截断 WAL。中断后重跑本步。
@@ -296,8 +288,4 @@ AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期�
 物理擦除。切换前备份仍含原文，按现有访问控制与保留策略管理。
 [AnySeek 历史日志和备份由独立保留策略管理。](#anyseek-全文与向量)
 
-从停止后的同一对目录还原时，保留 SQLite、AnySeek、绑定文件及所用版本。再次执行
-`verify` 并比对目录摘要和各活跃私有集合的可见水位，然后核对按序分页以及关键词、
-向量和跨 key 隔离。该清单可验证列出的问答和投影读回。它覆盖归档目录，不构成
-跨系统在线一致性快照，也不包含未写入 AnySeek 的 pending 正文。独立服务的对象
-存储备份、快照并发和跨版本恢复须独立验证。
+停机还原保留 SQLite、AnySeek、绑定文件及所用版本。再次执行 `verify` 对照清单，再检查按序分页、关键词、向量和跨 key 隔离。未提交的正文由调用方重试。在线快照、对象存储及跨版本恢复需独立验证。

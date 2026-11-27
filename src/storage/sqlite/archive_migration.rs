@@ -3,8 +3,21 @@ use super::*;
 use crate::session::{ArchiveDomain, ArchiveLocator, ArchivedTurnBody, EvidenceUse};
 use std::{collections::BTreeSet, path::Path};
 
-type TurnRow = (Uuid, Uuid, Uuid, Uuid, Uuid);
 type PrefixRow = (Uuid, Uuid, Uuid, i64);
+
+pub(crate) struct ArchiveMigrationDirectory {
+    pub(crate) legacy: Vec<(ArchiveDomain, Uuid, Uuid, Uuid, i64)>,
+    pub(crate) native: Vec<NativeRestoreSession>,
+}
+
+pub(crate) struct NativeRestoreSession {
+    pub(crate) domain: ArchiveDomain,
+    pub(crate) session: Uuid,
+    pub(crate) last_sequence: i64,
+    pub(crate) withdrawn: bool,
+    pub(crate) withdrawn_turns: BTreeSet<Uuid>,
+    pub(crate) expected: HashMap<Uuid, (Uuid, String)>,
+}
 
 pub(crate) struct LegacyArchive {
     pub(crate) locator: ArchiveLocator,
@@ -24,6 +37,67 @@ fn decode<T: serde::de::DeserializeOwned>(text: &str) -> StorageResult<T> {
 
 fn encode(value: &impl serde::Serialize) -> StorageResult<String> {
     serde_json::to_string(value).map_err(|_| corrupt())
+}
+
+async fn read_native_restore_sessions(
+    tx: &mut Connection,
+) -> StorageResult<HashMap<(Uuid, Uuid, Uuid), NativeRestoreSession>> {
+    let withdrawn: BTreeSet<(Uuid, Uuid, Uuid)> = sqlite_db::query_as(
+        "SELECT tenant_id,workspace_id,session_id FROM oc_withdrawn_private_sessions",
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(sqlite_err)?
+    .into_iter()
+    .collect();
+    let rows: Vec<(Uuid, Uuid, Uuid, i64, bool)> = sqlite_db::query_as(
+        "SELECT tenant_id,workspace_id,session_id,last_sequence,cleanup_after IS NOT NULL FROM oc_native_archive_sessions",
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(sqlite_err)?;
+    let mut sessions = HashMap::with_capacity(rows.len());
+    for (tenant_id, workspace_id, session, last_sequence, cleaning) in rows {
+        let key = (tenant_id, workspace_id, session);
+        let withdrawn = withdrawn.contains(&key);
+        if cleaning != withdrawn {
+            return Err(corrupt());
+        }
+        let owner = sqlite_db::query_scalar("SELECT logical_key_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND session_id=?")
+            .bind(tenant_id).bind(workspace_id).bind(session)
+            .fetch_optional(&mut *tx).await.map_err(sqlite_err)?.ok_or_else(corrupt)?;
+        sessions.insert(
+            key,
+            NativeRestoreSession {
+                domain: ArchiveDomain {
+                    scope: Scope {
+                        tenant_id,
+                        workspace_id,
+                    },
+                    owner,
+                },
+                session,
+                last_sequence,
+                withdrawn,
+                withdrawn_turns: BTreeSet::new(),
+                expected: HashMap::new(),
+            },
+        );
+    }
+    let tombstones: Vec<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as(
+        "SELECT tenant_id,workspace_id,session_id,turn_id FROM oc_native_archive_withdrawals",
+    )
+    .fetch_all(tx)
+    .await
+    .map_err(sqlite_err)?;
+    for (tenant_id, workspace_id, session, turn) in tombstones {
+        sessions
+            .get_mut(&(tenant_id, workspace_id, session))
+            .ok_or_else(corrupt)?
+            .withdrawn_turns
+            .insert(turn);
+    }
+    Ok(sessions)
 }
 
 impl SqliteStore {
@@ -103,9 +177,9 @@ impl SqliteStore {
     /// Historically created_at and stable turn IDs defined order for equal timestamps.
     pub(crate) async fn archive_migration_directory(
         &self,
-    ) -> StorageResult<Vec<(ArchiveDomain, Uuid, Uuid, Uuid, i64)>> {
+    ) -> StorageResult<ArchiveMigrationDirectory> {
         let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
-        let rows: Vec<TurnRow> = sqlite_db::query_as("SELECT tenant_id,workspace_id,session_id,turn_id,source_event_id FROM oc_session_turns ORDER BY tenant_id,workspace_id,session_id,created_at,turn_id")
+        let rows: Vec<(Uuid, Uuid, Uuid, Uuid, Uuid, String)> = sqlite_db::query_as("SELECT tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash FROM oc_session_turns ORDER BY tenant_id,workspace_id,session_id,created_at,turn_id")
             .fetch_all(&mut *tx).await.map_err(sqlite_err)?;
         // Each turn below proves one unique session source. Refuse to clear
         // any source absent from that directory.
@@ -117,7 +191,7 @@ impl SqliteStore {
         if source_count != rows.len() as i64 {
             return Err(corrupt());
         }
-        let native_proofs: BTreeSet<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as(
+        let mut native_proofs: BTreeSet<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as(
             "SELECT tenant_id,workspace_id,session_id,turn_id FROM oc_native_archive_proofs",
         )
         .fetch_all(&mut *tx)
@@ -125,12 +199,28 @@ impl SqliteStore {
         .map_err(sqlite_err)?
         .into_iter()
         .collect();
+        let mut native = read_native_restore_sessions(&mut tx).await?;
         let mut directory = Vec::with_capacity(rows.len());
         let mut previous = None;
         let mut sequence = 0;
         let mut owner = Uuid::nil();
-        for (tenant_id, workspace_id, session, turn, source) in rows {
-            if native_proofs.contains(&(tenant_id, workspace_id, session, turn)) {
+        for (tenant_id, workspace_id, session, turn, source, request_hash) in rows {
+            if native_proofs.remove(&(tenant_id, workspace_id, session, turn)) {
+                let entry = native
+                    .get_mut(&(tenant_id, workspace_id, session))
+                    .ok_or_else(corrupt)?;
+                let (state, empty): (String, bool) = sqlite_db::query_as("SELECT state,content='' FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='session_turn' AND file_id IS NULL")
+                    .bind(tenant_id).bind(workspace_id).bind(source)
+                    .fetch_optional(&mut *tx).await.map_err(sqlite_err)?.ok_or_else(corrupt)?;
+                if !empty || !crate::retrieval_diagnostics::digest(&request_hash) {
+                    return Err(corrupt());
+                }
+                if !entry.withdrawn && !entry.withdrawn_turns.contains(&turn) {
+                    if state != "active" {
+                        return Err(corrupt());
+                    }
+                    entry.expected.insert(turn, (source, request_hash));
+                }
                 continue;
             }
             let scope = Scope {
@@ -152,8 +242,14 @@ impl SqliteStore {
                 sequence,
             ));
         }
+        if !native_proofs.is_empty() {
+            return Err(corrupt());
+        }
         tx.commit().await.map_err(sqlite_err)?;
-        Ok(directory)
+        Ok(ArchiveMigrationDirectory {
+            legacy: directory,
+            native: native.into_values().collect(),
+        })
     }
 
     pub(crate) async fn archive_directory_count(&self) -> StorageResult<usize> {
@@ -171,7 +267,7 @@ impl SqliteStore {
         turn: Uuid,
         source: Uuid,
         sequence: i64,
-        legacy_order: bool,
+        copying: bool,
         stage: bool,
     ) -> StorageResult<LegacyArchive> {
         let mut tx = self
@@ -184,7 +280,7 @@ impl SqliteStore {
             "SELECT state,body_hash,logical_key_id,source_event_id,operation_epoch,turn_sequence,evidence_reported,confirmed_seq,group_id FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?",
         ).bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
             .fetch_optional(&mut *tx).await.map_err(sqlite_err)?;
-        let (old, source_state): (String,String) = sqlite_db::query_as("SELECT content,state FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='session_turn'")
+        let (old, source_state): (String,String) = sqlite_db::query_as("SELECT content,state FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='session_turn' AND file_id IS NULL")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(source).fetch_one(&mut *tx).await.map_err(sqlite_err)?;
         let old_body = if old.is_empty() {
             None
@@ -205,7 +301,9 @@ impl SqliteStore {
         {
             if owner != domain.owner
                 || saved_source != source
-                || (legacy_order && saved_seq != sequence)
+                || (copying && saved_seq != sequence)
+                || (!copying && old_body.is_some())
+                || (source_state == "retracted" && state != "withdrawn")
                 || !crate::retrieval_diagnostics::digest(&hash)
                 || old_body
                     .as_ref()

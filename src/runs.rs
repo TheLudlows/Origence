@@ -1,4 +1,4 @@
-//! Authorized Run operations stay in one relational transaction.
+//! Run evidence commits in SQLite. Archive reads stay outside that transaction.
 use crate::{
     error::{AppError, Result},
     evidence::{EvidenceBundle, EvidenceProvenance},
@@ -115,12 +115,27 @@ impl Service {
             }
         }
         let mut tx = self.write(a, Permission::Write).await?;
-        for archive in archives {
-            tx.attach_native_archive_proof(&archive).await?;
+        let mut result = match tx
+            .replay_run_context_prepared(run, event_id, request_digest)
+            .await?
+        {
+            Some(prepared) => prepared,
+            None => {
+                for archive in archives {
+                    tx.attach_native_archive_proof(&archive).await?;
+                }
+                tx.record_run_context_prepared(run, event_id, request_digest, bundle)
+                    .await?
+            }
+        };
+        // A concurrent preparer may have committed the same event before
+        // this write transaction. Reuse bodies already read and authorized
+        // only when the complete saved digest matches this candidate.
+        if let Some(proof) = result.get("archive_bundle_digest")
+            && *proof == prepared_bundle_hash(bundle)?
+        {
+            fill_archive_bundle(&mut result, bundle)?;
         }
-        let result = tx
-            .record_run_context_prepared(run, event_id, request_digest, bundle)
-            .await?;
         tx.commit().await?;
         self.restore_archive_run_bundle(a, run, event_id, request_digest, result)
             .await
@@ -167,10 +182,9 @@ impl Service {
         let Some(proof) = preparation.get("archive_bundle_digest") else {
             return Ok(preparation);
         };
-        let invalid = || AppError::Unavailable("invalid prepared archive snapshot".into());
         let mut bundle: EvidenceBundle =
             serde_json::from_value(preparation["recorded_bundle"].clone())
-                .map_err(|_| invalid())?;
+                .map_err(|_| invalid_archive_bundle())?;
         let mut legacy = Vec::new();
         for (index, item) in bundle.items.iter_mut().enumerate() {
             if let EvidenceProvenance::SessionTurn {
@@ -211,7 +225,7 @@ impl Service {
             .replay_run_context_prepared(run, event_id, request_digest)
             .await?;
         if current.as_ref() != Some(&preparation) {
-            return Err(invalid());
+            return Err(invalid_archive_bundle());
         }
         for (index, entry, body) in legacy_bodies {
             let fresh = tx.archive_delivery(&entry, body).await?;
@@ -219,17 +233,31 @@ impl Service {
                 format!("Question: {}\nAnswer: {}", fresh.question, fresh.answer);
         }
         bundle.rendered_context = crate::evidence::restore_rendered_context(&bundle);
-        if *proof != crate::storage::hash(serde_json::to_vec(&bundle).map_err(|_| invalid())?) {
-            return Err(invalid());
+        if *proof != prepared_bundle_hash(&bundle)? {
+            return Err(invalid_archive_bundle());
         }
-        preparation
-            .as_object_mut()
-            .ok_or_else(invalid)?
-            .remove("archive_bundle_digest");
-        preparation["recorded_bundle"] = serde_json::json!(bundle);
+        fill_archive_bundle(&mut preparation, &bundle)?;
         tx.commit().await?;
         Ok(preparation)
     }
+}
+
+fn invalid_archive_bundle() -> AppError {
+    AppError::Unavailable("invalid prepared archive snapshot".into())
+}
+
+fn prepared_bundle_hash(bundle: &EvidenceBundle) -> Result<String> {
+    let encoded = serde_json::to_string(bundle).map_err(|_| invalid_archive_bundle())?;
+    Ok(crate::storage::hash(encoded))
+}
+
+fn fill_archive_bundle(preparation: &mut Value, bundle: &EvidenceBundle) -> Result<()> {
+    let response = preparation
+        .as_object_mut()
+        .ok_or_else(invalid_archive_bundle)?;
+    response.remove("archive_bundle_digest");
+    response.insert("recorded_bundle".into(), serde_json::json!(bundle));
+    Ok(())
 }
 
 fn run_archive_content(body: &ArchivedTurnBody) -> String {

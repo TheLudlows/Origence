@@ -1,7 +1,7 @@
 //! Session and evidence authority, including exact archival provenance.
 use super::read_model::{self, AssociationKey};
 use super::*;
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(test)]
 use crate::session::SessionTurnInput;
 use crate::session::{ArchivedEvidence, EvidenceKind, FeedbackInput, FeedbackTarget, UsedEvidence};
 use std::collections::HashSet;
@@ -549,7 +549,7 @@ impl SqliteTx {
         Ok(evidence)
     }
 
-    #[cfg(any(feature = "local-storage", test))]
+    #[cfg(test)]
     pub(super) async fn register_turn(
         &mut self,
         session: Uuid,

@@ -212,18 +212,34 @@ pub(super) async fn process(
     let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let mut run: ImproveRun = tx.improve_run(*session_id, *improve_id).await?;
-    tx.commit().await?;
-
     let mut required = std::collections::HashMap::new();
     for item in &run.snapshot.items {
-        if item.turn.question.is_empty() {
-            required.entry(item.turn.turn_id).or_insert(&item.turn);
+        if item.turn.question.is_empty()
+            && let std::collections::hash_map::Entry::Vacant(slot) =
+                required.entry(item.turn.turn_id)
+        {
+            let legacy = match tx.archive_entry(*session_id, item.turn.turn_id).await {
+                Ok(archive) if archive.locator.source == item.turn.source_event_id => Some(archive),
+                Ok(_) => return Err(AppError::NotFound),
+                Err(StorageError::NotFound) => None,
+                Err(error) => return Err(error.into()),
+            };
+            slot.insert((&item.turn, legacy));
         }
     }
-    let mut hydrated = std::collections::HashMap::new();
-    let mut legacy = Vec::new();
-    for (turn, frozen) in required {
-        if let Some(archive) = service.load_native_archive(&a, *session_id, turn).await? {
+    tx.commit().await?;
+
+    let mut hydrated = std::collections::HashMap::with_capacity(required.len());
+    for (turn, (frozen, legacy)) in required {
+        let body = if let Some(entry) = legacy {
+            service.archived_body(&entry).await?
+        } else {
+            let archive = service
+                .load_native_archive(&a, *session_id, turn)
+                .await?
+                .ok_or_else(|| {
+                    AppError::Unavailable("private archive record unavailable".into())
+                })?;
             if archive.source != frozen.source_event_id
                 || archive.evidence != frozen.used_evidence
                 || !archive.body.evidence_use.is_reported()
@@ -232,26 +248,9 @@ pub(super) async fn process(
                     "private archive does not match frozen Improve evidence".into(),
                 ));
             }
-            hydrated.insert(turn, archive.body);
-        } else {
-            legacy.push((turn, frozen.source_event_id));
-        }
-    }
-    if !legacy.is_empty() {
-        let mut tx = service.read(&a, Permission::Write).await?;
-        guard(&mut tx, claim, payload).await?;
-        let mut entries = Vec::new();
-        for (turn, source) in legacy {
-            let archive = tx.archive_entry(*session_id, turn).await?;
-            if archive.locator.source != source {
-                return Err(AppError::NotFound);
-            }
-            entries.push((turn, archive));
-        }
-        tx.commit().await?;
-        for (turn, entry) in entries {
-            hydrated.insert(turn, service.archived_body(&entry).await?);
-        }
+            archive.body
+        };
+        hydrated.insert(turn, body);
     }
     if !hydrated.is_empty() {
         let mut tx = service.read(&a, Permission::Write).await?;
@@ -355,21 +354,10 @@ pub(super) async fn process(
             "learning:{}:{}:{}:{}",
             claim.scope.tenant_id, claim.scope.workspace_id, improve_id, decision.candidate
         ));
-        let title = "Conditional learning";
-        let source = tx
-            .create_event("learning", &candidate.render_text(), None)
-            .await?;
-        let asset = tx.insert_knowledge_asset(title).await?;
-        let child = Service::enqueue(
+        let (asset, source, child) = Service::stage_learning_ingest(
             &mut tx,
-            JobPayload::Ingest {
-                format: "text".into(),
-                title: title.into(),
-                expected_version: None,
-                embedding_profile: payload.embedding_profile().map(str::to_owned),
-            },
-            Some(asset),
-            Some(source),
+            candidate,
+            payload.embedding_profile().map(str::to_owned),
         )
         .await?;
         tx.create_learning(

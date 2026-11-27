@@ -570,6 +570,79 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     service.run_trace(&owner, run, 0, 1).await.unwrap();
     service.run_prefix(&owner, run, 1).await.unwrap();
 
+    // Pause one preparer during shared retrieval. The winner commits before
+    // a second private turn is archived, so the late candidate differs.
+    service
+        .memory(
+            &owner,
+            "native-run-race-memory",
+            serde_json::from_value(json!({
+                "fact_key":"synthetic.run_race",
+                "content":format!("{question} synthetic shared evidence")
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let mixed_event = Uuid::new_v4();
+    let mixed: EvidenceInput = serde_json::from_value(json!({
+        "query": question,
+        "routes":[{"route":"memory"},{"route":"session","limit":2}]
+    }))
+    .unwrap();
+    let gate = fixture(dir.path(), None).pause_next_content_read();
+    let delayed = tokio::spawn({
+        let service = service.clone();
+        let owner = owner.clone();
+        let mixed = mixed.clone();
+        async move {
+            service
+                .prepare_run_context(&owner, run, mixed_event, mixed)
+                .await
+        }
+    });
+    let timeout = std::time::Duration::from_secs(10);
+    tokio::time::timeout(timeout, gate.entered.notified())
+        .await
+        .expect("delayed Run should reach its shared content read");
+    let winner = service
+        .prepare_run_context(&owner, run, mixed_event, mixed)
+        .await
+        .unwrap();
+    assert_eq!(winner["bundle"]["items"].as_array().unwrap().len(), 2);
+    let uncited_turn = Uuid::new_v4();
+    let uncited_answer = "Private synthetic turn excluded from the winning Run";
+    service
+        .archive_turn(
+            &owner,
+            "later-native-turn",
+            session,
+            serde_json::from_value(json!({
+                "turn_id":uncited_turn,"question":question,"answer":uncited_answer,"used_evidence":[]
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    gate.resume.notify_one();
+    let resumed = tokio::time::timeout(timeout, delayed)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed, winner);
+    let uncited_proofs: i64 = sqlite_db::query_scalar(
+        "SELECT count(*) FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND turn_id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(uncited_turn)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(uncited_proofs, 0, "the losing bundle must not add a proof");
+
     service
         .withdraw_session_archive(&owner, session, Some(turn))
         .await

@@ -387,11 +387,9 @@ impl SqliteTx {
                 source_event_id,
                 ..
             } = citation
+                && self.require_turn_visible(session_id, turn_id).await? != source_event_id
             {
-                self.require_private_session(session_id).await?;
-                if self.require_turn_visible(session_id, turn_id).await? != source_event_id {
-                    return Err(StorageError::NotFound);
-                }
+                return Err(StorageError::NotFound);
             }
         }
         Ok(())

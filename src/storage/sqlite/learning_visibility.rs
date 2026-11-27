@@ -434,9 +434,9 @@ impl SqliteTx {
     async fn guard_learning_dependencies(
         &mut self,
         roots: Vec<Uuid>,
-        accepted_root: Option<Uuid>,
+        publication_root: Option<LearningRecord>,
     ) -> StorageResult<()> {
-        let catalog = self.learning_catalog_present().await?;
+        let catalog = publication_root.is_some() || self.learning_catalog_present().await?;
         let mut stack: Vec<_> = roots.into_iter().rev().map(Visit::Enter).collect();
         let mut visiting = HashSet::new();
         let mut complete = HashSet::new();
@@ -457,7 +457,10 @@ impl SqliteTx {
             if visiting.contains(&asset) {
                 return Err(StorageError::NotFound);
             }
-            let record = if catalog {
+            let is_publication_root = publication_root.is_some_and(|record| record.asset == asset);
+            let record = if is_publication_root {
+                publication_root
+            } else if catalog {
                 self.learning_record(asset).await?
             } else {
                 None
@@ -471,7 +474,7 @@ impl SqliteTx {
             };
             learning_count += 1;
             if learning_count + turn_dependencies.len() > MAX_LEARNING_CLOSURE
-                || !(record.published || (accepted_root == Some(asset) && record.accepted))
+                || !(record.published || (is_publication_root && record.accepted))
             {
                 return Err(StorageError::NotFound);
             }
@@ -622,10 +625,12 @@ impl SqliteTx {
                     return Err(StorageError::NotFound);
                 }
                 return self
-                    .guard_learning_dependencies(vec![asset], Some(asset))
+                    .guard_learning_dependencies(vec![asset], Some(record))
                     .await;
             }
-            self.require_learning_asset_visible(asset).await?;
+            if self.has_learning_source_version(asset).await? {
+                return Err(StorageError::NotFound);
+            }
         }
         if let Some(source) = source {
             self.require_learning_source_visible(source).await?;

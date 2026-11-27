@@ -27,6 +27,16 @@ Rust 1.98.0. Standalone AnySeek used CI pin `6a46fc791c9c425e0f94fea3d04be4c1fb8
 All checks used disposable synthetic data. Native Windows, production data migration,
 and online restore remain outside this validation.
 
+The follow-up review starts from `97d0bc6e264250c8cc939d3c66a294f22a4c19c7`.
+The actual CLI, HTTP, and MCP smokes ran again with embedded and standalone AnySeek.
+A missing known archive group returns 503 on source, turn, and context reads. Withdrawing
+an unreferenced turn by source ID creates no SQLite dependency proof. The restore manifest
+changes with a logical withdrawal and stays fixed when cleanup removes the withdrawn record.
+A concurrent Run preparer replays the committed result and leaves proofs only for the
+selected turns. Direct publication and Improve Learning regressions also passed.
+The follow-up default Rust suite passed 482 tests and the real AnySeek contracts passed eight.
+Strict SQLite-only and all-feature Clippy, formatting, and link checks passed.
+
 ## 2026-11-27 · AnySeek private turn archive
 
 Origence is based on `af9030310bd5d313e23d9ac42373fa0b1e7d38a7`. The embedded SDK remains

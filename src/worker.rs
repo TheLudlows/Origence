@@ -987,12 +987,12 @@ async fn cleanup_private_archives(service: &Service) -> Result<()> {
     let backend = service.engine.vector().private_archive();
     let mut result = Ok(());
     for entry in store.withdrawn_archives(16).await? {
-        match backend.archive_delete(&entry.locator).await {
-            Ok(()) => store.finish_archive_cleanup(&entry.locator).await?,
-            Err(error) => {
-                store.defer_archive_cleanup(&entry.locator).await?;
-                result = Err(error.into());
-            }
+        let deleted = backend.archive_delete(&entry.locator).await;
+        store
+            .settle_legacy_archive_cleanup(&entry.locator, deleted.is_ok())
+            .await?;
+        if let Err(error) = deleted {
+            result = Err(error.into());
         }
     }
     for (domain, session, turn) in store.withdrawn_native_archive_turns(16).await? {

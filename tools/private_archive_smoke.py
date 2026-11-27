@@ -109,6 +109,9 @@ class Proxy(Peer):
         if private and action == "block_read":
             self.reply(503, {})
             return
+        if private and action == "missing_group" and "/group?group_id=" in self.path:
+            self.reply(404, {})
+            return
         headers = {name: value for name in ("apikey", "X-AnySeek-Tenant", "X-AnySeek-Request-Id")
                    if (value := self.headers.get(name)) is not None}
         upstream_headers = {}
@@ -381,8 +384,26 @@ def run_contract(binary, root, model, anyseek, legacy):
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
                 results = list(pool.map(lambda _: host.request(route, concurrent_turn), range(5)))
             assert all(result == results[0] for result in results)
+            source_path = f"/v1/events/{results[0]['source_event_id']}"
+            assert json.loads(host.request(source_path)["content"])["question"] == concurrent_turn["question"]
+            deleted = expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 200)
+            assert expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 200) == deleted
+            expect(request(host.base, route + "/" + concurrent_turn["turn_id"], token=token), 404)
+            with database(directory) as db:
+                assert db.execute("SELECT 1 FROM oc_session_turns WHERE turn_id=?",
+                                  (uuid.UUID(concurrent_turn["turn_id"]).bytes,)).fetchone() is None
 
             if anyseek:
+                if not legacy:
+                    # The directory hit and Run proof still exist. Losing the
+                    # native group is an integrity error on all read paths.
+                    proxy.action = "missing_group"
+                    try:
+                        expect(request(host.base, f"/v1/events/{saved[0]['source_event_id']}", token=token), 503)
+                        expect(request(host.base, route + "/" + turn["turn_id"], token=token), 503)
+                        expect(request(host.base, "/v1/context", "POST", token, context), 503)
+                    finally:
+                        proxy.action = None
                 mixed_run = str(uuid.uuid4())
                 host.request("/v1/runs", {"run_id": mixed_run, "summary": "Synthetic mixed replay"})
                 mixed_path = f"/v1/runs/{mixed_run}/context"
@@ -503,6 +524,14 @@ def run_contract(binary, root, model, anyseek, legacy):
             shutil.copytree(directory, incomplete, ignore=shutil.ignore_patterns("anyseek"))
             command(binary, dict(env, OC_DATA_DIR=str(incomplete)), "archive-migrate", "verify",
                     *params, ok=False)
+            damaged = root / "missing-withdrawal"
+            shutil.copytree(directory, damaged)
+            with database(damaged) as db:
+                removed = db.execute("DELETE FROM oc_native_archive_withdrawals WHERE turn_id=?",
+                                     (uuid.UUID(concurrent_turn["turn_id"]).bytes,))
+                assert removed.rowcount == 1
+            altered = command(binary, dict(env, OC_DATA_DIR=str(damaged)), "archive-migrate", "verify", *params)
+            assert altered["directory_sha256"] != manifest["directory_sha256"]
         if anyseek:
             stack.close()
             native_copy = root / "restored-native"
