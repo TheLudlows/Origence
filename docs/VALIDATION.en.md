@@ -4,6 +4,18 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Management console visual update
+
+Based on main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`. Node.js 24.22.1 type checking,
+30 UI tests, and Rust 1.98.0 formatting and strict Clippy passed. Chromium 156.0.8078.79 used
+loopback synthetic data to verify the side-by-side chart and metering at 1440px, stacking at
+1024px and 320px, light and dark navigation at 736px and 375px, sign-in, workspace switching,
+keyboard focus, and retry. Measured text contrast on knowledge details ranged from 6.0259:1
+to 8.1043:1. A coarse pointer was emulated at 320px, 375px, and 736px to check hit targets for
+sign-out, dialogs, and disclosure controls.
+
+See the [Chinese record](VALIDATION.md#2026-11-26--管理控制台视觉更新) for the commands.
+
 ## 2026-11-26 · Run creation chart
 
 Based on main `78f08ab95494eb9cca9944e3a87fa0181374e1ef`. Node.js 24.22.1 type checking and 30 UI

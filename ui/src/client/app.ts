@@ -22,19 +22,25 @@ import type { ConsoleSession, ConsoleSessionResponse, ConsoleWorkspace } from ".
 
 const mount = document.getElementById("app")!;
 const pages = [
-  ["overview", "◫", "运行总览"],
-  ["runs", "⑂", "调用链路"],
-  ["memory", "◇", "记忆管理"],
-  ["knowledge", "▤", "知识管理"],
-  ["contexts", "⊞", "上下文工作台"],
-  ["keys", "⚿", "API Key"],
-  ["agents", "◉", "Agent 连接"],
+  ["overview", "运行总览"],
+  ["runs", "调用链路"],
+  ["memory", "记忆管理"],
+  ["knowledge", "知识管理"],
+  ["contexts", "上下文工作台"],
+  ["keys", "API Key"],
+  ["agents", "Agent 连接"],
 ] as const;
 const sessionPath = "/console/session";
 const workspaceStorageKey = "origence.selectedWorkspace";
 let session: ConsoleSession | null = null;
 let user: ConsoleWorkspace | undefined;
 let route = new AbortController();
+
+function brand() {
+  const mark = el("span", "brand-mark");
+  mark.setAttribute("aria-hidden", "true");
+  return el("div", "brand", mark, "Origence");
+}
 
 function focusRoute(target: HTMLElement) {
   target.tabIndex = -1;
@@ -181,14 +187,14 @@ function login(setupRequired?: true) {
       "login",
       el(
         "div",
-        "brand",
-        el("span", "brand-mark", "◎"),
-        "origence",
-        el("span", "accent", "."),
+        "login-identity",
+        brand(),
+        el("p", "login-product", "Agent 上下文工作台"),
       ),
-      panel(
-        "登录 Origence",
-        el("h1", "", "Agent 上下文工作台"),
+      el(
+        "section",
+        "login-form",
+        el("h1", "", "登录 Origence"),
         el(
           "p",
           "muted",
@@ -255,18 +261,20 @@ async function render() {
     focusRoute(error);
     return;
   }
-  const title = pages.find(([key]) => key === page)?.[2] ?? "内容详情";
+  const title = pages.find(([key]) => key === page)?.[1] ?? "内容详情";
   const nav = el("nav");
   nav.setAttribute("aria-label", "主导航");
-  for (const [key, icon, label] of pages) {
+  for (const [key, label] of pages) {
     if ((key === "keys" || key === "agents") && user.role !== "admin") continue;
     const link = button("", () => navigate(key), "nav-item");
-    link.append(el("span", "nav-icon", icon), label);
+    const icon = el("span", `nav-icon nav-icon-${key}`);
+    icon.setAttribute("aria-hidden", "true");
+    link.append(icon, label);
     if (key === page) link.setAttribute("aria-current", "page");
     nav.append(link);
   }
   const theme = button(
-    "◐",
+    "",
     () => {
       const dark =
         getComputedStyle(document.documentElement).colorScheme === "dark" ||
@@ -276,6 +284,7 @@ async function render() {
     },
     "icon-button",
   );
+  theme.append(el("span", "theme-icon"));
   theme.setAttribute("aria-label", "切换明暗主题");
   const workspaceHeading = el("h2", "", "工作区");
   workspaceHeading.id = "workspace-list-title";
@@ -285,7 +294,7 @@ async function render() {
   for (const workspace of session.workspaces) {
     const item = button(workspace.name, () => {
       if (workspace.workspace_id !== user?.workspace_id) chooseWorkspace(workspace, true);
-    }, "nav-item");
+    }, "workspace-item");
     if (workspace.workspace_id === user.workspace_id) item.setAttribute("aria-current", "true");
     workspaceList.append(el("li", "", item));
   }
@@ -293,6 +302,8 @@ async function render() {
   const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
   const activeWorkspace = user;
   const binding = session.binding;
+  const avatar = el("span", "avatar", session.account.slice(0, 1).toUpperCase());
+  avatar.setAttribute("aria-hidden", "true");
   mount.replaceChildren(
     el(
       "div",
@@ -300,25 +311,24 @@ async function render() {
       el(
         "aside",
         "sidebar",
+        brand(),
         el(
           "div",
-          "brand",
-          el("span", "brand-mark", "◎"),
-          "origence",
-          el("span", "accent", "."),
+          "workspace",
+          workspaceHeading,
+          workspaceList,
+          activeWorkspace.can_create_owned_workspaces
+            ? button("新建工作区", () => createWorkspace(activeWorkspace, binding, ctx.signal), "workspace-create")
+            : null,
         ),
-        el("div", "workspace", workspaceHeading, workspaceList),
-        activeWorkspace.can_create_owned_workspaces
-          ? button("新建工作区", () => createWorkspace(activeWorkspace, binding, ctx.signal), "nav-item")
-          : null,
         nav,
         el(
           "div",
           "account",
-          el("span", "avatar", user.role.slice(0, 1).toUpperCase()),
+          avatar,
           el(
             "div",
-            "",
+            "account-identity",
             el("strong", "", session.account),
             el("small", "mono", user.role),
           ),
@@ -334,11 +344,11 @@ async function render() {
           el(
             "div",
             "breadcrumb",
-            user.name === user.workspace_id ? short(user.workspace_id) : user.name,
-            el("span", "muted", "/"),
-            title,
+            el("span", "breadcrumb-workspace", user.name === user.workspace_id ? short(user.workspace_id) : user.name),
+            el("span", "breadcrumb-separator"),
+            el("strong", "", title),
           ),
-          el("div", "actions", el("span", "badge", "HTTP API"), theme),
+          theme,
         ),
         content,
       ),
