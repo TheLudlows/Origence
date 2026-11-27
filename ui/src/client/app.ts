@@ -175,33 +175,23 @@ function createWorkspace(parent: ConsoleWorkspace, binding: string, parentSignal
 }
 
 function login(setupRequired?: true) {
-  const username = input("输入账号");
+  const username = input("");
   username.required = true;
   username.autocomplete = "username";
-  const secret = input("输入密码", "", "password");
+  const secret = input("", "", "password");
   secret.required = true;
   secret.autocomplete = "current-password";
   const error = el("div");
   const connect = submit("登录");
   mount.replaceChildren(
     el(
-      "div",
+      "main",
       "login",
-      el(
-        "div",
-        "login-identity",
-        brand(),
-        el("p", "login-product", "Agent 上下文工作台"),
-      ),
       el(
         "section",
         "login-form",
-        el("h1", "", "登录 Origence"),
-        el(
-          "p",
-          "muted",
-          setupRequired ? "控制台尚未创建账号，请联系管理员。" : "登录后可以切换已获授权的工作区。",
-        ),
+        el("header", "login-heading", brand(), el("h1", "", "登录控制台")),
+        setupRequired ? el("p", "notice", "控制台尚未创建账号，请联系管理员。") : null,
         form(
           async () => {
             connect.disabled = true;

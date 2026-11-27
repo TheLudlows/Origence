@@ -132,7 +132,8 @@ async function testWidth(browser, origin, width, colorScheme) {
     await assertViewport(page, width);
     await tapEdge(logout, { right: true, bottom: true });
     await page.getByLabel("账号", { exact: true }).waitFor();
-    assert.equal(await main.count(), 0);
+    await main.getByRole("heading", { name: "登录控制台" }).waitFor();
+    assert.equal(await nav.count(), 0);
     return sizes;
   } finally {
     await page.close();
