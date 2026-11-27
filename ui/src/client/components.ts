@@ -44,7 +44,7 @@ export function field(label: string, control: HTMLElement) {
 export function panel(title: string, ...children: Child[]) {
   return el("section", "panel", el("h2", "", title), ...children);
 }
-export function heading(title: string, subtitle: string, ...actions: Child[]) {
+export function heading(title: string, subtitle: Child, ...actions: Child[]) {
   return el(
     "header",
     "page-heading",

@@ -500,6 +500,19 @@ small {
   margin-top: 7px;
   font-size: 13px;
 }
+.overview-workspace-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.overview-workspace-id code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
 .actions {
   display: flex;
   align-items: center;

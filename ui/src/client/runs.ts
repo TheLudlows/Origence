@@ -69,11 +69,21 @@ export function citation(
   );
 }
 
-export async function overview(root: HTMLElement, ctx: ViewContext) {
+export async function overview(root: HTMLElement, ctx: ViewContext, workspaceId: string) {
   root.append(
     heading(
       "运行总览",
-      "查看新建运行、已上报的计量和调用记录。",
+      el(
+        "span",
+        "",
+        "查看新建运行、已上报的计量和调用记录。",
+        el(
+          "span",
+          "overview-workspace-id",
+          el("span", "", "工作区 ID"),
+          el("code", "mono", workspaceId),
+        ),
+      ),
       button("查看调用链 →", () => ctx.navigate("runs"), "primary"),
     ),
   );
