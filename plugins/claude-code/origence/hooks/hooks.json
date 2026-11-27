@@ -120,6 +120,23 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 3,
+            "command": "origence",
+            "args": [
+              "plugin-hook",
+              "--client",
+              "claude-code"
+            ],
+            "onFailure": "continue"
+          }
+        ]
+      }
     ]
   }
 }

@@ -131,27 +131,7 @@ impl Queue {
     }
 
     fn prepare_directory(&self) -> anyhow::Result<()> {
-        #[cfg(unix)]
-        let created = {
-            use std::os::unix::fs::DirBuilderExt;
-            fs::DirBuilder::new().mode(0o700).create(&self.0)
-        };
-        #[cfg(not(unix))]
-        let created = fs::create_dir(&self.0);
-        match created {
-            Ok(()) => {
-                let parent = self.0.parent().context("invalid hook queue location")?;
-                sync_directory(parent)?;
-            }
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
-            Err(_) => anyhow::bail!("cannot create hook queue"),
-        }
-        self.check_directory(
-            &self
-                .0
-                .symlink_metadata()
-                .context("cannot inspect hook queue")?,
-        )
+        prepare_private_directory(&self.0)
     }
 
     fn check_directory(&self, metadata: &fs::Metadata) -> anyhow::Result<()> {
@@ -161,17 +141,8 @@ impl Queue {
 
     fn lock(&self) -> anyhow::Result<File> {
         let lock = open_private(&self.0.join("queue.lock"))?;
-        let start = Instant::now();
-        loop {
-            match lock.try_lock() {
-                Ok(()) => return Ok(lock),
-                Err(std::fs::TryLockError::WouldBlock) if start.elapsed() < LOCK_WAIT => {
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-                Err(std::fs::TryLockError::WouldBlock) => anyhow::bail!("hook queue busy"),
-                Err(_) => anyhow::bail!("cannot lock hook queue"),
-            }
-        }
+        wait_private_lock(&lock)?;
+        Ok(lock)
     }
 
     fn read(&self) -> anyhow::Result<State> {
@@ -209,7 +180,42 @@ impl Queue {
     }
 }
 
-fn open_private(path: &Path) -> anyhow::Result<File> {
+pub(super) fn wait_private_lock(lock: &File) -> anyhow::Result<()> {
+    let start = Instant::now();
+    loop {
+        match lock.try_lock() {
+            Ok(()) => return Ok(()),
+            Err(std::fs::TryLockError::WouldBlock) if start.elapsed() < LOCK_WAIT => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(std::fs::TryLockError::WouldBlock) => anyhow::bail!("hook queue busy"),
+            Err(_) => anyhow::bail!("cannot lock hook queue"),
+        }
+    }
+}
+
+pub(super) fn prepare_private_directory(path: &Path) -> anyhow::Result<()> {
+    let builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    let builder = {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = builder;
+        builder.mode(0o700);
+        builder
+    };
+    match builder.create(path) {
+        Ok(()) => sync_directory(path.parent().context("invalid hook queue location")?)?,
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+        Err(_) => anyhow::bail!("cannot create hook queue"),
+    }
+    let metadata = path
+        .symlink_metadata()
+        .context("cannot inspect hook queue")?;
+    ensure!(metadata.is_dir(), "hook queue must be a private directory");
+    require_private(&metadata)
+}
+
+pub(super) fn open_private(path: &Path) -> anyhow::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).create(true).truncate(false);
     #[cfg(unix)]
@@ -224,7 +230,7 @@ fn open_private(path: &Path) -> anyhow::Result<File> {
     Ok(file)
 }
 
-fn sync_directory(path: &Path) -> anyhow::Result<()> {
+pub(super) fn sync_directory(path: &Path) -> anyhow::Result<()> {
     #[cfg(unix)]
     File::open(path)
         .and_then(|f| f.sync_all())

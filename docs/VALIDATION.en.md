@@ -4,6 +4,21 @@
 
 The latest local verification was 2026-11-26. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-26 · Incremental private turns for Codex and Claude Code
+
+Based on main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`, on Linux x86_64 with Rust 1.98.0.
+Temporary SQLite and an actual loopback Origence HTTP server exercised synthetic hooks in separate
+processes. Coverage includes pairing, project opt-in, redaction, offline staging, byte-for-byte
+replay following a lost receipt, concurrent retries, key and workspace isolation, source withdrawal,
+and changed answers. Private retrieval preserves unknown evidence use. Legacy empty lists still
+report that no evidence was used. Improve skips feedback on turns with unknown evidence use.
+Rust formatting, strict all-features Clippy, 239 library tests, 216 local integration tests and
+three Python MCP schema tests passed.
+The HTTP MCP smoke passed protocol negotiation, the archive tool schema, live revocation and restart
+with embedded AnySeek and the CI-pinned standalone AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
+The standalone fixture was built with Rust 1.99.1. Native clients, live models, and Windows and macOS
+paths await verification. See the [commands](VALIDATION.md).
+
 ## 2026-11-26 · Run creation chart
 
 Based on main `78f08ab95494eb9cca9944e3a87fa0181374e1ef`. Node.js 24.22.1 type checking and 30 UI

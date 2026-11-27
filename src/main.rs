@@ -251,11 +251,16 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
         }),
         Command::ClientHook { profile, action } => Box::pin(run_client_hook(profile, action)),
         Command::PluginHook { client } => Box::pin(async move {
-            if client_hook::capture_plugin_event(client, &server_url)
-                .await
-                .is_err()
-            {
-                eprintln!("Origence plugin hook: Run observation could not be delivered");
+            match client_hook::capture_plugin_event(client, &server_url).await {
+                Ok(report) => {
+                    if report.run_delivery_failed {
+                        eprintln!("Origence plugin hook: Run observation could not be delivered");
+                    }
+                    if let Some(notice) = report.turn_sync_notice {
+                        eprintln!("Origence turn sync: {notice}");
+                    }
+                }
+                Err(_) => eprintln!("Origence plugin hook: could not read the observation"),
             }
             println!("{{}}");
             Ok(())

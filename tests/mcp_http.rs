@@ -585,6 +585,24 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
             .unwrap()["answer"],
         "Synthetic answer"
     );
+    let unknown = Uuid::new_v4();
+    peer.call(
+        token,
+        None,
+        "context_turn_archive",
+        json!({"turn": {
+            "turn_id": unknown, "question": "Synthetic question", "answer": "Synthetic answer",
+            "used_evidence": [], "evidence_use": "unknown"
+        }}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        peer.call(token, None, "context_turn_get", json!({"turn_id":unknown}))
+            .await
+            .unwrap()["evidence_use"],
+        "unknown"
+    );
     assert!(
         peer.call(
             token,

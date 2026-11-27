@@ -343,7 +343,9 @@ def check_tools(mcp):
             continue
         if name == "context_turn_archive":
             fields = {"turn_id": "string", "question": "string", "answer": "string", "used_evidence": "array"}
-            schema_object(root, properties["turn"], fields, fields)
+            turn = schema_object(root, properties["turn"], {**fields, "evidence_use": "string"}, fields)
+            require(set(dereference(root, turn["evidence_use"]).get("enum", [])) == {"reported", "unknown"},
+                    "archive evidence use states changed")
             continue
         if name == "context_get":
             require(nullable(root, properties["version"]), "get version no longer accepts null")

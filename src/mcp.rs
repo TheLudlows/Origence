@@ -223,7 +223,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Explicitly archive one turn to your private Origence session, only when requested. Requires writer access. Reuse the same turn UUID and content on retry; never include credentials."
+        description = "Explicitly archive one turn to your private Origence session, only when requested. Requires writer access. Use evidence_use=unknown with an empty used_evidence list if actual use is unknown. Reuse the same turn UUID and content on retry; never include credentials."
     )]
     async fn context_turn_archive(
         &self,

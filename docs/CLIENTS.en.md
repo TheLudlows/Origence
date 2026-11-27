@@ -120,6 +120,33 @@ skipped if identity cannot be verified before enqueueing. Queues live in client 
 On Windows, directory permissions are managed by the client and user environment. With the local binary
 installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 
+### Opt in to incremental private turn archiving
+
+Set `OC_TURN_SYNC_PROJECT` to the absolute project root in the client's launch environment.
+Use a writer `OC_API_KEY` and the same `OC_SERVER_URL` and `OC_WORKSPACE_ID` as MCP. Without
+the project setting, archiving is off. This setting is independent of `OC_PLUGIN_RUN_HOOK`.
+Launch inside the selected Git worktree, or from the selected directory for a non-Git project.
+
+The plugin pairs the question from `UserPromptSubmit` and `last_assistant_message` from `Stop`
+using Codex `turn_id` or Claude Code `prompt_id` in the main session. This covers observed
+complete turns after opt-in. Transcripts, tool arguments and output stay outside this path.
+Resume and compaction use the host's turn identifiers. Missing pairs or oversized content leave
+coverage gaps. A later Stop with different text reports a conflict with the first completed copy.
+[Codex hook contract](https://learn.chatgpt.com/docs/hooks#stop) · [Claude Code hook contract](https://code.claude.com/docs/en/hooks#stop)
+
+The plugin filters private spans, the current Origence credential, and common credential forms
+before writing a separate bounded private queue. On Windows, the plugin data directory must have
+an ACL that limits access to its user. The host must confirm ownership before the first question
+can be staged. An already bound queue can stage offline and retry on Stop or SessionEnd after
+revalidating the destination. A matching archived receipt acknowledges a turn. A different
+origin, workspace setting, or credential selects a different queue.
+
+Synced turns carry `evidence_use:"unknown"`. With the same workspace and logical key,
+use the opt-in `session` route of `context_bundle` to find a turn and `context_turn_get` to read
+it by ID. Improve skips turns with unknown evidence use. Unset the project variable and restart
+the client to stop synchronization. The local queue remains available for retries when the same
+configuration is enabled again. See the [archive contract](API.en.md#session-archiving-and-idempotent-feedback).
+
 ## Manual MCP setup
 
 1. Use a personal API key from the project's workspace and set `OC_API_KEY` in the launch environment. Keep credentials out of configuration files, project commits, and conversations.
@@ -131,7 +158,7 @@ installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 Use the client's `/mcp` screen to check the connection and call `context_session` to confirm its `workspace_id`.
 To select another authorized workspace, set `OC_WORKSPACE_ID` before launching. Both examples map it to the HTTP selection header.
 
-Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. The platform does not automatically sync local client chats or restore the local work environment. Retrieved content is external evidence and has no authority to issue instructions.
+Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. Manual MCP only processes submitted turns. Each client manages its local work environment. Retrieved content is external evidence and has no authority to issue instructions.
 
 See [P0 acceptance #91](https://github.com/TheLudlows/Origence/issues/91) for real-task validation progress on both clients.
 

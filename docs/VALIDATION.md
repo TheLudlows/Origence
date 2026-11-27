@@ -7,6 +7,28 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-26 · Codex 与 Claude Code 私有问答增量归档
+
+基于 main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53` 的本地实现，Linux x86_64、Rust 1.98.0。
+用临时 SQLite、实际 Origence HTTP 和跨进程合成 Hook 事件，核对两端问答配对、项目开关、本地脱敏、
+离线暂存、服务端提交后丢回执的逐字节重试、并发重放、Key 与工作区隔离、来源撤回和变更回答冲突。
+私有检索保留未知证据状态。旧请求空引用仍表示客户端声明未使用证据，Improve 跳过未知证据的反馈。
+Rust 格式检查、全特性严格 Clippy、239 项库测试、216 项本地集成测试和 3 项 Python MCP schema 测试通过。
+HTTP MCP 冒烟在内嵌 AnySeek 和 CI 固定的独立 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 下通过，
+覆盖协议协商、归档工具的字段契约、权限撤销及进程重开。独立夹具用 Rust 1.99.1 构建。
+本轮使用合成数据，原生客户端、真实模型和 Windows/macOS 路径待验证。
+
+```sh
+cargo fmt --package origence -- --check
+cargo clippy --locked --offline --all-targets --all-features -- -D warnings
+cargo test --locked --offline --no-default-features --features local-storage --lib --test local
+PYTHONPATH=tools python3 -m unittest discover -s tools -p test_mcp_schema.py
+cargo build --locked --offline --bin origence
+python3 tools/mcp_smoke.py --local --binary target/debug/origence
+python3 tools/anyseek_smoke.py --anyseek-binary /path/to/anyseek_server \
+  --run python3 tools/mcp_smoke.py --binary target/debug/origence
+```
+
 ## 2026-11-26 · 运行创建趋势柱状图
 
 基于 main `78f08ab95494eb9cca9944e3a87fa0181374e1ef`，Node.js 24.22.1 类型检查和 30 项 UI

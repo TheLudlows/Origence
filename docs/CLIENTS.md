@@ -113,6 +113,28 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 已安装本机二进制时，可在启动前设置 `OC_PLUGIN_RUN_HOOK=0` 停止上报。
 继续使用原有项目配置时，关闭插件 Hook 并沿用下文的独立发送器。
 
+### 按项目开启私有问答增量归档
+
+在项目启动环境把 `OC_TURN_SYNC_PROJECT` 设为项目根目录的绝对路径，并提供具有 writer 权限的
+`OC_API_KEY`。`OC_SERVER_URL` 和 `OC_WORKSPACE_ID` 与 MCP 使用相同设置。未设置项目路径时，此功能关闭。
+这个开关独立于 `OC_PLUGIN_RUN_HOOK`。Git 项目从仓库根目录或其子目录启动，其他项目从选定目录启动。
+
+插件用 `UserPromptSubmit` 的问题与 `Stop` 的 `last_assistant_message` 配对。Codex 依赖 `turn_id`，
+Claude Code 依赖 `prompt_id`。只处理启用之后、两个字段和轮次关联都可靠的主会话问答。
+原始 transcript、工具参数和输出不会读入此流程。续聊和压缩后沿用宿主给出的轮次标识。
+无配对、缺少回答或超过归档上限会留下缺口。重复 `Stop` 复用同一归档，变更回答会报告冲突。
+[Codex Hook 契约](https://learn.chatgpt.com/docs/hooks#stop) · [Claude Code Hook 契约](https://code.claude.com/docs/en/hooks#stop)
+
+问题和回答在本地过滤 `<private>…</private>`、当前 Origence 凭据与常见凭据形式，再暂存在独立有界队列。
+Windows 使用客户端插件数据目录继承的 ACL，应限制其他用户读取。首次记录问题前需要服务端确认归档归属。
+已有归属时可离线暂存，`Stop` 或 `SessionEnd` 复核归属后重试。收到匹配的 `archived` 回执才确认归档。
+换服务、工作区或凭据使用独立队列。来源撤回会阻断重放，内容冲突保留原版，两种情况都会报告。
+
+同步的问答标记 `evidence_use:"unknown"`。同一工作区和逻辑 key 可用 `context_bundle` 的私有 `session`
+路线搜索，再按 `turn_id` 调用 `context_turn_get`。这条路径保存私有问答，Improve 会跳过证据使用未知的轮次。
+去掉项目变量并重启客户端可停止同步。已暂存的队列会保留，下次用同一配置启用时可继续重试。
+参见[归档契约](API.md#会话归档与幂等反馈)。
+
 ## 手工 MCP 接入
 
 1. 使用项目所属 workspace 的个人 API key，通过启动环境提供 `OC_API_KEY`。
@@ -131,8 +153,8 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用
 `context_session` 会得到同一个平台归档，再用 `context_turn_get` 按 turn UUID
-读取（需 writer 权限）。给两个客户端分别签发独立 key 时，它们的归档互不可见。平台不会自动同步
-客户端的本地聊天记录，也不会恢复客户端的工作现场。
+读取（需 writer 权限）。给两个客户端分别签发独立 key 时，它们的归档互不可见。手工 MCP 接入只处理
+调用方提交的轮次，客户端的工作现场由各自宿主维护。
 检索内容是外部证据，不是可直接执行的指令。
 
 双客户端真实任务的验收进度见 [P0 验收 #91](https://github.com/TheLudlows/Origence/issues/91)。
