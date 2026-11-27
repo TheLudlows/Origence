@@ -8,7 +8,8 @@ interface ArchivePage {
 }
 
 export async function archivePage(root: HTMLElement, ctx: ViewContext) {
-  root.append(heading("私有归档", "查看和删除当前 Key 在此工作区归档的问答。"));
+  const canDelete = ctx.role !== "workspace";
+  root.append(heading("私有归档", canDelete ? "查看和删除当前 Key 在此工作区归档的问答。" : "查看本工作空间归档的问答。"));
   if (ctx.role === "reader") {
     root.append(empty("需要写入权限", "私有归档仅向具备写入权限的所属 Key 开放。"));
     return;
@@ -62,9 +63,9 @@ export async function archivePage(root: HTMLElement, ctx: ViewContext) {
       for (const turn of page.turns) {
         const target = path + "/turns/" + encodeURIComponent(turn.turn_id);
         turns.append(panel(turn.question, el("p", "archive-answer", turn.answer),
-          button("删除这一轮", () => {
+          canDelete ? button("删除这一轮", () => {
             if (!busy && window.confirm("删除这一轮归档问答？")) return remove(target);
-          }, "link")));
+          }, "link") : null));
       }
       more.hidden = after === null;
       clear.disabled = cutoff === "0";
@@ -108,6 +109,7 @@ export async function archivePage(root: HTMLElement, ctx: ViewContext) {
   const turns = el("div", "");
   const more = button("加载更多", load);
   more.hidden = true;
-  list.append(clear, turns, more);
+  if (canDelete) list.append(clear);
+  list.append(turns, more);
   await load();
 }

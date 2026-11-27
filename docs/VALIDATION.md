@@ -7,6 +7,134 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 单 Key 部署与全局知识清理
+
+基于 PR #178 的 `ec3aebc` 和后续清理，使用 Windows、本地嵌入式 AnySeek 与 Rust 1.98.0。
+`cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -- -D warnings` 通过。
+`cargo test --locked --test local` 分别以 `global_knowledge`、`workspace_access` 和 `mcp_runs` 为过滤条件运行，合计通过 9 项。
+手工检查了批准时读取正文的 SQL。仍在同一事务按发布 ID 读取单表、按字节起点排序，并验证内容哈希。
+补齐 Agent 连接权限后，`cargo test --locked --test local -- mcp_http` 通过 4 项。真实 MCP 握手产生的活动
+可用本空间 Key 读取，指定同租户的另一个空间返回 403。控制台也验证了本空间连接列表和跨空间拒绝。
+更新原有权限断言后，`cargo test --locked --all-targets` 完整复跑，485 项通过、8 项按配置跳过。
+
+Node 24.15.0 的 `npm --prefix ui test` 通过 34 项。`node ui/scripts/check-console-session-browser.cjs`
+通过本机 Chromium 合成服务验收，包括审核分页重试、按检索范围打开固定版本、成员账号登录和单 Key 登录。
+Windows 公共部署入口在临时目录中验证了两个模式的控制台登录和 Run 读取。新部署还验证了管理员 Key 登录，
+并确认外部配置指向不存在的账号库时也能启动，且部署未创建账号库。成员授权模式按原流程创建并使用账号库。
+上述本地检查未重跑 Linux 或完整原生 Agent 安装套件。
+
+## 2026-11-27 · MCP 与客户端 CI 契约修复
+
+基于 PR #178 的 `37129e8` 和后续修复，在 Windows 使用 Rust 1.98.0、隔离新库和嵌入式 AnySeek。
+`cargo fmt --all -- --check`、严格 Clippy、Python 与 Node 语法检查，以及 `git diff --check` 通过。
+原 Linux CI 在 MCP 输入字段核对处失败。Windows 本机重新运行 `tools/mcp_smoke.py --local`
+通过四种协议版本的结构校验、固定版本全局知识读取、审核前与下架后的拒绝、错误保护及服务重开。
+
+Windows 原生客户端验收固定使用 Codex 0.171.0 与 Claude Code 2.1.330。修复前，Codex 已返回五个启用的 Hook，
+旧断言仍要求四个。更新后，`tools/plugin_smoke.py --bind 127.0.0.1:0` 对两端通过真实安装、
+默认与选定工作空间、历史版本读取、Run Hook 和卸载。本机 8080 端口已被占用，验收使用临时回环端口。
+安装器验收增加了离线轮换后重新连接的用例。HTTP 与 MCP 核对相同的逻辑 Key 和会话。
+
+## 2026-11-27 · 全局知识与部署 Key 初始化
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新数据库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings`、`git diff --check` 通过。
+`cargo test --locked --lib --quiet` 通过 233 项。隔离构建的 `cargo test --locked --target-dir
+target/run-admin-check --test local --` 筛选全局知识、工作空间、会话、证据包、目录、语义提取、
+HTTP/MCP、Run 和检索用例，62 项通过。新增用例覆盖跨租户权限、固定版本、驳回、重开后审核、
+联合召回，以及下架后禁止重放相关 Run 上下文。校准了一项仍预期本区管理员不可读同区 Run 的旧断言。
+
+隔离副本的 `npm test` 通过 34 项。本机 Chrome 的 `check-console-session-browser.cjs`
+验证工作空间提交、部署管理员审核、已发布目录和下架，并回归登录与只读查看。
+使用真实本机 SQLite 和嵌入式 AnySeek 的隔离部署验证了 `origence-deploy --init` 签发两把 Key、
+控制台登录、发布和联合召回、下架、重复安装、强制重建时保留备份及卸载保留数据库。部署脚本与浏览器安装验证脚本通过
+Node 语法检查，完整客户端安装烟测脚本通过 Python 语法检查。Linux 环境不可用，现有 dev 未切换。
+
+## 2026-11-27 · 单 Key 会话自动提取
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0 与新建测试数据库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和 `git diff --check` 通过。
+`cargo test --locked --lib --quiet` 通过 233 项。默认目标目录的在线服务占用了 `origence.exe`。
+用 `cargo test --locked --target-dir target/run-admin-check --test local --` 筛选工作空间、会话、语义提取、
+目录、HTTP/MCP、Run 和检索用例，48 项集成测试通过。隔离构建的 CLI 在新库上通过单 Key 工作空间创建、
+工作空间 Key 轮换和部署管理员 Key 签发。
+同一隔离目录的 `local_app::local_host_api_cli_mcp_models_and_recovery` 额外通过 1 项，回归旧提取、HTTP、MCP 和恢复流程。
+真实 SQLite、合成 AnySeek 和模型端点验证了归档回执、服务重开、Key 轮换、提取记忆的检索与空间隔离，
+以及删除后的重放保持原任务和原问答。真实模型提取质量和 Linux 未验证。
+
+## 2026-11-27 · 部署管理员只读查看
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新建测试数据库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和
+`git diff --check` 通过。库测试通过 233 项。`cargo test --locked --test local --no-run`
+因在线服务占用 `origence.exe` 返回 1。直接运行本轮生成的 `local` 测试程序，22 项集成测试通过。
+测试使用真实 SQLite 与合成 AnySeek 归档，覆盖跨租户查看会话、Run 和已发布内容，拒绝混用不同空间的 ID，
+拒绝工作空间 Key 访问管理接口、拒绝管理员 Key 写入业务数据、禁止响应缓存与旧管理员凭据失效。
+
+隔离副本的 `npm test` 通过 34 项。合成 API 上的本机 Chrome 测试
+`check-console-session-browser.cjs` 覆盖管理员 Key 登录、切换工作空间、查看原始问答、Run 事件与记忆，
+并回归工作空间 Key 和现有账号的登录。Linux 环境不可用，运行中的 dev 服务继续使用现有版本。
+
+## 2026-11-27 · 单 Key 工作空间与控制台登录
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新建测试目录。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings`、`git diff --check` 与
+`node --check tools/installer/protocol.mjs` 通过。`cargo test --locked --lib --quiet` 通过 233 项。
+`cargo test --locked --test local --no-run` 因在线服务占用 `origence.exe` 返回 1，仍生成本轮 `local` 集成测试程序。
+直接执行该程序的工作空间 Key、目录、HTTP/MCP、Run 与检索相关过滤项，21 项通过。覆盖单空间授权、拒绝多发凭据、
+轮换保留会话、删除记忆，以及通过会话或来源接口删除原始问答均返回 403。集成测试使用真实本地 SQLite 和合成 AnySeek 夹具。
+
+隔离副本的 `npm test` 通过 34 项。`check-console-session-browser.cjs` 在本机 Chrome 下通过 Key 登录、
+单空间显示、会话只读浏览、刷新和现有账号入口回归。本机 WSL 仅有 Docker Desktop 内部发行版，Docker 引擎未运行，
+本轮未执行 Linux 验证。在线服务继续使用原数据库和构建产物。
+
+## 2026-11-27 · 工作区管理员只读查看 Run 链路
+
+基于 `eef2134`，使用 Windows、Rust 1.98.0、Node 24.15.0 和新建的测试数据库。
+`cargo fmt --all -- --check` 与 `cargo clippy --locked --all-targets -- -D warnings` 通过，
+`cargo test --locked --lib` 通过 233 项。`cargo test --locked --test local --no-run` 在更新被在线服务占用的 `origence.exe` 时退出 1。
+直接执行该轮生成的 `local` 测试二进制，20 项相关集成测试通过。
+公共库、HTTP 和 MCP 验证了本区管理员可以读取他人已记录的事件正文，其他角色和其他工作区管理员受到隔离。
+回归覆盖分页、固定前缀和写入限制、原始私有来源读取拒绝，以及撤回后保留事件位置和不可用数量。
+
+`npm.cmd --prefix ui test` 通过 33 项，本机 Chrome 的 `check-navigation-focus-browser.cjs` 通过。
+页面测试覆盖管理员打开其他 Key 的详情时显示可用的只读操作，以及旧 API 响应中的入口回退。
+在线 UI 已返回读取后端授权的前端资源。本轮未执行 Linux 验证或切换在线 API。
+
+## 2026-11-27 · 移除运行总览的计量卡片
+
+基于 `eef2134` 的 Windows 工作树，使用 Node 24.15.0 和 Rust 1.98.0。
+`npm.cmd --prefix ui test` 通过 32 项，覆盖接口返回有值或空计量时的趋势展示、时间范围切换和重试。
+`node ui/scripts/check-navigation-focus-browser.cjs` 在 Chrome 158.0.8127.88 通过，
+覆盖 1440、1024 和 320 像素下的图表宽度、键盘操作、悬停和触摸。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和 `git diff --check` 通过。
+本地运行中的控制台返回了更新后的前端资源。
+
+## 2026-11-27 · 独立 AnySeek 集合限额兼容
+
+在 Linux x86-64、Rust 1.98.0 和合成新库上，使用独立 AnySeek Release
+`74d48d92db27d4fa155ce38004ac079f3bf92835` 对照 Origence `d34804c` 与本次修复。
+基线进程在普通知识发布时收到不含 `max_records` 的集合 Info 后退出。修复后的同一 HTTP
+路径完成入库、发布及原文搜索。两版均通过私有归档配套恢复前后的 `directory_sha256`
+比对，以及恢复后的轮次列表、回读和撤回。[AnySeek #229](https://github.com/TheLudlows/anyseek/issues/229)
+
+- `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets --all-features -- -D warnings` 通过。
+- `cargo test --locked --test anyseek` 通过 6 项。集合检查覆盖缺省、正整数以及非法的已声明上限，并继续校验 `max_candidates`。
+- `python3 tools/anyseek_smoke.py --anyseek-binary <固定 Release> --binary target/debug/origence --test-executable <上步测试程序>` 通过 8 项真实后端契约，并验证 HTTP、MCP、服务重开和撤回。
+- 旧集合 Info 形状使用契约夹具校验。本轮联调使用上述 Linux 固定二进制。
+
+## 2026-11-27 · 移除运行总览的时段明细
+
+基于 `3a341e4`，使用 Windows、Node 24.15.0 和 Rust 1.98.0。`npm --prefix ui test` 通过 32 项，
+覆盖运行总览移除折叠表格后仍能显示柱状图与计量。`node ui/scripts/check-navigation-focus-browser.cjs`
+使用本机 Chrome 通过，覆盖不同视口下的柱状图布局、键盘操作、悬停和触摸。
+
+`cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -- -D warnings` 通过。
+`cargo test --locked --test local catalog::` 在更新被运行中服务占用的 `origence.exe` 时退出 1。
+直接执行本轮构建生成的集成测试二进制，`catalog::` 过滤下 7 项和 `foundation_http::` 下 3 项全部通过，
+包括管理员可列出其他 Key 的 Run、但无法读取其链路的回归。在线 UI 返回了更新后的前端资源。
+运行中的 API 使用旧版角色约束，未切换到新版二进制。
+
 ## 2026-11-27 · 写入权限包含审阅与发布
 
 基于主干 `d34804c`，使用 Linux、新建合成库及 Rust 1.98.0。Skill 回归使用独立 writer 凭据提交、批准和发布，
@@ -31,6 +159,8 @@ Linux Chromium 156.0.8078.79 通过回环合成数据检查单列登录、错误
 知识详情另测了原始来源页签、固定版本和比较，所测文本对比度为 6.52:1 至 9.63:1。
 
 同步到主干 `3a341e4` 后，32 项 UI 测试、类型检查和上述 Chromium 回归再次通过。
+同步到主干 `493e38b` 后，34 项 UI 测试和类型检查通过。Chromium 复跑了成员账号、工作空间 Key 与部署管理员 Key
+登录、全局知识提交与审核、导航焦点、触控、正文和版本比较，以及精简后的运行趋势。
 
 ## 2026-11-27 · 私有归档直接删除
 

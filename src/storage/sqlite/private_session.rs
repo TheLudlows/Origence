@@ -20,7 +20,7 @@ impl SqliteTx {
         let owner = self.private_key_id().await?;
         self.private_session_for(owner).await
     }
-    async fn private_session_for(&mut self, owner: Uuid) -> StorageResult<Option<Uuid>> {
+    pub(super) async fn private_session_for(&mut self, owner: Uuid) -> StorageResult<Option<Uuid>> {
         sqlite_db::query_scalar("SELECT session_id FROM oc_key_sessions WHERE tenant_id=? AND workspace_id=? AND logical_key_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(owner).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)
     }
@@ -53,10 +53,13 @@ impl SqliteTx {
     }
     /// Rotate one live credential, retaining its logical identity and all archives.
     pub async fn rotate_scoped_key(&mut self, id: Uuid) -> StorageResult<IssuedKey> {
-        self.check_permission(Permission::Delete).await?;
+        self.check_permission(Permission::WorkspaceAdmin).await?;
         let old:Option<(Uuid,String,bool,bool)>=sqlite_db::query_as("SELECT logical_key_id,role,allow_owned_workspaces,default_access FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT revoked")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (logical, role, capability, default_access) = old.ok_or(StorageError::NotFound)?;
+        if role == "workspace" {
+            return Err(StorageError::Forbidden);
+        }
         self.authorize_granted_key_rotation(id, logical).await?;
         // A key may rotate itself only under this transaction's already-verified admin role.
         let key_id = Uuid::new_v4();

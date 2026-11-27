@@ -69,7 +69,7 @@ async function install(state, args) {
 
   const who = await identity(endpoint, token);
   status("whoami", "success", { workspace_id: who.workspace_id, role: who.role });
-  const mcp = await connectMcp(endpoint, token, who.workspace_id, who.id);
+  const mcp = await connectMcp(endpoint, token, who.workspace_id);
   status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
 
   const env = withoutWorkspaceKey(process.env);

@@ -107,14 +107,10 @@ impl Service {
             return Err(AppError::Invalid("query, mode or limit invalid".into()));
         }
         let started = std::time::Instant::now();
-        let terms = if input.mode == "vector" {
-            String::new()
-        } else {
-            let query = input.query.clone();
-            tokio::task::spawn_blocking(move || parsing::lexical(&query))
-                .await
-                .map_err(|error| AppError::Internal(error.into()))?
-        };
+        let query = input.query.clone();
+        let terms = tokio::task::spawn_blocking(move || parsing::lexical(&query))
+            .await
+            .map_err(|error| AppError::Internal(error.into()))?;
         let authorization_started = std::time::Instant::now();
         // Resolve the scoped identity before branch candidate limits and native top-k.
         // The final authorized read below still verifies visibility and identity.
@@ -279,7 +275,7 @@ impl Service {
             vector_ms,
             vector_batches,
             vector_dimension,
-            warnings,
+            mut warnings,
             effective,
             terms,
             native_hits,
@@ -456,6 +452,15 @@ impl Service {
             }
         }
         let relations = live_relations;
+        if input.memory_identity.is_none() {
+            let shared = verify.global_keyword_hits(&terms, input.limit).await?;
+            if !shared.is_empty() {
+                if effective != "keyword" {
+                    warnings.push("Global knowledge uses keyword matching.");
+                }
+                hits = merge_global_hits(hits, shared, input.limit);
+            }
+        }
         verify.commit().await?;
         let verification_ms = verification_started.elapsed().as_secs_f64() * 1000.0;
         let hits: Vec<Value> = hits
@@ -463,6 +468,7 @@ impl Service {
             .map(|hit| {
                 let mut value = json!(hit);
                 value["normalization_status"] = json!(hit.normalization_status());
+                value["scope"] = json!(hit_scope(&hit));
                 value
             })
             .collect();
@@ -523,6 +529,30 @@ impl Service {
         Ok(
             json!({"rendered_context":rendered,"sources":all_sources,"budget_tokens":input.budget_tokens,"count":rendered.len(),"tokenizer":"utf8-bytes-upper-bound-v1","context_policy":"identity-provenance-v1","memory_identity":search["memory_identity"],"count_is_estimate":true,"effective_mode":search["effective_mode"],"warnings":search["warnings"],"active_components":search["active_components"],"graph":search["graph"]}),
         )
+    }
+}
+
+/// Interleave local and shared rankings without comparing different score
+/// scales. A local hit wins when there is only one available response slot.
+pub(crate) fn merge_global_hits<T>(local: Vec<T>, global: Vec<T>, limit: usize) -> Vec<T> {
+    let mut local = local.into_iter();
+    let mut global = global.into_iter();
+    (0..limit)
+        .map_while(|rank| {
+            if rank % 2 == 0 {
+                local.next().or_else(|| global.next())
+            } else {
+                global.next().or_else(|| local.next())
+            }
+        })
+        .collect()
+}
+
+fn hit_scope(hit: &SearchHit) -> &'static str {
+    if hit.locator["parser"] == "global-knowledge-snapshot:v1" {
+        "global"
+    } else {
+        "workspace"
     }
 }
 
@@ -692,6 +722,9 @@ pub fn render(hits: &[SearchHit], budget: usize) -> (String, Vec<Value>) {
     for hit in hits {
         let marker = format!("[{}:{}:{}]", hit.asset_id, hit.version, hit.chunk_id);
         let mut identity = json!({"kind":hit.kind,"identity":hit.identity,"normalization_status":hit.normalization_status()});
+        if hit_scope(hit) == "global" {
+            identity["scope"] = json!("global");
+        }
         if hit.locator["parser"] == crate::memory_semantics::PARSER {
             identity["semantic_status"] = hit.locator["semantic_status"].clone();
             identity["suggested_identity"] = hit.locator["suggested_identity"].clone();
@@ -705,7 +738,7 @@ pub fn render(hits: &[SearchHit], budget: usize) -> (String, Vec<Value>) {
             continue;
         }
         rendered.push_str(&block);
-        sources.push(json!({"citation":marker,"asset_id":hit.asset_id,"version":hit.version,"chunk_id":hit.chunk_id,"source_event_id":hit.source_event_id,"locator":hit.locator,"kind":hit.kind,"identity":hit.identity,"normalization_status":hit.normalization_status()}));
+        sources.push(json!({"citation":marker,"asset_id":hit.asset_id,"version":hit.version,"chunk_id":hit.chunk_id,"source_event_id":hit.source_event_id,"locator":hit.locator,"kind":hit.kind,"scope":hit_scope(hit),"identity":hit.identity,"normalization_status":hit.normalization_status()}));
     }
     (rendered, sources)
 }

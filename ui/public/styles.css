@@ -638,7 +638,6 @@ form > button {
   }
 }
 .run-trend {
-  container-type: inline-size;
   gap: 16px;
 }
 .run-trend-heading {
@@ -656,23 +655,11 @@ form > button {
   font-weight: 680;
   font-variant-numeric: tabular-nums;
 }
-.run-creation-result,
-.run-trend-series {
+.run-creation-result {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px;
-}
-.run-creation-result > .panel {
-  background: var(--soft);
-  box-shadow: none;
-  padding: 18px;
-}
-@container (min-width: 49rem) {
-  .run-creation-result {
-    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
-    gap: 20px;
-  }
 }
 .run-chart {
   margin: 0;
@@ -779,15 +766,6 @@ form > button {
   min-height: 3.1em;
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-.run-creation-buckets summary {
-  width: fit-content;
-  color: var(--accent);
-  font-size: 13px;
-  cursor: pointer;
-}
-.run-creation-buckets[open] > p {
-  margin-block: 8px;
 }
 table {
   border-collapse: collapse;
@@ -1017,6 +995,10 @@ dialog::backdrop {
 .login-form form {
   gap: 17px;
 }
+.login-alternate {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
 .login-form .field {
   color: var(--text);
   font-size: 13px;
@@ -1039,7 +1021,7 @@ dialog::backdrop {
   font-size: 14px;
   font-weight: 690;
 }
-.login-form > :empty {
+.login-form form > :empty {
   display: none;
 }
 .asset-tabs [aria-selected="true"] {

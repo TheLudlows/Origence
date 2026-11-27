@@ -48,16 +48,24 @@ CREATE TABLE oc_api_keys (
     tenant_id BLOB NOT NULL,
     workspace_id BLOB NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL CHECK (role IN ('reader','writer','admin')),
+    role TEXT NOT NULL CHECK (role IN ('reader','writer','admin','workspace')),
     default_access INTEGER NOT NULL DEFAULT 1 CHECK (default_access IN (0,1)),
     allow_owned_workspaces INTEGER NOT NULL DEFAULT 0 CHECK (allow_owned_workspaces IN (0,1)),
     revoked INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
+    CHECK (role != 'workspace' OR (default_access = 1 AND allow_owned_workspaces = 0)),
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id)
 );
 
 CREATE INDEX oc_api_keys_logical ON oc_api_keys(tenant_id, logical_key_id);
+CREATE UNIQUE INDEX oc_one_active_workspace_key ON oc_api_keys(tenant_id, workspace_id)
+WHERE role = 'workspace' AND NOT revoked;
+
+CREATE TABLE oc_deployment_admin (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    token_hash TEXT NOT NULL
+);
 
 CREATE TABLE oc_workspace_key_grants (
     tenant_id BLOB NOT NULL,
@@ -115,6 +123,33 @@ CREATE TABLE oc_versions (
     FOREIGN KEY (tenant_id, workspace_id, asset_id) REFERENCES oc_assets(tenant_id, workspace_id, id),
     FOREIGN KEY (tenant_id, workspace_id, source_event_id) REFERENCES oc_events(tenant_id, workspace_id, id)
 );
+
+-- A global release is an independent copy of one explicitly submitted
+-- knowledge version. Private source IDs are retained only for moderation.
+CREATE TABLE oc_global_knowledge (
+    id BLOB PRIMARY KEY,
+    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, asset_id BLOB NOT NULL,
+    version INTEGER NOT NULL, source_event_id BLOB NOT NULL,
+    title TEXT NOT NULL, content_hash TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending','approved','rejected','withdrawn')),
+    submitted_at INTEGER NOT NULL, reviewed_at INTEGER,
+    UNIQUE (tenant_id, workspace_id, asset_id, version),
+    FOREIGN KEY (tenant_id, workspace_id, asset_id, version)
+        REFERENCES oc_versions(tenant_id, workspace_id, asset_id, version)
+);
+CREATE INDEX oc_global_knowledge_state ON oc_global_knowledge(state,id);
+
+CREATE TABLE oc_global_knowledge_chunks (
+    publication_id BLOB NOT NULL, id BLOB NOT NULL UNIQUE,
+    byte_start INTEGER NOT NULL CHECK (byte_start >= 0),
+    byte_end INTEGER NOT NULL CHECK (byte_end > byte_start),
+    content TEXT NOT NULL, terms TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0,1)),
+    PRIMARY KEY (publication_id, byte_start),
+    FOREIGN KEY (publication_id) REFERENCES oc_global_knowledge(id)
+);
+CREATE INDEX oc_global_knowledge_enabled
+    ON oc_global_knowledge_chunks(publication_id,byte_start) WHERE enabled;
 
 CREATE TABLE oc_jobs (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,

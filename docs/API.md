@@ -27,11 +27,12 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 | `POST /v1/runs` | writer 提交稳定的 `run_id` 与脱敏 `summary`，绑定当前归档 |
 | `POST /v1/runs/{id}/events` | 稳定 `event_id`、时间、报告方与具名事件；相同重试返回原序号 |
 | `POST /v1/runs/{id}/context` | `event_id` 和 `context`（EvidenceBundle 请求）；返回 bundle 和服务端准备回执 |
-| `GET /v1/runs/{id}?after=0&limit=50` | 当前 key 的分页追溯，包含明确的采集边界 |
+| `GET /v1/runs/{id}?after=0&limit=50` | 所属 Key 或本工作区管理员读取分页链路。`is_owner` 标明当前 Key 的归属。 |
 | `GET /v1/runs/{id}/prefix?through_sequence=N` | 当前 key 的不可变前缀摘要，可作为 Skill 依据 |
 
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
 结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
+链路读取包含 Run 已记录的正文。私有归档原文、内部重放快照、固定前缀、原始 PDF 核验和外部核验记录继续使用各自的授权。
 外部核验记录由 Run 所有者针对精确前缀通过 HTTP 提交，保留转录来源与核验身份的声明状态。
 详情见 [Run 契约](contracts/runs.zh-CN.md)和[外部核验契约](contracts/run-verification.zh-CN.md)。
 
@@ -61,7 +62,7 @@ browse 包括候选预检。
 后端诊断格式为 v2，含服务版本、分析配置摘要、embedding 空间 SHA256（未配置为 null）、
 查询耗时与 `visible_seq`，以及查询后另行采样的
 committed/lexical/vector 进度、失败与恢复标志。配置还记录核对过的容量限制和 embedding
-空间摘要。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
+空间摘要。候选预算 `max_candidates` 必须为正整数。后端提供 `max_records` 时核验并记录正整数，缺省时诊断省略该字段。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
 序号属于 AnySeek collection，不是 workspace 序号、SQLite 版本或跨存储快照。
 客户端往返和服务端耗时边界不同，均不证明客户端消费或模型实际使用。
 
@@ -124,6 +125,10 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ## 角色
 
+使用 `--offline workspace-create --workspace-key <名称>` 创建的工作空间使用一把固定绑定的有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在本空间读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档，删除轮次、清空会话及通过来源接口删除会话均返回 403。空间管理和角色授权接口仅对各自的管理员开放。轮换使用 `--offline workspace-key-rotate <工作空间 ID>`。
+
+已有角色管理路径的权限表如下。
+
 | 角色 | 权限 |
 | --- | --- |
 | reader | 已发布内容 get/search/resolve |
@@ -136,9 +141,41 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 本节的「内容条目」指可单独读取和版本化的记忆或知识，通过 `asset_id` 标识。已发布 Skill 使用独立接口。
 
+### 部署管理员查看
+
+`origence --offline deployment-admin-rotate` 签发或轮换独立凭据。部署管理接口接受该 Bearer Key。工作空间查看接口均为只读。
+
+| GET 路径 | 数据 |
+| --- | --- |
+| `/admin/deployment/me` | 当前部署管理员身份 |
+| `/admin/deployment/workspaces` | 部署中所有工作空间，按工作空间 ID 分页 |
+| `/admin/deployment/workspaces/{id}/sessions` | 所选工作空间的会话 ID |
+| `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | 原始问答及引用，按会话序号分页 |
+| `/admin/deployment/workspaces/{id}/runs` 和 `/admin/deployment/workspaces/{id}/runs/{run}` | Run 列表与事件 |
+| `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
+
+分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员读取原始问答无需持有工作空间 Key，普通工作空间 API 的写入授权继续独立执行。
+
+### 全局知识
+
+一套部署共享一个知识目录。可写工作空间提交已发布知识的固定版本，提交同一版本返回原发布 ID 和审核状态。部署管理员可审核这些提交。
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `POST /v1/global-knowledge` | 提交本空间的 `asset_id` 和整数 `version`，返回 `publication_id` 和状态 |
+| `GET /v1/global-knowledge` | 已批准目录，支持 `after` 和 `limit` |
+| `GET /v1/global-knowledge/{publication_id}` | 读取生效的固定版本正文 |
+| `GET /admin/deployment/global-knowledge` | 审核目录，`state` 默认为 `pending`，也可查询 `approved`、`rejected`、`withdrawn` |
+| `GET /admin/deployment/global-knowledge/{publication_id}` | 查看待审正文、来源工作空间和固定版本 |
+| `POST /admin/deployment/global-knowledge/{publication_id}/review` | 通过 `decision` 执行 `approve`、`reject` 或 `withdraw` |
+
+批准前核对原版本仍有效。批准后共享副本独立于原知识的后续更新或删除，下架会立即停止新的共享读取、召回及含该引用的 Run 上下文重放。全局公开记录使用独立 ID 和正文内 UTF-8 字节范围。原始附件、会话及私有来源 ID 仍由原工作空间授权。
+
+`search`、`resolve`、知识路由的 `context` 和 Run 上下文合并本空间结果与全局关键词命中，沿用请求的结果数与上下文预算。向量和混合模式仍使用关键词匹配全局知识。搜索与 resolve 用 `scope` 标明范围，上下文使用 `global_knowledge` 引用。MCP 的 `context_get` 传 `scope: "global"` 和全局发布 ID 可读取固定版本。
+
 ### Agent 连接
 
-`GET /admin/agents` 仅供当前工作区管理员读取。工作区按 Bearer 凭据和可选
+`GET /admin/agents` 允许工作空间 Key 或成员授权工作区的管理员读取本空间的连接。工作区按 Bearer 凭据和可选
 `X-Origence-Workspace` 解析。返回 `workspace_id`、`window_seconds`（300）、
 `capacity_reached` 和 `items`。每项有当前 `role` 及 `observation`，包含
 `credential_id`、`last_seen_at_ms`、`active_requests` 和 `client_kinds`。
@@ -160,7 +197,7 @@ Origence 使用无状态 Streamable HTTP。列表显示当前进程正在处理�
   workspace 来自认证；按 `asset_id` 升序扫描当前已发布、未删除的候选，逐条复用
   读取单条内容时采用的完整来源、语义和可见性检查。返回 `{items,next_after}`，items 仅为
   内容条目元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
-- `GET /v1/runs?limit=25&after=<UUID>`：当前工作区的 `admin` 可查看该工作区的全部 Run，响应为 `scope:"workspace"`。其他角色查看当前逻辑 key 的 Run，响应为 `scope:"current_logical_key"`。每项含 `run_id`、`owner_key_id`、`is_owner`、`created_at_ms`、`status` 和 `summary`。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。其他 key 的 `summary` 为 `null`，详情和证据端点继续校验所有权。获授权的凭据轮换延续逻辑身份。
+- `GET /v1/runs?limit=25&after=<UUID>`：当前工作区的 `admin` 可查看该工作区的全部 Run，响应为 `scope:"workspace"`。其他角色查看当前逻辑 Key 的 Run，响应为 `scope:"current_logical_key"`。每项含 `run_id`、`owner_key_id`、`is_owner`、`can_read_trace`、`created_at_ms`、`status` 和 `summary`。`can_read_trace` 表示当前角色与归属允许打开链路，详情请求仍复核来源。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。目录中的其他 Key 的 `summary` 为 `null`。管理员可打开详情读取摘要和事件。获授权的凭据轮换延续逻辑身份。
 
 两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
 按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
@@ -471,6 +508,8 @@ SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"`
 
 归档成功返回 HTTP 200 和 `{session_id,turn_id,source_event_id,state:"archived"}`。同一授权逻辑 key 下，重试相同轮次、正文及有序证据返回原标识，改变请求内容返回 409。AnySeek 原子提交正文和投影。回执丢失时，携原请求重试。
 
+单 Key 工作空间的回执另有 `memory_job_id`。归档成功后可用 `GET /v1/jobs/{job_id}` 查询异步提取状态。现有 Worker 从已归档问答提取可复用内容，输出写入同一空间。模型未配置或提取失败时，原始问答仍已归档，任务可按普通作业规则重试。轮次重放返回同一任务，记忆删除后重放也不会重新提取。
+
 按稳定 ID 读取使用 `GET /v1/sessions/{session_id}/turns/{turn_id}`，按目录顺序分页使用
 `GET /v1/sessions/{session_id}/turns?after=0&limit=16`。以返回的 `next_after` 请求下一页。
 授权发起的写入和撤回都可能留下序号空位。已建立的 AnySeek 集合缺失、已知轮次不完整或哈希不符时，读取返回 503。
@@ -580,7 +619,7 @@ version_root_source_event_id。`session_turn` 保留真实会话、轮次、归�
 
 `GET /v1/assets/{asset_id}/runs?version=1&limit=25&after={run_uuid}`：`version` 必填且为正数；
 `limit` 为 1–100，默认 25；`after` 可省略，按 Run UUID 稳定翻页。仅当前 logical key，
-管理员没有他人的 Run 读取特权。返回 `asset_id`、`asset_version`、`items`（仅 `run_id`、
+管理员也仅能通过此接口枚举当前 Key 的关联。返回 `asset_id`、`asset_version`、`items`（仅 `run_id`、
 `created_at_ms`）、`next_after`、`scope: current_logical_key`、`coverage: recorded_references`。
 空页仍可能有下一游标；源或内容条目不可读时拒绝访问。索引定位首条已归档引用并复核权威事件，
 不可读的关联保守省略，不承诺完整采集或整个 Run 的其他引用可读。

@@ -15,6 +15,9 @@ const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const createWorkspacePath = new RegExp(`^/v1/workspaces/owned/${uuid}$`);
 const managedKeyPath = new RegExp(`^/admin/keys/(${uuid})(?:/rotate)?$`);
 const agentPath = "/admin/agents";
+const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets(?:/${uuid})?))?$`);
+const globalReviewRead = new RegExp(`^/admin/deployment/global-knowledge(?:/${uuid})?$`);
+const globalReviewWrite = new RegExp(`^/admin/deployment/global-knowledge/${uuid}/review$`);
 const keyRules: [string, RegExp][] = [
   ["GET", /^\/admin\/(keys|workspace-key-grants)$/],
   ["POST", new RegExp(`^/admin/keys(?:/${uuid}/rotate)?$`)],
@@ -24,6 +27,8 @@ const keyRules: [string, RegExp][] = [
 const rules: [string, RegExp][] = [
   ["GET", /^\/health\/(live|ready)$/],
   ["GET", /^\/v1\/(whoami|session|assets|runs)$/],
+  ["GET", new RegExp(`^/v1/global-knowledge(?:/${uuid})?$`)],
+  ["POST", /^\/v1\/global-knowledge$/],
   ["GET", new RegExp(`^/v1/sessions/${uuid}/turns$`)],
   ["DELETE", new RegExp(`^/v1/sessions/${uuid}(?:/turns/${uuid})?$`)],
   ["GET", /^\/v1\/runs\/overview$/],
@@ -135,7 +140,14 @@ export function createUiServer(options: ServerOptions) {
     if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) throw new HttpError(502, "暂时无法核验工作区权限");
     return checkedConsoleIdentity(await response.json());
-  }, (authorization, signal) => listOwnedWorkspaces(upstream, authorization, signal));
+  }, (authorization, signal) => listOwnedWorkspaces(upstream, authorization, signal), async (authorization, signal) => {
+    const response = await fetch(new URL("/admin/deployment/me", upstream), {
+      headers: { authorization }, redirect: "manual", signal,
+    });
+    if ([401, 403, 404].includes(response.status)) return false;
+    if (!response.ok) throw new HttpError(502, "暂时无法核验部署管理员权限");
+    return (await response.json())?.role === "deployment_admin";
+  });
   return createServer(async (req, res) => {
     try {
       const host = req.headers.host ?? "";
@@ -171,9 +183,12 @@ export function createUiServer(options: ServerOptions) {
           return;
         }
         const path = target.pathname.slice(4);
+        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || globalReviewRead.test(path))
+          || req.method === "POST" && globalReviewWrite.test(path);
         const managingKeys = keyRules.some(([method, pattern]) => method === req.method && pattern.test(path));
         const viewingAgents = req.method === "GET" && path === agentPath;
         if (
+          !deploymentOperation &&
           !managingKeys &&
           !viewingAgents &&
           !rules.some(
@@ -184,17 +199,22 @@ export function createUiServer(options: ServerOptions) {
         const headers = new Headers();
         const authorization = req.headers.authorization;
         const creatingWorkspace = req.method === "PUT" && createWorkspacePath.test(path);
-        if (!managingKeys && !viewingAgents && !creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
+        if (deploymentOperation) headers.set("authorization", sessions.deploymentAuthorization(req, new URL(origin)));
+        else if (!managingKeys && !viewingAgents && !creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
         else if (!path.startsWith("/health/")) {
           const workspace = sessions.authorization(req, new URL(origin));
           if (creatingWorkspace && !workspace.canCreateOwned) throw new HttpError(403, "当前工作区未授权创建子工作区");
           headers.set("authorization", workspace.authorization);
-          if (managingKeys || viewingAgents) {
+          if (managingKeys) {
             if (workspace.role !== "admin")
-              throw new HttpError(403, viewingAgents ? "只有工作区管理员可以查看 Agent 连接" : "只有工作区管理员可以管理 API Key");
+              throw new HttpError(403, "只有工作区管理员可以管理 API Key");
             const targetId = managedKeyPath.exec(path)?.[1];
             if (targetId?.toLowerCase() === workspace.principalId.toLowerCase())
               throw new HttpError(409, "请在控制台外维护当前会话使用的凭据");
+          }
+          if (viewingAgents && workspace.role !== "admin" && workspace.role !== "workspace")
+            throw new HttpError(403, "当前凭据无权查看本工作区的 Agent 连接");
+          if (managingKeys || viewingAgents) {
             headers.set("X-Origence-Workspace", workspace.workspaceId);
           } else if (workspace.scopedWorkspace) headers.set("X-Origence-Workspace", workspace.scopedWorkspace);
         }
@@ -271,6 +291,7 @@ if (
       host: { type: "string" },
       port: { type: "string" },
       strictPort: { type: "boolean" },
+      "key-only": { type: "boolean" },
     },
   });
   const port = Number(
@@ -279,12 +300,12 @@ if (
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid ORIGENCE_UI_PORT");
   const accountDatabase = process.env.ORIGENCE_UI_ACCOUNTS_DB;
-  if (!accountDatabase && process.env.ORIGENCE_UI_ACCOUNTS_FILE)
+  if (!values["key-only"] && !accountDatabase && process.env.ORIGENCE_UI_ACCOUNTS_FILE)
     throw new Error("Configure local console accounts with ORIGENCE_UI_ACCOUNTS_DB");
   const server = createUiServer({
     apiBaseUrl: process.env.ORIGENCE_API_BASE_URL ?? "http://127.0.0.1:8080",
     publicOrigin: process.env.ORIGENCE_UI_ORIGIN,
-    accounts: loadConfiguredConsoleAccounts(process.env),
+    accounts: values["key-only"] ? [] : loadConfiguredConsoleAccounts(process.env),
   });
   server.listen(
     port,

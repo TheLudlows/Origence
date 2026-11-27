@@ -46,13 +46,16 @@ pub struct KeyCapabilities {
 
 /// A permission a domain operation can require (A2.2 `check_current_permission`).
 ///
-/// Roles are `reader | writer | admin`; the mapping is fixed here so
-/// the storage layer stays independent of the HTTP role matrix.
+/// Workspace credentials have full content access. Administrative operations
+/// and legacy archive deletion keep separate checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Permission {
     Read,
     Write,
     Delete,
+    InspectAgents,
+    WorkspaceAdmin,
+    DeleteArchive,
 }
 
 impl Permission {
@@ -62,6 +65,9 @@ impl Permission {
             Self::Read => "read",
             Self::Write => "write",
             Self::Delete => "delete",
+            Self::InspectAgents => "inspect_agents",
+            Self::WorkspaceAdmin => "workspace_admin",
+            Self::DeleteArchive => "delete_archive",
         }
     }
 
@@ -69,9 +75,11 @@ impl Permission {
     /// shared by the in-memory contract double and future adapters.
     pub fn granted_by(self, role: &str) -> bool {
         match self {
-            Self::Read => matches!(role, "reader" | "writer" | "admin"),
-            Self::Write => matches!(role, "writer" | "admin"),
-            Self::Delete => role == "admin",
+            Self::Read => matches!(role, "reader" | "writer" | "admin" | "workspace"),
+            Self::Write => matches!(role, "writer" | "admin" | "workspace"),
+            Self::Delete | Self::InspectAgents => matches!(role, "admin" | "workspace"),
+            Self::WorkspaceAdmin => role == "admin",
+            Self::DeleteArchive => matches!(role, "writer" | "admin"),
         }
     }
 }

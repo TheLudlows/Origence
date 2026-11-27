@@ -54,6 +54,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     reportedChunk: "77777777-7777-4777-8777-777777777777",
     reportedRef: "88888888-8888-4888-8888-888888888888",
     otherRun: "99999999-9999-4999-8999-999999999999",
+    legacyRun: "99999999-9999-4999-8999-999999999998",
     otherKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   };
   const reportedReference = {
@@ -160,10 +161,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         metering: window === "24h" ? {
           duration_p95_ms: 1500, duration_runs: 2,
           agent_tokens: "0", token_runs: 1,
-          costs: [
-            { basis: "estimated", currency: "USD", micros: "12345", runs: 1 },
-            { basis: "billed", currency: "CNY", micros: "9007199254740993", runs: 2 },
-          ],
+          costs: [{ basis: "estimated", currency: "USD", micros: "12345", runs: 1 }],
         } : { duration_p95_ms: null, duration_runs: 0, agent_tokens: null, token_runs: 0, costs: [] },
         series: Array.from({ length: size }, (_, index) => ({
           start_ms: index * width,
@@ -181,12 +179,24 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         next_after: null,
       });
     }
+    if (path.pathname === `/api/v1/runs/${ids.otherRun}`)
+      return response({
+        run: { run_id: ids.otherRun, summary: "Other Key execution" },
+        is_owner: false,
+        events: [{
+          sequence: 1, evidence_origin: "reported", recorded_at_ms: 1000,
+          report: { reporter: "client", event: { kind: "result_reported", outcome: "failure", summary: "Other Key recorded result" } },
+          references: [],
+        }],
+        next_after: null,
+      });
     if (path.pathname === "/api/v1/runs")
       return response({
         scope: "workspace",
         items: [
           { run_id: ids.run, owner_key_id: ids.source, is_owner: true, summary: "fixture task", created_at_ms: 1000, status: "unknown" },
-          { run_id: ids.otherRun, owner_key_id: ids.otherKey, is_owner: false, summary: null, created_at_ms: 1100, status: "reported_failure" },
+          { run_id: ids.otherRun, owner_key_id: ids.otherKey, is_owner: false, can_read_trace: true, summary: null, created_at_ms: 1100, status: "reported_failure" },
+          { run_id: ids.legacyRun, owner_key_id: ids.run, is_owner: false, summary: null, created_at_ms: 1200, status: "unknown" },
         ],
         next_after: null,
       });
@@ -473,53 +483,32 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.ok(document.body.textContent.includes("服务就绪状态"));
     assert.ok(!document.body.textContent.includes("本页运行数"));
     const otherRun = [...document.querySelectorAll("tbody tr")].find((row) => row.textContent.includes(ids.otherKey));
-    assert.ok(otherRun.textContent.includes("私有任务"));
+    assert.ok(otherRun.textContent.includes("其他 Key 的任务"));
     assert.ok(otherRun.textContent.includes("上报失败"));
-    assert.equal(otherRun.querySelector("button"), null);
+    assert.equal(otherRun.querySelector("button").textContent, "查看链路 →");
     const trend = [...document.querySelectorAll("section")].find(
       (section) => section.querySelector("h2")?.textContent === "运行创建趋势",
     );
     await wait(() => trend.textContent.includes("新建运行 31 条"));
-    const rows = (scope) => [...scope.querySelectorAll("tbody tr")].map(
-      (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent),
-    );
-    const details = () => trend.querySelector("details.run-creation-buckets");
     const bars = () => [...trend.querySelectorAll(".run-chart-bar")];
-    const metering = () => [...trend.querySelectorAll("section")].find(
-      (section) => section.querySelector("h2")?.textContent === "运行计量",
-    );
     assert.equal(bars().length, 24);
     assert.equal(bars().filter((bar) => bar.tabIndex === 0).length, 1);
     assert.match(bars()[0].getAttribute("aria-label"), /新建 31 个 Run$/);
     assert.match(bars()[1].getAttribute("aria-label"), /新建 0 个 Run$/);
-    assert.equal(details().open, false);
-    assert.equal(rows(details()).length, 24);
-    assert.equal(rows(details())[0][2], "31");
-    assert.deepEqual(rows(metering()), [
-      ["端到端耗时 P95", "1,500 ms", "2"],
-      ["Agent Token 总量", "0", "1"],
-      ["费用估算", "USD 0.012345", "1"],
-      ["账单金额", "CNY 9,007,199,254.740993", "2"],
-    ]);
+    assert.equal(trend.querySelector("details"), null);
+    assert.doesNotMatch(trend.textContent, /运行计量|已上报数值/);
     assert.ok(document.body.textContent.includes("fixture task"));
     const range = control("统计范围", trend);
     range.value = "7d";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("新建运行 34 条"));
     assert.equal(bars().length, 7);
-    assert.equal(rows(details()).length, 7);
-    assert.deepEqual(rows(metering()), [
-      ["端到端耗时 P95", "未知", "0"],
-      ["Agent Token 总量", "未知", "0"],
-      ["费用", "未知", "0"],
-    ]);
+    assert.doesNotMatch(trend.textContent, /运行计量|已上报数值/);
     overviewUnavailable = true;
     range.value = "24h";
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("创建量暂不可用"));
-    assert.equal(trend.querySelectorAll("tbody tr").length, 0);
     assert.equal(bars().length, 0);
-    assert.equal(metering(), undefined);
     assert.ok(document.body.textContent.includes("fixture task"));
     overviewUnavailable = false;
     click("重试读取创建量", trend);
@@ -535,6 +524,20 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(window.localStorage.length, 0);
     assert.equal(window.sessionStorage.length, 1);
     assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
+  });
+  await t.test("administrator opens another Key's trace with read-only controls", async () => {
+    click("调用链路");
+    const otherRow = () => [...document.querySelectorAll("main tbody tr")].find((row) => row.textContent.includes(ids.otherKey));
+    await wait(otherRow);
+    assert.ok(document.querySelector("main tbody").textContent.includes("仅所有者可查看链路"));
+    click("查看链路 →", otherRow());
+    await wait(() => document.body.textContent.includes("Other Key recorded result"));
+    const main = document.querySelector("main");
+    assert.ok(main.textContent.includes("Other Key execution"));
+    assert.ok(!main.textContent.includes("获取此处的固定前缀摘要"));
+    assert.ok([...main.querySelectorAll("section")].filter((section) =>
+      ["外部核验记录", "Skill 候选"].includes(section.querySelector("h2")?.textContent),
+    ).every((section) => section.hidden));
   });
   await t.test("administrator Agent list distinguishes active requests, failures, and empty results", async () => {
     click("Agent 连接");

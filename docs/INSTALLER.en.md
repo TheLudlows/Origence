@@ -31,7 +31,7 @@ Setup verifies the workspace and tools served over HTTP MCP, installs the plugin
 
 Restart the terminal and clients, then use `/mcp` to check the connection and `context_session` to confirm the workspace. Follow Codex's trust flow in `/hooks` for the installed hooks. To change the endpoint or key, use `--force` and select all currently connected Agents because they share that configuration.
 
-Run `origence-setup uninstall` from a restarted terminal, or use the platform launcher above with `uninstall`. This rolls back the Agent plugins, MCP overrides, and environment changes it owns. Local services and the console account are managed by the deployment command.
+Run `origence-setup uninstall` from a restarted terminal, or use the platform launcher above with `uninstall`. This rolls back the Agent plugins, MCP overrides, and environment changes it owns. The deployment command manages services and the console.
 
 ## Deploy the local API and console
 
@@ -45,10 +45,10 @@ Use `--init` for a fresh local workspace. The console defaults to `127.0.0.1:300
 ./bin/origence-deploy install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
-Deployment starts or reuses the API, provisions a console account, and verifies that signing in uses the same workspace and key. The supplied key determines console permissions. Interactive initialization prints the new key and console password. In automation, use `--credentials-file <new path outside Git>` or explicitly pass `--show-secrets`. Keep the generated credentials private. Add `--verify-write` to record and read one labeled test Run through the console. Reruns use the same probe Run.
+Fresh deployment issues a workspace key and a separate deployment administrator key, then verifies both console sign-ins. The workspace key is also the Agent credential. The administrator key can inspect the deployment and moderate global knowledge. Obtain both newly issued keys through interactive initialization, `--credentials-file <new path outside Git>`, or an explicit `--show-secrets`. Operators can rotate the administrator key offline. Existing role-based credentials continue to support account sign-in. Add `--verify-write` to record and read one labeled test Run through the console. Reruns use the same probe Run.
 
 Repeated commands reuse the deployment. Only an explicit `--force --init <name>` replaces the workspace. It renames an existing data directory to a backup first. Stop any external services using that directory before reinitializing.
 
-Run `./bin/origence-deploy uninstall` or `.\bin\origence-deploy.cmd uninstall` from the checkout. It stops deployment-managed processes and removes its console account. Databases, backups, exported credentials, and Agent plugins are retained. Existing all-in-one journals are read by ownership. To roll back a former all-in-one install completely, run both uninstall commands. Private state and service logs are under `%LOCALAPPDATA%\Origence\installer` on Windows or `~/.origence/installer` on Unix.
+Run `./bin/origence-deploy uninstall` or `.\bin\origence-deploy.cmd uninstall` from the checkout. It stops deployment-managed processes and removes account configuration that it owns. Databases, backups, exported credentials, and Agent plugins are retained. Existing all-in-one journals are read by ownership. To roll back a former all-in-one install completely, run both uninstall commands. Private state and service logs are under `%LOCALAPPDATA%\Origence\installer` on Windows or `~/.origence/installer` on Unix.
 
 [Operations and recovery](OPERATIONS.en.md) · [Claude Code and Codex integration](CLIENTS.en.md)

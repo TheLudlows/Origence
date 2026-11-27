@@ -29,6 +29,7 @@ pub(crate) struct ContextMcp {
 struct GetInput {
     asset_id: String,
     version: Option<i32>,
+    scope: Option<String>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -164,7 +165,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Read your private Run trace, with current authorization and source checks. after is a sequence cursor; limit defaults to 50 (maximum 100). Missing events mean unknown, never complete capture."
+        description = "Read a Run trace you own or, as a workspace admin, any Run in the selected workspace. Source checks still apply. after is a sequence cursor; limit defaults to 50 (maximum 100). Missing events mean unknown, never complete capture."
     )]
     async fn context_run_get(
         &self,
@@ -343,7 +344,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Read a published memory or knowledge item, including a historical version, if the item and its source remain valid."
+        description = "Read a published memory or knowledge item. Set scope to global for a global knowledge publication ID."
     )]
     async fn context_get(
         &self,
@@ -351,7 +352,32 @@ impl ContextMcp {
     ) -> std::result::Result<CallToolResult, ErrorData> {
         let id = Uuid::parse_str(&input.asset_id)
             .map_err(|_| ErrorData::invalid_params("asset_id must be a UUID", None))?;
-        result(self.service.get(&self.identity, id, input.version).await)
+        match input.scope.as_deref() {
+            None | Some("workspace") => {
+                result(self.service.get(&self.identity, id, input.version).await)
+            }
+            Some("global") => {
+                let snapshot = self
+                    .service
+                    .global_knowledge(&self.identity, id)
+                    .await
+                    .and_then(|value| {
+                        if input
+                            .version
+                            .is_some_and(|version| value["version"] != version)
+                        {
+                            Err(crate::error::AppError::NotFound)
+                        } else {
+                            Ok(value)
+                        }
+                    });
+                result(snapshot)
+            }
+            Some(_) => Err(ErrorData::invalid_params(
+                "scope must be workspace or global",
+                None,
+            )),
+        }
     }
 }
 fn session_id(value: serde_json::Value) -> crate::error::Result<Uuid> {

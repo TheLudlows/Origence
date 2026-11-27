@@ -4,6 +4,148 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Single-key deployment and global knowledge cleanup
+
+Windows validation used PR #178 at `ec3aebc` with the cleanup changes, embedded AnySeek, and Rust 1.98.0.
+`cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` passed.
+`cargo test --locked --test local` passed nine tests across the `global_knowledge`, `workspace_access`, and `mcp_runs` filters.
+Manual SQL review confirmed that approval still reads one table within the same transaction, orders rows by starting byte, and verifies the content hash.
+After fixing Agent connections access, `cargo test --locked --test local -- mcp_http` passed four tests. A real MCP handshake appeared in the workspace key's own activity list. Selecting another workspace in the same tenant returned 403. Console tests verified local activity and cross-workspace denial.
+After updating the existing permission assertions, `cargo test --locked --all-targets` passed 485 tests with eight ignored by configuration.
+
+`npm --prefix ui test` passed 34 tests on Node 24.15.0. `node ui/scripts/check-console-session-browser.cjs` passed in local Chromium against the fixture server, including review pagination and retry, opening the pinned release according to search scope, and both account and workspace key sign-in.
+The public Windows deployment launcher passed sign-in and Run reads for both modes in temporary directories. Fresh deployment also verified administrator sign-in and started without creating an account database while the inherited account database path was absent. Membership mode still created and used the managed account database.
+The local checks did not rerun Linux or the full native agent installer suite.
+
+## 2026-11-27 · MCP and native client CI contracts
+
+Based on PR #178 at `37129e8` and its follow-up changes, with Rust 1.98.0, fresh isolated Windows
+databases, and embedded AnySeek. Formatting, strict Clippy, Python and Node syntax checks, and
+`git diff --check` passed. The original Linux CI failed while checking MCP input fields.
+The local Windows `tools/mcp_smoke.py --local` run passed schema checks for four protocol
+requests, pinned global lookup, denial before approval and after withdrawal, safe errors, and reopen.
+
+Native Windows client acceptance used Codex 0.171.0 and Claude Code 2.1.330. Codex returned five
+enabled hooks before the fix, while the old assertion expected four. With the updated contract,
+`tools/plugin_smoke.py --bind 127.0.0.1:0` passed native install, default and selected workspace
+access, historical version lookup, Run hooks, and uninstall for both clients. Port 8080 was
+already occupied, so the native smoke used an ephemeral loopback port. Installer acceptance adds a real offline key-rotation case,
+and checks that HTTP and MCP resolve the same logical key and session.
+
+## 2026-11-27 · Global knowledge and deployment key provisioning
+
+Verified on a Windows working tree based on `55c0ece`, with Rust 1.98.0, Node 24.15.0, and fresh databases.
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `git diff --check` passed.
+`cargo test --locked --lib --quiet` passed 233 tests. The isolated `cargo test --locked --target-dir
+target/run-admin-check --test local --` passed 62 selected tests across global knowledge, workspace access,
+sessions, evidence bundles, catalogs, semantic extraction, HTTP/MCP, Runs, and retrieval. The new case verifies
+cross-tenant access, pinned versions, rejection, review after reopen, combined recall, and failure to replay
+prepared Run context after withdrawal. An older assertion was updated for same-workspace administrator trace access.
+
+`npm test` passed 34 tests in an isolated UI checkout. Local Chrome passed `check-console-session-browser.cjs`
+for workspace submission, deployment review, approved browsing, withdrawal, login, and read-only inspection.
+An isolated Windows deployment with real SQLite and embedded AnySeek verified key issuance through
+`origence-deploy --init`, both console login modes, publication and combined recall, withdrawal, install replay,
+backup before forced reinitialization, and database preservation on uninstall. The deployment and installer browser scripts passed Node syntax checks.
+The full client installer smoke script passed Python syntax checking. Linux verification was unavailable.
+The existing dev deployment was left in place.
+
+## 2026-11-27 · Automatic extraction for single-key conversations
+
+Verified on a Windows working tree based on `55c0ece`, with Rust 1.98.0 and fresh test databases.
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `git diff --check` passed.
+`cargo test --locked --lib --quiet` passed 233 tests. The running service held `origence.exe` open in the default
+target directory. `cargo test --locked --target-dir target/run-admin-check --test local --` passed 48 selected
+workspace, session, semantic extraction, catalog, HTTP/MCP, Run, and retrieval tests. The isolated CLI build passed
+single-key workspace creation, workspace-key rotation, and deployment administrator key issuance on a fresh database.
+The same target passed `local_app::local_host_api_cli_mcp_models_and_recovery` as an additional test
+covering existing extraction, HTTP, MCP, and recovery.
+Real SQLite and synthetic AnySeek and model endpoints verified the archive receipt, service reopen,
+key rotation, retrieval and workspace isolation for the extracted memory, and replay after deletion with the original
+job and conversation intact. Real-model extraction quality and Linux were untested.
+
+## 2026-11-27 · Read-only deployment administrator inspection
+
+Verified on a Windows working tree based on `55c0ece`, with Rust 1.98.0, Node 24.15.0, and fresh test databases.
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and
+`git diff --check` passed. All 233 library tests passed. `cargo test --locked --test local --no-run`
+returned 1 because the running service held `origence.exe` open. The newly built `local` executable passed
+22 selected integration tests. Real SQLite and a synthetic AnySeek archive verified cross-tenant reads of
+sessions, Runs, and published content, rejection of IDs from another workspace, denial of workspace credentials
+at administrator endpoints, denial of administrator credentials for workspace writes, cache prevention, and key rotation.
+
+`npm test` passed 34 tests in an isolated UI checkout. The local Chrome run of
+`check-console-session-browser.cjs` used a synthetic API to exercise administrator sign-in, workspace switching,
+and reads of original turns, Run events, and memory. Workspace-key and account sign-in regressions passed.
+Linux verification was unavailable. The running dev service kept its existing version.
+
+## 2026-11-27 · Single-key workspaces and console sign-in
+
+Verified on a Windows working tree based on `55c0ece`, with Rust 1.98.0, Node 24.15.0, and fresh test directories.
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, `git diff --check`, and
+`node --check tools/installer/protocol.mjs` passed. `cargo test --locked --lib --quiet` passed 233 tests.
+`cargo test --locked --test local --no-run` returned 1 because the running service held `origence.exe` open.
+The new `local` integration test executable passed 21 selected workspace-key, catalog, HTTP/MCP, Run, and retrieval tests.
+They cover workspace scope, refusal to issue another credential, archive continuity after rotation, memory deletion, and
+HTTP 403 for deletion of original turns through either the session or source endpoint. Integration uses real SQLite and a synthetic AnySeek fixture.
+
+`npm test` passed 34 tests in an isolated UI checkout. `check-console-session-browser.cjs` passed in local Chrome.
+Coverage includes workspace-key sign-in, the single workspace, read-only archive controls, reload, and existing account sign-in.
+The only local WSL distribution was Docker Desktop's internal distribution, with its engine stopped. Linux verification was unavailable.
+The running service kept its database and build artifacts.
+
+## 2026-11-27 · Read-only workspace administrator access to Run traces
+
+Based on `eef2134` on Windows with Rust 1.98.0, Node 24.15.0, and fresh test databases.
+`cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` passed.
+`cargo test --locked --lib` passed 233 tests. `cargo test --locked --test local --no-run` exited 1 while updating
+`origence.exe` held open by the running service. The newly built `local` test executable passed 20 relevant integration tests.
+The public library, HTTP, and MCP checks covered access to recorded event bodies for same-workspace admins,
+isolation for other roles and workspaces, pagination, prefix and write restrictions, denial of original private source access,
+and preservation of event positions with unavailable-source counts after withdrawal.
+
+`npm.cmd --prefix ui test` passed 33 tests, including an administrator opening another key's trace with read-only controls
+and link behavior with older API responses. `check-navigation-focus-browser.cjs` passed in local Chrome.
+The live UI served the asset that reads the backend authorization flag. Linux and live API deployment were untested.
+
+## 2026-11-27 · Remove the metering panel from the Run overview
+
+On the Windows working tree based on `eef2134`, with Node 24.15.0 and Rust 1.98.0,
+`npm.cmd --prefix ui test` passed all 32 tests. Coverage includes rendering the trend when the
+API returns populated or empty metering, switching windows, and retrying.
+`node ui/scripts/check-navigation-focus-browser.cjs` passed in Chrome 158.0.8127.88, covering chart width,
+keyboard, hover, and touch at 1440, 1024, and 320 pixels.
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and
+`git diff --check` passed. The running local console served the updated frontend assets.
+
+## 2026-11-27 · Standalone AnySeek collection limit compatibility
+
+On Linux x86-64 with Rust 1.98.0 and fresh synthetic stores, standalone AnySeek Release
+`74d48d92db27d4fa155ce38004ac079f3bf92835` was paired with Origence `d34804c` and the fix.
+The baseline exited during ordinary asset publication after receiving collection Info without
+`max_records`. The fixed HTTP path ingested, published and found the original text in search.
+Both builds matched the private archive `directory_sha256` before and after paired restore,
+then passed the turn list, readback and withdrawal checks. [AnySeek #229](https://github.com/TheLudlows/anyseek/issues/229)
+
+- `cargo fmt --all -- --check` and `cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
+- `cargo test --locked --test anyseek` passed six cases. Collection checks cover omitted, positive and invalid advertised Record limits and still require a positive `max_candidates`.
+- `python3 tools/anyseek_smoke.py --anyseek-binary <frozen Release> --binary target/debug/origence --test-executable <test binary from the prior command>` passed eight real-backend contracts and the HTTP, MCP, service reopen and withdrawal checks.
+- The legacy Info shape uses a contract fixture. The live probe used the Linux binary above.
+
+## 2026-11-27 · Remove interval details from the Run overview
+
+Based on `3a341e4` on Windows with Node 24.15.0 and Rust 1.98.0. `npm --prefix ui test` passed all
+32 tests, including the overview chart and metering after removal of the collapsible table.
+`node ui/scripts/check-navigation-focus-browser.cjs` passed in local Chrome and covered responsive
+chart layout plus keyboard, hover, and touch input.
+
+`cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` passed.
+`cargo test --locked --test local catalog::` exited 1 when updating `origence.exe` held open by the
+running service. The newly built integration test executable passed all seven tests matching
+`catalog::` and all three matching `foundation_http::`, including administrator directory visibility
+and owner-only trace access. The live UI served the updated frontend asset. The running API uses
+the older role constraints and was kept on its existing binary.
+
 ## 2026-11-27 · Writers can review and publish
 
 Based on main `d34804c`, using Linux, fresh synthetic databases, and Rust 1.98.0. Skill
@@ -33,6 +175,9 @@ layouts. Checks covered 320 to 1440px and both color schemes. Knowledge detail c
 source tabs, pinned versions, and comparisons. Measured detail text contrast ranged from 6.52:1 to 9.63:1.
 
 On main `3a341e4`, the 32 UI tests, type checking, and the Chromium checks above passed again.
+On main `493e38b`, 34 UI tests and type checking passed. Chromium verified member-account, workspace-key,
+and deployment-admin sign-in, global knowledge submission and review, navigation focus, touch targets,
+content and version comparison, and the simplified Run trend.
 
 ## 2026-11-27 · Direct private archive deletion
 

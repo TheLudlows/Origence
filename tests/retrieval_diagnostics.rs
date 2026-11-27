@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 #[tokio::test]
-async fn context_query_embedding_usage_is_scoped_privately_and_replayed() {
+async fn context_query_embedding_usage_is_scoped_and_replayed() {
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -70,13 +70,13 @@ async fn context_query_embedding_usage_is_scoped_privately_and_replayed() {
         .await
         .unwrap();
     let owner = store.issue_key(scope, "writer").await.unwrap();
-    let outsider = store.issue_key(scope, "admin").await.unwrap();
+    let admin = store.issue_key(scope, "admin").await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service);
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let client = HostClient::new(&base, owner.token).unwrap();
-    let outsider = HostClient::new(&base, outsider.token).unwrap();
+    let admin = HostClient::new(&base, admin.token).unwrap();
     let run = Uuid::new_v4();
     let run_path = format!("/v1/runs/{run}");
     let context_path = format!("{run_path}/context");
@@ -129,7 +129,7 @@ async fn context_query_embedding_usage_is_scoped_privately_and_replayed() {
     );
     let known = request("PRIVATE QUERY known", "hybrid");
     assert!(
-        outsider
+        admin
             .call(Method::POST, &context_path, Some(&known), None)
             .await
             .is_err()
@@ -209,12 +209,12 @@ async fn context_query_embedding_usage_is_scoped_privately_and_replayed() {
     let failed = &events[6];
     assert_eq!(failed["report"]["kind"], "context_preparation_failed");
     assert_eq!(observation(&failed["report"]), expected(json!(4)));
-    assert!(
-        outsider
-            .call(Method::GET, &run_path, None, None)
-            .await
-            .is_err()
-    );
+    let admin_trace = admin
+        .call(Method::GET, &run_path, None, None)
+        .await
+        .unwrap();
+    assert_eq!(admin_trace["is_owner"], false);
+    assert_eq!(admin_trace["events"], trace["events"]);
     let trace = trace.to_string();
     for private in [
         "PRIVATE QUERY",

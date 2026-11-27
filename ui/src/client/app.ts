@@ -1,7 +1,9 @@
 import { archivePage } from "./archive.js";
 import { api, ApiError } from "./api.js";
-import { agentsPage } from "./agents.js";
+import { agentsPage, canInspectAgents } from "./agents.js";
 import { assetDetail, assetsPage } from "./assets.js";
+import { deploymentConsole } from "./deployment.js";
+import { globalKnowledgePage } from "./global-knowledge.js";
 import {
   button,
   el,
@@ -27,6 +29,7 @@ const pages = [
   ["runs", "调用链路"],
   ["memory", "记忆管理"],
   ["knowledge", "知识管理"],
+  ["global-knowledge", "全局知识"],
   ["contexts", "上下文工作台"],
   ["archive", "私有归档"],
   ["keys", "API Key"],
@@ -97,6 +100,14 @@ function showSession(result: ConsoleSessionResponse) {
   session = result.session;
   if (!session) {
     login(result.setupRequired);
+    return;
+  }
+  if (result.mode === "deployment") {
+    user = undefined;
+    route.abort();
+    route = new AbortController();
+    api.setWorkspace(undefined, session.binding);
+    deploymentConsole(mount, route.signal, logout);
     return;
   }
   const previous = sessionStorage.getItem(workspaceStorageKey);
@@ -175,6 +186,27 @@ function createWorkspace(parent: ConsoleWorkspace, binding: string, parentSignal
 }
 
 function login(setupRequired?: true) {
+  const workspaceKey = input("输入工作空间或部署管理员 Key", "", "password");
+  workspaceKey.required = true;
+  workspaceKey.autocomplete = "off";
+  const keyError = el("div");
+  const keyConnect = submit("使用 Key 登录");
+  const keyForm = form(async () => {
+    keyConnect.disabled = true;
+    keyError.replaceChildren();
+    try {
+      const key = workspaceKey.value.trim();
+      const result = await api.post<ConsoleSessionResponse>(sessionPath, key.startsWith("oc_admin_") ? { deployment_key: key } : { workspace_key: key });
+      workspaceKey.value = "";
+      showSession(result);
+    } catch (e) {
+      message(keyError, e);
+    } finally {
+      keyConnect.disabled = false;
+    }
+  }, field("访问 Key", workspaceKey), keyConnect, keyError);
+  if (!setupRequired) keyForm.classList.add("login-alternate");
+
   const username = input("");
   username.required = true;
   username.autocomplete = "username";
@@ -191,8 +223,7 @@ function login(setupRequired?: true) {
         "section",
         "login-form",
         el("header", "login-heading", brand(), el("h1", "", "登录控制台")),
-        setupRequired ? el("p", "notice", "控制台尚未创建账号，请联系管理员。") : null,
-        form(
+        setupRequired ? null : form(
           async () => {
             connect.disabled = true;
             error.replaceChildren();
@@ -212,8 +243,9 @@ function login(setupRequired?: true) {
           field("账号", username),
           field("密码", secret),
           connect,
+          error,
         ),
-        error,
+        keyForm,
       ),
     ),
   );
@@ -258,7 +290,8 @@ async function render() {
   nav.setAttribute("aria-label", "主导航");
   for (const [key, label] of pages) {
     if (key === "archive" && user.role === "reader") continue;
-    if ((key === "keys" || key === "agents") && user.role !== "admin") continue;
+    if (key === "keys" && user.role !== "admin") continue;
+    if (key === "agents" && !canInspectAgents(user.role)) continue;
     const link = button("", () => navigate(key), "nav-item");
     const icon = el("span", `nav-icon nav-icon-${key}`);
     icon.setAttribute("aria-hidden", "true");
@@ -323,7 +356,7 @@ async function render() {
             "div",
             "account-identity",
             el("strong", "", session.account),
-            el("small", "mono", user.role),
+            user.role === "workspace" ? null : el("small", "mono", user.role),
           ),
           button("退出", logout, "sidebar-exit"),
         ),
@@ -357,6 +390,8 @@ async function render() {
     else if (page === "runs") await runsPage(content, ctx, id);
     else if (page === "memory" || page === "knowledge")
       await assetsPage(content, page, ctx);
+    else if (page === "global-knowledge")
+      await globalKnowledgePage(content, ctx, id);
     else if (page === "contexts") contextPage(content, ctx);
     else if (page === "archive") await archivePage(content, ctx);
     else if (page === "keys") keysPage(content, ctx, activeWorkspace);
@@ -384,7 +419,7 @@ window.addEventListener("hashchange", () => {
   void render();
 });
 window.addEventListener("origence:unauthorized", () => {
-  if (user) void restoreSession();
+  if (session) void restoreSession();
 });
 window.addEventListener("pagehide", clearView);
 window.addEventListener("pageshow", (event) => {

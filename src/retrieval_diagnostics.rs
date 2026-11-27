@@ -28,7 +28,8 @@ pub struct CheckedConfig {
     pub analysis_fingerprint: String,
     pub embedding_space_sha256: Option<String>,
     pub max_candidates: u64,
-    pub max_records: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_records: Option<u64>,
 }
 
 /// A backend observation; progress and results are sampled at different instants.

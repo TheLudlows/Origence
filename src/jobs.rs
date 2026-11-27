@@ -73,8 +73,8 @@ impl std::str::FromStr for JobKind {
     }
 }
 
-/// The two extract variants share one persisted operation but never fall back
-/// from a present, malformed identity to legacy extraction.
+/// Extract variants share one persisted operation. Present mode fields select
+/// their typed payload, even when the fields are malformed.
 ///
 /// The private Serde discriminator is an implementation detail of the codec;
 /// callers must use `decode`/`encode` for the durable payload representation.
@@ -99,6 +99,11 @@ pub enum JobPayload {
         embedding_profile: Option<String>,
     },
     LegacyExtract {
+        embedding_profile: Option<String>,
+    },
+    ArchiveExtract {
+        archive_turn: Uuid,
+        session_id: Uuid,
         embedding_profile: Option<String>,
     },
     IdentifiedExtract {
@@ -155,6 +160,7 @@ impl JobPayload {
             return Err(AppError::Invalid("unsupported job payload schema".into()));
         }
         let discriminator = match kind {
+            JobKind::Extract if object.contains_key("archive_turn") => "archive_extract",
             JobKind::Extract if object.contains_key("identity") => "identified_extract",
             JobKind::Extract => "legacy_extract",
             _ => kind.as_str(),
@@ -188,6 +194,11 @@ impl JobPayload {
             |identity: &MemoryIdentity| identity.validate().map_err(|_| invalid_payload());
         match self {
             Self::IdentifiedExtract { identity, .. } => validate(identity),
+            Self::ArchiveExtract {
+                archive_turn,
+                session_id,
+                ..
+            } if archive_turn.is_nil() || session_id.is_nil() => Err(invalid_payload()),
             Self::MessageBatchIngest { accepted_spec, .. } => {
                 accepted_spec.validate().map_err(|_| invalid_payload())
             }
@@ -237,7 +248,9 @@ impl JobPayload {
             Self::Publish { .. } => JobKind::Publish,
             Self::Ingest { .. } => JobKind::Ingest,
             Self::Restore { .. } => JobKind::Restore,
-            Self::LegacyExtract { .. } | Self::IdentifiedExtract { .. } => JobKind::Extract,
+            Self::LegacyExtract { .. }
+            | Self::ArchiveExtract { .. }
+            | Self::IdentifiedExtract { .. } => JobKind::Extract,
             Self::MessageBatchIngest { .. } => JobKind::MessageBatchIngest,
             Self::SemanticPublish { .. } => JobKind::SemanticPublish,
             Self::SemanticExtract { .. } => JobKind::SemanticExtract,
@@ -259,6 +272,9 @@ impl JobPayload {
                 embedding_profile, ..
             }
             | Self::LegacyExtract { embedding_profile }
+            | Self::ArchiveExtract {
+                embedding_profile, ..
+            }
             | Self::IdentifiedExtract {
                 embedding_profile, ..
             }
@@ -299,6 +315,7 @@ impl JobPayload {
                 expected_version, ..
             } => Some(*expected_version),
             Self::LegacyExtract { .. }
+            | Self::ArchiveExtract { .. }
             | Self::SemanticExtract { .. }
             | Self::Improve { .. }
             | Self::ConsolidateMemory { .. }

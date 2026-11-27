@@ -382,11 +382,34 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     assert_eq!(
         next,
         json!({"scope":"workspace","next_after":null,"items":[{
-            "run_id":other_run,"owner_key_id":other_key.key_id,"is_owner":false,"summary":null,
+            "run_id":other_run,"owner_key_id":other_key.key_id,"is_owner":false,"can_read_trace":true,"summary":null,
             "created_at_ms":next["items"][0]["created_at_ms"],"status":"reported_failure"
         }]})
     );
-    assert!(s.run_trace(&admin, other_run, 0, 25).await.is_err());
+    let trace = s.run_trace(&admin, other_run, 0, 1).await.unwrap();
+    assert_eq!(trace["is_owner"], false);
+    assert_eq!(trace["run"]["summary"], "other private task");
+    assert_eq!(
+        trace["events"][0]["report"]["event"]["summary"],
+        "private report"
+    );
+    assert_eq!(trace["next_after"], 1);
+    assert!(s.run_prefix(&admin, other_run, 1).await.is_err());
+    assert!(s.run_trace(&reader, other_run, 0, 25).await.is_err());
+    let outside = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    store
+        .create_workspace(outside.tenant_id, outside.workspace_id, "Other workspace")
+        .await
+        .unwrap();
+    let outside_key = store.issue_key(outside, "admin").await.unwrap();
+    let outside_admin = s.auth(&outside_key.token).await.unwrap();
+    assert!(matches!(
+        s.run_trace(&outside_admin, other_run, 0, 1).await,
+        Err(origence::error::AppError::NotFound)
+    ));
     assert!(
         s.list_runs(&reader, Uuid::nil(), 25).await.unwrap()["items"]
             .as_array()
@@ -451,15 +474,18 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .await
         .unwrap();
     assert_eq!(admin_list, next);
-    assert_eq!(
-        http.get(format!("{base}/v1/runs/{other_run}"))
-            .bearer_auth(rotated["token"].as_str().unwrap())
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        404
-    );
+    let admin_trace: Value = http
+        .get(format!("{base}/v1/runs/{other_run}?limit=1"))
+        .bearer_auth(rotated["token"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(admin_trace, trace);
     for path in ["/v1/assets?kind=knowledge&limit=1", "/v1/runs?limit=1"] {
         let result = http
             .get(format!("{base}{path}"))

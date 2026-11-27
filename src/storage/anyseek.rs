@@ -769,6 +769,7 @@ impl AnySeekFullTextStore {
             Some((_, d)) => Self::vector_collection_config(*d)?,
             None => Self::collection_config(),
         };
+        let max_records = info["limits"].get("max_records");
         if info["schema"] != expected["schema"]
             || info["name"] != FORMAT
             || info["text_normalization"] != "None"
@@ -792,9 +793,7 @@ impl AnySeekFullTextStore {
             || info["limits"]["max_candidates"]
                 .as_u64()
                 .is_none_or(|n| n == 0)
-            || info["limits"]["max_records"]
-                .as_u64()
-                .is_none_or(|n| n == 0)
+            || max_records.is_some_and(|value| value.as_u64().is_none_or(|n| n == 0))
             || info["embedding_space_id"]
                 != self
                     .embedding
@@ -810,7 +809,7 @@ impl AnySeekFullTextStore {
             analysis_fingerprint: info["analysis"]["fingerprint"].as_str().unwrap().to_owned(),
             embedding_space_sha256: self.embedding.as_ref().map(|(p, _)| hash(p)),
             max_candidates: info["limits"]["max_candidates"].as_u64().unwrap(),
-            max_records: info["limits"]["max_records"].as_u64().unwrap(),
+            max_records: max_records.and_then(Value::as_u64),
         };
         #[cfg(feature = "local-storage")]
         if let Some(binding) = &self.binding {

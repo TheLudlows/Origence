@@ -163,6 +163,13 @@ pub enum EvidenceProvenance {
         version_root_source_event_id: Uuid,
         locator: Value,
     },
+    GlobalKnowledge {
+        publication_id: Uuid,
+        version: i32,
+        chunk_id: Uuid,
+        byte_start: i64,
+        byte_end: i64,
+    },
     SessionTurn {
         session_id: Uuid,
         turn_id: Uuid,

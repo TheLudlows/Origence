@@ -30,6 +30,13 @@ export function citation(
   ctx: ViewContext,
   { pdf, knowledgeQuote, label }: { pdf?: { path?: string }; knowledgeQuote?: string; label?: string } = {},
 ) {
+  if (ref.type === "global_knowledge" && typeof ref.publication_id === "string") {
+    const publication = ref.publication_id;
+    return el("div", "citation",
+      button(`全局知识 · v${ref.version}`, () => ctx.navigate("global-knowledge", publication), "link"),
+      code(ref),
+    );
+  }
   const source = el("div");
   const textSource = !pdf && ref.source_event_id && ctx.role !== "reader"
     ? sourcePreviewTarget()
@@ -76,7 +83,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext, workspaceId:
       el(
         "span",
         "",
-        "查看新建运行、已上报的计量和调用记录。",
+        "查看新建运行和调用记录。",
         el(
           "span",
           "overview-workspace-id",
@@ -123,7 +130,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext, workspaceId:
       el(
         "p",
         "muted",
-        "Origence 展示服务端准备回执和客户端显式上报。没有上报的活动保持未知。Run 详情仅向所属 Key 开放。",
+        "Origence 展示服务端准备回执和客户端显式上报。没有上报的活动保持未知。",
       ),
     ),
   );
@@ -139,15 +146,15 @@ function runTable(items: Run[], workspaceWide: boolean, ctx: ViewContext) {
   return table(
     ["任务", "Run ID", ...(workspaceWide ? ["所属 Key"] : []), "创建时间", "状态", "操作"],
     items.map((run) => [
-      run.summary ?? "私有任务",
+      run.summary ?? "其他 Key 的任务",
       el("span", "mono", short(run.run_id)),
       ...(workspaceWide ? [run.owner_key_id ? el("span", "mono", run.owner_key_id) : "—"] : []),
       date(run.created_at_ms),
       badge(statuses[run.status] ?? statuses.unknown,
         run.status === "reported_success" ? "good" : run.status === "reported_failure" ? "danger" : ""),
-      run.is_owner === false
-        ? "仅所有者可查看链路"
-        : button("查看链路 →", () => ctx.navigate("runs", run.run_id), "link"),
+      (run.can_read_trace ?? run.is_owner !== false)
+        ? button("查看链路 →", () => ctx.navigate("runs", run.run_id), "link")
+        : "仅所有者可查看链路",
     ]),
   );
 }
@@ -386,8 +393,10 @@ function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
 
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
-  const drafting = ["writer", "admin"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
+  const drafting = ["writer", "admin", "workspace"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
   const assessments = el("div");
+  const verificationSection = panel("外部核验记录", assessments);
+  verificationSection.hidden = true;
   const declarations = el("div", "", el("p", "muted", "正在读取采集声明…"));
   const coverage = panel("采集声明", declarations);
   let after = 0;
@@ -399,6 +408,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   let selectedSequence: number | undefined;
   let verification: AbortController | undefined;
   let loading = false;
+  let isOwner = false;
   const selectEvent = (event: RunEvent) => {
     if (selectedSequence === event.sequence) return;
     selectedSequence = event.sequence;
@@ -408,6 +418,8 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const report = event.report;
     const eventBody = report.event ?? report;
     const embedding = contextQueryEmbedding(event);
+    const privateUnavailable = typeof report.private_sources_unavailable === "number";
+    const globalUnavailable = typeof report.global_sources_unavailable === "number";
     details.replaceChildren(
       el("h2", "", runEventLabel(event)),
       badge(eventOrigin(event)[1]),
@@ -417,9 +429,9 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         `sequence ${event.sequence} · ${date(event.recorded_at_ms)}`,
       ),
       ...(embedding ? [embedding] : []),
-      typeof report.private_sources_unavailable === "number"
-        ? el("p", "notice", "归档来源已删除或不可用。")
-        : managedObservation(event) ?? code(eventBody),
+      ...(privateUnavailable ? [el("p", "notice", "归档来源已删除或不可用。")] : []),
+      ...(globalUnavailable ? [el("p", "notice", "引用的全局知识已下架。")] : []),
+      ...(privateUnavailable || globalUnavailable ? [] : [managedObservation(event) ?? code(eventBody)]),
     );
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])
@@ -430,6 +442,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const shown = new Set<string>();
     const pdfPath = (ref: ArchivedAssetReference) => {
       shown.add(ref.evidence_ref_id);
+      if (!isOwner) return undefined;
       const query = new URLSearchParams({
         sequence: String(event.sequence),
         evidence_ref_id: ref.evidence_ref_id,
@@ -474,8 +487,10 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       }
       details.append(code(ref));
     }
-    details.append(fixedPrefix(id, event.sequence, selectionSignal));
-    if (drafting) details.append(drafting.action(event.sequence));
+    if (isOwner) {
+      details.append(fixedPrefix(id, event.sequence, selectionSignal));
+      if (drafting) details.append(drafting.action(event.sequence));
+    }
     timeline
       .querySelectorAll("button")
       .forEach((b) =>
@@ -506,6 +521,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         ctx.signal,
       );
       if (ctx.signal.aborted) return;
+      isOwner = value.is_owner !== false;
       summary.textContent = value.run.summary;
       const firstPage = events.length === 0;
       events.push(...value.events);
@@ -518,9 +534,10 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       else timeline.append(...rows);
       if (!events.length)
         timeline.append(empty("暂无已记录事件", "未上报的活动未知。"));
-      if (drafting) drafting.root.hidden = !events.length;
+      if (drafting) drafting.root.hidden = !isOwner || !events.length;
       if (selectedSequence === undefined && events[0]) selectEvent(events[0]);
-      if (events.length && !verification) {
+      if (isOwner && events.length && !verification) {
+        verificationSection.hidden = false;
         verification = new AbortController();
         const signal = AbortSignal.any([ctx.signal, verification.signal]);
         void verificationPanel(assessments, id, { ...ctx, signal });
@@ -542,6 +559,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       selectedSequence = undefined;
       verification?.abort();
       verification = undefined;
+      verificationSection.hidden = true;
       if (drafting) {
         drafting.reset();
         drafting.root.hidden = true;
@@ -581,7 +599,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     ),
     ...(drafting ? [drafting.root] : []),
     coverage,
-    panel("外部核验记录", assessments),
+    verificationSection,
     error,
   );
   await load();
