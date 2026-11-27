@@ -167,6 +167,11 @@ impl Service {
         }
         caller.require("write")?;
         self.check_run_owner(caller, run).await?;
+        if context.as_of_ms.is_some() {
+            return Err(AppError::Invalid(
+                "as_of_ms is unsupported for Run context preparation. Use /v1/context or context_bundle for dated memory.".into(),
+            ));
+        }
         context
             .validate()
             .map_err(|e| AppError::Invalid(e.into()))?;

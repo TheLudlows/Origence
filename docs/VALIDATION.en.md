@@ -26,6 +26,11 @@ regression covers historical, current, unknown, conflicting, and budget-limited 
 checks that an extra identity condition keeps a separate value eligible and that conflict
 reporting follows the selected business time.
 
+After syncing main `af9030310bd5d313e23d9ac42373fa0b1e7d38a7`, HTTP and MCP Run preparation
+returned `INVALID_ARGUMENT` for `as_of_ms` after checking write access and ownership. Neither
+request recorded an event, and preparation without the date succeeded using the same event ID.
+The standalone HTTP/MCP date recall and identity/budget regressions passed on the updated main.
+
 ## 2026-11-27 · Restore AnySeek default keyword AND
 
 On main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`, a partial-term query matched incorrectly.

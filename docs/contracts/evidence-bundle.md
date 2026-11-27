@@ -96,8 +96,8 @@ citations cannot round-trip into that contract. The response, retained session
 block and API documentation explicitly disclose this unsupported case; callers
 must not invent chunk IDs or claim complete archive coverage.
 Consolidated fact citations are marked `unsupported_long_term_memory_reference`
-for that same archive contract. Server-prepared Run snapshots use their
-existing citation contract.
+for that same archive contract. Run preparation rejects `as_of_ms` before
+recording a snapshot or failure event. Use standalone context for dated memory.
 
 ## Conflict and budgeting contract
 

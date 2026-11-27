@@ -85,6 +85,8 @@ server_observed。首次成功时另存私有上下文快照；相同请求重�
 失败事件同样不可覆盖，恢复后新的准备尝试使用新的 event_id。普通 MCP/Search 请求
 不会自动加入某个 Run，仍需显式调用准备接口；未采集活动保持未知。
 
+HTTP Run 准备和 MCP `context_run_prepare` 在认证与归属检查后拒绝 `context.as_of_ms`，返回 `INVALID_ARGUMENT`，此时尚未计算请求摘要或写入事件。带业务日期的记忆查询使用 `POST /v1/context` 或 MCP `context_bundle`。
+
 ## AnySeek 统一检索
 
 每个 workspace 的全文、向量和一跳图候选使用同一 AnySeek collection。适配器将 Origence 预分词

@@ -148,7 +148,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Prepare context for an owned Run. Records server preparation or safe failure; does not prove delivery or model use. Retry the same event_id/context; recovery after failure requires a new event_id."
+        description = "Prepare context for an owned Run. Records server preparation or safe failure; does not prove delivery or model use. Retry the same event_id/context; recovery after failure requires a new event_id. Run preparation rejects as_of_ms. Use context_bundle for dated memory."
     )]
     async fn context_run_prepare(
         &self,

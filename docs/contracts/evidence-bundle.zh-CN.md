@@ -31,7 +31,7 @@
 Reader 只可读取 Learning 已发布的 statement/why、精确条件及脱敏支持标识与区间。原始问答和引用原文要求 writer 权限及该私有会话逻辑 key 的所有权。条件同时保留于正文、条目元数据和引用来源。按调用方上下文精确匹配每个字符串条件，`caller_context_exact_match` 只代表调用方提供了这些字符串。否则适用性明确为 `unverified`。模型不解释、扩大或推断适用条件。
 
 当前归档 API 的 `used_evidence` 只接受 chunk/entity/relation。内容引用可映射为精确分块引用，会话轮次引用无法原样写回。响应、保留会话块和 API 文档明确披露此限制。调用方不能伪造分块 ID 或声称归档覆盖完整。
-归纳事实引用带 `unsupported_long_term_memory_reference` 标记。服务端 Run 准备沿用既有引用契约。
+归纳事实引用带 `unsupported_long_term_memory_reference` 标记。服务端 Run 准备在记录快照或失败事件前拒绝 `as_of_ms`。带日期的记忆查询使用独立上下文入口。
 
 ## 冲突与预算契约
 
