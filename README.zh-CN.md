@@ -27,11 +27,12 @@ Origence 管理记忆、知识、Skill 和运行轨迹，提供 HTTP、MCP 接�
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
-./target/debug/origence --offline workspace-create demo
+./target/debug/origence --offline workspace-create --workspace-key demo
+./target/debug/origence --offline deployment-admin-rotate
 ./target/debug/origence serve --local
 ```
 
-使用 `workspace-create` 返回的工作空间令牌访问 API。Origence 在 `$OC_DATA_DIR/anyseek` 下打开嵌入式 AnySeek Catalog，并在首次访问时初始化工作空间对应的集合。
+使用 `workspace-create` 返回的 Key 登录工作空间或接入 Agent。部署管理员用独立 Key 查看所有工作空间及审核全局知识。Origence 在 `$OC_DATA_DIR/anyseek` 下打开嵌入式 AnySeek Catalog，并在首次访问时初始化工作空间对应的集合。
 
 ## 云上部署
 
@@ -48,11 +49,11 @@ npm run build
 npm start
 ```
 
-打开 `http://127.0.0.1:3000` 并用控制台账号登录。首次安装请[创建第一个控制台账号](ui/README.md#本地账号与工作区)。Origence 地址与 `http://127.0.0.1:8080` 不同时，设置 `ORIGENCE_API_BASE_URL`。
+打开 `http://127.0.0.1:3000`，使用[工作空间 Key](ui/README.md#工作空间-key-登录)或[现有控制台账号](ui/README.md#现有账号授权入口)登录。Origence 地址与 `http://127.0.0.1:8080` 不同时，设置 `ORIGENCE_API_BASE_URL`。
 
 ## Rust 库与存储
 
-SQLite 保存权限、版本化事实、来源和持久任务。AnySeek 保存已发布的分块正文、摘要和检索索引，并在独立私有集合保存完整问答及轮次目录。Blob 保存上传的原始文件。[存储分工](docs/design/current-implementation.md#storage-design)
+SQLite 保存权限、版本化事实、来源、持久任务和全局知识副本。AnySeek 保存工作空间已发布的分块正文、摘要和检索索引，并在独立私有集合保存完整问答及轮次目录。Blob 保存上传的原始文件。[存储分工](docs/design/current-implementation.md#storage-design)
 
 库调用方可使用解析、身份和值契约、模型、Blob 存储和 AnySeek 适配器，无需元数据引擎。
 

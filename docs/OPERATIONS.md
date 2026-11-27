@@ -52,7 +52,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## 初始化与凭据
 
-先执行 `origence --offline workspace-create NAME`，保存返回的 token，再启动宿主。要在同一租户创建另一个 workspace，在离线命令中加 `--in-tenant-of <现有 workspace UUID>`。在线 `key-create`/`key-revoke` 默认使用凭据的默认 workspace。其他工作区的授权和撤销见 [身份与密钥管理](API.md#身份与密钥管理)。离线管理依赖操作系统授权，必须独占数据目录。
+新库先执行 `origence --offline workspace-create --workspace-key NAME` 签发工作空间 Key，再执行 `origence --offline deployment-admin-rotate` 签发部署管理员 Key。保存两项凭据后启动宿主。单 Key 工作空间用 `workspace-key-rotate` 离线轮换。成员授权模式的密钥及其他空间授权见 [身份与密钥管理](API.md#身份与密钥管理)。离线管理依赖操作系统授权，必须独占数据目录。
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 
@@ -133,7 +133,9 @@ SQLite 在远端提交后才发布权威版本。超时未知时检查当前组�
 | 用途 | 服务地址 | API key | 模型名 |
 | --- | --- | --- | --- |
 | Embedding | `OC_EMBEDDING_BASE_URL` | `OC_EMBEDDING_API_KEY` | `OC_EMBEDDING_MODEL` |
-| 提取、摘要、图提取和 Improve | `OC_EXTRACTION_BASE_URL` | `OC_EXTRACTION_API_KEY` | `OC_EXTRACTION_MODEL` |
+| 会话自动提取、显式提取、摘要、图提取和 Improve | `OC_EXTRACTION_BASE_URL` | `OC_EXTRACTION_API_KEY` | `OC_EXTRACTION_MODEL` |
+
+单 Key 工作空间的自动提取会将归档问答发送到配置的提取端点。原文继续存放在私有 AnySeek 归档，SQLite 保存任务和来源证明。归档成功回执表示提取任务已持久化，可独立于客户端请求恢复。AnySeek 提交成功后如果归档回执丢失，客户端可重放原请求补齐任务并取得同一回执。
 
 任一专用地址为空时，该模型沿用 `OC_MODEL_BASE_URL`，其专用 key 为空时沿用
 `OC_MODEL_API_KEY`。填写专用地址后，该地址只使用对应的专用 key，留空即不发送

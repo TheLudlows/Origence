@@ -780,10 +780,9 @@ async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() 
         .await
         .unwrap();
     assert_eq!(directory["items"].as_array().unwrap().len(), 2);
-    assert!(matches!(
-        admin_client.run_trace(claude.run_id, 0, 50).await,
-        Err(origence::error::AppError::NotFound)
-    ));
+    let admin_trace = admin_client.run_trace(claude.run_id, 0, 50).await.unwrap();
+    assert_eq!(admin_trace["is_owner"], false);
+    assert_eq!(admin_trace["events"].as_array().unwrap().len(), 2);
 
     fixture.configure(&base, reader.key_id, &["claude_code"]);
     assert_eq!(

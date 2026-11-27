@@ -30,6 +30,13 @@ export function citation(
   ctx: ViewContext,
   { pdf, knowledgeQuote, label }: { pdf?: { path?: string }; knowledgeQuote?: string; label?: string } = {},
 ) {
+  if (ref.type === "global_knowledge" && typeof ref.publication_id === "string") {
+    const publication = ref.publication_id;
+    return el("div", "citation",
+      button(`全局知识 · v${ref.version}`, () => ctx.navigate("global-knowledge", publication), "link"),
+      code(ref),
+    );
+  }
   const source = el("div");
   const textSource = !pdf && ref.source_event_id && ctx.role !== "reader"
     ? sourcePreviewTarget()
@@ -386,7 +393,7 @@ function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
 
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
-  const drafting = ["writer", "admin"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
+  const drafting = ["writer", "admin", "workspace"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
   const assessments = el("div");
   const verificationSection = panel("外部核验记录", assessments);
   verificationSection.hidden = true;
@@ -411,6 +418,8 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     const report = event.report;
     const eventBody = report.event ?? report;
     const embedding = contextQueryEmbedding(event);
+    const privateUnavailable = typeof report.private_sources_unavailable === "number";
+    const globalUnavailable = typeof report.global_sources_unavailable === "number";
     details.replaceChildren(
       el("h2", "", runEventLabel(event)),
       badge(eventOrigin(event)[1]),
@@ -420,9 +429,9 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         `sequence ${event.sequence} · ${date(event.recorded_at_ms)}`,
       ),
       ...(embedding ? [embedding] : []),
-      typeof report.private_sources_unavailable === "number"
-        ? el("p", "notice", "归档来源已删除或不可用。")
-        : managedObservation(event) ?? code(eventBody),
+      ...(privateUnavailable ? [el("p", "notice", "归档来源已删除或不可用。")] : []),
+      ...(globalUnavailable ? [el("p", "notice", "引用的全局知识已下架。")] : []),
+      ...(privateUnavailable || globalUnavailable ? [] : [managedObservation(event) ?? code(eventBody)]),
     );
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])

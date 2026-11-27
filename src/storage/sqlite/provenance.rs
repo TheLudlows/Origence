@@ -84,6 +84,18 @@ impl SqliteTx {
 
     pub(super) async fn retract_event_inner(&mut self, id: Uuid) -> StorageResult<u64> {
         self.require_private_source(id).await?;
+        let kind: Option<String> = sqlite_db::query_scalar(
+            "SELECT kind FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        if kind.as_deref() == Some("session_turn") {
+            self.check_permission(Permission::DeleteArchive).await?;
+        }
         sqlite_db::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )

@@ -82,6 +82,26 @@ mod host {
     }
 
     impl SqliteTx {
+        /// Admission runs in the archive's final write transaction. Completed
+        /// and failed jobs are also bindings, so client replays never enqueue
+        /// a second extraction after a memory has been deleted.
+        pub(crate) async fn archive_extraction_job(
+            &mut self,
+            source: Uuid,
+        ) -> StorageResult<Option<Uuid>> {
+            sqlite_db::query_scalar(
+                "SELECT id FROM oc_jobs
+                 WHERE tenant_id=? AND workspace_id=? AND source_event_id=?
+                 AND operation='extract' AND json_type(payload,'$.archive_turn')='text'",
+            )
+            .bind(self.scope.tenant_id)
+            .bind(self.scope.workspace_id)
+            .bind(source)
+            .fetch_optional(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)
+        }
+
         pub(crate) async fn archive_domain(
             &mut self,
             session: Uuid,

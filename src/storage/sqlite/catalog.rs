@@ -12,6 +12,15 @@ impl SqliteTx {
         limit: usize,
     ) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
+        self.asset_catalog_in_scope(kind, after, limit).await
+    }
+
+    pub(crate) async fn asset_catalog_in_scope(
+        &mut self,
+        kind: &str,
+        after: Uuid,
+        limit: usize,
+    ) -> StorageResult<Value> {
         if !matches!(kind, "memory" | "knowledge") || !(1..=100).contains(&limit) {
             return Err(StorageError::InvalidArgument("invalid catalog page"));
         }
@@ -108,11 +117,22 @@ impl SqliteTx {
 
     pub async fn run_catalog(&mut self, after: Uuid, limit: usize) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
+        let owner = self.private_key_id().await?;
+        let workspace_wide = self.live_role().await? == "admin";
+        self.run_catalog_in_scope(after, limit, Some(owner), workspace_wide)
+            .await
+    }
+
+    pub(crate) async fn run_catalog_in_scope(
+        &mut self,
+        after: Uuid,
+        limit: usize,
+        owner: Option<Uuid>,
+        workspace_wide: bool,
+    ) -> StorageResult<Value> {
         if !(1..=100).contains(&limit) {
             return Err(StorageError::InvalidArgument("invalid catalog page"));
         }
-        let owner = self.private_key_id().await?;
-        let workspace_wide = self.live_role().await? == "admin";
         let sql = if workspace_wide {
             "SELECT run_id,owner_key_id,CASE WHEN owner_key_id=?3 THEN input END,created_at \
              FROM oc_runs WHERE tenant_id=?1 AND workspace_id=?2 AND run_id>?4 ORDER BY run_id LIMIT ?5"
@@ -156,9 +176,10 @@ impl SqliteTx {
                 Some("failure") => "reported_failure",
                 _ => "unknown",
             };
+            let is_owner = owner == Some(run_owner);
             items.push(json!({
-                "run_id":id, "owner_key_id":run_owner, "is_owner":owner==run_owner,
-                "can_read_trace":workspace_wide || owner==run_owner,
+                "run_id":id, "owner_key_id":run_owner, "is_owner":is_owner,
+                "can_read_trace":workspace_wide || is_owner,
                 "summary":input.map(|input| input.summary), "created_at_ms":created, "status":status
             }));
         }

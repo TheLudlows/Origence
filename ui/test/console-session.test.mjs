@@ -79,6 +79,51 @@ test("default console account login needs no database path or initialization com
   assert.equal((await login.json()).session.account, credentials.username);
 });
 
+test("a workspace Key signs in without an account and stays scoped after reload", async (t) => {
+  const key = "oc_" + "a".repeat(64);
+  let active = true;
+  const seen = [];
+  const upstream = await listen(createServer((req, res) => {
+    seen.push(req.url);
+    res.setHeader("Content-Type", "application/json");
+    if (!active || req.headers.authorization !== `Bearer ${key}`) {
+      res.statusCode = 401;
+      return res.end("{}");
+    }
+    res.end(JSON.stringify({ id: b, workspace_id: a, role: "workspace" }));
+  }), t);
+  const ui = await listen(createUiServer({ apiBaseUrl: upstream }), t);
+  const signedIn = await fetch(ui + sessionPath, {
+    method: "POST",
+    headers: { Origin: ui, "Content-Type": "application/json" },
+    body: JSON.stringify({ workspace_key: key }),
+  });
+  assert.equal(signedIn.status, 200);
+  const cookie = signedIn.headers.get("Set-Cookie").split(";")[0];
+  const payload = await signedIn.text();
+  assert.ok(!payload.includes(key) && !cookie.includes(key));
+  const { mode, session } = JSON.parse(payload);
+  assert.equal(mode, "workspace");
+  assert.deepEqual(session.workspaces.map((value) => value.workspace_id), [a]);
+  assert.deepEqual(seen, ["/v1/whoami"]);
+  const request = (path, workspace = a) => fetch(ui + path, {
+    headers: { Cookie: cookie, "X-Origence-Session": session.binding, "X-Origence-Workspace": workspace },
+  });
+  assert.equal((await request("/api/v1/assets", b)).status, 403);
+  assert.equal((await request("/api/admin/keys")).status, 403);
+  assert.equal((await request("/api/admin/deployment/workspaces")).status, 403);
+  assert.equal((await fetch(`${ui}/api/admin/deployment/global-knowledge/${a}/review`, {
+    method: "POST",
+    headers: { Origin: ui, Cookie: cookie, "X-Origence-Session": session.binding, "Content-Type": "application/json" },
+    body: JSON.stringify({ decision: "approve" }),
+  })).status, 403);
+  assert.equal((await request("/api/v1/assets")).status, 200);
+  assert.deepEqual((await (await request(sessionPath)).json()).session, session);
+  active = false;
+  assert.equal((await request("/api/v1/assets")).status, 401);
+  assert.equal((await (await request(sessionPath)).json()).session, null);
+});
+
 test("account sessions survive reload and enforce grants, tenant credentials, revocation, and sign-out", async (t) => {
   const identities = new Map([
     ["Bearer alice-a", { id: a, workspace_id: a, role: "writer" }],

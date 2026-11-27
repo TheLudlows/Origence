@@ -18,7 +18,7 @@ export interface ConsoleSession {
   workspaces: ConsoleWorkspace[];
 }
 export interface ConsoleSessionResponse {
-  mode: "account";
+  mode: "account" | "workspace" | "deployment";
   setupRequired?: true;
   session: ConsoleSession | null;
 }
@@ -116,7 +116,7 @@ export interface ContextItem {
   route: string;
   title: string;
   content: string;
-  provenance: LongTermMemoryProvenance | (Provenance & { type: "asset_chunk" | "session_turn" });
+  provenance: LongTermMemoryProvenance | (Provenance & { type: "asset_chunk" | "session_turn" | "global_knowledge" });
   normalization_status: string;
   semantic_status?: string;
   conditions?: string[];

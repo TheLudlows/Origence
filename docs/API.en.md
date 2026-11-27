@@ -81,6 +81,10 @@ The old standalone graph storage API and graph traversal were removed. `StorageE
 
 ## Roles
 
+The `--offline workspace-create --workspace-key <name>` command provisions one active key bound to its workspace. Authentication returns `role: "workspace"` to identify this credential type. It permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403. Workspace and role-grant management retain their administrator checks. Use `--offline workspace-key-rotate <workspace-id>` to rotate the key.
+
+Existing role-based paths use the following permission table.
+
 | Role | Permissions |
 | --- | --- |
 | reader | get/search/resolve on published content |
@@ -92,6 +96,38 @@ Original files and jobs can expose unpublished data, so reader cannot access the
 ## Endpoints
 
 A content item here is a versioned memory or knowledge entry identified by `asset_id`. Published Skills use separate endpoints.
+
+### Deployment administrator inspection
+
+`origence --offline deployment-admin-rotate` issues or rotates the separate administrator credential. The deployment management endpoints accept this bearer key. Workspace inspection endpoints are read-only.
+
+| GET path | Data |
+| --- | --- |
+| `/admin/deployment/me` | Deployment administrator identity |
+| `/admin/deployment/workspaces` | All workspaces, paginated by workspace ID |
+| `/admin/deployment/workspaces/{id}/sessions` | Session IDs in the selected workspace |
+| `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | Original Q&A and references, paginated by session sequence |
+| `/admin/deployment/workspaces/{id}/runs` and `/admin/deployment/workspaces/{id}/runs/{run}` | Run directory and recorded events |
+| `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` and `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | Published content directory and versioned body |
+
+Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns without the workspace key. Workspace write authorization is checked separately.
+
+### Global knowledge
+
+Each deployment has one shared knowledge catalog. A workspace writer can submit an exact published version. Repeating a submission returns the original publication ID and review state. A deployment administrator moderates submissions.
+
+| Method and path | Behavior |
+| --- | --- |
+| `POST /v1/global-knowledge` | Submit a local `asset_id` and integer `version`. Returns `publication_id` and state |
+| `GET /v1/global-knowledge` | Approved catalog with `after` and `limit` |
+| `GET /v1/global-knowledge/{publication_id}` | Read the active version's body |
+| `GET /admin/deployment/global-knowledge` | Review catalog. The default `state` is `pending`. Also accepts `approved`, `rejected`, and `withdrawn` |
+| `GET /admin/deployment/global-knowledge/{publication_id}` | Inspect submitted text, source workspace, and exact version |
+| `POST /admin/deployment/global-knowledge/{publication_id}/review` | Set `decision` to `approve`, `reject`, or `withdraw` |
+
+Approval revalidates the original version. The approved copy survives updates or deletion of the private original. Withdrawal immediately blocks new reads, recall, and replay of prepared Run context that cites the release. Shared citations use independent IDs and UTF-8 byte ranges within the published text. Private files, turns, and source IDs retain their workspace authorization.
+
+`search`, `resolve`, the knowledge route of `context`, and Run context merge workspace results with global keyword matches within the requested limits. Global knowledge uses keyword matching in vector and hybrid modes. Search and resolve report `scope`, and context uses `global_knowledge` citations. MCP `context_get` accepts `scope: "global"` with a global publication ID.
 
 ### Agent connections
 
@@ -404,6 +440,8 @@ Reading and writing archive turns and feedback require writer or above. `session
 - GET used_evidence entries are `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`. reference is the caller input above, and evidence_ref_id is allocated and persisted on first archive. source_event_id/source_version refer to a semantic member's original source. version_source_event_id is the snapshot's root source, and reference.asset_version is the content item version used. These identifiers are distinct.
 
 Successful archival returns HTTP 200 and `{session_id,turn_id,source_event_id,state:"archived"}`. Under the same authorized logical key, retrying the same turn, text, and ordered evidence returns the original IDs. Changed input returns 409. AnySeek commits the body and projection atomically. Retry with the original request after a lost receipt.
+
+Single-key workspace receipts also include `memory_job_id`. Use `GET /v1/jobs/{job_id}` for asynchronous extraction status. The existing worker extracts reusable information from the archived question and answer and publishes it to the same workspace. Missing model configuration or failed extraction leaves the original turn archived. The job follows the normal retry rules. Replaying a turn returns the same job, including after an extracted memory has been deleted.
 
 Read one turn with `GET /v1/sessions/{session_id}/turns/{turn_id}` or page in registration order with `GET /v1/sessions/{session_id}/turns?after=0&limit=16`. Use `next_after` to continue. Write attempts and withdrawals can leave gaps. A missing established collection, incomplete known turn, or digest mismatch returns 503.
 

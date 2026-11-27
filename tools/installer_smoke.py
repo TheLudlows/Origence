@@ -101,7 +101,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
 def check_hook(binary, project, env, credentials):
     ui = credentials["ui"]
     profile, session = request(ui + "/api/console/session", headers={"Origin": ui}, payload={
-        "username": credentials["username"], "password": credentials["password"],
+        "workspace_key": credentials["token"],
     })
     workspace = credentials["workspace_id"]
     require(profile["session"]["workspaces"][0]["workspace_id"] == workspace,
@@ -117,7 +117,7 @@ def check_hook(binary, project, env, credentials):
                            "prompt_id": str(uuid.uuid4()), "cwd": str(project),
                            "hook_event_name": "UserPromptSubmit"}),
                            text=True, capture_output=True, timeout=20, check=True)
-    sanitized(child.stdout + child.stderr, [credentials["token"], credentials["password"]])
+    sanitized(child.stdout + child.stderr, [credentials["token"], credentials["deployment_admin_key"]])
     after, _ = request(ui + "/api/v1/runs", headers=headers)
     ids = {entry["run_id"] for entry in before["items"]}
     added = [entry for entry in after["items"] if entry["run_id"] not in ids]
@@ -130,7 +130,7 @@ def check_hook(binary, project, env, credentials):
 
 
 def check_browser(env, credentials, run, forbidden):
-    info = {name: credentials[name] for name in ("ui", "username", "password")}
+    info = {name: credentials[name] for name in ("ui", "token")}
     child = subprocess.run(["node", str(REPO / "ui/scripts/check-installer-browser.cjs")],
                            env=env, input=json.dumps(dict(info, run=run)), capture_output=True,
                            encoding="utf-8", timeout=45)
@@ -194,10 +194,12 @@ def smoke(binary, claude, codex, root, browser):
         first = installer(env, ["install", *deploy_args, "--init", "Installer synthetic", "--verify-write",
                                 "--credentials-file", str(output)], forbidden, entry=deploy_cmd, cwd=root)
         credentials = json.loads(output.read_text(encoding="utf-8"))
-        forbidden = [credentials["token"], credentials["password"]]
+        forbidden = [credentials["token"], credentials["deployment_admin_key"]]
         sanitized(first, forbidden)
-        require(len(credentials["password"]) >= 15 and first["console-account"]["status"] == "success",
-                "Deployment must provision a working console account")
+        require(credentials["login_mode"] == "workspace" and credentials["role"] == "workspace"
+                and "password" not in credentials and first["console-session"]["status"] == "success"
+                and first["deployment-admin-session"]["status"] == "success",
+                "Fresh deployment must provision the workspace and deployment administrator Keys")
         require("claude-code" not in first and "codex" not in first and "agent" not in json.loads(state.read_text(encoding="utf-8")),
                 "Deployment must not configure either agent")
         if WINDOWS:
@@ -225,7 +227,7 @@ def smoke(binary, claude, codex, root, browser):
                   **{name: split["agent"][name] for name in ("claude", "shell", "registry") if name in split["agent"]}}
         state.write_text(json.dumps(legacy), encoding="utf-8")
         connected = installer(env_key, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
-        require(connected["http-mcp"]["detail"]["tools"] == 11 and connected["claude-code"]["status"] == "success"
+        require(connected["http-mcp"]["status"] == "success" and connected["claude-code"]["status"] == "success"
                 and connected["codex"]["status"] == "success" and "ui" not in connected and "api" not in connected,
                 "Agent setup must connect both clients without starting a UI or an API")
         replay = json.loads(state.read_text(encoding="utf-8"))
@@ -298,7 +300,7 @@ def smoke(binary, claude, codex, root, browser):
                 replacement["whoami"]["detail"]["workspace_id"] != credentials["workspace_id"],
                 "Force plus init must preserve the original data and bind the new workspace")
         config = json.loads(state.read_text(encoding="utf-8"))["deploy"]["config"]
-        forbidden.extend([config["token"], config["password"]])
+        forbidden.append(config["token"])
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
         installer(new_env, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)

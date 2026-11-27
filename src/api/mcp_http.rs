@@ -94,7 +94,10 @@ async fn active_agents(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
     let admin = auth(&endpoint.service, &headers).await?;
-    let mut tx = endpoint.service.read(&admin, Permission::Delete).await?;
+    let mut tx = endpoint
+        .service
+        .read(&admin, Permission::WorkspaceAdmin)
+        .await?;
     let (observations, capacity_reached) = endpoint.presence.snapshot(scope(&admin));
     let mut items = Vec::with_capacity(observations.len());
     for observation in observations {

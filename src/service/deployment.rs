@@ -1,0 +1,122 @@
+//! Read-only deployment inspection. Workspace credentials never enter this path.
+use super::*;
+
+pub(super) fn unauthorized_admin(error: StorageError) -> AppError {
+    match error {
+        StorageError::Forbidden => AppError::Unauthorized,
+        error => error.into(),
+    }
+}
+
+impl Service {
+    pub async fn authenticate_deployment_admin(&self, token: &str) -> Result<()> {
+        self.engine
+            .relational()
+            .authenticate_deployment_admin(token)
+            .await
+            .map_err(unauthorized_admin)
+    }
+
+    pub async fn inspect_workspaces(
+        &self,
+        token: &str,
+        after: Uuid,
+        limit: usize,
+    ) -> Result<Value> {
+        self.engine
+            .relational()
+            .deployment_workspaces(token, after, limit)
+            .await
+            .map_err(unauthorized_admin)
+    }
+
+    pub(super) async fn inspect_workspace(&self, token: &str, workspace: Uuid) -> Result<SqliteTx> {
+        self.engine
+            .relational()
+            .begin_deployment_inspection(token, workspace)
+            .await
+            .map_err(unauthorized_admin)
+    }
+
+    pub async fn inspect_sessions(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        after: Uuid,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut tx = self.inspect_workspace(token, workspace).await?;
+        let result = tx.inspection_sessions(after, limit).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    pub async fn inspect_turns(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        session: Uuid,
+        after: i64,
+        limit: usize,
+    ) -> Result<Value> {
+        self.archived_turn_page(
+            ReadAccess::Deployment { token, workspace },
+            session,
+            after,
+            limit,
+        )
+        .await
+    }
+
+    pub async fn inspect_runs(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        after: Uuid,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut tx = self.inspect_workspace(token, workspace).await?;
+        let result = tx.run_catalog_in_scope(after, limit, None, true).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    pub async fn inspect_run(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        run: Uuid,
+        after: i64,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut tx = self.inspect_workspace(token, workspace).await?;
+        let result = tx.run_trace_in_scope(run, after, limit, None, true).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    pub async fn inspect_assets(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        kind: &str,
+        after: Uuid,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut tx = self.inspect_workspace(token, workspace).await?;
+        let result = tx.asset_catalog_in_scope(kind, after, limit).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    pub async fn inspect_asset(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        asset: Uuid,
+        version: Option<i32>,
+    ) -> Result<Value> {
+        self.read_asset(ReadAccess::Deployment { token, workspace }, asset, version)
+            .await
+    }
+}

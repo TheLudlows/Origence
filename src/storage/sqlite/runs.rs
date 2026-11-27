@@ -211,9 +211,22 @@ impl SqliteTx {
         allow_admin: bool,
     ) -> StorageResult<Value> {
         let key = self.private_key_id().await?;
+        let workspace_wide = allow_admin && self.live_role().await? == "admin";
+        self.run_trace_in_scope(run, after, limit, Some(key), workspace_wide)
+            .await
+    }
+
+    pub(crate) async fn run_trace_in_scope(
+        &mut self,
+        run: Uuid,
+        after: i64,
+        limit: usize,
+        key: Option<Uuid>,
+        workspace_wide: bool,
+    ) -> StorageResult<Value> {
         let (session, owner, input, created) = self.run_record(run).await?;
-        let is_owner = owner == key;
-        if !is_owner && (!allow_admin || self.live_role().await? != "admin") {
+        let is_owner = key == Some(owner);
+        if !is_owner && !workspace_wide {
             return Err(StorageError::NotFound);
         }
         if self.private_session_for(owner).await? != Some(session) {
@@ -235,7 +248,8 @@ impl SqliteTx {
             let removed = self
                 .retracted_archive_citations(&citations, admin_session)
                 .await?;
-            if removed == 0 {
+            let global_removed = self.unavailable_global_citations(&citations).await?;
+            if removed == 0 && global_removed == 0 {
                 for reference in &refs {
                     self.require_run_reference_visible(reference).await?;
                 }
@@ -245,7 +259,13 @@ impl SqliteTx {
                 // A historical trace keeps the event, while replay and Skill
                 // publication still require the original evidence to be live.
                 refs.clear();
-                report = json!({"kind":"context_prepared","event_id":report["event_id"],"private_sources_unavailable":removed});
+                report = json!({"kind":"context_prepared","event_id":report["event_id"]});
+                if removed > 0 {
+                    report["private_sources_unavailable"] = json!(removed);
+                }
+                if global_removed > 0 {
+                    report["global_sources_unavailable"] = json!(global_removed);
+                }
             }
             // The private retry snapshot is not duplicated in paginated traces.
             if let Some(object) = report.as_object_mut() {
@@ -286,6 +306,49 @@ impl SqliteTx {
                 {
                     removed += 1;
                 }
+            }
+        }
+        Ok(removed)
+    }
+
+    async fn unavailable_global_citations(
+        &mut self,
+        citations: &[EvidenceProvenance],
+    ) -> StorageResult<usize> {
+        let mut removed = 0;
+        for citation in citations {
+            let EvidenceProvenance::GlobalKnowledge {
+                publication_id,
+                version,
+                chunk_id,
+                byte_start,
+                byte_end,
+            } = *citation
+            else {
+                continue;
+            };
+            let approved: bool = sqlite_db::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM oc_global_knowledge WHERE id=? AND version=? AND state='approved')",
+            ).bind(publication_id).bind(version).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            if !approved {
+                removed += 1;
+                continue;
+            }
+            let exact: bool = sqlite_db::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM oc_global_knowledge_chunks
+                 WHERE publication_id=? AND id=? AND byte_start=? AND byte_end=? AND enabled)",
+            )
+            .bind(publication_id)
+            .bind(chunk_id)
+            .bind(byte_start)
+            .bind(byte_end)
+            .fetch_one(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)?;
+            if !exact {
+                return Err(StorageError::Unavailable(
+                    "invalid global knowledge citation".into(),
+                ));
             }
         }
         Ok(removed)
@@ -447,8 +510,11 @@ impl SqliteTx {
     }
 
     async fn validate_prepared_payload(&mut self, payload: &Value) -> StorageResult<()> {
-        self.validate_prepared_citations(&prepared_citations(payload)?, None)
-            .await
+        let citations = prepared_citations(payload)?;
+        if self.unavailable_global_citations(&citations).await? != 0 {
+            return Err(StorageError::NotFound);
+        }
+        self.validate_prepared_citations(&citations, None).await
     }
 
     async fn validate_prepared_citations(
@@ -542,6 +608,9 @@ impl SqliteTx {
                         self.require_run_reference_visible(r).await?;
                         refs.push(r.clone());
                     }
+                }
+                EvidenceProvenance::GlobalKnowledge { .. } => {
+                    // Validated with the prepared payload before persistence.
                 }
                 EvidenceProvenance::LongTermMemory { .. } => {
                     return Err(StorageError::InvalidArgument(

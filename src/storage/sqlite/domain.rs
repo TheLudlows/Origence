@@ -3,11 +3,13 @@
 use super::*;
 
 impl SqliteTx {
-    /// Explicit retry keeps the job's original execution identity and scope.
+    /// Retry keeps the original authority. An archive job follows its
+    /// workspace's logical key through credential rotation.
     #[cfg(feature = "local-storage")]
     pub(crate) async fn require_job_creator_write(&mut self, job: Uuid) -> StorageResult<()> {
-        let creator: Option<Uuid> = sqlite_db::query_scalar(
-            "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+        let job_authority: Option<(Uuid, bool)> = sqlite_db::query_as(
+            "SELECT created_by,operation='extract' AND json_type(payload,'$.archive_turn') IS 'text'
+             FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
@@ -15,7 +17,12 @@ impl SqliteTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        let creator = creator.ok_or(StorageError::NotFound)?;
+        let (creator, archive_extraction) = job_authority.ok_or(StorageError::NotFound)?;
+        let creator = if archive_extraction {
+            super::workspace_key::active_workspace_key(&mut self.tx, self.scope, creator).await?
+        } else {
+            creator
+        };
         let role = self.live_role_for_principal(creator).await?;
         if !Permission::Write.granted_by(&role) {
             return Err(StorageError::Forbidden);
@@ -52,6 +59,9 @@ impl SqliteTx {
         .map_err(sqlite_err)?;
         let (role, workspace, allow_owned, default_access, logical_id) =
             key.ok_or(StorageError::Forbidden)?;
+        if role == "workspace" && workspace != scope.workspace_id {
+            return Err(StorageError::Forbidden);
+        }
         if workspace != scope.workspace_id
             && let Some(role) =
                 super::workspace_grants::grant_role(&mut self.tx, scope, logical_id).await?

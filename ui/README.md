@@ -19,9 +19,21 @@ npm start
 
 `npm start` 使用内置默认值。需要覆盖时，可使用本目录的 `.env` 或部署环境变量。对外提供服务时将 `ORIGENCE_UI_ORIGIN` 设为准确的 HTTPS origin，并让反向代理保留该 Host。默认仅允许 loopback Host。上游 origin 只接受 HTTP(S) 域名及端口，且转发不跟随重定向。
 
-### 本地账号与工作区
+### 工作空间 Key 登录
 
-控制台默认使用账号和密码登录。账号库默认位于仓库根目录的 `.data/console-accounts.db`，需要指定其他位置时才设置 `ORIGENCE_UI_ACCOUNTS_DB`。首次启动尚无账号时，登录页会提示联系管理员。
+宿主停机时运行 `origence --offline workspace-create --workspace-key <名称>` 创建空间，然后启动 API 和控制台。用签发的 Key 登录控制台或配置 Agent。控制台打开该 Key 对应的空间，支持读取归档问答和管理记忆。轮换使用 `origence --offline workspace-key-rotate <工作空间 ID>`，再用新 Key 登录。
+
+### 部署管理员
+
+宿主停机时运行 `origence --offline deployment-admin-rotate` 签发或轮换部署管理员 Key。用该 Key 从控制台的「访问 Key」入口登录，选择任意工作空间，便可查看其原始会话、Run、已发布记忆和知识。轮换后旧 Key 及其登录会话失效。
+
+### 全局知识
+
+打开自己工作空间的知识详情，在指定版本点击「提交到全局知识审核」。部署管理员通过「全局知识审核」查看待审正文，批准、驳回或下架。已批准版本可从「全局知识」打开，也会出现在知识检索和上下文中。共享副本保留提交时的版本。后续修改原知识时，可提交新的版本审核。
+
+### 现有账号授权入口
+
+账号库默认位于仓库根目录的 `.data/console-accounts.db`，可用 `ORIGENCE_UI_ACCOUNTS_DB` 指定其他位置。配置账号后，控制台显示账号密码入口。
 
 构建后在 `ui` 目录设置第一个账号的密码和工作区授权。`set-password` 会按需创建私有账号库。密码从标准输入读取，至少 15 个字符。
 

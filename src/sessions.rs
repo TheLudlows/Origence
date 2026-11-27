@@ -2,7 +2,8 @@
 use crate::{
     context_retrieval::{ContextQuery, ContextSessionTurn},
     error::{AppError, Result},
-    service::Service,
+    jobs::JobPayload,
+    service::{ReadAccess, Service},
     session::{ArchiveDomain, ArchivedTurnBody, FeedbackInput, SessionTurnInput},
     storage::{
         DomainTx, Permission, StorageError, StorageResult,
@@ -60,7 +61,7 @@ impl Service {
     }
     /// Explicit admin authorization rotates credentials without merging archives.
     pub async fn rotate_key(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
-        let mut tx = self.write(a, Permission::Delete).await?;
+        let mut tx = self.write(a, Permission::WorkspaceAdmin).await?;
         let key = tx.rotate_scoped_key(id).await?;
         tx.commit().await?;
         Ok(json!(key))
@@ -80,6 +81,7 @@ impl Service {
         let turn = input.turn_id;
         let admission = self.engine.relational().archive_dependencies.lock().await;
         let mut tx = self.read(a, Permission::Write).await?;
+        let managed = tx.live_role_for_principal(a.id).await? == "workspace";
         let domain = tx.archive_domain(session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
@@ -138,12 +140,37 @@ impl Service {
         } else {
             record
         };
-        let mut tx = self.read(a, Permission::Write).await?;
+        let mut tx = if managed {
+            self.write(a, Permission::Write).await?
+        } else {
+            self.read(a, Permission::Write).await?
+        };
         require_native_record(&mut tx, &record).await?;
+        let mut response = json!({"session_id":session,"turn_id":turn,"source_event_id":record.source,"state":"archived"});
+        if managed {
+            let job = match tx.archive_extraction_job(record.source).await? {
+                Some(job) => job,
+                None => {
+                    // Record only metadata and immutable provenance. The worker
+                    // loads the existing native body outside this transaction.
+                    tx.attach_native_archive_proof(&record).await?;
+                    Self::enqueue(
+                        &mut tx,
+                        JobPayload::ArchiveExtract {
+                            archive_turn: turn,
+                            session_id: session,
+                            embedding_profile: self.models.profile.clone(),
+                        },
+                        None,
+                        Some(record.source),
+                    )
+                    .await?
+                }
+            };
+            response["memory_job_id"] = json!(job);
+        }
         tx.commit().await?;
-        Ok(
-            json!({"session_id":session,"turn_id":turn,"source_event_id":record.source,"state":"archived"}),
-        )
+        Ok(response)
     }
 
     async fn archive_projection(
@@ -266,11 +293,34 @@ impl Service {
         after: i64,
         limit: usize,
     ) -> Result<Value> {
+        self.archived_turn_page(ReadAccess::Workspace(a), session, after, limit)
+            .await
+    }
+
+    async fn read_archive_domain(
+        &self,
+        access: ReadAccess<'_>,
+        session: Uuid,
+    ) -> Result<(SqliteTx, ArchiveDomain)> {
+        let mut tx = self.read_with_access(access, Permission::Write).await?;
+        let domain = match access {
+            ReadAccess::Workspace(_) => tx.archive_domain(session).await?,
+            ReadAccess::Deployment { .. } => tx.inspection_archive_domain(session).await?,
+        };
+        Ok((tx, domain))
+    }
+
+    pub(crate) async fn archived_turn_page(
+        &self,
+        access: ReadAccess<'_>,
+        session: Uuid,
+        after: i64,
+        limit: usize,
+    ) -> Result<Value> {
         if !(1..=32).contains(&limit) || after < 0 {
             return Err(AppError::Invalid("invalid private archive page".into()));
         }
-        let mut tx = self.read(a, Permission::Write).await?;
-        let domain = tx.archive_domain(session).await?;
+        let (mut tx, domain) = self.read_archive_domain(access, session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
         let through_sequence = tx.archive_last_sequence(session).await?;
         tx.commit().await?;
@@ -283,11 +333,21 @@ impl Service {
         } else {
             (None, Vec::new())
         };
-        let mut tx = self.read(a, Permission::Write).await?;
-        tx.archive_domain(session).await?;
+        let (mut tx, verified_domain) = self.read_archive_domain(access, session).await?;
+        if verified_domain != domain {
+            return Err(AppError::Conflict("archive scope changed".into()));
+        }
         let mut turns = Vec::new();
         for record in native {
-            match native_archive_view(&mut tx, record).await {
+            if record.session != session {
+                return Err(AppError::Unavailable("invalid archive page scope".into()));
+            }
+            let view = async {
+                verify_archive_proof(&mut tx, session, record.turn, Some(&record)).await?;
+                native_archive_fields(&mut tx, record).await
+            }
+            .await;
+            match view {
                 Ok(view) => turns.push(view),
                 Err(StorageError::NotFound) => {}
                 Err(error) => return Err(error.into()),
@@ -306,7 +366,7 @@ impl Service {
         turn: Uuid,
     ) -> Result<Value> {
         session_id(session)?;
-        let mut tx = self.read(a, Permission::Write).await?;
+        let mut tx = self.read(a, Permission::DeleteArchive).await?;
         tx.archive_domain(session).await?;
         if tx.archive_turn_sequence(session, turn).await?.is_none() {
             return Err(AppError::NotFound);
@@ -325,7 +385,7 @@ impl Service {
         through_sequence: i64,
     ) -> Result<Value> {
         session_id(session)?;
-        let mut tx = self.read(a, Permission::Write).await?;
+        let mut tx = self.read(a, Permission::DeleteArchive).await?;
         tx.archive_domain(session).await?;
         if !(0..=through_sequence).contains(&after)
             || through_sequence > tx.archive_last_sequence(session).await?
@@ -352,7 +412,7 @@ impl Service {
         // Serialize deletion with readers that install durable supporting evidence.
         // Use the existing source retraction to make proofs unusable on interruption.
         let _dependency_guard = self.engine.relational().archive_dependencies.lock().await;
-        let mut tx = self.write(a, Permission::Write).await?;
+        let mut tx = self.write(a, Permission::DeleteArchive).await?;
         let domain = tx.archive_domain(session).await?;
         tx.retract_archive_support(session, turn).await?;
         tx.commit().await?;
@@ -502,6 +562,13 @@ impl Service {
 
 async fn native_archive_view(tx: &mut SqliteTx, record: NativeArchiveTurn) -> StorageResult<Value> {
     require_native_record(tx, &record).await?;
+    native_archive_fields(tx, record).await
+}
+
+async fn native_archive_fields(
+    tx: &mut SqliteTx,
+    record: NativeArchiveTurn,
+) -> StorageResult<Value> {
     let feedback = tx.feedback_rows(record.session, record.turn).await?;
     let mut value = json!({
         "session_id":record.session,"turn_id":record.turn,"source_event_id":record.source,
@@ -525,6 +592,15 @@ async fn verify_native_lookup(
     record: Option<&NativeArchiveTurn>,
 ) -> StorageResult<()> {
     tx.archive_domain(session).await?;
+    verify_archive_proof(tx, session, turn, record).await
+}
+
+async fn verify_archive_proof(
+    tx: &mut SqliteTx,
+    session: Uuid,
+    turn: Uuid,
+    record: Option<&NativeArchiveTurn>,
+) -> StorageResult<()> {
     if let Some((source, digest)) = tx.native_archive_live_proof_digest(session, turn).await? {
         match record {
             Some(record) if record.source == source && record.request_hash == digest => {}

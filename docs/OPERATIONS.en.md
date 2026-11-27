@@ -46,7 +46,7 @@ The old implementation used a subprocess to terminate parsing after a hard 30-se
 
 ## Initialization and credentials
 
-Run `origence --offline workspace-create NAME`, save the returned token, and then start the host. To create another workspace in the same tenant, add `--in-tenant-of <existing-workspace-UUID>` to the offline command. Online `key-create` and `key-revoke` use the credential's default workspace. See [identity and credential management](API.en.md#identity-and-credential-management) for granting and revoking access in another workspace. Offline administration uses OS authorization and needs exclusive access to the data directory.
+For a fresh database, run `origence --offline workspace-create --workspace-key NAME` to issue a workspace key, then `origence --offline deployment-admin-rotate` to issue the deployment administrator key. Save both credentials before starting the host. Rotate single-workspace keys offline with `workspace-key-rotate`. The [identity and credential management reference](API.en.md#identity-and-credential-management) covers role-based credentials and grants. Offline administration uses OS authorization and needs exclusive access to the data directory.
 
 Origence reads process environment variables. It does not load `.env` automatically. Compose reads `.env`. Keep model credentials, API tokens, and `.env` out of Git. See origence --help for command arguments and the next section for local model setup.
 
@@ -106,7 +106,9 @@ running the binary directly, or in `.env` for Compose.
 | Purpose | Base URL | API key | Model name |
 | --- | --- | --- | --- |
 | Embedding | `OC_EMBEDDING_BASE_URL` | `OC_EMBEDDING_API_KEY` | `OC_EMBEDDING_MODEL` |
-| Extraction, summaries, graph extraction, and Improve | `OC_EXTRACTION_BASE_URL` | `OC_EXTRACTION_API_KEY` | `OC_EXTRACTION_MODEL` |
+| Automatic conversation extraction, explicit extraction, summaries, graph extraction, and Improve | `OC_EXTRACTION_BASE_URL` | `OC_EXTRACTION_API_KEY` | `OC_EXTRACTION_MODEL` |
+
+Automatic extraction in single-key workspaces sends the archived question and answer to the configured extraction endpoint. The original stays in the private AnySeek archive. SQLite stores the job and source proof. A successful archive receipt means the job is durable and its recovery is independent of the client request. If the receipt is lost after the AnySeek commit, replay the original request to ensure the job is queued and recover the receipt.
 
 A model with a blank dedicated URL uses `OC_MODEL_BASE_URL` and falls back to
 `OC_MODEL_API_KEY` if its dedicated key is blank. A dedicated URL uses only its

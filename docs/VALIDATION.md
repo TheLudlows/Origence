@@ -7,6 +7,59 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 全局知识与部署 Key 初始化
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新数据库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings`、`git diff --check` 通过。
+`cargo test --locked --lib --quiet` 通过 233 项。隔离构建的 `cargo test --locked --target-dir
+target/run-admin-check --test local --` 筛选全局知识、工作空间、会话、证据包、目录、语义提取、
+HTTP/MCP、Run 和检索用例，62 项通过。新增用例覆盖跨租户权限、固定版本、驳回、重开后审核、
+联合召回，以及下架后禁止重放相关 Run 上下文。校准了一项仍预期本区管理员不可读同区 Run 的旧断言。
+
+隔离副本的 `npm test` 通过 34 项。本机 Chrome 的 `check-console-session-browser.cjs`
+验证工作空间提交、部署管理员审核、已发布目录和下架，并回归登录与只读查看。
+使用真实本机 SQLite 和嵌入式 AnySeek 的隔离部署验证了 `origence-deploy --init` 签发两把 Key、
+控制台登录、发布和联合召回、下架、重复安装、强制重建时保留备份及卸载保留数据库。部署脚本与浏览器安装验证脚本通过
+Node 语法检查，完整客户端安装烟测脚本通过 Python 语法检查。Linux 环境不可用，现有 dev 未切换。
+
+## 2026-11-27 · 单 Key 会话自动提取
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0 与新建测试数据库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和 `git diff --check` 通过。
+`cargo test --locked --lib --quiet` 通过 233 项。默认目标目录的在线服务占用了 `origence.exe`。
+用 `cargo test --locked --target-dir target/run-admin-check --test local --` 筛选工作空间、会话、语义提取、
+目录、HTTP/MCP、Run 和检索用例，48 项集成测试通过。隔离构建的 CLI 在新库上通过单 Key 工作空间创建、
+工作空间 Key 轮换和部署管理员 Key 签发。
+同一隔离目录的 `local_app::local_host_api_cli_mcp_models_and_recovery` 额外通过 1 项，回归旧提取、HTTP、MCP 和恢复流程。
+真实 SQLite、合成 AnySeek 和模型端点验证了归档回执、服务重开、Key 轮换、提取记忆的检索与空间隔离，
+以及删除后的重放保持原任务和原问答。真实模型提取质量和 Linux 未验证。
+
+## 2026-11-27 · 部署管理员只读查看
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新建测试数据库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和
+`git diff --check` 通过。库测试通过 233 项。`cargo test --locked --test local --no-run`
+因在线服务占用 `origence.exe` 返回 1。直接运行本轮生成的 `local` 测试程序，22 项集成测试通过。
+测试使用真实 SQLite 与合成 AnySeek 归档，覆盖跨租户查看会话、Run 和已发布内容，拒绝混用不同空间的 ID，
+拒绝工作空间 Key 访问管理接口、拒绝管理员 Key 写入业务数据、禁止响应缓存与旧管理员凭据失效。
+
+隔离副本的 `npm test` 通过 34 项。合成 API 上的本机 Chrome 测试
+`check-console-session-browser.cjs` 覆盖管理员 Key 登录、切换工作空间、查看原始问答、Run 事件与记忆，
+并回归工作空间 Key 和现有账号的登录。Linux 环境不可用，运行中的 dev 服务继续使用现有版本。
+
+## 2026-11-27 · 单 Key 工作空间与控制台登录
+
+基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新建测试目录。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings`、`git diff --check` 与
+`node --check tools/installer/protocol.mjs` 通过。`cargo test --locked --lib --quiet` 通过 233 项。
+`cargo test --locked --test local --no-run` 因在线服务占用 `origence.exe` 返回 1，仍生成本轮 `local` 集成测试程序。
+直接执行该程序的工作空间 Key、目录、HTTP/MCP、Run 与检索相关过滤项，21 项通过。覆盖单空间授权、拒绝多发凭据、
+轮换保留会话、删除记忆，以及通过会话或来源接口删除原始问答均返回 403。集成测试使用真实本地 SQLite 和合成 AnySeek 夹具。
+
+隔离副本的 `npm test` 通过 34 项。`check-console-session-browser.cjs` 在本机 Chrome 下通过 Key 登录、
+单空间显示、会话只读浏览、刷新和现有账号入口回归。本机 WSL 仅有 Docker Desktop 内部发行版，Docker 引擎未运行，
+本轮未执行 Linux 验证。在线服务继续使用原数据库和构建产物。
+
 ## 2026-11-27 · 工作区管理员只读查看 Run 链路
 
 基于 `eef2134`，使用 Windows、Rust 1.98.0、Node 24.15.0 和新建的测试数据库。

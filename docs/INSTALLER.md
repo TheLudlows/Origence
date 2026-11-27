@@ -31,7 +31,7 @@
 
 完成后重开终端和客户端，运行 `/mcp` 检查连接，调用 `context_session` 核对工作区。在 Codex 的 `/hooks` 按客户端提示审阅和信任已安装的 Hook。已有 Agent 共用一组地址和 Key，更换时用 `--force` 并选择所有已接入的 Agent。
 
-卸载可在重开的终端运行 `origence-setup uninstall`，或从仓库中运行对应平台的入口加 `uninstall`。它撤销本次添加的插件、MCP 覆盖和用户环境修改。已有服务和控制台账号由部署入口管理。
+卸载可在重开的终端运行 `origence-setup uninstall`，或从仓库中运行对应平台的入口加 `uninstall`。它撤销本次添加的插件、MCP 覆盖和用户环境修改。服务与控制台由部署入口管理。
 
 ## 本地部署 API 和控制台
 
@@ -45,10 +45,10 @@
 ./bin/origence-deploy install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
-部署启动或复用 API，创建控制台登录账号，并验证浏览器登录使用的工作区和 Key。现有 API 的角色决定控制台的权限。交互式首次初始化时显示新 Key，安装成功时显示控制台密码。自动化可用 `--credentials-file <Git 目录之外的新文件>` 或显式加 `--show-secrets`。凭据只应保存到私有位置。加 `--verify-write` 可创建并从控制台读回一条标记明确的测试 Run，重复执行会复用同一条。
+新部署会签发工作空间 Key 和独立部署管理员 Key，并验证两种控制台登录。工作空间 Key 同时用于 Agent 和控制台。管理员 Key 可查看整个部署并审核全局知识。首次初始化通过交互输出、`--credentials-file <Git 目录之外的新文件>` 或显式加 `--show-secrets` 获取新发凭据。已部署的管理员 Key 可由操作员离线轮换。连接现有角色凭据时继续支持控制台账号登录。加 `--verify-write` 可创建并从控制台读回一条标记明确的测试 Run，重复执行会复用同一条。
 
 重复执行会复用部署。只有显式执行 `--force --init <名称>` 才会重建工作区，现有数据目录先改名备份。重建前应停止使用该目录的外部服务。
 
-从仓库运行 `./bin/origence-deploy uninstall` 或 `.\bin\origence-deploy.cmd uninstall`。它停止部署脚本管理的进程并移除其控制台账号，保留数据库、备份、已导出的凭据文件和 Agent 插件。以前的一键安装记录会按所属范围读取，完整撤销旧安装时分别执行两个卸载命令。日志与私有状态位于 Windows 的 `%LOCALAPPDATA%\Origence\installer` 或 Unix 的 `~/.origence/installer`。
+从仓库运行 `./bin/origence-deploy uninstall` 或 `.\bin\origence-deploy.cmd uninstall`。它停止部署脚本管理的进程，清理其管理的账号配置，并保留数据库、备份、已导出的凭据文件和 Agent 插件。以前的一键安装记录会按所属范围读取，完整撤销旧安装时分别执行两个卸载命令。日志与私有状态位于 Windows 的 `%LOCALAPPDATA%\Origence\installer` 或 Unix 的 `~/.origence/installer`。
 
 [部署与恢复](OPERATIONS.md) · [Claude Code 与 Codex 接入](CLIENTS.md)

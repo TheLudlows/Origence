@@ -12,6 +12,15 @@ See the [roadmap](../ROADMAP.en.md) for product evolution, [platform design](cur
 
 The first release targets enterprise engineering and business teams, piloting on intranets through local **Claude Code and Codex** CLIs. Users select evidence from memory and execution experience to form reviewable Skill candidates. Publication requires approval by a user with publishing rights. Session archives are private to their logical keys. Each logical key binds one session within a workspace. That key owns the Runs it creates, and workspace administrators can read their recorded traces. Published memory, knowledge, and Skills belong to a workspace, are reused according to permissions, and are isolated across workspaces. Sessions support platform archiving and authorized reads, without restoring client work environments.
 
+### Workspace keys and deployment-wide knowledge
+
+- A workspace is the identity for ordinary access. It has one active key for Agents and the console. The key grants business reads and writes in that workspace. Rotation preserves the workspace and archive. A separate administrator identity can read all workspaces, including original conversations.
+- Conversation turns are archived and retained. A workspace key can delete an extracted memory. Extraction uses the existing durable worker and publishes back to the source workspace. Once deleted, a memory must stay deleted if the same source is retried or reprocessed.
+- Each deployment has one shared knowledge space. A workspace submits a fixed version of its knowledge for administrators to approve, reject, or withdraw. Only approved, live versions enter shared recall. A published version identifies its evidence, and private attachments and turns retain their source authorization.
+- Recall includes local memory and knowledge plus live shared knowledge. Results identify scope and version. Extracted memories, private knowledge changes, and Skills are written to their original workspace.
+
+Single-key workspaces, conversation retention and automatic extraction, deployment-wide read-only inspection, and shared knowledge moderation and recall are implemented. Shared copies have independent publication IDs. Approval revalidates the original version. The deployment administrator can withdraw an approved copy. The membership model below records the contract for existing callers.
+
 ## 2. Overall architecture
 
 ```mermaid

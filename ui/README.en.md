@@ -17,9 +17,21 @@ npm start
 
 `npm start` uses built-in defaults. To override them, use the `.env` in this directory or deployment environment variables. For external access, set the exact HTTPS `ORIGENCE_UI_ORIGIN` and have the reverse proxy preserve that Host. Only loopback Hosts are allowed by default. The proxy takes an HTTP(S) origin for the upstream and does not follow redirects.
 
-### Local accounts and workspaces
+### Workspace Key sign-in
 
-The console uses account and password sign-in by default. Its account database is `.data/console-accounts.db` in the repository root. Set `ORIGENCE_UI_ACCOUNTS_DB` only to use a different location. Until the first account is created, the sign-in page directs users to their administrator.
+Run `origence --offline workspace-create --workspace-key <name>` while the host is stopped, then start the API and console. Use the issued key to sign into the console or configure an Agent. The console opens the key's workspace for browsing archived turns and managing memories. Rotate the key with `origence --offline workspace-key-rotate <workspace-id>` and sign in with the replacement.
+
+### Deployment administrator
+
+Run `origence --offline deployment-admin-rotate` while the host is stopped to issue or rotate the deployment administrator key. Sign in through the console access-key field and select a workspace to inspect its original conversations, Runs, and published memories and knowledge. Rotation invalidates the previous key and its console session.
+
+### Global knowledge
+
+Open an exact knowledge version in your workspace and select the submission action. The deployment administrator reviews the submitted text and can approve, reject, or withdraw a release. Approved releases appear in Global Knowledge, search, and context. To share an updated document, submit its new version for review.
+
+### Existing account sign-in
+
+The account database is `.data/console-accounts.db` at the repository root. `ORIGENCE_UI_ACCOUNTS_DB` can override that location. The console shows account and password sign-in when accounts are configured.
 
 After building, run these commands from `ui` to set the first account's password and grant workspace access. `set-password` creates the private account database if needed. It reads the password from standard input. Use at least 15 characters.
 

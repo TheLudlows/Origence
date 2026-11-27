@@ -125,6 +125,10 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ## 角色
 
+使用 `--offline workspace-create --workspace-key <名称>` 创建的工作空间使用一把固定绑定的有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在本空间读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档，删除轮次、清空会话及通过来源接口删除会话均返回 403。空间管理和角色授权接口仅对各自的管理员开放。轮换使用 `--offline workspace-key-rotate <工作空间 ID>`。
+
+已有角色管理路径的权限表如下。
+
 | 角色 | 权限 |
 | --- | --- |
 | reader | 已发布内容 get/search/resolve |
@@ -136,6 +140,38 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 ## 接口
 
 本节的「内容条目」指可单独读取和版本化的记忆或知识，通过 `asset_id` 标识。已发布 Skill 使用独立接口。
+
+### 部署管理员查看
+
+`origence --offline deployment-admin-rotate` 签发或轮换独立凭据。部署管理接口接受该 Bearer Key。工作空间查看接口均为只读。
+
+| GET 路径 | 数据 |
+| --- | --- |
+| `/admin/deployment/me` | 当前部署管理员身份 |
+| `/admin/deployment/workspaces` | 部署中所有工作空间，按工作空间 ID 分页 |
+| `/admin/deployment/workspaces/{id}/sessions` | 所选工作空间的会话 ID |
+| `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | 原始问答及引用，按会话序号分页 |
+| `/admin/deployment/workspaces/{id}/runs` 和 `/admin/deployment/workspaces/{id}/runs/{run}` | Run 列表与事件 |
+| `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
+
+分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员读取原始问答无需持有工作空间 Key，普通工作空间 API 的写入授权继续独立执行。
+
+### 全局知识
+
+一套部署共享一个知识目录。可写工作空间提交已发布知识的固定版本，提交同一版本返回原发布 ID 和审核状态。部署管理员可审核这些提交。
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `POST /v1/global-knowledge` | 提交本空间的 `asset_id` 和整数 `version`，返回 `publication_id` 和状态 |
+| `GET /v1/global-knowledge` | 已批准目录，支持 `after` 和 `limit` |
+| `GET /v1/global-knowledge/{publication_id}` | 读取生效的固定版本正文 |
+| `GET /admin/deployment/global-knowledge` | 审核目录，`state` 默认为 `pending`，也可查询 `approved`、`rejected`、`withdrawn` |
+| `GET /admin/deployment/global-knowledge/{publication_id}` | 查看待审正文、来源工作空间和固定版本 |
+| `POST /admin/deployment/global-knowledge/{publication_id}/review` | 通过 `decision` 执行 `approve`、`reject` 或 `withdraw` |
+
+批准前核对原版本仍有效。批准后共享副本独立于原知识的后续更新或删除，下架会立即停止新的共享读取、召回及含该引用的 Run 上下文重放。全局公开记录使用独立 ID 和正文内 UTF-8 字节范围。原始附件、会话及私有来源 ID 仍由原工作空间授权。
+
+`search`、`resolve`、知识路由的 `context` 和 Run 上下文合并本空间结果与全局关键词命中，沿用请求的结果数与上下文预算。向量和混合模式仍使用关键词匹配全局知识。搜索与 resolve 用 `scope` 标明范围，上下文使用 `global_knowledge` 引用。MCP 的 `context_get` 传 `scope: "global"` 和全局发布 ID 可读取固定版本。
 
 ### Agent 连接
 
@@ -471,6 +507,8 @@ SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"`
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该内容条目快照根来源，reference.asset_version 是实际使用的内容条目版本，三者不能互相替代。
 
 归档成功返回 HTTP 200 和 `{session_id,turn_id,source_event_id,state:"archived"}`。同一授权逻辑 key 下，重试相同轮次、正文及有序证据返回原标识，改变请求内容返回 409。AnySeek 原子提交正文和投影。回执丢失时，携原请求重试。
+
+单 Key 工作空间的回执另有 `memory_job_id`。归档成功后可用 `GET /v1/jobs/{job_id}` 查询异步提取状态。现有 Worker 从已归档问答提取可复用内容，输出写入同一空间。模型未配置或提取失败时，原始问答仍已归档，任务可按普通作业规则重试。轮次重放返回同一任务，记忆删除后重放也不会重新提取。
 
 按稳定 ID 读取使用 `GET /v1/sessions/{session_id}/turns/{turn_id}`，按目录顺序分页使用
 `GET /v1/sessions/{session_id}/turns?after=0&limit=16`。以返回的 `next_after` 请求下一页。
