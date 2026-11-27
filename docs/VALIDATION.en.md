@@ -11,6 +11,7 @@ Windows validation used PR #178 at `ec3aebc` with the cleanup changes, embedded 
 `cargo test --locked --test local` passed nine tests across the `global_knowledge`, `workspace_access`, and `mcp_runs` filters.
 Manual SQL review confirmed that approval still reads one table within the same transaction, orders rows by starting byte, and verifies the content hash.
 After fixing Agent connections access, `cargo test --locked --test local -- mcp_http` passed four tests. A real MCP handshake appeared in the workspace key's own activity list. Selecting another workspace in the same tenant returned 403. Console tests verified local activity and cross-workspace denial.
+After updating the existing permission assertions, `cargo test --locked --all-targets` passed 485 tests with eight ignored by configuration.
 
 `npm --prefix ui test` passed 34 tests on Node 24.15.0. `node ui/scripts/check-console-session-browser.cjs` passed in local Chromium against the fixture server, including review pagination and retry, opening the pinned release according to search scope, and both account and workspace key sign-in.
 The public Windows deployment launcher passed sign-in and Run reads for both modes in temporary directories. Fresh deployment also verified administrator sign-in and started without creating an account database while the inherited account database path was absent. Membership mode still created and used the managed account database.

@@ -406,7 +406,7 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
             .len(),
         1
     );
-    for path in ["/admin/keys", "/admin/agents", "/v1/workspaces/owned"] {
+    for path in ["/admin/keys", "/v1/workspaces/owned"] {
         assert!(matches!(
             client.call(Method::GET, path, None, None).await,
             Err(AppError::Forbidden)
