@@ -77,9 +77,9 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
       button("查看调用链 →", () => ctx.navigate("runs"), "primary"),
     ),
   );
-  const cards = el("div", "stats");
+  const readiness = el("div", "overview-health");
   const recent = el("div");
-  root.append(cards, runCreationTrend(ctx.signal), recent);
+  root.append(readiness, runCreationTrend(ctx.signal), recent);
   const results = await Promise.allSettled([
     api.get<{ status: string }>("/health/ready", ctx.signal),
     api.get<RunDirectory>("/v1/runs?limit=25", ctx.signal),
@@ -91,26 +91,15 @@ export async function overview(root: HTMLElement, ctx: ViewContext) {
   const list = panel(workspaceWide ? "当前工作区的运行" : "当前 Key 的运行");
   recent.append(list);
   const ready = health.status === "fulfilled" && health.value.status === "ready";
-  cards.append(
+  readiness.append(
     panel(
       "服务就绪状态",
       el(
         "div",
-        ready ? "stat-value stat-health is-ready" : "stat-value stat-health",
+        ready ? "stat-health is-ready" : "stat-health",
         ready ? "就绪" : health.status === "fulfilled" ? health.value.status : "不可用",
       ),
       el("p", "muted", "检查 Worker 与本地存储。模型健康需单独核对。"),
-    ),
-  );
-  cards.append(
-    panel(
-      "本页运行数",
-      el(
-        "div",
-        "stat-value",
-        runs.status === "fulfilled" ? runs.value.items.length : "—",
-      ),
-      el("p", "muted", workspaceWide ? "当前工作区列表的第一页" : "当前 Key 列表的第一页"),
     ),
   );
   if (runs.status === "fulfilled") {

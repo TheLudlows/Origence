@@ -31,6 +31,20 @@ strict all-target Clippy, embedded AnySeek startup and restart, and separate HTT
 passed. All 24 synthetic keyword seed queries completed with zero query errors. Verification used synthetic
 data and zero model calls. Windows, real-model retrieval quality, and the official pilot remain open.
 
+## 2026-11-27 · Run overview and roadmap cleanup
+
+Based on main `1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Node.js 24.22.1, Chromium 156.0.8078.79,
+and Rust 1.98.0. `npm --prefix ui run check` and `npm --prefix ui test` passed (31 tests). Chromium passed
+`check-navigation-focus-browser.cjs` and `check-console-session-browser.cjs`, covering trends, metering, responsive navigation,
+retry focus, and account sessions. Browser sign-in against local Origence, the Node console, and fresh SQLite verified the
+24-hour and 7-day trends for 26 synthetic Runs, reported duration, tokens and cost, and loading the 26th Run through the Run list.
+The overview displayed service readiness with the page-count card removed. Replaying the legacy field with the same idempotency key
+returned the same receipt. Changing only `publish_if_authorized` returned HTTP 409.
+`cargo fmt --all -- --check` and `cargo clippy --locked --offline --all-features --all-targets -- -D warnings` passed.
+`cargo test --locked --offline --no-default-features --features local-storage --lib --test local --test memory-consolidation --quiet`
+passed 239 library, 218 local integration, and 6 long-term memory tests, including Run statistics and metering and both legacy
+extraction endpoints and controlled extraction. Private integrations and formal pilots were untested.
+
 ## 2026-11-27 · Simplify standalone evidence capture and display
 
 Based on local extraction commit `0d84a6c99ad6271af8c74f4274c0b3489e2f043d`. Local HTTP

@@ -41,6 +41,19 @@ node ui/scripts/check-run-verification-browser.mjs
 24 题合成关键词种子评估完成，查询错误为 0。
 本轮使用合成数据，无模型调用。Windows、真实模型检索质量和正式试点仍待验收。
 
+## 2026-11-27 · 运行总览与路线图清理
+
+基于 main `1a8544b647613864582354bc9f5942e69426b463`，Linux x86_64、Node.js 24.22.1、Chromium 156.0.8078.79、Rust 1.98.0。
+`npm --prefix ui run check` 和 `npm --prefix ui test` 通过（31 项）。Chromium 的 `check-navigation-focus-browser.cjs` 和
+`check-console-session-browser.cjs` 通过，覆盖趋势、计量、响应式导航、重试焦点和账号会话。
+使用本地 Origence、Node 控制台及新建 SQLite，从浏览器登录，核对 26 条合成 Run 的 24 小时及 7 天趋势、
+已上报的耗时、Token 与费用，以及由调用链路加载第 26 条 Run。总览仍显示服务就绪状态，已移除本页运行数。
+同一幂等键和旧字段重放返回相同回执，单独改变 `publish_if_authorized` 得到 HTTP 409。
+`cargo fmt --all -- --check` 和 `cargo clippy --locked --offline --all-features --all-targets -- -D warnings` 通过。
+`cargo test --locked --offline --no-default-features --features local-storage --lib --test local --test memory-consolidation --quiet`
+通过 239 项库测试、218 项本地集成测试和 6 项长期记忆测试，覆盖 Run 统计和计量、两个旧提取入口和受控提取。
+未验证私有集成，也未启动正式试点。
+
 ## 2026-11-27 · 统一长期记忆写入和召回（本地）
 
 基于 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`，Linux x86_64，Rust 1.98.0。
