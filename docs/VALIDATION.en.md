@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Workspace ID in the Run overview
+
+Verified `3f86479` on Windows, based on `d72a71a`. With Node.js 24.15.0, `npm test` in `ui`
+passed all 32 tests, including coverage for displaying the active workspace ID in the Run overview
+and omitting it from the sidebar. With Rust 1.98.0, `cargo fmt --check` and
+`cargo clippy --locked --all-targets -- -D warnings` passed. `git diff origin/main --check` passed.
+Real browser checks and the Rust test suite were not run.
+
 ## 2026-11-27 · Writers can review and publish
 
 Based on main `d34804c`, using Linux, fresh synthetic databases, and Rust 1.98.0. Skill

@@ -7,6 +7,13 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 运行总览显示工作区 ID
+
+Windows 上验证 `3f86479`（基于 `d72a71a`）。Node.js 24.15.0 下，`ui` 的 `npm test`
+通过全部 32 项测试，覆盖运行总览显示当前工作区 ID 和侧栏不显示该字段。
+Rust 1.98.0 下，`cargo fmt --check` 与 `cargo clippy --locked --all-targets -- -D warnings`
+通过。`git diff origin/main --check` 通过。未运行真实浏览器检查或 Rust 测试套件。
+
 ## 2026-11-27 · 写入权限包含审阅与发布
 
 基于主干 `d34804c`，使用 Linux、新建合成库及 Rust 1.98.0。Skill 回归使用独立 writer 凭据提交、批准和发布，
