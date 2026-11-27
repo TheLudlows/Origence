@@ -20,6 +20,18 @@
 - `python3 tools/anyseek_smoke.py --anyseek-binary <固定 Release> --binary target/debug/origence --test-executable <上步测试程序>` 通过 8 项真实后端契约，并验证 HTTP、MCP、服务重开和撤回。
 - 旧集合 Info 形状使用契约夹具校验。本轮联调使用上述 Linux 固定二进制。
 
+## 2026-11-27 · 移除运行总览的时段明细
+
+基于 `3a341e4`，使用 Windows、Node 24.15.0 和 Rust 1.98.0。`npm --prefix ui test` 通过 32 项，
+覆盖运行总览移除折叠表格后仍能显示柱状图与计量。`node ui/scripts/check-navigation-focus-browser.cjs`
+使用本机 Chrome 通过，覆盖不同视口下的柱状图布局、键盘操作、悬停和触摸。
+
+`cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -- -D warnings` 通过。
+`cargo test --locked --test local catalog::` 在更新被运行中服务占用的 `origence.exe` 时退出 1。
+直接执行本轮构建生成的集成测试二进制，`catalog::` 过滤下 7 项和 `foundation_http::` 下 3 项全部通过，
+包括管理员可列出其他 Key 的 Run、但无法读取其链路的回归。在线 UI 返回了更新后的前端资源。
+运行中的 API 使用旧版角色约束，未切换到新版二进制。
+
 ## 2026-11-27 · 写入权限包含审阅与发布
 
 基于主干 `d34804c`，使用 Linux、新建合成库及 Rust 1.98.0。Skill 回归使用独立 writer 凭据提交、批准和发布，

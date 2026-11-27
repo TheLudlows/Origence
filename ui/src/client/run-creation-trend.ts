@@ -7,7 +7,8 @@ interface RunCreationBucket {
   created_runs: number;
 }
 
-interface RunCreationOverview extends RunCreationBucket {
+interface RunCreationOverview {
+  created_runs: number;
   scope: "workspace" | "current_logical_key";
   series: RunCreationBucket[];
   metering?: {
@@ -105,16 +106,6 @@ function creationChart(buckets: RunCreationBucket[], daily: boolean) {
   return chart;
 }
 
-function creationDetails(data: RunCreationOverview) {
-  return el("details", "run-creation-buckets",
-    el("summary", "", "查看明细"),
-    el("p", "muted", `${exactTime.format(data.start_ms)}（含）至 ${exactTime.format(data.end_ms)}（不含）`),
-    table(["时段开始（含）", "时段结束（不含）", "新建 Run 数"], data.series.map((bucket) => [
-      exactTime.format(bucket.start_ms), exactTime.format(bucket.end_ms), bucket.created_runs,
-    ])),
-  );
-}
-
 function amount(currency: string, micros: string) {
   const units = BigInt(micros);
   const whole = (units / 1_000_000n).toLocaleString("zh-CN");
@@ -179,7 +170,6 @@ export function runCreationTrend(signal: AbortSignal) {
         el("div", "run-trend-series",
           creationChart(data.series, range.value === "7d"),
           el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
-          creationDetails(data),
         ),
         metering(data),
       );

@@ -18,6 +18,20 @@ then passed the turn list, readback and withdrawal checks. [AnySeek #229](https:
 - `python3 tools/anyseek_smoke.py --anyseek-binary <frozen Release> --binary target/debug/origence --test-executable <test binary from the prior command>` passed eight real-backend contracts and the HTTP, MCP, service reopen and withdrawal checks.
 - The legacy Info shape uses a contract fixture. The live probe used the Linux binary above.
 
+## 2026-11-27 · Remove interval details from the Run overview
+
+Based on `3a341e4` on Windows with Node 24.15.0 and Rust 1.98.0. `npm --prefix ui test` passed all
+32 tests, including the overview chart and metering after removal of the collapsible table.
+`node ui/scripts/check-navigation-focus-browser.cjs` passed in local Chrome and covered responsive
+chart layout plus keyboard, hover, and touch input.
+
+`cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` passed.
+`cargo test --locked --test local catalog::` exited 1 when updating `origence.exe` held open by the
+running service. The newly built integration test executable passed all seven tests matching
+`catalog::` and all three matching `foundation_http::`, including administrator directory visibility
+and owner-only trace access. The live UI served the updated frontend asset. The running API uses
+the older role constraints and was kept on its existing binary.
+
 ## 2026-11-27 · Writers can review and publish
 
 Based on main `d34804c`, using Linux, fresh synthetic databases, and Rust 1.98.0. Skill

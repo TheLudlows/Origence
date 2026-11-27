@@ -156,8 +156,6 @@ async function checkCreationChart(page, width, hasTouch) {
   const chart = page.getByRole('figure', { name: '新建 Run 数' });
   const range = page.getByRole('combobox', { name: '统计范围' });
   const bars = chart.getByRole('button');
-  const details = page.locator('details.run-creation-buckets');
-  const summary = details.locator('summary');
   const readout = chart.locator('.run-chart-readout');
   const exactStart = /1970\/01\/01 GMT\+8 08:00:00\.123（含）/;
   const focusBucket = async (key, index) => {
@@ -174,7 +172,6 @@ async function checkCreationChart(page, width, hasTouch) {
   assert.match(await chart.locator('.run-chart-ticks').innerText(), /^08:00/);
   assert.match(await chart.locator('.run-chart-time').innerText(), /Asia\/Shanghai/);
   assert.match(await bars.first().getAttribute('aria-label'), exactStart);
-  await details.locator('table').waitFor({ state: 'hidden' });
   const geometry = await chart.evaluate((node) => {
     const marks = [...node.querySelectorAll('.run-chart-mark')].slice(0, 3)
       .map((mark) => mark.getBoundingClientRect());
@@ -210,13 +207,6 @@ async function checkCreationChart(page, width, hasTouch) {
   await focusBucket('Home', 0);
   await focusBucket('ArrowRight', 1);
   await focusBucket('ArrowLeft', 0);
-  await page.keyboard.press('Tab');
-  assert.equal(await isFocused(summary), true);
-  await page.keyboard.press('Enter');
-  await details.locator('table').waitFor();
-  assert.equal(await details.getByRole('row').count(), 25);
-  assert.match(await details.getByRole('cell').first().innerText(), /GMT\+8 08:00:00\.123/);
-  assert.equal(await details.getByRole('row').nth(1).getByRole('cell').last().innerText(), '1');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
   if (hasTouch) await bars.nth(2).tap();
   else await bars.nth(2).hover();
@@ -344,7 +334,7 @@ async function checkCreationChart(page, width, hasTouch) {
       await checkOverviewRetry(page, receiveInitial, holdOverview, () => overviewRequests);
       console.log('PASS ' + width + 'px: keyboard retry, focus during latency and repeated error, recovery with and without focus on Retry');
       await checkCreationChart(page, width, hasTouch);
-      console.log(`PASS ${width}px: creation chart and metering layout, counts and baseline, local times, keyboard, ${hasTouch ? 'emulated tap' : 'hover'}, and collapsed details`);
+      console.log(`PASS ${width}px: creation chart and metering layout, counts and baseline, local times, keyboard, and ${hasTouch ? 'emulated tap' : 'hover'}`);
       const receiveKnowledge = holdRequest('knowledge');
       await nav(/知识管理/).press('Enter');
       await expectMain('知识管理');
