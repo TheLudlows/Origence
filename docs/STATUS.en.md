@@ -45,7 +45,7 @@ process. See the [Agent connections API](API.en.md#agent-connections).
 
 Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. The native Windows runner passed installation, workspace selection, pinned retrieval, and the default hook with synthetic data. See [VALIDATION](VALIDATION.en.md). The formal freeze is blocked on tasks, model authorization, and independent roles.
 
-Both plugins support [per-project opt-in for private turn archiving](CLIENTS.en.md#opt-in-to-incremental-private-turn-archiving).
+With a writable key, `origence-setup` enables [private turn archiving for the current project](CLIENTS.en.md#incremental-private-turn-archiving) by default.
 
 Applications driving either client can use [managed Run reporting](MANAGED-RUNS.en.md)
 for Codex App Server command metadata and Claude Agent SDK cancellation.

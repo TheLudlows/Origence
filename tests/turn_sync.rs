@@ -77,10 +77,11 @@ struct Plugin<'a> {
 
 impl Plugin<'_> {
     async fn invoke(&self, event: Value, enabled: bool) -> Output {
-        self.invoke_from(self.project, event, enabled).await
+        self.invoke_from(self.project, event, enabled.then_some(self.project))
+            .await
     }
 
-    async fn invoke_from(&self, cwd: &Path, event: Value, enabled: bool) -> Output {
+    async fn invoke_from(&self, cwd: &Path, event: Value, project: Option<&Path>) -> Output {
         let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
         command
             .current_dir(cwd)
@@ -101,8 +102,8 @@ impl Plugin<'_> {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        if enabled {
-            command.env("OC_TURN_SYNC_PROJECT", self.project);
+        if let Some(project) = project {
+            command.env("OC_TURN_SYNC_PROJECT", project);
         }
         let mut child = command.spawn().unwrap();
         child
@@ -216,11 +217,19 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
     codex
         .invoke(codex.open("turn-1", "disabled prompt"), false)
         .await;
+    let paused = codex
+        .invoke_from(
+            codex.project,
+            codex.open("turn-1", "paused prompt"),
+            Some(Path::new("")),
+        )
+        .await;
+    assert!(paused.stderr.is_empty());
     codex
         .invoke_from(
             fixture.config.parent().unwrap(),
             codex.open("turn-1", "prompt outside the opted-in project"),
-            true,
+            Some(codex.project),
         )
         .await;
     assert!(!codex.data.exists());

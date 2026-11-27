@@ -1,3 +1,4 @@
+import { realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { connectClaude, connectCodex, removeClaude, removeCodex } from "./installer/agents.mjs";
 import {
@@ -18,11 +19,29 @@ const usage = `Usage: origence-setup install [--agent claude|codex|both] [--endp
 --agent CLIENT           Install Claude Code (default), Codex, or both
 --from-env               Read OC_SERVER_URL and OC_API_KEY
 --force                  Update settings for all installed agents
---origence PATH          Origence executable for Run hooks
+--turn-sync-project DIR  Archive private turns for this project (defaults to the current project)
+--no-turn-sync           Pause private turn archiving
+--origence PATH          Origence executable for plugin hooks
 --claude PATH            Claude Code executable, if it is outside PATH
 --codex PATH             Codex executable, if it is outside PATH
 
 Use origence-deploy to start a local API and console or initialize a workspace.`;
+
+function turnSyncProject(directory) {
+  const path = resolve(directory);
+  check(statSync(path, { throwIfNoEntry: false })?.isDirectory(),
+    "Choose an existing project directory for private turn archiving.");
+  const project = realpathSync(path);
+  // Match the plugin's project scope for Git worktrees and regular checkouts.
+  for (let current = project; ; current = dirname(current)) {
+    const git = join(current, ".git");
+    const marker = statSync(git, { throwIfNoEntry: false });
+    if (marker?.isFile() || (marker?.isDirectory() && statSync(join(git, "HEAD"), { throwIfNoEntry: false })?.isFile())) {
+      return current;
+    }
+    if (current === dirname(current)) return project;
+  }
+}
 
 function clientBinary(state, name, selected) {
   const agent = agents[name];
@@ -55,6 +74,11 @@ async function install(state, args) {
   const selected = target === "both" ? Object.keys(agents) : [target];
   const installed = Object.keys(agents).filter(name => state.value[name]);
   const old = state.value.config;
+  const projectOption = args["turn-sync-project"];
+  check(projectOption === undefined || (projectOption && !args["no-turn-sync"]),
+    "Supply a project directory with --turn-sync-project, or use --no-turn-sync.");
+  const project = args["no-turn-sync"] ? "" : projectOption ?? old?.turnSyncProject
+    ?? process.env.OC_TURN_SYNC_PROJECT ?? process.cwd();
   const interactive = process.stdin.isTTY && !args["from-env"];
   const endpointInput = args.endpoint ?? (args["from-env"] ? process.env.OC_SERVER_URL : old?.endpoint ?? process.env.OC_SERVER_URL)
     ?? (interactive ? (await ask("Origence API endpoint [" + defaultEndpoint + "]: ")).trim() || defaultEndpoint : defaultEndpoint);
@@ -68,6 +92,8 @@ async function install(state, args) {
     "This endpoint and key are shared by installed Agents. To change them, rerun with --force and select all installed Agents.");
 
   const who = await identity(endpoint, token);
+  const turnSync = project ? turnSyncProject(project) : "";
+  const archiveProject = ["writer", "admin", "workspace"].includes(who.role) ? turnSync : "";
   status("whoami", "success", { workspace_id: who.workspace_id, role: who.role });
   const mcp = await connectMcp(endpoint, token, who.workspace_id);
   status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
@@ -94,16 +120,18 @@ async function install(state, args) {
   check(executable("origence", env.PATH) === binary,
     "Select a binary named origence (origence.exe on Windows) for the plugin hook PATH.");
   execute(binary, ["plugin-hook", "--help"], { env, diagnosis: "The Origence binary does not support Agent hooks" });
-  const vars = { OC_API_KEY: token, OC_SERVER_URL: endpoint, OC_WORKSPACE_ID: who.workspace_id };
-  state.value.config = { endpoint, token, binary, workspace: who.workspace_id, key: who.id };
+  const vars = { OC_API_KEY: token, OC_SERVER_URL: endpoint, OC_WORKSPACE_ID: who.workspace_id,
+    OC_TURN_SYNC_PROJECT: archiveProject };
+  state.value.config = { endpoint, token, binary, workspace: who.workspace_id, key: who.id, turnSyncProject: turnSync };
   state.save();
   for (const name of selected) agents[name].connect(state, clients[name], { ...env, ...vars }, endpoint);
   writeUserEnvironment(state, vars, dirs);
   status("user-environment", "success", "Saved the Agent environment. Restart your terminal and the selected clients.");
-  status("installation", "success", { endpoint, workspace_id: who.workspace_id, role: who.role, agents: selected });
+  status("installation", "success", { endpoint, workspace_id: who.workspace_id, role: who.role,
+    agents: selected, private_turn_sync: Boolean(archiveProject) });
 }
 
 await runInstaller({
   name: "origence-setup", scope: "agent", usage, install, uninstall,
-  strings: ["agent", "endpoint", "token", "origence", "claude", "codex"], flags: [],
+  strings: ["agent", "endpoint", "token", "origence", "claude", "codex", "turn-sync-project"], flags: ["no-turn-sync"],
 });

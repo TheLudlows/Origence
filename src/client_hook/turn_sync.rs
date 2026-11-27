@@ -282,7 +282,7 @@ impl Store {
     }
 }
 
-/// Default-off and independent of Run metadata capture.
+/// Scoped to the configured project and independent of Run metadata capture.
 pub(super) async fn sync_plugin_turn(
     client: Client,
     origin: &str,

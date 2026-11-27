@@ -29,6 +29,8 @@ Enter the API URL and workspace key when prompted. The key is hidden while typin
 
 Setup verifies the workspace and tools served over HTTP MCP, installs the plugin, and saves the user environment and PATH for the clients and hooks. It checks the registered entry in Codex and uses the vendor CLI for non-default URLs. Conflicting existing MCP entries are reported for the user to resolve. The Agent command uses a running API and needs no console port.
 
+`origence-setup` enables [private turn archiving](CLIENTS.en.md#incremental-private-turn-archiving) by default with a writable key. It uses the Git project root where setup runs, or the current directory outside Git. A saved selection takes precedence, followed by an existing `OC_TURN_SYNC_PROJECT`. Use `--turn-sync-project <directory>` to select, change, or resume archiving for a project, and `--no-turn-sync` to pause. Both clients share the setting. Archiving collects new turns in the selected project after it is enabled.
+
 Restart the terminal and clients, then use `/mcp` to check the connection and `context_session` to confirm the workspace. Follow Codex's trust flow in `/hooks` for the installed hooks. To change the endpoint or key, use `--force` and select all currently connected Agents because they share that configuration.
 
 Run `origence-setup uninstall` from a restarted terminal, or use the platform launcher above with `uninstall`. This rolls back the Agent plugins, MCP overrides, and environment changes it owns. The deployment command manages services and the console.
