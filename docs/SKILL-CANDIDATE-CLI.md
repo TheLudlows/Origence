@@ -9,7 +9,21 @@ owner's `OC_API_KEY` and `OC_SERVER_URL`; switch credentials explicitly for the
 appointed reviewer. Keep selection files and owner-only candidate output private.
 The normal `origence` CLI remains the default binary.
 
-## Select and edit
+## Draft from a Run in the console
+
+Sign in with the Run owner's workspace account and open the Run in the trace view.
+Select the endpoint event and choose **选取依据并起草** (Select evidence and draft).
+The editor stays bound to that exact prefix while you inspect other timeline events.
+
+Enter the method and the redacted evidence you want to share. Confirm disclosure
+of both before saving. Keep the candidate ID to reopen it from the **Skill 候选**
+section of the same Run. Saving changes creates a revision and invalidates older
+approvals. Enter the designated reviewer's credential ID, Skill ID, and version,
+then submit the saved revision. The reviewer can get their credential `id` from
+`GET /v1/whoami` and open the packet with `origence-skill review` below. Use the
+commands below for approval, explicit publication, and online download.
+
+## Select and edit with the CLI
 
 Build with `cargo build --bin origence-skill`; use `target/debug/origence-skill`
 (or add `target/debug` to PATH). The examples below use placeholders,

@@ -31,6 +31,17 @@ returned `INVALID_ARGUMENT` for `as_of_ms` after checking write access and owner
 request recorded an event, and preparation without the date succeeded using the same event ID.
 The standalone HTTP/MCP date recall and identity/budget regressions passed on the updated main.
 
+## 2026-11-27 · Draft Skill candidates from Run details
+
+Based on main `1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Rust 1.98.0,
+Node.js 24.22.1, and Chromium 156.0.8078.79. The real console and Origence ran on loopback
+with a fresh temporary directory and synthetic data. Account sign-in and Run navigation
+verified the exact prefix, explicit disclosure, idempotent retry after a lost save response,
+reopening the candidate, invalidation of approval after a basis-only edit, and narrow layout.
+The same host verified reviewer isolation, publication permission, package contents,
+cross-workspace denial, and source withdrawal. The official pilot and native client loading
+were outside this run. See the [commands](VALIDATION.md#2026-11-27--从-run-详情起草-skill-候选).
+
 ## 2026-11-27 · Restore AnySeek default keyword AND
 
 On main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`, a partial-term query matched incorrectly.
@@ -46,6 +57,20 @@ The default Rust suite passed 484 tests, with the 8 real-backend contracts run s
 strict all-target Clippy, embedded AnySeek startup and restart, and separate HTTP, MCP, and Node UI smokes
 passed. All 24 synthetic keyword seed queries completed with zero query errors. Verification used synthetic
 data and zero model calls. Windows, real-model retrieval quality, and the official pilot remain open.
+
+## 2026-11-27 · Run overview and roadmap cleanup
+
+Based on main `1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Node.js 24.22.1, Chromium 156.0.8078.79,
+and Rust 1.98.0. `npm --prefix ui run check` and `npm --prefix ui test` passed (31 tests). Chromium passed
+`check-navigation-focus-browser.cjs` and `check-console-session-browser.cjs`, covering trends, metering, responsive navigation,
+retry focus, and account sessions. Browser sign-in against local Origence, the Node console, and fresh SQLite verified the
+24-hour and 7-day trends for 26 synthetic Runs, reported duration, tokens and cost, and loading the 26th Run through the Run list.
+The overview displayed service readiness with the page-count card removed. Replaying the legacy field with the same idempotency key
+returned the same receipt. Changing only `publish_if_authorized` returned HTTP 409.
+`cargo fmt --all -- --check` and `cargo clippy --locked --offline --all-features --all-targets -- -D warnings` passed.
+`cargo test --locked --offline --no-default-features --features local-storage --lib --test local --test memory-consolidation --quiet`
+passed 239 library, 218 local integration, and 6 long-term memory tests, including Run statistics and metering and both legacy
+extraction endpoints and controlled extraction. Private integrations and formal pilots were untested.
 
 ## 2026-11-27 · Simplify standalone evidence capture and display
 

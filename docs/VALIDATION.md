@@ -30,6 +30,26 @@ PR #165 复核加入同工作区、同完整身份的已确认显式值。修复
 再对 `as_of_ms` 返回 `INVALID_ARGUMENT`。两次拒绝均未写事件，同一事件 ID 去掉日期后可正常准备。
 独立 HTTP/MCP 的日期召回及身份、预算回归在更新后的主干上通过。
 
+## 2026-11-27 · 从 Run 详情起草 Skill 候选
+
+基于 main `1a8544b647613864582354bc9f5942e69426b463`。Linux x86_64、Rust 1.98.0、
+Node.js 24.22.1、Chromium 156.0.8078.79。用临时目录、回环服务和合成数据启动真实控制台及
+Origence。通过账号登录和调用链路验证精确事件前缀、显式披露、保存回执丢失后幂等重试、
+重新打开候选、仅改依据即使旧批准失效，以及窄屏布局。通过同一个宿主验证指定审阅者隔离、
+发布权限、分发包内容、跨工作区拒绝和来源撤回。正式试点和原生客户端加载未执行。
+
+```sh
+cargo fmt --package origence -- --check
+cargo build --locked --bin origence --bin origence-skill
+cargo clippy --locked --all-features --all-targets -- -D warnings
+cargo test --locked --no-default-features --features local-storage --lib --test skill-workflow
+npm --prefix ui run check
+npm --prefix ui test
+python3 tools/ui_skill_smoke.py --binary target/debug/origence
+node ui/scripts/check-run-coverage-browser.cjs
+node ui/scripts/check-run-verification-browser.mjs
+```
+
 ## 2026-11-27 · 恢复 AnySeek 默认关键词 AND
 
 在 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7` 上复现缺词误命中，原有真实后端合约为 7 项通过、1 项失败。
@@ -43,6 +63,19 @@ PR #165 复核加入同工作区、同完整身份的已确认显式值。修复
 嵌入式 AnySeek 启动与重启，以及独立 HTTP、MCP 和 Node UI 冒烟通过。
 24 题合成关键词种子评估完成，查询错误为 0。
 本轮使用合成数据，无模型调用。Windows、真实模型检索质量和正式试点仍待验收。
+
+## 2026-11-27 · 运行总览与路线图清理
+
+基于 main `1a8544b647613864582354bc9f5942e69426b463`，Linux x86_64、Node.js 24.22.1、Chromium 156.0.8078.79、Rust 1.98.0。
+`npm --prefix ui run check` 和 `npm --prefix ui test` 通过（31 项）。Chromium 的 `check-navigation-focus-browser.cjs` 和
+`check-console-session-browser.cjs` 通过，覆盖趋势、计量、响应式导航、重试焦点和账号会话。
+使用本地 Origence、Node 控制台及新建 SQLite，从浏览器登录，核对 26 条合成 Run 的 24 小时及 7 天趋势、
+已上报的耗时、Token 与费用，以及由调用链路加载第 26 条 Run。总览仍显示服务就绪状态，已移除本页运行数。
+同一幂等键和旧字段重放返回相同回执，单独改变 `publish_if_authorized` 得到 HTTP 409。
+`cargo fmt --all -- --check` 和 `cargo clippy --locked --offline --all-features --all-targets -- -D warnings` 通过。
+`cargo test --locked --offline --no-default-features --features local-storage --lib --test local --test memory-consolidation --quiet`
+通过 239 项库测试、218 项本地集成测试和 6 项长期记忆测试，覆盖 Run 统计和计量、两个旧提取入口和受控提取。
+未验证私有集成，也未启动正式试点。
 
 ## 2026-11-27 · 统一长期记忆写入和召回（本地）
 

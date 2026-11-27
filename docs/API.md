@@ -37,7 +37,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 
 | Skill 接口 | 输入与结果 |
 | --- | --- |
-| `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`；0 创建，修改产生新修订 |
+| `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`；0 创建，修改产生新修订。`candidate` 接受 `SkillCandidateInput` 或[选定经历输入](SKILL-CANDIDATE-CLI.zh-CN.md#使用-cli-选择依据并编辑)，后者须明确确认披露。 |
 | `GET /v1/skill-candidates/{id}` | 仅创建者读取候选、私有备注和精确依据 |
 | `POST /v1/skill-candidates/{id}/reviews/{review}` | 选定审阅者、修订、发布目标和脱敏依据 |
 | `GET /v1/skill-reviews/{review}` | 选定审阅包与决定，不扩展到原会话或 Run |

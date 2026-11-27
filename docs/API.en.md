@@ -28,7 +28,7 @@ The server receipt proves preparation of the exact context, without proving clie
 
 | Skill endpoint | Input and result |
 | --- | --- |
-| `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`. Use 0 to create. Changes generate a new revision. |
+| `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`. Use 0 to create. Changes generate a new revision. `candidate` accepts `SkillCandidateInput` or [selected-experience input](SKILL-CANDIDATE-CLI.md#select-and-edit-with-the-cli) with explicit consent to disclose. |
 | `GET /v1/skill-candidates/{id}` | Only the creator can read the candidate, private notes, and exact basis. |
 | `POST /v1/skill-candidates/{id}/reviews/{review}` | Select reviewer, revision, publishing target, and redacted basis. |
 | `GET /v1/skill-reviews/{review}` | Selected review package and decision, without access to original sessions or Runs. |

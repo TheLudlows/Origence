@@ -468,6 +468,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         document.body.textContent.includes("fixture task"),
     );
     assert.equal(document.querySelector("h1").textContent, "运行总览");
+    assert.ok(document.body.textContent.includes("服务就绪状态"));
+    assert.ok(!document.body.textContent.includes("本页运行数"));
     const otherRun = [...document.querySelectorAll("tbody tr")].find((row) => row.textContent.includes(ids.otherKey));
     assert.ok(otherRun.textContent.includes("私有任务"));
     assert.ok(otherRun.textContent.includes("上报失败"));

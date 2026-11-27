@@ -6,6 +6,7 @@ use crate::{
     run::{RunEventInput, RunInput},
     service::Service,
     skill::{SkillCandidateInput, SkillPackage, SkillReviewInput, SkillReviewPacket},
+    skill_candidate::SelectedExperience,
 };
 use axum::{
     Json, Router,
@@ -200,7 +201,14 @@ async fn run_trace(
 #[serde(deny_unknown_fields)]
 struct CandidateUpdate {
     expected_revision: u32,
-    candidate: SkillCandidateInput,
+    candidate: CandidateDraft,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CandidateDraft {
+    Manual(SkillCandidateInput),
+    Selected(SelectedExperience),
 }
 
 async fn save_skill_candidate(
@@ -209,8 +217,13 @@ async fn save_skill_candidate(
     Path(id): Path<Uuid>,
     Json(i): Json<CandidateUpdate>,
 ) -> Result<Json<Value>> {
+    let auth = auth(&s, &h).await?;
+    let candidate = match i.candidate {
+        CandidateDraft::Manual(candidate) => candidate,
+        CandidateDraft::Selected(selection) => selection.candidate()?,
+    };
     Ok(Json(
-        s.save_skill_candidate(&auth(&s, &h).await?, id, i.expected_revision, i.candidate)
+        s.save_skill_candidate(&auth, id, i.expected_revision, candidate)
             .await?,
     ))
 }
