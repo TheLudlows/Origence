@@ -167,7 +167,7 @@ Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上�
 ## A5. 数据模型与约束来源
 
 物理 schema 以 DDL 为准，身份占位、独立生命周期与恢复要求见[存储不变量](../contracts/storage.md)。
-所有新查询遵守 [AGENTS](../../AGENTS.zh-CN.md) 的无 JOIN、事务和来源约束。
+所有新查询遵守 [AGENTS](../../AGENTS.md) 的无 JOIN、事务和来源约束。
 原文保留、同版本备份恢复、持久化与重试仍是要求。
 
 ## A6. 协议边界

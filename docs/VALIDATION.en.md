@@ -4,6 +4,15 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Project cleanup-after-change skill
+
+Based on main `241374ed0f960a4aff67acb3e62a4c09ff5cea0f`. This change only updates project instructions, the skill, and documentation references.
+
+- Reviewed the 5 sections and 27 rules in both skill languages, YAML frontmatter, interface metadata, and implicit invocation. `git diff --check`, `git diff --cached --check`, and Python 3 / PyYAML checks passed.
+- Maintain only the root `AGENTS.md`. Confirmed that its translated mirror had no unique constraints before removing it. Audited all 80 Markdown files and 120 script, workflow, and configuration files at commit `845aeab839716c6a32dc7741cfa727ad13019ed7`, repaired current navigation and the SQL-constraint anchor, and documented the exception to bilingual maintenance. No bilingual check script depended on the mirror.
+- Reference and anchor checks passed; other historical validation entries remain intact. Runtime code was unchanged, no tests were added, and Rust or Node.js builds and test suites were not run. These checks do not establish runtime or CI validation results.
+
+
 ## 2026-11-27 · Private Q&A on fresh databases
 
 Based on `c385544f8723f30f51654ac79d1c64143ff47716` on Linux x86_64 with Rust 1.98.0.
