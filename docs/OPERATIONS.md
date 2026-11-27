@@ -237,7 +237,7 @@ branches_ms 包含候选装载、融合及已启用的辅助分支；verificatio
 已保存计划按原 provenance 重用，计划提交前失败可能重新调用模型，不保证外部计费一次。
 尚无计划时 extraction 配置 fingerprint 必须匹配受理配置，embedding profile 始终须匹配。
 
-调用方显式提交 targets/expected_version/allow_update，没有自动监听或新 Worker。
+调用方显式提交 targets/expected_version，没有自动监听或新 Worker。
 恢复与最终提交复核 creator、generation/run_token、版本及完整来源；取消阻止迟到发布，
 不保证停止已发出的模型调用或 blocking 工作，优雅退出等待当前作业。
 空候选/duplicate 可合法完成，superseded 需重读版本再提交。输入/输出限制见

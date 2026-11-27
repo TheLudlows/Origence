@@ -7,6 +7,23 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 模型提取追加证据
+
+基于 main `c1ab0d5a82b5e098f699288c78dcb6b1f99f0cf2`。Linux x86_64、Rust 1.98.0。
+通过 239 项库测试、217 项本地集成测试及 6 项长期记忆归纳专项测试。全目标全特性严格 Clippy、
+格式检查、Node 类型检查及 30 项 UI 测试通过。
+
+真实本地 HTTP 和模型夹具核对了受控提取的冲突证据、旧 `allow_update` 请求拒绝、人工确认后的版本发布、
+保存计划后的重试和撤回。两个旧提取入口均验证了已有条目保持原版本、后续证据可单独检索。
+长期记忆测试覆盖按生效日期查询、同日冲突和撤回后重算。模型响应来自合成夹具。
+
+```sh
+cargo test --locked --no-default-features --features local-storage --lib --test local --test memory-consolidation
+cargo clippy --locked --all-features --all-targets -- -D warnings
+npm --prefix ui run check
+npm --prefix ui test
+```
+
 ## 2026-11-26 · Codex 与 Claude Code 私有问答增量归档
 
 基于 main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`，Linux x86_64、Rust 1.98.0。

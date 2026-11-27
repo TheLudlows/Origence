@@ -352,7 +352,6 @@ mod tests {
         let target = CaptureTarget {
             identity: identity.clone(),
             expected_version: 1,
-            allow_update: false,
         };
         let property = MemoryProperty {
             predicate: "language".into(),
@@ -429,13 +428,13 @@ mod tests {
                 JobPayload::SemanticExtract {
                     targets: vec![target.clone()],
                     properties: vec![property.clone()],
-                    extractor: "semantic-capture:v1".into(),
+                    extractor: "semantic-capture:v2".into(),
                     extraction_profile: "extract:v1".into(),
                     extraction_model: "model".into(),
                     embedding_profile: None,
                 },
                 "semantic_extract",
-                json!({"schema_version":1,"targets":[target],"properties":[property],"extractor":"semantic-capture:v1","extraction_profile":"extract:v1","extraction_model":"model","embedding_profile":null}),
+                json!({"schema_version":1,"targets":[target],"properties":[property],"extractor":"semantic-capture:v2","extraction_profile":"extract:v1","extraction_model":"model","embedding_profile":null}),
             ),
             (
                 JobPayload::Improve {

@@ -246,11 +246,6 @@ impl Service {
                 .await?
                 .ok_or_else(|| AppError::Invalid("unregistered memory property".into()))?;
             property.check_identity(&target.identity)?;
-            if target.allow_update && property.cardinality != Cardinality::Single {
-                return Err(AppError::Invalid(
-                    "allow_update requires a single property".into(),
-                ));
-            }
             let version = match tx.identity_candidate_asset(&target.identity).await? {
                 Some(asset) => tx.asset_current_version(asset).await?,
                 None => None,

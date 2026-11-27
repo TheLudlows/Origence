@@ -74,7 +74,8 @@ async fn extract(Json(v): Json<Value>) -> Json<Value> {
         json!({"memories":[
             {"fact_key":"model.claim","content":"Model proposal requires review","publish_if_authorized":true},
             {"fact_key":"model.second","content":"Second extracted fact","publish_if_authorized":true},
-            {"fact_key":"model.claim","content":"Duplicate claim ignored","publish_if_authorized":true}
+            {"fact_key":"model.claim","content":"A different claim under the same key","publish_if_authorized":true},
+            {"fact_key":"model.claim","content":"Model proposal requires review","publish_if_authorized":true}
         ],"entities":[{"name":"Atlas","entity_type":"service","description":"payments"},{"name":"Team","entity_type":"team","description":"owner"}],"relations":[{"source":"Atlas","predicate":"owned_by","target":"Team"}]}).to_string()
     };
     Json(json!({"choices":[{"message":{"content":content}}]}))
@@ -298,8 +299,34 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let second = &extracted["result"]["memories"][1];
     assert_eq!(second["fact_key"], "model.second");
     assert_eq!(second["version"], 1);
-    // A duplicate fact_key in one extraction drops instead of breaking the job.
-    assert_eq!(extracted["result"]["memories"].as_array().unwrap().len(), 2);
+    // Distinct facts sharing a key are retained. Exact repeats within the
+    // same extraction collapse to one candidate.
+    assert_eq!(extracted["result"]["memories"].as_array().unwrap().len(), 3);
+    let alternative = &extracted["result"]["memories"][2];
+    assert!(alternative["fact_key"].is_null());
+    assert_ne!(alternative["asset_id"], claim["asset_id"]);
+    let repeated = post(
+        &http,
+        &base,
+        token,
+        "/v1/captures",
+        json!({"content":"More evidence"}),
+    )
+    .await;
+    let repeated = job(&http, &base, token, id(&repeated, "job_id"), "completed").await;
+    let repeated_first = &repeated["result"]["memories"][0];
+    assert!(repeated_first["fact_key"].is_null());
+    assert_ne!(repeated_first["asset_id"], claim["asset_id"]);
+    let original_claim = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::GET,
+        &format!("/v1/assets/{}", claim["asset_id"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(original_claim["version"], 1);
     let identity = json!({"subject":{"kind":"service","stable_id":"billing"},"predicate":"release.approval","context":{"environment":"production"}});
     let first_key = Uuid::new_v4().to_string();
     let first_body = json!({"identity":identity,"content":"生产发布需要审批","expected_version":0});
@@ -323,8 +350,14 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         json!({"identity":identity,"content":"生产发布需要双人审批","expected_version":1}),
     )
     .await;
-    assert_eq!(first["asset_id"], second["asset_id"]);
-    job(&http, &base, token, id(&second, "job_id"), "completed").await;
+    assert_ne!(first["asset_id"], second["asset_id"]);
+    let appended = job(&http, &base, token, id(&second, "job_id"), "completed").await;
+    assert_eq!(
+        appended["result"]["memories"][0]["asset_id"],
+        second["asset_id"]
+    );
+    assert!(appended["result"]["memories"][0]["identity"].is_null());
+    assert_eq!(appended["result"]["memories"][0]["version"], 1);
     let view = request(
         &http,
         &base,
@@ -334,7 +367,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         Value::Null,
     )
     .await;
-    assert_eq!(view["version"], 2);
+    assert_eq!(view["version"], 1);
     assert_eq!(view["identity"], identity);
     let replay: Value = http
         .post(format!("{base}/v1/captures/identified"))
@@ -349,7 +382,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .unwrap();
     assert_eq!(replay, first);
     for path in ["/v1/memories/identified", "/v1/captures/identified"] {
-        for (expected, status) in [(0, 409), (1, 409), (-1, 422)] {
+        for (expected, status) in [(0, 409), (2, 409), (-1, 422)] {
             let rejected = http
                 .post(format!("{base}{path}"))
                 .bearer_auth(token)
@@ -381,7 +414,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         Value::Null,
     )
     .await;
-    assert_eq!(unchanged["version"], 2);
+    assert_eq!(unchanged["version"], 1);
     assert_eq!(unchanged["normalization_status"], "explicit_identity");
     let source_path = format!(
         "/v1/events/{}",
@@ -433,7 +466,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     assert_eq!(lookup.status(), 200);
     let lookup: Value = lookup.json().await.unwrap();
     assert_eq!(lookup["asset_id"], first["asset_id"]);
-    assert_eq!(lookup["version"], 2);
+    assert_eq!(lookup["version"], 1);
     let recalled = post(
         &http,
         &base,
@@ -450,6 +483,16 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .unwrap();
     assert_eq!(hit["identity"], identity);
     assert_eq!(hit["normalization_status"], "explicit_identity");
+    let appended_hit = recalled["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|hit| hit["asset_id"] == second["asset_id"])
+        .unwrap();
+    assert!(appended_hit["identity"].is_null());
+    assert_eq!(appended_hit["locator"]["suggested_identity"], identity);
+    assert_eq!(appended_hit["content"], "生产发布需要双人审批");
+    assert_eq!(appended_hit["source_event_id"], second["source_event_id"]);
     let context = post(
         &http,
         &base,
@@ -984,11 +1027,11 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
             reader,
             None,
             "context_resolve",
-            json!({"query":"Atlas","mode":"hybrid","budget_tokens":3000}),
+            json!({"query":"Atlas","mode":"hybrid","budget_tokens":12000}),
         )
         .await
         .unwrap();
-    assert!(assembled["count"].as_u64().unwrap() <= 3000);
+    assert!(assembled["count"].as_u64().unwrap() <= 12000);
     assert!(
         assembled["sources"]
             .as_array()

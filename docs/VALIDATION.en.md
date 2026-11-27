@@ -4,6 +4,17 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Append extracted evidence
+
+Based on main `c1ab0d5a82b5e098f699288c78dcb6b1f99f0cf2` on Linux x86_64 with Rust 1.98.0.
+239 library, 217 local integration, and 6 long-term memory tests passed. Formatting, strict
+all-target all-feature Clippy, Node type checking, and 30 UI tests passed.
+
+A local HTTP service with synthetic model responses verified separate conflict evidence, rejection
+of the former `allow_update` field, explicit correction, retry and withdrawal. Both older extraction
+endpoints kept the existing version while saving separately retrievable evidence. Long-term memory
+tests checked effective dates, same-day conflicts, and recomputation after withdrawal.
+
 ## 2026-11-26 · Incremental private turns for Codex and Claude Code
 
 On main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53` with Linux x86_64 and Rust 1.98.0,

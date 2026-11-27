@@ -321,6 +321,11 @@ impl Service {
         }
         let (asset, version) = tx.identity_slot(&input.identity).await?;
         input.check_version(version)?;
+        let asset = if version.is_some() {
+            tx.unnormalized_memory_slot().await?
+        } else {
+            asset
+        };
         let source = tx
             .create_event("identified_capture", &input.content, None)
             .await?;
@@ -328,7 +333,7 @@ impl Service {
             &mut tx,
             JobPayload::IdentifiedExtract {
                 identity: input.identity,
-                expected_version: version,
+                expected_version: None,
                 embedding_profile: self.models.profile.clone(),
             },
             Some(asset),

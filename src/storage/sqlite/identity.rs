@@ -47,7 +47,7 @@ pub(super) fn checked_identity(
 }
 
 impl SqliteTx {
-    pub(super) async fn identity_for_asset(
+    pub(crate) async fn identity_for_asset(
         &mut self,
         asset: Uuid,
     ) -> StorageResult<Option<MemoryIdentity>> {
