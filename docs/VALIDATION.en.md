@@ -4,6 +4,20 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Standalone AnySeek collection limit compatibility
+
+On Linux x86-64 with Rust 1.98.0 and fresh synthetic stores, standalone AnySeek Release
+`74d48d92db27d4fa155ce38004ac079f3bf92835` was paired with Origence `d34804c` and the fix.
+The baseline exited during ordinary asset publication after receiving collection Info without
+`max_records`. The fixed HTTP path ingested, published and found the original text in search.
+Both builds matched the private archive `directory_sha256` before and after paired restore,
+then passed the turn list, readback and withdrawal checks. [AnySeek #229](https://github.com/TheLudlows/anyseek/issues/229)
+
+- `cargo fmt --all -- --check` and `cargo clippy --locked --all-targets --all-features -- -D warnings` passed.
+- `cargo test --locked --test anyseek` passed six cases. Collection checks cover omitted, positive and invalid advertised Record limits and still require a positive `max_candidates`.
+- `python3 tools/anyseek_smoke.py --anyseek-binary <frozen Release> --binary target/debug/origence --test-executable <test binary from the prior command>` passed eight real-backend contracts and the HTTP, MCP, service reopen and withdrawal checks.
+- The legacy Info shape uses a contract fixture. The live probe used the Linux binary above.
+
 ## 2026-11-27 · Writers can review and publish
 
 Based on main `d34804c`, using Linux, fresh synthetic databases, and Rust 1.98.0. Skill

@@ -7,6 +7,19 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 独立 AnySeek 集合限额兼容
+
+在 Linux x86-64、Rust 1.98.0 和合成新库上，使用独立 AnySeek Release
+`74d48d92db27d4fa155ce38004ac079f3bf92835` 对照 Origence `d34804c` 与本次修复。
+基线进程在普通知识发布时收到不含 `max_records` 的集合 Info 后退出。修复后的同一 HTTP
+路径完成入库、发布及原文搜索。两版均通过私有归档配套恢复前后的 `directory_sha256`
+比对，以及恢复后的轮次列表、回读和撤回。[AnySeek #229](https://github.com/TheLudlows/anyseek/issues/229)
+
+- `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets --all-features -- -D warnings` 通过。
+- `cargo test --locked --test anyseek` 通过 6 项。集合检查覆盖缺省、正整数以及非法的已声明上限，并继续校验 `max_candidates`。
+- `python3 tools/anyseek_smoke.py --anyseek-binary <固定 Release> --binary target/debug/origence --test-executable <上步测试程序>` 通过 8 项真实后端契约，并验证 HTTP、MCP、服务重开和撤回。
+- 旧集合 Info 形状使用契约夹具校验。本轮联调使用上述 Linux 固定二进制。
+
 ## 2026-11-27 · 写入权限包含审阅与发布
 
 基于主干 `d34804c`，使用 Linux、新建合成库及 Rust 1.98.0。Skill 回归使用独立 writer 凭据提交、批准和发布，
