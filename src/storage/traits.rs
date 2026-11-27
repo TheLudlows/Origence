@@ -88,18 +88,6 @@ pub trait DomainTx {
         request_hash: &str,
     ) -> StorageResult<Option<Value>>;
 
-    /// Verify that a job's original creator may still execute in its stored
-    /// scope. Explicit retry never transfers execution identity to its caller.
-    async fn require_job_creator_permission(
-        &mut self,
-        _job: Uuid,
-        _permission: Permission,
-    ) -> StorageResult<()> {
-        Err(StorageError::Unavailable(
-            "job creator authorization unavailable".into(),
-        ))
-    }
-
     /// Register work on this same transaction. Business write and enqueue
     /// commit or roll back together; a consumer (not this method) claims it.
     async fn enqueue(&mut self, work: WorkItem) -> StorageResult<()>;

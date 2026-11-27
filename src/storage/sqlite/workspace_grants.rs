@@ -216,7 +216,7 @@ impl SqliteTx {
         role: Option<&str>,
     ) -> StorageResult<()> {
         self.check_permission(Permission::Delete).await?;
-        if role.is_some_and(|role| !ROLES.contains(&role)) {
+        if role.is_some_and(|role| !Permission::Read.granted_by(role)) {
             return Err(StorageError::InvalidArgument("invalid workspace role"));
         }
         let (credential, default_workspace, owned_capability): (Uuid, Uuid, bool) =

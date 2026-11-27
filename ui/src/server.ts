@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfiguredConsoleAccounts, workspaceIdPattern, type ConsoleAccount } from "./console-accounts.js";
-import { checkedConsoleIdentity, consoleSessionPath, ConsoleSessions, type OwnedWorkspace } from "./console-session.js";
+import { checkedConsoleIdentity, consoleSessionPath, ConsoleSessions, isConsoleRole, type OwnedWorkspace } from "./console-session.js";
 import { HttpError } from "./http-error.js";
 
 const MAX_BODY = 10 * 1024 * 1024;
@@ -89,7 +89,7 @@ async function listOwnedWorkspaces(upstream: URL, authorization: string, signal:
       throw new HttpError(502, "子工作区列表无效");
     for (const item of page.items) {
       if (!item || typeof item.workspace_id !== "string" || !workspaceIdPattern.test(item.workspace_id) ||
-          typeof item.name !== "string" || !["reader", "writer", "admin"].includes(item.role))
+          typeof item.name !== "string" || !isConsoleRole(item.role))
         throw new HttpError(502, "子工作区列表无效");
       items.push({ workspace_id: item.workspace_id, name: item.name, role: item.role });
     }

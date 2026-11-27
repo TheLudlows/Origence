@@ -247,6 +247,10 @@ export class ConsoleSessions {
   }
 }
 
+export function isConsoleRole(value: unknown): value is string {
+  return typeof value === "string" && roleNames.has(value);
+}
+
 export function checkedConsoleIdentity(value: unknown): User {
   if (!value || typeof value !== "object")
     throw new HttpError(502, "无法读取工作区身份");
@@ -254,7 +258,7 @@ export function checkedConsoleIdentity(value: unknown): User {
   if (
     typeof id !== "string" || !workspaceIdPattern.test(id) ||
     typeof workspace_id !== "string" || !workspaceIdPattern.test(workspace_id) ||
-    typeof role !== "string" || !roleNames.has(role)
+    !isConsoleRole(role)
   )
     throw new HttpError(502, "无法读取工作区身份");
   return {

@@ -60,7 +60,7 @@ Parse AnySeek payload outside transactions and compare chunk hash and full locat
 | artifact owner | Exact source/version ownership of an artifact. Shared artifacts may have multiple owners. |
 | index entry | Index readiness and dimension for artifact, field, profile, and generation |
 | publication ledger | External publication status and recovery identity for source, version, surface, and generation |
-| Private session / Run / Skill | Logical-key ownership, immutable events and revisions, review permissions, and published versions |
+| Private session / Run / Skill | Logical-key ownership, immutable events and revisions, designated review credentials, and published versions |
 
 `index entry` and `publication ledger` have distinct keys, states, and lifecycles. They cannot substitute for each other. ready plus committed does not establish visibility. Reads still check permissions, current content item version, sources, owner, and semantic snapshot or Learning supports. Job generation, business version, model profile, and execution run_token are independent identities.
 

@@ -642,8 +642,7 @@ impl Service {
             // after the deleting key is revoked. The retrying actor still needs
             // Delete above; publication jobs retain their original authority.
             if row["operation"] != "cleanup" {
-                tx.require_job_creator_permission(id, Permission::Write)
-                    .await?;
+                tx.require_job_creator_write(id).await?;
             }
             tx.require_improve_job_retry_allowed(id).await?;
             tx.valid_targets(

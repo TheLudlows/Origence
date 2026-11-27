@@ -3,6 +3,26 @@
 use super::*;
 
 impl SqliteTx {
+    /// Explicit retry keeps the job's original execution identity and scope.
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn require_job_creator_write(&mut self, job: Uuid) -> StorageResult<()> {
+        let creator: Option<Uuid> = sqlite_db::query_scalar(
+            "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(job)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let creator = creator.ok_or(StorageError::NotFound)?;
+        let role = self.live_role_for_principal(creator).await?;
+        if !Permission::Write.granted_by(&role) {
+            return Err(StorageError::Forbidden);
+        }
+        Ok(())
+    }
+
     /// The role in this transaction. IMMEDIATE writes serialize with revoke;
     /// model/native IO must precede a fresh authorized write transaction.
     pub(super) async fn live_role(&mut self) -> StorageResult<String> {
@@ -134,28 +154,6 @@ impl DomainTx for SqliteTx {
                 Ok(None)
             }
         }
-    }
-
-    async fn require_job_creator_permission(
-        &mut self,
-        job: Uuid,
-        permission: Permission,
-    ) -> StorageResult<()> {
-        let creator: Option<Uuid> = sqlite_db::query_scalar(
-            "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(job)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let creator = creator.ok_or(StorageError::NotFound)?;
-        let role = self.live_role_for_principal(creator).await?;
-        if !permission.granted_by(&role) {
-            return Err(StorageError::Forbidden);
-        }
-        Ok(())
     }
 
     async fn enqueue(&mut self, work: WorkItem) -> StorageResult<()> {

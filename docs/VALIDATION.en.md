@@ -18,6 +18,11 @@ API key roles, workspace grants and rotation, and the Skill submission, approval
 flow. Strict Clippy passed with all features, SQLite only, and without default features.
 Formatting passed. Windows and upgrades of existing databases were untested.
 
+Cleanup based on `88bb7a0` consolidated role validation and removed the unused generic
+permission parameter from job retry. The same 455 Rust tests and 32 UI tests, Node type
+checking, strict Clippy, formatting, and relative documentation link checks passed on
+Linux. Chromium and Windows were not rerun for the cleanup.
+
 ## 2026-11-27 · Direct private archive deletion
 
 Based on main `7b362c6d6aeed56fb4d438df00a2c08e356c7830` on Linux with fresh synthetic data.
