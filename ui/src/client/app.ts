@@ -363,7 +363,7 @@ async function render() {
   content.append(el("p", "muted", "正在读取…"));
   try {
     content.replaceChildren();
-    if (page === "overview") await overview(content, ctx);
+    if (page === "overview") await overview(content, ctx, activeWorkspace.workspace_id);
     else if (page === "runs") await runsPage(content, ctx, id);
     else if (page === "memory" || page === "knowledge")
       await assetsPage(content, page, ctx);
