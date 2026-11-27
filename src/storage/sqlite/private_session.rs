@@ -130,8 +130,7 @@ mod tests {
             used_evidence: vec![],
             evidence_use: Default::default(),
         };
-        let receipt = tx.archive_turn(session, &turn, "hash").await.unwrap();
-        let source: Uuid = serde_json::from_value(receipt["source_event_id"].clone()).unwrap();
+        let (source, _) = tx.register_turn(session, &turn, "hash").await.unwrap();
         tx.commit().await.unwrap();
         let foreign_scope = Scope {
             tenant_id: scope.tenant_id,
@@ -145,7 +144,7 @@ mod tests {
         let foreign_auth = store.authenticate(&foreign_key.token).await.unwrap();
         let mut foreign_tx = store.begin(foreign_auth).await.unwrap();
         assert!(matches!(
-            foreign_tx.session_turn(session, turn.turn_id).await,
+            foreign_tx.require_turn_visible(session, turn.turn_id).await,
             Err(StorageError::NotFound)
         ));
         foreign_tx.commit().await.unwrap();
@@ -158,11 +157,11 @@ mod tests {
         let mut tx = store.begin(other_auth).await.unwrap();
         assert_ne!(session, tx.private_session_id().await.unwrap());
         assert!(matches!(
-            tx.session_turn(session, turn.turn_id).await,
+            tx.require_turn_visible(session, turn.turn_id).await,
             Err(StorageError::NotFound)
         ));
         assert!(matches!(
-            tx.archive_turn(session, &turn, "hash").await,
+            tx.register_turn(session, &turn, "hash").await,
             Err(StorageError::NotFound)
         ));
         assert!(matches!(
@@ -198,7 +197,7 @@ mod tests {
         let mut tx = store.begin(new_auth).await.unwrap();
         assert_eq!(logical, tx.private_key_id().await.unwrap());
         assert_eq!(session, tx.private_session_id().await.unwrap());
-        assert!(tx.session_turn(session, turn.turn_id).await.is_ok());
+        assert!(tx.require_turn_visible(session, turn.turn_id).await.is_ok());
         tx.commit().await.unwrap();
         let mut tx = store
             .begin(store.authenticate(&admin.token).await.unwrap())

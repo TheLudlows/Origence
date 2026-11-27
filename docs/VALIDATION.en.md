@@ -41,6 +41,15 @@ and the untouched pre-cutover backup still exposed its original to authorized te
 Verification covered active files and logical visibility. Physical erasure of SQLite pages,
 historical WAL, and backups was outside the test.
 
+The #168 cleanup starts from `4bfab721e981348024b14a7053d6e4568443e720`. Strict all-target
+Clippy passed with SQLite only and all features. The default Rust suite passed 478 tests.
+Seven internal tests for the retired SQLite body scan were removed. Current Context, Run replay, and Improve tests
+still cover authorization and evidence references. The embedded and pinned standalone archive
+smokes verify that an invalid copy limit leaves the schema untouched, an unmatched legacy source
+blocks purge, and a source of the wrong kind cannot be read or retrieved. The standalone smoke
+also withdraws a turn while Context waits on the private body read and checks that final delivery
+omits it. Purge leaves the pre-cutover synthetic backup intact.
+
 ## 2026-11-27 · Dated reimbursement policy in everyday context
 
 Based on main `1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Rust 1.98.0,

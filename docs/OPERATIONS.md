@@ -6,7 +6,7 @@
 
 ## 当前阶段范围
 
-只面向新建数据库，启动要求完整当前 schema；不自动补表、升级或迁移已有数据。
+启动要求完整当前 schema。紧邻旧版的私有归档使用[显式隔离迁移](#私有问答归档隔离迁移与配套恢复)。
 同版本持久化、重启/重试和备份恢复仍是要求，不兼容结构拒绝打开。
 保留原始来源及备份，不能因使用新目录而删除或覆盖旧数据。
 事务查询、身份占位与发布计划约束见[存储不变量](contracts/storage.md)。
@@ -17,9 +17,9 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db` 及 SQLite WAL | 权限、原始来源事件、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
+| `context.db` 及 SQLite WAL | 权限、来源事件、私有归档目录、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
-| `anyseek/` | 本地模式默认的 AnySeek Catalog 与 workspace collections，含正文、摘要和全文/向量/图索引。独立部署时按 AnySeek 规则单独备份 |
+| `anyseek/` | 本地模式默认的 AnySeek Catalog 与共享、私有集合，含正文、摘要和全文/向量/图索引。独立部署时按 AnySeek 规则单独备份 |
 | `full-text-backend.json` | AnySeek endpoint、tenant/workspace 自动路由规则和 embedding profile/维度绑定；不含 key，随整目录备份 |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | 原始文件内容；按作用域和内容 hash 定位 |
 
@@ -262,23 +262,13 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 ## 私有问答归档、隔离迁移与配套恢复
 
-私有集合按租户命名空间和 workspace、逻辑 key 派生地址。原始 API token 不参与命名。
-每轮用稳定 Record ID 保存完整问答，同组提交独立检索投影。固定 AnySeek 版本接受
-1 MiB Record、最多 64 个组成员和 4 MiB 原生 group 请求。Origence 的请求上限是
-2 MiB。现有每字段 65,536 UTF-8 字节限制下，即使按每字节最大六字节 JSON 转义，
-正文也可放在一个 Record。关键词覆盖完整问答，配置 embedding 时，投影使用问题和
-回答各最多 4096 UTF-8 字节的字符边界前缀。只出现在长回答尾部的语义不会进入向量投影。
+[归档、检索和撤回的 API 契约](API.md#会话归档与幂等反馈) 定义调用方可见行为。
+完整问答使用稳定 Record ID，并与检索投影原子提交。现行正文字节上限即使经 JSON
+转义也低于固定 AnySeek 版本的 1 MiB 单 Record 上限。
 
-AnySeek 的 operation epoch 只接受当前和前一 UTC 日。Origence 保留稳定操作 nonce、
-Record ID 和已登记 epoch。回执过期时，首先按 group ID、成员和正文哈希恢复。只有提交
-明确返回过期且 group 仍不存在时，才用同一 nonce、新 epoch 和版本 0 CAS 接受调用方
-重交的正文。撤回会先在 SQLite 隐藏该轮，再以原子空 group 替换删除活跃记录及索引
-入口。已出现的 group 版本阻断版本 0 的迟到提交。原始日志段和备份的最终物理擦除
-受 AnySeek 保留与备份轮换控制。
-
-Improve 保存引用、反馈及支持片段哈希，模型处理时从私有集合按需读回。Run 重放
-持久化来源引用和 bundle 哈希，涉及私有轮次时在原授权和来源仍有效的前提下读回
-正文。客户端现有脱敏与已脱敏的待投递队列继续使用，收到回执后由客户端确认出队。
+AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期且原 group 仍不存在时，
+才能用同一 nonce、新 epoch 和版本 0 CAS 重交正文。撤回先隐藏 SQLite 目录，
+后台以原子空 group 清理活跃记录，并用 group 版本阻断迟到写入。
 
 仅在隔离副本演练。停止 Origence 和配套 AnySeek，复制整个 Origence 数据目录以及
 独立 AnySeek 的数据目录（嵌入模式的 AnySeek 在 Origence 目录下）。给远端方式提供
@@ -300,8 +290,8 @@ Improve 保存引用、反馈及支持片段哈希，模型处理时从私有集
 
 这里验证的是逻辑清除及清理后当前 SQLite 文件的可见内容。SQLite `secure_delete`、
 `VACUUM` 和 WAL 截断无法保证底层数据库页面、历史 WAL、文件系统副本、快照或历史备份的
-物理擦除。切换前的备份保留原文，按现有访问控制与保留策略单独管理。本 PR 仅在合成副本
-演练，生产迁移未执行。
+物理擦除。切换前备份仍含原文，按现有访问控制与保留策略管理。
+[AnySeek 历史日志和备份由独立保留策略管理。](#anyseek-全文与向量)
 
 从停止后的同一对目录还原时，保留 SQLite、AnySeek、绑定文件及所用版本。再次执行
 `verify` 并比对目录摘要和各活跃私有集合的可见水位，然后核对按序分页以及关键词、

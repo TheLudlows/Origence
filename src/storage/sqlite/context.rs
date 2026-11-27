@@ -6,8 +6,6 @@
 
 use super::read_model::{self, AssociationKey};
 use super::*;
-#[cfg(test)]
-use crate::context_retrieval::{ContextSessionResult, ContextSessionTurn, SESSION_SCAN_LIMIT};
 use crate::{
     context_retrieval::{ContextCandidate, ContextLearning, ContextLearningSupport, ContextRoute},
     learning::LearningCandidate,
@@ -15,16 +13,6 @@ use crate::{
     memory_semantics::Cardinality,
     types::SearchHit,
 };
-#[cfg(test)]
-use std::collections::HashSet;
-
-#[cfg(test)]
-#[path = "context_session_tests.rs"]
-mod session_tests;
-
-#[cfg(test)]
-const RECENT_EVENTS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND state='active' AND kind='session_turn' AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
-
 impl SqliteTx {
     pub(crate) async fn context_route_matches(
         &mut self,
@@ -335,144 +323,6 @@ impl SqliteTx {
                     principal_id: support.principal_id,
                 })
                 .collect(),
-        })
-    }
-
-    /// One shared metadata readset, with per-turn JSON and closure decisions in
-    /// caller order. No state escapes this read call or its transaction.
-    #[cfg(test)]
-    pub(crate) async fn context_session_turns(
-        &mut self,
-        keys: &[(Uuid, Uuid)],
-    ) -> StorageResult<Vec<Option<ContextSessionTurn>>> {
-        if keys.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.check_permission(Permission::Write).await?;
-        let bound = self.bound_private_session().await?;
-        if keys.iter().any(|(session, _)| Some(*session) != bound) {
-            return Err(StorageError::NotFound);
-        }
-        let mut batch = self.context_turn_metadata(keys).await?;
-        let mut turns = Vec::with_capacity(keys.len());
-        for index in 0..keys.len() {
-            turns.push(self.context_turn_from_metadata(&mut batch, index).await?);
-        }
-        Ok(turns)
-    }
-
-    #[cfg(test)]
-    async fn recent_turn_keys(
-        &mut self,
-        session: Option<Uuid>,
-        exclude_session: Option<Uuid>,
-    ) -> StorageResult<Vec<(Uuid, Uuid)>> {
-        let Some(bound) = self.bound_private_session().await? else {
-            return Ok(Vec::new());
-        };
-        if session.is_some_and(|id| id != bound) {
-            return Err(StorageError::NotFound);
-        }
-        let session = Some(bound);
-        let mut selected = Vec::new();
-        let mut cursor: Option<(AssociationKey, AssociationKey, AssociationKey)> = None;
-        loop {
-            let sql = if cursor.is_some() {
-                "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) AND (created_at<? OR (created_at=? AND (session_id>? OR (session_id=? AND turn_id>?)))) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
-            } else {
-                "SELECT session_id,turn_id,source_event_id,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND (? IS NULL OR session_id=?) AND (? IS NULL OR session_id!=?) ORDER BY created_at DESC,session_id,turn_id LIMIT 128"
-            };
-            let mut query = sqlite_db::query(sql)
-                .bind(self.scope.tenant_id)
-                .bind(self.scope.workspace_id)
-                .bind(session)
-                .bind(session)
-                .bind(exclude_session)
-                .bind(exclude_session);
-            if let Some((created_at, session, turn)) = &cursor {
-                query = query
-                    .bind(created_at.clone())
-                    .bind(created_at.clone())
-                    .bind(session.clone())
-                    .bind(session.clone())
-                    .bind(turn.clone());
-            }
-            let rows = query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
-            let size = rows.len();
-            if let Some(last) = rows.last() {
-                cursor = Some((
-                    last.try_get("created_at").map_err(sqlite_err)?,
-                    last.try_get("session_id").map_err(sqlite_err)?,
-                    last.try_get("turn_id").map_err(sqlite_err)?,
-                ));
-            }
-            let keys = rows
-                .iter()
-                .map(|row| Ok(vec![row.try_get("source_event_id").map_err(sqlite_err)?]))
-                .collect::<StorageResult<Vec<_>>>()?;
-            // Even the empty first page prepares the event relation, as the
-            // original statement did. Domain keys are decoded only after gate.
-            let active: HashSet<_> =
-                read_model::associate_query(&mut self.tx, self.scope, RECENT_EVENTS, 1, &keys)
-                    .await?
-                    .into_iter()
-                    .map(|(index, _)| index)
-                    .collect();
-            for (index, row) in rows.into_iter().enumerate() {
-                if active.contains(&index) {
-                    selected.push(row);
-                    if selected.len() == SESSION_SCAN_LIMIT + 1 {
-                        break;
-                    }
-                }
-            }
-            if selected.len() == SESSION_SCAN_LIMIT + 1 || size < 128 {
-                break;
-            }
-        }
-        // The original query decoded all 513 keys before inspecting any turn.
-        selected
-            .into_iter()
-            .map(|row| {
-                Ok((
-                    row.try_get("session_id").map_err(sqlite_err)?,
-                    row.try_get("turn_id").map_err(sqlite_err)?,
-                ))
-            })
-            .collect()
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn context_recent_turns(
-        &mut self,
-        terms: &str,
-        session: Option<Uuid>,
-        exclude_session: Option<Uuid>,
-        limit: usize,
-    ) -> StorageResult<ContextSessionResult> {
-        self.check_permission(Permission::Write).await?;
-        let rows = self.recent_turn_keys(session, exclude_session).await?;
-        let scan_exhausted = rows.len() > SESSION_SCAN_LIMIT;
-        let words: HashSet<_> = terms.split_whitespace().collect();
-        let mut turns = Vec::new();
-        let scanned = rows.len().min(SESSION_SCAN_LIMIT);
-        let checked = self.context_session_turns(&rows[..scanned]).await?;
-        for item in checked {
-            let Some(mut item) = item else {
-                continue;
-            };
-            let text = crate::parsing::lexical(&format!("{}\n{}", item.question, item.answer));
-            let tokens: HashSet<_> = text.split_whitespace().collect();
-            if words.is_subset(&tokens) && turns.len() < limit {
-                // Recent-first rank counts visible retained matches only.
-                item.score = 1.0 / (turns.len() + 1) as f64;
-                turns.push(item);
-            }
-        }
-        Ok(ContextSessionResult {
-            turns,
-            scanned,
-            scan_exhausted,
         })
     }
 }

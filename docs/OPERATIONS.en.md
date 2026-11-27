@@ -6,7 +6,10 @@ Applies to a single host using SQLite as the authority, Blob storage, and AnySee
 
 ## Current scope
 
-This stage targets newly created databases. Startup requires the complete current schema and does not add missing tables, upgrade, or migrate existing data. Same-version durability, restart and retry, and backup and restore remain required. Incompatible schemas cannot be opened. Retain original sources and backups, and keep old data intact when using a new directory. See [storage invariants](contracts/storage.en.md) for transaction queries, identity reservations, and publication plans.
+Startup requires the complete current schema. The immediately preceding private archive schema
+has an [explicit offline migration](#private-archive-and-paired-recovery). Retain original sources
+and backups. See [storage invariants](contracts/storage.en.md) for transaction queries, identity
+reservations, and publication plans.
 
 ## Directories and processes
 
@@ -14,9 +17,9 @@ This stage targets newly created databases. Startup requires the complete curren
 
 | Path | Contents |
 | --- | --- |
-| `context.db` and SQLite WAL | Permissions, original source events, version pointers and content hashes, locators, summary retrieval terms, idempotency, jobs and recovery plans, owners, ledger, and audit |
+| `context.db` and SQLite WAL | Permissions, source events, private archive directory, version pointers and content hashes, locators, summary retrieval terms, idempotency, jobs and recovery plans, owners, ledger, and audit |
 | `context.db.lock` | OS lock file for exclusive host access. The file can exist when the lock is no longer held. |
-| `anyseek/` | Default local AnySeek Catalog and workspace collections, including text, summaries, and full-text, vector, and graph indexes. A standalone deployment is backed up separately according to AnySeek's rules. |
+| `anyseek/` | Default local AnySeek Catalog and shared and private collections, including text, summaries, and full-text, vector, and graph indexes. A standalone deployment is backed up separately according to AnySeek's rules. |
 | `full-text-backend.json` | AnySeek endpoint, automatic tenant/workspace routing rules, and embedding profile and dimension binding. Contains no key and is backed up with the entire directory. |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | Original file contents, located by scope and content hash |
 
@@ -203,30 +206,33 @@ Run `origence.exe serve --local` to start the API and local AnySeek. To also sta
 
 ## Private archive and paired recovery
 
-A private collection is derived from tenant namespace, workspace, and logical-key UUID. Each turn
-has a stable canonical Record and an atomic search projection. At the existing 65,536 UTF-8 bytes
-per question or answer, the full body fits the pinned AnySeek 1 MiB Record limit even with worst-case
-JSON escaping. Lexical indexing covers the full turn. If embeddings are configured, the provider
-receives up to the first 4096 UTF-8 bytes of each field, cut at a character boundary. Meaning present
-only in a long answer’s tail is outside the vector projection.
+See the [archive API contract](API.en.md#session-archiving-and-idempotent-feedback) for delivery,
+retrieval, and withdrawal behavior. The complete body fits in a stable Record under the pinned
+1 MiB limit, including JSON escaping. It is committed atomically with its search projection.
 
-Origin authority registers pending first. If the AnySeek receipt cannot be used, Origence compares
-the stable group, its members and the body digest. Wire operation epochs expire after the current
-and previous UTC day. A confirmed expiry and absent group permit a fresh epoch with the original
-operation nonce and CAS version zero. Withdrawal hides the directory first and durably empties or
-fences the native group. AnySeek log retention and backup rotation govern physical eradication.
+AnySeek accepts the current and previous UTC operation epochs. Resubmit under a fresh epoch
+only after the backend confirms expiry and an absent group. Keep the original nonce and
+use CAS version zero. Withdrawal hides the directory first. Cleanup uses an atomic empty group
+and fences delayed writes with the group version.
 
-On a stopped, isolated copy, run `origence --offline --data-dir <copy> archive-migrate copy --isolated-copy --limit 64`,
-then `archive-migrate verify --isolated-copy` with the same global flags. Add `--local` for embedded
-AnySeek. Wait for `unconfirmed=0`, check the ordered directory and restore the paired backup before
-using `archive-migrate purge --isolated-copy`. Purge rechecks the native records before redacting
-legacy SQLite bodies, Improve snapshots and quote references, and Run replay snapshots. SQLite
-compaction and WAL truncation precede normal startup. Retain the manifest with the paired SQLite
-and AnySeek copies. Compare the directory SHA-256, engine version, SQLite-confirmed sequences, and active private-collection visible sequences after restore. These are offline verification results, with no guarantee of an
-online cross-store snapshot or an authoritative body for pending entries never written to AnySeek.
+Stop Origence and AnySeek and retain an untouched paired backup. Work on an isolated copy of
+the complete data directories. For embedded AnySeek, add `--local`. For standalone AnySeek,
+use the isolated service at the bound address and set `OC_ANYSEEK_URL` and `OC_ANYSEEK_API_KEY`.
 
-Verification checks logical removal and the contents of the current SQLite files. SQLite
-`secure_delete`, `VACUUM`, and WAL truncation do not guarantee physical erasure from storage
-pages, historical WAL files, filesystem copies, snapshots, or older backups. Keep the pre-cutover
-backup under the existing access and retention policy. The migration was exercised only on
-disposable synthetic copies.
+1. Run `origence --offline --data-dir <copy> archive-migrate copy --isolated-copy --limit 64`.
+   It accepts the immediately preceding authority schema or a prepared copy. Re-run to resume.
+2. Run `archive-migrate verify --isolated-copy` with the same global flags. Require
+   `unconfirmed=0` and rehearse restoring the paired backup.
+3. Run `archive-migrate purge --isolated-copy`. It rechecks the directory before clearing the
+   old turn bodies, Improve prose and quotes, and Run replay bodies. Re-run if interrupted.
+   Normal startup resumes after SQLite compaction and WAL truncation. Persisted Run verification
+   and Skill references retain their prefix digests. An external-only commitment may need renewal.
+
+After a stopped paired restore, compare directory SHA-256, engine version, SQLite confirmation
+sequences, and AnySeek visible sequences. Check ordered reads, keyword and vector search, and key
+isolation. An unwritten pending body requires the original caller payload. Online, object-storage,
+and cross-version backups require separate validation.
+
+SQLite `secure_delete`, `VACUUM`, and WAL truncation provide logical cleanup of active files.
+They cannot guarantee physical erasure of storage pages, historical WAL, filesystem copies,
+snapshots, or backups. Keep access controls and retention on the untouched pre-cutover backup.

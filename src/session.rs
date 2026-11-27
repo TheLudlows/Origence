@@ -113,7 +113,7 @@ impl EvidenceUse {
     }
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "local-storage")]
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ArchivedTurnBody {
@@ -123,9 +123,8 @@ pub(crate) struct ArchivedTurnBody {
     pub evidence_use: EvidenceUse,
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "local-storage")]
 impl ArchivedTurnBody {
-    #[cfg(any(feature = "local-storage", test))]
     pub(crate) fn from_input(input: &SessionTurnInput) -> Self {
         Self {
             question: input.question.clone(),
@@ -134,7 +133,6 @@ impl ArchivedTurnBody {
         }
     }
 
-    #[cfg(feature = "local-storage")]
     pub(crate) fn model_json_bytes(&self) -> usize {
         // Serialized string sizes less the two empty JSON string delimiters.
         serde_json::json!(self.question).to_string().len()
@@ -142,7 +140,6 @@ impl ArchivedTurnBody {
             - 4
     }
 
-    #[cfg(feature = "local-storage")]
     pub(crate) fn digest(&self) -> String {
         crate::storage::hash(serde_json::json!(self).to_string())
     }

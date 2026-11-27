@@ -418,7 +418,22 @@ Feedback request examples for the original turn or an exact archived reference r
 
 rating accepts only helpful/unhelpful/neutral as the caller's judgment, without inferring truth. comment is optional or null and capped at 4096 UTF-8 bytes. Targets must belong to the archived turn in the path. Feedback may not refer to unused hits, other turns, or other scopes. At most 256 immutable entries per turn. At capacity, new entries return 409 while exact replays can still succeed without truncation. The unique domain key is tenant/workspace/principal/feedback_id. The same semantic request reuses results; changed turn, target, rating, or comment returns 409. Feedback does not overwrite, edit, or delete prior ratings or directly change ranking or weights. POST returns `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`. GET returns `{session_id,turn_id,feedback:[...]}`. Feedback retains the original request and created_by/created_at. Turn GET also includes feedback.
 
-Governance invalidates a whole turn conservatively. Admin `DELETE /v1/events/{source_event_id}` can withdraw Q&A. Deleting a content item actually cited, withdrawing its root source or any semantic-memory support source, or deleting its file immediately blocks the entire turn and feedback reads and writes (404). Original archive source GET also checks dependencies. This applies before cleanup. Historical archives do not depend on removable chunk foreign keys. Reads and replay revalidate sources. The cache stores IDs and statuses only; the same key, a different key, or restart cannot revive invalid archives. Learning only uses archives that pass the same validity checks. The explicit Improve → Learning endpoint follows. A writer on the owning logical key can withdraw a turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}` or a session with `DELETE /v1/sessions/{session_id}`. Withdrawal blocks delivery in the authority transaction. Retriable AnySeek cleanup fences late writes with the group version. Existing backups follow their own retention policy.
+An owning writer can withdraw one turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}`
+or the whole session with `DELETE /v1/sessions/{session_id}`. Admins can also withdraw the
+archive source with `DELETE /v1/events/{source_event_id}`. Invalidation of a cited item, root
+source, semantic-memory support source, or file immediately blocks the entire turn and feedback
+(404). The same visibility rules apply to source reads, replay, and Improve.
+[Cleanup and backups](OPERATIONS.en.md#private-archive-and-paired-recovery)
+
+The session route is off by default. A caller without live writer permission receives 403 before model calls.
+`session_id` and `exclude_session_id` require the session route. Keyword, vector, and hybrid
+search use eligible archived IDs in the workspace and logical-key collection. Origence deduplicates
+by turn ID and rechecks sources and transitive Learning support before delivery.
+`scanned` counts eligible directory entries.
+Keywords cover the complete turn. Vectors represent up to the first 4096 UTF-8 bytes of the
+question and answer separately, cut at a character boundary. Meaning present only in a long
+answer's tail is outside the vector projection. `allow_partial` permits keyword fallback when
+embedding is unavailable.
 
 ## Explicit Improve → Learning
 
@@ -452,7 +467,7 @@ Optional fields include `mode` keyword (default)/vector/hybrid, `allow_partial` 
 
 The memory route includes consolidated topics for ordinary queries such as `{"query":"What is Atlas's domestic hotel reimbursement limit?","as_of_ms":1796083200000}`. `as_of_ms` selects the fact's business time in Unix milliseconds, defaulting to now. Each `long_term_memory` provenance has the chosen `state`, versioned `timeline`, and original UTF-8 quote spans. `conflicting` and `unknown` have no selected value. The console opens the original as a writer or verifies the published quote as a reader. [Field and budget details](contracts/evidence-bundle.md#typed-provenance-and-applicability)
 
-Session requires writer or above or returns 403, checked before model calls. `session_id` / `exclude_session_id` can restrict sessions only when the session route is enabled. The private AnySeek collection supports keyword, vector, and hybrid retrieval. Origence restricts the native query to valid archived IDs, rechecks permission and source validity before delivery, and deduplicates by stable turn ID. `scanned` reports eligible directory entries. Vector search uses the configured embedding model. `allow_partial` permits keyword fallback when an embedding is unavailable.
+See the [session archive and retrieval rules](#session-archiving-and-idempotent-feedback).
 
 Returns `rendered_context`, `items`, `conflicts`, `warnings`, scope, policy, requested/effective mode, total budget and actual bytes, and per-route candidate, kept, and omitted counts. Each item retains type, retrieval lane, conditions/applicability, semantic identity, score kind, and stable citation. `provenance.type=asset_chunk` distinguishes asset_version, original source_version, and version_root_source_event_id. `session_turn` retains real session_id/turn_id/archive source and historic used_evidence without fabricating chunks. Full visibility of sources and referenced material is checked before budgeting and in the final render snapshot. Withdrawal does not wait for physical cleanup. Validity only indicates that the read snapshot visibility check passed.
 

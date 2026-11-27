@@ -25,27 +25,22 @@ impl SqliteTx {
         &mut self,
         session: Uuid,
         turn: Uuid,
-    ) -> StorageResult<Option<(bool, usize)>> {
-        if !archive_schema_present(&mut self.tx).await? {
-            return Ok(None);
-        }
-        let row: Option<(bool, i64)> = sqlite_db::query_as("SELECT evidence_reported,body_bytes FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+    ) -> StorageResult<(bool, usize)> {
+        let (reported, bytes): (bool, i64) = sqlite_db::query_as("SELECT evidence_reported,body_bytes FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? AND state='archived'")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        row.map(|(reported, bytes)| {
-            usize::try_from(bytes)
-                .map(|bytes| (reported, bytes))
-                .map_err(|_| StorageError::Unavailable("invalid private archive body size".into()))
-        })
-        .transpose()
+            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+        let bytes = usize::try_from(bytes)
+            .map_err(|_| StorageError::Unavailable("invalid private archive body size".into()))?;
+        Ok((reported, bytes))
     }
 
     pub(super) async fn withdraw_archive_source(&mut self, source: Uuid) -> StorageResult<()> {
-        if archive_schema_present(&mut self.tx).await? {
-            sqlite_db::query("UPDATE oc_private_archives SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        if cfg!(test) && !archive_schema_present(&mut self.tx).await? {
+            return Ok(());
         }
+        sqlite_db::query("UPDATE oc_private_archives SET state='withdrawn' WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
 }
@@ -71,7 +66,7 @@ mod host {
         pub evidence_use: EvidenceUse,
     }
 
-    pub(crate) type Row = (
+    type Row = (
         Uuid,
         Uuid,
         Uuid,
@@ -85,7 +80,7 @@ mod host {
     );
 
     impl ArchiveEntry {
-        pub(crate) fn from_row(scope: Scope, row: Row) -> StorageResult<Self> {
+        fn from_row(scope: Scope, row: Row) -> StorageResult<Self> {
             let (owner, session, turn, source, body_hash, epoch, reported, sequence, state, group) =
                 row;
             let locator = ArchiveLocator {
@@ -316,46 +311,30 @@ mod host {
             Ok(value)
         }
 
-        pub(crate) async fn archive_list(
+        /// Full directory rows define the page cursor. Only entries with
+        /// currently valid support are eligible for native body reads or search.
+        pub(crate) async fn archive_page(
             &mut self,
             session: Uuid,
             after: i64,
             limit: usize,
-        ) -> StorageResult<Vec<ArchiveEntry>> {
+        ) -> StorageResult<(ArchiveDomain, Option<i64>, usize, Vec<ArchiveEntry>)> {
             let domain = self.archive_domain(session).await?;
             let rows: Vec<Row> = sqlite_db::query_as("SELECT logical_key_id,session_id,turn_id,source_event_id,body_hash,operation_epoch,evidence_reported,turn_sequence,state,group_id FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND logical_key_id=? AND session_id=? AND state='archived' AND turn_sequence>? ORDER BY turn_sequence LIMIT ?")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(domain.owner).bind(session).bind(after).bind(limit as i64)
                 .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
-            rows.into_iter()
-                .map(|row| ArchiveEntry::from_row(self.scope, row))
-                .collect()
-        }
-
-        pub(crate) async fn archive_candidates(
-            &mut self,
-            session: Uuid,
-            groups: &[String],
-        ) -> StorageResult<HashMap<String, ArchiveEntry>> {
-            let domain = self.archive_domain(session).await?;
-            let mut selected = HashMap::new();
-            for batch in groups.chunks(16) {
-                let mut query = sqlite_db::query_as::<Row>("SELECT logical_key_id,session_id,turn_id,source_event_id,body_hash,operation_epoch,evidence_reported,turn_sequence,state,group_id FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND logical_key_id=? AND session_id=? AND state='archived' AND group_id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                    .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(domain.owner).bind(session);
-                for i in 0..16 {
-                    query = query.bind(batch.get(i).map(String::as_str));
-                }
-                for row in query.fetch_all(&mut *self.tx).await.map_err(sqlite_err)? {
-                    let entry = ArchiveEntry::from_row(self.scope, row)?;
-                    match self.require_archive_support(&entry).await {
-                        Ok(_) => {
-                            selected.insert(entry.locator.group(), entry);
-                        }
-                        Err(StorageError::NotFound) => {}
-                        Err(error) => return Err(error),
-                    }
+            let next = rows.last().map(|row| row.7);
+            let scanned = rows.len();
+            let mut selected = Vec::new();
+            for row in rows {
+                let entry = ArchiveEntry::from_row(self.scope, row)?;
+                match self.require_archive_support(&entry).await {
+                    Ok(_) => selected.push(entry),
+                    Err(StorageError::NotFound) => {}
+                    Err(error) => return Err(error),
                 }
             }
-            Ok(selected)
+            Ok((domain, next, scanned, selected))
         }
 
         pub(crate) async fn withdraw_archives(

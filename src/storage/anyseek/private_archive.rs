@@ -1,12 +1,10 @@
 //! Private archive collections have no route through workspace asset retrieval.
 use super::*;
-use crate::session::ArchivedTurnBody;
+use crate::session::{ArchiveDomain, ArchiveLocator, ArchivedTurnBody};
 
 const PRIVATE_FORMAT: &str = "origence-private-archive-v1";
 const PRIVATE_FIELDS: &[&str] = &["archive", "kind"];
 const RECORD_BYTES: usize = 1024 * 1024;
-
-use crate::session::{ArchiveDomain, ArchiveLocator};
 
 #[derive(Clone, Copy)]
 pub(crate) enum ArchiveQuery<'a> {
@@ -16,6 +14,27 @@ pub(crate) enum ArchiveQuery<'a> {
 
 fn invalid_archive() -> StorageError {
     StorageError::Unavailable("private archive contents failed integrity verification".into())
+}
+
+fn receipt_sequence(
+    result: &Value,
+    group: &str,
+    epoch: u64,
+    nonce: &str,
+    version: u64,
+    records: usize,
+) -> Option<u64> {
+    let receipt = &result["receipt"];
+    if result["atomic"] != true
+        || result["operation_id"]["epoch"] != epoch
+        || result["operation_id"]["nonce"] != nonce
+        || receipt["group_id"] != group
+        || receipt["group_version"] != version
+        || receipt["record_count"] != records
+    {
+        return None;
+    }
+    receipt["seq"].as_u64().filter(|seq| *seq > 0)
 }
 
 impl AnySeekFullTextStore {
@@ -207,10 +226,7 @@ impl AnySeekFullTextStore {
             .map(|hit| &hit["record"])
             .find(|record| record["record_id"] == group)
             .ok_or_else(invalid_archive)?;
-        if record["record_id"] != group
-            || record["document"]["archive"] != group
-            || record["document"]["kind"] != "body"
-        {
+        if record["document"]["archive"] != group || record["document"]["kind"] != "body" {
             return Err(invalid_archive());
         }
         let body: ArchivedTurnBody = serde_json::from_value(record["document"]["body"].clone())
@@ -276,13 +292,7 @@ impl AnySeekFullTextStore {
         }
         if let Ok((status, result)) = &response
             && status.is_success()
-            && result["atomic"] == true
-            && result["operation_id"]["epoch"] == epoch
-            && result["operation_id"]["nonce"] == nonce
-            && result["receipt"]["group_id"] == group
-            && result["receipt"]["group_version"] == 1
-            && result["receipt"]["record_count"] == 2
-            && let Some(seq) = result["receipt"]["seq"].as_u64().filter(|s| *s > 0)
+            && let Some(seq) = receipt_sequence(result, &group, epoch, &nonce, 1, 2)
         {
             return Ok(seq);
         }
@@ -330,12 +340,7 @@ impl AnySeekFullTextStore {
                 continue;
             }
             if status.is_success()
-                && result["atomic"] == true
-                && result["operation_id"]["epoch"] == epoch
-                && result["operation_id"]["nonce"] == nonce
-                && result["receipt"]["group_id"] == group
-                && result["receipt"]["group_version"] == version + 1
-                && result["receipt"]["record_count"] == 0
+                && receipt_sequence(&result, &group, epoch, &nonce, version + 1, 0).is_some()
             {
                 return Ok(());
             }

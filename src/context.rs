@@ -6,7 +6,7 @@ use crate::{
     error::{AppError, Result},
     evidence::*,
     service::Service,
-    storage::{DomainTx, Permission, sqlite::now_ms},
+    storage::{DomainTx, Permission, StorageError, sqlite::now_ms},
     types::AuthContext,
 };
 
@@ -121,13 +121,13 @@ impl Service {
                     ranked_native.extend(found.ranked_native);
                 }
                 None => {
-                    let found = self
+                    let (scanned, found) = self
                         .context_session_candidates(auth, &input, &query, route.limit)
                         .await?;
-                    accounting.candidates = found.turns.len();
-                    accounting.scanned = Some(found.scanned);
-                    accounting.scan_exhausted = Some(found.scan_exhausted);
-                    turns.extend(found.turns);
+                    accounting.candidates = found.len();
+                    accounting.scanned = Some(scanned);
+                    accounting.scan_exhausted = Some(false);
+                    turns.extend(found);
                 }
             }
             bundle.routes.push(accounting);
@@ -219,15 +219,21 @@ impl Service {
             items.push(item);
         }
         for candidate in turns {
-            if let Some(fresh) = Self::recheck_archive_candidate(&mut tx, candidate).await? {
-                items.push(session_item(fresh, &query.effective_mode));
-            } else {
-                bundle
-                    .routes
-                    .iter_mut()
-                    .find(|r| r.route == EvidenceRoute::Session)
-                    .unwrap()
-                    .invalidated_before_render += 1;
+            match tx.archive_delivery(&candidate.entry, candidate.body).await {
+                Ok(mut turn) => {
+                    turn.score = candidate.score;
+                    turn.retrieval_routes = candidate.routes;
+                    items.push(session_item(turn, &query.effective_mode));
+                }
+                Err(StorageError::NotFound) => {
+                    bundle
+                        .routes
+                        .iter_mut()
+                        .find(|r| r.route == EvidenceRoute::Session)
+                        .unwrap()
+                        .invalidated_before_render += 1;
+                }
+                Err(error) => return Err(error.into()),
             }
         }
         render(&mut bundle, items);

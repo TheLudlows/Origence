@@ -488,7 +488,18 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 
 rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
 
-治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的内容条目删除、根来源撤回、记忆语义 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；显式学习入口见下节 Improve → Learning。原逻辑 key 的 writer 可用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 撤回单轮，或用 `DELETE /v1/sessions/{session_id}` 撤回整个会话。撤回事务立即阻断交付，后台清理重试并用 AnySeek group 版本阻断晚到写入。已有备份仍遵守各自的保留策略。
+原逻辑 key 的 writer 可用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 撤回单轮，
+或用 `DELETE /v1/sessions/{session_id}` 撤回整个会话。admin 也可撤回归档来源
+`DELETE /v1/events/{source_event_id}`。实际引用的条目、根来源、任一语义支持来源或文件失效时，
+整轮问答和反馈立即返回 404。原始来源读取、重放和 Improve 使用同一可见性规则。
+[清理与备份](OPERATIONS.md#私有问答归档隔离迁移与配套恢复)
+
+私有会话召回默认关闭。启用 session 路由要求实时 writer 权限，未通过时在模型调用前返回 403。
+`session_id` / `exclude_session_id` 仅在启用时可用。关键词、向量及混合检索仅查询
+该 workspace 和逻辑 key 的有效归档 ID，按 turn ID 去重并在交付前复核来源及传递 Learning 支持。
+`scanned` 为有效目录候选数。关键词覆盖完整问答。向量只表示问题和回答各自开头
+最多 4096 UTF-8 字节，按字符边界截断。只出现在长回答尾部的语义不会进入向量投影。
+embedding 不可用时，`allow_partial` 允许退回关键词。
 
 ## 显式 Improve → Learning
 
@@ -531,12 +542,7 @@ resolve 合约不变。最小输入为 `{"query":"Atlas"}`。
 
 memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_of_ms":1796083200000}` 召回已归纳主题。`as_of_ms` 指定事实的业务时点（Unix 毫秒，默认当前时间）。`long_term_memory` 来源包含该时点的 `state`、带版本的时间线和原文 UTF-8 引文区间。状态为 `conflicting` 或 `unknown` 时没有选定值。控制台 writer 可打开原文，reader 可核验已发布的引文。[字段及预算细节](contracts/evidence-bundle.zh-CN.md#类型化来源与适用性)
 
-启用 session 必须 writer 以上，否则 403；该权限在任何模型调用前校验。
-`session_id` / `exclude_session_id` 可限制会话，必须同时启用 session。会话路由
-在认证 workspace 和逻辑 key 的独立 AnySeek 集合支持 keyword、vector 和 hybrid。
-Origence 在查询前限制到有效的已归档轮次，交付前再复核当前权限和来源，并按稳定 turn_id 去重。
-`scanned` 记录有效的目录候选数。vector 依赖部署配置的 embedding，`allow_partial` 允许
-缺少 embedding 时退回关键词。
+会话路由详见 [会话归档与召回访问规则](#会话归档与幂等反馈)。
 
 返回 `rendered_context`、`items`、`conflicts`、`warnings`、scope、policy、
 requested/effective mode、总预算/实际字节及各路由候选/保留/省略计数。

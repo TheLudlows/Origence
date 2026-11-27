@@ -1,9 +1,9 @@
 //! Private archives reconcile AnySeek durability with SQLite delivery authority.
 use crate::{
-    context_retrieval::{ContextQuery, ContextSessionResult, ContextSessionTurn},
+    context_retrieval::ContextQuery,
     error::{AppError, Result},
     service::Service,
-    session::{ArchivedTurnBody, FeedbackInput, SessionTurnInput},
+    session::{ArchiveLocator, ArchivedTurnBody, FeedbackInput, SessionTurnInput},
     storage::{
         DomainTx, Permission, StorageError,
         anyseek::{operation_epoch, private_archive::ArchiveQuery},
@@ -15,6 +15,13 @@ use crate::{
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
+
+pub(crate) struct ArchiveCandidate {
+    pub entry: ArchiveEntry,
+    pub body: ArchivedTurnBody,
+    pub score: f64,
+    pub routes: Vec<String>,
+}
 
 fn session_id(id: Uuid) -> Result<()> {
     if id.is_nil() {
@@ -75,7 +82,7 @@ impl Service {
         {
             seq
         } else {
-            self.archive_body_write(&entry, &body).await?
+            self.write_archive_locator(&entry.locator, &body).await?
         };
         let mut tx = self.write(a, Permission::Write).await?;
         tx.confirm_archive(&entry, seq).await?;
@@ -83,17 +90,9 @@ impl Service {
         Ok(entry.receipt())
     }
 
-    pub(crate) async fn archive_body_write(
-        &self,
-        entry: &ArchiveEntry,
-        body: &ArchivedTurnBody,
-    ) -> Result<u64> {
-        self.write_archive_locator(&entry.locator, body).await
-    }
-
     pub(crate) async fn write_archive_locator(
         &self,
-        locator: &crate::session::ArchiveLocator,
+        locator: &ArchiveLocator,
         body: &ArchivedTurnBody,
     ) -> Result<u64> {
         let text = format!("{}\n{}", body.question, body.answer);
@@ -200,17 +199,12 @@ impl Service {
             return Err(AppError::Invalid("invalid private archive page".into()));
         }
         let mut tx = self.read(a, Permission::Write).await?;
-        let entries = tx.archive_list(session, after, limit).await?;
-        let groups: Vec<_> = entries.iter().map(|entry| entry.locator.group()).collect();
-        let visible = tx.archive_candidates(session, &groups).await?;
+        let (_, next, _, entries) = tx.archive_page(session, after, limit).await?;
         tx.commit().await?;
-        let next = entries.last().map(|entry| entry.sequence);
         let mut bodies = Vec::new();
         for entry in entries {
-            if visible.contains_key(&entry.locator.group()) {
-                let body = self.archived_body(&entry).await?;
-                bodies.push((entry, body));
-            }
+            let body = self.archived_body(&entry).await?;
+            bodies.push((entry, body));
         }
         let mut tx = self.read(a, Permission::Write).await?;
         tx.archive_domain(session).await?;
@@ -250,37 +244,28 @@ impl Service {
         input: &crate::evidence::EvidenceInput,
         prepared: &ContextQuery,
         limit: usize,
-    ) -> Result<ContextSessionResult> {
-        let empty = || ContextSessionResult {
-            turns: Vec::new(),
-            scanned: 0,
-            scan_exhausted: false,
-        };
+    ) -> Result<(usize, Vec<ArchiveCandidate>)> {
         let mut tx = self.read(auth, Permission::Write).await?;
         let bound = tx.bound_private_session().await?;
         if input.session_id.is_some() && input.session_id != bound {
             return Err(AppError::NotFound);
         }
         let Some(session) = bound.filter(|id| Some(*id) != input.exclude_session_id) else {
-            return Ok(empty());
+            return Ok((0, Vec::new()));
         };
-        let domain = tx.archive_domain(session).await?;
         // AnySeek's default 10,000-record collection stores two members per turn.
-        let directory = tx.archive_list(session, 0, 5001).await?;
-        let groups: Vec<_> = directory
-            .iter()
-            .map(|entry| entry.locator.group())
-            .collect();
-        let eligible = tx.archive_candidates(session, &groups).await?;
+        let (domain, _, scanned, entries) = tx.archive_page(session, 0, 5001).await?;
         tx.commit().await?;
-        if eligible.is_empty() {
-            return Ok(empty());
+        if entries.is_empty() {
+            return Ok((0, Vec::new()));
         }
-        if directory.len() > 5000 {
+        if scanned > 5000 {
             return Err(AppError::Unavailable(
                 "private archive collection exceeds query budget".into(),
             ));
         }
+        let groups: Vec<_> = entries.iter().map(|entry| entry.locator.group()).collect();
+        let eligible: HashMap<_, _> = groups.iter().cloned().zip(entries).collect();
         let backend = self.engine.vector().private_archive();
         if !backend.private_collection(domain, false).await? {
             return Err(AppError::Unavailable(
@@ -295,10 +280,6 @@ impl Service {
         if let Some(vector) = &prepared.embedding {
             queries.push(("vector", ArchiveQuery::Vector(vector)));
         }
-        let groups: Vec<_> = groups
-            .into_iter()
-            .filter(|group| eligible.contains_key(group))
-            .collect();
         let mut ranked = HashMap::<String, (f64, Vec<String>)>::new();
         for (route, query) in &queries {
             let mut hits = Vec::new();
@@ -343,46 +324,16 @@ impl Service {
                 .then_with(|| eligible[&b.0].sequence.cmp(&eligible[&a.0].sequence))
         });
         let mut found = Vec::new();
-        for (group, (score, routes)) in ranked {
+        for (group, (score, routes)) in ranked.into_iter().take(limit) {
             let entry = &eligible[&group];
-            found.push((entry, self.archived_body(entry).await?, score, routes));
-            if found.len() == limit {
-                break;
-            }
+            found.push(ArchiveCandidate {
+                entry: entry.clone(),
+                body: self.archived_body(entry).await?,
+                score,
+                routes,
+            });
         }
-        let mut tx = self.read(auth, Permission::Write).await?;
-        let mut turns = Vec::new();
-        for (entry, body, score, routes) in found {
-            match tx.archive_delivery(entry, body).await {
-                Ok(mut turn) => {
-                    turn.score = score;
-                    turn.retrieval_routes = routes;
-                    turns.push(turn);
-                }
-                Err(StorageError::NotFound) => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
-        tx.commit().await?;
-        Ok(ContextSessionResult {
-            turns,
-            scanned: groups.len(),
-            scan_exhausted: false,
-        })
-    }
-
-    pub(crate) async fn recheck_archive_candidate(
-        tx: &mut crate::storage::sqlite::SqliteTx,
-        candidate: ContextSessionTurn,
-    ) -> Result<Option<ContextSessionTurn>> {
-        match tx
-            .require_turn_visible(candidate.session_id, candidate.turn_id)
-            .await
-        {
-            Ok(source) if source == candidate.source_event_id => Ok(Some(candidate)),
-            Ok(_) | Err(StorageError::NotFound) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Ok((groups.len(), found))
     }
 
     pub async fn record_feedback(

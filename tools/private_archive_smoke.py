@@ -274,6 +274,9 @@ def run_contract(binary, root, model, anyseek, legacy):
                 old_bodies = db.execute("SELECT content FROM oc_events WHERE kind='session_turn'").fetchall()
             assert any(MARKER in body for (body,) in old_bodies)
             params = [*args, "--isolated-copy"]
+            command(binary, env, "archive-migrate", "copy", *params, "--limit", "0", ok=False)
+            with database(directory) as db:
+                assert db.execute("SELECT name FROM sqlite_schema WHERE name='oc_private_archives'").fetchone() is None
             if anyseek:
                 proxy.action = "crash_after_commit"
                 cmd = [binary, "--offline", "archive-migrate", "copy", *params, "--limit", "1"]
@@ -306,6 +309,16 @@ def run_contract(binary, root, model, anyseek, legacy):
             assert repeated["copied"] == 0 and repeated["directory_sha256"] == copied["directory_sha256"]
             verified = command(binary, env, "archive-migrate", "verify", *params)
             assert verified["directory_sha256"] == copied["directory_sha256"]
+            damaged = root / "orphan-source-copy"
+            shutil.copytree(directory, damaged)
+            orphan = uuid.uuid4().bytes
+            with database(damaged) as db:
+                db.execute("INSERT INTO oc_events (tenant_id,workspace_id,id,content,kind,state,created_by,created_at) "
+                           "SELECT tenant_id,workspace_id,?,content,kind,state,created_by,created_at "
+                           "FROM oc_events WHERE kind='session_turn' LIMIT 1", (orphan,))
+            command(binary, dict(env, OC_DATA_DIR=str(damaged)), "archive-migrate", "purge", *params, ok=False)
+            with database(damaged) as db:
+                assert db.execute("SELECT content FROM oc_events WHERE id=?", (orphan,)).fetchone()[0]
             purged = command(binary, env, "archive-migrate", "purge", *params)
             assert purged["phase"] == "complete" and purged["directory_sha256"] == copied["directory_sha256"]
             assert command(binary, env, "archive-migrate", "purge", *params)["directory_sha256"] == copied["directory_sha256"]
@@ -332,6 +345,15 @@ def run_contract(binary, root, model, anyseek, legacy):
             assert host.request(prepare, run_request) == prepared
             assert host.request(prefix_path) == prefix
             assert host.request(verification_path, verification) == recorded_verification
+            source = uuid.UUID(saved[0]["source_event_id"]).bytes
+            with database(directory) as db:
+                db.execute("UPDATE oc_events SET kind='knowledge' WHERE id=?", (source,))
+            try:
+                expect(request(host.base, route + "/" + turn["turn_id"], token=token), 404)
+                assert host.request("/v1/context", context)["items"] == []
+            finally:
+                with database(directory) as db:
+                    db.execute("UPDATE oc_events SET kind='session_turn' WHERE id=?", (source,))
             for mode, query in (("keyword", MARKER), ("vector", "semantic paraphrase"), ("hybrid", MARKER)):
                 found = host.request("/v1/context", dict(context, query=query, mode=mode))
                 assert found["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
@@ -378,6 +400,24 @@ def run_contract(binary, root, model, anyseek, legacy):
                 proxy.entered.clear()
                 proxy.release.clear()
                 assert host.request(route + "/" + turn["turn_id"])["answer"] == ANSWER
+
+                disappearing = new_turn("withdrawalduringsearchneedle")
+                host.request(route, disappearing)
+                search = dict(context, query=disappearing["question"])
+                assert host.request("/v1/context", search)["items"][0]["provenance"]["turn_id"] == disappearing["turn_id"]
+                proxy.action = "hold_read"
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    inflight = pool.submit(request, host.base, "/v1/context", "POST", token, search)
+                    try:
+                        assert proxy.entered.wait(15), "context did not reach private body read"
+                        expect(request(host.base, route + "/" + disappearing["turn_id"], "DELETE", token), 200)
+                    finally:
+                        proxy.release.set()
+                    result = expect(inflight.result(), 200)
+                    assert result["items"] == []
+                    assert result["routes"][0]["invalidated_before_render"] == 1
+                proxy.entered.clear()
+                proxy.release.clear()
                 proxy.action = "before"
                 delayed = new_turn("unwrittenpendingneedle")
                 expect(request(host.base, route, "POST", token, delayed, "unwritten"), 503)

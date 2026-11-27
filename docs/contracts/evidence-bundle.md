@@ -43,14 +43,8 @@ native keyword/vector mode. The final snapshot reopens each topic's latest
 revision, checks every source and requires each ranking source to still belong
 to that revision.
 
-Session is off by default and requires live writer-or-higher permission before
-model IO. AnySeek searches a collection bound to the workspace and logical key
-using keyword, vector, or hybrid retrieval. Origence admits only archived turns
-with visible sources and archived references, including transitive Learning
-support. It deduplicates by turn ID and rechecks current visibility before
-rendering. `scanned` counts eligible directory entries. Keywords cover the full
-turn. Vector retrieval represents the first 4096 UTF-8 bytes of each field,
-cut at a character boundary. Tail-only meaning is outside the vector projection.
+The [session archive API](../API.en.md#session-archiving-and-idempotent-feedback)
+defines private retrieval, authorization, and coverage.
 
 All returned candidates are rebuilt in a fresh authorized relational snapshot
 after embedding/native IO, then rendered while the snapshot remains open.

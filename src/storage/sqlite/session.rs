@@ -6,9 +6,6 @@ use crate::session::SessionTurnInput;
 use crate::session::{ArchivedEvidence, EvidenceKind, FeedbackInput, FeedbackTarget, UsedEvidence};
 use std::collections::HashSet;
 
-#[cfg(all(test, feature = "local-storage"))]
-mod context_reads;
-
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
@@ -451,19 +448,6 @@ impl SqliteTx {
         rows.iter().map(|s| decode(s)).collect()
     }
 
-    #[cfg(any(feature = "local-storage", test))]
-    async fn archive_evidence(
-        &mut self,
-        reference: &UsedEvidence,
-        evidence_ref_id: Uuid,
-    ) -> StorageResult<ArchivedEvidence> {
-        let evidence = self
-            .archive_evidence_local(reference, evidence_ref_id)
-            .await?;
-        self.require_archived_evidence_visible(&evidence).await?;
-        Ok(evidence)
-    }
-
     /// Validate exact immutable provenance without following Learning edges.
     /// The iterative Learning guard is the only caller which may use this
     /// helper without the public writer-only archive permission check.
@@ -484,26 +468,14 @@ impl SqliteTx {
         turn: Uuid,
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_sessions().await?;
-        let turn_row = sqlite_db::query("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+        let source: AssociationKey = sqlite_db::query_scalar("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        let keys = turn_row
-            .as_ref()
-            .map(|row| -> StorageResult<Vec<AssociationKey>> {
-                Ok(vec![row.try_get("source_event_id").map_err(sqlite_err)?])
-            })
-            .transpose()?
-            .into_iter()
-            .collect::<Vec<_>>();
-        let active =
-            read_model::associate_query(&mut self.tx, self.scope, ARCHIVE_ROOTS, 1, &keys).await?;
-        if active.is_empty() {
-            return Err(StorageError::NotFound);
-        }
-        let source = turn_row
-            .ok_or(StorageError::NotFound)?
-            .try_get("source_event_id")
-            .map_err(sqlite_err)?;
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
+            .ok_or(StorageError::NotFound)?;
+        let source: Uuid = sqlite_db::query_scalar("SELECT id FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND state='active' AND kind='session_turn' AND file_id IS NULL")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
+            .ok_or(StorageError::NotFound)?;
         let archived = self.turn_evidence(session, turn).await?;
         let references: Vec<_> = archived
             .iter()
@@ -527,12 +499,20 @@ impl SqliteTx {
     }
 
     pub async fn require_turn_visible(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Uuid> {
+        Ok(self.visible_turn_support(session, turn).await?.0)
+    }
+
+    pub(super) async fn visible_turn_support(
+        &mut self,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
         self.require_private_session(session).await?;
         self.check_permission(Permission::Write).await?;
         let (source, evidence) = self.require_turn_visible_local(session, turn).await?;
         self.require_archived_evidence_set_visible(&evidence)
             .await?;
-        Ok(source)
+        Ok((source, evidence))
     }
 
     /// Also gate the existing raw-source endpoint, so it cannot bypass withdrawal.
@@ -549,36 +529,6 @@ impl SqliteTx {
         let (session, turn) = turn.ok_or(StorageError::NotFound)?;
         self.require_turn_visible(session, turn).await?;
         Ok(())
-    }
-
-    #[cfg(test)]
-    pub async fn archive_turn(
-        &mut self,
-        session: Uuid,
-        input: &SessionTurnInput,
-        request_hash: &str,
-    ) -> StorageResult<Value> {
-        if session.is_nil() {
-            return Err(StorageError::InvalidArgument("session_id must be non-nil"));
-        }
-        let (source, inserted) = self.register_turn(session, input, request_hash).await?;
-        if inserted {
-            let body = json!(crate::session::ArchivedTurnBody::from_input(input)).to_string();
-            sqlite_db::query(
-                "UPDATE oc_events SET content=? WHERE tenant_id=? AND workspace_id=? AND id=?",
-            )
-            .bind(body)
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .bind(source)
-            .execute(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
-        }
-        self.require_turn_visible(session, input.turn_id).await?;
-        Ok(
-            json!({"session_id":session,"turn_id":input.turn_id,"source_event_id":source,"state":"archived"}),
-        )
     }
 
     #[cfg(any(feature = "local-storage", test))]
@@ -602,23 +552,13 @@ impl SqliteTx {
             return Ok((source, false));
         }
         let mut evidence = Vec::new();
-        if input.used_evidence.len() == 1 {
+        let mut batch = Self::archive_metadata(&input.used_evidence);
+        for (index, reference) in input.used_evidence.iter().enumerate() {
             evidence.push(
-                self.archive_evidence(&input.used_evidence[0], Uuid::new_v4())
+                self.archive_from_batch(&mut batch, index, reference, Uuid::new_v4())
                     .await?,
             );
-        } else {
-            let mut batch = Self::archive_metadata(&input.used_evidence);
-            for (index, reference) in input.used_evidence.iter().enumerate() {
-                let item = self
-                    .archive_from_batch(&mut batch, index, reference, Uuid::new_v4())
-                    .await?;
-                self.require_archived_evidence_visible(&item).await?;
-                evidence.push(item);
-            }
         }
-        // Enforce the closure bound over the whole turn, not separately
-        // for each reference before writing an unreadable archive.
         self.require_archived_evidence_set_visible(&evidence)
             .await?;
         let source = self.create_event("session_turn", "", None).await?;
@@ -631,26 +571,6 @@ impl SqliteTx {
                     .bind(item.evidence_ref_id).bind(ordinal as i32).bind(encode(item)?).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         }
         Ok((source, true))
-    }
-
-    #[cfg(test)]
-    pub async fn session_turn(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Value> {
-        let source = self.require_turn_visible(session, turn).await?;
-        let body = self
-            .event_content(source, true)
-            .await?
-            .ok_or(StorageError::NotFound)?;
-        let body: crate::session::ArchivedTurnBody = decode(&body)?;
-        let (created_by, created_at): (Uuid, i64) = sqlite_db::query_as("SELECT created_by,created_at FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-        let evidence = self.turn_evidence(session, turn).await?;
-        let feedback = self.feedback_rows(session, turn).await?;
-        let mut view = json!({"session_id":session,"turn_id":turn,"source_event_id":source,"question":body.question,"answer":body.answer,"used_evidence":evidence,"feedback":feedback,"created_by":created_by,"created_at":created_at});
-        if !body.evidence_use.is_reported() {
-            view["evidence_use"] = json!(body.evidence_use);
-        }
-        Ok(view)
     }
 
     pub(super) async fn feedback_rows(

@@ -38,8 +38,6 @@ pub(crate) enum ContextRoute {
 }
 
 pub(crate) const CONTEXT_CANDIDATE_LIMIT: usize = 100;
-#[cfg(test)]
-pub(crate) const SESSION_SCAN_LIMIT: usize = 512;
 
 pub(crate) enum ContextLimit {
     Chunks(usize),
@@ -132,14 +130,6 @@ pub(crate) struct ContextSessionTurn {
     pub created_at: i64,
     pub score: f64,
     pub retrieval_routes: Vec<String>,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ContextSessionResult {
-    pub turns: Vec<ContextSessionTurn>,
-    pub scanned: usize,
-    /// More scoped rows exist beyond the fixed recent-turn scan bound.
-    pub scan_exhausted: bool,
 }
 
 impl Service {

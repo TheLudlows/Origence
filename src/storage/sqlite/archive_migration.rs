@@ -92,6 +92,16 @@ impl SqliteStore {
         let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
         let rows: Vec<TurnRow> = sqlite_db::query_as("SELECT tenant_id,workspace_id,session_id,turn_id,source_event_id FROM oc_session_turns ORDER BY tenant_id,workspace_id,session_id,created_at,turn_id")
             .fetch_all(&mut *tx).await.map_err(sqlite_err)?;
+        // Each turn below proves one unique session source. Refuse to clear
+        // any source absent from that directory.
+        let source_count: i64 =
+            sqlite_db::query_scalar("SELECT COUNT(*) FROM oc_events WHERE kind='session_turn'")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(sqlite_err)?;
+        if source_count != rows.len() as i64 {
+            return Err(corrupt());
+        }
         let mut directory = Vec::with_capacity(rows.len());
         let mut previous = None;
         let mut sequence = 0;
@@ -120,6 +130,14 @@ impl SqliteStore {
         Ok(directory)
     }
 
+    pub(crate) async fn archive_directory_count(&self) -> StorageResult<usize> {
+        let count: i64 = sqlite_db::query_scalar("SELECT COUNT(*) FROM oc_private_archives")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(sqlite_err)?;
+        count.try_into().map_err(|_| corrupt())
+    }
+
     pub(crate) async fn migration_archive(
         &self,
         domain: ArchiveDomain,
@@ -127,6 +145,7 @@ impl SqliteStore {
         turn: Uuid,
         source: Uuid,
         sequence: i64,
+        legacy_order: bool,
         stage: bool,
     ) -> StorageResult<LegacyArchive> {
         let mut tx = self
@@ -135,8 +154,8 @@ impl SqliteStore {
             .await
             .map_err(sqlite_err)?;
         let scope = domain.scope;
-        let existing: Option<(String, String, Uuid, Uuid, i64, i64, bool, Option<i64>)> = sqlite_db::query_as(
-            "SELECT state,body_hash,logical_key_id,source_event_id,operation_epoch,turn_sequence,evidence_reported,confirmed_seq FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?",
+        let existing: Option<(String, String, Uuid, Uuid, i64, i64, bool, Option<i64>, String)> = sqlite_db::query_as(
+            "SELECT state,body_hash,logical_key_id,source_event_id,operation_epoch,turn_sequence,evidence_reported,confirmed_seq,group_id FROM oc_private_archives WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?",
         ).bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
             .fetch_optional(&mut *tx).await.map_err(sqlite_err)?;
         let (old, source_state): (String,String) = sqlite_db::query_as("SELECT content,state FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='session_turn'")
@@ -146,7 +165,7 @@ impl SqliteStore {
         } else {
             Some(decode::<ArchivedTurnBody>(&old)?)
         };
-        let (state, hash, epoch) = if let Some((
+        if let Some((
             state,
             hash,
             owner,
@@ -155,19 +174,13 @@ impl SqliteStore {
             saved_seq,
             reported,
             confirmed_seq,
+            group,
         )) = existing
         {
-            // Fresh directories already have an explicit sequence. Legacy
-            // directories reconcile their original deterministic order.
-            let phase: Option<String> = sqlite_db::query_scalar(
-                "SELECT phase FROM oc_private_archive_migration WHERE id=1",
-            )
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(sqlite_err)?;
             if owner != domain.owner
                 || saved_source != source
-                || (phase.as_deref() == Some("copying") && saved_seq != sequence)
+                || (legacy_order && saved_seq != sequence)
+                || !crate::retrieval_diagnostics::digest(&hash)
                 || old_body
                     .as_ref()
                     .is_some_and(|b| b.digest() != hash || b.evidence_use.is_reported() != reported)
@@ -182,6 +195,9 @@ impl SqliteStore {
                 body_hash: hash,
                 epoch: epoch.try_into().map_err(|_| corrupt())?,
             };
+            if locator.group() != group {
+                return Err(corrupt());
+            }
             tx.commit().await.map_err(sqlite_err)?;
             return Ok(LegacyArchive {
                 locator,
@@ -193,54 +209,52 @@ impl SqliteStore {
                     .map_err(|_| corrupt())?,
                 old_body,
             });
+        }
+        let body = old_body.as_ref().ok_or_else(corrupt)?;
+        let hash = body.digest();
+        let epoch = crate::storage::anyseek::operation_epoch()?;
+        let state = if source_state == "retracted" {
+            "withdrawn"
         } else {
-            let body = old_body.as_ref().ok_or_else(corrupt)?;
-            let hash = body.digest();
-            let epoch = crate::storage::anyseek::operation_epoch()?;
-            let state = if source_state == "retracted" {
-                "withdrawn"
-            } else {
-                "pending"
-            };
-            if stage {
-                let locator = ArchiveLocator {
-                    domain,
-                    session,
-                    turn,
-                    source,
-                    body_hash: hash.clone(),
-                    epoch,
-                };
-                let request_hash: String = sqlite_db::query_scalar("SELECT request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
-                    .fetch_one(&mut *tx).await.map_err(sqlite_err)?;
-                let refs:Vec<String> = sqlite_db::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
-                    .fetch_all(&mut *tx).await.map_err(sqlite_err)?;
-                let used_evidence = refs
-                    .iter()
-                    .map(|value| Ok(decode::<crate::session::ArchivedEvidence>(value)?.reference))
-                    .collect::<StorageResult<Vec<_>>>()?;
-                let input = crate::session::SessionTurnInput {
-                    turn_id: turn,
-                    question: body.question.clone(),
-                    answer: body.answer.clone(),
-                    used_evidence,
-                    evidence_use: body.evidence_use,
-                };
-                if request_hash
-                    != super::hash(json!({"session_id":session,"input":input}).to_string())
-                {
-                    return Err(corrupt());
-                }
-                sqlite_db::query("INSERT INTO oc_private_archives(tenant_id,workspace_id,logical_key_id,session_id,turn_id,source_event_id,group_id,body_hash,body_bytes,operation_epoch,evidence_reported,turn_sequence,state,cleanup_done) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                    .bind(scope.tenant_id).bind(scope.workspace_id).bind(domain.owner).bind(session).bind(turn).bind(source)
-                    .bind(locator.group()).bind(&hash).bind(body.model_json_bytes() as i64).bind(epoch as i64)
-                    .bind(body.evidence_use != EvidenceUse::Unknown).bind(sequence).bind(state).bind(state == "withdrawn")
-                    .execute(&mut *tx).await.map_err(sqlite_err)?;
-            }
-            (if stage { state } else { "legacy" }.to_owned(), hash, epoch)
+            "pending"
         };
+        if stage {
+            let locator = ArchiveLocator {
+                domain,
+                session,
+                turn,
+                source,
+                body_hash: hash.clone(),
+                epoch,
+            };
+            let request_hash: String = sqlite_db::query_scalar("SELECT request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
+                .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
+                .fetch_one(&mut *tx).await.map_err(sqlite_err)?;
+            let refs:Vec<String> = sqlite_db::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
+                .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
+                .fetch_all(&mut *tx).await.map_err(sqlite_err)?;
+            let used_evidence = refs
+                .iter()
+                .map(|value| Ok(decode::<crate::session::ArchivedEvidence>(value)?.reference))
+                .collect::<StorageResult<Vec<_>>>()?;
+            let input = crate::session::SessionTurnInput {
+                turn_id: turn,
+                question: body.question.clone(),
+                answer: body.answer.clone(),
+                used_evidence,
+                evidence_use: body.evidence_use,
+            };
+            if request_hash != super::hash(json!({"session_id":session,"input":input}).to_string())
+            {
+                return Err(corrupt());
+            }
+            sqlite_db::query("INSERT INTO oc_private_archives(tenant_id,workspace_id,logical_key_id,session_id,turn_id,source_event_id,group_id,body_hash,body_bytes,operation_epoch,evidence_reported,turn_sequence,state,cleanup_done) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                .bind(scope.tenant_id).bind(scope.workspace_id).bind(domain.owner).bind(session).bind(turn).bind(source)
+                .bind(locator.group()).bind(&hash).bind(body.model_json_bytes() as i64).bind(epoch as i64)
+                .bind(body.evidence_use != EvidenceUse::Unknown).bind(sequence).bind(state).bind(state == "withdrawn")
+                .execute(&mut *tx).await.map_err(sqlite_err)?;
+        }
+        let state = if stage { state } else { "legacy" }.to_owned();
         tx.commit().await.map_err(sqlite_err)?;
         Ok(LegacyArchive {
             locator: ArchiveLocator {

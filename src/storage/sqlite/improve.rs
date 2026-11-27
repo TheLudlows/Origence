@@ -4,7 +4,7 @@ use crate::learning::{
     FrozenFeedback, FrozenSnapshot, FrozenTurn, ImproveInput, ImproveRun, LearningCandidate,
     MAX_CANDIDATES, MAX_SNAPSHOT_BYTES, SkippedFeedback,
 };
-use crate::session::{ArchivedEvidence, ArchivedTurnBody, FeedbackInput};
+use crate::session::FeedbackInput;
 
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
 
@@ -350,47 +350,21 @@ impl SqliteTx {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<Option<(FrozenTurn, usize)>> {
-        let source = self.require_turn_visible(session, turn).await?;
-        // A report of unknown evidence cannot support shared Learning.
-        let (question, answer, body_bytes) = if let Some((reported, body_bytes)) =
-            self.archive_body_metadata(session, turn).await?
-        {
-            if !reported {
-                return Ok(None);
-            }
-            (
-                String::new(),
-                String::new(),
-                body_bytes + r#","question":"","answer":""#.len(),
-            )
-        } else {
-            let content = self
-                .event_content(source, true)
-                .await?
-                .ok_or(StorageError::NotFound)?;
-            let body: ArchivedTurnBody = decode(&content)?;
-            if !body.evidence_use.is_reported() {
-                return Ok(None);
-            }
-            (body.question, body.answer, 0)
-        };
-        let rows: Vec<String> = sqlite_db::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
-        let used_evidence: Vec<ArchivedEvidence> = rows
-            .iter()
-            .map(|row| decode(row))
-            .collect::<StorageResult<_>>()?;
+        let (source, used_evidence) = self.visible_turn_support(session, turn).await?;
+        let (reported, body_bytes) = self.archive_body_metadata(session, turn).await?;
+        if !reported {
+            return Ok(None);
+        }
         Ok(Some((
             FrozenTurn {
                 session_id: session,
                 turn_id: turn,
                 source_event_id: source,
-                question,
-                answer,
+                question: String::new(),
+                answer: String::new(),
                 used_evidence,
             },
-            body_bytes,
+            body_bytes + r#","question":"","answer":""#.len(),
         )))
     }
 
