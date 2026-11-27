@@ -23,6 +23,7 @@ pub mod long_term_memory;
 mod mcp;
 pub mod memory_identity;
 pub mod memory_semantics;
+pub mod memory_timeline;
 pub mod messages;
 pub mod models;
 pub mod parsing;

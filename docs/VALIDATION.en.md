@@ -20,6 +20,12 @@ and both Chromium context citation regressions passed. [Commands](VALIDATION.md#
 An extraction fixture supplied synthetic responses. Windows, live models, native Agent clients,
 and the official pilot remain unverified.
 
+PR #165 review added a confirmed explicit value alongside a dated topic with the same full
+identity. Before the fix, the HTTP historical response returned both values. The HTTP and MCP
+regression covers historical, current, unknown, conflicting, and budget-limited reads. It also
+checks that an extra identity condition keeps a separate value eligible and that conflict
+reporting follows the selected business time.
+
 ## 2026-11-27 · Simplify standalone evidence capture and display
 
 Based on local extraction commit `0d84a6c99ad6271af8c74f4274c0b3489e2f043d`. Local HTTP

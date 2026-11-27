@@ -168,12 +168,13 @@ impl Service {
         let mut tx = self.read(auth, permission).await?;
         tx.verify_native_candidates(&ranked_native).await?;
         let mut items = Vec::new();
-        if include_long_term
-            && let Some(accounting) = bundle
-                .routes
-                .iter_mut()
-                .find(|r| r.route == EvidenceRoute::Memory)
-        {
+        let mut memory_accounting = bundle
+            .routes
+            .iter_mut()
+            .find(|r| r.route == EvidenceRoute::Memory)
+            .filter(|_| include_long_term);
+        if let Some(accounting) = memory_accounting.as_deref_mut() {
+            bundle.conflict_assessment = "explicit_single_value_identity_only_within_recalled_candidates; consolidated_conflicts_at_selected_business_time; general_prose_not_assessed".into();
             let as_of_ms = input.as_of_ms.unwrap_or_else(now_ms);
             if let Some(identity) = &input.memory_identity {
                 if let Some(view) = tx.long_term_memory(identity, None, as_of_ms).await? {
@@ -198,24 +199,42 @@ impl Service {
                     }
                 }
             }
-            let mut remaining = accounting.candidate_limit - items.len();
-            assets.retain(|asset| {
-                if asset.route != ContextRoute::Memory {
-                    return true;
-                }
-                if remaining == 0 {
-                    return false;
-                }
-                remaining -= 1;
-                true
-            });
-            accounting.candidates = accounting.candidate_limit - remaining;
+            accounting.candidates = items.len();
         }
+        // A recalled consolidated topic is the date-aware result for its complete
+        // identity. Enforce this before budgeting so omission cannot expose an
+        // undated value for that identity.
+        let dated_identities: Vec<_> = items
+            .iter()
+            .filter_map(|item| item.identity.clone())
+            .collect();
         for candidate in assets {
+            let accounting = if candidate.route == ContextRoute::Memory {
+                memory_accounting.as_deref_mut()
+            } else {
+                None
+            };
+            if accounting
+                .as_ref()
+                .is_some_and(|r| r.candidates == r.candidate_limit)
+            {
+                continue;
+            }
             let fresh = tx
                 .refresh_context_candidate(candidate, input.memory_identity.as_ref())
                 .await?;
-            items.push(asset_item(fresh, &input, &query.effective_mode)?);
+            let item = asset_item(fresh, &input, &query.effective_mode)?;
+            if let Some(accounting) = accounting {
+                if item
+                    .identity
+                    .as_ref()
+                    .is_some_and(|identity| dated_identities.contains(identity))
+                {
+                    continue;
+                }
+                accounting.candidates += 1;
+            }
+            items.push(item);
         }
         let turn_keys: Vec<_> = turns
             .iter()

@@ -35,7 +35,10 @@ A normal question uses the [long-term lexical scan](memory-consolidation.md#ç»Ÿä
 with at most 32 query terms and 512 scoped fact rows. The route reports `scanned`
 and `scan_exhausted`. `memory_identity` bypasses the scan and selects an exact
 topic. Consolidated topics use the memory candidate limit before the remaining
-slots go to memory chunks. This lookup works independently of the selected
+slots go to memory chunks. A recalled consolidated topic takes precedence over
+chunks with the same complete identity in that request. This exclusion holds
+when the date's conclusion is conflicting or unknown, and when the topic is
+omitted for budget. Chunks with other identities remain eligible. This lookup works independently of the selected
 native keyword/vector mode. The final snapshot reopens each topic's latest
 revision, checks every source and requires each ranking source to still belong
 to that revision.
@@ -111,8 +114,10 @@ Each conflict group is one indivisible render unit containing all recalled
 alternatives and its warning. If it does not fit, the whole group is omitted
 and reported; one side is never rendered alone after a detected conflict.
 Each consolidated topic is likewise one whole block covering its selection,
-timeline and all citations. A skipped topic with a conflicting period counts
-toward `omitted_conflict_groups`.
+timeline and all citations. When the selected business time is conflicting, the
+topic appears in `conflicts` if retained and counts toward
+`omitted_conflict_groups` if skipped for byte budget. Conflicts for other times
+remain visible through the topic's timeline when the topic fits.
 
 `budget` and per-route `max_bytes` are actual UTF-8 bytes, not tokens. Defaults
 are 4000 total bytes, 20 candidates per enabled route and 4000 bytes per route.

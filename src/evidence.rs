@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::memory_identity::MemoryIdentity;
+use crate::{
+    memory_identity::MemoryIdentity,
+    memory_timeline::{ConclusionState, Evidence as MemoryFactEvidence, MemoryPeriod},
+};
 
 pub const CONTEXT_POLICY: &str = "evidence-bundle:utf8-whole-blocks:round-robin:v1";
 
@@ -176,9 +179,9 @@ pub enum EvidenceProvenance {
         version: i32,
         as_of_ms: i64,
         effective_from_ms: Option<i64>,
-        state: crate::consolidation::ConclusionState,
-        timeline: Vec<crate::consolidation::MemoryPeriod>,
-        citations: Vec<crate::consolidation::Evidence>,
+        state: ConclusionState,
+        timeline: Vec<MemoryPeriod>,
+        citations: Vec<MemoryFactEvidence>,
     },
 }
 
@@ -350,14 +353,36 @@ fn units(mut items: Vec<EvidenceItem>) -> Vec<Unit> {
             conflict: Some(conflict),
         });
     }
-    for (index, item) in unique.into_iter().enumerate() {
-        if !grouped.contains(&index) {
-            result.push(Unit {
-                route: item.route,
-                items: vec![item],
-                conflict: None,
-            });
+    let mut next_conflict = result.len() + 1;
+    for (index, mut item) in unique.into_iter().enumerate() {
+        if grouped.contains(&index) {
+            continue;
         }
+        let conflict = if matches!(
+            &item.provenance,
+            EvidenceProvenance::LongTermMemory {
+                state: ConclusionState::Conflicting,
+                ..
+            }
+        ) && let Some(identity) = &item.identity
+        {
+            let id = format!("conflict:{next_conflict}");
+            next_conflict += 1;
+            item.conflict_id = Some(id.clone());
+            Some(EvidenceConflict {
+                conflict_id: id,
+                identity: identity.clone(),
+                evidence_ids: vec![item.evidence_id.clone()],
+                warning: "Keep each cited alternative for the selected business period.".into(),
+            })
+        } else {
+            None
+        };
+        result.push(Unit {
+            route: item.route,
+            items: vec![item],
+            conflict,
+        });
     }
     result
 }
@@ -413,12 +438,7 @@ pub(crate) fn render(bundle: &mut EvidenceBundle, candidates: Vec<EvidenceItem>)
                 || accounting.used_bytes + text.len() > accounting.max_bytes
             {
                 accounting.omitted_for_budget += unit.items.len();
-                let dated_conflict = unit.items.iter().any(|item| {
-                    matches!(&item.provenance, EvidenceProvenance::LongTermMemory { timeline, .. }
-                        if timeline.iter().any(|period| period.state == crate::consolidation::ConclusionState::Conflicting))
-                });
-                bundle.omitted_conflict_groups +=
-                    usize::from(unit.conflict.is_some() || dated_conflict);
+                bundle.omitted_conflict_groups += usize::from(unit.conflict.is_some());
                 continue;
             }
             accounting.used_bytes += text.len();

@@ -246,6 +246,22 @@ fn assert_current(view: &Value, value: &str) {
     assert_eq!(view["state"], json!({"status":"current","value":value}));
 }
 
+const POLICY_QUESTION: &str = "云舟境内酒店报销上限是多少？";
+
+async fn publish_explicit_policy(fixture: &Fixture, identity: MemoryIdentity, amount: &str) {
+    let content = format!("{POLICY_QUESTION} 每晚{amount}。");
+    let receipt = fixture.service.semantic_memory(
+        &fixture.auth,
+        &Uuid::new_v4().to_string(),
+        serde_json::from_value(json!({
+            "identity":identity, "content":content, "operation":"assert", "expected_version":0,
+            "statements":[{"value":amount,"quote":content,"byte_start":0,"byte_end":content.len()}]
+        })).unwrap(),
+    ).await.unwrap();
+    let job = settle(fixture, &receipt).await;
+    assert_eq!(job["state"], "completed", "{job}");
+}
+
 #[tokio::test]
 async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together() {
     let fixture = setup().await;
@@ -267,7 +283,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     let client = reqwest::Client::new();
     let args = |as_of_ms, budget| {
         json!({
-            "query":"云舟境内酒店报销上限是多少？",
+            "query":POLICY_QUESTION,
             "as_of_ms": as_of_ms,
             "budget": budget,
         })
@@ -289,8 +305,39 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
                 .unwrap()
         }
     };
+    let mcp_ask = |time, budget| {
+        let request = client
+            .post(format!("{base}/mcp"))
+            .bearer_auth(&reader.token)
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2025-11-25")
+            .json(
+                &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+                    "name":"context_bundle","arguments":args(time, budget)
+                }}),
+            );
+        async move {
+            let reply: Value = request
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            serde_json::from_str::<Value>(reply["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap()
+        }
+    };
     let nothing = ask(&reader.token, DECEMBER_START, 4000).await;
     assert_eq!(nothing["items"], json!([]));
+
+    publish_explicit_policy(&fixture, identity("境内"), "160元").await;
+    let standalone = ask(&reader.token, DECEMBER_START, 4000).await;
+    assert_eq!(standalone["items"][0]["semantic_status"], "confirmed");
+    assert_eq!(standalone["items"][0]["semantic_value"], "160元");
+    let legacy_bytes = standalone["used_bytes"].as_u64().unwrap() as usize;
 
     let original = publish(
         &fixture,
@@ -367,27 +414,15 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
         assert_eq!(get(&other_key).send().await.unwrap().status(), 404);
     }
 
-    let mcp: Value = client
-        .post(format!("{base}/mcp"))
-        .bearer_auth(&reader.token)
-        .header("Accept", "application/json, text/event-stream")
-        .header("MCP-Protocol-Version", "2025-11-25")
-        .json(
-            &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
-                "name":"context_bundle","arguments":args(DECEMBER_START, 4000)
-            }}),
-        )
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    let from_mcp: Value =
-        serde_json::from_str(mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(from_mcp["items"], after["items"]);
+    for (time, bundle) in [
+        (0, &missing),
+        (END_OF_NOVEMBER, &before),
+        (DECEMBER_START, &after),
+    ] {
+        assert_eq!(mcp_ask(time, 4000).await["items"], bundle["items"]);
+        assert_eq!(bundle["items"].as_array().unwrap().len(), 1);
+        assert!(!bundle.to_string().contains("160元"));
+    }
     assert_eq!(
         ask(&other_key, DECEMBER_START, 4000).await["items"],
         json!([])
@@ -406,7 +441,21 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     let conflicting = ask(&reader.token, DECEMBER_START, 4000).await;
     let conflict = &conflicting["items"][0]["provenance"];
     assert_eq!(conflict["state"], json!({"status":"conflicting"}));
+    assert_eq!(conflicting["items"].as_array().unwrap().len(), 1);
     assert!(conflicting["items"][0]["semantic_value"].is_null());
+    assert_eq!(conflicting["conflicts"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        conflicting["conflicts"][0]["conflict_id"],
+        conflicting["items"][0]["conflict_id"]
+    );
+    assert_eq!(
+        conflicting["conflicts"][0]["evidence_ids"],
+        json!([conflicting["items"][0]["evidence_id"]])
+    );
+    assert_eq!(conflicting["omitted_conflict_groups"], 0);
+    let mcp_conflict = mcp_ask(DECEMBER_START, 4000).await;
+    assert_eq!(mcp_conflict["items"], conflicting["items"]);
+    assert_eq!(mcp_conflict["conflicts"], conflicting["conflicts"]);
     assert_eq!(
         conflict["citations"]
             .as_array()
@@ -418,10 +467,43 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     );
     let bytes = conflicting["rendered_context"].as_str().unwrap().len();
     assert_eq!(conflicting["used_bytes"], bytes);
-    let omitted = ask(&reader.token, DECEMBER_START, bytes - 1).await;
+    assert!(legacy_bytes < bytes);
+    let omitted = ask(&reader.token, DECEMBER_START, legacy_bytes).await;
     assert_eq!(omitted["items"], json!([]));
     assert_eq!(omitted["rendered_context"], "");
+    assert_eq!(omitted["conflicts"], json!([]));
     assert_eq!(omitted["omitted_conflict_groups"], 1);
+    let mcp_omitted = mcp_ask(DECEMBER_START, legacy_bytes).await;
+    assert_eq!(mcp_omitted["items"], omitted["items"]);
+    assert_eq!(mcp_omitted["omitted_conflict_groups"], 1);
+
+    // The future conflict is present in the timeline, outside this request's date.
+    let earlier = ask(&reader.token, END_OF_NOVEMBER, 4000).await;
+    assert_current(&earlier["items"][0]["provenance"], "100 元");
+    assert_eq!(
+        earlier["items"][0]["provenance"]["timeline"][1]["state"]["status"],
+        "conflicting"
+    );
+    assert_eq!(earlier["conflicts"], json!([]));
+    for date in [0, END_OF_NOVEMBER] {
+        let omitted = ask(&reader.token, date, legacy_bytes).await;
+        assert_eq!(omitted["items"], json!([]));
+        assert_eq!(omitted["omitted_conflict_groups"], 0);
+        assert_eq!(omitted["routes"][0]["omitted_for_budget"], 1);
+    }
+
+    let mut distinct = identity("境内");
+    distinct.context.insert("traveler".into(), "实习生".into());
+    publish_explicit_policy(&fixture, distinct.clone(), "180元").await;
+    let mixed = ask(&reader.token, DECEMBER_START, 4000).await;
+    let mixed = mixed["items"].as_array().unwrap();
+    assert_eq!(mixed.len(), 2);
+    let scoped = mixed
+        .iter()
+        .find(|item| item["provenance"]["type"] == "asset_chunk")
+        .unwrap();
+    assert_eq!(scoped["identity"], json!(distinct));
+    assert_eq!(scoped["semantic_value"], "180元");
 
     let removed = id(&disputed_source, "source_event_id");
     let withdrawn = client
