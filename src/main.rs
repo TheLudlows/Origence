@@ -56,13 +56,22 @@ enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Offline bootstrap: create a workspace and print its admin token once.
+    /// Offline bootstrap: create a workspace and print its token once.
     WorkspaceCreate {
         name: String,
         /// Create in the tenant of this existing workspace.
         #[arg(long)]
         in_tenant_of: Option<Uuid>,
+        /// Issue one workspace credential for Agent and console sign-in.
+        #[arg(long)]
+        workspace_key: bool,
     },
+    /// Offline recovery or rotation of a workspace's single credential.
+    WorkspaceKeyRotate {
+        workspace_id: Uuid,
+    },
+    /// Offline issuance or rotation of the deployment administrator credential.
+    DeploymentAdminRotate,
     KeyCreate {
         workspace_id: Uuid,
         #[arg(long, default_value = "reader")]
@@ -298,6 +307,8 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             Ok(())
         }),
         command @ (Command::WorkspaceCreate { .. }
+        | Command::WorkspaceKeyRotate { .. }
+        | Command::DeploymentAdminRotate
         | Command::KeyCreate { .. }
         | Command::KeyRevoke { .. })
             if offline =>
@@ -406,7 +417,11 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
     tokio::fs::create_dir_all(&data_dir).await?;
     let store = SqliteStore::open(data_dir.join("context.db")).await?;
     let result = match command {
-        Command::WorkspaceCreate { name, in_tenant_of } => {
+        Command::WorkspaceCreate {
+            name,
+            in_tenant_of,
+            workspace_key,
+        } => {
             anyhow::ensure!(!name.trim().is_empty(), "name is required");
             let scope = Scope {
                 tenant_id: match in_tenant_of {
@@ -415,12 +430,21 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
                 },
                 workspace_id: Uuid::new_v4(),
             };
-            store
-                .create_workspace(scope.tenant_id, scope.workspace_id, &name)
-                .await?;
-            let key = store.issue_key(scope, "admin").await?;
+            let key = if workspace_key {
+                store.create_key_workspace(scope, &name).await?
+            } else {
+                store
+                    .create_workspace(scope.tenant_id, scope.workspace_id, &name)
+                    .await?;
+                store.issue_key(scope, "admin").await?
+            };
             json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token})
         }
+        Command::WorkspaceKeyRotate { workspace_id } => {
+            let scope = store.workspace_scope(workspace_id).await?;
+            json!(store.rotate_workspace_key(scope).await?)
+        }
+        Command::DeploymentAdminRotate => json!({"token":store.rotate_deployment_admin().await?}),
         Command::KeyCreate {
             workspace_id,
             role,
@@ -517,8 +541,13 @@ fn offline_command<'a>(
 
 async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> {
     anyhow::ensure!(
-        !matches!(command, Command::WorkspaceCreate { .. }),
-        "workspace-create requires --offline and a stopped host"
+        !matches!(
+            command,
+            Command::WorkspaceCreate { .. }
+                | Command::WorkspaceKeyRotate { .. }
+                | Command::DeploymentAdminRotate
+        ),
+        "provisioning and offline key rotation require --offline and a stopped host"
     );
     let token = std::env::var("OC_API_KEY")
         .ok()

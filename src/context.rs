@@ -219,6 +219,31 @@ impl Service {
             }
             items.push(item);
         }
+        if let Some(accounting) = bundle
+            .routes
+            .iter_mut()
+            .find(|r| r.route == EvidenceRoute::Knowledge)
+        {
+            let shared = tx
+                .global_keyword_hits(&query.terms, accounting.candidate_limit)
+                .await?;
+            if !shared.is_empty() {
+                if query.effective_mode != "keyword" {
+                    bundle
+                        .warnings
+                        .push("Global knowledge uses keyword matching.".into());
+                }
+                let (local, other): (Vec<_>, Vec<_>) = items
+                    .into_iter()
+                    .partition(|item| item.route == EvidenceRoute::Knowledge);
+                let shared = shared.into_iter().map(global_item).collect::<Result<_>>()?;
+                let knowledge =
+                    crate::retrieval::merge_global_hits(local, shared, accounting.candidate_limit);
+                accounting.candidates = knowledge.len();
+                items = other;
+                items.extend(knowledge);
+            }
+        }
         for candidate in turns {
             match candidate.deliver(&mut tx).await {
                 Ok(turn) => items.push(session_item(turn, &query.effective_mode)),
@@ -315,6 +340,35 @@ fn asset_item(
         conflict_id: None,
         archive_roundtrip: "chunk_supported".into(),
         single_valued: candidate.single_valued,
+    })
+}
+
+fn global_item(hit: crate::types::SearchHit) -> Result<EvidenceItem> {
+    Ok(EvidenceItem {
+        evidence_id: format!("global:{}", hit.chunk_id),
+        route: EvidenceRoute::Knowledge,
+        retrieval_routes: vec!["global_keyword".into()],
+        title: hit.title,
+        content: hit.content,
+        provenance: EvidenceProvenance::GlobalKnowledge {
+            publication_id: hit.asset_id,
+            version: hit.version,
+            chunk_id: hit.chunk_id,
+            byte_start: crate::service::decode(hit.locator["byte_start"].clone())?,
+            byte_end: crate::service::decode(hit.locator["byte_end"].clone())?,
+        },
+        identity: None,
+        normalization_status: "not_applicable".into(),
+        semantic_status: None,
+        semantic_value: None,
+        conditions: Vec::new(),
+        learning: None,
+        applicability: "not_applicable".into(),
+        score: hit.score,
+        score_kind: "global_keyword_rank".into(),
+        conflict_id: None,
+        archive_roundtrip: "unsupported_global_knowledge_reference".into(),
+        single_valued: false,
     })
 }
 fn session_item(turn: ContextSessionTurn, mode: &str) -> EvidenceItem {

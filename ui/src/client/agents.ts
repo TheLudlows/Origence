@@ -22,9 +22,13 @@ interface AgentsResponse {
   }[];
 }
 
+export function canInspectAgents(role: string) {
+  return role === "workspace" || role === "admin";
+}
+
 export function agentsPage(root: HTMLElement, ctx: ViewContext, workspaceId: string) {
-  if (ctx.role !== "admin") {
-    root.append(heading("Agent 连接", "只有当前工作区的管理员可以查看。"));
+  if (!canInspectAgents(ctx.role)) {
+    root.append(heading("Agent 连接", "当前凭据无权查看本工作区的 Agent 连接。"));
     return;
   }
   const description = el("p", "muted");

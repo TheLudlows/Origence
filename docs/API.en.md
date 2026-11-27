@@ -14,17 +14,19 @@ Existing command-style mutations need a 1–200 ASCII character `Idempotency-Key
 
 `GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a separate private session for each workspace and logical key. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. Admins can rotate credentials in their issuing workspace. Rotating another key also requires admin access in every additional workspace granted to that key. The replacement retains the original logical key and its grants and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
 
-Trace is stored as private Runs. Run entry points derive the logical key from authentication and apply current permissions and source validity checks.
+Trace is stored in Runs owned by logical keys. Run entry points derive the key from authentication and apply current permissions and source validity checks.
 
 | Run endpoint | Input and result |
 | --- | --- |
 | `POST /v1/runs` | Writer supplies a stable `run_id` and redacted `summary`, bound to the current archive |
 | `POST /v1/runs/{id}/events` | Stable `event_id`, timestamp, reporter, and named event. An identical retry returns the original sequence. |
 | `POST /v1/runs/{id}/context` | `event_id` and `context` (EvidenceBundle request). Returns the bundle and a server preparation receipt. |
-| `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the current key, including explicit collection boundaries |
+| `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the owner or an admin in the Run's workspace. `is_owner` identifies whether the current logical key owns the Run. |
 | `GET /v1/runs/{id}/prefix?through_sequence=N` | Immutable prefix digest for the current key, usable as Skill evidence |
 
 The server receipt proves preparation of the exact context, without proving client receipt or model use. The client reports tools, loads, results, feedback, and artifact references. Unreported activities remain unknown. When any source becomes invalid, reference verification prevents further delivery. The Run owner submits external verification over HTTP for an exact prefix, retaining the reported transcript source and verifier identity status. See the [Run contract](contracts/runs.md) and [external verification contract](contracts/run-verification.md).
+
+Trace reads include the text recorded in the Run. Original private archives, internal replay snapshots, fixed prefixes, original PDF verification, and external verification records retain their existing authorization.
 
 | Skill endpoint | Input and result |
 | --- | --- |
@@ -43,7 +45,7 @@ Changing the candidate revision, the review package contents, or the destination
 
 Search, Resolve, and EvidenceBundle return `retrieval:{requests,omitted_requests}`. Each row represents one real AnySeek query. It includes Origence and backend request IDs, route, actual mode (browse/lexical/vector/hybrid), elapsed call time, safe error code, returned candidate count, and available backend diagnostics. Standalone service queries record HTTP status. For embedded SDK queries, `http_status` is null, and SDK failure is recorded as `sdk_error`. Browse includes candidate preflight.
 
-Backend diagnostics v2 include service version, analysis configuration digest, embedding space SHA256 (null if unset), query time, `visible_seq`, and separately sampled committed/lexical/vector progress with failure and recovery flags. Configuration also records verified capacity limits and the embedding space digest. Each query compares returned analysis and space digests and rejects post-start space changes. Sequences are per AnySeek collection, with no workspace sequence, SQLite version, or cross-store snapshot semantics. Client round trips and server timing cover different intervals. Neither proves client consumption or model use.
+Backend diagnostics v2 include service version, analysis configuration digest, embedding space SHA256 (null if unset), query time, `visible_seq`, and separately sampled committed/lexical/vector progress with failure and recovery flags. Configuration records the verified, positive `max_candidates` limit and the embedding space digest. A positive `max_records` is recorded when the backend advertises that limit. Diagnostics omit the field when the backend provides no record-count limit. Each query compares returned analysis and space digests and rejects post-start space changes. Sequences are per AnySeek collection, with no workspace sequence, SQLite version, or cross-store snapshot semantics. Client round trips and server timing cover different intervals. Neither proves client consumption or model use.
 
 Each call retains only the 128 most recent attempts and explicitly returns the earlier omission count. Diagnostics omit raw queries, vectors, filter values, text, URLs, keys, and raw backend errors. Unknown or missing fields remain null. Malformed or mismatched backend diagnostics are rejected. Deterministic context content and references exclude changing request IDs and timing.
 
@@ -79,6 +81,10 @@ The old standalone graph storage API and graph traversal were removed. `StorageE
 
 ## Roles
 
+The `--offline workspace-create --workspace-key <name>` command provisions one active key bound to its workspace. Authentication returns `role: "workspace"` to identify this credential type. It permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403. Workspace and role-grant management retain their administrator checks. Use `--offline workspace-key-rotate <workspace-id>` to rotate the key.
+
+Existing role-based paths use the following permission table.
+
 | Role | Permissions |
 | --- | --- |
 | reader | get/search/resolve on published content |
@@ -91,10 +97,41 @@ Original files and jobs can expose unpublished data, so reader cannot access the
 
 A content item here is a versioned memory or knowledge entry identified by `asset_id`. Published Skills use separate endpoints.
 
+### Deployment administrator inspection
+
+`origence --offline deployment-admin-rotate` issues or rotates the separate administrator credential. The deployment management endpoints accept this bearer key. Workspace inspection endpoints are read-only.
+
+| GET path | Data |
+| --- | --- |
+| `/admin/deployment/me` | Deployment administrator identity |
+| `/admin/deployment/workspaces` | All workspaces, paginated by workspace ID |
+| `/admin/deployment/workspaces/{id}/sessions` | Session IDs in the selected workspace |
+| `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | Original Q&A and references, paginated by session sequence |
+| `/admin/deployment/workspaces/{id}/runs` and `/admin/deployment/workspaces/{id}/runs/{run}` | Run directory and recorded events |
+| `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` and `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | Published content directory and versioned body |
+
+Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns without the workspace key. Workspace write authorization is checked separately.
+
+### Global knowledge
+
+Each deployment has one shared knowledge catalog. A workspace writer can submit an exact published version. Repeating a submission returns the original publication ID and review state. A deployment administrator moderates submissions.
+
+| Method and path | Behavior |
+| --- | --- |
+| `POST /v1/global-knowledge` | Submit a local `asset_id` and integer `version`. Returns `publication_id` and state |
+| `GET /v1/global-knowledge` | Approved catalog with `after` and `limit` |
+| `GET /v1/global-knowledge/{publication_id}` | Read the active version's body |
+| `GET /admin/deployment/global-knowledge` | Review catalog. The default `state` is `pending`. Also accepts `approved`, `rejected`, and `withdrawn` |
+| `GET /admin/deployment/global-knowledge/{publication_id}` | Inspect submitted text, source workspace, and exact version |
+| `POST /admin/deployment/global-knowledge/{publication_id}/review` | Set `decision` to `approve`, `reject`, or `withdraw` |
+
+Approval revalidates the original version. The approved copy survives updates or deletion of the private original. Withdrawal immediately blocks new reads, recall, and replay of prepared Run context that cites the release. Shared citations use independent IDs and UTF-8 byte ranges within the published text. Private files, turns, and source IDs retain their workspace authorization.
+
+`search`, `resolve`, the knowledge route of `context`, and Run context merge workspace results with global keyword matches within the requested limits. Global knowledge uses keyword matching in vector and hybrid modes. Search and resolve report `scope`, and context uses `global_knowledge` citations. MCP `context_get` accepts `scope: "global"` with a global publication ID.
+
 ### Agent connections
 
-`GET /admin/agents` requires an administrator in the workspace selected by the
-Bearer credential and optional `X-Origence-Workspace` header. The response has
+`GET /admin/agents` accepts a workspace key or a membership-based workspace administrator. The bearer credential and optional `X-Origence-Workspace` header determine the workspace. The response has
 `workspace_id`, `window_seconds` (300), `capacity_reached`, and `items`. Each
 item has its current `role` and an `observation` with `credential_id`,
 `last_seen_at_ms`, `active_requests`, and `client_kinds`. New reads exclude
@@ -117,7 +154,7 @@ also offers a manual refresh.
 ### Read-only management catalogs
 
 - `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`. Reader and above, with workspace from authentication. Scan current published nondeleted candidates by ascending `asset_id` and reuse the full ordinary source, semantic, and visibility checks for each. Returns `{items,next_after}`. Items contain metadata only, without text or semantic quotes. Invalid sources are excluded and other storage errors fail explicitly.
-- `GET /v1/runs?limit=25&after=<UUID>`. An admin lists Runs in the selected workspace (`scope:"workspace"`). Other roles list their own Runs (`scope:"current_logical_key"`). Each row includes `run_id`, `owner_key_id`, `is_owner`, `created_at_ms`, `status`, and `summary`. The latest `result_reported` event supplies `reported_success`, `reported_failure`, or `unknown`. Other keys' summaries are `null`. Details and evidence endpoints still verify ownership. Authorized rotation preserves logical ownership.
+- `GET /v1/runs?limit=25&after=<UUID>`. An admin lists Runs in the selected workspace (`scope:"workspace"`). Other roles list their own Runs (`scope:"current_logical_key"`). Each row includes `run_id`, `owner_key_id`, `is_owner`, `can_read_trace`, `created_at_ms`, `status`, and `summary`. `can_read_trace` reflects role and ownership. The trace request also revalidates sources. The latest `result_reported` event supplies `reported_success`, `reported_failure`, or `unknown`. Other keys' summaries are `null` in the directory. Administrators can open the trace to read the summary and events. Authorized rotation preserves logical ownership.
 
 Both endpoints default to limit=50, range 1–100. With no after, begin at the start. Unknown parameters fail. Ordering is by UUID instead of creation time. `next_after` is the last scanned candidate, not a total. Pages may have fewer than limit or be empty if sources are invalid. Continue while next_after is non-null. Each page is a live authorized read without a frozen snapshot across requests. Reads create neither sessions nor publishing jobs.
 
@@ -402,6 +439,8 @@ Reading and writing archive turns and feedback require writer or above. `session
 - GET used_evidence entries are `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`. reference is the caller input above, and evidence_ref_id is allocated and persisted on first archive. source_event_id/source_version refer to a semantic member's original source. version_source_event_id is the snapshot's root source, and reference.asset_version is the content item version used. These identifiers are distinct.
 
 Successful archival returns HTTP 200 and `{session_id,turn_id,source_event_id,state:"archived"}`. Under the same authorized logical key, retrying the same turn, text, and ordered evidence returns the original IDs. Changed input returns 409. AnySeek commits the body and projection atomically. Retry with the original request after a lost receipt.
+
+Single-key workspace receipts also include `memory_job_id`. Use `GET /v1/jobs/{job_id}` for asynchronous extraction status. The existing worker extracts reusable information from the archived question and answer and publishes it to the same workspace. Missing model configuration or failed extraction leaves the original turn archived. The job follows the normal retry rules. Replaying a turn returns the same job, including after an extracted memory has been deleted.
 
 Read one turn with `GET /v1/sessions/{session_id}/turns/{turn_id}` or page in registration order with `GET /v1/sessions/{session_id}/turns?after=0&limit=16`. Use `next_after` to continue. Write attempts and withdrawals can leave gaps. A missing established collection, incomplete known turn, or digest mismatch returns 503.
 

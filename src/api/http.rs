@@ -66,6 +66,7 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/captures", post(capture))
         .route("/v1/captures/identified", post(identified_capture))
         .route("/v1/knowledge", post(knowledge))
+        .merge(super::global_knowledge::routes())
         .route(
             "/v1/sessions/{session_id}",
             axum::routing::delete(withdraw_session),
@@ -98,11 +99,23 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/files", post(upload))
         .route("/v1/files/{id}", get(file).delete(delete_file))
         .merge(super::foundation::routes())
+        .merge(super::deployment::routes())
         .layer(DefaultBodyLimit::max(crate::parsing::MAX_FILE))
         .with_state(service)
         .merge(mcp)
 }
-fn token(h: &HeaderMap) -> Result<&str> {
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CursorPage {
+    pub(super) after: Option<Uuid>,
+    pub(super) limit: Option<usize>,
+}
+
+pub(super) fn uncached_json(value: Value) -> impl IntoResponse {
+    ([(header::CACHE_CONTROL, "no-store")], Json(value))
+}
+
+pub(super) fn token(h: &HeaderMap) -> Result<&str> {
     h.get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))

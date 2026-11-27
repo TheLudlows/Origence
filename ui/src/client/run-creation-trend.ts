@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { button, el, field, message, panel, select, table } from "./components.js";
+import { button, el, field, message, select } from "./components.js";
 
 interface RunCreationBucket {
   start_ms: number;
@@ -7,21 +7,10 @@ interface RunCreationBucket {
   created_runs: number;
 }
 
-interface RunCreationOverview extends RunCreationBucket {
+interface RunCreationOverview {
+  created_runs: number;
   scope: "workspace" | "current_logical_key";
   series: RunCreationBucket[];
-  metering?: {
-    duration_p95_ms: number | null;
-    duration_runs: number;
-    agent_tokens: string | null;
-    token_runs: number;
-    costs: {
-      basis: "estimated" | "billed";
-      currency: string;
-      micros: string;
-      runs: number;
-    }[];
-  };
 }
 
 const exactTime = new Intl.DateTimeFormat("zh-CN", {
@@ -105,47 +94,6 @@ function creationChart(buckets: RunCreationBucket[], daily: boolean) {
   return chart;
 }
 
-function creationDetails(data: RunCreationOverview) {
-  return el("details", "run-creation-buckets",
-    el("summary", "", "查看明细"),
-    el("p", "muted", `${exactTime.format(data.start_ms)}（含）至 ${exactTime.format(data.end_ms)}（不含）`),
-    table(["时段开始（含）", "时段结束（不含）", "新建 Run 数"], data.series.map((bucket) => [
-      exactTime.format(bucket.start_ms), exactTime.format(bucket.end_ms), bucket.created_runs,
-    ])),
-  );
-}
-
-function amount(currency: string, micros: string) {
-  const units = BigInt(micros);
-  const whole = (units / 1_000_000n).toLocaleString("zh-CN");
-  const fraction = (units % 1_000_000n).toString().padStart(6, "0");
-  return `${currency} ${whole}.${fraction}`;
-}
-
-function metering(data: RunCreationOverview) {
-  const metrics = data.metering;
-  if (!metrics) return panel("运行计量", el("p", "muted", "当前服务未返回计量数据。"));
-  const duration = metrics.duration_p95_ms === null
-    ? "未知" : `${metrics.duration_p95_ms.toLocaleString("zh-CN")} ms`;
-  const tokens = metrics.agent_tokens === null
-    ? "未知" : BigInt(metrics.agent_tokens).toLocaleString("zh-CN");
-  const costs = metrics.costs.map(({ basis, currency, micros, runs }) => [
-    basis === "billed" ? "账单金额" : "费用估算",
-    amount(currency, micros),
-    runs,
-  ]);
-  return panel(
-    "运行计量",
-    el("p", "muted", `统计窗口内创建的 ${data.created_runs.toLocaleString("zh-CN")} 个 Run。只汇总已上报的整轮计量，费用按币种和来源分别列出。`),
-    table(["指标", "已上报数值", "覆盖 Run 数"], [
-      ["端到端耗时 P95", duration, metrics.duration_runs],
-      ["Agent Token 总量", tokens, metrics.token_runs],
-      ...costs,
-      ...(costs.length ? [] : [["费用", "未知", 0]]),
-    ]),
-  );
-}
-
 export function runCreationTrend(signal: AbortSignal) {
   const range = select([
     ["24h", "最近 24 小时"],
@@ -176,12 +124,8 @@ export function runCreationTrend(signal: AbortSignal) {
       if (requestSignal.aborted) return;
       status.textContent = `新建运行 ${data.created_runs.toLocaleString("zh-CN")} 条`;
       result.append(
-        el("div", "run-trend-series",
-          creationChart(data.series, range.value === "7d"),
-          el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
-          creationDetails(data),
-        ),
-        metering(data),
+        creationChart(data.series, range.value === "7d"),
+        el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
       );
       if (document.activeElement === retry) range.focus();
       retry.hidden = true;

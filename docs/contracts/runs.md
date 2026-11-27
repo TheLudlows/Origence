@@ -1,13 +1,14 @@
-# Private Run trace
+# Run trace
 
 **English** · [简体中文](runs.zh-CN.md)
 
 Trace is a core data domain in Origence. Run is the unit of storage and access for
-private execution evidence. See the [architecture plan](../design/agent-data-foundation.en.md).
+recorded execution evidence. See the [architecture plan](../design/agent-data-foundation.en.md).
 Run creation and append are authorized relational transactions. Each Run is bound
-to a server-assigned private session and stable logical key. Workspace admin is
-not an implicit private archive reader. Credential rotation preserves logical
-ownership; revocation prevents replay as well as new writes and readback.
+to a server-assigned private session and stable logical key. The owner and a
+workspace admin can read the Run summary and recorded event bodies. Original
+private archives, replay, and evidence operations retain their owner checks.
+Rotation preserves ownership. Revocation blocks the revoked credential's access.
 
 `run_id` and `event_id` are durable retry identities. Equal payloads return the
 original receipt; changed payloads conflict. Events are append-only, monotonically
@@ -23,9 +24,9 @@ MCP cannot observe unrelated client or tool activity.
 The caller-inaccessible context preparation path records a SHA256 digest of the
 exact serialized server bundle, immutable citations, route accounting, warnings,
 and omission/budget information. It attests only that the server prepared that
-bundle, not that a client received it or a model used it. Source visibility and
-private session ownership are checked again inside the append transaction and
-on trace/prefix readback. Withdrawal fails closed rather than exposing stale
+bundle, not that a client received it or a model used it. Append, trace, and prefix
+reads recheck source visibility. Administrator trace reads validate private citations
+against the recorded Run session using citation metadata. Withdrawal suppresses stale
 private source evidence. Empty prepared bundles are valid and preserve warnings.
 No automatic capture of every context request, external tool call, or result is
 claimed by this interface. Routes must check Run ownership before retrieval IO.
@@ -127,7 +128,8 @@ Same-schema reopen retains associations. No migration or backfill is performed.
 the selected workspace. An admin lists and counts all workspace Runs. Other roles
 list and count their own Runs. The directory shows the Run ID, logical owner,
 creation time and latest reported outcome. A missing or unknown result is unknown.
-Summaries and trace details remain owner-only. Each durable Run row counts once,
+Directory summaries are limited to the owner's rows. Administrators can read the
+summary and events on any Run detail page in their workspace. Each durable Run row counts once,
 and credential rotation retains its logical owner. Empty scopes receive zeroes
 without creating a session.
 
@@ -188,8 +190,8 @@ Currency and basis groups are presented separately, without exchange rates.
 
 The caller supplies metering. The current Codex and Claude Code Hooks do not
 have complete whole-Run measurements. The query embedding observation remains
-separate. Workspace administrators read aggregates while raw Run events remain
-owner-only. The event and its time- and scope-indexed metering projection commit
+separate. Workspace administrators can read workspace aggregates and recorded
+metering events. The event and its time- and scope-indexed metering projection commit
 together on fresh SQLite databases. Reads do not scan Run bodies.
 
 ## Managed client observations

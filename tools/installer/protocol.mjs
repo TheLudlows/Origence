@@ -42,18 +42,18 @@ async function json(response, operation) {
 export async function identity(endpoint, token) {
   const response = await responseAt(endpoint, "/v1/whoami", { headers: { Authorization: "Bearer " + token } });
   const result = await json(await expect(response, 200, "API identity"), "API identity");
-  check(uuid.test(result.workspace_id) && uuid.test(result.id) && ["admin", "writer", "reader"].includes(result.role),
+  check(uuid.test(result.workspace_id) && uuid.test(result.id) && ["admin", "writer", "reader", "workspace"].includes(result.role),
     "The API did not return an Origence workspace and key identity.");
   return result;
 }
 
-const toolNames = [
+const requiredTools = [
   "context_search", "context_resolve", "context_bundle", "context_get",
   "context_run_create", "context_run_prepare", "context_run_report", "context_run_get",
   "context_session", "context_turn_get", "context_turn_archive",
 ];
 
-export async function connectMcp(endpoint, token, workspace, key) {
+export async function connectMcp(endpoint, token, workspace) {
   let id = 0;
   const headers = {
     "Content-Type": "application/json",
@@ -91,34 +91,45 @@ export async function connectMcp(endpoint, token, workspace, key) {
   await rpc("notifications/initialized", {}, true);
   const catalog = await rpc("tools/list", {});
   const names = catalog.tools?.map(tool => tool.name) ?? [];
-  check(names.length === toolNames.length && toolNames.every(name => names.includes(name)),
-    "MCP tools/list did not return the expected 11 Origence tools. Check the server version.");
+  check(requiredTools.every(name => names.includes(name)),
+    "MCP tools/list did not return the required Origence tools. Check the server version.");
+  const session = await json(await expect(await responseAt(endpoint, "/v1/session", {
+    headers: { Authorization: headers.Authorization, "X-Origence-Workspace": workspace },
+  }), 200, "HTTP session"), "HTTP session");
   const context = await call("context_session", {});
-  check(context.workspace_id === workspace && context.key_id === key,
-    "MCP context_session does not match the API workspace and key.");
+  check(session.workspace_id === workspace && uuid.test(session.key_id) && uuid.test(session.session_id)
+    && context.workspace_id === workspace && context.key_id === session.key_id && context.session_id === session.session_id,
+    "MCP context_session does not match the API workspace, logical key and session.");
   return { call, toolCount: names.length };
 }
 
 const sessionPath = "/api/console/session";
-export async function consoleLogin(base, username, password, workspace, key) {
+export async function consoleLogin(base, credentials, workspace, key) {
   await (await expect(await responseAt(base, "/"), 200, "UI root")).body?.cancel();
   const response = await expect(await responseAt(base, sessionPath, {
     method: "POST", headers: { "Content-Type": "application/json", Origin: base },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(credentials),
   }), 200, "UI login");
   const cookie = response.headers.getSetCookie()[0]?.split(";")[0];
   const profile = await json(response, "UI login");
-  const grant = profile.session?.workspaces?.find(item => item.workspace_id === workspace);
-  check(cookie && profile.session?.account === username && grant?.id === key,
-    "The UI account is not bound to the same workspace and key as MCP.");
-  const headers = { Cookie: cookie, "X-Origence-Workspace": workspace,
-    "X-Origence-Session": profile.session.binding };
+  const mode = credentials.deployment_key ? "deployment" : credentials.workspace_key ? "workspace" : "account";
+  check(cookie && profile.mode === mode && profile.session?.binding, "The UI did not establish the requested credential session.");
+  const headers = { Cookie: cookie, "X-Origence-Session": profile.session.binding };
   async function read(path) {
     const response = await responseAt(base, "/api" + path, { headers });
     return json(await expect(response, 200, "Authenticated UI read"), "Authenticated UI read");
   }
-  const who = await read("/v1/whoami");
-  check(who.workspace_id === workspace && who.id === key, "The UI proxy resolved a different workspace or key.");
+  if (mode === "deployment") {
+    const catalog = await read("/admin/deployment/workspaces?limit=1");
+    check(Array.isArray(catalog.items), "The UI did not verify the deployment administrator roster.");
+  } else {
+    const grant = profile.session.workspaces.find(item => item.workspace_id === workspace);
+    check(grant?.id === key && (mode !== "account" || profile.session.account === credentials.username),
+      "The UI session is not bound to the same workspace and key as MCP.");
+    headers["X-Origence-Workspace"] = workspace;
+    const who = await read("/v1/whoami");
+    check(who.workspace_id === workspace && who.id === key, "The UI proxy resolved a different workspace or key.");
+  }
   return { read, logout: async () => {
     const response = await responseAt(base, sessionPath, { method: "DELETE", headers: { ...headers, Origin: base } });
     await response.body?.cancel();

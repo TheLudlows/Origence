@@ -30,6 +30,7 @@ impl Service {
         tx.commit().await?;
         Ok(value)
     }
+    /// Read the caller's Run or, for a workspace admin, any Run in that workspace.
     pub async fn run_trace(
         &self,
         a: &AuthContext,
@@ -38,7 +39,7 @@ impl Service {
         limit: usize,
     ) -> Result<Value> {
         let mut tx = self.read(a, Permission::Read).await?;
-        let value = tx.private_run_trace(run, after, limit).await?;
+        let value = tx.run_trace(run, after, limit).await?;
         tx.commit().await?;
         Ok(value)
     }

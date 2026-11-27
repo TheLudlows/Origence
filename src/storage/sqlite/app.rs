@@ -387,9 +387,12 @@ impl SqliteTx {
         role: &str,
         capabilities: KeyCapabilities,
     ) -> StorageResult<IssuedKey> {
-        self.check_permission(Permission::Delete).await?;
-        if !Permission::Read.granted_by(role) {
+        self.check_permission(Permission::WorkspaceAdmin).await?;
+        if role == "workspace" || !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict("invalid role".into()));
+        }
+        if super::workspace_key::has_workspace_key(&mut self.tx, self.scope).await? {
+            return Err(StorageError::Forbidden);
         }
         if capabilities.allow_owned_workspaces {
             let root: bool = sqlite_db::query_scalar(
@@ -416,7 +419,7 @@ impl SqliteTx {
         Ok(IssuedKey { key_id, token })
     }
     pub async fn revoke_scoped_key(&mut self, id: Uuid) -> StorageResult<()> {
-        self.check_permission(Permission::Delete).await?;
+        self.check_permission(Permission::WorkspaceAdmin).await?;
         let result = sqlite_db::query(
             "UPDATE oc_api_keys SET revoked=1 WHERE tenant_id=? AND workspace_id=? AND id=?",
         )
