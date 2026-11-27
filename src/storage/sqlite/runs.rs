@@ -194,12 +194,20 @@ impl SqliteTx {
         let mut events = Vec::new();
         let mut cursor = after;
         for (seq, principal, payload, references, recorded) in rows.into_iter().take(limit) {
-            let refs: Vec<ArchivedEvidence> = decode(&references)?;
-            for reference in &refs {
-                self.require_run_reference_visible(reference).await?;
-            }
+            let mut refs: Vec<ArchivedEvidence> = decode(&references)?;
             let mut report: Value = decode(&payload)?;
-            self.validate_prepared_payload(&report).await?;
+            let removed = self.retracted_archive_citations(&report).await?;
+            if removed == 0 {
+                for reference in &refs {
+                    self.require_run_reference_visible(reference).await?;
+                }
+                self.validate_prepared_payload(&report).await?;
+            } else {
+                // A historical trace keeps the event, while replay and Skill
+                // publication still require the original evidence to be live.
+                refs.clear();
+                report = json!({"kind":"context_prepared","event_id":report["event_id"],"private_sources_unavailable":removed});
+            }
             // The private retry snapshot is not duplicated in paginated traces.
             if let Some(object) = report.as_object_mut() {
                 object.remove("replay_bundle");
@@ -211,6 +219,30 @@ impl SqliteTx {
             json!({"run":decode::<RunInput>(&input)?,"session_id":session,"created_at_ms":created,"events":events,"next_after":if more{Some(cursor)}else{None},"unreported_activity":"unknown","coverage_notice":"Only explicitly recorded events are visible; MCP cannot observe unrelated client or tool activity."}),
         )
     }
+    async fn retracted_archive_citations(&mut self, report: &Value) -> StorageResult<usize> {
+        if report["kind"] != "context_prepared" {
+            return Ok(0);
+        }
+        let mut removed = 0;
+        for citation in
+            decode::<Vec<crate::evidence::EvidenceProvenance>>(&report["citations"].to_string())?
+        {
+            if let crate::evidence::EvidenceProvenance::SessionTurn {
+                session_id,
+                turn_id,
+                source_event_id,
+                ..
+            } = citation
+                && self.native_archive_turn_for_source(source_event_id).await?
+                    == Some((session_id, turn_id))
+                && !self.archive_source_active(source_event_id).await?
+            {
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     /// Digest of an immutable, authorized event prefix for private Skill evidence.
     /// Appending later events does not change a previously selected prefix.
     pub async fn private_run_prefix_digest(

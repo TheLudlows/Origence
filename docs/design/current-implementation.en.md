@@ -92,7 +92,7 @@ Job leases carry creator, scope, generation, and run_token. After model calls, p
 
 AnySeek writes the immutable publication's chunks as one atomic Record group. One chunk can carry graph metadata. Each new business version uses a separate group. There is no shared Origence/AnySeek transaction. On a lost response, check the complete current group first. Recover with the original plan and epoch. Cleanup uses a CAS on the current group version to preserve other members. A still-valid job after startup cleanup can rebuild with the original plan. If no complete commit can be proved outside the original operation window, preserve failed state without guessing using a new identity.
 
-One atomic AnySeek group commits a new private turn's body, directory data, and search projection. Stable turn IDs and request digests confirm writes and retries. Withdrawal blocks delivery before AnySeek cleanup. [Archive API](../API.en.md#session-archiving-and-idempotent-feedback)
+One atomic AnySeek group commits a new private turn's body, directory data, and search projection. Stable turn IDs and request digests confirm writes and retries. AnySeek confirms deletion of the group. SQLite reuses ordinary source retraction for existing dependency proofs. [Archive API](../API.en.md#session-archiving-and-idempotent-feedback)
 
 <a id="storage-configuration"></a>
 ### A2.7 Configuration and failure boundaries

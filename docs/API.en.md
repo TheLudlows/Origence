@@ -418,12 +418,19 @@ Feedback request examples for the original turn or an exact archived reference r
 
 rating accepts only helpful/unhelpful/neutral as the caller's judgment, without inferring truth. comment is optional or null and capped at 4096 UTF-8 bytes. Targets must belong to the archived turn in the path. Feedback may not refer to unused hits, other turns, or other scopes. At most 256 immutable entries per turn. At capacity, new entries return 409 while exact replays can still succeed without truncation. The unique domain key is tenant/workspace/principal/feedback_id. The same semantic request reuses results; changed turn, target, rating, or comment returns 409. Feedback does not overwrite, edit, or delete prior ratings or directly change ranking or weights. POST returns `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`. GET returns `{session_id,turn_id,feedback:[...]}`. Feedback retains the original request and created_by/created_at. Turn GET also includes feedback.
 
-An owning writer can withdraw one turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}`
-or the whole session with `DELETE /v1/sessions/{session_id}`. Admins can also withdraw the
-archive source with `DELETE /v1/events/{source_event_id}`. Withdrawal blocks delivery before
-asynchronous cleanup. Private reads preserve historical Q&A and check live workspace
-permission, ownership, withdrawal, and integrity. New feedback, Run references, and Improve
-revalidate their sources.
+An owning writer deletes one turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}`.
+To clear history, freeze the string `through_sequence` from the archive listing and call
+`DELETE /v1/sessions/{session_id}?through_sequence=<cutoff>&after=0`. Continue with the returned
+string `next_after` until it is `null`. Retry with the same cutoff and cursor. Already deleted
+turns can be confirmed again. Newer turns remain available and the same logical key can keep archiving.
+Admins can also delete a source in their own archive through `DELETE /v1/events/{source_event_id}`.
+Use the original idempotency key when retrying this endpoint.
+
+The server reports deletion success after confirmation from AnySeek. Group versions fence delayed writes.
+When a Run or published experience has used a turn, normal source retraction makes its proof unavailable
+before issuing the delete. If AnySeek fails or its response is lost, that proof remains unavailable and
+the console shows that deletion is unconfirmed and offers a retry. Run history retains the event
+position. Affected context events return a summary and a `private_sources_unavailable` count.
 [Cleanup and backups](OPERATIONS.en.md#private-archive-and-paired-recovery)
 
 The session route is off by default. A caller without live writer permission receives 403 before model calls.

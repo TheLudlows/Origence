@@ -407,7 +407,9 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         `sequence ${event.sequence} · ${date(event.recorded_at_ms)}`,
       ),
       ...(embedding ? [embedding] : []),
-      managedObservation(event) ?? code(eventBody),
+      typeof report.private_sources_unavailable === "number"
+        ? el("p", "notice", "归档来源已删除或不可用。")
+        : managedObservation(event) ?? code(eventBody),
     );
     const refs = Array.isArray(report.citations)
       ? (report.citations as Provenance[])

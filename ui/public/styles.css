@@ -343,6 +343,24 @@ small {
     linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
     linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat;
 }
+.nav-icon-archive::before {
+  position: absolute;
+  inset: 3px 2px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  content: "";
+}
+.nav-icon-archive::after {
+  position: absolute;
+  inset: 7px 6px auto;
+  border-top: 1.5px solid currentColor;
+  content: "";
+}
+.archive-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .nav-icon-keys::before {
   width: 8px;
   height: 8px;

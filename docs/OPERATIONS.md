@@ -262,7 +262,7 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 ## 私有问答归档与配套恢复
 
-私有问答的恢复依赖 SQLite 与 AnySeek 的配套备份。后台清理用 AnySeek 组版本和撤回标记阻断迟到写入。
+私有问答的恢复依赖 SQLite 与 AnySeek 的配套备份。直接删除用 AnySeek 组版本阻断迟到写入。
 [AnySeek 备份保留策略](#anyseek-全文与向量) · [归档 API](API.md#会话归档与幂等反馈)
 
 1. 停止 Origence 和配套 AnySeek，记录版本并备份完整 Origence 数据目录。独立模式另备份 AnySeek
@@ -270,7 +270,7 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 2. 在隔离副本运行 `origence --offline --data-dir <副本> archive-verify --isolated-copy`。
    嵌入模式加 `--local`。独立模式使用隔离 AnySeek 的 `OC_ANYSEEK_URL` 和
    `OC_ANYSEEK_API_KEY`，服务地址要与绑定文件一致。保存清单的 AnySeek 版本、
-   可见轮次数和 `directory_sha256`。摘要涵盖正文、顺序、来源与已分配序号的会话和轮次的撤回标记。
+   可见轮次数和 `directory_sha256`。摘要涵盖正文、顺序、来源、会话已分配序号和已删除轮次保留的 AnySeek 组版本。
 3. 用同版本停机还原配套目录和绑定文件，重新执行 `archive-verify` 比对清单，再通过 API 验证
    按序分页、关键词、向量和跨 key 隔离。对没有被 Run 或反馈等用途引用的普通轮次，清单对比
    用于发现整组缺失。尚未提交的正文由调用方携原文重试。

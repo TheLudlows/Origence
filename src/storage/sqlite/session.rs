@@ -430,9 +430,7 @@ impl SqliteTx {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
-        if !self.archive_proof_live(session, turn).await? {
-            return Err(StorageError::NotFound);
-        }
+        self.archive_body_metadata(session, turn).await?;
         let source: AssociationKey = sqlite_db::query_scalar("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?

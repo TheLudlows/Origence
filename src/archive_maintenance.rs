@@ -41,8 +41,7 @@ async fn verify(service: &Service) -> Result<Value> {
         let domain = entry.domain;
         let session = entry.session;
         let collection = domain.collection();
-        // Bind logical fences and the allocator without depending on when the
-        // worker physically deletes withdrawn records.
+        // Bind the allocator even if the live archive is empty.
         proofs.push((
             collection.clone(),
             entry.last_sequence,
@@ -50,16 +49,9 @@ async fn verify(service: &Service) -> Result<Value> {
             Uuid::nil(),
             Uuid::nil(),
             String::new(),
-            hash(json!(entry.withdrawn_turns).to_string()),
-            if entry.withdrawn {
-                "withdrawn_session"
-            } else {
-                "session"
-            },
+            String::new(),
+            "session",
         ));
-        if entry.withdrawn {
-            continue;
-        }
         if !backend.native_archive_collection(domain, false).await? {
             return Err(AppError::Unavailable(
                 "private archive collection missing".into(),
@@ -71,13 +63,10 @@ async fn verify(service: &Service) -> Result<Value> {
                 .native_archive_page(domain, session, after, 32)
                 .await?;
             for row in rows {
-                if row.sequence > entry.last_sequence {
+                if entry.registered.remove(&row.turn) != Some(row.sequence) {
                     return Err(AppError::Unavailable(
-                        "native archive sequence is ahead of its authority allocator".into(),
+                        "native archive sequence does not match its registration".into(),
                     ));
-                }
-                if entry.withdrawn_turns.contains(&row.turn) {
-                    continue;
                 }
                 if let Some((source, digest)) = entry.expected.remove(&row.turn)
                     && (source != row.source || digest != row.request_hash)
@@ -108,6 +97,21 @@ async fn verify(service: &Service) -> Result<Value> {
                 None => break,
             }
         }
+        for (turn, sequence) in entry.registered {
+            let version = backend
+                .absent_archive_version(domain, session, turn)
+                .await?;
+            proofs.push((
+                collection.clone(),
+                sequence,
+                session,
+                turn,
+                Uuid::nil(),
+                String::new(),
+                hash(json!(version).to_string()),
+                "absent",
+            ));
+        }
         if !entry.expected.is_empty() {
             return Err(AppError::Unavailable(
                 "native archive referenced by a recorded dependency proof is missing".into(),
@@ -116,7 +120,7 @@ async fn verify(service: &Service) -> Result<Value> {
     }
     proofs.sort_unstable();
     Ok(json!({
-        "format":"origence-private-archive-restore-v1",
+        "format":"origence-private-archive-restore-v2",
         "anyseek_version":backend.archive_backend_version().await?,
         "archived":native_archived,
         "directory_sha256":hash(json!(proofs).to_string()),

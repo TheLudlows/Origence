@@ -1697,10 +1697,14 @@ async fn learning_source_archive_or_asset_withdrawal_hides_every_read_before_cle
             _ => (id(&original, "source_event_id"), "event"),
         };
         let deleted = s.delete(&a, "withdraw", target_id, kind).await.unwrap();
-        assert_eq!(
-            s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
-            "pending"
-        );
+        if target == "archive" {
+            assert_eq!(deleted["blocked"], true);
+        } else {
+            assert_eq!(
+                s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
+                "pending"
+            );
+        }
         assert_hidden(&s, &a, &learning).await;
         let reader = role(&s, &a, "reader").await;
         assert_hidden(&s, &reader, &learning).await;
@@ -2520,10 +2524,7 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
         )
         .await
         .unwrap();
-    assert_eq!(
-        s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
-        "pending"
-    );
+    assert_eq!(deleted["blocked"], true);
     // Native records still fill the old unfiltered budget. Only the fresh
     // transitive Learning guard may remove them before each branch's top-k.
     assert_native_budget(&s, &budget).await;
@@ -3049,10 +3050,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
         .unwrap();
     assert_eq!(withdrawn.status(), StatusCode::OK);
     let receipt: Value = withdrawn.json().await.unwrap();
-    assert_eq!(
-        s.job(&owner, id(&receipt, "cleanup_job_id")).await.unwrap()["state"],
-        "pending"
-    );
+    assert_eq!(receipt["blocked"], true);
     let (pending_review, _, pending_digest) = &approved[1];
     cli(
         &base,

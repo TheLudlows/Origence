@@ -652,14 +652,26 @@ async fn session_turns(
     ))
 }
 
+#[derive(Deserialize)]
+struct ArchiveDeleteRange {
+    through_sequence: i64,
+    after: Option<i64>,
+}
+
 async fn withdraw_session(
     State(s): State<Service>,
     h: HeaderMap,
     Path(session): Path<Uuid>,
+    Query(range): Query<ArchiveDeleteRange>,
 ) -> Result<Json<Value>> {
     Ok(Json(
-        s.withdraw_session_archive(&auth(&s, &h).await?, session, None)
-            .await?,
+        s.clear_session_archive(
+            &auth(&s, &h).await?,
+            session,
+            range.after.unwrap_or(0),
+            range.through_sequence,
+        )
+        .await?,
     ))
 }
 
@@ -669,7 +681,7 @@ async fn withdraw_turn(
     Path((session, turn)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Value>> {
     Ok(Json(
-        s.withdraw_session_archive(&auth(&s, &h).await?, session, Some(turn))
+        s.withdraw_session_archive(&auth(&s, &h).await?, session, turn)
             .await?,
     ))
 }

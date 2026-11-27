@@ -84,7 +84,6 @@ impl SqliteTx {
 
     pub(super) async fn retract_event_inner(&mut self, id: Uuid) -> StorageResult<u64> {
         self.require_private_source(id).await?;
-        self.withdraw_archive_source(id).await?;
         sqlite_db::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )

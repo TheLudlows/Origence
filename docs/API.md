@@ -488,9 +488,17 @@ SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"`
 
 rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
 
-原逻辑 key 的 writer 可用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 撤回单轮，
-或用 `DELETE /v1/sessions/{session_id}` 撤回整个会话。admin 也可撤回归档来源
-`DELETE /v1/events/{source_event_id}`。撤回先阻断读回，再异步清理。私有读回保留历史问答，按当前 owner、工作区权限、轮次撤回和正文完整性判断。新增反馈、Run 引用和 Improve 仍按用途复核其来源。
+原逻辑 key 的 writer 用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 删除单轮。
+清空历史使用分页读取返回的字符串 `through_sequence` 固定上界，再调用
+`DELETE /v1/sessions/{session_id}?through_sequence=<上界>&after=0`。响应的字符串
+`next_after` 为下一批游标，值为 `null` 时完成。失败重试相同上界和游标，已删除的轮次
+可以再次确认。高于上界的新轮次保留，同一个逻辑 key 可继续归档。
+Admin 也可通过 `DELETE /v1/events/{source_event_id}` 删除自己会话的归档来源，重试沿用幂等键。
+
+服务端在 AnySeek 确认后才返回删除成功。组版本阻断迟到写入。
+若轮次曾被 Run 或经验作为依据，沿用普通来源撤回规则，在发出删除前让该来源证明停止使用。
+AnySeek 失败或响应丢失时，引用保持不可用，控制台显示删除未确认并支持重试。
+Run 的历史列表保留原事件位置，受影响的上下文事件只返回摘要及 `private_sources_unavailable` 数量。
 [清理与备份](OPERATIONS.md#私有问答归档与配套恢复)
 
 私有会话召回默认关闭。启用 session 路由要求实时 writer 权限，未通过时在模型调用前返回 403。

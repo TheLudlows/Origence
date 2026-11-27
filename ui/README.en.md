@@ -64,6 +64,7 @@ administrator rights in that key's additional workspaces.
 - **Memory** displays the visible asset catalog and supports pagination, filtering, search, explicit and semantic writes, text extraction, provenance, and fixed-version comparison.
 - **Knowledge** supports Text/Markdown/PDF uploads, asynchronous publication, updates, job lookup, retry and cancellation, and authorized restore or withdrawal.
 - **Context workbench** displays new query previews, source details, budgets, and omission counts. Budgets are always in UTF-8 bytes.
+- **Private archive** lets an owning writer view turns, delete one turn, or clear a fixed range. Unconfirmed deletions can be retried with the same range.
 
 The catalog shows only currently published assets visible to normal reads. It does not list withdrawn or unpublished material. Search preview displays the relevant asset type from the workspace hybrid hits. It does not perform in-document search or represent the complete catalog. Historical views request an explicit version. After source withdrawal the server blocks access, and frontend caches cannot restore the content. Update semantic memory with a new semantic write. Generic restore does not apply. Reading original sources, files, and jobs requires writer or above. Asset deletion and source withdrawal also require admin.
 
@@ -88,7 +89,7 @@ npm run check
 npm test
 ```
 
-Tests cover actual HTTP forwarding, credential isolation, binary uploads, errors and timeouts, UTF-8 locators, and DOM workflows across all five pages. DOM tests do not verify browser layout. Run the real-backend test at the repository root. It uses no external model.
+Tests cover actual HTTP forwarding, credential isolation, binary uploads, errors and timeouts, UTF-8 locators, and console DOM workflows. DOM tests do not verify browser layout. Run the real-backend test at the repository root. It uses no external model.
 
 ```sh
 python3 tools/anyseek_smoke.py --anyseek-binary /path/to/anyseek_server \

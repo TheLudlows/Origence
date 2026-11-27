@@ -93,6 +93,8 @@ use locking::LockGuard;
 /// The local relational store backed by a single native SQLite database file.
 pub struct SqliteStore {
     pool: Pool,
+    #[cfg(feature = "local-storage")]
+    pub(crate) archive_dependencies: tokio::sync::Mutex<()>,
     path: PathBuf,
     /// In-process lock holder bound to the database path (A2.5). Dropping it
     /// (or crashing the process) releases the OS lock.

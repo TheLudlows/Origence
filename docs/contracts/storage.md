@@ -61,7 +61,7 @@ SQLite 不再保存 `oc_versions.content`、`oc_chunks.content`、`oc_summaries.
 
 SQL 保留来源与可见性判断所需的 locator、Summary 冻结词项、Run/Skill 凭据与恢复计划。
 AnySeek 私有集合保存完整问答、轮次目录和检索字段。SQLite 保存工作区与逻辑 key 归属、
-会话序号分配器、撤回标记和实际使用的依赖证明。只有 AnySeek 能读回复原正文。
+会话序号分配、请求幂等记录和实际使用的依赖证明。AnySeek 按组删除正文与索引并保留版本防止迟到写入。
 数据目录绑定与 collection schema 同时换代。
 [私有问答配套恢复](../OPERATIONS.md#私有问答归档与配套恢复)
 

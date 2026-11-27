@@ -103,6 +103,15 @@ impl Service {
         request_digest: &str,
         bundle: &EvidenceBundle,
     ) -> Result<Value> {
+        let _dependency_guard = if bundle
+            .items
+            .iter()
+            .any(|item| matches!(item.provenance, EvidenceProvenance::SessionTurn { .. }))
+        {
+            Some(self.engine.relational().archive_dependencies.lock().await)
+        } else {
+            None
+        };
         let mut archives = Vec::new();
         for item in &bundle.items {
             if let Some(archive) = self.native_run_archive(a, &item.provenance).await? {
@@ -160,9 +169,7 @@ impl Service {
         let archive = self
             .load_native_archive(a, *session_id, *turn_id)
             .await?
-            .ok_or_else(|| {
-                AppError::Unavailable("private archive for Run citation is missing".into())
-            })?;
+            .ok_or(AppError::NotFound)?;
         if archive.source != *source_event_id
             || archive.evidence != *used_evidence
             || archive.body.evidence_use != *evidence_use

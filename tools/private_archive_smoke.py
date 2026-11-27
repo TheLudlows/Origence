@@ -96,8 +96,14 @@ class Proxy(Peer):
         body = self.read_json() if self.command == "POST" else None
         private = "/pr_" in self.path
         # Fault modes are armed for one request on the isolated peer.
-        put = self.path.endswith("/group/replace") and body and body["records"]
+        replace = self.path.endswith("/group/replace") and body
+        put = replace and body["records"]
+        delete = replace and not body["records"]
         action = peer.action
+        if private and delete and action == "delete_before":
+            peer.action = None
+            self.reply(503, {})
+            return
         if private and put and action == "before":
             peer.action = None
             self.reply(503, {})
@@ -117,6 +123,10 @@ class Proxy(Peer):
         upstream_headers = {}
         status, value = request(peer.upstream, self.path, self.command, body=body, headers=headers,
                                 upstream_headers=upstream_headers)
+        if private and delete and action == "delete_after" and status == 200:
+            peer.action = None
+            self.reply(503, {})
+            return
         if private and put and action == "after" and status == 200:
             peer.action = "block_read"
             self.reply(503, {})
@@ -398,9 +408,6 @@ def run_contract(binary, root, model, anyseek):
                     delayed_call = pool.submit(request, host.base, route, "POST", token, late)
                     assert proxy.entered.wait(15)
                     expect(request(host.base, route + "/" + late["turn_id"], "DELETE", token), 200)
-                    with database(directory) as db:
-                        wait_for(lambda: db.execute("SELECT cleanup_after IS NULL FROM oc_native_archive_withdrawals WHERE turn_id=?",
-                                                   (uuid.UUID(late["turn_id"]).bytes,)).fetchone() == (1,))
                     proxy.release.set()
                     assert delayed_call.result()[0] in (404, 503)
                 expect(request(host.base, route + "/" + late["turn_id"], token=token), 404)
@@ -437,16 +444,13 @@ def run_contract(binary, root, model, anyseek):
             assert rotated["source_event_id"] == saved[0]["source_event_id"]
             expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 200)
             expect(request(host.base, route + "/" + control["turn_id"], token=replacement), 404)
-            with database(directory) as db:
-                cleaned = "SELECT cleanup_after IS NULL FROM oc_native_archive_withdrawals WHERE turn_id=?"
-                wait_for(lambda: db.execute(cleaned,
-                                           (uuid.UUID(control["turn_id"]).bytes,)).fetchone() == (1,))
+
 
         token = replacement
         check(directory, [MARKER, ANSWER, "unwrittenpendingneedle", "lostreceiptneedle"])
         params = [*args, "--isolated-copy"]
         manifest = command(binary, env, "archive-verify", *params)
-        assert manifest["format"] == "origence-private-archive-restore-v1"
+        assert manifest["format"] == "origence-private-archive-restore-v2"
         assert manifest["archived"] >= 2 and len(manifest["directory_sha256"]) == 64
         with database(directory) as db:
             try:
@@ -463,14 +467,6 @@ def run_contract(binary, root, model, anyseek):
             shutil.copytree(directory, incomplete, ignore=shutil.ignore_patterns("anyseek"))
             command(binary, dict(env, OC_DATA_DIR=str(incomplete)), "archive-verify",
                     *params, ok=False)
-            damaged = root / "missing-withdrawal"
-            shutil.copytree(directory, damaged)
-            with database(damaged) as db:
-                removed = db.execute("DELETE FROM oc_native_archive_withdrawals WHERE turn_id=?",
-                                     (uuid.UUID(concurrent_turn["turn_id"]).bytes,))
-                assert removed.rowcount == 1
-            altered = command(binary, dict(env, OC_DATA_DIR=str(damaged)), "archive-verify", *params)
-            assert altered["directory_sha256"] != manifest["directory_sha256"]
         if anyseek:
             stack.close()
             native_copy = root / "restored-native"
@@ -493,15 +489,41 @@ def run_contract(binary, root, model, anyseek):
             assert host.request("/v1/context", context)["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
             assert host.request("/v1/context", dict(context, query="semantic paraphrase", mode="vector"))["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
             assert host.request("/v1/search", {"query": MARKER})["hits"] == []
-            expect(request(host.base, f"/v1/sessions/{session}", "DELETE", token), 200)
-            expect(request(host.base, route, "POST", token, new_turn("Session withdrawn fixture")), 404)
+            if anyseek:
+                for fault in ("delete_before", "delete_after"):
+                    sample = new_turn(fault)
+                    host.request(route, sample)
+                    target = route + "/" + sample["turn_id"]
+                    proxy_server.action = fault
+                    expect(request(host.base, target, "DELETE", token), 503)
+                    expect(request(host.base, target, token=token), 200 if fault == "delete_before" else 404)
+                    expect(request(host.base, target, "DELETE", token), 200)
+                    expect(request(host.base, target, token=token), 404)
+
+            for index in range(17):
+                host.request(route, new_turn(f"Multi-page clear fixture {index}"))
+            cutoff = host.request(route)["through_sequence"]
+            newer = new_turn("New turn outside the confirmed range")
+            host.request(route, newer)
+            clear = f"/v1/sessions/{session}?through_sequence={cutoff}"
+            for _ in range(2):
+                after = "0"
+                while after is not None:
+                    batch = expect(request(host.base, f"{clear}&after={after}", "DELETE", token), 200)
+                    after = batch["next_after"]
+                history = host.request(route)["turns"]
+                assert [row["turn_id"] for row in history] == [newer["turn_id"]]
+            expect(request(host.base, f"/v1/sessions/{session}", "DELETE", token), 400)
+            trace = host.request(f"/v1/runs/{run_id}")
+            assert trace["events"][0]["report"]["private_sources_unavailable"] == 1
+            assert trace["events"][0]["references"] == []
             expect(request(host.base, prepare, "POST", token, run_request), 404)
 
 
 def wait_for(predicate):
     until = time.monotonic() + 15
     while not predicate():
-        assert time.monotonic() < until, "private archive maintenance did not converge"
+        assert time.monotonic() < until, "fixture did not converge"
         time.sleep(0.05)
 
 

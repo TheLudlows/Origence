@@ -582,11 +582,7 @@ impl Service {
             Some((session, turn)) => self
                 .load_native_archive(a, session, turn)
                 .await?
-                .ok_or_else(|| {
-                    AppError::Unavailable(
-                        "private archive record referenced by a proof is missing".into(),
-                    )
-                })?,
+                .ok_or(AppError::NotFound)?,
             None => self
                 .load_native_archive_source(a, id)
                 .await?
@@ -677,17 +673,44 @@ impl Service {
         if !["asset", "event", "file"].contains(&target) {
             return Err(AppError::Invalid("invalid deletion target".into()));
         }
+        let operation = format!("delete/{target}/{id}");
         let (mut tx, cached) = self
-            .command(
-                a,
-                Permission::Delete,
-                &format!("delete/{target}/{id}"),
-                key,
-                &json!({}),
-            )
+            .command(a, Permission::Delete, &operation, key, &json!({}))
             .await?;
-        if let Some(v) = cached {
-            return Ok(v);
+        if let Some(receipt) = cached {
+            if let Some(address) = receipt.get("archive") {
+                let (session, turn): (Uuid, Uuid) = decode(address.clone())?;
+                tx.commit().await?;
+                self.withdraw_session_archive(a, session, turn).await?;
+                return Ok(json!({"id":id,"blocked":true}));
+            }
+            return Ok(receipt);
+        }
+        if target == "event" {
+            let address = tx.native_archive_turn_for_source(id).await?;
+            if address.is_some() || !tx.event_exists(id).await? {
+                tx.rollback().await?;
+                let (session, turn) = match address {
+                    Some(address) => address,
+                    None => {
+                        let record = self
+                            .load_native_archive_source(a, id)
+                            .await?
+                            .ok_or(AppError::NotFound)?;
+                        (record.session, record.turn)
+                    }
+                };
+                let (tx, cached) = self
+                    .command(a, Permission::Delete, &operation, key, &json!({}))
+                    .await?;
+                if cached.is_none() {
+                    Self::finish(tx, json!({"archive":[session,turn]})).await?;
+                } else {
+                    tx.commit().await?;
+                }
+                self.withdraw_session_archive(a, session, turn).await?;
+                return Ok(json!({"id":id,"blocked":true}));
+            }
         }
         let changed = match target {
             "asset" => tx.delete_asset(id).await?,
@@ -695,35 +718,7 @@ impl Service {
             _ => tx.delete_file(id).await?,
         };
         if changed == 0 {
-            if target != "event" {
-                return Err(AppError::NotFound);
-            }
-            tx.rollback().await?;
-            let record = self
-                .load_native_archive_source(a, id)
-                .await?
-                .ok_or(AppError::NotFound)?;
-            let (mut retry, cached) = self
-                .command(
-                    a,
-                    Permission::Delete,
-                    &format!("delete/{target}/{id}"),
-                    key,
-                    &json!({}),
-                )
-                .await?;
-            if let Some(v) = cached {
-                return Ok(v);
-            }
-            // Leave a fence even if no downstream consumer created a
-            // relational source. A source linked in the meantime retracts
-            // through the ordinary event path inside this same transaction.
-            if retry.retract_event(id).await? == 0 {
-                retry
-                    .withdraw_native_archive(record.session, record.turn)
-                    .await?;
-            }
-            tx = retry;
+            return Err(AppError::NotFound);
         }
         if target == "event" {
             tx.retract_consolidation_source(id).await?;

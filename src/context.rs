@@ -121,11 +121,12 @@ impl Service {
                     ranked_native.extend(found.ranked_native);
                 }
                 None => {
-                    let (scanned, found) = self
+                    let (scanned, invalidated, found) = self
                         .context_session_candidates(auth, &input, &query, route.limit)
                         .await?;
                     accounting.candidates = found.len();
                     accounting.scanned = Some(scanned);
+                    accounting.invalidated_before_render = invalidated;
                     accounting.scan_exhausted = Some(false);
                     turns.extend(found);
                 }

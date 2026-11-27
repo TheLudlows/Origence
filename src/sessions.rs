@@ -78,14 +78,17 @@ impl Service {
         let request = json!({"session_id":session,"input":input});
         let digest = hash(request.to_string());
         let turn = input.turn_id;
+        let admission = self.engine.relational().archive_dependencies.lock().await;
         let mut tx = self.read(a, Permission::Write).await?;
-        let domain = tx.require_native_archive_live(session, turn).await?;
+        let domain = tx.archive_domain(session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
 
         let backend = self.engine.vector().private_archive();
         let existing = if self.require_native_collection(domain, initialized).await? {
-            backend.native_archive_read(domain, session, turn).await?
+            backend
+                .native_archive_for_admission(domain, session, turn)
+                .await?
         } else {
             backend.native_archive_collection(domain, true).await?;
             None
@@ -107,7 +110,10 @@ impl Service {
                     evidence: tx
                         .prepare_native_archive_evidence(&input.used_evidence)
                         .await?,
-                    sequence: tx.allocate_native_archive_sequence(session).await?,
+                    sequence: match tx.archive_turn_sequence(session, turn).await? {
+                        Some(sequence) => sequence,
+                        None => tx.allocate_native_archive_sequence(session).await?,
+                    },
                     request_hash: digest,
                     body: ArchivedTurnBody::from_input(&input),
                 },
@@ -117,10 +123,13 @@ impl Service {
         // Record only the ordinary API key binding. Native CAS decides whether
         // the turn exists and which original identifiers it has.
         if cached.is_none() {
-            tx.finish_command(json!({"session_id":session,"turn_id":turn}))
-                .await?;
+            tx.finish_command(
+                json!({"session_id":session,"turn_id":turn,"sequence":record.sequence}),
+            )
+            .await?;
         }
         tx.commit().await?;
+        drop(admission);
         let record = if needs_write {
             let (terms, vector) = self.archive_projection(&record.body).await?;
             backend
@@ -186,7 +195,7 @@ impl Service {
     ) -> Result<Option<NativeArchiveTurn>> {
         session_id(session)?;
         let mut tx = self.read(a, Permission::Write).await?;
-        let domain = tx.require_native_archive_live(session, turn).await?;
+        let domain = tx.archive_domain(session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
         if !self.require_native_collection(domain, initialized).await? {
@@ -263,6 +272,7 @@ impl Service {
         let mut tx = self.read(a, Permission::Write).await?;
         let domain = tx.archive_domain(session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
+        let through_sequence = tx.archive_last_sequence(session).await?;
         tx.commit().await?;
         let (next, native) = if self.require_native_collection(domain, initialized).await? {
             self.engine
@@ -284,32 +294,78 @@ impl Service {
             }
         }
         tx.commit().await?;
-        Ok(json!({"session_id":session,"turns":turns,"next_after":next}))
+        Ok(
+            json!({"session_id":session,"turns":turns,"next_after":next,"through_sequence":through_sequence.to_string()}),
+        )
     }
 
     pub async fn withdraw_session_archive(
         &self,
         a: &AuthContext,
         session: Uuid,
-        turn: Option<Uuid>,
+        turn: Uuid,
     ) -> Result<Value> {
-        let mut tx = self.write(a, Permission::Write).await?;
-        if let Some(turn) = turn {
-            if !tx.native_archive_request_exists(session, turn).await? {
-                return Err(AppError::NotFound);
-            }
-            tx.withdraw_native_archive(session, turn).await?;
-        } else {
-            tx.withdraw_session_native(session).await?;
+        session_id(session)?;
+        let mut tx = self.read(a, Permission::Write).await?;
+        tx.archive_domain(session).await?;
+        if tx.archive_turn_sequence(session, turn).await?.is_none() {
+            return Err(AppError::NotFound);
         }
-        tx.audit(
-            "session.archive_withdrawn",
-            turn.unwrap_or(session),
-            json!({"session_id":session,"turn_id":turn}),
-        )
-        .await?;
         tx.commit().await?;
+        self.delete_native_turn(a, session, turn).await?;
         Ok(json!({"session_id":session,"turn_id":turn,"blocked":true}))
+    }
+
+    /// Process one bounded page. A failed request can be replayed with the same cursor.
+    pub async fn clear_session_archive(
+        &self,
+        a: &AuthContext,
+        session: Uuid,
+        after: i64,
+        through_sequence: i64,
+    ) -> Result<Value> {
+        session_id(session)?;
+        let mut tx = self.read(a, Permission::Write).await?;
+        tx.archive_domain(session).await?;
+        if !(0..=through_sequence).contains(&after)
+            || through_sequence > tx.archive_last_sequence(session).await?
+        {
+            return Err(AppError::Invalid("invalid archive deletion range".into()));
+        }
+        let page = tx
+            .archive_delete_page(session, after, through_sequence)
+            .await?;
+        tx.commit().await?;
+        let next = page.last().map(|(sequence, _)| *sequence);
+        for (_, turn) in page {
+            let turn = Uuid::parse_str(&turn)
+                .map_err(|_| AppError::Unavailable("invalid archive command identity".into()))?;
+            self.delete_native_turn(a, session, turn).await?;
+        }
+        Ok(json!({
+            "session_id":session,"through_sequence":through_sequence.to_string(),
+            "next_after": next.filter(|sequence| *sequence < through_sequence).map(|sequence| sequence.to_string()),
+        }))
+    }
+
+    async fn delete_native_turn(&self, a: &AuthContext, session: Uuid, turn: Uuid) -> Result<()> {
+        // Serialize deletion with readers that install durable supporting evidence.
+        // Use the existing source retraction to make proofs unusable on interruption.
+        let _dependency_guard = self.engine.relational().archive_dependencies.lock().await;
+        let mut tx = self.write(a, Permission::Write).await?;
+        let domain = tx.archive_domain(session).await?;
+        tx.retract_archive_support(session, turn).await?;
+        tx.commit().await?;
+        self.require_native_collection(domain, true).await?;
+        self.engine
+            .vector()
+            .private_archive()
+            .native_archive_delete(domain, session, turn)
+            .await?;
+        let mut tx = self.read(a, Permission::Write).await?;
+        tx.archive_domain(session).await?;
+        tx.commit().await?;
+        Ok(())
     }
 
     pub(crate) async fn context_session_candidates(
@@ -318,20 +374,20 @@ impl Service {
         input: &crate::evidence::EvidenceInput,
         prepared: &ContextQuery,
         limit: usize,
-    ) -> Result<(usize, Vec<ArchiveCandidate>)> {
+    ) -> Result<(usize, usize, Vec<ArchiveCandidate>)> {
         let mut tx = self.read(auth, Permission::Write).await?;
         let bound = tx.bound_private_session().await?;
         if input.session_id.is_some() && input.session_id != bound {
             return Err(AppError::NotFound);
         }
         let Some(session) = bound.filter(|id| Some(*id) != input.exclude_session_id) else {
-            return Ok((0, Vec::new()));
+            return Ok((0, 0, Vec::new()));
         };
         let domain = tx.archive_domain(session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
         if !self.require_native_collection(domain, initialized).await? {
-            return Ok((0, Vec::new()));
+            return Ok((0, 0, Vec::new()));
         }
         let backend = self.engine.vector().private_archive();
         let (count, _) = backend
@@ -368,6 +424,7 @@ impl Service {
         }
         let mut ranked: Vec<_> = ranked.into_iter().collect();
         ranked.sort_by(|a, b| b.1.0.total_cmp(&a.1.0).then_with(|| a.0.cmp(&b.0)));
+        let candidate_count = ranked.len().min(limit);
         let mut found = Vec::new();
         for (turn, (score, routes)) in ranked.into_iter().take(limit) {
             if let Some(archive) = backend
@@ -381,7 +438,7 @@ impl Service {
                 });
             }
         }
-        Ok((count, found))
+        Ok((count, candidate_count - found.len(), found))
     }
 
     pub async fn record_feedback(
@@ -397,6 +454,7 @@ impl Service {
             return Err(AppError::Invalid("turn_id must be non-nil".into()));
         }
         input.validate().map_err(|e| AppError::Invalid(e.into()))?;
+        let _dependency_guard = self.engine.relational().archive_dependencies.lock().await;
         let archive = self
             .load_native_archive(a, session, turn)
             .await?
@@ -466,8 +524,8 @@ async fn verify_native_lookup(
     turn: Uuid,
     record: Option<&NativeArchiveTurn>,
 ) -> StorageResult<()> {
-    tx.require_native_archive_live(session, turn).await?;
-    if let Some((source, digest)) = tx.native_archive_proof_digest(session, turn).await? {
+    tx.archive_domain(session).await?;
+    if let Some((source, digest)) = tx.native_archive_live_proof_digest(session, turn).await? {
         match record {
             Some(record) if record.source == source && record.request_hash == digest => {}
             Some(_) => {
