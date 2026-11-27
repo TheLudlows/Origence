@@ -2,7 +2,7 @@
 use super::{Capture, Client, events::Observation, read_bounded, require_private};
 use crate::run::RunEventInput;
 use anyhow::{Context, ensure};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::VecDeque,
     fs::{self, File, OpenOptions},
@@ -63,7 +63,7 @@ impl Queue {
     }
 
     pub fn enqueue(&self, record: Record) -> anyhow::Result<Capture> {
-        self.prepare_directory()?;
+        prepare_private_directory(&self.0)?;
         let _lock = self.lock()?;
         let mut state = self.read()?;
         if state.pending.iter().any(|r| r.event_id == record.event_id)
@@ -86,16 +86,13 @@ impl Queue {
         limit: usize,
     ) -> anyhow::Result<Option<Batch>> {
         match self.0.symlink_metadata() {
-            Ok(metadata) => self.check_directory(&metadata)?,
+            Ok(metadata) => check_private_directory(&metadata)?,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
             Err(_) => anyhow::bail!("cannot inspect hook queue"),
         }
-        let sender_lock = open_private(&self.0.join("sender.lock"))?;
-        match sender_lock.try_lock() {
-            Ok(()) => {}
-            Err(std::fs::TryLockError::WouldBlock) => return Ok(None),
-            Err(_) => anyhow::bail!("cannot lock hook sender"),
-        }
+        let Some(sender_lock) = try_sender_lock(&self.0)? else {
+            return Ok(None);
+        };
         let _lock = self.lock()?;
         let state = self.read()?;
         let mut records = Vec::new();
@@ -130,30 +127,12 @@ impl Queue {
         self.write(&state)
     }
 
-    fn prepare_directory(&self) -> anyhow::Result<()> {
-        prepare_private_directory(&self.0)
-    }
-
-    fn check_directory(&self, metadata: &fs::Metadata) -> anyhow::Result<()> {
-        ensure!(metadata.is_dir(), "hook queue must be a private directory");
-        require_private(metadata)
-    }
-
     fn lock(&self) -> anyhow::Result<File> {
-        let lock = open_private(&self.0.join("queue.lock"))?;
-        wait_private_lock(&lock)?;
-        Ok(lock)
+        lock_private(&self.0.join("queue.lock"))
     }
 
     fn read(&self) -> anyhow::Result<State> {
-        let file = match File::open(self.0.join("queue-v1.json")) {
-            Ok(file) => file,
-            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(State::default()),
-            Err(_) => anyhow::bail!("cannot open hook queue"),
-        };
-        require_private(&file.metadata().context("cannot inspect hook queue state")?)?;
-        let state: State = serde_json::from_slice(&read_bounded(file, STATE_LIMIT)?)
-            .map_err(|_| anyhow::anyhow!("invalid hook queue state"))?;
+        let state: State = read_private_state(&self.0.join("queue-v1.json"), STATE_LIMIT)?;
         ensure!(
             state.pending.len() <= PENDING_LIMIT && state.acknowledged.len() <= RECEIPT_LIMIT,
             "hook queue size limit exceeded"
@@ -162,29 +141,25 @@ impl Queue {
     }
 
     fn write(&self, state: &State) -> anyhow::Result<()> {
-        let data = serde_json::to_vec(state).context("cannot encode hook queue")?;
-        ensure!(
-            data.len() as u64 <= STATE_LIMIT,
-            "hook queue size limit exceeded"
-        );
-        let temp = self.0.join("queue-v1.tmp");
-        let mut file = open_private(&temp)?;
-        file.set_len(0)
-            .context("cannot reset hook queue staging file")?;
-        file.write_all(&data).context("cannot stage hook queue")?;
-        file.sync_all()
-            .context("cannot sync hook queue staging file")?;
-        drop(file);
-        fs::rename(temp, self.0.join("queue-v1.json")).context("cannot publish hook queue")?;
-        sync_directory(&self.0)
+        write_private_state(&self.0.join("queue-v1.json"), state, STATE_LIMIT)
     }
 }
 
-pub(super) fn wait_private_lock(lock: &File) -> anyhow::Result<()> {
+pub(super) fn try_sender_lock(directory: &Path) -> anyhow::Result<Option<File>> {
+    let lock = open_private(&directory.join("sender.lock"))?;
+    match lock.try_lock() {
+        Ok(()) => Ok(Some(lock)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(_) => anyhow::bail!("cannot lock hook sender"),
+    }
+}
+
+pub(super) fn lock_private(path: &Path) -> anyhow::Result<File> {
+    let lock = open_private(path)?;
     let start = Instant::now();
     loop {
         match lock.try_lock() {
-            Ok(()) => return Ok(()),
+            Ok(()) => return Ok(lock),
             Err(std::fs::TryLockError::WouldBlock) if start.elapsed() < LOCK_WAIT => {
                 std::thread::sleep(Duration::from_millis(5));
             }
@@ -192,6 +167,40 @@ pub(super) fn wait_private_lock(lock: &File) -> anyhow::Result<()> {
             Err(_) => anyhow::bail!("cannot lock hook queue"),
         }
     }
+}
+
+pub(super) fn read_private_state<T: Default + DeserializeOwned>(
+    path: &Path,
+    limit: u64,
+) -> anyhow::Result<T> {
+    match path.symlink_metadata() {
+        Ok(meta) => ensure!(meta.is_file(), "invalid hook queue state"),
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(T::default()),
+        Err(_) => anyhow::bail!("cannot inspect hook queue state"),
+    }
+    let file = File::open(path).context("cannot open hook queue state")?;
+    require_private(&file.metadata().context("cannot inspect hook queue state")?)?;
+    serde_json::from_slice(&read_bounded(file, limit)?)
+        .map_err(|_| anyhow::anyhow!("invalid hook queue state"))
+}
+
+pub(super) fn write_private_state(
+    path: &Path,
+    state: &impl Serialize,
+    limit: u64,
+) -> anyhow::Result<()> {
+    let data = serde_json::to_vec(state).context("cannot encode hook queue")?;
+    ensure!(data.len() as u64 <= limit, "hook queue size limit exceeded");
+    let temp = path.with_extension("tmp");
+    let mut file = open_private(&temp)?;
+    file.set_len(0)
+        .context("cannot reset hook queue staging file")?;
+    file.write_all(&data).context("cannot stage hook queue")?;
+    file.sync_all()
+        .context("cannot sync hook queue staging file")?;
+    drop(file);
+    fs::rename(temp, path).context("cannot publish hook queue")?;
+    sync_directory(path.parent().context("invalid hook queue location")?)
 }
 
 pub(super) fn prepare_private_directory(path: &Path) -> anyhow::Result<()> {
@@ -211,11 +220,18 @@ pub(super) fn prepare_private_directory(path: &Path) -> anyhow::Result<()> {
     let metadata = path
         .symlink_metadata()
         .context("cannot inspect hook queue")?;
-    ensure!(metadata.is_dir(), "hook queue must be a private directory");
-    require_private(&metadata)
+    check_private_directory(&metadata)
 }
 
-pub(super) fn open_private(path: &Path) -> anyhow::Result<File> {
+fn check_private_directory(metadata: &fs::Metadata) -> anyhow::Result<()> {
+    ensure!(metadata.is_dir(), "hook queue must be a private directory");
+    require_private(metadata)
+}
+
+fn open_private(path: &Path) -> anyhow::Result<File> {
+    if let Ok(meta) = path.symlink_metadata() {
+        ensure!(meta.is_file(), "hook queue entry must be a file");
+    }
     let mut options = OpenOptions::new();
     options.read(true).write(true).create(true).truncate(false);
     #[cfg(unix)]
@@ -230,7 +246,7 @@ pub(super) fn open_private(path: &Path) -> anyhow::Result<File> {
     Ok(file)
 }
 
-pub(super) fn sync_directory(path: &Path) -> anyhow::Result<()> {
+fn sync_directory(path: &Path) -> anyhow::Result<()> {
     #[cfg(unix)]
     File::open(path)
         .and_then(|f| f.sync_all())

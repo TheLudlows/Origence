@@ -4,8 +4,10 @@ mod redact;
 use super::{
     Client, client_id, derived_uuid, digest,
     plugin::{id, private_plugin_storage, project_root},
-    queue::{open_private, prepare_private_directory, sync_directory, wait_private_lock},
-    read_bounded, require_private,
+    queue::{
+        lock_private, prepare_private_directory, read_private_state, try_sender_lock,
+        write_private_state,
+    },
 };
 use crate::{
     client::HostClient,
@@ -16,14 +18,7 @@ use crate::{
 use anyhow::{Context, ensure};
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::VecDeque,
-    fs::{self, File},
-    io::{ErrorKind, Write},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::VecDeque, path::PathBuf, sync::Arc, time::Duration};
 use uuid::Uuid;
 
 const NETWORK_BUDGET: Duration = Duration::from_secs(2);
@@ -52,13 +47,18 @@ enum Event {
 
 impl Hook {
     fn event(self, client: Client, token: &str) -> Option<Event> {
+        if self.agent_id.is_some() {
+            return None;
+        }
         let session = client_id(self.session_id.as_deref()?)?;
-        let session_key = derived_uuid(digest(
-            b"origence-private-turn-sync-session-v1",
-            [client.namespace(), session],
-        ));
+        let session_key = || {
+            derived_uuid(digest(
+                b"origence-private-turn-sync-session-v1",
+                [client.namespace(), session],
+            ))
+        };
         if self.hook_event_name == "SessionEnd" {
-            return Some(Event::SessionEnd(session_key));
+            return Some(Event::SessionEnd(session_key()));
         }
         let native_turn = match client {
             Client::Codex => self.turn_id.as_deref(),
@@ -71,7 +71,7 @@ impl Hook {
         ));
         Some(match self.hook_event_name.as_str() {
             "UserPromptSubmit" => Event::Prompt(
-                session_key,
+                session_key(),
                 turn,
                 self.prompt
                     .as_deref()
@@ -263,16 +263,7 @@ impl Store {
     }
 
     fn read(&self) -> anyhow::Result<State> {
-        let path = self.0.join("turns-v1.json");
-        match path.symlink_metadata() {
-            Ok(meta) => {
-                ensure!(meta.is_file(), "invalid archive sync state");
-                require_private(&meta)?;
-            }
-            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(State::default()),
-            Err(err) => return Err(err.into()),
-        }
-        let state: State = serde_json::from_slice(&read_bounded(File::open(path)?, STATE_LIMIT)?)?;
+        let state: State = read_private_state(&self.0.join("turns-v1.json"), STATE_LIMIT)?;
         ensure!(
             state.prompts.len() <= PENDING_LIMIT
                 && state.pending.len() <= PENDING_LIMIT
@@ -282,31 +273,11 @@ impl Store {
         Ok(state)
     }
 
-    fn lock(&self, name: &str) -> anyhow::Result<File> {
-        let path = self.0.join(name);
-        if let Ok(meta) = path.symlink_metadata() {
-            ensure!(meta.is_file(), "invalid archive sync file");
-        }
-        open_private(&path)
-    }
-
     fn update<R>(&self, op: impl FnOnce(&mut State) -> anyhow::Result<R>) -> anyhow::Result<R> {
-        let lock = self.lock("state.lock")?;
-        wait_private_lock(&lock)?;
+        let _lock = lock_private(&self.0.join("state.lock"))?;
         let mut state = self.read()?;
         let result = op(&mut state)?;
-        let bytes = serde_json::to_vec(&state)?;
-        ensure!(
-            bytes.len() as u64 <= STATE_LIMIT,
-            "archive sync state exceeds limits"
-        );
-        let mut temp = self.lock("turns-v1.tmp")?;
-        temp.set_len(0)?;
-        temp.write_all(&bytes)?;
-        temp.sync_all()?;
-        drop(temp);
-        fs::rename(self.0.join("turns-v1.tmp"), self.0.join("turns-v1.json"))?;
-        sync_directory(&self.0)?;
+        write_private_state(&self.0.join("turns-v1.json"), &state, STATE_LIMIT)?;
         Ok(result)
     }
 }
@@ -333,17 +304,9 @@ pub(super) async fn sync_plugin_turn(
             return Ok(None);
         }
         let hook: Hook = serde_json::from_slice(&payload)?;
-        if hook.agent_id.is_some()
-            || !matches!(
-                hook.hook_event_name.as_str(),
-                "UserPromptSubmit" | "Stop" | "Interrupt" | "StopFailure" | "SessionEnd"
-            )
-        {
+        let Some(event) = hook.event(client, &client_token) else {
             return Ok(None);
-        }
-        let event = hook
-            .event(client, &client_token)
-            .context("missing supported turn event")?;
+        };
         let directory = private_plugin_storage(&data, &project)?;
         let scope = derived_uuid(digest(
             b"origence-private-turn-sync-scope-v1",
@@ -429,8 +392,10 @@ async fn deliver(
 ) -> anyhow::Result<Option<&'static str>> {
     let sender = store
         .blocking(|store| {
-            let lock = store.lock("sender.lock")?;
-            if lock.try_lock().is_err() || store.read()?.pending.is_empty() {
+            let Some(lock) = try_sender_lock(&store.0)? else {
+                return Ok(None);
+            };
+            if store.read()?.pending.is_empty() {
                 return Ok(None);
             }
             Ok(Some(lock))

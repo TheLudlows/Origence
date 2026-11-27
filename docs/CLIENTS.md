@@ -115,25 +115,17 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 
 ### 按项目开启私有问答增量归档
 
-在项目启动环境把 `OC_TURN_SYNC_PROJECT` 设为项目根目录的绝对路径，并提供具有 writer 权限的
-`OC_API_KEY`。`OC_SERVER_URL` 和 `OC_WORKSPACE_ID` 与 MCP 使用相同设置。未设置项目路径时，此功能关闭。
-这个开关独立于 `OC_PLUGIN_RUN_HOOK`。Git 项目从仓库根目录或其子目录启动，其他项目从选定目录启动。
+功能默认关闭。用本机 Origence 插件运行 Codex 或 Claude Code 时，将 `OC_TURN_SYNC_PROJECT` 设为项目根目录的绝对路径，
+提供有写权限的 `OC_API_KEY`，并沿用 MCP 的 `OC_SERVER_URL` 和 `OC_WORKSPACE_ID`。
+Git 项目可从仓库子目录启动。此开关独立于 `OC_PLUGIN_RUN_HOOK`。
 
-插件用 `UserPromptSubmit` 的问题与 `Stop` 的 `last_assistant_message` 配对。Codex 依赖 `turn_id`，
-Claude Code 依赖 `prompt_id`。只处理启用之后、两个字段和轮次关联都可靠的主会话问答。
-原始 transcript、工具参数和输出不会读入此流程。续聊和压缩后沿用宿主给出的轮次标识。
-无配对、缺少回答或超过归档上限会留下缺口。重复 `Stop` 复用同一归档，变更回答会报告冲突。
-[Codex Hook 契约](https://learn.chatgpt.com/docs/hooks#stop) · [Claude Code Hook 契约](https://code.claude.com/docs/en/hooks#stop)
+插件在本地过滤 `<private>…</private>`、当前 Origence 凭据和常见凭据，只暂存启用后能配对的主会话问答。
+原始会话文件、工具参数和输出不采集。首次暂存前需在线确认归档归属，后续可离线排队。
+重试限于同一项目、服务、工作区和凭据，Windows 使用插件数据目录继承的 ACL。
+移除变量并重启可暂停，已暂存的问答会在同一配置再次启用时重试。
 
-问题和回答在本地过滤 `<private>…</private>`、当前 Origence 凭据与常见凭据形式，再暂存在独立有界队列。
-Windows 使用客户端插件数据目录继承的 ACL，应限制其他用户读取。首次记录问题前需要服务端确认归档归属。
-已有归属时可离线暂存，`Stop` 或 `SessionEnd` 复核归属后重试。收到匹配的 `archived` 回执才确认归档。
-换服务、工作区或凭据使用独立队列。来源撤回会阻断重放，内容冲突保留原版，两种情况都会报告。
-
-同步的问答标记 `evidence_use:"unknown"`。同一工作区和逻辑 key 可用 `context_bundle` 的私有 `session`
-路线搜索，再按 `turn_id` 调用 `context_turn_get`。这条路径保存私有问答，Improve 会跳过证据使用未知的轮次。
-去掉项目变量并重启客户端可停止同步。已暂存的队列会保留，下次用同一配置启用时可继续重试。
-参见[归档契约](API.md#会话归档与幂等反馈)。
+同一工作区和逻辑 key 可通过 `context_bundle` 的私有 `session` 路线召回。
+同步问答的证据使用状态为 `unknown`。见[归档契约](API.md#会话归档与幂等反馈)。
 
 ## 手工 MCP 接入
 

@@ -40,10 +40,20 @@ pub async fn capture_plugin_event(
     else {
         return Ok(PluginHookReport::default());
     };
-    let workspace = requested_workspace()?;
-    let data = PathBuf::from(
-        std::env::var_os(data_variable(client)).context("client did not provide plugin storage")?,
-    );
+    let workspace = std::env::var_os("OC_WORKSPACE_ID")
+        .map(|value| {
+            value
+                .to_str()
+                .and_then(|value| value.parse::<Uuid>().ok())
+                .context("invalid OC_WORKSPACE_ID")
+        })
+        .transpose()?;
+    let data_var = match client {
+        Client::Codex => "PLUGIN_DATA",
+        Client::ClaudeCode => "CLAUDE_PLUGIN_DATA",
+    };
+    let data =
+        PathBuf::from(std::env::var_os(data_var).context("client did not provide plugin storage")?);
     let payload: Arc<[u8]> =
         tokio::task::spawn_blocking(|| read_bounded(std::io::stdin().lock(), HOOK_LIMIT))
             .await??
@@ -180,24 +190,6 @@ async fn record(
         ensure!(report.blocked.is_none(), "hook delivery deferred");
     }
     Ok(())
-}
-
-fn requested_workspace() -> anyhow::Result<Option<Uuid>> {
-    std::env::var_os("OC_WORKSPACE_ID")
-        .map(|value| {
-            value
-                .to_str()
-                .and_then(|value| value.parse::<Uuid>().ok())
-                .context("invalid OC_WORKSPACE_ID")
-        })
-        .transpose()
-}
-
-fn data_variable(client: Client) -> &'static str {
-    match client {
-        Client::Codex => "PLUGIN_DATA",
-        Client::ClaudeCode => "CLAUDE_PLUGIN_DATA",
-    }
 }
 
 pub(super) fn project_root(cwd: &Path) -> &Path {

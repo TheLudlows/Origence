@@ -122,30 +122,20 @@ installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 
 ### Opt in to incremental private turn archiving
 
-Set `OC_TURN_SYNC_PROJECT` to the absolute project root in the client's launch environment.
-Use a writer `OC_API_KEY` and the same `OC_SERVER_URL` and `OC_WORKSPACE_ID` as MCP. Without
-the project setting, archiving is off. This setting is independent of `OC_PLUGIN_RUN_HOOK`.
-Launch inside the selected Git worktree, or from the selected directory for a non-Git project.
+Archiving is off by default. With the local Origence plugin for Codex or Claude Code, set
+`OC_TURN_SYNC_PROJECT` to the absolute project root, use a writer `OC_API_KEY`, and reuse the
+MCP settings for `OC_SERVER_URL` and `OC_WORKSPACE_ID`. Git subdirectories are supported.
+This setting is independent of `OC_PLUGIN_RUN_HOOK`.
 
-The plugin pairs the question from `UserPromptSubmit` and `last_assistant_message` from `Stop`
-using Codex `turn_id` or Claude Code `prompt_id` in the main session. This covers observed
-complete turns after opt-in. Transcripts, tool arguments and output stay outside this path.
-Resume and compaction use the host's turn identifiers. Missing pairs or oversized content leave
-coverage gaps. A later Stop with different text reports a conflict with the first completed copy.
-[Codex hook contract](https://learn.chatgpt.com/docs/hooks#stop) · [Claude Code hook contract](https://code.claude.com/docs/en/hooks#stop)
+The plugin removes private spans, the current Origence credential, and common credential forms locally.
+It stages paired main-session questions and answers observed after opt-in. Transcripts, tool arguments,
+and output stay out of collection. Initial staging requires a confirmed host identity. Later turns can
+queue offline and retry with the same project, server, workspace, and credential. Windows uses the plugin
+data directory’s inherited ACL. Unset the project variable and restart to pause delivery. Staged turns
+can retry if the same configuration is enabled again.
 
-The plugin filters private spans, the current Origence credential, and common credential forms
-before writing a separate bounded private queue. On Windows, the plugin data directory must have
-an ACL that limits access to its user. The host must confirm ownership before the first question
-can be staged. An already bound queue can stage offline and retry on Stop or SessionEnd after
-revalidating the destination. A matching archived receipt acknowledges a turn. A different
-origin, workspace setting, or credential selects a different queue.
-
-Synced turns carry `evidence_use:"unknown"`. With the same workspace and logical key,
-use the opt-in `session` route of `context_bundle` to find a turn and `context_turn_get` to read
-it by ID. Improve skips turns with unknown evidence use. Unset the project variable and restart
-the client to stop synchronization. The local queue remains available for retries when the same
-configuration is enabled again. See the [archive contract](API.en.md#session-archiving-and-idempotent-feedback).
+Use the private `session` route of `context_bundle` from the same workspace and logical key to recall
+synced turns. They carry unknown evidence use. See the [archive contract](API.en.md#session-archiving-and-idempotent-feedback).
 
 ## Manual MCP setup
 

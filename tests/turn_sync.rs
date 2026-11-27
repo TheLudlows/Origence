@@ -327,7 +327,6 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
         .await;
     assert_eq!(wire.posts.lock().unwrap().len(), 3);
 
-    // The private archive is independent of the originating client, including reads after restart.
     let authorized = HostClient::new(&base, owner.token.clone())
         .unwrap()
         .with_workspace(scope.workspace_id);
