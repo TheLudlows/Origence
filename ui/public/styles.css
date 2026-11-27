@@ -745,15 +745,6 @@ form > button {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.run-creation-buckets summary {
-  width: fit-content;
-  color: var(--accent);
-  font-size: 13px;
-  cursor: pointer;
-}
-.run-creation-buckets[open] > p {
-  margin-block: 8px;
-}
 table {
   border-collapse: collapse;
   width: 100%;

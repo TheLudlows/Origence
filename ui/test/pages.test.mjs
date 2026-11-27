@@ -483,7 +483,6 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     const rows = (scope) => [...scope.querySelectorAll("tbody tr")].map(
       (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent),
     );
-    const details = () => trend.querySelector("details.run-creation-buckets");
     const bars = () => [...trend.querySelectorAll(".run-chart-bar")];
     const metering = () => [...trend.querySelectorAll("section")].find(
       (section) => section.querySelector("h2")?.textContent === "运行计量",
@@ -492,9 +491,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(bars().filter((bar) => bar.tabIndex === 0).length, 1);
     assert.match(bars()[0].getAttribute("aria-label"), /新建 31 个 Run$/);
     assert.match(bars()[1].getAttribute("aria-label"), /新建 0 个 Run$/);
-    assert.equal(details().open, false);
-    assert.equal(rows(details()).length, 24);
-    assert.equal(rows(details())[0][2], "31");
+    assert.equal(trend.querySelector("details"), null);
     assert.deepEqual(rows(metering()), [
       ["端到端耗时 P95", "1,500 ms", "2"],
       ["Agent Token 总量", "0", "1"],
@@ -507,7 +504,6 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     range.dispatchEvent(new Event("change"));
     await wait(() => trend.textContent.includes("新建运行 34 条"));
     assert.equal(bars().length, 7);
-    assert.equal(rows(details()).length, 7);
     assert.deepEqual(rows(metering()), [
       ["端到端耗时 P95", "未知", "0"],
       ["Agent Token 总量", "未知", "0"],
