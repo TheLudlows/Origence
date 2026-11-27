@@ -55,9 +55,9 @@ Source event/原始 Blob、内容条目及其版本、chunk、summary、图对�
 
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
-| SQLite | 权限、来源、版本与发布账本、持久任务、版本化长期事实、私有归档目录及哈希、Run 与 Skill 记录和包 | `context.db` |
+| SQLite | 权限、来源、版本与发布账本、持久任务、版本化长期事实、会话序号分配与撤回、Run/反馈实际引用的证据、Skill 记录和包 | `context.db` |
 | AnySeek 共享集合 | 已发布的分块正文、摘要及全文、向量和一跳图索引 | 按租户与 workspace 路由 |
-| AnySeek 私有集合 | 完整原始问答及其关键词和向量投影 | 按租户、workspace 和逻辑 key 路由 |
+| AnySeek 私有集合 | 完整原始问答、轮次顺序、来源引用和哈希，以及关键词和向量投影 | 按租户、workspace 和逻辑 key 路由 |
 | BlobStore | 上传原件的字节 | 以 scope/hash 定位的本地目录 |
 
 Origence 负责判定权限、来源和可见状态。AnySeek 同时持久化正文并提供候选，归档与发布正文的恢复需要配套 AnySeek 数据。
@@ -77,7 +77,7 @@ Origence 负责判定权限、来源和可见状态。AnySeek 同时持久化正
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。正常启动要求兼容结构，不自动升级、转换数据或重建丢失的集合。紧邻旧版的私有归档有单独的[离线迁移与配套恢复流程](../OPERATIONS.md#私有问答归档隔离迁移与配套恢复)。
+启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。正常启动要求兼容结构，不自动升级、转换数据或重建丢失的集合。私有归档的停机验证见[配套备份恢复](../OPERATIONS.md#私有问答归档与配套恢复)。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
 `full-text-backend.json` 的 `origence-content-backend-v2` 格式保存格式、endpoint、tenant/workspace 路由规则和模型 profile/维度，排除 API key。
@@ -121,7 +121,7 @@ AnySeek 用一组 Record 原子写入一次不可变发布的所有 chunk，其�
 清理以当前 group 版本 CAS 保留其他成员，启动清理后仍有效的作业可在原计划下重建。
 超出原操作窗口且无法确认完整提交时保留失败状态，不换身份猜测写入。
 
-私有问答先在 SQLite 登记 pending，AnySeek 原子写入正文和检索投影并确认后才标 archived。Origence 撤回先阻断交付，再清理 AnySeek。[归档 API](../API.md#会话归档与幂等反馈)
+新私有问答用一个 AnySeek 原子组提交正文、目录及检索投影。稳定轮次 ID 与请求哈希用于确认提交和重试。Origence 撤回先阻断交付，再清理 AnySeek。[归档 API](../API.md#会话归档与幂等反馈)
 
 <a id="storage-configuration"></a>
 ### A2.7 配置与失败边界
@@ -146,6 +146,7 @@ Origence 对分词结果逐词做 SHA-256 编码后交给 AnySeek，保留 AND �
 SessionTurn 显式归档实际使用的证据。归档和 Run 绑定当前 workspace 的稳定逻辑 key；独立 key 不共享，授权轮换可延续。Feedback 幂等但不自动调权。
 Improve 显式提案、核验并经普通知识发布 Learning，保留适用条件和完整支持闭包。
 它不等于自动学习所有交互，也没有独立 Guidance 生命周期。
+工作区 writer 也可用人工确认或固定知识版本直接发布经验，走同一发布通道。
 
 正式长期事实在 SQLite 保留版本、来源和生效时间，普通 Context 可按业务时点求值。经验召回使用当前有效的已发布 Learning。带 `as_of_ms` 的查询走普通 Context 或长期记忆接口，Run 上下文准备会拒绝该参数。[长期记忆](../contracts/memory-consolidation.md)
 

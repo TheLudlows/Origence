@@ -2,7 +2,7 @@
 
 **简体中文** · [English](STATUS.en.md)
 
-更新于 2026-11-19，整合基线为 main [`2094f81`](https://github.com/TheLudlows/Origence/commit/2094f81c990aaf7d69d4ff09295c1a2a837c4ba1)。
+更新于 2026-11-27，本地实现基于 main `a542ff0`。
 Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。首版目标见[产品路线图](ROADMAP.md)与[架构规划](design/agent-data-foundation.md)。
 
 AML 评测协议的 HTTP 入口与启动开关已移除。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
@@ -16,7 +16,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | Skill | [从 Run 详情选取依据、起草及提交审阅](SKILL-CANDIDATE-CLI.zh-CN.md#在控制台从-run-起草)、[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载及两种客户端目录格式导出。Windows 公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核。默认关键词检索要求查询词项全部出现。真实引擎本地回归通过。日常上下文按预算组装带业务日期、时间线和固定引用的归纳事实，控制台可核对原始来源。[证据包契约](contracts/evidence-bundle.zh-CN.md) | 当前后端的模型检索质量、容量与延迟验收 |
-| 私有归档与反馈 | AnySeek 私有原文、逻辑 key 隔离、按 ID 与序号读取、关键词与向量召回、撤回清理；支持显式反馈和 Improve → Learning | 在 P0 双场景任务中核对归档和反馈证据 |
+| 私有归档与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 key 隔离。支持按 ID 与序号读取、关键词与向量召回、撤回清理和显式反馈。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对归档和反馈证据 |
 | Node.js 管理界面 | 账号登录、工作区管理、受限目录、异步入库、固定版本与来源、Run 列表。运行总览用柱状图显示新建 Run 的趋势，可展开逐时段明细，另显示执行方上报的整轮 P95、Agent Token、费用和样本数。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已按运行计量范围结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
@@ -122,8 +122,7 @@ CI 保留 Node UI 构建、真实 UI 门禁和固定夹具缓存，缓存与检�
 
 ## 范围与证据
 
-正常启动要求当前 schema。紧邻旧版私有归档可[显式离线迁移](OPERATIONS.md#私有问答归档隔离迁移与配套恢复)。
-同版本持久化、重启/重试与备份恢复仍是要求。
+正常启动要求当前 schema。同版本重启、重试和[配套备份恢复](OPERATIONS.md#私有问答归档与配套恢复)仍是要求。
 原始会话、Run 详情和未发布候选按逻辑 key 私有隔离。工作区管理员可查看本区的 Run 元数据、上报状态与创建统计。
 本工作区获授权的成员可以复用已发布的记忆、知识和技能，支持来源仍需有效；Skill 的
 私有会话依据可能限制其他 key 的审阅或分发，详见 [Run 契约](contracts/runs.zh-CN.md)。

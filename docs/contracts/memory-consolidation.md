@@ -1,6 +1,6 @@
 # 长期记忆
 
-长期记忆统一接收事实和经验的来源。事实保存按生效时间归纳的结论，经验保存经反馈和核验发布的做法。
+长期记忆统一接收事实和经验的来源。事实保存按生效时间归纳的结论，经验保存按适用条件发布的做法。
 
 | 操作 | HTTP | MCP | Rust |
 | --- | --- | --- | --- |
@@ -11,9 +11,10 @@
 
 ## 写入
 
-工作区 writer 使用 `Idempotency-Key` 请求头或 MCP 的 `idempotency_key` 提供 1–200 个 ASCII 字符的重试键。请求体从以下两种选一项。同键同请求复用原作业，同键改为另一种来源会冲突。
+工作区 writer 使用 1–200 个 ASCII 字符作为 HTTP `Idempotency-Key` 或 MCP `idempotency_key`。以下请求体任选一项。同键同请求复用原作业，修改请求返回冲突。
 
 - `{content}` 提交事实原文，最大 64 KiB。原文、归纳作业和 `{state:"accepted",source_event_id,job_id}` 回执在同一事务保存。
+- `{experience:{statement,why,conditions,basis}}` 直接提交已选定的做法、理由和适用条件。依据可为 `{kind:"asset_version",asset_id,version,content_sha256}`，固定本工作区已发布的知识版本和摘要，也可为 `{kind:"human_confirmation"}`，由提交者声明人工确认。系统记录提交凭据身份及时间。直接提交经过既有知识入库作业，无需私有会话或归档问答。回执含 `learning_id`、`asset_id`、`source_event_id`、`job_id` 和 `status:"accepted"`。作业发布后才进入召回。
 - `{experience:{session_id,improve:{improve_id,conditions,max_feedback?}}}` 引用当前逻辑 key 所有的私有会话及其反馈，并授权按 `conditions` 核验和发布经验。原始问答和反馈受私有会话权限约束。回执含 `improve_id` 和 `job_id`，可通过 `GET /v1/improvements/{id}` 查看发布进度。[经验核验与发布](learning.zh-CN.md)
 
 归纳需要已配置的提取模型，以及管理员通过 `/admin/memory-properties` 登记的单值属性和必填条件。主体标识、适用条件值和事实值须出现在原文引文中。引文使用 UTF-8 字节半开区间。不合法的引文导致作业失败。
@@ -27,7 +28,7 @@
 工作区 reader 提交 `{query,identity?,as_of_ms?,limit?,applicability_context?}`。`as_of_ms` 指定事实的生效时点（Unix 毫秒，默认当前时间）。经验使用当前可见的发布版本。每类默认最多返回 10 条，`limit` 可设为 1–20。
 
 - `fact` 使用最多 32 个查询词项匹配按主题 ID 和证据版本排列的最多 512 条有效证据。还有证据未扫描时，`fact_scan_exhausted` 为 `true`。指定完整 `identity` 可跳过扫描。词项命中标为 `unverified`，精确身份命中标为 `caller_identity_exact_match`。结果包含事实版本和所用来源的字节区间。
-- `experience` 使用已发布内容的全文索引，每条经验返回结论、解释、适用条件和一个发布分块引用。调用方传入的 `applicability_context` 逐字匹配全部原始条件时标为 `caller_context_exact_match`，否则标为 `unverified`。
+- `experience` 使用已发布内容的全文索引，每条经验返回结论、解释、适用条件和一个发布分块引用。直接提交的经验还返回 `publication`，包含选定依据和提交记录。它记录发布者声明和知识版本的有效性。调用方传入的 `applicability_context` 逐字匹配全部原始条件时标为 `caller_context_exact_match`，否则标为 `unverified`。
 
 两类结果在同一个最终授权快照内检查来源有效性。经验的发布分块引用可直接用于会话归档的 `used_evidence`。
 

@@ -6,11 +6,61 @@ The latest local verification was 2026-11-27. Each section identifies its exact 
 
 ## 2026-11-27 · Project cleanup-after-change skill
 
-Based on main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57`. This change only updates project instructions, the skill, and documentation references.
+Based on main `241374ed0f960a4aff67acb3e62a4c09ff5cea0f`. This change only updates project instructions, the skill, and documentation references.
 
 - Reviewed the 5 sections and 27 rules in both skill languages, YAML frontmatter, interface metadata, and implicit invocation. `git diff --check`, `git diff --cached --check`, and Python 3 / PyYAML checks passed.
 - Maintain only the root `AGENTS.md`. Confirmed that its translated mirror had no unique constraints before removing it. Audited all 80 Markdown files and 120 script, workflow, and configuration files at commit `845aeab839716c6a32dc7741cfa727ad13019ed7`, repaired current navigation and the SQL-constraint anchor, and documented the exception to bilingual maintenance. No bilingual check script depended on the mirror.
 - Reference and anchor checks passed; other historical validation entries remain intact. Runtime code was unchanged, no tests were added, and Rust or Node.js builds and test suites were not run. These checks do not establish runtime or CI validation results.
+
+
+## 2026-11-27 · Private Q&A on fresh databases
+
+Based on `c385544f8723f30f51654ac79d1c64143ff47716` on Linux x86_64 with Rust 1.98.0.
+The standalone AnySeek server used CI pin `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
+
+- `cargo test --locked` passed 481 tests. Eight real-backend AnySeek contracts also passed.
+  All-target Clippy passed with `-D warnings` for SQLite only and all features.
+  Formatting, documentation links, and diff checks passed.
+- `tools/private_archive_smoke.py` exercised the CLI, HTTP, and MCP with both backends.
+  It covered private search and shared search isolation, ordered reads, credential rotation,
+  failed commits and lost receipts, withdrawal races, Run replay, SQLite rejection of
+  private Q&A writes, and a paired restore with `archive-verify`.
+- Synthetic databases from before #168, from #168, and from the preceding #170 commit
+  were rejected by both `serve` and `archive-verify`. The SQLite file SHA-256 remained
+  unchanged. Local validation covered Linux and stopped copies.
+
+## 2026-11-27 · Native private turn directory and direct experience publication
+
+Based on main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57` on Linux x86_64 with
+Rust 1.98.0. Standalone AnySeek used CI pin `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
+
+- The default Rust suite passed 482 tests and the real AnySeek contracts passed another 8.
+  All-target Clippy with warnings denied passed
+  for SQLite only and all features. Formatting and links passed.
+- The private archive smoke passed through the actual CLI, HTTP, and MCP on both backends.
+  It checks the absence of a SQLite directory row for ordinary turns, exact and ordered reads,
+  key and workspace isolation, lost receipt recovery, late writes and withdrawal races, mixed
+  Run source checks, and stopped paired restore.
+- Isolated tests ran `copy / verify / purge` for the pre-#168 SQLite bodies and explicit
+  admission of a #168 store. They compared original SQLite bytes, old IDs, withdrawals, and
+  mixed pagination order. Five concurrent first submissions returned the same receipt.
+- With models disabled, HTTP and MCP published experiences from human confirmation and
+  a pinned document version without a private turn archive. Both backends returned the
+  published experiences and hid the document-based experience after source withdrawal.
+  Existing Improve and effective-date fact paths retained their separate behavior.
+
+All checks used disposable synthetic data. Native Windows, production data migration,
+and online restore remain outside this validation.
+
+The follow-up review starts from `97d0bc6e264250c8cc939d3c66a294f22a4c19c7`.
+The actual CLI, HTTP, and MCP smokes ran again with embedded and standalone AnySeek.
+A missing known archive group returns 503 on source, turn, and context reads. Withdrawing
+an unreferenced turn by source ID creates no SQLite dependency proof. The restore manifest
+changes with a logical withdrawal and stays fixed when cleanup removes the withdrawn record.
+A concurrent Run preparer replays the committed result and leaves proofs only for the
+selected turns. Direct publication and Improve Learning regressions also passed.
+The follow-up default Rust suite passed 482 tests and the real AnySeek contracts passed eight.
+Strict SQLite-only and all-feature Clippy, formatting, and link checks passed.
 
 ## 2026-11-27 · AnySeek private turn archive
 

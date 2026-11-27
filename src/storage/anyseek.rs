@@ -202,6 +202,8 @@ pub struct AnySeekFullTextStore {
     checked_config: OnceLock<crate::retrieval_diagnostics::CheckedConfig>,
     checked_scopes: tokio::sync::Mutex<HashSet<(Uuid, Uuid)>>,
     #[cfg(feature = "local-storage")]
+    native_archive_provisioning: tokio::sync::Mutex<()>,
+    #[cfg(feature = "local-storage")]
     binding: Option<super::retrieval_store::binding::Binding>,
 }
 
@@ -406,6 +408,8 @@ impl AnySeekFullTextStore {
             embedding,
             checked_config: OnceLock::new(),
             checked_scopes: tokio::sync::Mutex::new(HashSet::new()),
+            #[cfg(feature = "local-storage")]
+            native_archive_provisioning: tokio::sync::Mutex::new(()),
             #[cfg(feature = "local-storage")]
             binding: None,
         }

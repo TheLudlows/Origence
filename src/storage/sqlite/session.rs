@@ -1,25 +1,12 @@
 //! Session and evidence authority, including exact archival provenance.
 use super::read_model::{self, AssociationKey};
 use super::*;
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(test)]
 use crate::session::SessionTurnInput;
 use crate::session::{ArchivedEvidence, EvidenceKind, FeedbackInput, FeedbackTarget, UsedEvidence};
 use std::collections::HashSet;
 
 pub(super) const SCHEMA: &str = include_str!("../session-schema.sql");
-
-pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
-    let tables: bool = sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name IN ('oc_session_turns','oc_session_turn_evidence','oc_feedback'))")
-        .fetch_one(&mut *conn).await.map_err(sqlite_err)?;
-    // Evaluate both original relations, including their prepare errors. This
-    // is the existing global presence probe, not a complete schema validator.
-    let sources: bool =
-        sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE kind='session_turn')")
-            .fetch_one(conn)
-            .await
-            .map_err(sqlite_err)?;
-    Ok(tables || sources)
-}
 
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s).map_err(|_| StorageError::Unavailable("invalid session record".into()))
@@ -76,19 +63,6 @@ struct ArchiveReadBatch {
 }
 
 impl SqliteTx {
-    async fn require_sessions(&mut self) -> StorageResult<()> {
-        if !available(&mut self.tx).await? {
-            return Err(StorageError::Unavailable(
-                "session archives require a new database".into(),
-            ));
-        }
-        Ok(())
-    }
-
-    /// Each relation is loaded only after the current reference reaches its
-    /// original read boundary. In particular, missing chunks and invalid local
-    /// support must not prepare owner/ledger statements. Raw rows defer decoding
-    /// until consumption; native JSON guards remain in reference order.
     fn archive_metadata(references: &[UsedEvidence]) -> ArchiveReadBatch {
         ArchiveReadBatch {
             references: references.to_vec(),
@@ -456,18 +430,9 @@ impl SqliteTx {
         session: Uuid,
         turn: Uuid,
     ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
-        if !self.archive_state_visible(session, turn).await? {
+        if !self.archive_proof_live(session, turn).await? {
             return Err(StorageError::NotFound);
         }
-        self.turn_support_local(session, turn).await
-    }
-
-    pub(super) async fn turn_support_local(
-        &mut self,
-        session: Uuid,
-        turn: Uuid,
-    ) -> StorageResult<(Uuid, Vec<ArchivedEvidence>)> {
-        self.require_sessions().await?;
         let source: AssociationKey = sqlite_db::query_scalar("SELECT source_event_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
@@ -520,9 +485,6 @@ impl SqliteTx {
         &mut self,
         source: Uuid,
     ) -> StorageResult<()> {
-        if !available(&mut self.tx).await? {
-            return Err(StorageError::NotFound);
-        }
         let turn: Option<(Uuid, Uuid)> = sqlite_db::query_as("SELECT session_id,turn_id FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -532,6 +494,24 @@ impl SqliteTx {
     }
 
     #[cfg(any(feature = "local-storage", test))]
+    pub(crate) async fn prepare_native_archive_evidence(
+        &mut self,
+        references: &[UsedEvidence],
+    ) -> StorageResult<Vec<ArchivedEvidence>> {
+        let mut evidence = Vec::with_capacity(references.len());
+        let mut batch = Self::archive_metadata(references);
+        for (index, reference) in references.iter().enumerate() {
+            evidence.push(
+                self.archive_from_batch(&mut batch, index, reference, Uuid::new_v4())
+                    .await?,
+            );
+        }
+        self.require_archived_evidence_set_visible(&evidence)
+            .await?;
+        Ok(evidence)
+    }
+
+    #[cfg(test)]
     pub(super) async fn register_turn(
         &mut self,
         session: Uuid,
@@ -539,7 +519,6 @@ impl SqliteTx {
         request_hash: &str,
     ) -> StorageResult<(Uuid, bool)> {
         self.check_permission(Permission::Write).await?;
-        self.require_sessions().await?;
         self.require_private_session(session).await?;
         input.validate().map_err(StorageError::InvalidArgument)?;
         let existing: Option<(Uuid, String)> = sqlite_db::query_as("SELECT source_event_id,request_hash FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=?")
@@ -551,15 +530,8 @@ impl SqliteTx {
             }
             return Ok((source, false));
         }
-        let mut evidence = Vec::new();
-        let mut batch = Self::archive_metadata(&input.used_evidence);
-        for (index, reference) in input.used_evidence.iter().enumerate() {
-            evidence.push(
-                self.archive_from_batch(&mut batch, index, reference, Uuid::new_v4())
-                    .await?,
-            );
-        }
-        self.require_archived_evidence_set_visible(&evidence)
+        let evidence = self
+            .prepare_native_archive_evidence(&input.used_evidence)
             .await?;
         let source = self.create_event("session_turn", "", None).await?;
         sqlite_db::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
@@ -570,10 +542,15 @@ impl SqliteTx {
                     .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
                     .bind(item.evidence_ref_id).bind(ordinal as i32).bind(encode(item)?).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         }
+        let body_bytes = encode(&input.question)?.len() + encode(&input.answer)?.len() - 4;
+        sqlite_db::query("INSERT INTO oc_native_archive_proofs(tenant_id,workspace_id,session_id,turn_id,evidence_reported,body_bytes) VALUES(?,?,?,?,?,?)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(input.turn_id)
+            .bind(input.evidence_use.is_reported()).bind(body_bytes as i64)
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok((source, true))
     }
 
-    pub(super) async fn feedback_rows(
+    pub(crate) async fn feedback_rows(
         &mut self,
         session: Uuid,
         turn: Uuid,
@@ -595,6 +572,14 @@ impl SqliteTx {
 
     pub async fn session_feedback(&mut self, session: Uuid, turn: Uuid) -> StorageResult<Value> {
         self.require_turn_visible(session, turn).await?;
+        self.session_feedback_view(session, turn).await
+    }
+
+    pub(crate) async fn session_feedback_view(
+        &mut self,
+        session: Uuid,
+        turn: Uuid,
+    ) -> StorageResult<Value> {
         Ok(
             json!({"session_id":session,"turn_id":turn,"feedback":self.feedback_rows(session, turn).await?}),
         )

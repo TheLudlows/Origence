@@ -30,7 +30,7 @@ use uuid::Uuid;
 
 mod app;
 #[cfg(feature = "local-storage")]
-mod archive_migration;
+mod archive_restore;
 mod catalog;
 #[cfg(feature = "local-storage")]
 mod consolidation;
@@ -52,8 +52,6 @@ mod lifecycle;
 mod locking;
 mod private_archive;
 mod private_session;
-#[cfg(feature = "local-storage")]
-pub(crate) use private_archive::ArchiveEntry;
 
 mod provenance;
 mod publication;

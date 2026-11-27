@@ -2,7 +2,6 @@
 use super::*;
 
 const SCHEMA: &str = include_str!("../sqlite-schema.sql");
-
 pub(super) async fn schema_present(conn: &mut Connection) -> StorageResult<bool> {
     sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='oc_workspaces')",
@@ -19,6 +18,7 @@ pub(super) async fn exec_schema(conn: &mut Connection) -> StorageResult<()> {
         session::SCHEMA,
         private_archive::SCHEMA,
         improve::SCHEMA,
+        improve::CATALOG_SCHEMA,
         runs::SCHEMA,
         skill::SCHEMA,
     ] {
@@ -39,26 +39,7 @@ pub(super) async fn check_conn(conn: &mut Connection) -> StorageResult<()> {
             session::SCHEMA,
             private_archive::SCHEMA,
             improve::SCHEMA,
-            runs::SCHEMA,
-            skill::SCHEMA,
-        ],
-    )
-    .await
-    .map_err(sqlite_err)
-}
-
-#[cfg(feature = "local-storage")]
-pub(super) async fn check_legacy_archive_schema(conn: &mut Connection) -> StorageResult<()> {
-    sqlite_db::check_format(conn, "authority")
-        .await
-        .map_err(sqlite_err)?;
-    sqlite_db::verify_schema(
-        conn,
-        &[
-            SCHEMA,
-            semantics::SCHEMA,
-            session::SCHEMA,
-            improve::SCHEMA,
+            improve::CATALOG_SCHEMA,
             runs::SCHEMA,
             skill::SCHEMA,
         ],

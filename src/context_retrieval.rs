@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    learning::SupportField,
+    learning::{ExperiencePublication, SupportField},
     memory_identity::MemoryIdentity,
     parsing,
     service::{Service, scope},
@@ -76,6 +76,8 @@ pub(crate) struct ContextLearning {
     pub why: String,
     pub conditions: Vec<String>,
     pub supports: Vec<ContextLearningSupport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publication: Option<ExperiencePublication>,
 }
 
 #[derive(Clone, Debug)]

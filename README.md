@@ -60,7 +60,7 @@ Open `http://127.0.0.1:3000` and sign in with your console account. For a fresh 
 
 ## Rust library and storage
 
-SQLite holds authoritative data such as permissions, versioned facts, sources, and archive directories. AnySeek stores published chunks, summaries, and search indexes, with complete Q&A in separate private collections. Blob storage holds original uploads. [Storage ownership](docs/design/current-implementation.en.md#storage-design)
+SQLite holds authoritative data such as permissions, versioned facts, sources, and durable jobs. AnySeek stores published chunks, summaries, and search indexes, with complete Q&A and turn directories in separate private collections. Blob storage holds original uploads. [Storage ownership](docs/design/current-implementation.en.md#storage-design)
 
 Library callers can use parsing, identity and value contracts, models, Blob storage, and the AnySeek adapter without a metadata engine.
 

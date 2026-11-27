@@ -109,15 +109,14 @@ class Proxy(Peer):
         if private and action == "block_read":
             self.reply(503, {})
             return
+        if private and action == "missing_group" and "/group?group_id=" in self.path:
+            self.reply(404, {})
+            return
         headers = {name: value for name in ("apikey", "X-AnySeek-Tenant", "X-AnySeek-Request-Id")
                    if (value := self.headers.get(name)) is not None}
         upstream_headers = {}
         status, value = request(peer.upstream, self.path, self.command, body=body, headers=headers,
                                 upstream_headers=upstream_headers)
-        if private and put and action == "crash_after_commit" and status == 200:
-            peer.action = None
-            peer.entered.set()
-            assert peer.release.wait(20)
         if private and put and action == "after" and status == 200:
             peer.action = "block_read"
             self.reply(503, {})
@@ -201,7 +200,7 @@ def check(directory, markers):
             assert not any(marker.encode() in data for marker in markers), f"private body in {path.name}"
 
 
-def run_contract(binary, root, model, anyseek, legacy):
+def run_contract(binary, root, model, anyseek):
     directory = root / "origence"
     directory.mkdir()
     env = isolated_env(str(directory))
@@ -226,9 +225,8 @@ def run_contract(binary, root, model, anyseek, legacy):
             proxy.release = threading.Event()
             env.update(OC_ANYSEEK_URL=proxy_url, OC_ANYSEEK_API_KEY=key)
             forbidden.append(key)
-        run_binary = legacy or binary
-        owner = command(run_binary, env, "workspace-create", "private fixture")
-        foreign = command(run_binary, env, "workspace-create", "second workspace", "--in-tenant-of",
+        owner = command(binary, env, "workspace-create", "private fixture")
+        foreign = command(binary, env, "workspace-create", "second workspace", "--in-tenant-of",
                           owner["workspace_id"])
         token = owner["token"]
         forbidden.extend([token, foreign["token"]])
@@ -240,13 +238,18 @@ def run_contract(binary, root, model, anyseek, legacy):
         def start(binary=binary, env=env):
             return Host(binary, env, token, forbidden, args)
 
-        with start(run_binary) as host:
+        with start() as host:
             session = host.request("/v1/session")["session_id"]
             route = f"/v1/sessions/{session}/turns"
             saved = []
             for item in (turn, control, rich):
                 saved.append(host.request(route, item))
                 time.sleep(0.005)
+            with database(directory) as db:
+                assert db.execute("SELECT COUNT(*) FROM oc_session_turns").fetchone() == (0,)
+                assert not db.execute(
+                    "SELECT 1 FROM sqlite_schema WHERE name IN ('oc_private_archives','oc_private_archive_migration')"
+                ).fetchall()
             context = {"query": MARKER, "routes": [{"route": "session"}]}
             run_id, event_id = str(uuid.uuid4()), str(uuid.uuid4())
             host.request("/v1/runs", {"run_id": run_id, "summary": "Synthetic replay"})
@@ -265,67 +268,6 @@ def run_contract(binary, root, model, anyseek, legacy):
                 "reported_skill_version": None,
             }
             recorded_verification = host.request(verification_path, verification)
-
-
-        if legacy:
-            legacy_backup = root / "legacy-before-purge"
-            shutil.copytree(directory, legacy_backup)
-            with database(legacy_backup) as db:
-                old_bodies = db.execute("SELECT content FROM oc_events WHERE kind='session_turn'").fetchall()
-            assert any(MARKER in body for (body,) in old_bodies)
-            params = [*args, "--isolated-copy"]
-            command(binary, env, "archive-migrate", "copy", *params, "--limit", "0", ok=False)
-            with database(directory) as db:
-                assert db.execute("SELECT name FROM sqlite_schema WHERE name='oc_private_archives'").fetchone() is None
-            if anyseek:
-                proxy.action = "crash_after_commit"
-                cmd = [binary, "--offline", "archive-migrate", "copy", *params, "--limit", "1"]
-                with subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
-                    try:
-                        assert proxy.entered.wait(20), "migration did not reach native commit"
-                        process.kill()
-                        process.communicate(timeout=10)
-                        assert process.returncode != 0
-                    finally:
-                        proxy.release.set()
-                        if process.poll() is None:
-                            process.kill()
-                proxy.entered.clear()
-                proxy.release.clear()
-                with database(directory) as db:
-                    assert db.execute("SELECT state FROM oc_private_archives").fetchall() == [("pending",)]
-                    assert db.execute("SELECT content FROM oc_events WHERE kind='session_turn'").fetchone()[0]
-            partial = command(binary, env, "archive-migrate", "copy", *params, "--limit", "1")
-            assert partial["copied"] == 1 and partial["unconfirmed"] == 2
-            command(binary, env, "archive-migrate", "purge", *params, ok=False)
-            stopped = subprocess.run([binary, "serve", "--bind", "127.0.0.1:0", *args],
-                                     env=env, capture_output=True, timeout=15)
-            assert stopped.returncode != 0 and not stopped.stdout
-            with database(directory) as db:
-                assert db.execute("SELECT content FROM oc_events WHERE kind='session_turn'").fetchone()[0]
-            copied = command(binary, env, "archive-migrate", "copy", *params)
-            assert copied["archived"] == 3 and copied["unconfirmed"] == 0
-            repeated = command(binary, env, "archive-migrate", "copy", *params)
-            assert repeated["copied"] == 0 and repeated["directory_sha256"] == copied["directory_sha256"]
-            verified = command(binary, env, "archive-migrate", "verify", *params)
-            assert verified["directory_sha256"] == copied["directory_sha256"]
-            damaged = root / "orphan-source-copy"
-            shutil.copytree(directory, damaged)
-            orphan = uuid.uuid4().bytes
-            with database(damaged) as db:
-                db.execute("INSERT INTO oc_events (tenant_id,workspace_id,id,content,kind,state,created_by,created_at) "
-                           "SELECT tenant_id,workspace_id,?,content,kind,state,created_by,created_at "
-                           "FROM oc_events WHERE kind='session_turn' LIMIT 1", (orphan,))
-            command(binary, dict(env, OC_DATA_DIR=str(damaged)), "archive-migrate", "purge", *params, ok=False)
-            with database(damaged) as db:
-                assert db.execute("SELECT content FROM oc_events WHERE id=?", (orphan,)).fetchone()[0]
-            purged = command(binary, env, "archive-migrate", "purge", *params)
-            assert purged["phase"] == "complete" and purged["directory_sha256"] == copied["directory_sha256"]
-            assert command(binary, env, "archive-migrate", "purge", *params)["directory_sha256"] == copied["directory_sha256"]
-            check(directory, [MARKER, ANSWER])
-            # A backup made before cutover retains the original on purpose.
-            with database(legacy_backup) as db:
-                assert db.execute("SELECT content FROM oc_events WHERE kind='session_turn'").fetchall() == old_bodies
 
         with start() as host:
             listed = host.request(route + "?limit=2")
@@ -349,8 +291,8 @@ def run_contract(binary, root, model, anyseek, legacy):
             with database(directory) as db:
                 db.execute("UPDATE oc_events SET kind='knowledge' WHERE id=?", (source,))
             try:
-                expect(request(host.base, route + "/" + turn["turn_id"], token=token), 404)
-                assert host.request("/v1/context", context)["items"] == []
+                assert host.request(route + "/" + turn["turn_id"])["answer"] == ANSWER
+                assert host.request("/v1/context", context)["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
             finally:
                 with database(directory) as db:
                     db.execute("UPDATE oc_events SET kind='session_turn' WHERE id=?", (source,))
@@ -373,8 +315,25 @@ def run_contract(binary, root, model, anyseek, legacy):
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
                 results = list(pool.map(lambda _: host.request(route, concurrent_turn), range(5)))
             assert all(result == results[0] for result in results)
+            source_path = f"/v1/events/{results[0]['source_event_id']}"
+            assert json.loads(host.request(source_path)["content"])["question"] == concurrent_turn["question"]
+            deleted = expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 200)
+            assert expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 200) == deleted
+            expect(request(host.base, route + "/" + concurrent_turn["turn_id"], token=token), 404)
+            with database(directory) as db:
+                assert db.execute("SELECT 1 FROM oc_session_turns WHERE turn_id=?",
+                                  (uuid.UUID(concurrent_turn["turn_id"]).bytes,)).fetchone() is None
 
             if anyseek:
+                # The directory hit and Run proof still exist. Losing the
+                # native group is an integrity error on all read paths.
+                proxy.action = "missing_group"
+                try:
+                    expect(request(host.base, f"/v1/events/{saved[0]['source_event_id']}", token=token), 503)
+                    expect(request(host.base, route + "/" + turn["turn_id"], token=token), 503)
+                    expect(request(host.base, "/v1/context", "POST", token, context), 503)
+                finally:
+                    proxy.action = None
                 mixed_run = str(uuid.uuid4())
                 host.request("/v1/runs", {"run_id": mixed_run, "summary": "Synthetic mixed replay"})
                 mixed_path = f"/v1/runs/{mixed_run}/context"
@@ -424,11 +383,10 @@ def run_contract(binary, root, model, anyseek, legacy):
                 expect(request(host.base, route + "/" + delayed["turn_id"], token=token), 404)
                 assert expect(request(host.base, "/v1/context", "POST", token,
                                       dict(context, query="unwrittenpendingneedle")), 200)["items"] == []
-                # Simulate resubmitting an unwritten reservation after its
-                # AnySeek receipt epoch has expired.
+                # An unwritten native turn has no SQLite archive row to promote.
                 with database(directory) as db:
-                    db.execute("UPDATE oc_private_archives SET operation_epoch=0 WHERE turn_id=?",
-                               (uuid.UUID(delayed["turn_id"]).bytes,))
+                    assert db.execute("SELECT 1 FROM oc_session_turns WHERE turn_id=?",
+                                      (uuid.UUID(delayed["turn_id"]).bytes,)).fetchone() is None
                 expect(request(host.base, route, "POST", token, delayed, "unwritten"), 200)
 
                 for action in ["missing", "corrupt"]:
@@ -441,10 +399,10 @@ def run_contract(binary, root, model, anyseek, legacy):
                     assert proxy.entered.wait(15)
                     expect(request(host.base, route + "/" + late["turn_id"], "DELETE", token), 200)
                     with database(directory) as db:
-                        wait_for(lambda: db.execute("SELECT cleanup_done FROM oc_private_archives WHERE turn_id=?",
+                        wait_for(lambda: db.execute("SELECT cleanup_after IS NULL FROM oc_native_archive_withdrawals WHERE turn_id=?",
                                                    (uuid.UUID(late["turn_id"]).bytes,)).fetchone() == (1,))
                     proxy.release.set()
-                    expect(delayed_call.result(), 503)
+                    assert delayed_call.result()[0] in (404, 503)
                 expect(request(host.base, route + "/" + late["turn_id"], token=token), 404)
                 expect(request(host.base, route, "POST", token, late), 404)
                 proxy.action = "after"
@@ -454,8 +412,8 @@ def run_contract(binary, root, model, anyseek, legacy):
 
         with start() as host:
             if anyseek:
-                pending = host.request("/v1/context", dict(context, query="lostreceiptneedle"))
-                assert pending["items"] == []
+                found = host.request("/v1/context", dict(context, query="lostreceiptneedle"))
+                assert found["items"][0]["provenance"]["turn_id"] == lost["turn_id"]
                 recovered = host.request(route + "/" + lost["turn_id"])
                 assert recovered["question"] == lost["question"]
                 assert host.request(route, lost)["source_event_id"] == recovered["source_event_id"]
@@ -480,20 +438,39 @@ def run_contract(binary, root, model, anyseek, legacy):
             expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 200)
             expect(request(host.base, route + "/" + control["turn_id"], token=replacement), 404)
             with database(directory) as db:
-                wait_for(lambda: db.execute("SELECT cleanup_done FROM oc_private_archives WHERE turn_id=?",
+                cleaned = "SELECT cleanup_after IS NULL FROM oc_native_archive_withdrawals WHERE turn_id=?"
+                wait_for(lambda: db.execute(cleaned,
                                            (uuid.UUID(control["turn_id"]).bytes,)).fetchone() == (1,))
 
         token = replacement
         check(directory, [MARKER, ANSWER, "unwrittenpendingneedle", "lostreceiptneedle"])
         params = [*args, "--isolated-copy"]
-        manifest = command(binary, env, "archive-migrate", "verify", *params)
+        manifest = command(binary, env, "archive-verify", *params)
+        assert manifest["format"] == "origence-private-archive-restore-v1"
+        assert manifest["archived"] >= 2 and len(manifest["directory_sha256"]) == 64
+        with database(directory) as db:
+            try:
+                db.execute("UPDATE oc_events SET content=? WHERE id=?", (ANSWER, source))
+            except sqlite3.IntegrityError:
+                pass
+            else:
+                raise AssertionError("SQLite accepted a private turn body")
+
         restored = root / "restored-origence"
         shutil.copytree(directory, restored)
         if not anyseek:
             incomplete = root / "authority-only"
             shutil.copytree(directory, incomplete, ignore=shutil.ignore_patterns("anyseek"))
-            command(binary, dict(env, OC_DATA_DIR=str(incomplete)), "archive-migrate", "verify",
+            command(binary, dict(env, OC_DATA_DIR=str(incomplete)), "archive-verify",
                     *params, ok=False)
+            damaged = root / "missing-withdrawal"
+            shutil.copytree(directory, damaged)
+            with database(damaged) as db:
+                removed = db.execute("DELETE FROM oc_native_archive_withdrawals WHERE turn_id=?",
+                                     (uuid.UUID(concurrent_turn["turn_id"]).bytes,))
+                assert removed.rowcount == 1
+            altered = command(binary, dict(env, OC_DATA_DIR=str(damaged)), "archive-verify", *params)
+            assert altered["directory_sha256"] != manifest["directory_sha256"]
         if anyseek:
             stack.close()
             native_copy = root / "restored-native"
@@ -508,7 +485,7 @@ def run_contract(binary, root, model, anyseek, legacy):
             stack.callback(proxy_server.server_close)
             stack.callback(proxy_server.shutdown)
         restore_env = dict(env, OC_DATA_DIR=str(restored))
-        restored_manifest = command(binary, restore_env, "archive-migrate", "verify", *params)
+        restored_manifest = command(binary, restore_env, "archive-verify", *params)
         assert restored_manifest == manifest
         with start(env=restore_env) as host:
             assert host.request(route + "/" + turn["turn_id"])["answer"] == ANSWER
@@ -532,12 +509,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--anyseek-binary")
-    parser.add_argument("--legacy-binary")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="origence-private-archive-") as root, peer(Model) as (_, model):
         run_contract(str(Path(args.binary).resolve()), Path(root), model,
-                     str(Path(args.anyseek_binary).resolve()) if args.anyseek_binary else None,
-                     str(Path(args.legacy_binary).resolve()) if args.legacy_binary else None)
+                     str(Path(args.anyseek_binary).resolve()) if args.anyseek_binary else None)
     print("Private archive HTTP, isolation, integrity, recovery and restore contract passed.")
 
 

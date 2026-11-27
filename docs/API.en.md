@@ -143,7 +143,7 @@ The Node.js UI uses these and the HTTP endpoints below. It never opens databases
 | `POST /v1/memories` | `{fact_key,content}` (`publish_if_authorized` is deprecated and accepted without effect) → `asset_id`, `source_event_id`, and `job_id`, `state:"accepted"`. `conflict` indicates append to an existing fact. |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`. The same scoped identity reuses the content item. `conflict` indicates an existing version. |
 | `POST /v1/memories/lookup` | Complete `{subject,predicate,context:{}}`, readable by reader. Returns the same current published view as `GET /v1/assets/{id}`. No Idempotency-Key or content item creation. |
-| `POST /v1/memories/retain` | Submit fact text or an experience source and receive a job receipt. See the [long-term memory contract](contracts/memory-consolidation.md). |
+| `POST /v1/memories/retain` | Submit fact text, selected feedback, or an experience with human confirmation or a pinned document version. Returns a job receipt. [Long-term memory contract](contracts/memory-consolidation.md) |
 | `POST /v1/memories/long-term/recall` | Retrieve facts and experiences together by query. |
 | `POST /v1/memories/long-term/lookup` | Read fact details by exact identity. |
 | `GET /v1/memories/long-term/{id}` | Read fact details by ID. |
@@ -374,7 +374,7 @@ Locators use the original source and byte ranges from memory semantics. New extr
 
 ## Session archiving and idempotent feedback
 
-SessionTurn is an immutable Q&A archive explicitly submitted after the caller finishes answering. `state:"archived"` means the archive committed and `state:"recorded"` means feedback committed. Learning requires explicitly calling [Improve](#explicit-improve--learning).
+Callers explicitly submit SessionTurn archives. `state:"archived"` confirms archival and `state:"recorded"` confirms feedback. Submit experience [directly](contracts/memory-consolidation.md#写入), or use [Improve](#explicit-improve--learning) to derive it from archives and feedback.
 
 Reading and writing archive turns and feedback require writer or above. `session_id` must be bound to the authenticated logical key. Tenant, workspace, and logical key are authentication-derived. Reads, writes, and retries recheck credential validity. session_id, turn_id, feedback_id, and evidence UUIDs must be non-nil. POST requires `Idempotency-Key`. Unknown fields, missing required fields, and unknown enum values are rejected.
 
@@ -402,9 +402,9 @@ Reading and writing archive turns and feedback require writer or above. `session
 - Older versions with valid support can be archived after a newer update and need not match current_version. The archive stores the complete original locator, including parser, byte ranges, extraction, and semantic-memory support_sources. It does not reinterpret historic offsets.
 - GET used_evidence entries are `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`. reference is the caller input above, and evidence_ref_id is allocated and persisted on first archive. source_event_id/source_version refer to a semantic member's original source. version_source_event_id is the snapshot's root source, and reference.asset_version is the content item version used. These identifiers are distinct.
 
-Successful archive HTTP 200 returns `{session_id,turn_id,source_event_id,state:"archived"}`. The unique domain key is tenant/workspace/session_id/turn_id. Under the same authorized logical key, identical text, evidence use state, and ordered `used_evidence` return original IDs. Retry can use a different `Idempotency-Key` or authorized rotated credential. Changed content returns 409 and preserves the original. SQLite first registers the pending turn and exact evidence references. Origence confirms it only after AnySeek atomically commits the Q&A and its search projection. An invalid reference rolls back registration. A lost receipt is recoverable by stable turn identity and body hash. A never-submitted pending turn requires the caller to retry with the original body.
+Successful archival returns HTTP 200 and `{session_id,turn_id,source_event_id,state:"archived"}`. Under the same authorized logical key, retrying the same turn, text, and ordered evidence returns the original IDs. Changed input returns 409. AnySeek commits the body and projection atomically. Retry with the original request after a lost receipt.
 
-Read one turn with `GET /v1/sessions/{session_id}/turns/{turn_id}` or page in registration order with `GET /v1/sessions/{session_id}/turns?after=0&limit=16`. Use `next_after` to continue. Withdrawn turns can leave gaps. Missing or invalid committed records return 503.
+Read one turn with `GET /v1/sessions/{session_id}/turns/{turn_id}` or page in registration order with `GET /v1/sessions/{session_id}/turns?after=0&limit=16`. Use `next_after` to continue. Write attempts and withdrawals can leave gaps. A missing established collection, incomplete known turn, or digest mismatch returns 503.
 
 Feedback request examples for the original turn or an exact archived reference returned by GET.
 
@@ -420,16 +420,17 @@ rating accepts only helpful/unhelpful/neutral as the caller's judgment, without 
 
 An owning writer can withdraw one turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}`
 or the whole session with `DELETE /v1/sessions/{session_id}`. Admins can also withdraw the
-archive source with `DELETE /v1/events/{source_event_id}`. Invalidation of a cited item, root
-source, semantic-memory support source, or file immediately blocks the entire turn and feedback
-(404). The same visibility rules apply to source reads, replay, and Improve.
+archive source with `DELETE /v1/events/{source_event_id}`. Withdrawal blocks delivery before
+asynchronous cleanup. Private reads preserve historical Q&A and check live workspace
+permission, ownership, withdrawal, and integrity. New feedback, Run references, and Improve
+revalidate their sources.
 [Cleanup and backups](OPERATIONS.en.md#private-archive-and-paired-recovery)
 
 The session route is off by default. A caller without live writer permission receives 403 before model calls.
 `session_id` and `exclude_session_id` require the session route. Keyword, vector, and hybrid
-search use eligible archived IDs in the workspace and logical-key collection. Origence deduplicates
-by turn ID and rechecks sources and transitive Learning support before delivery.
-`scanned` counts eligible directory entries.
+search use the workspace and logical-key collection. Origence deduplicates by turn ID and checks
+live authorization and withdrawal before delivery. `scanned` counts directory candidates before
+final validation.
 Keywords cover the complete turn. Vectors represent up to the first 4096 UTF-8 bytes of the
 question and answer separately, cut at a character boundary. Meaning present only in a long
 answer's tail is outside the vector projection. `allow_partial` permits keyword fallback when
@@ -469,7 +470,7 @@ The memory route includes consolidated topics for ordinary queries such as `{"qu
 
 See the [session archive and retrieval rules](#session-archiving-and-idempotent-feedback).
 
-Returns `rendered_context`, `items`, `conflicts`, `warnings`, scope, policy, requested/effective mode, total budget and actual bytes, and per-route candidate, kept, and omitted counts. Each item retains type, retrieval lane, conditions/applicability, semantic identity, score kind, and stable citation. `provenance.type=asset_chunk` distinguishes asset_version, original source_version, and version_root_source_event_id. `session_turn` retains real session_id/turn_id/archive source and historic used_evidence without fabricating chunks. Full visibility of sources and referenced material is checked before budgeting and in the final render snapshot. Withdrawal does not wait for physical cleanup. Validity only indicates that the read snapshot visibility check passed.
+Returns `rendered_context`, `items`, `conflicts`, `warnings`, scope, policy, requested/effective mode, byte counts, and per-route accounting. Each item retains type, retrieval lane, conditions, applicability, identity, score kind, and stable citation. `asset_chunk` distinguishes asset, source, and version-root identifiers. `session_turn` keeps its exact archival references. Shared candidates recheck sources before budgeting and in the final snapshot. Private candidates follow the session rules above. Validity describes the snapshot's visibility check.
 
 Deterministic conflict grouping applies only to confirmed/conflict values under the same conditions and explicit single-value identity. All candidates and warnings within a group are retained or omitted together. Prose, different conditions, and multi-value sets are not inferred to be mutually exclusive. Conflict checks cover retrieved candidates only and do not establish absence of cross-document conflict. Deduplicate only exact evidence locations, merging keyword/vector paths without merging similar text.
 
