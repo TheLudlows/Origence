@@ -85,6 +85,8 @@ server_observed。首次成功时另存私有上下文快照；相同请求重�
 失败事件同样不可覆盖，恢复后新的准备尝试使用新的 event_id。普通 MCP/Search 请求
 不会自动加入某个 Run，仍需显式调用准备接口；未采集活动保持未知。
 
+HTTP Run 准备和 MCP `context_run_prepare` 在认证与归属检查后拒绝 `context.as_of_ms`，返回 `INVALID_ARGUMENT`，此时尚未计算请求摘要或写入事件。带业务日期的记忆查询使用 `POST /v1/context` 或 MCP `context_bundle`。
+
 ## AnySeek 统一检索
 
 每个 workspace 的全文、向量和一跳图候选使用同一 AnySeek collection。适配器将 Origence 预分词
@@ -522,6 +524,8 @@ resolve 合约不变。最小输入为 `{"query":"Atlas"}`。
 字符串。Learning 的每个条件与其逐字精确匹配才标记 `caller_context_exact_match`，
 否则保留并标记 `unverified`；两者都不代表系统验证了真实适用性。
 
+memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_of_ms":1796083200000}` 召回已归纳主题。`as_of_ms` 指定事实的业务时点（Unix 毫秒，默认当前时间）。`long_term_memory` 来源包含该时点的 `state`、带版本的时间线和原文 UTF-8 引文区间。状态为 `conflicting` 或 `unknown` 时没有选定值。控制台 writer 可打开原文，reader 可核验已发布的引文。[字段及预算细节](contracts/evidence-bundle.zh-CN.md#类型化来源与适用性)
+
 启用 session 必须 writer 以上，否则 403；该权限在任何模型调用前校验。
 `session_id` / `exclude_session_id` 可限制会话，必须同时启用 session。会话路由
 扫描最多 512 条近期关系型记录，完整来源/传递证据有效性先于保留条数限制，
@@ -542,14 +546,13 @@ version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/�
 位置去重，合并 keyword/vector 路径，不合并相似文字。
 
 所有标题、引用、条件、来源、冲突警告和分隔符都计入实际 UTF-8 上下文预算；
-整块保留，不截断中文/emoji，不保留孤立引用。记忆、知识和 Learning 三条路由共享一次 embedding，
-各自独立候选过滤/预算。此版只用原文 chunk，不引入 summary/graph 路径。
+归纳主题连同时间线和引文整块保留。记忆、知识和 Learning 三条原生检索路由共享一次 embedding，
+各自独立候选过滤/预算，原生检索使用原文 chunk。
 稳定轮询与各路由上限是中性工程默认，不代表已验证的最佳质量权重。
 
-**归档限制**：记忆、知识和 Learning 条目 可转换为原有 chunk used_evidence。session_turn 引用
-目前不能作为 `SessionTurn.used_evidence`（该合约只支持 chunk/entity/relation）；
-响应与会话正文标记 `unsupported_session_turn_reference`，调用方不得伪造 chunk
-或声称此类引用已完整归档。Learning 发布给 reader 的引用只有支持标识/范围，
+**归档限制**。基于 chunk 的记忆、知识和 Learning 条目可转换为原有 chunk used_evidence。
+`SessionTurn.used_evidence` 接受 chunk/entity/relation。不支持的引用带 `unsupported_session_turn_reference`
+或 `unsupported_long_term_memory_reference` 标记。Learning 发布给 reader 的引用只有支持标识/范围，
 不返回支撑轮次的原始问答或 quote。
 
 详见 [EvidenceBundle 契约](contracts/evidence-bundle.zh-CN.md)。真实 Agent

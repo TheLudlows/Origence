@@ -91,14 +91,34 @@ export interface Provenance {
   locator?: Record<string, unknown>;
   [key: string]: unknown;
 }
+export type LongTermMemoryState =
+  | { status: "current"; value: string }
+  | { status: "conflicting" | "unknown" };
+export interface LongTermMemoryCitation {
+  source_event_id: string;
+  effective_at_ms: number | null;
+  statement: { value: string; quote: string; byte_start: number; byte_end: number };
+}
+export interface LongTermMemoryProvenance extends Provenance {
+  type: "long_term_memory";
+  memory_id: string;
+  version: number;
+  as_of_ms: number;
+  effective_from_ms: number | null;
+  state: LongTermMemoryState;
+  timeline: { effective_from_ms: number | null; state: LongTermMemoryState }[];
+  citations: LongTermMemoryCitation[];
+}
 export interface ContextItem {
   evidence_id: string;
   route: string;
   title: string;
   content: string;
-  provenance: Provenance;
+  provenance: LongTermMemoryProvenance | (Provenance & { type: "asset_chunk" | "session_turn" });
   normalization_status: string;
   semantic_status?: string;
+  conditions?: string[];
+  applicability?: string;
 }
 export interface Bundle {
   budget: number;

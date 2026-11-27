@@ -46,6 +46,7 @@ TOOL_FIELDS = {
     "context_bundle": {
         "query": "string", "mode": "string", "allow_partial": "boolean",
         "budget": "integer", "routes": "array", "memory_identity": "object",
+        "as_of_ms": "integer",
         "applicability_context": "array", "session_id": "string",
         "exclude_session_id": "string",
     },

@@ -640,6 +640,60 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
         .await
         .unwrap();
     let event_id = Uuid::new_v4();
+    let dated_context = json!({"query":"Atlas","mode":"keyword","as_of_ms":0});
+    let http_prepare = |key: &str| {
+        let base = peer.url.strip_suffix("/mcp").unwrap();
+        peer.client
+            .post(format!("{base}/v1/runs/{run}/context"))
+            .bearer_auth(key)
+            .json(&json!({"event_id":event_id,"context":dated_context}))
+    };
+    let mcp_prepare = |key: &str| {
+        peer.post(rpc(
+            "tools/call",
+            json!({"name":"context_run_prepare","arguments":{
+                "run_id":run,"event_id":event_id,"context":dated_context
+            }}),
+        ))
+        .bearer_auth(key)
+    };
+    let response = http_prepare(token).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = response.json().await.unwrap();
+    assert_eq!(error["error"]["code"], "INVALID_ARGUMENT");
+    let message = error["error"]["message"].as_str().unwrap();
+    assert!(message.contains("as_of_ms is unsupported for Run context preparation"));
+    let error: Value = mcp_prepare(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        error["error"]["message"],
+        format!("INVALID_ARGUMENT: {message}")
+    );
+    for (key, status, code) in [
+        (&reader.token, StatusCode::FORBIDDEN, "FORBIDDEN"),
+        (&a_admin.token, StatusCode::NOT_FOUND, "NOT_FOUND"),
+    ] {
+        assert_eq!(http_prepare(key).send().await.unwrap().status(), status);
+        let denied: Value = mcp_prepare(key).send().await.unwrap().json().await.unwrap();
+        assert!(
+            denied["error"]["message"]
+                .as_str()
+                .unwrap()
+                .starts_with(code)
+        );
+    }
+    let trace = peer
+        .call(token, None, "context_run_get", json!({"run_id":run}))
+        .await
+        .unwrap();
+    assert_eq!(trace["events"], json!([]));
+
+    // Both invalid requests left this event ID available for normal preparation.
     let context = json!({"query":"Atlas","mode":"keyword"});
     let prepare = peer
         .call(

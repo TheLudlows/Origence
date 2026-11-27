@@ -7,6 +7,29 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 日常上下文召回带日期的报销上限
+
+基于 main `1a8544b647613864582354bc9f5942e69426b463`，Linux x86_64，Rust 1.98.0，
+Node.js 24.22.1，Chromium 156.0.8078.79。合成报销规则通过实际 HTTP `/v1/context` 和
+MCP `context_bundle` 验证中文问句召回、生效日前后、同日冲突、缺证据、字节预算、同租户跨工作区隔离和撤回后的重算。
+Chromium 经实际控制台、HTTP 宿主和后台 worker 验证固定原文的 UTF-8 高亮、reader 的固定版本引文及撤回后重新打开失败。
+
+- `cargo test --locked --no-fail-fast --quiet` 通过 485 项，保留默认忽略的 8 项 AnySeek 测试。
+- `cargo fmt --package origence -- --check`、`cargo clippy --locked --all-features --all-targets -- -D warnings` 及 diff 检查通过。
+- `npm --prefix ui test` 通过 31 项。设置 `NODE_PATH` 和 `CHROMIUM` 后，运行 `ui/scripts/check-context-policy-browser.cjs`
+  和既有 `ui/scripts/check-context-knowledge-browser.cjs` 均通过。
+- `python3 tools/mcp_smoke.py --binary target/debug/origence --local` 和 3 项 `tools/test_mcp_schema.py` 测试通过。
+
+提取响应来自合成夹具。Windows、真实模型、原生 Agent 客户端和正式试点未验证。
+
+PR #165 复核加入同工作区、同完整身份的已确认显式值。修复前，HTTP 历史查询同时返回该显式值和归纳历史值。
+修复后，HTTP/MCP 返回的归纳主题在应用预算前排除同身份显式值，覆盖历史、当前、未知、同日冲突和预算省略。
+另验证额外条件形成独立身份，以及未来冲突仅在选定时点冲突时才进入响应的冲突字段。
+
+同步 main `af9030310bd5d313e23d9ac42373fa0b1e7d38a7` 后，HTTP 和 MCP Run 准备先检查写权限和归属，
+再对 `as_of_ms` 返回 `INVALID_ARGUMENT`。两次拒绝均未写事件，同一事件 ID 去掉日期后可正常准备。
+独立 HTTP/MCP 的日期召回及身份、预算回归在更新后的主干上通过。
+
 ## 2026-11-27 · 从 Run 详情起草 Skill 候选
 
 基于 main `1a8544b647613864582354bc9f5942e69426b463`。Linux x86_64、Rust 1.98.0、

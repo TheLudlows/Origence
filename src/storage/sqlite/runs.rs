@@ -417,6 +417,11 @@ impl SqliteTx {
                         refs.push(r.clone());
                     }
                 }
+                EvidenceProvenance::LongTermMemory { .. } => {
+                    return Err(StorageError::InvalidArgument(
+                        "prepared Run does not support long-term memory citations",
+                    ));
+                }
             }
         }
         let old: Option<i64> = sqlite_db::query_scalar("SELECT sequence FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?")

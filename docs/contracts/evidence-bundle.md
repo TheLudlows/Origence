@@ -22,14 +22,26 @@ pools. Type, scope, exact identity and complete source visibility are checked
 before branch caps and native vector top-k. One query embedding is shared by
 all enabled content retrieval routes. Keyword uses the existing all-query-terms matching
 rule; hybrid is deterministic RRF60. Each route has at most 100 candidates per
-branch and an explicit returned candidate limit 1–100. This version deliberately
-uses original chunks only, with no summary or graph branches. Search/resolve
-remain available for their existing components.
+branch and an explicit returned candidate limit 1–100. Native content retrieval
+uses original chunks. Search/resolve remain available for their existing components.
 
 Optional exact memory identity applies only to memory, including supported
 explicit conflict counterparts. Historical content item versions never become current
 retrieval candidates. Session references still preserve the exact historical
 versions actually used when archived.
+
+In regular context reads, the memory route includes consolidated fact topics.
+A normal question uses the [long-term lexical scan](memory-consolidation.md#统一召回)
+with at most 32 query terms and 512 scoped fact rows. The route reports `scanned`
+and `scan_exhausted`. `memory_identity` bypasses the scan and selects an exact
+topic. Consolidated topics use the memory candidate limit before the remaining
+slots go to memory chunks. A recalled consolidated topic takes precedence over
+chunks with the same complete identity in that request. This exclusion holds
+when the date's conclusion is conflicting or unknown, and when the topic is
+omitted for budget. Chunks with other identities remain eligible. This lookup works independently of the selected
+native keyword/vector mode. The final snapshot reopens each topic's latest
+revision, checks every source and requires each ranking source to still belong
+to that revision.
 
 Session is off by default and requires live writer-or-higher permission before
 any model IO. It is bounded recent relational lexical recall, not an embedding
@@ -54,6 +66,22 @@ concepts are deliberately distinct. Session provenance is a tagged real
 (session_id, turn_id, source_event_id) tuple with archived references, never a
 fictional chunk. Citation IDs include both session and turn IDs.
 
+`as_of_ms` selects business time in Unix milliseconds (default now).
+`long_term_memory` provenance includes `memory_id`, `version`, `as_of_ms`,
+`effective_from_ms`, the `state` at selection time, the `timeline` of conclusion
+changes, and `citations`. Each citation includes `source_event_id`, the fact's
+`effective_at_ms`, and a verbatim `statement` with half-open UTF-8 byte offsets.
+`effective_from_ms` is `null` for an undated baseline or an `unknown` result.
+`current` includes one value. `conflicting` and `unknown` carry no selected
+value. A question with no visible matched topic yields no consolidated item.
+Keyword matches have `unverified` applicability. An exact caller identity has
+`caller_identity_exact_match`.
+
+The console reopens the source event using writer-or-higher permission and
+checks the byte range against the fixed quote before highlighting. A reader
+can recheck the published excerpt by opening its pinned memory version. Each
+open enforces current source visibility.
+
 Learning is reader-visible only as its published statement/why, exact conditions
 and sanitized support identifiers/ranges. Raw supporting Q&A and quotes require
 writer authority and ownership of the private session's logical key. Conditions appear in retained text, item metadata and citation
@@ -67,6 +95,9 @@ Content citations in a bundle can be mapped to exact chunk references. Session-t
 citations cannot round-trip into that contract. The response, retained session
 block and API documentation explicitly disclose this unsupported case; callers
 must not invent chunk IDs or claim complete archive coverage.
+Consolidated fact citations are marked `unsupported_long_term_memory_reference`
+for that same archive contract. Run preparation rejects `as_of_ms` before
+recording a snapshot or failure event. Use standalone context for dated memory.
 
 ## Conflict and budgeting contract
 
@@ -82,6 +113,11 @@ recalled candidates. General memory/document/Learning prose contradictions are
 Each conflict group is one indivisible render unit containing all recalled
 alternatives and its warning. If it does not fit, the whole group is omitted
 and reported; one side is never rendered alone after a detected conflict.
+Each consolidated topic is likewise one whole block covering its selection,
+timeline and all citations. When the selected business time is conflicting, the
+topic appears in `conflicts` if retained and counts toward
+`omitted_conflict_groups` if skipped for byte budget. Conflicts for other times
+remain visible through the topic's timeline when the topic fits.
 
 `budget` and per-route `max_bytes` are actual UTF-8 bytes, not tokens. Defaults
 are 4000 total bytes, 20 candidates per enabled route and 4000 bytes per route.

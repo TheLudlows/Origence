@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+pub use crate::memory_timeline::{ConclusionState, Evidence, MemoryPeriod};
+
 use crate::{
     error::{AppError, Result},
     jobs::JobPayload,
@@ -106,31 +108,10 @@ impl GroundedFact {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Evidence {
-    pub source_event_id: Uuid,
-    pub statement: Statement,
-    pub effective_at_ms: Option<i64>,
-}
-
 #[derive(Serialize)]
 pub(crate) struct MemoryRevision {
     pub memory_id: Uuid,
     pub version: i32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub enum ConclusionState {
-    Unknown,
-    Conflicting,
-    Current { value: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryPeriod {
-    pub effective_from_ms: Option<i64>,
-    pub state: ConclusionState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

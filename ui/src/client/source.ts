@@ -72,7 +72,7 @@ export async function sourcePreview(
   sourceId: string,
   locator: Record<string, unknown>,
   ctx: ViewContext,
-  knowledgeQuote?: string,
+  expectedQuote?: string,
 ) {
   target.request?.abort();
   const request = new AbortController();
@@ -103,7 +103,7 @@ export async function sourcePreview(
       : "已读取原始来源。";
     if (
       !page &&
-      knowledgeQuote !== undefined &&
+      expectedQuote !== undefined &&
       source.kind === "knowledge" &&
       locator.parser === "source-ranges-v1"
     ) {
@@ -116,7 +116,7 @@ export async function sourcePreview(
           throw new Error("引用区间无效");
         const original = bytes ? sourceDecoder.decode(bytes) : source.content;
         const [before, quote, after] = byteRange(original, start, end);
-        if (!quote || quote !== knowledgeQuote) throw new Error("引用与原文不匹配");
+        if (!quote || quote !== expectedQuote) throw new Error("引用与原文不匹配");
         content.append(before, el("mark", "", quote), after);
         outcome = "已核对原文字节区间，已高亮引用。";
       } catch {
@@ -132,6 +132,8 @@ export async function sourcePreview(
         Number(locator.byte_start),
         Number(locator.byte_end),
       );
+      if (expectedQuote !== undefined && (!quote || quote !== expectedQuote))
+        throw new Error("引用与原文不匹配");
       content.append(before, el("mark", "", quote), after);
       outcome = "已定位原文字节区间，已高亮引用。";
     } else content.textContent = source.content;
