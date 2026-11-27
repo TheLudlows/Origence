@@ -76,7 +76,7 @@ export async function overview(root: HTMLElement, ctx: ViewContext, workspaceId:
       el(
         "span",
         "",
-        "查看新建运行、已上报的计量和调用记录。",
+        "查看新建运行和调用记录。",
         el(
           "span",
           "overview-workspace-id",

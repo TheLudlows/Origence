@@ -7,6 +7,15 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 移除运行总览的计量卡片
+
+基于 `eef2134` 的 Windows 工作树，使用 Node 24.15.0 和 Rust 1.98.0。
+`npm.cmd --prefix ui test` 通过 32 项，覆盖接口返回有值或空计量时的趋势展示、时间范围切换和重试。
+`node ui/scripts/check-navigation-focus-browser.cjs` 在 Chrome 158.0.8127.88 通过，
+覆盖 1440、1024 和 320 像素下的图表宽度、键盘操作、悬停和触摸。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings` 和 `git diff --check` 通过。
+本地运行中的控制台返回了更新后的前端资源。
+
 ## 2026-11-27 · 移除运行总览的时段明细
 
 基于 `3a341e4`，使用 Windows、Node 24.15.0 和 Rust 1.98.0。`npm --prefix ui test` 通过 32 项，

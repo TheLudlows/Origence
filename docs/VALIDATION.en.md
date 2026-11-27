@@ -4,6 +4,16 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Remove the metering panel from the Run overview
+
+On the Windows working tree based on `eef2134`, with Node 24.15.0 and Rust 1.98.0,
+`npm.cmd --prefix ui test` passed all 32 tests. Coverage includes rendering the trend when the
+API returns populated or empty metering, switching windows, and retrying.
+`node ui/scripts/check-navigation-focus-browser.cjs` passed in Chrome 158.0.8127.88, covering chart width,
+keyboard, hover, and touch at 1440, 1024, and 320 pixels.
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and
+`git diff --check` passed. The running local console served the updated frontend assets.
+
 ## 2026-11-27 · Remove interval details from the Run overview
 
 Based on `3a341e4` on Windows with Node 24.15.0 and Rust 1.98.0. `npm --prefix ui test` passed all

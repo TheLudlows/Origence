@@ -59,7 +59,7 @@ administrator rights in that key's additional workspaces.
 
 ## Pages
 
-- **Overview** shows service readiness and Run creation counts and trends. Admins see the selected workspace's Run list, reported outcomes and counts. Other roles see their own Runs. Summaries and trace details are owner-only. Uncollected latency and cost appear as unknown.
+- **Overview** shows service readiness and Run creation counts and trends. Admins see the selected workspace's Run list, reported outcomes and counts. Other roles see their own Runs. Summaries and trace details are owner-only.
 - **Tracing** displays each Run's private Trace, including event order, reporters, preparation receipts, precise references, PDF page locators, and external verification records. The preparation event can show query embedding input tokens reported by the model service. Without a report it shows unknown. It does not represent the full Agent turn's usage or cost.
 - **Memory** displays the visible asset catalog and supports pagination, filtering, search, explicit and semantic writes, text extraction, provenance, and fixed-version comparison.
 - **Knowledge** supports Text/Markdown/PDF uploads, asynchronous publication, updates, job lookup, retry and cancellation, and authorized restore or withdrawal.
