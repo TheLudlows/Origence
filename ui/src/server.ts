@@ -30,6 +30,7 @@ const rules: [string, RegExp][] = [
     /^\/v1\/(search|context|knowledge|files|memories\/(identified|semantic|lookup)|captures\/(identified|semantic))$/,
   ],
   ["GET", new RegExp(`^/v1/(assets|events|jobs|files|runs)/${uuid}$`)],
+  ["GET", new RegExp(`^/v1/memories/long-term/${uuid}$`)],
   ["DELETE", new RegExp(`^/v1/(assets|events|files)/${uuid}$`)],
   ["POST", new RegExp(`^/v1/assets/${uuid}/restore$`)],
   ["POST", new RegExp(`^/v1/jobs/${uuid}/(retry|cancel)$`)],

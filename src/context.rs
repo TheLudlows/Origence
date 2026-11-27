@@ -1,11 +1,12 @@
 //! Context assembly keeps final provenance, permission and visibility checks in
 //! one fresh relational snapshot after all embedding/native retrieval IO.
 use crate::{
+    consolidation::{ConclusionState, MemoryView, effective_date_at},
     context_retrieval::{ContextCandidate, ContextLimit, ContextRoute, ContextSessionTurn},
     error::{AppError, Result},
     evidence::*,
     service::Service,
-    storage::{DomainTx, Permission},
+    storage::{DomainTx, Permission, sqlite::now_ms},
     types::AuthContext,
 };
 
@@ -15,7 +16,7 @@ impl Service {
         auth: &AuthContext,
         input: EvidenceInput,
     ) -> Result<EvidenceBundle> {
-        self.observed_evidence_bundle(auth, input).await.0
+        self.observe_context(auth, input, true).await.0
     }
 
     pub(crate) async fn observed_evidence_bundle(
@@ -26,8 +27,21 @@ impl Service {
         Result<EvidenceBundle>,
         crate::retrieval_diagnostics::RetrievalDiagnostics,
     ) {
+        // Server-prepared Run snapshots retain their existing citation contract.
+        self.observe_context(auth, input, false).await
+    }
+
+    async fn observe_context(
+        &self,
+        auth: &AuthContext,
+        input: EvidenceInput,
+        include_long_term: bool,
+    ) -> (
+        Result<EvidenceBundle>,
+        crate::retrieval_diagnostics::RetrievalDiagnostics,
+    ) {
         let (mut result, observations) = crate::retrieval_diagnostics::capture(Box::pin(
-            self.evidence_bundle_inner(auth, input),
+            self.evidence_bundle_inner(auth, input, include_long_term),
         ))
         .await;
         if let Ok(bundle) = &mut result {
@@ -40,6 +54,7 @@ impl Service {
         &self,
         auth: &AuthContext,
         mut input: EvidenceInput,
+        include_long_term: bool,
     ) -> Result<EvidenceBundle> {
         input
             .validate()
@@ -135,9 +150,67 @@ impl Service {
             }
             bundle.routes.push(accounting);
         }
+        let facts = if include_long_term
+            && input.memory_identity.is_none()
+            && input
+                .routes
+                .iter()
+                .any(|route| route.route == EvidenceRoute::Memory)
+        {
+            let found = self.search_long_term_facts(auth, &query.terms).await?;
+            if found.exhausted {
+                bundle.warnings.push("Long-term memory recall exhausted its 512-row fact scan; other matching topics may exist.".into());
+            }
+            Some(found)
+        } else {
+            None
+        };
         let mut tx = self.read(auth, permission).await?;
         tx.verify_native_candidates(&ranked_native).await?;
         let mut items = Vec::new();
+        if include_long_term
+            && let Some(accounting) = bundle
+                .routes
+                .iter_mut()
+                .find(|r| r.route == EvidenceRoute::Memory)
+        {
+            let as_of_ms = input.as_of_ms.unwrap_or_else(now_ms);
+            if let Some(identity) = &input.memory_identity {
+                if let Some(view) = tx.long_term_memory(identity, None, as_of_ms).await? {
+                    items.push(long_term_item(view, as_of_ms, "exact_identity", 1.0));
+                }
+            } else if let Some(found) = facts {
+                accounting.scanned = Some(found.scanned);
+                accounting.scan_exhausted = Some(found.exhausted);
+                for (id, matched) in found.ranked {
+                    if let Some(view) = tx.refresh_long_term_fact(id, &matched, as_of_ms).await? {
+                        items.push(long_term_item(
+                            view,
+                            as_of_ms,
+                            "fact_lexical_overlap",
+                            matched.score as f64,
+                        ));
+                        if items.len() == accounting.candidate_limit {
+                            break;
+                        }
+                    } else {
+                        accounting.invalidated_before_render += 1;
+                    }
+                }
+            }
+            let mut remaining = accounting.candidate_limit - items.len();
+            assets.retain(|asset| {
+                if asset.route != ContextRoute::Memory {
+                    return true;
+                }
+                if remaining == 0 {
+                    return false;
+                }
+                remaining -= 1;
+                true
+            });
+            accounting.candidates = accounting.candidate_limit - remaining;
+        }
         for candidate in assets {
             let fresh = tx
                 .refresh_context_candidate(candidate, input.memory_identity.as_ref())
@@ -272,6 +345,73 @@ fn session_item(turn: ContextSessionTurn) -> EvidenceItem {
         score_kind: "recent_visible_rank".into(),
         conflict_id: None,
         archive_roundtrip: "unsupported_session_turn_reference".into(),
+        single_valued: false,
+    }
+}
+
+fn long_term_item(view: MemoryView, as_of_ms: i64, origin: &str, score: f64) -> EvidenceItem {
+    let (status, content, value) = match &view.state {
+        ConclusionState::Current { value } => (
+            "current",
+            format!("Applicable value: {value}"),
+            Some(serde_json::json!(value)),
+        ),
+        ConclusionState::Conflicting => (
+            "conflicting",
+            "Conflicting values for this business date. Do not choose a single value.".into(),
+            None,
+        ),
+        ConclusionState::Unknown => (
+            "unknown",
+            "No applicable evidence for this business date.".into(),
+            None,
+        ),
+    };
+    EvidenceItem {
+        evidence_id: format!("long_term_memory:{}:v{}", view.memory_id, view.version),
+        route: EvidenceRoute::Memory,
+        retrieval_routes: vec![origin.into()],
+        title: format!(
+            "{} · {}",
+            view.identity.subject.stable_id, view.identity.predicate
+        ),
+        content,
+        provenance: EvidenceProvenance::LongTermMemory {
+            memory_id: view.memory_id,
+            version: view.version,
+            as_of_ms,
+            effective_from_ms: effective_date_at(
+                view.evidence
+                    .iter()
+                    .map(|evidence| evidence.effective_at_ms),
+                as_of_ms,
+            )
+            .flatten(),
+            state: view.state,
+            timeline: view.timeline,
+            citations: view.evidence,
+        },
+        conditions: view
+            .identity
+            .context
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect(),
+        identity: Some(view.identity),
+        normalization_status: "consolidated".into(),
+        semantic_status: Some(status.into()),
+        semantic_value: value,
+        learning: None,
+        applicability: if origin == "exact_identity" {
+            "caller_identity_exact_match"
+        } else {
+            "unverified"
+        }
+        .into(),
+        score,
+        score_kind: origin.into(),
+        conflict_id: None,
+        archive_roundtrip: "unsupported_long_term_memory_reference".into(),
         single_valued: false,
     }
 }

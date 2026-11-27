@@ -7,6 +7,21 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 日常上下文召回带日期的报销上限
+
+基于 main `1a8544b647613864582354bc9f5942e69426b463`，Linux x86_64，Rust 1.98.0，
+Node.js 24.22.1，Chromium 156.0.8078.79。合成报销规则通过实际 HTTP `/v1/context` 和
+MCP `context_bundle` 验证中文问句召回、生效日前后、同日冲突、缺证据、字节预算、同租户跨工作区隔离和撤回后的重算。
+Chromium 经实际控制台、HTTP 宿主和后台 worker 验证固定原文的 UTF-8 高亮、reader 的固定版本引文及撤回后重新打开失败。
+
+- `cargo test --locked --no-fail-fast --quiet` 通过 485 项，保留默认忽略的 8 项 AnySeek 测试。
+- `cargo fmt --package origence -- --check`、`cargo clippy --locked --all-features --all-targets -- -D warnings` 及 diff 检查通过。
+- `npm --prefix ui test` 通过 31 项。设置 `NODE_PATH` 和 `CHROMIUM` 后，运行 `ui/scripts/check-context-policy-browser.cjs`
+  和既有 `ui/scripts/check-context-knowledge-browser.cjs` 均通过。
+- `python3 tools/mcp_smoke.py --binary target/debug/origence --local` 和 3 项 `tools/test_mcp_schema.py` 测试通过。
+
+提取响应来自合成夹具。Windows、真实模型、原生 Agent 客户端和正式试点未验证。
+
 ## 2026-11-27 · 统一长期记忆写入和召回（本地）
 
 基于 main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`，Linux x86_64，Rust 1.98.0。

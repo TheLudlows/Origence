@@ -17,7 +17,85 @@ import {
   type ViewContext,
 } from "./components.js";
 import { citation } from "./runs.js";
-import type { Bundle } from "./types.js";
+import { sourcePreview, sourcePreviewTarget } from "./source.js";
+import type {
+  Bundle,
+  LongTermMemoryCitation,
+  LongTermMemoryProvenance,
+  LongTermMemoryState,
+} from "./types.js";
+
+function businessDate(ms: number) {
+  const date = new Date(ms);
+  return Number.isNaN(date.valueOf()) ? String(ms) : date.toISOString().split("T")[0];
+}
+
+function memoryState(state: LongTermMemoryState) {
+  if (state.status === "current") return state.value;
+  return state.status === "conflicting" ? "来源冲突，无法确定单一值" : "该日期缺少适用证据";
+}
+
+function memoryCitation(
+  ref: LongTermMemoryProvenance,
+  entry: LongTermMemoryCitation,
+  ctx: ViewContext,
+) {
+  const preview = sourcePreviewTarget();
+  const { byte_start, byte_end, quote } = entry.statement;
+  const open = button(ctx.role === "reader" ? "核验引文" : "打开原文", async () => {
+    if (ctx.role !== "reader") {
+      await sourcePreview(
+        preview, entry.source_event_id, { byte_start, byte_end, byte_basis: "source_utf8" }, ctx, quote,
+      );
+      return;
+    }
+    open.disabled = true;
+    preview.result.replaceChildren();
+    preview.announcement.textContent = "正在核验引文…";
+    try {
+      const query = new URLSearchParams({ version: String(ref.version), as_of_ms: String(ref.as_of_ms) });
+      const fixed = await api.get<{ evidence: LongTermMemoryCitation[] }>(
+        `/v1/memories/long-term/${ref.memory_id}?${query}`, ctx.signal,
+      );
+      if (ctx.signal.aborted || !preview.root.isConnected) return;
+      const original = fixed.evidence.find((candidate) =>
+        candidate.source_event_id === entry.source_event_id &&
+        candidate.statement.byte_start === byte_start &&
+        candidate.statement.byte_end === byte_end &&
+        candidate.statement.quote === quote,
+      );
+      if (!original) throw new Error("固定版本中找不到此引文");
+      preview.result.append(el("pre", "code", el("mark", "", original.statement.quote)));
+      preview.announcement.textContent = "已核验固定版本的引文。";
+    } catch (e) {
+      if (ctx.signal.aborted || !preview.root.isConnected) return;
+      preview.announcement.textContent = "无法核验引文。";
+      message(preview.result, e);
+    } finally {
+      open.disabled = false;
+    }
+  });
+  const date = entry.effective_at_ms === null ? "无日期基线" : businessDate(entry.effective_at_ms);
+  return el(
+    "div", "citation",
+    el("p", "muted", `${date} · ${entry.source_event_id} · 字节 ${byte_start}–${byte_end}`),
+    open,
+    preview.root,
+  );
+}
+
+function datedMemory(ref: LongTermMemoryProvenance, unverified: boolean, ctx: ViewContext) {
+  return el(
+    "div", "",
+    el("p", "", `${businessDate(ref.as_of_ms)} 的结论 · ${memoryState(ref.state)}`),
+    el("p", "muted", `记忆版本 ${ref.version}${unverified ? " · 适用条件待确认" : ""}`),
+    table(["生效日期（UTC）", "结论"], ref.timeline.map(({ effective_from_ms, state }) => [
+      effective_from_ms === null ? "无日期基线" : businessDate(effective_from_ms),
+      memoryState(state),
+    ])),
+    ...ref.citations.map((entry) => memoryCitation(ref, entry, ctx)),
+  );
+}
 
 export function contextPage(root: HTMLElement, ctx: ViewContext) {
   const query = input("描述本次任务，例如“Atlas 的生产发布要求”");
@@ -31,6 +109,7 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
   budget.min = "0";
   budget.max = "32000";
   budget.required = true;
+  const asOf = input("", "", "date");
   const session = el("input");
   session.type = "checkbox";
   const result = el("div");
@@ -61,6 +140,7 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
             mode: mode.value,
             budget: Number(budget.value),
             routes,
+            ...(asOf.value ? { as_of_ms: asOf.valueAsNumber } : {}),
           },
           AbortSignal.any([ctx.signal, activeRequest.signal]),
         );
@@ -104,20 +184,27 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
           );
         for (const item of bundle.items) {
           const detail = el("details", "source");
+          const provenance = item.provenance;
           detail.append(
             el(
               "summary",
               "",
               item.title || item.evidence_id,
               badge(item.route),
+              provenance.type === "long_term_memory" && item.conditions?.length
+                ? badge(item.conditions.join(" · "))
+                : null,
               badge(item.semantic_status ?? item.normalization_status),
             ),
-            code(item.content),
-            citation(item.provenance, ctx, {
+          );
+          if (provenance.type === "long_term_memory") {
+            detail.append(datedMemory(provenance, item.applicability === "unverified", ctx));
+          } else {
+            detail.append(code(item.content), citation(provenance, ctx, {
               knowledgeQuote: item.route === "knowledge" ? item.content : undefined,
               label: item.normalization_status === "unnormalized" ? "查看证据" : undefined,
-            }),
-          );
+            }));
+          }
           items.append(detail);
         }
         result.append(
@@ -146,6 +233,7 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
       "form-grid",
       field("检索方式", mode),
       field("总预算（UTF-8 字节）", budget),
+      field("记忆业务日期（UTC）", asOf),
     ),
     ctx.role !== "reader" ? field("包含当前 key 的私有会话", session) : null,
     el(

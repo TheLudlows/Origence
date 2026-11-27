@@ -247,6 +247,221 @@ fn assert_current(view: &Value, value: &str) {
 }
 
 #[tokio::test]
+async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together() {
+    let fixture = setup().await;
+    let (base, _api) = serve(origence::api::router(fixture.service.clone())).await;
+    let reader = fixture
+        .service
+        .engine
+        .relational()
+        .issue_key(
+            Scope {
+                tenant_id: fixture.auth.tenant_id,
+                workspace_id: fixture.auth.workspace_id,
+            },
+            "reader",
+        )
+        .await
+        .unwrap();
+    let (_, other_key) = provision(&fixture.service, fixture.auth.tenant_id).await;
+    let client = reqwest::Client::new();
+    let args = |as_of_ms, budget| {
+        json!({
+            "query":"云舟境内酒店报销上限是多少？",
+            "as_of_ms": as_of_ms,
+            "budget": budget,
+        })
+    };
+    let ask = |key: &str, time, budget| {
+        let request = client
+            .post(format!("{base}/v1/context"))
+            .bearer_auth(key)
+            .json(&args(time, budget));
+        async move {
+            request
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let nothing = ask(&reader.token, DECEMBER_START, 4000).await;
+    assert_eq!(nothing["items"], json!([]));
+
+    let original = publish(
+        &fixture,
+        "original",
+        ORIGINAL,
+        "境内",
+        "100 元",
+        Some("2026-01-01"),
+    )
+    .await;
+    let upcoming = publish(
+        &fixture,
+        "upcoming",
+        UPCOMING,
+        "境内",
+        "80 元",
+        Some("2026-12-01"),
+    )
+    .await;
+    let missing = ask(&reader.token, 0, 4000).await;
+    let before = ask(&reader.token, END_OF_NOVEMBER, 4000).await;
+    let after = ask(&reader.token, DECEMBER_START, 4000).await;
+    let item = &before["items"][0];
+    let pinned = &item["provenance"];
+    assert_eq!(before["items"].as_array().unwrap().len(), 1);
+    assert_eq!(item["identity"]["context"], json!({"region":"境内"}));
+    assert_eq!(item["applicability"], "unverified");
+    assert_eq!(pinned["type"], "long_term_memory");
+    assert_eq!(pinned["as_of_ms"], END_OF_NOVEMBER);
+    assert_eq!(pinned["timeline"][1]["effective_from_ms"], DECEMBER_START);
+    assert_eq!(
+        pinned["timeline"][1]["state"],
+        json!({"status":"current","value":"80 元"})
+    );
+    assert_current(pinned, "100 元");
+    assert_current(&after["items"][0]["provenance"], "80 元");
+    assert_eq!(
+        missing["items"][0]["provenance"]["state"],
+        json!({"status":"unknown"})
+    );
+    assert!(missing["items"][0]["semantic_value"].is_null());
+    assert_eq!(
+        pinned["citations"][0]["source_event_id"],
+        original["source_event_id"]
+    );
+    assert_eq!(
+        pinned["citations"][1]["source_event_id"],
+        upcoming["source_event_id"]
+    );
+    for citation in pinned["citations"].as_array().unwrap() {
+        let source_id = id(citation, "source_event_id");
+        let get = |key: &str| {
+            client
+                .get(format!("{base}/v1/events/{source_id}"))
+                .bearer_auth(key)
+        };
+        let source: Value = get(&fixture.token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let statement = &citation["statement"];
+        let start = statement["byte_start"].as_u64().unwrap() as usize;
+        let end = statement["byte_end"].as_u64().unwrap() as usize;
+        assert_eq!(
+            source["content"].as_str().unwrap().get(start..end).unwrap(),
+            statement["quote"]
+        );
+        assert_eq!(get(&reader.token).send().await.unwrap().status(), 403);
+        assert_eq!(get(&other_key).send().await.unwrap().status(), 404);
+    }
+
+    let mcp: Value = client
+        .post(format!("{base}/mcp"))
+        .bearer_auth(&reader.token)
+        .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+                "name":"context_bundle","arguments":args(DECEMBER_START, 4000)
+            }}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let from_mcp: Value =
+        serde_json::from_str(mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(from_mcp["items"], after["items"]);
+    assert_eq!(
+        ask(&other_key, DECEMBER_START, 4000).await["items"],
+        json!([])
+    );
+
+    let dispute = "通知：云舟境内酒店限额自2026-12-01起为每晚120 元。";
+    let disputed_source = publish(
+        &fixture,
+        "dispute",
+        dispute,
+        "境内",
+        "120 元",
+        Some("2026-12-01"),
+    )
+    .await;
+    let conflicting = ask(&reader.token, DECEMBER_START, 4000).await;
+    let conflict = &conflicting["items"][0]["provenance"];
+    assert_eq!(conflict["state"], json!({"status":"conflicting"}));
+    assert!(conflicting["items"][0]["semantic_value"].is_null());
+    assert_eq!(
+        conflict["citations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["effective_at_ms"] == DECEMBER_START)
+            .count(),
+        2
+    );
+    let bytes = conflicting["rendered_context"].as_str().unwrap().len();
+    assert_eq!(conflicting["used_bytes"], bytes);
+    let omitted = ask(&reader.token, DECEMBER_START, bytes - 1).await;
+    assert_eq!(omitted["items"], json!([]));
+    assert_eq!(omitted["rendered_context"], "");
+    assert_eq!(omitted["omitted_conflict_groups"], 1);
+
+    let removed = id(&disputed_source, "source_event_id");
+    let withdrawn = client
+        .delete(format!("{base}/v1/events/{removed}"))
+        .bearer_auth(&fixture.token)
+        .header("Idempotency-Key", "remove-conflicting-source")
+        .send()
+        .await
+        .unwrap();
+    assert!(withdrawn.status().is_success());
+    let revised = ask(&reader.token, DECEMBER_START, 4000).await;
+    let current = &revised["items"][0]["provenance"];
+    assert_current(current, "80 元");
+    assert_eq!(current["memory_id"], conflict["memory_id"]);
+    assert!(current["version"].as_i64() > conflict["version"].as_i64());
+    assert!(!revised.to_string().contains(&removed.to_string()));
+    let historical = client
+        .get(format!(
+            "{base}/v1/memories/long-term/{}?version={}",
+            id(conflict, "memory_id"),
+            conflict["version"]
+        ))
+        .bearer_auth(&reader.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(historical.status(), 404);
+    assert_eq!(
+        client
+            .get(format!("{base}/v1/events/{removed}"))
+            .bearer_auth(&fixture.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+}
+
+#[tokio::test]
 async fn retain_replays_and_materializes_a_dated_policy_through_http() {
     let fixture = setup().await;
     let baseline = "通知：云舟境内酒店每晚最多报100 元。";

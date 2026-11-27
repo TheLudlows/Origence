@@ -91,6 +91,9 @@ pub struct EvidenceInput {
     pub routes: Vec<RouteBudget>,
     #[serde(default)]
     pub memory_identity: Option<MemoryIdentity>,
+    /// Business time for consolidated memory, in Unix milliseconds (UTC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub as_of_ms: Option<i64>,
     /// Caller assertions only. Exact matching never proves applicability.
     #[serde(default)]
     pub applicability_context: Vec<String>,
@@ -167,6 +170,15 @@ pub enum EvidenceProvenance {
         )]
         evidence_use: crate::session::EvidenceUse,
         created_at: i64,
+    },
+    LongTermMemory {
+        memory_id: Uuid,
+        version: i32,
+        as_of_ms: i64,
+        effective_from_ms: Option<i64>,
+        state: crate::consolidation::ConclusionState,
+        timeline: Vec<crate::consolidation::MemoryPeriod>,
+        citations: Vec<crate::consolidation::Evidence>,
     },
 }
 
@@ -401,7 +413,12 @@ pub(crate) fn render(bundle: &mut EvidenceBundle, candidates: Vec<EvidenceItem>)
                 || accounting.used_bytes + text.len() > accounting.max_bytes
             {
                 accounting.omitted_for_budget += unit.items.len();
-                bundle.omitted_conflict_groups += usize::from(unit.conflict.is_some());
+                let dated_conflict = unit.items.iter().any(|item| {
+                    matches!(&item.provenance, EvidenceProvenance::LongTermMemory { timeline, .. }
+                        if timeline.iter().any(|period| period.state == crate::consolidation::ConclusionState::Conflicting))
+                });
+                bundle.omitted_conflict_groups +=
+                    usize::from(unit.conflict.is_some() || dated_conflict);
                 continue;
             }
             accounting.used_bytes += text.len();

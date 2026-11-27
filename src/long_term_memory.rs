@@ -17,7 +17,10 @@ use crate::{
     parsing,
     service::Service,
     session::{EvidenceKind, UsedEvidence},
-    storage::{DomainTx, Permission, sqlite::now_ms},
+    storage::{
+        DomainTx, Permission,
+        sqlite::{SqliteTx, now_ms},
+    },
     types::{AuthContext, CaptureInput},
 };
 
@@ -106,9 +109,37 @@ pub(crate) struct FactSearchRow {
 }
 
 #[derive(Default)]
-struct FactMatch {
-    score: usize,
+pub(crate) struct FactMatch {
+    pub(crate) score: usize,
     matched_sources: BTreeSet<Uuid>,
+}
+
+#[derive(Default)]
+pub(crate) struct FactSearch {
+    pub(crate) ranked: Vec<(Uuid, FactMatch)>,
+    pub(crate) scanned: usize,
+    pub(crate) exhausted: bool,
+}
+
+impl SqliteTx {
+    /// Re-resolve the current revision and confirm that each ranking source is still visible.
+    pub(crate) async fn refresh_long_term_fact(
+        &mut self,
+        id: Uuid,
+        matched: &FactMatch,
+        as_of_ms: i64,
+    ) -> Result<Option<MemoryView>> {
+        Ok(self
+            .long_term_memory_by_id(id, None, as_of_ms)
+            .await?
+            .filter(|view| {
+                matched.matched_sources.iter().all(|source| {
+                    view.evidence
+                        .iter()
+                        .any(|evidence| evidence.source_event_id == *source)
+                })
+            }))
+    }
 }
 
 fn rank_facts(rows: Vec<FactSearchRow>, terms: &str) -> Vec<(Uuid, FactMatch)> {
@@ -163,6 +194,31 @@ fn recalled_fact(view: MemoryView, as_of_ms: i64, applicability: Applicability) 
 }
 
 impl Service {
+    pub(crate) async fn search_long_term_facts(
+        &self,
+        auth: &AuthContext,
+        terms: &str,
+    ) -> Result<FactSearch> {
+        if terms.is_empty() {
+            return Ok(FactSearch::default());
+        }
+        let mut tx = self.read(auth, Permission::Read).await?;
+        let mut rows = tx.long_term_fact_search_rows(FACT_SCAN_LIMIT + 1).await?;
+        tx.commit().await?;
+        let exhausted = rows.len() > FACT_SCAN_LIMIT;
+        rows.truncate(FACT_SCAN_LIMIT);
+        let scanned = rows.len();
+        let terms = terms.to_owned();
+        let ranked = tokio::task::spawn_blocking(move || rank_facts(rows, &terms))
+            .await
+            .map_err(|error| AppError::Internal(error.into()))?;
+        Ok(FactSearch {
+            ranked,
+            scanned,
+            exhausted,
+        })
+    }
+
     /// Submit one source into the shared long-term memory workflow. The writer
     /// chooses the approved source; a private session still requires its owner.
     pub async fn retain_long_term_memory(
@@ -217,21 +273,11 @@ impl Service {
         let query = self
             .prepare_context_query(auth, &input.query, "keyword", false)
             .await?;
-        let (ranked_facts, fact_scan_exhausted) =
-            if input.identity.is_none() && !query.terms.is_empty() {
-                let mut tx = self.read(auth, Permission::Read).await?;
-                let mut rows = tx.long_term_fact_search_rows(FACT_SCAN_LIMIT + 1).await?;
-                tx.commit().await?;
-                let exhausted = rows.len() > FACT_SCAN_LIMIT;
-                rows.truncate(FACT_SCAN_LIMIT);
-                let terms = query.terms.clone();
-                let ranked = tokio::task::spawn_blocking(move || rank_facts(rows, &terms))
-                    .await
-                    .map_err(|error| AppError::Internal(error.into()))?;
-                (ranked, exhausted)
-            } else {
-                (Vec::new(), false)
-            };
+        let facts = if input.identity.is_none() {
+            self.search_long_term_facts(auth, &query.terms).await?
+        } else {
+            FactSearch::default()
+        };
         let experiences = self
             .context_candidates(
                 auth,
@@ -254,14 +300,8 @@ impl Service {
                 ));
             }
         } else {
-            for (id, matched) in ranked_facts {
-                if let Some(view) = tx.long_term_memory_by_id(id, None, as_of_ms).await?
-                    && matched.matched_sources.iter().all(|source| {
-                        view.evidence
-                            .iter()
-                            .any(|evidence| evidence.source_event_id == *source)
-                    })
-                {
+            for (id, matched) in facts.ranked {
+                if let Some(view) = tx.refresh_long_term_fact(id, &matched, as_of_ms).await? {
                     memories.push(recalled_fact(view, as_of_ms, Applicability::Unverified));
                     if memories.len() == limit {
                         break;
@@ -300,7 +340,7 @@ impl Service {
         Ok(LongTermRecall {
             as_of_ms,
             memories,
-            fact_scan_exhausted,
+            fact_scan_exhausted: facts.exhausted,
         })
     }
 }
