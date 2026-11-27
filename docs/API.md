@@ -209,7 +209,7 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ `asset_id` / `source_event_id` / `job_id` 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`；同 scope 下相同身份复用内容条目；`conflict` 表示已有版本 |
 | `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与 `GET /v1/assets/{id}` 相同的当前已发布视图；不需要 Idempotency-Key，不创建内容条目 |
-| `POST /v1/memories/retain` | 提交事实原文或经验来源，返回作业回执。见[长期记忆契约](contracts/memory-consolidation.md)。 |
+| `POST /v1/memories/retain` | 提交事实原文、指定反馈，或直接提交经验及人工确认或固定文档版本，返回作业回执。[长期记忆契约](contracts/memory-consolidation.md) |
 | `POST /v1/memories/long-term/recall` | 按查询词一起召回事实和经验。 |
 | `POST /v1/memories/long-term/lookup` | 按完整身份读取事实详情。 |
 | `GET /v1/memories/long-term/{id}` | 按 ID 读取事实详情。 |
@@ -442,7 +442,7 @@ locator 沿用记忆语义原始来源与字节范围，自动提取的新成员
 
 ## 会话归档与幂等反馈
 
-SessionTurn 是不可变的问答档案，由调用方在回答完成后明确提交。`state:"archived"` 表示归档已提交，`state:"recorded"` 表示反馈已提交。学习需要显式调用下文的 [Improve](#显式-improve--learning)。
+SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"` 分别表示归档和反馈已提交。经验可[直接提交](contracts/memory-consolidation.md#写入)，也可显式调用 [Improve](#显式-improve--learning) 从归档和反馈中提炼。
 
 归档轮次和反馈的读写均要求 writer 或更高权限，并且 `session_id` 必须是认证逻辑 key 的绑定会话。tenant、workspace 与逻辑 key 均来自认证，读写和重试都检查凭据是否仍然有效。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil。POST 要求 `Idempotency-Key`。未知字段、缺少必要字段、未知枚举均拒绝。
 
@@ -470,11 +470,11 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该内容条目快照根来源，reference.asset_version 是实际使用的内容条目版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文、证据状态和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 先登记 pending 和实际引用。AnySeek 原子提交问答和检索投影后，Origence 才确认 archived。任一引用失败则拒绝归档。丢失回执可通过稳定轮次 ID 和正文哈希恢复。后端从未收到正文时，调用方须携原请求重试。
+归档成功返回 HTTP 200 和 `{session_id,turn_id,source_event_id,state:"archived"}`。同一授权逻辑 key 下，重试相同轮次、正文及有序证据返回原标识，改变请求内容返回 409。AnySeek 原子提交正文和投影。回执丢失时，携原请求重试。
 
 按稳定 ID 读取使用 `GET /v1/sessions/{session_id}/turns/{turn_id}`，按目录顺序分页使用
 `GET /v1/sessions/{session_id}/turns?after=0&limit=16`。以返回的 `next_after` 请求下一页。
-撤回可在序号中留下空位；有效的已归档正文或检索记录缺失时，读取返回 503。
+授权发起的写入和撤回都可能留下序号空位。已建立的 AnySeek 集合缺失、已知轮次不完整或哈希不符时，读取返回 503。
 
 反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
 
@@ -490,14 +490,13 @@ rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断�
 
 原逻辑 key 的 writer 可用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 撤回单轮，
 或用 `DELETE /v1/sessions/{session_id}` 撤回整个会话。admin 也可撤回归档来源
-`DELETE /v1/events/{source_event_id}`。实际引用的条目、根来源、任一语义支持来源或文件失效时，
-整轮问答和反馈立即返回 404。原始来源读取、重放和 Improve 使用同一可见性规则。
-[清理与备份](OPERATIONS.md#私有问答归档隔离迁移与配套恢复)
+`DELETE /v1/events/{source_event_id}`。撤回先阻断读回，再异步清理。私有读回保留历史问答，按当前 owner、工作区权限、轮次撤回和正文完整性判断。新增反馈、Run 引用和 Improve 仍按用途复核其来源。
+[清理与备份](OPERATIONS.md#私有问答归档与配套恢复)
 
 私有会话召回默认关闭。启用 session 路由要求实时 writer 权限，未通过时在模型调用前返回 403。
 `session_id` / `exclude_session_id` 仅在启用时可用。关键词、向量及混合检索仅查询
-该 workspace 和逻辑 key 的有效归档 ID，按 turn ID 去重并在交付前复核来源及传递 Learning 支持。
-`scanned` 为有效目录候选数。关键词覆盖完整问答。向量只表示问题和回答各自开头
+该 workspace 和逻辑 key 的私有集合，按 turn ID 去重并在交付前复核当前权限和撤回状态。
+`scanned` 计入最终复核前的目录候选。关键词覆盖完整问答。向量只表示问题和回答各自开头
 最多 4096 UTF-8 字节，按字符边界截断。只出现在长回答尾部的语义不会进入向量投影。
 embedding 不可用时，`allow_partial` 允许退回关键词。
 
@@ -548,9 +547,8 @@ memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_o
 requested/effective mode、总预算/实际字节及各路由候选/保留/省略计数。
 每个 item 保留类型、检索分支、条件/适用状态、语义身份、得分种类和稳定引用。
 `provenance.type=asset_chunk` 明确区分 asset_version、原始 source_version、
-version_root_source_event_id；`session_turn` 保留真实 session_id/turn_id/归档来源
-与历史 used_evidence，不伪造 chunk。来源及转引完整可见性在预算前和最终渲染
-快照中核验，撤回不等待物理清理。有效性仅表示通过该读取快照的可见性检查。
+version_root_source_event_id。`session_turn` 保留真实会话、轮次、归档来源和历史引用。
+共享候选在预算前和最终快照中复核来源，私有候选遵循上文的会话规则。有效性表示通过读取快照的可见性检查。
 
 仅对明确单值身份、同条件下的 confirmed/conflict 值做确定性冲突分组；组内所有
 候选与警告整体保留或整体省略。普通文本、不同条件及多值集合不推断互斥。

@@ -49,9 +49,9 @@ Source events and original Blobs, content items and versions, chunks, summaries,
 
 | Component | Current responsibilities | Implementation |
 | --- | --- | --- |
-| SQLite | Permissions, sources, versions and publication ledger, durable jobs, versioned long-term facts, private archive directories and hashes, Run and Skill records and packages | `context.db` |
+| SQLite | Permissions, sources, versions and publication ledger, durable jobs, versioned long-term facts, session numbering and withdrawal, evidence used by Run or feedback, Skill records and packages | `context.db` |
 | AnySeek shared collections | Published chunk text, summaries, and full-text, vector, and one-hop graph indexes | Routed by tenant and workspace |
-| AnySeek private collections | Complete original Q&A with keyword and vector projections | Routed by tenant, workspace, and logical key |
+| AnySeek private collections | Complete original Q&A, turn sequence, references, and hashes with keyword and vector projections | Routed by tenant, workspace, and logical key |
 | BlobStore | Original upload bytes | Local directories addressed by scope/hash |
 
 Origence determines permissions, provenance, and visibility. AnySeek persists text and serves candidates. Recovery of archived or published text requires the matching AnySeek data.
@@ -66,7 +66,7 @@ Without default features, the core library does not depend on SQLite. Callers ca
 <a id="storage-initialization"></a>
 ### A2.3 Initialization lifecycle
 
-On startup, open and validate SQLite exclusively, check the backend binding, open the local AnySeek Catalog or verify the remote service credential, persist the routing binding, assemble and check projections and Blob storage, check committed workspace collections, recover jobs and remove orphans, then open the service. Normal startup requires a compatible schema. Automatic upgrades, data conversion, and rebuilding of missing collections are outside startup. The immediately preceding private archive schema has a separate [offline migration and paired recovery procedure](../OPERATIONS.en.md#private-archive-and-paired-recovery).
+On startup, open and validate SQLite exclusively, check the backend binding, open the local AnySeek Catalog or verify the remote service credential, persist the routing binding, assemble and check projections and Blob storage, check committed workspace collections, recover jobs and remove orphans, then open the service. Normal startup requires a compatible schema. Automatic upgrades, data conversion, and rebuilding of missing collections are outside startup. See [paired backup and restore](../OPERATIONS.en.md#private-archive-and-paired-recovery) for offline private archive verification.
 
 An AnySeek backend can be selected initially only for an unbound directory with no published full text. Successful initialization stores format, endpoint, tenant/workspace routing, and model profile and dimensions in `full-text-backend.json` format `origence-content-backend-v2` without an API key. On first use, persist the collection analysis digest before publication. It may be absent only without published full text. The read is bounded under the authority's exclusive lock. Sync the staging file and publish it atomically. On Unix also sync the parent directory. Later target or model mismatches and corrupt bindings fail before remote I/O. Rotating a service credential for the same endpoint, route, and model leaves the binding intact. An authenticated Scope determines the tenant UUID namespace and `ws_<workspace UUID 无连字符>` (workspace UUID with no hyphens) collection. First use creates the fixed schema. Reopen strictly checks published collections and does not rebuild missing ones. Ordinary process restart and arbitrary power loss have separate acceptance. Staging remnants are not valid bindings.
 
@@ -92,7 +92,7 @@ Job leases carry creator, scope, generation, and run_token. After model calls, p
 
 AnySeek writes the immutable publication's chunks as one atomic Record group. One chunk can carry graph metadata. Each new business version uses a separate group. There is no shared Origence/AnySeek transaction. On a lost response, check the complete current group first. Recover with the original plan and epoch. Cleanup uses a CAS on the current group version to preserve other members. A still-valid job after startup cleanup can rebuild with the original plan. If no complete commit can be proved outside the original operation window, preserve failed state without guessing using a new identity.
 
-SQLite registers a private turn as pending. AnySeek atomically commits its body and search projection before Origence marks it archived. Withdrawal blocks delivery before AnySeek cleanup. [Archive API](../API.en.md#session-archiving-and-idempotent-feedback)
+One atomic AnySeek group commits a new private turn's body, directory data, and search projection. Stable turn IDs and request digests confirm writes and retries. Withdrawal blocks delivery before AnySeek cleanup. [Archive API](../API.en.md#session-archiving-and-idempotent-feedback)
 
 <a id="storage-configuration"></a>
 ### A2.7 Configuration and failure boundaries
@@ -111,6 +111,8 @@ Record engineering regressions, actual engine and Streamable HTTP MCP, real Clau
 Explicit memory identity comprises scope + subject + predicate + canonical context. Similarity does not authorize replacement. The [identity specification](../contracts/memory.en.md) defines single/multi-value state, conflict evidence, and whole-snapshot withdrawal. SessionTurn explicitly archives evidence actually used. Archives and Runs bind to the workspace's stable logical key. Independent keys are isolated and authorized rotation preserves continuity. Feedback is idempotent without automatic ranking changes. Improve explicitly proposes, verifies, and publishes Learning via ordinary knowledge publication. It preserves conditions and complete support closure, without learning from all interactions automatically or a separate Guidance lifecycle.
 
 Long-term facts retain versions, sources, and effective times in SQLite. Ordinary Context can evaluate them at a business time. Experience retrieval uses currently visible published Learning. Dated queries use ordinary Context or the long-term memory APIs. Run context preparation rejects `as_of_ms`. [Long-term memory](../contracts/memory-consolidation.md)
+
+Workspace writers can also publish experience on the same publication path with human confirmation or a pinned knowledge version.
 
 EvidenceBundle gives memory, knowledge, and Learning independent retrieval and UTF-8 byte budgets. Session defaults off and only a writer on the current key can read it. Only explicit single-value identity conflicts are recognized. General prose contradictions are not inferred. Session references must not be fabricated as chunk/entity/relation archive references. See the [memory](../contracts/memory.en.md), [learning](../contracts/learning.md), and [context](../contracts/evidence-bundle.md) contracts.
 

@@ -19,6 +19,9 @@ async fn database() -> (tempfile::TempDir, Pool) {
         "CREATE TABLE oc_artifact_owners(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,chunk_id BLOB)",
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,surface TEXT,state TEXT,generation INTEGER)",
         "CREATE TABLE oc_session_turns(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,source_event_id BLOB)",
+        "CREATE TABLE oc_native_archive_proofs(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,evidence_reported INTEGER,body_bytes INTEGER)",
+        "CREATE TABLE oc_native_archive_withdrawals(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB)",
+        "CREATE TABLE oc_withdrawn_private_sessions(tenant_id BLOB,workspace_id BLOB,session_id BLOB)",
         "CREATE TABLE oc_session_turn_evidence(tenant_id BLOB,workspace_id BLOB,session_id BLOB,turn_id BLOB,evidence_ref_id BLOB,ordinal INTEGER,evidence TEXT)",
     ] {
         db::query(sql).execute(&pool).await.unwrap();
@@ -127,6 +130,14 @@ async fn store_turn(tx: &mut SqliteTx, evidence: &[ArchivedEvidence]) -> (Uuid, 
         .bind(session)
         .bind(turn)
         .bind(root)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    db::query("INSERT INTO oc_native_archive_proofs VALUES(?,?,?,?,1,42)")
+        .bind(tx.scope.tenant_id)
+        .bind(tx.scope.workspace_id)
+        .bind(session)
+        .bind(turn)
         .execute(&mut *tx.tx)
         .await
         .unwrap();
@@ -515,43 +526,6 @@ async fn session_content_decoding_retains_member_before_root_order() {
         tx.tx.rollback().await.unwrap();
         pool.shutdown().await.unwrap();
     }
-}
-
-#[tokio::test]
-async fn session_available_retains_global_any_table_or_source_probe() {
-    let (_dir, pool) = database().await;
-    let mut conn = pool.acquire().await.unwrap();
-    assert!(session::available(&mut conn).await.unwrap());
-    for sql in [
-        "DROP TABLE oc_session_turns",
-        "DROP TABLE oc_session_turn_evidence",
-    ] {
-        db::query(sql).execute(&mut *conn).await.unwrap();
-    }
-    assert!(!session::available(&mut conn).await.unwrap());
-    db::query("INSERT INTO oc_events VALUES(?,?,?,'withdrawn','session_turn','historical',NULL)")
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    assert!(session::available(&mut conn).await.unwrap());
-    db::query("CREATE TABLE oc_feedback(id INTEGER)")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    db::query("DROP TABLE oc_events")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    // A present archive table does not short-circuit the event-table prepare.
-    assert!(matches!(
-        session::available(&mut conn).await,
-        Err(StorageError::Backend(_))
-    ));
-    drop(conn);
-    pool.shutdown().await.unwrap();
 }
 
 #[tokio::test]

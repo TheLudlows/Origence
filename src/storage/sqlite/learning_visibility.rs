@@ -4,6 +4,7 @@
 //! traversed iteratively, so a malformed cycle cannot recurse on the async stack
 //! and an over-limit closure is rejected rather than partially validated.
 use super::*;
+use crate::learning::{ExperienceBasis, ExperiencePublication};
 use crate::session::ArchivedEvidence;
 use std::collections::HashSet;
 
@@ -15,7 +16,7 @@ struct LearningRecord {
     id: Uuid,
     asset: Uuid,
     source: Uuid,
-    session: Uuid,
+    session: Option<Uuid>,
     published: bool,
     accepted: bool,
 }
@@ -56,16 +57,77 @@ impl SqliteTx {
         };
         let id = row.try_get("id").map_err(sqlite_err)?;
         let source = row.try_get("source_event_id").map_err(sqlite_err)?;
-        let session = row.try_get("session_id").map_err(sqlite_err)?;
+        let session: Option<Uuid> = row.try_get("session_id").map_err(sqlite_err)?;
         let status: String = row.try_get("status").map_err(sqlite_err)?;
+        let accepted = if status == "accepted" && session.is_none() {
+            let job: Uuid = sqlite_db::query_scalar("SELECT ingest_job_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=?")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id)
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+            sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=? AND asset_id=? AND source_event_id=? AND operation='ingest' AND NOT cancel_requested AND state!='cancelled')")
+                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).bind(asset).bind(source)
+                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?
+        } else {
+            status == "accepted" && run_active
+        };
         Ok(Some(LearningRecord {
             id,
             asset,
             source,
             session,
             published: status == "published",
-            accepted: status == "accepted" && run_active,
+            accepted,
         }))
+    }
+
+    pub(super) async fn experience_provenance(
+        &mut self,
+        learning: Uuid,
+    ) -> StorageResult<ExperiencePublication> {
+        let (basis, recorded_by, recorded_at_ms) = sqlite_db::query_as::<(String, Uuid, i64)>("SELECT basis,created_by,created_at FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=? AND basis IS NOT NULL")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(learning)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
+            .ok_or(StorageError::NotFound)?;
+        let basis = serde_json::from_str(&basis)
+            .map_err(|_| StorageError::Unavailable("invalid experience basis".into()))?;
+        Ok(ExperiencePublication {
+            basis,
+            recorded_by,
+            recorded_at_ms,
+        })
+    }
+
+    pub(crate) async fn require_experience_basis_visible(
+        &mut self,
+        basis: &ExperienceBasis,
+    ) -> StorageResult<()> {
+        let ExperienceBasis::AssetVersion {
+            asset_id,
+            version,
+            content_sha256,
+        } = basis
+        else {
+            return Ok(());
+        };
+        let asset: bool = sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='knowledge' AND NOT deleted)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset_id)
+            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+        if !asset {
+            return Err(StorageError::NotFound);
+        }
+        let source: Uuid = sqlite_db::query_scalar("SELECT source_event_id FROM oc_versions WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=? AND content_hash=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset_id)
+            .bind(version).bind(content_sha256)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
+            .ok_or(StorageError::NotFound)?;
+        // Explicit document evidence uses ordinary Knowledge sources. This
+        // keeps a direct experience from depending on private archive material.
+        let active: bool = sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='knowledge' AND state='active')")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
+            .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+        if !active {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
     }
 
     async fn has_learning_source_version(&mut self, asset: Uuid) -> StorageResult<bool> {
@@ -372,9 +434,9 @@ impl SqliteTx {
     async fn guard_learning_dependencies(
         &mut self,
         roots: Vec<Uuid>,
-        accepted_root: Option<Uuid>,
+        publication_root: Option<LearningRecord>,
     ) -> StorageResult<()> {
-        let catalog = self.learning_catalog_present().await?;
+        let catalog = publication_root.is_some() || self.learning_catalog_present().await?;
         let mut stack: Vec<_> = roots.into_iter().rev().map(Visit::Enter).collect();
         let mut visiting = HashSet::new();
         let mut complete = HashSet::new();
@@ -395,7 +457,10 @@ impl SqliteTx {
             if visiting.contains(&asset) {
                 return Err(StorageError::NotFound);
             }
-            let record = if catalog {
+            let is_publication_root = publication_root.is_some_and(|record| record.asset == asset);
+            let record = if is_publication_root {
+                publication_root
+            } else if catalog {
                 self.learning_record(asset).await?
             } else {
                 None
@@ -409,7 +474,7 @@ impl SqliteTx {
             };
             learning_count += 1;
             if learning_count + turn_dependencies.len() > MAX_LEARNING_CLOSURE
-                || !(record.published || (accepted_root == Some(asset) && record.accepted))
+                || !(record.published || (is_publication_root && record.accepted))
             {
                 return Err(StorageError::NotFound);
             }
@@ -436,6 +501,13 @@ impl SqliteTx {
             if active_asset.is_none() || active_source.is_none() {
                 return Err(StorageError::NotFound);
             }
+            let Some(archive_session) = record.session else {
+                let publication = self.experience_provenance(record.id).await?;
+                self.require_experience_basis_visible(&publication.basis)
+                    .await?;
+                complete.insert(asset);
+                continue;
+            };
             // Fetch one extra row to detect truncation, never authorize a prefix.
             let supports: Vec<(Uuid, Uuid)> = sqlite_db::query_as("SELECT DISTINCT session_id,turn_id FROM oc_learning_support WHERE tenant_id=? AND workspace_id=? AND learning_id=? ORDER BY session_id,turn_id LIMIT 65")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(record.id)
@@ -445,7 +517,7 @@ impl SqliteTx {
             }
             let mut dependencies = HashSet::new();
             for (session, turn) in supports {
-                if session != record.session {
+                if session != archive_session {
                     return Err(StorageError::NotFound);
                 }
                 if let Some(roots) = turn_dependencies.get(&(session, turn)) {
@@ -553,10 +625,12 @@ impl SqliteTx {
                     return Err(StorageError::NotFound);
                 }
                 return self
-                    .guard_learning_dependencies(vec![asset], Some(asset))
+                    .guard_learning_dependencies(vec![asset], Some(record))
                     .await;
             }
-            self.require_learning_asset_visible(asset).await?;
+            if self.has_learning_source_version(asset).await? {
+                return Err(StorageError::NotFound);
+            }
         }
         if let Some(source) = source {
             self.require_learning_source_visible(source).await?;
@@ -626,7 +700,7 @@ impl SqliteTx {
                 // Preserve exactly the original four selected domain fields.
                 let _: Uuid = row.try_get("id").map_err(sqlite_err)?;
                 let source: Uuid = row.try_get("source_event_id").map_err(sqlite_err)?;
-                let _: Uuid = row.try_get("session_id").map_err(sqlite_err)?;
+                let _: Option<Uuid> = row.try_get("session_id").map_err(sqlite_err)?;
                 let status: String = row.try_get("status").map_err(sqlite_err)?;
                 let asset: Uuid = row.try_get("asset_id").map_err(sqlite_err)?;
                 is_learning.insert(asset);
@@ -919,13 +993,13 @@ mod tests {
         let session = Uuid::new_v4();
         let turn = Uuid::new_v4();
         let feedback = Uuid::new_v4();
-        let turn_source = tx
-            .create_event("session_turn", "fixture", None)
-            .await
-            .unwrap();
+        let turn_source = tx.create_event("session_turn", "", None).await.unwrap();
         sqlite_db::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,'fixture',?,0)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
             .bind(turn_source).bind(principal).execute(&mut *tx.tx).await.unwrap();
+        sqlite_db::query("INSERT INTO oc_native_archive_proofs(tenant_id,workspace_id,session_id,turn_id,evidence_reported,body_bytes) VALUES(?,?,?,?,1,7)")
+            .bind(scope.tenant_id).bind(scope.workspace_id).bind(session).bind(turn)
+            .execute(&mut *tx.tx).await.unwrap();
         sqlite_db::query("INSERT INTO oc_feedback(tenant_id,workspace_id,principal_id,feedback_id,session_id,turn_id,request_hash,feedback,created_at,feedback_sequence) VALUES(?,?,?,?,?,?,'fixture','{}',0,1)")
             .bind(scope.tenant_id).bind(scope.workspace_id).bind(principal).bind(feedback)
             .bind(session).bind(turn).execute(&mut *tx.tx).await.unwrap();

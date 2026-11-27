@@ -60,10 +60,10 @@ SQLite 不再保存 `oc_versions.content`、`oc_chunks.content`、`oc_summaries.
 摘要模型版本随 payload 保存；SQL 仅保留仍参与 Summary 召回的词项。
 
 SQL 保留来源与可见性判断所需的 locator、Summary 冻结词项、Run/Skill 凭据与恢复计划。
-私有问答仅在 AnySeek 保存正文，SQLite 持久化目录、哈希、引用和确认状态。
-AnySeek 不可当作可随意删除的缓存。来源撤回后的既有清理仍适用，不能清空已发布正文再靠
-SQLite 自动重建。数据目录绑定与 collection schema 同时换代。私有归档的旧结构通过
-[显式隔离迁移](../OPERATIONS.md#私有问答归档隔离迁移与配套恢复)切换。
+AnySeek 私有集合保存完整问答、轮次目录和检索字段。SQLite 保存工作区与逻辑 key 归属、
+会话序号分配器、撤回标记和实际使用的依赖证明。只有 AnySeek 能读回复原正文。
+数据目录绑定与 collection schema 同时换代。
+[私有问答配套恢复](../OPERATIONS.md#私有问答归档与配套恢复)
 
 读取在事务外解析 AnySeek payload，并比对 chunk 哈希和完整 locator；同一 chunk 的残留
 代次只允许重复相同 payload，不从冲突内容中挑选一个。完整版本还比对拼接后的版本哈希。

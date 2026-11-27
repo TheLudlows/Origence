@@ -12,7 +12,8 @@ use crate::{
     context_retrieval::{ContextLimit, ContextRoute},
     error::{AppError, Result},
     evidence::{conditions_match, validate_applicability_context},
-    learning::ImproveInput,
+    jobs::JobPayload,
+    learning::{DirectExperienceInput, ExperiencePublication, ImproveInput, LearningCandidate},
     memory_identity::MemoryIdentity,
     parsing,
     service::Service,
@@ -29,11 +30,14 @@ const MAX_FACT_QUERY_TERMS: usize = 32;
 const MAX_RECALL_PER_KIND: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ExperienceSource {
-    #[schemars(with = "String")]
-    pub session_id: Uuid,
-    pub improve: ImproveInput,
+#[serde(untagged, deny_unknown_fields)]
+pub enum ExperienceSource {
+    Feedback {
+        #[schemars(with = "String")]
+        session_id: Uuid,
+        improve: ImproveInput,
+    },
+    Direct(DirectExperienceInput),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +95,8 @@ pub enum RecalledMemory {
         applicability: Applicability,
         /// A reference to the published workspace chunk.
         citation: UsedEvidence,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        publication: Option<ExperiencePublication>,
     },
 }
 
@@ -232,20 +238,85 @@ impl Service {
                 self.retain_memory(auth, key, CaptureInput { content })
                     .await
             }
-            (None, Some(source)) => {
-                self.admit_improve(
-                    auth,
-                    key,
-                    RETAIN_SOURCE_KIND,
-                    source.session_id,
-                    source.improve,
-                )
-                .await
+            (
+                None,
+                Some(ExperienceSource::Feedback {
+                    session_id,
+                    improve,
+                }),
+            ) => {
+                self.admit_improve(auth, key, RETAIN_SOURCE_KIND, session_id, improve)
+                    .await
+            }
+            (None, Some(ExperienceSource::Direct(input))) => {
+                self.retain_experience(auth, key, input).await
             }
             _ => Err(AppError::Invalid(
                 "submit exactly one of content or experience".into(),
             )),
         }
+    }
+
+    async fn retain_experience(
+        &self,
+        auth: &AuthContext,
+        key: &str,
+        input: DirectExperienceInput,
+    ) -> Result<Value> {
+        input
+            .validate()
+            .map_err(|error| AppError::Invalid(error.into()))?;
+        let (mut tx, cached) = self
+            .command(
+                auth,
+                Permission::Write,
+                RETAIN_SOURCE_KIND,
+                key,
+                &serde_json::json!(input),
+            )
+            .await?;
+        tx.require_experience_basis_visible(&input.basis).await?;
+        if let Some(receipt) = cached {
+            tx.commit().await?;
+            return Ok(receipt);
+        }
+        let candidate = LearningCandidate {
+            statement: input.statement,
+            why: input.why,
+            conditions: input.conditions,
+            supports: Vec::new(),
+        };
+        let (asset, source, job) =
+            Self::stage_learning_ingest(&mut tx, &candidate, self.models.profile.clone()).await?;
+        let receipt = tx
+            .create_direct_learning(asset, source, job, &candidate, &input.basis)
+            .await?;
+        Self::finish(tx, receipt).await
+    }
+
+    pub(crate) async fn stage_learning_ingest(
+        tx: &mut SqliteTx,
+        candidate: &LearningCandidate,
+        embedding_profile: Option<String>,
+    ) -> Result<(Uuid, Uuid, Uuid)> {
+        let title = "Conditional learning";
+        let source = tx
+            .create_event("learning", &candidate.render_text(), None)
+            .await?;
+        let asset = tx.insert_knowledge_asset(title).await?;
+        let job = Self::enqueue(
+            tx,
+            JobPayload::Ingest {
+                format: "text".into(),
+                title: title.into(),
+                expected_version: None,
+                embedding_profile,
+            },
+            Some(asset),
+            Some(source),
+        )
+        .await?;
+        Ok((asset, source, job))
     }
 
     /// Retrieve both memory kinds with one query and one final authorized
@@ -327,6 +398,7 @@ impl Service {
                 why: learning.why,
                 conditions: learning.conditions,
                 applicability,
+                publication: learning.publication,
                 citation: UsedEvidence {
                     kind: EvidenceKind::Chunk,
                     id: fresh.hit.chunk_id,

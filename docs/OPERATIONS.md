@@ -6,7 +6,7 @@
 
 ## 当前阶段范围
 
-启动要求完整当前 schema。紧邻旧版的私有归档使用[显式隔离迁移](#私有问答归档隔离迁移与配套恢复)。
+启动要求完整当前 schema。已有数据目录需用创建它的版本打开。
 同版本持久化、重启/重试和备份恢复仍是要求，不兼容结构拒绝打开。
 保留原始来源及备份，不能因使用新目录而删除或覆盖旧数据。
 事务查询、身份占位与发布计划约束见[存储不变量](contracts/storage.md)。
@@ -17,7 +17,7 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `context.db` 及 SQLite WAL | 权限、来源事件、私有归档目录、版本指针/内容哈希、locator、摘要召回词项、幂等、任务/恢复计划、owner、账本、审计 |
+| `context.db` 及 SQLite WAL | 权限、来源、版本与哈希、定位符、召回词项、任务、账本、审计和归档的序号、撤回及下游引用证据 |
 | `context.db.lock` | 独占宿主的 OS 锁文件；是否有文件不等于锁仍被持有 |
 | `anyseek/` | 本地模式默认的 AnySeek Catalog 与共享、私有集合，含正文、摘要和全文/向量/图索引。独立部署时按 AnySeek 规则单独备份 |
 | `full-text-backend.json` | AnySeek endpoint、tenant/workspace 自动路由规则和 embedding profile/维度绑定；不含 key，随整目录备份 |
@@ -260,41 +260,19 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 使用 `origence.exe serve --local` 启动 API 和本地 AnySeek。需要 Node UI 时可使用
 [`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一 PowerShell 7.4+ 控制台联启。脚本入口禁用模型。
 
-## 私有问答归档、隔离迁移与配套恢复
+## 私有问答归档与配套恢复
 
-[归档、检索和撤回的 API 契约](API.md#会话归档与幂等反馈) 定义调用方可见行为。
-完整问答使用稳定 Record ID，并与检索投影原子提交。现行正文字节上限即使经 JSON
-转义也低于固定 AnySeek 版本的 1 MiB 单 Record 上限。
+私有问答的恢复依赖 SQLite 与 AnySeek 的配套备份。后台清理用 AnySeek 组版本和撤回标记阻断迟到写入。
+[AnySeek 备份保留策略](#anyseek-全文与向量) · [归档 API](API.md#会话归档与幂等反馈)
 
-AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期且原 group 仍不存在时，
-才能用同一 nonce、新 epoch 和版本 0 CAS 重交正文。撤回先隐藏 SQLite 目录，
-后台以原子空 group 清理活跃记录，并用 group 版本阻断迟到写入。
+1. 停止 Origence 和配套 AnySeek，记录版本并备份完整 Origence 数据目录。独立模式另备份 AnySeek
+   数据目录，嵌入模式的 AnySeek 在 Origence 目录内。保留原始备份。
+2. 在隔离副本运行 `origence --offline --data-dir <副本> archive-verify --isolated-copy`。
+   嵌入模式加 `--local`。独立模式使用隔离 AnySeek 的 `OC_ANYSEEK_URL` 和
+   `OC_ANYSEEK_API_KEY`，服务地址要与绑定文件一致。保存清单的 AnySeek 版本、
+   可见轮次数和 `directory_sha256`。摘要涵盖正文、顺序、来源与已分配序号的会话和轮次的撤回标记。
+3. 用同版本停机还原配套目录和绑定文件，重新执行 `archive-verify` 比对清单，再通过 API 验证
+   按序分页、关键词、向量和跨 key 隔离。对没有被 Run 或反馈等用途引用的普通轮次，清单对比
+   用于发现整组缺失。尚未提交的正文由调用方携原文重试。
 
-仅在隔离副本演练。停止 Origence 和配套 AnySeek，复制整个 Origence 数据目录以及
-独立 AnySeek 的数据目录（嵌入模式的 AnySeek 在 Origence 目录下）。给远端方式提供
-隔离的 AnySeek 服务和与原绑定相同的服务地址，严禁指向真实归档。先保留一对未修改
-备份。以下命令使用隔离数据目录。嵌入模式添加 `--local`。独立模式使用该副本的
-`OC_ANYSEEK_URL` 和 `OC_ANYSEEK_API_KEY`。
-
-1. `origence --offline --data-dir <副本> archive-migrate copy --isolated-copy --limit 64`。
-   只接受紧邻原版 authority schema 或已经准备好的副本。按历史 `created_at,turn_id`
-   顺序分配稳定序号并核对来源、原请求、正文哈希和回读。可分批执行或中断重跑。
-2. `origence --offline --data-dir <副本> archive-migrate verify --isolated-copy`。
-   等到 `unconfirmed=0`。保留验证清单中的目录摘要、AnySeek 版本及各活跃私有集合的
-   SQLite 确认水位和 AnySeek 查询可见水位。对照原先的轮次、来源引用、顺序和 Hash，并演练备份还原和读取。
-3. `origence --offline --data-dir <副本> archive-migrate purge --isolated-copy`。
-   先复验整份目录，显式删去旧正文、冻结的 Q&A、支持引文和 Run 重放正文副本。
-   同一事务记录进入清理阶段，再重建 SQLite 并截断 WAL。中断后重跑本步。
-   成功后才允许正常启动。已经持久化的 Run 核验与 Skill 依赖前缀保存原摘要，
-   仅存在外部的旧前缀承诺可能需要重新取得。
-
-这里验证的是逻辑清除及清理后当前 SQLite 文件的可见内容。SQLite `secure_delete`、
-`VACUUM` 和 WAL 截断无法保证底层数据库页面、历史 WAL、文件系统副本、快照或历史备份的
-物理擦除。切换前备份仍含原文，按现有访问控制与保留策略管理。
-[AnySeek 历史日志和备份由独立保留策略管理。](#anyseek-全文与向量)
-
-从停止后的同一对目录还原时，保留 SQLite、AnySeek、绑定文件及所用版本。再次执行
-`verify` 并比对目录摘要和各活跃私有集合的可见水位，然后核对按序分页以及关键词、
-向量和跨 key 隔离。该清单可验证列出的问答和投影读回。它覆盖归档目录，不构成
-跨系统在线一致性快照，也不包含未写入 AnySeek 的 pending 正文。独立服务的对象
-存储备份、快照并发和跨版本恢复须独立验证。
+清单表示停机副本的逻辑可见性。在线快照、跨版本恢复和介质物理擦除超出本验证范围。

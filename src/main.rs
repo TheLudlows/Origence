@@ -74,12 +74,8 @@ enum Command {
     KeyRevoke {
         key_id: Uuid,
     },
-    /// Copy, verify, or cut over an isolated copy of a legacy private archive.
-    ArchiveMigrate {
-        #[arg(value_enum)]
-        stage: ArchiveStage,
-        #[arg(long, default_value_t = 64)]
-        limit: usize,
+    /// Verify a stopped, same-version private archive backup.
+    ArchiveVerify {
         #[cfg(feature = "embedded-anyseek")]
         #[arg(long)]
         local: bool,
@@ -138,13 +134,6 @@ enum Command {
         version: Option<i32>,
     },
 }
-#[derive(Clone, Copy, clap::ValueEnum)]
-enum ArchiveStage {
-    Copy,
-    Verify,
-    Purge,
-}
-
 #[derive(Subcommand)]
 enum HookAction {
     /// Read hook stdin and enqueue only allowlisted metadata. Never sends HTTP.
@@ -260,35 +249,26 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 }
             }
         }),
-        Command::ArchiveMigrate {
-            stage,
-            limit,
+        Command::ArchiveVerify {
             #[cfg(feature = "embedded-anyseek")]
             local,
             isolated_copy,
         } => Box::pin(async move {
             anyhow::ensure!(
                 offline && isolated_copy,
-                "archive-migrate requires --offline and --isolated-copy"
+                "archive-verify requires --offline and --isolated-copy"
             );
-            use origence::archive_maintenance::{self, Stage};
-            let stage = match stage {
-                ArchiveStage::Copy => Stage::Copy { limit },
-                ArchiveStage::Verify => Stage::Verify,
-                ArchiveStage::Purge => Stage::Purge,
-            };
+            use origence::archive_maintenance;
             let models = Models::from_env()?;
             #[cfg(feature = "embedded-anyseek")]
             let result = if local {
-                archive_maintenance::run_embedded(&data_dir, models, stage).await?
+                archive_maintenance::run_embedded(&data_dir, models).await?
             } else {
-                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?, stage)
-                    .await?
+                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?).await?
             };
             #[cfg(not(feature = "embedded-anyseek"))]
             let result =
-                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?, stage)
-                    .await?;
+                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?).await?;
             println!("{result}");
             Ok(())
         }),

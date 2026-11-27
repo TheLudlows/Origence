@@ -7,6 +7,45 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 新建库的私有问答存储
+
+基于 `c385544f8723f30f51654ac79d1c64143ff47716`，Linux x86_64、Rust 1.98.0。
+独立 AnySeek 使用 CI 固定版本 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
+
+- `cargo test --locked` 通过 481 项。另运行 8 项固定版真实 AnySeek 合约。
+  SQLite-only 和全特性的全目标 Clippy 均通过 `-D warnings`。格式、文档链接和 diff 检查通过。
+- `tools/private_archive_smoke.py` 用实际 CLI、HTTP、MCP 验证了嵌入和独立后端。
+  覆盖私有检索与共享隔离、按序读回、权限轮换、提交失败与丢回执、撤回竞态、
+  Run 重放、SQLite 拒绝存入问答正文和 `archive-verify` 配套恢复。
+- 用前 #168、#168 和 #170 前一提交生成的三个合成库验证拒绝旧 schema。
+  `serve` 和 `archive-verify` 均拒绝打开，SQLite 文件 SHA-256 保持一致。
+  本地验证限 Linux 和停机副本。
+
+## 2026-11-27 · 原生私有轮次目录与直接发布经验
+
+基于 main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57`，Linux x86_64，
+Rust 1.98.0。独立 AnySeek 使用 CI 固定版本 `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
+
+- 默认 Rust 回归通过 482 项，另通过 8 项真实 AnySeek 合约。SQLite-only 与全特性的全目标 Clippy 均以
+  `-D warnings` 通过，格式和链接检查通过。
+- 对实际 CLI、HTTP 和 MCP 复跑私有归档，嵌入与独立后端均通过。覆盖普通轮次无
+  SQLite 目录行、按 ID 和序号读回、跨 key 与 workspace 隔离、丢失回执后查回、
+  迟到写入与撤回竞态、混合 Run 的来源复核、以及成对停机备份恢复。
+- 隔离库验证了前代 SQLite 正文的 `copy / verify / purge` 和 #168 库的显式切换。
+  比对旧库原件、原标识、撤回和混合分页序号。五个并发首次提交在新集合返回同一回执。
+- 关闭模型后，经真实 HTTP 与 MCP 分别用人工确认和固定文档版本发布经验，无需先归档
+  私有问答。两种后端均可召回，并在文档撤回后隐藏依赖它的经验。原 Improve 与
+  按业务时点的事实记忆走各自既有路径。
+
+上述检查只使用一次性合成目录。Windows、真实数据迁移和在线备份恢复未在本轮验证。
+
+以 `97d0bc6e264250c8cc939d3c66a294f22a4c19c7` 为基线复核。已用实际 CLI、
+HTTP 和 MCP 复跑嵌入及独立 AnySeek。已知归档组缺失时，来源、单轮和检索返回 503。
+按来源 ID 撤回未被引用的轮次不会补写 SQLite 证据。恢复清单随撤回标记变化，
+后台物理清理已撤回记录时保持同一摘要。并发 Run 回归确认落败请求重放已保存结果，
+且只为采用的轮次持久化证据。直接发布与 Improve 的 Learning 回归均通过。
+本轮默认 Rust 套件通过 482 项，真实 AnySeek 合约通过 8 项。SQLite-only 与全特性的严格 Clippy、格式和链接检查通过。
+
 ## 2026-11-27 · AnySeek 私有问答归档（本地）
 
 基线为 Origence `af9030310bd5d313e23d9ac42373fa0b1e7d38a7`。嵌入 SDK 维持

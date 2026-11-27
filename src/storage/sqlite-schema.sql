@@ -83,6 +83,7 @@ CREATE TABLE oc_events (
     content TEXT NOT NULL, kind TEXT NOT NULL, file_id BLOB,
     state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','retracted')),
     created_by BLOB NOT NULL, created_at INTEGER NOT NULL,
+    CHECK (kind <> 'session_turn' OR (content = '' AND file_id IS NULL)),
     PRIMARY KEY (tenant_id, workspace_id, id),
     FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id),
     FOREIGN KEY (tenant_id, workspace_id, file_id) REFERENCES oc_files(tenant_id, workspace_id, id)

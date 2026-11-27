@@ -190,7 +190,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Submit approved evidence for workspace long-term memory. Requires writer access. Supply exactly one of content (source text for facts) or experience (an owned session_id and an explicit improve request with conditions). Reuse the same idempotency_key (1 to 200 ASCII characters) and identical inputs on retry. An experience request authorizes publishing a verified conclusion from session feedback."
+        description = "Submit a source for workspace long-term memory. Requires writer access. Supply exactly one of content (fact source text) or experience (statement, why, conditions and an asset_version or human_confirmation basis, or an owned session_id and explicit improve request). A direct experience publishes the supplied conclusion under the writer's authority. Reuse the same idempotency_key and identical inputs on retry."
     )]
     async fn context_memory_retain(
         &self,
@@ -211,7 +211,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Search workspace facts and verified experiences together with query. Optional identity limits facts to that exact subject, predicate and context, as_of_ms selects the fact time, and applicability_context supplies exact conditions for experiences. For detailed fact history, supply identity without query and optionally version."
+        description = "Search workspace facts and published experiences together with query. Optional identity limits facts to that exact subject, predicate and context, as_of_ms selects the fact time, and applicability_context supplies exact conditions for experiences. For detailed fact history, supply identity without query and optionally version."
     )]
     async fn context_memory_recall(
         &self,

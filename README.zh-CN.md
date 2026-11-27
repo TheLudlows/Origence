@@ -52,7 +52,7 @@ npm start
 
 ## Rust 库与存储
 
-SQLite 保存权限、版本化事实、来源和归档目录等权威数据。AnySeek 保存已发布的分块正文、摘要和检索索引，并在独立私有集合中保存完整问答。Blob 保存上传的原始文件。[存储分工](docs/design/current-implementation.md#storage-design)
+SQLite 保存权限、版本化事实、来源和持久任务。AnySeek 保存已发布的分块正文、摘要和检索索引，并在独立私有集合保存完整问答及轮次目录。Blob 保存上传的原始文件。[存储分工](docs/design/current-implementation.md#storage-design)
 
 库调用方可使用解析、身份和值契约、模型、Blob 存储和 AnySeek 适配器，无需元数据引擎。
 
