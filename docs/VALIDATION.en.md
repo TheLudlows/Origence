@@ -146,6 +146,14 @@ running service. The newly built integration test executable passed all seven te
 and owner-only trace access. The live UI served the updated frontend asset. The running API uses
 the older role constraints and was kept on its existing binary.
 
+## 2026-11-27 · Workspace ID in the Run overview
+
+Verified `3f86479` on Windows, based on `d72a71a`. With Node.js 24.15.0, `npm test` in `ui`
+passed all 32 tests, including coverage for displaying the active workspace ID in the Run overview
+and omitting it from the sidebar. With Rust 1.98.0, `cargo fmt --check` and
+`cargo clippy --locked --all-targets -- -D warnings` passed. `git diff origin/main --check` passed.
+Real browser checks and the Rust test suite were not run.
+
 ## 2026-11-27 · Writers can review and publish
 
 Based on main `d34804c`, using Linux, fresh synthetic databases, and Rust 1.98.0. Skill

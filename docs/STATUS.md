@@ -17,7 +17,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核。默认关键词检索要求查询词项全部出现。真实引擎本地回归通过。日常上下文按预算组装带业务日期、时间线和固定引用的归纳事实，控制台可核对原始来源。[证据包契约](contracts/evidence-bundle.zh-CN.md) | 当前后端的模型检索质量、容量与延迟验收 |
 | 私有归档与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。支持按 ID 与序号读取、关键词与向量召回、显式反馈。成员授权的工作区沿用原归档删除权限，单 Key 工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对归档和反馈证据 |
-| Node.js 管理界面 | 工作空间 Key 登录、部署管理员跨空间查看和全局知识审核，以及受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。现有成员授权空间仍可使用账号登录。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
+| Node.js 管理界面 | 工作空间 Key 登录、部署管理员跨空间查看和全局知识审核，以及受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。运行总览显示可选中复制的当前工作区 ID。现有成员授权空间仍可使用账号登录。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
