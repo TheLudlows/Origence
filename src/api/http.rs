@@ -49,6 +49,15 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/memories/identified", post(identified_memory))
         .route("/v1/memories/semantic", post(semantic_memory))
         .route("/v1/memories/lookup", post(lookup_memory))
+        .route("/v1/memories/retain", post(retain_memory))
+        .route(
+            "/v1/memories/long-term/lookup",
+            post(recall_long_term_memory),
+        )
+        .route(
+            "/v1/memories/long-term/{id}",
+            get(recall_long_term_memory_by_id),
+        )
         .route("/v1/captures/semantic", post(semantic_capture))
         .route("/v1/captures", post(capture))
         .route("/v1/captures/identified", post(identified_capture))
@@ -192,6 +201,37 @@ async fn lookup_memory(
     Json(identity): Json<crate::memory_identity::MemoryIdentity>,
 ) -> Result<Json<Value>> {
     Ok(Json(s.lookup_memory(&auth(&s, &h).await?, identity).await?))
+}
+async fn retain_memory(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(input): Json<CaptureInput>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.retain_memory(&auth(&s, &h).await?, key(&h)?, input)
+            .await?,
+    ))
+}
+async fn recall_long_term_memory(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Json(input): Json<crate::consolidation::RecallInput>,
+) -> Result<Json<crate::consolidation::MemoryView>> {
+    Ok(Json(
+        s.recall_long_term_memory(&auth(&s, &h).await?, input)
+            .await?,
+    ))
+}
+async fn recall_long_term_memory_by_id(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(id): Path<Uuid>,
+    Query(query): Query<crate::consolidation::RecallVersion>,
+) -> Result<Json<crate::consolidation::MemoryView>> {
+    Ok(Json(
+        s.recall_long_term_memory_by_id(&auth(&s, &h).await?, id, query)
+            .await?,
+    ))
 }
 async fn semantic_capture(
     State(s): State<Service>,

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{sync::atomic::Ordering, time::Duration};
 use uuid::Uuid;
+mod consolidation;
 mod improve;
 mod semantic_capture;
 
@@ -122,7 +123,7 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> R
     }
     if !matches!(
         payload.kind(),
-        JobKind::Extract | JobKind::SemanticExtract | JobKind::Improve
+        JobKind::Extract | JobKind::SemanticExtract | JobKind::Improve | JobKind::ConsolidateMemory
     ) {
         let current = tx
             .asset_current_version(claim.asset.ok_or(AppError::NotFound)?)
@@ -244,6 +245,9 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
     if payload.kind() == JobKind::Improve {
         tx.commit().await?;
         return improve::process(service, claim, payload).await;
+    }
+    if matches!(payload, JobPayload::ConsolidateMemory { .. }) {
+        return Box::pin(consolidation::process(service, claim, payload, tx)).await;
     }
     if payload.kind() == JobKind::Extract {
         // A saved plan replays without re-calling the extraction model.
@@ -416,6 +420,7 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
             | JobPayload::IdentifiedExtract { .. }
             | JobPayload::SemanticExtract { .. }
             | JobPayload::Improve { .. }
+            | JobPayload::ConsolidateMemory { .. }
             | JobPayload::Cleanup { .. } => {
                 return Err(AppError::Invalid("invalid publication operation".into()));
             }

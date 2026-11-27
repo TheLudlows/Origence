@@ -11,6 +11,7 @@ autotests = false
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart"] }
+chrono = { version = "0.4", default-features = false, optional = true }
 anyseek = { git = "https://github.com/TheLudlows/anyseek.git", rev = "5626dadfd5414b294a3cf0f6b845f5261760f68b", default-features = false, optional = true }
 clap = { version = "4", features = ["derive", "env"] }
 fs2 = { version = "0.4", optional = true }
@@ -18,6 +19,7 @@ jieba-rs = "0.7"
 # Text extraction only; no OCR, rendering, or platform bindings.
 pdf_oxide = { version = "=0.3.78", default-features = false }
 pulldown-cmark = "0.13"
+regex = { version = "1", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rmcp = { version = "=1.8.0", default-features = false, optional = true, features = ["server", "macros", "transport-streamable-http-server"] }
 schemars = "1"
@@ -37,7 +39,7 @@ tempfile = "3"
 [features]
 default = ["embedded-anyseek"]
 embedded-anyseek = ["local-storage", "dep:anyseek"]
-local-storage = ["sqlite", "dep:rmcp"]
+local-storage = ["sqlite", "dep:chrono", "dep:regex", "dep:rmcp"]
 sqlite = ["dep:rusqlite", "dep:fs2"]
 # Historical fixture diagnostics are opt-in and are not production acceptance.
 manual-diagnostics = ["sqlite"]
@@ -77,4 +79,9 @@ required-features = ["local-storage"]
 [[test]]
 name = "skill-workflow"
 path = "tests/skill_workflow.rs"
+required-features = ["local-storage"]
+
+[[test]]
+name = "memory-consolidation"
+path = "tests/memory_consolidation.rs"
 required-features = ["local-storage"]

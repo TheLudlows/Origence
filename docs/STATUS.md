@@ -11,7 +11,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。见[记忆契约](contracts/memory.md) | P0 真实任务验收 |
+| 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。见[记忆契约](contracts/memory.md) [长期记忆归纳](contracts/memory-consolidation.md)支持追加原文和查询带版本的结论。 | P0 真实任务验收、归纳的真实模型质量 |
 | 知识 | Text、Markdown、PDF 入库，版本读取与比较、发布与撤回；更新失败保留原发布版本。见 [API](API.md#接口) | P0 真实任务验收 |
 | Skill | [选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载及两种客户端目录格式导出。Windows 公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |

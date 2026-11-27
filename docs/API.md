@@ -206,6 +206,9 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ `asset_id` / `source_event_id` / `job_id` 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`；同 scope 下相同身份复用内容条目；`conflict` 表示已有版本 |
 | `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与 `GET /v1/assets/{id}` 相同的当前已发布视图；不需要 Idempotency-Key，不创建内容条目 |
+| `POST /v1/memories/retain` | `{content}`，writer 提交 `Idempotency-Key`，返回 `{state:"accepted",source_event_id,job_id}`。后台归纳新旧证据。MCP 对应 `context_memory_retain`。 |
+| `POST /v1/memories/long-term/lookup` | `{identity,version?,as_of_ms?}`，reader 可读，返回 `{memory_id,version,identity,state,timeline,evidence}`。MCP 对应 `context_memory_recall`。见[长期记忆归纳](contracts/memory-consolidation.md)。 |
+| `GET /v1/memories/long-term/{id}` | reader 用作业返回的 `memory_id` 读取同一长期记忆视图。查询参数 `version` 和 `as_of_ms` 可选。 |
 | `POST /v1/captures/semantic` | `{content,targets:[{identity,expected_version,allow_update:false}]}` → source/job；受限模型分类并复用 记忆语义，详见下节 |
 | `POST /v1/captures` | `{content}` → source/job；抽取结果逐条直接发布，结果见任务 `result.memories` |
 | `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |

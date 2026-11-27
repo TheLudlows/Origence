@@ -31,6 +31,8 @@ use uuid::Uuid;
 mod app;
 mod catalog;
 #[cfg(feature = "local-storage")]
+mod consolidation;
+#[cfg(feature = "local-storage")]
 mod context;
 #[cfg(all(test, feature = "local-storage"))]
 mod context_route_tests;

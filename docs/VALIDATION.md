@@ -2071,3 +2071,27 @@ Key。沿用共享地址时保留旧配置语义，专用地址只接收本链�
   1 项通过。最后一项在父进程注入无效的专用地址和合成 Key，子进程仍使用自带的旧式测试配置。
 - Docker Compose v2.40.3 使用测试 `.env` 执行 `config`，确认两个专用地址和 Key 均传入
   host 服务。模型调用仅使用本地合成协议夹具；未连接真实模型服务或部署容器。
+
+## 2026-11-26 — 长期记忆归纳（本地）
+
+基于 main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`，Linux x86_64，Rust 1.98.0。
+通过 HTTP、MCP 和公开 Rust API 验证[长期记忆归纳契约](contracts/memory-consolidation.md)。
+提取模型由 loopback HTTP 夹具替代。
+
+- `cargo test --locked --offline -j 3 --no-fail-fast --quiet` 通过 479 项，既有 AnySeek
+  用例忽略 8 项。包括 HTTP 与 MCP 写入、按身份和 ID 读取、版本与生效时间、同日冲突、
+  工作区隔离、来源撤回和权限撤销。
+- `cargo test --locked --offline --no-default-features --features local-storage
+  --test memory-consolidation -j 3 --quiet` 通过 6 项。覆盖无日期旧通知与新生效日期、
+  迟到通知、漏报日期、临时政策、截断金额引文、模型错误重试和重开后复用已保存的提取计划。
+- `cargo clippy --locked --offline --all-targets --all-features -j 3 -- -D warnings` 与
+  核心、仅 SQLite 两种无默认特性配置的全目标 Clippy 均通过，警告视为错误。
+  `cargo fmt --all -- --check` 与 `git diff --check` 通过。
+- `python3 tools/mcp_smoke.py --binary target/debug/origence --local` 通过实际 Origence 子进程
+  的协议协商、工具参数、撤权和重开检查。Python 工具套件运行 16 项，11 项通过、5 项跳过。
+
+真实提取模型的语义质量、Windows 和真实客户端验收待执行。
+
+PR #160 清理后在 Linux / Rust 1.98.0 复跑 `local-storage` 的 `local` 和
+`memory-consolidation` 测试目标，共 222 项通过。默认特性的 `jobs::tests` 6 项通过。
+全目标全特性 Clippy、格式检查与 `git diff --check` 通过。

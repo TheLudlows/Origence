@@ -50,6 +50,8 @@ TOOL_FIELDS = {
         "exclude_session_id": "string",
     },
     "context_get": {"asset_id": "string", "version": "integer"},
+    "context_memory_retain": {"content": "string", "idempotency_key": "string"},
+    "context_memory_recall": {"identity": "object", "version": "integer", "as_of_ms": "integer"},
     "context_run_create": {"run_id": "string", "summary": "string"},
     "context_run_prepare": {"run_id": "string", "event_id": "string", "context": "object"},
     "context_run_report": {"run_id": "string", "report": "object"},
@@ -309,6 +311,17 @@ def schema_object(root, node, fields, required, closed=True):
     return node.get("properties", {})
 
 
+def memory_identity_schema(root, node):
+    identity = schema_object(root, node,
+                             {"subject": "object", "predicate": "string", "context": "object"},
+                             ["subject", "predicate"])
+    subject = schema_object(root, identity["subject"],
+                            {"kind": "string", "stable_id": "string"}, ["kind", "stable_id"])
+    require(set(dereference(root, subject["kind"])["enum"]) ==
+            {"user", "agent", "project", "service", "team"}, "identity subject kinds changed")
+    schema_type(root, identity["context"]["additionalProperties"], "string")
+
+
 def check_tools(mcp):
     result = mcp.success("tools/list", {})
     require(result.get("nextCursor") is None, "unexpected MCP tool pagination")
@@ -328,6 +341,8 @@ def check_tools(mcp):
             "context_run_report": ["run_id", "report"],
             "context_run_get": ["run_id"],
             "context_get": ["asset_id"], "context_session": [],
+            "context_memory_retain": ["content", "idempotency_key"],
+            "context_memory_recall": ["identity"],
             "context_turn_get": ["turn_id"], "context_turn_archive": ["turn"],
         }.get(name, ["query"])
         properties = schema_object(root, root, TOOL_FIELDS[name], required,
@@ -350,17 +365,17 @@ def check_tools(mcp):
         if name == "context_get":
             require(nullable(root, properties["version"]), "get version no longer accepts null")
             continue
+        if name == "context_memory_retain":
+            continue
+        if name == "context_memory_recall":
+            require(all(nullable(root, properties[field]) for field in ("version", "as_of_ms")),
+                    "long-term recall version/time no longer accepts null")
+            memory_identity_schema(root, properties["identity"])
+            continue
         require(nullable(root, properties["memory_identity"]), "memory identity no longer accepts null")
         require(properties["mode"].get("default") == "keyword", "retrieval default mode changed")
         require(properties["allow_partial"].get("default") is False, "partial retrieval default changed")
-        identity = schema_object(root, properties["memory_identity"],
-                                 {"subject": "object", "predicate": "string", "context": "object"},
-                                 ["subject", "predicate"])
-        subject = schema_object(root, identity["subject"],
-                                {"kind": "string", "stable_id": "string"}, ["kind", "stable_id"])
-        require(set(dereference(root, subject["kind"])["enum"]) ==
-                {"user", "agent", "project", "service", "team"}, "identity subject kinds changed")
-        schema_type(root, identity["context"]["additionalProperties"], "string")
+        memory_identity_schema(root, properties["memory_identity"])
         if name in ("context_search", "context_resolve"):
             components = schema_object(root, properties["components"],
                                        {"summaries": "boolean", "graph": "boolean"}, [])
