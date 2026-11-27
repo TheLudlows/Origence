@@ -20,6 +20,8 @@ import {
 import type { Page, Provenance, Run, RunEvent, Trace } from "./types.js";
 import { runPdfPreview, sourcePreview, sourcePreviewTarget } from "./source.js";
 import { runCreationTrend } from "./run-creation-trend.js";
+import { readRunPrefix } from "./run-prefix.js";
+import { runSkillDrafting } from "./run-skill.js";
 
 type RunDirectory = Page<Run> & { scope: "workspace" | "current_logical_key" };
 
@@ -356,21 +358,9 @@ function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
     notice.className = "muted";
     notice.textContent = "正在读取固定前缀摘要…";
     try {
-      const prefix = await api.get<{
-        run_id: string;
-        through_sequence: number;
-        digest: string;
-      } | null>(`/v1/runs/${encodeURIComponent(runId)}/prefix?through_sequence=${sequence}`, signal);
+      const prefix = await readRunPrefix(runId, sequence, signal);
       if (signal.aborted) return;
-      if (prefix?.run_id !== runId.toLowerCase() || prefix.through_sequence !== sequence ||
-          typeof prefix.digest !== "string" || !/^[0-9a-f]{64}$/.test(prefix.digest)) {
-        throw new Error("固定前缀响应与当前 Run 或事件不一致");
-      }
-      result.replaceChildren(code({
-        run_id: prefix.run_id,
-        through_sequence: prefix.through_sequence,
-        digest: prefix.digest,
-      }));
+      result.replaceChildren(code(prefix));
       notice.textContent = `已读取截至事件 ${sequence} 的固定前缀摘要。`;
     } catch (e) {
       if (signal.aborted) return;
@@ -386,6 +376,7 @@ function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
 
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
+  const drafting = ["writer", "reviewer", "admin"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
   const assessments = el("div");
   const declarations = el("div", "", el("p", "muted", "正在读取采集声明…"));
   const coverage = panel("采集声明", declarations);
@@ -472,6 +463,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       details.append(code(ref));
     }
     details.append(fixedPrefix(id, event.sequence, selectionSignal));
+    if (drafting) details.append(drafting.action(event.sequence));
     timeline
       .querySelectorAll("button")
       .forEach((b) =>
@@ -514,6 +506,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       else timeline.append(...rows);
       if (!events.length)
         timeline.append(empty("暂无已记录事件", "未上报的活动未知。"));
+      if (drafting) drafting.root.hidden = !events.length;
       if (selectedSequence === undefined && events[0]) selectEvent(events[0]);
       if (events.length && !verification) {
         verification = new AbortController();
@@ -529,7 +522,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
     } catch (e) {
       if (ctx.signal.aborted) return;
       const focused = document.activeElement;
-      const restoreFocus = [timeline, details, assessments].some((section) => section.contains(focused));
+      const restoreFocus = [timeline, details, assessments, drafting?.root].some((section) => section?.contains(focused));
       events.length = 0;
       after = 0;
       selected?.abort();
@@ -537,6 +530,10 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       selectedSequence = undefined;
       verification?.abort();
       verification = undefined;
+      if (drafting) {
+        drafting.reset();
+        drafting.root.hidden = true;
+      }
       timeline.replaceChildren();
       details.replaceChildren();
       assessments.replaceChildren();
@@ -570,6 +567,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
       panel("事件顺序", timeline, more),
       panel("节点与上下文证据", details),
     ),
+    ...(drafting ? [drafting.root] : []),
     coverage,
     panel("外部核验记录", assessments),
     error,
