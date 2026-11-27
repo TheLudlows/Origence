@@ -2,7 +2,7 @@
 
 **简体中文** · [English](current-implementation.en.md)
 
-更新：2026-11-18。代码基线为 main `4160fd5`。本文描述当前架构与不变量。接口见 [API](../API.md)，运行与恢复见
+产品与存储边界复核基线为 main `d4867aa`（2026-11-27）。接口见 [API](../API.md)，运行与恢复见
 [OPERATIONS](../OPERATIONS.md)，进度见 [STATUS](../STATUS.md)，验收见 [VALIDATION](../VALIDATION.md)。
 A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方案可从 Git 历史查阅。
 首版目标与验收合同见[架构规划](agent-data-foundation.md)。
@@ -11,7 +11,9 @@ A1–A6 编号与显式锚点保留，供代码中的设计引用使用；旧方
 
 Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。当前提供记忆与知识的写入和检索、Skill 候选与审批发布、私有 Run 记录与查询，以及上下文组装和显式会话学习。
 
-Claude Code 和 Codex 是首版试点宿主，现有入口包括 Streamable HTTP MCP、显式归档与 Run 工具、已批准 Skill 的目录导出。试点进度见 [STATUS](../STATUS.md)。
+- Origence 负责保存、授权交付和追溯数据。Claude Code 与 Codex 负责推理、编排、加载 Skill 及执行工具。Origence 可为数据处理调用配置好的模型，并记录显式提交的会话轮次。客户端管理原生聊天、工具进程和工作现场。Skill 发布后，工具调用仍由执行端鉴权。
+- 私有问答、反馈、Run 和未发布候选由 workspace 内的稳定逻辑 key 隔离。授权轮换可接续原归档。已发布的记忆、知识、Learning 和 Skill 按 workspace 授权共享。跨越私有与共享边界需要相应的显式提交、来源复核和发布流程。
+- 首版试点使用 Claude Code 和 Codex。服务端准备记录、客户端上报和所有者转录的外部核验分别保存。未采集的活动保持未知。真实任务效果和独立签认按试点验收。[STATUS](../STATUS.md) · [P0 试点 #91](https://github.com/TheLudlows/Origence/issues/91)
 
 ## 2. 当前架构
 
@@ -32,11 +34,11 @@ flowchart TD
     W --> B[Blob：原始文件]
     W --> R[RetrievalStore]
     S --> R
-    R --> F[AnySeek 全文、向量与一跳候选]
+    R --> F[AnySeek 共享正文、私有问答与检索]
     W --> P[按配置调用模型与解析器]
 ```
 
-HTTP 与单 Worker 共享一个 `StorageEngine`。SQLite authority 持有数据目录的独占 OS 锁。客户端 MCP 直连宿主的 `/mcp`。CLI 离线访问要求独占打开。本地模式在 Origence 进程内通过 Rust SDK 打开 AnySeek Catalog，云上模式通过 HTTP 访问独立的 AnySeek，服务凭据只由宿主持有。两种模式均按已鉴权的 Scope 选择 tenant UUID 命名空间和 workspace 集合。AnySeek 保存已发布正文与检索索引，员工权限和业务来源仍由 Origence 判定。[运行与部署](../OPERATIONS.md#anyseek-全文与向量)
+HTTP 与单 Worker 共享一个 `StorageEngine`。SQLite 持有数据目录的独占 OS 锁。客户端 MCP 直连宿主的 `/mcp`，Node.js 管理界面通过 HTTP 访问服务，离线 CLI 要求独占打开。Origence 可用 Rust SDK 在进程内打开 AnySeek，也可通过 HTTP 连接独立服务。独立服务的凭据由 Origence 持有。[运行与部署](../OPERATIONS.md#anyseek-全文与向量)
 
 <a id="a1-资产来源与发布"></a>
 ## A1. 内容、来源与发布
@@ -53,10 +55,12 @@ Source event/原始 Blob、内容条目及其版本、chunk、summary、图对�
 
 | 组件 | 当前职责 | 实现 |
 | --- | --- | --- |
-| RelationalStore / JobQueue | 权限、原始来源、版本指针/哈希、身份、审计、任务、owner 与发布账本 | 原生 SQLite `context.db` |
-| RetrievalStore | 带作用域、来源、generation 的分块正文/摘要及全文、向量和一跳图索引 | 本地 AnySeek Rust SDK 或独立 AnySeek HTTP 服务 |
-| Trace / Skill | 私有 Run 事件及核验记录、Skill 候选和发布包 | 原生 SQLite `context.db` |
-| BlobStore | 原始文件字节 | scope/hash 限定的本地目录 |
+| SQLite | 权限、来源、版本与发布账本、持久任务、版本化长期事实、私有归档目录及哈希、Run 与 Skill 记录和包 | `context.db` |
+| AnySeek 共享集合 | 已发布的分块正文、摘要及全文、向量和一跳图索引 | 按租户与 workspace 路由 |
+| AnySeek 私有集合 | 完整原始问答及其关键词和向量投影 | 按租户、workspace 和逻辑 key 路由 |
+| BlobStore | 上传原件的字节 | 以 scope/hash 定位的本地目录 |
+
+Origence 负责判定权限、来源和可见状态。AnySeek 同时持久化正文并提供候选，归档与发布正文的恢复需要配套 AnySeek 数据。
 
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
@@ -73,7 +77,7 @@ Source event/原始 Blob、内容条目及其版本、chunk、summary、图对�
 <a id="storage-initialization"></a>
 ### A2.3 初始化生命周期
 
-启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。检查失败保持不可用。只创建新结构，不自动升级、重建丢失索引或转换已有数据。
+启动顺序为独占打开并核验 SQLite、检查后端绑定、在本地打开 AnySeek Catalog 或验证远端服务凭据、持久化路由绑定、装配并检查投影和 Blob、检查已提交 workspace 集合、恢复作业并清理孤儿，随后开放服务。正常启动要求兼容结构，不自动升级、转换数据或重建丢失的集合。紧邻旧版的私有归档有单独的[离线迁移与配套恢复流程](../OPERATIONS.md#私有问答归档隔离迁移与配套恢复)。
 
 AnySeek 首次选择仅允许无已发布全文且未绑定的目录。成功初始化后，在
 `full-text-backend.json` 的 `origence-content-backend-v2` 格式保存格式、endpoint、tenant/workspace 路由规则和模型 profile/维度，排除 API key。
@@ -112,20 +116,21 @@ metadata 或存储错误明确失败；正文与 locator 从 AnySeek payload 读
 3. 权威事务再次核对运行/来源/权限/版本，提交版本元数据/内容哈希、owner、ready 索引及作业完成。
 4. 失败或撤回后按权威清理规划删除孤儿；图关系的有效来源保留自己的 owner 和独立投影。
 
-AnySeek 用一组 Record 原子写入一个不可变发布的 chunk，其中一个可附带图元数据；新业务版本使用独立组。
+AnySeek 用一组 Record 原子写入一次不可变发布的所有 chunk，其中一个可附带图元数据。各业务版本使用独立组。
 这不是 Origence 与 AnySeek 的共同事务。响应丢失先核对完整当前组；原计划恢复复用 epoch。
 清理以当前 group 版本 CAS 保留其他成员，启动清理后仍有效的作业可在原计划下重建。
 超出原操作窗口且无法确认完整提交时保留失败状态，不换身份猜测写入。
+
+私有问答先在 SQLite 登记 pending，AnySeek 原子写入正文和检索投影并确认后才标 archived。Origence 撤回先阻断交付，再清理 AnySeek。[归档 API](../API.md#会话归档与幂等反馈)
 
 <a id="storage-configuration"></a>
 ### A2.7 配置与失败边界
 
 宿主须选择本地嵌入式或远端 AnySeek。远端模式的库调用方使用 `Service::open_with_anyseek(dir, models, config)`。未知后端、缺少远端配置和存储错误不静默降级。只有请求允许的模型失败可按原契约降为 keyword。
 
-AnySeek 复用原分词后逐词 SHA-256 编码，保留 AND 与词频；BM25 排序须在实际后端与任务集上独立评估。
-每个发布最多 64 个 chunk Record，完整编码请求至多 2 MiB，图元数据不占独立 Record；超限整份拒绝。候选、响应、超时和解析限制见
-[API](../API.md#anyseek-统一检索)与 [OPERATIONS](../OPERATIONS.md#anyseek-全文与向量)，不在设计重复维护数值。
-AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定配置。全库相关性、容量和延迟未验收。
+Origence 对分词结果逐词做 SHA-256 编码后交给 AnySeek，保留 AND 与词频。BM25 排序在实际后端和任务集上独立评估。
+发布、候选、响应、超时、分析配置和解析限制见 [API](../API.md#anyseek-统一检索) 与
+[OPERATIONS](../OPERATIONS.md#anyseek-全文与向量)。全库相关性、容量和延迟未验收。
 
 <a id="storage-acceptance"></a>
 ### A2.8 验收
@@ -141,6 +146,8 @@ AnySeek info 尚未暴露 tokenizer/stop_words；部署须使用导出的固定�
 SessionTurn 显式归档实际使用的证据。归档和 Run 绑定当前 workspace 的稳定逻辑 key；独立 key 不共享，授权轮换可延续。Feedback 幂等但不自动调权。
 Improve 显式提案、核验并经普通知识发布 Learning，保留适用条件和完整支持闭包。
 它不等于自动学习所有交互，也没有独立 Guidance 生命周期。
+
+正式长期事实在 SQLite 保留版本、来源和生效时间，普通 Context 可按业务时点求值。经验召回使用当前有效的已发布 Learning。带 `as_of_ms` 的查询走普通 Context 或长期记忆接口，Run 上下文准备会拒绝该参数。[长期记忆](../contracts/memory-consolidation.md)
 
 EvidenceBundle 对 memory、knowledge、Learning 分配独立召回与 UTF-8 字节预算；session
 默认关闭且仅当前 key 的 writer 可读。仅识别明确单值身份冲突，不推断一般文本矛盾。
@@ -159,8 +166,8 @@ Trace 按 Run 存储，归属逻辑 key。服务端记录准备过的精确上�
 ## A5. 数据模型与约束来源
 
 物理 schema 以 DDL 为准，身份占位、独立生命周期与恢复要求见[存储不变量](../contracts/storage.md)。
-所有新查询遵守 [AGENTS](../../AGENTS.zh-CN.md) 的无 JOIN、事务和来源约束；
-原文保留、同版本备份恢复、持久化与重试仍是要求，旧库升级与数据迁移不在当前范围。
+所有新查询遵守 [AGENTS](../../AGENTS.zh-CN.md) 的无 JOIN、事务和来源约束。
+原文保留、同版本备份恢复、持久化与重试仍是要求。
 
 ## A6. 协议边界
 

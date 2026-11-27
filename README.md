@@ -16,6 +16,7 @@ Origence manages memory, knowledge, Skills, and traces. It provides HTTP and MCP
 Authorized workspace members can reuse published memory, knowledge, and Skills.
 
 Context preparation selects authorized evidence for a task. AnySeek supports full-text, vector, and one-hop graph retrieval, with authorization and source checks in Origence.
+Agent hosts handle inference, task orchestration, and business tool execution. [Current product scope](docs/design/current-implementation.en.md#1-product-scope)
 
 ## Quick start
 
@@ -59,7 +60,7 @@ Open `http://127.0.0.1:3000` and sign in with your console account. For a fresh 
 
 ## Rust library and storage
 
-The Rust host bundles SQLite through rusqlite and uses it for permissions, version metadata, and durable records. AnySeek stores published text and serves retrieval. Blob storage preserves original files. Version hashes are derived from the original content, and ledger registration uses its existing composite key.
+SQLite holds authoritative data such as permissions, versioned facts, sources, and archive directories. AnySeek stores published chunks, summaries, and search indexes, with complete Q&A in separate private collections. Blob storage holds original uploads. [Storage ownership](docs/design/current-implementation.en.md#storage-design)
 
 Library callers can use parsing, identity and value contracts, models, Blob storage, and the AnySeek adapter without a metadata engine.
 

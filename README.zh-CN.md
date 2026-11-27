@@ -16,6 +16,7 @@ Origence 管理记忆、知识、Skill 和运行轨迹，提供 HTTP、MCP 接�
 工作区成员可以按权限复用已发布的记忆、知识和技能。
 
 上下文准备为任务选择授权范围内的证据。AnySeek 提供全文、向量和一跳图检索，Origence 核验授权与来源。
+模型推理、任务编排和业务工具执行由智能体宿主负责。[当前产品边界](docs/design/current-implementation.md#1-产品边界)
 
 ## 快速开始
 
@@ -51,7 +52,7 @@ npm start
 
 ## Rust 库与存储
 
-Rust 宿主通过 rusqlite 内置 SQLite，用于存放权限、版本元数据及持久记录。AnySeek 存储已发布的文本并提供检索。Blob 存储保留原始文件。版本哈希根据原始内容计算，账本登记使用现有复合键。
+SQLite 保存权限、版本化事实、来源和归档目录等权威数据。AnySeek 保存已发布的分块正文、摘要和检索索引，并在独立私有集合中保存完整问答。Blob 保存上传的原始文件。[存储分工](docs/design/current-implementation.md#storage-design)
 
 库调用方可使用解析、身份和值契约、模型、Blob 存储和 AnySeek 适配器，无需元数据引擎。
 
