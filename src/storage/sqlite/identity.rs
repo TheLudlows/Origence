@@ -47,6 +47,7 @@ pub(super) fn checked_identity(
 }
 
 impl SqliteTx {
+    #[cfg(feature = "local-storage")]
     pub(crate) async fn identity_for_asset(
         &mut self,
         asset: Uuid,
