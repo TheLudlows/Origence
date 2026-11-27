@@ -815,7 +815,7 @@ impl AnySeekFullTextStore {
         } else {
             META.to_vec()
         };
-        let (status, result) = self.request(scope, Request::Query(json!({"query":query,"operator":"or","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
+        let (status, result) = self.request(scope, Request::Query(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
         if !status.is_success() {
             return Err(unavailable());
         }
