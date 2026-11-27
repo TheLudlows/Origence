@@ -92,6 +92,7 @@ fn rejected(
 pub(super) async fn request(
     engine: &LocalEngine,
     scope: Option<Scope>,
+    collection: Option<&str>,
     request: Request,
     observation: &mut Option<QueryObservation>,
 ) -> StorageResult<(StatusCode, Value)> {
@@ -103,10 +104,10 @@ pub(super) async fn request(
     }
     let scope = scope.ok_or_else(inconsistent)?;
     let tenant = scope.tenant_id.to_string();
-    let collection = AnySeekFullTextStore::collection(scope);
+    let collection = collection.ok_or_else(inconsistent)?;
     let group_version = matches!(request, Request::GroupVersion(_));
     let result = match request {
-        Request::Info => engine.collection_info(&tenant, &collection).await,
+        Request::Info => engine.collection_info(&tenant, collection).await,
         Request::Create(body) => {
             let args: Create = decode_request(body).await?;
             if args.collection_id != collection {
@@ -115,7 +116,7 @@ pub(super) async fn request(
             engine
                 .create_collection(
                     &tenant,
-                    &collection,
+                    collection,
                     args.operation_id,
                     args.config,
                     args.embedding_space_id,
@@ -125,7 +126,7 @@ pub(super) async fn request(
         }
         Request::Query(body) => {
             let query = decode_request(body).await?;
-            let result = match engine.query(&tenant, &collection, query).await {
+            let result = match engine.query(&tenant, collection, query).await {
                 Ok(result) => result,
                 Err(error) => return rejected(error, observation),
             };
@@ -138,7 +139,7 @@ pub(super) async fn request(
             return Ok((StatusCode::OK, value));
         }
         Request::GroupVersion(group) => engine
-            .group_version(&tenant, &collection, &group)
+            .group_version(&tenant, collection, &group)
             .await
             .map(|version| {
                 version.map_or(
@@ -150,7 +151,7 @@ pub(super) async fn request(
             let group: anyseek::sdk::GroupReplace = decode_request(body).await?;
             let operation_id = group.operation_id.clone();
             engine
-                .replace_group(&tenant, &collection, group)
+                .replace_group(&tenant, collection, group)
                 .await
                 .map(|receipt| json!({"atomic":true,"operation_id":operation_id,"receipt":receipt}))
         }

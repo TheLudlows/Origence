@@ -397,21 +397,45 @@ fn block(unit: &Unit) -> String {
         ));
     }
     for item in &unit.items {
-        // JSON escaping keeps embedded newlines/quotes in evidence metadata data.
-        let metadata = serde_json::json!({
-            "route":item.route,"identity":item.identity,"normalization_status":item.normalization_status,
-            "semantic_status":item.semantic_status,"semantic_value":item.semantic_value,
-            "conditions":item.conditions,"applicability":item.applicability,"learning":item.learning,
-            "provenance":item.provenance,"conflict_id":item.conflict_id,
-            "archive_roundtrip":item.archive_roundtrip
-        });
-        text.push_str(&format!(
-            "[{}] {}\n{}\n{}\n\n",
-            item.evidence_id,
-            serde_json::to_string(&item.title).unwrap(),
-            metadata,
-            item.content
-        ));
+        append_item(&mut text, item);
+    }
+    text
+}
+
+#[cfg(any(feature = "local-storage", test))]
+fn append_item(text: &mut String, item: &EvidenceItem) {
+    // JSON escaping keeps embedded newlines/quotes in evidence metadata data.
+    let metadata = serde_json::json!({
+        "route":item.route,"identity":item.identity,"normalization_status":item.normalization_status,
+        "semantic_status":item.semantic_status,"semantic_value":item.semantic_value,
+        "conditions":item.conditions,"applicability":item.applicability,"learning":item.learning,
+        "provenance":item.provenance,"conflict_id":item.conflict_id,
+        "archive_roundtrip":item.archive_roundtrip
+    });
+    text.push_str(&format!(
+        "[{}] {}\n{}\n{}\n\n",
+        item.evidence_id,
+        serde_json::to_string(&item.title).unwrap(),
+        metadata,
+        item.content
+    ));
+}
+
+#[cfg(feature = "local-storage")]
+pub(crate) fn restore_rendered_context(bundle: &EvidenceBundle) -> String {
+    let mut text = String::new();
+    let mut emitted = BTreeSet::new();
+    for item in &bundle.items {
+        if let Some(id) = &item.conflict_id
+            && emitted.insert(id)
+            && let Some(conflict) = bundle
+                .conflicts
+                .iter()
+                .find(|group| &group.conflict_id == id)
+        {
+            text.push_str(&format!("CONFLICT {}: {}\n", id, conflict.warning));
+        }
+        append_item(&mut text, item);
     }
     text
 }

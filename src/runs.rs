@@ -57,7 +57,13 @@ impl Service {
             .record_run_context_failed(run, event_id, request_digest, code, observations)
             .await?;
         tx.commit().await?;
-        Ok(replay)
+        match replay {
+            Some(value) => Ok(Some(
+                self.restore_archive_run_bundle(a, run, event_id, request_digest, value)
+                    .await?,
+            )),
+            None => Ok(None),
+        }
     }
 
     pub(crate) async fn replay_run_context_prepared(
@@ -72,7 +78,13 @@ impl Service {
             .replay_run_context_prepared(run, event_id, request_digest)
             .await?;
         tx.commit().await?;
-        Ok(replay)
+        match replay {
+            Some(value) => Ok(Some(
+                self.restore_archive_run_bundle(a, run, event_id, request_digest, value)
+                    .await?,
+            )),
+            None => Ok(None),
+        }
     }
 
     pub(crate) async fn check_run_owner(&self, a: &AuthContext, run: Uuid) -> Result<()> {
@@ -94,7 +106,75 @@ impl Service {
             .record_run_context_prepared(run, event_id, request_digest, bundle)
             .await?;
         tx.commit().await?;
-        Ok(result)
+        self.restore_archive_run_bundle(a, run, event_id, request_digest, result)
+            .await
+    }
+
+    async fn restore_archive_run_bundle(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        event_id: Uuid,
+        request_digest: &str,
+        mut preparation: Value,
+    ) -> Result<Value> {
+        use crate::evidence::{EvidenceBundle, EvidenceProvenance};
+
+        let Some(proof) = preparation.get("archive_bundle_digest") else {
+            return Ok(preparation);
+        };
+        let invalid = || AppError::Unavailable("invalid prepared archive snapshot".into());
+        let mut bundle: EvidenceBundle =
+            serde_json::from_value(preparation["recorded_bundle"].clone())
+                .map_err(|_| invalid())?;
+        let mut tx = self.read(a, Permission::Write).await?;
+        let mut entries = Vec::new();
+        for (index, item) in bundle.items.iter().enumerate() {
+            if let EvidenceProvenance::SessionTurn {
+                session_id,
+                turn_id,
+                source_event_id,
+                ..
+            } = item.provenance
+            {
+                let entry = tx.archive_entry(session_id, turn_id).await?;
+                if tx.require_turn_visible(session_id, turn_id).await? != source_event_id {
+                    return Err(AppError::NotFound);
+                }
+                entries.push((index, entry));
+            }
+        }
+        tx.commit().await?;
+        let mut bodies = Vec::new();
+        for (index, entry) in entries {
+            let body = self.archived_body(&entry).await?;
+            bodies.push((index, entry, body));
+        }
+        let mut tx = self.read(a, Permission::Write).await?;
+        // Any cited workspace asset can be withdrawn while the private bodies
+        // are in flight. Recheck the complete prepared event in this snapshot.
+        let current = tx
+            .replay_run_context_prepared(run, event_id, request_digest)
+            .await?;
+        if current.as_ref() != Some(&preparation) {
+            return Err(invalid());
+        }
+        for (index, entry, body) in bodies {
+            let fresh = tx.archive_delivery(&entry, body).await?;
+            bundle.items[index].content =
+                format!("Question: {}\nAnswer: {}", fresh.question, fresh.answer);
+        }
+        bundle.rendered_context = crate::evidence::restore_rendered_context(&bundle);
+        if *proof != crate::storage::hash(serde_json::to_vec(&bundle).map_err(|_| invalid())?) {
+            return Err(invalid());
+        }
+        preparation
+            .as_object_mut()
+            .ok_or_else(invalid)?
+            .remove("archive_bundle_digest");
+        preparation["recorded_bundle"] = serde_json::json!(bundle);
+        tx.commit().await?;
+        Ok(preparation)
     }
 }
 

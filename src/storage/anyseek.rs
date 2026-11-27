@@ -23,6 +23,8 @@ use uuid::Uuid;
 mod graph;
 #[cfg(feature = "embedded-anyseek")]
 mod local;
+#[cfg(feature = "local-storage")]
+pub(crate) mod private_archive;
 pub use graph::{GraphEdgeCandidate, GraphEntityCandidate, GraphPublication};
 
 const FORMAT: &str = "origence-content-sha256-v1";
@@ -166,11 +168,10 @@ enum Request {
 }
 
 impl Request {
-    fn http(self, scope: Option<Scope>) -> StorageResult<(Method, String, Option<Value>)> {
+    fn http(self, collection_id: Option<&str>) -> StorageResult<(Method, String, Option<Value>)> {
         let root = "/api/v1/index";
         let collection = || {
-            scope
-                .map(AnySeekFullTextStore::collection)
+            collection_id
                 .map(|id| format!("{root}/{id}"))
                 .ok_or_else(inconsistent)
         };
@@ -533,16 +534,35 @@ impl AnySeekFullTextStore {
         request: Request,
         observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
     ) -> StorageResult<(StatusCode, Value)> {
+        let collection = scope.map(Self::collection);
+        self.request_collection(scope, collection.as_deref(), request, observation)
+            .await
+    }
+
+    async fn request_collection(
+        &self,
+        scope: Option<Scope>,
+        collection: Option<&str>,
+        request: Request,
+        observation: &mut Option<crate::retrieval_diagnostics::QueryObservation>,
+    ) -> StorageResult<(StatusCode, Value)> {
         match &self.backend {
             Backend::Http { base, key, client } => {
-                let (method, path, body) = request.http(scope)?;
+                let (method, path, body) = request.http(collection)?;
                 let url = base.join(&path).map_err(|_| unavailable())?;
                 let request = client.request(method, url).header("apikey", key.clone());
                 Self::request_http(scope, request, body, observation).await
             }
             #[cfg(feature = "embedded-anyseek")]
             Backend::Embedded(engine) => {
-                Box::pin(local::request(engine, scope, request, observation)).await
+                Box::pin(local::request(
+                    engine,
+                    scope,
+                    collection,
+                    request,
+                    observation,
+                ))
+                .await
             }
         }
     }

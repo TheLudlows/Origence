@@ -71,25 +71,16 @@ impl Service {
         };
         // A forbidden raw-session request fails before any model/native IO.
         self.read(auth, permission).await?.rollback().await?;
-        let has_assets = input
-            .routes
-            .iter()
-            .any(|r| r.route != EvidenceRoute::Session);
         let query = self
-            .prepare_context_query(
-                auth,
-                &input.query,
-                if has_assets { &input.mode } else { "keyword" },
-                input.allow_partial,
-            )
+            .prepare_context_query(auth, &input.query, &input.mode, input.allow_partial)
             .await?;
         let mut bundle = EvidenceBundle {
             retrieval: Default::default(),
             tenant_id: auth.tenant_id, workspace_id: auth.workspace_id,
             policy: CONTEXT_POLICY.into(), validity: "passed_current_visibility_snapshot_not_factual_truth".into(),
             conflict_assessment: "explicit_single_value_identity_only_within_recalled_candidates; general_prose_not_assessed".into(),
-            requested_mode: if has_assets { query.requested_mode.clone() } else { input.mode.clone() },
-            effective_mode: if has_assets { query.effective_mode.clone() } else { "recent_lexical".into() },
+            requested_mode: query.requested_mode.clone(),
+            effective_mode: query.effective_mode.clone(),
             rendered_context: String::new(), items: Vec::new(), conflicts: Vec::new(), warnings: query.warnings.clone(),
             budget: input.budget, used_bytes: 0, omitted_conflict_groups: 0, routes: Vec::new(),
         };
@@ -131,20 +122,11 @@ impl Service {
                 }
                 None => {
                     let found = self
-                        .context_session_candidates(
-                            auth,
-                            &input.query,
-                            input.session_id,
-                            input.exclude_session_id,
-                            route.limit,
-                        )
+                        .context_session_candidates(auth, &input, &query, route.limit)
                         .await?;
                     accounting.candidates = found.turns.len();
                     accounting.scanned = Some(found.scanned);
                     accounting.scan_exhausted = Some(found.scan_exhausted);
-                    if found.scan_exhausted {
-                        bundle.warnings.push("Session recall exhausted its 512-row recent scan window; older matching turns may exist.".into());
-                    }
                     turns.extend(found.turns);
                 }
             }
@@ -236,15 +218,9 @@ impl Service {
             }
             items.push(item);
         }
-        let turn_keys: Vec<_> = turns
-            .iter()
-            .map(|candidate| (candidate.session_id, candidate.turn_id))
-            .collect();
-        let fresh_turns = tx.context_session_turns(&turn_keys).await?;
-        for (candidate, fresh) in turns.into_iter().zip(fresh_turns) {
-            if let Some(mut fresh) = fresh {
-                fresh.score = candidate.score;
-                items.push(session_item(fresh));
+        for candidate in turns {
+            if let Some(fresh) = Self::recheck_archive_candidate(&mut tx, candidate).await? {
+                items.push(session_item(fresh, &query.effective_mode));
             } else {
                 bundle
                     .routes
@@ -338,11 +314,17 @@ fn asset_item(
         single_valued: candidate.single_valued,
     })
 }
-fn session_item(turn: ContextSessionTurn) -> EvidenceItem {
+fn session_item(turn: ContextSessionTurn, mode: &str) -> EvidenceItem {
     EvidenceItem {
         evidence_id: format!("turn:{}:{}", turn.session_id, turn.turn_id),
         route: EvidenceRoute::Session,
-        retrieval_routes: vec!["recent_lexical".into()],
+        score_kind: match mode {
+            "vector" => "native_similarity",
+            "hybrid" => "rrf60",
+            _ => "lexical_relevance",
+        }
+        .into(),
+        retrieval_routes: turn.retrieval_routes,
         title: "Archived session turn".into(),
         content: format!("Question: {}\nAnswer: {}", turn.question, turn.answer),
         provenance: EvidenceProvenance::SessionTurn {
@@ -361,7 +343,6 @@ fn session_item(turn: ContextSessionTurn) -> EvidenceItem {
         learning: None,
         applicability: "not_applicable".into(),
         score: turn.score,
-        score_kind: "recent_visible_rank".into(),
         conflict_id: None,
         archive_roundtrip: "unsupported_session_turn_reference".into(),
         single_valued: false,

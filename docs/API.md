@@ -79,8 +79,9 @@ EvidenceBundle 的 `retrieval` 可选带 `context_query_embedding`，仅记录�
 `POST /v1/runs/{id}/context` 将成功诊断与精确 bundle 摘要一起写入私有 Run；
 通过认证、归属和输入校验后发生的准备失败记录 `context_preparation_failed`，并标为
 server_observed。首次成功时另存私有上下文快照；相同请求重放先检查事件和请求摘要，
-复核当前权限、原始引用及私有会话有效性后返回原 bundle/回执，不再调用模型或 AnySeek，
-后端暂时不可用或语料更新不会改写原结果。快照不在分页 Run trace 中重复返回。
+复核当前权限、原始引用及私有会话有效性后返回原 bundle/回执。重放无需模型或重新检索。
+引用私有轮次时按 ID 从 AnySeek 读取并校验正文和 bundle 摘要；后端不可用时保留原回执供重试。
+快照不在分页 Run trace 中重复返回。
 请求摘要改变返回冲突；来源撤回或权限失效仍阻断重放。
 失败事件同样不可覆盖，恢复后新的准备尝试使用新的 event_id。普通 MCP/Search 请求
 不会自动加入某个 Run，仍需显式调用准备接口；未采集活动保持未知。
@@ -469,7 +470,11 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 - 支持仍有效的旧版本在更新到新版本后仍可归档，不要求等于 current_version。归档保存完整原 locator（含 parser、字节范围、extraction 与记忆语义support_sources），不重新解释历史偏移。
 - GET 的 used_evidence 元素为 `{evidence_ref_id,reference,source_event_id,source_version,version_source_event_id,locator}`。reference 为上述调用方引用，evidence_ref_id 由服务端首次归档分配并持久化。source_event_id/source_version 是记忆语义成员的原始来源；version_source_event_id 是该内容条目快照根来源，reference.asset_version 是实际使用的内容条目版本，三者不能互相替代。
 
-归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文、证据状态和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 事务原子保存问答来源事件、档案、实际引用、审计与命令回执，任一引用失败则回滚。
+归档成功 HTTP 200 返回 `{session_id,turn_id,source_event_id,state:"archived"}`。唯一领域键为 tenant/workspace/session_id/turn_id。在同一个获授权的逻辑 key 下，相同正文、证据状态和有序 `used_evidence` 返回原标识，更换 `Idempotency-Key` 或获准轮换凭据仍可重试。改变内容返回 409，原归档保留。SQLite 先登记 pending 和实际引用。AnySeek 原子提交问答和检索投影后，Origence 才确认 archived。任一引用失败则拒绝归档。丢失回执可通过稳定轮次 ID 和正文哈希恢复。后端从未收到正文时，调用方须携原请求重试。
+
+按稳定 ID 读取使用 `GET /v1/sessions/{session_id}/turns/{turn_id}`，按目录顺序分页使用
+`GET /v1/sessions/{session_id}/turns?after=0&limit=16`。以返回的 `next_after` 请求下一页。
+撤回可在序号中留下空位；有效的已归档正文或检索记录缺失时，读取返回 503。
 
 反馈请求示例（针对原轮次或 GET 返回的确切归档引用）：
 
@@ -483,7 +488,7 @@ SessionTurn 是不可变的问答档案，由调用方在回答完成后明确�
 
 rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
 
-治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的内容条目删除、根来源撤回、记忆语义 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；显式学习入口见下节 Improve → Learning。逻辑撤回保留原始持久化记录，不等于物理擦除。
+治理采用保守的整轮次失效：可通过既有 admin `DELETE /v1/events/{source_event_id}` 撤回问答；任何实际引用的内容条目删除、根来源撤回、记忆语义 任一支持来源撤回或文件删除，同样立即阻断整轮问答与全部反馈读取和新增反馈（404）。原始 archive source 的 GET 也执行依赖检查，不能绕过此规则。清理任务尚未运行时规则即生效；历史档案不依赖可被清理的 chunk 外键。读与重放均重新校验有效性，命令缓存只存标识/状态，已失效档案不会因同键重放、换键或重开进程恢复可见。后续学习只能使用通过同一有效性门槛的档案；显式学习入口见下节 Improve → Learning。原逻辑 key 的 writer 可用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 撤回单轮，或用 `DELETE /v1/sessions/{session_id}` 撤回整个会话。撤回事务立即阻断交付，后台清理重试并用 AnySeek group 版本阻断晚到写入。已有备份仍遵守各自的保留策略。
 
 ## 显式 Improve → Learning
 
@@ -528,9 +533,10 @@ memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_o
 
 启用 session 必须 writer 以上，否则 403；该权限在任何模型调用前校验。
 `session_id` / `exclude_session_id` 可限制会话，必须同时启用 session。会话路由
-扫描最多 512 条近期关系型记录，完整来源/传递证据有效性先于保留条数限制，
-返回 `scanned` / `scan_exhausted`；扫描耗尽明确提示可能存在未扫描的更早记录。
-这不是全历史语义检索，不能把读者权限扩大为读取原始问答。
+在认证 workspace 和逻辑 key 的独立 AnySeek 集合支持 keyword、vector 和 hybrid。
+Origence 在查询前限制到有效的已归档轮次，交付前再复核当前权限和来源，并按稳定 turn_id 去重。
+`scanned` 记录有效的目录候选数。vector 依赖部署配置的 embedding，`allow_partial` 允许
+缺少 embedding 时退回关键词。
 
 返回 `rendered_context`、`items`、`conflicts`、`warnings`、scope、policy、
 requested/effective mode、总预算/实际字节及各路由候选/保留/省略计数。

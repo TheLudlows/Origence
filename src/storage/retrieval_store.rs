@@ -37,6 +37,9 @@ impl RetrievalStore {
             backend: backend.with_binding(binding),
         })
     }
+    pub(crate) fn private_archive(&self) -> &AnySeekFullTextStore {
+        &self.backend
+    }
     pub(crate) async fn check_scope(&self, scope: Scope) -> StorageResult<()> {
         self.backend.check_scope(scope, false).await
     }

@@ -6,22 +6,23 @@
 
 use super::read_model::{self, AssociationKey};
 use super::*;
+#[cfg(test)]
+use crate::context_retrieval::{ContextSessionResult, ContextSessionTurn, SESSION_SCAN_LIMIT};
 use crate::{
-    context_retrieval::{
-        ContextCandidate, ContextLearning, ContextLearningSupport, ContextRoute,
-        ContextSessionResult, ContextSessionTurn, SESSION_SCAN_LIMIT,
-    },
+    context_retrieval::{ContextCandidate, ContextLearning, ContextLearningSupport, ContextRoute},
     learning::LearningCandidate,
     memory_identity::MemoryIdentity,
     memory_semantics::Cardinality,
     types::SearchHit,
 };
+#[cfg(test)]
 use std::collections::HashSet;
 
 #[cfg(test)]
 #[path = "context_session_tests.rs"]
 mod session_tests;
 
+#[cfg(test)]
 const RECENT_EVENTS: &str = "SELECT id,(id=?) AS m0,(id=?) AS m1,(id=?) AS m2,(id=?) AS m3,(id=?) AS m4,(id=?) AS m5,(id=?) AS m6,(id=?) AS m7 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND state='active' AND kind='session_turn' AND ((id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?))";
 
 impl SqliteTx {
@@ -339,6 +340,7 @@ impl SqliteTx {
 
     /// One shared metadata readset, with per-turn JSON and closure decisions in
     /// caller order. No state escapes this read call or its transaction.
+    #[cfg(test)]
     pub(crate) async fn context_session_turns(
         &mut self,
         keys: &[(Uuid, Uuid)],
@@ -359,6 +361,7 @@ impl SqliteTx {
         Ok(turns)
     }
 
+    #[cfg(test)]
     async fn recent_turn_keys(
         &mut self,
         session: Option<Uuid>,
@@ -439,6 +442,7 @@ impl SqliteTx {
             .collect()
     }
 
+    #[cfg(test)]
     pub(crate) async fn context_recent_turns(
         &mut self,
         terms: &str,

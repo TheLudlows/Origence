@@ -777,6 +777,29 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
         .learning(&a, id(&run["learnings"][0], "learning_id"))
         .await
         .unwrap();
+    let pool = s.engine.relational().pool();
+    let (snapshot, proposal): (String, String) =
+        db::query_as("SELECT snapshot,proposal_plan FROM oc_improve_runs WHERE improve_id=?")
+            .bind(improve_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    let snapshot: Value = serde_json::from_str(&snapshot).unwrap();
+    let proposal: Value = serde_json::from_str(&proposal).unwrap();
+    assert!(snapshot["items"][0]["turn"].get("question").is_none());
+    assert!(snapshot["items"][0]["turn"].get("answer").is_none());
+    let quote_digest = json!(origence::storage::hash(ANSWER));
+    assert_eq!(
+        proposal["candidates"][0]["supports"][0]["quote"],
+        quote_digest
+    );
+    let candidate: String = db::query_scalar("SELECT candidate FROM oc_learnings WHERE id=?")
+        .bind(id(&run["learnings"][0], "learning_id"))
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let candidate: Value = serde_json::from_str(&candidate).unwrap();
+    assert_eq!(candidate["supports"][0]["quote"], quote_digest);
     assert_eq!(learning["statement"], STATEMENT);
     assert_eq!(learning["conditions"], json!([CONDITION]));
     assert!(

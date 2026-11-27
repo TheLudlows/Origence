@@ -195,8 +195,38 @@ The caller explicitly supplies target identities. Admission saves the current pu
 
 ## Query diagnostics and Run
 
-Compare the binding's analysis_fingerprint with the AnySeek collection's analysis.fingerprint. Use x-anyseek-request-id from the new API response to correlate with the server's response_prepared debug log. HTTP errors provide a safe x-anyseek-error-code. The log indicates response preparation only, without confirming body delivery. Query diagnostics v2 must return the configured embedding_space_sha256. A space change is rejected even if dimensions match. A successful Run preparation can reuse a private snapshot during a backend outage, but replay still checks current authorization and original sources. The successful receipt does not establish backend recovery. New preparations still need backend access. Run retrieval diagnostics distinguish requests never issued, network failures, HTTP errors, and invalid diagnostics. Raw error bodies are not kept. Backend indexing progress is sampled after the query. Handle AnySeek health first if it reports lag, failure, or recovery flags. Do not advance the consumer sequence by hand or mask the failure with empty retrieval. See [API](API.en.md#retrieval-diagnostics) for fields and collection boundaries.
+Compare the binding's analysis_fingerprint with the AnySeek collection's analysis.fingerprint. Use x-anyseek-request-id from the new API response to correlate with the server's response_prepared debug log. HTTP errors provide a safe x-anyseek-error-code. The log indicates response preparation only, without confirming body delivery. Query diagnostics v2 must return the configured embedding_space_sha256. A space change is rejected even if dimensions match. A successful Run preparation can reuse its snapshot and rechecks current authorization and original sources. Replays of private turns require AnySeek for verified reads by ID. The successful receipt does not establish backend recovery. New preparations still need backend access. Run retrieval diagnostics distinguish requests never issued, network failures, HTTP errors, and invalid diagnostics. Raw error bodies are not kept. Backend indexing progress is sampled after the query. Handle AnySeek health first if it reports lag, failure, or recovery flags. Do not advance the consumer sequence by hand or mask the failure with empty retrieval. See [API](API.en.md#retrieval-diagnostics) for fields and collection boundaries.
 
 ## Native Windows development launcher
 
 Run `origence.exe serve --local` to start the API and local AnySeek. To also start the Node UI, run [`tools/start-dev.ps1`](WINDOWS-DEV.en.md) in the same PowerShell 7.4+ console. The launcher disables models.
+
+## Private archive and paired recovery
+
+A private collection is derived from tenant namespace, workspace, and logical-key UUID. Each turn
+has a stable canonical Record and an atomic search projection. At the existing 65,536 UTF-8 bytes
+per question or answer, the full body fits the pinned AnySeek 1 MiB Record limit even with worst-case
+JSON escaping. Lexical indexing covers the full turn. If embeddings are configured, the provider
+receives up to the first 4096 UTF-8 bytes of each field, cut at a character boundary. Meaning present
+only in a long answer’s tail is outside the vector projection.
+
+Origin authority registers pending first. If the AnySeek receipt cannot be used, Origence compares
+the stable group, its members and the body digest. Wire operation epochs expire after the current
+and previous UTC day. A confirmed expiry and absent group permit a fresh epoch with the original
+operation nonce and CAS version zero. Withdrawal hides the directory first and durably empties or
+fences the native group. AnySeek log retention and backup rotation govern physical eradication.
+
+On a stopped, isolated copy, run `origence --offline --data-dir <copy> archive-migrate copy --isolated-copy --limit 64`,
+then `archive-migrate verify --isolated-copy` with the same global flags. Add `--local` for embedded
+AnySeek. Wait for `unconfirmed=0`, check the ordered directory and restore the paired backup before
+using `archive-migrate purge --isolated-copy`. Purge rechecks the native records before redacting
+legacy SQLite bodies, Improve snapshots and quote references, and Run replay snapshots. SQLite
+compaction and WAL truncation precede normal startup. Retain the manifest with the paired SQLite
+and AnySeek copies. Compare the directory SHA-256, engine version, SQLite-confirmed sequences, and active private-collection visible sequences after restore. These are offline verification results, with no guarantee of an
+online cross-store snapshot or an authoritative body for pending entries never written to AnySeek.
+
+Verification checks logical removal and the contents of the current SQLite files. SQLite
+`secure_delete`, `VACUUM`, and WAL truncation do not guarantee physical erasure from storage
+pages, historical WAL files, filesystem copies, snapshots, or older backups. Keep the pre-cutover
+backup under the existing access and retention policy. The migration was exercised only on
+disposable synthetic copies.

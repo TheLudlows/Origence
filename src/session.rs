@@ -11,6 +11,47 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(feature = "local-storage")]
+pub(crate) struct ArchiveDomain {
+    pub scope: crate::storage::Scope,
+    pub owner: Uuid,
+}
+
+#[cfg(feature = "local-storage")]
+impl ArchiveDomain {
+    pub(crate) fn collection(self) -> String {
+        // Catalog identifiers are at most 63 ASCII bytes.
+        let digest = crate::storage::hash(format!(
+            "{}:{}:{}",
+            self.scope.tenant_id, self.scope.workspace_id, self.owner
+        ));
+        format!("pr_{}", &digest[..60])
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(feature = "local-storage")]
+pub(crate) struct ArchiveLocator {
+    pub domain: ArchiveDomain,
+    pub session: Uuid,
+    pub turn: Uuid,
+    pub source: Uuid,
+    pub body_hash: String,
+    pub epoch: u64,
+}
+
+#[cfg(feature = "local-storage")]
+impl ArchiveLocator {
+    pub(crate) fn group(&self) -> String {
+        // session is unique within the workspace, including across key rotations.
+        format!(
+            "t{}",
+            crate::storage::hash(format!("{}:{}", self.session, self.turn))
+        )
+    }
+}
+
 /// Maximum UTF-8 byte length of each question and answer.
 pub const MAX_SESSION_TEXT_BYTES: usize = 64 * 1024;
 /// Maximum number of distinct evidence references in one turn.
@@ -73,12 +114,38 @@ impl EvidenceUse {
 }
 
 #[cfg(feature = "sqlite")]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ArchivedTurnBody {
     pub question: String,
     pub answer: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "EvidenceUse::is_reported")]
     pub evidence_use: EvidenceUse,
+}
+
+#[cfg(feature = "sqlite")]
+impl ArchivedTurnBody {
+    #[cfg(any(feature = "local-storage", test))]
+    pub(crate) fn from_input(input: &SessionTurnInput) -> Self {
+        Self {
+            question: input.question.clone(),
+            answer: input.answer.clone(),
+            evidence_use: input.evidence_use,
+        }
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn model_json_bytes(&self) -> usize {
+        // Serialized string sizes less the two empty JSON string delimiters.
+        serde_json::json!(self.question).to_string().len()
+            + serde_json::json!(self.answer).to_string().len()
+            - 4
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn digest(&self) -> String {
+        crate::storage::hash(serde_json::json!(self).to_string())
+    }
 }
 
 /// Immutable input for a turn in the session identified by the request path.

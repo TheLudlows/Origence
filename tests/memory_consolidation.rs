@@ -428,6 +428,48 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
         json!([])
     );
 
+    let session = fixture
+        .service
+        .private_session(&fixture.auth)
+        .await
+        .unwrap();
+    let session_id = id(&session, "session_id");
+    let turn_id = Uuid::new_v4();
+    let archive = client
+        .post(format!("{base}/v1/sessions/{session_id}/turns"))
+        .bearer_auth(&fixture.token)
+        .header("Idempotency-Key", "dated-context-private-fixture")
+        .json(&json!({"turn_id":turn_id,"question":POLICY_QUESTION,
+            "answer":"合成私有会话答复","used_evidence":[]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(archive.status(), 200);
+    for (date, expected) in [(END_OF_NOVEMBER, "100 元"), (DECEMBER_START, "80 元")] {
+        let mut mixed = args(date, 8000);
+        mixed["routes"] = json!([{"route":"memory"},{"route":"session"}]);
+        let ask = |token| {
+            client
+                .post(format!("{base}/v1/context"))
+                .bearer_auth(token)
+                .json(&mixed)
+        };
+        let result: Value = ask(&fixture.token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let items = result["items"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_current(&items[0]["provenance"], expected);
+        assert_eq!(items[1]["provenance"]["turn_id"], json!(turn_id));
+        assert_eq!(ask(&reader.token).send().await.unwrap().status(), 403);
+    }
+
     let dispute = "通知：云舟境内酒店限额自2026-12-01起为每晚120 元。";
     let disputed_source = publish(
         &fixture,

@@ -586,7 +586,7 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
 }
 
 #[tokio::test]
-async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan() {
+async fn evidence_session_index_finds_older_matches_and_enforces_private_scope() {
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -620,9 +620,13 @@ async fn evidence_session_scan_is_bounded_and_session_filters_precede_the_scan()
     }
     let input = request("Ancientneedle", &["session"]);
     let bounded = bundle(&s, &a, input.clone()).await;
-    assert!(items(&bounded).is_empty());
-    assert_eq!(accounting(&bounded, "session")["scanned"], 512);
-    assert_eq!(accounting(&bounded, "session")["scan_exhausted"], true);
+    assert_eq!(items(&bounded).len(), 1);
+    assert_eq!(
+        items(&bounded)[0]["provenance"]["turn_id"],
+        oldest["turn_id"]
+    );
+    assert_eq!(accounting(&bounded, "session")["scanned"], 513);
+    assert_eq!(accounting(&bounded, "session")["scan_exhausted"], false);
     // Filtering a different key's session never bypasses private ownership,
     // even when its turn would otherwise match the query.
     let key = s.issue_key(&a, "writer").await.unwrap();

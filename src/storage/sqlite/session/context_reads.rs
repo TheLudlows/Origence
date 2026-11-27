@@ -247,6 +247,7 @@ impl SqliteTx {
             evidence_use: body.evidence_use,
             created_at,
             score: 0.0,
+            retrieval_routes: Vec::new(),
         }))
     }
 }

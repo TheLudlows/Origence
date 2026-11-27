@@ -249,7 +249,7 @@ branches_ms 包含候选装载、融合及已启用的辅助分支；verificatio
 通过新 API 的查询响应可按 x-anyseek-request-id 关联服务器的 response_prepared 调试日志；
 HTTP 错误提供安全的 x-anyseek-error-code。该日志只说明响应已准备，body 交付仍未确认。
 查询诊断 v2 必须返回与配置一致的 embedding_space_sha256；同维度换空间也会拒绝。
-成功 Run 准备可在后端故障时复用私有快照，重放仍核验当前权限和原始来源；
+成功 Run 准备可复用私有快照；重放核验当前权限和原始来源，含私有轮次时还需从 AnySeek 按 ID 读回；
 该成功回执不代表后端已经恢复，新准备请求仍需正常访问后端。
 Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不合规诊断；原始错误正文不落库。
 后端索引进度在查询后采样，出现落后/失败/恢复标志时先处理 AnySeek 健康状态，
@@ -259,3 +259,52 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 使用 `origence.exe serve --local` 启动 API 和本地 AnySeek。需要 Node UI 时可使用
 [`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一 PowerShell 7.4+ 控制台联启。脚本入口禁用模型。
+
+## 私有问答归档、隔离迁移与配套恢复
+
+私有集合按租户命名空间和 workspace、逻辑 key 派生地址。原始 API token 不参与命名。
+每轮用稳定 Record ID 保存完整问答，同组提交独立检索投影。固定 AnySeek 版本接受
+1 MiB Record、最多 64 个组成员和 4 MiB 原生 group 请求。Origence 的请求上限是
+2 MiB。现有每字段 65,536 UTF-8 字节限制下，即使按每字节最大六字节 JSON 转义，
+正文也可放在一个 Record。关键词覆盖完整问答，配置 embedding 时，投影使用问题和
+回答各最多 4096 UTF-8 字节的字符边界前缀。只出现在长回答尾部的语义不会进入向量投影。
+
+AnySeek 的 operation epoch 只接受当前和前一 UTC 日。Origence 保留稳定操作 nonce、
+Record ID 和已登记 epoch。回执过期时，首先按 group ID、成员和正文哈希恢复。只有提交
+明确返回过期且 group 仍不存在时，才用同一 nonce、新 epoch 和版本 0 CAS 接受调用方
+重交的正文。撤回会先在 SQLite 隐藏该轮，再以原子空 group 替换删除活跃记录及索引
+入口。已出现的 group 版本阻断版本 0 的迟到提交。原始日志段和备份的最终物理擦除
+受 AnySeek 保留与备份轮换控制。
+
+Improve 保存引用、反馈及支持片段哈希，模型处理时从私有集合按需读回。Run 重放
+持久化来源引用和 bundle 哈希，涉及私有轮次时在原授权和来源仍有效的前提下读回
+正文。客户端现有脱敏与已脱敏的待投递队列继续使用，收到回执后由客户端确认出队。
+
+仅在隔离副本演练。停止 Origence 和配套 AnySeek，复制整个 Origence 数据目录以及
+独立 AnySeek 的数据目录（嵌入模式的 AnySeek 在 Origence 目录下）。给远端方式提供
+隔离的 AnySeek 服务和与原绑定相同的服务地址，严禁指向真实归档。先保留一对未修改
+备份。以下命令使用隔离数据目录。嵌入模式添加 `--local`。独立模式使用该副本的
+`OC_ANYSEEK_URL` 和 `OC_ANYSEEK_API_KEY`。
+
+1. `origence --offline --data-dir <副本> archive-migrate copy --isolated-copy --limit 64`。
+   只接受紧邻原版 authority schema 或已经准备好的副本。按历史 `created_at,turn_id`
+   顺序分配稳定序号并核对来源、原请求、正文哈希和回读。可分批执行或中断重跑。
+2. `origence --offline --data-dir <副本> archive-migrate verify --isolated-copy`。
+   等到 `unconfirmed=0`。保留验证清单中的目录摘要、AnySeek 版本及各活跃私有集合的
+   SQLite 确认水位和 AnySeek 查询可见水位。对照原先的轮次、来源引用、顺序和 Hash，并演练备份还原和读取。
+3. `origence --offline --data-dir <副本> archive-migrate purge --isolated-copy`。
+   先复验整份目录，显式删去旧正文、冻结的 Q&A、支持引文和 Run 重放正文副本。
+   同一事务记录进入清理阶段，再重建 SQLite 并截断 WAL。中断后重跑本步。
+   成功后才允许正常启动。已经持久化的 Run 核验与 Skill 依赖前缀保存原摘要，
+   仅存在外部的旧前缀承诺可能需要重新取得。
+
+这里验证的是逻辑清除及清理后当前 SQLite 文件的可见内容。SQLite `secure_delete`、
+`VACUUM` 和 WAL 截断无法保证底层数据库页面、历史 WAL、文件系统副本、快照或历史备份的
+物理擦除。切换前的备份保留原文，按现有访问控制与保留策略单独管理。本 PR 仅在合成副本
+演练，生产迁移未执行。
+
+从停止后的同一对目录还原时，保留 SQLite、AnySeek、绑定文件及所用版本。再次执行
+`verify` 并比对目录摘要和各活跃私有集合的可见水位，然后核对按序分页以及关键词、
+向量和跨 key 隔离。该清单可验证列出的问答和投影读回。它覆盖归档目录，不构成
+跨系统在线一致性快照，也不包含未写入 AnySeek 的 pending 正文。独立服务的对象
+存储备份、快照并发和跨版本恢复须独立验证。

@@ -250,6 +250,12 @@ impl SqliteTx {
                 self.require_run_reference_visible(&r).await?;
             }
         }
+        if let Some(digest) = sqlite_db::query_scalar("SELECT digest FROM oc_archive_legacy_run_prefixes WHERE tenant_id=? AND workspace_id=? AND run_id=? AND through_sequence=?")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(through_sequence)
+            .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?
+        {
+            return Ok(digest);
+        }
         Ok(hash(encode(&(
             self.scope.tenant_id,
             self.scope.workspace_id,
@@ -258,6 +264,37 @@ impl SqliteTx {
             rows,
         ))?))
     }
+}
+
+pub(super) fn redact_archive_replay(payload: &mut Value) -> StorageResult<bool> {
+    use crate::evidence::EvidenceProvenance;
+    if payload["kind"] != "context_prepared" || payload["replay_bundle_digest"].is_string() {
+        return Ok(false);
+    }
+    let mut replay: crate::evidence::EvidenceBundle =
+        serde_json::from_value(payload["replay_bundle"].clone())
+            .map_err(|_| StorageError::Unavailable("invalid prepared context snapshot".into()))?;
+    if !replay
+        .items
+        .iter()
+        .any(|item| matches!(item.provenance, EvidenceProvenance::SessionTurn { .. }))
+    {
+        return Ok(false);
+    }
+    if payload["bundle_digest"] != hash(encode(&replay)?) {
+        return Err(StorageError::Unavailable(
+            "invalid prepared context snapshot".into(),
+        ));
+    }
+    for item in &mut replay.items {
+        if matches!(item.provenance, EvidenceProvenance::SessionTurn { .. }) {
+            item.content.clear();
+        }
+    }
+    replay.rendered_context.clear();
+    payload["replay_bundle_digest"] = json!(hash(encode(&replay)?));
+    payload["replay_bundle"] = json!(replay);
+    Ok(true)
 }
 
 impl SqliteTx {
@@ -304,17 +341,23 @@ impl SqliteTx {
             serde_json::from_value(payload["replay_bundle"].clone()).map_err(|_| {
                 StorageError::Unavailable("invalid prepared context snapshot".into())
             })?;
+        let proof = payload["replay_bundle_digest"]
+            .as_str()
+            .unwrap_or(payload["bundle_digest"].as_str().unwrap_or(""));
         if bundle.tenant_id != self.scope.tenant_id
             || bundle.workspace_id != self.scope.workspace_id
-            || payload["bundle_digest"] != hash(encode(&bundle)?)
+            || proof != hash(encode(&bundle)?)
         {
             return Err(StorageError::Unavailable(
                 "invalid prepared context snapshot".into(),
             ));
         }
-        Ok(Some(
-            json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_bundle":bundle}),
-        ))
+        let mut response =
+            json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_bundle":bundle});
+        if payload["replay_bundle_digest"].is_string() {
+            response["archive_bundle_digest"] = payload["bundle_digest"].clone();
+        }
+        Ok(Some(response))
     }
 
     async fn require_run_reference_visible(
@@ -432,7 +475,8 @@ impl SqliteTx {
                 "event identity reused with different payload".into(),
             ));
         }
-        let payload = json!({"kind":"context_prepared","event_id":event_id,"reporter":"server","context_request_digest":request_digest,"bundle_digest":hash(encode(bundle)?),"replay_bundle":bundle,"citations":citations,"retrieval":bundle.retrieval,"routes":bundle.routes,"warnings":bundle.warnings,"budget":bundle.budget,"used_bytes":bundle.used_bytes,"omitted_conflict_groups":bundle.omitted_conflict_groups,"delivery_status":"prepared_not_confirmed_received_or_used"});
+        let mut payload = json!({"kind":"context_prepared","event_id":event_id,"reporter":"server","context_request_digest":request_digest,"bundle_digest":hash(encode(bundle)?),"replay_bundle":bundle,"citations":citations,"retrieval":bundle.retrieval,"routes":bundle.routes,"warnings":bundle.warnings,"budget":bundle.budget,"used_bytes":bundle.used_bytes,"omitted_conflict_groups":bundle.omitted_conflict_groups,"delivery_status":"prepared_not_confirmed_received_or_used"});
+        redact_archive_replay(&mut payload)?;
         self.validate_prepared_payload(&payload).await?;
         let payload = encode(&payload)?;
         let digest = hash(&payload);

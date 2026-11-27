@@ -53,6 +53,71 @@ impl ProposalPlan {
     }
 }
 
+fn proposal_with_digests(proposal: &ProposalPlan) -> ProposalPlan {
+    let mut durable = proposal.clone();
+    for candidate in &mut durable.candidates {
+        for support in &mut candidate.supports {
+            support.quote = crate::storage::hash(&support.quote);
+        }
+    }
+    durable
+}
+
+fn restore_proposal(
+    value: Value,
+    snapshot: &FrozenSnapshot,
+    conditions: &[String],
+) -> Result<ProposalPlan> {
+    let mut proposal: ProposalPlan = serde_json::from_value(value).map_err(|_| invalid_plan())?;
+    for candidate in &mut proposal.candidates {
+        for support in &mut candidate.supports {
+            let item = snapshot
+                .items
+                .iter()
+                .find(|item| {
+                    item.turn.turn_id == support.turn_id
+                        && item.principal_id == support.principal_id
+                        && item.feedback.feedback_id == support.feedback_id
+                })
+                .ok_or_else(invalid_plan)?;
+            let body = match support.field {
+                crate::learning::SupportField::Question => &item.turn.question,
+                crate::learning::SupportField::Answer => &item.turn.answer,
+            };
+            let quote = body
+                .get(support.byte_start..support.byte_end)
+                .ok_or_else(invalid_plan)?;
+            if crate::storage::hash(quote) != support.quote {
+                return Err(invalid_plan());
+            }
+            support.quote = quote.to_owned();
+        }
+    }
+    ProposalPlan::parse(json!(proposal), snapshot, conditions)
+}
+
+fn require_derived_learning(proposal: &ProposalPlan, snapshot: &FrozenSnapshot) -> Result<()> {
+    for candidate in &proposal.candidates {
+        let published = [&candidate.statement, &candidate.why]
+            .into_iter()
+            .chain(&candidate.conditions);
+        if snapshot.items.iter().any(|item| {
+            [&item.turn.question, &item.turn.answer]
+                .into_iter()
+                .any(|raw| {
+                    let raw = raw.trim();
+                    !raw.is_empty()
+                        && published.clone().any(|field| {
+                            field.trim() == raw || (raw.len() >= 16 && field.contains(raw))
+                        })
+                })
+        }) {
+            return Err(invalid_plan());
+        }
+    }
+    Ok(())
+}
+
 impl VerificationPlan {
     fn parse(value: Value, candidate_count: usize) -> Result<Self> {
         if value.to_string().len() > 32 * 1024 {
@@ -155,11 +220,39 @@ pub(super) async fn process(
     let a = auth(claim);
     let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
-    let run: ImproveRun = tx.improve_run(*session_id, *improve_id).await?;
+    let mut run: ImproveRun = tx.improve_run(*session_id, *improve_id).await?;
+    let mut entries = std::collections::HashMap::new();
+    for item in &run.snapshot.items {
+        if item.turn.question.is_empty()
+            && let std::collections::hash_map::Entry::Vacant(entry) =
+                entries.entry(item.turn.turn_id)
+        {
+            let archive = tx.archive_entry(*session_id, item.turn.turn_id).await?;
+            if archive.locator.source != item.turn.source_event_id {
+                return Err(AppError::NotFound);
+            }
+            entry.insert(archive);
+        }
+    }
     tx.commit().await?;
+    let mut hydrated = std::collections::HashMap::new();
+    for (turn, entry) in entries {
+        hydrated.insert(turn, service.archived_body(&entry).await?);
+    }
+    if !hydrated.is_empty() {
+        let mut tx = service.read(&a, Permission::Write).await?;
+        guard(&mut tx, claim, payload).await?;
+        tx.commit().await?;
+        for item in &mut run.snapshot.items {
+            if let Some(body) = hydrated.get(&item.turn.turn_id) {
+                item.turn.question.clone_from(&body.question);
+                item.turn.answer.clone_from(&body.answer);
+            }
+        }
+    }
 
     let proposal = if let Some(saved) = run.proposal_plan.clone() {
-        ProposalPlan::parse(saved, &run.snapshot, &run.conditions)?
+        restore_proposal(saved, &run.snapshot, &run.conditions)?
     } else {
         let value = if run.snapshot.items.is_empty() {
             json!({"candidates":[]})
@@ -171,10 +264,15 @@ pub(super) async fn process(
                 .await?
         };
         let proposal = ProposalPlan::parse(value, &run.snapshot, &run.conditions)?;
+        require_derived_learning(&proposal, &run.snapshot)?;
         let mut tx = service.write(&a, Permission::Write).await?;
         guard(&mut tx, claim, payload).await?;
-        tx.save_improve_proposal(*session_id, *improve_id, &json!(proposal))
-            .await?;
+        tx.save_improve_proposal(
+            *session_id,
+            *improve_id,
+            &json!(proposal_with_digests(&proposal)),
+        )
+        .await?;
         tx.audit(
             "learning.proposed",
             *improve_id,
@@ -236,8 +334,9 @@ pub(super) async fn process(
     let mut tx = service.write(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let mut learnings = Vec::new();
+    let durable = proposal_with_digests(&proposal);
     for decision in verification.decisions.iter().filter(|d| d.accepted) {
-        let candidate = &proposal.candidates[decision.candidate];
+        let candidate = &durable.candidates[decision.candidate];
         let learning_id = graph::entity_id(&format!(
             "learning:{}:{}:{}:{}",
             claim.scope.tenant_id, claim.scope.workspace_id, improve_id, decision.candidate
