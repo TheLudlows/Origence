@@ -25,13 +25,12 @@ const usage = `Usage: origence-deploy install [--endpoint URL] [--token KEY | --
 --show-secrets           Print workspace and newly issued deployment credentials to stdout
 --credentials-file PATH  Write a new private JSON file outside Git (never overwrites)`;
 
-async function prepareConsole() {
+function prepareConsole() {
   const entry = join(repo, "ui", "dist", "server.js");
   if (!existsSync(entry) || !existsSync(join(repo, "ui", "dist", "public", "index.html"))) {
     npm("--prefix", "ui", "ci", "--ignore-scripts", "--no-audit", "--no-fund");
     npm("--prefix", "ui", "run", "build");
   }
-  return import("../ui/dist/console-accounts.js");
 }
 
 function localDataDir(input, state, previous) {
@@ -138,6 +137,7 @@ async function ensureConsole(state, config, old, env) {
   await stopService(state, "ui");
   const dir = startService(state, "ui", process.execPath, [
     join(repo, "ui", "dist", "server.js"), "--host", "127.0.0.1", "--port", url.port, "--strictPort",
+    ...(config.mode === "workspace" ? ["--key-only"] : []),
   ], repo, env);
   await waitForService(ui, "/", dir, "Origence console");
   state.value.uiBinding = config.binding;
@@ -152,7 +152,8 @@ async function uninstall(state) {
     api: () => stopService(state, "api"),
     account: async () => {
       if (state.value.accountOwned && existsSync(db)) {
-        const accounts = await prepareConsole();
+        prepareConsole();
+        const accounts = await import("../ui/dist/console-accounts.js");
         accounts.configureConsoleAccount(db, { kind: "remove-account", username: account });
       }
     },
@@ -230,17 +231,20 @@ async function install(state, args) {
   state.save();
 
   const db = join(state.dir, "console-accounts.db");
-  const accounts = await prepareConsole();
+  prepareConsole();
   if (mode === "workspace") {
-    accounts.prepareConsoleAccounts(db);
     if (state.value.accountOwned) {
-      accounts.configureConsoleAccount(db, { kind: "remove-account", username: account });
+      if (existsSync(db)) {
+        const accounts = await import("../ui/dist/console-accounts.js");
+        accounts.configureConsoleAccount(db, { kind: "remove-account", username: account });
+      }
       delete state.value.accountOwned;
       delete state.value.accountBinding;
       delete state.value.accountWorkspace;
       state.save();
     }
   } else if (state.value.accountBinding !== config.binding || !existsSync(db)) {
+    const accounts = await import("../ui/dist/console-accounts.js");
     accounts.prepareConsoleAccounts(db);
     state.value.accountOwned = true;
     state.save();
@@ -254,8 +258,11 @@ async function install(state, args) {
     state.value.accountWorkspace = who.workspace_id;
     state.save();
   }
-  const uiEnv = { ...env, ORIGENCE_UI_ACCOUNTS_DB: db, ORIGENCE_API_BASE_URL: endpoint.origin };
-  if (mode === "account") uiEnv[grantKey] = token;
+  const uiEnv = { ...env, ORIGENCE_API_BASE_URL: endpoint.origin };
+  if (mode === "account") {
+    uiEnv.ORIGENCE_UI_ACCOUNTS_DB = db;
+    uiEnv[grantKey] = token;
+  }
   delete uiEnv.ORIGENCE_UI_ORIGIN;
   await ensureConsole(state, config, old, uiEnv);
   const login = mode === "workspace" ? { workspace_key: token } : { username: account, password: config.password };

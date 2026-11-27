@@ -1,4 +1,4 @@
-use super::http::{auth, token};
+use super::http::{CursorPage, auth, token, uncached_json};
 use crate::{
     error::Result,
     service::{GlobalKnowledgeDecision, Service},
@@ -6,12 +6,11 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    http::{HeaderMap, header},
+    http::HeaderMap,
     response::IntoResponse,
     routing::{get, post},
 };
 use serde::Deserialize;
-use serde_json::Value;
 use uuid::Uuid;
 
 pub(super) fn routes() -> Router<Service> {
@@ -29,22 +28,11 @@ pub(super) fn routes() -> Router<Service> {
         )
 }
 
-fn private(value: Value) -> impl IntoResponse {
-    ([(header::CACHE_CONTROL, "no-store")], Json(value))
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Submission {
     asset_id: Uuid,
     version: i32,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Page {
-    after: Option<Uuid>,
-    limit: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -67,7 +55,7 @@ async fn submit(
     Json(input): Json<Submission>,
 ) -> Result<impl IntoResponse> {
     let auth = auth(&service, &headers).await?;
-    Ok(private(
+    Ok(uncached_json(
         service
             .submit_global_knowledge(&auth, input.asset_id, input.version)
             .await?,
@@ -77,10 +65,10 @@ async fn submit(
 async fn catalog(
     State(service): State<Service>,
     headers: HeaderMap,
-    Query(page): Query<Page>,
+    Query(page): Query<CursorPage>,
 ) -> Result<impl IntoResponse> {
     let auth = auth(&service, &headers).await?;
-    Ok(private(
+    Ok(uncached_json(
         service
             .global_knowledge_catalog(
                 &auth,
@@ -97,7 +85,7 @@ async fn snapshot(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let auth = auth(&service, &headers).await?;
-    Ok(private(service.global_knowledge(&auth, id).await?))
+    Ok(uncached_json(service.global_knowledge(&auth, id).await?))
 }
 
 async fn reviews(
@@ -105,7 +93,7 @@ async fn reviews(
     headers: HeaderMap,
     Query(page): Query<ReviewPage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .global_review_catalog(
                 token(&headers)?,
@@ -122,7 +110,7 @@ async fn review_detail(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service.global_review_detail(token(&headers)?, id).await?,
     ))
 }
@@ -133,7 +121,7 @@ async fn review(
     Path(id): Path<Uuid>,
     Json(input): Json<Review>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .review_global_knowledge(token(&headers)?, id, input.decision)
             .await?,

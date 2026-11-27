@@ -194,15 +194,20 @@ impl SqliteTx {
         if !private && row.state != "approved" {
             return Err(StorageError::NotFound);
         }
+        let content = self.global_snapshot_content(&row).await?;
+        let mut value = release_value(&row, private);
+        value["content"] = json!(content);
+        Ok(value)
+    }
+
+    async fn global_snapshot_content(&mut self, row: &Release) -> StorageResult<String> {
         let chunks: Vec<String> = sqlite_db::query_scalar("SELECT content FROM oc_global_knowledge_chunks WHERE publication_id=? ORDER BY byte_start")
-            .bind(id).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
+            .bind(row.id).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         let content = chunks.concat();
         if hash(&content) != row.content_hash {
             return Err(invalid_copy());
         }
-        let mut value = release_value(&row, private);
-        value["content"] = json!(content);
-        Ok(value)
+        Ok(content)
     }
 
     pub(crate) async fn moderate_global_snapshot(
@@ -228,7 +233,7 @@ impl SqliteTx {
                     "submitted knowledge source changed".into(),
                 ));
             }
-            self.global_snapshot(id, true).await?;
+            self.global_snapshot_content(&row).await?;
         }
         sqlite_db::query("UPDATE oc_global_knowledge SET state=?,reviewed_at=? WHERE id=?")
             .bind(to)

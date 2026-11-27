@@ -1,50 +1,11 @@
 import { api } from "./api.js";
-import { button, code, el, empty, heading, message, panel, short } from "./components.js";
+import { button, code, cursor, el, heading, message, paged, panel, short } from "./components.js";
 import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
 
 const prefix = "/admin/deployment/workspaces";
 type Workspace = { workspace_id: string; name: string };
 type Turn = { question: string; answer: string };
-
-function cursor(path: string, after: string | number | null) {
-  if (after === null) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}after=${encodeURIComponent(after)}`;
-}
-
-function paged<T, C extends string | number>(
-  root: HTMLElement,
-  signal: AbortSignal,
-  read: (after: C | null) => Promise<{ items: T[]; next_after: C | null }>,
-  row: (item: T) => HTMLElement,
-) {
-  const items = el("div"), feedback = el("div");
-  let after: C | null = null;
-  const more = button("加载更多", load);
-  async function load() {
-    if (signal.aborted) return;
-    more.disabled = true;
-    feedback.replaceChildren();
-    try {
-      const page = await read(after);
-      if (signal.aborted) return;
-      after = page.next_after;
-      items.append(...page.items.map(row));
-      more.textContent = "加载更多";
-      more.hidden = after === null;
-      if (!items.childElementCount && more.hidden)
-        items.append(empty("暂无记录", "此范围内暂无可查看的记录。"));
-    } catch (error) {
-      if (signal.aborted) return;
-      message(feedback, error);
-      more.textContent = "重试";
-    } finally {
-      more.disabled = false;
-    }
-  }
-  root.append(items, feedback, more);
-  void load();
-}
 
 export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout: () => Promise<void>) {
   const workspaceList = el("div"), content = el("main", "content");

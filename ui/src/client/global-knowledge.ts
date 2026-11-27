@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { badge, button, el, field, heading, message, panel, select, short, type ViewContext } from "./components.js";
+import { badge, button, cursor, el, field, heading, message, paged, panel, select, short, type ViewContext } from "./components.js";
 import type { Page } from "./types.js";
 
 type State = "pending" | "approved" | "rejected" | "withdrawn";
@@ -29,33 +29,15 @@ function catalog(
   signal: AbortSignal,
   open: (id: string) => void,
 ) {
-  const items = el("div");
-  const feedback = el("div");
-  let after: string | null = null;
-  const more = button("加载更多", load);
-  async function load() {
-    more.disabled = true;
-    feedback.replaceChildren();
-    try {
-      const suffix = after ? `${path.includes("?") ? "&" : "?"}after=${encodeURIComponent(after)}` : "";
-      const page = await api.get<Page<GlobalKnowledge>>(path + suffix, signal);
-      if (signal.aborted) return;
-      items.append(...page.items.map((item) => panel(
-        item.title,
-        el("p", "muted", `v${item.version} · ${publicationStatus[item.state]}${item.workspace_id ? ` · 工作空间 ${short(item.workspace_id)}` : ""}`),
-        button(`查看 ${item.title}`, () => open(item.publication_id), "link"),
-      )));
-      after = page.next_after;
-      more.hidden = !after;
-      if (!items.childElementCount) feedback.append(el("p", "muted", "暂无记录。"));
-    } catch (error) {
-      if (!signal.aborted) message(feedback, error);
-    } finally {
-      more.disabled = false;
-    }
-  }
-  target.replaceChildren(items, feedback, more);
-  void load();
+  target.replaceChildren();
+  paged<GlobalKnowledge, string>(target, signal,
+    (after) => api.get<Page<GlobalKnowledge>>(cursor(path, after), signal),
+    (item) => panel(
+      item.title,
+      el("p", "muted", `v${item.version} · ${publicationStatus[item.state]}${item.workspace_id ? ` · 工作空间 ${short(item.workspace_id)}` : ""}`),
+      button(`查看 ${item.title}`, () => open(item.publication_id), "link"),
+    ),
+  );
 }
 
 export async function globalKnowledgePage(root: HTMLElement, ctx: ViewContext, id?: string) {

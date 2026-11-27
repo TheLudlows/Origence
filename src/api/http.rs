@@ -104,6 +104,17 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .with_state(service)
         .merge(mcp)
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CursorPage {
+    pub(super) after: Option<Uuid>,
+    pub(super) limit: Option<usize>,
+}
+
+pub(super) fn uncached_json(value: Value) -> impl IntoResponse {
+    ([(header::CACHE_CONTROL, "no-store")], Json(value))
+}
+
 pub(super) fn token(h: &HeaderMap) -> Result<&str> {
     h.get("Authorization")
         .and_then(|v| v.to_str().ok())

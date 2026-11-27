@@ -11,6 +11,7 @@ const singleWorkspace = "55555555-5555-4555-8555-555555555555";
 const workspaceKey = "oc_" + "a".repeat(64);
 const deploymentKey = "oc_admin_" + "b".repeat(64);
 const publication = "66666666-6666-4666-8666-666666666666";
+const reviewCursor = "77777777-7777-4777-8777-777777777777";
 const password = "console-fixture-密码-01";
 const grants = [
   { workspaceId: alpha, name: "研发", authorization: "Bearer synthetic-alpha" },
@@ -33,6 +34,7 @@ async function run() {
     content: "发布版运维知识正文", source_event_id: excluded, content_hash: "a".repeat(64),
     identity: null, normalization_status: "not_applicable", restored_from: null };
   let submission;
+  let reviewRetry = false;
   const upstream = createServer(async (req, res) => {
     const url = new URL(req.url, "http://fixture.invalid");
     const { pathname: path } = url;
@@ -50,8 +52,17 @@ async function run() {
       const base = "/admin/deployment/workspaces";
       const review = "/admin/deployment/global-knowledge";
       if (path === "/admin/deployment/me") return send({ role: "deployment_admin" });
-      if (path === review)
+      if (path === review) {
+        if (submission?.state === "pending" && url.searchParams.get("state") === "pending") {
+          if (url.searchParams.get("after") !== reviewCursor)
+            return send({ items: [{ ...submission, publication_id: reviewCursor, title: "另一条待审核知识" }], next_after: reviewCursor });
+          if (!reviewRetry) {
+            reviewRetry = true;
+            return send({ error: { message: "模拟审核分页失败" } }, 502);
+          }
+        }
         return send({ items: submission?.state === url.searchParams.get("state") ? [submission] : [], next_after: null });
+      }
       if (path === `${review}/${publication}`) return send(submission);
       if (path === `${review}/${publication}/review` && req.method === "POST") {
         const { decision } = await readJson();
@@ -77,6 +88,9 @@ async function run() {
       if (path === "/v1/whoami") return send({ id: singleWorkspace, workspace_id: singleWorkspace, role: "workspace" });
       if (path === `/v1/assets/${alpha}`) return send(knowledge);
       if (path === `/v1/assets/${alpha}/runs`) return send({ items: [], next_after: null });
+      if (path === "/v1/assets") return send({ items: [knowledge], next_after: null });
+      if (path === "/v1/search" && submission?.state === "approved")
+        return send({ hits: [{ ...knowledge, asset_id: publication, scope: "global", locator: { byte_start: 0 } }] });
       if (path === "/v1/global-knowledge" && req.method === "POST") {
         assert.deepEqual(await readJson(), { asset_id: alpha, version: 1 });
         submission ??= { publication_id: publication, workspace_id: singleWorkspace, title: knowledge.title,
@@ -221,7 +235,7 @@ async function run() {
     await keyPage.getByRole("button", { name: "提交到全局知识审核" }).click();
     await keyPage.getByText("全局知识 v1 · 待审核", { exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "全局知识", exact: true }).click();
-    await keyPage.getByText("暂无记录。", { exact: true }).waitFor();
+    await keyPage.getByRole("heading", { name: "暂无记录", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "退出", exact: true }).click();
     await keyField.fill(deploymentKey);
     await keyPage.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
@@ -238,6 +252,10 @@ async function run() {
     await keyPage.getByRole("button", { name: "Memory sample", exact: true }).click();
     await keyPage.getByText("Recorded memory body", { exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "全局知识审核", exact: true }).click();
+    await keyPage.getByText("另一条待审核知识", { exact: true }).waitFor();
+    await keyPage.getByRole("button", { name: "加载更多", exact: true }).click();
+    await keyPage.getByText("模拟审核分页失败", { exact: true }).waitFor();
+    await keyPage.getByRole("button", { name: "重试", exact: true }).click();
     await keyPage.getByRole("button", { name: "查看 共享运维手册", exact: true }).click();
     await keyPage.getByText(knowledge.content, { exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "批准发布", exact: true }).click();
@@ -245,6 +263,12 @@ async function run() {
     await keyPage.getByRole("button", { name: "退出", exact: true }).click();
     await keyField.fill(workspaceKey);
     await keyPage.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
+    await keyPage.getByRole("button", { name: "知识管理", exact: true }).click();
+    await keyPage.getByLabel("查询", { exact: true }).fill("运维");
+    await keyPage.getByRole("button", { name: "检索预览", exact: true }).click();
+    await keyPage.getByRole("button", { name: "查看命中版本 v1", exact: true }).click();
+    await keyPage.waitForURL(`**/#global-knowledge/${publication}`);
+    await keyPage.getByText(knowledge.content, { exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "全局知识", exact: true }).click();
     await keyPage.getByRole("button", { name: "查看 共享运维手册", exact: true }).click();
     await keyPage.getByText(knowledge.content, { exact: true }).waitFor();

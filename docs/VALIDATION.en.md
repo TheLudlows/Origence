@@ -4,6 +4,17 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Single-key deployment and global knowledge cleanup
+
+Windows validation used PR #178 at `ec3aebc` with the cleanup changes, embedded AnySeek, and Rust 1.98.0.
+`cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` passed.
+`cargo test --locked --test local` passed nine tests across the `global_knowledge`, `workspace_access`, and `mcp_runs` filters.
+Manual SQL review confirmed that approval still reads one table within the same transaction, orders rows by starting byte, and verifies the content hash.
+
+`npm --prefix ui test` passed 34 tests on Node 24.15.0. `node ui/scripts/check-console-session-browser.cjs` passed in local Chromium against the fixture server, including review pagination and retry, opening the pinned release according to search scope, and both account and workspace key sign-in.
+The public Windows deployment launcher passed sign-in and Run reads for both modes in temporary directories. Fresh deployment also verified administrator sign-in and started without creating an account database while the inherited account database path was absent. Membership mode still created and used the managed account database.
+The local checks did not rerun Linux or the full native agent installer suite.
+
 ## 2026-11-27 · MCP and native client CI contracts
 
 Based on PR #178 at `37129e8` and its follow-up changes, with Rust 1.98.0, fresh isolated Windows

@@ -21,6 +21,8 @@ npm start
 
 Run `origence --offline workspace-create --workspace-key <name>` while the host is stopped, then start the API and console. Use the issued key to sign into the console or configure an Agent. The console opens the key's workspace for browsing archived turns and managing memories. Rotate the key with `origence --offline workspace-key-rotate <workspace-id>` and sign in with the replacement.
 
+The console started by `origence-deploy install --init <name>` uses key sign-in and needs no account database. For a manual start, use `npm start -- --key-only`.
+
 ### Deployment administrator
 
 Run `origence --offline deployment-admin-rotate` while the host is stopped to issue or rotate the deployment administrator key. Sign in through the console access-key field and select a workspace to inspect its original conversations, Runs, and published memories and knowledge. Rotation invalidates the previous key and its console session.
@@ -52,13 +54,13 @@ An eight-hour in-memory console session survives page reloads. The browser recei
 
 ### Create a child workspace
 
-Sign in as a root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
+In an existing membership-based workspace, sign in as the root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
 ### API key management
 
-Sign in as an administrator, select a workspace, and open **API Key** in the sidebar. The page lists
+In an existing membership-based workspace, sign in as an administrator, select the workspace, and open **API Key** in the sidebar. The page lists
 credentials issued there and lets administrators create them, change roles, rotate, or revoke them.
 To grant access using a key issued in another workspace in the same tenant, enter its logical key ID
 in the target workspace. Removing an additional grant removes access to that workspace. Rotation

@@ -7,6 +7,19 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 单 Key 部署与全局知识清理
+
+基于 PR #178 的 `ec3aebc` 和后续清理，使用 Windows、本地嵌入式 AnySeek 与 Rust 1.98.0。
+`cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -- -D warnings` 通过。
+`cargo test --locked --test local` 分别以 `global_knowledge`、`workspace_access` 和 `mcp_runs` 为过滤条件运行，合计通过 9 项。
+手工检查了批准时读取正文的 SQL。仍在同一事务按发布 ID 读取单表、按字节起点排序，并验证内容哈希。
+
+Node 24.15.0 的 `npm --prefix ui test` 通过 34 项。`node ui/scripts/check-console-session-browser.cjs`
+通过本机 Chromium 合成服务验收，包括审核分页重试、按检索范围打开固定版本、成员账号登录和单 Key 登录。
+Windows 公共部署入口在临时目录中验证了两个模式的控制台登录和 Run 读取。新部署还验证了管理员 Key 登录，
+并确认外部配置指向不存在的账号库时也能启动，且部署未创建账号库。成员授权模式按原流程创建并使用账号库。
+上述本地检查未重跑 Linux 或完整原生 Agent 安装套件。
+
 ## 2026-11-27 · MCP 与客户端 CI 契约修复
 
 基于 PR #178 的 `37129e8` 和后续修复，在 Windows 使用 Rust 1.98.0、隔离新库和嵌入式 AnySeek。

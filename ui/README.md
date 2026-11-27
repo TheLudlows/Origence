@@ -23,6 +23,8 @@ npm start
 
 宿主停机时运行 `origence --offline workspace-create --workspace-key <名称>` 创建空间，然后启动 API 和控制台。用签发的 Key 登录控制台或配置 Agent。控制台打开该 Key 对应的空间，支持读取归档问答和管理记忆。轮换使用 `origence --offline workspace-key-rotate <工作空间 ID>`，再用新 Key 登录。
 
+`origence-deploy install --init <名称>` 启动的控制台仅使用 Key 登录，无需创建账号库。手动启动时可用 `npm start -- --key-only`。
+
 ### 部署管理员
 
 宿主停机时运行 `origence --offline deployment-admin-rotate` 签发或轮换部署管理员 Key。用该 Key 从控制台的「访问 Key」入口登录，选择任意工作空间，便可查看其原始会话、Run、已发布记忆和知识。轮换后旧 Key 及其登录会话失效。
@@ -54,7 +56,7 @@ PowerShell 可以把 `Read-Host -MaskInput` 的输出传给同一个 `set-passwo
 
 ### API Key 管理
 
-用管理员账号登录并选择工作区后，在侧栏进入 **API Key**。可查看本区签发的凭据、创建与调整权限、
+在现有成员授权工作区中，用管理员账号登录并选择工作区后，在侧栏进入 **API Key**。可查看本区签发的凭据、创建与调整权限、
 轮换或撤销。为同租户的其他工作区签发的 Key 添加权限时，在目标工作区输入其逻辑 Key ID。
 移除额外授权只撤销当前工作区的访问。轮换会立即使旧 token 失效，保留逻辑 Key ID 和原授权。
 

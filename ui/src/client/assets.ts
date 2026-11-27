@@ -58,7 +58,7 @@ export async function assetsPage(
       hits.replaceChildren(el("p", "muted", "正在检索…"));
       try {
         const result = await api.post<{
-          hits: (Asset & { locator: Record<string, unknown> })[];
+          hits: (Asset & { scope: "workspace" | "global"; locator: Record<string, unknown> })[];
           warnings?: string[];
           effective_mode?: string;
         }>(
@@ -85,7 +85,7 @@ export async function assetsPage(
             ),
           );
         for (const item of matches) {
-          const global = item.locator?.parser === "global-knowledge-snapshot:v1";
+          const global = item.scope === "global";
           const source = !global && canWrite(ctx.role) ? sourcePreviewTarget() : null;
           hits.append(
             panel(
@@ -97,7 +97,9 @@ export async function assetsPage(
                 item.normalization_status === "unnormalized"
                   ? "查看命中证据"
                   : `查看命中版本 v${item.version}`,
-                () => ctx.navigate(global ? "global-knowledge" : "asset", item.asset_id, item.version),
+                () => global
+                  ? ctx.navigate("global-knowledge", item.asset_id)
+                  : ctx.navigate("asset", item.asset_id, item.version),
                 "link",
               ),
               source

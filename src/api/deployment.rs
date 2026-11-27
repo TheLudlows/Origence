@@ -1,15 +1,15 @@
 //! Read-only HTTP endpoints for deployment administrators.
-use super::http::token;
+use super::http::{CursorPage, token, uncached_json};
 use crate::{error::Result, service::Service};
 use axum::{
-    Json, Router,
+    Router,
     extract::{Path, Query, State},
-    http::{HeaderMap, header},
+    http::HeaderMap,
     response::IntoResponse,
     routing::get,
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 use uuid::Uuid;
 
 pub(super) fn routes() -> Router<Service> {
@@ -39,17 +39,6 @@ pub(super) fn routes() -> Router<Service> {
         )
 }
 
-fn private(value: Value) -> impl IntoResponse {
-    ([(header::CACHE_CONTROL, "no-store")], Json(value))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Page {
-    after: Option<Uuid>,
-    limit: Option<usize>,
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SequencePage {
@@ -75,15 +64,15 @@ async fn me(State(service): State<Service>, headers: HeaderMap) -> Result<impl I
     service
         .authenticate_deployment_admin(token(&headers)?)
         .await?;
-    Ok(private(json!({"role":"deployment_admin"})))
+    Ok(uncached_json(json!({"role":"deployment_admin"})))
 }
 
 async fn workspaces(
     State(service): State<Service>,
     headers: HeaderMap,
-    Query(page): Query<Page>,
+    Query(page): Query<CursorPage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_workspaces(
                 token(&headers)?,
@@ -98,9 +87,9 @@ async fn sessions(
     State(service): State<Service>,
     headers: HeaderMap,
     Path(workspace): Path<Uuid>,
-    Query(page): Query<Page>,
+    Query(page): Query<CursorPage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_sessions(
                 token(&headers)?,
@@ -118,7 +107,7 @@ async fn turns(
     Path((workspace, session)): Path<(Uuid, Uuid)>,
     Query(page): Query<SequencePage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_turns(
                 token(&headers)?,
@@ -135,9 +124,9 @@ async fn runs(
     State(service): State<Service>,
     headers: HeaderMap,
     Path(workspace): Path<Uuid>,
-    Query(page): Query<Page>,
+    Query(page): Query<CursorPage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_runs(
                 token(&headers)?,
@@ -155,7 +144,7 @@ async fn run(
     Path((workspace, run)): Path<(Uuid, Uuid)>,
     Query(page): Query<SequencePage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_run(
                 token(&headers)?,
@@ -174,7 +163,7 @@ async fn assets(
     Path(workspace): Path<Uuid>,
     Query(page): Query<AssetPage>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_assets(
                 token(&headers)?,
@@ -193,7 +182,7 @@ async fn asset(
     Path((workspace, asset)): Path<(Uuid, Uuid)>,
     Query(query): Query<AssetVersion>,
 ) -> Result<impl IntoResponse> {
-    Ok(private(
+    Ok(uncached_json(
         service
             .inspect_asset(token(&headers)?, workspace, asset, query.version)
             .await?,

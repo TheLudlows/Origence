@@ -160,6 +160,7 @@ def smoke(binary, claude, codex, root, browser):
     Path(env["CODEX_HOME"]).mkdir()
     env.pop("ZDOTDIR", None)
     state = root / ("Origence" if WINDOWS else ".origence") / "installer" / "state.json"
+    env["ORIGENCE_UI_ACCOUNTS_DB"] = str(root / "unused-console-accounts.db")
     rc = root / ".bashrc"
     previous_shell = "export OC_API_KEY=prior-shell-value\n# unrelated edit"
     registry_before = registry_values() if WINDOWS else None
@@ -199,6 +200,9 @@ def smoke(binary, claude, codex, root, browser):
                 and "password" not in credentials and first["console-session"]["status"] == "success"
                 and first["deployment-admin-session"]["status"] == "success",
                 "Fresh deployment must provision the workspace and deployment administrator Keys")
+        require(not (state.parent / "console-accounts.db").exists()
+                and not Path(env["ORIGENCE_UI_ACCOUNTS_DB"]).exists(),
+                "A fresh deployment must not create or require a console account database")
         require("claude-code" not in first and "codex" not in first and "agent" not in json.loads(state.read_text(encoding="utf-8")),
                 "Deployment must not configure either agent")
         if WINDOWS:
