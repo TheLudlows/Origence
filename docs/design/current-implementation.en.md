@@ -2,13 +2,15 @@
 
 **English** · [简体中文](current-implementation.md)
 
-Updated 2026-11-18. Code baseline is main `4160fd5`. This page describes the current architecture and invariants. See [API](../API.en.md) for contracts, [OPERATIONS](../OPERATIONS.en.md) for operation and recovery, [STATUS](../STATUS.en.md) for progress, and [VALIDATION](../VALIDATION.en.md) for acceptance. A1–A6 numbers and explicit anchors are retained for source-code references. Historical designs are in Git. The [architecture plan](agent-data-foundation.en.md) describes first-release goals and acceptance contracts.
+Product and storage boundaries reviewed against main `d4867aa` on 2026-11-27. See [API](../API.en.md) for contracts, [OPERATIONS](../OPERATIONS.en.md) for operation and recovery, [STATUS](../STATUS.en.md) for progress, and [VALIDATION](../VALIDATION.en.md) for acceptance. A1–A6 numbers and explicit anchors are retained for source-code references. Historical designs are in Git. The [architecture plan](agent-data-foundation.en.md) describes first-release goals and acceptance contracts.
 
 ## 1. Product scope
 
 Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. It currently provides memory and knowledge writes and retrieval, Skill candidates and approved publication, private Run recording and reading, context assembly, and explicit session learning.
 
-Claude Code and Codex are the initial pilot hosts. Entry points include Streamable HTTP MCP, explicit archive and Run tools, and directory exports of approved Skills. See [STATUS](../STATUS.en.md) for pilot progress.
+- Origence stores, delivers, and traces authorized data. Claude Code and Codex handle inference, orchestration, Skill loading, and tool execution. Origence can call configured models for its data processing and record explicitly submitted turns. Agent hosts manage their native chats, tool processes, and working state. Tool calls still require execution-side authorization after Skill publication.
+- Private Q&A, feedback, Runs, and unpublished candidates are isolated by stable logical key within each workspace. Authorized rotation preserves access to the same archive. Published memory, knowledge, Learning, and Skills are shared under workspace authorization. Moving private material into shared use requires explicit submission, source validation, and the applicable publication workflow.
+- Claude Code and Codex are the initial pilot hosts. Server preparation, client reports, and owner-transcribed external assessments are recorded separately. Uncollected activity stays unknown. The pilot evaluates real task outcomes and independent assessment. [STATUS](../STATUS.en.md) · [P0 pilot #91](https://github.com/TheLudlows/Origence/issues/91)
 
 ## 2. Current architecture
 
@@ -29,11 +31,11 @@ flowchart TD
     W --> B[Blob original files]
     W --> R[RetrievalStore]
     S --> R
-    R --> F[AnySeek full-text, vector, and one-hop candidates]
+    R --> F[AnySeek shared text, private turn bodies, and retrieval]
     W --> P[Configured models and parsers]
 ```
 
-HTTP and the single Worker share one `StorageEngine`. The SQLite authority holds the data directory's exclusive OS lock. MCP clients connect directly to the host's `/mcp` endpoint. Offline CLI access opens the directory exclusively. Local mode opens the AnySeek Catalog in the Origence process through the Rust SDK. Cloud mode connects to standalone AnySeek over HTTP using a credential held only by the host. Both modes choose a tenant UUID namespace and workspace collection from the authenticated Scope. AnySeek stores published text and retrieval indexes. Origence determines employee permissions and source validity. [Operations and deployment](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
+HTTP and the single Worker share one `StorageEngine`. SQLite holds the data directory's exclusive OS lock. MCP clients connect directly to the host's `/mcp` endpoint, the Node.js console uses HTTP, and offline CLI access opens the directory exclusively. Origence can open AnySeek in-process through the Rust SDK or connect to a standalone server over HTTP. Origence holds the standalone service credential. [Operations and deployment](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
 <a id="a1-assets-sources-and-publication"></a>
 ## A1. Content, sources, and publication
@@ -47,10 +49,12 @@ Source events and original Blobs, content items and versions, chunks, summaries,
 
 | Component | Current responsibilities | Implementation |
 | --- | --- | --- |
-| RelationalStore / JobQueue | Permissions, original sources, version pointers and hashes, identities, audit, jobs, owners, and publication ledger | Native SQLite `context.db` |
-| RetrievalStore | Chunk text and summaries with scope, provenance, and generation, plus full-text, vector, and one-hop graph indexes | Local AnySeek Rust SDK or standalone AnySeek HTTP service |
-| Trace / Skill | Private Run events and verification records, Skill candidates, and published packages | Native SQLite `context.db` |
-| BlobStore | Original file bytes | Local directories scoped by scope/hash |
+| SQLite | Permissions, sources, versions and publication ledger, durable jobs, versioned long-term facts, private archive directories and hashes, Run and Skill records and packages | `context.db` |
+| AnySeek shared collections | Published chunk text, summaries, and full-text, vector, and one-hop graph indexes | Routed by tenant and workspace |
+| AnySeek private collections | Complete original Q&A with keyword and vector projections | Routed by tenant, workspace, and logical key |
+| BlobStore | Original upload bytes | Local directories addressed by scope/hash |
+
+Origence determines permissions, provenance, and visibility. AnySeek persists text and serves candidates. Recovery of archived or published text requires the matching AnySeek data.
 
 <a id="storage-interfaces"></a>
 ### A2.2 Interface boundaries
@@ -62,7 +66,7 @@ Without default features, the core library does not depend on SQLite. Callers ca
 <a id="storage-initialization"></a>
 ### A2.3 Initialization lifecycle
 
-On startup, open and validate SQLite exclusively, check the backend binding, open the local AnySeek Catalog or verify the remote service credential, persist the routing binding, assemble and check projections and Blob storage, check committed workspace collections, recover jobs and remove orphans, then open the service. A failed check keeps the service unavailable. Startup creates new structures only and does not upgrade, recreate missing indexes, or convert existing data automatically.
+On startup, open and validate SQLite exclusively, check the backend binding, open the local AnySeek Catalog or verify the remote service credential, persist the routing binding, assemble and check projections and Blob storage, check committed workspace collections, recover jobs and remove orphans, then open the service. Normal startup requires a compatible schema. Automatic upgrades, data conversion, and rebuilding of missing collections are outside startup. The immediately preceding private archive schema has a separate [offline migration and paired recovery procedure](../OPERATIONS.en.md#private-archive-and-paired-recovery).
 
 An AnySeek backend can be selected initially only for an unbound directory with no published full text. Successful initialization stores format, endpoint, tenant/workspace routing, and model profile and dimensions in `full-text-backend.json` format `origence-content-backend-v2` without an API key. On first use, persist the collection analysis digest before publication. It may be absent only without published full text. The read is bounded under the authority's exclusive lock. Sync the staging file and publish it atomically. On Unix also sync the parent directory. Later target or model mismatches and corrupt bindings fail before remote I/O. Rotating a service credential for the same endpoint, route, and model leaves the binding intact. An authenticated Scope determines the tenant UUID namespace and `ws_<workspace UUID 无连字符>` (workspace UUID with no hyphens) collection. First use creates the fixed schema. Reopen strictly checks published collections and does not rebuild missing ones. Ordinary process restart and arbitrary power loss have separate acceptance. Staging remnants are not valid bindings.
 
@@ -88,12 +92,14 @@ Job leases carry creator, scope, generation, and run_token. After model calls, p
 
 AnySeek writes the immutable publication's chunks as one atomic Record group. One chunk can carry graph metadata. Each new business version uses a separate group. There is no shared Origence/AnySeek transaction. On a lost response, check the complete current group first. Recover with the original plan and epoch. Cleanup uses a CAS on the current group version to preserve other members. A still-valid job after startup cleanup can rebuild with the original plan. If no complete commit can be proved outside the original operation window, preserve failed state without guessing using a new identity.
 
+SQLite registers a private turn as pending. AnySeek atomically commits its body and search projection before Origence marks it archived. Withdrawal blocks delivery before AnySeek cleanup. [Archive API](../API.en.md#session-archiving-and-idempotent-feedback)
+
 <a id="storage-configuration"></a>
 ### A2.7 Configuration and failure boundaries
 
 The host selects embedded local or remote AnySeek. In remote mode, library callers use `Service::open_with_anyseek(dir, models, config)`. Unknown backends, missing remote settings, and storage errors do not silently fall back. Only model failures allowed by the request can fall back to keyword under the existing contract.
 
-AnySeek reuses original tokenization and encodes each term with SHA-256, preserving AND and term frequency. Evaluate BM25 ranking on the actual backend and task set. Each publication allows up to 64 chunk Records and 2 MiB of encoded requests. Graph metadata does not occupy an additional Record. Reject oversize publications in full. See [API](../API.en.md#unified-anyseek-retrieval) and [OPERATIONS](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval) for candidate, response, timeout, and parsing limits. The design does not maintain duplicate numbers. This design baseline did not yet expose tokenizer/stop_words in AnySeek info and required exported fixed configuration. Full-corpus relevance, capacity, and latency are unaccepted.
+Origence sends SHA-256 encoded terms to AnySeek, preserving AND and term frequency. Evaluate BM25 ranking on the actual backend and task set. See [API](../API.en.md#unified-anyseek-retrieval) and [OPERATIONS](../OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval) for publication, candidate, response, timeout, analysis configuration, and parsing limits. Full-corpus relevance, capacity, and latency are unaccepted.
 
 <a id="storage-acceptance"></a>
 ### A2.8 Acceptance
@@ -103,6 +109,8 @@ Record engineering regressions, actual engine and Streamable HTTP MCP, real Clau
 ## A3. Identity, sessions, and conditional experience
 
 Explicit memory identity comprises scope + subject + predicate + canonical context. Similarity does not authorize replacement. The [identity specification](../contracts/memory.en.md) defines single/multi-value state, conflict evidence, and whole-snapshot withdrawal. SessionTurn explicitly archives evidence actually used. Archives and Runs bind to the workspace's stable logical key. Independent keys are isolated and authorized rotation preserves continuity. Feedback is idempotent without automatic ranking changes. Improve explicitly proposes, verifies, and publishes Learning via ordinary knowledge publication. It preserves conditions and complete support closure, without learning from all interactions automatically or a separate Guidance lifecycle.
+
+Long-term facts retain versions, sources, and effective times in SQLite. Ordinary Context can evaluate them at a business time. Experience retrieval uses currently visible published Learning. Dated queries use ordinary Context or the long-term memory APIs. Run context preparation rejects `as_of_ms`. [Long-term memory](../contracts/memory-consolidation.md)
 
 EvidenceBundle gives memory, knowledge, and Learning independent retrieval and UTF-8 byte budgets. Session defaults off and only a writer on the current key can read it. Only explicit single-value identity conflicts are recognized. General prose contradictions are not inferred. Session references must not be fabricated as chunk/entity/relation archive references. See the [memory](../contracts/memory.en.md), [learning](../contracts/learning.md), and [context](../contracts/evidence-bundle.md) contracts.
 
@@ -114,7 +122,7 @@ Trace is stored by Run under the logical key. The server records exact prepared 
 
 ## A5. Data model and sources of constraints
 
-DDL defines the physical schema. See [storage invariants](../contracts/storage.en.md) for identity reservations, independent lifecycles, and recovery. New queries follow [AGENTS](../../AGENTS.md) for JOIN-free SQL, transactions, and provenance. Retaining original text, same-version backup/restore, durability, and retry remain required. Legacy upgrades and migrations are out of scope.
+DDL defines the physical schema. See [storage invariants](../contracts/storage.en.md) for identity reservations, independent lifecycles, and recovery. New queries follow [AGENTS](../../AGENTS.md) for JOIN-free SQL, transactions, and provenance. Retaining original text, same-version backup/restore, durability, and retry remain required.
 
 ## A6. Protocol boundaries
 
