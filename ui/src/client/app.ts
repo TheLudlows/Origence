@@ -191,33 +191,38 @@ function login(setupRequired?: true) {
   workspaceKey.autocomplete = "off";
   const keyError = el("div");
   const keyConnect = submit("使用 Key 登录");
-  const username = input("输入账号");
+  const keyForm = form(async () => {
+    keyConnect.disabled = true;
+    keyError.replaceChildren();
+    try {
+      const key = workspaceKey.value.trim();
+      const result = await api.post<ConsoleSessionResponse>(sessionPath, key.startsWith("oc_admin_") ? { deployment_key: key } : { workspace_key: key });
+      workspaceKey.value = "";
+      showSession(result);
+    } catch (e) {
+      message(keyError, e);
+    } finally {
+      keyConnect.disabled = false;
+    }
+  }, field("访问 Key", workspaceKey), keyConnect, keyError);
+  if (!setupRequired) keyForm.classList.add("login-alternate");
+
+  const username = input("");
   username.required = true;
   username.autocomplete = "username";
-  const secret = input("输入密码", "", "password");
+  const secret = input("", "", "password");
   secret.required = true;
   secret.autocomplete = "current-password";
   const error = el("div");
   const connect = submit("登录");
   mount.replaceChildren(
     el(
-      "div",
+      "main",
       "login",
-      el(
-        "div",
-        "login-identity",
-        brand(),
-        el("p", "login-product", "Agent 上下文工作台"),
-      ),
       el(
         "section",
         "login-form",
-        el("h1", "", "登录 Origence"),
-        el(
-          "p",
-          "muted",
-          "使用工作空间或部署管理员 Key 登录。",
-        ),
+        el("header", "login-heading", brand(), el("h1", "", "登录控制台")),
         setupRequired ? null : form(
           async () => {
             connect.disabled = true;
@@ -238,23 +243,9 @@ function login(setupRequired?: true) {
           field("账号", username),
           field("密码", secret),
           connect,
+          error,
         ),
-        setupRequired ? null : error,
-        form(async () => {
-          keyConnect.disabled = true;
-          keyError.replaceChildren();
-          try {
-            const key = workspaceKey.value.trim();
-            const result = await api.post<ConsoleSessionResponse>(sessionPath, key.startsWith("oc_admin_") ? { deployment_key: key } : { workspace_key: key });
-            workspaceKey.value = "";
-            showSession(result);
-          } catch (e) {
-            message(keyError, e);
-          } finally {
-            keyConnect.disabled = false;
-          }
-        }, field("访问 Key", workspaceKey), keyConnect),
-        keyError,
+        keyForm,
       ),
     ),
   );

@@ -201,7 +201,7 @@ export async function assetsPage(
       filtered.length
         ? table(
             [
-              "标题 / 主体",
+              kind === "memory" ? "标题 / 主体" : "标题",
               kind === "memory" ? "适用条件" : "来源",
               "状态",
               "版本",
@@ -241,6 +241,13 @@ export async function assetsPage(
     }
   };
   search.addEventListener("input", render);
+  const catalog = panel(
+    `已发布${kindLabel}`,
+    kind === "memory" ? applyFilter : labelControl(search, "筛选已加载的知识"),
+    list,
+    more,
+  );
+  if (kind === "knowledge") catalog.classList.add("knowledge-catalog");
   root.append(
     heading(
       title,
@@ -258,28 +265,31 @@ export async function assetsPage(
           )
         : null,
     ),
-    panel(`已发布${kindLabel}`, kind === "memory" ? applyFilter : labelControl(search, "筛选已加载的知识"), list, more),
-    panel("检索预览", retrieve, hits),
-    panel(
-      "通过标识打开",
-      form(
-        () => ctx.navigate("asset", direct.value.trim()),
-        field("内容 ID", direct),
-        submit("打开内容"),
+    catalog,
+    el(
+      "div", "columns catalog-tools",
+      panel("检索预览", retrieve, hits),
+      panel(
+        "通过标识打开",
+        form(
+          () => ctx.navigate("asset", direct.value.trim()),
+          field("内容 ID", direct),
+          submit("打开内容"),
+        ),
+        canWrite(ctx.role)
+          ? form(
+              async () => {
+                try {
+                  await trackJob({ job_id: jobId.value.trim() }, error, ctx);
+                } catch (e) {
+                  message(error, e);
+                }
+              },
+              field("任务 ID", jobId),
+              submit("查看入库任务"),
+            )
+          : null,
       ),
-      canWrite(ctx.role)
-        ? form(
-            async () => {
-              try {
-                await trackJob({ job_id: jobId.value.trim() }, error, ctx);
-              } catch (e) {
-                message(error, e);
-              }
-            },
-            field("任务 ID", jobId),
-            submit("查看入库任务"),
-          )
-        : null,
     ),
     error,
   );
@@ -287,7 +297,7 @@ export async function assetsPage(
 }
 
 function assetContent(asset: Asset, ctx: ViewContext) {
-  const body = code(asset.content);
+  const body = el("pre", "asset-prose", asset.content);
   if (!canWrite(ctx.role)) return panel("正文", body);
 
   const source = el("div");
@@ -526,6 +536,12 @@ export async function assetDetail(
   };
   const versionStatus = status(asset.semantic_status ?? asset.normalization_status);
   versionStatus.classList.add("asset-version-status");
+  const history = !evidence && form(
+    () => ctx.navigate("asset", id, Number(historyVersion.value)),
+    field("读取固定历史版本", historyVersion),
+    submit("读取版本"),
+  );
+  if (history) history.classList.add("asset-history");
   const publicationFeedback = el("div");
   const share = button("提交到全局知识审核", async () => {
     share.disabled = true;
@@ -561,11 +577,7 @@ export async function assetDetail(
       ),
       asset.identity ? code(asset.identity) : null,
       el("p", "mono muted", `SHA256 ${asset.content_hash}`),
-      !evidence && form(
-        () => ctx.navigate("asset", id, Number(historyVersion.value)),
-        field("读取固定历史版本", historyVersion),
-        submit("读取版本"),
-      ),
+      history,
     ),
     assetContent(asset, ctx),
   );

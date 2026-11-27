@@ -173,6 +173,20 @@ permission parameter from job retry. The same 455 Rust tests and 32 UI tests, No
 checking, strict Clippy, formatting, and relative documentation link checks passed on
 Linux. Chromium and Windows were not rerun for the cleanup.
 
+## 2026-11-27 · Console sign-in and content layout
+
+Based on main `d34804c52560936e0c654ef40a0440fba3a23ca8`. Node.js 24.22.1 type checking and 32 UI tests
+passed. Rust 1.98.0 formatting and strict all-target Clippy passed. Chromium 156.0.8078.79 on Linux
+used synthetic loopback data to check the single-column sign-in, retry after invalid credentials,
+workspace switching, sign-out, keyboard focus, touch targets, the Run chart, and knowledge list and detail
+layouts. Checks covered 320 to 1440px and both color schemes. Knowledge detail checks also covered
+source tabs, pinned versions, and comparisons. Measured detail text contrast ranged from 6.52:1 to 9.63:1.
+
+On main `3a341e4`, the 32 UI tests, type checking, and the Chromium checks above passed again.
+On main `493e38b`, 34 UI tests and type checking passed. Chromium verified member-account, workspace-key,
+and deployment-admin sign-in, global knowledge submission and review, navigation focus, touch targets,
+content and version comparison, and the simplified Run trend.
+
 ## 2026-11-27 · Direct private archive deletion
 
 Based on main `7b362c6d6aeed56fb4d438df00a2c08e356c7830` on Linux with fresh synthetic data.
