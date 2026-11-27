@@ -50,7 +50,7 @@ impl RelationalStore for SqliteStore {
         role: &str,
         capabilities: KeyCapabilities,
     ) -> StorageResult<IssuedKey> {
-        if !Permission::Read.granted_by(role) {
+        if role == "workspace" || !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict(format!("invalid role {role}")));
         }
         let mut tx = self
@@ -67,6 +67,9 @@ impl RelationalStore for SqliteStore {
         .await
         .map_err(sqlite_err)?;
         let owner = owner.ok_or(StorageError::NotFound)?;
+        if super::workspace_key::has_workspace_key(&mut tx, scope).await? {
+            return Err(StorageError::Forbidden);
+        }
         if capabilities.allow_owned_workspaces && owner.is_some() {
             return Err(StorageError::Forbidden);
         }
@@ -144,7 +147,7 @@ impl SqliteStore {
         limit: u32,
     ) -> StorageResult<Vec<(Uuid, String, String)>> {
         let mut tx = self
-            .begin_scoped(auth, false, Some(Permission::Delete))
+            .begin_scoped(auth, false, Some(Permission::WorkspaceAdmin))
             .await?;
         tx.require_root_workspace().await?;
         let (logical_id, home, home_role, default_access, capable) =
@@ -229,7 +232,7 @@ impl SqliteStore {
         }
         let required = match authorization {
             #[cfg(feature = "local-storage")]
-            OwnedWorkspaceAuthorization::Administrator => Some(Permission::Delete),
+            OwnedWorkspaceAuthorization::Administrator => Some(Permission::WorkspaceAdmin),
             OwnedWorkspaceAuthorization::Capability(_) => None,
         };
         let mut tx = self.begin_scoped(auth, create.is_some(), required).await?;

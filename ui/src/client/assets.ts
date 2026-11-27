@@ -25,9 +25,10 @@ import { sourcePreview, sourcePreviewTarget, textDelta } from "./source.js";
 
 import { editor, capture } from "./asset-editor.js";
 import { trackJob } from "./jobs.js";
+import { publicationStatus, type GlobalKnowledge } from "./global-knowledge.js";
 
 const canWrite = (role: string) =>
-  ["writer", "admin"].includes(role);
+  ["writer", "admin", "workspace"].includes(role);
 
 export async function assetsPage(
   root: HTMLElement,
@@ -57,7 +58,7 @@ export async function assetsPage(
       hits.replaceChildren(el("p", "muted", "正在检索…"));
       try {
         const result = await api.post<{
-          hits: (Asset & { locator: Record<string, unknown> })[];
+          hits: (Asset & { scope: "workspace" | "global"; locator: Record<string, unknown> })[];
           warnings?: string[];
           effective_mode?: string;
         }>(
@@ -84,17 +85,21 @@ export async function assetsPage(
             ),
           );
         for (const item of matches) {
-          const source = canWrite(ctx.role) ? sourcePreviewTarget() : null;
+          const global = item.scope === "global";
+          const source = !global && canWrite(ctx.role) ? sourcePreviewTarget() : null;
           hits.append(
             panel(
               item.title || short(item.asset_id),
+              global ? badge("全局知识") : null,
               code(item.content),
               code(item.locator),
               button(
                 item.normalization_status === "unnormalized"
                   ? "查看命中证据"
                   : `查看命中版本 v${item.version}`,
-                () => ctx.navigate("asset", item.asset_id, item.version),
+                () => global
+                  ? ctx.navigate("global-knowledge", item.asset_id)
+                  : ctx.navigate("asset", item.asset_id, item.version),
                 "link",
               ),
               source
@@ -521,13 +526,31 @@ export async function assetDetail(
   };
   const versionStatus = status(asset.semantic_status ?? asset.normalization_status);
   versionStatus.classList.add("asset-version-status");
+  const publicationFeedback = el("div");
+  const share = button("提交到全局知识审核", async () => {
+    share.disabled = true;
+    publicationFeedback.replaceChildren();
+    try {
+      const release = await api.post<GlobalKnowledge>(
+        "/v1/global-knowledge", { asset_id: id, version: asset.version }, ctx.signal,
+      );
+      if (!ctx.signal.aborted) publicationFeedback.append(el("p", "notice",
+        `全局知识 v${release.version} · ${publicationStatus[release.state]}`));
+    } catch (e) {
+      if (!ctx.signal.aborted) message(publicationFeedback, e);
+    } finally {
+      share.disabled = false;
+    }
+  });
   root.append(
     heading(
       asset.title || `${kindLabel}详情`,
       evidence ? `${kindLabel} · ${id}` : `${kindLabel} · v${asset.version} · ${id}`,
       button("返回列表", () => ctx.navigate(asset.kind)),
       !evidence && canWrite(ctx.role) ? button("更新内容", update, "primary") : null,
+      asset.kind === "knowledge" && canWrite(ctx.role) ? share : null,
     ),
+    publicationFeedback,
     panel(
       evidence ? "证据信息" : "版本与身份",
       el(
@@ -575,14 +598,14 @@ export async function assetDetail(
         !evidence && canWrite(ctx.role) && !asset.semantic_status
           ? button("恢复此版本", restore)
           : null,
-        ctx.role === "admin"
+        (ctx.role === "admin" || ctx.role === "workspace")
           ? button(
               "撤回来源",
               () => mutate(`/v1/events/${asset.source_event_id}`, "DELETE"),
               "danger",
             )
           : null,
-        ctx.role === "admin"
+        (ctx.role === "admin" || ctx.role === "workspace")
           ? button(
               `删除${kindLabel}`,
               () => mutate(`/v1/assets/${id}`, "DELETE"),

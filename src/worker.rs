@@ -85,6 +85,21 @@ async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> R
     tx.valid_targets(claim.asset, claim.source).await?;
     tx.guard_learning_publication(claim.asset, claim.source)
         .await?;
+    if let JobPayload::ArchiveExtract {
+        session_id,
+        archive_turn,
+        ..
+    } = payload
+    {
+        tx.require_private_session(*session_id).await?;
+        let (source, _) = tx
+            .native_archive_live_proof_digest(*session_id, *archive_turn)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        if claim.source != Some(source) {
+            return Err(AppError::Conflict("archive source changed".into()));
+        }
+    }
     if let JobPayload::SemanticPublish {
         parser,
         semantic_members,
@@ -173,10 +188,21 @@ async fn process_next_inner(service: &Service) -> Result<bool> {
     };
     let result = process_claim(service, &mut claim).await;
     if let Err(error) = result {
-        let retry = matches!(
+        let mut retry = matches!(
             error,
             AppError::Database(_) | AppError::Internal(_) | AppError::RetryableUnavailable(_)
         );
+        if matches!(error, AppError::Forbidden)
+            && claim.kind == JobKind::Extract.as_str()
+            && claim.payload.get("archive_turn").is_some()
+        {
+            retry = service
+                .engine
+                .relational()
+                .archive_worker_key(claim.scope, claim.created_by)
+                .await
+                .is_ok_and(|current| current != claim.created_by);
+        }
         let state = if matches!(error, AppError::Conflict(_)) {
             "superseded"
         } else {
@@ -205,6 +231,13 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
             .settle(claim.clone(), JobFinish::Completed)
             .await?;
         return Ok(());
+    }
+    if matches!(payload, JobPayload::ArchiveExtract { .. }) {
+        claim.created_by = service
+            .engine
+            .relational()
+            .archive_worker_key(claim.scope, claim.created_by)
+            .await?;
     }
     let a = auth(claim);
     let mut tx = service.read(&a, Permission::Write).await?;
@@ -253,11 +286,26 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
             tx.commit().await?;
             return publish_prepared(service, claim, payload, p).await;
         }
-        let text = tx
-            .event_content(claim.source.ok_or(AppError::NotFound)?, true)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        tx.commit().await?;
+        let text = if let JobPayload::ArchiveExtract {
+            session_id,
+            archive_turn,
+            ..
+        } = payload
+        {
+            tx.commit().await?;
+            let record = service
+                .load_native_archive(&a, *session_id, *archive_turn)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            json!({"question":record.body.question,"answer":record.body.answer}).to_string()
+        } else {
+            let text = tx
+                .event_content(claim.source.ok_or(AppError::NotFound)?, true)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            tx.commit().await?;
+            text
+        };
         let drafts = if let JobPayload::IdentifiedExtract { identity, .. } = payload {
             let mut chunks = service.models.extract_identified(&text, identity).await?;
             let mut tx = service.read(&a, Permission::Write).await?;
@@ -286,29 +334,49 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
                 }]
             }
         } else {
-            let memories = service.models.extract(&text).await?;
+            let archive = matches!(payload, JobPayload::ArchiveExtract { .. });
+            let memories = if archive {
+                service.models.extract_archive_memory(&text).await?
+            } else {
+                service.models.extract(&text).await?
+            };
+            let job_id = claim.job_id;
+            let parsed = tokio::task::spawn_blocking(move || {
+                let mut parsed = Vec::new();
+                let mut seen =
+                    std::collections::HashMap::<&str, std::collections::HashSet<&str>>::new();
+                for memory in &memories {
+                    let facts = seen.entry(&memory.fact_key).or_default();
+                    let first = facts.is_empty();
+                    if first_extracted_fact(facts, &memory.content, job_id) {
+                        let chunks = parsing::chunks(&memory.content, "text")?;
+                        parsed.push((memory.fact_key.clone(), first, chunks));
+                    }
+                }
+                Ok::<_, AppError>(parsed)
+            })
+            .await
+            .map_err(|error| AppError::Internal(error.into()))??;
             let mut tx = service.write(&a, Permission::Write).await?;
             guard(&mut tx, claim, payload).await?;
             let mut drafts = Vec::new();
-            let mut seen =
-                std::collections::HashMap::<&str, std::collections::HashSet<&str>>::new();
-            for m in &memories {
-                let facts = seen.entry(&m.fact_key).or_default();
-                let first = facts.is_empty();
-                if !first_extracted_fact(facts, &m.content, claim.job_id) {
-                    continue;
-                }
-                let mut chunks = parsing::chunks(&m.content, "text")?;
-                let slot = if first {
-                    Some(tx.slot(&m.fact_key).await?)
+            for (fact_key, first, mut chunks) in parsed {
+                let slot = if first && !archive {
+                    Some(tx.slot(&fact_key).await?)
                 } else {
                     None
                 };
                 let (asset, fact_key) = match slot {
-                    Some((asset, None)) => (asset, Some(m.fact_key.clone())),
+                    Some((asset, None)) => (asset, Some(fact_key)),
                     _ => {
                         for chunk in &mut chunks {
-                            chunk.locator["suggested_fact_key"] = json!(m.fact_key);
+                            chunk.locator["suggested_fact_key"] = json!(fact_key);
+                            if archive {
+                                chunk.locator["extraction"] = json!({
+                                    "parser":"session-memory:v1",
+                                    "model":service.models.summary_model(),
+                                });
+                            }
                         }
                         let id = graph::entity_id(&format!(
                             "capture-evidence:{}:{}",
@@ -432,6 +500,7 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
                 }
             }
             JobPayload::LegacyExtract { .. }
+            | JobPayload::ArchiveExtract { .. }
             | JobPayload::MessageBatchIngest { .. }
             | JobPayload::IdentifiedExtract { .. }
             | JobPayload::SemanticExtract { .. }
@@ -842,6 +911,9 @@ async fn publish_prepared(
     let mut tx = service.write(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     for memory in &publication.memories {
+        if matches!(payload, JobPayload::ArchiveExtract { .. }) {
+            tx.valid_targets(Some(memory.asset), None).await?;
+        }
         let current = tx.asset_current_version(memory.asset).await?;
         if current != memory.expected_version {
             return Err(AppError::Conflict(

@@ -104,6 +104,14 @@ async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
     let reader = store.issue_key(scope, "reader").await.unwrap();
     let writer = store.issue_key(scope, "writer").await.unwrap();
     let invalid = store.issue_key(scope, "reader").await.unwrap();
+    let key_scope = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let workspace_key = store
+        .create_key_workspace(key_scope, "Single Key agent fixture")
+        .await
+        .unwrap();
     let grant_admin = service.auth(&selected_admin.token).await.unwrap();
     service
         .set_workspace_key_grant(&grant_admin, writer.key_id, Some("reader"))
@@ -163,6 +171,38 @@ async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
             PROTOCOL
         );
     }
+    assert_eq!(
+        initialize(&workspace_key.token, "codex")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let workspace_activity = list(&workspace_key.token)
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(
+        workspace_activity["workspace_id"],
+        json!(key_scope.workspace_id)
+    );
+    let observations = workspace_activity["items"].as_array().unwrap();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0]["role"], "workspace");
+    assert_eq!(
+        peer.client
+            .get(&endpoint)
+            .bearer_auth(&workspace_key.token)
+            .header("X-Origence-Workspace", scope.workspace_id.to_string())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
     assert!(
         initialize(&reader.token, "private label fixture")
             .send()

@@ -38,9 +38,12 @@ mod consolidation;
 mod context;
 #[cfg(all(test, feature = "local-storage"))]
 mod context_route_tests;
+mod deployment;
 mod domain;
 #[cfg(feature = "local-storage")]
 mod full_text;
+#[cfg(feature = "local-storage")]
+mod global_knowledge;
 mod identity;
 mod improve;
 #[cfg(test)]
@@ -79,6 +82,7 @@ mod versions;
 mod versions_tests;
 mod visibility;
 mod workspace_grants;
+mod workspace_key;
 
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::ledger::{LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey};

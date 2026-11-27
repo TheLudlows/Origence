@@ -87,6 +87,8 @@ impl SqliteStore {
         };
         let role = if scope.workspace_id == key.default_workspace {
             key.default_access.then_some(key.default_role)
+        } else if key.default_role == "workspace" {
+            None
         } else {
             grant_role(&mut tx, scope, key.logical_id).await?
         };
@@ -102,7 +104,11 @@ impl SqliteStore {
     pub async fn workspace_access(&self, token: &str) -> StorageResult<Vec<WorkspaceAccess>> {
         let mut tx = self.pool.begin_with("BEGIN").await.map_err(sqlite_err)?;
         let key = LiveCredential::from_token(&mut tx, token).await?;
-        let mut grants = additional_grants(&mut tx, key.tenant_id, key.logical_id).await?;
+        let mut grants = if key.default_role == "workspace" {
+            Vec::new()
+        } else {
+            additional_grants(&mut tx, key.tenant_id, key.logical_id).await?
+        };
         if key.default_access {
             grants.insert(0, (key.default_workspace, key.default_role));
         }
@@ -140,7 +146,7 @@ impl SqliteStore {
 impl SqliteTx {
     /// Enumerate this workspace's current credentials without exposing token hashes.
     pub async fn list_issued_keys(&mut self, after: Uuid, limit: u32) -> StorageResult<Value> {
-        self.check_permission(Permission::Delete).await?;
+        self.check_permission(Permission::WorkspaceAdmin).await?;
         let count = key_page_size(limit)?;
         let rows: Vec<(Uuid, Uuid, String, bool, bool, i64)> = sqlite_db::query_as(
             "SELECT id,logical_key_id,role,default_access,allow_owned_workspaces,created_at
@@ -168,7 +174,7 @@ impl SqliteTx {
         after: Uuid,
         limit: u32,
     ) -> StorageResult<Value> {
-        self.check_permission(Permission::Delete).await?;
+        self.check_permission(Permission::WorkspaceAdmin).await?;
         let count = key_page_size(limit)?;
         let rows: Vec<(Uuid, String)> = sqlite_db::query_as(
             "SELECT logical_key_id,role FROM oc_workspace_key_grants
@@ -215,21 +221,28 @@ impl SqliteTx {
         logical_id: Uuid,
         role: Option<&str>,
     ) -> StorageResult<()> {
-        self.check_permission(Permission::Delete).await?;
-        if role.is_some_and(|role| !Permission::Read.granted_by(role)) {
+        self.check_permission(Permission::WorkspaceAdmin).await?;
+        if role.is_some_and(|role| role == "workspace" || !Permission::Read.granted_by(role)) {
             return Err(StorageError::InvalidArgument("invalid workspace role"));
         }
-        let (credential, default_workspace, owned_capability): (Uuid, Uuid, bool) =
-            sqlite_db::query_as(
-                "SELECT id,workspace_id,allow_owned_workspaces FROM oc_api_keys
+        let (credential, default_workspace, owned_capability, credential_role): (
+            Uuid,
+            Uuid,
+            bool,
+            String,
+        ) = sqlite_db::query_as(
+            "SELECT id,workspace_id,allow_owned_workspaces,role FROM oc_api_keys
                  WHERE tenant_id=? AND logical_key_id=? AND NOT revoked",
-            )
-            .bind(self.scope.tenant_id)
-            .bind(logical_id)
-            .fetch_optional(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?
-            .ok_or(StorageError::NotFound)?;
+        )
+        .bind(self.scope.tenant_id)
+        .bind(logical_id)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?
+        .ok_or(StorageError::NotFound)?;
+        if credential_role == "workspace" {
+            return Err(StorageError::Forbidden);
+        }
         if self.scope.workspace_id == default_workspace {
             sqlite_db::query(
                 "UPDATE oc_api_keys SET role=COALESCE(?,role),default_access=?
@@ -290,7 +303,7 @@ impl SqliteTx {
                 workspace_id,
             };
             let role = self.live_role_in_scope(self.principal_id, scope).await?;
-            if !Permission::Delete.granted_by(&role) {
+            if !Permission::WorkspaceAdmin.granted_by(&role) {
                 return Err(StorageError::Forbidden);
             }
         }

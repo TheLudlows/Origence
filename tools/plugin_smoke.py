@@ -9,13 +9,12 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
-import tempfile
 import threading
 import time
 from urllib.error import URLError
 
 from live_archive_smoke import child_environment
-from mcp_smoke import Child, Host, Mcp, isolated_env, require, sanitized
+from mcp_smoke import Child, Host, Mcp, fixture_directory, isolated_env, require, sanitized
 
 PLUGIN = "origence@origence-tools"
 TOOLS = ("context_session", "context_search", "context_get")
@@ -121,8 +120,10 @@ def codex_tools(cli, project, env, forbidden, probe, bundled):
     with codex_session(cli, project, env, forbidden) as (rpc, thread):
         hook_entries = rpc("hooks/list", {"threadId": thread})["data"]
         hooks = [hook for entry in hook_entries for hook in entry["hooks"] if hook.get("pluginId") == PLUGIN]
-        require(len(hooks) == 4 and all(hook["enabled"] and hook["source"] == "plugin" for hook in hooks),
-                "Codex did not discover the four enabled plugin hooks")
+        expected_events = ["interrupt", "postToolUse", "sessionEnd", "stop", "userPromptSubmit"]
+        require(sorted(hook["eventName"] for hook in hooks) == expected_events
+                and all(hook["enabled"] and hook["source"] == "plugin" for hook in hooks),
+                "Codex did not discover the expected enabled plugin events")
         require(all(hook["trustStatus"] == "untrusted" for hook in hooks), "Fresh Codex hooks must still require review")
         status = rpc("mcpServerStatus/list", {"threadId": thread})
         servers = [entry for entry in status["data"] if entry["name"] == "origence"]
@@ -340,8 +341,7 @@ def main():
     args = parser.parse_args()
     require(args.bind.startswith("127.0.0.1:"), "Plugin smoke requires an IPv4 loopback address")
     check_packages()
-    with tempfile.TemporaryDirectory(prefix="origence plugin ") as temporary:
-        root = Path(temporary)
+    with fixture_directory("origence plugin ") as root:
         binary_dir = root / "Origence binary"
         data = root / "database"
         binary_dir.mkdir()
@@ -376,7 +376,7 @@ def main():
             if path_name != "PATH":
                 env["PATH"] = env.pop(path_name)
             require(shutil.which(binary.name, path=env["PATH"]) is None, "Reader test requires a PATH without Origence")
-            env.update(HOME=temporary, USERPROFILE=temporary, OC_API_KEY=reader["token"])
+            env.update(HOME=str(root), USERPROFILE=str(root), OC_API_KEY=reader["token"])
             # Each Windows client uses disposable configuration and cache roots.
             if os.name == "nt":
                 for variable in ("APPDATA", "LOCALAPPDATA"):

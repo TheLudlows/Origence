@@ -17,9 +17,23 @@ npm start
 
 `npm start` uses built-in defaults. To override them, use the `.env` in this directory or deployment environment variables. For external access, set the exact HTTPS `ORIGENCE_UI_ORIGIN` and have the reverse proxy preserve that Host. Only loopback Hosts are allowed by default. The proxy takes an HTTP(S) origin for the upstream and does not follow redirects.
 
-### Local accounts and workspaces
+### Workspace Key sign-in
 
-The console uses account and password sign-in by default. Its account database is `.data/console-accounts.db` in the repository root. Set `ORIGENCE_UI_ACCOUNTS_DB` only to use a different location. Until the first account is created, the sign-in page directs users to their administrator.
+Run `origence --offline workspace-create --workspace-key <name>` while the host is stopped, then start the API and console. Use the issued key to sign into the console or configure an Agent. The console opens the key's workspace for browsing archived turns and managing memories. Rotate the key with `origence --offline workspace-key-rotate <workspace-id>` and sign in with the replacement.
+
+The console started by `origence-deploy install --init <name>` uses key sign-in and needs no account database. For a manual start, use `npm start -- --key-only`.
+
+### Deployment administrator
+
+Run `origence --offline deployment-admin-rotate` while the host is stopped to issue or rotate the deployment administrator key. Sign in through the console access-key field and select a workspace to inspect its original conversations, Runs, and published memories and knowledge. Rotation invalidates the previous key and its console session.
+
+### Global knowledge
+
+Open an exact knowledge version in your workspace and select the submission action. The deployment administrator reviews the submitted text and can approve, reject, or withdraw a release. Approved releases appear in Global Knowledge, search, and context. To share an updated document, submit its new version for review.
+
+### Existing account sign-in
+
+The account database is `.data/console-accounts.db` at the repository root. `ORIGENCE_UI_ACCOUNTS_DB` can override that location. The console shows account and password sign-in when accounts are configured.
 
 After building, run these commands from `ui` to set the first account's password and grant workspace access. `set-password` creates the private account database if needed. It reads the password from standard input. Use at least 15 characters.
 
@@ -34,19 +48,19 @@ In PowerShell, pipe `Read-Host -MaskInput` into the same `set-password` command.
 
 Use the [Origence key management API](../docs/API.en.md#endpoints) to issue a separate key with the appropriate role for each account and workspace grant. Inject each key into the console server environment, for example as `ORIGENCE_ALICE_ENGINEERING_KEY`. The account database stores scrypt password hashes and workspace grants. Run `set-password` again to change a password, `grant` to update a grant, `revoke USERNAME WORKSPACE_ID` to remove a grant, or `remove-account USERNAME` to remove an account and all its grants. If the console is running, restart it to load account changes or rotated keys.
 
-After sign-in, the sidebar lists every workspace the account can access and highlights the current one. Select a workspace to switch to it. The list includes direct account grants and child workspaces accessible through a granted root. The upstream checks each key's workspace and role and denies revoked keys. Agents continue to use their own API tokens. Private sessions and Runs retain logical-key isolation. To preserve access to an account holder's existing private records, grant their own original logical key.
+After sign-in, the sidebar lists every workspace the account can access and highlights the current one. Select a workspace to switch to it. The list includes direct account grants and child workspaces accessible through a granted root. The upstream checks each key's workspace and role and denies revoked keys. Agents continue to use their own API tokens. Private sessions and Run writes require the owning logical key. To preserve access to an account holder's existing private records, grant their own original logical key.
 
 An eight-hour in-memory console session survives page reloads. The browser receives a random HttpOnly, SameSite=Strict cookie. HTTPS also enables Secure. The tab stores only the selected workspace ID in sessionStorage. Sign-out, expiry, or Node restart requires login again.
 
 ### Create a child workspace
 
-Sign in as a root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
+In an existing membership-based workspace, sign in as the root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
 ### API key management
 
-Sign in as an administrator, select a workspace, and open **API Key** in the sidebar. The page lists
+In an existing membership-based workspace, sign in as an administrator, select the workspace, and open **API Key** in the sidebar. The page lists
 credentials issued there and lets administrators create them, change roles, rotate, or revoke them.
 To grant access using a key issued in another workspace in the same tenant, enter its logical key ID
 in the target workspace. Removing an additional grant removes access to that workspace. Rotation
@@ -59,7 +73,7 @@ administrator rights in that key's additional workspaces.
 
 ## Pages
 
-- **Overview** shows service readiness and Run creation counts and trends. Admins see the selected workspace's Run list, reported outcomes and counts. Other roles see their own Runs. Summaries and trace details are owner-only. Uncollected latency and cost appear as unknown.
+- **Overview** shows service readiness and Run creation counts and trends. Admins can read the selected workspace's Run list, reported outcomes, counts, and full recorded traces. Other roles see their own Runs.
 - **Tracing** displays each Run's private Trace, including event order, reporters, preparation receipts, precise references, PDF page locators, and external verification records. The preparation event can show query embedding input tokens reported by the model service. Without a report it shows unknown. It does not represent the full Agent turn's usage or cost.
 - **Memory** displays the visible asset catalog and supports pagination, filtering, search, explicit and semantic writes, text extraction, provenance, and fixed-version comparison.
 - **Knowledge** supports Text/Markdown/PDF uploads, asynchronous publication, updates, job lookup, retry and cancellation, and authorized restore or withdrawal.

@@ -55,7 +55,7 @@ impl Service {
         logical_key_id: Uuid,
         role: Option<&str>,
     ) -> Result<()> {
-        let mut tx = self.write(auth, Permission::Delete).await?;
+        let mut tx = self.write(auth, Permission::WorkspaceAdmin).await?;
         tx.set_workspace_key_grant(logical_key_id, role).await?;
         tx.commit().await?;
         Ok(())
@@ -149,7 +149,7 @@ impl Service {
         role: &str,
         capabilities: KeyCapabilities,
     ) -> Result<Value> {
-        let mut tx = self.write(auth, Permission::Delete).await?;
+        let mut tx = self.write(auth, Permission::WorkspaceAdmin).await?;
         let key = tx
             .issue_scoped_key_with_capabilities(role, capabilities)
             .await?;
@@ -163,7 +163,7 @@ impl Service {
         after: Uuid,
         limit: u32,
     ) -> Result<Value> {
-        let mut tx = self.read(auth, Permission::Delete).await?;
+        let mut tx = self.read(auth, Permission::WorkspaceAdmin).await?;
         let page = tx.list_issued_keys(after, limit).await?;
         tx.commit().await?;
         Ok(page)
@@ -175,7 +175,7 @@ impl Service {
         after: Uuid,
         limit: u32,
     ) -> Result<Value> {
-        let mut tx = self.read(auth, Permission::Delete).await?;
+        let mut tx = self.read(auth, Permission::WorkspaceAdmin).await?;
         let page = tx.list_workspace_key_grants(after, limit).await?;
         tx.commit().await?;
         Ok(page)

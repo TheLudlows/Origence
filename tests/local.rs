@@ -10,6 +10,8 @@ mod support;
 mod evidence_bundle;
 #[cfg(feature = "local-storage")]
 mod foundation_http;
+#[cfg(feature = "local-storage")]
+mod global_knowledge;
 mod identity_check_cli;
 mod identity_vector_regression;
 mod initialization;

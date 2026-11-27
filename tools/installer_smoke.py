@@ -7,11 +7,10 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from urllib.request import Request, urlopen
 import uuid
 
-from mcp_smoke import isolated_env, require, sanitized
+from mcp_smoke import fixture_directory, isolated_env, require, sanitized
 from plugin_smoke import codex_session, tool_value
 
 REPO = Path(__file__).resolve().parents[1]
@@ -101,7 +100,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
 def check_hook(binary, project, env, credentials):
     ui = credentials["ui"]
     profile, session = request(ui + "/api/console/session", headers={"Origin": ui}, payload={
-        "username": credentials["username"], "password": credentials["password"],
+        "workspace_key": credentials["token"],
     })
     workspace = credentials["workspace_id"]
     require(profile["session"]["workspaces"][0]["workspace_id"] == workspace,
@@ -117,7 +116,7 @@ def check_hook(binary, project, env, credentials):
                            "prompt_id": str(uuid.uuid4()), "cwd": str(project),
                            "hook_event_name": "UserPromptSubmit"}),
                            text=True, capture_output=True, timeout=20, check=True)
-    sanitized(child.stdout + child.stderr, [credentials["token"], credentials["password"]])
+    sanitized(child.stdout + child.stderr, [credentials["token"], credentials["deployment_admin_key"]])
     after, _ = request(ui + "/api/v1/runs", headers=headers)
     ids = {entry["run_id"] for entry in before["items"]}
     added = [entry for entry in after["items"] if entry["run_id"] not in ids]
@@ -130,7 +129,7 @@ def check_hook(binary, project, env, credentials):
 
 
 def check_browser(env, credentials, run, forbidden):
-    info = {name: credentials[name] for name in ("ui", "username", "password")}
+    info = {name: credentials[name] for name in ("ui", "token")}
     child = subprocess.run(["node", str(REPO / "ui/scripts/check-installer-browser.cjs")],
                            env=env, input=json.dumps(dict(info, run=run)), capture_output=True,
                            encoding="utf-8", timeout=45)
@@ -161,6 +160,7 @@ def smoke(binary, claude, codex, root, browser):
     Path(env["CODEX_HOME"]).mkdir()
     env.pop("ZDOTDIR", None)
     state = root / ("Origence" if WINDOWS else ".origence") / "installer" / "state.json"
+    env["ORIGENCE_UI_ACCOUNTS_DB"] = str(root / "unused-console-accounts.db")
     rc = root / ".bashrc"
     previous_shell = "export OC_API_KEY=prior-shell-value\n# unrelated edit"
     registry_before = registry_values() if WINDOWS else None
@@ -194,10 +194,15 @@ def smoke(binary, claude, codex, root, browser):
         first = installer(env, ["install", *deploy_args, "--init", "Installer synthetic", "--verify-write",
                                 "--credentials-file", str(output)], forbidden, entry=deploy_cmd, cwd=root)
         credentials = json.loads(output.read_text(encoding="utf-8"))
-        forbidden = [credentials["token"], credentials["password"]]
+        forbidden = [credentials["token"], credentials["deployment_admin_key"]]
         sanitized(first, forbidden)
-        require(len(credentials["password"]) >= 15 and first["console-account"]["status"] == "success",
-                "Deployment must provision a working console account")
+        require(credentials["login_mode"] == "workspace" and credentials["role"] == "workspace"
+                and "password" not in credentials and first["console-session"]["status"] == "success"
+                and first["deployment-admin-session"]["status"] == "success",
+                "Fresh deployment must provision the workspace and deployment administrator Keys")
+        require(not (state.parent / "console-accounts.db").exists()
+                and not Path(env["ORIGENCE_UI_ACCOUNTS_DB"]).exists(),
+                "A fresh deployment must not create or require a console account database")
         require("claude-code" not in first and "codex" not in first and "agent" not in json.loads(state.read_text(encoding="utf-8")),
                 "Deployment must not configure either agent")
         if WINDOWS:
@@ -225,7 +230,7 @@ def smoke(binary, claude, codex, root, browser):
                   **{name: split["agent"][name] for name in ("claude", "shell", "registry") if name in split["agent"]}}
         state.write_text(json.dumps(legacy), encoding="utf-8")
         connected = installer(env_key, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
-        require(connected["http-mcp"]["detail"]["tools"] == 11 and connected["claude-code"]["status"] == "success"
+        require(connected["http-mcp"]["status"] == "success" and connected["claude-code"]["status"] == "success"
                 and connected["codex"]["status"] == "success" and "ui" not in connected and "api" not in connected,
                 "Agent setup must connect both clients without starting a UI or an API")
         replay = json.loads(state.read_text(encoding="utf-8"))
@@ -298,10 +303,11 @@ def smoke(binary, claude, codex, root, browser):
                 replacement["whoami"]["detail"]["workspace_id"] != credentials["workspace_id"],
                 "Force plus init must preserve the original data and bind the new workspace")
         config = json.loads(state.read_text(encoding="utf-8"))["deploy"]["config"]
-        forbidden.extend([config["token"], config["password"]])
+        forbidden.append(config["token"])
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
         installer(new_env, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        session, _ = request(endpoint + "/v1/session", headers={"Authorization": "Bearer " + config["token"]})
         agent = json.loads(state.read_text(encoding="utf-8"))["agent"]
         installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
         remaining = json.loads(state.read_text(encoding="utf-8"))
@@ -309,6 +315,22 @@ def smoke(binary, claude, codex, root, browser):
                 "Deployment uninstall must leave Agent settings and ownership alone")
         require((data / "context.db").is_file() and (backup / "context.db").is_file(),
                 "Deployment uninstall must preserve both live and backed-up data")
+        rotated = subprocess.run([str(binary), "--data-dir", str(data), "--offline",
+                                  "workspace-key-rotate", config["workspace"]],
+                                 cwd=root, env=env, capture_output=True, timeout=60, check=True)
+        replacement_key = json.loads(rotated.stdout)
+        forbidden.append(replacement_key["token"])
+        require(replacement_key["key_id"] != config["key"], "Key rotation must issue a new credential ID")
+        rotated_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=replacement_key["token"])
+        resumed = installer(rotated_env, ["install", "--from-env", "--ui-port", str(ui_port),
+                                          "--data-dir", str(data), "--origence", str(binary)],
+                            forbidden, entry=deploy_cmd, cwd=root)
+        require(resumed["http-mcp"]["status"] == "success" and resumed["console-session"]["status"] == "success",
+                "Deployment must accept the rotated Key")
+        current_session, _ = request(endpoint + "/v1/session",
+                                     headers={"Authorization": "Bearer " + replacement_key["token"]})
+        require(current_session == session, "The rotated Key must keep its logical session")
+        installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
         user_url = "http://127.0.0.1:20123/mcp"
         subprocess.run([str(codex), "mcp", "add", "origence", "--url", user_url, "--bearer-token-env-var",
                         "OC_API_KEY"], cwd=root, env=env, capture_output=True, timeout=30, check=True)
@@ -337,8 +359,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if WINDOWS and not args.allow_windows_user_env:
         sys.exit("Run Windows acceptance in a disposable account with --allow-windows-user-env.")
-    with tempfile.TemporaryDirectory(prefix="origence installer ") as directory:
-        root = Path(directory)
+    with fixture_directory("origence installer ") as root:
         binary_dir = root / "Origence binaries"
         binary_dir.mkdir()
         binary = binary_dir / ("origence.exe" if WINDOWS else "origence")

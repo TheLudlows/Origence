@@ -117,9 +117,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   await page.keyboard.press('Space');
   (await receiveSuccess())(true);
   await trend.getByText('新建运行 3 条', { exact: true }).waitFor();
-  await trend.getByRole('row', { name: '端到端耗时 P95 2,345 ms 2' }).waitFor();
-  await trend.getByRole('row', { name: 'Agent Token 总量 0 1' }).waitFor();
-  await trend.getByRole('row', { name: '费用估算 USD 0.000075 1' }).waitFor();
+  await trend.getByRole('figure', { name: '新建 Run 数' }).waitFor();
   await retry.waitFor({ state: 'hidden' });
   const recovered = {
     focusedRange: await isFocused(range),
@@ -135,7 +133,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   await range.press('ArrowDown');
   (await receiveRangeFailure())(false);
   await error.waitFor();
-  assert.equal(await trend.getByText('USD 0.000075', { exact: true }).count(), 0);
+  assert.equal(await trend.getByRole('figure', { name: '新建 Run 数' }).count(), 0);
   assert.equal(await isFocused(range), true);
   await focusRetry();
   const receiveBackgroundSuccess = holdOverview();
@@ -146,13 +144,12 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   assert.equal(await isFocused(openTrace), true);
   sendBackgroundSuccess(true);
   await trend.getByText('新建运行 4 条', { exact: true }).waitFor();
-  await trend.getByRole('row', { name: '端到端耗时 P95 未知 0' }).waitFor();
   await retry.waitFor({ state: 'hidden' });
   assert.equal(await isFocused(openTrace), true);
   assert.equal(requestCount(), 5);
 }
 
-async function checkCreationChart(page, width, hasTouch) {
+async function checkCreationChart(page, hasTouch) {
   const chart = page.getByRole('figure', { name: '新建 Run 数' });
   const range = page.getByRole('combobox', { name: '统计范围' });
   const bars = chart.getByRole('button');
@@ -179,23 +176,21 @@ async function checkCreationChart(page, width, hasTouch) {
     const ticks = [...node.querySelectorAll('.run-chart-ticks span')]
       .map((tick) => tick.getBoundingClientRect());
     const chart = node.getBoundingClientRect();
-    const metering = node.closest('.run-creation-result')
-      .querySelector(':scope > .panel').getBoundingClientRect();
+    const result = node.parentElement.getBoundingClientRect();
     return {
       heights: marks.map((mark) => mark.height),
       fromBaseline: marks.every((mark) => Math.abs(mark.bottom - baseline.bottom) <= 1),
       distinctTicks: ticks.slice(1).every((tick, index) => ticks[index].right < tick.left),
       chartFits: chart.right <= innerWidth &&
         document.documentElement.scrollWidth === innerWidth,
-      sideBySide: Math.abs(chart.top - metering.top) < 1 && chart.right < metering.left,
-      stacked: chart.bottom < metering.top,
+      fullWidth: Math.abs(chart.width - result.width) < 1,
     };
   });
   assert.ok(geometry.heights[0] > 0);
   assert.equal(geometry.heights[1], 0);
   assert.equal(geometry.heights[2], 2 * geometry.heights[0]);
   assert.ok(geometry.fromBaseline && geometry.distinctTicks && geometry.chartFits, JSON.stringify(geometry));
-  assert.equal(width === 1440 ? geometry.sideBySide : geometry.stacked, true, JSON.stringify(geometry));
+  assert.ok(geometry.fullWidth, JSON.stringify(geometry));
   await range.focus();
   await focusBucket('Tab', 0);
   assert.match(await readout.innerText(), exactStart);
@@ -260,12 +255,6 @@ async function checkCreationChart(page, width, hasTouch) {
         response.end(JSON.stringify({
           scope: 'workspace',
           start_ms: 123, end_ms: 123 + buckets * duration, created_runs: created,
-          metering: days
-            ? { duration_p95_ms: null, duration_runs: 0, agent_tokens: null, token_runs: 0, costs: [] }
-            : {
-                duration_p95_ms: 2345, duration_runs: 2, agent_tokens: '0', token_runs: 1,
-                costs: [{ basis: 'estimated', currency: 'USD', micros: '75', runs: 1 }],
-              },
           series: Array.from({ length: buckets }, (_, index) => ({
             start_ms: 123 + index * duration, end_ms: 123 + (index + 1) * duration,
             created_runs: index === 0 ? created - 2 : index === 2 ? 2 : 0,
@@ -333,8 +322,8 @@ async function checkCreationChart(page, width, hasTouch) {
       await expectMain('运行总览');
       await checkOverviewRetry(page, receiveInitial, holdOverview, () => overviewRequests);
       console.log('PASS ' + width + 'px: keyboard retry, focus during latency and repeated error, recovery with and without focus on Retry');
-      await checkCreationChart(page, width, hasTouch);
-      console.log(`PASS ${width}px: creation chart and metering layout, counts and baseline, local times, keyboard, and ${hasTouch ? 'emulated tap' : 'hover'}`);
+      await checkCreationChart(page, hasTouch);
+      console.log(`PASS ${width}px: creation chart layout, counts and baseline, local times, keyboard, and ${hasTouch ? 'emulated tap' : 'hover'}`);
       const receiveKnowledge = holdRequest('knowledge');
       await nav(/知识管理/).press('Enter');
       await expectMain('知识管理');

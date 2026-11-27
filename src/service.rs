@@ -23,6 +23,9 @@ use uuid::Uuid;
 
 mod catalog;
 mod content;
+mod deployment;
+pub(crate) mod global_knowledge;
+pub use global_knowledge::GlobalKnowledgeDecision;
 mod workspaces;
 
 #[derive(Clone)]
@@ -30,6 +33,12 @@ pub struct Service {
     pub engine: Arc<LocalEngine>,
     pub models: Models,
     pub worker_running: Arc<AtomicBool>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ReadAccess<'a> {
+    Workspace(&'a AuthContext),
+    Deployment { token: &'a str, workspace: Uuid },
 }
 pub(crate) fn decode<T: DeserializeOwned>(value: Value) -> Result<T> {
     serde_json::from_value(value)
@@ -161,6 +170,19 @@ impl Service {
             .relational()
             .begin_checked(authorized(a), permission)
             .await?)
+    }
+
+    pub(crate) async fn read_with_access(
+        &self,
+        access: ReadAccess<'_>,
+        permission: Permission,
+    ) -> Result<SqliteTx> {
+        match access {
+            ReadAccess::Workspace(auth) => self.read(auth, permission).await,
+            ReadAccess::Deployment { token, workspace } => {
+                self.inspect_workspace(token, workspace).await
+            }
+        }
     }
     pub(crate) async fn command(
         &self,
@@ -516,13 +538,23 @@ impl Service {
         .await
     }
     pub async fn get(&self, a: &AuthContext, id: Uuid, version: Option<i32>) -> Result<Value> {
-        let mut tx = self.read(a, Permission::Read).await?;
+        self.read_asset(ReadAccess::Workspace(a), id, version).await
+    }
+
+    async fn read_asset(
+        &self,
+        access: ReadAccess<'_>,
+        id: Uuid,
+        version: Option<i32>,
+    ) -> Result<Value> {
+        let mut tx = self.read_with_access(access, Permission::Read).await?;
+        let scope = tx.scope();
         let mut v = tx.asset_view(id, version).await?;
         let references = tx
             .chunk_refs_for_version(id, decode(v["version"].clone())?)
             .await?;
         tx.commit().await?;
-        let chunks = self.read_chunk_content(scope(a), &references).await?;
+        let chunks = self.read_chunk_content(scope, &references).await?;
         let content = chunks
             .into_iter()
             .map(|chunk| chunk.content)
@@ -532,7 +564,7 @@ impl Service {
                 "document content does not match its publication".into(),
             ));
         }
-        let mut verify = self.read(a, Permission::Read).await?;
+        let mut verify = self.read_with_access(access, Permission::Read).await?;
         if verify.asset_view(id, version).await? != v
             || verify
                 .chunk_refs_for_version(id, decode(v["version"].clone())?)
@@ -692,9 +724,10 @@ impl Service {
                         (record.session, record.turn)
                     }
                 };
-                let (tx, cached) = self
+                let (mut tx, cached) = self
                     .command(a, Permission::Delete, &operation, key, &json!({}))
                     .await?;
+                tx.check_permission(Permission::DeleteArchive).await?;
                 if cached.is_none() {
                     Self::finish(tx, json!({"archive":[session,turn]})).await?;
                 } else {
@@ -816,13 +849,13 @@ impl Service {
         Ok(bytes)
     }
     pub async fn issue_key(&self, a: &AuthContext, role: &str) -> Result<Value> {
-        let mut tx = self.write(a, Permission::Delete).await?;
+        let mut tx = self.write(a, Permission::WorkspaceAdmin).await?;
         let key = tx.issue_scoped_key(role).await?;
         tx.commit().await?;
         Ok(json!(key))
     }
     pub async fn revoke_key(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
-        let mut tx = self.write(a, Permission::Delete).await?;
+        let mut tx = self.write(a, Permission::WorkspaceAdmin).await?;
         tx.revoke_scoped_key(id).await?;
         tx.commit().await?;
         Ok(json!({"key_id":id,"revoked":true}))

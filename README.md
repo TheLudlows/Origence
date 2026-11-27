@@ -28,11 +28,13 @@ Choose a fresh data directory for this quick start.
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
-./target/debug/origence --offline workspace-create demo
+./target/debug/origence --offline workspace-create --workspace-key demo
+./target/debug/origence --offline deployment-admin-rotate
 ./target/debug/origence serve --local
 ```
 
-Use the workspace token returned by `workspace-create` to access the API.
+Use the key returned by `workspace-create` to sign into the workspace or connect an Agent.
+The separate deployment administrator key can inspect all workspaces and moderate global knowledge.
 Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
 initializes workspace collections on first use.
 
@@ -54,13 +56,13 @@ npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:3000` and sign in with your console account. For a fresh installation, see
-[creating the first console account](ui/README.en.md#local-accounts-and-workspaces). Set
+Open `http://127.0.0.1:3000` and sign in with a [workspace key](ui/README.en.md#workspace-key-sign-in)
+or an [existing console account](ui/README.en.md#existing-account-sign-in). Set
 `ORIGENCE_API_BASE_URL` when Origence is not at `http://127.0.0.1:8080`.
 
 ## Rust library and storage
 
-SQLite holds authoritative data such as permissions, versioned facts, sources, and durable jobs. AnySeek stores published chunks, summaries, and search indexes, with complete Q&A and turn directories in separate private collections. Blob storage holds original uploads. [Storage ownership](docs/design/current-implementation.en.md#storage-design)
+SQLite holds permissions, versioned facts, sources, durable jobs, and global knowledge copies. AnySeek stores workspace publication chunks, summaries, and search indexes, with complete Q&A and turn directories in separate private collections. Blob storage holds original uploads. [Storage ownership](docs/design/current-implementation.en.md#storage-design)
 
 Library callers can use parsing, identity and value contracts, models, Blob storage, and the AnySeek adapter without a metadata engine.
 
