@@ -26,6 +26,8 @@ use uuid::Uuid;
 const CONDITION: &str = "Atlas production parsers";
 const ANSWER: &str = "前言 é\nAtlas production parsers should use Rust 🦀 for memory safety.";
 const STATEMENT: &str = "Use Rust for memory-safe Atlas production parsers.";
+const FACT_BASELINE: &str = "Atlas production parsers require 1 reviewer.";
+const FACT_UPDATE: &str = "Atlas production parsers require 2 reviewers starting on 2026-12-01.";
 
 struct Server(tokio::task::JoinHandle<()>);
 
@@ -150,6 +152,10 @@ async fn completions(
                     candidate["statement"] =
                         json!(format!("{STATEMENT} Fixture {}.", item["turn"]["turn_id"]))
                 }
+                "multi_chunk" => {
+                    candidate["why"] =
+                        json!("Use evidence from Atlas production parsers. ".repeat(75))
+                }
                 _ => {}
             }
             let mut candidates = vec![candidate];
@@ -202,6 +208,22 @@ async fn completions(
         } else {
             json!({"decisions":decisions}).to_string()
         }
+    } else if prompt.starts_with("Extract factual evidence for long-term memory") {
+        let request: Value =
+            serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        let source = request["source"].as_str().unwrap();
+        let (value, date) = match source {
+            FACT_BASELINE => ("1 reviewer", None),
+            FACT_UPDATE => ("2 reviewers", Some("2026-12-01")),
+            _ => panic!("unexpected long-term memory fixture input"),
+        };
+        json!({"facts":[{
+            "identity":{"subject":{"kind":"project","stable_id":"Atlas"},
+                        "predicate":"parser.review_requirement","context":{"env":"production"}},
+            "statement":{"value":value,"quote":source,"byte_start":0,"byte_end":source.len()},
+            "effective_date":date
+        }]})
+        .to_string()
     } else if prompt.starts_with("Summarize") {
         format!("{CONDITION}: {STATEMENT}")
     } else {
@@ -373,6 +395,260 @@ async fn learn(s: &Service, a: &AuthContext, session: Uuid) -> Value {
     s.learning(a, id(&run["learnings"][0], "learning_id"))
         .await
         .unwrap()
+}
+
+#[tokio::test]
+async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
+    let directory = tempfile::tempdir().unwrap();
+    let (model, fixture, _model_server) = models().await;
+    let s = super::support::open_service(directory.path(), model)
+        .await
+        .unwrap();
+    let (owner, token) = provision(&s).await;
+    let reader = role(&s, &owner, "reader").await;
+    let other_writer = role(&s, &owner, "writer").await;
+    let (other_workspace, _) = provision_scope(&s, owner.tenant_id, Uuid::new_v4()).await;
+    let session = id(&s.private_session(&owner).await.unwrap(), "session_id");
+
+    s.register_memory_property(
+        &owner,
+        "register-review-requirement",
+        serde_json::from_value(json!({
+            "predicate":"parser.review_requirement","cardinality":"single",
+            "required_context":["env"]
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    publish(&s, &owner).await;
+    let original = search(&s, &owner, "keyword").await;
+    let turn = archive(&s, &owner, session, vec![evidence(&original["hits"][0])]).await;
+    feedback(&s, &owner, &turn, Uuid::new_v4()).await;
+    let improve_id = Uuid::new_v4();
+    let experience =
+        json!({"experience":{"session_id":session,"improve":improve_input(improve_id, 32)}});
+    let parse_retain = |value: &Value| serde_json::from_value(value.clone()).unwrap();
+    assert!(matches!(
+        s.retain_long_term_memory(&other_writer, "foreign-session", parse_retain(&experience))
+            .await,
+        Err(AppError::NotFound)
+    ));
+    assert!(matches!(
+        s.retain_long_term_memory(&reader, "reader-retain", parse_retain(&experience))
+            .await,
+        Err(AppError::Forbidden)
+    ));
+    let mut both = experience.clone();
+    both["content"] = json!(FACT_BASELINE);
+    assert!(matches!(
+        s.retain_long_term_memory(&owner, "ambiguous-input", parse_retain(&both))
+            .await,
+        Err(AppError::Invalid(_))
+    ));
+    assert_eq!(fixture.proposals.load(Ordering::SeqCst), 0);
+
+    let (base, _server) = serve(origence::api::router(s.clone())).await;
+    let http = reqwest::Client::new();
+    let peer = super::mcp_http::Peer::at(format!("{base}/mcp"));
+    let fact_request = json!({"content":FACT_BASELINE});
+    let baseline = s
+        .retain_long_term_memory(&owner, "fact-baseline", parse_retain(&fact_request))
+        .await
+        .unwrap();
+    assert_eq!(
+        baseline,
+        peer.call(
+            &token,
+            None,
+            "context_memory_retain",
+            json!({"idempotency_key":"fact-baseline","content":FACT_BASELINE})
+        )
+        .await
+        .unwrap()
+    );
+    assert!(matches!(
+        s.retain_long_term_memory(&owner, "fact-baseline", parse_retain(&experience))
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    let update = s
+        .retain_long_term_memory(
+            &owner,
+            "fact-update",
+            parse_retain(&json!({"content":FACT_UPDATE})),
+        )
+        .await
+        .unwrap();
+    let mut tool_request = experience.clone();
+    tool_request["idempotency_key"] = json!("retain-experience");
+    fixture.set_mode("multi_chunk");
+    let accepted = peer
+        .call(&token, None, "context_memory_retain", tool_request)
+        .await
+        .unwrap();
+    let repeated: Value = http
+        .post(format!("{base}/v1/memories/retain"))
+        .bearer_auth(&token)
+        .header("Idempotency-Key", "retain-experience")
+        .json(&experience)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(repeated, accepted);
+    let legacy = s
+        .improve(
+            &owner,
+            "legacy-replay",
+            session,
+            improve_input(improve_id, 32),
+        )
+        .await
+        .unwrap();
+    assert_eq!(legacy["job_id"], accepted["job_id"]);
+    drain(&s).await;
+    let improvement = s.improvement(&owner, improve_id).await.unwrap();
+    assert_eq!(improvement["status"], "completed");
+    assert_eq!(fixture.proposals.load(Ordering::SeqCst), 1);
+
+    let request =
+        json!({"query":"parsers","as_of_ms":1796083200000_i64,"applicability_context":[CONDITION]});
+    let recall = async |auth: &AuthContext| {
+        let input = serde_json::from_value(request.clone()).unwrap();
+        serde_json::to_value(s.recall_long_term_memories(auth, input).await.unwrap()).unwrap()
+    };
+    let recalled = recall(&reader).await;
+    assert_eq!(recalled["memories"].as_array().unwrap().len(), 2);
+    let fact = &recalled["memories"][0];
+    assert_eq!(fact["kind"], "fact");
+    assert_eq!(fact["state"]["value"], "2 reviewers");
+    assert_eq!(fact["version"], 2);
+    assert_eq!(fact["applicability"], "unverified");
+    assert_eq!(
+        fact["citations"][0]["source_event_id"],
+        update["source_event_id"]
+    );
+    let lesson = &recalled["memories"][1];
+    assert_eq!(lesson["kind"], "experience");
+    assert_eq!(lesson["statement"], STATEMENT);
+    assert_eq!(lesson["applicability"], "caller_context_exact_match");
+    assert_eq!(lesson["citation"]["kind"], "chunk");
+    assert_eq!(
+        lesson["memory_id"],
+        improvement["learnings"][0]["learning_id"]
+    );
+    let indexed = s
+        .search(
+            &reader,
+            serde_json::from_value(json!({"query":"parsers","limit":100})).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        indexed["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|hit| hit["asset_id"] == lesson["citation"]["asset_id"])
+            .count()
+            > 1
+    );
+    let serialized = recalled.to_string();
+    for private in [id(&turn, "source_event_id"), id(&turn, "turn_id"), session] {
+        assert!(!serialized.contains(&private.to_string()));
+    }
+    assert!(!serialized.contains(ANSWER));
+    let tool_recall = peer
+        .call(&token, None, "context_memory_recall", request.clone())
+        .await
+        .unwrap();
+    assert_eq!(tool_recall, recalled);
+    let downstream_session = id(
+        &s.private_session(&other_writer).await.unwrap(),
+        "session_id",
+    );
+    let downstream = archive(
+        &s,
+        &other_writer,
+        downstream_session,
+        vec![lesson["citation"].clone()],
+    )
+    .await;
+    let downstream_id = id(&downstream, "turn_id");
+    let archived = s
+        .session_turn(&other_writer, downstream_session, downstream_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        archived["used_evidence"][0]["reference"],
+        lesson["citation"]
+    );
+    assert_eq!(recall(&other_workspace).await["memories"], json!([]));
+
+    let mut earlier = request.clone();
+    earlier["identity"] = fact["identity"].clone();
+    earlier["as_of_ms"] = json!(1796083199999_i64);
+    earlier
+        .as_object_mut()
+        .unwrap()
+        .remove("applicability_context");
+    let earlier: Value = http
+        .post(format!("{base}/v1/memories/long-term/recall"))
+        .bearer_auth(&token)
+        .json(&earlier)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(earlier["memories"][0]["memory_id"], fact["memory_id"]);
+    assert_eq!(earlier["memories"][0]["state"]["value"], "1 reviewer");
+    assert_eq!(
+        earlier["memories"][0]["applicability"],
+        "caller_identity_exact_match"
+    );
+    assert_eq!(
+        earlier["memories"][0]["citations"][0]["source_event_id"],
+        baseline["source_event_id"]
+    );
+    assert_eq!(earlier["memories"][1]["applicability"], "unverified");
+
+    // Retraction is observable before the cleanup worker runs.
+    s.delete(
+        &owner,
+        "withdraw-fact",
+        id(&update, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
+    let remaining = recall(&reader).await;
+    assert_eq!(remaining["memories"][0]["state"]["value"], "1 reviewer");
+    assert_eq!(remaining["memories"][1], *lesson);
+    s.delete(
+        &owner,
+        "withdraw-private-basis",
+        id(&turn, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
+    let remaining = recall(&reader).await;
+    assert_eq!(remaining["memories"].as_array().unwrap().len(), 1);
+    assert_eq!(remaining["memories"][0]["kind"], "fact");
+    assert!(matches!(
+        s.session_turn(&other_writer, downstream_session, downstream_id)
+            .await,
+        Err(AppError::NotFound)
+    ));
 }
 
 async fn snapshot(s: &Service, run: Uuid) -> Value {

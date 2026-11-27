@@ -4,7 +4,7 @@
 //! prepared once, then shared by every enabled document route. No summary,
 //! graph, publication or background work is introduced here.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,10 @@ use crate::{
     parsing,
     service::{Service, scope},
     session::ArchivedEvidence,
-    storage::sqlite::retrieval::{NativePublicationProof, NativeRankedCandidate},
+    storage::sqlite::{
+        SqliteTx,
+        retrieval::{NativePublicationProof, NativeRankedCandidate},
+    },
     storage::{DomainTx, FullTextQuery, Permission, VectorQuery},
     types::{AuthContext, SearchHit},
 };
@@ -36,6 +39,11 @@ pub(crate) enum ContextRoute {
 
 pub(crate) const CONTEXT_CANDIDATE_LIMIT: usize = 100;
 pub(crate) const SESSION_SCAN_LIMIT: usize = 512;
+
+pub(crate) enum ContextLimit {
+    Chunks(usize),
+    Assets(usize),
+}
 
 /// One query embedding and one explicit fallback decision for all routes.
 pub(crate) struct ContextQuery {
@@ -88,6 +96,27 @@ pub(crate) struct ContextCandidate {
 pub(crate) struct ContextCandidateResult {
     pub candidates: Vec<ContextCandidate>,
     pub ranked_native: Vec<NativeRankedCandidate>,
+}
+
+impl SqliteTx {
+    /// Rebuild the candidate and verify its native content against the final
+    /// relational snapshot. Callers must also verify the ranking participants.
+    pub(crate) async fn refresh_context_candidate(
+        &mut self,
+        candidate: ContextCandidate,
+        identity: Option<&MemoryIdentity>,
+    ) -> Result<ContextCandidate> {
+        let mut fresh = self
+            .context_candidate(candidate.hit.chunk_id, candidate.route, identity)
+            .await?
+            .ok_or_else(|| AppError::Conflict("native context candidate route changed".into()))?;
+        self.verify_content_hits(std::slice::from_ref(&candidate.hit))
+            .await?;
+        fresh.hit.score = candidate.hit.score;
+        fresh.hit.content = candidate.hit.content;
+        fresh.retrieval_routes = candidate.retrieval_routes;
+        Ok(fresh)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -169,8 +198,12 @@ impl Service {
         query: &ContextQuery,
         route: ContextRoute,
         identity: Option<&MemoryIdentity>,
-        limit: usize,
+        limit: ContextLimit,
     ) -> Result<ContextCandidateResult> {
+        let (limit, unique_assets) = match limit {
+            ContextLimit::Chunks(count) => (count, false),
+            ContextLimit::Assets(count) => (count, true),
+        };
         if !(1..=CONTEXT_CANDIDATE_LIMIT).contains(&limit) {
             return Err(AppError::Invalid("context candidate limit invalid".into()));
         }
@@ -351,7 +384,12 @@ impl Service {
         }
         let fused = fuse_context_branches(branches, query.effective_mode == "hybrid");
         let mut candidates = Vec::new();
+        // Keep all native rank proofs for the caller. Only selected chunks need content reads.
+        let mut assets = HashSet::new();
         for (hit, origins) in fused {
+            if unique_assets && !assets.insert(hit.asset_id) {
+                continue;
+            }
             if let Some(mut candidate) = tx.context_candidate(hit.chunk_id, route, identity).await?
             {
                 candidate.hit.score = hit.score;

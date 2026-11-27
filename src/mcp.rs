@@ -1,9 +1,12 @@
 use crate::{
     agent_presence::{AgentPresence, ClientKind},
     consolidation::RecallInput,
+    error::AppError,
+    long_term_memory::{ExperienceSource, LongTermRecallInput, LongTermRetainInput},
+    memory_identity::MemoryIdentity,
     service::Service,
     session::SessionTurnInput,
-    types::{AuthContext, CaptureInput, ResolveInput, SearchInput},
+    types::{AuthContext, ResolveInput, SearchInput},
 };
 use rmcp::{
     ErrorData,
@@ -30,8 +33,20 @@ struct GetInput {
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct MemoryRetainInput {
-    content: String,
     idempotency_key: String,
+    content: Option<String>,
+    experience: Option<ExperienceSource>,
+}
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MemoryRecallInput {
+    query: Option<String>,
+    identity: Option<MemoryIdentity>,
+    version: Option<i32>,
+    as_of_ms: Option<i64>,
+    limit: Option<usize>,
+    #[serde(default)]
+    applicability_context: Vec<String>,
 }
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -175,7 +190,7 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Save new source text to the workspace and queue background long-term memory consolidation. Requires writer access. Submit only content approved for this workspace. Reuse the same idempotency_key (1 to 200 ASCII characters) and identical content on retry. A receipt confirms admission; the job result contains the resulting memory IDs and versions."
+        description = "Submit approved evidence for workspace long-term memory. Requires writer access. Supply exactly one of content (source text for facts) or experience (an owned session_id and an explicit improve request with conditions). Reuse the same idempotency_key (1 to 200 ASCII characters) and identical inputs on retry. An experience request authorizes publishing a verified conclusion from session feedback."
     )]
     async fn context_memory_retain(
         &self,
@@ -183,11 +198,12 @@ impl ContextMcp {
     ) -> std::result::Result<CallToolResult, ErrorData> {
         result(
             self.service
-                .retain_memory(
+                .retain_long_term_memory(
                     &self.identity,
                     &input.idempotency_key,
-                    CaptureInput {
+                    LongTermRetainInput {
                         content: input.content,
+                        experience: input.experience,
                     },
                 )
                 .await,
@@ -195,15 +211,54 @@ impl ContextMcp {
     }
 
     #[tool(
-        description = "Look up a consolidated workspace memory by the exact subject, predicate, and complete context. Returns its timeline, cited evidence, and current, conflicting, or unknown status. Optional version selects a historical snapshot. Optional as_of_ms evaluates its evidence at a Unix time in milliseconds."
+        description = "Search workspace facts and verified experiences together with query. Optional identity limits facts to that exact subject, predicate and context, as_of_ms selects the fact time, and applicability_context supplies exact conditions for experiences. For detailed fact history, supply identity without query and optionally version."
     )]
     async fn context_memory_recall(
         &self,
-        Parameters(input): Parameters<RecallInput>,
+        Parameters(input): Parameters<MemoryRecallInput>,
     ) -> std::result::Result<CallToolResult, ErrorData> {
+        if let Some(query) = input.query {
+            if input.version.is_some() {
+                return Err(mcp_error(AppError::Invalid(
+                    "version requires exact fact lookup without query".into(),
+                )));
+            }
+            let recalled = self
+                .service
+                .recall_long_term_memories(
+                    &self.identity,
+                    LongTermRecallInput {
+                        query,
+                        identity: input.identity,
+                        as_of_ms: input.as_of_ms,
+                        limit: input.limit,
+                        applicability_context: input.applicability_context,
+                    },
+                )
+                .await
+                .map_err(mcp_error)?;
+            return result(Ok(serde_json::json!(recalled)));
+        }
+        if input.limit.is_some() || !input.applicability_context.is_empty() {
+            return Err(mcp_error(AppError::Invalid(
+                "limit and applicability_context require query".into(),
+            )));
+        }
+        let identity = input.identity.ok_or_else(|| {
+            mcp_error(AppError::Invalid(
+                "query or exact identity is required".into(),
+            ))
+        })?;
         let memory = self
             .service
-            .recall_long_term_memory(&self.identity, input)
+            .recall_long_term_memory(
+                &self.identity,
+                RecallInput {
+                    identity,
+                    version: input.version,
+                    as_of_ms: input.as_of_ms,
+                },
+            )
             .await
             .map_err(mcp_error)?;
         result(Ok(serde_json::json!(memory)))

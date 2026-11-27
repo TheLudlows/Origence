@@ -104,6 +104,7 @@ impl SqliteTx {
     pub async fn unnormalized_memory_slot(&mut self) -> StorageResult<Uuid> {
         self.insert_unnormalized_memory_slot(Uuid::new_v4()).await
     }
+    #[cfg(feature = "local-storage")]
     pub(crate) async fn reserve_capture_evidence_slot(&mut self, id: Uuid) -> StorageResult<Uuid> {
         match self.valid_targets_inner(Some(id), None).await {
             Ok(()) => Ok(id),

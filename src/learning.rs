@@ -22,9 +22,10 @@ fn default_max_feedback() -> usize {
     MAX_FEEDBACK
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ImproveInput {
+    #[schemars(with = "String")]
     pub improve_id: Uuid,
     /// Caller-selected scope. A proposal must preserve this exact list.
     pub conditions: Vec<String>,

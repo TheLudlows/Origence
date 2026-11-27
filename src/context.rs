@@ -1,7 +1,7 @@
 //! Context assembly keeps final provenance, permission and visibility checks in
 //! one fresh relational snapshot after all embedding/native retrieval IO.
 use crate::{
-    context_retrieval::{ContextCandidate, ContextRoute, ContextSessionTurn},
+    context_retrieval::{ContextCandidate, ContextLimit, ContextRoute, ContextSessionTurn},
     error::{AppError, Result},
     evidence::*,
     service::Service,
@@ -106,7 +106,7 @@ impl Service {
                             &query,
                             kind,
                             input.memory_identity.as_ref(),
-                            route.limit,
+                            ContextLimit::Chunks(route.limit),
                         ),
                     )
                     .await?;
@@ -139,25 +139,10 @@ impl Service {
         tx.verify_native_candidates(&ranked_native).await?;
         let mut items = Vec::new();
         for candidate in assets {
-            if let Some(mut fresh) = tx
-                .context_candidate(
-                    candidate.hit.chunk_id,
-                    candidate.route,
-                    input.memory_identity.as_ref(),
-                )
-                .await?
-            {
-                tx.verify_content_hits(std::slice::from_ref(&candidate.hit))
-                    .await?;
-                fresh.hit.score = candidate.hit.score;
-                fresh.hit.content = candidate.hit.content;
-                fresh.retrieval_routes = candidate.retrieval_routes;
-                items.push(asset_item(fresh, &input, &query.effective_mode)?);
-            } else {
-                return Err(AppError::Conflict(
-                    "native context candidate route changed".into(),
-                ));
-            }
+            let fresh = tx
+                .refresh_context_candidate(candidate, input.memory_identity.as_ref())
+                .await?;
+            items.push(asset_item(fresh, &input, &query.effective_mode)?);
         }
         let turn_keys: Vec<_> = turns
             .iter()
@@ -216,11 +201,7 @@ fn asset_item(
         .unwrap_or_default();
     let applicability = if learning.is_none() {
         "not_applicable"
-    } else if !conditions.is_empty()
-        && conditions
-            .iter()
-            .all(|c| input.applicability_context.contains(c))
-    {
+    } else if conditions_match(&conditions, &input.applicability_context) {
         "caller_context_exact_match"
     } else {
         "unverified"

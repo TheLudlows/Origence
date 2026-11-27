@@ -57,6 +57,25 @@ fn default_routes() -> Vec<RouteBudget> {
     .collect()
 }
 
+pub(crate) fn validate_applicability_context(context: &[String]) -> Result<(), &'static str> {
+    if context.len() > 32
+        || context
+            .iter()
+            .any(|s| s.trim().is_empty() || s.len() > 256 || s.contains('\0'))
+    {
+        return Err("applicability context invalid");
+    }
+    Ok(())
+}
+
+#[cfg(feature = "local-storage")]
+pub(crate) fn conditions_match(conditions: &[String], context: &[String]) -> bool {
+    !conditions.is_empty()
+        && conditions
+            .iter()
+            .all(|condition| context.contains(condition))
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceInput {
@@ -110,14 +129,7 @@ impl EvidenceInput {
         {
             return Err("memory identity invalid");
         }
-        if self.applicability_context.len() > 32
-            || self
-                .applicability_context
-                .iter()
-                .any(|s| s.trim().is_empty() || s.len() > 256 || s.contains('\0'))
-        {
-            return Err("applicability context invalid");
-        }
+        validate_applicability_context(&self.applicability_context)?;
         if self.session_id.is_some_and(|id| id.is_nil())
             || self.exclude_session_id.is_some_and(|id| id.is_nil())
         {
