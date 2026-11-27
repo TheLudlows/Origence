@@ -4,6 +4,21 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · MCP and native client CI contracts
+
+Based on PR #178 at `37129e8` and its follow-up changes, with Rust 1.98.0, fresh isolated Windows
+databases, and embedded AnySeek. Formatting, strict Clippy, Python and Node syntax checks, and
+`git diff --check` passed. The original Linux CI failed while checking MCP input fields.
+The local Windows `tools/mcp_smoke.py --local` run passed schema checks for four protocol
+requests, pinned global lookup, denial before approval and after withdrawal, safe errors, and reopen.
+
+Native Windows client acceptance used Codex 0.171.0 and Claude Code 2.1.330. Codex returned five
+enabled hooks before the fix, while the old assertion expected four. With the updated contract,
+`tools/plugin_smoke.py --bind 127.0.0.1:0` passed native install, default and selected workspace
+access, historical version lookup, Run hooks, and uninstall for both clients. Port 8080 was
+already occupied, so the native smoke used an ephemeral loopback port. Installer acceptance adds a real offline key-rotation case,
+and checks that HTTP and MCP resolve the same logical key and session.
+
 ## 2026-11-27 · Global knowledge and deployment key provisioning
 
 Verified on a Windows working tree based on `55c0ece`, with Rust 1.98.0, Node 24.15.0, and fresh databases.

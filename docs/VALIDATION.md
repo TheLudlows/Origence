@@ -7,6 +7,18 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · MCP 与客户端 CI 契约修复
+
+基于 PR #178 的 `37129e8` 和后续修复，在 Windows 使用 Rust 1.98.0、隔离新库和嵌入式 AnySeek。
+`cargo fmt --all -- --check`、严格 Clippy、Python 与 Node 语法检查，以及 `git diff --check` 通过。
+原 Linux CI 在 MCP 输入字段核对处失败。Windows 本机重新运行 `tools/mcp_smoke.py --local`
+通过四种协议版本的结构校验、固定版本全局知识读取、审核前与下架后的拒绝、错误保护及服务重开。
+
+Windows 原生客户端验收固定使用 Codex 0.171.0 与 Claude Code 2.1.330。修复前，Codex 已返回五个启用的 Hook，
+旧断言仍要求四个。更新后，`tools/plugin_smoke.py --bind 127.0.0.1:0` 对两端通过真实安装、
+默认与选定工作空间、历史版本读取、Run Hook 和卸载。本机 8080 端口已被占用，验收使用临时回环端口。
+安装器验收增加了离线轮换后重新连接的用例。HTTP 与 MCP 核对相同的逻辑 Key 和会话。
+
 ## 2026-11-27 · 全局知识与部署 Key 初始化
 
 基于 `55c0ece` 的 Windows 工作树，使用 Rust 1.98.0、Node 24.15.0 和新数据库。

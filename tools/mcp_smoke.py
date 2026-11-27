@@ -5,6 +5,7 @@ Run: python3 tools/mcp_smoke.py --binary target/debug/origence
 Runs the actual HTTP host with temporary data, scoped keys and no models.
 """
 import argparse
+from contextlib import contextmanager
 from anyseek_fixture_env import configure_fixture
 import json
 import os
@@ -50,7 +51,7 @@ TOOL_FIELDS = {
         "applicability_context": "array", "session_id": "string",
         "exclude_session_id": "string",
     },
-    "context_get": {"asset_id": "string", "version": "integer"},
+    "context_get": {"asset_id": "string", "version": "integer", "scope": "string"},
     "context_memory_retain": {
         "content": "string", "experience": None, "idempotency_key": "string",
     },
@@ -89,6 +90,17 @@ def isolated_env(directory):
                NO_PROXY="127.0.0.1,localhost,::1", no_proxy="127.0.0.1,localhost,::1")
     configure_fixture(env)
     return env
+
+
+@contextmanager
+def fixture_directory(prefix):
+    root = tempfile.gettempdir()
+    cleanup_root = root
+    if os.name == "nt" and not root.startswith("\\\\?\\"):
+        # Normal paths for the host and vendor clients, long paths for cleanup.
+        cleanup_root = "\\\\?\\UNC\\" + root[2:] if root.startswith("\\\\") else "\\\\?\\" + root
+    with tempfile.TemporaryDirectory(prefix=prefix, dir=cleanup_root) as directory:
+        yield Path(root) / Path(directory).name
 
 
 class Child:
@@ -411,6 +423,7 @@ def check_tools(mcp):
             continue
         if name == "context_get":
             require(nullable(root, properties["version"]), "get version no longer accepts null")
+            require(nullable(root, properties["scope"]), "get scope no longer accepts null")
             continue
         if name == "context_memory_retain":
             require(all(nullable(root, properties[field]) for field in ("content", "experience")),
@@ -483,6 +496,8 @@ def exercise(mcp, asset_id, workspace_id):
             "MCP get did not return the current version")
     require(history["version"] == 1 and history["content"] == OLD_CONTENT,
             "MCP get did not preserve historical version")
+    require(mcp.tool("context_get", {"asset_id": asset_id, "scope": "workspace"}) == current,
+            "MCP get's explicit workspace scope changed the default lookup")
     empty = mcp.tool("context_search", {"query": "MCPDEFINITELYABSENT"})
     require(empty["hits"] == [], "missing query unexpectedly produced search hits")
     long_term = mcp.tool("context_memory_recall", {"query": QUERY})
@@ -491,6 +506,10 @@ def exercise(mcp, asset_id, workspace_id):
     mcp.error("context_get", {"asset_id": BAD_INPUT}, -32602, "asset_id must be a UUID")
     mcp.error("context_get", {"asset_id": str(uuid.uuid4())}, -32600,
               "NOT_FOUND: resource not found")
+    mcp.error("context_get", {"asset_id": asset_id, "scope": "global"}, -32600,
+              "NOT_FOUND: resource not found")
+    mcp.error("context_get", {"asset_id": asset_id, "scope": BAD_INPUT}, -32602,
+              "scope must be workspace or global")
     mcp.error("context_search", {"query": QUERY, "mode": BAD_INPUT}, -32600,
               "INVALID_ARGUMENT: query, mode or limit invalid")
     mcp.error("context_resolve", {"query": QUERY, "budget_tokens": 32001}, -32600,
@@ -509,6 +528,31 @@ def exercise(mcp, asset_id, workspace_id):
     # The same live connection must remain usable after errors.
     require(mcp.tool("context_get", {"asset_id": asset_id})["content"] == CONTENT,
             "MCP session failed to recover after invalid tool calls")
+
+
+def exercise_global_knowledge(host, mcp, admin):
+    content = "MCPGLOBALPOLICY requires independent review. Café 审批."
+    host.forbidden.append(content)
+    asset = host.wait_for_publication(host.request("/v1/knowledge", {
+        "title": "Shared policy", "content": content, "format": "text",
+    }))
+    submission = host.request("/v1/global-knowledge", {"asset_id": asset, "version": 1})
+    publication = submission["publication_id"]
+    args = {"asset_id": publication, "scope": "global", "version": 1}
+    mcp.error("context_get", args, -32600, "NOT_FOUND: resource not found")
+    review_path = f"/admin/deployment/global-knowledge/{publication}/review"
+    owner = host.token
+    host.token = admin
+    try:
+        host.request(review_path, {"decision": "approve"})
+        release = mcp.tool("context_get", args)
+        require(release["content"] == content and release["version"] == 1 and release["scope"] == "global",
+                "MCP get lost the global release's pinned version")
+        mcp.error("context_get", {**args, "version": 2}, -32600, "NOT_FOUND: resource not found")
+        host.request(review_path, {"decision": "withdraw"})
+        mcp.error("context_get", args, -32600, "NOT_FOUND: resource not found")
+    finally:
+        host.token = owner
 
 
 def exercise_private_archive(mcp, other_mcp, reader_mcp, turn):
@@ -568,9 +612,11 @@ class Host(Child):
         return json.loads(value)
 
     def publish(self, content):
-        accepted = self.request("/v1/memories", {
+        return self.wait_for_publication(self.request("/v1/memories", {
             "fact_key": "mcp.smoke.policy", "content": content, "publish_if_authorized": True,
-        })
+        }))
+
+    def wait_for_publication(self, accepted):
         deadline = time.monotonic() + STARTUP_TIMEOUT
         while True:
             job = self.request("/v1/jobs/" + accepted["job_id"])
@@ -601,17 +647,22 @@ def main():
     args = parser.parse_args()
     binary = str(Path(args.binary).resolve())
     require(Path(binary).is_file(), "Origence binary does not exist; build it first")
-    with tempfile.TemporaryDirectory(prefix="oc-mcp-smoke-") as directory:
-        env = isolated_env(directory)
-        forbidden = [directory, OLD_CONTENT, CONTENT, BAD_INPUT]
+    with fixture_directory("oc-mcp-smoke-") as directory:
+        env = isolated_env(str(directory))
+        forbidden = [str(directory), OLD_CONTENT, CONTENT, BAD_INPUT]
         bootstrap = subprocess.run([binary, "--offline", "workspace-create", "mcp-smoke"],
                                    env=env, cwd=directory, capture_output=True, timeout=STARTUP_TIMEOUT)
         require(bootstrap.returncode == 0, "MCP fixture workspace bootstrap failed")
         workspace = json.loads(bootstrap.stdout)
         token, workspace_id = workspace["token"], workspace["workspace_id"]
+        provision = subprocess.run([binary, "--offline", "deployment-admin-rotate"], env=env,
+                                   cwd=directory, capture_output=True, timeout=STARTUP_TIMEOUT)
+        require(provision.returncode == 0, "MCP fixture administrator bootstrap failed")
+        admin = json.loads(provision.stdout)["token"]
         bad_token = "oc_invalid_smoke_" + uuid.uuid4().hex
-        forbidden.extend([token, bad_token])
+        forbidden.extend([token, admin, bad_token])
         sanitized(bootstrap.stderr.decode("utf-8", errors="replace"), forbidden)
+        sanitized(provision.stderr.decode("utf-8", errors="replace"), forbidden)
         env["OC_API_KEY"] = token
         turn = {"turn_id": str(uuid.uuid4()), "question": "What changed here?",
                 "answer": "This archive is private.", "used_evidence": []}
@@ -631,6 +682,7 @@ def main():
             mcp = Mcp(host.base, reader["token"], forbidden)
             mcp.initialize("2025-11-25", "2025-11-25")
             exercise(mcp, asset_id, workspace_id)
+            exercise_global_knowledge(host, mcp, admin)
             mcp.error("context_bundle", {"query": QUERY, "routes": [{"route": "session"}]},
                       -32600, "FORBIDDEN: permission denied")
             writer_mcp = Mcp(host.base, token, forbidden)
@@ -652,7 +704,7 @@ def main():
                     "archive changed after host restart")
             require(mcp.tool("context_get", {"asset_id": asset_id})["content"] == CONTENT,
                     "MCP failed to reopen after host restart")
-        print("PASS: HTTP MCP version negotiation, schemas, tools, safe errors, live revocation and reopen",
+        print("PASS: HTTP MCP version negotiation, schemas, global lookup, safe errors, live revocation and reopen",
               flush=True)
 
 

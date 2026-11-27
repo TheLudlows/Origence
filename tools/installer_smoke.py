@@ -7,11 +7,10 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from urllib.request import Request, urlopen
 import uuid
 
-from mcp_smoke import isolated_env, require, sanitized
+from mcp_smoke import fixture_directory, isolated_env, require, sanitized
 from plugin_smoke import codex_session, tool_value
 
 REPO = Path(__file__).resolve().parents[1]
@@ -304,6 +303,7 @@ def smoke(binary, claude, codex, root, browser):
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
         installer(new_env, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        session, _ = request(endpoint + "/v1/session", headers={"Authorization": "Bearer " + config["token"]})
         agent = json.loads(state.read_text(encoding="utf-8"))["agent"]
         installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
         remaining = json.loads(state.read_text(encoding="utf-8"))
@@ -311,6 +311,22 @@ def smoke(binary, claude, codex, root, browser):
                 "Deployment uninstall must leave Agent settings and ownership alone")
         require((data / "context.db").is_file() and (backup / "context.db").is_file(),
                 "Deployment uninstall must preserve both live and backed-up data")
+        rotated = subprocess.run([str(binary), "--data-dir", str(data), "--offline",
+                                  "workspace-key-rotate", config["workspace"]],
+                                 cwd=root, env=env, capture_output=True, timeout=60, check=True)
+        replacement_key = json.loads(rotated.stdout)
+        forbidden.append(replacement_key["token"])
+        require(replacement_key["key_id"] != config["key"], "Key rotation must issue a new credential ID")
+        rotated_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=replacement_key["token"])
+        resumed = installer(rotated_env, ["install", "--from-env", "--ui-port", str(ui_port),
+                                          "--data-dir", str(data), "--origence", str(binary)],
+                            forbidden, entry=deploy_cmd, cwd=root)
+        require(resumed["http-mcp"]["status"] == "success" and resumed["console-session"]["status"] == "success",
+                "Deployment must accept the rotated Key")
+        current_session, _ = request(endpoint + "/v1/session",
+                                     headers={"Authorization": "Bearer " + replacement_key["token"]})
+        require(current_session == session, "The rotated Key must keep its logical session")
+        installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
         user_url = "http://127.0.0.1:20123/mcp"
         subprocess.run([str(codex), "mcp", "add", "origence", "--url", user_url, "--bearer-token-env-var",
                         "OC_API_KEY"], cwd=root, env=env, capture_output=True, timeout=30, check=True)
@@ -339,8 +355,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if WINDOWS and not args.allow_windows_user_env:
         sys.exit("Run Windows acceptance in a disposable account with --allow-windows-user-env.")
-    with tempfile.TemporaryDirectory(prefix="origence installer ") as directory:
-        root = Path(directory)
+    with fixture_directory("origence installer ") as root:
         binary_dir = root / "Origence binaries"
         binary_dir.mkdir()
         binary = binary_dir / ("origence.exe" if WINDOWS else "origence")

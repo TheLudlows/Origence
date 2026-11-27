@@ -213,7 +213,7 @@ async function install(state, args) {
   if (state.value.bootstrap?.token === token)
     check(who.workspace_id === state.value.bootstrap.workspace_id, "The initialized API resolved to a different workspace.");
   status("whoami", "success", { workspace_id: who.workspace_id, role: who.role });
-  const mcp = await connectMcp(endpoint.origin, token, who.workspace_id, who.id);
+  const mcp = await connectMcp(endpoint.origin, token, who.workspace_id);
   if (old && !sameEndpoint && state.value.apiEndpoint !== endpoint.origin) await stopService(state, "api");
   status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
 

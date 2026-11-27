@@ -53,7 +53,7 @@ const requiredTools = [
   "context_session", "context_turn_get", "context_turn_archive",
 ];
 
-export async function connectMcp(endpoint, token, workspace, key) {
+export async function connectMcp(endpoint, token, workspace) {
   let id = 0;
   const headers = {
     "Content-Type": "application/json",
@@ -93,9 +93,13 @@ export async function connectMcp(endpoint, token, workspace, key) {
   const names = catalog.tools?.map(tool => tool.name) ?? [];
   check(requiredTools.every(name => names.includes(name)),
     "MCP tools/list did not return the required Origence tools. Check the server version.");
+  const session = await json(await expect(await responseAt(endpoint, "/v1/session", {
+    headers: { Authorization: headers.Authorization, "X-Origence-Workspace": workspace },
+  }), 200, "HTTP session"), "HTTP session");
   const context = await call("context_session", {});
-  check(context.workspace_id === workspace && context.key_id === key,
-    "MCP context_session does not match the API workspace and key.");
+  check(session.workspace_id === workspace && uuid.test(session.key_id) && uuid.test(session.session_id)
+    && context.workspace_id === workspace && context.key_id === session.key_id && context.session_id === session.session_id,
+    "MCP context_session does not match the API workspace, logical key and session.");
   return { call, toolCount: names.length };
 }
 
