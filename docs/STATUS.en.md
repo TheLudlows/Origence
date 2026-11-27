@@ -36,7 +36,7 @@ A fresh database supports offline provisioning of single-key workspaces. The cre
 
 The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The plugin's automatic Run hook still reports through a local command. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
 
-Workspace administrators can open **Agent connections** to see in-flight MCP
+Workspace keys and membership-based workspace administrators can open **Agent connections** to see their workspace's in-flight MCP
 requests and activity from the last five minutes, grouped by credential with
 the client kinds seen in handshakes. Observations are local to the serving
 process. See the [Agent connections API](API.en.md#agent-connections).

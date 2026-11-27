@@ -53,6 +53,7 @@ pub enum Permission {
     Read,
     Write,
     Delete,
+    InspectAgents,
     WorkspaceAdmin,
     DeleteArchive,
 }
@@ -64,6 +65,7 @@ impl Permission {
             Self::Read => "read",
             Self::Write => "write",
             Self::Delete => "delete",
+            Self::InspectAgents => "inspect_agents",
             Self::WorkspaceAdmin => "workspace_admin",
             Self::DeleteArchive => "delete_archive",
         }
@@ -75,7 +77,7 @@ impl Permission {
         match self {
             Self::Read => matches!(role, "reader" | "writer" | "admin" | "workspace"),
             Self::Write => matches!(role, "writer" | "admin" | "workspace"),
-            Self::Delete => matches!(role, "admin" | "workspace"),
+            Self::Delete | Self::InspectAgents => matches!(role, "admin" | "workspace"),
             Self::WorkspaceAdmin => role == "admin",
             Self::DeleteArchive => matches!(role, "writer" | "admin"),
         }

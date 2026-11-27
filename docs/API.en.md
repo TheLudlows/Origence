@@ -131,8 +131,7 @@ Approval revalidates the original version. The approved copy survives updates or
 
 ### Agent connections
 
-`GET /admin/agents` requires an administrator in the workspace selected by the
-Bearer credential and optional `X-Origence-Workspace` header. The response has
+`GET /admin/agents` accepts a workspace key or a membership-based workspace administrator. The bearer credential and optional `X-Origence-Workspace` header determine the workspace. The response has
 `workspace_id`, `window_seconds` (300), `capacity_reached`, and `items`. Each
 item has its current `role` and an `observation` with `credential_id`,
 `last_seen_at_ms`, `active_requests`, and `client_kinds`. New reads exclude

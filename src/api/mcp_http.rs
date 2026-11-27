@@ -1,5 +1,5 @@
 //! Native, request-scoped Streamable HTTP MCP transport.
-use super::http::auth;
+use super::http::{auth, uncached_json};
 use crate::{
     agent_presence::{ACTIVITY_WINDOW, AgentPresence},
     error::{AppError, Result},
@@ -8,7 +8,7 @@ use crate::{
     storage::{DomainTx, Permission, StorageError},
 };
 use axum::{
-    Json, Router,
+    Router,
     body::{Body, to_bytes},
     extract::{Request, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
@@ -93,12 +93,12 @@ async fn active_agents(
     State(endpoint): State<Endpoint>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
-    let admin = auth(&endpoint.service, &headers).await?;
+    let caller = auth(&endpoint.service, &headers).await?;
     let mut tx = endpoint
         .service
-        .read(&admin, Permission::WorkspaceAdmin)
+        .read(&caller, Permission::InspectAgents)
         .await?;
-    let (observations, capacity_reached) = endpoint.presence.snapshot(scope(&admin));
+    let (observations, capacity_reached) = endpoint.presence.snapshot(scope(&caller));
     let mut items = Vec::with_capacity(observations.len());
     for observation in observations {
         match tx.live_role_for_principal(observation.credential_id).await {
@@ -108,13 +108,10 @@ async fn active_agents(
         }
     }
     tx.commit().await?;
-    Ok((
-        [(header::CACHE_CONTROL, "no-store")],
-        Json(json!({
-            "workspace_id":admin.workspace_id, "window_seconds":ACTIVITY_WINDOW.as_secs(),
-            "capacity_reached":capacity_reached, "items":items
-        })),
-    ))
+    Ok(uncached_json(json!({
+        "workspace_id":caller.workspace_id, "window_seconds":ACTIVITY_WINDOW.as_secs(),
+        "capacity_reached":capacity_reached, "items":items
+    })))
 }
 
 async fn handle(State(endpoint): State<Endpoint>, request: Request) -> Response {

@@ -175,7 +175,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ### Agent 连接
 
-`GET /admin/agents` 仅供当前工作区管理员读取。工作区按 Bearer 凭据和可选
+`GET /admin/agents` 允许工作空间 Key 或成员授权工作区的管理员读取本空间的连接。工作区按 Bearer 凭据和可选
 `X-Origence-Workspace` 解析。返回 `workspace_id`、`window_seconds`（300）、
 `capacity_reached` 和 `items`。每项有当前 `role` 及 `observation`，包含
 `credential_id`、`last_seen_at_ms`、`active_requests` 和 `client_kinds`。

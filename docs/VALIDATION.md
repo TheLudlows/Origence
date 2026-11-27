@@ -13,6 +13,8 @@
 `cargo fmt --all -- --check` 和 `cargo clippy --locked --all-targets -- -D warnings` 通过。
 `cargo test --locked --test local` 分别以 `global_knowledge`、`workspace_access` 和 `mcp_runs` 为过滤条件运行，合计通过 9 项。
 手工检查了批准时读取正文的 SQL。仍在同一事务按发布 ID 读取单表、按字节起点排序，并验证内容哈希。
+补齐 Agent 连接权限后，`cargo test --locked --test local -- mcp_http` 通过 4 项。真实 MCP 握手产生的活动
+可用本空间 Key 读取，指定同租户的另一个空间返回 403。控制台也验证了本空间连接列表和跨空间拒绝。
 
 Node 24.15.0 的 `npm --prefix ui test` 通过 34 项。`node ui/scripts/check-console-session-browser.cjs`
 通过本机 Chromium 合成服务验收，包括审核分页重试、按检索范围打开固定版本、成员账号登录和单 Key 登录。

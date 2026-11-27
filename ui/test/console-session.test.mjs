@@ -90,6 +90,10 @@ test("a workspace Key signs in without an account and stays scoped after reload"
       res.statusCode = 401;
       return res.end("{}");
     }
+    if (req.url === "/admin/agents") {
+      assert.equal(req.headers["x-origence-workspace"], a);
+      return res.end(JSON.stringify({ workspace_id: a, items: [] }));
+    }
     res.end(JSON.stringify({ id: b, workspace_id: a, role: "workspace" }));
   }), t);
   const ui = await listen(createUiServer({ apiBaseUrl: upstream }), t);
@@ -110,6 +114,8 @@ test("a workspace Key signs in without an account and stays scoped after reload"
     headers: { Cookie: cookie, "X-Origence-Session": session.binding, "X-Origence-Workspace": workspace },
   });
   assert.equal((await request("/api/v1/assets", b)).status, 403);
+  assert.deepEqual(await (await request("/api/admin/agents")).json(), { workspace_id: a, items: [] });
+  assert.equal((await request("/api/admin/agents", b)).status, 403);
   assert.equal((await request("/api/admin/keys")).status, 403);
   assert.equal((await request("/api/admin/deployment/workspaces")).status, 403);
   assert.equal((await fetch(`${ui}/api/admin/deployment/global-knowledge/${a}/review`, {

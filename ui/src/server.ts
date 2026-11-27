@@ -205,12 +205,16 @@ export function createUiServer(options: ServerOptions) {
           const workspace = sessions.authorization(req, new URL(origin));
           if (creatingWorkspace && !workspace.canCreateOwned) throw new HttpError(403, "当前工作区未授权创建子工作区");
           headers.set("authorization", workspace.authorization);
-          if (managingKeys || viewingAgents) {
+          if (managingKeys) {
             if (workspace.role !== "admin")
-              throw new HttpError(403, viewingAgents ? "只有工作区管理员可以查看 Agent 连接" : "只有工作区管理员可以管理 API Key");
+              throw new HttpError(403, "只有工作区管理员可以管理 API Key");
             const targetId = managedKeyPath.exec(path)?.[1];
             if (targetId?.toLowerCase() === workspace.principalId.toLowerCase())
               throw new HttpError(409, "请在控制台外维护当前会话使用的凭据");
+          }
+          if (viewingAgents && workspace.role !== "admin" && workspace.role !== "workspace")
+            throw new HttpError(403, "当前凭据无权查看本工作区的 Agent 连接");
+          if (managingKeys || viewingAgents) {
             headers.set("X-Origence-Workspace", workspace.workspaceId);
           } else if (workspace.scopedWorkspace) headers.set("X-Origence-Workspace", workspace.scopedWorkspace);
         }

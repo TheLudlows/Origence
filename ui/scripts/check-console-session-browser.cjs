@@ -86,6 +86,9 @@ async function run() {
     }
     if (req.headers.authorization === `Bearer ${workspaceKey}`) {
       if (path === "/v1/whoami") return send({ id: singleWorkspace, workspace_id: singleWorkspace, role: "workspace" });
+      if (path === "/admin/agents") return send({ workspace_id: singleWorkspace, window_seconds: 300, capacity_reached: false,
+        items: [{ role: "workspace", observation: { credential_id: singleWorkspace, client_kinds: ["codex"],
+          active_requests: 1, last_seen_at_ms: 1770000000000 } }] });
       if (path === `/v1/assets/${alpha}`) return send(knowledge);
       if (path === `/v1/assets/${alpha}/runs`) return send({ items: [], next_after: null });
       if (path === "/v1/assets") return send({ items: [knowledge], next_after: null });
@@ -230,6 +233,8 @@ async function run() {
     await keyPage.reload();
     await keyPage.getByText("归档原文", { exact: true }).waitFor();
     assert.equal(await keyPage.evaluate(() => localStorage.length), 0);
+    await keyPage.getByRole("button", { name: "Agent 连接", exact: true }).click();
+    await keyPage.getByRole("cell", { name: "Codex", exact: true }).waitFor();
     console.log("PASS workspace Key sign-in and archive read-only controls without a console account (synthetic HTTP, Chromium)");
     await keyPage.goto(`${keyBase}/#asset/${alpha}?version=1`);
     await keyPage.getByRole("button", { name: "提交到全局知识审核" }).click();

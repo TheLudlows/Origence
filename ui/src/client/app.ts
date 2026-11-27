@@ -1,6 +1,6 @@
 import { archivePage } from "./archive.js";
 import { api, ApiError } from "./api.js";
-import { agentsPage } from "./agents.js";
+import { agentsPage, canInspectAgents } from "./agents.js";
 import { assetDetail, assetsPage } from "./assets.js";
 import { deploymentConsole } from "./deployment.js";
 import { globalKnowledgePage } from "./global-knowledge.js";
@@ -299,7 +299,8 @@ async function render() {
   nav.setAttribute("aria-label", "主导航");
   for (const [key, label] of pages) {
     if (key === "archive" && user.role === "reader") continue;
-    if ((key === "keys" || key === "agents") && user.role !== "admin") continue;
+    if (key === "keys" && user.role !== "admin") continue;
+    if (key === "agents" && !canInspectAgents(user.role)) continue;
     const link = button("", () => navigate(key), "nav-item");
     const icon = el("span", `nav-icon nav-icon-${key}`);
     icon.setAttribute("aria-hidden", "true");
