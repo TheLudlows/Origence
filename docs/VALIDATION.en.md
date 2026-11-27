@@ -6,11 +6,11 @@ The latest local verification was 2026-11-27. Each section identifies its exact 
 
 ## 2026-11-27 · Project cleanup-after-change skill
 
-Based on main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57`. This change only updates project instructions and skill documentation/configuration.
+Based on main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57`. This change only updates project instructions, the skill, and documentation references.
 
-- `git diff --check` and `git diff --cached --check` passed. Python 3 / PyYAML checks passed for skill frontmatter, interface metadata, and the implicit-invocation setting.
-- Checked the 5 sections and 27 rules in both skill languages and all 6 local documentation links. Reviewed cleanup scope, compatibility boundaries, and test-addition requirements in parallel.
-- Runtime code was unchanged and no tests were added. Rust and Node.js builds and test suites were not run; these checks do not establish runtime or CI validation results.
+- Reviewed the 5 sections and 27 rules in both skill languages, YAML frontmatter, interface metadata, and implicit invocation. `git diff --check`, `git diff --cached --check`, and Python 3 / PyYAML checks passed.
+- Maintain only the root `AGENTS.md`. Confirmed that its translated mirror had no unique constraints before removing it. Audited all 80 Markdown files and 120 script, workflow, and configuration files at commit `845aeab839716c6a32dc7741cfa727ad13019ed7`, repaired current navigation and the SQL-constraint anchor, and documented the exception to bilingual maintenance. No bilingual check script depended on the mirror.
+- Reference and anchor checks passed; other historical validation entries remain intact. Runtime code was unchanged, no tests were added, and Rust or Node.js builds and test suites were not run. These checks do not establish runtime or CI validation results.
 
 ## 2026-11-27 · AnySeek private turn archive
 

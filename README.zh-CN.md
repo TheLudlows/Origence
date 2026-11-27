@@ -72,6 +72,6 @@ cargo test --no-default-features
 
 评估入口包括[检索](evals/retrieval/README.zh-CN.md)和 [Agent 对照](evals/agent/README.zh-CN.md)。
 
-贡献者与编码智能体的实现规则见 [AGENTS.md](AGENTS.zh-CN.md)。SQL 禁用 JOIN 的约束继续生效，原自动检查和测试已移除。
+贡献者与编码智能体的实现规则见 [AGENTS.md](AGENTS.md)。SQL 禁用 JOIN 的约束继续生效，原自动检查和测试已移除。
 
 Windows 原生开发（无需 WSL）见[本地启动和可选 UI 启动器](docs/WINDOWS-DEV.md)。

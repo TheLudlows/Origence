@@ -1,6 +1,8 @@
 # Origence implementation constraints
 
-**English** · [简体中文](AGENTS.zh-CN.md)
+Maintain this project's root agent instructions only in `AGENTS.md`. Do not create
+language-specific copies of this file; it is an explicit exception to bilingual
+documentation requirements.
 
 Read the relevant design, `docs/STATUS.md`, and current code before changing an
 implementation. Prefer the smallest change that meets the documented behavior.
