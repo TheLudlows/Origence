@@ -146,7 +146,84 @@ pub struct LearningCandidate {
     pub supports: Vec<LearningSupport>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ExperienceBasis {
+    HumanConfirmation,
+    AssetVersion {
+        #[schemars(with = "String")]
+        asset_id: Uuid,
+        version: i32,
+        content_sha256: String,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExperiencePublication {
+    pub basis: ExperienceBasis,
+    pub recorded_by: Uuid,
+    pub recorded_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectExperienceInput {
+    pub statement: String,
+    pub why: String,
+    pub conditions: Vec<String>,
+    pub basis: ExperienceBasis,
+}
+
+impl DirectExperienceInput {
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        validate_conditions(&self.conditions)?;
+        if self.statement.contains('\0')
+            || self.why.contains('\0')
+            || self
+                .conditions
+                .iter()
+                .any(|condition| condition.contains('\0'))
+        {
+            return Err("experience text contains NUL");
+        }
+        validate_learning_text(&self.statement, &self.why)?;
+        if let ExperienceBasis::AssetVersion {
+            asset_id,
+            version,
+            content_sha256,
+        } = &self.basis
+            && (asset_id.is_nil()
+                || *version <= 0
+                || !crate::retrieval_diagnostics::digest(content_sha256))
+        {
+            return Err("experience requires an exact valid asset version and SHA-256");
+        }
+        Ok(())
+    }
+}
+
+fn validate_learning_text(statement: &str, why: &str) -> Result<(), &'static str> {
+    if statement.trim().is_empty() || statement.len() > MAX_STATEMENT_BYTES {
+        return Err("learning statement must be nonblank and at most 8192 UTF-8 bytes");
+    }
+    if why.trim().is_empty() || why.len() > MAX_WHY_BYTES {
+        return Err("learning why must be nonblank and at most 4096 UTF-8 bytes");
+    }
+    Ok(())
+}
+
 impl LearningCandidate {
+    #[cfg(feature = "local-storage")]
+    pub(crate) fn render_text(&self) -> String {
+        format!(
+            "Conditional learning\nConditions:\n{}\n\nStatement:\n{}\n\nWhy:\n{}",
+            self.conditions.join("\n"),
+            self.statement,
+            self.why,
+        )
+    }
+
     /// Validate immutable exact UTF-8 evidence; this does not assert semantic truth.
     pub fn validate(
         &self,
@@ -175,12 +252,7 @@ impl LearningCandidate {
         if self.conditions != conditions {
             return Err("learning conditions must exactly match the request");
         }
-        if self.statement.trim().is_empty() || self.statement.len() > MAX_STATEMENT_BYTES {
-            return Err("learning statement must be nonblank and at most 8192 UTF-8 bytes");
-        }
-        if self.why.trim().is_empty() || self.why.len() > MAX_WHY_BYTES {
-            return Err("learning why must be nonblank and at most 4096 UTF-8 bytes");
-        }
+        validate_learning_text(&self.statement, &self.why)?;
         if self.supports.is_empty() || self.supports.len() > MAX_SUPPORTS {
             return Err("learning must have between 1 and 32 supports");
         }

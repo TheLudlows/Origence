@@ -195,15 +195,6 @@ fn check_model_profile(service: &Service, payload: &JobPayload) -> Result<()> {
     Ok(())
 }
 
-fn learning_text(candidate: &LearningCandidate) -> String {
-    format!(
-        "Conditional learning\nConditions:\n{}\n\nStatement:\n{}\n\nWhy:\n{}",
-        candidate.conditions.join("\n"),
-        candidate.statement,
-        candidate.why,
-    )
-}
-
 pub(super) async fn process(
     service: &Service,
     claim: &ClaimedJob,
@@ -221,23 +212,46 @@ pub(super) async fn process(
     let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let mut run: ImproveRun = tx.improve_run(*session_id, *improve_id).await?;
-    let mut entries = std::collections::HashMap::new();
+    tx.commit().await?;
+
+    let mut required = std::collections::HashMap::new();
     for item in &run.snapshot.items {
-        if item.turn.question.is_empty()
-            && let std::collections::hash_map::Entry::Vacant(entry) =
-                entries.entry(item.turn.turn_id)
-        {
-            let archive = tx.archive_entry(*session_id, item.turn.turn_id).await?;
-            if archive.locator.source != item.turn.source_event_id {
-                return Err(AppError::NotFound);
-            }
-            entry.insert(archive);
+        if item.turn.question.is_empty() {
+            required.entry(item.turn.turn_id).or_insert(&item.turn);
         }
     }
-    tx.commit().await?;
     let mut hydrated = std::collections::HashMap::new();
-    for (turn, entry) in entries {
-        hydrated.insert(turn, service.archived_body(&entry).await?);
+    let mut legacy = Vec::new();
+    for (turn, frozen) in required {
+        if let Some(archive) = service.load_native_archive(&a, *session_id, turn).await? {
+            if archive.source != frozen.source_event_id
+                || archive.evidence != frozen.used_evidence
+                || !archive.body.evidence_use.is_reported()
+            {
+                return Err(AppError::Unavailable(
+                    "private archive does not match frozen Improve evidence".into(),
+                ));
+            }
+            hydrated.insert(turn, archive.body);
+        } else {
+            legacy.push((turn, frozen.source_event_id));
+        }
+    }
+    if !legacy.is_empty() {
+        let mut tx = service.read(&a, Permission::Write).await?;
+        guard(&mut tx, claim, payload).await?;
+        let mut entries = Vec::new();
+        for (turn, source) in legacy {
+            let archive = tx.archive_entry(*session_id, turn).await?;
+            if archive.locator.source != source {
+                return Err(AppError::NotFound);
+            }
+            entries.push((turn, archive));
+        }
+        tx.commit().await?;
+        for (turn, entry) in entries {
+            hydrated.insert(turn, service.archived_body(&entry).await?);
+        }
     }
     if !hydrated.is_empty() {
         let mut tx = service.read(&a, Permission::Write).await?;
@@ -343,7 +357,7 @@ pub(super) async fn process(
         ));
         let title = "Conditional learning";
         let source = tx
-            .create_event("learning", &learning_text(candidate), None)
+            .create_event("learning", &candidate.render_text(), None)
             .await?;
         let asset = tx.insert_knowledge_asset(title).await?;
         let child = Service::enqueue(

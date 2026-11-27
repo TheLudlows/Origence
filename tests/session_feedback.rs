@@ -728,9 +728,9 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
     );
     let receipt = left.unwrap();
     assert_eq!(right.unwrap(), receipt);
-    assert_eq!(count(&s, "oc_session_turns").await, 1);
-    assert_eq!(count(&s, "oc_session_turn_evidence").await, 1);
-    assert_eq!(count(&s, "oc_events").await, before_events + 1);
+    assert_eq!(count(&s, "oc_session_turns").await, 0);
+    assert_eq!(count(&s, "oc_session_turn_evidence").await, 0);
+    assert_eq!(count(&s, "oc_events").await, before_events);
     let saved = s.session_turn(&a, session, turn_id).await.unwrap();
     let feedback = feedback(
         Uuid::new_v4(),
@@ -758,6 +758,9 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
     );
     let feedback_receipt = left.unwrap();
     assert_eq!(right.unwrap(), feedback_receipt);
+    assert_eq!(count(&s, "oc_session_turns").await, 1);
+    assert_eq!(count(&s, "oc_session_turn_evidence").await, 1);
+    assert_eq!(count(&s, "oc_events").await, before_events + 1);
     assert_eq!(count(&s, "oc_feedback").await, 1);
     assert_eq!(count(&s, "oc_jobs").await, before_jobs);
     let saved = s.session_turn(&a, session, turn_id).await.unwrap();
@@ -786,7 +789,7 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
 }
 
 #[tokio::test]
-async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit() {
+async fn session_transaction_failure_rolls_back_mid_proof_and_feedback_audit() {
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -807,34 +810,36 @@ async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit
             .collect(),
     );
     assert_eq!(input["used_evidence"].as_array().unwrap().len(), 2);
-    // Failure occurs after the source, turn, and first evidence insertion.
+    archive(&s, &a, "atomic-archive", session, input)
+        .await
+        .unwrap();
+    let original = s.session_turn(&a, session, turn_id).await.unwrap();
+    assert_eq!(count(&s, "oc_session_turn_evidence").await, 0);
+    let input = feedback(Uuid::new_v4(), json!({"type":"turn"}));
+
+    // A feedback consumer's proof must commit together with its feedback.
     db::raw_sql("CREATE TRIGGER fail_second_session_reference BEFORE INSERT ON oc_session_turn_evidence WHEN NEW.ordinal=1 BEGIN SELECT RAISE(ABORT,'fixture reference failure'); END;")
         .execute(s.engine.relational().pool()).await.unwrap();
     let before = counts(&s, true).await;
     assert!(
-        archive(&s, &a, "atomic-archive", session, input.clone())
+        record(&s, &a, "atomic-feedback", session, turn_id, input.clone())
             .await
             .is_err()
     );
     assert_eq!(counts(&s, true).await, before);
-    assert!(matches!(
-        s.session_turn(&a, session, turn_id).await,
-        Err(AppError::NotFound)
-    ));
+    assert_eq!(
+        s.session_turn(&a, session, turn_id).await.unwrap(),
+        original
+    );
     db::raw_sql("DROP TRIGGER fail_second_session_reference;")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
-    archive(&s, &a, "atomic-archive", session, input)
-        .await
-        .unwrap();
-    assert_eq!(count(&s, "oc_session_turn_evidence").await, 2);
 
     // An audit failure must also roll back the feedback and command reservation.
     db::raw_sql("CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON oc_audit BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;")
         .execute(s.engine.relational().pool()).await.unwrap();
     let before = counts(&s, true).await;
-    let input = feedback(Uuid::new_v4(), json!({"type":"turn"}));
     assert!(
         record(&s, &a, "atomic-feedback", session, turn_id, input.clone())
             .await
@@ -852,6 +857,7 @@ async fn session_transaction_failure_rolls_back_mid_reference_and_feedback_audit
     record(&s, &a, "atomic-feedback", session, turn_id, input)
         .await
         .unwrap();
+    assert_eq!(count(&s, "oc_session_turn_evidence").await, 2);
     assert_eq!(count(&s, "oc_feedback").await, 1);
 }
 
@@ -906,8 +912,68 @@ async fn assert_hidden(
     assert_eq!(counts(s, true).await, before);
 }
 
+async fn assert_history_survives_dependency_withdrawal(
+    s: &Service,
+    a: &AuthContext,
+    session: Uuid,
+    input: &Value,
+    receipt: &Value,
+    feedback: &Value,
+) {
+    let turn = id(input, "turn_id");
+    let saved = s.session_turn(a, session, turn).await.unwrap();
+    assert_eq!(saved["question"], input["question"]);
+    assert_eq!(saved["answer"], input["answer"]);
+    assert_eq!(
+        saved["used_evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|evidence| evidence["reference"].clone())
+            .collect::<Vec<_>>(),
+        *input["used_evidence"].as_array().unwrap()
+    );
+    let source = s
+        .source_event(a, id(receipt, "source_event_id"))
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_str(source["content"].as_str().unwrap()).unwrap();
+    assert_eq!(body["answer"], input["answer"]);
+    assert_eq!(
+        s.session_feedback(a, session, turn).await.unwrap()["feedback"][0]["feedback_id"],
+        feedback["feedback_id"]
+    );
+    let before = counts(s, true).await;
+    assert_eq!(
+        archive(
+            s,
+            a,
+            &format!("withdrawn-archive-{session}-{turn}"),
+            session,
+            input.clone(),
+        )
+        .await
+        .unwrap(),
+        *receipt
+    );
+    // A downstream feedback mutation cannot adopt invalid support proofs.
+    assert!(matches!(
+        record(
+            s,
+            a,
+            "invalidated-support-feedback",
+            session,
+            turn,
+            feedback.clone(),
+        )
+        .await,
+        Err(AppError::NotFound)
+    ));
+    assert_eq!(counts(s, true).await, before);
+}
+
 #[tokio::test]
-async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanup() {
+async fn session_withdrawal_and_dependency_withdrawal_have_distinct_effects() {
     for target in ["event", "asset", "archive"] {
         let dir = tempfile::tempdir().unwrap();
         let s = crate::support::open_service(dir.path(), Models::disabled())
@@ -961,8 +1027,13 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
             s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
             "pending"
         );
-        assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
-        if target != "archive" {
+        if target == "archive" {
+            assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+        } else {
+            assert_history_survives_dependency_withdrawal(
+                &s, &a, session, &input, &receipt, &feedback,
+            )
+            .await;
             let before = counts(&s, true).await;
             let mut new_turn = input.clone();
             new_turn["turn_id"] = json!(Uuid::new_v4());
@@ -979,10 +1050,16 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
             ));
             assert_eq!(counts(&s, true).await, before);
         }
-        // Even though the other used reference remains active, no partial Q&A
-        // or feedback list may leak through either read endpoint.
+        // Physical cleanup must not change the established logical result.
         while worker::process_next(&s).await.unwrap() {}
-        assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+        if target == "archive" {
+            assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+        } else {
+            assert_history_survives_dependency_withdrawal(
+                &s, &a, session, &input, &receipt, &feedback,
+            )
+            .await;
+        }
         let originals: i64 = db::query_scalar("SELECT count(*) FROM oc_events WHERE id=?")
             .bind(id(&receipt, "source_event_id"))
             .fetch_one(s.engine.relational().pool())
@@ -998,7 +1075,14 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
             .await
             .unwrap();
         let a = s.auth(&token).await.unwrap();
-        assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+        if target == "archive" {
+            assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+        } else {
+            assert_history_survives_dependency_withdrawal(
+                &s, &a, session, &input, &receipt, &feedback,
+            )
+            .await;
+        }
     }
 }
 
@@ -1064,9 +1148,11 @@ async fn session_deleted_file_invalidates_archived_evidence_before_cleanup() {
         s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
         "pending"
     );
-    assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+    assert_history_survives_dependency_withdrawal(&s, &a, session, &input, &receipt, &feedback)
+        .await;
     while worker::process_next(&s).await.unwrap() {}
-    assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+    assert_history_survives_dependency_withdrawal(&s, &a, session, &input, &receipt, &feedback)
+        .await;
 }
 
 /// Graph support is relational source/version ownership in the current worker.
@@ -1246,12 +1332,13 @@ async fn session_graph_evidence_requires_exact_support_kind_and_committed_ledger
         .unwrap();
     assert_eq!(tx.graph_evidence(entity).await.unwrap().len(), 2);
     tx.commit().await.unwrap();
-    // Authoritative graph support can disappear before backend cleanup. Every
-    // raw read and command replay revalidates the committed support then.
+    // Graph support can disappear before cleanup. An owned history preserves
+    // exactly what was cited while downstream proof checks reject that citation.
     db::query("UPDATE oc_artifact_ledger SET state='orphan' WHERE tenant_id=? AND workspace_id=? AND source_id=? AND artifact_id=?")
         .bind(a.tenant_id).bind(a.workspace_id).bind(id(&first, "source_event_id")).bind(entity)
         .execute(s.engine.relational().pool()).await.unwrap();
-    assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+    assert_history_survives_dependency_withdrawal(&s, &a, session, &input, &receipt, &feedback)
+        .await;
     assert_eq!(
         s.session_turn(&a, other_session, other_turn).await.unwrap(),
         other_view
@@ -1390,10 +1477,12 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
         s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
         "pending"
     );
-    // The Python-only archive is hidden too: Rust is an unselected supporting
-    // member of its S2 snapshot, so the complete version is no longer valid.
+    // Rust is an unselected supporting member of the Python citation's S2
+    // snapshot. Both historical turns remain private and neither proves this
+    // invalidated version for a new consumer.
     for (session, input, receipt, feedback) in &archives {
-        assert_hidden(&s, &a, *session, input, receipt, feedback).await;
+        assert_history_survives_dependency_withdrawal(&s, &a, *session, input, receipt, feedback)
+            .await;
     }
     while worker::process_next(&s).await.unwrap() {}
     let rebuilt = semantic_member(&s, &a, "Python", "supplement", 3).await;
@@ -1404,7 +1493,8 @@ async fn session_s2_retains_original_member_provenance_and_checks_the_whole_snap
     );
     // Rebuilding a new valid version never rewrites the older archived version.
     for (session, input, receipt, feedback) in &archives {
-        assert_hidden(&s, &a, *session, input, receipt, feedback).await;
+        assert_history_survives_dependency_withdrawal(&s, &a, *session, input, receipt, feedback)
+            .await;
     }
 }
 
@@ -1421,6 +1511,13 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
         let receipt = archive(&s, &a, "schema-source", session, input.clone())
             .await
             .unwrap();
+        assert_eq!(
+            s.session_turn(&a, session, id(&input, "turn_id"))
+                .await
+                .unwrap()["answer"],
+            input["answer"]
+        );
+        let other = role(&s, &a, "writer").await;
         let statement = if drop_all {
             "DROP TABLE oc_feedback; DROP TABLE oc_session_turn_evidence; DROP TABLE oc_session_turns;"
         } else {
@@ -1431,10 +1528,10 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
             .await
             .unwrap();
         if drop_all {
-            // Removing every session table must not turn an archived question
-            // and answer into an unguarded legacy raw event in the live host.
+            // Removing SQL consumer proof tables must not expose a native
+            // archive to a different logical key in the live host.
             assert!(
-                s.source_event(&a, id(&receipt, "source_event_id"))
+                s.source_event(&other, id(&receipt, "source_event_id"))
                     .await
                     .is_err()
             );
@@ -1450,12 +1547,15 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
         let database_path = dir.path().join("context.db");
         let raw_pool = db::Pool::open(database_path).await.unwrap();
         let mut conn = raw_pool.acquire().await.unwrap();
-        let source: String = db::query_scalar("SELECT content FROM oc_events WHERE id=?")
+        let source: Option<String> = db::query_scalar("SELECT content FROM oc_events WHERE id=?")
             .bind(id(&receipt, "source_event_id"))
-            .fetch_one(&mut *conn)
+            .fetch_optional(&mut *conn)
             .await
             .unwrap();
-        assert!(source.is_empty(), "SQLite holds only source provenance");
+        assert!(
+            source.is_none(),
+            "plain archives do not create a SQLite event"
+        );
         let repaired: bool =
             db::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')")
                 .fetch_one(&mut *conn)

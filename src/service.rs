@@ -580,14 +580,23 @@ impl Service {
             tx.commit().await?;
             return self.archive_source(a, id, session, turn).await;
         }
-        let value = tx.event_view(id).await?;
-        if value["kind"] == "session_turn" {
-            return Err(AppError::Unavailable(
-                "private archive metadata unavailable".into(),
-            ));
+        match tx.event_view(id).await {
+            Ok(value) if value["kind"] != "session_turn" => {
+                tx.commit().await?;
+                return Ok(value);
+            }
+            Ok(_) | Err(crate::storage::StorageError::NotFound) => {}
+            Err(err) => return Err(err.into()),
         }
         tx.commit().await?;
-        Ok(value)
+        let record = self
+            .load_native_archive_source(a, id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        Ok(json!({
+            "event_id":record.source,"kind":"session_turn","content":json!(record.body).to_string(),
+            "file_id":null,"created_at":record.created_at
+        }))
     }
     pub async fn job(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
         let mut tx = self.read(a, Permission::Write).await?;
@@ -681,11 +690,33 @@ impl Service {
         if let Some(v) = cached {
             return Ok(v);
         }
-        let changed = match target {
+        let mut changed = match target {
             "asset" => tx.delete_asset(id).await?,
             "event" => tx.retract_event(id).await?,
             _ => tx.delete_file(id).await?,
         };
+        if target == "event" && changed == 0 {
+            tx.rollback().await?;
+            let record = self
+                .load_native_archive_source(a, id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            let (mut retry, cached) = self
+                .command(
+                    a,
+                    Permission::Delete,
+                    &format!("delete/{target}/{id}"),
+                    key,
+                    &json!({}),
+                )
+                .await?;
+            if let Some(v) = cached {
+                return Ok(v);
+            }
+            retry.attach_native_archive_proof(&record).await?;
+            changed = retry.retract_event(id).await?;
+            tx = retry;
+        }
         if changed == 0 {
             return Err(AppError::NotFound);
         }

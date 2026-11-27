@@ -995,6 +995,37 @@ async fn cleanup_private_archives(service: &Service) -> Result<()> {
             }
         }
     }
+    for (domain, session, turn) in store.withdrawn_native_archive_turns(16).await? {
+        let deleted = backend.native_archive_delete(domain, session, turn).await;
+        store
+            .settle_native_turn_cleanup(domain.scope, session, turn, deleted.is_ok())
+            .await?;
+        if let Err(error) = deleted {
+            result = Err(error.into());
+        }
+    }
+    for (domain, session) in store.withdrawn_native_archive_sessions(2).await? {
+        let mut removed = false;
+        match backend.native_archive_page(domain, session, 0, 8).await {
+            Ok((_, turns)) => {
+                for turn in turns {
+                    match backend
+                        .native_archive_delete(domain, session, turn.turn)
+                        .await
+                    {
+                        Ok(()) => removed = true,
+                        Err(error) => result = Err(error.into()),
+                    }
+                }
+            }
+            Err(error) => result = Err(error.into()),
+        }
+        // Keep sweeping withdrawn sessions so delayed writes that were
+        // allocated before the withdrawal cannot escape physical cleanup.
+        store
+            .reschedule_native_session_cleanup(domain.scope, session, removed)
+            .await?;
+    }
     result
 }
 

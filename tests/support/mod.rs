@@ -443,8 +443,10 @@ async fn replace(
         });
         for row in rows {
             let id = row["record_id"].as_str().unwrap().to_owned();
+            let mut row = row.clone();
+            row["version"] = json!(current + 1);
             data.private_records
-                .insert((tenant.clone(), collection.clone(), id), row.clone());
+                .insert((tenant.clone(), collection.clone(), id), row);
         }
     } else {
         data.records
@@ -470,6 +472,13 @@ async fn replace(
 }
 fn matches(record: &Value, filters: &[Value]) -> bool {
     filters.iter().all(|filter| {
+        if let Some(int) = filter.get("Int") {
+            let field = int["field"].as_str().unwrap();
+            return record["document"][field].as_i64().is_some_and(|value| {
+                let range = &int["filter"];
+                range["start"].as_i64().unwrap() <= value && value < range["end"].as_i64().unwrap()
+            });
+        }
         let is_set = filter.get("StringSet").is_some();
         let f = if is_set {
             &filter["StringSet"]
@@ -615,10 +624,14 @@ async fn query(
         .filter(|r| matches(r, &filters))
         .filter_map(|r| scores(r, &q).map(|score| (r.clone(), score)))
         .collect::<Vec<_>>();
-    rows.sort_by(|a, b| {
-        b.1.total_cmp(&a.1)
-            .then_with(|| a.0["record_id"].as_str().cmp(&b.0["record_id"].as_str()))
-    });
+    if q["sort"] == json!([{"field":"sequence","order":"Ascending"}]) {
+        rows.sort_by_key(|(record, _)| record["document"]["sequence"].as_i64().unwrap());
+    } else {
+        rows.sort_by(|a, b| {
+            b.1.total_cmp(&a.1)
+                .then_with(|| a.0["record_id"].as_str().cmp(&b.0["record_id"].as_str()))
+        });
+    }
     let count = rows.len();
     let offset = q["offset"].as_u64().unwrap_or(0) as usize;
     let length = q["length"].as_u64().unwrap_or(10) as usize;

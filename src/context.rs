@@ -219,12 +219,8 @@ impl Service {
             items.push(item);
         }
         for candidate in turns {
-            match tx.archive_delivery(&candidate.entry, candidate.body).await {
-                Ok(mut turn) => {
-                    turn.score = candidate.score;
-                    turn.retrieval_routes = candidate.routes;
-                    items.push(session_item(turn, &query.effective_mode));
-                }
+            match candidate.deliver(&mut tx).await {
+                Ok(turn) => items.push(session_item(turn, &query.effective_mode)),
                 Err(StorageError::NotFound) => {
                     bundle
                         .routes

@@ -1,9 +1,11 @@
 //! Authorized Run operations stay in one relational transaction.
 use crate::{
     error::{AppError, Result},
+    evidence::{EvidenceBundle, EvidenceProvenance},
     run::{RunEventInput, RunInput},
     service::Service,
-    storage::{DomainTx, Permission},
+    session::ArchivedTurnBody,
+    storage::{DomainTx, Permission, anyseek::private_archive::NativeArchiveTurn},
     types::AuthContext,
 };
 use serde_json::Value;
@@ -99,15 +101,59 @@ impl Service {
         run: Uuid,
         event_id: Uuid,
         request_digest: &str,
-        bundle: &crate::evidence::EvidenceBundle,
+        bundle: &EvidenceBundle,
     ) -> Result<Value> {
+        let mut archives = Vec::new();
+        for item in &bundle.items {
+            if let Some(archive) = self.native_run_archive(a, &item.provenance).await? {
+                if item.content != run_archive_content(&archive.body) {
+                    return Err(AppError::Unavailable(
+                        "private archive changed during Run preparation".into(),
+                    ));
+                }
+                archives.push(archive);
+            }
+        }
         let mut tx = self.write(a, Permission::Write).await?;
+        for archive in archives {
+            tx.attach_native_archive_proof(&archive).await?;
+        }
         let result = tx
             .record_run_context_prepared(run, event_id, request_digest, bundle)
             .await?;
         tx.commit().await?;
         self.restore_archive_run_bundle(a, run, event_id, request_digest, result)
             .await
+    }
+
+    async fn native_run_archive(
+        &self,
+        a: &AuthContext,
+        citation: &EvidenceProvenance,
+    ) -> Result<Option<NativeArchiveTurn>> {
+        let EvidenceProvenance::SessionTurn {
+            session_id,
+            turn_id,
+            source_event_id,
+            used_evidence,
+            evidence_use,
+            created_at,
+        } = citation
+        else {
+            return Ok(None);
+        };
+        let archive = self.load_native_archive(a, *session_id, *turn_id).await?;
+        if let Some(archive) = &archive
+            && (archive.source != *source_event_id
+                || archive.evidence != *used_evidence
+                || archive.body.evidence_use != *evidence_use
+                || archive.created_at != *created_at)
+        {
+            return Err(AppError::Unavailable(
+                "private archive does not match the recorded Run citation".into(),
+            ));
+        }
+        Ok(archive)
     }
 
     async fn restore_archive_run_bundle(
@@ -118,8 +164,6 @@ impl Service {
         request_digest: &str,
         mut preparation: Value,
     ) -> Result<Value> {
-        use crate::evidence::{EvidenceBundle, EvidenceProvenance};
-
         let Some(proof) = preparation.get("archive_bundle_digest") else {
             return Ok(preparation);
         };
@@ -127,9 +171,8 @@ impl Service {
         let mut bundle: EvidenceBundle =
             serde_json::from_value(preparation["recorded_bundle"].clone())
                 .map_err(|_| invalid())?;
-        let mut tx = self.read(a, Permission::Write).await?;
-        let mut entries = Vec::new();
-        for (index, item) in bundle.items.iter().enumerate() {
+        let mut legacy = Vec::new();
+        for (index, item) in bundle.items.iter_mut().enumerate() {
             if let EvidenceProvenance::SessionTurn {
                 session_id,
                 turn_id,
@@ -137,18 +180,29 @@ impl Service {
                 ..
             } = item.provenance
             {
-                let entry = tx.archive_entry(session_id, turn_id).await?;
-                if tx.require_turn_visible(session_id, turn_id).await? != source_event_id {
-                    return Err(AppError::NotFound);
+                if let Some(archive) = self.native_run_archive(a, &item.provenance).await? {
+                    item.content = run_archive_content(&archive.body);
+                } else {
+                    legacy.push((index, session_id, turn_id, source_event_id));
                 }
-                entries.push((index, entry));
             }
         }
-        tx.commit().await?;
-        let mut bodies = Vec::new();
-        for (index, entry) in entries {
-            let body = self.archived_body(&entry).await?;
-            bodies.push((index, entry, body));
+        let mut legacy_bodies = Vec::new();
+        if !legacy.is_empty() {
+            let mut tx = self.read(a, Permission::Write).await?;
+            let mut entries = Vec::new();
+            for (index, session, turn, source) in legacy {
+                if tx.require_turn_visible(session, turn).await? != source {
+                    return Err(AppError::NotFound);
+                }
+                let entry = tx.archive_entry(session, turn).await?;
+                entries.push((index, entry));
+            }
+            tx.commit().await?;
+            for (index, entry) in entries {
+                let body = self.archived_body(&entry).await?;
+                legacy_bodies.push((index, entry, body));
+            }
         }
         let mut tx = self.read(a, Permission::Write).await?;
         // Any cited workspace asset can be withdrawn while the private bodies
@@ -159,7 +213,7 @@ impl Service {
         if current.as_ref() != Some(&preparation) {
             return Err(invalid());
         }
-        for (index, entry, body) in bodies {
+        for (index, entry, body) in legacy_bodies {
             let fresh = tx.archive_delivery(&entry, body).await?;
             bundle.items[index].content =
                 format!("Question: {}\nAnswer: {}", fresh.question, fresh.answer);
@@ -176,6 +230,10 @@ impl Service {
         tx.commit().await?;
         Ok(preparation)
     }
+}
+
+fn run_archive_content(body: &ArchivedTurnBody) -> String {
+    format!("Question: {}\nAnswer: {}", body.question, body.answer)
 }
 
 impl Service {

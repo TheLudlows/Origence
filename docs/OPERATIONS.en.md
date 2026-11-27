@@ -210,6 +210,11 @@ See the [archive API contract](API.en.md#session-archiving-and-idempotent-feedba
 retrieval, and withdrawal behavior. The complete body fits in a stable Record under the pinned
 1 MiB limit, including JSON escaping. It is committed atomically with its search projection.
 
+AnySeek confirms new turns using committed native records. SQLite holds workspace authorization,
+per-session sequence allocation, withdrawal markers, and proofs used by downstream references.
+Back up both stores. `verify` checks active native turn order, request hashes, and bodies,
+and continues to compare confirmation watermarks for legacy records.
+
 AnySeek accepts the current and previous UTC operation epochs. Resubmit under a fresh epoch
 only after the backend confirms expiry and an absent group. Keep the original nonce and
 use CAS version zero. Withdrawal hides the directory first. Cleanup uses an atomic empty group
@@ -220,7 +225,9 @@ the complete data directories. For embedded AnySeek, add `--local`. For standalo
 use the isolated service at the bound address and set `OC_ANYSEEK_URL` and `OC_ANYSEEK_API_KEY`.
 
 1. Run `origence --offline --data-dir <copy> archive-migrate copy --isolated-copy --limit 64`.
-   It accepts the immediately preceding authority schema or a prepared copy. Re-run to resume.
+   It accepts the preceding authority schema supported by #168, the #168 archive schema, or a
+   prepared copy. SQLite bodies copy in batches by their historical order. Turns already in
+   AnySeek under #168 retain their original format, IDs, order, and withdrawals.
 2. Run `archive-migrate verify --isolated-copy` with the same global flags. Require
    `unconfirmed=0` and rehearse restoring the paired backup.
 3. Run `archive-migrate purge --isolated-copy`. It rechecks the directory before clearing the

@@ -398,6 +398,189 @@ async fn learn(s: &Service, a: &AuthContext, session: Uuid) -> Value {
 }
 
 #[tokio::test]
+async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
+    let dir = tempfile::tempdir().unwrap();
+    let (models, fixture, _model) = models().await;
+    let s = super::support::open_service(dir.path(), models)
+        .await
+        .unwrap();
+    let (admin, _) = provision(&s).await;
+    let writer_key = s.issue_key(&admin, "writer").await.unwrap();
+    let writer_token = writer_key["token"].as_str().unwrap();
+    let writer = s.auth(writer_token).await.unwrap();
+    let reader_key = s.issue_key(&admin, "reader").await.unwrap();
+    let reader_token = reader_key["token"].as_str().unwrap();
+    let reader = s.auth(reader_token).await.unwrap();
+    let (other, _) = provision_scope(&s, admin.tenant_id, Uuid::new_v4()).await;
+    let doc = s
+        .knowledge(
+            &writer,
+            "basis-document",
+            serde_json::from_value(json!({
+                "title":"Atlas parser notes", "format":"text",
+                "content":"Atlas parsers use bounded input in production."
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    drain(&s).await;
+    let pinned = s.get(&reader, id(&doc, "asset_id"), Some(1)).await.unwrap();
+    let basis = json!({"kind":"asset_version","asset_id":doc["asset_id"],"version":1,
+        "content_sha256":pinned["content_hash"]});
+    let request = json!({"experience":{"statement":"Atlas parsers must bound input.",
+        "why":"The reviewed team note fixes that scope.", "conditions":[CONDITION],"basis":basis}});
+    let parse = |value: &Value| serde_json::from_value(value.clone()).unwrap();
+    let mut wrong = request.clone();
+    wrong["experience"]["basis"]["content_sha256"] = json!("0".repeat(64));
+    assert!(matches!(
+        s.retain_long_term_memory(&writer, "wrong-basis", parse(&wrong))
+            .await,
+        Err(AppError::NotFound)
+    ));
+    assert!(matches!(
+        s.retain_long_term_memory(&other, "other-workspace", parse(&request))
+            .await,
+        Err(AppError::NotFound)
+    ));
+
+    let (base, _api) = serve(origence::api::router(s.clone())).await;
+    let http = reqwest::Client::new();
+    let post = |token: &str| {
+        http.post(format!("{base}/v1/memories/retain"))
+            .bearer_auth(token)
+            .header("Idempotency-Key", "direct-document")
+            .json(&request)
+    };
+    assert_eq!(
+        post(reader_token).send().await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    let accepted: Value = post(writer_token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(accepted["status"], "accepted");
+    let peer = super::mcp_http::Peer::at(format!("{base}/mcp"));
+    let mut tool = request.clone();
+    tool["idempotency_key"] = json!("direct-document");
+    assert_eq!(
+        peer.call(writer_token, None, "context_memory_retain", tool)
+            .await
+            .unwrap(),
+        accepted
+    );
+    let mut changed = request.clone();
+    changed["experience"]["why"] = json!("A different reason");
+    assert!(matches!(
+        s.retain_long_term_memory(&writer, "direct-document", parse(&changed))
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    let confirmation = json!({"experience":{
+        "statement":"Atlas parsers should sample errors.",
+        "why":"The release owner confirmed this during review.",
+        "conditions":[CONDITION],
+        "basis":{"kind":"human_confirmation"}
+    }});
+    let affirmed = s
+        .retain_long_term_memory(&writer, "direct-confirmation", parse(&confirmation))
+        .await
+        .unwrap();
+    drain(&s).await;
+    let recall = async || {
+        serde_json::to_value(
+            s.recall_long_term_memories(
+                &reader,
+                serde_json::from_value(
+                    json!({"query":"Atlas parsers","applicability_context":[CONDITION]}),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let recalled = recall().await;
+    let lessons = recalled["memories"].as_array().unwrap();
+    assert_eq!(lessons.len(), 2, "{recalled}");
+    let referenced = lessons
+        .iter()
+        .find(|item| item["memory_id"] == accepted["learning_id"])
+        .unwrap();
+    assert_eq!(referenced["publication"]["basis"], basis);
+    assert_eq!(referenced["publication"]["recorded_by"], json!(writer.id));
+    assert_eq!(referenced["applicability"], "caller_context_exact_match");
+    let detail = s
+        .learning(&reader, id(&affirmed, "learning_id"))
+        .await
+        .unwrap();
+    assert_eq!(detail["publication"]["basis"]["kind"], "human_confirmation");
+    assert_eq!(detail["supports"], json!([]));
+    assert!(detail.get("session_id").is_none());
+    let context = s
+        .evidence_bundle(
+            &reader,
+            serde_json::from_value(json!({
+                "query":"Atlas parsers", "routes":[{"route":"learning"}]
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(context.items.len(), 2);
+    assert!(context.items.iter().all(|item| {
+        item.learning
+            .as_ref()
+            .and_then(|row| row.publication.as_ref())
+            .is_some()
+    }));
+    assert_eq!(fixture.proposals.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.verifications.load(Ordering::SeqCst), 0);
+
+    let mut pending_request = request.clone();
+    pending_request["experience"]["statement"] = json!("Atlas parsers budget allocations.");
+    let pending = s
+        .retain_long_term_memory(&writer, "direct-pending-withdraw", parse(&pending_request))
+        .await
+        .unwrap();
+    s.delete(
+        &admin,
+        "withdraw-basis",
+        id(&doc, "source_event_id"),
+        "event",
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        s.learning(&reader, id(&accepted, "learning_id")).await,
+        Err(AppError::NotFound)
+    ));
+    assert!(matches!(
+        s.retain_long_term_memory(&writer, "direct-document", parse(&request))
+            .await,
+        Err(AppError::NotFound)
+    ));
+    let recalled = recall().await;
+    let lessons = recalled["memories"].as_array().unwrap();
+    assert_eq!(lessons.len(), 1, "{recalled}");
+    assert_eq!(lessons[0]["memory_id"], affirmed["learning_id"]);
+    drain(&s).await;
+    assert_ne!(
+        s.job(&writer, id(&pending, "job_id")).await.unwrap()["outcome"],
+        "published"
+    );
+    assert_eq!(count(&s, "oc_improve_runs").await, 0);
+    assert_eq!(count(&s, "oc_session_turns").await, 0);
+}
+
+#[tokio::test]
 async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     let directory = tempfile::tempdir().unwrap();
     let (model, fixture, _model_server) = models().await;
@@ -644,11 +827,12 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     let remaining = recall(&reader).await;
     assert_eq!(remaining["memories"].as_array().unwrap().len(), 1);
     assert_eq!(remaining["memories"][0]["kind"], "fact");
-    assert!(matches!(
-        s.session_turn(&other_writer, downstream_session, downstream_id)
-            .await,
-        Err(AppError::NotFound)
-    ));
+    let history = s
+        .session_turn(&other_writer, downstream_session, downstream_id)
+        .await
+        .unwrap();
+    assert_eq!(history["answer"], ANSWER);
+    assert_eq!(history["used_evidence"][0]["reference"], lesson["citation"]);
 }
 
 async fn snapshot(s: &Service, run: Uuid) -> Value {
@@ -1452,7 +1636,7 @@ async fn learning_withdrawn_unquoted_member_invalidates_the_whole_supporting_sna
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let learning = learn(&s, &a, session).await;
     // The archived Python reference is still active. Its version contains an
-    // older Rust member, so withdrawing that unquoted member hides the snapshot.
+    // older Rust member. That member still gates derived Learning.
     let deleted = s
         .delete(
             &a,
@@ -1467,10 +1651,12 @@ async fn learning_withdrawn_unquoted_member_invalidates_the_whole_supporting_sna
         "pending"
     );
     assert_hidden(&s, &a, &learning).await;
-    assert!(matches!(
-        s.session_turn(&a, session, id(&turn, "turn_id")).await,
-        Err(AppError::NotFound)
-    ));
+    assert_eq!(
+        s.session_turn(&a, session, id(&turn, "turn_id"))
+            .await
+            .unwrap()["answer"],
+        archived["answer"]
+    );
     drain(&s).await;
     assert_hidden(&s, &a, &learning).await;
 }
@@ -1558,15 +1744,19 @@ async fn learning_transitive_withdrawal_survives_cleanup_and_restart() {
     );
     assert_hidden(&s, &a, &first).await;
     assert_hidden(&s, &a, &second).await;
-    assert!(matches!(
+    assert_eq!(
         s.session_turn(&a, second_session, id(&downstream, "turn_id"))
-            .await,
-        Err(AppError::NotFound)
-    ));
-    assert!(matches!(
-        s.source_event(&a, id(&downstream, "source_event_id")).await,
-        Err(AppError::NotFound)
-    ));
+            .await
+            .unwrap()["answer"],
+        ANSWER
+    );
+    let historical_source = s
+        .source_event(&a, id(&downstream, "source_event_id"))
+        .await
+        .unwrap();
+    let historical_body: Value =
+        serde_json::from_str(historical_source["content"].as_str().unwrap()).unwrap();
+    assert_eq!(historical_body["answer"], ANSWER);
     drain(&s).await;
     s.engine.relational().pool().close().await;
     drop(s);
@@ -1576,6 +1766,12 @@ async fn learning_transitive_withdrawal_survives_cleanup_and_restart() {
     let a = s.auth(&token).await.unwrap();
     assert_hidden(&s, &a, &first).await;
     assert_hidden(&s, &a, &second).await;
+    assert_eq!(
+        s.session_turn(&a, second_session, id(&downstream, "turn_id"))
+            .await
+            .unwrap()["answer"],
+        ANSWER
+    );
 }
 
 #[tokio::test]
@@ -2628,8 +2824,8 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
         .await
         .unwrap();
     assert_eq!(before.items.len(), 4);
-    // Deliberately leave cleanup pending. Full source closure must hide both
-    // generations of Learning and both raw archived turns immediately.
+    // Deliberately leave cleanup pending. The source closure hides both
+    // generations of shared Learning, while the owner keeps private history.
     s.delete(
         &a,
         "withdraw-bundle-root",
@@ -2639,16 +2835,21 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     .await
     .unwrap();
     for mode in ["keyword", "vector", "hybrid"] {
-        for (auth, mut request) in [(&reader, input.clone()), (&a, all_routes.clone())] {
+        for (auth, mut request, expected_count) in
+            [(&reader, input.clone(), 0), (&a, all_routes.clone(), 2)]
+        {
             request["mode"] = json!(mode);
             let hidden = s
                 .evidence_bundle(auth, serde_json::from_value(request).unwrap())
                 .await
                 .unwrap();
-            assert!(hidden.items.is_empty(), "{hidden:?}");
+            assert_eq!(hidden.items.len(), expected_count);
+            assert!(hidden.items.iter().all(|item| {
+                item.route == origence::evidence::EvidenceRoute::Session && item.learning.is_none()
+            }));
             assert!(hidden.conflicts.is_empty());
-            assert!(hidden.rendered_context.is_empty());
-            assert_eq!(hidden.used_bytes, 0);
+            assert_eq!(hidden.rendered_context.is_empty(), expected_count == 0);
+            assert_eq!(hidden.used_bytes, hidden.rendered_context.len());
         }
     }
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 2);

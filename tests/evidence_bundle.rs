@@ -446,8 +446,8 @@ async fn evidence_preserves_current_chunks_and_historical_archived_references() 
             .contains("exact old answer")
     );
     assert_accounted(&current);
-    // With cleanup still queued, the old source invalidates the archived whole
-    // turn but must not replace the current memory with its historical version.
+    // Before cleanup, shared recall still uses only the current memory. The
+    // owner can also recall the exact archived turn as private history.
     s.delete(
         &a,
         "withdraw-chronicle",
@@ -457,11 +457,23 @@ async fn evidence_preserves_current_chunks_and_historical_archived_references() 
     .await
     .unwrap();
     let after = bundle(&s, &a, request("Chronicle", &["memory", "session"])).await;
-    assert_eq!(items(&after).len(), 1);
-    assert_eq!(items(&after)[0]["provenance"]["asset_version"], 2);
-    assert_eq!(items(&after)[0]["route"], "memory");
+    assert_eq!(items(&after).len(), 2);
+    let memory = items(&after)
+        .iter()
+        .find(|item| item["route"] == "memory")
+        .unwrap();
+    assert_eq!(memory["provenance"]["asset_version"], 2);
+    let history = items(&after)
+        .iter()
+        .find(|item| item["route"] == "session")
+        .unwrap();
+    assert_eq!(history["provenance"]["turn_id"], archived["turn_id"]);
+    assert_eq!(
+        history["provenance"]["used_evidence"][0]["source_event_id"],
+        first["source_event_id"]
+    );
     assert!(
-        !after["rendered_context"]
+        history["content"]
             .as_str()
             .unwrap()
             .contains("exact old answer")
@@ -602,12 +614,12 @@ async fn evidence_session_index_finds_older_matches_and_enforces_private_scope()
         vec![],
     )
     .await;
-    // Fixture timestamps establish strict recency independent of machine speed.
-    db::query("UPDATE oc_session_turns SET created_at=1 WHERE source_event_id=?")
-        .bind(id(&oldest, "source_event_id"))
-        .execute(s.engine.relational().pool())
-        .await
-        .unwrap();
+    assert_eq!(
+        s.session_turn(&a, target_session, id(&oldest, "turn_id"))
+            .await
+            .unwrap()["sequence"],
+        1
+    );
     for _ in 0..512 {
         archive(
             &s,
@@ -945,7 +957,7 @@ async fn evidence_does_not_infer_conflicts_for_sets_contexts_proposals_or_prose(
 }
 
 #[tokio::test]
-async fn evidence_whole_snapshot_withdrawal_hides_unmatched_members_and_archived_turns() {
+async fn evidence_whole_snapshot_withdrawal_hides_shared_members_and_keeps_private_history() {
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -991,14 +1003,17 @@ async fn evidence_whole_snapshot_withdrawal_hides_unmatched_members_and_archived
     )
     .await
     .unwrap();
-    let hidden = bundle(&s, &a, request("Pythonneedle", &["memory", "session"])).await;
-    assert!(items(&hidden).is_empty(), "{hidden}");
-    assert_accounted(&hidden);
-    assert!(matches!(
-        s.session_turn(&a, id(&archived, "session_id"), id(&archived, "turn_id"))
-            .await,
-        Err(AppError::NotFound)
-    ));
+    let retained = bundle(&s, &a, request("Pythonneedle", &["memory", "session"])).await;
+    assert_eq!(items(&retained).len(), 1, "{retained}");
+    let history = &items(&retained)[0];
+    assert_eq!(history["route"], "session");
+    assert_eq!(history["provenance"]["turn_id"], archived["turn_id"]);
+    assert_accounted(&retained);
+    let read = s
+        .session_turn(&a, id(&archived, "session_id"), id(&archived, "turn_id"))
+        .await
+        .unwrap();
+    assert_eq!(read["used_evidence"][0]["reference"]["asset_version"], 2);
 }
 
 #[tokio::test]

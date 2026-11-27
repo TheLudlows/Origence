@@ -1,14 +1,17 @@
-//! Private archives reconcile AnySeek durability with SQLite delivery authority.
+//! Private archives use AnySeek for committed turns and SQLite for live authority.
 use crate::{
-    context_retrieval::ContextQuery,
+    context_retrieval::{ContextQuery, ContextSessionTurn},
     error::{AppError, Result},
     service::Service,
-    session::{ArchiveLocator, ArchivedTurnBody, FeedbackInput, SessionTurnInput},
+    session::{ArchiveDomain, ArchiveLocator, ArchivedTurnBody, FeedbackInput, SessionTurnInput},
     storage::{
         DomainTx, Permission, StorageError,
-        anyseek::{operation_epoch, private_archive::ArchiveQuery},
+        anyseek::{
+            operation_epoch,
+            private_archive::{ArchiveQuery, NativeArchiveTurn},
+        },
         hash,
-        sqlite::ArchiveEntry,
+        sqlite::{ArchiveEntry, SqliteTx, now_ms},
     },
     types::AuthContext,
 };
@@ -17,10 +20,43 @@ use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
 
 pub(crate) struct ArchiveCandidate {
-    pub entry: ArchiveEntry,
-    pub body: ArchivedTurnBody,
-    pub score: f64,
-    pub routes: Vec<String>,
+    archive: ArchiveContent,
+    score: f64,
+    routes: Vec<String>,
+}
+
+enum ArchiveContent {
+    Native(NativeArchiveTurn),
+    Legacy(ArchiveEntry, ArchivedTurnBody),
+}
+
+impl ArchiveCandidate {
+    pub(crate) async fn deliver(
+        self,
+        tx: &mut SqliteTx,
+    ) -> crate::storage::StorageResult<ContextSessionTurn> {
+        let mut turn = match self.archive {
+            ArchiveContent::Native(record) => {
+                require_native_record(tx, &record).await?;
+                ContextSessionTurn {
+                    session_id: record.session,
+                    turn_id: record.turn,
+                    source_event_id: record.source,
+                    question: record.body.question,
+                    answer: record.body.answer,
+                    evidence: record.evidence,
+                    evidence_use: record.body.evidence_use,
+                    created_at: record.created_at,
+                    score: 0.0,
+                    retrieval_routes: Vec::new(),
+                }
+            }
+            ArchiveContent::Legacy(entry, body) => tx.archive_delivery(&entry, body).await?,
+        };
+        turn.score = self.score;
+        turn.retrieval_routes = self.routes;
+        Ok(turn)
+    }
 }
 
 fn session_id(id: Uuid) -> Result<()> {
@@ -57,6 +93,93 @@ impl Service {
         session_id(session)?;
         input.validate().map_err(|e| AppError::Invalid(e.into()))?;
         let request = json!({"session_id":session,"input":input});
+        let digest = hash(request.to_string());
+        let turn = input.turn_id;
+        let mut tx = self.read(a, Permission::Write).await?;
+        tx.require_native_archive_live(session, turn).await?;
+        let domain = tx.archive_domain(session).await?;
+        let initialized = tx.native_archive_initialized(session).await?;
+        let historical = match tx.archive_entry(session, turn).await {
+            Ok(_) => true,
+            Err(StorageError::NotFound) => false,
+            Err(error) => return Err(error.into()),
+        };
+        tx.commit().await?;
+        if historical {
+            return self
+                .archive_legacy_turn(a, key, session, input, request)
+                .await;
+        }
+
+        let backend = self.engine.vector().private_archive();
+        let existing = if initialized {
+            self.load_native_archive(a, session, turn).await?
+        } else {
+            None
+        };
+        if existing
+            .as_ref()
+            .is_some_and(|record| record.request_hash != digest)
+        {
+            return Err(AppError::Conflict("turn is immutable".into()));
+        }
+        if !initialized {
+            backend.native_archive_collection(domain, true).await?;
+        }
+        let (mut tx, cached) = self
+            .command(a, Permission::Write, "session.turn.archive", key, &request)
+            .await?;
+        tx.require_native_archive_live(session, turn).await?;
+        let (record, needs_write) = match existing {
+            Some(record) => (record, false),
+            None => (
+                NativeArchiveTurn {
+                    session,
+                    turn,
+                    source: Uuid::new_v4(),
+                    created_by: a.id,
+                    created_at: now_ms(),
+                    evidence: tx
+                        .prepare_native_archive_evidence(&input.used_evidence)
+                        .await?,
+                    sequence: tx.allocate_native_archive_sequence(session).await?,
+                    request_hash: digest,
+                    body: ArchivedTurnBody::from_input(&input),
+                },
+                true,
+            ),
+        };
+        // Record only the ordinary API key binding. Native CAS decides whether
+        // the turn exists and which original identifiers it has.
+        if cached.is_none() {
+            tx.finish_command(json!({"session_id":session,"turn_id":turn}))
+                .await?;
+        }
+        tx.commit().await?;
+        let record = if needs_write {
+            let (terms, vector) = self.archive_projection(&record.body).await?;
+            backend
+                .native_archive_write(domain, &record, terms, vector)
+                .await?
+        } else {
+            record
+        };
+        let mut tx = self.read(a, Permission::Write).await?;
+        require_native_record(&mut tx, &record).await?;
+        tx.commit().await?;
+        Ok(
+            json!({"session_id":session,"turn_id":turn,"source_event_id":record.source,"state":"archived"}),
+        )
+    }
+
+    async fn archive_legacy_turn(
+        &self,
+        a: &AuthContext,
+        key: &str,
+        session: Uuid,
+        input: SessionTurnInput,
+        request: Value,
+    ) -> Result<Value> {
         let body = ArchivedTurnBody::from_input(&input);
         let (mut tx, cached) = self
             .command(a, Permission::Write, "session.turn.archive", key, &request)
@@ -95,6 +218,19 @@ impl Service {
         locator: &ArchiveLocator,
         body: &ArchivedTurnBody,
     ) -> Result<u64> {
+        let (terms, embedding) = self.archive_projection(body).await?;
+        Ok(self
+            .engine
+            .vector()
+            .private_archive()
+            .archive_write(locator, body, terms, embedding)
+            .await?)
+    }
+
+    async fn archive_projection(
+        &self,
+        body: &ArchivedTurnBody,
+    ) -> Result<(String, Option<Vec<f32>>)> {
         let text = format!("{}\n{}", body.question, body.answer);
         let terms = tokio::task::spawn_blocking(move || archive_terms(&text))
             .await
@@ -107,12 +243,69 @@ impl Service {
         } else {
             None
         };
-        Ok(self
+        Ok((terms, embedding))
+    }
+
+    async fn require_native_collection(
+        &self,
+        domain: ArchiveDomain,
+        initialized: bool,
+    ) -> Result<bool> {
+        if !initialized {
+            return Ok(false);
+        }
+        if !self
             .engine
             .vector()
             .private_archive()
-            .archive_write(locator, body, terms, embedding)
-            .await?)
+            .native_archive_collection(domain, false)
+            .await?
+        {
+            return Err(AppError::Unavailable(
+                "private archive collection missing".into(),
+            ));
+        }
+        Ok(true)
+    }
+
+    pub(crate) async fn load_native_archive(
+        &self,
+        a: &AuthContext,
+        session: Uuid,
+        turn: Uuid,
+    ) -> Result<Option<NativeArchiveTurn>> {
+        session_id(session)?;
+        let mut tx = self.read(a, Permission::Write).await?;
+        tx.require_native_archive_live(session, turn).await?;
+        let domain = tx.archive_domain(session).await?;
+        let initialized = tx.native_archive_initialized(session).await?;
+        tx.commit().await?;
+        if !self.require_native_collection(domain, initialized).await? {
+            return Ok(None);
+        }
+        let record = self
+            .engine
+            .vector()
+            .private_archive()
+            .native_archive_read(domain, session, turn)
+            .await?;
+        let mut tx = self.read(a, Permission::Write).await?;
+        if let Some(record) = &record {
+            require_native_record(&mut tx, record).await?;
+        } else {
+            tx.require_native_archive_live(session, turn).await?;
+            if tx
+                .native_archive_proof_digest(session, turn)
+                .await?
+                .is_some()
+            {
+                return Err(AppError::Unavailable(
+                    "private archive record referenced by a proof is missing".into(),
+                ));
+            }
+        }
+        tx.commit().await?;
+        Ok(record)
     }
 
     async fn visible_archive_entry(
@@ -161,12 +354,52 @@ impl Service {
     }
 
     pub async fn session_turn(&self, a: &AuthContext, session: Uuid, turn: Uuid) -> Result<Value> {
+        if let Some(record) = self.load_native_archive(a, session, turn).await? {
+            let mut tx = self.read(a, Permission::Write).await?;
+            let value = native_archive_view(&mut tx, record).await?;
+            tx.commit().await?;
+            return Ok(value);
+        }
         let entry = self.visible_archive_entry(a, session, turn).await?;
         let body = self.archived_body(&entry).await?;
         let mut tx = self.read(a, Permission::Write).await?;
         let value = tx.archive_view(&entry, body).await?;
         tx.commit().await?;
         Ok(value)
+    }
+
+    pub(crate) async fn load_native_archive_source(
+        &self,
+        a: &AuthContext,
+        source: Uuid,
+    ) -> Result<Option<NativeArchiveTurn>> {
+        let mut tx = self.read(a, Permission::Write).await?;
+        let Some(session) = tx.bound_private_session().await? else {
+            return Ok(None);
+        };
+        let domain = match tx.archive_domain(session).await {
+            Ok(domain) => domain,
+            Err(StorageError::NotFound) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        let initialized = tx.native_archive_initialized(session).await?;
+        tx.commit().await?;
+        if !self.require_native_collection(domain, initialized).await? {
+            return Ok(None);
+        }
+        let Some(record) = self
+            .engine
+            .vector()
+            .private_archive()
+            .native_archive_source(domain, session, source)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let mut tx = self.read(a, Permission::Write).await?;
+        require_native_record(&mut tx, &record).await?;
+        tx.commit().await?;
+        Ok(Some(record))
     }
 
     pub(crate) async fn archive_source(
@@ -199,8 +432,20 @@ impl Service {
             return Err(AppError::Invalid("invalid private archive page".into()));
         }
         let mut tx = self.read(a, Permission::Write).await?;
-        let (_, next, _, entries) = tx.archive_page(session, after, limit).await?;
+        let (domain, legacy_next, scanned, entries) =
+            tx.archive_page(session, after, limit).await?;
+        let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
+        let (native_next, native) =
+            if scanned < limit && self.require_native_collection(domain, initialized).await? {
+                self.engine
+                    .vector()
+                    .private_archive()
+                    .native_archive_page(domain, session, after, limit - scanned)
+                    .await?
+            } else {
+                (None, Vec::new())
+            };
         let mut bodies = Vec::new();
         for entry in entries {
             let body = self.archived_body(&entry).await?;
@@ -216,8 +461,15 @@ impl Service {
                 Err(error) => return Err(error.into()),
             }
         }
+        for record in native {
+            match native_archive_view(&mut tx, record).await {
+                Ok(view) => turns.push(view),
+                Err(StorageError::NotFound) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
         tx.commit().await?;
-        Ok(json!({"session_id":session,"turns":turns,"next_after":next}))
+        Ok(json!({"session_id":session,"turns":turns,"next_after":native_next.or(legacy_next)}))
     }
 
     pub async fn withdraw_session_archive(
@@ -227,7 +479,21 @@ impl Service {
         turn: Option<Uuid>,
     ) -> Result<Value> {
         let mut tx = self.write(a, Permission::Write).await?;
-        tx.withdraw_archives(session, turn).await?;
+        match tx.withdraw_archives(session, turn).await {
+            Ok(()) => {
+                if turn.is_none() {
+                    tx.withdraw_session_native(session).await?;
+                }
+            }
+            Err(StorageError::NotFound) if turn.is_some() => {
+                let turn = turn.expect("checked");
+                if !tx.native_archive_request_exists(session, turn).await? {
+                    return Err(AppError::NotFound);
+                }
+                tx.withdraw_native_archive(session, turn).await?;
+            }
+            Err(error) => return Err(error.into()),
+        }
         tx.audit(
             "session.archive_withdrawn",
             turn.unwrap_or(session),
@@ -255,8 +521,9 @@ impl Service {
         };
         // AnySeek's default 10,000-record collection stores two members per turn.
         let (domain, _, scanned, entries) = tx.archive_page(session, 0, 5001).await?;
+        let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
-        if entries.is_empty() {
+        if entries.is_empty() && !initialized {
             return Ok((0, Vec::new()));
         }
         if scanned > 5000 {
@@ -267,11 +534,20 @@ impl Service {
         let groups: Vec<_> = entries.iter().map(|entry| entry.locator.group()).collect();
         let eligible: HashMap<_, _> = groups.iter().cloned().zip(entries).collect();
         let backend = self.engine.vector().private_archive();
-        if !backend.private_collection(domain, false).await? {
+        if !groups.is_empty() && !backend.private_collection(domain, false).await? {
             return Err(AppError::Unavailable(
                 "private archive collection unavailable".into(),
             ));
         }
+        let native = self.require_native_collection(domain, initialized).await?;
+        let native_count = if native {
+            backend
+                .native_archive_search(domain, ArchiveQuery::Keyword(""), 1)
+                .await?
+                .0
+        } else {
+            0
+        };
         let terms = archive_terms(&input.query);
         let mut queries = Vec::new();
         if prepared.effective_mode != "vector" {
@@ -281,8 +557,17 @@ impl Service {
             queries.push(("vector", ArchiveQuery::Vector(vector)));
         }
         let mut ranked = HashMap::<String, (f64, Vec<String>)>::new();
+        let mut turn_ids = HashMap::new();
         for (route, query) in &queries {
             let mut hits = Vec::new();
+            if native {
+                let (_, found) = backend.native_archive_search(domain, *query, limit).await?;
+                for (turn, score) in found {
+                    let key = turn.to_string();
+                    turn_ids.insert(key.clone(), turn);
+                    hits.push((key, score));
+                }
+            }
             for batch in groups.chunks(64) {
                 // Check that the rankable projection of every eligible archive
                 // is present, including records that would not match the query.
@@ -321,19 +606,32 @@ impl Service {
         ranked.sort_by(|a, b| {
             b.1.0
                 .total_cmp(&a.1.0)
-                .then_with(|| eligible[&b.0].sequence.cmp(&eligible[&a.0].sequence))
+                .then_with(|| {
+                    eligible
+                        .get(&b.0)
+                        .map(|entry| entry.sequence)
+                        .cmp(&eligible.get(&a.0).map(|entry| entry.sequence))
+                })
+                .then_with(|| a.0.cmp(&b.0))
         });
         let mut found = Vec::new();
         for (group, (score, routes)) in ranked.into_iter().take(limit) {
-            let entry = &eligible[&group];
+            let archive = if let Some(entry) = eligible.get(&group) {
+                ArchiveContent::Legacy(entry.clone(), self.archived_body(entry).await?)
+            } else {
+                let turn = turn_ids[&group];
+                let Some(record) = backend.native_archive_read(domain, session, turn).await? else {
+                    continue;
+                };
+                ArchiveContent::Native(record)
+            };
             found.push(ArchiveCandidate {
-                entry: entry.clone(),
-                body: self.archived_body(entry).await?,
+                archive,
                 score,
                 routes,
             });
         }
-        Ok((groups.len(), found))
+        Ok((groups.len() + native_count, found))
     }
 
     pub async fn record_feedback(
@@ -349,6 +647,7 @@ impl Service {
             return Err(AppError::Invalid("turn_id must be non-nil".into()));
         }
         input.validate().map_err(|e| AppError::Invalid(e.into()))?;
+        let archive = self.load_native_archive(a, session, turn).await?;
         let request = json!({"session_id":session,"turn_id":turn,"input":input});
         let (mut tx, cached) = self
             .command(
@@ -359,6 +658,9 @@ impl Service {
                 &request,
             )
             .await?;
+        if let Some(record) = &archive {
+            tx.attach_native_archive_proof(record).await?;
+        }
         if let Some(receipt) = cached {
             tx.require_turn_visible(session, turn).await?;
             tx.commit().await?;
@@ -377,11 +679,52 @@ impl Service {
         turn: Uuid,
     ) -> Result<Value> {
         session_id(session)?;
+        let record = self.load_native_archive(a, session, turn).await?;
         let mut tx = self.read(a, Permission::Write).await?;
-        let value = tx.session_feedback(session, turn).await?;
+        let value = if record.is_some() {
+            tx.require_native_archive_live(session, turn).await?;
+            json!({"session_id":session,"turn_id":turn,"feedback":tx.feedback_rows(session, turn).await?})
+        } else {
+            tx.session_feedback(session, turn).await?
+        };
         tx.commit().await?;
         Ok(value)
     }
+}
+
+async fn native_archive_view(
+    tx: &mut SqliteTx,
+    record: NativeArchiveTurn,
+) -> crate::storage::StorageResult<Value> {
+    require_native_record(tx, &record).await?;
+    let feedback = tx.feedback_rows(record.session, record.turn).await?;
+    let mut value = json!({
+        "session_id":record.session,"turn_id":record.turn,"source_event_id":record.source,
+        "question":record.body.question,"answer":record.body.answer,"used_evidence":record.evidence,
+        "feedback":feedback,"created_by":record.created_by,"created_at":record.created_at,"sequence":record.sequence,
+    });
+    if !record.body.evidence_use.is_reported() {
+        value["evidence_use"] = json!(record.body.evidence_use);
+    }
+    Ok(value)
+}
+
+async fn require_native_record(
+    tx: &mut SqliteTx,
+    record: &NativeArchiveTurn,
+) -> crate::storage::StorageResult<()> {
+    tx.require_native_archive_live(record.session, record.turn)
+        .await?;
+    if let Some((source, digest)) = tx
+        .native_archive_proof_digest(record.session, record.turn)
+        .await?
+        && (source != record.source || digest != record.request_hash)
+    {
+        return Err(StorageError::Unavailable(
+            "private archive proof mismatch".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn prefix(text: &str) -> &str {

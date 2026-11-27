@@ -4,6 +4,29 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Native private turn directory and direct experience publication
+
+Based on main `a542ff0af5cd6ac8a315d6fe8d4a6c5f99734f57` on Linux x86_64 with
+Rust 1.98.0. Standalone AnySeek used CI pin `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
+
+- The default Rust suite passed 482 tests and the real AnySeek contracts passed another 8.
+  All-target Clippy with warnings denied passed
+  for SQLite only and all features. Formatting and links passed.
+- The private archive smoke passed through the actual CLI, HTTP, and MCP on both backends.
+  It checks the absence of a SQLite directory row for ordinary turns, exact and ordered reads,
+  key and workspace isolation, lost receipt recovery, late writes and withdrawal races, mixed
+  Run source checks, and stopped paired restore.
+- Isolated tests ran `copy / verify / purge` for the pre-#168 SQLite bodies and explicit
+  admission of a #168 store. They compared original SQLite bytes, old IDs, withdrawals, and
+  mixed pagination order. Five concurrent first submissions returned the same receipt.
+- With models disabled, HTTP and MCP published experiences from human confirmation and
+  a pinned document version without a private turn archive. Both backends returned the
+  published experiences and hid the document-based experience after source withdrawal.
+  Existing Improve and effective-date fact paths retained their separate behavior.
+
+All checks used disposable synthetic data. Native Windows, production data migration,
+and online restore remain outside this validation.
+
 ## 2026-11-27 · AnySeek private turn archive
 
 Origence is based on `af9030310bd5d313e23d9ac42373fa0b1e7d38a7`. The embedded SDK remains

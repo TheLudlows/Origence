@@ -266,6 +266,8 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 完整问答使用稳定 Record ID，并与检索投影原子提交。现行正文字节上限即使经 JSON
 转义也低于固定 AnySeek 版本的 1 MiB 单 Record 上限。
 
+新轮次由原生 AnySeek 记录确认。SQLite 保存工作区授权、每会话序号分配、撤回标记和实际被下游引用的校验证据。备份须包含两套存储。`verify` 核对活跃原生轮次的顺序、请求哈希和正文，并继续检查旧格式记录的确认水位。
+
 AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期且原 group 仍不存在时，
 才能用同一 nonce、新 epoch 和版本 0 CAS 重交正文。撤回先隐藏 SQLite 目录，
 后台以原子空 group 清理活跃记录，并用 group 版本阻断迟到写入。
@@ -277,8 +279,9 @@ AnySeek 接受当日和前一 UTC 日的操作 epoch。经后端确认为过期�
 `OC_ANYSEEK_URL` 和 `OC_ANYSEEK_API_KEY`。
 
 1. `origence --offline --data-dir <副本> archive-migrate copy --isolated-copy --limit 64`。
-   只接受紧邻原版 authority schema 或已经准备好的副本。按历史 `created_at,turn_id`
-   顺序分配稳定序号并核对来源、原请求、正文哈希和回读。可分批执行或中断重跑。
+   接受 #168 明确支持的前代 authority schema、#168 的原归档结构或已经准备好的副本。
+   对 SQLite 正文按历史 `created_at,turn_id` 顺序分批复制并核对来源、原请求、正文哈希和回读。
+   #168 已在 AnySeek 的历史轮次保留原格式、标识、顺序和撤回。
 2. `origence --offline --data-dir <副本> archive-migrate verify --isolated-copy`。
    等到 `unconfirmed=0`。保留验证清单中的目录摘要、AnySeek 版本及各活跃私有集合的
    SQLite 确认水位和 AnySeek 查询可见水位。对照原先的轮次、来源引用、顺序和 Hash，并演练备份还原和读取。

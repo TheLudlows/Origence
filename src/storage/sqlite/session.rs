@@ -532,6 +532,24 @@ impl SqliteTx {
     }
 
     #[cfg(any(feature = "local-storage", test))]
+    pub(crate) async fn prepare_native_archive_evidence(
+        &mut self,
+        references: &[UsedEvidence],
+    ) -> StorageResult<Vec<ArchivedEvidence>> {
+        let mut evidence = Vec::with_capacity(references.len());
+        let mut batch = Self::archive_metadata(references);
+        for (index, reference) in references.iter().enumerate() {
+            evidence.push(
+                self.archive_from_batch(&mut batch, index, reference, Uuid::new_v4())
+                    .await?,
+            );
+        }
+        self.require_archived_evidence_set_visible(&evidence)
+            .await?;
+        Ok(evidence)
+    }
+
+    #[cfg(any(feature = "local-storage", test))]
     pub(super) async fn register_turn(
         &mut self,
         session: Uuid,
@@ -551,15 +569,8 @@ impl SqliteTx {
             }
             return Ok((source, false));
         }
-        let mut evidence = Vec::new();
-        let mut batch = Self::archive_metadata(&input.used_evidence);
-        for (index, reference) in input.used_evidence.iter().enumerate() {
-            evidence.push(
-                self.archive_from_batch(&mut batch, index, reference, Uuid::new_v4())
-                    .await?,
-            );
-        }
-        self.require_archived_evidence_set_visible(&evidence)
+        let evidence = self
+            .prepare_native_archive_evidence(&input.used_evidence)
             .await?;
         let source = self.create_event("session_turn", "", None).await?;
         sqlite_db::query("INSERT INTO oc_session_turns(tenant_id,workspace_id,session_id,turn_id,source_event_id,request_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)")
@@ -573,7 +584,7 @@ impl SqliteTx {
         Ok((source, true))
     }
 
-    pub(super) async fn feedback_rows(
+    pub(crate) async fn feedback_rows(
         &mut self,
         session: Uuid,
         turn: Uuid,

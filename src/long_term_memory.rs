@@ -12,7 +12,8 @@ use crate::{
     context_retrieval::{ContextLimit, ContextRoute},
     error::{AppError, Result},
     evidence::{conditions_match, validate_applicability_context},
-    learning::ImproveInput,
+    jobs::JobPayload,
+    learning::{DirectExperienceInput, ExperiencePublication, ImproveInput, LearningCandidate},
     memory_identity::MemoryIdentity,
     parsing,
     service::Service,
@@ -30,10 +31,17 @@ const MAX_RECALL_PER_KIND: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ExperienceSource {
+pub struct FeedbackExperienceSource {
     #[schemars(with = "String")]
     pub session_id: Uuid,
     pub improve: ImproveInput,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ExperienceSource {
+    Feedback(FeedbackExperienceSource),
+    Direct(DirectExperienceInput),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +99,8 @@ pub enum RecalledMemory {
         applicability: Applicability,
         /// A reference to the published workspace chunk.
         citation: UsedEvidence,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        publication: Option<ExperiencePublication>,
     },
 }
 
@@ -232,7 +242,7 @@ impl Service {
                 self.retain_memory(auth, key, CaptureInput { content })
                     .await
             }
-            (None, Some(source)) => {
+            (None, Some(ExperienceSource::Feedback(source))) => {
                 self.admit_improve(
                     auth,
                     key,
@@ -242,10 +252,65 @@ impl Service {
                 )
                 .await
             }
+            (None, Some(ExperienceSource::Direct(input))) => {
+                self.retain_experience(auth, key, input).await
+            }
             _ => Err(AppError::Invalid(
                 "submit exactly one of content or experience".into(),
             )),
         }
+    }
+
+    async fn retain_experience(
+        &self,
+        auth: &AuthContext,
+        key: &str,
+        input: DirectExperienceInput,
+    ) -> Result<Value> {
+        input
+            .validate()
+            .map_err(|error| AppError::Invalid(error.into()))?;
+        let (mut tx, cached) = self
+            .command(
+                auth,
+                Permission::Write,
+                RETAIN_SOURCE_KIND,
+                key,
+                &serde_json::json!(input),
+            )
+            .await?;
+        tx.require_experience_basis_visible(&input.basis).await?;
+        if let Some(receipt) = cached {
+            tx.commit().await?;
+            return Ok(receipt);
+        }
+        let candidate = LearningCandidate {
+            statement: input.statement,
+            why: input.why,
+            conditions: input.conditions,
+            supports: Vec::new(),
+        };
+        let title = "Conditional learning";
+        let source = tx
+            .create_event("learning", &candidate.render_text(), None)
+            .await?;
+        let asset = tx.insert_knowledge_asset(title).await?;
+        let job = Self::enqueue(
+            &mut tx,
+            JobPayload::Ingest {
+                format: "text".into(),
+                title: title.into(),
+                expected_version: None,
+                embedding_profile: self.models.profile.clone(),
+            },
+            Some(asset),
+            Some(source),
+        )
+        .await?;
+        let receipt = tx
+            .create_direct_learning(asset, source, job, &candidate, &input.basis)
+            .await?;
+        Self::finish(tx, receipt).await
     }
 
     /// Retrieve both memory kinds with one query and one final authorized
@@ -327,6 +392,7 @@ impl Service {
                 why: learning.why,
                 conditions: learning.conditions,
                 applicability,
+                publication: learning.publication,
                 citation: UsedEvidence {
                     kind: EvidenceKind::Chunk,
                     id: fresh.hit.chunk_id,

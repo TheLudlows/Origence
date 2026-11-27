@@ -247,6 +247,10 @@ def run_contract(binary, root, model, anyseek, legacy):
             for item in (turn, control, rich):
                 saved.append(host.request(route, item))
                 time.sleep(0.005)
+            if not legacy:
+                with database(directory) as db:
+                    assert db.execute("SELECT COUNT(*) FROM oc_private_archives").fetchone() == (0,)
+                    assert db.execute("SELECT COUNT(*) FROM oc_session_turns").fetchone() == (0,)
             context = {"query": MARKER, "routes": [{"route": "session"}]}
             run_id, event_id = str(uuid.uuid4()), str(uuid.uuid4())
             host.request("/v1/runs", {"run_id": run_id, "summary": "Synthetic replay"})
@@ -349,8 +353,12 @@ def run_contract(binary, root, model, anyseek, legacy):
             with database(directory) as db:
                 db.execute("UPDATE oc_events SET kind='knowledge' WHERE id=?", (source,))
             try:
-                expect(request(host.base, route + "/" + turn["turn_id"], token=token), 404)
-                assert host.request("/v1/context", context)["items"] == []
+                if legacy:
+                    expect(request(host.base, route + "/" + turn["turn_id"], token=token), 404)
+                    assert host.request("/v1/context", context)["items"] == []
+                else:
+                    assert host.request(route + "/" + turn["turn_id"])["answer"] == ANSWER
+                    assert host.request("/v1/context", context)["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
             finally:
                 with database(directory) as db:
                     db.execute("UPDATE oc_events SET kind='session_turn' WHERE id=?", (source,))
@@ -424,11 +432,10 @@ def run_contract(binary, root, model, anyseek, legacy):
                 expect(request(host.base, route + "/" + delayed["turn_id"], token=token), 404)
                 assert expect(request(host.base, "/v1/context", "POST", token,
                                       dict(context, query="unwrittenpendingneedle")), 200)["items"] == []
-                # Simulate resubmitting an unwritten reservation after its
-                # AnySeek receipt epoch has expired.
+                # An unwritten native turn has no SQLite archive row to promote.
                 with database(directory) as db:
-                    db.execute("UPDATE oc_private_archives SET operation_epoch=0 WHERE turn_id=?",
-                               (uuid.UUID(delayed["turn_id"]).bytes,))
+                    assert db.execute("SELECT 1 FROM oc_private_archives WHERE turn_id=?",
+                                      (uuid.UUID(delayed["turn_id"]).bytes,)).fetchone() is None
                 expect(request(host.base, route, "POST", token, delayed, "unwritten"), 200)
 
                 for action in ["missing", "corrupt"]:
@@ -441,10 +448,10 @@ def run_contract(binary, root, model, anyseek, legacy):
                     assert proxy.entered.wait(15)
                     expect(request(host.base, route + "/" + late["turn_id"], "DELETE", token), 200)
                     with database(directory) as db:
-                        wait_for(lambda: db.execute("SELECT cleanup_done FROM oc_private_archives WHERE turn_id=?",
+                        wait_for(lambda: db.execute("SELECT cleanup_after IS NULL FROM oc_native_archive_withdrawals WHERE turn_id=?",
                                                    (uuid.UUID(late["turn_id"]).bytes,)).fetchone() == (1,))
                     proxy.release.set()
-                    expect(delayed_call.result(), 503)
+                    assert delayed_call.result()[0] in (404, 503)
                 expect(request(host.base, route + "/" + late["turn_id"], token=token), 404)
                 expect(request(host.base, route, "POST", token, late), 404)
                 proxy.action = "after"
@@ -454,8 +461,8 @@ def run_contract(binary, root, model, anyseek, legacy):
 
         with start() as host:
             if anyseek:
-                pending = host.request("/v1/context", dict(context, query="lostreceiptneedle"))
-                assert pending["items"] == []
+                found = host.request("/v1/context", dict(context, query="lostreceiptneedle"))
+                assert found["items"][0]["provenance"]["turn_id"] == lost["turn_id"]
                 recovered = host.request(route + "/" + lost["turn_id"])
                 assert recovered["question"] == lost["question"]
                 assert host.request(route, lost)["source_event_id"] == recovered["source_event_id"]
@@ -480,7 +487,9 @@ def run_contract(binary, root, model, anyseek, legacy):
             expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 200)
             expect(request(host.base, route + "/" + control["turn_id"], token=replacement), 404)
             with database(directory) as db:
-                wait_for(lambda: db.execute("SELECT cleanup_done FROM oc_private_archives WHERE turn_id=?",
+                cleaned = ("SELECT cleanup_done FROM oc_private_archives WHERE turn_id=?" if legacy
+                           else "SELECT cleanup_after IS NULL FROM oc_native_archive_withdrawals WHERE turn_id=?")
+                wait_for(lambda: db.execute(cleaned,
                                            (uuid.UUID(control["turn_id"]).bytes,)).fetchone() == (1,))
 
         token = replacement

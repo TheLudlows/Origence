@@ -1,4 +1,4 @@
-//! Exclusive maintenance for the immediately preceding relational archive schema.
+//! Exclusive maintenance for the supported relational and first AnySeek archive schemas.
 use super::*;
 use crate::session::{ArchiveDomain, ArchiveLocator, ArchivedTurnBody, EvidenceUse};
 use std::{collections::BTreeSet, path::Path};
@@ -36,22 +36,28 @@ impl SqliteStore {
         let _opening = opening.lock().await;
         let source = Pool::open_read_only(&path).await.map_err(sqlite_err)?;
         source.hold_lifetime_guard(lock.clone());
-        let already_prepared = async {
+        let predecessor_has_v1_archive = async {
             let mut conn = source.acquire().await.map_err(sqlite_err)?;
             if schema::check_conn(&mut conn).await.is_ok() {
                 sqlite_db::check_format(&mut conn, "authority")
                     .await
                     .map_err(sqlite_err)?;
-                return Ok::<_, StorageError>(true);
+                return Ok::<_, StorageError>(None);
+            }
+            if schema::check_legacy_v1_archive_schema(&mut conn)
+                .await
+                .is_ok()
+            {
+                return Ok(Some(true));
             }
             schema::check_legacy_archive_schema(&mut conn).await?;
-            Ok(false)
+            Ok(Some(false))
         }
         .await;
         source.close().await;
-        if already_prepared? {
+        let Some(has_v1_archive) = predecessor_has_v1_archive? else {
             return Ok(());
-        }
+        };
         let pool = Pool::open(&path).await.map_err(sqlite_err)?;
         pool.hold_lifetime_guard(lock);
         let result = async {
@@ -59,17 +65,26 @@ impl SqliteStore {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(sqlite_err)?;
-            schema::check_legacy_archive_schema(&mut tx).await?;
-            sqlite_db::raw_sql(private_archive::SCHEMA)
+            if has_v1_archive {
+                schema::check_legacy_v1_archive_schema(&mut tx).await?;
+            } else {
+                schema::check_legacy_archive_schema(&mut tx).await?;
+                sqlite_db::raw_sql(private_archive::SCHEMA)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(sqlite_err)?;
+                sqlite_db::query(
+                    "INSERT INTO oc_private_archive_migration(id,phase) VALUES(1,'copying')",
+                )
                 .execute(&mut *tx)
                 .await
                 .map_err(sqlite_err)?;
-            sqlite_db::query(
-                "INSERT INTO oc_private_archive_migration(id,phase) VALUES(1,'copying')",
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(sqlite_err)?;
+            }
+            schema::convert_legacy_learning_catalog(&mut tx).await?;
+            sqlite_db::raw_sql(private_archive::NATIVE_SCHEMA)
+                .execute(&mut *tx)
+                .await
+                .map_err(sqlite_err)?;
             schema::check_conn(&mut tx).await?;
             tx.commit().await.map_err(sqlite_err)
         }
@@ -102,11 +117,22 @@ impl SqliteStore {
         if source_count != rows.len() as i64 {
             return Err(corrupt());
         }
+        let native_proofs: BTreeSet<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as(
+            "SELECT tenant_id,workspace_id,session_id,turn_id FROM oc_native_archive_proofs",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(sqlite_err)?
+        .into_iter()
+        .collect();
         let mut directory = Vec::with_capacity(rows.len());
         let mut previous = None;
         let mut sequence = 0;
         let mut owner = Uuid::nil();
         for (tenant_id, workspace_id, session, turn, source) in rows {
+            if native_proofs.contains(&(tenant_id, workspace_id, session, turn)) {
+                continue;
+            }
             let scope = Scope {
                 tenant_id,
                 workspace_id,

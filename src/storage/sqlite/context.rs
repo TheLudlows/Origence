@@ -296,20 +296,30 @@ impl SqliteTx {
         // visible_hit already verifies the complete support closure. Published
         // Learning remains a workspace asset; private support pointers are
         // included only for the key that owns the underlying archive.
-        let (learning_id, improve_id, session_id, body): (Uuid, Uuid, Uuid, String) =
+        let (learning_id, improve_id, session_id, body): (Uuid, Option<Uuid>, Option<Uuid>, String) =
             sqlite_db::query_as("SELECT id,improve_id,session_id,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND status='published'")
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
                 .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-        let own_archive = self.bound_private_session().await? == Some(session_id);
+        let own_archive = if let Some(session) = session_id {
+            self.bound_private_session().await? == Some(session)
+        } else {
+            false
+        };
         let candidate: LearningCandidate = serde_json::from_str(&body)
             .map_err(|_| StorageError::Unavailable("invalid learning record".into()))?;
+        let publication = if session_id.is_none() {
+            Some(self.experience_provenance(learning_id).await?)
+        } else {
+            None
+        };
         Ok(ContextLearning {
             learning_id,
-            improve_id: own_archive.then_some(improve_id),
-            session_id: own_archive.then_some(session_id),
+            improve_id: improve_id.filter(|_| own_archive),
+            session_id: session_id.filter(|_| own_archive),
             statement: candidate.statement,
             why: candidate.why,
             conditions: candidate.conditions,
+            publication,
             supports: candidate
                 .supports
                 .into_iter()

@@ -137,6 +137,42 @@ async fn reconcile(service: &Service, stage: Stage, limit: usize) -> Result<Valu
             "private archive directory contains unmatched rows".into(),
         ));
     }
+    let mut native_archived = 0;
+    for (domain, session) in store.native_archive_sessions().await? {
+        if !backend.native_archive_collection(domain, false).await? {
+            return Err(AppError::Unavailable(
+                "private archive collection missing".into(),
+            ));
+        }
+        let mut after = 0;
+        loop {
+            let (next, rows) = backend
+                .native_archive_page(domain, session, after, 32)
+                .await?;
+            for row in rows {
+                native_archived += 1;
+                proofs.push((
+                    format!("native:{}", domain.collection()),
+                    row.sequence,
+                    session,
+                    row.turn,
+                    row.source,
+                    row.request_hash,
+                    row.body.digest(),
+                    "archived".into(),
+                ));
+            }
+            match next {
+                Some(sequence) if sequence > after => after = sequence,
+                Some(_) => {
+                    return Err(AppError::Unavailable(
+                        "native archive cursor did not advance".into(),
+                    ));
+                }
+                None => break,
+            }
+        }
+    }
     if matches!(stage, Stage::Purge) {
         if phase.is_none() || unconfirmed != 0 {
             return Err(AppError::Conflict(
@@ -150,7 +186,8 @@ async fn reconcile(service: &Service, stage: Stage, limit: usize) -> Result<Valu
         "format":"origence-private-archive-v1",
         "anyseek_version":backend.archive_backend_version().await?,
         "phase":store.archive_migration_phase().await?,
-        "archived":archived,"withdrawn":withdrawn,"unconfirmed":unconfirmed,"copied":copied,
+        "archived":archived + native_archived,"native_archived":native_archived,
+        "withdrawn":withdrawn,"unconfirmed":unconfirmed,"copied":copied,
         "directory_sha256":hash(json!(proofs).to_string()),
         "sqlite_confirmed_sequences":confirmed,
         "anyseek_visible_sequences":watermarks,

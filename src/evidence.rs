@@ -8,6 +8,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
+    learning::ExperiencePublication,
     memory_identity::MemoryIdentity,
     memory_timeline::{ConclusionState, Evidence as MemoryFactEvidence, MemoryPeriod},
 };
@@ -206,6 +207,8 @@ pub struct LearningEvidence {
     pub why: String,
     pub conditions: Vec<String>,
     pub supports: Vec<LearningCitation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publication: Option<ExperiencePublication>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

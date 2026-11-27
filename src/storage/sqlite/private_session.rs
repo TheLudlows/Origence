@@ -70,7 +70,7 @@ impl SqliteTx {
         if let Some(session) = session {
             self.require_private_session(session).await?;
         }
-        let learning_session: Option<Uuid> = sqlite_db::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?")
+        let learning_session: Option<Uuid> = sqlite_db::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=? AND session_id IS NOT NULL")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(session) = learning_session {
             self.require_private_session(session).await?;
@@ -84,7 +84,7 @@ impl SqliteTx {
         if let Some(session) = session {
             self.require_private_session(session).await?;
         }
-        let session:Option<Uuid>=sqlite_db::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND ingest_job_id=?")
+        let session:Option<Uuid>=sqlite_db::query_scalar("SELECT session_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND ingest_job_id=? AND session_id IS NOT NULL")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(session) = session {
             self.require_private_session(session).await?;

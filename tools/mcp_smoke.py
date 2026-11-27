@@ -52,7 +52,7 @@ TOOL_FIELDS = {
     },
     "context_get": {"asset_id": "string", "version": "integer"},
     "context_memory_retain": {
-        "content": "string", "experience": "object", "idempotency_key": "string",
+        "content": "string", "experience": None, "idempotency_key": "string",
     },
     "context_memory_recall": {
         "query": "string", "identity": "object", "version": "integer", "as_of_ms": "integer",
@@ -273,14 +273,19 @@ class Mcp:
         self.send(message, expected_status=401)
 
 
-def dereference(root, node):
+def resolve_ref(root, node):
     if "$ref" in node:
         path = node["$ref"]
         require(path.startswith("#/"), "schema has a nonlocal reference")
         target = root
         for part in path[2:].split("/"):
             target = target[part.replace("~1", "/").replace("~0", "~")]
-        return dereference(root, target)
+        return resolve_ref(root, target)
+    return node
+
+
+def dereference(root, node):
+    node = resolve_ref(root, node)
     choices = node.get("anyOf", node.get("oneOf"))
     if choices:
         values = [choice for choice in choices if choice.get("type") != "null"]
@@ -290,8 +295,7 @@ def dereference(root, node):
 
 
 def nullable(root, node):
-    if "$ref" in node:
-        return nullable(root, dereference(root, node))
+    node = resolve_ref(root, node)
     kind = node.get("type")
     if kind == "null" or isinstance(kind, list) and "null" in kind:
         return True
@@ -313,8 +317,45 @@ def schema_object(root, node, fields, required, closed=True):
     if closed:
         require(node.get("additionalProperties") is False, "MCP schema no longer rejects unknown fields")
     for name, expected in fields.items():
-        schema_type(root, node["properties"][name], expected)
+        if expected is not None:
+            schema_type(root, node["properties"][name], expected)
     return node.get("properties", {})
+
+
+def schema_variants(root, node):
+    node = resolve_ref(root, node)
+    choices = node.get("anyOf", node.get("oneOf"))
+    if choices:
+        return [variant for choice in choices for variant in schema_variants(root, choice)]
+    return [] if node.get("type") == "null" else [node]
+
+
+def experience_schema(root, node):
+    variants = schema_variants(root, node)
+    require(len(variants) == 2, "expected direct and feedback experience schemas")
+    direct, feedback = sorted(variants, key=lambda item: "basis" not in item.get("properties", {}))
+    experience = schema_object(root, feedback, {"session_id": "string", "improve": "object"},
+                               ["session_id", "improve"])
+    improve = schema_object(root, experience["improve"],
+                            {"improve_id": "string", "conditions": "array", "max_feedback": "integer"},
+                            ["improve_id", "conditions"])
+    schema_type(root, improve["conditions"]["items"], "string")
+    require(improve["max_feedback"].get("default") == 32, "feedback limit default changed")
+    direct_fields = {"statement": "string", "why": "string", "conditions": "array", "basis": None}
+    statement = schema_object(root, direct, direct_fields, direct_fields)
+    schema_type(root, statement["conditions"]["items"], "string")
+    bases = schema_variants(root, statement["basis"])
+    require(len(bases) == 2, "expected document and human-confirmation bases")
+    basis_fields = {
+        "asset_version": {"kind": "string", "asset_id": "string", "version": "integer",
+                          "content_sha256": "string"},
+        "human_confirmation": {"kind": "string"},
+    }
+    for basis in bases:
+        tag = basis.get("properties", {}).get("kind", {}).get("const")
+        require(tag in basis_fields, "unexpected direct experience basis")
+        fields = basis_fields.pop(tag)
+        schema_object(root, basis, fields, fields)
 
 
 def memory_identity_schema(root, node):
@@ -374,14 +415,7 @@ def check_tools(mcp):
         if name == "context_memory_retain":
             require(all(nullable(root, properties[field]) for field in ("content", "experience")),
                     "long-term retain source alternatives no longer accept null")
-            experience = schema_object(
-                root, properties["experience"], {"session_id": "string", "improve": "object"},
-                ["session_id", "improve"])
-            improve = schema_object(root, experience["improve"],
-                                    {"improve_id": "string", "conditions": "array",
-                                     "max_feedback": "integer"}, ["improve_id", "conditions"])
-            schema_type(root, improve["conditions"]["items"], "string")
-            require(improve["max_feedback"].get("default") == 32, "feedback limit default changed")
+            experience_schema(root, properties["experience"])
             continue
         if name == "context_memory_recall":
             require(all(nullable(root, properties[field])

@@ -463,6 +463,129 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
 }
 
 #[tokio::test]
+async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
+    use origence::{error::AppError, evidence::EvidenceInput, storage::sqlite_db};
+
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    store
+        .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic Run proof")
+        .await
+        .unwrap();
+    let key = store.issue_key(scope, "writer").await.unwrap();
+    let owner = service.auth(&key.token).await.unwrap();
+    let session = service.private_session(&owner).await.unwrap();
+    let session = serde_json::from_value(session["session_id"].clone()).unwrap();
+    let turn = Uuid::new_v4();
+    let question = "runarchiveproofneedle";
+    let answer = "Private answer for only this synthetic Run";
+    service
+        .archive_turn(
+            &owner,
+            "native-run-turn",
+            session,
+            serde_json::from_value(json!({
+                "turn_id":turn,"question":question,"answer":answer,"used_evidence":[]
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let rows: i64 = sqlite_db::query_scalar(
+        "SELECT count(*) FROM oc_session_turns WHERE tenant_id=? AND workspace_id=? AND turn_id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(turn)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(rows, 0, "ordinary private saves must avoid the proof table");
+
+    let run = Uuid::new_v4();
+    service
+        .create_run(
+            &owner,
+            serde_json::from_value(json!({"run_id":run,"summary":"Synthetic archive replay"}))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let event = Uuid::new_v4();
+    let input: EvidenceInput = serde_json::from_value(json!({
+        "query":question,"routes":[{"route":"session","limit":1}]
+    }))
+    .unwrap();
+    let prepared = service
+        .prepare_run_context(&owner, run, event, input.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        prepared["bundle"]["items"][0]["provenance"]["turn_id"],
+        json!(turn)
+    );
+    assert!(
+        prepared["bundle"]["rendered_context"]
+            .as_str()
+            .unwrap()
+            .contains(answer)
+    );
+    assert_eq!(
+        service
+            .prepare_run_context(&owner, run, event, input.clone())
+            .await
+            .unwrap(),
+        prepared
+    );
+    let persisted: String = sqlite_db::query_scalar(
+        "SELECT payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND event_id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(run)
+    .bind(event)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(!persisted.contains(question) && !persisted.contains(answer));
+    let source: Uuid = serde_json::from_value(
+        prepared["bundle"]["items"][0]["provenance"]["source_event_id"].clone(),
+    )
+    .unwrap();
+    let proof: String = sqlite_db::query_scalar(
+        "SELECT content FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(proof.is_empty());
+    service.run_trace(&owner, run, 0, 1).await.unwrap();
+    service.run_prefix(&owner, run, 1).await.unwrap();
+
+    service
+        .withdraw_session_archive(&owner, session, Some(turn))
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.prepare_run_context(&owner, run, event, input).await,
+        Err(AppError::NotFound)
+    ));
+    assert!(matches!(
+        service.run_prefix(&owner, run, 1).await,
+        Err(AppError::NotFound)
+    ));
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() {
     use crate::client_hooks::HookFixture;
     use origence::client_hook::{Capture, Client};

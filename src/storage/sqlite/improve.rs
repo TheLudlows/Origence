@@ -7,6 +7,7 @@ use crate::learning::{
 use crate::session::FeedbackInput;
 
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
+pub(super) const CATALOG_SCHEMA: &str = include_str!("../learning-catalog-schema.sql");
 
 pub(super) async fn available(conn: &mut Connection) -> StorageResult<bool> {
     // All three reads are intentional: an earlier true arm must not hide a
@@ -343,6 +344,44 @@ impl SqliteTx {
             ));
         }
         Ok(())
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn create_direct_learning(
+        &mut self,
+        asset: Uuid,
+        source: Uuid,
+        job: Uuid,
+        candidate: &LearningCandidate,
+        basis: &crate::learning::ExperienceBasis,
+    ) -> StorageResult<Value> {
+        if self
+            .learning_registration_duplicate(candidate)
+            .await?
+            .is_some()
+        {
+            return Err(StorageError::Conflict("learning already registered".into()));
+        }
+        if !learning_ingest_valid(&mut self.tx, self.scope, asset, source, job).await? {
+            return Err(StorageError::Conflict(
+                "learning requires its registered knowledge ingestion".into(),
+            ));
+        }
+        let id = Uuid::new_v4();
+        sqlite_db::query("INSERT INTO oc_learnings(tenant_id,workspace_id,id,basis,asset_id,source_event_id,ingest_job_id,candidate,fingerprint,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(encode(basis)?)
+            .bind(asset).bind(source).bind(job).bind(encode(candidate)?).bind(fingerprint(candidate)?)
+            .bind(self.principal_id).bind(now_ms())
+            .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.audit(
+            "learning.accepted",
+            id,
+            json!({"asset_id":asset,"source_event_id":source,"ingest_job_id":job}),
+        )
+        .await?;
+        Ok(
+            json!({"learning_id":id,"asset_id":asset,"source_event_id":source,"job_id":job,"status":"accepted"}),
+        )
     }
 
     async fn frozen_turn(
@@ -770,7 +809,7 @@ impl SqliteTx {
         if !available(&mut self.tx).await? {
             return Ok(());
         }
-        let row: Option<(Uuid, Uuid, Uuid, Uuid)> = sqlite_db::query_as("SELECT id,session_id,improve_id,source_event_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
+        let row: Option<(Uuid, Option<Uuid>, Option<Uuid>, Uuid)> = sqlite_db::query_as("SELECT id,session_id,improve_id,source_event_id FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND asset_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(asset)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let Some((id, session, improve, source)) = row else {
@@ -795,7 +834,9 @@ impl SqliteTx {
             )
             .await?;
         }
-        self.complete_improve(session, improve).await?;
+        if let (Some(session), Some(improve)) = (session, improve) {
+            self.complete_improve(session, improve).await?;
+        }
         Ok(())
     }
 
@@ -849,12 +890,14 @@ impl SqliteTx {
     pub async fn learning_view(&mut self, learning: Uuid) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
         self.require_improve().await?;
-        let row: Option<(Uuid, Uuid, Uuid, Uuid, Uuid, String, String)> = sqlite_db::query_as("SELECT improve_id,session_id,asset_id,source_event_id,ingest_job_id,status,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=?")
+        let row: Option<(Option<Uuid>, Option<Uuid>, Uuid, Uuid, Uuid, String, String)> = sqlite_db::query_as("SELECT improve_id,session_id,asset_id,source_event_id,ingest_job_id,status,candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(learning)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (improve, session, asset, source, job, status, candidate) =
             row.ok_or(StorageError::NotFound)?;
-        self.require_private_session(session).await?;
+        if let Some(session) = session {
+            self.require_private_session(session).await?;
+        }
         self.require_learning_asset_visible(asset).await?;
         let candidate: LearningCandidate = decode(&candidate)?;
         let supports: Vec<Value> = candidate.supports.iter().map(|support| json!({
@@ -868,13 +911,18 @@ impl SqliteTx {
             .ok_or_else(|| StorageError::Unavailable("invalid learning record".into()))?;
         object.extend(serde_json::Map::from_iter([
             ("learning_id".into(), json!(learning)),
-            ("improve_id".into(), json!(improve)),
-            ("session_id".into(), json!(session)),
             ("asset_id".into(), json!(asset)),
             ("source_event_id".into(), json!(source)),
             ("ingest_job_id".into(), json!(job)),
             ("status".into(), json!(status)),
         ]));
+        if let (Some(improve), Some(session)) = (improve, session) {
+            object.insert("improve_id".into(), json!(improve));
+            object.insert("session_id".into(), json!(session));
+        } else {
+            let publication = self.experience_provenance(learning).await?;
+            object.insert("publication".into(), json!(publication));
+        }
         Ok(result)
     }
 }
