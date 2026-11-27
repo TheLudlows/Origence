@@ -15,6 +15,7 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 | 产品定位、核心数据和阶段目标 | [产品路线图](ROADMAP.md) |
 | 已确认的产品边界、目标架构与首版验收 | [架构规划](design/agent-data-foundation.md) |
 | 当前已实现什么、阻塞项与下一步 | [STATUS](STATUS.md) |
+| 固定主干版本的能力与验收边界 | [能力盘点](CAPABILITIES.md) |
 | 当前代码的组件、存储分工与一致性 | [实现架构](design/current-implementation.md) |
 | HTTP、MCP 与公开库接口 | [API](API.md) |
 | 配置、部署、故障处理与备份恢复 | [OPERATIONS](OPERATIONS.md) |

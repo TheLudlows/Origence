@@ -15,6 +15,7 @@ The first release targets pilot use by internal engineering and business teams o
 | Product positioning, core data, and milestones | [Product roadmap](ROADMAP.en.md) |
 | Confirmed product scope, target architecture, and initial acceptance | [Architecture plan](design/agent-data-foundation.en.md) |
 | What is implemented, blockers, and next steps | [STATUS](STATUS.en.md) |
+| Capabilities and acceptance limits at a pinned main revision | [Capabilities](CAPABILITIES.en.md) |
 | Current components, storage responsibilities, and consistency | [Implementation architecture](design/current-implementation.en.md) |
 | HTTP, MCP, and public library interfaces | [API](API.en.md) |
 | Configuration, deployments, failures, backup and restore | [OPERATIONS](OPERATIONS.en.md) |
