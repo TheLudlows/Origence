@@ -7,6 +7,36 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · 简化独立证据的录入和显示
+
+基于本地提取改动 `0d84a6c99ad6271af8c74f4274c0b3489e2f043d`。本地 HTTP 回归验证只提交目标身份时，
+服务端保存受理时的发布版本。同一请求幂等重放，显式旧版本仍被拒绝，两个并发首次提取仍受版本校验。
+旧提取独立证据可按固定版本读取，与使用事实键的已发布记忆区分。使用合成模型响应。
+
+239 项库测试、217 项本地集成测试、6 项长期记忆测试、格式检查和全特性全目标严格 Clippy 通过。
+Node 类型检查及 31 项 UI 测试通过，覆盖表单、独立证据详情和固定引用。Chromium 的资产页签与版本比较回归在
+320、375、736、1024px 的明暗主题及 reader/writer 角色通过。测试环境为 Linux。
+
+基于 `a989e7f2fcb4bb5f642ee28590f6ddd914b82e8c` 精简两个旧提取入口的共用发布流程，合并资产读取中的
+身份查询。Linux 上复跑上述 Rust、Node 和 Chromium 检查，覆盖授权、精确版本读取、撤回和重放。
+
+## 2026-11-27 · 模型提取追加证据
+
+基于 main `c1ab0d5a82b5e098f699288c78dcb6b1f99f0cf2`。Linux x86_64、Rust 1.98.0。
+通过 239 项库测试、217 项本地集成测试及 6 项长期记忆归纳专项测试。全目标全特性严格 Clippy、
+格式检查、Node 类型检查及 30 项 UI 测试通过。
+
+真实本地 HTTP 和模型夹具核对了受控提取的冲突证据、旧 `allow_update` 请求拒绝、人工确认后的版本发布、
+保存计划后的重试和撤回。两个旧提取入口均验证了已有条目保持原版本、后续证据可单独检索。
+长期记忆测试覆盖按生效日期查询、同日冲突和撤回后重算。模型响应来自合成夹具。
+
+```sh
+cargo test --locked --no-default-features --features local-storage --lib --test local --test memory-consolidation
+cargo clippy --locked --all-features --all-targets -- -D warnings
+npm --prefix ui run check
+npm --prefix ui test
+```
+
 ## 2026-11-26 · Codex 与 Claude Code 私有问答增量归档
 
 基于 main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`，Linux x86_64、Rust 1.98.0。

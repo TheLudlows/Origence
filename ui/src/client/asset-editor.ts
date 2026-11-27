@@ -333,11 +333,11 @@ export function capture(ctx: ViewContext) {
       el(
         "p",
         "muted",
-        "仅提取本次显式提交的文本；空目标仅产生未归一化证据。需要服务端配置提取模型。",
+        "提取会保留原文引用和冲突证据。已有单值由人工确认后更新。空目标只产生未归一化证据，需配置提取模型。",
       ),
       field("原始文本", content),
       field(
-        "允许的目标身份（含 identity、expected_version；可留 []）",
+        "目标身份（JSON 数组，每项含 identity，可留 []）",
         targets,
       ),
       save,

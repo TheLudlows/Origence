@@ -112,8 +112,8 @@ async fn provision(s: &Service, tenant: Option<Uuid>) -> (AuthContext, String) {
 fn identity(predicate: &str) -> Value {
     json!({"subject":{"kind":"service","stable_id":"Atlas"},"predicate":predicate,"context":{"env":"production"}})
 }
-fn target(predicate: &str, version: i32, allow_update: bool) -> Value {
-    json!({"identity":identity(predicate),"expected_version":version,"allow_update":allow_update})
+fn target(predicate: &str, version: i32) -> Value {
+    json!({"identity":identity(predicate),"expected_version":version})
 }
 fn candidate(
     content: &str,
@@ -185,7 +185,7 @@ async fn http(base: &str, token: &str, key: &str, body: Value) -> (u16, Value) {
 }
 
 #[tokio::test]
-async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
+async fn semantic_capture_http_preserves_conflicts_and_requires_explicit_updates() {
     let (_dir, s, a, token, stub, _model) = fixture(true).await;
     property(&s, &a, "database.engine", "single").await;
     property(&s, &a, "service.languages", "multi").await;
@@ -198,8 +198,8 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     let req = request(
         text,
         vec![
-            target("database.engine", 0, false),
-            target("service.languages", 0, false),
+            json!({"identity":identity("database.engine")}),
+            json!({"identity":identity("service.languages")}),
         ],
     );
     let (base, _api) = serve(origence::api::router(s.clone())).await;
@@ -234,7 +234,16 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     let envelope: Value =
         serde_json::from_str(model_request["messages"][1]["content"].as_str().unwrap()).unwrap();
     assert_eq!(envelope["source"], text);
-    assert_eq!(envelope["targets"], req["targets"]);
+    assert_eq!(
+        envelope["targets"],
+        json!([target("database.engine", 0), target("service.languages", 0)])
+    );
+    assert_eq!(http(&base, &token, "capture", req.clone()).await.1, r);
+    let old_version = request(text, vec![target("database.engine", 0)]);
+    assert_eq!(
+        http(&base, &token, "stale-version", old_version).await.0,
+        409
+    );
     let event = s.source_event(&a, id(&r, "source_event_id")).await.unwrap();
     assert_eq!(event["content"], text);
     // Independent caller in a second session uses the persisted workspace memory.
@@ -262,7 +271,7 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
         let hit = &hits[0];
         let l = &hit["locator"];
         assert_eq!(hit["source_event_id"], r["source_event_id"]);
-        assert_eq!(l["extraction"]["parser"], "semantic-capture:v1");
+        assert_eq!(l["extraction"]["parser"], "semantic-capture:v2");
         assert_eq!(l["extraction"]["model"], "extract-fixture");
         assert_eq!(
             &text[l["byte_start"].as_u64().unwrap() as usize
@@ -303,12 +312,7 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     }
     let text = "Atlas 生产从 PostgreSQL 改用 MySQL。";
     stub.respond(vec![candidate(text, Some(0), "update", "MySQL", text)]);
-    let unapproved = submit(
-        &s,
-        &a,
-        request(text, vec![target("database.engine", 1, false)]),
-    )
-    .await;
+    let unapproved = submit(&s, &a, request(text, vec![target("database.engine", 1)])).await;
     let unapproved_result = finish(&s, &a, &unapproved).await;
     assert_eq!(
         unapproved_result["memories"][0]["semantic_status"],
@@ -326,7 +330,7 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     let conflict = submit(
         &s,
         &a,
-        request(text, vec![target("database.engine", 1, false)]),
+        request(text, vec![json!({"identity":identity("database.engine")})]),
     )
     .await;
     let conflict_result = finish(&s, &a, &conflict).await;
@@ -342,23 +346,39 @@ async fn semantic_capture_http_multilingual_search_isolation_and_updates() {
     assert_eq!(conflicting["normalization_status"], "unnormalized");
     assert_evidence_matrix(&s, &a, &conflicting, "MySQL", true).await;
     assert_eq!(lookup(&s, &a, "database.engine").await, original);
-    stub.respond(vec![candidate(text, Some(0), "update", "MySQL", text)]);
-    let update = submit(
-        &s,
-        &a,
-        request(text, vec![target("database.engine", 1, true)]),
-    )
-    .await;
+    let mut legacy_request = request(text, vec![target("database.engine", 1)]);
+    legacy_request["targets"][0]["allow_update"] = json!(true);
+    let calls = stub.calls.load(Ordering::SeqCst);
+    let rejected = reqwest::Client::new()
+        .post(format!("{base}/v1/captures/semantic"))
+        .bearer_auth(&token)
+        .header("Idempotency-Key", "old-flag")
+        .json(&legacy_request)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(stub.calls.load(Ordering::SeqCst), calls);
+    assert_eq!(lookup(&s, &a, "database.engine").await, original);
+
+    let update = s
+        .semantic_memory(
+            &a,
+            "manual-correction",
+            serde_json::from_value(json!({
+                "identity":identity("database.engine"), "operation":"update", "expected_version":1,
+                "content":text,
+                "statements":[{"value":"MySQL","quote":text,"byte_start":0,"byte_end":text.len()}]
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
     finish(&s, &a, &update).await;
     let updated = lookup(&s, &a, "database.engine").await;
     assert_eq!(updated["version"], 2);
     stub.respond(vec![candidate(text, Some(0), "assert", "MySQL", text)]);
-    let duplicate = submit(
-        &s,
-        &a,
-        request(text, vec![target("database.engine", 2, false)]),
-    )
-    .await;
+    let duplicate = submit(&s, &a, request(text, vec![target("database.engine", 2)])).await;
     assert_eq!(
         finish(&s, &a, &duplicate).await["memories"][0]["state"],
         "duplicate"
@@ -449,7 +469,7 @@ async fn semantic_capture_set_sources_survive_union_and_withdrawal() {
     let first = submit(
         &s,
         &a,
-        request("Rust", vec![target("service.languages", 0, false)]),
+        request("Rust", vec![target("service.languages", 0)]),
     )
     .await;
     finish(&s, &a, &first).await;
@@ -463,7 +483,7 @@ async fn semantic_capture_set_sources_survive_union_and_withdrawal() {
     let next = submit(
         &s,
         &a,
-        request("Python", vec![target("service.languages", 1, false)]),
+        request("Python", vec![target("service.languages", 1)]),
     )
     .await;
     finish(&s, &a, &next).await;
@@ -475,7 +495,7 @@ async fn semantic_capture_set_sources_survive_union_and_withdrawal() {
     );
     assert_eq!(
         fact["semantic_values"][0]["locator"]["extraction"]["parser"],
-        "semantic-capture:v1"
+        "semantic-capture:v2"
     );
     assert_evidence_matrix(&s, &a, &fact, "Python", true).await;
     let withdrawal = s
@@ -500,7 +520,7 @@ async fn semantic_capture_set_sources_survive_union_and_withdrawal() {
     let rebuild = submit(
         &s,
         &a,
-        request("Python", vec![target("service.languages", 2, false)]),
+        request("Python", vec![target("service.languages", 2)]),
     )
     .await;
     finish(&s, &a, &rebuild).await;
@@ -531,7 +551,7 @@ async fn semantic_capture_retry_reuses_plan_across_service_restart() {
         "PostgreSQL",
     )]);
     stub.fail_embedding.store(true, Ordering::SeqCst);
-    let req = request("PostgreSQL", vec![target("database.engine", 0, false)]);
+    let req = request("PostgreSQL", vec![target("database.engine", 0)]);
     let r = submit(&s, &a, req.clone()).await;
     assert_eq!(terminal(&s, &a, &r).await["state"], "failed");
     assert!(matches!(
@@ -572,7 +592,7 @@ async fn semantic_capture_rejects_bad_batches_and_handles_empty_or_unknown() {
     let (_dir, s, a, _, stub, _model) = fixture(false).await;
     property(&s, &a, "database.engine", "single").await;
     let good = candidate("Rust 🦀", Some(0), "assert", "Rust", "Rust 🦀");
-    let req = request("Rust 🦀", vec![target("database.engine", 0, false)]);
+    let req = request("Rust 🦀", vec![target("database.engine", 0)]);
     let mut bad = good.clone();
     bad["target"] = json!(999);
     let mut span = good.clone();
@@ -622,12 +642,7 @@ async fn semantic_capture_changed_unused_or_uncertain_target_does_not_block_publ
         property(&s, &a, "database.engine", "single").await;
         property(&s, &a, "service.languages", "multi").await;
         stub.respond(vec![candidate("Rust", Some(0), "assert", "Rust", "Rust")]);
-        let first = submit(
-            &s,
-            &a,
-            request("Rust", vec![target("database.engine", 0, false)]),
-        )
-        .await;
+        let first = submit(&s, &a, request("Rust", vec![target("database.engine", 0)])).await;
         // Hold the first publication outside SQL, so the later request passes
         // admission at version 0 without relying on equal-timestamp queue order.
         stub.hold_embedding.store(true, Ordering::SeqCst);
@@ -642,10 +657,7 @@ async fn semantic_capture_changed_unused_or_uncertain_target_does_not_block_publ
             &a,
             request(
                 "Go",
-                vec![
-                    target("database.engine", 0, false),
-                    target("service.languages", 0, false),
-                ],
+                vec![target("database.engine", 0), target("service.languages", 0)],
             ),
         )
         .await;
@@ -686,7 +698,10 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     let (_dir, s, a, _, stub, _model) = fixture(true).await;
     property(&s, &a, "database.engine", "single").await;
     stub.respond(vec![candidate("Rust", Some(0), "assert", "Rust", "Rust")]);
-    let req = request("Rust", vec![target("database.engine", 0, false)]);
+    let req = request(
+        "Rust",
+        vec![json!({"identity":identity("database.engine")})],
+    );
     let first = submit(&s, &a, req.clone()).await;
     let stale = submit(&s, &a, req.clone()).await;
     finish(&s, &a, &first).await;
@@ -694,12 +709,7 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     // Pause outside any SQL transaction at embedding; revoke source before commit.
     stub.respond(vec![candidate("Go", Some(0), "update", "Go", "Go")]);
     stub.hold_embedding.store(true, Ordering::SeqCst);
-    let pending = submit(
-        &s,
-        &a,
-        request("Go", vec![target("database.engine", 1, true)]),
-    )
-    .await;
+    let pending = submit(&s, &a, request("Go", vec![target("database.engine", 1)])).await;
     let worker_service = s.clone();
     let running = tokio::spawn(async move { worker::process_next(&worker_service).await.unwrap() });
     tokio::time::timeout(std::time::Duration::from_secs(10), stub.entered.notified())
@@ -720,20 +730,16 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
         "cancelled"
     );
     assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
-    let cancelled = submit(
-        &s,
-        &a,
-        request("Go", vec![target("database.engine", 1, true)]),
-    )
-    .await;
+    let cancelled = submit(&s, &a, request("Go", vec![target("database.engine", 1)])).await;
     s.job_action(&a, "cancel", id(&cancelled, "job_id"), "cancel")
         .await
         .unwrap();
     s.job_action(&a, "retry-cancel", id(&cancelled, "job_id"), "retry")
         .await
         .unwrap();
-    finish(&s, &a, &cancelled).await;
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 2);
+    let retried = finish(&s, &a, &cancelled).await;
+    assert_eq!(retried["memories"][0]["semantic_status"], "ambiguous");
+    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
     let writer = s
         .engine
         .relational()
@@ -747,12 +753,7 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
         .await
         .unwrap();
     let wa = s.auth(&writer.token).await.unwrap();
-    let revoked = submit(
-        &s,
-        &wa,
-        request("Go", vec![target("database.engine", 2, false)]),
-    )
-    .await;
+    let revoked = submit(&s, &wa, request("Go", vec![target("database.engine", 1)])).await;
     stub.hold_embedding.store(true, Ordering::SeqCst);
     let worker_service = s.clone();
     let running = tokio::spawn(async move { worker::process_next(&worker_service).await.unwrap() });
@@ -766,13 +767,13 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
         s.job(&a, id(&revoked, "job_id")).await.unwrap()["state"],
         "failed"
     );
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 2);
+    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
 }
 
 #[tokio::test]
 async fn semantic_capture_target_validation_and_atomic_route_failure() {
     let (_dir, s, a, _, stub, _model) = fixture(false).await;
-    let req = request("Rust", vec![target("database.engine", 0, false)]);
+    let req = request("Rust", vec![target("database.engine", 0)]);
     assert!(
         s.semantic_capture(
             &a,
@@ -814,10 +815,7 @@ async fn semantic_capture_target_validation_and_atomic_route_failure() {
         &a,
         request(
             "Rust",
-            vec![
-                target("service.languages", 0, false),
-                target("database.engine", 0, false),
-            ],
+            vec![target("service.languages", 0), target("database.engine", 0)],
         ),
     )
     .await;
@@ -831,9 +829,9 @@ async fn semantic_capture_target_validation_and_atomic_route_failure() {
         Err(AppError::NotFound)
     ));
     // Distinct subjects/environments remain separate allowed targets.
-    let mut second = target("database.engine", 0, false);
+    let mut second = target("database.engine", 0);
     second["identity"]["context"]["env"] = json!("staging");
-    let mut third = target("database.engine", 0, false);
+    let mut third = target("database.engine", 0);
     third["identity"]["subject"]["stable_id"] = json!("Other Atlas");
     stub.respond(vec![
         candidate("Rust Go Java", Some(0), "assert", "Rust", "Rust"),
@@ -845,11 +843,7 @@ async fn semantic_capture_target_validation_and_atomic_route_failure() {
         &a,
         request(
             "Rust Go Java",
-            vec![
-                target("database.engine", 0, false),
-                second.clone(),
-                third.clone(),
-            ],
+            vec![target("database.engine", 0), second.clone(), third.clone()],
         ),
     )
     .await;
@@ -892,7 +886,7 @@ async fn semantic_capture_rechecks_retained_member_sources_and_model_profile() {
     let first = submit(
         &s,
         &a,
-        request("Rust", vec![target("service.languages", 0, false)]),
+        request("Rust", vec![target("service.languages", 0)]),
     )
     .await;
     finish(&s, &a, &first).await;
@@ -906,7 +900,7 @@ async fn semantic_capture_rechecks_retained_member_sources_and_model_profile() {
     let pending = submit(
         &s,
         &a,
-        request("Python", vec![target("service.languages", 1, false)]),
+        request("Python", vec![target("service.languages", 1)]),
     )
     .await;
     stub.hold_embedding.store(true, Ordering::SeqCst);
@@ -943,7 +937,7 @@ async fn semantic_capture_rechecks_retained_member_sources_and_model_profile() {
     let next = submit(
         &s,
         &a,
-        request("Python", vec![target("service.languages", 1, false)]),
+        request("Python", vec![target("service.languages", 1)]),
     )
     .await;
     let count = stub.calls.load(Ordering::SeqCst);
@@ -977,7 +971,7 @@ async fn semantic_capture_rechecks_retained_member_sources_and_model_profile() {
     let next = submit(
         &no_vectors,
         &a,
-        request("Python", vec![target("service.languages", 1, false)]),
+        request("Python", vec![target("service.languages", 1)]),
     )
     .await;
     assert!(worker::process_next(&different).await.unwrap());

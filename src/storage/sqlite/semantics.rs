@@ -102,7 +102,16 @@ impl SqliteTx {
         Ok(())
     }
     pub async fn unnormalized_memory_slot(&mut self) -> StorageResult<Uuid> {
-        let id = Uuid::new_v4();
+        self.insert_unnormalized_memory_slot(Uuid::new_v4()).await
+    }
+    pub(crate) async fn reserve_capture_evidence_slot(&mut self, id: Uuid) -> StorageResult<Uuid> {
+        match self.valid_targets_inner(Some(id), None).await {
+            Ok(()) => Ok(id),
+            Err(StorageError::Conflict(_)) => self.insert_unnormalized_memory_slot(id).await,
+            Err(error) => Err(error),
+        }
+    }
+    async fn insert_unnormalized_memory_slot(&mut self, id: Uuid) -> StorageResult<Uuid> {
         sqlite_db::query("INSERT INTO oc_assets(tenant_id,workspace_id,id,kind,title,created_at) VALUES(?,?,?,'memory','Unnormalized evidence',?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(id)

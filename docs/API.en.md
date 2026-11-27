@@ -144,8 +144,8 @@ The Node.js UI uses these and the HTTP endpoints below. It never opens databases
 | `POST /v1/memories/retain` | Writer submits `{content}` with `Idempotency-Key`. Returns `{state:"accepted",source_event_id,job_id}` and queues long-term memory consolidation. MCP tool `context_memory_retain` accepts `content` and `idempotency_key`. |
 | `POST /v1/memories/long-term/lookup` | Reader submits `{identity,version?,as_of_ms?}` for exact scoped lookup. Returns `{memory_id,version,identity,state,timeline,evidence}`. MCP tool `context_memory_recall` takes the same fields. See [the consolidation contract](contracts/memory-consolidation.md). |
 | `GET /v1/memories/long-term/{id}` | Reader uses the job's `memory_id` to read the same memory view. Optional query parameters are `version` and `as_of_ms`. |
-| `POST /v1/captures/semantic` | `{content,targets:[{identity,expected_version,allow_update:false}]}` → source/job. Bounded model classification reuses memory semantics, described below. |
-| `POST /v1/captures` | `{content}` → source/job. Extracted facts publish individually. See job `result.memories`. |
+| `POST /v1/captures/semantic` | `{content,targets:[{identity}]}` → source/job. Bounded model classification reuses memory semantics, described below. |
+| `POST /v1/captures` | `{content}` → source/job. Saves extracted evidence individually. See job `result.memories`. |
 | `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`. Caller supplies the complete identity and the model only extracts source spans. Requires an extraction model. |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
 | `POST /v1/files?name=...&format=...` | Raw binary body without multipart. Returns file_id. Filename is metadata only. |
@@ -244,7 +244,7 @@ New databases always contain the complete identity schema. Startup rejects absen
 
 ## Capture for one identity
 
-`/v1/captures/identified` accepts the same `{identity,content}` as explicit memory writes. content is the original text for extraction. Identity comes from the caller and scope from the key. The model cannot choose subject, predicate, context, or workspace. Admission records the current expected_version. Other publication during extraction supersedes the job under existing version rules, so extraction cannot overwrite a newer version. Missing extraction model returns 503. Startup rejects missing identity schemas.
+`/v1/captures/identified` accepts `{identity,content}` with the original text. The caller supplies the identity and the key supplies the scope. Admission checks the target version. For an already published identity, subsequent extraction produces a separate evidence asset with `suggested_identity` in its locator. Exact identity lookup continues to return the published asset. A concurrent first publication supersedes the job. Missing extraction model returns 503.
 
 Model output must include an exact source quote and UTF-8 byte_start/byte_end. The server validates boundaries and content. The published body is that exact span, and search locator source_span=true marks offsets into original text. Equal duplicate quotes merge. Different quotes are ambiguous for one identity, returning job failed/INVALID_ARGUMENT without a version update. No spans completes with result.memories=[] and may leave only an unpublished reserved content item. The source event retains original input.
 
@@ -252,7 +252,7 @@ No automatic subject inference, alias normalization, arbitrary semantic merging,
 
 ## Identity status and source verification
 
-`GET /v1/assets/{id}` returns normalization_status. Explicitly bound memory uses explicit_identity. Conflict, negation, proposal, and ambiguous evidence retained by memory semantics or controlled extraction uses unnormalized. Legacy fact_key memory uses legacy_unidentified, and knowledge uses not_applicable. The status describes identity binding only, without assessing truth or model semantics. Historical versions use the same content item identity. Legacy memory is not normalized automatically.
+`GET /v1/assets/{id}` returns normalization_status. Explicitly bound memory uses explicit_identity. Standalone evidence uses unnormalized, including conflicts, negations, proposals, ambiguities, and evidence saved separately by the older extraction endpoints. Legacy fact_key memory uses legacy_unidentified, and knowledge uses not_applicable. The status describes identity binding only, without assessing truth or model semantics. Historical versions use the same content item identity. Legacy memory is not normalized automatically.
 
 Writer can use GET /v1/events/{id} to compare a search locator's byte range with the original source, including for failed or zero-result capture. Original input can contain unpublished content and reader cannot access it. Withdrawn sources, deleted file sources, and sources from another workspace are unavailable. Logical deletion retains underlying original text, with no physical erasure feature. Memory semantics supplies a separate status for unnormalized memories. Automatic identity merging is unimplemented.
 
@@ -270,7 +270,7 @@ The complete identity first locates an authorized content item. Keyword/vector r
 
 ## Caller version preconditions for explicit writes
 
-memories/identified and captures/identified accept optional nonnegative expected_version. 0 requires no published version, while an unpublished reservation may exist. Positive values must equal the current version in the acceptance transaction. A mismatch returns 409 and rolls back without creating source or job. Negative values return 422. Omitted or null uses the current version at admission as before and does not require creation.
+memories/identified and captures/identified accept optional nonnegative expected_version. 0 requires no published version, while an unpublished reservation may exist. Positive values must equal the current version in the acceptance transaction. A mismatch returns 409 and rolls back without creating source or job. Negative values return 422. Omitted or null uses the target version at admission. Explicit writes can append a version. Extraction saves separate evidence for a published identity.
 
 Pass lookup's version to the write endpoint to cover the concurrency window between read and admission. After acceptance, the Worker still checks the admitted version. A change fails the job, and admission does not promise synchronous publication. A successful replay of the same idempotency key and request returns the original admission before checking later changes. A different expected_version changes the request and conflicts. Omitted and null are excluded from the canonical payload to preserve replay of existing keys.
 
@@ -348,24 +348,24 @@ New databases can use `POST /v1/captures/semantic` or `Service::semantic_capture
       "subject": {"kind": "service", "stable_id": "Atlas"},
       "predicate": "database.engine",
       "context": {"env": "production"}
-    },
-    "expected_version": 0,
-    "allow_update": false
+    }
   }]
 }
 ```
 
-Admin first registers the required properties. Each target's property must be registered with all required conditions. expected_version is required, with 0 for no published version. At admission, check all target versions. Any mismatch returns 409 without a source or job. Duplicate identities in targets are disallowed. allow_update defaults false and is only available for single-value properties. Even if enabled, the model must explicitly classify as update. A different value classified as assert remains conflict evidence.
+Admin first registers the required properties. Each target's property must be registered with all required conditions. Only identity is needed for routine capture. When expected_version is omitted, the admission transaction reads the published version and saves it with the job. Explicit versions remain a precondition, with 0 for no published version. A mismatch returns 409 without a source or job. Duplicate identities in targets are disallowed. Targets authorize identity matching. The former `allow_update` field returns 422. Capture preserves a different single value classified as assert as conflict evidence. Use `/v1/memories/semantic` for an explicitly confirmed update.
 
-The entire target list is not locked after admission. Deterministic candidates using semantic memory check the target version at routing. After the plan is saved, the Worker revalidates the actual memory entry's version after routing, sources, and visibility on retry/recovery and before final commit, including whether a duplicate is still a valid current fact. Unused targets and targets only retained as suggested_identity in unnormalized evidence are not identity-version preconditions for final commit. Negation, proposal, ambiguity, and update downgraded because allow_update was absent do not modify suggested identity. Deterministic assert checks the target version before routing to conflict, and then publishes independent conflict evidence. A lost version race for an actual determinate fact supersedes the entire job without partial publication.
+The entire target list is not locked after admission. Deterministic candidates using semantic memory check the target version at routing. After the plan is saved, the Worker revalidates the actual memory entry's version after routing, sources, and visibility on retry/recovery and before final commit, including whether a duplicate is still a valid current fact. Unused targets and targets only retained as suggested_identity in unnormalized evidence are not identity-version preconditions for final commit. Negation, proposal, ambiguity, and an update classified by the model do not modify suggested identity. Deterministic assert checks the target version before routing to conflict, and then publishes independent conflict evidence. A lost version race for an actual determinate fact supersedes the entire job without partial publication.
 
 content is limited to 64 KiB UTF-8 with up to 20 targets. Empty targets are valid but produce only unnormalized evidence. The model returns up to 20 candidates with 32 total statements, at most one candidate per non-null target (merge conflict statements in one candidate). Quotes are limited to 8192 bytes, values to 256 bytes, and final sets to 32 members. The model may return only target index/null, operation, and statements with exact source ranges. Unknown fields, duplicate targets, invalid ranges, and excess bounds reject the entire batch without partial publication. Invalid requests return 422, version/idempotency conflicts 409, and missing model 503. Model failures after acceptance appear in jobs. Error responses and logs omit source text and model diagnostics.
 
-If the model classifies negation, proposal, ambiguity, or no target match, route through unnormalized memory semantics. An update lacking allow_update becomes ambiguous and retains the quote without overwriting the current value. Use supplement to append to multi. Incompatible operations such as single supplement fail the job. Duplicate values retain the submitted source and add no version. Model extraction makes judgments within caller scope. Exact quotes, identity restrictions, and version checks do not prove semantic correctness.
+If the model classifies negation, proposal, ambiguity, or no target match, route through unnormalized memory semantics. If the model still returns update, capture saves its quote as ambiguous evidence. Use supplement to append to multi. Incompatible operations such as single supplement fail the job. Duplicate values retain the submitted source and add no version. Model extraction makes judgments within caller scope. Exact quotes, identity restrictions, and version checks do not prove semantic correctness.
 
 Admission returns `{state:"accepted",source_event_id,job_id}`. On completion, `result.memories` lists asset_id, version, target, requested_operation, state (published/duplicate), semantic_status, identity, and normalization_status in model candidate order. An empty candidate list returns an empty array. All duplicates may complete without creating a version. lookup/get/search/resolve retain their endpoints, and `memory_identity` is the search filter.
 
-Locators use the original source and byte ranges from memory semantics. New extracted members add `extraction:{parser:"semantic-capture:v1",model:"配置的模型名称"}` with the configured model name. Old members preserve their source version and extraction metadata. They are not marked as new model or input. Source withdrawal hides the whole semantic snapshot with no automatic fallback. Published memory can be reused across callers and sessions in the same workspace. This endpoint stores neither structured SessionTurn/Feedback nor Improve/Learning distillation.
+Locators use the original source and byte ranges from memory semantics. New extracted members add `extraction:{parser:"semantic-capture:v2",model:"配置的模型名称"}` with the configured model name. Old members preserve their source version and extraction metadata. They are not marked as new model or input. Source withdrawal hides the whole semantic snapshot with no automatic fallback. Published memory can be reused across callers and sessions in the same workspace. This endpoint stores neither structured SessionTurn/Feedback nor Improve/Learning distillation.
+
+`POST /v1/captures` saves candidates using the fact keys returned by the model. The first fact can publish under the key. Distinct facts in the same extraction and subsequent captures of an existing key are saved separately, with `suggested_fact_key` in each locator. Exact repeats within one extraction are deduplicated by key and text.
 
 ## Session archiving and idempotent feedback
 

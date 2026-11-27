@@ -44,6 +44,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     };
   const ids = {
     asset: "11111111-1111-4111-8111-111111111111",
+    evidence: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     run: "22222222-2222-4222-8222-222222222222",
     source: "33333333-3333-4333-8333-333333333333",
     job: "44444444-4444-4444-8444-444444444444",
@@ -81,6 +82,16 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     content_hash: "a".repeat(64),
     restored_from: null,
   };
+  const evidence = {
+    ...asset,
+    asset_id: ids.evidence,
+    title: "独立审批证据",
+    identity: null,
+    normalization_status: "unnormalized",
+    semantic_status: "conflict",
+  };
+  let captureRequest;
+  let evidenceVersion;
   const writes = [],
     keys = [];
   const searches = new Map();
@@ -166,7 +177,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       if (path.searchParams.get("memory_filter")?.includes("staging"))
         return response({items: path.searchParams.has("after") ? [asset] : [], next_after: path.searchParams.has("after") ? null : ids.asset});
       return response({
-        items: [asset].filter((a) => a.kind === path.searchParams.get("kind")),
+        items: [asset, evidence].filter((a) => a.kind === path.searchParams.get("kind")),
         next_after: null,
       });
     }
@@ -308,6 +319,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return pending.promise;
     }
     if (path.pathname === `/api/v1/assets/${ids.asset}`) return response(asset);
+    if (path.pathname === `/api/v1/assets/${ids.evidence}`) {
+      evidenceVersion = path.searchParams.get("version");
+      return response(evidence);
+    }
     if (path.pathname === `/api/v1/assets/${ids.reportedAsset}`) {
       const version = path.searchParams.get("version");
       reportedReads.push(version);
@@ -335,6 +350,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
         state: "accepted",
       });
     }
+    if (path.pathname === "/api/v1/captures/semantic") {
+      captureRequest = body;
+      return response({ job_id: ids.job, state: "accepted" });
+    }
     if (path.pathname === `/api/v1/events/${ids.source}`)
       return response({ content: "source text is not verified PDF page text", file_id: ids.source });
     if (path.pathname === `/api/v1/assets/${ids.asset}/runs`) {
@@ -358,6 +377,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       return response({ job_id: ids.job, asset_id: ids.asset });
     }
     if (path.pathname === "/api/v1/search") {
+      if (body.query === "独立审批证据")
+        return response({ hits: [{ ...evidence, locator: {} }] });
       const pending = Promise.withResolvers();
       searches.set(body.query, pending);
       return pending.promise;
@@ -559,6 +580,38 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
       click("关闭", modal);
     },
   );
+  await t.test("standalone evidence is captured and displayed without a user-facing version", async () => {
+    click("记忆管理");
+    await wait(() => document.body.textContent.includes(evidence.title));
+    const rows = [...document.querySelectorAll("tbody tr")];
+    const evidenceRow = rows.find((row) => row.textContent.includes(evidence.title));
+    assert.ok(evidenceRow);
+    assert.equal(evidenceRow.querySelectorAll("td")[3].textContent, "—");
+    const confirmedRow = rows.find((row) => row.textContent.includes(asset.title));
+    assert.equal(confirmedRow.querySelectorAll("td")[3].textContent, "v1");
+
+    click("从文本提取");
+    const dialog = document.querySelector("dialog");
+    control("原始文本", dialog).value = "生产发布需要双人审批";
+    const targets = [{ identity: asset.identity }];
+    control("目标身份（JSON 数组，每项含 identity，可留 []）", dialog).value = JSON.stringify(targets);
+    dialog.querySelector("form").requestSubmit();
+    await wait(() => dialog.textContent.includes("completed"));
+    assert.deepEqual(captureRequest, { content: "生产发布需要双人审批", targets });
+    click("关闭", dialog);
+
+    const query = control("查询");
+    query.value = evidence.title;
+    query.closest("form").requestSubmit();
+    await wait(() => document.body.textContent.includes("查看命中证据"));
+    click("查看命中证据");
+    await wait(() => document.querySelector("h1")?.textContent === evidence.title);
+    assert.equal(evidenceVersion, "1");
+    const detail = document.querySelector("main");
+    assert.match(detail.textContent, /证据信息/);
+    assert.doesNotMatch(detail.textContent, /v1|读取版本|版本比较|恢复此版本|更新内容/);
+    assert.match(detail.textContent, /来源引用/);
+  });
   await t.test("new knowledge sends null version preconditions", async () => {
     click("知识管理");
     await wait(() => document.querySelector("h1")?.textContent === "知识管理");

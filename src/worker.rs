@@ -70,16 +70,16 @@ fn permission(payload: &JobPayload) -> Permission {
         Permission::Write
     }
 }
-fn first_extracted_fact(
-    seen: &mut std::collections::HashSet<String>,
-    fact_key: &str,
+fn first_extracted_fact<'a>(
+    seen: &mut std::collections::HashSet<&'a str>,
+    content: &'a str,
     job_id: Uuid,
 ) -> bool {
-    if seen.insert(fact_key.to_owned()) {
+    if seen.insert(content) {
         return true;
     }
-    // Model-provided keys can contain source text or other sensitive data.
-    tracing::warn!(%job_id, "duplicate extracted fact_key dropped");
+    // Model-provided keys and statement text may contain sensitive data.
+    tracing::warn!(%job_id, "duplicate extracted fact dropped");
     false
 }
 async fn guard(tx: &mut SqliteTx, claim: &ClaimedJob, payload: &JobPayload) -> Result<()> {
@@ -265,53 +265,76 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
             .await?
             .ok_or(AppError::NotFound)?;
         tx.commit().await?;
-        if let JobPayload::IdentifiedExtract { identity, .. } = payload {
-            let chunks = service.models.extract_identified(&text, identity).await?;
-            let mut tx = service.write(&a, Permission::Write).await?;
+        let drafts = if let JobPayload::IdentifiedExtract { identity, .. } = payload {
+            let mut chunks = service.models.extract_identified(&text, identity).await?;
+            let mut tx = service.read(&a, Permission::Write).await?;
             guard(&mut tx, claim, payload).await?;
             let asset = claim.asset.ok_or(AppError::NotFound)?;
-            if tx.identity_slot(identity).await?.0 != asset {
+            let binding = tx.identity_for_asset(asset).await?;
+            tx.commit().await?;
+            if binding.as_ref().is_some_and(|binding| binding != identity) {
                 return Err(AppError::Conflict(
                     "identified capture asset binding changed".into(),
                 ));
             }
-            let expected = payload.expected_version();
-            let drafts = if chunks.is_empty() {
+            if binding.is_none() {
+                for chunk in &mut chunks {
+                    chunk.locator["suggested_identity"] = json!(identity);
+                }
+            }
+            if chunks.is_empty() {
                 Vec::new()
             } else {
                 vec![DraftMemory {
                     asset,
                     fact_key: None,
-                    expected_version: expected,
+                    expected_version: None,
                     chunks,
                 }]
-            };
-            tx.commit().await?;
-            let publication = prepare(service, claim, payload, profile, drafts).await?;
-            return publish_prepared(service, claim, payload, publication).await;
-        }
-        let memories = service.models.extract(&text).await?;
-        // Slot every fact under a short write tx; versions are re-verified at
-        // commit, so a race only supersedes the job without overwriting.
-        let mut tx = service.write(&a, Permission::Write).await?;
-        guard(&mut tx, claim, payload).await?;
-        let mut drafts = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for m in &memories {
-            // One memory per fact key per extraction; slot is SELECT-then-INSERT,
-            // so a duplicate would collide with itself at the version recheck.
-            if !first_extracted_fact(&mut seen, &m.fact_key, claim.job_id) {
-                continue;
             }
-            let (asset, expected) = tx.slot(&m.fact_key).await?;
-            drafts.push(DraftMemory {
-                asset,
-                fact_key: Some(m.fact_key.clone()),
-                expected_version: expected,
-                chunks: parsing::chunks(&m.content, "text")?,
-            });
-        }
-        tx.commit().await?;
+        } else {
+            let memories = service.models.extract(&text).await?;
+            let mut tx = service.write(&a, Permission::Write).await?;
+            guard(&mut tx, claim, payload).await?;
+            let mut drafts = Vec::new();
+            let mut seen =
+                std::collections::HashMap::<&str, std::collections::HashSet<&str>>::new();
+            for m in &memories {
+                let facts = seen.entry(&m.fact_key).or_default();
+                let first = facts.is_empty();
+                if !first_extracted_fact(facts, &m.content, claim.job_id) {
+                    continue;
+                }
+                let mut chunks = parsing::chunks(&m.content, "text")?;
+                let slot = if first {
+                    Some(tx.slot(&m.fact_key).await?)
+                } else {
+                    None
+                };
+                let (asset, fact_key) = match slot {
+                    Some((asset, None)) => (asset, Some(m.fact_key.clone())),
+                    _ => {
+                        for chunk in &mut chunks {
+                            chunk.locator["suggested_fact_key"] = json!(m.fact_key);
+                        }
+                        let id = graph::entity_id(&format!(
+                            "capture-evidence:{}:{}",
+                            claim.job_id,
+                            drafts.len()
+                        ));
+                        (tx.reserve_capture_evidence_slot(id).await?, None)
+                    }
+                };
+                drafts.push(DraftMemory {
+                    asset,
+                    fact_key,
+                    expected_version: None,
+                    chunks,
+                });
+            }
+            tx.commit().await?;
+            drafts
+        };
         let publication = prepare(service, claim, payload, profile, drafts).await?;
         return publish_prepared(service, claim, payload, publication).await;
     }
@@ -753,6 +776,17 @@ async fn publish_prepared(
     payload: &JobPayload,
     mut publication: Publication,
 ) -> Result<()> {
+    if payload.kind() == JobKind::Extract
+        && (payload.expected_version().is_some()
+            || publication
+                .memories
+                .iter()
+                .any(|memory| memory.expected_version.is_some() || memory.version != 1))
+    {
+        return Err(AppError::Conflict(
+            "extraction cannot replace a published memory".into(),
+        ));
+    }
     if publication.full_text_operation_epoch.is_none() {
         publication.full_text_operation_epoch = Some(crate::storage::anyseek::operation_epoch()?);
     }
@@ -907,6 +941,12 @@ async fn publish_prepared(
             result["extractor"] = json!(extractor);
         }
     } else if payload.kind() == JobKind::Extract {
+        let identity = if matches!(payload, JobPayload::IdentifiedExtract { .. }) {
+            tx.identity_for_asset(claim.asset.ok_or(AppError::NotFound)?)
+                .await?
+        } else {
+            None
+        };
         result["memories"] = json!(
             publication
                 .memories
@@ -914,7 +954,7 @@ async fn publish_prepared(
                 .map(|m| json!({
                     "asset_id": m.asset,
                     "fact_key": m.fact_key,
-                    "identity": payload.identity(),
+                    "identity": identity,
                     "version": m.version,
                 }))
                 .collect::<Vec<_>>()
@@ -1123,7 +1163,7 @@ mod tests {
             assert_eq!(seen.len(), 1);
         });
         let logs = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
-        assert!(logs.contains("duplicate extracted fact_key dropped"));
+        assert!(logs.contains("duplicate extracted fact dropped"));
         assert!(logs.contains(&job_id.to_string()));
         assert!(!logs.contains(sensitive_key));
     }

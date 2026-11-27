@@ -198,6 +198,12 @@ impl JobPayload {
             Self::SemanticExtract { targets, .. } => {
                 for target in targets {
                     validate(&target.identity)?;
+                    if !target
+                        .expected_version
+                        .is_some_and(|version| (0..i32::MAX).contains(&version))
+                    {
+                        return Err(invalid_payload());
+                    }
                 }
                 Ok(())
             }
@@ -314,13 +320,6 @@ impl JobPayload {
             _ => None,
         }
     }
-
-    pub fn identity(&self) -> Option<&MemoryIdentity> {
-        match self {
-            Self::IdentifiedExtract { identity, .. } => Some(identity),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -351,8 +350,7 @@ mod tests {
         };
         let target = CaptureTarget {
             identity: identity.clone(),
-            expected_version: 1,
-            allow_update: false,
+            expected_version: Some(1),
         };
         let property = MemoryProperty {
             predicate: "language".into(),
@@ -429,13 +427,13 @@ mod tests {
                 JobPayload::SemanticExtract {
                     targets: vec![target.clone()],
                     properties: vec![property.clone()],
-                    extractor: "semantic-capture:v1".into(),
+                    extractor: "semantic-capture:v2".into(),
                     extraction_profile: "extract:v1".into(),
                     extraction_model: "model".into(),
                     embedding_profile: None,
                 },
                 "semantic_extract",
-                json!({"schema_version":1,"targets":[target],"properties":[property],"extractor":"semantic-capture:v1","extraction_profile":"extract:v1","extraction_model":"model","embedding_profile":null}),
+                json!({"schema_version":1,"targets":[target],"properties":[property],"extractor":"semantic-capture:v2","extraction_profile":"extract:v1","extraction_model":"model","embedding_profile":null}),
             ),
             (
                 JobPayload::Improve {
@@ -485,13 +483,21 @@ mod tests {
             assert_eq!(decoded.expected_version(), typed.expected_version());
             assert_eq!(decoded.title(), typed.title());
             assert_eq!(decoded.target_version(), typed.target_version());
-            assert_eq!(decoded.identity(), typed.identity());
             assert_eq!(decoded.encode().unwrap(), (kind, golden));
         }
     }
 
     #[test]
     fn malformed_fields_and_required_fields_fail_without_raw_diagnostics() {
+        let (_, operation, mut capture) = fixtures()
+            .into_iter()
+            .find(|(_, operation, _)| *operation == "semantic_extract")
+            .unwrap();
+        capture["targets"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("expected_version");
+        assert!(JobPayload::decode(operation, &capture).is_err());
         for (_, operation, golden) in fixtures() {
             for (field, value) in golden.as_object().unwrap() {
                 if field == "schema_version" || value.is_null() {

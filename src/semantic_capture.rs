@@ -8,16 +8,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
-pub const EXTRACTOR: &str = "semantic-capture:v1";
+pub const EXTRACTOR: &str = "semantic-capture:v2";
 pub const MAX_SOURCE_BYTES: usize = 64 * 1024;
 pub const MAX_CANDIDATES: usize = 20;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CaptureTarget {
     pub identity: MemoryIdentity,
-    pub expected_version: i32,
-    #[serde(default)]
-    pub allow_update: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_version: Option<i32>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,7 +36,9 @@ impl SemanticCaptureInput {
                 .identity
                 .validate()
                 .map_err(|_| AppError::Invalid("invalid capture identity".into()))?;
-            if !(0..i32::MAX).contains(&target.expected_version)
+            if target
+                .expected_version
+                .is_some_and(|version| !(0..i32::MAX).contains(&version))
                 || !seen
                     .insert(serde_json::to_string(&target.identity).map_err(anyhow::Error::from)?)
             {
@@ -74,9 +75,7 @@ impl Candidate {
             .target
             .map(|i| request.targets.get(i).ok_or_else(invalid))
             .transpose()?;
-        let operation = if self.operation == SemanticOperation::Update
-            && !target.is_some_and(|t| t.allow_update)
-        {
+        let operation = if self.operation == SemanticOperation::Update {
             SemanticOperation::Ambiguous
         } else {
             self.operation
@@ -85,7 +84,7 @@ impl Candidate {
             identity: target.map(|t| t.identity.clone()),
             content: request.content.clone(),
             operation,
-            expected_version: target.map_or(0, |t| t.expected_version),
+            expected_version: target.and_then(|t| t.expected_version).unwrap_or(0),
             statements: self.statements.clone(),
         };
         input.validate().map_err(|_| invalid())?;
@@ -133,8 +132,8 @@ mod tests {
         json!({"target":0,"operation":"assert","statements":[{"value":"Rust","quote":"使用 Rust","byte_start":start,"byte_end":r.content.len()}]})
     }
     #[test]
-    fn semantic_capture_utf8_and_explicit_overwrite_authority() {
-        let mut r = request();
+    fn semantic_capture_utf8_preserves_model_update_as_evidence() {
+        let r = request();
         let mut c = candidate();
         c["operation"] = json!("update");
         let e = parse_extraction(&r, json!({"candidates":[c]})).unwrap();
@@ -142,11 +141,9 @@ mod tests {
             e.candidates[0].input(&r).unwrap().operation,
             SemanticOperation::Ambiguous
         );
-        r.targets[0].allow_update = true;
-        assert_eq!(
-            e.candidates[0].input(&r).unwrap().operation,
-            SemanticOperation::Update
-        );
+        let mut legacy_request = json!(r);
+        legacy_request["targets"][0]["allow_update"] = json!(true);
+        assert!(serde_json::from_value::<SemanticCaptureInput>(legacy_request).is_err());
         let mut c = candidate();
         c["target"] = Value::Null;
         let e = parse_extraction(&r, json!({"candidates":[c]})).unwrap();
@@ -193,7 +190,7 @@ mod tests {
         r.content = "x".repeat(MAX_SOURCE_BYTES + 1);
         assert!(r.validate().is_err());
         r = request();
-        r.targets[0].expected_version = i32::MAX;
+        r.targets[0].expected_version = Some(i32::MAX);
         assert!(r.validate().is_err());
         let mut c = candidate();
         c["target"] = Value::Null;
