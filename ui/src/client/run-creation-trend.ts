@@ -105,10 +105,11 @@ function creationChart(buckets: RunCreationBucket[], daily: boolean) {
   return chart;
 }
 
-function creationDetails(buckets: RunCreationBucket[]) {
+function creationDetails(data: RunCreationOverview) {
   return el("details", "run-creation-buckets",
     el("summary", "", "查看明细"),
-    table(["时段开始（含）", "时段结束（不含）", "新建 Run 数"], buckets.map((bucket) => [
+    el("p", "muted", `${exactTime.format(data.start_ms)}（含）至 ${exactTime.format(data.end_ms)}（不含）`),
+    table(["时段开始（含）", "时段结束（不含）", "新建 Run 数"], data.series.map((bucket) => [
       exactTime.format(bucket.start_ms), exactTime.format(bucket.end_ms), bucket.created_runs,
     ])),
   );
@@ -151,7 +152,7 @@ export function runCreationTrend(signal: AbortSignal) {
     ["7d", "最近 7 天"],
   ]);
   const result = el("div", "run-creation-result");
-  const status = el("p");
+  const status = el("p", "run-trend-status");
   status.setAttribute("role", "status");
   const retry = button("重试读取创建量", () => {
     if (retry.getAttribute("aria-disabled") !== "true") return load();
@@ -175,10 +176,11 @@ export function runCreationTrend(signal: AbortSignal) {
       if (requestSignal.aborted) return;
       status.textContent = `新建运行 ${data.created_runs.toLocaleString("zh-CN")} 条`;
       result.append(
-        el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
-        el("p", "muted", `${exactTime.format(data.start_ms)}（含）至 ${exactTime.format(data.end_ms)}（不含）`),
-        creationChart(data.series, range.value === "7d"),
-        creationDetails(data.series),
+        el("div", "run-trend-series",
+          creationChart(data.series, range.value === "7d"),
+          el("p", "muted", data.scope === "workspace" ? "统计当前工作区的全部新建运行。" : "统计当前 Key 的新建运行。"),
+          creationDetails(data),
+        ),
         metering(data),
       );
       if (document.activeElement === retry) range.focus();
@@ -196,10 +198,11 @@ export function runCreationTrend(signal: AbortSignal) {
   };
   range.addEventListener("change", () => void load());
   void load();
-  return panel(
-    "运行创建趋势",
-    field("统计范围", range),
-    status,
+  return el("section", "panel run-trend",
+    el("div", "run-trend-heading",
+      el("div", "", el("h2", "", "运行创建趋势"), status),
+      field("统计范围", range),
+    ),
     el("div", "", result, retry),
   );
 }

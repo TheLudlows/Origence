@@ -151,7 +151,7 @@ async function checkOverviewRetry(page, receiveInitial, holdOverview, requestCou
   assert.equal(requestCount(), 5);
 }
 
-async function checkCreationChart(page, hasTouch) {
+async function checkCreationChart(page, width, hasTouch) {
   const chart = page.getByRole('figure', { name: '新建 Run 数' });
   const range = page.getByRole('combobox', { name: '统计范围' });
   const bars = chart.getByRole('button');
@@ -180,18 +180,24 @@ async function checkCreationChart(page, hasTouch) {
     const baseline = node.querySelector('.run-chart-baseline').getBoundingClientRect();
     const ticks = [...node.querySelectorAll('.run-chart-ticks span')]
       .map((tick) => tick.getBoundingClientRect());
+    const chart = node.getBoundingClientRect();
+    const metering = node.closest('.run-creation-result')
+      .querySelector(':scope > .panel').getBoundingClientRect();
     return {
       heights: marks.map((mark) => mark.height),
       fromBaseline: marks.every((mark) => Math.abs(mark.bottom - baseline.bottom) <= 1),
       distinctTicks: ticks.slice(1).every((tick, index) => ticks[index].right < tick.left),
-      chartFits: node.getBoundingClientRect().right <= innerWidth &&
+      chartFits: chart.right <= innerWidth &&
         document.documentElement.scrollWidth === innerWidth,
+      sideBySide: Math.abs(chart.top - metering.top) < 1 && chart.right < metering.left,
+      stacked: chart.bottom < metering.top,
     };
   });
   assert.ok(geometry.heights[0] > 0);
   assert.equal(geometry.heights[1], 0);
   assert.equal(geometry.heights[2], 2 * geometry.heights[0]);
   assert.ok(geometry.fromBaseline && geometry.distinctTicks && geometry.chartFits, JSON.stringify(geometry));
+  assert.equal(width === 1440 ? geometry.sideBySide : geometry.stacked, true, JSON.stringify(geometry));
   await range.focus();
   await focusBucket('Tab', 0);
   assert.match(await readout.innerText(), exactStart);
@@ -311,7 +317,7 @@ async function checkCreationChart(page, hasTouch) {
     }
     const { chromium } = require('playwright');
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
-    for (const width of [1024, 320]) {
+    for (const width of [1440, 1024, 320]) {
       const hasTouch = width === 320;
       const page = await browser.newPage({
         viewport: { width, height: 768 },
@@ -336,8 +342,8 @@ async function checkCreationChart(page, hasTouch) {
       await expectMain('运行总览');
       await checkOverviewRetry(page, receiveInitial, holdOverview, () => overviewRequests);
       console.log('PASS ' + width + 'px: keyboard retry, focus during latency and repeated error, recovery with and without focus on Retry');
-      await checkCreationChart(page, hasTouch);
-      console.log(`PASS ${width}px: creation chart counts and baseline, local times, keyboard, ${hasTouch ? 'emulated tap' : 'hover'}, and collapsed details`);
+      await checkCreationChart(page, width, hasTouch);
+      console.log(`PASS ${width}px: creation chart and metering layout, counts and baseline, local times, keyboard, ${hasTouch ? 'emulated tap' : 'hover'}, and collapsed details`);
       const receiveKnowledge = holdRequest('knowledge');
       await nav(/知识管理/).press('Enter');
       await expectMain('知识管理');

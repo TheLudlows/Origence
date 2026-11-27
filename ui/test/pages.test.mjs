@@ -512,7 +512,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
   });
   await t.test("administrator Agent list distinguishes active requests, failures, and empty results", async () => {
-    click("◉Agent 连接");
+    click("Agent 连接");
     await wait(() => document.body.textContent.includes("Codex、Claude Code"));
     assert.equal(document.querySelector("h1").textContent, "Agent 连接");
     assert.ok(document.body.textContent.includes("正在处理（2）"));
@@ -528,7 +528,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   await t.test(
     "memory form retries the same operation without silent version overwrite",
     async () => {
-      click("◇记忆管理");
+      click("记忆管理");
       await wait(
         () => document.querySelector("h1")?.textContent === "记忆管理",
       );
@@ -560,7 +560,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     },
   );
   await t.test("new knowledge sends null version preconditions", async () => {
-    click("▤知识管理");
+    click("知识管理");
     await wait(() => document.querySelector("h1")?.textContent === "知识管理");
     assert.ok(document.body.textContent.includes("已发布知识"));
     assert.ok(control("内容 ID"));
@@ -589,7 +589,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     click("关闭", upload);
   });
   await t.test("memory filters are server predicates and preserve empty-page continuation", async () => {
-    click("◇记忆管理");
+    click("记忆管理");
     await wait(() => document.querySelector("h1")?.textContent === "记忆管理");
     assert.ok(document.body.textContent.includes("已发布记忆"));
     control("主体类型").value = "service";
@@ -669,7 +669,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   await t.test(
     "a superseded search cannot overwrite the newer query",
     async () => {
-      click("◇记忆管理");
+      click("记忆管理");
       await wait(
         () => document.querySelector("h1")?.textContent === "记忆管理",
       );
@@ -699,7 +699,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
   await t.test(
     "context renders byte accounting and untrusted content as text",
     async () => {
-      click("⊞上下文工作台");
+      click("上下文工作台");
       await wait(
         () => document.querySelector("h1")?.textContent === "上下文工作台",
       );
@@ -734,7 +734,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     }
   });
   await t.test("Run preparation links to the exact asset version", async () => {
-    click("⑂调用链路");
+    click("调用链路");
     await wait(() => document.body.textContent.includes("fixture task"));
     click("查看链路 →");
     await wait(

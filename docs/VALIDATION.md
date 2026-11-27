@@ -29,6 +29,25 @@ python3 tools/anyseek_smoke.py --anyseek-binary /path/to/anyseek_server \
   --run python3 tools/mcp_smoke.py --binary target/debug/origence
 ```
 
+## 2026-11-26 · 管理控制台视觉更新
+
+基于 main `a5fbcd230795e2132362b6d5ae9a0240a8b36e53`，Node.js 24.22.1 类型检查和
+30 项 UI 测试通过。Rust 1.98.0 格式检查与严格 Clippy 通过。
+Chromium 156.0.8078.79 使用回环合成数据验证了 1440px 的趋势与计量并排、1024px 和
+320px 的堆叠、736px 和 375px 的明暗主题导航，以及登录、工作区切换、键盘焦点和重试。
+知识详情量测项的文字对比度为 6.0259:1 至 8.1043:1。320px、375px 和 736px 使用模拟粗糙指针
+检查退出、弹窗和折叠控件的目标尺寸。
+
+```sh
+npm --prefix ui run check
+npm --prefix ui test
+for script in check-navigation-focus-browser check-asset-tabs-browser \
+  check-console-session-browser check-narrow-touch-browser; do
+  NODE_PATH=/path/to/playwright/node_modules CHROMIUM=/path/to/chromium \
+    node "ui/scripts/${script}.cjs"
+done
+```
+
 ## 2026-11-26 · 运行创建趋势柱状图
 
 基于 main `78f08ab95494eb9cca9944e3a87fa0181374e1ef`，Node.js 24.22.1 类型检查和 30 项 UI
