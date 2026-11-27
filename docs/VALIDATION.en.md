@@ -15,6 +15,22 @@ The same host verified reviewer isolation, publication permission, package conte
 cross-workspace denial, and source withdrawal. The official pilot and native client loading
 were outside this run. See the [commands](VALIDATION.md#2026-11-27--从-run-详情起草-skill-候选).
 
+## 2026-11-27 · Restore AnySeek default keyword AND
+
+On main `0c1f815bf579c8c653e47e2cc8ea254bc7e182b7`, a partial-term query matched incorrectly.
+The original real-backend suite had 7 passes and 1 failure. The fix was tested on main
+`1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Rust 1.98.0. The standalone AnySeek
+fixture was built from the CI pin `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` with Rust 1.99.1.
+
+`python3 tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --cargo-tests --binary <origence>`
+passed all 8 real-backend contracts. The public Rust library, HTTP, and Streamable HTTP MCP covered
+default keyword queries with all, some, or none of the terms present. The suite also checked cross-workspace
+isolation, key revocation, source withdrawal, citation locations, publication and Run replay, and restart.
+The default Rust suite passed 484 tests, with the 8 real-backend contracts run separately. Formatting,
+strict all-target Clippy, embedded AnySeek startup and restart, and separate HTTP, MCP, and Node UI smokes
+passed. All 24 synthetic keyword seed queries completed with zero query errors. Verification used synthetic
+data and zero model calls. Windows, real-model retrieval quality, and the official pilot remain open.
+
 ## 2026-11-27 · Simplify standalone evidence capture and display
 
 Based on local extraction commit `0d84a6c99ad6271af8c74f4274c0b3489e2f043d`. Local HTTP
