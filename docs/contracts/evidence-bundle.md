@@ -43,14 +43,8 @@ native keyword/vector mode. The final snapshot reopens each topic's latest
 revision, checks every source and requires each ranking source to still belong
 to that revision.
 
-Session is off by default and requires live writer-or-higher permission before
-any model IO. It is bounded recent relational lexical recall, not an embedding
-index. At most 512 scoped active-source rows are inspected, ordered by creation
-time descending and stable session/turn IDs. Full archived evidence/transitive
-Learning visibility is checked before the retained turn limit. A lookahead row
-reports `scan_exhausted`; older matching turns may exist. Hidden turns may use
-the scan window, never the retained-result limit. This is disclosed, not claimed
-as exhaustive history search.
+The [session archive API](../API.en.md#session-archiving-and-idempotent-feedback)
+defines private retrieval, authorization, and coverage.
 
 All returned candidates are rebuilt in a fresh authorized relational snapshot
 after embedding/native IO, then rendered while the snapshot remains open.

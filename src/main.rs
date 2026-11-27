@@ -74,6 +74,19 @@ enum Command {
     KeyRevoke {
         key_id: Uuid,
     },
+    /// Copy, verify, or cut over an isolated copy of a legacy private archive.
+    ArchiveMigrate {
+        #[arg(value_enum)]
+        stage: ArchiveStage,
+        #[arg(long, default_value_t = 64)]
+        limit: usize,
+        #[cfg(feature = "embedded-anyseek")]
+        #[arg(long)]
+        local: bool,
+        /// Assert that the stopped authority and AnySeek belong to a disposable copy.
+        #[arg(long)]
+        isolated_copy: bool,
+    },
     /// Offline inspection of the current SQLite identity schema; never migrates a database.
     IdentityCheck,
     /// Capture opt-in client hooks or send their private queue to the host.
@@ -125,6 +138,13 @@ enum Command {
         version: Option<i32>,
     },
 }
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ArchiveStage {
+    Copy,
+    Verify,
+    Purge,
+}
+
 #[derive(Subcommand)]
 enum HookAction {
     /// Read hook stdin and enqueue only allowlisted metadata. Never sends HTTP.
@@ -239,6 +259,38 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                     Err(error.into())
                 }
             }
+        }),
+        Command::ArchiveMigrate {
+            stage,
+            limit,
+            #[cfg(feature = "embedded-anyseek")]
+            local,
+            isolated_copy,
+        } => Box::pin(async move {
+            anyhow::ensure!(
+                offline && isolated_copy,
+                "archive-migrate requires --offline and --isolated-copy"
+            );
+            use origence::archive_maintenance::{self, Stage};
+            let stage = match stage {
+                ArchiveStage::Copy => Stage::Copy { limit },
+                ArchiveStage::Verify => Stage::Verify,
+                ArchiveStage::Purge => Stage::Purge,
+            };
+            let models = Models::from_env()?;
+            #[cfg(feature = "embedded-anyseek")]
+            let result = if local {
+                archive_maintenance::run_embedded(&data_dir, models, stage).await?
+            } else {
+                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?, stage)
+                    .await?
+            };
+            #[cfg(not(feature = "embedded-anyseek"))]
+            let result =
+                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?, stage)
+                    .await?;
+            println!("{result}");
+            Ok(())
         }),
         Command::IdentityCheck => Box::pin(async move {
             anyhow::ensure!(

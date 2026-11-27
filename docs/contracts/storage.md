@@ -59,10 +59,11 @@ SQLite 不再保存 `oc_versions.content`、`oc_chunks.content`、`oc_summaries.
 `oc_chunks.search_terms` 或 `oc_summaries.model_revision`。分块词项只供 AnySeek 使用，
 摘要模型版本随 payload 保存；SQL 仅保留仍参与 Summary 召回的词项。
 
-SQL 中仍保留用于来源与可见性判断的 locator，以及当前 Summary 召回所需的冻结词项；
-原始来源事件、私有 Run/Skill 快照与完整恢复计划也继续持久保存，不宣称消除所有文本副本。
+SQL 保留来源与可见性判断所需的 locator、Summary 冻结词项、Run/Skill 凭据与恢复计划。
+私有问答仅在 AnySeek 保存正文，SQLite 持久化目录、哈希、引用和确认状态。
 AnySeek 不可当作可随意删除的缓存。来源撤回后的既有清理仍适用，不能清空已发布正文再靠
-SQLite 自动重建。数据目录绑定与 collection schema 同时换代；旧目录/集合拒绝打开，不自动转换。
+SQLite 自动重建。数据目录绑定与 collection schema 同时换代。私有归档的旧结构通过
+[显式隔离迁移](../OPERATIONS.md#私有问答归档隔离迁移与配套恢复)切换。
 
 读取在事务外解析 AnySeek payload，并比对 chunk 哈希和完整 locator；同一 chunk 的残留
 代次只允许重复相同 payload，不从冲突内容中挑选一个。完整版本还比对拼接后的版本哈希。

@@ -4,7 +4,7 @@ use crate::learning::{
     FrozenFeedback, FrozenSnapshot, FrozenTurn, ImproveInput, ImproveRun, LearningCandidate,
     MAX_CANDIDATES, MAX_SNAPSHOT_BYTES, SkippedFeedback,
 };
-use crate::session::{ArchivedEvidence, ArchivedTurnBody, FeedbackInput};
+use crate::session::FeedbackInput;
 
 pub(super) const SCHEMA: &str = include_str!("../learning-schema.sql");
 
@@ -280,7 +280,7 @@ fn proposals(run: &ImproveRun, value: &Value) -> StorageResult<ProposalPlan> {
     }
     for (index, candidate) in plan.candidates.iter().enumerate() {
         candidate
-            .validate(&run.snapshot, &run.conditions)
+            .validate_references(&run.snapshot, &run.conditions)
             .map_err(StorageError::InvalidArgument)?;
         if plan.candidates[..index].contains(candidate) {
             return Err(StorageError::InvalidArgument(
@@ -349,32 +349,23 @@ impl SqliteTx {
         &mut self,
         session: Uuid,
         turn: Uuid,
-    ) -> StorageResult<Option<FrozenTurn>> {
-        let source = self.require_turn_visible(session, turn).await?;
-        let content = self
-            .event_content(source, true)
-            .await?
-            .ok_or(StorageError::NotFound)?;
-        let body: ArchivedTurnBody = decode(&content)?;
-        // Shared Learning requires a complete, revocable support chain.
-        if !body.evidence_use.is_reported() {
+    ) -> StorageResult<Option<(FrozenTurn, usize)>> {
+        let (source, used_evidence) = self.visible_turn_support(session, turn).await?;
+        let (reported, body_bytes) = self.archive_body_metadata(session, turn).await?;
+        if !reported {
             return Ok(None);
         }
-        let rows: Vec<String> = sqlite_db::query_scalar("SELECT evidence FROM oc_session_turn_evidence WHERE tenant_id=? AND workspace_id=? AND session_id=? AND turn_id=? ORDER BY ordinal")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session).bind(turn)
-            .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
-        let used_evidence: Vec<ArchivedEvidence> = rows
-            .iter()
-            .map(|row| decode(row))
-            .collect::<StorageResult<_>>()?;
-        Ok(Some(FrozenTurn {
-            session_id: session,
-            turn_id: turn,
-            source_event_id: source,
-            question: body.question,
-            answer: body.answer,
-            used_evidence,
-        }))
+        Ok(Some((
+            FrozenTurn {
+                session_id: session,
+                turn_id: turn,
+                source_event_id: source,
+                question: String::new(),
+                answer: String::new(),
+                used_evidence,
+            },
+            body_bytes + r#","question":"","answer":""#.len(),
+        )))
     }
 
     /// Accept and freeze in the same transaction as registration of `job_id`.
@@ -437,9 +428,11 @@ impl SqliteTx {
             .fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
         let mut snapshot = FrozenSnapshot::default();
         let mut target = lower;
+        let mut body_budget = 0;
         for (sequence, principal_id, feedback_id, turn_id, body) in rows {
             let skip_reason = match self.frozen_turn(session, turn_id).await {
-                Ok(Some(turn)) => {
+                Ok(Some((turn, body_bytes))) => {
+                    body_budget += body_bytes;
                     let feedback: FeedbackInput = decode(&body)?;
                     if feedback.feedback_id != feedback_id {
                         return Err(StorageError::Unavailable(
@@ -452,11 +445,12 @@ impl SqliteTx {
                         feedback,
                         turn,
                     });
-                    if encode(&snapshot)?.len() > MAX_SNAPSHOT_BYTES
+                    if encode(&snapshot)?.len() + body_budget > MAX_SNAPSHOT_BYTES
                         || encode(
                             &json!({"conditions":input.conditions,"feedback":snapshot.items}),
                         )?
                         .len()
+                            + body_budget
                             > MAX_SNAPSHOT_BYTES
                     {
                         snapshot.items.pop();
@@ -549,6 +543,7 @@ impl SqliteTx {
                 || self
                     .frozen_turn(run.session_id, item.turn.turn_id)
                     .await?
+                    .map(|(turn, _)| turn)
                     .as_ref()
                     != Some(&item.turn)
             {

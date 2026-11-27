@@ -6,7 +6,10 @@ Applies to a single host using SQLite as the authority, Blob storage, and AnySee
 
 ## Current scope
 
-This stage targets newly created databases. Startup requires the complete current schema and does not add missing tables, upgrade, or migrate existing data. Same-version durability, restart and retry, and backup and restore remain required. Incompatible schemas cannot be opened. Retain original sources and backups, and keep old data intact when using a new directory. See [storage invariants](contracts/storage.en.md) for transaction queries, identity reservations, and publication plans.
+Startup requires the complete current schema. The immediately preceding private archive schema
+has an [explicit offline migration](#private-archive-and-paired-recovery). Retain original sources
+and backups. See [storage invariants](contracts/storage.en.md) for transaction queries, identity
+reservations, and publication plans.
 
 ## Directories and processes
 
@@ -14,9 +17,9 @@ This stage targets newly created databases. Startup requires the complete curren
 
 | Path | Contents |
 | --- | --- |
-| `context.db` and SQLite WAL | Permissions, original source events, version pointers and content hashes, locators, summary retrieval terms, idempotency, jobs and recovery plans, owners, ledger, and audit |
+| `context.db` and SQLite WAL | Permissions, source events, private archive directory, version pointers and content hashes, locators, summary retrieval terms, idempotency, jobs and recovery plans, owners, ledger, and audit |
 | `context.db.lock` | OS lock file for exclusive host access. The file can exist when the lock is no longer held. |
-| `anyseek/` | Default local AnySeek Catalog and workspace collections, including text, summaries, and full-text, vector, and graph indexes. A standalone deployment is backed up separately according to AnySeek's rules. |
+| `anyseek/` | Default local AnySeek Catalog and shared and private collections, including text, summaries, and full-text, vector, and graph indexes. A standalone deployment is backed up separately according to AnySeek's rules. |
 | `full-text-backend.json` | AnySeek endpoint, automatic tenant/workspace routing rules, and embedding profile and dimension binding. Contains no key and is backed up with the entire directory. |
 | `blobs/<tenant>/<workspace>/uploads/<hash>` | Original file contents, located by scope and content hash |
 
@@ -195,8 +198,41 @@ The caller explicitly supplies target identities. Admission saves the current pu
 
 ## Query diagnostics and Run
 
-Compare the binding's analysis_fingerprint with the AnySeek collection's analysis.fingerprint. Use x-anyseek-request-id from the new API response to correlate with the server's response_prepared debug log. HTTP errors provide a safe x-anyseek-error-code. The log indicates response preparation only, without confirming body delivery. Query diagnostics v2 must return the configured embedding_space_sha256. A space change is rejected even if dimensions match. A successful Run preparation can reuse a private snapshot during a backend outage, but replay still checks current authorization and original sources. The successful receipt does not establish backend recovery. New preparations still need backend access. Run retrieval diagnostics distinguish requests never issued, network failures, HTTP errors, and invalid diagnostics. Raw error bodies are not kept. Backend indexing progress is sampled after the query. Handle AnySeek health first if it reports lag, failure, or recovery flags. Do not advance the consumer sequence by hand or mask the failure with empty retrieval. See [API](API.en.md#retrieval-diagnostics) for fields and collection boundaries.
+Compare the binding's analysis_fingerprint with the AnySeek collection's analysis.fingerprint. Use x-anyseek-request-id from the new API response to correlate with the server's response_prepared debug log. HTTP errors provide a safe x-anyseek-error-code. The log indicates response preparation only, without confirming body delivery. Query diagnostics v2 must return the configured embedding_space_sha256. A space change is rejected even if dimensions match. A successful Run preparation can reuse its snapshot and rechecks current authorization and original sources. Replays of private turns require AnySeek for verified reads by ID. The successful receipt does not establish backend recovery. New preparations still need backend access. Run retrieval diagnostics distinguish requests never issued, network failures, HTTP errors, and invalid diagnostics. Raw error bodies are not kept. Backend indexing progress is sampled after the query. Handle AnySeek health first if it reports lag, failure, or recovery flags. Do not advance the consumer sequence by hand or mask the failure with empty retrieval. See [API](API.en.md#retrieval-diagnostics) for fields and collection boundaries.
 
 ## Native Windows development launcher
 
 Run `origence.exe serve --local` to start the API and local AnySeek. To also start the Node UI, run [`tools/start-dev.ps1`](WINDOWS-DEV.en.md) in the same PowerShell 7.4+ console. The launcher disables models.
+
+## Private archive and paired recovery
+
+See the [archive API contract](API.en.md#session-archiving-and-idempotent-feedback) for delivery,
+retrieval, and withdrawal behavior. The complete body fits in a stable Record under the pinned
+1 MiB limit, including JSON escaping. It is committed atomically with its search projection.
+
+AnySeek accepts the current and previous UTC operation epochs. Resubmit under a fresh epoch
+only after the backend confirms expiry and an absent group. Keep the original nonce and
+use CAS version zero. Withdrawal hides the directory first. Cleanup uses an atomic empty group
+and fences delayed writes with the group version.
+
+Stop Origence and AnySeek and retain an untouched paired backup. Work on an isolated copy of
+the complete data directories. For embedded AnySeek, add `--local`. For standalone AnySeek,
+use the isolated service at the bound address and set `OC_ANYSEEK_URL` and `OC_ANYSEEK_API_KEY`.
+
+1. Run `origence --offline --data-dir <copy> archive-migrate copy --isolated-copy --limit 64`.
+   It accepts the immediately preceding authority schema or a prepared copy. Re-run to resume.
+2. Run `archive-migrate verify --isolated-copy` with the same global flags. Require
+   `unconfirmed=0` and rehearse restoring the paired backup.
+3. Run `archive-migrate purge --isolated-copy`. It rechecks the directory before clearing the
+   old turn bodies, Improve prose and quotes, and Run replay bodies. Re-run if interrupted.
+   Normal startup resumes after SQLite compaction and WAL truncation. Persisted Run verification
+   and Skill references retain their prefix digests. An external-only commitment may need renewal.
+
+After a stopped paired restore, compare directory SHA-256, engine version, SQLite confirmation
+sequences, and AnySeek visible sequences. Check ordered reads, keyword and vector search, and key
+isolation. An unwritten pending body requires the original caller payload. Online, object-storage,
+and cross-version backups require separate validation.
+
+SQLite `secure_delete`, `VACUUM`, and WAL truncation provide logical cleanup of active files.
+They cannot guarantee physical erasure of storage pages, historical WAL, filesystem copies,
+snapshots, or backups. Keep access controls and retention on the untouched pre-cutover backup.

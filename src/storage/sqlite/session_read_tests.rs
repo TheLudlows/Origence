@@ -14,7 +14,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
     for sql in [
         "CREATE TABLE oc_assets(tenant_id BLOB,workspace_id BLOB,id BLOB,deleted INTEGER,current_version INTEGER,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_versions(tenant_id BLOB,workspace_id BLOB,asset_id BLOB,version INTEGER,source_event_id BLOB,PRIMARY KEY(tenant_id,workspace_id,asset_id,version))",
-        "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT,content TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT,kind TEXT,content TEXT,file_id BLOB,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB,version INTEGER,locator TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
         "CREATE TABLE oc_artifact_owners(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,chunk_id BLOB)",
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,surface TEXT,state TEXT,generation INTEGER)",
@@ -54,11 +54,12 @@ fn reference(index: u128) -> UsedEvidence {
     }
 }
 
-async fn event(tx: &mut SqliteTx, scope: Scope, id: Uuid, content: &str) {
-    db::query("INSERT INTO oc_events VALUES(?,?,?,'active','ordinary',?)")
+async fn event(tx: &mut SqliteTx, scope: Scope, id: Uuid, kind: &str, content: &str) {
+    db::query("INSERT INTO oc_events VALUES(?,?,?,'active',?,?,NULL)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(id)
+        .bind(kind)
         .bind(content)
         .execute(&mut *tx.tx)
         .await
@@ -68,7 +69,7 @@ async fn event(tx: &mut SqliteTx, scope: Scope, id: Uuid, content: &str) {
 async fn seed(tx: &mut SqliteTx, scope: Scope, index: u128) -> ArchivedEvidence {
     let reference = reference(index);
     let root = Uuid::from_u128(30_000 + index);
-    event(tx, scope, root, "root content").await;
+    event(tx, scope, root, "ordinary", "root content").await;
     db::query("INSERT INTO oc_assets VALUES(?,?,?,0,2)")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
@@ -119,7 +120,7 @@ async fn store_turn(tx: &mut SqliteTx, evidence: &[ArchivedEvidence]) -> (Uuid, 
     let turn = Uuid::new_v4();
     let root = Uuid::new_v4();
     let scope = tx.scope;
-    event(tx, scope, root, "turn content").await;
+    event(tx, scope, root, "session_turn", "").await;
     db::query("INSERT INTO oc_session_turns VALUES(?,?,?,?,?)")
         .bind(tx.scope.tenant_id)
         .bind(tx.scope.workspace_id)
@@ -307,11 +308,19 @@ async fn session_empty_and_invalid_archives_do_not_prepare_evidence_tables() {
     ] {
         db::query(sql).execute(&mut *tx.tx).await.unwrap();
     }
-    // The local root requires active state, not the public session source kind.
     assert_eq!(
         tx.require_turn_visible_local(session, turn).await.unwrap(),
         (root, vec![])
     );
+    db::query("UPDATE oc_events SET kind='ordinary' WHERE id=?")
+        .bind(root)
+        .execute(&mut *tx.tx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        tx.require_turn_visible_local(session, turn).await,
+        Err(StorageError::NotFound)
+    ));
     let mut invalid = ArchivedEvidence {
         evidence_ref_id: Uuid::new_v4(),
         reference: reference(1),
@@ -486,7 +495,7 @@ async fn session_content_decoding_retains_member_before_root_order() {
         let evidence = seed(&mut tx, scope, 1).await;
         let member = Uuid::new_v4();
         if member_exists {
-            event(&mut tx, scope, member, "member").await;
+            event(&mut tx, scope, member, "ordinary", "member").await;
         }
         let locator = json!({"parser": crate::memory_semantics::PARSER, "source_event_id": member, "source_version": 7, "support_sources": []}).to_string();
         set_locator(&mut tx, &evidence.reference, &locator).await;
@@ -520,7 +529,7 @@ async fn session_available_retains_global_any_table_or_source_probe() {
         db::query(sql).execute(&mut *conn).await.unwrap();
     }
     assert!(!session::available(&mut conn).await.unwrap());
-    db::query("INSERT INTO oc_events VALUES(?,?,?,'withdrawn','session_turn','historical')")
+    db::query("INSERT INTO oc_events VALUES(?,?,?,'withdrawn','session_turn','historical',NULL)")
         .bind(Uuid::new_v4())
         .bind(Uuid::new_v4())
         .bind(Uuid::new_v4())
@@ -551,12 +560,14 @@ async fn session_turn_root_native_filter_precedes_uuid_decode() {
     let scope = scope();
     let mut tx = transaction(&pool, scope).await;
     let (session, turn, _) = store_turn(&mut tx, &[]).await;
-    db::query("INSERT INTO oc_events VALUES(?,?,x'31','withdrawn','ordinary','short root')")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
+    db::query(
+        "INSERT INTO oc_events VALUES(?,?,x'31','withdrawn','session_turn','short root',NULL)",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .execute(&mut *tx.tx)
+    .await
+    .unwrap();
     db::query("UPDATE oc_session_turns SET source_event_id=x'31'")
         .execute(&mut *tx.tx)
         .await

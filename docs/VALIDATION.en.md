@@ -4,6 +4,52 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · AnySeek private turn archive
+
+Origence is based on `af9030310bd5d313e23d9ac42373fa0b1e7d38a7`. The embedded SDK remains
+`5626dadfd5414b294a3cf0f6b845f5261760f68b`. Standalone AnySeek was built from the CI pin
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` with Rust 1.99.1. Origence verification used
+Rust 1.98.0 on Linux x86_64 and synthetic turns in disposable stores.
+
+- `cargo fmt --package origence -- --check`, `cargo clippy --locked --all-targets -j 2 -- -D warnings`,
+  `cargo test --locked -j 2 --no-fail-fast` (484 passed), and `git diff --check` passed.
+  `python3 tools/anyseek_smoke.py --anyseek-binary <CI fixture> --cargo-tests` passed 8 additional
+  real-backend contracts with just `local-storage`. Compilation checks passed with no default
+  features and with the standalone `sqlite` and `local-storage` feature sets.
+- `python3 tools/private_archive_smoke.py --binary <origence> --legacy-binary <af90303-binary>`
+  passed through the embedded CLI, HTTP, and Streamable HTTP MCP. Adding
+  `--anyseek-binary <CI fixture>` passed against the pinned standalone server. Both covered exact
+  and ordered reads, UTF-8 limits, keyword, synthetic vector and hybrid search, scope separation,
+  credential rotation, shared search isolation, Run replay and legacy prefix verification, batched migration, explicit purge,
+  repeat execution, and stopped paired restore. Restore compared the ordered directory digest,
+  SQLite confirmation sequences, engine version, and AnySeek visible sequences.
+- The standalone run injected a pre-write failure, an expired epoch, a lost write receipt, missing
+  group members, a hash mismatch, a late write after withdrawal, and revocation during delivery.
+  It killed the offline migration process after the native commit and before SQLite confirmation.
+  Re-running recovered the same turn. SQLite files and Run replay were checked for leaked bodies.
+  The Improve regression checked that snapshots keep references and durable quotes are digests.
+- Windows, real embedding quality, object storage and online/cross-version snapshots, and migration
+  of real sessions remain outside this validation.
+
+The PR was rebased onto main `8d6605ff6dcb4ceaa60c72cd5a9106dcd2525461`. The embedded
+and pinned standalone private-archive smokes, all 8 real-backend contracts, and the full live
+HTTP MCP smoke ran again. Mixed context kept #165's before/after values and exact provenance
+and denied the private route to readers. A new standalone test withdrew a cited shared source
+while a mixed Run replay waited on a private body read. Replay returned 404 and the authorized
+private turn remained readable. The purged synthetic authority files passed the body check
+and the untouched pre-cutover backup still exposed its original to authorized test code.
+Verification covered active files and logical visibility. Physical erasure of SQLite pages,
+historical WAL, and backups was outside the test.
+
+The #168 cleanup starts from `4bfab721e981348024b14a7053d6e4568443e720`. Strict all-target
+Clippy passed with SQLite only and all features. The default Rust suite passed 478 tests.
+Seven internal tests for the retired SQLite body scan were removed. Current Context, Run replay, and Improve tests
+still cover authorization and evidence references. The embedded and pinned standalone archive
+smokes verify that an invalid copy limit leaves the schema untouched, an unmatched legacy source
+blocks purge, and a source of the wrong kind cannot be read or retrieved. The standalone smoke
+also withdraws a turn while Context waits on the private body read and checks that final delivery
+omits it. Purge leaves the pre-cutover synthetic backup intact.
+
 ## 2026-11-27 · Dated reimbursement policy in everyday context
 
 Based on main `1a8544b647613864582354bc9f5942e69426b463` on Linux x86_64 with Rust 1.98.0,

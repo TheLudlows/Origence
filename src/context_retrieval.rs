@@ -38,7 +38,6 @@ pub(crate) enum ContextRoute {
 }
 
 pub(crate) const CONTEXT_CANDIDATE_LIMIT: usize = 100;
-pub(crate) const SESSION_SCAN_LIMIT: usize = 512;
 
 pub(crate) enum ContextLimit {
     Chunks(usize),
@@ -51,7 +50,7 @@ pub(crate) struct ContextQuery {
     pub requested_mode: String,
     pub effective_mode: String,
     pub warnings: Vec<String>,
-    embedding: Option<Vec<f32>>,
+    pub(crate) embedding: Option<Vec<f32>>,
 }
 
 /// Reader-safe support metadata. Archived question/answer and verbatim quotes
@@ -130,14 +129,7 @@ pub(crate) struct ContextSessionTurn {
     pub evidence_use: crate::session::EvidenceUse,
     pub created_at: i64,
     pub score: f64,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ContextSessionResult {
-    pub turns: Vec<ContextSessionTurn>,
-    pub scanned: usize,
-    /// More scoped rows exist beyond the fixed recent-turn scan bound.
-    pub scan_exhausted: bool,
+    pub retrieval_routes: Vec<String>,
 }
 
 impl Service {
@@ -423,36 +415,6 @@ impl Service {
             candidates,
             ranked_native,
         })
-    }
-
-    pub(crate) async fn context_session_candidates(
-        &self,
-        auth: &AuthContext,
-        query: &str,
-        session_id: Option<Uuid>,
-        exclude_session_id: Option<Uuid>,
-        limit: usize,
-    ) -> Result<ContextSessionResult> {
-        if limit == 0
-            || limit > CONTEXT_CANDIDATE_LIMIT
-            || query.len() > 4000
-            || query.contains('\0')
-            || session_id.is_some_and(|id| id.is_nil())
-            || exclude_session_id.is_some_and(|id| id.is_nil())
-        {
-            return Err(AppError::Invalid("session recall input invalid".into()));
-        }
-        let mut tx = self.read(auth, Permission::Write).await?;
-        let result = tx
-            .context_recent_turns(
-                &parsing::lexical(query),
-                session_id,
-                exclude_session_id,
-                limit,
-            )
-            .await?;
-        tx.commit().await?;
-        Ok(result)
     }
 }
 

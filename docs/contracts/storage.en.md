@@ -32,7 +32,11 @@ With the host stopped and no nonempty WAL, read-only admission uses an immutable
 
 Each `origence-content-sha256-v1` Record represents one chunk. `payload` is stored unindexed JSON with original UTF-8 text, full locator, optional summary, and model version. The same Record's `terms`, vector, and graph retain existing retrieval behavior. No separate whole-text, version, or summary Record alters BM25 corpus count. SQLite no longer saves `oc_versions.content`, `oc_chunks.content`, `oc_summaries.text`, `oc_chunks.search_terms`, or `oc_summaries.model_revision`. Chunk terms are AnySeek-only, summary model versions live in payload, and SQLite retains only terms used by Summary retrieval.
 
-SQL retains locators for source and visibility checks and frozen terms for current Summary retrieval. Original source events, private Run/Skill snapshots, and full recovery plans remain durable. Some text copies still exist. AnySeek is not a disposable cache. Existing cleanup after withdrawal remains. Removing published text does not permit automatic rebuild from SQLite. Directory binding and collection schema are versioned together. Legacy directories and collections are refused without conversion.
+SQL retains source and visibility locators, frozen Summary terms, Run/Skill receipts, and recovery plans.
+AnySeek holds private Q&A bodies. SQLite holds their directory, hashes, references, and confirmation state.
+Published text requires a retained AnySeek store or backup. Directory binding and collection schema are
+versioned together. Use [offline migration](../OPERATIONS.en.md#private-archive-and-paired-recovery)
+for the previous private archive schema.
 
 Parse AnySeek payload outside transactions and compare chunk hash and full locator. Residual generations may have duplicates only if the same chunk payload is identical. Conflicting content cannot be picked arbitrarily. Check the assembled version hash too. GET, Search, and Context start a fresh transaction after remote I/O to revalidate permissions, source, and publication identity. A nonempty Search takes a final snapshot after reading text. Empty results avoid that read. Historical restore reads the original version's immutable chunks, then uses the original publication guard. Missing, truncated, or mismatched data fails explicitly without reparsing original sources. Internal semantic memory merging reconstructs exact quotes from original historical source byte ranges and verifies hashes without remote I/O inside the transaction.
 

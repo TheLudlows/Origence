@@ -68,7 +68,9 @@ pub struct FrozenTurn {
     pub session_id: Uuid,
     pub turn_id: Uuid,
     pub source_event_id: Uuid,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub question: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub answer: String,
     pub used_evidence: Vec<ArchivedEvidence>,
 }
@@ -151,6 +153,24 @@ impl LearningCandidate {
         snapshot: &FrozenSnapshot,
         conditions: &[String],
     ) -> Result<(), &'static str> {
+        self.validate_supports(snapshot, conditions, false)
+    }
+
+    #[cfg(feature = "sqlite")]
+    pub(crate) fn validate_references(
+        &self,
+        snapshot: &FrozenSnapshot,
+        conditions: &[String],
+    ) -> Result<(), &'static str> {
+        self.validate_supports(snapshot, conditions, true)
+    }
+
+    fn validate_supports(
+        &self,
+        snapshot: &FrozenSnapshot,
+        conditions: &[String],
+        digests: bool,
+    ) -> Result<(), &'static str> {
         validate_conditions(conditions)?;
         if self.conditions != conditions {
             return Err("learning conditions must exactly match the request");
@@ -186,7 +206,13 @@ impl LearningCandidate {
                 SupportField::Answer => &frozen.turn.answer,
             };
             if support.byte_start >= support.byte_end
-                || source.get(support.byte_start..support.byte_end) != Some(support.quote.as_str())
+                || support.byte_end > crate::session::MAX_SESSION_TEXT_BYTES
+                || support.byte_end - support.byte_start > MAX_QUOTE_BYTES
+                || if digests && source.is_empty() {
+                    !crate::retrieval_diagnostics::digest(&support.quote)
+                } else {
+                    source.get(support.byte_start..support.byte_end) != Some(support.quote.as_str())
+                }
             {
                 return Err("learning support must match exact UTF-8 source bytes");
             }

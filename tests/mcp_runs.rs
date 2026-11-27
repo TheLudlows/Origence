@@ -399,6 +399,13 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .await
             .unwrap()
     );
+    assert!(
+        replacement
+            .call("context_turn_get", json!({"turn_id":turn}))
+            .await
+            .is_err()
+    );
+    fixture(dir.path(), None).unavailable(false);
     replacement
         .call("context_turn_get", json!({"turn_id":turn}))
         .await

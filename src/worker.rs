@@ -153,7 +153,14 @@ pub async fn run(
         }
     }
     let _reset = Reset(service.worker_running.clone());
+    let mut next_archive_cleanup = tokio::time::Instant::now();
     while !*stop.borrow() {
+        if tokio::time::Instant::now() >= next_archive_cleanup {
+            if let Err(error) = cleanup_private_archives(&service).await {
+                tracing::warn!(code = error.code(), "private archive cleanup will retry");
+            }
+            next_archive_cleanup = tokio::time::Instant::now() + Duration::from_secs(1);
+        }
         if !process_next(&service).await? {
             tokio::select! {_ = tokio::time::sleep(Duration::from_millis(100))=>{}, _ = stop.changed()=>{}}
         }
@@ -975,6 +982,22 @@ async fn publish_prepared(
     tx.commit().await?;
     Ok(())
 }
+async fn cleanup_private_archives(service: &Service) -> Result<()> {
+    let store = service.engine.relational();
+    let backend = service.engine.vector().private_archive();
+    let mut result = Ok(());
+    for entry in store.withdrawn_archives(16).await? {
+        match backend.archive_delete(&entry.locator).await {
+            Ok(()) => store.finish_archive_cleanup(&entry.locator).await?,
+            Err(error) => {
+                store.defer_archive_cleanup(&entry.locator).await?;
+                result = Err(error.into());
+            }
+        }
+    }
+    result
+}
+
 /// Runs only before serving requests or on the single worker, never concurrently
 /// with native writes. Visibility is already blocked by the relational tombstone.
 pub async fn cleanup(service: &Service) -> Result<()> {

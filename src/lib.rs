@@ -2,6 +2,8 @@
 mod agent_presence;
 #[cfg(feature = "local-storage")]
 pub mod api;
+#[cfg(feature = "local-storage")]
+pub mod archive_maintenance;
 pub mod capture;
 #[cfg(feature = "local-storage")]
 pub mod consolidation;

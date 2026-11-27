@@ -37,6 +37,9 @@ struct Data {
     content_read: Option<Arc<ContentReadGate>>,
     records: BTreeMap<String, Value>,
     collections: HashSet<(String, String)>,
+    private_configs: HashMap<(String, String), Value>,
+    private_records: BTreeMap<(String, String, String), Value>,
+    private_seq: u64,
     creations: usize,
     routes: Vec<(String, String)>,
     lose_next_create: bool,
@@ -318,10 +321,15 @@ async fn create(
         return failure(StatusCode::SERVICE_UNAVAILABLE);
     }
     let id = q["collection_id"].as_str().unwrap().to_owned();
-    if !data.collections.insert((tenant, id.clone())) {
+    if !data.collections.insert((tenant.clone(), id.clone())) {
         return failure(StatusCode::CONFLICT);
     }
-    data.creations += 1;
+    if id.starts_with("pr_") {
+        data.private_configs
+            .insert((tenant, id.clone()), q["config"].clone());
+    } else {
+        data.creations += 1;
+    }
     if data.lose_next_create {
         data.lose_next_create = false;
         return failure(StatusCode::SERVICE_UNAVAILABLE);
@@ -339,7 +347,7 @@ async fn info(
         if data.unavailable {
             return failure(StatusCode::NOT_FOUND);
         }
-        if !data.collections.contains(&(tenant, id)) {
+        if !data.collections.contains(&(tenant.clone(), id.clone())) {
             return failure(StatusCode::FORBIDDEN);
         }
     }
@@ -348,6 +356,7 @@ async fn info(
         None => AnySeekFullTextStore::collection_config(),
     };
     let data = f.data.lock().unwrap();
+    let schema = data.private_configs.get(&(tenant, id)).unwrap_or(&schema);
     let mut info = json!({"version":"fixture-1", "name":schema["index_name"],"schema":schema["schema"],"text_normalization":"None","vector_dimensions":f.dimension,
         "embedding_space_id":data.profile,"limits":{"max_records":10000,"max_candidates":10000},
         "analysis":{"format":"native-package-analysis:v1","fingerprint":analysis_fingerprint(),"tokenizer":"TantivySimpleV1",
@@ -408,7 +417,12 @@ async fn replace(
     if data.reject_writes {
         return failure(StatusCode::SERVICE_UNAVAILABLE);
     }
-    data.posts += 1;
+    let private = collection.starts_with("pr_");
+    if private {
+        data.private_seq += 1;
+    } else {
+        data.posts += 1;
+    }
     let operation = format!("{tenant}/{collection}/{}", q["operation_id"]);
     if let Some(receipt) = data.receipts.get(&operation) {
         return (StatusCode::OK, Json(receipt.clone()));
@@ -423,14 +437,30 @@ async fn replace(
     if rows.len() > 64 {
         return failure(StatusCode::BAD_REQUEST);
     }
-    data.records
-        .retain(|_, r| r["document"]["publication"] != group);
-    for row in rows {
+    if private {
+        data.private_records.retain(|(t, c, _), r| {
+            t != &tenant || c != &collection || r["document"]["archive"] != group
+        });
+        for row in rows {
+            let id = row["record_id"].as_str().unwrap().to_owned();
+            data.private_records
+                .insert((tenant.clone(), collection.clone(), id), row.clone());
+        }
+    } else {
         data.records
-            .insert(row["record_id"].as_str().unwrap().into(), row.clone());
+            .retain(|_, r| r["document"]["publication"] != group);
+        for row in rows {
+            data.records
+                .insert(row["record_id"].as_str().unwrap().into(), row.clone());
+        }
     }
     data.groups.insert(group_key, current + 1);
-    let receipt = json!({"atomic":true,"operation_id":q["operation_id"],"receipt":{"group_id":group,"group_version":current+1,"record_count":rows.len()}});
+    let seq = if private {
+        data.private_seq
+    } else {
+        data.posts as u64
+    };
+    let receipt = json!({"atomic":true,"operation_id":q["operation_id"],"receipt":{"group_id":group,"group_version":current+1,"record_count":rows.len(),"seq":seq}});
     data.receipts.insert(operation, receipt.clone());
     if data.lose_next_write {
         data.lose_next_write = false;
@@ -533,7 +563,10 @@ async fn query(
         gate.resume.notified().await;
     }
     let mut data = f.data.lock().unwrap();
-    data.queries.push(q.clone());
+    let private = collection.starts_with("pr_");
+    if !private {
+        data.queries.push(q.clone());
+    }
     if data.unavailable {
         return failure(StatusCode::NOT_FOUND);
     }
@@ -561,6 +594,14 @@ async fn query(
         })
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
+    if private {
+        candidates.extend(
+            data.private_records
+                .iter()
+                .filter(|((t, c, _), _)| t == &tenant && c == &collection)
+                .map(|((_, _, id), value)| (id.clone(), value.clone())),
+        );
+    }
     if graph_query {
         for anchor in &data.stale_graph_anchors {
             candidates.insert(
@@ -598,7 +639,7 @@ async fn query(
     (
         StatusCode::OK,
         Json(
-            json!({"hits":hits,"count_total":count,"visible_seq":data.posts,
+            json!({"hits":hits,"count_total":count,"visible_seq":if private {data.private_seq} else {data.posts as u64},
             "diagnostics":{"format_version":2,"request_id":if data.bad_diagnostics {"PRIVATE BAD REQUEST ID".into()}else{request_id},"engine_version":"fixture-1",
                 "mode":if q.get("query_vector").is_some(){"vector"}else if q["query"].as_str().is_some_and(|s|!s.is_empty()){"lexical"}else{"browse"},
                 "elapsed_us":1,"analysis_fingerprint":analysis_fingerprint(),

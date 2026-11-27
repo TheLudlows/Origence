@@ -990,7 +990,7 @@ async fn session_dependency_withdrawal_hides_all_reads_and_replays_before_cleanu
             .unwrap();
         assert_eq!(
             originals, 1,
-            "logical withdrawal must preserve original Q&A bytes"
+            "logical withdrawal preserves the provenance directory entry"
         );
         s.engine.relational().pool().close().await;
         drop(s);
@@ -1455,9 +1455,7 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
             .fetch_one(&mut *conn)
             .await
             .unwrap();
-        let source: Value = serde_json::from_str(&source).unwrap();
-        assert_eq!(source["question"], input["question"]);
-        assert_eq!(source["answer"], input["answer"]);
+        assert!(source.is_empty(), "SQLite holds only source provenance");
         let repaired: bool =
             db::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')")
                 .fetch_one(&mut *conn)

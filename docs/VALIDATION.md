@@ -7,6 +7,45 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-27 · AnySeek 私有问答归档（本地）
+
+基线为 Origence `af9030310bd5d313e23d9ac42373fa0b1e7d38a7`。嵌入 SDK 维持
+`5626dadfd5414b294a3cf0f6b845f5261760f68b`。独立 AnySeek 从 CI 固定的
+`6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a` 用 Rust 1.99.1 构建。Origence
+本地验证用 Linux x86_64 与 Rust 1.98.0。仅使用临时 SQLite、AnySeek 和合成问答。
+
+- `cargo fmt --package origence -- --check`、`cargo clippy --locked --all-targets -j 2 -- -D warnings`、
+  `cargo test --locked -j 2 --no-fail-fast`（484 项通过）和 `git diff --check` 均通过。
+  `python3 tools/anyseek_smoke.py --anyseek-binary <CI 固定版本> --cargo-tests` 在仅
+  `local-storage` 特性下另通过 8 项真实后端合约。无默认特性、`sqlite` 和 `local-storage` 的编译检查通过。
+- `python3 tools/private_archive_smoke.py --binary <origence> --legacy-binary <af90303-binary>`
+  通过实际 CLI、HTTP 和 Streamable HTTP MCP 的嵌入 AnySeek 测试。加
+  `--anyseek-binary <CI 固定版本>` 通过独立 AnySeek 测试。两种拓扑均覆盖单轮精确读回、按序分页、
+  多语言和 65,536 字节边界、关键词、合成 embedding 向量与混合召回、scope 隔离、轮换、共享内容无泄漏、
+  Run 重放和旧前缀核验、分批迁移、未完成时拒绝清除和启动、显式清除与重复执行。停机成对备份恢复后比对目录摘要、
+  SQLite 确认水位、AnySeek 版本和查询可见水位，复查顺序、关键词、向量和隔离。嵌入环境也验证缺少
+  AnySeek 的 SQLite 单独副本无法通过核验。
+- 独立 AnySeek 另覆盖提交前故障、未写入 pending 的过期 epoch 重试、写入后丢回执与重启按 ID 恢复、
+  缺失组成员、正文哈希不符、撤回抢在迟到写入之前及读回途中撤权。迁移进程在 AnySeek 已提交而 SQLite
+  尚未确认时被强制终止，重跑回读恢复同一轮次。SQLite 和 Origence 文件扫描核对测试正文未落入
+  权威库、Blob 或 Run 重放副本。Rust Improve 回归核对冻结输入不含正文且持久化引文为哈希。
+- 本地验证范围是 Linux、停机的文件目录备份及合成模型。Windows、真实 embedding 质量、
+  对象存储或在线异步 AnySeek 快照、跨版本与真实会话迁移仍未验证。
+
+提交 PR 前重新对齐 main `8d6605ff6dcb4ceaa60c72cd5a9106dcd2525461`。再跑嵌入和 CI
+固定版独立 AnySeek 的私有归档冒烟及 8 项真实后端合约，并通过完整的真实 HTTP MCP 冒烟。
+混合上下文复查了 #165 生效日前后的不同值、固定来源和 reader 拒绝访问私有路由。新增实测让
+Run 重放暂停在私有正文读取，撤回同一快照的共享引用后释放请求，确认重放返回 404 而原私有轮次
+仍可读。清理后的合成 SQLite 目录通过正文检查，未修改的切换前备份仍能读到原文。
+验证针对活动文件和逻辑可见性。SQLite 页面、历史 WAL 和备份的物理擦除未验收。
+
+#168 精简复核以 `4bfab721e981348024b14a7053d6e4568443e720` 为起点。
+SQLite-only 与全特性的全目标 Clippy 均以 `-D warnings` 通过，默认 Rust 回归通过 478 项。
+移除只覆盖旧 SQLite 正文扫描的 7 项内部测试。Context、Run 重放和 Improve 的现行入口继续
+验证权限与引用。嵌入和固定版本独立 AnySeek 冒烟均检查无效复制参数不修改 schema、缺少目录的
+旧来源阻止清除、错误类型的来源不能读回或召回。独立服务另将私有检索暂停在正文读回时，
+撤回后恢复请求，验证 Context 在最终复核时剔除该轮次。清除操作未改动切换前的合成备份。
+
 ## 2026-11-27 · 日常上下文召回带日期的报销上限
 
 基于 main `1a8544b647613864582354bc9f5942e69426b463`，Linux x86_64，Rust 1.98.0，

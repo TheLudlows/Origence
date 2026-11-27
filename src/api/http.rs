@@ -66,10 +66,17 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/captures", post(capture))
         .route("/v1/captures/identified", post(identified_capture))
         .route("/v1/knowledge", post(knowledge))
-        .route("/v1/sessions/{session_id}/turns", post(archive_turn))
+        .route(
+            "/v1/sessions/{session_id}",
+            axum::routing::delete(withdraw_session),
+        )
+        .route(
+            "/v1/sessions/{session_id}/turns",
+            post(archive_turn).get(session_turns),
+        )
         .route(
             "/v1/sessions/{session_id}/turns/{turn_id}",
-            get(session_turn),
+            get(session_turn).delete(withdraw_turn),
         )
         .route(
             "/v1/sessions/{session_id}/turns/{turn_id}/feedback",
@@ -622,6 +629,51 @@ async fn archive_turn(
             .await?,
     ))
 }
+#[derive(Deserialize)]
+struct TurnPage {
+    after: Option<i64>,
+    limit: Option<usize>,
+}
+
+async fn session_turns(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(session): Path<Uuid>,
+    Query(page): Query<TurnPage>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.session_turns(
+            &auth(&s, &h).await?,
+            session,
+            page.after.unwrap_or(0),
+            page.limit.unwrap_or(16),
+        )
+        .await?,
+    ))
+}
+
+async fn withdraw_session(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path(session): Path<Uuid>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.withdraw_session_archive(&auth(&s, &h).await?, session, None)
+            .await?,
+    ))
+}
+
+async fn withdraw_turn(
+    State(s): State<Service>,
+    h: HeaderMap,
+    Path((session, turn)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Value>> {
+    Ok(Json(
+        s.withdraw_session_archive(&auth(&s, &h).await?, session, Some(turn))
+            .await?,
+    ))
+}
+
 async fn session_turn(
     State(s): State<Service>,
     h: HeaderMap,
