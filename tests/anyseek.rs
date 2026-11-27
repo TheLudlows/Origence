@@ -713,6 +713,34 @@ async fn combined_projection_replay_vector_scope_cleanup_and_unavailability() {
 
 #[cfg(feature = "local-storage")]
 #[tokio::test]
+async fn record_count_limit_is_optional_and_present_limits_are_positive() {
+    use serde_json::json;
+
+    let fixtures = [
+        (json!({"max_candidates":10_000}), true),
+        (json!({"max_candidates":10_000,"max_records":10_000}), true),
+        (json!({"max_candidates":10_000,"max_records":0}), false),
+        (json!({"max_candidates":10_000,"max_records":null}), false),
+        (
+            json!({"max_candidates":10_000,"max_records":"10000"}),
+            false,
+        ),
+        (json!({"max_candidates":0}), false),
+        (json!({"max_records":10_000}), false),
+    ];
+    let peer = support::AnySeekFixture::start(None);
+    for (limits, accepted) in fixtures {
+        peer.info_override("limits", limits.clone());
+        let result = AnySeekFullTextStore::new(peer.config())
+            .unwrap()
+            .check_scope(scope(), true)
+            .await;
+        assert_eq!(result.is_ok(), accepted, "limits={limits}: {result:?}");
+    }
+}
+
+#[cfg(feature = "local-storage")]
+#[tokio::test]
 async fn unified_collection_configuration_is_exact_and_credentials_are_not_persisted() {
     let peer = support::AnySeekFixture::start(Some(2));
     assert!(

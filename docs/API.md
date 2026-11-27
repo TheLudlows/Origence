@@ -61,7 +61,7 @@ browse 包括候选预检。
 后端诊断格式为 v2，含服务版本、分析配置摘要、embedding 空间 SHA256（未配置为 null）、
 查询耗时与 `visible_seq`，以及查询后另行采样的
 committed/lexical/vector 进度、失败与恢复标志。配置还记录核对过的容量限制和 embedding
-空间摘要。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
+空间摘要。候选预算 `max_candidates` 必须为正整数。后端提供 `max_records` 时核验并记录正整数，缺省时诊断省略该字段。每次查询均比较返回的分析与空间摘要，拒绝启动后发生的空间变化。
 序号属于 AnySeek collection，不是 workspace 序号、SQLite 版本或跨存储快照。
 客户端往返和服务端耗时边界不同，均不证明客户端消费或模型实际使用。
 

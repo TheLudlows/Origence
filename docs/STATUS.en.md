@@ -20,6 +20,8 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
+Standalone AnySeek deployments accept collection Info after removal of the Record count limit and still validate advertised legacy limits and the query candidate limit. See [VALIDATION](VALIDATION.en.md#2026-11-27--standalone-anyseek-collection-limit-compatibility) for pinned versions and evidence.
+
 ## Origence local and cloud startup
 
 `origence serve --local` opens the AnySeek Catalog at `OC_DATA_DIR/anyseek` in the same process through the Rust SDK. The host handles startup recovery, verification of published collections, and graceful shutdown. The Windows development script uses this entry point and optionally starts the Node UI. The cloud image runs `origence serve` against standalone AnySeek. The deployment environment provides the address and credential. [Operations guide](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
