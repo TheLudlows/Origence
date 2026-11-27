@@ -26,7 +26,7 @@ type RunDirectory = Page<Run> & { scope: "workspace" | "current_logical_key" };
 export function citation(
   ref: Provenance,
   ctx: ViewContext,
-  { pdf, knowledgeQuote }: { pdf?: { path?: string }; knowledgeQuote?: string } = {},
+  { pdf, knowledgeQuote, label }: { pdf?: { path?: string }; knowledgeQuote?: string; label?: string } = {},
 ) {
   const source = el("div");
   const textSource = !pdf && ref.source_event_id && ctx.role !== "reader"
@@ -50,7 +50,7 @@ export function citation(
     ref.asset_id && (!pdf || (typeof ref.asset_version === "number" &&
       Number.isSafeInteger(ref.asset_version) && ref.asset_version > 0))
       ? button(
-          `${short(ref.asset_id)} · v${ref.asset_version ?? "?"}`,
+          label ?? `${short(ref.asset_id)} · v${ref.asset_version ?? "?"}`,
           () => ctx.navigate("asset", ref.asset_id, ref.asset_version),
           "link",
         )

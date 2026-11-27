@@ -115,6 +115,7 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
             code(item.content),
             citation(item.provenance, ctx, {
               knowledgeQuote: item.route === "knowledge" ? item.content : undefined,
+              label: item.normalization_status === "unnormalized" ? "查看证据" : undefined,
             }),
           );
           items.append(detail);

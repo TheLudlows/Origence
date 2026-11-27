@@ -64,7 +64,7 @@ async fn database() -> (tempfile::TempDir, Pool) {
     // foreign keys so the fail-closed read path can be exercised directly. Identity
     // CHECK constraints are omitted to retain corrupt and wrong-kind fixtures.
     for sql in [
-        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
+        "CREATE TABLE oc_assets(tenant_id BLOB NOT NULL,workspace_id BLOB NOT NULL,id BLOB NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,fact_key TEXT,current_version INTEGER,deleted INTEGER NOT NULL DEFAULT 0,identity_key TEXT,identity_json TEXT,PRIMARY KEY(tenant_id,workspace_id,id))",
         // Non-unique only in this permissive corruption fixture; production
         // admission requires the exact unique partial identity index.
         "CREATE INDEX oc_memory_identity_slot ON oc_assets(tenant_id,workspace_id,identity_key) WHERE identity_key IS NOT NULL",
@@ -891,10 +891,6 @@ async fn event_projection_preserves_missing_deleted_and_foreign_file_semantics()
 #[tokio::test]
 async fn identity_kind_filter_precedes_native_key_decoding() {
     let (_dir, pool) = database().await;
-    db::query("ALTER TABLE oc_assets ADD COLUMN fact_key TEXT")
-        .execute(&pool)
-        .await
-        .unwrap();
     let scope = scope();
     let identity: crate::memory_identity::MemoryIdentity = serde_json::from_value(json!({
         "subject":{"kind":"service","stable_id":"billing"},

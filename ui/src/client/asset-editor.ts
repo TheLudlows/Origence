@@ -337,7 +337,7 @@ export function capture(ctx: ViewContext) {
       ),
       field("原始文本", content),
       field(
-        "允许的目标身份（含 identity、expected_version；可留 []）",
+        "目标身份（JSON 数组，每项含 identity，可留 []）",
         targets,
       ),
       save,

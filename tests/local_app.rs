@@ -317,6 +317,20 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     let repeated_first = &repeated["result"]["memories"][0];
     assert!(repeated_first["fact_key"].is_null());
     assert_ne!(repeated_first["asset_id"], claim["asset_id"]);
+    let standalone = request(
+        &http,
+        &base,
+        token,
+        reqwest::Method::GET,
+        &format!(
+            "/v1/assets/{}?version=1",
+            repeated_first["asset_id"].as_str().unwrap()
+        ),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(standalone["version"], 1);
+    assert_eq!(standalone["normalization_status"], "unnormalized");
     let original_claim = request(
         &http,
         &base,
@@ -327,6 +341,10 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
     )
     .await;
     assert_eq!(original_claim["version"], 1);
+    assert_eq!(
+        original_claim["normalization_status"],
+        "legacy_unidentified"
+    );
     let identity = json!({"subject":{"kind":"service","stable_id":"billing"},"predicate":"release.approval","context":{"environment":"production"}});
     let first_key = Uuid::new_v4().to_string();
     let first_body = json!({"identity":identity,"content":"生产发布需要审批","expected_version":0});
@@ -490,6 +508,7 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .find(|hit| hit["asset_id"] == second["asset_id"])
         .unwrap();
     assert!(appended_hit["identity"].is_null());
+    assert_eq!(appended_hit["normalization_status"], "unnormalized");
     assert_eq!(appended_hit["locator"]["suggested_identity"], identity);
     assert_eq!(appended_hit["content"], "生产发布需要双人审批");
     assert_eq!(appended_hit["source_event_id"], second["source_event_id"]);

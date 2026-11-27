@@ -91,7 +91,9 @@ export async function assetsPage(
               code(item.content),
               code(item.locator),
               button(
-                `查看命中版本 v${item.version}`,
+                item.normalization_status === "unnormalized"
+                  ? "查看命中证据"
+                  : `查看命中版本 v${item.version}`,
                 () => ctx.navigate("asset", item.asset_id, item.version),
                 "link",
               ),
@@ -187,7 +189,7 @@ export async function assetsPage(
       kind === "memory"
         ? status(a.semantic_status ?? a.normalization_status)
         : badge("已发布", "good"),
-      `v${a.version}`,
+      a.normalization_status === "unnormalized" ? "—" : `v${a.version}`,
       button("查看详情 →", () => ctx.navigate("asset", a.asset_id), "link"),
     ]);
     list.replaceChildren(
@@ -373,10 +375,11 @@ export async function assetDetail(
     ctx.signal,
   );
   if (ctx.signal.aborted) return;
-  const kindLabel = asset.kind === "memory" ? "记忆" : "知识";
+  const evidence = asset.normalization_status === "unnormalized";
+  const kindLabel = evidence ? "记忆证据" : asset.kind === "memory" ? "记忆" : "知识";
   const error = el("div");
   const related = panel(
-    `关联 Run · v${asset.version}`,
+    evidence ? "关联 Run" : `关联 Run · v${asset.version}`,
     el("p", "muted", "仅当前逻辑 key 的已记录引用；不代表完整采集、收到或使用。"),
   );
   const relatedResult = el("div");
@@ -521,28 +524,30 @@ export async function assetDetail(
   root.append(
     heading(
       asset.title || `${kindLabel}详情`,
-      `${kindLabel} · v${asset.version} · ${id}`,
+      evidence ? `${kindLabel} · ${id}` : `${kindLabel} · v${asset.version} · ${id}`,
       button("返回列表", () => ctx.navigate(asset.kind)),
-      canWrite(ctx.role) ? button("更新内容", update, "primary") : null,
+      !evidence && canWrite(ctx.role) ? button("更新内容", update, "primary") : null,
     ),
     panel(
-      "版本与身份",
+      evidence ? "证据信息" : "版本与身份",
       el(
         "div",
         "actions",
         versionStatus,
-        badge(`v${asset.version}`),
+        !evidence && badge(`v${asset.version}`),
       ),
       asset.identity ? code(asset.identity) : null,
       el("p", "mono muted", `SHA256 ${asset.content_hash}`),
-      form(
+      !evidence && form(
         () => ctx.navigate("asset", id, Number(historyVersion.value)),
         field("读取固定历史版本", historyVersion),
         submit("读取版本"),
       ),
     ),
     assetContent(asset, ctx),
-    panel(
+  );
+  if (!evidence)
+    root.append(panel(
       "版本比较",
       el(
         "div",
@@ -551,20 +556,23 @@ export async function assetDetail(
         button("比较正文", compare),
       ),
       el("div", "asset-comparison", comparisonStatus, comparisonResult),
-    ),
+    ));
+  root.append(
     panel(
       "来源引用",
       el("p", "mono", asset.source_event_id),
       el(
         "p",
         "muted",
-        `${kindLabel}版本与来源版本分别保留，原始来源需要独立读取权限。`,
+        evidence
+          ? "原始来源需要独立读取权限。"
+          : `${kindLabel}版本与来源版本分别保留，原始来源需要独立读取权限。`,
       ),
       asset.semantic_values ? code(asset.semantic_values) : null,
       el(
         "div",
         "actions",
-        ["reviewer", "admin"].includes(ctx.role) && !asset.semantic_status
+        !evidence && ["reviewer", "admin"].includes(ctx.role) && !asset.semantic_status
           ? button("恢复此版本", restore)
           : null,
         ctx.role === "admin"

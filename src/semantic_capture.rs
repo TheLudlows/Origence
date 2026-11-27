@@ -15,7 +15,8 @@ pub const MAX_CANDIDATES: usize = 20;
 #[serde(deny_unknown_fields)]
 pub struct CaptureTarget {
     pub identity: MemoryIdentity,
-    pub expected_version: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_version: Option<i32>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,7 +36,9 @@ impl SemanticCaptureInput {
                 .identity
                 .validate()
                 .map_err(|_| AppError::Invalid("invalid capture identity".into()))?;
-            if !(0..i32::MAX).contains(&target.expected_version)
+            if target
+                .expected_version
+                .is_some_and(|version| !(0..i32::MAX).contains(&version))
                 || !seen
                     .insert(serde_json::to_string(&target.identity).map_err(anyhow::Error::from)?)
             {
@@ -81,7 +84,7 @@ impl Candidate {
             identity: target.map(|t| t.identity.clone()),
             content: request.content.clone(),
             operation,
-            expected_version: target.map_or(0, |t| t.expected_version),
+            expected_version: target.and_then(|t| t.expected_version).unwrap_or(0),
             statements: self.statements.clone(),
         };
         input.validate().map_err(|_| invalid())?;
@@ -187,7 +190,7 @@ mod tests {
         r.content = "x".repeat(MAX_SOURCE_BYTES + 1);
         assert!(r.validate().is_err());
         r = request();
-        r.targets[0].expected_version = i32::MAX;
+        r.targets[0].expected_version = Some(i32::MAX);
         assert!(r.validate().is_err());
         let mut c = candidate();
         c["target"] = Value::Null;

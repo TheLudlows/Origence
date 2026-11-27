@@ -209,7 +209,7 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `POST /v1/memories/retain` | `{content}`，writer 提交 `Idempotency-Key`，返回 `{state:"accepted",source_event_id,job_id}`。后台归纳新旧证据。MCP 对应 `context_memory_retain`。 |
 | `POST /v1/memories/long-term/lookup` | `{identity,version?,as_of_ms?}`，reader 可读，返回 `{memory_id,version,identity,state,timeline,evidence}`。MCP 对应 `context_memory_recall`。见[长期记忆归纳](contracts/memory-consolidation.md)。 |
 | `GET /v1/memories/long-term/{id}` | reader 用作业返回的 `memory_id` 读取同一长期记忆视图。查询参数 `version` 和 `as_of_ms` 可选。 |
-| `POST /v1/captures/semantic` | `{content,targets:[{identity,expected_version}]}` → source/job；受限模型分类并复用 记忆语义，详见下节 |
+| `POST /v1/captures/semantic` | `{content,targets:[{identity}]}` → source/job；受限模型分类并复用 记忆语义，详见下节 |
 | `POST /v1/captures` | `{content}` → source/job；逐条保存抽取证据，结果见任务 `result.memories` |
 | `POST /v1/captures/identified` | `{identity,content}` → `asset_id` / `source_event_id` / `job_id`；完整身份由调用方指定，模型只抽取原文片段；需要 extraction model |
 | `POST /v1/knowledge` | `{title,content或file_id,format:"text"或"markdown"或"pdf",asset_id:null或UUID,expected_version:null或整数}` |
@@ -319,7 +319,7 @@ lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精�
 
 ## 身份状态与来源核验
 
-`GET /v1/assets/{id}` 返回 normalization_status：记忆有显式身份绑定时为 explicit_identity；记忆语义/受控提取 保留的冲突、否定、提议和歧义证据为 unnormalized；旧 fact_key 记忆为 legacy_unidentified；知识条目为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一内容条目身份。旧记忆不会因该字段被自动归一化。
+`GET /v1/assets/{id}` 返回 normalization_status：记忆有显式身份绑定时为 explicit_identity；独立证据为 unnormalized，包括冲突、否定、提议、歧义及旧提取入口另存的证据；旧 fact_key 记忆为 legacy_unidentified；知识条目为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一内容条目身份。旧记忆不会因该字段被自动归一化。
 
 writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。记忆语义 已提供未归一化记忆的独立状态；自动身份归并尚未实现。
 
@@ -415,13 +415,12 @@ content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开�
       "subject": {"kind": "service", "stable_id": "Atlas"},
       "predicate": "database.engine",
       "context": {"env": "production"}
-    },
-    "expected_version": 0
+    }
   }]
 }
 ```
 
-首先由 admin 注册相应属性目录。每个 target 的属性必须已注册且包含所有必需条件；expected_version 必填，0 表示无已发布版本。受理时检查所有目标的版本，任一不匹配即返回 409，且不创建来源或任务。相同身份不能重复列入 targets。目标只授权身份匹配，旧字段 `allow_update` 返回 422。模型把不同单值分类为 assert 时，保留为 conflict 证据。显式确认的单值更新通过 `/v1/memories/semantic` 提交。
+首先由 admin 注册相应属性目录。每个 target 的属性必须已注册且包含所有必需条件；日常提取只需 identity。省略 expected_version 时，服务端在受理事务中读取当前发布版本并随任务保存。显式提供时，0 表示无已发布版本，任一版本不匹配即返回 409，且不创建来源或任务。相同身份不能重复列入 targets。目标只授权身份匹配，旧字段 `allow_update` 返回 422。模型把不同单值分类为 assert 时，保留为 conflict 证据。显式确认的单值更新通过 `/v1/memories/semantic` 提交。
 
 受理后不持续锁定整个 targets 列表：进入记忆语义的确定性候选在路由时核对所用目标版本；计划保存后，Worker 在重试/恢复及最终提交前复核实际路由到的记忆条目的版本、来源与可见性，包含 duplicate 结果是否仍为有效当前事实。未被候选使用的 target，以及未归一化证据仅作为 suggested_identity 保留的目标，不作为最终提交的身份版本前置条件。否定、提议、歧义和模型返回后降级的 update 不更新建议身份；确定性 assert 路由为 conflict 前仍检查目标版本，之后独立发布 conflict 证据。实际确定事实版本竞争失败时，整个任务 superseded，不部分发布。
 

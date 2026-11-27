@@ -197,7 +197,10 @@ async fn semantic_capture_http_preserves_conflicts_and_requires_explicit_updates
     ]);
     let req = request(
         text,
-        vec![target("database.engine", 0), target("service.languages", 0)],
+        vec![
+            json!({"identity":identity("database.engine")}),
+            json!({"identity":identity("service.languages")}),
+        ],
     );
     let (base, _api) = serve(origence::api::router(s.clone())).await;
     let reader = s
@@ -231,7 +234,16 @@ async fn semantic_capture_http_preserves_conflicts_and_requires_explicit_updates
     let envelope: Value =
         serde_json::from_str(model_request["messages"][1]["content"].as_str().unwrap()).unwrap();
     assert_eq!(envelope["source"], text);
-    assert_eq!(envelope["targets"], req["targets"]);
+    assert_eq!(
+        envelope["targets"],
+        json!([target("database.engine", 0), target("service.languages", 0)])
+    );
+    assert_eq!(http(&base, &token, "capture", req.clone()).await.1, r);
+    let old_version = request(text, vec![target("database.engine", 0)]);
+    assert_eq!(
+        http(&base, &token, "stale-version", old_version).await.0,
+        409
+    );
     let event = s.source_event(&a, id(&r, "source_event_id")).await.unwrap();
     assert_eq!(event["content"], text);
     // Independent caller in a second session uses the persisted workspace memory.
@@ -315,7 +327,12 @@ async fn semantic_capture_http_preserves_conflicts_and_requires_explicit_updates
     assert_evidence_matrix(&s, &a, &ambiguous, "MySQL", true).await;
     assert_eq!(lookup(&s, &a, "database.engine").await, original);
     stub.respond(vec![candidate(text, Some(0), "assert", "MySQL", text)]);
-    let conflict = submit(&s, &a, request(text, vec![target("database.engine", 1)])).await;
+    let conflict = submit(
+        &s,
+        &a,
+        request(text, vec![json!({"identity":identity("database.engine")})]),
+    )
+    .await;
     let conflict_result = finish(&s, &a, &conflict).await;
     assert_eq!(
         conflict_result["memories"][0]["semantic_status"],
@@ -681,7 +698,10 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     let (_dir, s, a, _, stub, _model) = fixture(true).await;
     property(&s, &a, "database.engine", "single").await;
     stub.respond(vec![candidate("Rust", Some(0), "assert", "Rust", "Rust")]);
-    let req = request("Rust", vec![target("database.engine", 0)]);
+    let req = request(
+        "Rust",
+        vec![json!({"identity":identity("database.engine")})],
+    );
     let first = submit(&s, &a, req.clone()).await;
     let stale = submit(&s, &a, req.clone()).await;
     finish(&s, &a, &first).await;

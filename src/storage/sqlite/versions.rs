@@ -86,7 +86,7 @@ impl SqliteTx {
         version: Option<i32>,
     ) -> StorageResult<Value> {
         let asset = sqlite_db::query(
-            "SELECT id,kind,COALESCE(?,current_version) AS requested_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
+            "SELECT id,kind,fact_key IS NULL AS no_fact_key,COALESCE(?,current_version) AS requested_version FROM oc_assets WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT deleted",
         )
         .bind(version)
         .bind(self.scope.tenant_id)
@@ -138,9 +138,12 @@ impl SqliteTx {
             Vec::new()
         };
         let identity = self.identity_for_asset(asset_id).await?;
+        let no_fact_key: bool = asset.try_get("no_fact_key").map_err(sqlite_err)?;
         let normalization_status = if kind != "memory" {
             "not_applicable"
-        } else if semantic_status.as_deref().is_some_and(|s| s != "confirmed") {
+        } else if semantic_status.as_deref().is_some_and(|s| s != "confirmed")
+            || (identity.is_none() && no_fact_key)
+        {
             "unnormalized"
         } else if identity.is_some() {
             "explicit_identity"

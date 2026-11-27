@@ -4,6 +4,19 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Simplify standalone evidence capture and display
+
+Based on local extraction commit `0d84a6c99ad6271af8c74f4274c0b3489e2f043d`. Local HTTP
+tests used synthetic model responses and checked version-free targets, the saved admission
+version, idempotent replay, stale explicit versions, and concurrent first publication.
+Older standalone extraction evidence remained readable by fixed version.
+
+239 library tests, 217 local integration tests, 6 long-term memory tests, formatting, and
+strict all-feature all-target Clippy passed. Node type checking and 31 UI tests passed.
+The UI tests covered the capture form, standalone evidence details, and fixed references.
+Chromium passed the asset tabs and version comparison regression at 320, 375, 736, and
+1024px in both color schemes and reader/writer roles. The verification ran on Linux.
+
 ## 2026-11-27 · Append extracted evidence
 
 Based on main `c1ab0d5a82b5e098f699288c78dcb6b1f99f0cf2` on Linux x86_64 with Rust 1.98.0.

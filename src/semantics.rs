@@ -225,7 +225,7 @@ impl Service {
         &self,
         a: &AuthContext,
         key: &str,
-        input: SemanticCaptureInput,
+        mut input: SemanticCaptureInput,
     ) -> Result<Value> {
         input.validate()?;
         let (mut tx, cached) = self
@@ -240,7 +240,7 @@ impl Service {
             .semantic_extraction_profile()
             .ok_or_else(|| AppError::Unavailable("extraction model is not configured".into()))?;
         let mut properties = Vec::new();
-        for target in &input.targets {
+        for target in &mut input.targets {
             let property = tx
                 .memory_property(&target.identity.predicate)
                 .await?
@@ -249,10 +249,15 @@ impl Service {
             let version = match tx.identity_candidate_asset(&target.identity).await? {
                 Some(asset) => tx.asset_current_version(asset).await?,
                 None => None,
-            };
-            if target.expected_version != version.unwrap_or(0) {
+            }
+            .unwrap_or(0);
+            if target
+                .expected_version
+                .is_some_and(|expected| expected != version)
+            {
                 return Err(AppError::Conflict("expected_version mismatch".into()));
             }
+            target.expected_version = Some(version);
             properties.push(property);
         }
         let source = tx

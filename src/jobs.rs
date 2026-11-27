@@ -198,6 +198,12 @@ impl JobPayload {
             Self::SemanticExtract { targets, .. } => {
                 for target in targets {
                     validate(&target.identity)?;
+                    if !target
+                        .expected_version
+                        .is_some_and(|version| (0..i32::MAX).contains(&version))
+                    {
+                        return Err(invalid_payload());
+                    }
                 }
                 Ok(())
             }
@@ -351,7 +357,7 @@ mod tests {
         };
         let target = CaptureTarget {
             identity: identity.clone(),
-            expected_version: 1,
+            expected_version: Some(1),
         };
         let property = MemoryProperty {
             predicate: "language".into(),
@@ -491,6 +497,15 @@ mod tests {
 
     #[test]
     fn malformed_fields_and_required_fields_fail_without_raw_diagnostics() {
+        let (_, operation, mut capture) = fixtures()
+            .into_iter()
+            .find(|(_, operation, _)| *operation == "semantic_extract")
+            .unwrap();
+        capture["targets"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("expected_version");
+        assert!(JobPayload::decode(operation, &capture).is_err());
         for (_, operation, golden) in fixtures() {
             for (field, value) in golden.as_object().unwrap() {
                 if field == "schema_version" || value.is_null() {
