@@ -4,6 +4,25 @@
 
 The latest local verification was 2026-11-27. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-27 · Writers can review and publish
+
+Based on main `d34804c`, using Linux, fresh synthetic databases, and Rust 1.98.0. Skill
+regressions used separate writer credentials to submit, approve, and publish. They checked reader
+denial, private candidate and Run isolation, stale approvals, and source withdrawal. Workspace
+regressions covered role changes, rejection of the former reviewer role, writer restore and job
+retry, and administrator-only cleanup.
+
+234 Rust library tests, 220 local integration tests, and 1 Skill CLI test passed.
+Node type checking, 32 UI tests, and 12 managed Run tests passed. Real Chromium verified the three
+API key roles, workspace grants and rotation, and the Skill submission, approval, and publication
+flow. Strict Clippy passed with all features, SQLite only, and without default features.
+Formatting passed. Windows and upgrades of existing databases were untested.
+
+Cleanup based on `88bb7a0` consolidated role validation and removed the unused generic
+permission parameter from job retry. The same 455 Rust tests and 32 UI tests, Node type
+checking, strict Clippy, formatting, and relative documentation link checks passed on
+Linux. Chromium and Windows were not rerun for the cleanup.
+
 ## 2026-11-27 · Direct private archive deletion
 
 Based on main `7b362c6d6aeed56fb4d438df00a2c08e356c7830` on Linux with fresh synthetic data.

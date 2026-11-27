@@ -471,7 +471,7 @@ impl Service {
         let (mut tx, cached) = self
             .command(
                 a,
-                Permission::Review,
+                Permission::Write,
                 &format!("restore/{id}"),
                 key,
                 &json!(input),
@@ -617,9 +617,6 @@ impl Service {
             return Ok(v);
         }
         let row = tx.job_row(id).await?;
-        if row["created_by"] != json!(a.id) {
-            tx.check_permission(Permission::Review).await?;
-        }
         let state = row["state"].as_str().unwrap_or("");
         // Improve's model job can be completed while its Ingest children are
         // still publishing. Explicit cancellation releases only the unfinished
@@ -645,12 +642,7 @@ impl Service {
             // after the deleting key is revoked. The retrying actor still needs
             // Delete above; publication jobs retain their original authority.
             if row["operation"] != "cleanup" {
-                let creator_permission = match row["operation"].as_str() {
-                    Some("restore") => Permission::Publish,
-                    _ => Permission::Write,
-                };
-                tx.require_job_creator_permission(id, creator_permission)
-                    .await?;
+                tx.require_job_creator_write(id).await?;
             }
             tx.require_improve_job_retry_allowed(id).await?;
             tx.valid_targets(

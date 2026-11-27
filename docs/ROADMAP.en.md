@@ -12,7 +12,7 @@ This document describes product goals and milestone acceptance. The initial rele
 | --- | --- |
 | Memory | Project facts, preferences, decisions, and reusable experiences with conditions, versions, and provenance. |
 | Knowledge | Documents, team standards, and business material with publication, updates, withdrawal, and precise version citations. |
-| Skill | Reusable methods, procedures, and references. Selected experiences can form private candidates that people with publishing permission share after approving the precise version. |
+| Skill | Reusable methods, procedures, and references. Selected experiences can form private candidates. A workspace writer or admin publishes once the designated reviewer approves the exact version. |
 | Trace | Uses Run to organize evidence, including server-prepared context, client-reported Skill loads, tools and results, collection gaps, and external verification. |
 
 ## How the data is used

@@ -107,9 +107,6 @@ pub(super) struct MaintenanceLock {
     _guard: std::sync::Arc<LockGuard>,
 }
 
-/// Roles an API key may hold (A2.2 role matrix).
-const ROLES: &[&str] = &["reader", "writer", "reviewer", "admin"];
-
 fn sqlite_err(e: sqlite_db::Error) -> StorageError {
     match e {
         sqlite_db::Error::Incompatible(message) => StorageError::Unavailable(message.into()),

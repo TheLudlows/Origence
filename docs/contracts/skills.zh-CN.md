@@ -8,8 +8,8 @@
 
 - `save_skill_candidate(id, expected_revision, input)` 以调用方稳定逻辑 key 创建或追加不可变修订。私有备注和来源引用只对所有者可见，工作空间管理员也不能读取。
 - 所有者显式提交审阅 ID、精确修订、指定审阅者凭据、工作空间/Skill/版本目标及选定的脱敏依据。仅指定审阅者及所有者可读审阅包。审阅者不会隐式获得读取原始归档的权限。
-- `decide_skill_review(review, packet_digest, approve)` 要求获指定且当前有效的 Publish 角色。决定不可变，变更须新建审阅 ID。凭据轮换要求重新指定审阅者。获授权的逻辑 key 轮换保持候选所有权。
-- `publish_skill(review, packet_digest)` 是独立显式操作。重新核对当前 Publish 权限、审批凭据、当前候选修订、支持来源权威和确切生成包。候选的任何改动都会使旧批准失效，包括修改来源或私有备注。
+- `decide_skill_review(review, packet_digest, approve)` 要求获指定的凭据当前具有 writer 或 admin 权限。决定不可变，变更须新建审阅 ID。凭据轮换要求重新指定审阅者。获授权的逻辑 key 轮换保持候选所有权。
+- `publish_skill(review, packet_digest)` 是独立显式操作。重新核对当前写入权限、审批凭据、当前候选修订、支持来源权威和确切生成包。候选的任何改动都会使旧批准失效，包括修改来源或私有备注。
 - 发布通过现有 SQLite 权威事务保存有界、不可变的包字节及来源。不执行外部 I/O，不启动 Worker，不产生半安装包。版本单调递增。当前包保存在 SQLite 中，原始文档字节保存在 Blob 存储。
 - `skill_package(skill, version)` 重新检查来源和撤回状态后，只返回获准的清单与文件。分发包不含审阅依据、原始来源 ID、私有备注和批准记录。在来源和支持仍有效时，可以使用精确历史版本。向 Run 追加事件不会改变已批准的不可变前缀。撤销或撤回后拒绝读取。
 

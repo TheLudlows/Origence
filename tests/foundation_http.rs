@@ -24,7 +24,7 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         .await
         .unwrap();
     let writer = store.issue_key(scope, "writer").await.unwrap();
-    let reviewer = store.issue_key(scope, "reviewer").await.unwrap();
+    let reviewer = store.issue_key(scope, "writer").await.unwrap();
     let reader = store.issue_key(scope, "reader").await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -95,6 +95,19 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         "revision":1, "reviewer_id":reviewer.key_id, "basis":"Redacted selected evidence",
         "target":{"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"skill_id":skill,"version":1}
     });
+    let mut reader_appointment = review_input.clone();
+    reader_appointment["reviewer_id"] = json!(reader.key_id);
+    assert!(matches!(
+        writer_client
+            .call(
+                Method::POST,
+                &format!("{candidate_path}/reviews/{}", Uuid::new_v4()),
+                Some(&reader_appointment),
+                None,
+            )
+            .await,
+        Err(origence::error::AppError::Forbidden)
+    ));
     writer_client
         .call(
             Method::POST,
@@ -140,6 +153,17 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         )
         .await
         .unwrap();
+    assert!(matches!(
+        reader_client
+            .call(
+                Method::POST,
+                &format!("{review_path}/publish"),
+                Some(&exact),
+                None,
+            )
+            .await,
+        Err(origence::error::AppError::Forbidden)
+    ));
     let published = reviewer_client
         .call(
             Method::POST,
@@ -227,7 +251,7 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
         .await
         .unwrap();
     let owner = store.issue_key(scope, "admin").await.unwrap();
-    let reviewer = store.issue_key(scope, "reviewer").await.unwrap();
+    let reviewer = store.issue_key(scope, "writer").await.unwrap();
     let a = service.auth(&owner.token).await.unwrap();
     let first = service
         .knowledge(

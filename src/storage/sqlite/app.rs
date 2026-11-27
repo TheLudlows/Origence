@@ -388,7 +388,7 @@ impl SqliteTx {
         capabilities: KeyCapabilities,
     ) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::Delete).await?;
-        if !ROLES.contains(&role) {
+        if !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict("invalid role".into()));
         }
         if capabilities.allow_owned_workspaces {

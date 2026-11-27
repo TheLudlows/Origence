@@ -18,7 +18,7 @@ The editor stays bound to that exact prefix while you inspect other timeline eve
 Enter the method and the redacted evidence you want to share. Confirm disclosure
 of both before saving. Keep the candidate ID to reopen it from the **Skill 候选**
 section of the same Run. Saving changes creates a revision and invalidates older
-approvals. Enter the designated reviewer's credential ID, Skill ID, and version,
+approvals. Enter the designated reviewer's writer or admin credential ID, Skill ID, and version,
 then submit the saved revision. The reviewer can get their credential `id` from
 `GET /v1/whoami` and open the packet with `origence-skill review` below. Use the
 commands below for approval, explicit publication, and online download.

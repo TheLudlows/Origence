@@ -27,7 +27,7 @@ impl Fixture {
             .await
             .unwrap();
         let mut keys = Vec::new();
-        for role in ["writer", "reviewer", "admin"] {
+        for role in ["writer", "writer", "admin"] {
             let key = store.issue_key(scope, role).await.unwrap();
             keys.push(store.authenticate(&key.token).await.unwrap());
         }
@@ -134,15 +134,14 @@ async fn skill_exact_approval_private_review_restart_and_withdrawal() {
         .unwrap();
     tx.commit().await.unwrap();
     let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
-    assert!(tx.publish_skill(review, &packet.digest).await.is_err());
-    tx.rollback().await.unwrap();
-    let mut tx = f.store.begin(f.reviewer.clone()).await.unwrap();
     let package = tx.publish_skill(review, &packet.digest).await.unwrap();
+    package.validate().unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.reviewer.clone()).await.unwrap();
     assert_eq!(
         package,
         tx.publish_skill(review, &packet.digest).await.unwrap()
     );
-    package.validate().unwrap();
     tx.commit().await.unwrap();
     f.store.shutdown().await.unwrap();
     drop(f.store);

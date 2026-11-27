@@ -2902,7 +2902,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     feedback(&s, &owner, &turn, Uuid::new_v4()).await;
     let learning = learn(&s, &owner, session).await;
     let writer = s.issue_key(&owner, "writer").await.unwrap();
-    let reviewer = s.issue_key(&owner, "reviewer").await.unwrap();
+    let reviewer = s.issue_key(&owner, "writer").await.unwrap();
     let writer_token = writer["token"].as_str().unwrap();
     let reviewer_token = reviewer["token"].as_str().unwrap();
     let (base, _api) = serve(origence::api::router(s.clone())).await;

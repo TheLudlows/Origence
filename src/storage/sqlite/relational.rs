@@ -50,7 +50,7 @@ impl RelationalStore for SqliteStore {
         role: &str,
         capabilities: KeyCapabilities,
     ) -> StorageResult<IssuedKey> {
-        if !ROLES.contains(&role) {
+        if !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict(format!("invalid role {role}")));
         }
         let mut tx = self

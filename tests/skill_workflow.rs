@@ -47,7 +47,7 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
         .await
         .unwrap();
     let writer = store.issue_key(scope, "writer").await.unwrap();
-    let reviewer = store.issue_key(scope, "reviewer").await.unwrap();
+    let reviewer = store.issue_key(scope, "writer").await.unwrap();
     let other = store.issue_key(scope, "admin").await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());

@@ -165,10 +165,11 @@ async function checkConsole(page, prefix) {
   const latest = await call(owner, candidate);
   assert.deepEqual(latest.input.sources, [{ kind: "run", ...prefix }]);
   await post(reviewer, `${secondReview}/decision`, { digest: second.digest, approve: true });
-  await post(owner, `${secondReview}/publish`, { digest: second.digest }, 403);
+  await post(reader, `${secondReview}/publish`, { digest: second.digest }, 403);
   const packagePath = `/v1/skills/${skill}/versions/1/package`;
   await call(reader, packagePath, { status: 404 });
-  const published = await post(reviewer, `${secondReview}/publish`, { digest: second.digest });
+  const published = await post(owner, `${secondReview}/publish`, { digest: second.digest });
+  assert.deepEqual(await post(reviewer, `${secondReview}/publish`, { digest: second.digest }), published);
   assert.deepEqual(await call(reader, packagePath), published);
   assert.ok(published.files["SKILL.md"].includes(method));
   for (const hidden of [firstBasis, secondBasis, notes, raw, later, run, fixture.source]) {

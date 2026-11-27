@@ -81,6 +81,28 @@ async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecyc
             Err(AppError::Invalid(_))
         ));
     }
+    assert!(matches!(
+        a_client
+            .call(
+                Method::POST,
+                keys,
+                Some(&json!({"workspace_id":a_id, "role":"reviewer"})),
+                None
+            )
+            .await,
+        Err(AppError::Conflict(message)) if message == "invalid role"
+    ));
+    assert!(matches!(
+        b_client
+            .call(
+                Method::PUT,
+                &format!("{grants}/{logical}"),
+                Some(&json!({"role":"reviewer"})),
+                None
+            )
+            .await,
+        Err(AppError::Invalid(_))
+    ));
     let first = a_client
         .call(Method::GET, "/admin/keys?limit=1", None, None)
         .await

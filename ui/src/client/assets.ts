@@ -27,7 +27,7 @@ import { editor, capture } from "./asset-editor.js";
 import { trackJob } from "./jobs.js";
 
 const canWrite = (role: string) =>
-  ["writer", "reviewer", "admin"].includes(role);
+  ["writer", "admin"].includes(role);
 
 export async function assetsPage(
   root: HTMLElement,
@@ -572,7 +572,7 @@ export async function assetDetail(
       el(
         "div",
         "actions",
-        !evidence && ["reviewer", "admin"].includes(ctx.role) && !asset.semantic_status
+        !evidence && canWrite(ctx.role) && !asset.semantic_status
           ? button("恢复此版本", restore)
           : null,
         ctx.role === "admin"

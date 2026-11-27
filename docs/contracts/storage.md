@@ -95,7 +95,7 @@ GET、Search、Context 在远端 IO 后使用新事务复核权限及来源/发�
 | artifact owner | 精确来源/版本对产物的归属；共享对象可有多个 owner |
 | index entry | 产物、field、profile、generation 的索引就绪及维度信息 |
 | publication ledger | 来源、版本、surface、generation 的外部发布状态与恢复身份 |
-| 私有会话 / Run / Skill | 逻辑 key 归属、不可变事件/修订、审阅授权与发布版本 |
+| 私有会话 / Run / Skill | 逻辑 key 归属、不可变事件与修订、指定审阅凭据及发布版本 |
 
 `index entry` 和 `publication ledger` 的键、状态与生命周期不同，不能互相替代。
 ready + committed 仍不足以证明可见：读取还要检查权限、当前内容条目版本、来源、owner

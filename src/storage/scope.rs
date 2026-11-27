@@ -46,14 +46,12 @@ pub struct KeyCapabilities {
 
 /// A permission a domain operation can require (A2.2 `check_current_permission`).
 ///
-/// Roles are `reader | writer | reviewer | admin`; the mapping is fixed here so
+/// Roles are `reader | writer | admin`; the mapping is fixed here so
 /// the storage layer stays independent of the HTTP role matrix.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Permission {
     Read,
     Write,
-    Review,
-    Publish,
     Delete,
 }
 
@@ -63,8 +61,6 @@ impl Permission {
         match self {
             Self::Read => "read",
             Self::Write => "write",
-            Self::Review => "review",
-            Self::Publish => "publish",
             Self::Delete => "delete",
         }
     }
@@ -73,9 +69,8 @@ impl Permission {
     /// shared by the in-memory contract double and future adapters.
     pub fn granted_by(self, role: &str) -> bool {
         match self {
-            Self::Read => true,
-            Self::Write => matches!(role, "writer" | "reviewer" | "admin"),
-            Self::Review | Self::Publish => matches!(role, "reviewer" | "admin"),
+            Self::Read => matches!(role, "reader" | "writer" | "admin"),
+            Self::Write => matches!(role, "writer" | "admin"),
             Self::Delete => role == "admin",
         }
     }

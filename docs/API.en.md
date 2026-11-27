@@ -33,9 +33,9 @@ The server receipt proves preparation of the exact context, without proving clie
 | `POST /v1/skill-candidates/{id}/reviews/{review}` | Select reviewer, revision, publishing target, and redacted basis. |
 | `GET /v1/skill-reviews/{review}` | Selected review package and decision, without access to original sessions or Runs. |
 | `POST /v1/skill-reviews/{review}/decision` | The designated reviewer uses `{digest,approve}` to approve or reject the exact contents. |
-| `POST /v1/skill-reviews/{review}/publish` | A principal with publishing permission publishes the approved immutable version using `{digest}`. |
+| `POST /v1/skill-reviews/{review}/publish` | A writer or admin publishes the approved immutable version using `{digest}`. |
 | `GET /v1/skills/{id}/versions/{version}/package` | Verifies scope, version, and source and returns a package containing only approved artifacts. |
-| `DELETE /v1/skills/{id}/versions/{version}` | A role with publishing permission withdraws the version and blocks later online export. |
+| `DELETE /v1/skills/{id}/versions/{version}` | A writer or admin withdraws the published Skill version and blocks later online export. |
 
 Changing the candidate revision, the review package contents, or the destination requires a new approval. Original sessions and review evidence are not distributed with packages. The caller submits a candidate, or binds a manually drafted method to an exact source using the selected-experience CLI. See the [Skill contract](contracts/skills.md) and [selected-experience CLI](SKILL-CANDIDATE-CLI.md) for package format and boundaries.
 
@@ -82,9 +82,8 @@ The old standalone graph storage API and graph traversal were removed. `StorageE
 | Role | Permissions |
 | --- | --- |
 | reader | get/search/resolve on published content |
-| writer | reader plus upload, original download, knowledge ingestion, structured memory publication, capture, archive and feedback, job read, and cancellation or retry of own jobs |
-| reviewer | writer plus version restore and operations on other principals' jobs |
-| admin | reviewer plus content item deletion, source withdrawal, file deletion, and retries of failed cleanup |
+| writer | reader plus uploads, original downloads, knowledge ingestion, structured memory publication, capture, archiving and feedback, reads and controls for accessible jobs, version restore, and Skill review and publication |
+| admin | writer plus content item deletion, source withdrawal, file deletion, retries of failed cleanup, and workspace administration |
 
 Original files and jobs can expose unpublished data, so reader cannot access them. Writer authorizes direct memory and capture publication. Publication rechecks permissions and sources before commit.
 
