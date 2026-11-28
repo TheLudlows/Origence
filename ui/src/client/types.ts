@@ -10,7 +10,6 @@ export interface User {
 }
 export interface ConsoleWorkspace extends User {
   name: string;
-  can_create_owned_workspaces?: boolean;
 }
 export interface ConsoleSession {
   account: string;

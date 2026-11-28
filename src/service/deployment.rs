@@ -1,20 +1,39 @@
-//! Read-only deployment inspection. Workspace credentials never enter this path.
+//! Deployment administration. Workspace credentials never enter this path.
 use super::*;
 
-pub(super) fn unauthorized_admin(error: StorageError) -> AppError {
-    match error {
-        StorageError::Forbidden => AppError::Unauthorized,
-        error => error.into(),
-    }
-}
-
 impl Service {
+    pub async fn provision_deployment_workspace(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        name: &str,
+    ) -> Result<Value> {
+        self.engine
+            .relational()
+            .provision_deployment_workspace(token, workspace, name)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn administer_deployment_keys(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        operation: crate::storage::sqlite::DeploymentKeyOperation,
+    ) -> Result<Value> {
+        self.engine
+            .relational()
+            .administer_deployment_keys(token, workspace, operation)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn authenticate_deployment_admin(&self, token: &str) -> Result<()> {
         self.engine
             .relational()
             .authenticate_deployment_admin(token)
             .await
-            .map_err(unauthorized_admin)
+            .map_err(Into::into)
     }
 
     pub async fn inspect_workspaces(
@@ -27,7 +46,7 @@ impl Service {
             .relational()
             .deployment_workspaces(token, after, limit)
             .await
-            .map_err(unauthorized_admin)
+            .map_err(Into::into)
     }
 
     pub(super) async fn inspect_workspace(&self, token: &str, workspace: Uuid) -> Result<SqliteTx> {
@@ -35,7 +54,7 @@ impl Service {
             .relational()
             .begin_deployment_inspection(token, workspace)
             .await
-            .map_err(unauthorized_admin)
+            .map_err(Into::into)
     }
 
     pub async fn inspect_sessions(

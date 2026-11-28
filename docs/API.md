@@ -141,9 +141,9 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 本节的「内容条目」指可单独读取和版本化的记忆或知识，通过 `asset_id` 标识。已发布 Skill 使用独立接口。
 
-### 部署管理员查看
+### 部署管理员
 
-`origence --offline deployment-admin-rotate` 签发或轮换独立凭据。部署管理接口接受该 Bearer Key。工作空间查看接口均为只读。
+`origence --offline deployment-admin-rotate` 签发或轮换独立凭据。部署管理接口接受该 Bearer Key。控制台初始化的管理员账号在服务端使用部署凭据。
 
 | GET 路径 | 数据 |
 | --- | --- |
@@ -153,6 +153,11 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | 原始问答及引用，按会话序号分页 |
 | `/admin/deployment/workspaces/{id}/runs` 和 `/admin/deployment/workspaces/{id}/runs/{run}` | Run 列表与事件 |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
+| `/admin/deployment/workspaces/{id}/keys` | 当前空间签发的 Key 元数据，包含 `single_key` |
+
+部署管理员用 `PUT /admin/deployment/workspaces/{id}` 提交 `{name}` 创建平级单 Key 工作空间，同一事务签发首把 Key。回执只在首次成功时返回 `key:{key_id,token}`，同 ID 同名重试返回 `created:false`。响应禁止缓存，未收到首次 Key 时可用 `POST /admin/deployment/workspaces/{id}/keys/rotate` 补发并撤销旧 Key，保留逻辑身份与会话。
+
+成员授权工作空间在 `/admin/deployment/workspaces/{id}` 下提供 `/keys` 和 `/workspace-key-grants`，方法与下面的工作区 Key 接口相同。部署管理员可以签发、轮换、撤销和调整授权。会话、Run 和内容查看仍为只读。
 
 分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员读取原始问答无需持有工作空间 Key，普通工作空间 API 的写入授权继续独立执行。
 
@@ -383,12 +388,9 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
 
-## 控制台子工作区
+## 既有所属工作区查询
 
-- 两个接口均要求调用方在当前根工作区拥有 `admin` 角色，包括通过显式工作区授权获得该角色的 Key。子工作区层级为一层。
-- `GET /v1/workspaces/owned?limit=50&after=<UUID>` 以 `items` 和 `next_after` 列出当前根工作区下该 Key 可访问的直接子工作区。每项包含 `workspace_id`、`name` 和有效 `role`。`limit` 范围 1–100。
-- `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。普通管理员创建时，同一事务为其逻辑 Key 添加新子工作区的 `writer` 授权。重复使用同一 UUID 时，有权访问该子工作区的调用方可读回回执，已有名称和授权保持原值。UUID 已关联不同父工作区时返回冲突。
-- `allow_owned_workspaces` 继续控制受信根凭据对子工作区的派生访问。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。具有派生能力的受信根凭据也可选择已存在的直接子工作区，以派生的 reader 或 writer 身份访问。目标不在该派生范围时返回 404。子工作区的记录按作用域和逻辑 key 隔离。
+`GET /v1/workspaces/owned?limit=50&after=<UUID>` 为成员授权账号列出已存在且可访问的所属工作区，返回 `items` 和 `next_after`。每项包含 `workspace_id`、`name` 和有效 `role`。创建工作区由[部署管理员](#部署管理员)通过平级入口完成。
 
 ## 通用所属 workspace 与消息批次库接口
 

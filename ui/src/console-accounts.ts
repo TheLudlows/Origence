@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 export const workspaceIdPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+export const deploymentKeyPattern = /^oc_admin_[a-f0-9]{64}$/;
 const accountPattern = /^[a-zA-Z0-9_.@-]{1,64}$/;
 const keyPattern = /^[\x21-\x7e]{1,512}$/;
 const hashPattern = /^scrypt-v1\$([a-f0-9]{32})\$([a-f0-9]{64})$/;
@@ -19,6 +20,7 @@ export interface ConsoleAccount {
   username: string;
   passwordHash: string;
   grants: readonly ConsoleGrant[];
+  deploymentAuthorization?: string;
 }
 
 function derive(password: string, salt: Buffer): Promise<Buffer> {
@@ -66,7 +68,13 @@ function hasErrorCode(error: unknown, code: string) {
 export function loadConfiguredConsoleAccounts(env: NodeJS.ProcessEnv): readonly ConsoleAccount[] {
   const override = env.ORIGENCE_UI_ACCOUNTS_DB;
   try {
-    return loadConsoleAccounts(consoleAccountsPath(override), env);
+    const accounts = loadConsoleAccounts(consoleAccountsPath(override), env);
+    const key = env.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
+    if (!key) return accounts;
+    if (!deploymentKeyPattern.test(key) || !accounts.some(({ username }) => username === "admin"))
+      throw new Error("Deployment administrator login requires a configured admin account and deployment key");
+    return accounts.map((account) => account.username === "admin"
+      ? { ...account, deploymentAuthorization: `Bearer ${key}` } : account);
   } catch (error) {
     if (!override && hasErrorCode(error, "ENOENT")) return [];
     throw error;

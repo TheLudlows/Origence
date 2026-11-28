@@ -15,6 +15,8 @@ pub enum StorageError {
     NotFound,
     #[error("{0}")]
     Conflict(String),
+    #[error("authentication required")]
+    Unauthorized,
     #[error("permission denied")]
     Forbidden,
     #[error("{0}")]

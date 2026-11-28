@@ -12,7 +12,8 @@ import { HttpError } from "./http-error.js";
 
 const MAX_BODY = 10 * 1024 * 1024;
 const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
-const createWorkspacePath = new RegExp(`^/v1/workspaces/owned/${uuid}$`);
+const deploymentWorkspacePath = new RegExp(`^/admin/deployment/workspaces/${uuid}$`);
+const deploymentWorkspaceKeyPath = new RegExp(`^/admin/deployment/workspaces/${uuid}(/(?:keys|workspace-key-grants)(?:/.*)?)$`);
 const managedKeyPath = new RegExp(`^/admin/keys/(${uuid})(?:/rotate)?$`);
 const agentPath = "/admin/agents";
 const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets(?:/${uuid})?))?$`);
@@ -49,7 +50,6 @@ const rules: [string, RegExp][] = [
   ["POST", new RegExp(`^/v1/skill-candidates/${uuid}/reviews/${uuid}$`)],
   ["GET", new RegExp(`^/v1/assets/${uuid}/runs$`)],
   ["GET", /^\/v1\/memory-properties\/[a-z0-9_.-]+$/],
-  ["PUT", createWorkspacePath],
 ];
 const security = {
   "Cache-Control": "no-store",
@@ -183,8 +183,12 @@ export function createUiServer(options: ServerOptions) {
           return;
         }
         const path = target.pathname.slice(4);
+        const deploymentKeyPath = deploymentWorkspaceKeyPath.exec(path)?.[1];
         const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || globalReviewRead.test(path))
-          || req.method === "POST" && globalReviewWrite.test(path);
+          || req.method === "PUT" && deploymentWorkspacePath.test(path)
+          || req.method === "POST" && (globalReviewWrite.test(path) || deploymentKeyPath === "/keys/rotate")
+          || !!deploymentKeyPath && keyRules.some(([method, pattern]) =>
+            method === req.method && pattern.test("/admin" + deploymentKeyPath));
         const managingKeys = keyRules.some(([method, pattern]) => method === req.method && pattern.test(path));
         const viewingAgents = req.method === "GET" && path === agentPath;
         if (
@@ -198,12 +202,10 @@ export function createUiServer(options: ServerOptions) {
           throw new HttpError(404, "接口不被允许");
         const headers = new Headers();
         const authorization = req.headers.authorization;
-        const creatingWorkspace = req.method === "PUT" && createWorkspacePath.test(path);
         if (deploymentOperation) headers.set("authorization", sessions.deploymentAuthorization(req, new URL(origin)));
-        else if (!managingKeys && !viewingAgents && !creatingWorkspace && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
+        else if (!managingKeys && !viewingAgents && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
         else if (!path.startsWith("/health/")) {
           const workspace = sessions.authorization(req, new URL(origin));
-          if (creatingWorkspace && !workspace.canCreateOwned) throw new HttpError(403, "当前工作区未授权创建子工作区");
           headers.set("authorization", workspace.authorization);
           if (managingKeys) {
             if (workspace.role !== "admin")

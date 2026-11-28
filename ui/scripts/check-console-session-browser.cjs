@@ -29,7 +29,6 @@ async function run() {
   const { createUiServer } = await import("../dist/server.js");
   const { hashConsolePassword } = await import("../dist/console-accounts.js");
   const children = new Map([[existingChild, { workspace_id: existingChild, name: "已有子工作区" }]]);
-  const creationAttempts = [];
   const knowledge = { asset_id: alpha, title: "共享运维手册", version: 1, kind: "knowledge",
     content: "发布版运维知识正文", source_event_id: excluded, content_hash: "a".repeat(64),
     identity: null, normalization_status: "not_applicable", restored_from: null };
@@ -113,17 +112,6 @@ async function run() {
       return send({ id: grant.workspaceId, workspace_id: grant.workspaceId, role: grant.workspaceId === alpha ? "admin" : "reader" });
     if (path === "/v1/workspaces/owned")
       return grant.workspaceId === alpha ? send({ items: [...children.values()].map((child) => ({ ...child, role: "writer" })), next_after: null }) : send({}, 403);
-    if (req.method === "PUT" && path.startsWith("/v1/workspaces/owned/")) {
-      if (grant.workspaceId !== alpha || req.headers["x-origence-workspace"]) return send({}, 403);
-      const id = path.split("/").at(-1);
-      const parts = [];
-      for await (const part of req) parts.push(part);
-      const { name } = JSON.parse(Buffer.concat(parts).toString());
-      creationAttempts.push(id);
-      children.set(id, { workspace_id: id, name });
-      if (creationAttempts.length === 1) return send({ error: { message: "模拟提交回执丢失" } }, 502);
-      return send({ workspace_id: id });
-    }
     if (path === "/v1/assets") {
       const scoped = req.headers["x-origence-workspace"];
       const child = scoped ? children.get(scoped) : undefined;
@@ -209,26 +197,13 @@ async function run() {
       readableCookies: "",
     });
     assert.equal((await context.cookies()).find((cookie) => cookie.name.startsWith("origence-console-")).httpOnly, true);
-    const newWorkspace = page.getByRole("button", { name: "新建工作区", exact: true });
-    assert.equal(await newWorkspace.count(), 0);
-    await workspace("研发").tap();
-    await newWorkspace.click();
-    const createDialog = page.getByRole("dialog", { name: "新建工作区", exact: true });
-    await createDialog.getByLabel("工作区名称", { exact: true }).fill("试点");
-    const create = createDialog.getByRole("button", { name: "创建工作区", exact: true });
-    await create.click();
-    await createDialog.getByText("模拟提交回执丢失", { exact: true }).waitFor();
-    await create.click();
-    await createDialog.waitFor({ state: "hidden" });
+    assert.equal(await page.getByRole("button", { name: "新建工作区", exact: true }).count(), 0);
+    await workspace("已有子工作区").tap();
     await page.getByRole("button", { name: /知识管理/ }).click();
-    await page.getByText("试点知识夹具", { exact: true }).waitFor();
-    assert.deepEqual(creationAttempts, [creationAttempts[0], creationAttempts[0]]);
-    assert.equal(children.size, 2);
-    assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["研发", "已有子工作区", "试点", "运营"]);
-    assert.equal(await newWorkspace.count(), 0);
+    await page.getByText("已有子工作区知识夹具", { exact: true }).waitFor();
     await page.reload();
-    await page.getByText("试点知识夹具", { exact: true }).waitFor();
-    assert.equal(await workspace("试点").getAttribute("aria-current"), "true");
+    await page.getByText("已有子工作区知识夹具", { exact: true }).waitFor();
+    assert.equal(await workspace("已有子工作区").getAttribute("aria-current"), "true");
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await page.getByLabel("账号", { exact: true }).waitFor();
     await page.reload();
@@ -285,7 +260,7 @@ async function run() {
     await keyPage.getByRole("heading", { name: "会话", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: /^会话 55555555/ }).click();
     await keyPage.getByText("管理员查看原始会话", { exact: true }).waitFor();
-    assert.equal(await keyPage.getByRole("button", { name: /删除|清空|新建/ }).count(), 0);
+    assert.equal(await keyPage.getByRole("button", { name: /删除|清空/ }).count(), 0);
     await keyPage.getByRole("button", { name: "运行", exact: true }).click();
     await keyPage.getByRole("button", { name: /11111111.*unknown/ }).click();
     await keyPage.getByText("Trace sample", { exact: true }).waitFor();
@@ -323,7 +298,7 @@ async function run() {
     await keyPage.getByText(/v1 · 已下架/).waitFor();
     console.log("PASS global knowledge submission, deployment review, browsing, and withdrawal (synthetic HTTP, Chromium)");
     console.log("PASS deployment administrator sign-in, workspace browsing, and read-only session, Run and memory views (synthetic HTTP, Chromium)");
-    console.log("PASS console login, visible workspace lists with account isolation, scoped creation and retry, keyboard and mobile switching, reload, and sign-out (synthetic HTTP, Chromium)");
+    console.log("PASS console login, visible workspace lists with account isolation, scoped viewing, keyboard and mobile switching, reload, and sign-out (synthetic HTTP, Chromium)");
   } finally {
     await browser?.close();
     for (const server of [ui, keyUi, upstream]) {

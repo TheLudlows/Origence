@@ -49,7 +49,7 @@ Windows 的 Agent 接入仅在用户环境变量 `OC_API_KEY` 中持久化工作
 ./bin/origence-deploy install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
-新部署会签发工作空间 Key 和独立部署管理员 Key，并验证两种控制台登录。工作空间 Key 同时用于 Agent 和控制台。管理员 Key 可查看整个部署并审核全局知识。首次初始化通过交互输出、`--credentials-file <Git 目录之外的新文件>` 或显式加 `--show-secrets` 获取新发凭据。已部署的管理员 Key 可由操作员离线轮换。连接现有角色凭据时继续支持控制台账号登录。加 `--verify-write` 可创建并从控制台读回一条标记明确的测试 Run，重复执行会复用同一条。
+新部署会签发工作空间 Key，并初始化部署管理员账号 `admin` 和随机密码。用管理员账号登录控制台后，可以创建平级工作区、管理各工作区的 Key 并审核全局知识。工作空间 Key 可用于 Agent 或单工作区登录。通过交互输出、`--credentials-file <Git 目录之外的新文件>` 或显式加 `--show-secrets` 获取凭据。已有部署可在运行接入命令时，通过服务端环境变量 `ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY` 提供有效的部署管理员 Key，绑定账号，无需重新初始化。加 `--verify-write` 可创建并从控制台读回一条标记明确的测试 Run，重复执行会复用同一条。
 
 重复执行会复用部署。只有显式执行 `--force --init <名称>` 才会重建工作区，现有数据目录先改名备份。重建前应停止使用该目录的外部服务。
 

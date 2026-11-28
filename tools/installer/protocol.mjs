@@ -104,7 +104,8 @@ export async function connectMcp(endpoint, token, workspace) {
 }
 
 const sessionPath = "/api/console/session";
-export async function consoleLogin(base, credentials, workspace, key) {
+export async function consoleLogin(base, credentials, workspace, key, mode =
+  credentials.deployment_key ? "deployment" : credentials.workspace_key ? "workspace" : "account") {
   await (await expect(await responseAt(base, "/"), 200, "UI root")).body?.cancel();
   const response = await expect(await responseAt(base, sessionPath, {
     method: "POST", headers: { "Content-Type": "application/json", Origin: base },
@@ -112,8 +113,9 @@ export async function consoleLogin(base, credentials, workspace, key) {
   }), 200, "UI login");
   const cookie = response.headers.getSetCookie()[0]?.split(";")[0];
   const profile = await json(response, "UI login");
-  const mode = credentials.deployment_key ? "deployment" : credentials.workspace_key ? "workspace" : "account";
   check(cookie && profile.mode === mode && profile.session?.binding, "The UI did not establish the requested credential session.");
+  check(!credentials.username || profile.session.account === credentials.username,
+    "The UI did not sign in as the supplied account.");
   const headers = { Cookie: cookie, "X-Origence-Session": profile.session.binding };
   async function read(path) {
     const response = await responseAt(base, "/api" + path, { headers });
@@ -124,7 +126,7 @@ export async function consoleLogin(base, credentials, workspace, key) {
     check(Array.isArray(catalog.items), "The UI did not verify the deployment administrator roster.");
   } else {
     const grant = profile.session.workspaces.find(item => item.workspace_id === workspace);
-    check(grant?.id === key && (mode !== "account" || profile.session.account === credentials.username),
+    check(grant?.id === key,
       "The UI session is not bound to the same workspace and key as MCP.");
     headers["X-Origence-Workspace"] = workspace;
     const who = await read("/v1/whoami");

@@ -138,53 +138,6 @@ async function restoreSession() {
   }
 }
 
-function createWorkspace(parent: ConsoleWorkspace, binding: string, parentSignal: AbortSignal) {
-  const dialog = el("dialog");
-  const lifetime = new AbortController();
-  const signal = AbortSignal.any([parentSignal, lifetime.signal]);
-  const name = input("输入工作区名称");
-  name.required = true;
-  name.maxLength = 256;
-  const create = submit("创建工作区");
-  const detail = el("div");
-  let attempt: { name: string; id: string } | undefined;
-  const title = el("h2", "", "新建工作区");
-  title.id = "create-workspace-title";
-  dialog.setAttribute("aria-labelledby", title.id);
-  dialog.append(
-    el("div", "dialog-head", title, button("关闭", () => dialog.close())),
-    el("p", "muted", `将在「${parent.name}」下创建子工作区。`),
-    form(async () => {
-      create.disabled = true;
-      detail.replaceChildren();
-      try {
-        const value = name.value.trim();
-        if (!value || new TextEncoder().encode(value).length > 256)
-          throw new Error("请输入工作区名称，最多 256 字节");
-        if (!attempt || attempt.name !== value) attempt = { name: value, id: crypto.randomUUID() };
-        const id = attempt.id;
-        await api.request(`/v1/workspaces/owned/${id}`, { method: "PUT", data: { name: value }, signal });
-        const refreshed = await api.get<ConsoleSessionResponse>(sessionPath, signal);
-        if (!refreshed.session || refreshed.session.binding !== binding)
-          throw new Error("登录会话已变更，请刷新页面");
-        const workspace = refreshed.session.workspaces.find((item) => item.workspace_id === id);
-        if (!workspace) throw new Error("工作区已创建，列表暂未更新，请重试");
-        session = refreshed.session;
-        dialog.close();
-        chooseWorkspace(workspace, true);
-      } catch (error) {
-        message(detail, error);
-      } finally {
-        create.disabled = false;
-      }
-    }, field("工作区名称", name), create),
-    detail,
-  );
-  dialog.addEventListener("close", () => { lifetime.abort(); dialog.remove(); }, { once: true });
-  document.body.append(dialog);
-  dialog.showModal();
-}
-
 function login(setupRequired?: true) {
   const username = input("");
   username.required = true;
@@ -305,7 +258,6 @@ async function render() {
   const content = el("main", "content");
   const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
   const activeWorkspace = user;
-  const binding = session.binding;
   mount.replaceChildren(
     el(
       "div",
@@ -319,9 +271,6 @@ async function render() {
           "workspace",
           workspaceHeading,
           workspaceList,
-          activeWorkspace.can_create_owned_workspaces
-            ? button("新建工作区", () => createWorkspace(activeWorkspace, binding, ctx.signal), "workspace-create")
-            : null,
         ),
         nav,
         el(

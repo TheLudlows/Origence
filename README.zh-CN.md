@@ -32,7 +32,7 @@ export OC_DATA_DIR="$(mktemp -d)"
 ./target/debug/origence serve --local
 ```
 
-使用 `workspace-create` 返回的 Key 登录工作空间或接入 Agent。部署管理员用独立 Key 查看所有工作空间及审核全局知识。Origence 在 `$OC_DATA_DIR/anyseek` 下打开嵌入式 AnySeek Catalog，并在首次访问时初始化工作空间对应的集合。
+使用 `workspace-create` 返回的 Key 登录工作空间或接入 Agent。部署管理员可以创建平级工作空间、管理各空间的 Key 和审核全局知识。Origence 在 `$OC_DATA_DIR/anyseek` 下打开嵌入式 AnySeek Catalog，并在首次访问时初始化工作空间对应的集合。
 
 ## 云上部署
 

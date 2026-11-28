@@ -97,9 +97,9 @@ Original files and jobs can expose unpublished data, so reader cannot access the
 
 A content item here is a versioned memory or knowledge entry identified by `asset_id`. Published Skills use separate endpoints.
 
-### Deployment administrator inspection
+### Deployment administrator
 
-`origence --offline deployment-admin-rotate` issues or rotates the separate administrator credential. The deployment management endpoints accept this bearer key. Workspace inspection endpoints are read-only.
+`origence --offline deployment-admin-rotate` issues or rotates the separate administrator credential. The deployment management endpoints accept this bearer key. The initialized console administrator uses the deployment credential on the server side.
 
 | GET path | Data |
 | --- | --- |
@@ -109,6 +109,11 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | Original Q&A and references, paginated by session sequence |
 | `/admin/deployment/workspaces/{id}/runs` and `/admin/deployment/workspaces/{id}/runs/{run}` | Run directory and recorded events |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` and `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | Published content directory and versioned body |
+| `/admin/deployment/workspaces/{id}/keys` | Active key metadata for the selected workspace, including `single_key` |
+
+Use `PUT /admin/deployment/workspaces/{id}` with `{name}` to create a peer single-key workspace and issue its key in the same transaction. Only initial creation returns `key:{key_id,token}`. A retry with the same ID and name returns `created:false`. If the first credential is lost, `POST /admin/deployment/workspaces/{id}/keys/rotate` issues a replacement, revokes the previous key, and preserves logical identity and sessions.
+
+Membership-based workspaces expose `/keys` and `/workspace-key-grants` within `/admin/deployment/workspaces/{id}` using the methods of the workspace key endpoints below. Deployment administrators can issue, rotate, revoke, and update grants. Session, Run, and asset inspection is read-only.
 
 Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns without the workspace key. Workspace write authorization is checked separately.
 
@@ -315,12 +320,9 @@ memories/identified and captures/identified accept optional nonnegative expected
 
 Pass lookup's version to the write endpoint to cover the concurrency window between read and admission. After acceptance, the Worker still checks the admitted version. A change fails the job, and admission does not promise synchronous publication. A successful replay of the same idempotency key and request returns the original admission before checking later changes. A different expected_version changes the request and conflicts. Omitted and null are excluded from the canonical payload to preserve replay of existing keys.
 
-## Console child workspaces
+## Existing owned workspace listing
 
-- `GET /v1/workspaces/owned?limit=50&after=<UUID>` lists the root's immediate children as `items` and `next_after`. Each item includes `workspace_id` and `name`. The limit ranges from 1 to 100.
-- `PUT /v1/workspaces/owned/{id}` accepts `{name}` and returns `{workspace_id}`. Reusing the UUID reads back the existing child. A UUID already owned by a different workspace returns a conflict.
-- Both endpoints require a live `admin` role in the selected root, including an explicit workspace grant. The list returns only accessible direct children and includes each child's effective `role`. Creation grants the creator's logical key explicit `writer` access in the same transaction if the key has no derived access. A caller can replay the receipt for an accessible child without changing its name or grants.
-- `allow_owned_workspaces` controls derived access for trusted root credentials. Business requests using `X-Origence-Workspace` check explicit grants first. A trusted root credential with that capability can select an existing direct child with its derived reader or writer role. Targets outside that derived scope return 404. Records remain isolated by scope and logical key.
+`GET /v1/workspaces/owned?limit=50&after=<UUID>` returns the existing owned workspaces a membership-based account can access, as `items` and `next_after`. Each item includes `workspace_id`, `name`, and the effective `role`. The [deployment administrator](#deployment-administrator) creates peer workspaces through the deployment management endpoints.
 
 ## Common owning workspace and message batch library APIs
 

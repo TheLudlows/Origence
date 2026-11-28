@@ -7,6 +7,20 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 部署管理员与平级工作区
+
+基于 main `dc1f040`，在 Linux 上使用 Rust 1.98.0、Node 24.22.1 和隔离 SQLite 数据库。
+`cargo test --locked --offline --lib --test local` 通过 234 项库测试和 224 项本地集成测试。测试覆盖工作区 Key
+不能创建平级空间、创建重试不再返回明文 Key、轮换保留逻辑身份、成员授权和跨工作区隔离。
+Rust 格式检查、全功能与仅 `sqlite` 的全目标严格 Clippy、Node 与 Python 语法检查、
+`npm --prefix ui run check`、34 项 UI 测试和 `git diff --check` 均通过。
+
+Chromium 156.0.8078.79 的 `check-key-management-browser.cjs` 对真实回环服务验证了部署管理员账号登录、
+创建平级工作区、轮换后旧 Key 返回 401 及全局知识审核。`check-console-session-browser.cjs` 对合成回环服务
+复核了普通账号的工作区列表隔离、Key 登录和部署管理员的查看入口。隔离本地安装验证了 `origence-deploy install --init`
+创建管理员及密码登录、`--verify-write` 写入并读取合成 Run、重装复用及卸载保留数据库。使用已有工作区 Key 的安装在显式提供
+部署管理员 Key 后可启用部署管理员账号登录，保留原工作区，后续运行复用该配置。未运行原生 Windows 或远端 CI。
+
 ## 2026-11-28 · 控制台会话命名
 
 基于 main `41a0ae2`，Linux 上的 Node 24.22.1 通过类型检查和 34 项 UI 测试，包括按原范围重试清空会话记录。

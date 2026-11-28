@@ -17,19 +17,19 @@ interface IncomingGrant extends KeyGrant { active: boolean }
 interface NewKey { key_id: string; token: string }
 interface KeyPage<T> { items: T[]; next_after: string | null }
 
-const keysPath = "/admin/keys";
-const grantsPath = "/admin/workspace-key-grants";
 const uuid = "[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const roles: [string, string][] = [
   ["reader", "reader · 检索"], ["writer", "writer · 写入、审阅、发布及 Run 上报"],
   ["admin", "admin · 工作区管理"],
 ];
 
-export function keysPage(mount: HTMLElement, ctx: ViewContext, workspace: { workspace_id: string; id: string; name: string }) {
+export function keysPage(mount: HTMLElement, ctx: ViewContext, workspace: { workspace_id: string; id?: string; name: string }, adminPath = "/admin") {
   if (ctx.role !== "admin") {
     mount.append(heading("API Key", "只有工作区管理员可以管理 API Key。"));
     return;
   }
+  const keysPath = `${adminPath}/keys`;
+  const grantsPath = `${adminPath}/workspace-key-grants`;
 
   const notice = el("p", "muted");
   notice.setAttribute("role", "status");
