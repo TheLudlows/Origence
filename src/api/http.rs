@@ -120,7 +120,7 @@ pub(super) fn token(h: &HeaderMap) -> Result<&str> {
         .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or(AppError::Unauthorized)
 }
-fn key(h: &HeaderMap) -> Result<&str> {
+pub(super) fn key(h: &HeaderMap) -> Result<&str> {
     h.get("Idempotency-Key")
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| AppError::Invalid("Idempotency-Key is required for mutations".into()))
@@ -451,9 +451,9 @@ async fn job_action(
     ))
 }
 #[derive(Deserialize)]
-struct Upload {
-    name: String,
-    format: String,
+pub(super) struct Upload {
+    pub(super) name: String,
+    pub(super) format: String,
 }
 async fn upload(
     State(s): State<Service>,

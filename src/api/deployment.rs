@@ -1,12 +1,15 @@
 //! HTTP endpoints for deployment administrators.
-use super::http::{CursorPage, token, uncached_json};
+use super::http::{CursorPage, Upload, key, token, uncached_json};
 use crate::{
     error::{AppError, Result},
+    memory_semantics::SemanticMemoryInput,
     service::Service,
     storage::sqlite::DeploymentKeyOperation,
+    types::{IdentifiedMemoryInput, KnowledgeInput},
 };
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{Path, Query, State},
     http::HeaderMap,
     response::IntoResponse,
@@ -64,7 +67,31 @@ pub(super) fn routes() -> Router<Service> {
         )
         .route(
             "/admin/deployment/workspaces/{workspace}/assets/{asset}",
-            get(asset),
+            get(asset).delete(delete_asset),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/memories/identified",
+            post(identified_memory),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/memories/semantic",
+            post(semantic_memory),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/knowledge",
+            post(knowledge),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/files",
+            post(upload),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/jobs/{job}",
+            get(job),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/jobs/{job}/{action}",
+            post(job_action),
         )
 }
 
@@ -396,6 +423,110 @@ async fn asset(
     Ok(uncached_json(
         service
             .inspect_asset(token(&headers)?, workspace, asset, query.version)
+            .await?,
+    ))
+}
+
+async fn identified_memory(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(workspace): Path<Uuid>,
+    Json(input): Json<IdentifiedMemoryInput>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .identified_memory(&auth, key(&headers)?, input)
+            .await?,
+    ))
+}
+
+async fn semantic_memory(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(workspace): Path<Uuid>,
+    Json(input): Json<SemanticMemoryInput>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .semantic_memory(&auth, key(&headers)?, input)
+            .await?,
+    ))
+}
+
+async fn knowledge(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(workspace): Path<Uuid>,
+    Json(input): Json<KnowledgeInput>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service.knowledge(&auth, key(&headers)?, input).await?,
+    ))
+}
+
+async fn delete_asset(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, asset)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .delete(&auth, key(&headers)?, asset, "asset")
+            .await?,
+    ))
+}
+
+async fn upload(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(workspace): Path<Uuid>,
+    Query(query): Query<Upload>,
+    body: Bytes,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .upload(&auth, key(&headers)?, &query.name, &query.format, &body)
+            .await?,
+    ))
+}
+
+async fn job(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, job)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(service.job(&auth, job).await?))
+}
+
+async fn job_action(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, job, action)): Path<(Uuid, Uuid, String)>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .job_action(&auth, key(&headers)?, job, &action)
             .await?,
     ))
 }

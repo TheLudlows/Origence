@@ -2,6 +2,26 @@
 use super::*;
 
 impl Service {
+    /// Resolve an administrator and the explicitly selected workspace for the
+    /// usual business transactions. Each transaction checks the live identity.
+    pub async fn authorize_deployment_workspace(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> Result<AuthContext> {
+        let auth = self
+            .engine
+            .relational()
+            .authorize_deployment_workspace(token, workspace)
+            .await?;
+        Ok(AuthContext {
+            id: auth.principal_id,
+            tenant_id: auth.scope.tenant_id,
+            workspace_id: auth.scope.workspace_id,
+            role: auth.role,
+        })
+    }
+
     pub async fn provision_deployment_workspace(
         &self,
         token: &str,

@@ -15,6 +15,7 @@ export async function trackJob(
   receipt: Receipt,
   target: HTMLElement,
   ctx: ViewContext,
+  base = "/v1",
 ) {
   if (!receipt.job_id) {
     target.replaceChildren(status(receipt.state ?? "已记录"), code(receipt));
@@ -35,7 +36,7 @@ export async function trackJob(
   const observe = async (read: AbortController): Promise<Job | undefined> => {
     try {
       const job = await api.get<Job>(
-        `/v1/jobs/${id}`,
+        `${base}/jobs/${id}`,
         AbortSignal.any([ctx.signal, read.signal]),
       );
       if (ctx.signal.aborted) return;
@@ -65,7 +66,7 @@ export async function trackJob(
           ),
           button("读取当前版本", async () => {
             try {
-              const latest = await api.get<Asset>(`/v1/assets/${asset}`, ctx.signal);
+              const latest = await api.get<Asset>(`${base}/assets/${asset}`, ctx.signal);
               current.replaceChildren(
                 el("p", "", `当前已发布 v${latest.version} · ${latest.title}`),
                 button(
@@ -118,7 +119,7 @@ export async function trackJob(
     if (changing || ctx.signal.aborted) return;
     changing = true;
     try {
-      await api.post(`/v1/jobs/${id}/${name}`, {}, ctx.signal, crypto.randomUUID());
+      await api.post(`${base}/jobs/${id}/${name}`, {}, ctx.signal, crypto.randomUUID());
       if (ctx.signal.aborted) return;
       const job = await refresh();
       // Retry starts a new generation after the original terminal state stopped polling.

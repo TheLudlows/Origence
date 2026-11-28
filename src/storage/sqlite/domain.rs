@@ -58,8 +58,13 @@ impl SqliteTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        let (role, workspace, allow_owned, default_access, logical_id) =
-            key.ok_or(StorageError::Forbidden)?;
+        let Some((role, workspace, allow_owned, default_access, logical_id)) = key else {
+            #[cfg(feature = "local-storage")]
+            if super::deployment::live_admin_in_scope(&mut self.tx, principal_id, scope).await? {
+                return Ok("admin".into());
+            }
+            return Err(StorageError::Forbidden);
+        };
         if role == "workspace" && workspace != scope.workspace_id {
             return Err(StorageError::Forbidden);
         }

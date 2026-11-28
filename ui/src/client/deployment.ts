@@ -1,8 +1,9 @@
 import { api } from "./api.js";
-import { button, code, cursor, el, field, form, heading, input, message, paged, panel, short, submit } from "./components.js";
+import { button, code, cursor, el, field, form, heading, input, message, paged, panel, short, submit, type ViewContext } from "./components.js";
 import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
 import { keysPage } from "./keys.js";
+import { editor } from "./asset-editor.js";
 
 const prefix = "/admin/deployment/workspaces";
 type Workspace = { workspace_id: string; name: string };
@@ -17,7 +18,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     button("新建工作区", createWorkspace, "workspace-item"),
     el("h2", "", "工作空间"), workspaceList, button("退出", logout, "sidebar-exit"),
   ), el("div", "workspace-main", content)));
-  content.append(heading(title, "选择工作空间，查看其会话、运行和已发布内容。"));
+  content.append(heading(title, "选择工作空间，查看会话和运行记录，管理记忆、知识及 Key。"));
   let selected: AbortController | undefined;
   let listRequest: AbortController | undefined;
 
@@ -118,17 +119,46 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const runs = () => show("运行记录", (target, viewSignal) =>
       paged<Run, string>(target, viewSignal, (after) => api.get<Page<Run>>(cursor(`${base}/runs`, after), viewSignal),
         (run) => button(`${short(run.run_id)} · ${run.status}`, () => openRun(run), "link")));
-    const openAsset = (asset: Asset) => show(asset.title, (target, viewSignal) => {
-      const path = `${base}/assets/${encodeURIComponent(asset.asset_id)}?version=${asset.version}`;
+    const label = (kind: Asset["kind"]) => kind === "memory" ? "记忆" : "知识";
+    const editContext = (kind: Asset["kind"], signal: AbortSignal): ViewContext => ({
+      role: "admin", signal,
+      navigate: (page, id) => { if (page === "asset" && id) openAsset(kind, id); },
+    });
+    const openAsset = (kind: Asset["kind"], assetId: string) => show(label(kind), (target, viewSignal) => {
+      const path = `${base}/assets/${encodeURIComponent(assetId)}`;
       void api.get<Asset>(path, viewSignal).then((value) => {
-        if (!viewSignal.aborted) target.append(el("p", "plain-text", value.content ?? ""));
+        if (viewSignal.aborted) return;
+        const feedback = el("div");
+        const key = crypto.randomUUID();
+        const remove = button(`删除${label(kind)}`, async () => {
+          if (remove.disabled || !window.confirm(`删除工作区「${workspace.name}」中的「${value.title}」？`)) return;
+          remove.disabled = true;
+          feedback.replaceChildren();
+          try {
+            await api.request(path, { method: "DELETE", key, signal: viewSignal });
+            if (!viewSignal.aborted) assets(kind);
+          } catch (error) {
+            if (!viewSignal.aborted) message(feedback, error);
+          } finally {
+            remove.disabled = false;
+          }
+        }, "danger");
+        target.append(el("h3", "", value.title), el("p", "muted", `v${value.version}`),
+          el("p", "plain-text", value.content ?? ""), el("div", "actions",
+            button("返回列表", () => assets(kind)),
+            kind === "knowledge" || value.identity
+              ? button(`更新${label(kind)}`, () => editor(kind, editContext(kind, viewSignal), value, base))
+              : null,
+            remove), feedback);
       }).catch((error: unknown) => {
         if (!viewSignal.aborted) message(target, error);
       });
     });
-    const assets = (kind: "memory" | "knowledge", label: string) => show(label, (target, viewSignal) =>
+    const assets = (kind: Asset["kind"]) => show(label(kind), (target, viewSignal) => {
+      target.append(button(`新建${label(kind)}`, () => editor(kind, editContext(kind, viewSignal), undefined, base)));
       paged<Asset, string>(target, viewSignal, (after) => api.get<Page<Asset>>(cursor(`${base}/assets?kind=${kind}`, after), viewSignal),
-        (asset) => button(asset.title, () => openAsset(asset), "link")));
+        (asset) => button(asset.title, () => openAsset(kind, asset.asset_id), "link"));
+    });
     const keys = () => show("API Key", (target, viewSignal) => {
       const result = el("div");
       target.append(result);
@@ -164,7 +194,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     });
     content.replaceChildren(heading(workspace.name, workspace.workspace_id), el("nav", "actions",
       button("会话", sessions), button("运行", runs),
-      button("记忆", () => assets("memory", "记忆")), button("知识", () => assets("knowledge", "知识")),
+      button("记忆", () => assets("memory")), button("知识", () => assets("knowledge")),
       button("API Key", keys)), view);
     sessions();
   }

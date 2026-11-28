@@ -24,7 +24,7 @@ Standalone AnySeek deployments accept collection Info after removal of the Recor
 
 ## Single-key workspaces
 
-A fresh database supports offline provisioning of single-key workspaces. The credential signs into both Agents and the console, provides workspace content access, and can delete memories. Original conversation turns support append and read. Successful archival queues automatic extraction on the durable worker. Replays keep the same job, including after memory deletion. Key rotation preserves historical data and accepted jobs. The initialized administrator account can create peer workspaces, manage their keys, inspect sessions and Runs, and moderate fixed-version global knowledge releases. Approved copies are recalled alongside workspace results. See the [deployment management and global knowledge APIs](API.en.md#deployment-administrator).
+A fresh database supports offline provisioning of single-key workspaces. The credential signs into both Agents and the console, provides workspace content access, and can delete memories. Original conversation turns support append and read. Successful archival queues automatic extraction on the durable worker. Replays keep the same job, including after memory deletion. Workspace key rotation preserves historical data and accepted jobs. The administrator account can create peer workspaces, rotate their keys, inspect sessions and Runs, and create, update, or delete memories and knowledge in the selected workspace. Administrators can also moderate fixed versions of global knowledge. Approved copies are recalled alongside workspace results. See the [deployment management and global knowledge APIs](API.en.md#deployment-administrator).
 
 ## Origence local and cloud startup
 

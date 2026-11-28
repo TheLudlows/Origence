@@ -113,9 +113,18 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 
 Use `PUT /admin/deployment/workspaces/{id}` with `{name}` to create a peer single-key workspace and issue its key in the same transaction. Only initial creation returns `key:{key_id,token}`. A retry with the same ID and name returns `created:false`. If the first credential is lost, `POST /admin/deployment/workspaces/{id}/keys/rotate` issues a replacement, revokes the previous key, and preserves logical identity and sessions.
 
-Membership-based workspaces expose `/keys` and `/workspace-key-grants` within `/admin/deployment/workspaces/{id}` using the methods of the workspace key endpoints below. Deployment administrators can issue, rotate, revoke, and update grants. Session, Run, and asset inspection is read-only.
+Membership-based workspaces expose `/keys` and `/workspace-key-grants` within `/admin/deployment/workspaces/{id}` using the methods of the workspace key endpoints below. Deployment administrators can issue, rotate, revoke, and update grants.
 
-Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns without the workspace key. Workspace write authorization is checked separately.
+The following paths are relative to `/admin/deployment/workspaces/{id}`. Mutations use `Idempotency-Key` and the corresponding `/v1` request bodies. The `{id}` in the path selects the workspace. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
+
+| Method and path | Operation |
+| --- | --- |
+| `POST /memories/identified`, `POST /memories/semantic` | Create or update memories with explicit identities |
+| `POST /files`, `POST /knowledge` | Upload a knowledge file and create or revise knowledge |
+| `DELETE /assets/{asset}` | Delete a memory or knowledge item in the selected workspace |
+| `GET /jobs/{job}`, `POST /jobs/{job}/{action}` | Read a workspace job or apply `retry` or `cancel` under its existing state rules |
+
+Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns and Runs in the selected workspace. Regular workspace endpoints use workspace keys.
 
 ### Global knowledge
 

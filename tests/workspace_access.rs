@@ -10,7 +10,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn deployment_admin_reads_across_tenants_and_cannot_write_workspace_data() {
+async fn deployment_admin_reads_across_tenants_and_requires_explicit_write_scope() {
     let dir = tempfile::tempdir().unwrap();
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let store = service.engine.relational();
@@ -182,6 +182,253 @@ async fn deployment_admin_reads_across_tenants_and_cannot_write_workspace_data()
         .authenticate_deployment_admin(&new_admin)
         .await
         .unwrap();
+    host.abort();
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn deployment_admin_content_writes_use_workspace_scope_and_audit_actor() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let first = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let second = Scope {
+        tenant_id: first.tenant_id,
+        workspace_id: Uuid::new_v4(),
+    };
+    let first_key = store.create_key_workspace(first, "First").await.unwrap();
+    let second_key = store.create_key_workspace(second, "Second").await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
+    let actor = service
+        .authorize_deployment_workspace(&admin, first.workspace_id)
+        .await
+        .unwrap();
+    assert!(!actor.id.is_nil());
+    assert_ne!(actor.id, first_key.key_id);
+    service
+        .register_memory_property(
+            &actor,
+            "test-property",
+            serde_json::from_value(
+                json!({"predicate":"hotel.limit","cardinality":"single","required_context":[]}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    // A workspace header never overrides the selected deployment path.
+    let operator = HostClient::new(&base, admin.clone())
+        .unwrap()
+        .with_workspace(second.workspace_id);
+    let agent = HostClient::new(&base, first_key.token).unwrap();
+    let other_agent = HostClient::new(&base, second_key.token).unwrap();
+    let a = format!("/admin/deployment/workspaces/{}", first.workspace_id);
+    let b = format!("/admin/deployment/workspaces/{}", second.workspace_id);
+    let publish = format!("{a}/knowledge");
+    let input = json!({"title":"Internal policy","content":"Original policy"});
+    assert!(matches!(
+        agent
+            .call(Method::POST, &publish, Some(&input), Some("write"))
+            .await,
+        Err(AppError::Unauthorized)
+    ));
+    assert!(matches!(
+        operator
+            .call(Method::POST, &publish, Some(&input), None)
+            .await,
+        Err(AppError::Invalid(_))
+    ));
+    let created = operator
+        .call(Method::POST, &publish, Some(&input), Some("write"))
+        .await
+        .unwrap();
+    assert_eq!(
+        operator
+            .call(Method::POST, &publish, Some(&input), Some("write"))
+            .await
+            .unwrap(),
+        created
+    );
+    let asset = created["asset_id"].as_str().unwrap();
+    let job = created["job_id"].as_str().unwrap();
+    let job_path = format!("{a}/jobs/{job}");
+    assert!(matches!(
+        operator
+            .call(Method::GET, &format!("{b}/jobs/{job}"), None, None)
+            .await,
+        Err(AppError::NotFound)
+    ));
+    for (action, state) in [("cancel", "cancelled"), ("retry", "pending")] {
+        assert_eq!(
+            operator
+                .call(
+                    Method::POST,
+                    &format!("{job_path}/{action}"),
+                    None,
+                    Some(action)
+                )
+                .await
+                .unwrap()["state"],
+            state
+        );
+    }
+    while origence::worker::process_next(&service).await.unwrap() {}
+    assert_eq!(
+        operator
+            .call(Method::GET, &job_path, None, None)
+            .await
+            .unwrap()["state"],
+        "completed"
+    );
+    let update = json!({"title":"Internal policy","content":"Revised policy","asset_id":asset,"expected_version":1});
+    assert!(matches!(
+        operator
+            .call(
+                Method::POST,
+                &format!("{b}/knowledge"),
+                Some(&update),
+                Some("update")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    operator
+        .call(Method::POST, &publish, Some(&update), Some("update"))
+        .await
+        .unwrap();
+
+    let written_memory = operator.call(Method::POST, &format!("{a}/memories/identified"), Some(&json!({
+        "identity":{"subject":{"kind":"service","stable_id":"atlas"},"predicate":"db.engine","context":{}},
+        "content":"Atlas uses SQLite"
+    })), Some("fact")).await.unwrap();
+    let semantic_memory = operator.call(Method::POST, &format!("{a}/memories/semantic"), Some(&json!({
+        "identity":{"subject":{"kind":"team","stable_id":"operations"},"predicate":"hotel.limit","context":{}},
+        "content":"80", "operation":"assert", "expected_version":0,
+        "statements":[{"value":"80","quote":"80","byte_start":0,"byte_end":2}]
+    })), Some("semantic")).await.unwrap();
+    let uploaded: serde_json::Value = reqwest::Client::new()
+        .post(format!("{base}{a}/files?name=note.txt&format=text"))
+        .bearer_auth(&admin)
+        .header("idempotency-key", "upload")
+        .body("Separate attached text")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let document = json!({"title":"Attached note","format":"text","file_id":uploaded["file_id"]});
+    assert!(matches!(
+        operator
+            .call(
+                Method::POST,
+                &format!("{b}/knowledge"),
+                Some(&document),
+                Some("attached")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    let attached = operator
+        .call(Method::POST, &publish, Some(&document), Some("attached"))
+        .await
+        .unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+    for (receipt, content) in [
+        (&written_memory, "Atlas uses SQLite"),
+        (&semantic_memory, "80"),
+        (&attached, "Separate attached text"),
+    ] {
+        let path = format!("/v1/assets/{}", receipt["asset_id"].as_str().unwrap());
+        assert_eq!(
+            agent.call(Method::GET, &path, None, None).await.unwrap()["content"],
+            content
+        );
+        assert!(matches!(
+            other_agent.call(Method::GET, &path, None, None).await,
+            Err(AppError::NotFound)
+        ));
+    }
+    let normal_path = format!("/v1/assets/{asset}");
+    assert_eq!(
+        agent
+            .call(Method::GET, &normal_path, None, None)
+            .await
+            .unwrap()["content"],
+        "Revised policy"
+    );
+    assert_eq!(
+        operator
+            .call(
+                Method::GET,
+                &format!("{a}/assets/{asset}?version=1"),
+                None,
+                None
+            )
+            .await
+            .unwrap()["content"],
+        "Original policy"
+    );
+    assert!(matches!(
+        operator
+            .call(
+                Method::DELETE,
+                &format!("{b}/assets/{asset}"),
+                None,
+                Some("remove")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    let delete_path = format!("{a}/assets/{asset}");
+    let deleted = operator
+        .call(Method::DELETE, &delete_path, None, Some("remove"))
+        .await
+        .unwrap();
+    assert_eq!(deleted["blocked"], true);
+    assert_eq!(
+        operator
+            .call(Method::DELETE, &delete_path, None, Some("remove"))
+            .await
+            .unwrap(),
+        deleted
+    );
+    assert!(matches!(
+        agent.call(Method::GET, &normal_path, None, None).await,
+        Err(AppError::NotFound)
+    ));
+
+    let audit: Vec<(String, Uuid)> = origence::storage::sqlite_db::query_as(
+        "SELECT action,actor FROM oc_audit WHERE tenant_id=? AND workspace_id=? AND target=? AND action IN ('knowledge.ingest','source.logical_delete') ORDER BY action",
+    )
+    .bind(first.tenant_id).bind(first.workspace_id).bind(Uuid::parse_str(asset).unwrap())
+    .fetch_all(store.pool()).await.unwrap();
+    assert_eq!(
+        audit,
+        vec![
+            ("knowledge.ingest".into(), actor.id),
+            ("knowledge.ingest".into(), actor.id),
+            ("source.logical_delete".into(), actor.id)
+        ]
+    );
+    store.rotate_deployment_admin().await.unwrap();
+    assert!(matches!(
+        service.job(&actor, Uuid::parse_str(job).unwrap()).await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(matches!(
+        operator.call(Method::GET, &job_path, None, None).await,
+        Err(AppError::Unauthorized)
+    ));
     host.abort();
     service.engine.shutdown().await.unwrap();
 }

@@ -297,7 +297,7 @@ async function run() {
     await keyPage.getByRole("button", { name: "下架", exact: true }).click();
     await keyPage.getByText(/v1 · 已下架/).waitFor();
     console.log("PASS global knowledge submission, deployment review, browsing, and withdrawal (synthetic HTTP, Chromium)");
-    console.log("PASS deployment administrator sign-in, workspace browsing, and read-only session, Run and memory views (synthetic HTTP, Chromium)");
+    console.log("PASS deployment administrator sign-in, workspace browsing, and session, Run and memory reads (synthetic HTTP, Chromium)");
     console.log("PASS console login, visible workspace lists with account isolation, scoped viewing, keyboard and mobile switching, reload, and sign-out (synthetic HTTP, Chromium)");
   } finally {
     await browser?.close();

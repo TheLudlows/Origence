@@ -93,7 +93,7 @@ HTTP Run 准备和 MCP `context_run_prepare` 在认证与归属检查后拒绝 `
 
 每个 workspace 的全文、向量和一跳图候选使用同一 AnySeek collection。适配器将 Origence 预分词
 编码为固定 SHA-256 词项并保留 AND 语义；向量由 Origence 生成，模型 profile 与维度
-由目录绑定固定。AnySeek 保存发布后的分块正文和摘要，SQLite 保存权限、发布版本、来源和内容哈希，Blob 保存原始文件。返回前，Origence 核验正文、权限、版本与来源。
+由目录绑定固定。AnySeek 保存发布后的分块正文和摘要，SQLite 保存权限、内容版本记录、来源和内容哈希，Blob 保存原始文件。返回前，Origence 核验正文、权限、版本与来源。
 
 发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 个 chunk Record，编码后请求至多 2 MiB；
 图元数据附在其中一个确定的 chunk 上，不新增 Record。同一发布通过一个组提交，新业务版本使用独立组。网络结果未知时检查完整组，
@@ -157,9 +157,18 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 部署管理员用 `PUT /admin/deployment/workspaces/{id}` 提交 `{name}` 创建平级单 Key 工作空间，同一事务签发首把 Key。回执只在首次成功时返回 `key:{key_id,token}`，同 ID 同名重试返回 `created:false`。响应禁止缓存，未收到首次 Key 时可用 `POST /admin/deployment/workspaces/{id}/keys/rotate` 补发并撤销旧 Key，保留逻辑身份与会话。
 
-成员授权工作空间在 `/admin/deployment/workspaces/{id}` 下提供 `/keys` 和 `/workspace-key-grants`，方法与下面的工作区 Key 接口相同。部署管理员可以签发、轮换、撤销和调整授权。会话、Run 和内容查看仍为只读。
+成员授权工作空间在 `/admin/deployment/workspaces/{id}` 下提供 `/keys` 和 `/workspace-key-grants`，方法与下面的工作区 Key 接口相同。管理员可以签发、轮换、撤销和调整授权。
 
-分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员读取原始问答无需持有工作空间 Key，普通工作空间 API 的写入授权继续独立执行。
+以下路径相对于 `/admin/deployment/workspaces/{id}`。写入请求使用 `Idempotency-Key`，请求体与对应 `/v1` 接口一致。目标工作区由路径中的 `{id}` 决定。审计记录管理员凭据对应的内部标识，该标识在管理员凭据轮换时更新。
+
+| 方法与路径 | 操作 |
+| --- | --- |
+| `POST /memories/identified`、`POST /memories/semantic` | 创建或更新有明确身份的记忆 |
+| `POST /files`、`POST /knowledge` | 上传知识文件，创建知识或提交新版 |
+| `DELETE /assets/{asset}` | 删除本区的记忆或知识条目 |
+| `GET /jobs/{job}`、`POST /jobs/{job}/{action}` | 查看本区任务，按现有任务规则执行 `retry` 或 `cancel` |
+
+分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员可读取所选工作区的原始问答和 Run。普通工作区接口继续使用工作区 Key。
 
 ### 全局知识
 

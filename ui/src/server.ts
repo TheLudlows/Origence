@@ -17,6 +17,9 @@ const deploymentWorkspaceKeyPath = new RegExp(`^/admin/deployment/workspaces/${u
 const managedKeyPath = new RegExp(`^/admin/keys/(${uuid})(?:/rotate)?$`);
 const agentPath = "/admin/agents";
 const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets(?:/${uuid})?))?$`);
+const deploymentContentPost = new RegExp(`^/admin/deployment/workspaces/${uuid}/(?:knowledge|files|memories/(?:identified|semantic)|jobs/${uuid}/(?:retry|cancel))$`);
+const deploymentAsset = new RegExp(`^/admin/deployment/workspaces/${uuid}/assets/${uuid}$`);
+const deploymentJob = new RegExp(`^/admin/deployment/workspaces/${uuid}/jobs/${uuid}$`);
 const globalReviewRead = new RegExp(`^/admin/deployment/global-knowledge(?:/${uuid})?$`);
 const globalReviewWrite = new RegExp(`^/admin/deployment/global-knowledge/${uuid}/review$`);
 const keyRules: [string, RegExp][] = [
@@ -184,9 +187,10 @@ export function createUiServer(options: ServerOptions) {
         }
         const path = target.pathname.slice(4);
         const deploymentKeyPath = deploymentWorkspaceKeyPath.exec(path)?.[1];
-        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || globalReviewRead.test(path))
+        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || deploymentJob.test(path) || globalReviewRead.test(path))
           || req.method === "PUT" && deploymentWorkspacePath.test(path)
-          || req.method === "POST" && (globalReviewWrite.test(path) || deploymentKeyPath === "/keys/rotate")
+          || req.method === "POST" && (deploymentContentPost.test(path) || globalReviewWrite.test(path) || deploymentKeyPath === "/keys/rotate")
+          || req.method === "DELETE" && deploymentAsset.test(path)
           || !!deploymentKeyPath && keyRules.some(([method, pattern]) =>
             method === req.method && pattern.test("/admin" + deploymentKeyPath));
         const managingKeys = keyRules.some(([method, pattern]) => method === req.method && pattern.test(path));

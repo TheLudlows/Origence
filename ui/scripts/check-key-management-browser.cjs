@@ -152,6 +152,11 @@ async function run(binary) {
     await login(page, "reader");
     await page.getByText("只有工作区管理员可以管理 API Key。", { exact: true }).waitFor();
     assert.equal(await nav.getByRole("button", { name: "API Key" }).count(), 0);
+    const denied = await page.request.post(`${base}/api/admin/deployment/workspaces/${a.workspace_id}/knowledge`, {
+      headers: { "Idempotency-Key": "denied-browser-write" },
+      data: { title: "Denied", content: "Denied" },
+    });
+    assert.ok([401, 403].includes(denied.status()));
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await login(page, "deployment");
     await page.getByRole("heading", { name: "管理员", exact: true }).waitFor();
@@ -175,10 +180,31 @@ async function run(binary) {
     secrets.push(nextKey);
     assert.equal((await (await whoami(nextKey)).json()).workspace_id, firstIdentity.workspace_id);
     assert.equal((await whoami(firstKey)).status, 401);
+    await page.getByRole("button", { name: "知识", exact: true }).click();
+    await page.getByRole("button", { name: "新建知识", exact: true }).click();
+    const createKnowledge = open("新建知识");
+    await createKnowledge.getByLabel("文档标题").fill("浏览器测试知识");
+    await createKnowledge.getByLabel("正文", { exact: true }).fill("合成正文第一版");
+    await createKnowledge.getByRole("button", { name: "提交发布", exact: true }).click();
+    await createKnowledge.getByRole("button", { name: "查看内容 →", exact: true }).click();
+    await createKnowledge.waitFor({ state: "detached" });
+    await page.getByText("合成正文第一版", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "更新知识", exact: true }).click();
+    const updateKnowledge = open("更新知识");
+    await updateKnowledge.getByLabel("正文", { exact: true }).fill("合成正文第二版");
+    await updateKnowledge.getByRole("button", { name: "提交新版本", exact: true }).click();
+    await updateKnowledge.getByRole("button", { name: "查看内容 →", exact: true }).click();
+    await page.getByText("合成正文第二版", { exact: true }).waitFor();
+    page.once("dialog", (dialog) => {
+      assert.match(dialog.message(), /独立试点/);
+      void dialog.accept();
+    });
+    await page.getByRole("button", { name: "删除知识", exact: true }).click();
+    await page.getByText("暂无记录", { exact: true }).waitFor();
     await page.getByRole("button", { name: "全局知识审核", exact: true }).click();
     await page.getByRole("heading", { name: "全局知识审核", exact: true }).waitFor();
     assert.ok(secrets.every((value) => !stderr.includes(value)));
-    console.log("PASS Chromium and Origence: scoped key management, deployment account sign-in, peer workspace creation and rotation, global knowledge review");
+    console.log("PASS Chromium and Origence: scoped key management, deployment sign-in, workspace creation and rotation, scoped knowledge create/update/delete, global review");
   } finally {
     await browser?.close();
     if (ui) { ui.closeAllConnections(); ui.close(); }

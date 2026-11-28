@@ -25,21 +25,60 @@ pub enum DeploymentKeyOperation {
 }
 
 #[cfg(feature = "local-storage")]
-pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<()> {
+fn admin_actor_id(token_hash: &str) -> Uuid {
+    // Administrator receipts use a distinct UUID version from workspace keys.
+    // Derive the actor from the verified fingerprint without storing the token.
+    use sha2::{Digest, Sha256};
+    let mut digest = Sha256::new();
+    digest.update(b"origence:administrator:v1:");
+    digest.update(token_hash);
+    let mut bytes = [0; 16];
+    bytes.copy_from_slice(&digest.finalize()[..16]);
+    uuid::Builder::from_custom_bytes(bytes).into_uuid()
+}
+
+#[cfg(feature = "local-storage")]
+pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<Uuid> {
     if token.len() != 73 || !token.starts_with("oc_admin_") {
         return Err(StorageError::Unauthorized);
     }
+    let fingerprint = hash(token);
     let exists: bool = sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1 AND token_hash=?)",
     )
-    .bind(hash(token))
+    .bind(&fingerprint)
     .fetch_one(conn)
     .await
     .map_err(sqlite_err)?;
     if !exists {
         return Err(StorageError::Unauthorized);
     }
-    Ok(())
+    Ok(admin_actor_id(&fingerprint))
+}
+
+#[cfg(feature = "local-storage")]
+pub(super) async fn live_admin_in_scope(
+    conn: &mut Connection,
+    actor: Uuid,
+    scope: Scope,
+) -> StorageResult<bool> {
+    if actor.get_version_num() != 8 {
+        return Ok(false);
+    }
+    let fingerprint: Option<String> =
+        sqlite_db::query_scalar("SELECT token_hash FROM oc_deployment_admin WHERE singleton=1")
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(sqlite_err)?;
+    if !fingerprint.is_some_and(|hash| admin_actor_id(&hash) == actor) {
+        return Ok(false);
+    }
+    sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_workspaces WHERE tenant_id=? AND id=?)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .fetch_one(conn)
+        .await
+        .map_err(sqlite_err)
 }
 
 impl SqliteStore {
@@ -64,7 +103,7 @@ impl SqliteStore {
     #[cfg(feature = "local-storage")]
     pub(crate) async fn authenticate_deployment_admin(&self, token: &str) -> StorageResult<()> {
         let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
-        require_admin(&mut conn, token).await
+        require_admin(&mut conn, token).await.map(|_| ())
     }
 
     #[cfg(feature = "local-storage")]
@@ -97,7 +136,7 @@ impl SqliteStore {
         Ok(json!({"items":items,"next_after":next_after}))
     }
 
-    /// Internal inspection context. The nil principal has no regular write or ownership rights.
+    /// Begin a read transaction for the selected workspace.
     #[cfg(feature = "local-storage")]
     pub(crate) async fn begin_deployment_inspection(
         &self,
@@ -105,6 +144,22 @@ impl SqliteStore {
         workspace: Uuid,
     ) -> StorageResult<SqliteTx> {
         self.deployment_workspace_tx(token, workspace, false).await
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn authorize_deployment_workspace(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> StorageResult<AuthorizedScope> {
+        let tx = self.begin_deployment_inspection(token, workspace).await?;
+        let auth = AuthorizedScope {
+            scope: tx.scope,
+            principal_id: tx.principal_id,
+            role: "admin".into(),
+        };
+        tx.commit().await?;
+        Ok(auth)
     }
 
     #[cfg(feature = "local-storage")]
@@ -119,7 +174,7 @@ impl SqliteStore {
             .begin_with(if write { "BEGIN IMMEDIATE" } else { "BEGIN" })
             .await
             .map_err(sqlite_err)?;
-        require_admin(&mut tx, token).await?;
+        let actor = require_admin(&mut tx, token).await?;
         let tenant = sqlite_db::query_scalar("SELECT tenant_id FROM oc_workspaces WHERE id=?")
             .bind(workspace)
             .fetch_optional(&mut *tx)
@@ -132,7 +187,7 @@ impl SqliteStore {
                 tenant_id: tenant,
                 workspace_id: workspace,
             },
-            principal_id: Uuid::nil(),
+            principal_id: actor,
             required: Vec::new(),
             command: None,
         })
@@ -150,7 +205,7 @@ impl SqliteStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(sqlite_err)?;
-        require_admin(&mut tx, token).await?;
+        let actor = require_admin(&mut tx, token).await?;
         let previous: Option<(Uuid, String, Option<Uuid>)> = sqlite_db::query_as(
             "SELECT tenant_id,name,owner_workspace_id FROM oc_workspaces WHERE id=?",
         )
@@ -173,7 +228,7 @@ impl SqliteStore {
         let mut scoped = SqliteTx {
             tx,
             scope,
-            principal_id: Uuid::nil(),
+            principal_id: actor,
             required: Vec::new(),
             command: None,
         };
