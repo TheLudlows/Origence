@@ -51,6 +51,18 @@ def registry_values():
     return values
 
 
+def set_registry_workspace_key(entry):
+    import winreg
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+        if entry is not None:
+            winreg.SetValueEx(key, "OC_API_KEY", 0, entry[1], entry[0])
+        else:
+            try:
+                winreg.DeleteValue(key, "OC_API_KEY")
+            except FileNotFoundError:
+                pass
+
+
 def fresh_windows_environment():
     import ctypes
     from ctypes import wintypes
@@ -242,10 +254,21 @@ def smoke(binary, claude, codex, root, browser):
         require(claude_only["installation"]["detail"]["private_turn_sync"] is True,
                 "Setup with a writable Key must enable project archiving")
         split = json.loads(state.read_text(encoding="utf-8"))
+        if WINDOWS:
+            sanitized(split["agent"], forbidden)
         legacy = {"version": 1, **split["deploy"],
                   **{name: split["agent"][name] for name in ("claude", "shell", "registry") if name in split["agent"]}}
+        rerun_env, source_flags = env_key, ["--from-env"]
+        if WINDOWS:
+            previous = "prior-synthetic-workspace-key"
+            legacy["registry"]["OC_API_KEY"] = {
+                "before": {"value": previous, "kind": "String"},
+                "installed": {"value": credentials["token"], "kind": "String"},
+            }
+            rerun_env, source_flags = dict(env, OC_API_KEY=invalid), []
+            forbidden = [*forbidden, previous, invalid]
         state.write_text(json.dumps(legacy), encoding="utf-8")
-        connected = installer(env_key, ["install", "--from-env", *setup_args, "--turn-sync-project", str(subdir)],
+        connected = installer(rerun_env, ["install", *source_flags, *setup_args, "--turn-sync-project", str(subdir)],
                               forbidden, entry=setup_cmd, cwd=root)
         require(connected["http-mcp"]["status"] == "success" and connected["claude-code"]["status"] == "success"
                 and connected["codex"]["status"] == "success" and "ui" not in connected and "api" not in connected,
@@ -253,7 +276,9 @@ def smoke(binary, claude, codex, root, browser):
         replay = json.loads(state.read_text(encoding="utf-8"))
         require(replay["version"] == 2 and replay["deploy"] == deployed,
                 "Agent setup must migrate a legacy journal without changing deployment settings")
-        installer(env_key, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        if WINDOWS:
+            sanitized(replay["agent"], forbidden)
+        installer(rerun_env, ["install", *source_flags, "--agent", "both"], forbidden, entry=setup_cmd, cwd=root)
         require(json.loads(state.read_text(encoding="utf-8")) == replay,
                 "Agent setup rerun must reuse the same settings and ownership")
         actual = None
@@ -291,7 +316,8 @@ def smoke(binary, claude, codex, root, browser):
             node = Path(shutil.which("node.exe", path=env["PATH"])).parent
             launch_path = os.pathsep.join((str(node), actual["PATH"]))
             installer(dict(env, PATH=launch_path), ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
-            require(registry_values() == registry_before, "Setup uninstall must restore original registry values")
+            require(registry_values() == dict(registry_before, OC_API_KEY=None),
+                    "Setup uninstall must clear its workspace Key and restore other user settings")
         else:
             with rc.open("a", encoding="utf-8") as handle:
                 handle.write("\n# added after agent setup")
@@ -328,6 +354,10 @@ def smoke(binary, claude, codex, root, browser):
         forbidden.append(config["token"])
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
+        if WINDOWS:
+            import winreg
+            adopted_key = (config["token"], winreg.REG_SZ)
+            set_registry_workspace_key(adopted_key)
         paused = installer(new_env, ["install", "--from-env", *setup_args, "--no-turn-sync"],
                            forbidden, entry=setup_cmd, cwd=root)
         require(paused["installation"]["detail"]["private_turn_sync"] is False,
@@ -365,12 +395,19 @@ def smoke(binary, claude, codex, root, browser):
                                    capture_output=True, encoding="utf-8", timeout=30, check=True)
         require(json.loads(inventory.stdout)["transport"]["url"] == user_url,
                 "Agent uninstall removed a user-edited Codex entry")
+        if WINDOWS:
+            require(registry_values()["OC_API_KEY"] == adopted_key,
+                    "Agent uninstall must preserve a preconfigured user Key")
         require(not state.exists(), "Both uninstalls left an active journal")
         print("PASS split deployment and Agent setup, native Claude/Codex MCP, Hook Run, private turn archive, backups, and isolated rollback")
     finally:
-        if state.exists():
-            installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
-            installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
+        try:
+            if state.exists():
+                installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
+                installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
+        finally:
+            if WINDOWS:
+                set_registry_workspace_key(registry_before["OC_API_KEY"])
 
 
 if __name__ == "__main__":

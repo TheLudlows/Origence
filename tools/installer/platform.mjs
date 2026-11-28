@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync,
   renameSync, rmSync, statSync, writeFileSync,
@@ -9,6 +9,7 @@ import { basename, delimiter, dirname, join, resolve } from "node:path";
 
 export const windows = process.platform === "win32";
 export const home = homedir();
+export const keyFingerprint = value => createHash("sha256").update(value).digest("hex");
 const helper = new URL("./windows.ps1", import.meta.url);
 const shellMarker = "# Origence installer managed environment";
 
@@ -176,6 +177,14 @@ export function writeUserEnvironment(state, vars, dirs) {
   installed.Path = { value: userPath, kind: current.Path?.kind ?? "ExpandString" };
   for (const name of names) {
     const previous = journal[name];
+    if (name === "OC_API_KEY") {
+      const fingerprint = keyFingerprint(installed[name].value);
+      const owned = current[name]?.value !== installed[name].value
+        || (previous?.owned === true && previous.fingerprint === fingerprint);
+      journal[name] = { fingerprint, owned };
+      if (!owned) delete installed[name];
+      continue;
+    }
     const before = previous ? previous.before : current[name];
     journal[name] = { before, installed: installed[name] };
     if (name === "Path") {
@@ -193,6 +202,12 @@ export function restoreUserEnvironment(state) {
     const current = windowsSettings({ action: "read", names: Object.keys(journal) });
     const values = {};
     for (const [name, record] of Object.entries(journal)) {
+      if (name === "OC_API_KEY") {
+        const entry = current[name];
+        if (record.owned && entry?.kind === "String" && keyFingerprint(entry.value) === record.fingerprint)
+          values[name] = null;
+        continue;
+      }
       if (current[name]?.value === record.installed?.value && current[name]?.kind === record.installed?.kind) {
         values[name] = record.before;
       } else if (name === "Path" && current.Path && record.added.length) {

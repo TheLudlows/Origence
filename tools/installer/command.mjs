@@ -4,7 +4,10 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { atomicWrite, check, executable, execute, home, outsideRepository, privateDirectory, windows, windowsSettings } from "./platform.mjs";
+import {
+  atomicWrite, check, executable, execute, home, keyFingerprint, outsideRepository,
+  privateDirectory, windows, windowsSettings,
+} from "./platform.mjs";
 
 export const repo = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export const grantKey = "ORIGENCE_DEMO_KEY";
@@ -67,6 +70,18 @@ function installerState(dir, scope) {
     }
   }
   const value = state[scope] ?? {};
+  if (windows && scope === "agent") {
+    // Older Windows setup journals copied the workspace key and the original
+    // registry value here. Keep only ownership metadata on the next save.
+    if (value.config) delete value.config.token;
+    const legacy = value.registry?.OC_API_KEY;
+    if (legacy?.installed) {
+      value.registry.OC_API_KEY = {
+        fingerprint: keyFingerprint(legacy.installed.value),
+        owned: legacy.before?.value !== legacy.installed.value,
+      };
+    }
+  }
   const save = () => atomicWrite(path, JSON.stringify(state, null, 2) + "\n");
   return {
     dir,
