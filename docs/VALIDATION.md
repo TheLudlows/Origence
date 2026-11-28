@@ -7,6 +7,15 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 控制台登录切换与浅色样式
+
+基于 main `91479ea`，Linux 上的 Node 24.22.1 通过 `npm --prefix ui run check` 和 34 项 UI 测试。
+Chromium 156.0.8078.79 对回环合成服务通过 `check-console-session-browser.cjs`、`check-navigation-focus-browser.cjs`、
+`check-narrow-touch-browser.cjs` 和 `check-asset-tabs-browser.cjs`。
+验证账号与 Key 的单表单切换、键盘焦点、凭据清除、两种部署的登录，以及 320–1440px 的导航与页面布局。
+375px 下「用 Key 登录」的文字对比度为浅色 7.55:1、深色 10.45:1，模拟触控目标至少 44×44 CSS px。
+触控为浏览器模拟，未运行 Windows 或真实部署。
+
 ## 2026-11-28 · 安装器默认启用项目私有问答归档
 
 基于 main `493e38b` 的独立工作树，使用 Windows、Rust 1.98.0、Node 24.15.0 及新建测试库。
