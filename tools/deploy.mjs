@@ -83,7 +83,6 @@ async function ensureConsole(state, config, old, env) {
   await stopService(state, "ui");
   const dir = startService(state, "ui", process.execPath, [
     join(repo, "ui", "dist", "server.js"), "--host", "127.0.0.1", "--port", url.port, "--strictPort",
-    ...(config.mode === "workspace" ? ["--key-only"] : []),
   ], repo, env);
   await waitForService(ui, "/", dir, "Origence console");
   state.value.uiBinding = config.binding;

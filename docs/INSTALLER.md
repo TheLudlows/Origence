@@ -49,6 +49,8 @@ Windows 的 Agent 接入仅在用户环境变量 `OC_API_KEY` 中持久化工作
 ./bin/origence-deploy install --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
+控制台在安装时取得部署管理员凭据后启用账号密码登录。只提供工作区 Key 时，使用该 Key 登录控制台。
+
 首次启动自动创建部署管理员。安装器为控制台的 `admin` 账号设置随机密码，通过交互输出、`--credentials-file` 或显式 `--show-secrets` 获取登录信息。用管理员账号创建工作空间，再用该空间的 Key 接入 Agent。已有服务可以用工作空间 Key 接入，也可以设置 `ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY` 以管理员身份安装控制台。`--verify-write` 需要提供有写权限的工作空间 Key。
 
 从仓库运行 `./bin/origence-deploy uninstall` 或 `.\bin\origence-deploy.cmd uninstall`。它停止部署脚本管理的进程，清理其管理的账号配置，并保留数据库、备份、已导出的凭据文件和 Agent 插件。以前的一键安装记录会按所属范围读取，完整撤销旧安装时分别执行两个卸载命令。日志与私有状态位于 Windows 的 `%LOCALAPPDATA%\Origence\installer` 或 Unix 的 `~/.origence/installer`。

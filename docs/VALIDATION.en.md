@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Derive console sign-in from credentials
+
+Based on main `4f69478`, with Linux, Rust 1.98.0, Node.js 24.22.1, and isolated synthetic data.
+
+- `npm --prefix ui test` passed 33 tests. The built console rejected the removed startup flag. Rust formatting, strict Clippy on default targets, and diff checks passed.
+- Two independently installed consoles pointed to the same API. The administrator console accepted the `admin` password. The workspace console accepted its workspace Key and rejected the administrator password even when it inherited the existing account database path. The API stayed ready after uninstalling the workspace console.
+- `tools/installer_smoke.py` passed deployment, both Agent setups, Run and private archive, and uninstall checks. Native Windows was outside this run.
+
 ## 2026-11-28 · Remove superseded developer tools
 
 Based on main `d8dd128`, with Linux, Rust 1.98.0, Node.js 24.22.1, and isolated synthetic data.
