@@ -4,6 +4,20 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Workspace credential isolation and administrator accounts
+
+Verified `4cbdc4960b07f5ce674afa599a31a424b1a3f381` on main base
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`, using Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+HTTP, MCP, and library checks confirmed that even workspaces in the same tenant use separate credentials and that
+the workspace header cannot expand access. Rotation during model I/O blocked old authorizations and let the worker retry
+under the current key without changing the original submitter. The full Rust suite passed 476 tests with eight configured skips.
+Formatting, strict all-target Clippy with all features and `sqlite` only, and the HTTP MCP smoke passed.
+
+All 33 UI tests and type checking passed. Chromium covered administrator account login, single-workspace key sign-in,
+navigation focus, content tabs, and workspace key rotation. Isolated deployment smoke covered init, reinstall, supplied
+administrator credentials, a synthetic Run write/read, and uninstall. The client installation fixture now uses independent
+workspace keys and passed syntax checks. Native clients, native Windows, and GitHub CI are pending.
+
 ## 2026-11-28 · Administrator version restore and source withdrawal
 
 Verified `0de6327ac945bddd07bd7ab01d7772bcbea6df8f` on main base
