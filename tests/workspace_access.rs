@@ -1,10 +1,5 @@
 use crate::support::open_service;
-use origence::{
-    client::HostClient,
-    error::AppError,
-    models::Models,
-    storage::{RelationalStore, Scope},
-};
+use origence::{client::HostClient, error::AppError, models::Models, storage::Scope};
 use reqwest::{Method, StatusCode};
 use serde_json::json;
 use uuid::Uuid;
@@ -60,7 +55,7 @@ async fn deployment_admin_reads_across_tenants_and_requires_explicit_write_scope
         .unwrap();
     while origence::worker::process_next(&service).await.unwrap() {}
     let asset_id = serde_json::from_value(asset["asset_id"].clone()).unwrap();
-    store.revoke_key(owner.key_id).await.unwrap();
+    store.rotate_workspace_key(first).await.unwrap();
 
     let first_page = service
         .inspect_workspaces(&admin, Uuid::nil(), 1)
@@ -828,11 +823,6 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         .create_key_workspace(other, "Workspace B")
         .await
         .unwrap();
-    assert!(matches!(
-        store.issue_key(scope, "admin").await,
-        Err(origence::storage::StorageError::Forbidden)
-    ));
-
     let auth = service.auth(&key.token).await.unwrap();
     let session = service.private_session(&auth).await.unwrap();
     let session_id: Uuid = serde_json::from_value(session["session_id"].clone()).unwrap();
@@ -887,16 +877,24 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
             .len(),
         1
     );
-    assert_eq!(
-        reqwest::Client::new()
-            .get(format!("{base}/admin/keys"))
-            .bearer_auth(&key.token)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::METHOD_NOT_ALLOWED
-    );
+    let http = reqwest::Client::new();
+    for (method, path) in [
+        (Method::GET, "/admin/keys".to_string()),
+        (Method::POST, "/admin/keys".to_string()),
+        (Method::POST, format!("/admin/keys/{}/rotate", key.key_id)),
+        (Method::DELETE, format!("/admin/keys/{}", key.key_id)),
+    ] {
+        assert_eq!(
+            http.request(method, format!("{base}{path}"))
+                .bearer_auth(&key.token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND,
+            "{path}",
+        );
+    }
     for path in [
         format!("/v1/sessions/{session_id}/turns/{turn}"),
         format!("/v1/sessions/{session_id}?through_sequence=1"),

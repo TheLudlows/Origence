@@ -3,6 +3,7 @@
 //! reconcile pass leaves it committed without duplicating (A2.6).
 #![cfg(feature = "host")]
 
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::anyseek::{AnySeekFullTextStore, operation_epoch};
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};
 use origence::storage::sqlite::SqliteStore;

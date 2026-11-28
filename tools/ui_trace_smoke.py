@@ -113,21 +113,20 @@ def main():
         project = root / "project"
         project.mkdir()
         env = isolated_env(temporary)
-        workspace = seed_workspace(env, "Synthetic trace acceptance")
+        workspace = seed_workspace(env, "Synthetic trace acceptance", single_key=True)
+        other = seed_workspace(env, "Isolated trace workspace", workspace["workspace_id"], single_key=True)
         owner = workspace["token"]
-        forbidden = [owner]
+        forbidden = [owner, other["token"]]
         with Host(str(binary), env, owner, forbidden, serve_args=("--local",)) as host:
             first = publish_policy(host, 1)
             asset = first["asset_id"]
             second = publish_policy(host, 2, asset)
-            other = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "writer"})["token"]
-            forbidden.append(other)
             run = report_from_codex(host, args.codex, project, owner, forbidden, asset)
             publish_policy(host, 3, asset)
             prefix = transcribe_fixture(host, f"/v1/runs/{run}", asset)
             data = {"api": host.base, "workspace": workspace["workspace_id"], "run": run,
                     "prefix": prefix, "asset": asset, "sourceV2": second["source_event_id"],
-                    "textV2": policy_text(2), "owner": owner, "other": other}
+                    "textV2": policy_text(2), "owner": owner, "other": other["token"], "otherWorkspace": other["workspace_id"]}
             result = subprocess.run(["node", str(BROWSER_CHECK)], input=json.dumps(data),
                                     capture_output=True, text=True, encoding="utf-8", timeout=90)
             sanitized(result.stdout + result.stderr, forbidden)

@@ -1,5 +1,6 @@
 //! Provenance owners through the two-phase cleanup path.
 
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::{
     AuthorizedScope, DomainTx, Lifecycle, Permission, RelationalStore, Scope, SourceVersion,
     sqlite::SqliteStore,

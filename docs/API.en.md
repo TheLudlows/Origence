@@ -12,13 +12,13 @@ Existing command-style mutations need a 1–200 ASCII character `Idempotency-Key
 
 ## Private sessions, Trace, and Skills
 
-`GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a separate private session for each workspace and logical key. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. Admins can rotate credentials in their issuing workspace. The replacement retains the original logical key and workspace and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
+`GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a private session for the workspace and logical Key. The turn, feedback, and Improve endpoints use the archive of the current logical Key. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to their logical Key. The administrator rotates the credential through `POST /admin/deployment/workspaces/{id}/keys/rotate`. The replacement retains the original logical Key and workspace and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
 
 Trace is stored in Runs owned by logical keys. Run entry points derive the key from authentication and apply current permissions and source validity checks.
 
 | Run endpoint | Input and result |
 | --- | --- |
-| `POST /v1/runs` | Writer supplies a stable `run_id` and redacted `summary`, bound to the current archive |
+| `POST /v1/runs` | Supply a stable `run_id` and redacted `summary` using the Workspace Key. The Run is bound to the current archive. |
 | `POST /v1/runs/{id}/events` | Stable `event_id`, timestamp, reporter, and named event. An identical retry returns the original sequence. |
 | `POST /v1/runs/{id}/context` | `event_id` and `context` (EvidenceBundle request). Returns the bundle and a server preparation receipt. |
 | `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the owner or an admin in the Run's workspace. `is_owner` identifies whether the current logical key owns the Run. |
@@ -80,17 +80,9 @@ The old standalone graph storage API and graph traversal were removed. `StorageE
 
 ## Roles
 
-A single-key workspace provisioned by the deployment administrator has one active key bound to the workspace. Authentication returns `role: "workspace"` to identify this credential type. It permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403. Workspace and role-grant management retain their administrator checks. The deployment administrator can rotate it through `POST /admin/deployment/workspaces/{id}/keys/rotate`.
+Each workspace has one active Key. Authentication returns `role: "workspace"` for this credential. The Key permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403 for a Workspace Key.
 
-Existing role-based paths use the following permission table.
-
-| Role | Permissions |
-| --- | --- |
-| reader | get/search/resolve on published content |
-| writer | reader plus uploads, original downloads, knowledge ingestion, structured memory publication, capture, archiving and feedback, reads and controls for accessible jobs, version restore, and Skill review and publication |
-| admin | writer plus content item deletion, source withdrawal, file deletion, retries of failed cleanup, and workspace administration |
-
-Original files and jobs can expose unpublished data, so reader cannot access them. Writer authorizes direct memory and capture publication. Publication rechecks permissions and sources before commit.
+The administrator creates workspaces, rotates Keys, and can manage content in an explicitly selected workspace. Publication rechecks permissions and sources before commit.
 
 ## Endpoints
 
@@ -231,11 +223,8 @@ Knowledge updates change the current version and title only after asynchronous p
 | --- | --- |
 | `GET /v1/whoami` | Returns credential id, tenant_id, workspace_id, and effective role. |
 | `GET /v1/workspaces` | Returns the key workspace with workspace_id, name, role, and is_default. |
-| `POST /admin/keys` | Admin sends `{workspace_id,role}`. The workspace must match the request's selected workspace and becomes the new key's default. Returns `{key_id,token}`. |
-| `POST /admin/keys/{id}/rotate` | The issuing workspace's admin rotates the current credential ID. Keeps the logical ID and returns a new `{key_id,token}`. |
-| `DELETE /admin/keys/{id}` | An admin in the issuing workspace revokes the credential. |
 
-Administrators create new workspaces and inspect or rotate their keys through the [workspace administration API](#deployment-administrator). The `/admin/keys` write routes listed above belong to the legacy credential interface scheduled for removal.
+Administrators create new workspaces and inspect or rotate their keys through the [workspace administration API](#deployment-administrator).
 
 ## Version conflicts
 

@@ -13,7 +13,7 @@ import time
 from urllib.error import HTTPError
 import uuid
 
-from native_fixture import workspace as seed_workspace
+from native_fixture import admin_env, workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require
 
 
@@ -206,7 +206,8 @@ def verify_controls(host, admin, writer, outsider, cases, session, checks):
     host.token = outsider
     checks["other_admin_denied"] = [denied(host, path, (403, 404)) for path in (archived, route)]
     host.token = admin
-    rotated = host.request("/admin/keys/" + writer["key_id"] + "/rotate", {})
+    rotation = f"/admin/deployment/workspaces/{writer['workspace_id']}/keys/rotate"
+    rotated = host.request(rotation, {})
     host.forbidden.append(rotated["token"])
     host.token = writer["token"]
     checks["old_key_denied"] = denied(host, archived, (401,))
@@ -216,7 +217,8 @@ def verify_controls(host, admin, writer, outsider, cases, session, checks):
             "rotation lost the original archive or receipt")
     checks["rotation_preserved_ownership"] = True
     host.token = admin
-    host.request("/admin/keys/" + rotated["key_id"], method="DELETE")
+    next_key = host.request(rotation, {})
+    host.forbidden.append(next_key["token"])
     host.token = rotated["token"]
     checks["revoked_read_and_replay"] = [denied(host, archived, (401,)), denied(host, prepare, (401,), payload)]
 
@@ -245,17 +247,12 @@ def main():
                 root = Path(folder)
                 env = isolated_env(folder)
                 require("OC_ANYSEEK_API_KEY" in env, "run under tools/anyseek_smoke.py --run")
-                workspace = seed_workspace(env, "synthetic-archive")
-                admin = workspace["token"]
-                with Host(args.binary, env, admin, [admin, env["OC_ANYSEEK_API_KEY"]]) as host:
-                    def issue(role):
-                        key = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": role})
-                        host.forbidden.append(key["token"])
-                        return key
-                    writer = issue("writer")
-                    outsider = issue("admin")
+                writer = seed_workspace(env, "synthetic-archive", single_key=True)
+                outsider = seed_workspace(env, "isolated archive", writer["workspace_id"], single_key=True)
+                admin = admin_env(env)
+                forbidden = [admin, writer["token"], outsider["token"], env["OC_ANYSEEK_API_KEY"]]
+                with Host(args.binary, env, writer["token"], forbidden) as host:
                     host.publish("Synthetic public fixture for shared archive verification.")
-                    host.token = writer["token"]
                     session = host.request("/v1/session")["session_id"]
                     cases = [archive_case(), archive_case()]
                     round_trip(args, root, host, session, cases, start + 240, report)

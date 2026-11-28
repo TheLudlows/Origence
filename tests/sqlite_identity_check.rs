@@ -1,4 +1,5 @@
 //! The identity check inspects the current format read-only without repair.
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::sqlite_db as db;
 use origence::storage::{
     DomainTx, Lifecycle, Permission, RelationalStore, Scope, StorageError, sqlite::SqliteStore,

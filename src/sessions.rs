@@ -59,14 +59,6 @@ impl Service {
         tx.commit().await?;
         Ok(json!({"session_id":session_id,"key_id":key_id,"workspace_id":a.workspace_id}))
     }
-    /// Explicit admin authorization rotates credentials without merging archives.
-    pub async fn rotate_key(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
-        let mut tx = self.write(a, Permission::WorkspaceAdmin).await?;
-        let key = tx.rotate_scoped_key(id).await?;
-        tx.commit().await?;
-        Ok(json!(key))
-    }
-
     pub async fn archive_turn(
         &self,
         a: &AuthContext,

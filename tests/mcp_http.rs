@@ -1,9 +1,10 @@
+use crate::fixture_keys::FixtureKeys;
 use crate::support::open_service;
 use origence::{
     api::{McpHttpConfig, router_with_mcp},
     models::Models,
     service::Service,
-    storage::{RelationalStore, Scope},
+    storage::Scope,
 };
 use reqwest::{RequestBuilder, StatusCode};
 use serde_json::{Value, json};
@@ -275,10 +276,8 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
     }
 
     let admin_auth = service.auth(&admin.token).await.unwrap();
-    let replacement = service
-        .rotate_key(&admin_auth, writer.key_id)
-        .await
-        .unwrap();
+    let replacement =
+        crate::support::rotate_fixture_key(&service, &admin_auth, writer.key_id).await;
     let body: Value = list(&admin.token).await.unwrap().json().await.unwrap();
     assert_eq!(body["items"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -762,10 +761,7 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
         .await
         .is_err()
     );
-    service
-        .revoke_key(&service.auth(&a_admin.token).await.unwrap(), writer.key_id)
-        .await
-        .unwrap();
+    store.revoke_key(writer.key_id).await.unwrap();
     assert_eq!(
         peer.post(rpc("tools/list", json!({})))
             .bearer_auth(token)

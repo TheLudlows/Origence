@@ -1,12 +1,8 @@
 #![cfg(feature = "host")]
 use super::semantic_memory::{assert_evidence_budget, assert_evidence_matrix};
+use crate::fixture_keys::FixtureKeys;
 use origence::{
-    error::AppError,
-    models::Models,
-    service::Service,
-    storage::{RelationalStore, Scope},
-    types::AuthContext,
-    worker,
+    error::AppError, models::Models, service::Service, storage::Scope, types::AuthContext, worker,
 };
 use serde_json::{Value, json};
 use std::sync::{
@@ -760,7 +756,7 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     tokio::time::timeout(std::time::Duration::from_secs(10), stub.entered.notified())
         .await
         .unwrap();
-    s.revoke_key(&a, wa.id).await.unwrap();
+    s.engine.relational().revoke_key(wa.id).await.unwrap();
     stub.release.notify_one();
     running.await.unwrap();
     assert_eq!(

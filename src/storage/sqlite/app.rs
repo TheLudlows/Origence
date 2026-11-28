@@ -354,48 +354,6 @@ impl SqliteTx {
         }
         self.graph_rows_for_sources(&roots).await
     }
-
-    pub async fn issue_scoped_key(&mut self, role: &str) -> StorageResult<IssuedKey> {
-        self.check_permission(Permission::WorkspaceAdmin).await?;
-        if role == "workspace" || !Permission::Read.granted_by(role) {
-            return Err(StorageError::Conflict("invalid role".into()));
-        }
-        if super::workspace_key::has_workspace_key(&mut self.tx, self.scope).await? {
-            return Err(StorageError::Forbidden);
-        }
-        let key_id = Uuid::new_v4();
-        let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,?,?)").bind(key_id).bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        self.audit("key.issue", key_id, json!({"role":role}))
-            .await?;
-        Ok(IssuedKey { key_id, token })
-    }
-    pub async fn revoke_scoped_key(&mut self, id: Uuid) -> StorageResult<()> {
-        self.check_permission(Permission::WorkspaceAdmin).await?;
-        self.revoke_scoped_key_inner(id).await
-    }
-
-    pub(super) async fn revoke_scoped_key_inner(&mut self, id: Uuid) -> StorageResult<()> {
-        let result = sqlite_db::query(
-            "UPDATE oc_api_keys SET revoked=1 WHERE tenant_id=? AND workspace_id=? AND id=?",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(id)
-        .execute(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        if result.rows_affected() == 0 {
-            return Err(StorageError::NotFound);
-        }
-        self.audit("key.revoke", id, json!({})).await?;
-        // Self-revocation was authorized under the IMMEDIATE write lock; its
-        // intended effect must not invalidate its own commit.
-        if id == self.principal_id {
-            self.required.clear();
-        }
-        Ok(())
-    }
 }
 
 impl SqliteTx {

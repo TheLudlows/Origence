@@ -1,5 +1,6 @@
 use super::*;
-use crate::storage::RelationalStore;
+#[cfg(test)]
+use crate::fixture_keys::FixtureKeys;
 use crate::storage::sqlite_db as db;
 
 #[derive(Clone, Copy)]

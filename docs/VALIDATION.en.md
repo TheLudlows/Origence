@@ -2267,3 +2267,24 @@ job fingerprint uses the selected extraction endpoint.
 - Docker Compose v2.40.3 `config` confirmed that the fixture `.env` passes both
   URLs and keys to the host service. Model calls used synthetic loopback fixtures.
   Live providers and container deployment were outside this validation.
+
+## 2026-11-28 — Removal of obsolete Workspace Key endpoints (local)
+
+Main base `d8dd128f2dcc5a7551f439a464318ff1ae40d270`, implementation commit
+`ab99049f3c8de4ad303f9f15a91a293f25dbd981`. Linux x86_64 with Rust 1.98.0, fresh databases, and synthetic data.
+
+- `cargo test --locked --offline --no-fail-fast -j 3` passed 468 tests with 11 ignored. The old `/admin/keys`
+  endpoints return 404. After administrator rotation, HTTP and MCP reject the old Key, and the new Key retains
+  the logical ownership of sessions and Runs.
+- Strict all-targets Clippy passed for all features and for SQLite only. Formatting and `git diff --check` passed.
+  The SQLite-only archive isolation and rotation unit test passed.
+- `npm --prefix ui run check` and all 33 UI tests passed. Chromium against the local service verified workspace
+  creation, Key rotation, administrator review, historical version restoration, original citations, and source withdrawal.
+- `tools/mcp_smoke.py --local` passed. `tools/private_archive_smoke.py` passed with embedded and standalone AnySeek,
+  covering credential isolation, body integrity, replay, recovery, and restore. The Python suite passed 11 tests with 5 skipped.
+
+SQLite and permission checks still recognize the old roles. Windows, vendor clients, and live models were outside this validation.
+
+Before opening the PR, rebased onto main `4f69478b0cb68211adef40920f7926641a565777`, yielding implementation
+commit `98b9c6cde3068d64e887f539231e84e40b71de6e`. `git range-diff` confirmed an identical implementation patch.
+Main removed two old Python suites. All 3 remaining Python tests passed after the rebase.

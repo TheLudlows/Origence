@@ -1,5 +1,7 @@
 //! Native title inheritance and historical restore contracts.
 use super::*;
+#[cfg(test)]
+use crate::fixture_keys::FixtureKeys;
 use crate::storage::sqlite_db as db;
 
 async fn database() -> (tempfile::TempDir, SqliteStore, Scope) {

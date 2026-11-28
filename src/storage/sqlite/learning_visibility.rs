@@ -4,6 +4,8 @@
 //! traversed iteratively, so a malformed cycle cannot recurse on the async stack
 //! and an over-limit closure is rejected rather than partially validated.
 use super::*;
+#[cfg(test)]
+use crate::fixture_keys::FixtureKeys;
 use crate::learning::{ExperienceBasis, ExperiencePublication};
 use crate::session::ArchivedEvidence;
 use std::collections::HashSet;

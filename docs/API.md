@@ -12,19 +12,17 @@
 
 ## 私有会话、Trace 与 Skill
 
-`GET /v1/session` 返回 `{workspace_id,key_id,session_id}`，均从认证推导，首次可创建会话绑定。已有
-`/v1/sessions/{session_id}/turns`、反馈和 Improve 接口只接受当前 key 的归档，
-并保留 writer 权限。会话绑定当前工作区与逻辑 Key。发布后的 Learning 正文和条件可被同 workspace 召回，但归档、
-Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可以在凭据签发的 workspace 调用
-`POST /admin/keys/{id}/rotate`。新凭据延续原逻辑 Key 和工作区归属，并撤销旧凭据；响应中的新 token
-应安全保存。独立签发的新 key 不能读取原归档。客户端通过
+`GET /v1/session` 返回 `{workspace_id,key_id,session_id}`，均从认证推导，首次可创建会话绑定。
+轮次、反馈和 Improve 接口使用当前工作区和逻辑 Key 的归档。发布后的 Learning 正文和条件可被同一工作区召回，归档、
+Improve 和支持记录的私有指针仅返回给所属逻辑 Key。管理员通过
+`POST /admin/deployment/workspaces/{id}/keys/rotate` 轮换凭据。新凭据延续原逻辑 Key 和工作区归属，同时撤销旧凭据。客户端通过
 [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.md) 使用同一边界。
 
 Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权限和来源有效性处理。
 
 | Run 接口 | 输入与结果 |
 | --- | --- |
-| `POST /v1/runs` | writer 提交稳定的 `run_id` 与脱敏 `summary`，绑定当前归档 |
+| `POST /v1/runs` | 使用工作区 Key 提交稳定的 `run_id` 与脱敏 `summary`，绑定当前归档 |
 | `POST /v1/runs/{id}/events` | 稳定 `event_id`、时间、报告方与具名事件；相同重试返回原序号 |
 | `POST /v1/runs/{id}/context` | `event_id` 和 `context`（EvidenceBundle 请求）；返回 bundle 和服务端准备回执 |
 | `GET /v1/runs/{id}?after=0&limit=50` | 所属 Key 或本工作区管理员读取分页链路。`is_owner` 标明当前 Key 的归属。 |
@@ -124,17 +122,9 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ## 角色
 
-部署管理员创建的单 Key 工作空间使用一把固定绑定的有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在本空间读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档，删除轮次、清空会话及通过来源接口删除会话均返回 403。空间管理和角色授权接口仅对各自的管理员开放。部署管理员可通过 `POST /admin/deployment/workspaces/{id}/keys/rotate` 轮换。
+每个工作区使用一把有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在所属工作区读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档。用工作区 Key 删除轮次、清空会话或通过来源接口删除会话均返回 403。
 
-已有角色管理路径的权限表如下。
-
-| 角色 | 权限 |
-| --- | --- |
-| reader | 已发布内容 get/search/resolve |
-| writer | reader + 上传、原文件下载、知识入库、结构化记忆发布、提取、会话归档与反馈、获授权任务的查询与控制、版本恢复、Skill 审阅与发布 |
-| admin | writer + 内容条目删除、来源撤回、文件删除、失败清理任务重试和工作区管理 |
-
-原始文件和任务可能涉及未发布数据，reader 不能读取。记忆与 capture 由 writer 授权直接发布，发布任务提交时重新核验权限与来源。
+管理员可创建工作区、轮换 Key，以及在明确选定的工作区内管理业务内容。发布任务提交时重新核验权限与来源。
 
 ## 接口
 
@@ -297,11 +287,8 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | --- | --- |
 | `GET /v1/whoami` | 返回已认证凭据的 id、tenant_id、选中的 workspace_id 和有效 role |
 | `GET /v1/workspaces` | 返回本 Key 所属的工作区，每项含 workspace_id、name、role 和 is_default |
-| `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须是请求选中的 workspace，成为新 key 的默认项。返回 `{key_id,token}` |
-| `POST /admin/keys/{id}/rotate` | 签发工作区管理员轮换当前凭据 ID。保留逻辑 Key ID，返回新 `{key_id,token}` |
-| `DELETE /admin/keys/{id}` | 签发 workspace 的 admin 撤销整个凭据，后续所有工作区调用都会拒绝 |
 
-新工作区由管理员创建，Key 通过[管理员工作区接口](#部署管理员)查询和轮换。上表中 `/admin/keys` 的写入路径属于待移除的旧凭据接口。
+新工作区由管理员创建，Key 通过[管理员工作区接口](#部署管理员)查询和轮换。
 
 ## 版本冲突
 

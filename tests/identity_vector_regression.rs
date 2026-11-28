@@ -2,6 +2,7 @@
 //! Fixed vectors prove candidate filtering, not semantic retrieval quality.
 #![cfg(feature = "host")]
 
+use crate::fixture_keys::FixtureKeys;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use origence::{
     memory_identity::MemoryIdentity,

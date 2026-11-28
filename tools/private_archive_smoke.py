@@ -23,7 +23,7 @@ import uuid
 
 from anyseek_smoke import wait_ready
 from mcp_smoke import Host, Mcp, isolated_env
-from native_fixture import run as native_fixture, workspace as seed_workspace
+from native_fixture import admin_env, run as native_fixture, workspace as seed_workspace
 
 MARKER = "privatearchiveneedle"
 ANSWER = "Synthetic archive answer Café 审批 🦀"
@@ -99,20 +99,11 @@ class Proxy(Peer):
         # Fault modes are armed for one request on the isolated peer.
         replace = self.path.endswith("/group/replace") and body
         put = replace and body["records"]
-        delete = replace and not body["records"]
         action = peer.action
-        if private and delete and action == "delete_before":
-            peer.action = None
-            self.reply(503, {})
-            return
         if private and put and action == "before":
             peer.action = None
             self.reply(503, {})
             return
-        if private and put and action == "late":
-            peer.action = None
-            peer.entered.set()
-            assert peer.release.wait(20)
         if private and action == "block_read":
             self.reply(503, {})
             return
@@ -124,10 +115,6 @@ class Proxy(Peer):
         upstream_headers = {}
         status, value = request(peer.upstream, self.path, self.command, body=body, headers=headers,
                                 upstream_headers=upstream_headers)
-        if private and delete and action == "delete_after" and status == 200:
-            peer.action = None
-            self.reply(503, {})
-            return
         if private and put and action == "after" and status == 200:
             peer.action = "block_read"
             self.reply(503, {})
@@ -236,10 +223,11 @@ def run_contract(binary, root, model, anyseek):
             proxy.release = threading.Event()
             env.update(OC_ANYSEEK_URL=proxy_url, OC_ANYSEEK_API_KEY=key)
             forbidden.append(key)
-        owner = seed_workspace(env, "private fixture")
-        foreign = seed_workspace(env, "second workspace", owner["workspace_id"])
+        owner = seed_workspace(env, "private fixture", single_key=True)
+        administrator = admin_env(env)
+        foreign = seed_workspace(env, "second workspace", owner["workspace_id"], single_key=True)
         token = owner["token"]
-        forbidden.extend([token, foreign["token"]])
+        forbidden.extend([token, administrator, foreign["token"]])
         turn = new_turn(MARKER + " Café question")
         control = new_turn("Unrelated fixture orchard")
         rich = new_turn("界" * 21845 + "x", "\u0001" * 65535 + "y")
@@ -256,7 +244,7 @@ def run_contract(binary, root, model, anyseek):
                 saved.append(host.request(route, item))
                 time.sleep(0.005)
             with database(directory) as db:
-                assert db.execute("SELECT COUNT(*) FROM oc_session_turns").fetchone() == (0,)
+                assert db.execute("SELECT COUNT(*) FROM oc_session_turns").fetchone() == (len(saved),)
                 assert not db.execute(
                     "SELECT 1 FROM sqlite_schema WHERE name IN ('oc_private_archives','oc_private_archive_migration')"
                 ).fetchall()
@@ -315,11 +303,9 @@ def run_contract(binary, root, model, anyseek):
             assert host.request("/v1/search", {"query": "banana"})["hits"]
             empty = host.request("/v1/search", {"query": MARKER})
             assert empty["hits"] == []
-            writer = host.request("/admin/keys", {"workspace_id": owner["workspace_id"], "role": "writer"})
-            for other in [writer["token"], foreign["token"]]:
-                expect(request(host.base, route + "/" + turn["turn_id"], token=other), 404)
-                other_results = expect(request(host.base, "/v1/context", "POST", other, context), 200)
-                assert other_results["items"] == []
+            expect(request(host.base, route + "/" + turn["turn_id"], token=foreign["token"]), 404)
+            other_results = expect(request(host.base, "/v1/context", "POST", foreign["token"], context), 200)
+            assert other_results["items"] == []
             # Multiple client submissions settle to the first stable source ID.
             concurrent_turn = new_turn("Concurrent synthetic turn")
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
@@ -327,12 +313,8 @@ def run_contract(binary, root, model, anyseek):
             assert all(result == results[0] for result in results)
             source_path = f"/v1/events/{results[0]['source_event_id']}"
             assert json.loads(host.request(source_path)["content"])["question"] == concurrent_turn["question"]
-            deleted = expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 200)
-            assert expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 200) == deleted
-            expect(request(host.base, route + "/" + concurrent_turn["turn_id"], token=token), 404)
-            with database(directory) as db:
-                assert db.execute("SELECT 1 FROM oc_session_turns WHERE turn_id=?",
-                                  (uuid.UUID(concurrent_turn["turn_id"]).bytes,)).fetchone() is None
+            expect(request(host.base, source_path, "DELETE", token, {}, "withdraw-native-source"), 403)
+            expect(request(host.base, route + "/" + concurrent_turn["turn_id"], token=token), 200)
 
             if anyseek:
                 # The directory hit and Run proof still exist. Losing the
@@ -370,23 +352,6 @@ def run_contract(binary, root, model, anyseek):
                 proxy.release.clear()
                 assert host.request(route + "/" + turn["turn_id"])["answer"] == ANSWER
 
-                disappearing = new_turn("withdrawalduringsearchneedle")
-                host.request(route, disappearing)
-                search = dict(context, query=disappearing["question"])
-                assert host.request("/v1/context", search)["items"][0]["provenance"]["turn_id"] == disappearing["turn_id"]
-                proxy.action = "hold_read"
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    inflight = pool.submit(request, host.base, "/v1/context", "POST", token, search)
-                    try:
-                        assert proxy.entered.wait(15), "context did not reach private body read"
-                        expect(request(host.base, route + "/" + disappearing["turn_id"], "DELETE", token), 200)
-                    finally:
-                        proxy.release.set()
-                    result = expect(inflight.result(), 200)
-                    assert result["items"] == []
-                    assert result["routes"][0]["invalidated_before_render"] == 1
-                proxy.entered.clear()
-                proxy.release.clear()
                 proxy.action = "before"
                 delayed = new_turn("unwrittenpendingneedle")
                 expect(request(host.base, route, "POST", token, delayed, "unwritten"), 503)
@@ -402,16 +367,6 @@ def run_contract(binary, root, model, anyseek):
                 for action in ["missing", "corrupt"]:
                     proxy.action = action
                     expect(request(host.base, route + "/" + turn["turn_id"], token=token), 503)
-                proxy.action = "late"
-                late = new_turn("latependingneedle")
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    delayed_call = pool.submit(request, host.base, route, "POST", token, late)
-                    assert proxy.entered.wait(15)
-                    expect(request(host.base, route + "/" + late["turn_id"], "DELETE", token), 200)
-                    proxy.release.set()
-                    assert delayed_call.result()[0] in (404, 503)
-                expect(request(host.base, route + "/" + late["turn_id"], token=token), 404)
-                expect(request(host.base, route, "POST", token, late), 404)
                 proxy.action = "after"
                 lost = new_turn("lostreceiptneedle")
                 expect(request(host.base, route, "POST", token, lost, "lostreceipt"), 503)
@@ -424,7 +379,8 @@ def run_contract(binary, root, model, anyseek):
                 recovered = host.request(route + "/" + lost["turn_id"])
                 assert recovered["question"] == lost["question"]
                 assert host.request(route, lost)["source_event_id"] == recovered["source_event_id"]
-            rotate_path = f"/admin/keys/{owner['key_id']}/rotate"
+            rotate_path = f"/admin/deployment/workspaces/{owner['workspace_id']}/keys/rotate"
+            host.token = administrator
             if anyseek:
                 proxy.entered.clear()
                 proxy.release.clear()
@@ -442,8 +398,8 @@ def run_contract(binary, root, model, anyseek):
             expect(request(host.base, route + "/" + turn["turn_id"], token=token), 401)
             rotated = expect(request(host.base, route + "/" + turn["turn_id"], token=replacement), 200)
             assert rotated["source_event_id"] == saved[0]["source_event_id"]
-            expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 200)
-            expect(request(host.base, route + "/" + control["turn_id"], token=replacement), 404)
+            expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 403)
+            expect(request(host.base, route + "/" + control["turn_id"], token=replacement), 200)
 
 
         token = replacement
@@ -487,35 +443,11 @@ def run_contract(binary, root, model, anyseek):
             assert host.request("/v1/context", context)["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
             assert host.request("/v1/context", dict(context, query="semantic paraphrase", mode="vector"))["items"][0]["provenance"]["turn_id"] == turn["turn_id"]
             assert host.request("/v1/search", {"query": MARKER})["hits"] == []
-            if anyseek:
-                for fault in ("delete_before", "delete_after"):
-                    sample = new_turn(fault)
-                    host.request(route, sample)
-                    target = route + "/" + sample["turn_id"]
-                    proxy_server.action = fault
-                    expect(request(host.base, target, "DELETE", token), 503)
-                    expect(request(host.base, target, token=token), 200 if fault == "delete_before" else 404)
-                    expect(request(host.base, target, "DELETE", token), 200)
-                    expect(request(host.base, target, token=token), 404)
-
-            for index in range(17):
-                host.request(route, new_turn(f"Multi-page clear fixture {index}"))
-            cutoff = host.request(route)["through_sequence"]
-            newer = new_turn("New turn outside the confirmed range")
-            host.request(route, newer)
-            clear = f"/v1/sessions/{session}?through_sequence={cutoff}"
-            for _ in range(2):
-                after = "0"
-                while after is not None:
-                    batch = expect(request(host.base, f"{clear}&after={after}", "DELETE", token), 200)
-                    after = batch["next_after"]
-                history = host.request(route)["turns"]
-                assert [row["turn_id"] for row in history] == [newer["turn_id"]]
-            expect(request(host.base, f"/v1/sessions/{session}", "DELETE", token), 400)
-            trace = host.request(f"/v1/runs/{run_id}")
-            assert trace["events"][0]["report"]["private_sources_unavailable"] == 1
-            assert trace["events"][0]["references"] == []
-            expect(request(host.base, prepare, "POST", token, run_request), 404)
+            history = host.request(route)
+            clear = f"/v1/sessions/{session}?through_sequence={history['through_sequence']}"
+            expect(request(host.base, clear, "DELETE", token), 403)
+            assert host.request(route) == history
+            assert host.request(prepare, run_request) == prepared
 
 
 def wait_for(predicate):

@@ -1,12 +1,13 @@
 #![cfg(feature = "host")]
 
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::sqlite_db as db;
 use origence::{
     error::{AppError, Result},
     models::Models,
     service::Service,
     session::{FeedbackInput, SessionTurnInput},
-    storage::{AuthorizedScope, DomainTx, RelationalStore, Scope},
+    storage::{AuthorizedScope, DomainTx, Scope},
     types::AuthContext,
     worker,
 };
@@ -45,7 +46,7 @@ async fn provision_scope(
 }
 
 async fn role(s: &Service, a: &AuthContext, name: &str) -> AuthContext {
-    let key = s.issue_key(a, name).await.unwrap();
+    let key = crate::support::seed_member_key(s, a, name).await;
     s.auth(key["token"].as_str().unwrap()).await.unwrap()
 }
 
@@ -695,7 +696,7 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
         .await,
         Err(AppError::Forbidden)
     ));
-    s.revoke_key(&a, writer.id).await.unwrap();
+    s.engine.relational().revoke_key(writer.id).await.unwrap();
     for result in [
         s.session_turn(&writer, session, turn_id).await,
         s.session_feedback(&writer, session, turn_id).await,
@@ -1700,7 +1701,7 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
         .unwrap();
     let (a, token) = provision(&s).await;
     let (_, other_token) = provision(&s).await;
-    let reader = s.issue_key(&a, "reader").await.unwrap();
+    let reader = crate::support::seed_member_key(&s, &a, "reader").await;
     let reader_token = reader["token"].as_str().unwrap();
     let (base, _server) = serve(s.clone()).await;
     let http = reqwest::Client::builder()

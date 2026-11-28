@@ -1,4 +1,5 @@
 //! Real SQLite + Service + HTTP contracts for the UI's bounded catalogs.
+use crate::fixture_keys::FixtureKeys;
 use crate::support::open_service;
 use origence::{
     models::Models,
@@ -229,7 +230,7 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
         })
     );
     let admin_auth = service.auth(&admin.token).await.unwrap();
-    let rotated = service.rotate_key(&admin_auth, owner.key_id).await.unwrap();
+    let rotated = crate::support::rotate_fixture_key(&service, &admin_auth, owner.key_id).await;
     assert!(
         owner_http
             .call(Method::GET, "/v1/runs/overview", None, None)
@@ -416,7 +417,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
             .unwrap()
             .is_empty()
     );
-    let rotated = s.rotate_key(&other, admin_key.key_id).await.unwrap();
+    let rotated = crate::support::rotate_fixture_key(&s, &other, admin_key.key_id).await;
     let rotated_auth = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
     assert_eq!(
         s.list_runs(&rotated_auth, Uuid::nil(), 25).await.unwrap()["items"][0]["run_id"],
@@ -778,7 +779,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
             .unwrap()
             .is_empty()
     );
-    let rotated = s.rotate_key(&other, key.key_id).await.unwrap();
+    let rotated = crate::support::rotate_fixture_key(&s, &other, key.key_id).await;
     let a = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
     let mut after = Uuid::nil();
     let mut found = Vec::new();
@@ -1097,7 +1098,7 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
         .await
         .unwrap();
 
-    let replacement = service.rotate_key(&admin_auth, owner.key_id).await.unwrap();
+    let replacement = crate::support::rotate_fixture_key(&service, &admin_auth, owner.key_id).await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("http://{}/v1/runs/overview", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());

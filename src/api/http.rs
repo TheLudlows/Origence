@@ -30,9 +30,6 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/whoami", get(whoami))
         .route("/v1/workspaces", get(workspaces))
         .route("/v1/session", get(private_session))
-        .route("/admin/keys/{id}/rotate", post(rotate_key))
-        .route("/admin/keys", post(issue_key))
-        .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/admin/memory-properties", post(register_memory_property))
         .route("/v1/memory-properties/{predicate}", get(memory_property))
         .route("/v1/memories", post(memory))
@@ -467,35 +464,6 @@ async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value
     ))
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct KeyInput {
-    workspace_id: Uuid,
-    role: String,
-}
-
-async fn issue_key(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Json(input): Json<KeyInput>,
-) -> Result<impl IntoResponse> {
-    let a = auth(&s, &h).await?;
-    if input.workspace_id != a.workspace_id {
-        return Err(AppError::Forbidden);
-    }
-    Ok((
-        [(header::CACHE_CONTROL, "no-store")],
-        Json(s.issue_key(&a, &input.role).await?),
-    ))
-}
-async fn revoke_key(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Value>> {
-    Ok(Json(s.revoke_key(&auth(&s, &h).await?, id).await?))
-}
-
 async fn archive_turn(
     State(s): State<Service>,
     h: HeaderMap,
@@ -631,14 +599,4 @@ async fn context_bundle(
 
 async fn private_session(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value>> {
     Ok(Json(s.private_session(&auth(&s, &h).await?).await?))
-}
-async fn rotate_key(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-) -> Result<impl IntoResponse> {
-    Ok((
-        [(header::CACHE_CONTROL, "no-store")],
-        Json(s.rotate_key(&auth(&s, &h).await?, id).await?),
-    ))
 }

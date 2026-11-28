@@ -1,6 +1,7 @@
 //! Public, non-protocol message ingestion through the real Worker/search pipeline.
 //! Deterministic localhost embeddings exercise engineering, not model quality.
 #![cfg(feature = "host")]
+use crate::fixture_keys::FixtureKeys;
 use axum::{Json, Router, routing::post};
 use origence::storage::sqlite_db as db;
 use origence::{
@@ -708,7 +709,7 @@ async fn workspace_replay_preserves_creator_and_all_spec_input_conflicts() {
         .await
         .unwrap();
     let (_, auth) = provision(&service).await;
-    let replacement = service.issue_key(&auth, "admin").await.unwrap();
+    let replacement = crate::support::seed_member_key(&service, &auth, "admin").await;
     let other = service
         .auth(replacement["token"].as_str().unwrap())
         .await
@@ -1020,7 +1021,7 @@ async fn revoked_creator_cannot_publish_or_transfer_work_through_replay() {
         .await
         .unwrap();
     let (_, auth) = provision(&service).await;
-    let replacement = service.issue_key(&auth, "admin").await.unwrap();
+    let replacement = crate::support::seed_member_key(&service, &auth, "admin").await;
     let rotated = service
         .auth(replacement["token"].as_str().unwrap())
         .await
@@ -1035,7 +1036,12 @@ async fn revoked_creator_cannot_publish_or_transfer_work_through_replay() {
     tokio::time::timeout(Duration::from_secs(5), models.entered.notified())
         .await
         .unwrap();
-    service.revoke_key(&rotated, auth.id).await.unwrap();
+    service
+        .engine
+        .relational()
+        .revoke_key(auth.id)
+        .await
+        .unwrap();
     assert_eq!(
         service
             .submit_message_batch(&rotated, "revocation", batch("revocation"), models.spec())
