@@ -357,8 +357,20 @@ impl SqliteTx {
         outcome: &str,
         result: &Value,
     ) -> StorageResult<()> {
+        // Once committed, only message batches still need their original
+        // receipt identity and chunk membership for live readiness checks.
         sqlite_db::query(
-            "UPDATE oc_jobs SET state = 'completed', outcome = ?, result = ?, error_code = NULL, updated_at = ? \
+            "UPDATE oc_jobs SET state = 'completed', outcome = ?, result = ?, error_code = NULL, updated_at = ?, \
+             payload = CASE WHEN operation = 'message_batch_ingest' THEN json_set(payload,'$.publication',json_object( \
+                 'generation',json_extract(payload,'$.publication.generation'), \
+                 'profile',json_extract(payload,'$.publication.profile'), \
+                 'receipt_metadata',json_extract(payload,'$.publication.receipt_metadata'), \
+                 'memories',json_array(json_object( \
+                     'asset',json_extract(payload,'$.publication.memories[0].asset'), \
+                     'version',json_extract(payload,'$.publication.memories[0].version'), \
+                     'chunks',json((SELECT json_group_array(json_object('id',json_extract(value,'$.id')) ORDER BY key) \
+                         FROM json_each(payload,'$.publication.memories[0].chunks'))))))) \
+             ELSE json_remove(payload,'$.publication','$.consolidation_plan','$.semantic_capture_plan','$.semantic_members') END \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(outcome)

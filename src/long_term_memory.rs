@@ -287,7 +287,7 @@ impl Service {
             supports: Vec::new(),
         };
         let (asset, source, job) =
-            Self::stage_learning_ingest(&mut tx, &candidate, self.models.profile.clone()).await?;
+            Self::stage_learning_ingest(&mut tx, self.models.profile.clone()).await?;
         let receipt = tx
             .create_direct_learning(asset, source, job, &candidate, &input.basis)
             .await?;
@@ -296,13 +296,12 @@ impl Service {
 
     pub(crate) async fn stage_learning_ingest(
         tx: &mut SqliteTx,
-        candidate: &LearningCandidate,
         embedding_profile: Option<String>,
     ) -> Result<(Uuid, Uuid, Uuid)> {
         let title = "Conditional learning";
-        let source = tx
-            .create_event("learning", &candidate.render_text(), None)
-            .await?;
+        // The event tracks the source's identity and visibility. Its text is
+        // rendered from the immutable candidate in the learning catalog.
+        let source = tx.create_event("learning", "", None).await?;
         let asset = tx.insert_knowledge_asset(title).await?;
         let job = Self::enqueue(
             tx,

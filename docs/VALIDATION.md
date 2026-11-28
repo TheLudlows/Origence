@@ -7,6 +7,16 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 发布与经验副本精简
+
+基于 main `9275983`，Linux、Rust 1.98.0 和隔离 SQLite 数据库。运行
+`cargo test --locked --offline --lib --test local`，234 项库测试及 224 项集成测试通过。
+格式检查、全功能及仅 `sqlite` 的全目标严格 Clippy、“git diff --check”均通过。
+消息批次在完成时只保留精确回执元数据，既有故障重启测试核对原分块标识及模型调用次数。
+经验通过公开接口核对来源事件不再重复存正文，已发布版本与原始来源返回相同文本。
+使用 `tools/anyseek_smoke.py --embedded` 和隔离 HTTP 冒烟验证了真实嵌入式 AnySeek
+的发布与重启，另核验中文经验、SQLite 副本清理与撤回。未运行原生 Windows 或远端 CI。
+
 ## 2026-11-28 · 部署管理员与平级工作区
 
 基于 main `dc1f040`，在 Linux 上使用 Rust 1.98.0、Node 24.22.1 和隔离 SQLite 数据库。

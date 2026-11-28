@@ -21,6 +21,10 @@ Claude Code 与 Codex 已通过同 Key 会话互读和独立 Run 验收。双向
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
+## 发布与经验副本精简
+
+发布成功的任务在同一 SQLite 提交中清除用于重试的正文、摘要、向量和提取计划。消息批次继续保留精确回执元数据用于可见性校验。新经验的来源正文由不可变候选生成，来源事件只保留标识和可见性。详见[发布和清理设计](design/current-implementation.md#storage-consistency)。
+
 独立 AnySeek 部署可使用已取消 Record 数量上限的集合 Info，继续校验显式声明的旧版上限及查询候选限额。具体固定版本和实测见 [VALIDATION](VALIDATION.md#2026-11-27--独立-anyseek-集合限额兼容)。
 
 ## 单 Key 工作空间

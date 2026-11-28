@@ -242,6 +242,39 @@ fn entries(receipt: &IngestReceipt, payload: &Value) -> Vec<FullTextEntry> {
         .collect()
 }
 
+async fn published_entries(
+    service: &Service,
+    dir: &std::path::Path,
+    auth: &AuthContext,
+    receipt: &IngestReceipt,
+) -> Vec<FullTextEntry> {
+    let ids: Vec<Uuid> =
+        sqlite_db::query_scalar("SELECT id FROM oc_chunks WHERE asset_id=? ORDER BY ordinal")
+            .bind(receipt.asset_id)
+            .fetch_all(service.engine.relational().pool())
+            .await
+            .unwrap();
+    let mut stored = crate::support::fixture(dir, Some(2)).published_payloads(scope(auth), &ids);
+    let generation = payload(service, receipt).await["publication"]["generation"]
+        .as_i64()
+        .unwrap();
+    ids.into_iter()
+        .map(|id| {
+            let payload = stored.remove(&id).unwrap();
+            FullTextEntry {
+                id,
+                search_terms: parsing::lexical(&payload.content),
+                payload,
+                source: SourceVersion {
+                    source_id: receipt.source_event_id,
+                    version: receipt.target_version,
+                },
+                generation,
+            }
+        })
+        .collect()
+}
+
 async fn native_ids(service: &Service, auth: &AuthContext, generation: i64) -> BTreeSet<Uuid> {
     crate::support::projection(service)
         .search_full_text(FullTextQuery {
@@ -421,7 +454,20 @@ async fn full_text_write_failure_restarts_the_original_plan_without_partial_publ
             .await,
         Err(AppError::Conflict(_))
     ));
-    assert_eq!(payload(&service, &receipt).await, saved);
+    let completed = payload(&service, &receipt).await;
+    assert_eq!(
+        completed["publication"]["receipt_metadata"],
+        saved["publication"]["receipt_metadata"]
+    );
+    assert_eq!(
+        completed["publication"]["memories"][0]["chunks"],
+        json!(
+            planned
+                .iter()
+                .map(|entry| json!({"id":entry.id}))
+                .collect::<Vec<_>>()
+        )
+    );
     for (table, expected) in [
         ("oc_jobs", 1),
         ("oc_events", 1),
@@ -456,8 +502,7 @@ async fn withdrawn_source_is_hidden_before_cleanup_and_cannot_be_resurrected_by_
         "Atlas retained original",
     )
     .await;
-    let saved = payload(&service, &receipt).await;
-    let indexed = entries(&receipt, &saved);
+    let indexed = published_entries(&service, dir.path(), &auth, &receipt).await;
     let expected: BTreeSet<_> = indexed.iter().map(|entry| entry.id).collect();
     assert_eq!(native_ids(&service, &auth, 1).await, expected);
     service
@@ -526,7 +571,9 @@ async fn native_replays_vote_once_and_conflicting_committed_generations_fail_clo
         .unwrap();
     let (_, auth) = provision(&service).await;
     let receipt = publish(&service, &auth, &models, "rrf", "Atlas single evidence").await;
-    let entry = entries(&receipt, &payload(&service, &receipt).await).remove(0);
+    let entry = published_entries(&service, dir.path(), &auth, &receipt)
+        .await
+        .remove(0);
     let before = service
         .search(&auth, query("Atlas", "hybrid", false))
         .await
@@ -713,7 +760,7 @@ async fn completed_receipt_requires_every_exact_full_text_ledger_member() {
         .await
         .unwrap();
     assert!(worker::process_next(&service).await.unwrap());
-    let planned = entries(&receipt, &payload(&service, &receipt).await);
+    let planned = published_entries(&service, dir.path(), &auth, &receipt).await;
     assert_eq!(planned.len(), 2);
     assert_eq!(
         service.message_batch_status(&auth, &receipt).await.unwrap(),
@@ -789,7 +836,7 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
         ("beta", "original third"),
     ] {
         let receipt = publish(&service, &auth, &models, id, text).await;
-        chunks.push(entries(&receipt, &payload(&service, &receipt).await)[0].id);
+        chunks.push(published_entries(&service, dir.path(), &auth, &receipt).await[0].id);
     }
     let mut tx = service
         .engine
@@ -900,7 +947,7 @@ async fn wrong_source_rows_cannot_silently_consume_the_authorized_candidate_budg
         .await
         .unwrap();
     assert!(worker::process_next(&service).await.unwrap());
-    let originals = entries(&receipt, &payload(&service, &receipt).await);
+    let originals = published_entries(&service, dir.path(), &auth, &receipt).await;
     assert_eq!(originals.len(), 2);
     let vector = |entry: &FullTextEntry| VectorEntry {
         id: entry.id,
@@ -1033,7 +1080,7 @@ async fn committed_full_text_table_loss_blocks_readiness_search_and_reopen() {
         "Atlas committed evidence",
     )
     .await;
-    let indexed = entries(&receipt, &payload(&service, &receipt).await);
+    let indexed = published_entries(&service, dir.path(), &auth, &receipt).await;
     // Isolate the storage half of readiness without starting another worker.
     // No job is pending, and no background task races the test-owned move.
     service.worker_running.store(true, Ordering::Release);

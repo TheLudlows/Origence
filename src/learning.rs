@@ -214,7 +214,7 @@ fn validate_learning_text(statement: &str, why: &str) -> Result<(), &'static str
 }
 
 impl LearningCandidate {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "sqlite")]
     pub(crate) fn render_text(&self) -> String {
         format!(
             "Conditional learning\nConditions:\n{}\n\nStatement:\n{}\n\nWhy:\n{}",

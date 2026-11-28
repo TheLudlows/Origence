@@ -93,6 +93,8 @@ Job leases carry creator, scope, generation, and run_token. After model calls, p
 
 AnySeek writes the immutable publication's chunks as one atomic Record group. One chunk can carry graph metadata. Each new business version uses a separate group. There is no shared Origence/AnySeek transaction. On a lost response, check the complete current group first. Recover with the original plan and epoch. Cleanup uses a CAS on the current group version to preserve other members. A still-valid job after startup cleanup can rebuild with the original plan. If no complete commit can be proved outside the original operation window, preserve failed state without guessing using a new identity.
 
+Job completion removes the retry copies of chunk text, summaries, vectors, and extraction plans in the publication transaction. Message batch receipts retain the target version, generation, model profile, and chunk witnesses for live visibility checks. Failed jobs and jobs awaiting retry retain saved plans.
+
 One atomic AnySeek group commits a new private turn's body, directory data, and search projection. Stable turn IDs and request digests confirm writes and retries. AnySeek confirms deletion of the group. SQLite reuses ordinary source retraction for existing dependency proofs. [Archive API](../API.en.md#session-archiving-and-idempotent-feedback)
 
 <a id="storage-configuration"></a>
@@ -114,6 +116,7 @@ Explicit memory identity comprises scope + subject + predicate + canonical conte
 Long-term facts retain versions, sources, and effective times in SQLite. Ordinary Context can evaluate them at a business time. Experience retrieval uses currently visible published Learning. Dated queries use ordinary Context or the long-term memory APIs. Run context preparation rejects `as_of_ms`. [Long-term memory](../contracts/memory-consolidation.md)
 
 Workspace writers can also publish experience on the same publication path with human confirmation or a pinned knowledge version.
+New experience source events keep identity and visibility metadata. Ingest and the source reader render the same text from the immutable candidate.
 
 EvidenceBundle gives memory, knowledge, and Learning independent retrieval and UTF-8 byte budgets. Session defaults off and only a writer on the current key can read it. Only explicit single-value identity conflicts are recognized. General prose contradictions are not inferred. Session references must not be fabricated as chunk/entity/relation archive references. See the [memory](../contracts/memory.en.md), [learning](../contracts/learning.md), and [context](../contracts/evidence-bundle.md) contracts.
 

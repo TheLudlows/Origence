@@ -20,6 +20,10 @@ Claude Code and Codex passed cross-client reads of session records under the sam
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
+## Publication and experience copies
+
+The SQLite transaction that completes publication removes the retry copies of text, summaries, vectors, and extraction plans. Message batches retain exact receipt metadata for live visibility checks. New experience source events keep identity and visibility metadata, and render source text from the immutable candidate. See the [publication and cleanup design](design/current-implementation.en.md#storage-consistency).
+
 Standalone AnySeek deployments accept collection Info after removal of the Record count limit and still validate advertised legacy limits and the query candidate limit. See [VALIDATION](VALIDATION.en.md#2026-11-27--standalone-anyseek-collection-limit-compatibility) for pinned versions and evidence.
 
 ## Single-key workspaces

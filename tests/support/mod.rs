@@ -185,6 +185,27 @@ impl AnySeekFixture {
             .cloned()
             .collect()
     }
+    pub fn published_payloads(&self, scope: Scope, ids: &[Uuid]) -> HashMap<Uuid, ChunkPayload> {
+        let data = self.data.lock().unwrap();
+        ids.iter()
+            .map(|id| {
+                let document = data
+                    .records
+                    .values()
+                    .map(|row| &row["document"])
+                    .find(|doc| {
+                        doc["chunk_id"] == id.to_string()
+                            && doc["tenant"] == scope.tenant_id.to_string()
+                            && doc["workspace"] == scope.workspace_id.to_string()
+                    })
+                    .unwrap();
+                (
+                    *id,
+                    serde_json::from_value(document["payload"].clone()).unwrap(),
+                )
+            })
+            .collect()
+    }
     /// Inject stale graph-bearing anchors only into graph-filter queries. They
     /// must never become stale ordinary keyword/vector candidates in this test.
     pub fn restore_stale_records(&self, records: &[Value]) {

@@ -921,6 +921,21 @@ impl SqliteTx {
 }
 
 impl SqliteTx {
+    pub(super) async fn learning_source_text(&mut self, source: Uuid) -> StorageResult<String> {
+        let body: Option<String> = sqlite_db::query_scalar(
+            "SELECT candidate FROM oc_learnings WHERE tenant_id=? AND workspace_id=? AND source_event_id=?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(source)
+        .fetch_optional(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let body =
+            body.ok_or_else(|| StorageError::Unavailable("learning source missing".into()))?;
+        Ok(decode::<LearningCandidate>(&body)?.render_text())
+    }
+
     /// Registration checks accepted reservations under the same write lock as
     /// insertion. An earlier novelty check only considers published lessons.
     async fn find_learning_duplicate(
