@@ -145,6 +145,12 @@ impl Service {
             // No authority lease/transaction is held across remote IO.
             self.engine.vector().check_scope(scope).await?;
         }
+        if self.engine.relational().has_global_knowledge().await? {
+            self.engine
+                .vector()
+                .check_scope(global_knowledge::GLOBAL_SCOPE)
+                .await?;
+        }
         let profiles = self.engine.relational().committed_vector_profiles().await?;
         for (profile, dimension) in profiles {
             self.engine

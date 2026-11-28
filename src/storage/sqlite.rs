@@ -42,8 +42,7 @@ mod deployment;
 mod domain;
 #[cfg(feature = "local-storage")]
 mod full_text;
-#[cfg(feature = "local-storage")]
-mod global_knowledge;
+pub(crate) mod global_knowledge;
 mod identity;
 mod improve;
 #[cfg(test)]

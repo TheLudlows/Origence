@@ -69,6 +69,21 @@ HTTP 测试覆盖已移除的管理员多 Key 操作和子工作区列表、保�
 `npm --prefix ui run check` 与 34 项 UI 测试通过。Chromium 156.0.8078.79 通过
 `check-console-session-browser.cjs` 和 `check-key-management-browser.cjs`，覆盖新管理员名称、登录、
 平级工作区创建、密钥轮换和全局知识审核。浏览器使用回环服务和合成数据。原生 Windows 待运行。
+## 2026-11-28 · 全局知识检索审查
+
+基于 `14278f4`，Linux 和 Rust 1.98.0。真实 HTTP 协议夹具通过 257 个已批准分块的跨批次检索和
+合并排名，另在全局正文读取期间下架，确认最终响应只保留仍可见的工作区结果。原回执丢失、
+固定版本、来源删除和下架后 Run 重放拒绝等断言同时通过。
+
+## 2026-11-28 · 全局知识正文迁入 AnySeek
+
+基于 main `340aa50`，Linux 和 Rust 1.98.0。库测试 232 项、本地集成测试 225 项通过。
+全局知识回归复跑覆盖写入回执丢失后的续跑、待审隔离、跨租户读取、固定版本、私有来源删除、
+篡改正文拒绝返回，以及下架后拒绝 Run 回放。全功能和仅 `sqlite` 的全目标严格 Clippy、
+Rust 格式检查、`git diff --check` 通过。
+
+使用独立 AnySeek `6a46fc7` 运行 `tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --run python tools/mcp_smoke.py --binary <origence>`，
+验证 HTTP/MCP 全局读取与重启。未运行原生 Windows 或 GitHub CI。
 
 ## 2026-11-28 · PR #186 构建与远端发布回归
 

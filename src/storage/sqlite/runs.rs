@@ -327,28 +327,11 @@ impl SqliteTx {
             else {
                 continue;
             };
-            let approved: bool = sqlite_db::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM oc_global_knowledge WHERE id=? AND version=? AND state='approved')",
-            ).bind(publication_id).bind(version).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
-            if !approved {
+            if !self
+                .global_citation_available(publication_id, version, chunk_id, byte_start, byte_end)
+                .await?
+            {
                 removed += 1;
-                continue;
-            }
-            let exact: bool = sqlite_db::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM oc_global_knowledge_chunks
-                 WHERE publication_id=? AND id=? AND byte_start=? AND byte_end=? AND enabled)",
-            )
-            .bind(publication_id)
-            .bind(chunk_id)
-            .bind(byte_start)
-            .bind(byte_end)
-            .fetch_one(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
-            if !exact {
-                return Err(StorageError::Unavailable(
-                    "invalid global knowledge citation".into(),
-                ));
             }
         }
         Ok(removed)

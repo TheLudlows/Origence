@@ -52,6 +52,7 @@ Source events and original Blobs, content items and versions, chunks, summaries,
 | --- | --- | --- |
 | SQLite | Permissions, sources, versions and publication ledger, durable jobs, versioned long-term facts, session numbering and withdrawal, evidence used by Run or feedback, Skill records and packages | `context.db` |
 | AnySeek shared collections | Published chunk text, summaries, and full-text, vector, and one-hop graph indexes | Routed by tenant and workspace |
+| Global AnySeek collection | Pinned global releases, chunks, and keyword index | Dedicated scope reserved for global publication |
 | AnySeek private collections | Complete original Q&A, turn sequence, references, and hashes with keyword and vector projections | Routed by tenant, workspace, and logical key |
 | BlobStore | Original upload bytes | Local directories addressed by scope/hash |
 

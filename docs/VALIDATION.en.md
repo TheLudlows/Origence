@@ -79,6 +79,25 @@ protocol negotiation, tool contracts, and revocation.
 Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 passed `check-console-session-browser.cjs`
 and `check-key-management-browser.cjs` with loopback services and synthetic data, covering the administrator
 label, sign-in, peer workspace creation, key rotation, and global knowledge review. Native Windows is pending.
+## 2026-11-28 · Global knowledge retrieval review
+
+Based on `14278f4`, using Linux and Rust 1.98.0. The HTTP protocol fixture verified
+merged ranking across batches containing 257 approved chunks. Withdrawal during a
+global body read left only the still-visible workspace hit in the final result. Existing
+lost-response, pinned version, source deletion, and withdrawn Run replay checks also passed.
+
+## 2026-11-28 · Move global knowledge content to AnySeek
+
+Based on main `340aa50`, using Linux and Rust 1.98.0. Passed 232 library and 225 local
+integration tests. The targeted global knowledge rerun covered a lost write response,
+pending release isolation, cross-tenant reads, a pinned version, deletion of the private
+original, tampered text rejection, and Run replay denial after withdrawal.
+Strict all-target Clippy with all features and with only `sqlite`, Rust formatting,
+and `git diff --check` passed.
+
+`tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --run python tools/mcp_smoke.py --binary <origence>`
+verified HTTP/MCP global reads and restart with standalone AnySeek `6a46fc7`.
+Native Windows and GitHub CI were not run.
 
 ## 2026-11-28 · PR #186 build and remote publication checks
 
