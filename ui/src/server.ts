@@ -145,7 +145,7 @@ export function createUiServer(options: ServerOptions) {
       headers: { authorization }, redirect: "manual", signal,
     });
     if ([401, 403, 404].includes(response.status)) return false;
-    if (!response.ok) throw new HttpError(502, "暂时无法核验部署管理员权限");
+    if (!response.ok) throw new HttpError(502, "暂时无法核验管理员权限");
     return (await response.json())?.role === "deployment_admin";
   });
   return createServer(async (req, res) => {

@@ -303,6 +303,8 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 
 ## 任务与读取可见性
 
+单 Key 工作区轮换凭据后，已受理的任务使用该工作区当前有效的 Key 执行或重试，保留任务原提交者。处理中遇到轮换导致的授权失败时，Worker 按任务重试规则重新领取。
+
 `pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 `asset_id` 和 `version`。之后仍可能被更新、删除或来源撤回。
 
 删除响应为 `{id,blocked:true,cleanup_job_id,originals_retained:true}`。逻辑删除事务完成后新读取被阻断，索引清理是否完成不影响这一规则。已经发出的数据无法收回；在删除前已开始的请求可能先完成。
@@ -403,7 +405,7 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 - MessageBatch 的 batch_id/session_id 为 1–4096 UTF-8 字节、无 NUL；每批 1–256 条消息，正文合计不超过 1,000,000 UTF-8 字节，正文遵守通用文本校验。role 是 1–64 UTF-8 字节、非空白且无控制字符的原样标签，例如 system/tool；它不代表权限。timestamp 是可选有符号 i64 Unix 毫秒，缺省/null 不补当前时间，不据此重排消息。
 - `AcceptedMessageSpec::raw_only(profile)` 固定 `message-batch-ranges-v1`、parser_version=1、chunking_version=1、raw_only=true 及 embedding profile；接受事务把完整规格写入原 job payload。完整批次和规格参与请求 hash，重复键的内容/session/顺序/角色/时间/parser/profile/mode 变化返回冲突，不另建任务。恢复和显式 retry 使用原规格；运行模型 profile 不匹配时拒绝处理。
 - `IngestReceipt` 保存原 asset/source/job/目标版本和规格，不保存永久 success。`message_batch_status` / `wait_message_batch` 重新授权并观察这一批次，区分 Pending、Retrievable、Failed、CancelledOrSuperseded、Invisible。只有确切目标版本、有效来源、全部目标 profile 的原分块索引和账本 generation 一致，才是 Retrievable。
-- 同一 workspace 的合法新 key 可命中同一回执，但 job.created_by 不变。原 key 撤销/降权/关闭能力后，新 key 不接管原消息发布任务；Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。正常轮换先排空旧任务，再撤销旧 key。原有 cleanup 是特权回收任务：仍允许当前 admin 在原 creator 撤销后显式重试清理，但不转移 created_by，也不发布数据。
+- 同一 workspace 的合法新 key 可命中同一回执，`job.created_by` 保留原提交者。单 Key 轮换后的执行授权见[任务与读取可见性](#任务与读取可见性)。成员 Key 撤销、降权或关闭能力后，另一把 Key 无法接管原任务。Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。cleanup 是特权回收任务，当前 admin 可在原提交者撤销后显式重试清理。
 - 原文来源 JSON 保留完整 batch/session/role/timestamp 和输入顺序；分块定位包含 source_event_id、external_batch_id、message_index、source_path、消息内 UTF-8 byte_start/end 及 parser 规格。同 session 的多批次不会仅由局部 message_index 区分。原始批次不伪造 SessionTurn/Feedback。
 
 派生能力 root key 是受信服务端凭据，可以访问 root 下全部所属 workspace。调用方负责核对终端用户身份并选择获授权的目标 workspace。root key 仅供受信服务使用。

@@ -3,8 +3,7 @@
 use super::*;
 
 impl SqliteTx {
-    /// Retry keeps the original authority. An archive job follows its
-    /// workspace's logical key through credential rotation.
+    /// Retry uses the same execution authority as the worker.
     #[cfg(feature = "local-storage")]
     pub(crate) async fn require_job_creator_write(&mut self, job: Uuid) -> StorageResult<()> {
         let job_authority: Option<(Uuid, bool)> = sqlite_db::query_as(
@@ -18,11 +17,13 @@ impl SqliteTx {
         .await
         .map_err(sqlite_err)?;
         let (creator, archive_extraction) = job_authority.ok_or(StorageError::NotFound)?;
-        let creator = if archive_extraction {
-            super::workspace_key::active_workspace_key(&mut self.tx, self.scope, creator).await?
-        } else {
-            creator
-        };
+        let creator = super::workspace_key::job_execution_key(
+            &mut self.tx,
+            self.scope,
+            creator,
+            archive_extraction,
+        )
+        .await?;
         let role = self.live_role_for_principal(creator).await?;
         if !Permission::Write.granted_by(&role) {
             return Err(StorageError::Forbidden);

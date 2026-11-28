@@ -254,7 +254,7 @@ async function run() {
     await keyPage.getByRole("button", { name: "退出", exact: true }).click();
     await keyField.fill(deploymentKey);
     await keyPage.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
-    await keyPage.getByRole("heading", { name: "部署管理", exact: true }).waitFor();
+    await keyPage.getByRole("heading", { name: "管理员", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "Beta space", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "Alpha space", exact: true }).click();
     await keyPage.getByRole("heading", { name: "会话", exact: true }).waitFor();

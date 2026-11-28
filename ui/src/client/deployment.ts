@@ -11,7 +11,7 @@ type IssuedKey = { key_id: string; token: string };
 
 export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout: () => Promise<void>) {
   const workspaceList = el("div"), content = el("main", "content");
-  const title = "部署管理";
+  const title = "管理员";
   root.replaceChildren(el("div", "shell", el("aside", "sidebar",
     button("全局知识审核", reviews, "workspace-item"),
     button("新建工作区", createWorkspace, "workspace-item"),

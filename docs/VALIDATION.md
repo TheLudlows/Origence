@@ -7,6 +7,19 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 管理员命名与单 Key 作业轮换
+
+基于 main `92759833a943d8f5529e2938e77d0c10b636cd75`，Linux、Rust 1.98.0 和 Node 24.22.1。
+`cargo test --locked --offline --test local workspace_access::` 通过 5 项。新 Key 通过 HTTP、MCP 和公开库接口
+读回原会话及来源、Run、记忆和知识，旧 Key 的 HTTP 及 MCP 请求返回 401。待处理的知识任务发布新版，
+取消的记忆任务经新 Key 重试完成。原任务保留提交者，另一个工作区的 Key 继续有效，且无法读取该知识。
+默认特性的 `cargo test --locked --offline --no-fail-fast --quiet -j 3` 通过 486 项，忽略 8 项。
+格式检查、全特性全目标严格 Clippy 和本地 HTTP MCP 冒烟通过。MCP 检查覆盖协议协商、工具契约及撤权。
+
+`npm --prefix ui run check` 与 34 项 UI 测试通过。Chromium 156.0.8078.79 通过
+`check-console-session-browser.cjs` 和 `check-key-management-browser.cjs`，覆盖新管理员名称、登录、
+平级工作区创建、密钥轮换和全局知识审核。浏览器使用回环服务和合成数据。原生 Windows 待运行。
+
 ## 2026-11-28 · 部署管理员与平级工作区
 
 基于 main `dc1f040`，在 Linux 上使用 Rust 1.98.0、Node 24.22.1 和隔离 SQLite 数据库。

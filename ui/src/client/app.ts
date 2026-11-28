@@ -147,7 +147,7 @@ function login(setupRequired?: true) {
   mount.replaceChildren(el("main", "login", el("div", "login-layout", brand(), card)));
 
   function showForm(useKey: boolean, focus = false) {
-    const secret = input(useKey ? "输入工作空间或部署管理员 Key" : "", "", "password");
+    const secret = input(useKey ? "输入工作空间或管理员 Key" : "", "", "password");
     secret.required = true;
     secret.autocomplete = useKey ? "off" : "current-password";
     const error = el("div");

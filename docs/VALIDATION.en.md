@@ -4,6 +4,22 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Administrator label and jobs across workspace key rotation
+
+Linux verification used main `92759833a943d8f5529e2938e77d0c10b636cd75`, Rust 1.98.0, and Node 24.22.1.
+`cargo test --locked --offline --test local workspace_access::` passed five tests. HTTP, MCP, and public library
+checks read the original session and source, Run, memory, and knowledge with the current key. The previous key
+received HTTP 401 through HTTP and MCP. A pending knowledge job published its new version, and a cancelled
+memory job completed after the current key retried it. The original submitter remained recorded, and another
+workspace's key remained valid and was denied access to the knowledge.
+The default-feature `cargo test --locked --offline --no-fail-fast --quiet -j 3` passed 486 tests with eight ignored.
+Formatting, strict Clippy for all targets and features, and the local HTTP MCP smoke passed. The MCP smoke covered
+protocol negotiation, tool contracts, and revocation.
+
+Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 passed `check-console-session-browser.cjs`
+and `check-key-management-browser.cjs` with loopback services and synthetic data, covering the administrator
+label, sign-in, peer workspace creation, key rotation, and global knowledge review. Native Windows is pending.
+
 ## 2026-11-28 · Deployment administrators and peer workspaces
 
 Linux verification used main `dc1f040`, Rust 1.98.0, Node 24.22.1, and isolated SQLite databases.

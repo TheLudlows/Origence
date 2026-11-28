@@ -154,7 +154,7 @@ async function run(binary) {
     assert.equal(await nav.getByRole("button", { name: "API Key" }).count(), 0);
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await login(page, "deployment");
-    await page.getByRole("heading", { name: "部署管理", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "管理员", exact: true }).waitFor();
     await page.getByRole("button", { name: "研发", exact: true }).waitFor();
     await page.getByRole("button", { name: "运营", exact: true }).waitFor();
     await page.getByRole("button", { name: "新建工作区", exact: true }).click();

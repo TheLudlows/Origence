@@ -132,7 +132,7 @@ export class ConsoleSessions {
 
   deploymentAuthorization(req: IncomingMessage, origin: URL) {
     const authorization = this.boundSession(req, origin).deploymentAuthorization;
-    if (!authorization) throw new HttpError(403, "此入口需要部署管理员 Key");
+    if (!authorization) throw new HttpError(403, "此入口需要管理员权限");
     return authorization;
   }
 
@@ -258,7 +258,7 @@ export class ConsoleSessions {
       const authorization = account.deploymentAuthorization;
       if (authorization) {
         if (!await this.identifyDeployment(authorization, signal))
-          throw new HttpError(401, "部署管理员凭据已失效");
+          throw new HttpError(401, "管理员凭据已失效");
         const session = this.session(account.username, [], origin, "deployment");
         session.deploymentAuthorization = authorization;
         return session;
@@ -281,8 +281,8 @@ export class ConsoleSessions {
     try {
       const authorization = `Bearer ${key}`;
       if (deploying) {
-        if (!await this.identifyDeployment(authorization, signal)) throw new HttpError(401, "部署管理员 Key 无效");
-        const session = this.session("部署管理员", [], origin, "deployment");
+        if (!await this.identifyDeployment(authorization, signal)) throw new HttpError(401, "管理员 Key 无效");
+        const session = this.session("管理员", [], origin, "deployment");
         session.deploymentAuthorization = authorization;
         return { session, identity: undefined };
       }

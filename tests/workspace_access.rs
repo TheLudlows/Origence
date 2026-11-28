@@ -348,7 +348,7 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         .create_key_workspace(scope, "Workspace A")
         .await
         .unwrap();
-    store
+    let other_key = store
         .create_key_workspace(other, "Workspace B")
         .await
         .unwrap();
@@ -374,6 +374,14 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         .await
         .unwrap();
     let source = receipt["source_event_id"].as_str().unwrap();
+    let run = Uuid::new_v4();
+    service
+        .create_run(
+            &auth,
+            serde_json::from_value(json!({"run_id":run,"summary":"Rotation fixture"})).unwrap(),
+        )
+        .await
+        .unwrap();
     assert!(matches!(
         service
             .withdraw_session_archive(&auth, session_id, turn)
@@ -382,11 +390,8 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     ));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let client = HostClient::new(
-        &format!("http://{}", listener.local_addr().unwrap()),
-        key.token.clone(),
-    )
-    .unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let client = HostClient::new(&base, key.token.clone()).unwrap();
     let router = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     assert_eq!(
@@ -438,6 +443,7 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     );
     assert!(matches!(
         client
+            .clone()
             .with_workspace(other.workspace_id)
             .call(Method::GET, "/v1/whoami", None, None)
             .await,
@@ -455,25 +461,158 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         )
         .await
         .unwrap();
-    while origence::worker::process_next(&service).await.unwrap() {}
-    let asset: Uuid = serde_json::from_value(memory["asset_id"].clone()).unwrap();
-    service.get(&auth, asset, None).await.unwrap();
-    service
-        .delete(&auth, "delete-memory", asset, "asset")
+    let knowledge = client
+        .call(
+            Method::POST,
+            "/v1/knowledge",
+            Some(&json!({"title":"Workflow","content":"Original procedure"})),
+            Some("knowledge-v1"),
+        )
         .await
         .unwrap();
-    assert!(matches!(
-        service.get(&auth, asset, None).await,
-        Err(AppError::NotFound)
-    ));
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let asset: Uuid = serde_json::from_value(memory["asset_id"].clone()).unwrap();
+    let knowledge_path = format!("/v1/assets/{}", knowledge["asset_id"].as_str().unwrap());
+    let queued_knowledge = client
+        .call(
+            Method::POST,
+            "/v1/knowledge",
+            Some(
+                &json!({"asset_id":knowledge["asset_id"],"expected_version":1,
+                "title":"Workflow","content":"Procedure accepted before rotation"}),
+            ),
+            Some("knowledge-v2"),
+        )
+        .await
+        .unwrap();
+    let queued_memory = client
+        .call(
+            Method::POST,
+            "/v1/memories",
+            Some(&json!({"fact_key":"fixture.retry","content":"Retry after rotation"})),
+            Some("queued-memory"),
+        )
+        .await
+        .unwrap();
+    let job_id = queued_memory["job_id"].as_str().unwrap();
+    client
+        .call(
+            Method::POST,
+            &format!("/v1/jobs/{job_id}/cancel"),
+            None,
+            Some("cancel-before-rotation"),
+        )
+        .await
+        .unwrap();
 
     let replacement = store.rotate_workspace_key(scope).await.unwrap();
     assert!(matches!(
-        service.auth(&key.token).await,
+        client.call(Method::GET, "/v1/whoami", None, None).await,
         Err(AppError::Unauthorized)
     ));
+    let peer = super::mcp_http::Peer::at(format!("{base}/mcp"));
+    assert_eq!(
+        peer.call(&key.token, None, "context_session", json!({}))
+            .await,
+        Err(json!({"http_status":401}))
+    );
+    assert_eq!(
+        peer.call(&replacement.token, None, "context_session", json!({}))
+            .await
+            .unwrap(),
+        session
+    );
+    assert_eq!(
+        peer.call(
+            &replacement.token,
+            None,
+            "context_turn_get",
+            json!({"turn_id":turn})
+        )
+        .await
+        .unwrap()["source_event_id"],
+        receipt["source_event_id"]
+    );
+    let current = HostClient::new(&base, replacement.token.clone()).unwrap();
+    assert_eq!(
+        current
+            .call(Method::GET, &format!("/v1/runs/{run}"), None, None)
+            .await
+            .unwrap()["run"]["summary"],
+        "Rotation fixture"
+    );
+    assert_eq!(
+        current
+            .call(Method::GET, &knowledge_path, None, None)
+            .await
+            .unwrap()["content"],
+        "Original procedure"
+    );
     let rotated = service.auth(&replacement.token).await.unwrap();
-    assert_eq!(service.private_session(&rotated).await.unwrap(), session);
+    assert_eq!(
+        service.get(&rotated, asset, None).await.unwrap()["content"],
+        "保留中文偏好"
+    );
+    let neighboring = HostClient::new(&base, other_key.token).unwrap();
+    assert_eq!(
+        neighboring
+            .call(Method::GET, "/v1/whoami", None, None)
+            .await
+            .unwrap()["workspace_id"],
+        json!(other.workspace_id)
+    );
+    assert!(matches!(
+        neighboring
+            .call(Method::GET, &knowledge_path, None, None)
+            .await,
+        Err(AppError::NotFound)
+    ));
+
+    current
+        .call(
+            Method::POST,
+            &format!("/v1/jobs/{job_id}/retry"),
+            None,
+            Some("retry-after-rotation"),
+        )
+        .await
+        .unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let knowledge_job: Uuid = serde_json::from_value(queued_knowledge["job_id"].clone()).unwrap();
+    assert_eq!(
+        service.job(&rotated, knowledge_job).await.unwrap()["state"],
+        "completed"
+    );
+    assert_eq!(
+        current
+            .call(Method::GET, &knowledge_path, None, None)
+            .await
+            .unwrap()["content"],
+        "Procedure accepted before rotation"
+    );
+    let memory_job: Uuid = job_id.parse().unwrap();
+    assert_eq!(
+        service.job(&rotated, memory_job).await.unwrap()["state"],
+        "completed"
+    );
+    let stored_creator: Uuid = origence::storage::sqlite_db::query_scalar(
+        "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(knowledge_job)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(stored_creator, key.key_id);
+    service
+        .delete(&rotated, "delete-memory", asset, "asset")
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.get(&rotated, asset, None).await,
+        Err(AppError::NotFound)
+    ));
     host.abort();
     service.engine.shutdown().await.unwrap();
 }
