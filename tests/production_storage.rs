@@ -822,7 +822,7 @@ fn scores(result: &Value) -> BTreeMap<Uuid, f64> {
 }
 
 #[tokio::test]
-async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakage() {
+async fn summary_and_matches_inside_one_native_chunk_without_cross_chunk_leakage() {
     let models = FixtureModels::start().await;
     let dir = tempfile::tempdir().unwrap();
     let service = crate::support::open_service(dir.path(), models.models())
@@ -830,49 +830,25 @@ async fn summary_and_matches_across_rows_of_one_chunk_without_cross_chunk_leakag
         .unwrap();
     let (_, auth) = provision(&service).await;
     let mut chunks = Vec::new();
-    for (id, text) in [
-        ("both", "original first"),
-        ("alpha", "original second"),
-        ("beta", "original third"),
+    for (id, text, summary) in [
+        ("both", "original first", "alpha beta"),
+        ("alpha", "original second", "alpha"),
+        ("beta", "original third", "beta"),
     ] {
         let receipt = publish(&service, &auth, &models, id, text).await;
-        chunks.push(published_entries(&service, dir.path(), &auth, &receipt).await[0].id);
-    }
-    let mut tx = service
-        .engine
-        .relational()
-        .begin(authorized(&auth))
-        .await
-        .unwrap();
-    tx.check_permission(Permission::Write).await.unwrap();
-    for (chunk, text) in [
-        (chunks[0], "alpha"),
-        (chunks[0], "beta"),
-        (chunks[1], "alpha"),
-        (chunks[2], "beta"),
-    ] {
-        tx.insert_summary(Uuid::new_v4(), chunk, &parsing::lexical(text))
+        let mut entry = published_entries(&service, dir.path(), &auth, &receipt)
+            .await
+            .remove(0);
+        chunks.push(entry.id);
+        entry.payload.summary = Some(origence::storage::ChunkSummary {
+            text: summary.to_owned(),
+            model_revision: "fixture".into(),
+        });
+        crate::support::projection(&service)
+            .upsert_full_text(scope(&auth), vec![entry])
             .await
             .unwrap();
     }
-    tx.commit().await.unwrap();
-    let mut tx = service
-        .engine
-        .relational()
-        .begin_read(authorized(&auth))
-        .await
-        .unwrap();
-    tx.check_permission(Permission::Read).await.unwrap();
-    let direct = tx.summary_hits("alpha beta", None).await.unwrap();
-    assert_eq!(direct.len(), 1);
-    assert_eq!(direct[0].chunk_id, chunks[0]);
-    assert!(
-        tx.summary_hits("alpha beta absent", None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    tx.commit().await.unwrap();
     assert_eq!(
         service
             .search(&auth, query("alpha beta", "keyword", false))

@@ -42,8 +42,9 @@ def schema(dimension=None):
     result = [{"field": name, "field_type": "String", "store": True,
                "index_lexical": False, "index_vector": False, "filterable": True, "boost": 1.0}
               for name in fields]
-    result.append({"field": "terms", "field_type": "Text", "store": True,
-                   "index_lexical": True, "index_vector": False, "filterable": False, "boost": 1.0})
+    for field in ("terms", "summary_terms"):
+        result.append({"field": field, "field_type": "Text", "store": True,
+                       "index_lexical": True, "index_vector": False, "filterable": False, "boost": 1.0})
     for name, field_type, filterable in [
         ("payload", "Json", False),
         ("graph", "Json", False),

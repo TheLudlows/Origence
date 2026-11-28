@@ -4,8 +4,7 @@
 
 Baseline: `293e2bf6af3b180d43c8050731047b552ac07519`.
 
-The first release records **owner-transcribed external assessments** only. It does
-not implement a platform verifier or authenticate an external verifier. The server
+Run owners can link an external assessment or transcribe its result. The platform performs no verification of external assessments or verifier identities. The server
 records the authenticated credential principal and logical owner, receipt time,
 and an exact immutable Run prefix (sequence and SHA256). `verifier_label` and
 `assessed_at_ms` are owner claims; client `reporter=user/test` is not an authenticated
@@ -21,12 +20,19 @@ latest publication or a success report. Basis sequences address immutable events
 summary is bounded sanitized text, not a URL to be fetched or trusted HTML.
 At least one basis sequence and a nonempty summary are required.
 
+If an external system already holds the assessment, submit only `verification_id`,
+`through_sequence`, `prefix_digest`, and `external_ref`. The reference is a 1–512
+UTF-8 byte record identifier, for example `review:case-17`. Origence displays it
+as text. Access to the result follows the external system’s own permissions. Submit
+a reference or a transcription as separate request forms.
+
 Only the Run owner with read/write permission can create or withdraw a record.
 Reads require owner/read. Prefix visibility and all original sources are checked
 inside the transaction before create, replay, read or withdrawal. A changed digest
 conflicts; inaccessible sources fail closed. No endpoint accepts owner/principal,
 platform status, authenticated verifier role or receipt timestamp from the caller.
-The server returns `evidence_origin:owner_transcribed_external`,
+The server returns `evidence_origin:owner_linked_external` for references or
+`owner_transcribed_external` for transcriptions, plus
 `verifier_authentication:unverified_claim`, `platform_verification:not_performed`.
 A failed external assessment can coexist with a client success report; neither
 changes the other or implies model use. A prepared v2 bundle only proves preparation.
@@ -51,7 +57,7 @@ acceptance is claimed.
 
 ## PRD and ingestion boundary
 
-This slice maps only to “the Run owner records external sign-off evidence”: the owner transcribes external assessment claims and references. It does not implement independent sign-off, allow a user to certify their own business outcome, or calculate a verified business pass rate. Even `conclusion:passed` stays an unverified external claim with `platform_verification:not_performed`; #89 remains open.
+This slice maps only to “the Run owner records external sign-off evidence”: the owner links the external reference or transcribes the assessment claim. It does not implement independent sign-off, allow a user to certify their own business outcome, or calculate a verified business pass rate. Even `conclusion:passed` stays an unverified external claim with `platform_verification:not_performed`; #89 remains open.
 
 #87 handles explicit client collection and preparation using the existing Run
 interfaces, and explicitly does not change verification semantics. No existing

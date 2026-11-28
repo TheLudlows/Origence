@@ -301,6 +301,19 @@ fn verification(
         .as_ref()
         .ok_or_else(|| StorageError::Conflict("proposal plan is not saved".into()))?;
     let proposal = proposals(run, proposal)?;
+    let plan = verification_decisions(value, proposal.candidates.len())?;
+    Ok((proposal, plan))
+}
+
+fn verification_decisions(
+    value: &Value,
+    candidate_count: usize,
+) -> StorageResult<VerificationPlan> {
+    if candidate_count > MAX_CANDIDATES {
+        return Err(StorageError::InvalidArgument(
+            "invalid learning candidate count",
+        ));
+    }
     let body = encode(value)?;
     if body.len() > MAX_SNAPSHOT_BYTES {
         return Err(StorageError::InvalidArgument(
@@ -308,14 +321,14 @@ fn verification(
         ));
     }
     let plan: VerificationPlan = decode(&body)?;
-    if plan.decisions.len() != proposal.candidates.len() {
+    if plan.decisions.len() != candidate_count {
         return Err(StorageError::InvalidArgument(
             "verification must account for every candidate",
         ));
     }
     let mut seen = std::collections::HashSet::new();
     for decision in &plan.decisions {
-        if decision.candidate >= proposal.candidates.len()
+        if decision.candidate >= candidate_count
             || !seen.insert(decision.candidate)
             || ![
                 "supported",
@@ -333,7 +346,7 @@ fn verification(
             ));
         }
     }
-    Ok((proposal, plan))
+    Ok(plan)
 }
 
 impl SqliteTx {
@@ -796,8 +809,9 @@ impl SqliteTx {
         if affected != 1 {
             return Err(StorageError::Conflict("improve cursor changed".into()));
         }
-        sqlite_db::query("UPDATE oc_improve_runs SET status='completed',completed_at=? WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
-            .bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
+        sqlite_db::query("UPDATE oc_improve_runs SET status='completed',completed_at=?,proposal_plan=? WHERE tenant_id=? AND workspace_id=? AND improve_id=?")
+            .bind(now_ms()).bind(json!({"candidate_count":plan.decisions.len()}).to_string())
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(improve)
             .execute(&mut *self.tx).await.map_err(sqlite_err)?;
         self.audit("session.improve_completed", improve,
             json!({"session_id":session,"target_sequence":run.target_sequence,"published_count":published,"skipped_count":run.snapshot.skipped.len()})).await?;
@@ -865,7 +879,21 @@ impl SqliteTx {
         let mut rejected_count = 0;
         let mut duplicate_count = 0;
         if let Some(value) = &run.verification_plan {
-            let (_, plan) = verification(&run, value)?;
+            let saved_count = run
+                .proposal_plan
+                .as_ref()
+                .and_then(|proposal| proposal.get("candidate_count"));
+            let plan = if let ("completed", Some(count)) = (run.status.as_str(), saved_count) {
+                let count = count
+                    .as_u64()
+                    .and_then(|count| usize::try_from(count).ok())
+                    .ok_or_else(|| {
+                        StorageError::Unavailable("invalid learning candidate count".into())
+                    })?;
+                verification_decisions(value, count)?
+            } else {
+                verification(&run, value)?.1
+            };
             for decision in plan.decisions {
                 if decision.accepted {
                     accepted_count += 1;

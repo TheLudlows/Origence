@@ -1013,10 +1013,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
     assert!(snapshot["items"][0]["turn"].get("question").is_none());
     assert!(snapshot["items"][0]["turn"].get("answer").is_none());
     let quote_digest = json!(origence::storage::hash(ANSWER));
-    assert_eq!(
-        proposal["candidates"][0]["supports"][0]["quote"],
-        quote_digest
-    );
+    assert_eq!(proposal, json!({"candidate_count":1}));
     let candidate: String = db::query_scalar("SELECT candidate FROM oc_learnings WHERE id=?")
         .bind(id(&run["learnings"][0], "learning_id"))
         .fetch_one(pool)

@@ -703,29 +703,6 @@ impl SqliteTx {
             .collect())
     }
 
-    pub(super) async fn current_summary_terms(
-        &mut self,
-        raw: &RawCurrentRows,
-        positions: &[usize],
-    ) -> StorageResult<HashMap<usize, sqlite_db::Row>> {
-        let requests = positions
-            .iter()
-            .map(|index| Ok(vec![raw.rows[*index].try_get("id").map_err(sqlite_err)?]))
-            .collect::<StorageResult<Vec<_>>>()?;
-        let rows = associate_query(
-            &mut self.tx,
-            self.scope,
-            "SELECT group_concat(search_terms,' ') AS search_terms,(chunk_id=?) AS m0,(chunk_id=?) AS m1,(chunk_id=?) AS m2,(chunk_id=?) AS m3,(chunk_id=?) AS m4,(chunk_id=?) AS m5,(chunk_id=?) AS m6,(chunk_id=?) AS m7 FROM oc_summaries WHERE tenant_id=? AND workspace_id=? AND ((chunk_id=?) OR (chunk_id=?) OR (chunk_id=?) OR (chunk_id=?) OR (chunk_id=?) OR (chunk_id=?) OR (chunk_id=?) OR (chunk_id=?)) GROUP BY chunk_id",
-            1,
-            &requests,
-        )
-        .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(index, row)| (positions[index], row))
-            .collect())
-    }
-
     async fn evaluate_support_rows(
         &mut self,
         rows: Vec<sqlite_db::Row>,

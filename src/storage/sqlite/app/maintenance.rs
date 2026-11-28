@@ -137,7 +137,7 @@ pub(super) async fn detach_invalid_chunks(
     conn: &mut Connection,
     scope: Scope,
 ) -> StorageResult<u64> {
-    let owners = sqlite_db::query("SELECT rowid AS cleanup_rowid,chunk_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type IN ('chunk','summary')")
+    let owners = sqlite_db::query("SELECT rowid AS cleanup_rowid,chunk_id FROM oc_artifact_owners WHERE tenant_id=? AND workspace_id=? AND artifact_type='chunk'")
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .fetch_all(&mut *conn)
@@ -212,25 +212,6 @@ pub(super) async fn remove_unowned_chunks(
             .into_iter()
             .map(|(index, _)| index)
             .collect();
-    let dead_keys: Vec<AssociationKey> = chunks
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !owned.contains(index))
-        .map(|(_, row)| row.try_get("id").map_err(sqlite_err))
-        .collect::<StorageResult<_>>()?;
-    // Delete every affected summary before any chunk, retaining the original
-    // global FK-safe order. A summary with no chunk at all is not selected.
-    for index in 0..dead_keys.len().div_ceil(8).max(1) {
-        let start = index * 8;
-        let batch = &dead_keys[start..(start + 8).min(dead_keys.len())];
-        let mut query = sqlite_db::query("DELETE FROM oc_summaries WHERE tenant_id=? AND workspace_id=? AND chunk_id IN (?,?,?,?,?,?,?,?)")
-            .bind(scope.tenant_id)
-            .bind(scope.workspace_id);
-        for slot in 0..8 {
-            query = query.bind(batch.get(slot).cloned());
-        }
-        query.execute(&mut *conn).await.map_err(sqlite_err)?;
-    }
     mutate_rowids(
         conn,
         scope,

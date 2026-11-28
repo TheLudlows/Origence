@@ -4,6 +4,25 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Publication retry, evidence, and retrieval storage cleanup
+
+Based on `ca40c0c` (main `9275983`). Linux checks used Rust 1.98.0, Node 24.22.1,
+and isolated fresh databases. `cargo test --locked --offline --lib --test local`
+passed 232 library and 225 integration tests. Regressions cover restart after a lost
+model-free publication response, digest tamper rejection, exact Run replay without
+a stored rendered string during a retrieval outage, external reference permissions
+and idempotency, exact retrieval of approved Skill packages, and completed Improve counts
+and child receipts. Console type checking and 34 tests passed, including display
+and removal of external references when access fails.
+
+`python tools/anyseek_smoke.py --embedded --binary <origence>` passed publication,
+diagnostics, replay, and restart with the real embedded engine. A loopback model fixture
+and three Chinese knowledge documents also passed within-chunk summary AND matching,
+independent ranking contribution, isolation from keyword retrieval, and restart.
+Formatting, strict all-target Clippy with all features and with only `sqlite`, and
+`git diff --check` passed. Native Windows, standalone remote AnySeek, real models, and
+GitHub CI were not run.
+
 ## 2026-11-28 · Publication and experience copies
 
 Based on main `9275983`, Linux verification used Rust 1.98.0 and isolated SQLite databases.

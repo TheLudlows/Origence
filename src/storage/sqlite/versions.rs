@@ -282,27 +282,6 @@ impl SqliteTx {
         Ok(())
     }
 
-    pub(super) async fn insert_summary_inner(
-        &mut self,
-        summary: Uuid,
-        chunk: Uuid,
-        search_terms: &str,
-    ) -> StorageResult<()> {
-        sqlite_db::query(
-            "INSERT INTO oc_summaries(tenant_id, workspace_id, id, chunk_id, search_terms) \
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .bind(summary)
-        .bind(chunk)
-        .bind(search_terms)
-        .execute(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        Ok(())
-    }
-
     pub(super) async fn update_asset_version_inner(
         &mut self,
         asset: Uuid,

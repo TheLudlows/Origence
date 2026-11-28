@@ -485,13 +485,9 @@ async fn keyword_empty_corpus_uses_three_authority_snapshots_and_no_index_schema
         .unwrap();
     let key = store.issue_key(scope, "admin").await.unwrap();
     let auth = service.auth(&key.token).await.unwrap();
-    // No index work exists. Optional index/summary tables are not dependencies
+    // No index work exists. Optional vector index entries are not dependencies
     // of this request; the complete schema remains mandatory on open/check.
     db::query("DROP TABLE oc_index_entries")
-        .execute(store.pool())
-        .await
-        .unwrap();
-    db::query("DROP TABLE oc_summaries")
         .execute(store.pool())
         .await
         .unwrap();

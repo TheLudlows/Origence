@@ -22,7 +22,11 @@ See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
 ## Publication and experience copies
 
-The SQLite transaction that completes publication removes the retry copies of text, summaries, vectors, and extraction plans. Message batches retain exact receipt metadata for live visibility checks. New experience source events keep identity and visibility metadata, and render source text from the immutable candidate. See the [publication and cleanup design](design/current-implementation.en.md#storage-consistency).
+Ordinary model-free publication persists only its generation, operation epoch, and digest for retry. It rebuilds from fixed inputs and verifies the original output before writing. Jobs that use models retain their exact pending outputs and drop them in the SQLite publication transaction. Message batches retain exact receipt metadata. Completed Improve runs retain the proposal count, verification decisions, and child receipts. New experience source events render text from the immutable candidate. See the [publication and cleanup design](design/current-implementation.en.md#storage-consistency).
+
+Run replay reconstructs context text from the fixed evidence and verifies the original digest. Run owners can store an external verification reference by itself. Skill publication points to the same files approved for review.
+
+SQLite still stores immutable Learning candidates and the regular evidence items needed for exact Run replay. Replay reads private conversation text from AnySeek.
 
 Standalone AnySeek deployments accept collection Info after removal of the Record count limit and still validate advertised legacy limits and the query candidate limit. See [VALIDATION](VALIDATION.en.md#2026-11-27--standalone-anyseek-collection-limit-compatibility) for pinned versions and evidence.
 
@@ -64,7 +68,7 @@ Configure only `OC_ANYSEEK_URL` and `OC_ANYSEEK_API_KEY`. The authenticated tena
 
 ## Unified text and index storage in AnySeek
 
-Original and summary text and their provenance share one chunk Record with full-text, vector, and graph indexes. SQLite removed version/chunk and summary text columns. Follow-up review removed unused chunk terms and redundant summary model versions, and simplified candidate reads to ID sets. Source status, publication pointers, content hashes, summary retrieval terms, and recovery state remain. Text and summary terms are generated and frozen outside transactions. Retry no longer retokenizes legacy plans missing fields. Historical reads and recovery use immutable text in AnySeek and fail explicitly if missing or rewritten. They do not silently recompute from original events. Reads hold no SQL transaction during retrieval and recheck permissions, sources, and all native ranking participants before return. New directories and collections use `origence-sqlite-v2` / `origence-content-sha256-v1`. See VALIDATION for exact tests.
+Original and summary text and their provenance share one chunk Record with full-text, vector, and graph indexes. SQLite removed version/chunk and summary text columns. Follow-up review removed unused chunk terms and redundant summary model versions, and simplified candidate reads to ID sets. Source status, publication pointers, content hashes, and recovery state remain in SQLite. Summary terms live in a dedicated field on the same AnySeek chunk Record and are queried by the hybrid summary branch. Historical reads and recovery use immutable text in AnySeek and fail explicitly if missing or rewritten. They do not silently recompute from original events. Reads hold no SQL transaction during retrieval and recheck permissions, sources, and all native ranking participants before return. New directories and collections use `origence-sqlite-v2` / `origence-content-sha256-v1`. See VALIDATION for exact tests.
 
 ## SQLite authority and minimal metadata
 

@@ -178,6 +178,25 @@ impl SqliteTx {
         sqlite_db::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn save_lexical_publication(
+        &mut self,
+        job: Uuid,
+        seal: &Value,
+    ) -> StorageResult<()> {
+        sqlite_db::query(
+            "UPDATE oc_jobs SET payload=json_set(json_remove(payload,'$.publication'),'$.lexical_publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(seal.to_string())
+        .bind(now_ms())
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(job)
+        .execute(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        Ok(())
+    }
     pub async fn index_ready(
         &mut self,
         chunk: Uuid,
@@ -261,48 +280,6 @@ impl SqliteTx {
 
     pub async fn visible_hit(&mut self, id: Uuid) -> StorageResult<Option<SearchHit>> {
         Ok(self.visible_hits(&[id]).await?.remove(&id))
-    }
-
-    pub async fn summary_hits(
-        &mut self,
-        terms: &str,
-        asset_filter: Option<Uuid>,
-    ) -> StorageResult<Vec<SearchHit>> {
-        let words: std::collections::HashSet<_> = terms.split_whitespace().collect();
-        if words.is_empty() {
-            return Ok(Vec::new());
-        }
-        let raw = read_model::current_rows(&mut self.tx, self.scope, None, asset_filter).await?;
-        let positions = self.local_current_positions(&raw).await?;
-        let summary_terms = self.current_summary_terms(&raw, &positions).await?;
-        let keys = positions
-            .iter()
-            .map(|index| raw.version_key(*index))
-            .collect::<StorageResult<Vec<_>>>()?;
-        let visible = self.visible_version_keys(&keys).await?;
-        let mut hits = Vec::new();
-        for (index, key) in positions.into_iter().zip(keys) {
-            if !visible.contains(&key) {
-                continue;
-            }
-            let text: Option<String> = summary_terms
-                .get(&index)
-                .map(|row| row.try_get("search_terms").map_err(sqlite_err))
-                .transpose()?
-                .flatten();
-            let tokens: std::collections::HashSet<_> =
-                text.as_deref().unwrap_or("").split_whitespace().collect();
-            if words.is_subset(&tokens) {
-                hits.push(raw.hit(index, words.len() as f64 / tokens.len().max(1) as f64)?);
-            }
-        }
-        hits.sort_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
-                .then(a.chunk_id.cmp(&b.chunk_id))
-        });
-        hits.truncate(100);
-        Ok(hits)
     }
 
     pub async fn graph_evidence(&mut self, artifact: Uuid) -> StorageResult<Vec<Value>> {

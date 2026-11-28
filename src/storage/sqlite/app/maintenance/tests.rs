@@ -148,14 +148,6 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
         index(&mut tx, scope, row.chunk).await;
     }
     owner(&mut tx, scope, old, "relation", sole, None).await;
-    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,search_terms) VALUES(?,?,?,?,'summary')")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(Uuid::new_v4())
-        .bind(old.chunk)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
     tx.commit().await.unwrap();
     let native = store.cleanup_plan(scope).await.unwrap();
     let (entities, relations) = graph_owner_ids(&store, scope).await;
@@ -202,14 +194,6 @@ async fn maintenance_preserves_historical_shared_owners_across_reopen_and_finish
             .await
             .unwrap();
     assert_eq!(chunks, vec![new.chunk]);
-    let summaries: i64 =
-        db::query_scalar("SELECT count(*) FROM oc_summaries WHERE tenant_id=? AND workspace_id=?")
-            .bind(scope.tenant_id)
-            .bind(scope.workspace_id)
-            .fetch_one(&store.pool)
-            .await
-            .unwrap();
-    assert_eq!(summaries, 0);
     let versions: i64 =
         db::query_scalar("SELECT count(*) FROM oc_versions WHERE tenant_id=? AND workspace_id=?")
             .bind(scope.tenant_id)
@@ -257,7 +241,7 @@ async fn maintenance_keeps_loose_chunk_gate_and_cross_type_ledger_owner_match() 
     // Different artifact, source, version and asset are allowed by the old
     // owner.chunk_id existence gate; adding any equality here is a regression.
     owner(&mut tx, scope, root, "chunk", artifact, Some(chosen.chunk)).await;
-    owner(&mut tx, scope, root, "summary", absent, None).await;
+    owner(&mut tx, scope, root, "chunk", absent, None).await;
     owner(&mut tx, scope, root, "entity", chosen.chunk, None).await;
     ledger(&mut tx, scope, root, artifact, "full_text", 4).await;
     ledger(&mut tx, scope, root, chosen.chunk, "vector", 5).await;
@@ -304,7 +288,6 @@ async fn raw_database() -> (tempfile::TempDir, Pool, Scope) {
         "CREATE TABLE oc_events(tenant_id BLOB,workspace_id BLOB,id BLOB,state TEXT)",
         "CREATE TABLE oc_artifact_owners(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_type TEXT,artifact_id BLOB,chunk_id BLOB)",
         "CREATE TABLE oc_chunks(tenant_id BLOB,workspace_id BLOB,id BLOB,asset_id BLOB)",
-        "CREATE TABLE oc_summaries(tenant_id BLOB,workspace_id BLOB,chunk_id BLOB)",
         "CREATE TABLE oc_index_entries(tenant_id BLOB,workspace_id BLOB,artifact_id BLOB,state TEXT)",
         "CREATE TABLE oc_artifact_ledger(tenant_id BLOB,workspace_id BLOB,source_id BLOB,version INTEGER,artifact_id BLOB,surface TEXT,state TEXT,updated_at INTEGER)",
     ] {
@@ -494,13 +477,6 @@ async fn finish_helpers_preserve_dangling_summary_and_loose_owner_equivalence() 
         .await
         .unwrap();
     for id in [chunk, missing] {
-        db::query("INSERT INTO oc_summaries VALUES(?,?,?)")
-            .bind(scope.tenant_id)
-            .bind(scope.workspace_id)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .unwrap();
         db::query("INSERT INTO oc_index_entries VALUES(?,?,?,'ready')")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
@@ -530,11 +506,6 @@ async fn finish_helpers_preserve_dangling_summary_and_loose_owner_equivalence() 
     }
     assert_eq!(remove_unowned_chunks(&mut tx, scope).await.unwrap(), 1);
     assert_eq!(remove_unowned_chunks(&mut tx, scope).await.unwrap(), 0);
-    let summaries: Vec<Uuid> = db::query_scalar("SELECT chunk_id FROM oc_summaries")
-        .fetch_all(&mut *tx)
-        .await
-        .unwrap();
-    assert_eq!(summaries, vec![missing]);
     assert_eq!(remove_missing_indexes(&mut tx, scope).await.unwrap(), 2);
     assert_eq!(orphan_unowned_ledger(&mut tx, scope).await.unwrap(), 1);
     let states: Vec<String> =
@@ -562,19 +533,19 @@ async fn empty_cleanup_does_not_require_unreferenced_events() {
 
 #[tokio::test]
 async fn cleanup_checks_required_mutations_but_skips_empty_owner_associations() {
-    for (sql, summaries) in [
-        ("DROP TABLE oc_summaries", true),
+    for (sql, chunks_missing) in [
+        ("DROP TABLE oc_chunks", true),
         ("DROP TABLE oc_artifact_owners", false),
     ] {
         let (_dir, pool, scope) = raw_database().await;
         db::query(sql).execute(&pool).await.unwrap();
         let mut tx = pool.begin().await.unwrap();
-        let result = if summaries {
+        let result = if chunks_missing {
             remove_unowned_chunks(&mut tx, scope).await
         } else {
             orphan_unowned_ledger(&mut tx, scope).await
         };
-        if summaries {
+        if chunks_missing {
             assert!(matches!(result, Err(StorageError::Backend(_))));
         } else {
             assert_eq!(result.unwrap(), 0);
@@ -591,14 +562,6 @@ async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retr
     let mut tx = store.pool.begin().await.unwrap();
     seed(&mut tx, scope, row).await;
     index(&mut tx, scope, row.chunk).await;
-    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,search_terms) VALUES(?,?,?,?,'summary')")
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(Uuid::new_v4())
-        .bind(row.chunk)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
     for generation in 1..=3 {
         ledger(&mut tx, scope, row, row.chunk, "vector", generation).await;
     }
@@ -615,13 +578,11 @@ async fn finish_cleanup_rolls_back_on_failure_and_orphans_without_rewriting_retr
         store.finish_cleanup(scope).await,
         Err(StorageError::Backend(_))
     ));
-    for sql in [
-        "SELECT count(*) FROM oc_chunks",
-        "SELECT count(*) FROM oc_summaries",
-    ] {
-        let count: i64 = db::query_scalar(sql).fetch_one(&store.pool).await.unwrap();
-        assert_eq!(count, 1);
-    }
+    let chunks: i64 = db::query_scalar("SELECT count(*) FROM oc_chunks")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+    assert_eq!(chunks, 1);
     let state: String = db::query_scalar("SELECT state FROM oc_index_entries")
         .fetch_one(&store.pool)
         .await

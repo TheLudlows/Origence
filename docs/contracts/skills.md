@@ -23,10 +23,10 @@ prefixes. No operation auto-publishes.
   rechecks current write access, the approving credential, current candidate
   revision, supporting source authority, and exact generated package. Any candidate
   edit invalidates prior approval, including a source or private-note edit.
-- Publication stores bounded immutable package bytes and provenance in the existing
-  SQLite authority transaction. There is no external IO/worker or partially installed
-  package. Versions increase monotonically. Packages currently reside in SQLite;
-  original document bytes remain in Blob storage.
+- Publication stores provenance, the approved review reference, and the package
+  digest in a SQLite transaction. Package bytes live in the immutable review record.
+  Distribution verifies the manifest, digest, and sources. Versions increase monotonically.
+  The publication transaction needs no external I/O.
 - `skill_package(skill, version)` returns only approved manifest and files, with
   fresh source and withdrawal checks. Review basis, raw source IDs, private notes,
   and approval records are not in the distributed package. Exact historical source

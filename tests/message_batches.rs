@@ -696,7 +696,6 @@ async fn generic_system_tool_batches_publish_raw_source_and_search_all_modes() {
         Err(AppError::NotFound)
     ));
     assert_eq!(models.chats.load(Ordering::SeqCst), 0);
-    assert_eq!(count(&service, "oc_summaries").await, 0);
     assert_eq!(count(&service, "oc_commands").await, 2);
     service.engine.shutdown().await.unwrap();
 }

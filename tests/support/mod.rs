@@ -718,6 +718,15 @@ impl Projection {
             let r = row(scope, e.id, e.source, e.generation);
             let id = r["record_id"].as_str().unwrap().to_string();
             let existing = data.records.entry(id).or_insert(r);
+            if let Some(summary) = &e.payload.summary {
+                existing["document"]["summary_terms"] = json!(
+                    origence::parsing::lexical(&summary.text)
+                        .split_whitespace()
+                        .map(|s| format!("t{}", storage::hash(s)))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+            }
             existing["document"]["payload"] = json!(e.payload);
             existing["document"]["terms"] = json!(
                 e.search_terms

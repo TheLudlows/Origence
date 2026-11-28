@@ -370,7 +370,7 @@ impl SqliteTx {
                      'version',json_extract(payload,'$.publication.memories[0].version'), \
                      'chunks',json((SELECT json_group_array(json_object('id',json_extract(value,'$.id')) ORDER BY key) \
                          FROM json_each(payload,'$.publication.memories[0].chunks'))))))) \
-             ELSE json_remove(payload,'$.publication','$.consolidation_plan','$.semantic_capture_plan','$.semantic_members') END \
+             ELSE json_remove(payload,'$.publication','$.lexical_publication','$.consolidation_plan','$.semantic_capture_plan','$.semantic_members') END \
              WHERE tenant_id = ? AND workspace_id = ? AND id = ?",
         )
         .bind(outcome)

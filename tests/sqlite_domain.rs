@@ -53,9 +53,6 @@ async fn memory_lifecycle_publishes_an_asset() {
         tx.insert_chunk(chunk, a, 1, 0, content, &json!({"byte_start": 0}))
             .await
             .unwrap();
-        tx.insert_summary(Uuid::new_v4(), chunk, "审批")
-            .await
-            .unwrap();
         tx.update_asset_version(a, 1, None).await.unwrap();
         asset = a;
         tx.commit().await.unwrap();

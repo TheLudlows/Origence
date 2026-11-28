@@ -52,7 +52,7 @@ observations, is hashed. Successful idempotent replay retains the first preparat
 IDs/timing and returns that same bundle; a context request digest prevents reusing
 an event ID with another request even if both produce empty context.
 
-The successful event stores a private copy of the prepared bundle for retries.
+The successful event stores a private evidence snapshot for retries. Replay reconstructs the rendered context and verifies the original bundle digest.
 Replay checks the event and request digest before model/retrieval IO, revalidates
 current permission, ownership and every original citation, and returns the original
 bundle/receipt even during a backend outage or after corpus updates. Paginated
@@ -204,7 +204,7 @@ business outcome unchanged. See [managed Run reporting](../MANAGED-RUNS.en.md).
 
 ## External verification records
 
-Owner-transcribed external assessments use a separate [verification contract](run-verification.md).
+External references and owner-transcribed assessments use a separate [verification contract](run-verification.md).
 They address an exact Run prefix and preserve attribution, basis, unknown use
 versions and withdrawal. They are never platform attestations; a claimed verifier
 or `reporter=user/test` label does not grant private Run access.

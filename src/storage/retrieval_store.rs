@@ -79,6 +79,13 @@ impl RetrievalStore {
     ) -> StorageResult<Vec<FullTextHit>> {
         self.backend.search(query, expected).await
     }
+    pub(crate) async fn search_summaries_authorized(
+        &self,
+        query: FullTextQuery,
+        expected: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<FullTextHit>> {
+        self.backend.search_summaries(query, expected).await
+    }
     pub(crate) async fn graph_seed_candidates(
         &self,
         scope: Scope,

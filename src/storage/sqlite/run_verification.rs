@@ -1,6 +1,8 @@
-//! Independent, JOIN-free owner-transcribed assessment persistence.
+//! Persistence for external assessment references and owner transcriptions.
 use super::*;
-use crate::run_verification::{RunVerificationInput, WithdrawRunVerificationInput};
+use crate::run_verification::{
+    RunVerificationInput, VerificationInput, WithdrawRunVerificationInput,
+};
 
 fn decode<T: serde::de::DeserializeOwned>(s: &str) -> StorageResult<T> {
     serde_json::from_str(s)
@@ -10,26 +12,27 @@ impl SqliteTx {
     async fn check_verification_prefix(
         &mut self,
         run: Uuid,
-        input: &RunVerificationInput,
+        input: &VerificationInput,
     ) -> StorageResult<()> {
+        let (_, through_sequence, prefix_digest) = input.binding();
         let digest = self
-            .private_run_prefix_digest(run, input.through_sequence)
+            .private_run_prefix_digest(run, through_sequence)
             .await?;
-        if digest != input.prefix_digest {
+        if digest != prefix_digest {
             return Err(StorageError::Conflict("Run prefix digest mismatch".into()));
         }
         Ok(())
     }
     async fn verification_record(&mut self, run: Uuid, id: Uuid) -> StorageResult<Value> {
         self.owned_run(run).await?;
-        let row: Option<(String, String, Option<String>)> = sqlite_db::query_as(
-            "SELECT payload,record,withdrawal FROM oc_run_verifications WHERE tenant_id=? AND workspace_id=? AND run_id=? AND verification_id=?"
+        let row: Option<(String, Option<String>)> = sqlite_db::query_as(
+            "SELECT record,withdrawal FROM oc_run_verifications WHERE tenant_id=? AND workspace_id=? AND run_id=? AND verification_id=?"
         ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(id)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        let (payload, record, withdrawal) = row.ok_or(StorageError::NotFound)?;
-        self.check_verification_prefix(run, &decode(&payload)?)
-            .await?;
+        let (record, withdrawal) = row.ok_or(StorageError::NotFound)?;
         let mut record: Value = decode(&record)?;
+        self.check_verification_prefix(run, &assessment(&record)?)
+            .await?;
         record["withdrawal"] = withdrawal
             .map(|w| decode(&w))
             .transpose()?
@@ -41,22 +44,29 @@ impl SqliteTx {
         run: Uuid,
         input: &RunVerificationInput,
     ) -> StorageResult<Value> {
+        self.record_verification(run, &VerificationInput::Transcribed(input.clone()))
+            .await
+    }
+    pub(crate) async fn record_verification(
+        &mut self,
+        run: Uuid,
+        input: &VerificationInput,
+    ) -> StorageResult<Value> {
         self.check_permission(Permission::Write).await?;
         input.validate().map_err(StorageError::InvalidArgument)?;
         self.check_verification_prefix(run, input).await?;
-        let payload = serde_json::to_string(input)
-            .map_err(|_| StorageError::InvalidArgument("invalid verification"))?;
+        let (id, _, _) = input.binding();
         let old: Option<String> = sqlite_db::query_scalar(
-            "SELECT payload FROM oc_run_verifications WHERE tenant_id=? AND workspace_id=? AND run_id=? AND verification_id=?"
-        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.verification_id)
+            "SELECT record FROM oc_run_verifications WHERE tenant_id=? AND workspace_id=? AND run_id=? AND verification_id=?"
+        ).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(id)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         if let Some(old) = old {
-            if old != payload {
+            if assessment(&decode(&old)?)? != *input {
                 return Err(StorageError::Conflict(
                     "verification identity reused with different payload".into(),
                 ));
             }
-            return self.verification_record(run, input.verification_id).await;
+            return self.verification_record(run, id).await;
         }
         let count: i64 = sqlite_db::query_scalar("SELECT COUNT(*) FROM oc_run_verifications WHERE tenant_id=? AND workspace_id=? AND run_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
@@ -65,14 +75,18 @@ impl SqliteTx {
                 "Run verification budget exceeded",
             ));
         }
+        let origin = match input {
+            VerificationInput::Linked(_) => "owner_linked_external",
+            VerificationInput::Transcribed(_) => "owner_transcribed_external",
+        };
         let record = json!({"run_id":run, "assessment":input,
             "recorder_principal_id":self.principal_id,"owner_key_id":self.private_key_id().await?,
-            "recorded_at_ms":now_ms(), "evidence_origin":"owner_transcribed_external",
+            "recorded_at_ms":now_ms(), "evidence_origin":origin,
             "verifier_authentication":"unverified_claim", "platform_verification":"not_performed",
             "withdrawal":null});
-        sqlite_db::query("INSERT INTO oc_run_verifications(tenant_id,workspace_id,run_id,verification_id,payload,record) VALUES(?,?,?,?,?,?)")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(input.verification_id)
-            .bind(payload).bind(record.to_string()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        sqlite_db::query("INSERT INTO oc_run_verifications(tenant_id,workspace_id,run_id,verification_id,record) VALUES(?,?,?,?,?)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(id)
+            .bind(record.to_string()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(record)
     }
     pub async fn run_verifications(
@@ -121,6 +135,10 @@ impl SqliteTx {
         record["withdrawal"] = withdrawal;
         Ok(record)
     }
+}
+
+fn assessment(record: &Value) -> StorageResult<VerificationInput> {
+    decode(&record["assessment"].to_string())
 }
 
 #[cfg(test)]
