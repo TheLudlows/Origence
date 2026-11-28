@@ -2297,3 +2297,15 @@ The HTTP regression verified automatic completion of pending jobs and retry of a
 with the replacement credential. Requests using the replaced credential were rejected. Job submitters
 were preserved and output was visible only in its original workspace. Formatting, strict all-targets
 all-features Clippy, and the full Rust suite passed (468 passed, 11 ignored). Windows was not run locally.
+
+## 2026-11-28 — Administrator and Workspace Key authorization (local)
+
+Main base `dc17b783e3afb9ee3a52577d20b29aad57254b32`, tested implementation
+`86c1eecec5bb0c751ae84c7ec370bffc0864d8e5`. Linux x86_64, Rust 1.98.0, fresh databases, and synthetic data.
+
+- The full Rust suite passed 468 tests with 11 ignored. Strict all-targets Clippy passed for all features and SQLite only. Formatting and `git diff --check` passed.
+- SQLite rejected a second active Key in one workspace. HTTP and MCP rejected a replaced Key, while the new Key could still read existing sessions, Runs, memories, and knowledge.
+- Accepted jobs finished in the original workspace across administrator credential rotation. The new credential could retry jobs, and the job record retained the original submitter.
+- UI type checks, 33 UI tests, 15 Node tool tests, 3 Python tests, and Chromium workspace rotation and source verification passed. HTTP MCP and archive recovery with embedded and standalone AnySeek passed.
+
+Archived turns support append and read. The obsolete archive deletion endpoints were removed. Windows and vendor clients were not run locally.
