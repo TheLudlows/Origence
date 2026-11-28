@@ -31,7 +31,7 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/workspaces", get(workspaces))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
-        .route("/admin/keys", get(list_keys).post(issue_key))
+        .route("/admin/keys", post(issue_key))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
         .route("/admin/memory-properties", post(register_memory_property))
         .route("/v1/memory-properties/{predicate}", get(memory_property))
@@ -469,31 +469,9 @@ async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WorkspacePage {
-    after: Option<Uuid>,
-    limit: Option<u32>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct KeyInput {
     workspace_id: Uuid,
     role: String,
-}
-
-async fn list_keys(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Query(page): Query<WorkspacePage>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.list_issued_keys(
-            &auth(&s, &h).await?,
-            page.after.unwrap_or_default(),
-            page.limit.unwrap_or(50),
-        )
-        .await?,
-    ))
 }
 
 async fn issue_key(

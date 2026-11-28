@@ -1,4 +1,4 @@
-//! Generic one-level workspace access and explicit key capability issuance.
+//! Authenticate credentials for their bound workspace.
 use super::*;
 use crate::storage::WorkspaceAccess;
 
@@ -46,17 +46,5 @@ impl Service {
             .workspace_access(token)
             .await
             .map_err(authentication_error)
-    }
-
-    pub async fn list_issued_keys(
-        &self,
-        auth: &AuthContext,
-        after: Uuid,
-        limit: u32,
-    ) -> Result<Value> {
-        let mut tx = self.read(auth, Permission::WorkspaceAdmin).await?;
-        let page = tx.list_issued_keys(after, limit).await?;
-        tx.commit().await?;
-        Ok(page)
     }
 }

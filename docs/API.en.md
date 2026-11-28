@@ -231,14 +231,11 @@ Knowledge updates change the current version and title only after asynchronous p
 | --- | --- |
 | `GET /v1/whoami` | Returns credential id, tenant_id, workspace_id, and effective role. |
 | `GET /v1/workspaces` | Returns the key workspace with workspace_id, name, role, and is_default. |
-| `GET /admin/keys` | An admin lists unrevoked credentials issued by the selected workspace. Returns credential and logical IDs, role, and creation time. |
 | `POST /admin/keys` | Admin sends `{workspace_id,role}`. The workspace must match the request's selected workspace and becomes the new key's default. Returns `{key_id,token}`. |
 | `POST /admin/keys/{id}/rotate` | The issuing workspace's admin rotates the current credential ID. Keeps the logical ID and returns a new `{key_id,token}`. |
 | `DELETE /admin/keys/{id}` | An admin in the issuing workspace revokes the credential. |
 
-The administrator key list takes `limit` (1–100, default 50) and a UUID `after` cursor and returns `{items,next_after}`.
-
-`/admin/keys` also needs a Bearer token. It omits the business idempotency cache to avoid storing plaintext tokens. Issuance returns the token once, and repeated POST creates a different key. After a lost response, list issued key IDs and revoke redundant credentials through the legacy key endpoints.
+Administrators create new workspaces and inspect or rotate their keys through the [workspace administration API](#deployment-administrator). The `/admin/keys` write routes listed above belong to the legacy credential interface scheduled for removal.
 
 ## Version conflicts
 

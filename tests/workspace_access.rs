@@ -887,10 +887,16 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
             .len(),
         1
     );
-    assert!(matches!(
-        client.call(Method::GET, "/admin/keys", None, None).await,
-        Err(AppError::Forbidden)
-    ));
+    assert_eq!(
+        reqwest::Client::new()
+            .get(format!("{base}/admin/keys"))
+            .bearer_auth(&key.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::METHOD_NOT_ALLOWED
+    );
     for path in [
         format!("/v1/sessions/{session_id}/turns/{turn}"),
         format!("/v1/sessions/{session_id}?through_sequence=1"),
@@ -1089,112 +1095,4 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     ));
     host.abort();
     service.engine.shutdown().await.unwrap();
-}
-
-#[tokio::test]
-async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecycle() {
-    let dir = tempfile::tempdir().unwrap();
-    let a = crate::support::seed_workspace(dir.path(), "A", None).await;
-    let a_id: Uuid = a["workspace_id"].as_str().unwrap().parse().unwrap();
-    let other = crate::support::seed_workspace(dir.path(), "Other tenant", None).await;
-    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
-    let a_token = a["token"].as_str().unwrap();
-    let a_admin = service.auth(a_token).await.unwrap();
-    let reader = service.issue_key(&a_admin, "reader").await.unwrap();
-    let writer = service.issue_key(&a_admin, "writer").await.unwrap();
-    let token = writer["token"].as_str().unwrap();
-    let logical: Uuid = writer["key_id"].as_str().unwrap().parse().unwrap();
-    let issued = service
-        .list_issued_keys(&a_admin, Uuid::nil(), 100)
-        .await
-        .unwrap();
-    assert_eq!(issued["items"].as_array().unwrap().len(), 3);
-    assert!(!issued.to_string().contains(token));
-    assert!(!issued.to_string().contains("token_hash"));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let router = origence::api::router(service.clone());
-    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    let client = |key: &str| HostClient::new(&base, key.into()).unwrap();
-    let a_client = client(a_token);
-    let foreign = client(other["token"].as_str().unwrap());
-    let read_client = client(reader["token"].as_str().unwrap());
-    let keys = "/admin/keys";
-    {
-        let path = keys;
-        assert!(matches!(
-            read_client.call(Method::GET, path, None, None).await,
-            Err(AppError::Forbidden)
-        ));
-        assert!(matches!(
-            a_client
-                .call(Method::GET, &format!("{path}?limit=0"), None, None)
-                .await,
-            Err(AppError::Invalid(_))
-        ));
-    }
-    assert!(matches!(
-        a_client
-            .call(
-                Method::POST,
-                keys,
-                Some(&json!({"workspace_id":a_id, "role":"reviewer"})),
-                None
-            )
-            .await,
-        Err(AppError::Conflict(message)) if message == "invalid role"
-    ));
-    let first = a_client
-        .call(Method::GET, "/admin/keys?limit=1", None, None)
-        .await
-        .unwrap();
-    let next = first["next_after"].as_str().unwrap();
-    assert_eq!(first["items"][0]["key_id"], next);
-    let rest = a_client
-        .call(Method::GET, &format!("{keys}?after={next}"), None, None)
-        .await
-        .unwrap();
-    assert_eq!(rest["items"].as_array().unwrap().len(), 2);
-    assert!(
-        rest["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|item| item["key_id"] != next)
-    );
-    assert_eq!(
-        foreign.call(Method::GET, keys, None, None).await.unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
-    let rotate = format!("{keys}/{logical}/rotate");
-    let rotated = a_client
-        .call(Method::POST, &rotate, None, None)
-        .await
-        .unwrap();
-    let replacement = rotated["key_id"].as_str().unwrap();
-    assert!(matches!(
-        service.auth(token).await,
-        Err(AppError::Unauthorized)
-    ));
-    let refreshed = a_client.call(Method::GET, keys, None, None).await.unwrap();
-    let row = refreshed["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["key_id"] == replacement)
-        .unwrap();
-    assert_eq!(row["logical_key_id"], logical.to_string());
-    assert!(
-        !refreshed
-            .to_string()
-            .contains(rotated["token"].as_str().unwrap())
-    );
-    a_client
-        .call(Method::DELETE, &format!("{keys}/{replacement}"), None, None)
-        .await
-        .unwrap();
-    host.abort();
 }

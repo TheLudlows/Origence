@@ -297,14 +297,11 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | --- | --- |
 | `GET /v1/whoami` | 返回已认证凭据的 id、tenant_id、选中的 workspace_id 和有效 role |
 | `GET /v1/workspaces` | 返回本 Key 所属的工作区，每项含 workspace_id、name、role 和 is_default |
-| `GET /admin/keys` | 管理员列出所选工作区签发的未撤销凭据。只返回凭据 ID、逻辑 Key ID、权限和创建时间 |
 | `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须是请求选中的 workspace，成为新 key 的默认项。返回 `{key_id,token}` |
 | `POST /admin/keys/{id}/rotate` | 签发工作区管理员轮换当前凭据 ID。保留逻辑 Key ID，返回新 `{key_id,token}` |
 | `DELETE /admin/keys/{id}` | 签发 workspace 的 admin 撤销整个凭据，后续所有工作区调用都会拒绝 |
 
-管理员密钥列表支持 `limit`（1–100，默认 50）和 UUID `after`，返回 `{items,next_after}`。
-
-`/admin/keys` 同样要求 Bearer token，但不使用业务幂等缓存，避免保存明文 token。发行结果只返回一次，重复 POST 会创建不同 key；若响应丢失，可通过旧版 Key 接口列出已签发的 Key ID 并撤销多余凭据。
+新工作区由管理员创建，Key 通过[管理员工作区接口](#部署管理员)查询和轮换。上表中 `/admin/keys` 的写入路径属于待移除的旧凭据接口。
 
 ## 版本冲突
 
