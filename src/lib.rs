@@ -60,8 +60,4 @@ pub mod worker;
 #[cfg(feature = "local-storage")]
 pub mod client;
 #[cfg(feature = "local-storage")]
-pub mod client_hook;
-#[cfg(feature = "local-storage")]
-pub mod client_skill;
-#[cfg(feature = "local-storage")]
 pub mod host;

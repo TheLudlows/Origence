@@ -45,7 +45,7 @@ Run 所有者可针对精确前缀通过 HTTP 登记外部记录号，或转录�
 | `POST /v1/skill-reviews/{review}/decision` | 指定审阅者使用 `{digest,approve}` 批准或驳回精确内容 |
 | `POST /v1/skill-reviews/{review}/publish` | writer 或 admin 按 `{digest}` 发布已批准的不可变版本 |
 | `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
-| `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续在线导出 |
+| `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续包下载 |
 
 候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
 调用方提交候选，也可用选定经历 CLI 将手工填写的方法绑定到一个精确依据。包格式和边界见

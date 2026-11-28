@@ -37,7 +37,7 @@ Trace reads include the text recorded in the Run. Original private archives, int
 | `POST /v1/skill-reviews/{review}/decision` | The designated reviewer uses `{digest,approve}` to approve or reject the exact contents. |
 | `POST /v1/skill-reviews/{review}/publish` | A writer or admin publishes the approved immutable version using `{digest}`. |
 | `GET /v1/skills/{id}/versions/{version}/package` | Verifies scope, version, and source and returns a package containing only approved artifacts. |
-| `DELETE /v1/skills/{id}/versions/{version}` | A writer or admin withdraws the published Skill version and blocks later online export. |
+| `DELETE /v1/skills/{id}/versions/{version}` | A writer or admin withdraws the published Skill version and blocks later package downloads. |
 
 Changing the candidate revision, the review package contents, or the destination requires a new approval. Original sessions and review evidence are not distributed with packages. The caller submits a candidate, or binds a manually drafted method to an exact source using the selected-experience CLI. See the [Skill contract](contracts/skills.md) and [selected-experience CLI](SKILL-CANDIDATE-CLI.md) for package format and boundaries.
 

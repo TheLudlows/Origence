@@ -27,7 +27,7 @@ use std::{
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use super::client_hooks::{HOOK_ENTRY, HookFixture};
+use super::agent_hooks::{HOOK_ENTRY, HookFixture};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Submission {
@@ -202,14 +202,14 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
     let fixture = HookFixture::new();
     let codex = Plugin {
         project: &fixture.project,
-        data: fixture.config.with_file_name("codex-data"),
+        data: fixture.data.join("codex-data"),
         base: &base,
         token: &owner.token,
         workspace: scope.workspace_id,
         client: "codex",
     };
     let claude = Plugin {
-        data: fixture.config.with_file_name("claude-data"),
+        data: fixture.data.join("claude-data"),
         client: "claude-code",
         ..codex
     };
@@ -226,7 +226,7 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
     assert!(paused.stderr.is_empty());
     codex
         .invoke_from(
-            fixture.config.parent().unwrap(),
+            fixture.data.as_path(),
             codex.open("turn-1", "prompt outside the opted-in project"),
             Some(codex.project),
         )

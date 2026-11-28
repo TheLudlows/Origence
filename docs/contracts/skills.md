@@ -48,15 +48,14 @@ The validator rejects Claude shell-preprocessing markers in descriptions, body, 
 references (inline and fenced forms), per the [client contract](https://code.claude.com/docs/en/skills#inject-dynamic-context).
 Natural-language instructions can still suggest actions; they are not execution authorization. This is not a general secret detector: reviewers remain responsible
 for ensuring the selected prose/reference contents are authorized and redacted.
-Offline exports cannot be instantly recalled, and approval does not grant business
-tool permissions.
+Previously downloaded copies cannot be instantly recalled, and approval does not grant
+business tool permissions.
 
 ## Client boundary
 
-Approved package export writes the Claude Code or Codex project layout after a fresh
-scope/version/source check; see [CLIENTS](../CLIENTS.en.md). Export is an explicit file
-copy. Managed loading, revocation of existing offline copies, and automatic candidate
-mining are not implemented. Current results belong in [VALIDATION](../VALIDATION.en.md).
+The authorized package endpoint rechecks scope, version, and approved source on each
+download. Callers manage any local files created from the response. See
+[CLIENTS](../CLIENTS.en.md) for supported client entry points. Current results belong in [VALIDATION](../VALIDATION.en.md).
 Private Run references retain the restrictions in the [Run contract](runs.md).
 
 ## Selected-experience drafting entry point

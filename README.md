@@ -10,7 +10,7 @@ Origence manages memory, knowledge, Skills, and traces. It provides HTTP and MCP
 
 - **Memory** records scoped facts, preferences, and decisions with version and source references.
 - **Knowledge** manages documents and their published versions, with source references and withdrawal.
-- **Skills** package reusable methods through private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
+- **Skills** package reusable methods through private candidates, exact human approval, immutable publication, and authorized package downloads.
 - **Trace** stores private Run records, including server-side context preparation, reported Skill loads, tools and results, external assessment records, and collection gaps.
 
 Authorized workspace members can reuse published memory, knowledge, and Skills.

@@ -10,7 +10,7 @@ Run from the repository root. Use Python 3.11 or newer, two installed and author
 python tools/anyseek_smoke.py --anyseek-binary ANYSEEK_BINARY --run python evals/pilot/live_skill_preflight.py --binary ORIGENCE_BINARY --claude-model CLAUDE_MODEL --codex-model CODEX_MODEL --report NEW_REPORT.json
 ```
 
-The clients share 100 seconds, each independently exporting the same approved Skill and returning a random string from the package. The script checks native loading signals and Runs, then withdraws the support source and verifies that new exports are refused and original files remain. Missing required checks produce a nonzero exit. [Test record](native-skill.windows.json)
+The clients share 100 seconds, each downloading and staging the same approved Skill in its test project and returning a random string from the package. The script checks native loading signals and Runs, then withdraws the support source and verifies that new downloads are refused and original files remain. Missing required checks produce a nonzero exit. [Test record](native-skill.windows.json)
 
 ## Rerun cross-client handoff in both scenarios
 

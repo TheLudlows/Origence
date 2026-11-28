@@ -4,6 +4,15 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Rust client module removal
+
+Based on Origence main `496960f` and #187's shared Hook commit `f314875`. Linux with Rust 1.98.0 and Node.js 24.22.1. All client inputs and model responses were synthetic.
+
+- `cargo fmt --all -- --check` and `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` passed. Clippy also passed with `--no-default-features --features local-storage` and with `--no-default-features --features sqlite`.
+- `cargo test --offline --locked --test local` passed these targeted filters: `agent_hooks::` (1), `turn_sync::` (1), `mcp_runs::` (3), `foundation_http::` (3), and `local_app::cli_exposes_only_serve` (1). These exercise the installed Node hook, queue retries, private archives, identity reuse through MCP, and authorized Skill package downloads. `cargo test --offline --locked --test skill-workflow -j 3` passed the standalone drafting, review, publication, and withdrawal workflow (1).
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` passed 3 tests and `python3 -m unittest discover -s evals/pilot -p 'test_*.py'` passed 58 tests. A standalone synthetic fixture check staged the downloaded Markdown and text references in both project layouts and verified that a 404 left the destination absent.
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` passed with Codex 0.171.0 and Claude Code 2.1.330. Local verification did not include Windows or live-model Skill loading.
+
 ## 2026-11-28 · Shared Node.js Agent hook
 
 Based on #187 at `8b051a9`. Linux, Rust 1.98.0, and Node.js 24.22.1. Codex 0.171.0 and Claude Code 2.1.330 used synthetic HTTP and model responses.

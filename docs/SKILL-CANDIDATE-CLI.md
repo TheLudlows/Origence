@@ -117,7 +117,7 @@ origence-skill withdraw SKILL_UUID 1
 # Subsequent online package fetch now fails.
 ```
 
-Source withdrawal also denies online fetches. Rust callers can use `client_skill::export_skill` to write approved Claude Code or Codex project copies. Offline copies are not
+Source withdrawal also denies online fetches. Callers manage copies they previously downloaded. Offline copies are not
 remotely cleaned up or instantly recalled. No native client loading, automatic
 publication, shared navigation, schema migration, or cross-Run mining is added.
 

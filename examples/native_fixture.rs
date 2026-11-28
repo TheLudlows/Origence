@@ -1,14 +1,8 @@
 //! Synthetic data and adapter probes for repository acceptance scripts.
 use anyhow::Context;
-use origence::{
-    archive_maintenance,
-    client::HostClient,
-    client_skill::{SkillClient, export_skill},
-    models::Models,
-    storage::{Scope, anyseek::AnySeekConfig},
-};
+use origence::{archive_maintenance, models::Models, storage::anyseek::AnySeekConfig};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::{io::Read, path::PathBuf};
 use uuid::Uuid;
 
@@ -24,14 +18,6 @@ enum Fixture {
     },
     ArchiveManifest {
         embedded: bool,
-    },
-    InstallSkill {
-        client: String,
-        project: PathBuf,
-        tenant: Uuid,
-        workspace: Uuid,
-        skill: Uuid,
-        version: u32,
     },
 }
 
@@ -70,30 +56,6 @@ async fn run(fixture: Fixture) -> anyhow::Result<Value> {
                 anyhow::bail!("embedded fixture support is unavailable");
             }
             Ok(archive_maintenance::run(&dir, models, AnySeekConfig::from_env()?).await?)
-        }
-        Fixture::InstallSkill {
-            client,
-            project,
-            tenant,
-            workspace,
-            skill,
-            version,
-        } => {
-            let target = match client.as_str() {
-                "codex" => SkillClient::Codex,
-                "claude-code" => SkillClient::ClaudeCode,
-                _ => anyhow::bail!("invalid fixture client"),
-            };
-            let host = HostClient::new(
-                &std::env::var("OC_SERVER_URL")?,
-                std::env::var("OC_API_KEY")?,
-            )?;
-            let scope = Scope {
-                tenant_id: tenant,
-                workspace_id: workspace,
-            };
-            let path = export_skill(&host, target, &project, scope, skill, version).await?;
-            Ok(json!({"skill_id":skill,"version":version,"path":path,"exported":true}))
         }
     }
 }

@@ -19,7 +19,7 @@
 
 ## 客户端边界
 
-导出获准包时重新核对作用域、版本和来源，再写入 Claude Code 或 Codex 项目布局。见 [CLIENTS](../CLIENTS.md)。导出只是显式文件复制。受管加载、回收既有离线副本及候选自动挖掘尚未实现。当前结果见 [VALIDATION](../VALIDATION.md)。私有 Run 引用遵循 [Run 契约](runs.zh-CN.md) 的限制。
+获准技能包的下载接口会重新核对作用域、版本和获批来源。调用方自行管理从响应创建的本地文件。客户端入口见 [CLIENTS](../CLIENTS.md)。当前结果见 [VALIDATION](../VALIDATION.md)。私有 Run 引用遵循 [Run 契约](runs.zh-CN.md) 的限制。
 
 ## 基于选定经历的起草入口
 

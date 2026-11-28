@@ -7,6 +7,15 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 移除 Rust 客户端模块
+
+基于 Origence main `496960f` 与 #187 的共享 Hook 提交 `f314875`。环境为 Linux、Rust 1.98.0、Node.js 24.22.1。客户端输入和模型响应均为合成材料。
+
+- `cargo fmt --all -- --check` 和 `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` 通过。严格 Clippy 也在 `--no-default-features --features local-storage` 和 `--no-default-features --features sqlite` 两种组合通过。
+- `cargo test --offline --locked --test local` 的定向过滤 `agent_hooks::`（1 项）、`turn_sync::`（1 项）、`mcp_runs::`（3 项）、`foundation_http::`（3 项）和 `local_app::cli_exposes_only_serve`（1 项）通过。覆盖安装入口、队列重试、私有归档、MCP 复用 Run 身份及授权 Skill 包下载。`cargo test --offline --locked --test skill-workflow -j 3` 通过独立的起草、审批、发布和撤回回归（1 项）。
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` 通过 3 项，`python3 -m unittest discover -s evals/pilot -p 'test_*.py'` 通过 58 项。独立合成夹具检查把下载的 Markdown 与文本引用写到两种测试项目布局，并核对收到 HTTP 404 时未创建目标目录。
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` 用 Codex 0.171.0 和 Claude Code 2.1.330 验证通过。本地未验证 Windows 或真实模型的 Skill 加载。
+
 ## 2026-11-28 · 共享 Node.js Agent Hook
 
 基于 #187 的 `8b051a9`，Linux、Rust 1.98.0、Node.js 24.22.1。Codex 0.171.0 和 Claude Code 2.1.330 使用合成 HTTP 及模型响应。

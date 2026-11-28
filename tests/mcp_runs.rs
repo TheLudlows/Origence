@@ -700,9 +700,33 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
 }
 
 #[tokio::test]
-async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() {
-    use crate::client_hooks::HookFixture;
-    use origence::client_hook::{Capture, Client};
+async fn mcp_runs_reuse_explicit_node_hook_identity_and_enforce_credentials() {
+    use crate::agent_hooks::HookFixture;
+    use axum::{
+        Json,
+        extract::{Request, State},
+        http::StatusCode,
+        middleware::{self, Next},
+        response::{IntoResponse, Response},
+    };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    async fn hold_hook_run(
+        State(hold): State<Arc<AtomicBool>>,
+        request: Request,
+        next: Next,
+    ) -> Response {
+        if hold.load(Ordering::SeqCst)
+            && request.method() == Method::POST
+            && request.uri().path() == "/v1/runs"
+        {
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({}))).into_response();
+        }
+        next.run(request).await
+    }
     use reqwest::Method;
 
     let dir = tempfile::tempdir().unwrap();
@@ -721,82 +745,137 @@ async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() 
     let admin = store.issue_key(scope, "admin").await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    let app = origence::api::router(service.clone());
+    let hold = Arc::new(AtomicBool::new(true));
+    let app = origence::api::router(service.clone())
+        .layer(middleware::from_fn_with_state(hold.clone(), hold_hook_run));
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let fixture = HookFixture::new();
-    fixture.configure(&base, writer.key_id, &["codex", "claude_code"]);
 
     let mcp = Peer::new(&base, &writer.token);
-    assert_eq!(
-        fixture.enqueue(Client::Codex, &writer.token, "start"),
-        Capture::Queued
-    );
-    assert_eq!(
-        fixture.enqueue(Client::ClaudeCode, &writer.token, "start"),
-        Capture::Queued
-    );
-    let codex = fixture
-        .profile()
-        .run_identity(Client::Codex, "codex-test-session", "codex-test-turn")
-        .unwrap();
-    let claude = fixture
-        .profile()
-        .run_identity(
-            Client::ClaudeCode,
-            "claude-test-session",
-            "550e8400-e29b-41d4-a716-446655440000",
+    let start = fixture.event("codex", "start");
+    fixture
+        .invoke(
+            "codex",
+            start.clone(),
+            &base,
+            &writer.token,
+            Some(scope.workspace_id),
+            true,
         )
-        .unwrap();
-    assert_ne!(codex.run_id, claude.run_id);
-    // The user/caller explicitly passes matching ID and summary. Either side can create first.
+        .await;
+    let pending = fixture.pending();
+    assert_eq!(pending.len(), 1);
+    let codex: Uuid = serde_json::from_value(pending[0]["run_id"].clone()).unwrap();
+
+    // Hold only the Hook HTTP write so the explicit MCP caller creates the
+    // same Run first, using the ID produced by the real Node hook.
     assert_eq!(
-        mcp.call("context_run_create", json!(codex)).await.unwrap()["run_id"],
-        codex.run_id.to_string()
+        mcp.call(
+            "context_run_create",
+            json!({"run_id":codex,"summary":"Codex turn (hook metadata only)"})
+        )
+        .await
+        .unwrap()["run_id"],
+        json!(codex)
     );
-    let outcome = fixture.profile().flush(writer.token.clone()).await.unwrap();
-    assert_eq!(outcome.sent, 2);
+    hold.store(false, Ordering::SeqCst);
+    fixture
+        .invoke(
+            "codex",
+            start,
+            &base,
+            &writer.token,
+            Some(scope.workspace_id),
+            true,
+        )
+        .await;
+    assert!(fixture.pending().is_empty());
+
+    // Claude takes the reverse order. The same explicit ID attaches to its
+    // initialized Hook Run without creating a second one.
+    let claude_start = fixture.event("claude-code", "start");
+    fixture
+        .invoke(
+            "claude-code",
+            claude_start.clone(),
+            &base,
+            &writer.token,
+            Some(scope.workspace_id),
+            true,
+        )
+        .await;
+    let owner = HostClient::new(&base, writer.token.clone()).unwrap();
+    let directory = owner
+        .call(Method::GET, "/v1/runs", None, None)
+        .await
+        .unwrap();
+    let items = directory["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    let claude: Uuid = serde_json::from_value(
+        items
+            .iter()
+            .find(|item| item["summary"] == "Claude Code prompt (hook metadata only)")
+            .unwrap()["run_id"]
+            .clone(),
+    )
+    .unwrap();
+    assert_ne!(codex, claude);
     assert_eq!(
-        mcp.call("context_run_create", json!(claude)).await.unwrap()["run_id"],
-        claude.run_id.to_string()
+        mcp.call(
+            "context_run_create",
+            json!({"run_id":claude,"summary":"Claude Code prompt (hook metadata only)"})
+        )
+        .await
+        .unwrap()["run_id"],
+        json!(claude)
     );
     assert_eq!(mcp.call("context_run_report", json!({
-        "run_id": claude.run_id,
+        "run_id": claude,
         "report": {
             "event_id": Uuid::new_v4(), "observed_at_ms": 1, "reporter": "user",
             "event": {"kind":"coverage","component":"synthetic_mcp","status":"partial","summary":"explicitly linked fixture"}
         }
     })).await.unwrap()["sequence"], 2);
     let trace = mcp
-        .call("context_run_get", json!({"run_id": claude.run_id}))
+        .call("context_run_get", json!({"run_id": claude}))
         .await
         .unwrap();
     assert_eq!(trace["events"].as_array().unwrap().len(), 2);
     assert_eq!(trace["unreported_activity"], "unknown");
 
-    let owner = HostClient::new(&base, writer.token.clone()).unwrap();
     let admin_client = HostClient::new(&base, admin.token).unwrap();
-    let directory = owner
-        .call(Method::GET, "/v1/runs", None, None)
-        .await
-        .unwrap();
-    assert_eq!(directory["items"].as_array().unwrap().len(), 2);
-    let admin_trace = admin_client.run_trace(claude.run_id, 0, 50).await.unwrap();
+    let admin_trace = admin_client.run_trace(claude, 0, 50).await.unwrap();
     assert_eq!(admin_trace["is_owner"], false);
     assert_eq!(admin_trace["events"].as_array().unwrap().len(), 2);
 
-    fixture.configure(&base, reader.key_id, &["claude_code"]);
-    assert_eq!(
-        fixture.enqueue(Client::ClaudeCode, &reader.token, "start"),
-        Capture::Queued
-    );
-    let rejected = fixture.profile().flush(reader.token).await.unwrap();
-    assert_eq!(rejected.blocked, Some("authorization_denied"));
+    fixture
+        .invoke(
+            "claude-code",
+            claude_start,
+            &base,
+            &reader.token,
+            Some(scope.workspace_id),
+            true,
+        )
+        .await;
+    assert!(fixture.pending().is_empty());
 
-    fixture.configure(&base, writer.key_id, &["codex", "claude_code"]);
-    assert_eq!(
-        fixture.enqueue(Client::Codex, &writer.token, "stop"),
-        Capture::Queued
-    );
+    hold.store(true, Ordering::SeqCst);
+    let stop = fixture.event("codex", "stop");
+    fixture
+        .invoke(
+            "codex",
+            stop.clone(),
+            &base,
+            &writer.token,
+            Some(scope.workspace_id),
+            true,
+        )
+        .await;
+    let blocked = fixture.pending();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0]["run_id"], json!(codex));
+    hold.store(false, Ordering::SeqCst);
     let replacement = admin_client
         .call(
             Method::POST,
@@ -809,41 +888,30 @@ async fn mcp_runs_reuse_explicit_client_hook_identity_and_enforce_credentials() 
         .as_str()
         .unwrap()
         .to_owned();
-    assert_eq!(
-        fixture.profile().flush(writer.token).await.unwrap().blocked,
-        Some("authorization_denied")
-    );
-    let replacement_client = HostClient::new(&base, replacement.clone()).unwrap();
-    assert!(
-        replacement_client
-            .run_trace(codex.run_id, 0, 10)
-            .await
-            .is_ok()
-    );
-    assert_eq!(
-        fixture
-            .profile()
-            .flush(replacement.clone())
-            .await
-            .unwrap()
-            .held,
-        2
-    );
-    assert_eq!(
-        fixture.enqueue(Client::Codex, &replacement, "stop"),
-        Capture::Duplicate
-    );
-    assert_eq!(
-        fixture.enqueue(Client::Codex, &replacement, "shell"),
-        Capture::Queued
-    );
-    let outcome = fixture.profile().flush(replacement).await.unwrap();
-    assert_eq!(outcome.sent, 1);
-    assert_eq!(outcome.held, 2);
-    let trace = replacement_client
-        .run_trace(codex.run_id, 0, 10)
-        .await
-        .unwrap();
+    fixture
+        .invoke(
+            "codex",
+            stop,
+            &base,
+            &writer.token,
+            Some(scope.workspace_id),
+            true,
+        )
+        .await;
+    assert_eq!(fixture.pending(), blocked);
+    fixture
+        .invoke(
+            "codex",
+            fixture.event("codex", "shell"),
+            &base,
+            &replacement,
+            Some(scope.workspace_id),
+            true,
+        )
+        .await;
+    assert_eq!(fixture.pending(), blocked);
+    let replacement_client = HostClient::new(&base, replacement).unwrap();
+    let trace = replacement_client.run_trace(codex, 0, 10).await.unwrap();
     assert_eq!(trace["events"].as_array().unwrap().len(), 2);
     assert_eq!(trace["events"][1]["report"]["event"]["tool"], "Bash");
 
