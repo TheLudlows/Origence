@@ -7,7 +7,7 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 
 AML 评测协议的 HTTP 入口与启动开关已移除。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
 
-Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。双向 Skill 复用已在公开合成题上跑通，正式未见题试点及独立业务签认待执行。[#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) · [#91 试点及验证记录](../evals/pilot/README.md)
+Claude Code 与 Codex 已通过同 Key 会话互读和独立 Run 验收。双向 Skill 复用已在公开合成题上跑通，正式未见题试点及独立业务签认待执行。[#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) · [#91 试点及验证记录](../evals/pilot/README.md)
 
 | 范围 | 已实现 | 尚未完成 |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Claude Code 与 Codex 已通过同 key 私有归档互读和独立 Run 验收。
 | Skill | [从 Run 详情选取依据、起草及提交审阅](SKILL-CANDIDATE-CLI.zh-CN.md#在控制台从-run-起草)、[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载及两种客户端目录格式导出。writer 可审阅与发布。Windows 公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核。默认关键词检索要求查询词项全部出现。真实引擎本地回归通过。日常上下文按预算组装带业务日期、时间线和固定引用的归纳事实，控制台可核对原始来源。[证据包契约](contracts/evidence-bundle.zh-CN.md) | 当前后端的模型检索质量、容量与延迟验收 |
-| 私有归档与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。支持按 ID 与序号读取、关键词与向量召回、显式反馈。成员授权的工作区沿用原归档删除权限，单 Key 工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对归档和反馈证据 |
+| 会话与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。控制台「会话」显示已保存的问答。支持按 ID 与序号读取、关键词与向量召回、显式反馈。成员授权空间按权限删除问答，单 Key 工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对会话和反馈证据 |
 | Node.js 管理界面 | 工作空间 Key 登录、部署管理员跨空间查看和全局知识审核，以及受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。运行总览显示可选中复制的当前工作区 ID。现有成员授权空间仍可使用账号登录。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
@@ -48,14 +48,14 @@ Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提�
 并通过有界私有队列和 Run API 上报元数据。MCP 仅在调用方显式传递同一 Run 标识时合用。
 接入与事件边界见[客户端接入](CLIENTS.md#验证默认-run-hook)。原生 Windows runner 已通过合成数据的安装、跨工作区检索、
 历史版本读取和默认 Hook，见 [VALIDATION](VALIDATION.md)。正式冻结因题集、模型授权和独立角色缺失而阻塞。
-`origence-setup` 使用可写 Key 时默认开启当前项目的[私有问答增量归档](CLIENTS.md#按项目开启私有问答增量归档)。
+`origence-setup` 使用可写 Key 时默认[自动归档当前项目的会话](CLIENTS.md#按项目自动归档会话)。
 
 应用直接驱动的任务还可使用[受管 Run 上报](MANAGED-RUNS.md)。Codex App Server 提供命令状态及可用的退出码和耗时，Claude Agent SDK 提供取消回执及对应轮次的结果。
 
 ## 多 workspace API 凭据
 
 同一逻辑 key 可在同租户的多个 workspace 获得各自的角色。HTTP 支持显式 workspace
-选择与授权枚举，在线 MCP 支持在连接启动时指定 workspace。私有归档仍按 workspace 和
+选择与授权枚举，在线 MCP 支持在连接启动时指定 workspace。会话记录仍按 workspace 和
 逻辑 key 隔离。原生客户端会话内工作区切换仍待接入。见 [API](API.md#身份与密钥管理)。
 
 ## AnySeek 服务凭据与 workspace 集合

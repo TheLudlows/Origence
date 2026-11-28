@@ -38,15 +38,15 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
       view.replaceChildren(section);
       render(section, viewSignal);
     };
-    const openArchive = (session: string) => show(`会话 ${short(session)}`, (target, viewSignal) => {
+    const openSession = (session: string) => show(`会话 ${short(session)}`, (target, viewSignal) => {
       paged<Turn, number>(target, viewSignal, async (after) => {
         const page = await api.get<{ turns: Turn[]; next_after: number | null }>(cursor(`${base}/sessions/${encodeURIComponent(session)}/turns`, after), viewSignal);
         return { items: page.turns, next_after: page.next_after };
-      }, (turn) => panel(turn.question, el("p", "archive-answer", turn.answer)));
+      }, (turn) => panel(turn.question, el("p", "plain-text", turn.answer)));
     });
-    const archives = () => show("归档会话", (target, viewSignal) =>
+    const sessions = () => show("会话", (target, viewSignal) =>
       paged<string, string>(target, viewSignal, (after) => api.get<Page<string>>(cursor(`${base}/sessions`, after), viewSignal),
-        (session) => button(`会话 ${short(session)}`, () => openArchive(session), "link")));
+        (session) => button(`会话 ${short(session)}`, () => openSession(session), "link")));
     const openRun = (run: Run) => show(`Run ${short(run.run_id)}`, (target, viewSignal) => {
       const summary = el("p");
       target.append(summary);
@@ -62,7 +62,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const openAsset = (asset: Asset) => show(asset.title, (target, viewSignal) => {
       const path = `${base}/assets/${encodeURIComponent(asset.asset_id)}?version=${asset.version}`;
       void api.get<Asset>(path, viewSignal).then((value) => {
-        if (!viewSignal.aborted) target.append(el("p", "archive-answer", value.content ?? ""));
+        if (!viewSignal.aborted) target.append(el("p", "plain-text", value.content ?? ""));
       }).catch((error: unknown) => {
         if (!viewSignal.aborted) message(target, error);
       });
@@ -71,9 +71,9 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
       paged<Asset, string>(target, viewSignal, (after) => api.get<Page<Asset>>(cursor(`${base}/assets?kind=${kind}`, after), viewSignal),
         (asset) => button(asset.title, () => openAsset(asset), "link")));
     content.replaceChildren(heading(workspace.name, workspace.workspace_id), el("nav", "actions",
-      button("会话", archives), button("运行", runs),
+      button("会话", sessions), button("运行", runs),
       button("记忆", () => assets("memory", "记忆")), button("知识", () => assets("knowledge", "知识"))), view);
-    archives();
+    sessions();
   }
 
   paged<Workspace, string>(workspaceList, signal, (after) => api.get<Page<Workspace>>(cursor(prefix, after), signal),

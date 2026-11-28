@@ -1,17 +1,17 @@
 import { api } from "./api.js";
 import { button, el, empty, heading, message, panel, type ViewContext } from "./components.js";
 
-interface ArchivePage {
+interface SessionTurnsPage {
   turns: { turn_id: string; question: string; answer: string }[];
   next_after: number | null;
   through_sequence: string;
 }
 
-export async function archivePage(root: HTMLElement, ctx: ViewContext) {
+export async function sessionsPage(root: HTMLElement, ctx: ViewContext) {
   const canDelete = ctx.role !== "workspace";
-  root.append(heading("私有归档", canDelete ? "查看和删除当前 Key 在此工作区归档的问答。" : "查看本工作空间归档的问答。"));
+  root.append(heading("会话", canDelete ? "查看当前 Key 在此工作空间保存的问答。" : "查看本工作空间保存的问答。"));
   if (ctx.role === "reader") {
-    root.append(empty("需要写入权限", "私有归档仅向具备写入权限的所属 Key 开放。"));
+    root.append(empty("需要写入权限", "读取会话记录需要使用具备写入权限的所属 Key。"));
     return;
   }
   const { session_id } = await api.get<{ session_id: string }>("/v1/session", ctx.signal);
@@ -57,19 +57,19 @@ export async function archivePage(root: HTMLElement, ctx: ViewContext) {
     busy = true;
     more.disabled = true;
     try {
-      const page = await api.get<ArchivePage>(path + "/turns?after=" + after, ctx.signal);
+      const page = await api.get<SessionTurnsPage>(path + "/turns?after=" + after, ctx.signal);
       if (after === 0) cutoff = page.through_sequence;
       after = page.next_after;
       for (const turn of page.turns) {
         const target = path + "/turns/" + encodeURIComponent(turn.turn_id);
-        turns.append(panel(turn.question, el("p", "archive-answer", turn.answer),
+        turns.append(panel(turn.question, el("p", "plain-text", turn.answer),
           canDelete ? button("删除这一轮", () => {
-            if (!busy && window.confirm("删除这一轮归档问答？")) return remove(target);
+            if (!busy && window.confirm("删除这一轮问答？")) return remove(target);
           }, "link") : null));
       }
       more.hidden = after === null;
       clear.disabled = cutoff === "0";
-      if (!turns.childElementCount) turns.append(empty("没有归档问答", "新归档的问答会显示在这里。"));
+      if (!turns.childElementCount) turns.append(empty("暂无会话记录", "客户端保存的问答会显示在这里。"));
     } catch (error) {
       message(status, error);
       status.append(button("重试读取", refresh));
@@ -87,15 +87,15 @@ export async function archivePage(root: HTMLElement, ctx: ViewContext) {
     await load();
   }
 
-  const clear = button("清空归档历史", async () => {
+  const clear = button("清空会话记录", async () => {
     if (busy) return;
     clear.disabled = true;
     list.inert = true;
     try {
-      const current = await api.get<ArchivePage>(path + "/turns?limit=1", ctx.signal);
+      const current = await api.get<SessionTurnsPage>(path + "/turns?limit=1", ctx.signal);
       if (ctx.signal.aborted) return;
       const target = path + "?through_sequence=" + encodeURIComponent(current.through_sequence);
-      if (window.confirm("删除当前归档历史？此后新提交的问答会保留。")) {
+      if (window.confirm("清空当前会话记录？此后新提交的问答会保留。")) {
         await remove(target, true);
         return;
       }

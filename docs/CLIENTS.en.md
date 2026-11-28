@@ -4,7 +4,7 @@
 
 Claude Code and Codex use Origence's Streamable HTTP MCP endpoint for retrieval. Register it directly or install the plugin with an automatic Run hook.
 
-Use [`origence-setup`](INSTALLER.en.md#connect-an-agent) to configure the Claude Code or Codex plugin, Run hook, and per-project private turn archiving. Use `origence-deploy` to run the API and console locally.
+Use [`origence-setup`](INSTALLER.en.md#connect-an-agent) to configure the Claude Code or Codex plugin, Run hook, and automatic session archiving by project. Use `origence-deploy` to run the API and console locally.
 
 ## Direct HTTP MCP
 
@@ -120,7 +120,7 @@ skipped if identity cannot be verified before enqueueing. Queues live in client 
 On Windows, directory permissions are managed by the client and user environment. With the local binary
 installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 
-### Incremental private turn archiving
+### Automatic session archiving by project
 
 `origence-setup install` sets `OC_TURN_SYNC_PROJECT` to the current project root by default with a writable key. For a
 manual plugin installation, set it to the absolute project root in the client's launch environment.
@@ -135,8 +135,9 @@ data directory’s inherited ACL. To pause an installer-managed configuration, r
 with the original `--agent` selection, then restart the terminal and client. With a manual installation,
 clear the variable and restart the client. Staged turns can retry if the same configuration is enabled again.
 
-Use the private `session` route of `context_bundle` from the same workspace and logical key to recall
-synced turns. They carry unknown evidence use. See the [archive contract](API.en.md#session-archiving-and-idempotent-feedback).
+View saved questions and answers under **Sessions** in the console. The private `session` route of
+`context_bundle` can recall synced turns from the same workspace and logical key. They carry unknown
+evidence use. See the [session API](API.en.md#session-archiving-and-idempotent-feedback).
 
 ## Manual MCP setup
 

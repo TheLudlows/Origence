@@ -6,7 +6,7 @@ Updated 2026-11-27. The local implementation is based on main `a542ff0`. Origenc
 
 AML evaluation-protocol HTTP endpoints and startup switches have been removed. Owning workspaces and message batches remain available via the [common Rust library APIs](API.en.md#common-owning-workspace-and-message-batch-library-apis).
 
-Claude Code and Codex passed cross-client reads of private archives under the same key and independent Run acceptance. Bidirectional Skill reuse worked on public synthetic tasks. The official pilot with unseen tasks and independent business sign-off remain open. [#87 Two-client integration](https://github.com/TheLudlows/Origence/issues/87) · [#91 Pilot and verification records](../evals/pilot/README.en.md)
+Claude Code and Codex passed cross-client reads of session records under the same key and independent Run acceptance. Bidirectional Skill reuse worked on public synthetic tasks. The official pilot with unseen tasks and independent business sign-off remain open. [#87 Two-client integration](https://github.com/TheLudlows/Origence/issues/87) · [#91 Pilot and verification records](../evals/pilot/README.en.md)
 
 | Area | Implemented | Pending |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ Claude Code and Codex passed cross-client reads of private archives under the sa
 | Skill | [Draft and submit selected evidence from a Run](SKILL-CANDIDATE-CLI.md#draft-from-a-run-in-the-console), [selected-experience CLI](SKILL-CANDIDATE-CLI.md), selected review packages, exact approval, immutable publication, online downloads, and exports for both client directory formats. Writers can review and publish. A public Windows example verified native loading in both clients and refusal of new exports after source withdrawal. [Test record](../evals/pilot/native-skill.windows.json) | Cross-client reuse and independent verification with unseen tasks in both scenarios, managed online reload |
 | Trace | Private Runs, preparation receipts, explicit HTTP/MCP reporting, default Run hooks in the Codex and Claude Code plugins, owner-transcribed external verification, exact version citations, and archived PDF page locators. [Run contract](contracts/runs.md) | Full event coverage on both clients, end-to-end evidence verification, independent sign-off |
 | Retrieval and context assembly | AnySeek full-text, vector, and one-hop graph candidates with authoritative revalidation. Default keyword search requires all query terms. Local real-engine regressions passed. Regular context includes budgeted consolidated facts with business dates, timelines, and fixed citations that the console can verify. [EvidenceBundle contract](contracts/evidence-bundle.md) | Model retrieval quality, capacity, and latency acceptance on the current backend |
-| Private archives and feedback | AnySeek holds new private turn bodies and directory data by logical key. Supports ID and ordered reads, keyword and vector recall, and explicit feedback. Role-based workspaces retain their archive deletion permission, and single-key workspaces retain original conversations. Experience can use human confirmation, a pinned document version, or Improve. | P0 archive and feedback evidence in both scenarios |
+| Sessions and feedback | AnySeek holds new private turn bodies and directory data by logical key. **Sessions** shows saved questions and answers in the console. Supports ID and ordered reads, keyword and vector recall, and explicit feedback. Membership-based workspaces allow authorized deletion, and single-key workspaces retain original conversations. Experience can use human confirmation, a pinned document version, or Improve. | P0 session and feedback evidence in both scenarios |
 | Node.js management UI | Workspace key sign-in, deployment administrator inspection across workspaces and global knowledge review, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. The Run overview shows the active workspace ID as selectable text. Account sign-in remains available for existing membership-based workspaces. [#76](https://github.com/TheLudlows/Origence/issues/76) is closed. | End-to-end traceability on frozen tasks is part of [#91](https://github.com/TheLudlows/Origence/issues/91). |
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
@@ -45,14 +45,14 @@ process. See the [Agent connections API](API.en.md#agent-connections).
 
 Codex uses `turn_id` to track turns, and Claude Code uses `prompt_id` for individual prompt contexts. Both client plugins install retrieval MCP and a default Run hook. The hook follows the MCP workspace selection and uses a credential that can write. It reports metadata through the same bounded private queue and Run API. MCP shares a Run only when the caller explicitly supplies the same Run identity. See [client integration](CLIENTS.en.md#verify-the-default-run-hook) for setup and coverage. The native Windows runner passed installation, workspace selection, pinned retrieval, and the default hook with synthetic data. See [VALIDATION](VALIDATION.en.md). The formal freeze is blocked on tasks, model authorization, and independent roles.
 
-With a writable key, `origence-setup` enables [private turn archiving for the current project](CLIENTS.en.md#incremental-private-turn-archiving) by default.
+With a writable key, `origence-setup` [automatically archives sessions for the current project](CLIENTS.en.md#automatic-session-archiving-by-project) by default.
 
 Applications driving either client can use [managed Run reporting](MANAGED-RUNS.en.md)
 for Codex App Server command metadata and Claude Agent SDK cancellation.
 
 ## Multi-workspace API credentials
 
-A logical key can have separate roles in several workspaces in the same tenant. HTTP supports explicit selection and grant listing. Online MCP connections can select a workspace at startup. Private archives remain scoped by workspace and logical key. Native in-chat workspace switching is pending. See [identity and credential management](API.en.md#identity-and-credential-management).
+A logical key can have separate roles in several workspaces in the same tenant. HTTP supports explicit selection and grant listing. Online MCP connections can select a workspace at startup. Session records remain scoped by workspace and logical key. Native in-chat workspace switching is pending. See [identity and credential management](API.en.md#identity-and-credential-management).
 
 ## AnySeek service credential and workspace collections
 

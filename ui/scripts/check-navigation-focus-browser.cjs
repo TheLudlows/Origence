@@ -24,7 +24,7 @@ async function checkResponsiveNavigation(page, width) {
   const nav = page.getByRole('navigation', { name: '主导航' });
   const theme = page.getByRole('button', { name: '切换明暗主题' });
   const exit = page.getByRole('button', { name: '退出', exact: true });
-  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '全局知识', '上下文工作台', '私有归档', 'API Key', 'Agent 连接'];
+  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '全局知识', '上下文工作台', '会话', 'API Key', 'Agent 连接'];
   const buttons = labels.map((label) => nav.getByRole('button', { name: new RegExp(label + '$') }));
   const context = buttons[labels.indexOf('上下文工作台')];
   const expectLayout = async () => {

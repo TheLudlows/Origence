@@ -294,7 +294,7 @@ small {
   border-radius: 3px;
   background: var(--chart-mark);
 }
-.archive-answer {
+.plain-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

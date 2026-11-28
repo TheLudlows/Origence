@@ -413,7 +413,7 @@ async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
         `sequence ${event.sequence} · ${date(event.recorded_at_ms)}`,
       ),
       ...(embedding ? [embedding] : []),
-      ...(privateUnavailable ? [el("p", "notice", "归档来源已删除或不可用。")] : []),
+      ...(privateUnavailable ? [el("p", "notice", "会话来源已删除或不可用。")] : []),
       ...(globalUnavailable ? [el("p", "notice", "引用的全局知识已下架。")] : []),
       ...(privateUnavailable || globalUnavailable ? [] : [managedObservation(event) ?? code(eventBody)]),
     );

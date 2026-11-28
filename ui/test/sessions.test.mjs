@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
-import { archivePage } from "../dist/client/archive.js";
+import { sessionsPage } from "../dist/client/sessions.js";
 
-test("archive clear resumes the failed page with the original cutoff", async (t) => {
+test("clearing session history resumes the failed page with the original cutoff", async (t) => {
   const window = new Window();
   const saved = new Map(["window", "document", "Node", "fetch"].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)],
@@ -16,8 +16,9 @@ test("archive clear resumes the failed page with the original cutoff", async (t)
     await window.happyDOM.close();
   });
   Object.assign(globalThis, { window, document: window.document, Node: window.Node });
-  window.confirm = () => true;
-  const archive = "/api/v1/sessions/private-session";
+  let confirmation;
+  window.confirm = (message) => { confirmation = message; return true; };
+  const sessionPath = "/api/v1/sessions/private-session";
   const deletes = [];
   let refreshed = false;
   globalThis.fetch = async (path, request) => {
@@ -41,7 +42,7 @@ test("archive clear resumes the failed page with the original cutoff", async (t)
     });
   };
   const root = document.body;
-  await archivePage(root, { role: "writer", signal: new AbortController().signal, navigate() {} });
+  await sessionsPage(root, { role: "writer", signal: new AbortController().signal, navigate() {} });
   const click = (name) => {
     const button = [...root.querySelectorAll("button")].find((control) => control.textContent === name);
     assert.ok(button, name);
@@ -54,16 +55,17 @@ test("archive clear resumes the failed page with the original cutoff", async (t)
     }
     assert.fail("Missing text: " + status);
   }
-  click("清空归档历史");
+  click("清空会话记录");
   await waitFor("删除未确认");
+  assert.match(confirmation, /新提交的问答会保留/);
   assert.match(root.textContent, /待清空问答/);
   assert.doesNotMatch(root.textContent, /删除完成/);
   click("重试删除");
   await waitFor("删除完成");
   assert.deepEqual(deletes, [
-    archive + "?through_sequence=20",
-    archive + "?through_sequence=20&after=16",
-    archive + "?through_sequence=20&after=16",
+    sessionPath + "?through_sequence=20",
+    sessionPath + "?through_sequence=20&after=16",
+    sessionPath + "?through_sequence=20&after=16",
   ]);
   assert.match(root.textContent, /保留的问答/);
   assert.doesNotMatch(root.textContent, /待清空问答/);
