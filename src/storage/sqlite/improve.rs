@@ -359,7 +359,7 @@ impl SqliteTx {
         Ok(())
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn create_direct_learning(
         &mut self,
         asset: Uuid,

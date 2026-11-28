@@ -155,7 +155,7 @@ fn extract_pdf_page(doc: &PdfDocument, page: usize, strict: bool) -> Result<Stri
     Ok(text)
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[derive(serde::Serialize)]
 pub struct PdfPageSpan {
     pub before: String,
@@ -164,7 +164,7 @@ pub struct PdfPageSpan {
 }
 
 /// Locate a unique archived byte range using the same extraction as ingestion.
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) fn pdf_page_span(
     bytes: Vec<u8>,
     locator: &serde_json::Value,

@@ -7,6 +7,24 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 宿主构建特性简化
+
+基于 main `496960f`，Linux 和 Rust 1.98.0。默认构建、仅 `host` 和仅 `sqlite` 三种构建的
+`cargo clippy --locked --offline --all-targets -- -D warnings` 均通过。后两种使用
+`--no-default-features --features host` 或 `--no-default-features --features sqlite`。
+格式和差异检查通过。`cargo tree` 确认默认构建包含 AnySeek SDK 和 SQLite，仅 `host` 包含 SQLite，
+关闭全部默认特性的核心构建不依赖 SQLite。
+
+- `cargo test --locked --offline --no-default-features --features host --test anyseek` 7 项通过，8 项跳过。
+  验证远端宿主拒绝缺失的远端配置与 `--local`。
+- `cargo test --locked --offline --test anyseek` 6 项通过，8 项跳过。
+  `python3 tools/anyseek_smoke.py --embedded --binary <origence>` 通过，覆盖嵌入式 AnySeek
+  发布、诊断、重放、重启和拒绝重建丢失的 Catalog。
+- `cargo test --locked --offline --no-default-features --features sqlite --test identity-layout`
+  默认跳过 3 项。追加 `identity_layout_before_after -- --ignored --exact` 后，指定诊断通过。
+
+未在本轮运行独立 AnySeek 服务、Docker 镜像或 Windows 原生构建。
+
 ## 2026-11-28 · 全局知识检索审查
 
 基于 `14278f4`，Linux 和 Rust 1.98.0。真实 HTTP 协议夹具通过 257 个已批准分块的跨批次检索和

@@ -1,6 +1,6 @@
 //! Public, non-protocol message ingestion through the real Worker/search pipeline.
 //! Deterministic localhost embeddings exercise engineering, not model quality.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 use axum::{Json, Router, routing::post};
 use origence::storage::sqlite_db as db;
 use origence::{

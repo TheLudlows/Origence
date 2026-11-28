@@ -4,6 +4,26 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Host build feature simplification
+
+Based on main `496960f`, using Linux and Rust 1.98.0. `cargo clippy --locked --offline
+--all-targets -- -D warnings` passed for the default, `host`-only, and `sqlite`-only builds.
+The latter two used `--no-default-features --features host` or
+`--no-default-features --features sqlite`. Format and diff checks passed. `cargo tree`
+confirmed that the default links the AnySeek SDK and SQLite, `host` alone links SQLite,
+and the core build with default features disabled has no SQLite dependency.
+
+- `cargo test --locked --offline --no-default-features --features host --test anyseek`
+  passed 7 tests and ignored 8. The remote host rejected missing remote configuration and `--local`.
+- `cargo test --locked --offline --test anyseek` passed 6 tests and ignored 8.
+  `python3 tools/anyseek_smoke.py --embedded --binary <origence>` passed and covered
+  embedded AnySeek publication, diagnostics, replay, restart, and refusal to recreate a lost Catalog.
+- `cargo test --locked --offline --no-default-features --features sqlite --test identity-layout`
+  ignored all 3 diagnostics by default. Appending `identity_layout_before_after -- --ignored --exact`
+  ran the selected diagnostic successfully.
+
+A standalone AnySeek server, the Docker image, and native Windows builds were outside this local run.
+
 ## 2026-11-28 · Global knowledge retrieval review
 
 Based on `14278f4`, using Linux and Rust 1.98.0. The HTTP protocol fixture verified

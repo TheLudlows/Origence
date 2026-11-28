@@ -12,13 +12,13 @@ use serde_json::Value;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) struct ArchiveDomain {
     pub scope: crate::storage::Scope,
     pub owner: Uuid,
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl ArchiveDomain {
     pub(crate) fn collection(self) -> String {
         // Catalog identifiers are at most 63 ASCII bytes.
@@ -91,7 +91,7 @@ impl EvidenceUse {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ArchivedTurnBody {
@@ -101,7 +101,7 @@ pub(crate) struct ArchivedTurnBody {
     pub evidence_use: EvidenceUse,
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl ArchivedTurnBody {
     pub(crate) fn from_input(input: &SessionTurnInput) -> Self {
         Self {

@@ -23,7 +23,7 @@ pub mod capabilities;
 pub mod error;
 pub mod ledger;
 pub mod local_blob;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) mod retrieval_store;
 pub mod scope;
 #[cfg(feature = "sqlite")]
@@ -37,7 +37,7 @@ pub fn hash(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes.as_ref()))
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub type LocalEngine = StorageEngine<
     std::sync::Arc<sqlite::SqliteStore>,
     std::sync::Arc<sqlite::SqliteStore>,
@@ -63,7 +63,7 @@ pub use capabilities::{
 };
 pub use error::{StorageError, StorageResult};
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub use retrieval_store::RetrievalStore;
 pub use scope::{
     AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion, WorkspaceAccess,

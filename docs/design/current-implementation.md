@@ -67,7 +67,7 @@ Origence 负责判定权限、来源和可见状态。AnySeek 同时持久化正
 <a id="storage-interfaces"></a>
 ### A2.2 接口边界
 
-关闭默认特性后，核心库不依赖 SQLite。纯数据契约、解析、模型、Blob 与 AnySeek 远端客户端可独立使用。`sqlite` 提供权威事务适配器，`local-storage` 组合仅使用远端 AnySeek 的宿主，`embedded-anyseek` 为默认原生构建启用本地 SDK。服务端仍必须持久化并核验权限、正文/版本、来源、幂等和恢复状态。空读集合不触碰不参与本次判断的表，初始化与显式检查负责验证完整结构。
+关闭默认特性后，核心库不依赖 SQLite。纯数据契约、解析、模型、Blob 与 AnySeek 远端客户端可独立使用。`sqlite` 提供权威事务适配器，`host` 提供完整宿主。关闭默认特性后只启用 `host`，宿主连接独立 AnySeek。默认 `embedded-anyseek` 在宿主构建中增加本地 SDK。服务端仍必须持久化并核验权限、正文/版本、来源、幂等和恢复状态。空读集合不触碰不参与本次判断的表，初始化与显式检查负责验证完整结构。
 
 `StorageEngine` 是组装结构，持有 `RelationalStore`、`JobQueue`、`VectorStore`、
 和 `BlobStore`。当前 `Service` 仍具体绑定 `LocalEngine`/SQLite 事务，

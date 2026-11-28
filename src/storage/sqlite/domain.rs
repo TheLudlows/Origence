@@ -5,7 +5,7 @@ use super::*;
 impl SqliteTx {
     /// Retry keeps the original authority. An archive job follows its
     /// workspace's logical key through credential rotation.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn require_job_creator_write(&mut self, job: Uuid) -> StorageResult<()> {
         let job_authority: Option<(Uuid, bool)> = sqlite_db::query_as(
             "SELECT created_by,operation='extract' AND json_type(payload,'$.archive_turn') IS 'text'

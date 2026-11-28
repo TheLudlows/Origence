@@ -1,6 +1,6 @@
 //! Native-engine fixtures for transaction-local Context route preparation.
 //! Each fixture reads one relation at a time and asserts domain outcomes directly.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 
 use super::*;
 use crate::context_retrieval::ContextRoute;

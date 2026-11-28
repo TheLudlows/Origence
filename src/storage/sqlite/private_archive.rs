@@ -72,7 +72,7 @@ impl SqliteTx {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod host {
     use super::*;
     use crate::{session::ArchiveDomain, storage::anyseek::private_archive::NativeArchiveTurn};
@@ -273,7 +273,7 @@ mod host {
     }
 }
 
-#[cfg(all(test, feature = "local-storage"))]
+#[cfg(all(test, feature = "host"))]
 #[tokio::test]
 async fn native_archive_authority_keeps_only_used_proof() {
     use crate::{

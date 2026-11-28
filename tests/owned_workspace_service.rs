@@ -1,5 +1,5 @@
 //! Public library upload/job/search regression for generic owned workspaces.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 use origence::storage::sqlite_db as db;
 use origence::{
     error::AppError,

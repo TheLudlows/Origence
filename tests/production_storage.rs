@@ -4,7 +4,7 @@
 //! These tests cover the new full-text surface, its authority boundary, and the
 //! retrieval behavior that must survive the backend replacement. All model/index IO
 //! uses deterministic localhost fixtures; no model quality or native ranking is evaluated.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 
 use axum::{Json, Router, routing::post};
 use origence::{

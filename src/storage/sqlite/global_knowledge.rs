@@ -1,6 +1,6 @@
 //! Authority records for immutable global knowledge releases.
 use super::*;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 use crate::service::GlobalKnowledgeDecision;
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -31,7 +31,7 @@ fn decode_chunks(manifest: &str) -> StorageResult<Vec<GlobalChunkRef>> {
     Ok(chunks)
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct GlobalRelease {
     pub(crate) id: Uuid,
@@ -47,14 +47,14 @@ pub(crate) struct GlobalRelease {
     reviewed_at: Option<i64>,
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl GlobalRelease {
     pub(crate) fn chunks(&self) -> StorageResult<Vec<GlobalChunkRef>> {
         decode_chunks(&self.chunk_manifest)
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl sqlite_db::FromRow for GlobalRelease {
     fn from_row(row: &sqlite_db::Row) -> sqlite_db::Result<Self> {
         Ok(Self {
@@ -75,10 +75,10 @@ impl sqlite_db::FromRow for GlobalRelease {
         })
     }
 }
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 const RELEASE_FIELDS: &str = "id,tenant_id,workspace_id,asset_id,version,source_event_id,title,content_hash,state,chunk_manifest,submitted_at,reviewed_at";
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) fn release_value(row: &GlobalRelease, private: bool) -> Value {
     let mut value = json!({
         "publication_id":row.id,"scope":"global","title":row.title,"version":row.version,
@@ -93,7 +93,7 @@ pub(crate) fn release_value(row: &GlobalRelease, private: bool) -> Value {
     value
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteStore {
     pub(crate) async fn global_moderation(
         &self,
@@ -120,7 +120,7 @@ impl SqliteStore {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteTx {
     pub(crate) async fn global_knowledge_source(
         &mut self,
@@ -284,7 +284,7 @@ impl SqliteTx {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteStore {
     pub(crate) async fn has_global_knowledge(&self) -> StorageResult<bool> {
         sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_global_knowledge)")

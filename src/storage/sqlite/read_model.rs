@@ -110,7 +110,7 @@ pub(super) struct CurrentChunk {
 
 /// Current root visibility only. Callers apply local support and Learning as
 /// separate batch layers; startup health intentionally only needs this layer.
-#[cfg(all(test, feature = "local-storage"))]
+#[cfg(all(test, feature = "host"))]
 pub(super) async fn current_chunks(
     conn: &mut Connection,
     scope: Scope,
@@ -124,7 +124,7 @@ pub(super) async fn current_chunks(
 
 // Counts are lengths of already-read sets, for native regression evidence.
 // No extra query or payload clone is performed to obtain them.
-#[cfg(all(test, feature = "local-storage"))]
+#[cfg(all(test, feature = "host"))]
 pub(super) async fn current_chunks_measured(
     conn: &mut Connection,
     scope: Scope,
@@ -179,7 +179,7 @@ pub(super) struct RawCurrentRows {
     assets: HashMap<usize, sqlite_db::Row>,
     versions: HashMap<usize, sqlite_db::Row>,
     positions: Vec<usize>,
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     counts: [usize; 4],
 }
 
@@ -323,7 +323,7 @@ pub(super) async fn current_rows(
         &requests,
     )
     .await?;
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     let asset_count = assets.len();
     let assets: HashMap<_, _> = assets.into_iter().collect();
     let versions = associate_rows(
@@ -338,7 +338,7 @@ pub(super) async fn current_rows(
         &requests,
     )
     .await?;
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     let version_count = versions.len();
     let sources = versions
         .iter()
@@ -362,14 +362,14 @@ pub(super) async fn current_rows(
         .enumerate()
         .filter_map(|(index, (request, row))| active.contains(&index).then_some((request, row)))
         .collect();
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     let counts = [rows.len(), requests.len(), asset_count, version_count];
     Ok(RawCurrentRows {
         rows,
         assets,
         versions,
         positions,
-        #[cfg(all(test, feature = "local-storage"))]
+        #[cfg(all(test, feature = "host"))]
         counts,
     })
 }
@@ -500,7 +500,7 @@ async fn current_root_rows(
         .collect())
 }
 
-#[cfg(all(test, feature = "local-storage"))]
+#[cfg(all(test, feature = "host"))]
 pub(super) async fn current_chunk_roots(
     conn: &mut Connection,
     scope: Scope,
@@ -603,7 +603,7 @@ pub(super) fn support_members(kind: &str, text: &str) -> StorageResult<Vec<Strin
 impl SqliteTx {
     // Test-only typed projection; production historical views retain raw rows
     // to decode their own selected tuple in its original order.
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     pub(super) async fn active_version_roots(
         &mut self,
         versions: &[VersionKey],
@@ -944,7 +944,7 @@ impl SqliteTx {
 
     /// Called after visible_hits in the same transaction; it only enriches
     /// already-authorized assets and is not a standalone visibility decision.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn retrieval_identities(
         &mut self,
         assets: &[Uuid],
@@ -1207,7 +1207,7 @@ impl SqliteTx {
         Ok(unique_ids(ids))
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(super) async fn supported_candidate_sources(
         &mut self,
         ids: &[Uuid],
@@ -1403,10 +1403,10 @@ pub(super) const MATCH_EVENT_SELECT: &str = "(id=?) AS m0,(id=?) AS m1,(id=?) AS
 pub(super) const MATCH_EVENT_WHERE: &str =
     "(id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?) OR (id=?)";
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) const MATCH_PUBLISHED_SELECT: &str = "(asset_id=? AND version=? AND source_event_id=?) AS m0,(asset_id=? AND version=? AND source_event_id=?) AS m1,(asset_id=? AND version=? AND source_event_id=?) AS m2,(asset_id=? AND version=? AND source_event_id=?) AS m3,(asset_id=? AND version=? AND source_event_id=?) AS m4,(asset_id=? AND version=? AND source_event_id=?) AS m5,(asset_id=? AND version=? AND source_event_id=?) AS m6,(asset_id=? AND version=? AND source_event_id=?) AS m7";
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) const MATCH_PUBLISHED_WHERE: &str = "(asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?) OR (asset_id=? AND version=? AND source_event_id=?)";
 
 // B-domain raw association. A fixed eight-way projection keeps native SQL
@@ -1481,7 +1481,7 @@ pub(super) async fn associate_query(
     Ok(result)
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn context_current_chunk_rows(
     conn: &mut Connection,
     scope: Scope,
@@ -1492,12 +1492,12 @@ pub(super) async fn context_current_chunk_rows(
         .0)
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 type ContextChunkRows = Vec<(Uuid, Uuid, String)>;
 
 // Local read-set metrics let regressions verify payload scope without timing
 // thresholds or an extra query. The counters do not affect query decisions.
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn context_current_chunk_rows_measured(
     conn: &mut Connection,
     scope: Scope,
