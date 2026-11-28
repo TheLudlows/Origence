@@ -249,7 +249,6 @@ if (
       host: { type: "string" },
       port: { type: "string" },
       strictPort: { type: "boolean" },
-      "key-only": { type: "boolean" },
     },
   });
   const port = Number(
@@ -257,13 +256,10 @@ if (
   );
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid ORIGENCE_UI_PORT");
-  const accountDatabase = process.env.ORIGENCE_UI_ACCOUNTS_DB;
-  if (!values["key-only"] && !accountDatabase && process.env.ORIGENCE_UI_ACCOUNTS_FILE)
-    throw new Error("Configure local console accounts with ORIGENCE_UI_ACCOUNTS_DB");
   const server = createUiServer({
     apiBaseUrl: process.env.ORIGENCE_API_BASE_URL ?? "http://127.0.0.1:8080",
     publicOrigin: process.env.ORIGENCE_UI_ORIGIN,
-    accounts: values["key-only"] ? [] : loadConfiguredConsoleAccounts(process.env),
+    accounts: loadConfiguredConsoleAccounts(process.env),
   });
   server.listen(
     port,

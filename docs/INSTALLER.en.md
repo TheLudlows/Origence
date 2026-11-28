@@ -49,6 +49,8 @@ A local installation starts the API and console. The console defaults to `127.0.
 ./bin/origence-deploy install --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
+The installer enables account and password sign-in when it obtains a deployment administrator credential. If you supply only a workspace Key to connect to an existing service, use that Key to sign in.
+
 First startup creates the deployment administrator. The installer sets a random password for the console account `admin`. Obtain sign-in details interactively, with `--credentials-file`, or with explicit `--show-secrets`. Create a workspace as the administrator, then use its key to connect an Agent. For an existing server, supply a workspace key or set `ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY` to install the console for an administrator. `--verify-write` requires a workspace key with write access.
 
 Run `./bin/origence-deploy uninstall` or `.\bin\origence-deploy.cmd uninstall` from the checkout. It stops deployment-managed processes and removes account configuration that it owns. Databases, backups, exported credentials, and Agent plugins are retained. Existing all-in-one journals are read by ownership. To roll back a former all-in-one install completely, run both uninstall commands. Private state and service logs are under `%LOCALAPPDATA%\Origence\installer` on Windows or `~/.origence/installer` on Unix.
