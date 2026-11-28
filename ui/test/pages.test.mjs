@@ -526,8 +526,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     assert.equal(trend.querySelectorAll(".run-chart-mark.is-zero").length, 7);
     overviewEmpty = false;
     assert.equal(window.localStorage.length, 0);
-    assert.equal(window.sessionStorage.length, 1);
-    assert.equal(window.sessionStorage.getItem("origence.selectedWorkspace"), ids.asset);
+    assert.equal(window.sessionStorage.length, 0);
   });
   await t.test("administrator opens another Key's trace with read-only controls", async () => {
     click("调用链路");

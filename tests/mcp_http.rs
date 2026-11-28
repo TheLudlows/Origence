@@ -62,6 +62,9 @@ impl Peer {
             assert_eq!(response.headers()["www-authenticate"], "Bearer");
             return Err(json!({"http_status": 401}));
         }
+        if response.status() == StatusCode::FORBIDDEN {
+            return Err(json!({"http_status": 403}));
+        }
         assert_eq!(response.status(), 200);
         let reply: Value = response.json().await.unwrap();
         if let Some(error) = reply.get("error") {
@@ -91,7 +94,7 @@ async fn workspace(service: &Service, tenant_id: Uuid) -> Scope {
 }
 
 #[tokio::test]
-async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
+async fn agent_list_keeps_mcp_activity_within_its_workspace() {
     let dir = tempfile::tempdir().unwrap();
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let scope = workspace(&service, Uuid::new_v4()).await;
@@ -110,11 +113,6 @@ async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
     };
     let workspace_key = store
         .create_key_workspace(key_scope, "Single Key agent fixture")
-        .await
-        .unwrap();
-    let grant_admin = service.auth(&selected_admin.token).await.unwrap();
-    service
-        .set_workspace_key_grant(&grant_admin, writer.key_id, Some("reader"))
         .await
         .unwrap();
 
@@ -213,14 +211,19 @@ async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
             .unwrap()["result"]
             .is_object()
     );
-    peer.call(
-        &writer.token,
-        Some(selected.workspace_id),
-        "context_session",
-        json!({}),
-    )
-    .await
-    .unwrap();
+    let denied = peer
+        .post(rpc(
+            "tools/call",
+            json!({
+                "name":"context_session","arguments":{}
+            }),
+        ))
+        .bearer_auth(&writer.token)
+        .header("X-Origence-Workspace", selected.workspace_id.to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
     let response = list(&admin.token).await.unwrap();
     assert_eq!(response.headers()["Cache-Control"], "no-store");
     let body: Value = response.json().await.unwrap();
@@ -259,37 +262,17 @@ async fn agent_list_uses_live_workspace_grants_and_groups_mcp_activity() {
         assert!(!body.to_string().contains(private));
     }
 
-    let body: Value = list(&selected_admin.token)
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(body["items"].as_array().unwrap().len(), 1);
-    assert_eq!(body["items"][0]["role"], "reader");
-    assert_eq!(body["items"][0]["observation"]["client_kinds"], json!([]));
-    assert_eq!(
-        list(&other_admin.token)
-            .await
-            .unwrap()
-            .json::<Value>()
-            .await
-            .unwrap()["items"],
-        json!([])
-    );
-    service
-        .set_workspace_key_grant(&grant_admin, writer.key_id, None)
-        .await
-        .unwrap();
-    assert_eq!(
-        list(&selected_admin.token)
-            .await
-            .unwrap()
-            .json::<Value>()
-            .await
-            .unwrap()["items"],
-        json!([])
-    );
+    for key in [&selected_admin, &other_admin] {
+        assert_eq!(
+            list(&key.token)
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()["items"],
+            json!([])
+        );
+    }
 
     let admin_auth = service.auth(&admin.token).await.unwrap();
     let replacement = service
@@ -553,7 +536,6 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
     let store = service.engine.relational();
     let writer = store.issue_key(a, "writer").await.unwrap();
     let a_admin = store.issue_key(a, "admin").await.unwrap();
-    let b_admin = store.issue_key(b, "admin").await.unwrap();
     let reader = store.issue_key(a, "reader").await.unwrap();
     let peer = Peer::start(service.clone(), McpHttpConfig::default()).await;
     let auth = service.auth(&writer.token).await.unwrap();
@@ -571,25 +553,12 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
         .unwrap();
     while origence::worker::process_next(&service).await.unwrap() {}
     let asset = &receipt["asset_id"];
-    let b_admin_auth = service.auth(&b_admin.token).await.unwrap();
-    service
-        .set_workspace_key_grant(&b_admin_auth, writer.key_id, Some("reader"))
-        .await
-        .unwrap();
     let token = &writer.token;
     let session = peer
         .call(token, None, "context_session", json!({}))
         .await
         .unwrap();
     assert_eq!(session["workspace_id"], a.workspace_id.to_string());
-    let other_session = peer
-        .call(token, Some(b.workspace_id), "context_session", json!({}))
-        .await
-        .unwrap();
-    assert_eq!(other_session["workspace_id"], b.workspace_id.to_string());
-    assert_eq!(session["key_id"], other_session["key_id"]);
-    assert_ne!(session["session_id"], other_session["session_id"]);
-
     let session_request = || {
         peer.post(rpc(
             "tools/call",

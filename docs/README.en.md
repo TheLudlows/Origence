@@ -35,7 +35,7 @@ The target architecture describes the product to be delivered. Implementation st
 | [Trace / Run](contracts/runs.md) | Private traces, context preparation records, client reports, and collection gaps |
 | [External Run verification](contracts/run-verification.md) | External assessment records for precise Run prefixes and their withdrawal |
 | [Storage invariants](contracts/storage.en.md) | Identity reservations, publication ledger, original evidence, and same-version recovery |
-| [Owning workspace and message batches](API.en.md#common-owning-workspace-and-message-batch-library-apis) | Common library interfaces, derived authorization, and batch publication state |
+| [Message batches](API.en.md#message-batch-rust-library-apis) | Common library interfaces, idempotency, and batch publication state |
 
 The [evaluation and comparison standard](Origence_%E6%95%88%E6%9E%9C%E8%AF%84%E4%BC%B0%E4%B8%8E%E5%AF%B9%E6%AF%94%E6%A0%87%E5%87%86.en.md) defines the evaluation method. See [evals](../evals/README.en.md) for runnable entry points. Enterprise pilot and competitive comparisons have separate completion criteria.
 

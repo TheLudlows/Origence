@@ -21,8 +21,7 @@ codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-v
 ```
 
 Launch the client from that terminal, check `/mcp`, and call `context_session` to confirm `workspace_id`.
-Direct clients use the credential's default workspace unless their HTTP requests supply the
-`X-Origence-Workspace` header for an authorized workspace. The plugins below take this header from `OC_WORKSPACE_ID`.
+The key determines the workspace. Use the destination workspace's own key to connect to another workspace. The optional `X-Origence-Workspace` header checks the workspace, and the plugins take it from `OC_WORKSPACE_ID`.
 
 Retrieval and explicit tool calls require no local Origence binary. The bundled automatic Run hook uses the binary. See [remote MCP deployment](OPERATIONS.en.md#remote-mcp).
 
@@ -79,7 +78,7 @@ The Codex plugin uses a fixed localhost default. For a different port or origin,
 codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_API_KEY
 ```
 
-To select a workspace through `OC_WORKSPACE_ID` with this override, add the `env_http_headers` section from the
+To check the workspace through `OC_WORKSPACE_ID` with this override, add the `env_http_headers` section from the
 [example](../examples/codex.mcp.toml) to that server's configuration. When using the automatic Run hook, set
 `OC_SERVER_URL` to the same API origin. To remove the override, run `codex mcp remove origence`.
 

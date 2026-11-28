@@ -153,14 +153,14 @@ test("only administrator sessions can list or rotate the selected workspace key"
   const adminWorkspace = "11111111-1111-4111-8111-111111111111";
   const readerWorkspace = "22222222-2222-4222-8222-222222222222";
   const adminId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const workspaceKey = "oc_" + "a".repeat(64);
   const password = "synthetic-console-password";
   const calls = [];
   const upstream = await listen(createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
     if (req.url === "/v1/whoami") {
-      const admin = req.headers.authorization === "Bearer synthetic-admin";
-      return res.end(JSON.stringify({ id: admin ? adminId : readerWorkspace,
-        workspace_id: admin ? adminWorkspace : readerWorkspace, role: admin ? "admin" : "reader" }));
+      assert.equal(req.headers.authorization, `Bearer ${workspaceKey}`);
+      return res.end(JSON.stringify({ id: adminId, workspace_id: adminWorkspace, role: "workspace" }));
     }
     if (req.url === "/admin/deployment/me")
       return res.end(JSON.stringify({ role: "deployment_admin" }));
@@ -169,16 +169,12 @@ test("only administrator sessions can list or rotate the selected workspace key"
   }), t);
   const passwordHash = await hashConsolePassword(password);
   const ui = await listen(createUiServer({ apiBaseUrl: upstream, accounts: [
-    { username: "member", passwordHash, grants: [
-      { workspaceId: adminWorkspace, name: "Admin", authorization: "Bearer synthetic-admin" },
-      { workspaceId: readerWorkspace, name: "Reader", authorization: "Bearer synthetic-reader" },
-    ] },
-    { username: "operator", passwordHash, grants: [], deploymentAuthorization: "Bearer deployment-secret" },
+    { username: "operator", passwordHash, deploymentAuthorization: "Bearer deployment-secret" },
   ] }), t);
-  async function signIn(username) {
+  async function signIn(data) {
     const login = await fetch(ui + "/api/console/session", {
       method: "POST", headers: { Origin: ui, "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(data),
     });
     assert.equal(login.status, 200);
     const { session } = await login.json();
@@ -186,13 +182,13 @@ test("only administrator sessions can list or rotate the selected workspace key"
       "X-Origence-Session": session.binding, "X-Origence-Workspace": adminWorkspace,
       Authorization: "Bearer untrusted-browser-value" } };
   }
-  const { headers, session } = await signIn("member");
-  assert.deepEqual(session.workspaces.map(({ workspace_id }) => workspace_id), [adminWorkspace, readerWorkspace]);
+  const { headers, session } = await signIn({ workspace_key: workspaceKey });
+  assert.deepEqual(session.workspaces.map(({ workspace_id }) => workspace_id), [adminWorkspace]);
   const workspacePath = `/admin/deployment/workspaces/${readerWorkspace}`;
   const keys = ui + "/api" + workspacePath + "/keys";
   assert.equal((await fetch(keys, { headers })).status, 403);
   assert.equal((await fetch(keys + "/rotate", { method: "POST", headers: { ...headers, Origin: ui } })).status, 403);
-  const operator = await signIn("operator");
+  const operator = await signIn({ username: "operator", password });
   assert.equal((await fetch(keys, { headers: { Authorization: "Bearer deployment-secret" } })).status, 401);
   const list = await fetch(keys + "?limit=1", { headers: operator.headers });
   assert.equal(list.status, 200);
@@ -208,12 +204,12 @@ test("only administrator sessions can list or rotate the selected workspace key"
   const agents = ui + "/api/admin/agents";
   assert.equal((await fetch(agents, { headers })).status, 200);
   assert.equal((await fetch(agents, { headers: { ...headers, "X-Origence-Workspace": readerWorkspace } })).status, 403);
-  assert.equal((await fetch(agents, { headers: { Authorization: "Bearer synthetic-admin" } })).status, 401);
+  assert.equal((await fetch(agents, { headers: { Authorization: `Bearer ${workspaceKey}` } })).status, 401);
   assert.equal((await fetch(agents, { method: "POST", headers })).status, 404);
   assert.deepEqual(calls, [
     [workspacePath + "/keys?limit=1", "GET", "Bearer deployment-secret", undefined, undefined],
     [workspacePath + "/keys/rotate", "POST", "Bearer deployment-secret", undefined, undefined],
-    ["/admin/agents", "GET", "Bearer synthetic-admin", adminWorkspace, undefined],
+    ["/admin/agents", "GET", `Bearer ${workspaceKey}`, adminWorkspace, undefined],
   ]);
 });
 

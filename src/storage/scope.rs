@@ -35,15 +35,6 @@ pub struct WorkspaceAccess {
     pub is_default: bool,
 }
 
-/// Explicit capabilities granted when an administrator issues a key.
-/// Rotation never inherits these from another key or from the admin role.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct KeyCapabilities {
-    #[serde(default)]
-    pub allow_owned_workspaces: bool,
-}
-
 /// A permission a domain operation can require (A2.2 `check_current_permission`).
 ///
 /// Workspace credentials have full content access. Administrative operations

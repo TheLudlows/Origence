@@ -1,5 +1,5 @@
 // Deterministic Chromium regression against a loopback HTTP fixture through the real UI relay.
-const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -68,7 +68,7 @@ async function scenario(browser, initialState, run) {
     }
     return send({}, 404);
   });
-  const relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(assetId, [token]) });
+  const relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(assetId, [token]) });
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

@@ -105,7 +105,7 @@ export async function connectMcp(endpoint, token, workspace) {
 
 const sessionPath = "/api/console/session";
 export async function consoleLogin(base, credentials, workspace, key, mode =
-  credentials.deployment_key ? "deployment" : credentials.workspace_key ? "workspace" : "account") {
+  credentials.workspace_key ? "workspace" : "deployment") {
   await (await expect(await responseAt(base, "/"), 200, "UI root")).body?.cancel();
   const response = await expect(await responseAt(base, sessionPath, {
     method: "POST", headers: { "Content-Type": "application/json", Origin: base },

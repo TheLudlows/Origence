@@ -20,8 +20,7 @@ codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-v
 ```
 
 在同一终端启动客户端，用 `/mcp` 检查连接，并调用 `context_session` 核对 `workspace_id`。
-默认使用凭据的默认工作区。要选择其他已授权工作区，在 HTTP MCP 请求中配置 `X-Origence-Workspace`
-请求头。下文的插件使用启动环境中的 `OC_WORKSPACE_ID` 填充此请求头。
+工作区由 Key 确定。要接入另一个工作区，请使用那个工作区的 Key。可用 `X-Origence-Workspace` 请求头核对；插件使用启动环境中的 `OC_WORKSPACE_ID` 填充该头。
 
 检索和显式工具调用无需本机 `origence`。插件中的自动 Run Hook 需要本机二进制。[远程部署配置](OPERATIONS.md#远程-mcp)
 
@@ -74,7 +73,7 @@ Codex 插件内的 URL 固定为本机默认地址。使用其他端口或域名
 codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_API_KEY
 ```
 
-同名覆盖后，若要用 `OC_WORKSPACE_ID` 选择工作区，把 [示例](../examples/codex.mcp.toml) 中的
+同名覆盖后，若要用 `OC_WORKSPACE_ID` 核对工作区，把 [示例](../examples/codex.mcp.toml) 中的
 `env_http_headers` 节加入该服务器配置。使用自动 Run Hook 时，`OC_SERVER_URL` 应指向同一 API 宿主。
 移除覆盖配置使用 `codex mcp remove origence`。
 
@@ -140,8 +139,7 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
    - **Codex**：将 [TOML 示例](../examples/codex.mcp.toml) 的 `[mcp_servers.origence]` 配置放入
      个人 Codex 配置或受信任项目的 `.codex/config.toml`，保留 `bearer_token_env_var = "OC_API_KEY"`。
 
-在客户端用 `/mcp` 检查连接。调用 `context_session` 核对 `workspace_id`。如需选择其他有权访问的工作区，
-可在启动前设置 `OC_WORKSPACE_ID`。两份示例均将该值映射为 HTTP 请求头。
+在客户端用 `/mcp` 检查连接。调用 `context_session` 核对 `workspace_id`。接入另一工作区时，请在启动前更换 `OC_API_KEY`。可设置 `OC_WORKSPACE_ID` 核对 Key 所属工作区，两份示例均将其映射为 HTTP 请求头。
 
 显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用

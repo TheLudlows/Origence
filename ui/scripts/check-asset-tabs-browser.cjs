@@ -1,5 +1,5 @@
 // Standalone Chromium regression with the built UI, relay, and loopback HTTP fixture.
-const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -330,7 +330,7 @@ async function feedbackChecks(page, displayedVersion, measurements) {
   const { createUiServer } = await import("../dist/server.js");
   let relay, browser;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(sourceId, ["synthetic-reader", "synthetic-writer"]) });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(sourceId, ["synthetic-reader", "synthetic-writer"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     for (const width of [1024, 736, 375, 320]) {

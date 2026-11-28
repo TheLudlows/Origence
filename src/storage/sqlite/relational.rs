@@ -34,16 +34,6 @@ impl RelationalStore for SqliteStore {
     }
 
     async fn issue_key(&self, scope: Scope, role: &str) -> StorageResult<IssuedKey> {
-        self.issue_key_with_capabilities(scope, role, KeyCapabilities::default())
-            .await
-    }
-
-    async fn issue_key_with_capabilities(
-        &self,
-        scope: Scope,
-        role: &str,
-        capabilities: KeyCapabilities,
-    ) -> StorageResult<IssuedKey> {
         if role == "workspace" || !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict(format!("invalid role {role}")));
         }
@@ -52,26 +42,25 @@ impl RelationalStore for SqliteStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(sqlite_err)?;
-        let owner: Option<Option<Uuid>> = sqlite_db::query_scalar(
-            "SELECT owner_workspace_id FROM oc_workspaces WHERE tenant_id = ? AND id = ?",
+        let exists: bool = sqlite_db::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_workspaces WHERE tenant_id = ? AND id = ?)",
         )
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
-        .fetch_optional(&mut *tx)
+        .fetch_one(&mut *tx)
         .await
         .map_err(sqlite_err)?;
-        let owner = owner.ok_or(StorageError::NotFound)?;
-        if super::workspace_key::has_workspace_key(&mut tx, scope).await? {
-            return Err(StorageError::Forbidden);
+        if !exists {
+            return Err(StorageError::NotFound);
         }
-        if capabilities.allow_owned_workspaces && owner.is_some() {
+        if super::workspace_key::has_workspace_key(&mut tx, scope).await? {
             return Err(StorageError::Forbidden);
         }
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         sqlite_db::query(
-            "INSERT INTO oc_api_keys(id, logical_key_id, tenant_id, workspace_id, token_hash, role, allow_owned_workspaces, revoked, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            "INSERT INTO oc_api_keys(id, logical_key_id, tenant_id, workspace_id, token_hash, role, revoked, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
         )
         .bind(key_id)
         .bind(key_id)
@@ -79,33 +68,12 @@ impl RelationalStore for SqliteStore {
         .bind(scope.workspace_id)
         .bind(hash(&token))
         .bind(role)
-        .bind(capabilities.allow_owned_workspaces)
         .bind(now_ms())
         .execute(&mut *tx)
         .await
         .map_err(sqlite_err)?;
         tx.commit().await.map_err(sqlite_err)?;
         Ok(IssuedKey { key_id, token })
-    }
-
-    async fn ensure_owned_workspace(
-        &self,
-        auth: AuthorizedScope,
-        workspace_id: Uuid,
-        name: &str,
-    ) -> StorageResult<AuthorizedScope> {
-        self.owned_workspace(auth, workspace_id, Some(name), Permission::Write)
-            .await?
-            .ok_or(StorageError::NotFound)
-    }
-
-    async fn lookup_owned_workspace(
-        &self,
-        auth: AuthorizedScope,
-        workspace_id: Uuid,
-    ) -> StorageResult<Option<AuthorizedScope>> {
-        self.owned_workspace(auth, workspace_id, None, Permission::Read)
-            .await
     }
 
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()> {
@@ -119,125 +87,5 @@ impl RelationalStore for SqliteStore {
 
     async fn reconcile_ledger(&self) -> StorageResult<Value> {
         self.reconcile_ledger_inner().await
-    }
-}
-
-impl SqliteStore {
-    async fn owned_workspace(
-        &self,
-        auth: AuthorizedScope,
-        workspace_id: Uuid,
-        create: Option<&str>,
-        permission: Permission,
-    ) -> StorageResult<Option<AuthorizedScope>> {
-        if create
-            .is_some_and(|name| name.trim().is_empty() || name.len() > 256 || name.contains('\0'))
-        {
-            return Err(StorageError::InvalidArgument(
-                "workspace name must contain 1..256 UTF-8 bytes without NUL",
-            ));
-        }
-        let mut tx = self.begin_scoped(auth, create.is_some(), None).await?;
-        let root_role = tx.require_owned_workspace_root(permission).await?;
-        let role = if Permission::Write.granted_by(&root_role) {
-            "writer"
-        } else {
-            "reader"
-        };
-        if workspace_id == tx.scope.workspace_id {
-            return Err(StorageError::Conflict("workspace cannot own itself".into()));
-        }
-        // Lookup by global identity so a cross-tenant collision also fails;
-        // never overwrite or silently select a different identity.
-        let existing: Option<(Uuid, Option<Uuid>)> = sqlite_db::query_as(
-            "SELECT tenant_id,owner_workspace_id FROM oc_workspaces WHERE id=?",
-        )
-        .bind(workspace_id)
-        .fetch_optional(&mut *tx.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let scope = Scope {
-            workspace_id,
-            ..tx.scope
-        };
-        let target_role = match existing {
-            Some((tenant, owner)) => {
-                if tenant != tx.scope.tenant_id || owner != Some(tx.scope.workspace_id) {
-                    return Err(StorageError::Conflict(
-                        "workspace ownership does not match".into(),
-                    ));
-                }
-                Some(role.into())
-            }
-            None => match create {
-                Some(name) => {
-                    sqlite_db::query(
-                        "INSERT INTO oc_workspaces(tenant_id,id,name,owner_workspace_id,created_at) \
-                         VALUES(?,?,?,?,?)",
-                    )
-                    .bind(tx.scope.tenant_id)
-                    .bind(workspace_id)
-                    .bind(name)
-                    .bind(tx.scope.workspace_id)
-                    .bind(now_ms())
-                    .execute(&mut *tx.tx)
-                    .await
-                    .map_err(sqlite_err)?;
-                    tx.audit("workspace.create_owned", workspace_id, json!({}))
-                        .await?;
-                    Some(role.into())
-                }
-                None => None,
-            },
-        };
-        let authorized = target_role.map(|role| AuthorizedScope {
-            scope,
-            principal_id: tx.principal_id,
-            role,
-        });
-        tx.commit().await?;
-        Ok(authorized)
-    }
-}
-
-impl SqliteTx {
-    async fn require_owned_workspace_root(
-        &mut self,
-        permission: Permission,
-    ) -> StorageResult<String> {
-        let role: Option<String> = sqlite_db::query_scalar(
-            "SELECT role FROM oc_api_keys \
-             WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked \
-               AND default_access AND allow_owned_workspaces=1",
-        )
-        .bind(self.principal_id)
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let role = role.ok_or(StorageError::Forbidden)?;
-        if !permission.granted_by(&role) {
-            return Err(StorageError::Forbidden);
-        }
-        self.require_root_workspace().await?;
-        self.required.push(permission);
-        Ok(role)
-    }
-
-    async fn require_root_workspace(&mut self) -> StorageResult<()> {
-        let root: Option<Uuid> = sqlite_db::query_scalar(
-            "SELECT id FROM oc_workspaces \
-             WHERE tenant_id=? AND id=? AND owner_workspace_id IS NULL",
-        )
-        .bind(self.scope.tenant_id)
-        .bind(self.scope.workspace_id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        if root.is_none() {
-            return Err(StorageError::Forbidden);
-        }
-        Ok(())
     }
 }

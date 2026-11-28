@@ -1,5 +1,5 @@
 // Standalone Chromium regression through the built UI and loopback HTTP relay.
-const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -164,7 +164,7 @@ async function checkPinnedVersion(page, detail) {
   const { createUiServer } = await import("../dist/server.js");
   let browser, relay;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(file, ["synthetic-reader", "synthetic-writer"]) });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(file, ["synthetic-reader", "synthetic-writer"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const writer = await browser.newPage({ viewport: { width: 375, height: 768 } });

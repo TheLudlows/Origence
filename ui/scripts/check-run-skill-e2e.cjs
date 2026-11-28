@@ -3,7 +3,7 @@ const { randomUUID } = require("node:crypto");
 const { once } = require("node:events");
 const { readFileSync } = require("node:fs");
 const { chromium } = require("playwright");
-const { fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 
 const fixture = JSON.parse(readFileSync(0, "utf8"));
 const { run, keys } = fixture;
@@ -189,11 +189,9 @@ async function checkConsole(page, prefix) {
 async function main() {
   const prefix = await seed();
   const { createUiServer } = await import("../dist/server.js");
-  const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const ui = createUiServer({ apiBaseUrl: fixture.api, accounts: [{
-    username: "fixture-owner", passwordHash: await hashConsolePassword(password),
-    grants: [{ workspaceId: fixture.workspace, name: "Synthetic Skill", authorization: `Bearer ${owner}` }],
-  }] });
+  const ui = createFixtureUiServer(createUiServer, { apiBaseUrl: fixture.api, accounts: [
+    { username: "fixture-owner", workspaceId: fixture.workspace, key: owner },
+  ] });
   let browser;
   try {
     ui.listen(0, "127.0.0.1");

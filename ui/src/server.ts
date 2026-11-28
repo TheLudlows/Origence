@@ -174,8 +174,6 @@ export function createUiServer(options: ServerOptions) {
         else if (!path.startsWith("/health/")) {
           const workspace = sessions.authorization(req, new URL(origin));
           headers.set("authorization", workspace.authorization);
-          if (viewingAgents && workspace.role !== "admin" && workspace.role !== "workspace")
-            throw new HttpError(403, "当前凭据无权查看本工作区的 Agent 连接");
           if (viewingAgents) headers.set("X-Origence-Workspace", workspace.workspaceId);
         }
         const payload = await body(req);

@@ -183,15 +183,14 @@ impl SqliteStore {
             .await
             .map_err(sqlite_err)?;
         let actor = require_admin(&mut tx, token).await?;
-        let previous: Option<(Uuid, String, Option<Uuid>)> = sqlite_db::query_as(
-            "SELECT tenant_id,name,owner_workspace_id FROM oc_workspaces WHERE id=?",
-        )
-        .bind(workspace)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(sqlite_err)?;
-        if let Some((tenant, saved_name, parent)) = previous {
-            if tenant != workspace || parent.is_some() || saved_name != name.trim() {
+        let previous: Option<(Uuid, String)> =
+            sqlite_db::query_as("SELECT tenant_id,name FROM oc_workspaces WHERE id=?")
+                .bind(workspace)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(sqlite_err)?;
+        if let Some((tenant, saved_name)) = previous {
+            if tenant != workspace || saved_name != name.trim() {
                 return Err(StorageError::Conflict("workspace ID already exists".into()));
             }
             tx.commit().await.map_err(sqlite_err)?;

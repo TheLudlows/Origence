@@ -5,7 +5,7 @@
 更新于 2026-11-27，本地实现基于 main `a542ff0`。
 Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill 和 Trace。首版目标见[产品路线图](ROADMAP.md)与[架构规划](design/agent-data-foundation.md)。
 
-AML 评测协议的 HTTP 入口与启动开关已移除。所属 workspace 和消息批次通过[通用 Rust 库接口](API.md#通用所属-workspace-与消息批次库接口)继续提供。
+AML 评测协议的 HTTP 入口与启动开关已移除。消息批次通过[通用 Rust 库接口](API.md#消息批次-rust-库接口)继续提供。
 
 Claude Code 与 Codex 已通过同 Key 会话互读和独立 Run 验收。双向 Skill 复用已在公开合成题上跑通，正式未见题试点及独立业务签认待执行。[#87 双客户端接入](https://github.com/TheLudlows/Origence/issues/87) · [#91 试点及验证记录](../evals/pilot/README.md)
 
@@ -17,7 +17,7 @@ Claude Code 与 Codex 已通过同 Key 会话互读和独立 Run 验收。双向
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核。默认关键词检索要求查询词项全部出现。真实引擎本地回归通过。日常上下文按预算组装带业务日期、时间线和固定引用的归纳事实，控制台可核对原始来源。[证据包契约](contracts/evidence-bundle.zh-CN.md) | 当前后端的模型检索质量、容量与延迟验收 |
 | 会话与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。控制台「会话」显示已保存的问答。支持按 ID 与序号读取、关键词与向量召回、显式反馈。成员授权空间按权限删除问答，单 Key 工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对会话和反馈证据 |
-| Node.js 管理界面 | 工作空间 Key 登录、部署管理员跨空间查看和全局知识审核，以及受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。运行总览显示可选中复制的当前工作区 ID。现有成员授权空间仍可使用账号登录。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
+| Node.js 管理界面 | 工作空间 Key 登录、部署管理员跨空间查看和全局知识审核，以及受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。运行总览显示可选中复制的当前工作区 ID。管理员通过账号进入实例管理。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
 
@@ -60,11 +60,9 @@ Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提�
 
 应用直接驱动的任务还可使用[受管 Run 上报](MANAGED-RUNS.md)。Codex App Server 提供命令状态及可用的退出码和耗时，Claude Agent SDK 提供取消回执及对应轮次的结果。
 
-## 旧版多工作区凭据
+## 工作区凭据
 
-控制台的 Key 管理由管理员在所选工作区执行单 Key 轮换。旧成员账号的工作区列表来自直接配置的凭据。
-依赖旧版多工作区凭据的集成仍可通过直连 HTTP 或 Rust 库使用现有授权。会话按工作区和逻辑 Key 隔离。
-见 [API](API.md#身份与密钥管理)。
+控制台管理员账号使用独立凭据。每把工作区 Key 固定在签发时的工作区，HTTP 和 MCP 的工作区参数用于一致性核对。旧成员 Key 的签发、轮换和撤销接口目前仅限原工作区。会话按工作区和逻辑 Key 隔离。见 [API](API.md#身份与密钥管理)。
 
 ## AnySeek 服务凭据与 workspace 集合
 

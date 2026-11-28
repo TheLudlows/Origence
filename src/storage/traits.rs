@@ -35,7 +35,7 @@ use crate::storage::{
         BlobKey, FullTextEntry, FullTextHit, FullTextQuery, VectorEntry, VectorHit, VectorQuery,
     },
     error::{StorageError, StorageResult},
-    scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion},
+    scope::{AuthorizedScope, Permission, Scope, SourceVersion},
 };
 
 /// A unit of work registered on a transaction for later claim by a worker.
@@ -333,47 +333,6 @@ pub trait RelationalStore {
 
     /// Privileged: issue an API key for a workspace, returning it once.
     async fn issue_key(&self, scope: Scope, role: &str) -> StorageResult<IssuedKey>;
-
-    /// Privileged: explicitly grant capabilities at key issuance. Backends
-    /// without owned workspaces fail closed rather than discard capabilities.
-    async fn issue_key_with_capabilities(
-        &self,
-        scope: Scope,
-        role: &str,
-        capabilities: KeyCapabilities,
-    ) -> StorageResult<IssuedKey> {
-        if capabilities.allow_owned_workspaces {
-            return Err(StorageError::Unavailable(
-                "owned workspace capabilities unavailable".into(),
-            ));
-        }
-        self.issue_key(scope, role).await
-    }
-
-    /// Atomically create or validate a one-level workspace owned by the
-    /// authenticated root. Requires a live writer key with explicit capability.
-    async fn ensure_owned_workspace(
-        &self,
-        _auth: AuthorizedScope,
-        _workspace_id: Uuid,
-        _name: &str,
-    ) -> StorageResult<AuthorizedScope> {
-        Err(StorageError::Unavailable(
-            "owned workspaces unavailable".into(),
-        ))
-    }
-
-    /// Authorize a root key before looking up an owned workspace, even when
-    /// absent. Never creates data; mismatched existing identities are conflicts.
-    async fn lookup_owned_workspace(
-        &self,
-        _auth: AuthorizedScope,
-        _workspace_id: Uuid,
-    ) -> StorageResult<Option<AuthorizedScope>> {
-        Err(StorageError::Unavailable(
-            "owned workspaces unavailable".into(),
-        ))
-    }
 
     /// Privileged: revoke a key by id.
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()>;

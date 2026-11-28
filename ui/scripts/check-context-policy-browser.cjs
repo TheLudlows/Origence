@@ -8,7 +8,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { setTimeout: sleep } = require("node:timers/promises");
 const { chromium } = require("playwright");
-const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 
 const bin = process.env.ORIGENCE_BIN ?? join(__dirname, "../../target/debug/origence");
 const predicate = "travel.hotel_cap";
@@ -99,9 +99,9 @@ async function preview(page, origin, role, date) {
     const futureId = await retain(futureSource, "future");
 
     const { createUiServer } = await import("../dist/server.js");
-    const accounts = await fixtureAccounts(writer.workspace_id, [writer.token, reader.token]);
+    const accounts = fixtureAccounts(writer.workspace_id, [writer.token, reader.token]);
     [accounts[0].username, accounts[1].username] = ["fixture-writer", "fixture-reader"];
-    relay = createUiServer({ apiBaseUrl: apiOrigin, accounts });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: apiOrigin, accounts });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const writerPage = await browser.newPage();

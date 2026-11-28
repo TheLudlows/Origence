@@ -50,7 +50,7 @@ async function run(binary) {
     });
     const passwordHash = await hashConsolePassword(password);
     ui = createUiServer({ apiBaseUrl: upstream, accounts: [
-      { username: "deployment", passwordHash, grants: [], deploymentAuthorization: `Bearer ${deploymentKey}` },
+      { username: "deployment", passwordHash, deploymentAuthorization: `Bearer ${deploymentKey}` },
     ] });
     ui.listen(0, "127.0.0.1");
     await once(ui, "listening");

@@ -49,66 +49,23 @@ impl SqliteTx {
         principal_id: Uuid,
         scope: Scope,
     ) -> StorageResult<String> {
-        let key: Option<(String, Uuid, bool, bool, Uuid)> = sqlite_db::query_as(
-            "SELECT role,workspace_id,allow_owned_workspaces=1,default_access,logical_key_id FROM oc_api_keys \
-             WHERE id=? AND tenant_id=? AND NOT revoked",
+        let role: Option<String> = sqlite_db::query_scalar(
+            "SELECT role FROM oc_api_keys WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked",
         )
         .bind(principal_id)
         .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        let Some((role, workspace, allow_owned, default_access, logical_id)) = key else {
-            #[cfg(feature = "local-storage")]
-            if super::deployment::live_admin_in_scope(&mut self.tx, principal_id, scope).await? {
-                return Ok("admin".into());
-            }
-            return Err(StorageError::Forbidden);
-        };
-        if role == "workspace" && workspace != scope.workspace_id {
-            return Err(StorageError::Forbidden);
-        }
-        if workspace != scope.workspace_id
-            && let Some(role) =
-                super::workspace_grants::grant_role(&mut self.tx, scope, logical_id).await?
-        {
+        if let Some(role) = role {
             return Ok(role);
         }
-        if !default_access {
-            return Err(StorageError::Forbidden);
+        #[cfg(feature = "local-storage")]
+        if super::deployment::live_admin_in_scope(&mut self.tx, principal_id, scope).await? {
+            return Ok("admin".into());
         }
-        // Both workspace rows come from the same transaction snapshot. Fetch
-        // the at-most-two identities together, never one query per result row.
-        let workspaces: Vec<(Uuid, Option<Uuid>)> = sqlite_db::query_as(
-            "SELECT id,owner_workspace_id FROM oc_workspaces \
-             WHERE tenant_id=? AND id IN (?,?)",
-        )
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .bind(workspace)
-        .fetch_all(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?;
-        let (_, target_owner) = workspaces
-            .iter()
-            .find(|(id, _)| *id == scope.workspace_id)
-            .ok_or(StorageError::Forbidden)?;
-        let (_, root_owner) = workspaces
-            .iter()
-            .find(|(id, _)| *id == workspace)
-            .ok_or(StorageError::Forbidden)?;
-        if workspace == scope.workspace_id {
-            return Ok(role);
-        }
-        if !allow_owned || *target_owner != Some(workspace) || root_owner.is_some() {
-            return Err(StorageError::Forbidden);
-        }
-        Ok(if Permission::Write.granted_by(&role) {
-            "writer"
-        } else {
-            "reader"
-        }
-        .into())
+        Err(StorageError::Forbidden)
     }
 }
 

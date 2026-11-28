@@ -19,8 +19,6 @@ mod learning_loop;
 mod local_app;
 mod local_ledger;
 mod message_batches;
-mod owned_workspace_service;
-mod owned_workspaces;
 mod production_storage;
 mod semantic_capture;
 mod semantic_catalog;
@@ -39,6 +37,8 @@ mod storage_contract;
 mod storage_recovery;
 #[cfg(feature = "local-storage")]
 mod workspace_access;
+mod workspace_commands;
+mod workspace_isolation;
 mod workspace_schema_rejection;
 
 #[cfg(feature = "local-storage")]

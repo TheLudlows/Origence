@@ -6,9 +6,7 @@ use origence::{
     host,
     models::Models,
     service::Service,
-    storage::{
-        KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore, anyseek::AnySeekConfig,
-    },
+    storage::{Lifecycle, RelationalStore, Scope, SqliteStore, anyseek::AnySeekConfig},
     types::{AuthContext, ResolveInput, SearchInput},
 };
 use serde_json::json;
@@ -76,9 +74,6 @@ enum Command {
         workspace_id: Uuid,
         #[arg(long, default_value = "reader")]
         role: String,
-        /// Allow this root key to access one layer of owned workspaces.
-        #[arg(long)]
-        allow_owned_workspaces: bool,
     },
     KeyRevoke {
         key_id: Uuid,
@@ -445,19 +440,9 @@ async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
             json!(store.rotate_workspace_key(scope).await?)
         }
         Command::DeploymentAdminRotate => json!({"token":store.rotate_deployment_admin().await?}),
-        Command::KeyCreate {
-            workspace_id,
-            role,
-            allow_owned_workspaces,
-        } => json!(
+        Command::KeyCreate { workspace_id, role } => json!(
             store
-                .issue_key_with_capabilities(
-                    store.workspace_scope(workspace_id).await?,
-                    &role,
-                    KeyCapabilities {
-                        allow_owned_workspaces
-                    },
-                )
+                .issue_key(store.workspace_scope(workspace_id).await?, &role)
                 .await?
         ),
         Command::KeyRevoke { key_id } => {
@@ -623,16 +608,10 @@ async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> 
             ),
             None,
         ),
-        Command::KeyCreate {
-            workspace_id,
-            role,
-            allow_owned_workspaces,
-        } => (
+        Command::KeyCreate { workspace_id, role } => (
             reqwest::Method::POST,
             "/admin/keys".into(),
-            Some(
-                json!({"workspace_id":workspace_id,"role":role,"allow_owned_workspaces":allow_owned_workspaces}),
-            ),
+            Some(json!({"workspace_id":workspace_id,"role":role})),
         ),
         Command::KeyRevoke { key_id } => (
             reqwest::Method::DELETE,

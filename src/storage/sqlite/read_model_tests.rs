@@ -2010,7 +2010,7 @@ async fn checked_transaction_looks_up_authority_once_and_rechecks_commit() {
         .unwrap();
     let after = pool.test_counts();
     assert_eq!(after.0 - before.0, 1);
-    assert_eq!(after.1 - before.1, 3); // BEGIN plus key/workspace reads, once.
+    assert_eq!(after.1 - before.1, 2); // BEGIN plus one key read scoped by workspace.
     db::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
         .bind(auth.principal_id)
         .execute(&mut *tx.tx)

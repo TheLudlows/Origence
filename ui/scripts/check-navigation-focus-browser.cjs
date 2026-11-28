@@ -1,5 +1,5 @@
 // Browser-only regression using the built UI, relay, and loopback synthetic HTTP.
-const { fixtureAccounts, fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
 const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { once } = require('node:events');
@@ -286,7 +286,7 @@ async function checkCreationChart(page, hasTouch) {
   });
   let ui, browser;
   try {
-    ui = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts('22222222-2222-4222-8222-222222222222', ['synthetic-key']) });
+    ui = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts('22222222-2222-4222-8222-222222222222', ['synthetic-key']) });
     const origin = await listen(ui, manual ? Number(process.env.ORIGENCE_FIXTURE_PORT ?? 0) : 0);
     if (manual) {
       console.log(origin + '/#overview · account fixture-synthetic-key · password ' + password + ' · fixture responses: 503, 503, 200, 503, then 200');

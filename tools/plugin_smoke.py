@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
+import urllib.error
 import threading
 import time
 from urllib.error import URLError
@@ -66,7 +67,7 @@ def calls(lookup, probe):
             "Pinned get did not return the historical version")
 
 
-def codex_client(cli, project, env, forbidden, default, switched, writer_env, base):
+def codex_client(cli, project, env, forbidden, default, switched, selected_env, writer_env, base):
     execute([cli, "plugin", "marketplace", "add", str(REPO)], project, env, forbidden)
     execute([cli, "plugin", "add", PLUGIN], project, env, forbidden)
     config = Path(env["CODEX_HOME"]) / "config.toml"
@@ -78,7 +79,7 @@ def codex_client(cli, project, env, forbidden, default, switched, writer_env, ba
         with config.open("a", encoding="utf-8") as stream:
             stream.write('\n[mcp_servers.origence.env_http_headers]\nX-Origence-Workspace = "OC_WORKSPACE_ID"\n')
     codex_tools(cli, project, env, forbidden, default, bundled)
-    codex_tools(cli, project, dict(env, OC_WORKSPACE_ID=switched.session["workspace_id"]),
+    codex_tools(cli, project, selected_env,
                 forbidden, switched, bundled)
     codex_hook_turn(cli, project, writer_env, forbidden)
     if not bundled:
@@ -230,11 +231,11 @@ class ScriptedClaude(BaseHTTPRequestHandler):
             self.wfile.write(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode())
 
 
-def claude_client(cli, project, env, forbidden, default, switched, writer_env, writer_probe):
+def claude_client(cli, project, env, forbidden, default, switched, selected_env, writer_env, writer_probe):
     execute([cli, "plugin", "install", "origence", "--marketplace", str(REPO)], project, env, forbidden)
     require(not (project / ".mcp.json").exists(), "Unexpected project MCP file")
     claude_turn(cli, project, env, forbidden, default)
-    claude_turn(cli, project, dict(env, OC_WORKSPACE_ID=switched.session["workspace_id"]), forbidden, switched)
+    claude_turn(cli, project, selected_env, forbidden, switched)
     claude_turn(cli, project, writer_env, forbidden, writer_probe)
     execute([cli, "plugin", "uninstall", PLUGIN], project, env, forbidden)
     execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
@@ -316,10 +317,8 @@ def check_hook_run(host, summary, component, forbidden, workspace):
                 "Plugin did not observe its own allowlisted MCP calls")
 
 
-def bootstrap(binary, data, env, name, home=None):
-    command = [binary, "--offline", "workspace-create", name]
-    if home is not None:
-        command.extend(["--in-tenant-of", home])
+def bootstrap(binary, data, env, name):
+    command = [binary, "--offline", "workspace-create", "--workspace-key", name]
     result = subprocess.run(command, cwd=data, env=env, capture_output=True, check=True, timeout=60)
     return json.loads(result.stdout)
 
@@ -350,33 +349,32 @@ def main():
         shutil.copy2(args.binary, binary)
         host_env = isolated_env(str(data))
         home = bootstrap(binary, data, host_env, "Plugin default workspace")
-        alternate = bootstrap(binary, data, host_env, "Plugin selected workspace", home["workspace_id"])
+        alternate = bootstrap(binary, data, host_env, "Plugin selected workspace")
         with Host(str(binary), host_env, home["token"], [home["token"], alternate["token"]],
                   serve_args=("--local",), bind=args.bind) as host:
             first_asset = publish_probe(host, "default workspace")
-            reader = host.request("/admin/keys", {"workspace_id": home["workspace_id"], "role": "reader"})
-            writer = host.request("/admin/keys", {"workspace_id": home["workspace_id"], "role": "writer"})
+            default = WorkspaceProbe(host.request("/v1/session"), *first_asset)
+            selected = alternate["workspace_id"]
+            try:
+                host.request("/v1/session", workspace=selected)
+                raise RuntimeError("A workspace header changed the home key's workspace")
+            except urllib.error.HTTPError as error:
+                require(error.code == 403, "Unexpected workspace mismatch response")
             host.token = alternate["token"]
             second_asset = publish_probe(host, "selected workspace")
-            for key, role in ((reader, "reader"), (writer, "writer")):
-                host.request(f"/admin/workspace-key-grants/{key['key_id']}", {"role": role}, method="PUT")
-            selected = alternate["workspace_id"]
-            host.token = reader["token"]
-            default = WorkspaceProbe(host.request("/v1/session"), *first_asset)
             switched = WorkspaceProbe(host.request("/v1/session", workspace=selected), *second_asset)
             require(default.session["workspace_id"] == home["workspace_id"] and
                     switched.session["workspace_id"] == selected and
-                    default.session["key_id"] == switched.session["key_id"] and
+                    default.session["key_id"] != switched.session["key_id"] and
                     default.session["session_id"] != switched.session["session_id"],
-                    "Fixture failed to isolate archives under the same logical key")
-            host.token = writer["token"]
-            writer_probe = WorkspaceProbe(host.request("/v1/session", workspace=selected), *second_asset)
+                    "Fixture did not isolate workspace keys and sessions")
+            writer_probe = switched
             env = child_environment()
             path_name = next(name for name in env if name.upper() == "PATH")
             if path_name != "PATH":
                 env["PATH"] = env.pop(path_name)
             require(shutil.which(binary.name, path=env["PATH"]) is None, "Reader test requires a PATH without Origence")
-            env.update(HOME=str(root), USERPROFILE=str(root), OC_API_KEY=reader["token"])
+            env.update(HOME=str(root), USERPROFILE=str(root), OC_API_KEY=home["token"])
             # Each Windows client uses disposable configuration and cache roots.
             if os.name == "nt":
                 for variable in ("APPDATA", "LOCALAPPDATA"):
@@ -387,7 +385,7 @@ def main():
                     env["CLAUDE_CODE_GIT_BASH_PATH"] = os.environ["CLAUDE_CODE_GIT_BASH_PATH"]
             if host.base != "http://127.0.0.1:8080":
                 env["OC_SERVER_URL"] = host.base
-            forbidden = [home["token"], alternate["token"], reader["token"], writer["token"]]
+            forbidden = [home["token"], alternate["token"]]
             diagnostics(host.base, forbidden)
             for label, cli, run in (("Codex", args.codex, codex_client), ("Claude Code", args.claude, claude_client)):
                 project = root / f"{label} project"
@@ -397,28 +395,26 @@ def main():
                 execute(["git", "init", "-q"], project, env, forbidden)
                 client_env = dict(env, CODEX_HOME=str(config), CLAUDE_CONFIG_DIR=str(config))
                 print(execute([cli, "--version"], project, client_env, forbidden).strip(), flush=True)
-                writer_env = dict(client_env, OC_API_KEY=writer["token"], OC_WORKSPACE_ID=selected,
-                                  PATH=str(binary_dir) + os.pathsep + client_env["PATH"])
+                selected_env = dict(client_env, OC_API_KEY=alternate["token"], OC_WORKSPACE_ID=selected)
+                writer_env = dict(selected_env, PATH=str(binary_dir) + os.pathsep + client_env["PATH"])
                 if label == "Codex":
-                    run(cli, project, client_env, forbidden, default, switched, writer_env, host.base)
+                    run(cli, project, client_env, forbidden, default, switched, selected_env, writer_env, host.base)
                 else:
-                    run(cli, project, client_env, forbidden, default, switched, writer_env, writer_probe)
+                    run(cli, project, client_env, forbidden, default, switched, selected_env, writer_env, writer_probe)
                 require(not (project / ".mcp.json").exists() and not (project / ".codex/config.toml").exists(),
                         "Client project contains standalone MCP registration")
                 require(not (project / ".claude/settings.local.json").exists() and not (project / ".codex/hooks.json").exists(),
                         "Client project contains standalone Hook registration")
-                host.token = reader["token"]
-                require(all(host.request("/v1/runs?limit=1", workspace=scope)["items"] == []
-                            for scope in (None, selected)), "Unexpected reader Run activity")
-                host.token = writer["token"]
+                host.token = home["token"]
                 require(host.request("/v1/runs?limit=1")["items"] == [],
-                        "Writer Hook reported into the default workspace")
+                        "A hook reported into the other workspace")
+                host.token = alternate["token"]
                 summary = "Codex turn (hook metadata only)" if label == "Codex" else "Claude Code prompt (hook metadata only)"
                 component = "codex_hook" if label == "Codex" else "claude_code_hook"
                 check_hook_run(host, summary, component, forbidden, selected)
-                print(f"PASS {label}: install, same-key default and selected workspace, historical v1 while v2 is published, "
+                print(f"PASS {label}: install, separate default and selected workspace keys, historical v1 while v2 is published, "
                       "writer Run hook in selected workspace, uninstall", flush=True)
-            print("PASS startup diagnostics, packaged hooks, and reader isolation", flush=True)
+            print("PASS startup diagnostics, packaged hooks, and workspace isolation", flush=True)
 
 
 if __name__ == "__main__":

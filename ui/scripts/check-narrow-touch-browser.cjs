@@ -1,5 +1,5 @@
 // Browser-only touch regression through the built UI, relay and loopback HTTP fixture.
-const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { createServer } = require("node:http");
@@ -144,7 +144,7 @@ async function testWidth(browser, origin, width, colorScheme) {
   const { createUiServer } = await import("../dist/server.js");
   let browser, relay;
   try {
-    relay = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts(assetId, [token]) });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(assetId, [token]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const failures = [];

@@ -175,9 +175,9 @@ SQLite is compiled into the program, so a separate SQLite service or client libr
 
 Avoid copying the databases separately while online or backing up only context.db. No online cross-database snapshot protocol is available. An older dedicated test database passed a full offline backup and restoration. Production backup/restore and power-loss tests still require separate acceptance. Logical deletion does not remove original text, which is also included in backups.
 
-## Common message batches and owning workspaces
+## Message batches
 
-A root administrator explicitly grants access to an owning workspace. A root credential with the capability is intended for trusted services. Derived access is restricted to reader or writer. The caller chooses the target workspace through the public Rust API. See [API](API.en.md#common-owning-workspace-and-message-batch-library-apis) for interfaces, idempotency, and authorization.
+Services use the key of the destination workspace when submitting a message batch through the Rust API.See [API](API.en.md#message-batch-rust-library-apis).
 
 Message batch submissions require an embedding profile that matches the accepted specification. Batches are indexed using vectors of the original text. The accepted specification is persisted with the job. Parsing and external calls stay outside storage transactions and the existing single Worker performs ingestion. Before rotating a credential, you can wait for its submitted jobs to finish. Revocation blocks publication by unfinished jobs under that credential.
 

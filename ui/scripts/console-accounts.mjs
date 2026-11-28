@@ -10,8 +10,6 @@ import {
 const usage = `Usage: node scripts/console-accounts.mjs [--db PATH] COMMAND
   init
   set-password USERNAME                 read password from stdin
-  grant USERNAME WORKSPACE_ID NAME KEY_ENV
-  revoke USERNAME WORKSPACE_ID
   remove-account USERNAME`;
 
 async function readPassword() {
@@ -30,7 +28,7 @@ try {
     options: { db: { type: "string" } },
     allowPositionals: true,
   });
-  const [command, username, workspaceId, name, keyEnv] = positionals;
+  const [command, username] = positionals;
   const path = consoleAccountsPath(values.db ?? process.env.ORIGENCE_UI_ACCOUNTS_DB);
   const length = positionals.length;
   if (command === "init" && length === 1) initializeConsoleAccounts(path);
@@ -38,10 +36,7 @@ try {
     const passwordHash = await hashConsolePassword(await readPassword());
     prepareConsoleAccounts(path);
     configureConsoleAccount(path, { kind: command, username, passwordHash });
-  } else if (command === "grant" && length === 5)
-    configureConsoleAccount(path, { kind: command, username, workspaceId, name, keyEnv });
-  else if (command === "revoke" && length === 3)
-    configureConsoleAccount(path, { kind: command, username, workspaceId });
+  }
   else if (command === "remove-account" && length === 2)
     configureConsoleAccount(path, { kind: command, username });
   else throw new Error(usage);

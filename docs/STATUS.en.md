@@ -4,7 +4,7 @@
 
 Updated 2026-11-27. The local implementation is based on main `a542ff0`. Origence is the unified data foundation for AI agents, covering memory, knowledge, Skills, and Trace. See the [product roadmap](ROADMAP.en.md) and [architecture plan](design/agent-data-foundation.en.md) for first-release goals.
 
-AML evaluation-protocol HTTP endpoints and startup switches have been removed. Owning workspaces and message batches remain available via the [common Rust library APIs](API.en.md#common-owning-workspace-and-message-batch-library-apis).
+AML evaluation-protocol HTTP endpoints and startup switches have been removed. Message batches remain available via the [common Rust library APIs](API.en.md#message-batch-rust-library-apis).
 
 Claude Code and Codex passed cross-client reads of session records under the same key and independent Run acceptance. Bidirectional Skill reuse worked on public synthetic tasks. The official pilot with unseen tasks and independent business sign-off remain open. [#87 Two-client integration](https://github.com/TheLudlows/Origence/issues/87) · [#91 Pilot and verification records](../evals/pilot/README.en.md)
 
@@ -16,7 +16,7 @@ Claude Code and Codex passed cross-client reads of session records under the sam
 | Trace | Private Runs, preparation receipts, explicit HTTP/MCP reporting, default Run hooks in the Codex and Claude Code plugins, owner-transcribed external verification, exact version citations, and archived PDF page locators. [Run contract](contracts/runs.md) | Full event coverage on both clients, end-to-end evidence verification, independent sign-off |
 | Retrieval and context assembly | AnySeek full-text, vector, and one-hop graph candidates with authoritative revalidation. Default keyword search requires all query terms. Local real-engine regressions passed. Regular context includes budgeted consolidated facts with business dates, timelines, and fixed citations that the console can verify. [EvidenceBundle contract](contracts/evidence-bundle.md) | Model retrieval quality, capacity, and latency acceptance on the current backend |
 | Sessions and feedback | AnySeek holds new private turn bodies and directory data by logical key. **Sessions** shows saved questions and answers in the console. Supports ID and ordered reads, keyword and vector recall, and explicit feedback. Membership-based workspaces allow authorized deletion, and single-key workspaces retain original conversations. Experience can use human confirmation, a pinned document version, or Improve. | P0 session and feedback evidence in both scenarios |
-| Node.js management UI | Workspace key sign-in, deployment administrator inspection across workspaces and global knowledge review, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. The Run overview shows the active workspace ID as selectable text. Account sign-in remains available for existing membership-based workspaces. [#76](https://github.com/TheLudlows/Origence/issues/76) is closed. | End-to-end traceability on frozen tasks is part of [#91](https://github.com/TheLudlows/Origence/issues/91). |
+| Node.js management UI | Workspace key sign-in, deployment administrator inspection across workspaces and global knowledge review, scoped catalogs, asynchronous ingestion, pinned versions and sources, and Run lists and creation trends. The Run overview shows the active workspace ID as selectable text. Administrator accounts use a separate deployment credential. [#76](https://github.com/TheLudlows/Origence/issues/76) is closed. | End-to-end traceability on frozen tasks is part of [#91](https://github.com/TheLudlows/Origence/issues/91). |
 
 See [VALIDATION](VALIDATION.en.md) for exact environments, commits, and results.
 
@@ -58,9 +58,9 @@ With a writable key, `origence-setup` [automatically archives sessions for the c
 Applications driving either client can use [managed Run reporting](MANAGED-RUNS.en.md)
 for Codex App Server command metadata and Claude Agent SDK cancellation.
 
-## Legacy multi-workspace credentials
+## Workspace credentials
 
-Administrators use the console to rotate the single key of the selected workspace. Existing member accounts list workspaces from directly configured credentials. Integrations that rely on legacy multi-workspace credentials retain direct HTTP and Rust library access. Sessions remain scoped by workspace and logical key. See [identity and credential management](API.en.md#identity-and-credential-management).
+Console administrator accounts use a separate deployment credential. Each workspace key is bound to its issuing workspace, and HTTP and MCP workspace parameters act as consistency checks. The remaining member key issuance, rotation, and revocation endpoints are confined to the issuing workspace. Sessions are scoped by workspace and logical key. See [identity and credential management](API.en.md#identity-and-credential-management).
 
 ## AnySeek service credential and workspace collections
 
