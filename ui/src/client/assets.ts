@@ -296,7 +296,7 @@ export async function assetsPage(
   await load();
 }
 
-function assetContent(asset: Asset, ctx: ViewContext) {
+function assetContent(asset: Asset, ctx: ViewContext, base: string) {
   const body = el("pre", "asset-prose", asset.content);
   if (!canWrite(ctx.role)) return panel("正文", body);
 
@@ -310,7 +310,7 @@ function assetContent(asset: Asset, ctx: ViewContext) {
     loading.setAttribute("role", "status");
     source.replaceChildren(loading);
     try {
-      const event = await api.get(`/v1/events/${asset.source_event_id}`, signal);
+      const event = await api.get(`${base}/events/${asset.source_event_id}`, signal);
       if (!signal.aborted) source.replaceChildren(code(event));
     } catch (e) {
       if (!signal.aborted) message(source, e);
@@ -384,9 +384,11 @@ export async function assetDetail(
   id: string,
   version: number | undefined,
   ctx: ViewContext,
+  { base = "/v1", workspaceName }: { base?: string; workspaceName?: string } = {},
 ) {
+  const path = `${base}/assets/${encodeURIComponent(id)}`;
   const asset = await api.get<Asset>(
-    `/v1/assets/${encodeURIComponent(id)}${version ? "?version=" + version : ""}`,
+    `${path}${version ? "?version=" + version : ""}`,
     ctx.signal,
   );
   if (ctx.signal.aborted) return;
@@ -450,7 +452,7 @@ export async function assetDetail(
     if (comparisonStatus.textContent !== loading) comparisonStatus.textContent = loading;
     try {
       const old = await api.get<Asset>(
-        `/v1/assets/${id}?version=${Number(oldVersion.value)}`,
+        `${path}?version=${Number(oldVersion.value)}`,
         signal,
       );
       if (signal.aborted) return;
@@ -477,22 +479,24 @@ export async function assetDetail(
       message(comparisonResult, e);
     }
   };
-  const mutate = async (path: string, method: string, data?: unknown) => {
+  const remove = async (targetPath: string) => {
     if (
       !confirm(
-        "此操作将阻断相关内容的后续读取，包括受影响的历史引用。确定继续？",
+        workspaceName
+          ? `确定在工作区「${workspaceName}」执行此操作？受影响的内容和历史引用将停止被读取。`
+          : "此操作将阻断相关内容的后续读取，包括受影响的历史引用。确定继续？",
       )
     )
       return;
     try {
-      await api.request(path, {
-        method,
-        data,
+      await api.request(targetPath, {
+        method: "DELETE",
         signal: ctx.signal,
         key: crypto.randomUUID(),
       });
       root.replaceChildren(
         empty("内容已阻断", `${kindLabel}或来源已撤回，后续访问以服务端状态为准。`),
+        button("返回列表", () => ctx.navigate(asset.kind)),
       );
     } catch (e) {
       message(error, e);
@@ -503,7 +507,8 @@ export async function assetDetail(
       editor(
         asset.kind,
         ctx,
-        await api.get<Asset>(`/v1/assets/${id}`, ctx.signal),
+        await api.get<Asset>(path, ctx.signal),
+        base,
       );
     } catch (e) {
       message(error, e);
@@ -515,10 +520,10 @@ export async function assetDetail(
     );
     if (!reason?.trim()) return;
     try {
-      const current = await api.get<Asset>(`/v1/assets/${id}`, ctx.signal);
+      const current = await api.get<Asset>(path, ctx.signal);
       await trackJob(
         await api.post<Receipt>(
-          `/v1/assets/${id}/restore`,
+          `${path}/restore`,
           {
             target_version: asset.version,
             expected_version: current.version,
@@ -529,6 +534,7 @@ export async function assetDetail(
         ),
         error,
         ctx,
+        base,
       );
     } catch (e) {
       message(error, e);
@@ -564,7 +570,7 @@ export async function assetDetail(
       evidence ? `${kindLabel} · ${id}` : `${kindLabel} · v${asset.version} · ${id}`,
       button("返回列表", () => ctx.navigate(asset.kind)),
       !evidence && canWrite(ctx.role) ? button("更新内容", update, "primary") : null,
-      asset.kind === "knowledge" && canWrite(ctx.role) ? share : null,
+      !workspaceName && asset.kind === "knowledge" && canWrite(ctx.role) ? share : null,
     ),
     publicationFeedback,
     panel(
@@ -579,7 +585,7 @@ export async function assetDetail(
       el("p", "mono muted", `SHA256 ${asset.content_hash}`),
       history,
     ),
-    assetContent(asset, ctx),
+    assetContent(asset, ctx, base),
   );
   if (!evidence)
     root.append(panel(
@@ -613,20 +619,20 @@ export async function assetDetail(
         (ctx.role === "admin" || ctx.role === "workspace")
           ? button(
               "撤回来源",
-              () => mutate(`/v1/events/${asset.source_event_id}`, "DELETE"),
+              () => remove(`${base}/events/${asset.source_event_id}`),
               "danger",
             )
           : null,
         (ctx.role === "admin" || ctx.role === "workspace")
           ? button(
               `删除${kindLabel}`,
-              () => mutate(`/v1/assets/${id}`, "DELETE"),
+              () => remove(path),
               "danger",
             )
           : null,
       ),
     ),
-    related,
-    error,
   );
+  if (!workspaceName) root.append(related);
+  root.append(error);
 }

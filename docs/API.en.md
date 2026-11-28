@@ -6,13 +6,13 @@ Covers the SQLite control state of a local host and AnySeek projections for text
 
 Jump to [library interfaces](#rust-library-interfaces) · [endpoints](#endpoints) · [job and read visibility](#jobs-and-read-visibility) · [retrieval](#retrieval) · [explicit identity](#explicit-memory-identity).
 
-Every `/v1/*` request requires `Authorization: Bearer TOKEN`. Business requests can send `X-Origence-Workspace: <UUID>` to select a workspace authorized for that logical key. Omission selects the workspace set at issuance. An unauthorized explicit selection returns 403. An unavailable default or invalid header returns 422. Use `GET /v1/workspaces` to list the key's current grants.
+Every `/v1/*` request requires `Authorization: Bearer TOKEN`. A key belongs to its issuing workspace. `X-Origence-Workspace: <UUID>` can check that workspace. A mismatch returns 403 and a malformed header returns 422. `GET /v1/workspaces` returns the key's workspace.
 
 Existing command-style mutations need a 1–200 ASCII character `Idempotency-Key`. Run and Skill use the stable IDs, revisions, and digests below. The idempotency scope is workspace + key principal + operation/target + idempotency key. Repeating an identical request reuses the result. The same key with different contents returns 409. Idempotent responses include identifiers and state only. Replaying after deletion neither re-writes data nor returns deleted text.
 
 ## Private sessions, Trace, and Skills
 
-`GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a separate private session for each workspace and logical key. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. Admins can rotate credentials in their issuing workspace. Rotating another key also requires admin access in every additional workspace granted to that key. The replacement retains the original logical key and its grants and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
+`GET /v1/session` returns `{workspace_id,key_id,session_id}` and resolves a separate private session for each workspace and logical key. Existing `/v1/sessions/{session_id}/turns`, feedback, and Improve endpoints accept only the current key's archive and retain the writer requirement. Published Learning text and conditions are available for retrieval in the same workspace. Private archive, Improve, and support record pointers are returned only to the original logical key. Admins can rotate credentials in their issuing workspace. The replacement retains the original logical key and workspace and revokes the old credential. Clients use the same private boundary through [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.en.md).
 
 Trace is stored in Runs owned by logical keys. Run entry points derive the key from authentication and apply current permissions and source validity checks.
 
@@ -32,10 +32,9 @@ Trace reads include the text recorded in the Run. Original private archives, int
 | --- | --- |
 | `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`. Use 0 to create. Changes generate a new revision. `candidate` accepts `SkillCandidateInput` or [selected-experience input](SKILL-CANDIDATE-CLI.md#select-and-edit-with-the-cli) with explicit consent to disclose. |
 | `GET /v1/skill-candidates/{id}` | Only the creator can read the candidate, private notes, and exact basis. |
-| `POST /v1/skill-candidates/{id}/reviews/{review}` | Select reviewer, revision, publishing target, and redacted basis. |
-| `GET /v1/skill-reviews/{review}` | Selected review package and decision, without access to original sessions or Runs. |
-| `POST /v1/skill-reviews/{review}/decision` | The designated reviewer uses `{digest,approve}` to approve or reject the exact contents. |
-| `POST /v1/skill-reviews/{review}/publish` | A writer or admin publishes the approved immutable version using `{digest}`. |
+| `POST /v1/skill-candidates/{id}/reviews/{review}` | Submit the revision, target, and redacted basis to the administrator. |
+| `GET /v1/skill-reviews/{review}` | Selected review packet, decision, and `published` state. |
+| `POST /v1/skill-reviews/{review}/publish` | The candidate owner publishes an administrator-approved package using `{digest}`. |
 | `GET /v1/skills/{id}/versions/{version}/package` | Verifies scope, version, and source and returns a package containing only approved artifacts. |
 | `DELETE /v1/skills/{id}/versions/{version}` | A writer or admin withdraws the published Skill version and blocks later package downloads. |
 
@@ -108,14 +107,28 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 | `/admin/deployment/workspaces/{id}/sessions` | Session IDs in the selected workspace |
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | Original Q&A and references, paginated by session sequence |
 | `/admin/deployment/workspaces/{id}/runs` and `/admin/deployment/workspaces/{id}/runs/{run}` | Run directory and recorded events |
+| `/admin/deployment/workspaces/{id}/skill-reviews` | Skill reviews submitted to the administrator, paginated by ID |
+| `/admin/deployment/workspaces/{id}/skill-reviews/{review}` | Selected review packet, decision, and publication state |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` and `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | Published content directory and versioned body |
-| `/admin/deployment/workspaces/{id}/keys` | Active key metadata for the selected workspace, including `single_key` |
+| `/admin/deployment/workspaces/{id}/keys` | Active workspace key metadata in `key`, with `key_id` and `created_at_ms`. |
 
 Use `PUT /admin/deployment/workspaces/{id}` with `{name}` to create a peer single-key workspace and issue its key in the same transaction. Only initial creation returns `key:{key_id,token}`. A retry with the same ID and name returns `created:false`. If the first credential is lost, `POST /admin/deployment/workspaces/{id}/keys/rotate` issues a replacement, revokes the previous key, and preserves logical identity and sessions.
 
-Membership-based workspaces expose `/keys` and `/workspace-key-grants` within `/admin/deployment/workspaces/{id}` using the methods of the workspace key endpoints below. Deployment administrators can issue, rotate, revoke, and update grants. Session, Run, and asset inspection is read-only.
+The administrator console rotates the single key of the selected workspace. Existing member credentials can still be used and maintained through the [direct workspace key endpoints](#identity-and-credential-management).
 
-Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns without the workspace key. Workspace write authorization is checked separately.
+The following paths are relative to `/admin/deployment/workspaces/{id}`. The `{id}` in the path selects the workspace. Content and job writes use `Idempotency-Key`. Skill retries use the review ID and packet digest. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
+
+| Method and path | Operation |
+| --- | --- |
+| `POST /memories/identified`, `POST /memories/semantic` | Create or update memories with explicit identities |
+| `POST /files`, `POST /knowledge` | Upload a knowledge file and create or revise knowledge |
+| `DELETE /assets/{asset}` | Delete a memory or knowledge item in the selected workspace |
+| `POST /assets/{asset}/restore` | Create a new version from an earlier version with a valid source. Supply the target version, expected current version, and reason. |
+| `GET /events/{event}`, `DELETE /events/{event}` | Read or withdraw a content source. Dependent versions and references become unreadable, and the original record is retained. |
+| `GET /jobs/{job}`, `POST /jobs/{job}/{action}` | Read a workspace job or apply `retry` or `cancel` under its existing state rules |
+| `POST /skill-reviews/{review}/decision`, `POST /skill-reviews/{review}/publish` | Record a decision using `{digest,approve}` and publish the approved package in a separate request using `{digest}` |
+
+Restore and withdrawal follow the workspace's version and source rules. Semantic memories are updated through explicit semantic writes. Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read Runs and saved original turns in the selected workspace. Original turns follow the existing session retention rules. Regular workspace endpoints use workspace keys.
 
 ### Global knowledge
 
@@ -216,27 +229,21 @@ Knowledge updates change the current version and title only after asynchronous p
 
 | Method and path | Semantics |
 | --- | --- |
-| `GET /v1/whoami` | Returns credential id, tenant_id, selected workspace_id, and effective role. |
-| `GET /v1/workspaces` | Lists explicit active grants with workspace_id, name, role, and is_default. |
-| `GET /admin/keys` | An admin lists unrevoked credentials issued by the selected workspace. Returns credential and logical IDs, role, default access, owned-workspace capability, and creation time. |
+| `GET /v1/whoami` | Returns credential id, tenant_id, workspace_id, and effective role. |
+| `GET /v1/workspaces` | Returns the key workspace with workspace_id, name, role, and is_default. |
 | `POST /admin/keys` | Admin sends `{workspace_id,role}`. The workspace must match the request's selected workspace and becomes the new key's default. Returns `{key_id,token}`. |
-| `POST /admin/keys/{id}/rotate` | The issuing workspace's admin rotates the current credential ID, subject to authorization for its additional grants. Keeps the logical ID and returns a new `{key_id,token}`. |
-| `GET /admin/workspace-key-grants` | An admin lists explicit additional grants in the selected workspace, with each logical ID, role, and credential activity status. |
-| `PUT /admin/workspace-key-grants/{logical_key_id}` | A workspace admin assigns `{role}` in the selected workspace to a logical key from the same tenant. |
-| `DELETE /admin/workspace-key-grants/{logical_key_id}` | A workspace admin removes access to the selected workspace. |
-| `DELETE /admin/keys/{id}` | An admin in the issuing workspace revokes the credential for all workspaces. |
+| `POST /admin/keys/{id}/rotate` | The issuing workspace's admin rotates the current credential ID. Keeps the logical ID and returns a new `{key_id,token}`. |
+| `DELETE /admin/keys/{id}` | An admin in the issuing workspace revokes the credential. |
 
-Grant endpoints use the stable `key_id` returned by `GET /v1/session`. Trusted service access to owned workspaces remains available through the dedicated library interface.
-
-Both admin lists take `limit` (1–100, default 50) and a UUID `after` cursor and return `{items,next_after}`.
-
-`/admin/keys` also needs a Bearer token. It omits the business idempotency cache to avoid storing plaintext tokens. Issuance returns the token once, and repeated POST creates a different key. After a lost response, check database key IDs through offline administration and revoke redundant credentials. Offline workspace and key commands use `--offline` and OS directory permissions and fail to open while the host is running.
+Administrators create new workspaces and inspect or rotate their keys through the [workspace administration API](#deployment-administrator). The `/admin/keys` write routes listed above belong to the legacy credential interface scheduled for removal.
 
 ## Version conflicts
 
 Admission records the current content item version, which the Worker rechecks before commit. If another version publishes first, the job becomes superseded and cannot overwrite it. Read again before resubmission. Publication plans and ledger make replay idempotent. Explicit identity also supports [caller-supplied version preconditions](#caller-version-preconditions-for-explicit-writes).
 
 ## Jobs and read visibility
+
+After single-workspace key rotation, accepted jobs use the current valid credential in that workspace for execution and retries. The job retains its original submitter. If rotation invalidates the credential during processing, the worker reclaims the job under the normal retry policy.
 
 `pending → processing → completed/failed/superseded`. Transient storage failure follows `processing → retry_wait → processing`. Cancellation is `cancelled`. Only completed + outcome=published indicates atomic commit of that version and index. capture result.memories lists each extracted fact's content item and version. Later updates, deletions, or source withdrawals can still occur.
 
@@ -320,25 +327,16 @@ memories/identified and captures/identified accept optional nonnegative expected
 
 Pass lookup's version to the write endpoint to cover the concurrency window between read and admission. After acceptance, the Worker still checks the admitted version. A change fails the job, and admission does not promise synchronous publication. A successful replay of the same idempotency key and request returns the original admission before checking later changes. A different expected_version changes the request and conflicts. Omitted and null are excluded from the canonical payload to preserve replay of existing keys.
 
-## Existing owned workspace listing
-
-`GET /v1/workspaces/owned?limit=50&after=<UUID>` returns the existing owned workspaces a membership-based account can access, as `items` and `next_after`. Each item includes `workspace_id`, `name`, and the effective `role`. The [deployment administrator](#deployment-administrator) creates peer workspaces through the deployment management endpoints.
-
-## Common owning workspace and message batch library APIs
+## Message batch Rust library APIs
 
 The following capabilities are available through the public Rust Service API.
 
-- `issue_key_with_capabilities(auth, role, KeyCapabilities { allow_owned_workspaces: true })`. Only the current admin of the target root may issue it. Existing `issue_key` defaults to false. Admin or a new key in the same root does not inherit it automatically. A key bound directly to a child cannot derive further workspaces.
-- `ensure_owned_workspace(auth, target_id, name)`. A root writer or above with the explicit capability creates or verifies one level of owned workspace in the same transaction. Tenant or owner mismatch conflicts, with no rebinding or replacement ID. The returned AuthContext retains the original key and has only reader or writer permissions.
-- `lookup_owned_workspace(auth, target_id)`. Check current root identity, capability, and read authorization first. A valid unknown target returns None without creating it. Ordinary key permissions do not expand.
 - `submit_message_batch(auth, key, MessageBatch, AcceptedMessageSpec)`. Accepts an external batch_id, session_id, and ordered SourceMessage array. Atomically persists source, content item, job, and `oc_commands` receipt. Each batch uses workspace-scoped `message_batch.ingest` idempotency. Ordinary commands remain principal-scoped. The key is 1–200 ASCII bytes and callers cannot select the deduplication domain.
 - MessageBatch batch_id/session_id are 1–4096 UTF-8 bytes without NUL. Each batch has 1–256 messages and a total body limit of 1,000,000 UTF-8 bytes under general text validation. role is a verbatim 1–64 UTF-8 byte label, not blank and containing no controls, for example system/tool, and grants no privilege. timestamp is optional signed i64 Unix milliseconds. Omitted/null values do not use current time, and timestamps do not reorder messages.
 - `AcceptedMessageSpec::raw_only(profile)` pins `message-batch-ranges-v1`, parser_version=1, chunking_version=1, raw_only=true, and embedding profile. Admission writes the full specification into the original job payload. The full batch and spec enter the request hash. Reusing a key with changed content/session/order/role/time/parser/profile/mode conflicts without a new job. Recovery and explicit retry retain the original specification. Processing refuses model profile mismatch.
 - `IngestReceipt` holds original `asset_id` / `source_event_id` / `job_id`, target version, and specification, not a permanent success. `message_batch_status` / `wait_message_batch` reauthorize and observe that batch, distinguishing Pending, Retrievable, Failed, CancelledOrSuperseded, and Invisible. Retrievable requires the exact target version, a valid source, original chunks indexed for all target profiles, and matching ledger generation.
-- A valid new key in the same workspace can find the same receipt, but job.created_by remains. After revocation, demotion, or capability disablement, a new key cannot take over the original message publication job. Worker, retry, final publication, and post-I/O reads revalidate live permissions. Normal rotation drains old jobs before revocation. Existing cleanup is privileged reclamation. A current admin may explicitly retry it after creator revocation without transferring created_by or publishing data.
+- A valid new key in the same workspace can find the same receipt. `job.created_by` records the original submitter. See [jobs and read visibility](#jobs-and-read-visibility) for single-key rotation. For member keys, revocation or demotion prevents another key from taking over the existing job. Worker, retry, final publication, and post-I/O reads revalidate live permissions. Cleanup is privileged reclamation. A current admin may explicitly retry cleanup after the creator is revoked.
 - Original source JSON keeps complete batch/session/role/timestamp and input order. Chunk locators include source_event_id, external_batch_id, message_index, source_path, UTF-8 byte_start/end within the message, and parser spec. Batches in the same session are not differentiated solely by local message_index. Raw batches do not fabricate SessionTurn or Feedback.
-
-A derivation-capable root key is a trusted server credential with access to all owned workspaces under that root. Callers authenticate end users and select authorized target workspaces. Only trusted services may hold root keys.
 
 ## Explicit memory semantics
 

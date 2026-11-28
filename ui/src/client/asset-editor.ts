@@ -20,6 +20,7 @@ let dialogCount = 0;
 function dialog(title: string, ctx: ViewContext) {
   const modal = el("dialog");
   const lifetime = new AbortController();
+  ctx.signal.addEventListener("abort", () => modal.close(), { signal: lifetime.signal });
   const body = el("div");
   const label = el("h2", "", title);
   label.id = `asset-editor-title-${++dialogCount}`;
@@ -63,7 +64,7 @@ function operation() {
   };
 }
 
-export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
+export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset, base = "/v1") {
   const view = dialog(
     `${asset ? "更新" : "新建"}${kind === "memory" ? "记忆" : "知识"}`,
     ctx,
@@ -175,7 +176,7 @@ export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
             content: content.value,
             expected_version: asset?.version ?? 0,
           };
-          path = `/v1/memories/${semantic.value}`;
+          path = `${base}/memories/${semantic.value}`;
           if (semantic.value === "semantic") {
             if (!value.value.trim()) throw new Error("请填写语义值");
             const size = new TextEncoder().encode(content.value).length;
@@ -219,14 +220,14 @@ export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
               hash,
             });
             const upload = await api.post<{ file_id: string }>(
-              `/v1/files?name=${encodeURIComponent(selected.name)}&format=${format.value}`,
+              `${base}/files?name=${encodeURIComponent(selected.name)}&format=${format.value}`,
               selected,
               ctx.signal,
               fileKey + "-upload",
             );
             payload.file_id = upload.file_id;
           } else payload.content = content.value;
-          path = "/v1/knowledge";
+          path = `${base}/knowledge`;
         }
         const receipt = await api.post<Receipt>(
           path,
@@ -235,7 +236,7 @@ export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
           keyFor(payload),
         );
         formNode.hidden = true;
-        await trackJob(receipt, result, ctx);
+        await trackJob(receipt, result, ctx, base);
       } catch (error) {
         message(result, error);
         if (
@@ -254,7 +255,7 @@ export function editor(kind: Asset["kind"], ctx: ViewContext, asset?: Asset) {
             button("读取当前版本", async () => {
               try {
                 const latest = await api.get<Asset>(
-                  `/v1/assets/${asset.asset_id}`,
+                  `${base}/assets/${asset.asset_id}`,
                   ctx.signal,
                 );
                 current.replaceChildren(

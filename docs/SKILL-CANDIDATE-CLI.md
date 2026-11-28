@@ -5,23 +5,22 @@
 `origence-skill` is an independent entry point over the existing authenticated HTTP
 API. It does not open a database, invoke a model, mine Runs, submit a review, or
 publish as a side effect of drafting. The host must already be running. Use the
-owner's `OC_API_KEY` and `OC_SERVER_URL`; switch credentials explicitly for the
-appointed reviewer. Keep selection files and owner-only candidate output private.
+owner's `OC_API_KEY` and `OC_SERVER_URL`. Keep selection files and owner-only candidate output private.
 The normal `origence` CLI remains the default binary.
 
 ## Draft from a Run in the console
 
-Sign in with the Run owner's workspace account and open the Run in the trace view.
+Sign in with the Run owner's workspace key and open the Run in the trace view.
 Select the endpoint event and choose **选取依据并起草** (Select evidence and draft).
 The editor stays bound to that exact prefix while you inspect other timeline events.
 
 Enter the method and the redacted evidence you want to share. Confirm disclosure
 of both before saving. Keep the candidate ID to reopen it from the **Skill 候选**
 section of the same Run. Saving changes creates a revision and invalidates older
-approvals. Enter the designated reviewer's writer or admin credential ID, Skill ID, and version,
-then submit the saved revision. The reviewer can get their credential `id` from
-`GET /v1/whoami` and open the packet with `origence-skill review` below. Use the
-commands below for approval, explicit publication, and online download.
+approvals. Enter the target Skill ID and version, then submit the saved revision.
+The administrator signs in with an account, selects the workspace, and opens
+**Skill 审核** (Skill review). After inspecting the disclosed basis and package files,
+the administrator can approve or reject the review. Publication is a separate action.
 
 ## Select and edit with the CLI
 
@@ -91,16 +90,14 @@ never enter the selected packet or distributed package automatically.
 
 ## Review, approve and explicitly publish
 
-Submit the exact saved revision and target to a named live reviewer credential:
+In a single-key workspace, submit the exact saved revision and target to the administrator.
 
 ```sh
 origence-skill submit CANDIDATE_UUID REVIEW_UUID --revision 2 \
-  --reviewer-id REVIEWER_CREDENTIAL_UUID --tenant-id TENANT_UUID \
+  --tenant-id TENANT_UUID \
   --workspace-id WORKSPACE_UUID --skill-id SKILL_UUID --version 1
-# Appointed reviewer, using their own credential:
 origence-skill review REVIEW_UUID
-origence-skill decide REVIEW_UUID EXACT_PACKET_DIGEST --approve
-# Or --reject; decisions are immutable. A revised decision needs a new review ID.
+# The candidate owner can also publish after administrator approval.
 origence-skill publish REVIEW_UUID EXACT_PACKET_DIGEST
 ```
 

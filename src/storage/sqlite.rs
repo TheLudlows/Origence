@@ -39,8 +39,6 @@ mod context;
 #[cfg(all(test, feature = "host"))]
 mod context_route_tests;
 mod deployment;
-#[cfg(feature = "host")]
-pub use deployment::DeploymentKeyOperation;
 mod domain;
 #[cfg(feature = "host")]
 mod full_text;
@@ -82,12 +80,12 @@ mod versions;
 #[cfg(test)]
 mod versions_tests;
 mod visibility;
-mod workspace_grants;
+mod workspace_auth;
 mod workspace_key;
 
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::ledger::{LEDGER_PENDING_TIMEOUT_MS, LedgerEntry, LedgerKey};
-use crate::storage::scope::{AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion};
+use crate::storage::scope::{AuthorizedScope, Permission, Scope, SourceVersion};
 use crate::storage::traits::{
     ClaimedJob, DomainTx, IssuedKey, JobFinish, JobQueue, RelationalStore, WorkItem,
 };

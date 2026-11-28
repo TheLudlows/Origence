@@ -10,7 +10,6 @@ import {
 } from "./platform.mjs";
 
 export const repo = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-export const grantKey = "ORIGENCE_DEMO_KEY";
 export const defaultEndpoint = "http://127.0.0.1:8080";
 export const status = (step, state, detail) => console.log(JSON.stringify({ step, status: state, detail }));
 export const tokenPattern = /^[\x21-\x7e]{1,512}$/;
@@ -111,7 +110,7 @@ function lock(dir) {
 
 export function withoutWorkspaceKey(env) {
   return Object.fromEntries(Object.entries(env).filter(([name]) =>
-    !["OC_API_KEY", grantKey].includes(name.toUpperCase())));
+    !["OC_API_KEY", "ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY", "ORIGENCE_DEMO_KEY"].includes(name.toUpperCase())));
 }
 
 export function npm(...args) {

@@ -7,6 +7,102 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 移除旧 Key 列表和指定审阅者
+
+在实现提交 `1282215c4151bafaafd4a215e1dc556ee8724750` 上使用隔离新库。管理员只能查询当前
+工作区 Key。Skill 审核改由管理员完成，复测了候选修订、审批摘要、撤回来源和两类凭据轮换。
+Linux 上 468 项 Rust 测试和 33 项 UI 测试通过。全特性、仅 `sqlite` 的严格全目标 Clippy 和
+格式检查通过。Chromium 核验 Key 管理和 Skill 起草、审核、发布。CI 固定的独立 AnySeek
+`6a46fc7` 上通过 UI、HTTP 和 MCP 冒烟，包括 Key 轮换、工作区隔离和同版本重开。
+Windows 的未使用导入和插件夹具断言已修正，原生验收由 GitHub CI 复核。
+
+## 2026-11-28 · 单 Key 工作区的 Skill 审核
+
+验证实现提交 `9e32c9e67996501f6aca9b71c26d205d48669fd4`，main 基线
+`496960f17f67682c994fb608d94518289bad6ea1`。使用 Linux、Rust 1.98.0、Node 24.22.1 和隔离新库。
+CLI、HTTP 和公开 Rust 接口覆盖工作区 Key 提交、禁止自行审批、审核只披露选定依据和包文件、
+同租户工作区隔离、分页、拒绝、摘要校验及重复审批审计。测试用包含私有会话引用的 Run 验证了审核，
+并在轮换管理员凭据和工作区 Key 后读回原候选、继续发布同一批准包。
+
+完整 Rust 测试通过 478 项，按配置忽略 8 项。格式、全特性和仅 `sqlite` 的全目标严格 Clippy 通过。
+Chromium 156.0.8078.79 通过 `check-key-management-browser.cjs`。浏览器用工作区 Key 提交，
+切换管理员账号，验证所选工作区的审核和发布，并确认发布前后的下载权限。33 项 UI 测试、类型检查
+以及实际 Origence 进程的 HTTP MCP 冒烟通过。本轮使用合成数据。原生 Windows、真实客户端及 GitHub CI 待验收。
+
+同步宿主特性变更后，在 `faaeb1494138e154a515acaeb80939476a02e8a7` 复测，main 基线为
+`c716e0c4ed55f5fcae87fb5a54a466eee2fc64f4`。默认 Rust 测试通过 478 项，忽略 11 项。
+仅启用 `host` 时两项 Skill CLI 回归也通过。Chromium 和 HTTP MCP 冒烟在重新构建的默认二进制上复测通过。
+全特性、仅 `host`、仅 `sqlite` 的全目标严格 Clippy 及格式检查通过。
+
+同步 #187 后，在 `09493a735a526ed6e2f51affaced8c2f5d657c68` 复测，main 基线为
+`d8fd22da59b9f79fe11e779386f248ecd1d3c9fc`。Linux 上 469 项 Rust 测试通过，按配置忽略 11 项。
+全特性与仅 `sqlite` 的全目标严格 Clippy、格式、33 项 UI 测试、15 项 Agent 协议夹具及 HTTP MCP
+冒烟通过。Chromium 验证工作区隔离、Skill 审核和发布、内容历史恢复、按日期引用原文及撤回。隔离安装器验证启动时
+登记管理员、创建工作区、重装时复用管理员以及在指定工作区写读合成 Run，最后卸载。未运行真实客户端。
+
+## 2026-11-28 · 工作区凭据隔离与管理员账号
+
+验证提交 `4cbdc4960b07f5ce674afa599a31a424b1a3f381`，main 基线
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`，使用 Linux、Rust 1.98.0、Node 24.22.1 和隔离新库。
+HTTP、MCP 和 Rust 库回归确认同租户工作区也要求各自的凭据，工作区请求头不能扩大访问范围。
+在模型 I/O 期间轮换 Key 后，旧身份无法完成读写，后台任务使用有效 Key 重试并保留原提交者。
+完整 Rust 测试通过 476 项，按配置忽略 8 项。格式、全特性与仅 `sqlite` 的全目标严格 Clippy、HTTP MCP 冒烟通过。
+
+33 项 UI 测试及类型检查通过。Chromium 验证管理员账号、单工作区 Key 登录、导航焦点、内容标签页和工作区 Key 轮换。
+隔离部署实测初始化、重装、提供既有管理员凭据、合成 Run 写入读回及卸载。双客户端安装验收脚本已更新为各工作区使用自己的 Key，
+本轮完成语法检查。原生客户端、原生 Windows 和 GitHub CI 待验收。
+
+## 2026-11-28 · 管理员恢复版本及撤回来源
+
+验证提交 `0de6327ac945bddd07bd7ab01d7772bcbea6df8f`，main 基线
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`，使用 Linux、Rust 1.98.0、Node 24.22.1 和隔离新库。
+定向 HTTP 与 Rust 库测试确认 v1 恢复为 v3，恢复与撤回记录管理员身份。撤回 v1 的来源后，v1 和 v3 阻断读取，
+使用独立来源的 v2 仍可读取，排队中的恢复取消，新的恢复请求被拒绝。测试也核对了来源正文保留、请求重放、
+过期版本条件、跨工作区拒绝，以及私有问答来源仍受原有保留规则保护。
+
+完整 Rust 测试通过 487 项，按配置忽略 8 项。Rust 格式、全特性与仅 `sqlite` 的全目标严格 Clippy、34 项 UI 测试、
+类型检查及 HTTP MCP 冒烟通过。Chromium 156.0.8078.79 经真实回环服务验证管理员读取固定版本、恢复、
+查看和撤回来源。控制台会话及内容标签页回归使用合成夹具。原生 Windows 和 GitHub CI 待验收。
+
+## 2026-11-28 · 移除旧版控制台 Key 和子工作区入口
+
+验证提交 `3eb7daf8b220430406c5300781c697002c28c97f`，main 基线为
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`，使用 Linux、Rust 1.98.0、Node 24.22.1 和隔离新库。
+HTTP 测试覆盖已移除的管理员多 Key 操作和子工作区列表、保留的单 Key 轮换，以及旧凭据仍有效。
+默认特性的完整 Rust 测试通过 486 项，按配置忽略 8 项。
+格式检查及全目标严格 Clippy 通过，涵盖全特性、仅 `sqlite` 和无默认特性。HTTP MCP 冒烟通过。
+
+34 项 UI 测试和类型检查通过。Chromium 156.0.8078.79 使用合成数据通过 `check-key-management-browser.cjs`、
+`check-console-session-browser.cjs` 和 `check-navigation-focus-browser.cjs`。覆盖账号登录后轮换所选工作区 Key、
+普通 Key 无法调用轮换、其他工作区凭据仍然有效、界面不再自动列出子工作区，以及移除菜单后的导航焦点和 Tab 顺序。
+原生 Windows 和 GitHub CI 待验收。
+
+## 2026-11-28 · 管理员在所选工作区管理记忆和知识
+
+代码和浏览器验证提交 `b534ee9bf521e8e9e15830e06368a1e0ab68bcbd`，合入 main
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015` 后在 Linux、Rust 1.98.0、Node 24.22.1 和隔离新库复测。
+工作区访问的 6 项用例通过。回环 HTTP 验证管理员创建记忆，创建和更新知识，上传附件，取消和重试任务，读取指定历史版本，执行幂等删除，以及轮换管理员凭据后旧权限失效。
+同租户另一工作区不能读取任务或引用附件，不能更新或删除目标内容。审计记录选定工作区和管理员凭据的内部身份。
+默认特性的完整 Rust 测试通过 486 项，按配置忽略 8 项。格式检查及全目标严格 Clippy 通过，涵盖全特性、仅 `sqlite` 和无默认特性。
+
+34 项 UI 测试、类型检查和 HTTP MCP 冒烟通过。Chromium 156.0.8078.79 通过
+`check-key-management-browser.cjs` 和 `check-console-session-browser.cjs`。浏览器用管理员账号在回环服务中完成
+创建、更新、删除知识，也验证普通账号被拒绝、工作区 Key 轮换和全局审核入口。
+本轮使用合成数据。原生 Windows 与 GitHub CI 待验收。
+
+## 2026-11-28 · 管理员命名与单 Key 作业轮换
+
+基于 main `92759833a943d8f5529e2938e77d0c10b636cd75`，Linux、Rust 1.98.0 和 Node 24.22.1。
+`cargo test --locked --offline --test local workspace_access::` 通过 5 项。新 Key 通过 HTTP、MCP 和公开库接口
+读回原会话及来源、Run、记忆和知识，旧 Key 的 HTTP 及 MCP 请求返回 401。待处理的知识任务发布新版，
+取消的记忆任务经新 Key 重试完成。原任务保留提交者，另一个工作区的 Key 继续有效，且无法读取该知识。
+默认特性的 `cargo test --locked --offline --no-fail-fast --quiet -j 3` 通过 486 项，忽略 8 项。
+格式检查、全特性全目标严格 Clippy 和本地 HTTP MCP 冒烟通过。MCP 检查覆盖协议协商、工具契约及撤权。
+
+`npm --prefix ui run check` 与 34 项 UI 测试通过。Chromium 156.0.8078.79 通过
+`check-console-session-browser.cjs` 和 `check-key-management-browser.cjs`，覆盖新管理员名称、登录、
+平级工作区创建、密钥轮换和全局知识审核。浏览器使用回环服务和合成数据。原生 Windows 待运行。
+
 ## 2026-11-28 · 删除旧的 `api` 启动命令
 
 基于 main `c716e0c` 与 #187 的客户端模块清理提交 `4877b20`。Linux、Rust 1.98.0，使用合成测试材料。

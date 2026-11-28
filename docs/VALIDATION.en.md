@@ -4,6 +4,121 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Remove the legacy key list and reviewer appointments
+
+Verified implementation `1282215c4151bafaafd4a215e1dc556ee8724750` against isolated fresh stores.
+Administrators inspect the current workspace key. Administrator-only Skill review was verified with
+candidate revision, approval digest, source withdrawal, and credential rotation checks.
+Linux passed 468 Rust tests and 33 UI tests. Formatting and strict all-target Clippy passed with all features
+and with only `sqlite`. Chromium covered key management, Skill drafting, review and publication.
+UI, HTTP, and MCP smoke checks against the CI-pinned standalone AnySeek `6a46fc7` covered key rotation,
+workspace isolation, and reopen. The fixes to the Windows-only import and plugin fixture are pending native CI.
+
+## 2026-11-28 · Skill review for single-key workspaces
+
+Verified implementation `9e32c9e67996501f6aca9b71c26d205d48669fd4` on main base
+`496960f17f67682c994fb608d94518289bad6ea1` with Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+The CLI, HTTP, and public Rust API checks cover workspace-key submission, denial of self-approval, selected packet
+disclosure, same-tenant workspace isolation, pagination, rejection, digest checks, and idempotent decision auditing.
+The Run used in the review cites a private session turn. Administrator credential and workspace key rotation preserved
+the original candidate and approval for publication of the same package.
+
+The full Rust suite passed 478 tests with eight configured skips. Formatting and strict all-target Clippy passed
+with all features and with only `sqlite`.
+Chromium 156.0.8078.79 passed `check-key-management-browser.cjs`, including workspace-key submission,
+administrator account review in the selected workspace, separate publication, and download checks before and after publication.
+All 33 UI tests, type checking, and the live-process HTTP MCP smoke passed. The checks used synthetic data. Windows,
+native product clients, and GitHub CI remain unverified for this change.
+
+After integrating the host feature changes, `faaeb1494138e154a515acaeb80939476a02e8a7` was verified
+on main base `c716e0c4ed55f5fcae87fb5a54a466eee2fc64f4`. The default Rust suite passed 478 tests
+with 11 ignored. Both Skill CLI tests also passed with only `host`. Chromium and HTTP MCP smoke checks
+passed again against the rebuilt default binary.
+Formatting and strict all-target Clippy passed with all features, `host` only, and `sqlite` only.
+
+After integrating #187, Linux verification at `09493a735a526ed6e2f51affaced8c2f5d657c68` on main base
+`d8fd22da59b9f79fe11e779386f248ecd1d3c9fc` passed 469 Rust tests with 11 configured skips.
+Strict Clippy with all features and with only `sqlite`, formatting, 33 UI tests, 15 Agent protocol fixture
+tests, and the HTTP MCP smoke passed. Chromium verified workspace isolation, Skill review and publication,
+history restoration, dated source citations, and source withdrawal. An isolated installer check covered administrator bootstrap,
+workspace provisioning, administrator reuse during reinstall, a scoped synthetic Run, and uninstall.
+Native product clients were not run.
+
+## 2026-11-28 · Workspace credential isolation and administrator accounts
+
+Verified `4cbdc4960b07f5ce674afa599a31a424b1a3f381` on main base
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`, using Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+HTTP, MCP, and library checks confirmed that even workspaces in the same tenant use separate credentials and that
+the workspace header cannot expand access. Rotation during model I/O blocked old authorizations and let the worker retry
+under the current key without changing the original submitter. The full Rust suite passed 476 tests with eight configured skips.
+Formatting, strict all-target Clippy with all features and `sqlite` only, and the HTTP MCP smoke passed.
+
+All 33 UI tests and type checking passed. Chromium covered administrator account login, single-workspace key sign-in,
+navigation focus, content tabs, and workspace key rotation. Isolated deployment smoke covered init, reinstall, supplied
+administrator credentials, a synthetic Run write/read, and uninstall. The client installation fixture now uses independent
+workspace keys and passed syntax checks. Native clients, native Windows, and GitHub CI are pending.
+
+## 2026-11-28 · Administrator version restore and source withdrawal
+
+Verified `0de6327ac945bddd07bd7ab01d7772bcbea6df8f` on main base
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`, using Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+The targeted HTTP and Rust library case restored v1 as v3 and verified administrator attribution. Withdrawing the source
+blocked reads of v1 and v3, preserved v2 with its separate source, cancelled a queued restore, and rejected new restores
+of v1. It also checked original record retention, idempotent replay, stale version preconditions, workspace isolation,
+and the existing protections for original conversation turns.
+
+The full Rust suite passed 487 tests with eight configured skips. Formatting, strict all-target Clippy with all features
+and `sqlite` only, 34 UI tests, type checking, and the HTTP MCP smoke passed. Chromium 156.0.8078.79 used a real loopback
+service to check pinned versions, restore, source reads, and withdrawal as administrator. Console session and content tab
+regressions used synthetic fixtures. Native Windows and GitHub CI are pending.
+
+## 2026-11-28 · Retire legacy console key management and child workspace discovery
+
+Verified `3eb7daf8b220430406c5300781c697002c28c97f` on main base
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`, using Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+HTTP coverage includes rejection of retired administrator multi-key routes and owned workspace listing,
+single-key rotation, and continued access with existing legacy credentials.
+The full default-feature Rust suite passed 486 tests with eight configured skips.
+Formatting and strict all-target Clippy passed with all features, `sqlite` only, and no default features.
+The HTTP MCP smoke passed.
+
+All 34 UI tests and type checking passed. Chromium 156.0.8078.79 passed `check-key-management-browser.cjs`,
+`check-console-session-browser.cjs`, and `check-navigation-focus-browser.cjs` with synthetic data.
+The checks cover administrator sign-in and rotation in the selected workspace, denial of rotation for a workspace key,
+unaffected credentials in other workspaces, removal of automatic child workspace listing, and navigation focus and Tab order.
+Native Windows and GitHub CI are pending.
+
+## 2026-11-28 · Administrator management of workspace memory and knowledge
+
+Implementation and browser checks used `b534ee9bf521e8e9e15830e06368a1e0ab68bcbd`, with main
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015` merged, on Linux with Rust 1.98.0, Node 24.22.1, and isolated fresh databases.
+All six workspace access cases passed. Loopback HTTP covered administrator memory and knowledge writes, file upload,
+job cancel and retry, pinned historical reads, idempotent deletion, and revocation after administrator credential rotation.
+Another workspace in the same tenant was denied job reads, attachment use, updates, and deletion. Audit rows recorded
+the selected workspace and the administrator credential's internal identity.
+The full default-feature Rust suite passed 486 tests with eight configured skips. Formatting and strict all-target
+Clippy passed for all features, `sqlite` only, and no default features.
+
+All 34 UI tests, type checking, and the HTTP MCP smoke passed. Chromium 156.0.8078.79 passed
+`check-key-management-browser.cjs` and `check-console-session-browser.cjs`. An administrator signed in and created,
+updated, and deleted knowledge against a loopback service. The checks also covered rejection of an ordinary account,
+workspace key rotation, and access to global review. The fixtures use synthetic data. Native Windows and GitHub CI are pending.
+
+## 2026-11-28 · Administrator label and jobs across workspace key rotation
+
+Linux verification used main `92759833a943d8f5529e2938e77d0c10b636cd75`, Rust 1.98.0, and Node 24.22.1.
+`cargo test --locked --offline --test local workspace_access::` passed five tests. HTTP, MCP, and public library
+checks read the original session and source, Run, memory, and knowledge with the current key. The previous key
+received HTTP 401 through HTTP and MCP. A pending knowledge job published its new version, and a cancelled
+memory job completed after the current key retried it. The original submitter remained recorded, and another
+workspace's key remained valid and was denied access to the knowledge.
+The default-feature `cargo test --locked --offline --no-fail-fast --quiet -j 3` passed 486 tests with eight ignored.
+Formatting, strict Clippy for all targets and features, and the local HTTP MCP smoke passed. The MCP smoke covered
+protocol negotiation, tool contracts, and revocation.
+
+Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 passed `check-console-session-browser.cjs`
+and `check-key-management-browser.cjs` with loopback services and synthetic data, covering the administrator
+label, sign-in, peer workspace creation, key rotation, and global knowledge review. Native Windows is pending.
 ## 2026-11-28 · Remove the old `api` startup command
 
 Based on main `c716e0c` and #187's client module removal `4877b20`. Linux, Rust 1.98.0, synthetic test data.

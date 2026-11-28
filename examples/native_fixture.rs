@@ -15,6 +15,8 @@ enum Fixture {
     MemberWorkspace {
         name: String,
         same_tenant_as: Option<Uuid>,
+        #[serde(default)]
+        single_key: bool,
     },
     ArchiveManifest {
         embedded: bool,
@@ -38,11 +40,12 @@ async fn run(fixture: Fixture) -> anyhow::Result<Value> {
         Fixture::MemberWorkspace {
             name,
             same_tenant_as,
+            single_key,
         } => {
             let dir = PathBuf::from(
                 std::env::var_os("OC_DATA_DIR").context("missing fixture directory")?,
             );
-            fixture_workspace::seed_member_workspace(&dir, &name, same_tenant_as).await
+            fixture_workspace::seed_workspace(&dir, &name, same_tenant_as, single_key).await
         }
         Fixture::ArchiveManifest { embedded } => {
             let dir = PathBuf::from(

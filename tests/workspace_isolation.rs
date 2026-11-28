@@ -1,10 +1,10 @@
-//! Public library upload/job/search regression for generic owned workspaces.
+//! Public library upload/job/search regression for isolated workspaces.
 #![cfg(feature = "host")]
-use origence::storage::sqlite_db as db;
+use origence::service::Service;
 use origence::{
     error::AppError,
     models::Models,
-    storage::{KeyCapabilities, RelationalStore, Scope},
+    storage::Scope,
     types::{KnowledgeInput, SearchInput},
     worker,
 };
@@ -25,45 +25,36 @@ fn query() -> SearchInput {
     }
 }
 
+async fn workspace_pair(
+    service: &Service,
+) -> (
+    (Scope, origence::types::AuthContext),
+    (Scope, origence::types::AuthContext),
+) {
+    let tenant_id = Uuid::new_v4();
+    let create = |name| async move {
+        let scope = Scope {
+            tenant_id,
+            workspace_id: Uuid::new_v4(),
+        };
+        let key = service
+            .engine
+            .relational()
+            .create_key_workspace(scope, name)
+            .await
+            .unwrap();
+        (scope, service.auth(&key.token).await.unwrap())
+    };
+    (create("Alice").await, create("Bob").await)
+}
+
 #[tokio::test]
-async fn upload_worker_search_and_revocation_use_owned_workspaces() {
+async fn upload_worker_and_search_stay_scoped_across_workspace_key_rotation() {
     let dir = tempfile::tempdir().unwrap();
     let service = crate::support::open_service(dir.path(), Models::disabled())
         .await
         .unwrap();
-    let scope = Scope {
-        tenant_id: Uuid::new_v4(),
-        workspace_id: Uuid::new_v4(),
-    };
-    service
-        .engine
-        .relational()
-        .create_workspace(scope.tenant_id, scope.workspace_id, "Workspace root")
-        .await
-        .unwrap();
-    let key = service
-        .engine
-        .relational()
-        .issue_key_with_capabilities(
-            scope,
-            "admin",
-            KeyCapabilities {
-                allow_owned_workspaces: true,
-            },
-        )
-        .await
-        .unwrap();
-    let parent = service.auth(&key.token).await.unwrap();
-    let alice_id = Uuid::new_v4();
-    let bob_id = Uuid::new_v4();
-    let alice = service
-        .ensure_owned_workspace(&parent, alice_id, "Alice")
-        .await
-        .unwrap();
-    let bob = service
-        .ensure_owned_workspace(&parent, bob_id, "Bob")
-        .await
-        .unwrap();
+    let ((alice_scope, alice), (_, bob)) = workspace_pair(&service).await;
     let mut alice_assets = Vec::new();
     for (auth, content, session) in [
         (&alice, "Atlas 审批需要两人。", "session-1"),
@@ -135,19 +126,6 @@ async fn upload_worker_search_and_revocation_use_owned_workspaces() {
             .unwrap()
             .contains("不需要")
     );
-    assert!(
-        service
-            .lookup_owned_workspace(&parent, Uuid::new_v4())
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        service.search(&parent, query()).await.unwrap()["hits"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
     let pending = service
         .knowledge(
             &alice,
@@ -164,26 +142,12 @@ async fn upload_worker_search_and_revocation_use_owned_workspaces() {
         .await
         .unwrap();
     let replacement = service
-        .issue_key_with_capabilities(
-            &parent,
-            "admin",
-            KeyCapabilities {
-                allow_owned_workspaces: true,
-            },
-        )
+        .engine
+        .relational()
+        .rotate_workspace_key(alice_scope)
         .await
         .unwrap();
-    let control = service
-        .auth(replacement["token"].as_str().unwrap())
-        .await
-        .unwrap();
-    let rotated = service
-        .lookup_owned_workspace(&control, alice_id)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(rotated.workspace_id, alice.workspace_id);
-    service.revoke_key(&control, key.key_id).await.unwrap();
+    let rotated = service.auth(&replacement.token).await.unwrap();
     assert_eq!(
         service.search(&rotated, query()).await.unwrap()["hits"]
             .as_array()
@@ -196,20 +160,21 @@ async fn upload_worker_search_and_revocation_use_owned_workspaces() {
         Err(AppError::Forbidden)
     ));
     assert!(worker::process_next(&service).await.unwrap());
-    let (state, code): (String, String) =
-        db::query_as("SELECT state,error_code FROM oc_jobs WHERE id=?")
-            .bind(id(&pending, "job_id"))
-            .fetch_one(service.engine.relational().pool())
-            .await
-            .unwrap();
-    assert_eq!(state, "failed");
-    assert_eq!(code, "FORBIDDEN");
+    let job = service.job(&rotated, id(&pending, "job_id")).await.unwrap();
+    assert_eq!(job["state"], "completed");
+    assert_eq!(
+        service.search(&bob, query()).await.unwrap()["hits"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     service.engine.shutdown().await.unwrap();
 }
 
 // Fixed model outputs exercise each storage branch, not semantic quality.
 #[tokio::test]
-async fn owned_workspaces_isolate_summary_graph_and_repeated_queries() {
+async fn workspaces_isolate_summary_graph_and_repeated_queries() {
     use axum::{Json, Router, routing::post};
     use origence::types::{ResolveInput, RetrievalComponents};
     use serde_json::json;
@@ -242,39 +207,7 @@ async fn owned_workspaces_isolate_summary_graph_and_repeated_queries() {
     let service = crate::support::open_service(dir.path(), models)
         .await
         .unwrap();
-    let scope = Scope {
-        tenant_id: Uuid::new_v4(),
-        workspace_id: Uuid::new_v4(),
-    };
-    service
-        .engine
-        .relational()
-        .create_workspace(scope.tenant_id, scope.workspace_id, "Workspace branches")
-        .await
-        .unwrap();
-    let key = service
-        .engine
-        .relational()
-        .issue_key_with_capabilities(
-            scope,
-            "admin",
-            KeyCapabilities {
-                allow_owned_workspaces: true,
-            },
-        )
-        .await
-        .unwrap();
-    let parent = service.auth(&key.token).await.unwrap();
-    let alice_id = Uuid::new_v4();
-    let bob_id = Uuid::new_v4();
-    let alice = service
-        .ensure_owned_workspace(&parent, alice_id, "Alice")
-        .await
-        .unwrap();
-    let bob = service
-        .ensure_owned_workspace(&parent, bob_id, "Bob")
-        .await
-        .unwrap();
+    let ((alice_scope, alice), (bob_scope, bob)) = workspace_pair(&service).await;
     let mut assets = Vec::new();
     for (auth, content) in [
         (&alice, "Atlas ALICE_ONLY requires approval."),
@@ -404,7 +337,14 @@ async fn owned_workspaces_isolate_summary_graph_and_repeated_queries() {
             assert!(scores[1] > scores[0]);
         }
     }
-    service.revoke_key(&parent, key.key_id).await.unwrap();
+    for scope in [alice_scope, bob_scope] {
+        service
+            .engine
+            .relational()
+            .rotate_workspace_key(scope)
+            .await
+            .unwrap();
+    }
     for auth in [&alice, &bob] {
         for mode in ["keyword", "vector", "hybrid"] {
             assert!(matches!(

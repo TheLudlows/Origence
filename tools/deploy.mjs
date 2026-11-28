@@ -5,7 +5,7 @@ import { check, execute } from "./installer/platform.mjs";
 import { activeService, listening, startService, stopService, waitForService } from "./installer/service.mjs";
 import { connectMcp, consoleLogin, endpointUrl, identity, isLoopback } from "./installer/protocol.mjs";
 import {
-  ask, credentialsPath, defaultEndpoint, grantKey, npm, origenceBinary, repo, rollback, runInstaller,
+  ask, credentialsPath, defaultEndpoint, npm, origenceBinary, repo, rollback, runInstaller,
   saveCredentials, status, tokenPattern, withoutWorkspaceKey,
 } from "./installer/command.mjs";
 
@@ -154,6 +154,7 @@ async function install(state, args) {
       "The backend did not authorize the deployment administrator credential.");
   }
   const who = token ? await identity(endpoint.origin, token) : null;
+  if (who) check(who.role === "workspace", "Use the workspace Key for the selected workspace.");
   const mcp = who ? await connectMcp(endpoint.origin, token, who.workspace_id) : null;
   if (old && !sameEndpoint && state.value.apiEndpoint !== endpoint.origin) await stopService(state, "api");
   if (who) {
@@ -161,8 +162,8 @@ async function install(state, args) {
     status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
   }
 
-  const mode = deploymentKey ? "deployment" : who?.role === "workspace" ? "workspace" : "account";
-  const reconfigure = !old || args.force || (old.mode ?? "account") !== mode || old.deploymentKey !== deploymentKey || old.workspace !== who?.workspace_id || old.key !== who?.id || old.endpoint !== endpoint.origin || old.ui !== ui;
+  const mode = deploymentKey ? "deployment" : "workspace";
+  const reconfigure = !old || args.force || old.mode !== mode || old.deploymentKey !== deploymentKey || old.workspace !== who?.workspace_id || old.key !== who?.id || old.endpoint !== endpoint.origin || old.ui !== ui;
   const config = { endpoint: endpoint.origin, token, workspace: who?.workspace_id, key: who?.id, ui,
     mode,
     ...(mode !== "workspace" ? { password: !args.force && old?.password || randomBytes(24).toString("base64url") } : {}),
@@ -194,13 +195,6 @@ async function install(state, args) {
     state.save();
     accounts.configureConsoleAccount(db, { kind: "set-password", username: account,
       passwordHash: await accounts.hashConsolePassword(config.password) });
-    if (state.value.accountWorkspace && (mode === "deployment" || state.value.accountWorkspace !== who.workspace_id))
-      accounts.configureConsoleAccount(db, { kind: "revoke", username: account, workspaceId: state.value.accountWorkspace });
-    if (mode === "account") {
-      accounts.configureConsoleAccount(db, { kind: "grant", username: account,
-        workspaceId: who.workspace_id, name: "Origence workspace", keyEnv: grantKey });
-      state.value.accountWorkspace = who.workspace_id;
-    } else delete state.value.accountWorkspace;
     state.value.accountBinding = config.binding;
     state.save();
   }
@@ -209,8 +203,7 @@ async function install(state, args) {
   delete uiEnv.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
   if (mode !== "workspace") {
     uiEnv.ORIGENCE_UI_ACCOUNTS_DB = db;
-    if (deploymentKey) uiEnv.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY = deploymentKey;
-    else uiEnv[grantKey] = token;
+    uiEnv.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY = deploymentKey;
   }
   delete uiEnv.ORIGENCE_UI_ORIGIN;
   await ensureConsole(state, config, old, uiEnv);
@@ -219,7 +212,7 @@ async function install(state, args) {
   try {
     status("console-session", "success", { mode, workspace_id: config.workspace, role: who?.role ?? "deployment_admin" });
     if (deploymentKey) status("deployment-admin-session", "success", "Verified the deployment administrator account.");
-    if (args["verify-write"] && mcp && ["writer", "admin", "workspace"].includes(who.role)) {
+    if (args["verify-write"] && mcp) {
       state.value.probes ??= {};
       const scope = [endpoint.origin, who.workspace_id, who.id].join("/");
       const run = state.value.probes[scope] ??= randomUUID();
@@ -230,7 +223,7 @@ async function install(state, args) {
         : "/v1/runs/" + run);
       check(read.run?.run_id === run, "The console did not return the written Run.");
       status("write-check", "success", { run_id: run, url: mode === "deployment" ? ui : ui + "/#runs/" + run });
-    } else status("write-check", "skipped", args["verify-write"] ? "A key with write access is required." : "Use --verify-write to record one labeled test Run.");
+    } else status("write-check", "skipped", "Use --verify-write to record one labeled test Run.");
   } finally {
     await consoleSession.logout().catch(() => {});
   }

@@ -1,5 +1,5 @@
 // Browser-only regression using the built UI, relay, and loopback synthetic HTTP.
-const { fixtureAccounts, fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
 const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { once } = require('node:events');
@@ -24,9 +24,10 @@ async function checkResponsiveNavigation(page, width) {
   const nav = page.getByRole('navigation', { name: '主导航' });
   const theme = page.getByRole('button', { name: '切换明暗主题' });
   const exit = page.getByRole('button', { name: '退出', exact: true });
-  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '全局知识', '上下文工作台', '会话', 'API Key', 'Agent 连接'];
+  const labels = ['运行总览', '调用链路', '记忆管理', '知识管理', '全局知识', '上下文工作台', '会话', 'Agent 连接'];
   const buttons = labels.map((label) => nav.getByRole('button', { name: new RegExp(label + '$') }));
-  const context = buttons[labels.indexOf('上下文工作台')];
+  const contextIndex = labels.indexOf('上下文工作台');
+  const context = buttons[contextIndex];
   const expectLayout = async () => {
     const navigation = await nav.boundingBox();
     const header = await page.locator('.topbar').boundingBox();
@@ -57,10 +58,7 @@ async function checkResponsiveNavigation(page, width) {
   for (const control of [theme, exit, ...buttons.toReversed()]) await step('Shift+Tab', control);
   for (const control of [...buttons.slice(1), exit, theme]) await step('Tab', control);
   await step('Shift+Tab', exit);
-  await step('Shift+Tab', buttons.at(-1));
-  await step('Shift+Tab', buttons.at(-2));
-  await step('Shift+Tab', buttons.at(-3));
-  await step('Shift+Tab', context);
+  for (const control of buttons.slice(contextIndex).toReversed()) await step('Shift+Tab', control);
   await page.keyboard.press('Enter');
   await main.getByRole('heading', { name: '上下文工作台', exact: true }).waitFor();
   assert.equal(await isFocused(main), true);
@@ -288,7 +286,7 @@ async function checkCreationChart(page, hasTouch) {
   });
   let ui, browser;
   try {
-    ui = createUiServer({ apiBaseUrl: await listen(upstream), accounts: await fixtureAccounts('22222222-2222-4222-8222-222222222222', ['synthetic-key']) });
+    ui = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts('22222222-2222-4222-8222-222222222222', ['synthetic-key']) });
     const origin = await listen(ui, manual ? Number(process.env.ORIGENCE_FIXTURE_PORT ?? 0) : 0);
     if (manual) {
       console.log(origin + '/#overview · account fixture-synthetic-key · password ' + password + ' · fixture responses: 503, 503, 200, 503, then 200');

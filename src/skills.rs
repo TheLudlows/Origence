@@ -10,6 +10,17 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 impl Service {
+    pub async fn deployment_skill_reviews(
+        &self,
+        auth: &AuthContext,
+        after: Uuid,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut tx = self.read(auth, Permission::Read).await?;
+        let result = tx.deployment_skill_reviews(after, limit).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
     pub async fn save_skill_candidate(
         &self,
         auth: &AuthContext,

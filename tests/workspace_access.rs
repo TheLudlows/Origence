@@ -10,7 +10,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn deployment_admin_reads_across_tenants_and_cannot_write_workspace_data() {
+async fn deployment_admin_reads_across_tenants_and_requires_explicit_write_scope() {
     let dir = tempfile::tempdir().unwrap();
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let store = service.engine.relational();
@@ -187,6 +187,482 @@ async fn deployment_admin_reads_across_tenants_and_cannot_write_workspace_data()
 }
 
 #[tokio::test]
+async fn deployment_admin_content_writes_use_workspace_scope_and_audit_actor() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let first = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let second = Scope {
+        tenant_id: first.tenant_id,
+        workspace_id: Uuid::new_v4(),
+    };
+    let first_key = store.create_key_workspace(first, "First").await.unwrap();
+    let second_key = store.create_key_workspace(second, "Second").await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
+    let actor = service
+        .authorize_deployment_workspace(&admin, first.workspace_id)
+        .await
+        .unwrap();
+    assert!(!actor.id.is_nil());
+    assert_ne!(actor.id, first_key.key_id);
+    service
+        .register_memory_property(
+            &actor,
+            "test-property",
+            serde_json::from_value(
+                json!({"predicate":"hotel.limit","cardinality":"single","required_context":[]}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    // A workspace header never overrides the selected deployment path.
+    let operator = HostClient::new(&base, admin.clone())
+        .unwrap()
+        .with_workspace(second.workspace_id);
+    let agent = HostClient::new(&base, first_key.token).unwrap();
+    let other_agent = HostClient::new(&base, second_key.token).unwrap();
+    let a = format!("/admin/deployment/workspaces/{}", first.workspace_id);
+    let b = format!("/admin/deployment/workspaces/{}", second.workspace_id);
+    let publish = format!("{a}/knowledge");
+    let input = json!({"title":"Internal policy","content":"Original policy"});
+    assert!(matches!(
+        agent
+            .call(Method::POST, &publish, Some(&input), Some("write"))
+            .await,
+        Err(AppError::Unauthorized)
+    ));
+    assert!(matches!(
+        operator
+            .call(Method::POST, &publish, Some(&input), None)
+            .await,
+        Err(AppError::Invalid(_))
+    ));
+    let created = operator
+        .call(Method::POST, &publish, Some(&input), Some("write"))
+        .await
+        .unwrap();
+    assert_eq!(
+        operator
+            .call(Method::POST, &publish, Some(&input), Some("write"))
+            .await
+            .unwrap(),
+        created
+    );
+    let asset = created["asset_id"].as_str().unwrap();
+    let job = created["job_id"].as_str().unwrap();
+    let job_path = format!("{a}/jobs/{job}");
+    assert!(matches!(
+        operator
+            .call(Method::GET, &format!("{b}/jobs/{job}"), None, None)
+            .await,
+        Err(AppError::NotFound)
+    ));
+    for (action, state) in [("cancel", "cancelled"), ("retry", "pending")] {
+        assert_eq!(
+            operator
+                .call(
+                    Method::POST,
+                    &format!("{job_path}/{action}"),
+                    None,
+                    Some(action)
+                )
+                .await
+                .unwrap()["state"],
+            state
+        );
+    }
+    while origence::worker::process_next(&service).await.unwrap() {}
+    assert_eq!(
+        operator
+            .call(Method::GET, &job_path, None, None)
+            .await
+            .unwrap()["state"],
+        "completed"
+    );
+    let update = json!({"title":"Internal policy","content":"Revised policy","asset_id":asset,"expected_version":1});
+    assert!(matches!(
+        operator
+            .call(
+                Method::POST,
+                &format!("{b}/knowledge"),
+                Some(&update),
+                Some("update")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    operator
+        .call(Method::POST, &publish, Some(&update), Some("update"))
+        .await
+        .unwrap();
+
+    let written_memory = operator.call(Method::POST, &format!("{a}/memories/identified"), Some(&json!({
+        "identity":{"subject":{"kind":"service","stable_id":"atlas"},"predicate":"db.engine","context":{}},
+        "content":"Atlas uses SQLite"
+    })), Some("fact")).await.unwrap();
+    let semantic_memory = operator.call(Method::POST, &format!("{a}/memories/semantic"), Some(&json!({
+        "identity":{"subject":{"kind":"team","stable_id":"operations"},"predicate":"hotel.limit","context":{}},
+        "content":"80", "operation":"assert", "expected_version":0,
+        "statements":[{"value":"80","quote":"80","byte_start":0,"byte_end":2}]
+    })), Some("semantic")).await.unwrap();
+    let uploaded: serde_json::Value = reqwest::Client::new()
+        .post(format!("{base}{a}/files?name=note.txt&format=text"))
+        .bearer_auth(&admin)
+        .header("idempotency-key", "upload")
+        .body("Separate attached text")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let document = json!({"title":"Attached note","format":"text","file_id":uploaded["file_id"]});
+    assert!(matches!(
+        operator
+            .call(
+                Method::POST,
+                &format!("{b}/knowledge"),
+                Some(&document),
+                Some("attached")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    let attached = operator
+        .call(Method::POST, &publish, Some(&document), Some("attached"))
+        .await
+        .unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+    for (receipt, content) in [
+        (&written_memory, "Atlas uses SQLite"),
+        (&semantic_memory, "80"),
+        (&attached, "Separate attached text"),
+    ] {
+        let path = format!("/v1/assets/{}", receipt["asset_id"].as_str().unwrap());
+        assert_eq!(
+            agent.call(Method::GET, &path, None, None).await.unwrap()["content"],
+            content
+        );
+        assert!(matches!(
+            other_agent.call(Method::GET, &path, None, None).await,
+            Err(AppError::NotFound)
+        ));
+    }
+    let normal_path = format!("/v1/assets/{asset}");
+    assert_eq!(
+        agent
+            .call(Method::GET, &normal_path, None, None)
+            .await
+            .unwrap()["content"],
+        "Revised policy"
+    );
+    assert_eq!(
+        operator
+            .call(
+                Method::GET,
+                &format!("{a}/assets/{asset}?version=1"),
+                None,
+                None
+            )
+            .await
+            .unwrap()["content"],
+        "Original policy"
+    );
+    assert!(matches!(
+        operator
+            .call(
+                Method::DELETE,
+                &format!("{b}/assets/{asset}"),
+                None,
+                Some("remove")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    let delete_path = format!("{a}/assets/{asset}");
+    let deleted = operator
+        .call(Method::DELETE, &delete_path, None, Some("remove"))
+        .await
+        .unwrap();
+    assert_eq!(deleted["blocked"], true);
+    assert_eq!(
+        operator
+            .call(Method::DELETE, &delete_path, None, Some("remove"))
+            .await
+            .unwrap(),
+        deleted
+    );
+    assert!(matches!(
+        agent.call(Method::GET, &normal_path, None, None).await,
+        Err(AppError::NotFound)
+    ));
+
+    let audit: Vec<(String, Uuid)> = origence::storage::sqlite_db::query_as(
+        "SELECT action,actor FROM oc_audit WHERE tenant_id=? AND workspace_id=? AND target=? AND action IN ('knowledge.ingest','source.logical_delete') ORDER BY action",
+    )
+    .bind(first.tenant_id).bind(first.workspace_id).bind(Uuid::parse_str(asset).unwrap())
+    .fetch_all(store.pool()).await.unwrap();
+    assert_eq!(
+        audit,
+        vec![
+            ("knowledge.ingest".into(), actor.id),
+            ("knowledge.ingest".into(), actor.id),
+            ("source.logical_delete".into(), actor.id)
+        ]
+    );
+    store.rotate_deployment_admin().await.unwrap();
+    assert!(matches!(
+        service.job(&actor, Uuid::parse_str(job).unwrap()).await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(matches!(
+        operator.call(Method::GET, &job_path, None, None).await,
+        Err(AppError::Unauthorized)
+    ));
+    host.abort();
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn administrator_restores_valid_history_and_withdraws_only_scoped_content_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let other = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let workspace_key = store.create_key_workspace(scope, "First").await.unwrap();
+    store.create_key_workspace(other, "Other").await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
+    let actor = service
+        .authorize_deployment_workspace(&admin, scope.workspace_id)
+        .await
+        .unwrap();
+    let agent = service.auth(&workspace_key.token).await.unwrap();
+    let first = service
+        .knowledge(
+            &agent,
+            "v1",
+            serde_json::from_value(json!({
+                "title":"Hotel policy","content":"100 per night"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let asset: Uuid = serde_json::from_value(first["asset_id"].clone()).unwrap();
+    let source: Uuid = serde_json::from_value(first["source_event_id"].clone()).unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+    service.knowledge(&agent, "v2", serde_json::from_value(json!({
+        "title":"Hotel policy","content":"80 per night","asset_id":asset,"expected_version":1
+    })).unwrap()).await.unwrap();
+    let session: Uuid = serde_json::from_value(
+        service.private_session(&agent).await.unwrap()["session_id"].clone(),
+    )
+    .unwrap();
+    let turn = Uuid::new_v4();
+    let archived = service.archive_turn(&agent, "archive", session, serde_json::from_value(json!({
+        "turn_id":turn,"question":"Private question","answer":"Private answer","used_evidence":[]
+    })).unwrap()).await.unwrap();
+    let archive_source = archived["source_event_id"].as_str().unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let router = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let client = HostClient::new(&origin, admin.clone()).unwrap();
+    let ordinary = HostClient::new(&origin, workspace_key.token).unwrap();
+    let selected = format!("/admin/deployment/workspaces/{}", scope.workspace_id);
+    let outside = format!("/admin/deployment/workspaces/{}", other.workspace_id);
+    let restore_path = format!("{selected}/assets/{asset}/restore");
+    let retract_path = format!("{selected}/events/{source}");
+    let restore =
+        json!({"target_version":1,"expected_version":2,"reason":"Correct mistaken revision"});
+    assert!(matches!(
+        ordinary
+            .call(Method::POST, &restore_path, Some(&restore), Some("restore"))
+            .await,
+        Err(AppError::Unauthorized)
+    ));
+    assert!(matches!(
+        ordinary
+            .call(Method::DELETE, &retract_path, None, Some("withdraw"))
+            .await,
+        Err(AppError::Unauthorized)
+    ));
+    assert!(matches!(
+        client
+            .call(
+                Method::POST,
+                &format!("{outside}/assets/{asset}/restore"),
+                Some(&restore),
+                Some("restore")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    for method in [Method::GET, Method::DELETE] {
+        assert!(matches!(
+            client
+                .call(
+                    method.clone(),
+                    &format!("{outside}/events/{source}"),
+                    None,
+                    Some("withdraw")
+                )
+                .await,
+            Err(AppError::NotFound)
+        ));
+        assert!(matches!(
+            client
+                .call(
+                    method,
+                    &format!("{selected}/events/{archive_source}"),
+                    None,
+                    Some("withdraw")
+                )
+                .await,
+            Err(AppError::Forbidden)
+        ));
+    }
+    assert_eq!(
+        service.session_turn(&agent, session, turn).await.unwrap()["answer"],
+        "Private answer"
+    );
+    assert_eq!(
+        client
+            .call(Method::GET, &retract_path, None, None)
+            .await
+            .unwrap()["content"],
+        "100 per night"
+    );
+    assert!(matches!(
+        client
+            .call(
+                Method::POST,
+                &restore_path,
+                Some(&json!({"target_version":1,"expected_version":1,"reason":"Stale revision"})),
+                Some("stale")
+            )
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    let receipt = client
+        .call(Method::POST, &restore_path, Some(&restore), Some("restore"))
+        .await
+        .unwrap();
+    assert_eq!(
+        client
+            .call(Method::POST, &restore_path, Some(&restore), Some("restore"))
+            .await
+            .unwrap(),
+        receipt
+    );
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let restored = service.get(&agent, asset, None).await.unwrap();
+    assert_eq!(restored["version"], 3);
+    assert_eq!(restored["restored_from"], 1);
+    assert_eq!(restored["content"], "100 per night");
+    assert_eq!(restored["source_event_id"], json!(source));
+
+    let pending = service
+        .restore(
+            &agent,
+            "pending-restore",
+            asset,
+            serde_json::from_value(
+                json!({"target_version":1,"expected_version":3,"reason":"Pending restore"}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let pending_job = serde_json::from_value(pending["job_id"].clone()).unwrap();
+    let removed = client
+        .call(Method::DELETE, &retract_path, None, Some("withdraw"))
+        .await
+        .unwrap();
+    assert_eq!(removed["originals_retained"], true);
+    assert_eq!(
+        service.job(&agent, pending_job).await.unwrap()["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        client
+            .call(Method::DELETE, &retract_path, None, Some("withdraw"))
+            .await
+            .unwrap(),
+        removed
+    );
+    assert!(matches!(
+        service
+            .inspect_content_source(&admin, scope.workspace_id, source)
+            .await,
+        Err(AppError::NotFound)
+    ));
+    for version in [1, 3] {
+        assert!(matches!(
+            service.get(&agent, asset, Some(version)).await,
+            Err(AppError::NotFound)
+        ));
+    }
+    assert_eq!(
+        service.get(&agent, asset, Some(2)).await.unwrap()["content"],
+        "80 per night"
+    );
+    assert!(matches!(
+        client
+            .call(
+                Method::POST,
+                &restore_path,
+                Some(&json!({"target_version":1,"expected_version":3,"reason":"Revoked source"})),
+                Some("revoked")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let retained: (String, String) = origence::storage::sqlite_db::query_as(
+        "SELECT state,content FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(retained, ("retracted".into(), "100 per night".into()));
+    let audited: Vec<(String, Uuid)> = origence::storage::sqlite_db::query_as(
+        "SELECT action,target FROM oc_audit WHERE tenant_id=? AND workspace_id=? AND actor=? AND action IN ('asset.restore_authorized','source.logical_delete') ORDER BY action",
+    ).bind(scope.tenant_id).bind(scope.workspace_id).bind(actor.id).fetch_all(store.pool()).await.unwrap();
+    assert_eq!(
+        audited,
+        vec![
+            ("asset.restore_authorized".into(), asset),
+            ("source.logical_delete".into(), source)
+        ]
+    );
+    host.abort();
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn workspace_archive_extracts_once_across_restart_and_rotation() {
     use axum::{Json, Router, routing::post};
     use serde_json::Value;
@@ -348,7 +824,7 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         .create_key_workspace(scope, "Workspace A")
         .await
         .unwrap();
-    store
+    let other_key = store
         .create_key_workspace(other, "Workspace B")
         .await
         .unwrap();
@@ -374,6 +850,14 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         .await
         .unwrap();
     let source = receipt["source_event_id"].as_str().unwrap();
+    let run = Uuid::new_v4();
+    service
+        .create_run(
+            &auth,
+            serde_json::from_value(json!({"run_id":run,"summary":"Rotation fixture"})).unwrap(),
+        )
+        .await
+        .unwrap();
     assert!(matches!(
         service
             .withdraw_session_archive(&auth, session_id, turn)
@@ -382,11 +866,8 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     ));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let client = HostClient::new(
-        &format!("http://{}", listener.local_addr().unwrap()),
-        key.token.clone(),
-    )
-    .unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let client = HostClient::new(&base, key.token.clone()).unwrap();
     let router = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     assert_eq!(
@@ -406,12 +887,16 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
             .len(),
         1
     );
-    for path in ["/admin/keys", "/v1/workspaces/owned"] {
-        assert!(matches!(
-            client.call(Method::GET, path, None, None).await,
-            Err(AppError::Forbidden)
-        ));
-    }
+    assert_eq!(
+        reqwest::Client::new()
+            .get(format!("{base}/admin/keys"))
+            .bearer_auth(&key.token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::METHOD_NOT_ALLOWED
+    );
     for path in [
         format!("/v1/sessions/{session_id}/turns/{turn}"),
         format!("/v1/sessions/{session_id}?through_sequence=1"),
@@ -438,6 +923,7 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     );
     assert!(matches!(
         client
+            .clone()
             .with_workspace(other.workspace_id)
             .call(Method::GET, "/v1/whoami", None, None)
             .await,
@@ -455,416 +941,158 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         )
         .await
         .unwrap();
-    while origence::worker::process_next(&service).await.unwrap() {}
-    let asset: Uuid = serde_json::from_value(memory["asset_id"].clone()).unwrap();
-    service.get(&auth, asset, None).await.unwrap();
-    service
-        .delete(&auth, "delete-memory", asset, "asset")
+    let knowledge = client
+        .call(
+            Method::POST,
+            "/v1/knowledge",
+            Some(&json!({"title":"Workflow","content":"Original procedure"})),
+            Some("knowledge-v1"),
+        )
         .await
         .unwrap();
-    assert!(matches!(
-        service.get(&auth, asset, None).await,
-        Err(AppError::NotFound)
-    ));
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let asset: Uuid = serde_json::from_value(memory["asset_id"].clone()).unwrap();
+    let knowledge_path = format!("/v1/assets/{}", knowledge["asset_id"].as_str().unwrap());
+    let queued_knowledge = client
+        .call(
+            Method::POST,
+            "/v1/knowledge",
+            Some(
+                &json!({"asset_id":knowledge["asset_id"],"expected_version":1,
+                "title":"Workflow","content":"Procedure accepted before rotation"}),
+            ),
+            Some("knowledge-v2"),
+        )
+        .await
+        .unwrap();
+    let queued_memory = client
+        .call(
+            Method::POST,
+            "/v1/memories",
+            Some(&json!({"fact_key":"fixture.retry","content":"Retry after rotation"})),
+            Some("queued-memory"),
+        )
+        .await
+        .unwrap();
+    let job_id = queued_memory["job_id"].as_str().unwrap();
+    client
+        .call(
+            Method::POST,
+            &format!("/v1/jobs/{job_id}/cancel"),
+            None,
+            Some("cancel-before-rotation"),
+        )
+        .await
+        .unwrap();
 
     let replacement = store.rotate_workspace_key(scope).await.unwrap();
     assert!(matches!(
-        service.auth(&key.token).await,
+        client.call(Method::GET, "/v1/whoami", None, None).await,
         Err(AppError::Unauthorized)
     ));
+    let peer = super::mcp_http::Peer::at(format!("{base}/mcp"));
+    assert_eq!(
+        peer.call(&key.token, None, "context_session", json!({}))
+            .await,
+        Err(json!({"http_status":401}))
+    );
+    assert_eq!(
+        peer.call(&replacement.token, None, "context_session", json!({}))
+            .await
+            .unwrap(),
+        session
+    );
+    assert_eq!(
+        peer.call(
+            &replacement.token,
+            None,
+            "context_turn_get",
+            json!({"turn_id":turn})
+        )
+        .await
+        .unwrap()["source_event_id"],
+        receipt["source_event_id"]
+    );
+    let current = HostClient::new(&base, replacement.token.clone()).unwrap();
+    assert_eq!(
+        current
+            .call(Method::GET, &format!("/v1/runs/{run}"), None, None)
+            .await
+            .unwrap()["run"]["summary"],
+        "Rotation fixture"
+    );
+    assert_eq!(
+        current
+            .call(Method::GET, &knowledge_path, None, None)
+            .await
+            .unwrap()["content"],
+        "Original procedure"
+    );
     let rotated = service.auth(&replacement.token).await.unwrap();
-    assert_eq!(service.private_session(&rotated).await.unwrap(), session);
-    host.abort();
-    service.engine.shutdown().await.unwrap();
-}
-
-#[tokio::test]
-async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecycle() {
-    let dir = tempfile::tempdir().unwrap();
-    let a = crate::support::seed_workspace(dir.path(), "A", None).await;
-    let a_id: Uuid = a["workspace_id"].as_str().unwrap().parse().unwrap();
-    let b = crate::support::seed_workspace(dir.path(), "B", Some(a_id)).await;
-    let other = crate::support::seed_workspace(dir.path(), "Other tenant", None).await;
-    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
-    let a_token = a["token"].as_str().unwrap();
-    let a_admin = service.auth(a_token).await.unwrap();
-    let b_admin = service.auth(b["token"].as_str().unwrap()).await.unwrap();
-    let reader = service.issue_key(&a_admin, "reader").await.unwrap();
-    let writer = service.issue_key(&a_admin, "writer").await.unwrap();
-    let token = writer["token"].as_str().unwrap();
-    let logical: Uuid = writer["key_id"].as_str().unwrap().parse().unwrap();
-    service
-        .set_workspace_key_grant(&b_admin, logical, Some("reader"))
-        .await
-        .unwrap();
-
-    let issued = service
-        .list_issued_keys(&a_admin, Uuid::nil(), 100)
-        .await
-        .unwrap();
-    assert_eq!(issued["items"].as_array().unwrap().len(), 3);
-    assert!(!issued.to_string().contains(token));
-    assert!(!issued.to_string().contains("token_hash"));
-    let grants = service
-        .list_workspace_key_grants(&b_admin, Uuid::nil(), 1)
-        .await
-        .unwrap();
     assert_eq!(
-        grants["items"],
-        json!([{"logical_key_id":logical,"role":"reader","active":true}])
+        service.get(&rotated, asset, None).await.unwrap()["content"],
+        "保留中文偏好"
     );
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let router = origence::api::router(service.clone());
-    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    let client = |key: &str| HostClient::new(&base, key.into()).unwrap();
-    let a_client = client(a_token);
-    let b_client = client(b["token"].as_str().unwrap());
-    let foreign = client(other["token"].as_str().unwrap());
-    let read_client = client(reader["token"].as_str().unwrap());
-    let keys = "/admin/keys";
-    let grants = "/admin/workspace-key-grants";
-    for path in [keys, grants] {
-        assert!(matches!(
-            read_client.call(Method::GET, path, None, None).await,
-            Err(AppError::Forbidden)
-        ));
-        assert!(matches!(
-            a_client
-                .call(Method::GET, &format!("{path}?limit=0"), None, None)
-                .await,
-            Err(AppError::Invalid(_))
-        ));
-    }
-    assert!(matches!(
-        a_client
-            .call(
-                Method::POST,
-                keys,
-                Some(&json!({"workspace_id":a_id, "role":"reviewer"})),
-                None
-            )
-            .await,
-        Err(AppError::Conflict(message)) if message == "invalid role"
-    ));
-    assert!(matches!(
-        b_client
-            .call(
-                Method::PUT,
-                &format!("{grants}/{logical}"),
-                Some(&json!({"role":"reviewer"})),
-                None
-            )
-            .await,
-        Err(AppError::Invalid(_))
-    ));
-    let first = a_client
-        .call(Method::GET, "/admin/keys?limit=1", None, None)
-        .await
-        .unwrap();
-    let next = first["next_after"].as_str().unwrap();
-    assert_eq!(first["items"][0]["key_id"], next);
-    let rest = a_client
-        .call(Method::GET, &format!("{keys}?after={next}"), None, None)
-        .await
-        .unwrap();
-    assert_eq!(rest["items"].as_array().unwrap().len(), 2);
-    assert!(
-        rest["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|item| item["key_id"] != next)
-    );
+    let neighboring = HostClient::new(&base, other_key.token).unwrap();
     assert_eq!(
-        foreign.call(Method::GET, keys, None, None).await.unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
-    assert_eq!(
-        foreign.call(Method::GET, grants, None, None).await.unwrap()["items"],
-        json!([])
-    );
-
-    let rotate = format!("{keys}/{logical}/rotate");
-    assert!(matches!(
-        a_client.call(Method::POST, &rotate, None, None).await,
-        Err(AppError::Forbidden)
-    ));
-    service
-        .set_workspace_key_grant(&b_admin, a_admin.id, Some("admin"))
-        .await
-        .unwrap();
-    let rotated = a_client
-        .call(Method::POST, &rotate, None, None)
-        .await
-        .unwrap();
-    let replacement = rotated["key_id"].as_str().unwrap();
-    assert!(matches!(
-        service.auth(token).await,
-        Err(AppError::Unauthorized)
-    ));
-    let refreshed = a_client.call(Method::GET, keys, None, None).await.unwrap();
-    let row = refreshed["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["key_id"] == replacement)
-        .unwrap();
-    assert_eq!(row["logical_key_id"], logical.to_string());
-    assert!(
-        !refreshed
-            .to_string()
-            .contains(rotated["token"].as_str().unwrap())
-    );
-    a_client
-        .call(Method::DELETE, &format!("{keys}/{replacement}"), None, None)
-        .await
-        .unwrap();
-    let incoming = b_client
-        .call(Method::GET, grants, None, None)
-        .await
-        .unwrap();
-    let row = incoming["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["logical_key_id"] == logical.to_string())
-        .unwrap();
-    assert_eq!(row["active"], false);
-    host.abort();
-}
-
-#[tokio::test]
-async fn one_credential_uses_live_workspace_grants_without_sharing_private_archives() {
-    let dir = tempfile::tempdir().unwrap();
-    let admin_a = crate::support::seed_workspace(dir.path(), "Engineering", None).await;
-    let a: Scope = serde_json::from_value(admin_a.clone()).unwrap();
-    let admin_b =
-        crate::support::seed_workspace(dir.path(), "Documents", Some(a.workspace_id)).await;
-    let b: Scope = serde_json::from_value(admin_b.clone()).unwrap();
-    let admin_external = crate::support::seed_workspace(dir.path(), "External", None).await;
-    let foreign: Scope = serde_json::from_value(admin_external.clone()).unwrap();
-    assert_eq!(a.tenant_id, b.tenant_id);
-    assert_ne!(a.workspace_id, b.workspace_id);
-    assert_ne!(a.tenant_id, foreign.tenant_id);
-    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
-    let store = service.engine.relational();
-    let writer = store.issue_key(a, "writer").await.unwrap();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let router = origence::api::router(service.clone());
-    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    let client = |key: &str| HostClient::new(&base, key.into()).unwrap();
-    let current = client(&writer.token);
-    let other = current.clone().with_workspace(b.workspace_id);
-    let grant = format!("/admin/workspace-key-grants/{}", writer.key_id);
-    let whoami = "/v1/whoami";
-    let session = "/v1/session";
-    let list = "/v1/workspaces";
-
-    assert_eq!(
-        current.call(Method::GET, whoami, None, None).await.unwrap()["workspace_id"],
-        a.workspace_id.to_string()
+        neighboring
+            .call(Method::GET, "/v1/whoami", None, None)
+            .await
+            .unwrap()["workspace_id"],
+        json!(other.workspace_id)
     );
     assert!(matches!(
-        other.call(Method::GET, whoami, None, None).await,
-        Err(AppError::Forbidden)
-    ));
-    assert!(matches!(
-        client(admin_external["token"].as_str().unwrap())
-            .call(Method::PUT, &grant, Some(&json!({"role":"reader"})), None)
+        neighboring
+            .call(Method::GET, &knowledge_path, None, None)
             .await,
         Err(AppError::NotFound)
     ));
-    let response = reqwest::Client::new()
-        .get(format!("{base}{whoami}"))
-        .bearer_auth(&writer.token)
-        .header("X-Origence-Workspace", a.workspace_id.to_string())
-        .header("X-Origence-Workspace", b.workspace_id.to_string())
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(matches!(
-        client("invalid").call(Method::GET, list, None, None).await,
-        Err(AppError::Unauthorized)
-    ));
 
-    let documents_admin = client(admin_b["token"].as_str().unwrap());
-    documents_admin
-        .call(Method::PUT, &grant, Some(&json!({"role":"reader"})), None)
-        .await
-        .unwrap();
-    assert_eq!(
-        current.call(Method::GET, list, None, None).await.unwrap(),
-        json!({"workspaces":[
-            {"workspace_id":a.workspace_id,"name":"Engineering","role":"writer","is_default":true},
-            {"workspace_id":b.workspace_id,"name":"Documents","role":"reader","is_default":false}
-        ]})
-    );
-    assert_eq!(
-        other.call(Method::GET, whoami, None, None).await.unwrap()["role"],
-        "reader"
-    );
-    let a_writer = service.auth(&writer.token).await.unwrap();
-    let b_admin_auth = service
-        .auth(admin_b["token"].as_str().unwrap())
-        .await
-        .unwrap();
-    let mut assets = Vec::new();
-    for (auth, title) in [
-        (&a_writer, "Atlas engineering"),
-        (&b_admin_auth, "Atlas documents"),
-    ] {
-        let receipt = service
-            .knowledge(
-                auth,
-                "workspace-local-publish",
-                serde_json::from_value(json!({"title":title,"content":title,"format":"text"}))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assets.push(receipt["asset_id"].clone());
-    }
-    while origence::worker::process_next(&service).await.unwrap() {}
-    for (scoped, asset) in [(&current, &assets[0]), (&other, &assets[1])] {
-        let response = scoped
-            .call(
-                Method::POST,
-                "/v1/search",
-                Some(&json!({"query":"Atlas"})),
-                None,
-            )
-            .await
-            .unwrap();
-        let matches = response["hits"].as_array().unwrap();
-        assert_eq!(matches.len(), 1);
-        assert_eq!(&matches[0]["asset_id"], asset);
-    }
-    let session_a = current
-        .call(Method::GET, session, None, None)
-        .await
-        .unwrap();
-    let session_b = other.call(Method::GET, session, None, None).await.unwrap();
-    assert_eq!(
-        crate::foundation_http::session_from_mcp(&base, &writer.token, Some(b.workspace_id)).await,
-        session_b
-    );
-    assert_eq!(session_a["key_id"], session_b["key_id"]);
-    assert_eq!(session_b["workspace_id"], b.workspace_id.to_string());
-    assert_ne!(session_a["session_id"], session_b["session_id"]);
-    let turn_id = Uuid::new_v4();
-    let turn = json!({"turn_id":turn_id,"question":"Synthetic question","answer":"Private A","used_evidence":[]});
-    let archive = |session: &serde_json::Value| {
-        format!(
-            "/v1/sessions/{}/turns",
-            session["session_id"].as_str().unwrap()
-        )
-    };
-    let a_archive = archive(&session_a);
-    assert!(matches!(
-        other
-            .call(
-                Method::POST,
-                &archive(&session_b),
-                Some(&turn),
-                Some("test")
-            )
-            .await,
-        Err(AppError::Forbidden)
-    ));
     current
-        .call(Method::POST, &a_archive, Some(&turn), Some("test"))
-        .await
-        .unwrap();
-
-    let rotate = format!("/admin/keys/{}/rotate", writer.key_id);
-    let engineering_admin = client(admin_a["token"].as_str().unwrap());
-    assert!(matches!(
-        engineering_admin
-            .call(Method::POST, &rotate, None, None)
-            .await,
-        Err(AppError::Forbidden)
-    ));
-    service
-        .set_workspace_key_grant(&b_admin_auth, writer.key_id, Some("writer"))
-        .await
-        .unwrap();
-    let b_write = service
-        .auth_workspace(&writer.token, Some(b.workspace_id))
-        .await
-        .unwrap();
-    assert_eq!(b_write.role, "writer");
-    assert!(matches!(
-        other
-            .call(Method::GET, &format!("{a_archive}/{turn_id}"), None, None)
-            .await,
-        Err(AppError::NotFound)
-    ));
-    service
-        .set_workspace_key_grant(
-            &b_admin_auth,
-            serde_json::from_value(admin_a["key_id"].clone()).unwrap(),
-            Some("admin"),
+        .call(
+            Method::POST,
+            &format!("/v1/jobs/{job_id}/retry"),
+            None,
+            Some("retry-after-rotation"),
         )
         .await
         .unwrap();
-    let new = engineering_admin
-        .call(Method::POST, &rotate, None, None)
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let knowledge_job: Uuid = serde_json::from_value(queued_knowledge["job_id"].clone()).unwrap();
+    assert_eq!(
+        service.job(&rotated, knowledge_job).await.unwrap()["state"],
+        "completed"
+    );
+    assert_eq!(
+        current
+            .call(Method::GET, &knowledge_path, None, None)
+            .await
+            .unwrap()["content"],
+        "Procedure accepted before rotation"
+    );
+    let memory_job: Uuid = job_id.parse().unwrap();
+    assert_eq!(
+        service.job(&rotated, memory_job).await.unwrap()["state"],
+        "completed"
+    );
+    let stored_creator: Uuid = origence::storage::sqlite_db::query_scalar(
+        "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(knowledge_job)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(stored_creator, key.key_id);
+    service
+        .delete(&rotated, "delete-memory", asset, "asset")
         .await
         .unwrap();
     assert!(matches!(
-        other.call(Method::GET, whoami, None, None).await,
-        Err(AppError::Unauthorized)
+        service.get(&rotated, asset, None).await,
+        Err(AppError::NotFound)
     ));
-    let replacement = client(new["token"].as_str().unwrap());
-    let replacement_b = replacement.clone().with_workspace(b.workspace_id);
-    assert_eq!(
-        replacement_b
-            .call(Method::GET, session, None, None)
-            .await
-            .unwrap(),
-        session_b
-    );
-    let b_live = service
-        .auth_workspace(new["token"].as_str().unwrap(), Some(b.workspace_id))
-        .await
-        .unwrap();
-    engineering_admin
-        .call(Method::DELETE, &grant, None, None)
-        .await
-        .unwrap();
-    assert!(matches!(
-        replacement.call(Method::GET, whoami, None, None).await,
-        Err(AppError::Invalid(_))
-    ));
-    assert_eq!(
-        replacement_b
-            .call(Method::GET, whoami, None, None)
-            .await
-            .unwrap()["role"],
-        "writer"
-    );
-    documents_admin
-        .call(Method::DELETE, &grant, None, None)
-        .await
-        .unwrap();
-    assert!(matches!(
-        service.private_session(&b_live).await,
-        Err(AppError::Forbidden)
-    ));
-    assert_eq!(
-        replacement
-            .call(Method::GET, list, None, None)
-            .await
-            .unwrap(),
-        json!({"workspaces":[]})
-    );
     host.abort();
     service.engine.shutdown().await.unwrap();
 }

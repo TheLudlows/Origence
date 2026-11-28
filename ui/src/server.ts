@@ -6,25 +6,22 @@ import {
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConfiguredConsoleAccounts, workspaceIdPattern, type ConsoleAccount } from "./console-accounts.js";
-import { checkedConsoleIdentity, consoleSessionPath, ConsoleSessions, isConsoleRole, type OwnedWorkspace } from "./console-session.js";
+import { loadConfiguredConsoleAccounts, type ConsoleAccount } from "./console-accounts.js";
+import { checkedConsoleIdentity, consoleSessionPath, ConsoleSessions } from "./console-session.js";
 import { HttpError } from "./http-error.js";
 
 const MAX_BODY = 10 * 1024 * 1024;
 const uuid = "[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}";
 const deploymentWorkspacePath = new RegExp(`^/admin/deployment/workspaces/${uuid}$`);
-const deploymentWorkspaceKeyPath = new RegExp(`^/admin/deployment/workspaces/${uuid}(/(?:keys|workspace-key-grants)(?:/.*)?)$`);
-const managedKeyPath = new RegExp(`^/admin/keys/(${uuid})(?:/rotate)?$`);
+const deploymentKeys = new RegExp(`^/admin/deployment/workspaces/${uuid}/keys$`);
+const deploymentRotate = new RegExp(`^/admin/deployment/workspaces/${uuid}/keys/rotate$`);
 const agentPath = "/admin/agents";
-const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets(?:/${uuid})?))?$`);
+const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets|skill-reviews(?:/${uuid})?))?$`);
+const deploymentContentPost = new RegExp(`^/admin/deployment/workspaces/${uuid}/(?:knowledge|files|memories/(?:identified|semantic)|assets/${uuid}/restore|jobs/${uuid}/(?:retry|cancel)|skill-reviews/${uuid}/(?:decision|publish))$`);
+const deploymentContentItem = new RegExp(`^/admin/deployment/workspaces/${uuid}/(?:assets|events)/${uuid}$`);
+const deploymentJob = new RegExp(`^/admin/deployment/workspaces/${uuid}/jobs/${uuid}$`);
 const globalReviewRead = new RegExp(`^/admin/deployment/global-knowledge(?:/${uuid})?$`);
 const globalReviewWrite = new RegExp(`^/admin/deployment/global-knowledge/${uuid}/review$`);
-const keyRules: [string, RegExp][] = [
-  ["GET", /^\/admin\/(keys|workspace-key-grants)$/],
-  ["POST", new RegExp(`^/admin/keys(?:/${uuid}/rotate)?$`)],
-  ["DELETE", new RegExp(`^/admin/(?:keys|workspace-key-grants)/${uuid}$`)],
-  ["PUT", new RegExp(`^/admin/workspace-key-grants/${uuid}$`)],
-];
 const rules: [string, RegExp][] = [
   ["GET", /^\/health\/(live|ready)$/],
   ["GET", /^\/v1\/(whoami|session|assets|runs)$/],
@@ -80,32 +77,6 @@ async function body(req: IncomingMessage): Promise<Buffer | undefined> {
   return Buffer.concat(chunks);
 }
 
-async function listOwnedWorkspaces(upstream: URL, authorization: string, signal: AbortSignal) {
-  const target = new URL("/v1/workspaces/owned?limit=100", upstream);
-  const items: OwnedWorkspace[] = [];
-  let after: string | null = null;
-  do {
-    if (after) target.searchParams.set("after", after);
-    const response = await fetch(target, { headers: { authorization }, redirect: "manual", signal });
-    if (after === null && (response.status === 403 || response.status === 404)) return null;
-    if (!response.ok) throw new HttpError(502, "暂时无法读取子工作区");
-    const page = await response.json() as { items?: unknown; next_after?: unknown };
-    if (page === null || !Array.isArray(page.items) || page.items.length > 100)
-      throw new HttpError(502, "子工作区列表无效");
-    for (const item of page.items) {
-      if (!item || typeof item.workspace_id !== "string" || !workspaceIdPattern.test(item.workspace_id) ||
-          typeof item.name !== "string" || !isConsoleRole(item.role))
-        throw new HttpError(502, "子工作区列表无效");
-      items.push({ workspace_id: item.workspace_id, name: item.name, role: item.role });
-    }
-    if (page.next_after === null) break;
-    if (typeof page.next_after !== "string" || !workspaceIdPattern.test(page.next_after) || (after && page.next_after <= after))
-      throw new HttpError(502, "子工作区分页无效");
-    after = page.next_after;
-  } while (after);
-  return items;
-}
-
 function json(res: ServerResponse, status: number, message: string) {
   res.writeHead(status, {
     ...security,
@@ -140,12 +111,12 @@ export function createUiServer(options: ServerOptions) {
     if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) throw new HttpError(502, "暂时无法核验工作区权限");
     return checkedConsoleIdentity(await response.json());
-  }, (authorization, signal) => listOwnedWorkspaces(upstream, authorization, signal), async (authorization, signal) => {
+  }, async (authorization, signal) => {
     const response = await fetch(new URL("/admin/deployment/me", upstream), {
       headers: { authorization }, redirect: "manual", signal,
     });
     if ([401, 403, 404].includes(response.status)) return false;
-    if (!response.ok) throw new HttpError(502, "暂时无法核验部署管理员权限");
+    if (!response.ok) throw new HttpError(502, "暂时无法核验管理员权限");
     return (await response.json())?.role === "deployment_admin";
   });
   return createServer(async (req, res) => {
@@ -183,17 +154,13 @@ export function createUiServer(options: ServerOptions) {
           return;
         }
         const path = target.pathname.slice(4);
-        const deploymentKeyPath = deploymentWorkspaceKeyPath.exec(path)?.[1];
-        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || globalReviewRead.test(path))
+        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || deploymentContentItem.test(path) || deploymentKeys.test(path) || deploymentJob.test(path) || globalReviewRead.test(path))
           || req.method === "PUT" && deploymentWorkspacePath.test(path)
-          || req.method === "POST" && (globalReviewWrite.test(path) || deploymentKeyPath === "/keys/rotate")
-          || !!deploymentKeyPath && keyRules.some(([method, pattern]) =>
-            method === req.method && pattern.test("/admin" + deploymentKeyPath));
-        const managingKeys = keyRules.some(([method, pattern]) => method === req.method && pattern.test(path));
+          || req.method === "POST" && (deploymentContentPost.test(path) || globalReviewWrite.test(path) || deploymentRotate.test(path))
+          || req.method === "DELETE" && deploymentContentItem.test(path);
         const viewingAgents = req.method === "GET" && path === agentPath;
         if (
           !deploymentOperation &&
-          !managingKeys &&
           !viewingAgents &&
           !rules.some(
             ([method, pattern]) => method === req.method && pattern.test(path),
@@ -203,22 +170,11 @@ export function createUiServer(options: ServerOptions) {
         const headers = new Headers();
         const authorization = req.headers.authorization;
         if (deploymentOperation) headers.set("authorization", sessions.deploymentAuthorization(req, new URL(origin)));
-        else if (!managingKeys && !viewingAgents && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
+        else if (!viewingAgents && authorization?.startsWith("Bearer ")) headers.set("authorization", authorization);
         else if (!path.startsWith("/health/")) {
           const workspace = sessions.authorization(req, new URL(origin));
           headers.set("authorization", workspace.authorization);
-          if (managingKeys) {
-            if (workspace.role !== "admin")
-              throw new HttpError(403, "只有工作区管理员可以管理 API Key");
-            const targetId = managedKeyPath.exec(path)?.[1];
-            if (targetId?.toLowerCase() === workspace.principalId.toLowerCase())
-              throw new HttpError(409, "请在控制台外维护当前会话使用的凭据");
-          }
-          if (viewingAgents && workspace.role !== "admin" && workspace.role !== "workspace")
-            throw new HttpError(403, "当前凭据无权查看本工作区的 Agent 连接");
-          if (managingKeys || viewingAgents) {
-            headers.set("X-Origence-Workspace", workspace.workspaceId);
-          } else if (workspace.scopedWorkspace) headers.set("X-Origence-Workspace", workspace.scopedWorkspace);
+          if (viewingAgents) headers.set("X-Origence-Workspace", workspace.workspaceId);
         }
         const payload = await body(req);
         for (const name of ["content-type", "idempotency-key"]) {

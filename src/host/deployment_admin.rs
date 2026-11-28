@@ -133,10 +133,7 @@ fn wide_path(path: &Path) -> Vec<u16> {
 
 #[cfg(windows)]
 fn private_create(path: &Path) -> io::Result<File> {
-    use std::{
-        os::windows::io::FromRawHandle,
-        ptr::{null, null_mut},
-    };
+    use std::{os::windows::io::FromRawHandle, ptr::null_mut};
     use windows_sys::Win32::{
         Foundation::{GENERIC_WRITE, INVALID_HANDLE_VALUE, LocalFree},
         Security::{

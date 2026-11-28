@@ -15,32 +15,9 @@ CREATE TABLE oc_workspaces (
     tenant_id BLOB NOT NULL,
     id BLOB PRIMARY KEY,
     name TEXT NOT NULL,
-    owner_workspace_id BLOB,
     created_at INTEGER NOT NULL,
-    UNIQUE (tenant_id, id),
-    CHECK (owner_workspace_id IS NULL OR owner_workspace_id != id),
-    FOREIGN KEY (tenant_id, owner_workspace_id) REFERENCES oc_workspaces(tenant_id, id)
+    UNIQUE (tenant_id, id)
 );
-
--- Ownership is immutable: changing it would reinterpret existing jobs' access.
-CREATE TRIGGER oc_workspace_owner_immutable
-BEFORE UPDATE OF owner_workspace_id ON oc_workspaces
-WHEN NEW.owner_workspace_id IS NOT OLD.owner_workspace_id
-BEGIN
-    SELECT RAISE(ABORT, 'workspace ownership is immutable');
-END;
-
--- The service also checks this inside its authorized creation transaction.
-CREATE TRIGGER oc_workspace_owner_root
-BEFORE INSERT ON oc_workspaces
-WHEN NEW.owner_workspace_id IS NOT NULL AND EXISTS (
-    SELECT 1 FROM oc_workspaces
-    WHERE tenant_id = NEW.tenant_id AND id = NEW.owner_workspace_id
-      AND owner_workspace_id IS NOT NULL
-)
-BEGIN
-    SELECT RAISE(ABORT, 'workspace owner must be a root');
-END;
 
 CREATE TABLE oc_api_keys (
     id BLOB PRIMARY KEY,
@@ -49,11 +26,8 @@ CREATE TABLE oc_api_keys (
     workspace_id BLOB NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     role TEXT NOT NULL CHECK (role IN ('reader','writer','admin','workspace')),
-    default_access INTEGER NOT NULL DEFAULT 1 CHECK (default_access IN (0,1)),
-    allow_owned_workspaces INTEGER NOT NULL DEFAULT 0 CHECK (allow_owned_workspaces IN (0,1)),
     revoked INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
-    CHECK (role != 'workspace' OR (default_access = 1 AND allow_owned_workspaces = 0)),
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id)
 );
@@ -65,16 +39,6 @@ WHERE role = 'workspace' AND NOT revoked;
 CREATE TABLE oc_deployment_admin (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     token_hash TEXT NOT NULL
-);
-
-CREATE TABLE oc_workspace_key_grants (
-    tenant_id BLOB NOT NULL,
-    workspace_id BLOB NOT NULL,
-    logical_key_id BLOB NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('reader','writer','admin')),
-    PRIMARY KEY (tenant_id, logical_key_id, workspace_id),
-    FOREIGN KEY (tenant_id, workspace_id) REFERENCES oc_workspaces(tenant_id, id),
-    FOREIGN KEY (tenant_id, logical_key_id) REFERENCES oc_api_keys(tenant_id, id)
 );
 
 CREATE TABLE oc_files (

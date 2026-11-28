@@ -3,11 +3,11 @@ const { randomUUID } = require("node:crypto");
 const { once } = require("node:events");
 const { readFileSync } = require("node:fs");
 const { chromium } = require("playwright");
-const { fixtureSignIn, password } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 
 const fixture = JSON.parse(readFileSync(0, "utf8"));
-const { run, keys } = fixture;
-const owner = keys.writer.token, reviewer = keys.reviewer.token, reader = keys.reader.token;
+const { run, key: owner, admin: reviewer, outsider } = fixture;
+const reviews = `/admin/deployment/workspaces/${fixture.workspace}/skill-reviews`;
 const runPath = `/v1/runs/${run}`;
 const raw = "PRIVATE_SYNTHETIC_RESULT";
 const later = "PRIVATE_SYNTHETIC_LATER_EVENT";
@@ -95,7 +95,7 @@ async function checkConsole(page, prefix) {
     ["方法步骤", method], ["选定依据（审阅者可见）", firstBasis], ["私有备注（可选）", notes]]) {
     await byLabel(page, label).fill(value);
   }
-  const confirmation = byLabel(page, "我确认可向指定审阅者披露方法和选定依据");
+  const confirmation = byLabel(page, "我确认可向管理员披露方法和选定依据");
   await byButton(page, "保存候选").click();
   await call(owner, candidate, { status: 404 });
   await confirmation.check();
@@ -119,25 +119,21 @@ async function checkConsole(page, prefix) {
   await call(owner, `/v1/skill-candidates/${randomUUID()}`, {
     method: "PUT", data: { expected_revision: 0, candidate: { ...selection, disclosure_confirmed: false } }, status: 422,
   });
-  await call(reader, `/v1/skill-candidates/${randomUUID()}`, {
-    method: "PUT", data: { expected_revision: 0, candidate: selection }, status: 403,
-  });
   await call(owner, `/v1/skill-candidates/${randomUUID()}`, {
     method: "PUT", data: { expected_revision: 0, candidate: { ...selection, source: { ...selection.source,
       through_sequence: 3 } } }, status: 404,
   });
-  await call(reviewer, candidate, { status: 404 });
-  await call(reviewer, runPath, { status: 404 });
-  await call(fixture.admin, candidate, { status: 404 });
+  await call(outsider, candidate, { status: 404 });
+  await call(outsider, runPath, { status: 404 });
+  await call(reviewer, candidate, { status: 401 });
 
-  await byLabel(page, "审阅者凭据 ID").fill(keys.reviewer.key_id);
   const skill = await byLabel(page, "目标 Skill ID").inputValue();
   const first = await submitReview(page, candidate, 1, firstBasis);
-  const firstReview = `/v1/skill-reviews/${first.review_id}`;
+  const firstReview = `${reviews}/${first.review_id}`;
   await post(owner, `${candidate}/reviews/${randomUUID()}`, {
-    reviewer_id: keys.reviewer.key_id, revision: first.revision, target: first.target, basis: secondBasis,
+    revision: first.revision, target: first.target, basis: secondBasis,
   }, 409);
-  await call(reader, firstReview, { status: 404 });
+  await call(outsider, firstReview, { status: 401 });
   assert.equal((await call(reviewer, firstReview)).decision, "pending");
   await post(reviewer, `${firstReview}/decision`, { digest: "0".repeat(64), approve: true }, 409);
   await post(reviewer, `${firstReview}/decision`, { digest: first.digest, approve: true });
@@ -157,28 +153,28 @@ async function checkConsole(page, prefix) {
   await byText(page, "已保存修订 2，旧批准失效。").waitFor();
   await post(reviewer, `${firstReview}/publish`, { digest: first.digest }, 409);
 
-  await byLabel(page, "审阅者凭据 ID").fill(keys.reviewer.key_id);
   await byLabel(page, "目标 Skill ID").fill(skill);
   const second = await submitReview(page, candidate, 2, secondBasis);
   assert.ok(!JSON.stringify(second).includes(firstBasis));
-  const secondReview = `/v1/skill-reviews/${second.review_id}`;
+  const secondReview = `${reviews}/${second.review_id}`;
+  const ownerReview = `/v1/skill-reviews/${second.review_id}`;
   const latest = await call(owner, candidate);
   assert.deepEqual(latest.input.sources, [{ kind: "run", ...prefix }]);
   await post(reviewer, `${secondReview}/decision`, { digest: second.digest, approve: true });
-  await post(reader, `${secondReview}/publish`, { digest: second.digest }, 403);
+  await post(outsider, `${ownerReview}/publish`, { digest: second.digest }, 404);
   const packagePath = `/v1/skills/${skill}/versions/1/package`;
-  await call(reader, packagePath, { status: 404 });
-  const published = await post(owner, `${secondReview}/publish`, { digest: second.digest });
+  await call(owner, packagePath, { status: 404 });
+  const published = await post(owner, `${ownerReview}/publish`, { digest: second.digest });
   assert.deepEqual(await post(reviewer, `${secondReview}/publish`, { digest: second.digest }), published);
-  assert.deepEqual(await call(reader, packagePath), published);
+  assert.deepEqual(await call(owner, packagePath), published);
   assert.ok(published.files["SKILL.md"].includes(method));
   for (const hidden of [firstBasis, secondBasis, notes, raw, later, run, fixture.source]) {
     assert.ok(!JSON.stringify(published).includes(hidden), "Package included private review/source material");
   }
   await call(fixture.outsider, packagePath, { status: 404 });
 
-  await call(fixture.admin, `/v1/events/${fixture.source}`, { method: "DELETE" });
-  await call(reader, packagePath, { status: 404 });
+  await call(owner, `/v1/events/${fixture.source}`, { method: "DELETE" });
+  await call(owner, packagePath, { status: 404 });
   await post(reviewer, `${secondReview}/publish`, { digest: second.digest }, 404);
   await page.reload();
   await page.getByRole("alert").waitFor();
@@ -189,11 +185,9 @@ async function checkConsole(page, prefix) {
 async function main() {
   const prefix = await seed();
   const { createUiServer } = await import("../dist/server.js");
-  const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const ui = createUiServer({ apiBaseUrl: fixture.api, accounts: [{
-    username: "fixture-owner", passwordHash: await hashConsolePassword(password),
-    grants: [{ workspaceId: fixture.workspace, name: "Synthetic Skill", authorization: `Bearer ${owner}` }],
-  }] });
+  const ui = createFixtureUiServer(createUiServer, { apiBaseUrl: fixture.api, accounts: [
+    { username: "fixture-owner", workspaceId: fixture.workspace, key: owner },
+  ] });
   let browser;
   try {
     ui.listen(0, "127.0.0.1");

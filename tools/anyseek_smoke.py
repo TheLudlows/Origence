@@ -21,7 +21,7 @@ import urllib.request
 import uuid
 
 from mcp_smoke import Host, Mcp, isolated_env, require
-from native_fixture import workspace as seed_workspace
+from native_fixture import admin_env, workspace as seed_workspace
 
 
 def call(base, path, key, body=None):
@@ -52,10 +52,11 @@ def wait_ready(process, base, key):
 
 def mcp_contract(binary, env, directory):
     env = dict(env, OC_DATA_DIR=str(Path(directory) / "origence"), OC_ENABLE_MODELS="false")
-    workspace = seed_workspace(env, "AnySeek smoke")
+    workspace = seed_workspace(env, "AnySeek smoke", single_key=True)
+    administrator = admin_env(env)
     token = workspace["token"]
     env["OC_API_KEY"] = token
-    forbidden = [token, env["OC_ANYSEEK_API_KEY"]]
+    forbidden = [token, administrator, env["OC_ANYSEEK_API_KEY"]]
     with Host(binary, env, token, forbidden) as host:
         old = "AnySeek smoke policy requires token approval."
         asset = host.publish(old)
@@ -81,8 +82,7 @@ def mcp_contract(binary, env, directory):
         recorded = host.request(f"/v1/runs/{run_id}")["events"]
         require(recorded[0]["report"]["retrieval"] == prepared["bundle"]["retrieval"],
                 "real Run trace lost observations")
-        reader = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})
-        client = Mcp(host.base, reader["token"], forbidden + [reader["token"]])
+        client = Mcp(host.base, token, forbidden)
         client.initialize("2025-03-26", "2025-03-26")
         terms = {"query": "token approval"}
         http_hits = host.request("/v1/search", terms)["hits"]
@@ -102,7 +102,9 @@ def mcp_contract(binary, env, directory):
                 "updated corpus changed an existing preparation receipt")
         require(client.tool("context_search", {"query": "approval"})["hits"] == [], "superseded version remained searchable")
         require(client.tool("context_get", {"asset_id": asset, "version": 1})["content"] == old, "historical source changed")
-        host.request("/admin/keys/" + reader["key_id"], method="DELETE")
+        host.token = administrator
+        token = host.request(f"/admin/deployment/workspaces/{workspace['workspace_id']}/keys/rotate", {})["token"]
+        forbidden.append(token)
         client.unauthorized("tools/call", {"name": "context_search", "arguments": {"query": "token"}})
     # Reopen the same authorities and projection through its HTTP MCP endpoint.
     with Host(binary, env, token, forbidden) as host:

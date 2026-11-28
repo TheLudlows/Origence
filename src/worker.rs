@@ -199,14 +199,11 @@ async fn process_next_inner(service: &Service) -> Result<bool> {
             error,
             AppError::Database(_) | AppError::Internal(_) | AppError::RetryableUnavailable(_)
         );
-        if matches!(error, AppError::Forbidden)
-            && claim.kind == JobKind::Extract.as_str()
-            && claim.payload.get("archive_turn").is_some()
-        {
+        if matches!(error, AppError::Forbidden) {
             retry = service
                 .engine
                 .relational()
-                .archive_worker_key(claim.scope, claim.created_by)
+                .job_execution_key(claim.scope, claim.created_by, false)
                 .await
                 .is_ok_and(|current| current != claim.created_by);
         }
@@ -239,13 +236,16 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
             .await?;
         return Ok(());
     }
-    if matches!(payload, JobPayload::ArchiveExtract { .. }) {
-        claim.created_by = service
-            .engine
-            .relational()
-            .archive_worker_key(claim.scope, claim.created_by)
-            .await?;
-    }
+    // Resolve the worker's credential without updating the recorded submitter.
+    claim.created_by = service
+        .engine
+        .relational()
+        .job_execution_key(
+            claim.scope,
+            claim.created_by,
+            matches!(payload, JobPayload::ArchiveExtract { .. }),
+        )
+        .await?;
     let a = auth(claim);
     let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;

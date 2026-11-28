@@ -1,8 +1,10 @@
 import { api } from "./api.js";
-import { button, code, cursor, el, field, form, heading, input, message, paged, panel, short, submit } from "./components.js";
+import { button, code, cursor, el, field, form, heading, input, message, paged, panel, short, submit, type ViewContext } from "./components.js";
 import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
-import { keysPage } from "./keys.js";
+import { editor } from "./asset-editor.js";
+import { assetDetail } from "./assets.js";
+import { skillReviewPage } from "./skill-review.js";
 
 const prefix = "/admin/deployment/workspaces";
 type Workspace = { workspace_id: string; name: string };
@@ -11,13 +13,13 @@ type IssuedKey = { key_id: string; token: string };
 
 export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout: () => Promise<void>) {
   const workspaceList = el("div"), content = el("main", "content");
-  const title = "部署管理";
+  const title = "管理员";
   root.replaceChildren(el("div", "shell", el("aside", "sidebar",
     button("全局知识审核", reviews, "workspace-item"),
     button("新建工作区", createWorkspace, "workspace-item"),
     el("h2", "", "工作空间"), workspaceList, button("退出", logout, "sidebar-exit"),
   ), el("div", "workspace-main", content)));
-  content.append(heading(title, "选择工作空间，查看其会话、运行和已发布内容。"));
+  content.append(heading(title, "选择工作空间，查看会话和运行记录，管理记忆、知识及 Key。"));
   let selected: AbortController | undefined;
   let listRequest: AbortController | undefined;
 
@@ -89,11 +91,11 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const base = `${prefix}/${encodeURIComponent(workspace.workspace_id)}`;
     const view = el("div");
     let viewLifetime: AbortController | undefined;
-    const show = (headingText: string, render: (target: HTMLElement, viewSignal: AbortSignal) => void) => {
+    const show = (headingText: string | null, render: (target: HTMLElement, viewSignal: AbortSignal) => void) => {
       viewLifetime?.abort();
       viewLifetime = new AbortController();
       const viewSignal = AbortSignal.any([scope, viewLifetime.signal]);
-      const section = panel(headingText);
+      const section = headingText ? panel(headingText) : el("div");
       view.replaceChildren(section);
       render(section, viewSignal);
     };
@@ -118,28 +120,35 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const runs = () => show("运行记录", (target, viewSignal) =>
       paged<Run, string>(target, viewSignal, (after) => api.get<Page<Run>>(cursor(`${base}/runs`, after), viewSignal),
         (run) => button(`${short(run.run_id)} · ${run.status}`, () => openRun(run), "link")));
-    const openAsset = (asset: Asset) => show(asset.title, (target, viewSignal) => {
-      const path = `${base}/assets/${encodeURIComponent(asset.asset_id)}?version=${asset.version}`;
-      void api.get<Asset>(path, viewSignal).then((value) => {
-        if (!viewSignal.aborted) target.append(el("p", "plain-text", value.content ?? ""));
-      }).catch((error: unknown) => {
-        if (!viewSignal.aborted) message(target, error);
-      });
+    const label = (kind: Asset["kind"]) => kind === "memory" ? "记忆" : "知识";
+    const editContext = (kind: Asset["kind"], signal: AbortSignal): ViewContext => ({
+      role: "admin", signal,
+      navigate: (page, id, version) => {
+        if (page === "asset" && id) openAsset(kind, id, version);
+        else if (page === kind) assets(kind);
+      },
     });
-    const assets = (kind: "memory" | "knowledge", label: string) => show(label, (target, viewSignal) =>
+    const openAsset = (kind: Asset["kind"], assetId: string, version?: number) => show(null, (target, viewSignal) => {
+      void assetDetail(target, assetId, version, editContext(kind, viewSignal), { base, workspaceName: workspace.name })
+        .catch((error: unknown) => {
+          if (!viewSignal.aborted) {
+            const feedback = el("div");
+            message(feedback, error);
+            target.replaceChildren(button("返回列表", () => assets(kind)), feedback);
+          }
+        });
+    });
+    const assets = (kind: Asset["kind"]) => show(label(kind), (target, viewSignal) => {
+      target.append(button(`新建${label(kind)}`, () => editor(kind, editContext(kind, viewSignal), undefined, base)));
       paged<Asset, string>(target, viewSignal, (after) => api.get<Page<Asset>>(cursor(`${base}/assets?kind=${kind}`, after), viewSignal),
-        (asset) => button(asset.title, () => openAsset(asset), "link")));
+        (asset) => button(asset.title, () => openAsset(kind, asset.asset_id, asset.version), "link"));
+    });
     const keys = () => show("API Key", (target, viewSignal) => {
       const result = el("div");
       target.append(result);
-      void api.get<{ single_key: boolean; items: { key_id: string }[] }>(`${base}/keys?limit=1`, viewSignal).then((page) => {
+      void api.get<{ key: { key_id: string } | null }>(`${base}/keys`, viewSignal).then((page) => {
         if (viewSignal.aborted) return;
-        if (!page.single_key) {
-          target.replaceChildren();
-          keysPage(target, { role: "admin", signal: viewSignal, navigate() {} }, workspace, base);
-          return;
-        }
-        const state = el("p", "muted", page.items[0]?.key_id ?? "暂无有效 Key");
+        const state = el("p", "muted", page.key?.key_id ?? "暂无有效 Key");
         const rotate = button("轮换工作区 Key", async () => {
           if (rotate.disabled || !window.confirm("轮换后，旧 Key 将立即失效。继续？")) return;
           rotate.disabled = true;
@@ -164,7 +173,8 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     });
     content.replaceChildren(heading(workspace.name, workspace.workspace_id), el("nav", "actions",
       button("会话", sessions), button("运行", runs),
-      button("记忆", () => assets("memory", "记忆")), button("知识", () => assets("knowledge", "知识")),
+      button("记忆", () => assets("memory")), button("知识", () => assets("knowledge")),
+      button("Skill 审核", () => show("Skill 审核", (target, viewSignal) => skillReviewPage(target, `${base}/skill-reviews`, viewSignal))),
       button("API Key", keys)), view);
     sessions();
   }

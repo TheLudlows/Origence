@@ -910,7 +910,7 @@ pub async fn seed_workspace(
     name: &str,
     parent: Option<uuid::Uuid>,
 ) -> serde_json::Value {
-    fixture_workspace::seed_member_workspace(dir, name, parent)
+    fixture_workspace::seed_workspace(dir, name, parent, false)
         .await
         .unwrap()
 }

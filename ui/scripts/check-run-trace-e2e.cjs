@@ -3,7 +3,7 @@ const { readFileSync } = require("node:fs");
 const { once } = require("node:events");
 const { chromium } = require("playwright");
 
-const password = "synthetic-run-trace-password";
+const { createFixtureUiServer, password } = require("./browser-fixture-accounts.cjs");
 const fixture = JSON.parse(readFileSync(0, "utf8"));
 const runPath = `/v1/runs/${fixture.run}`;
 const assetHash = `#asset/${fixture.asset}?version=2`;
@@ -60,14 +60,9 @@ async function checkDenied(page, path, navigate) {
 
 async function main() {
   const { createUiServer } = await import("../dist/server.js");
-  const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const passwordHash = await hashConsolePassword(password);
   const accounts = [["fixture-owner", fixture.owner], ["fixture-reviewer", fixture.other]]
-    .map(([username, key]) => ({
-      username, passwordHash,
-      grants: [{ workspaceId: fixture.workspace, name: "Synthetic workspace", authorization: `Bearer ${key}` }],
-    }));
-  const server = createUiServer({ apiBaseUrl: fixture.api, accounts });
+    .map(([username, key]) => ({ username, key, workspaceId: fixture.workspace }));
+  const server = createFixtureUiServer(createUiServer, { apiBaseUrl: fixture.api, accounts });
   let browser;
   try {
     server.listen(0, "127.0.0.1");

@@ -42,14 +42,12 @@ enum Command {
     },
     /// Owner-only editable candidate, including private notes. Keep output private.
     Candidate { candidate_id: Uuid },
-    /// Submit only the revision-bound disclosed basis and generated package to one reviewer.
+    /// Submit the disclosed basis and package for review by the administrator.
     Submit {
         candidate_id: Uuid,
         review_id: Uuid,
         #[arg(long)]
         revision: u32,
-        #[arg(long)]
-        reviewer_id: Uuid,
         #[arg(long)]
         tenant_id: Uuid,
         #[arg(long)]
@@ -61,15 +59,6 @@ enum Command {
     },
     /// Read the selected packet and its exact digest before deciding.
     Review { review_id: Uuid },
-    /// Record an immutable decision. Does not publish.
-    Decide {
-        review_id: Uuid,
-        digest: String,
-        #[arg(long, conflicts_with = "reject", required_unless_present = "reject")]
-        approve: bool,
-        #[arg(long, conflicts_with = "approve", required_unless_present = "approve")]
-        reject: bool,
-    },
     /// Explicitly publish the exact approved packet, subject to live permission/source checks.
     Publish { review_id: Uuid, digest: String },
     /// Fetch an exact online package; source/Skill withdrawal denies subsequent fetches.
@@ -147,7 +136,6 @@ impl SkillCli {
                 candidate_id,
                 review_id,
                 revision,
-                reviewer_id,
                 tenant_id,
                 workspace_id,
                 skill_id,
@@ -170,7 +158,6 @@ impl SkillCli {
                 let basis = selected_basis(&candidate)?.ok_or_else(|| AppError::Invalid("candidate has no confirmed selected basis; save an explicit selection first".into()))?;
                 let input = SkillReviewInput {
                     revision,
-                    reviewer_id,
                     target: SkillTarget {
                         tenant_id,
                         workspace_id,
@@ -194,21 +181,6 @@ impl SkillCli {
                         Method::GET,
                         &format!("/v1/skill-reviews/{review_id}"),
                         None,
-                        None,
-                    )
-                    .await
-            }
-            Command::Decide {
-                review_id,
-                digest,
-                approve,
-                reject: _,
-            } => {
-                client
-                    .call(
-                        Method::POST,
-                        &format!("/v1/skill-reviews/{review_id}/decision"),
-                        Some(&json!({"digest":digest,"approve":approve})),
                         None,
                     )
                     .await

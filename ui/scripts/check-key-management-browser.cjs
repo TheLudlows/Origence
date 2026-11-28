@@ -1,5 +1,6 @@
 // Real Chromium and Origence, with disposable loopback workspaces and tokens.
 const assert = require("node:assert/strict");
+const { randomUUID, randomBytes } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { mkdtemp, rm } = require("node:fs/promises");
@@ -7,7 +8,6 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const { createInterface } = require("node:readline");
 const { chromium } = require("playwright");
-const { randomBytes } = require("node:crypto");
 const { seedWorkspace } = require("./browser-fixture-workspaces.cjs");
 
 const password = "console-key-fixture-password";
@@ -28,8 +28,8 @@ async function run(binary) {
   const secrets = [];
   let host, ui, browser, stderr = "";
   try {
-    const a = seedWorkspace(directory, "研发");
-    const b = seedWorkspace(directory, "运营", a.workspace_id);
+    const a = seedWorkspace(directory, "研发", undefined, true);
+    const b = seedWorkspace(directory, "运营", a.workspace_id, true);
     const deploymentKey = "oc_admin_" + randomBytes(32).toString("hex");
     env.OC_DEPLOYMENT_ADMIN_KEY = deploymentKey;
     secrets.push(a.token, b.token, deploymentKey);
@@ -47,116 +47,79 @@ async function run(binary) {
     const whoami = (token, workspace) => fetch(`${upstream}/v1/whoami`, {
       headers: { Authorization: `Bearer ${token}`, ...(workspace ? { "X-Origence-Workspace": workspace } : {}) },
     });
-    const reader = await fetch(`${upstream}/admin/keys`, {
-      method: "POST", headers: { Authorization: `Bearer ${a.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ workspace_id: a.workspace_id, role: "reader" }),
+    const call = (path, token, body) => fetch(`${upstream}${path}`, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${token}`, ...(body && { "Content-Type": "application/json" }) },
+      body: body && JSON.stringify(body),
     });
-    assert.equal(reader.status, 200);
-    assert.equal(reader.headers.get("Cache-Control"), "no-store");
-    const readerKey = await reader.json();
-    secrets.push(readerKey.token);
     const passwordHash = await hashConsolePassword(password);
-    const grant = (workspace, token) => ({ workspaceId: workspace.workspace_id, name: workspace.name, authorization: `Bearer ${token}` });
     ui = createUiServer({ apiBaseUrl: upstream, accounts: [
-      { username: "admin", passwordHash, grants: [grant({ ...a, name: "研发" }, a.token), grant({ ...b, name: "运营" }, b.token)] },
-      { username: "deployment", passwordHash, grants: [], deploymentAuthorization: `Bearer ${deploymentKey}` },
-      { username: "reader", passwordHash, grants: [grant({ ...a, name: "研发" }, readerKey.token)] },
+      { username: "deployment", passwordHash, deploymentAuthorization: `Bearer ${deploymentKey}` },
     ] });
     ui.listen(0, "127.0.0.1");
     await once(ui, "listening");
     const base = `http://127.0.0.1:${ui.address().port}`;
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const page = await browser.newPage({ viewport: { width: 375, height: 800 } });
-    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: base });
-    await page.goto(base + "/#keys");
-    await login(page, "admin");
+    await page.goto(base);
     const open = (name) => page.getByRole("dialog", { name, exact: true });
-    const workspace = (name) => page.getByRole("list", { name: "工作区" }).getByRole("button", { name, exact: true });
-    const row = (id) => page.getByRole("row").filter({ hasText: id });
+    await page.getByRole("button", { name: "用 Key 登录", exact: true }).click();
+    await page.getByLabel("访问 Key", { exact: true }).fill(a.token);
+    await page.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
     const nav = page.getByRole("navigation", { name: "主导航" });
-    const secret = page.getByLabel("新 API Key", { exact: true });
-    await page.getByText("当前控制台凭据", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "创建 API Key", exact: true }).click();
-    const create = open("创建 API Key");
-    assert.deepEqual(await create.getByLabel("权限").locator("option").evaluateAll(
-      (options) => options.map((option) => option.value)
-    ), ["reader", "writer", "admin"]);
-    await create.getByLabel("权限").selectOption("writer");
-    await create.getByRole("button", { name: "创建", exact: true }).click();
-    await open("保存新 API Key").waitFor();
-    const token = await secret.inputValue();
-    secrets.push(token);
-    const identity = await (await whoami(token)).json();
-    assert.equal(identity.role, "writer");
-    assert.equal(identity.workspace_id, a.workspace_id);
-    await open("保存新 API Key").getByRole("button", { name: "复制 API Key" }).click();
-    await open("保存新 API Key").getByText("已复制", { exact: true }).waitFor();
-    assert.ok(await page.evaluate(async (expected) => await navigator.clipboard.readText() === expected, token));
-    await page.evaluate(() => navigator.clipboard.writeText(""));
-    await open("保存新 API Key").getByRole("button", { name: "关闭" }).click();
-    await secret.waitFor({ state: "detached" });
-    await row(identity.id).waitFor();
-    await row(identity.id).getByRole("button", { name: "调整权限" }).click();
-    const role = open("调整工作区授权");
-    await role.getByLabel("权限").selectOption("reader");
-    await role.getByRole("button", { name: "保存授权" }).click();
-    await row(identity.id).getByRole("cell", { name: "reader", exact: true }).waitFor();
-    assert.equal((await (await whoami(token)).json()).role, "reader");
-    await row(identity.id).getByRole("button", { name: "移除本区授权" }).click();
-    await open("移除工作区授权").getByRole("button", { name: "确认移除" }).click();
-    await row(identity.id).getByRole("button", { name: "启用本区访问" }).click();
-    assert.equal((await whoami(token, a.workspace_id)).status, 403);
-    await role.getByRole("button", { name: "保存授权" }).click();
-    await row(identity.id).getByRole("cell", { name: "reader", exact: true }).waitFor();
-    await row(identity.id).getByRole("button", { name: "轮换" }).click();
-    await open("轮换 API Key").getByRole("button", { name: "确认轮换" }).click();
-    await open("保存新 API Key").waitFor();
-    const replacement = await secret.inputValue();
-    secrets.push(replacement);
-    assert.ok(replacement !== token, "rotation must emit a different token");
-    assert.equal((await whoami(token)).status, 401);
-    const newIdentity = await (await whoami(replacement)).json();
-    assert.equal(newIdentity.role, "reader");
-    await page.evaluate(() => { location.hash = "overview"; });
-    await secret.waitFor({ state: "detached" });
-    const browserData = await page.evaluate(() => JSON.stringify({ session: { ...sessionStorage }, local: { ...localStorage }, cookie: document.cookie }));
-    assert.ok(secrets.every((value) => !browserData.includes(value)));
-
-    await workspace("运营").click();
-    await nav.getByRole("button", { name: "API Key" }).click();
-    await page.getByRole("button", { name: "添加工作区授权" }).click();
-    const incoming = open("添加工作区授权");
-    await incoming.getByLabel("逻辑 Key ID").fill(identity.id.toUpperCase());
-    await incoming.getByLabel("权限").selectOption("reader");
-    await incoming.getByRole("button", { name: "保存授权" }).click();
-    await row(identity.id).getByRole("button", { name: "移除授权" }).waitFor();
-    assert.equal((await (await whoami(replacement, b.workspace_id)).json()).role, "reader");
-    await row(identity.id).getByRole("button", { name: "调整权限" }).click();
-    await role.getByLabel("权限").selectOption("writer");
-    await role.getByRole("button", { name: "保存授权" }).click();
-    await row(identity.id).getByRole("cell", { name: "writer", exact: true }).waitFor();
-    assert.equal((await (await whoami(replacement, b.workspace_id)).json()).role, "writer");
-    await row(identity.id).getByRole("button", { name: "移除授权" }).click();
-    await open("移除工作区授权").getByRole("button", { name: "确认移除" }).click();
-    await row(identity.id).waitFor({ state: "detached" });
-    assert.equal((await whoami(replacement, b.workspace_id)).status, 403);
-    await workspace("研发").click();
-    await nav.getByRole("button", { name: "API Key" }).click();
-    assert.match(await row(newIdentity.id).innerText(), new RegExp(identity.id));
-    await row(newIdentity.id).getByRole("button", { name: "撤销" }).click();
-    await open("撤销 API Key").getByRole("button", { name: "确认撤销" }).click();
-    await row(newIdentity.id).waitFor({ state: "detached" });
-    assert.equal((await whoami(replacement)).status, 401);
-
-    await page.getByRole("button", { name: "退出", exact: true }).click();
-    await login(page, "reader");
-    await page.getByText("只有工作区管理员可以管理 API Key。", { exact: true }).waitFor();
+    await nav.waitFor();
     assert.equal(await nav.getByRole("button", { name: "API Key" }).count(), 0);
+    const denied = await page.evaluate(async (workspace) => {
+      const { session } = await (await fetch("/api/console/session")).json();
+      const response = await fetch(`/api/admin/deployment/workspaces/${workspace}/keys/rotate`, {
+        method: "POST", headers: { "X-Origence-Session": session.binding },
+      });
+      return response.status;
+    }, b.workspace_id);
+    assert.equal(denied, 403);
+    const runId = randomUUID();
+    assert.equal((await call("/v1/runs", a.token, { run_id: runId, summary: "Private synthetic Run" })).status, 200);
+    assert.equal((await call(`/v1/runs/${runId}/events`, a.token, {
+      event_id: randomUUID(), reporter: "test", observed_at_ms: 0,
+      event: { kind: "result_reported", outcome: "unknown", summary: "Synthetic result" },
+    })).status, 200);
+    await nav.getByRole("button", { name: "调用链路", exact: true }).click();
+    await page.getByLabel("Run ID", { exact: true }).fill(runId);
+    await page.getByRole("button", { name: "查看链路", exact: true }).click();
+    await page.getByRole("button", { name: "选取依据并起草", exact: true }).click();
+    await page.getByLabel("Skill 名称", { exact: true }).fill("verify-synthetic-output");
+    await page.getByLabel("描述", { exact: true }).fill("Check an output");
+    await page.getByLabel("方法步骤", { exact: true }).fill("Verify the reported output independently.");
+    await page.getByLabel("选定依据（审阅者可见）", { exact: true }).fill("Browser fixture disclosed basis");
+    await page.getByLabel("私有备注（可选）", { exact: true }).fill("Browser fixture private notes");
+    await page.getByLabel("我确认可向管理员披露方法和选定依据").check();
+    await page.getByRole("button", { name: "保存候选", exact: true }).click();
+    await page.getByText("已保存修订 1。", { exact: true }).waitFor();
+    const skillId = await page.getByLabel("目标 Skill ID", { exact: true }).inputValue();
+    const packagePath = `/v1/skills/${skillId}/versions/1/package`;
+    assert.equal(await page.getByLabel("审阅者凭据 ID", { exact: true }).count(), 0);
+    await page.getByRole("button", { name: "提交审阅", exact: true }).click();
+    await page.getByText("修订 1 已提交审阅。", { exact: true }).waitFor();
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await login(page, "deployment");
-    await page.getByRole("heading", { name: "部署管理", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "管理员", exact: true }).waitFor();
     await page.getByRole("button", { name: "研发", exact: true }).waitFor();
     await page.getByRole("button", { name: "运营", exact: true }).waitFor();
+    await page.getByRole("button", { name: "运营", exact: true }).click();
+    await page.getByRole("button", { name: "Skill 审核", exact: true }).click();
+    await page.getByText("暂无记录", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "研发", exact: true }).click();
+    await page.getByRole("button", { name: "Skill 审核", exact: true }).click();
+    await page.getByRole("button", { name: /修订 1 · 待审核/ }).click();
+    await page.getByText("Browser fixture disclosed basis", { exact: true }).waitFor();
+    assert.equal(await page.getByText("Browser fixture private notes", { exact: true }).count(), 0);
+    await page.getByRole("button", { name: "批准", exact: true }).click();
+    await page.getByText("已批准", { exact: true }).waitFor();
+    assert.equal((await call(packagePath, a.token)).status, 404);
+    await page.getByRole("button", { name: "发布 Skill", exact: true }).click();
+    await page.getByText("已发布", { exact: true }).waitFor();
+    assert.equal((await call(packagePath, a.token)).status, 200);
+    assert.equal((await call(packagePath, b.token)).status, 404);
     await page.getByRole("button", { name: "新建工作区", exact: true }).click();
     await page.getByLabel("工作区名称", { exact: true }).fill("独立试点");
     await page.getByRole("button", { name: "创建工作区", exact: true }).click();
@@ -175,10 +138,51 @@ async function run(binary) {
     secrets.push(nextKey);
     assert.equal((await (await whoami(nextKey)).json()).workspace_id, firstIdentity.workspace_id);
     assert.equal((await whoami(firstKey)).status, 401);
+    assert.equal((await whoami(a.token)).status, 200);
+    assert.equal((await whoami(b.token)).status, 200);
+    await page.getByRole("button", { name: "知识", exact: true }).click();
+    await workspaceSecret.waitFor({ state: "detached" });
+    const browserData = await page.evaluate(() => JSON.stringify({ session: { ...sessionStorage }, local: { ...localStorage }, cookie: document.cookie }));
+    assert.ok(secrets.every((value) => !browserData.includes(value)));
+    await page.getByRole("button", { name: "新建知识", exact: true }).click();
+    const createKnowledge = open("新建知识");
+    await createKnowledge.getByLabel("文档标题").fill("浏览器测试知识");
+    await createKnowledge.getByLabel("正文", { exact: true }).fill("合成正文第一版");
+    await createKnowledge.getByRole("button", { name: "提交发布", exact: true }).click();
+    await createKnowledge.getByRole("button", { name: "查看内容 →", exact: true }).click();
+    await createKnowledge.waitFor({ state: "detached" });
+    await page.getByText("合成正文第一版", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "更新内容", exact: true }).click();
+    const updateKnowledge = open("更新知识");
+    await updateKnowledge.getByLabel("正文", { exact: true }).fill("合成正文第二版");
+    await updateKnowledge.getByRole("button", { name: "提交新版本", exact: true }).click();
+    await updateKnowledge.getByRole("button", { name: "查看内容 →", exact: true }).click();
+    await page.getByText("合成正文第二版", { exact: true }).waitFor();
+    await page.getByLabel("读取固定历史版本", { exact: true }).fill("1");
+    await page.getByRole("button", { name: "读取版本", exact: true }).click();
+    await page.getByText("合成正文第一版", { exact: true }).waitFor();
+    page.once("dialog", (dialog) => {
+      assert.equal(dialog.type(), "prompt");
+      void dialog.accept("恢复经核实的正文");
+    });
+    await page.getByRole("button", { name: "恢复此版本", exact: true }).click();
+    await page.getByRole("button", { name: "查看内容 →", exact: true }).click();
+    await page.getByText("v3", { exact: true }).waitFor();
+    await page.getByText("合成正文第一版", { exact: true }).waitFor();
+    await page.getByRole("tab", { name: "原始来源", exact: true }).click();
+    await page.getByRole("tabpanel", { name: "原始来源", exact: true }).getByText(/合成正文第一版/).waitFor();
+    page.once("dialog", (dialog) => {
+      assert.match(dialog.message(), /独立试点/);
+      void dialog.accept();
+    });
+    await page.getByRole("button", { name: "撤回来源", exact: true }).click();
+    await page.getByRole("heading", { name: "内容已阻断", exact: true }).waitFor();
+    await page.getByRole("button", { name: "返回列表", exact: true }).click();
+    await page.getByText("暂无记录", { exact: true }).waitFor();
     await page.getByRole("button", { name: "全局知识审核", exact: true }).click();
     await page.getByRole("heading", { name: "全局知识审核", exact: true }).waitFor();
     assert.ok(secrets.every((value) => !stderr.includes(value)));
-    console.log("PASS Chromium and Origence: scoped key management, deployment account sign-in, peer workspace creation and rotation, global knowledge review");
+    console.log("PASS Chromium and Origence: workspace creation and key rotation, scoped Skill review and publication, knowledge create/update/restore and source withdrawal, global review");
   } finally {
     await browser?.close();
     if (ui) { ui.closeAllConnections(); ui.close(); }

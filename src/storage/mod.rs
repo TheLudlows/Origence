@@ -65,9 +65,7 @@ pub use error::{StorageError, StorageResult};
 pub use ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};
 #[cfg(feature = "host")]
 pub use retrieval_store::RetrievalStore;
-pub use scope::{
-    AuthorizedScope, KeyCapabilities, Permission, Scope, SourceVersion, WorkspaceAccess,
-};
+pub use scope::{AuthorizedScope, Permission, Scope, SourceVersion, WorkspaceAccess};
 #[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStore;
 pub use traits::{

@@ -358,9 +358,18 @@ impl SqliteTx {
         through_sequence: i64,
     ) -> StorageResult<String> {
         self.check_permission(Permission::Read).await?;
-        let input:Option<String>=sqlite_db::query_scalar("SELECT input FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=? AND owner_key_id=?")
+        let row:Option<(String, Uuid)>=sqlite_db::query_as("SELECT input,session_id FROM oc_runs WHERE tenant_id=? AND workspace_id=? AND run_id=? AND owner_key_id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).bind(owner_key_id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        let input = input.ok_or(StorageError::NotFound)?;
+        let (input, session) = row.ok_or(StorageError::NotFound)?;
+        if self.private_session_for(owner_key_id).await? != Some(session) {
+            return Err(StorageError::NotFound);
+        }
+        // The administrator verifies a selected packet against the Run's own
+        // session proofs. Workspace credentials retain the ordinary source guard.
+        let bound_session =
+            super::deployment::live_admin_in_scope(&mut self.tx, self.principal_id, self.scope)
+                .await?
+                .then_some(session);
         if !(0..=10000).contains(&through_sequence) {
             return Err(StorageError::InvalidArgument("invalid run prefix"));
         }
@@ -370,7 +379,7 @@ impl SqliteTx {
             return Err(StorageError::NotFound);
         }
         for (_, _, references, payload) in &rows {
-            self.validate_prepared_payload(&decode::<Value>(payload)?)
+            self.validate_prepared_payload(&decode::<Value>(payload)?, bound_session)
                 .await?;
             for r in decode::<Vec<ArchivedEvidence>>(references)? {
                 self.require_run_reference_visible(&r).await?;
@@ -436,7 +445,7 @@ impl SqliteTx {
         for reference in decode::<Vec<ArchivedEvidence>>(&references)? {
             self.require_run_reference_visible(&reference).await?;
         }
-        self.validate_prepared_payload(&payload).await?;
+        self.validate_prepared_payload(&payload, None).await?;
         let bundle: crate::evidence::EvidenceBundle =
             serde_json::from_value(payload["replay_bundle"].clone()).map_err(|_| {
                 StorageError::Unavailable("invalid prepared context snapshot".into())
@@ -473,18 +482,23 @@ impl SqliteTx {
         self.require_archived_evidence_visible(reference).await
     }
 
-    async fn validate_prepared_payload(&mut self, payload: &Value) -> StorageResult<()> {
+    async fn validate_prepared_payload(
+        &mut self,
+        payload: &Value,
+        bound_session: Option<Uuid>,
+    ) -> StorageResult<()> {
         let citations = prepared_citations(payload)?;
         if self.unavailable_global_citations(&citations).await? != 0 {
             return Err(StorageError::NotFound);
         }
-        self.validate_prepared_citations(&citations, None).await
+        self.validate_prepared_citations(&citations, bound_session)
+            .await
     }
 
     async fn validate_prepared_citations(
         &mut self,
         citations: &[EvidenceProvenance],
-        admin_session: Option<Uuid>,
+        bound_session: Option<Uuid>,
     ) -> StorageResult<()> {
         for citation in citations {
             if let EvidenceProvenance::SessionTurn {
@@ -494,7 +508,7 @@ impl SqliteTx {
                 ..
             } = *citation
             {
-                let current_source = if let Some(run_session) = admin_session {
+                let current_source = if let Some(run_session) = bound_session {
                     if run_session != session_id {
                         return Err(StorageError::NotFound);
                     }
@@ -598,7 +612,7 @@ impl SqliteTx {
         if replay_digest != digest {
             payload["replay_bundle_digest"] = json!(replay_digest);
         }
-        self.validate_prepared_payload(&payload).await?;
+        self.validate_prepared_payload(&payload, None).await?;
         let payload = encode(&payload)?;
         let digest = hash(&payload);
         let last:i64=sqlite_db::query_scalar("SELECT COALESCE(MAX(sequence),0) FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=?").bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(run).fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;

@@ -1202,19 +1202,19 @@ mod tests {
 
     #[test]
     fn trigger_bodies_are_not_split_at_semicolons() {
-        let schema = include_str!("sqlite-schema.sql");
+        let schema = "CREATE TABLE fixture (value TEXT NOT NULL);
+            CREATE TRIGGER fixture_immutable BEFORE UPDATE ON fixture BEGIN
+                SELECT RAISE(ABORT, 'fixture value is immutable');
+            END;
+            CREATE TABLE following (id INTEGER PRIMARY KEY);";
         let objects = schema_objects(schema).unwrap();
         let trigger = objects
             .iter()
-            .find(|(name, _)| name == "oc_workspace_owner_immutable")
+            .find(|(name, _)| name == "fixture_immutable")
             .unwrap();
-        assert!(
-            trigger
-                .1
-                .contains(&"'workspace ownership is immutable'".into())
-        );
+        assert!(trigger.1.contains(&"'fixture value is immutable'".into()));
         assert_eq!(trigger.1.last().unwrap(), "end");
-        assert!(objects.iter().any(|(name, _)| name == "oc_artifact_ledger"));
+        assert!(objects.iter().any(|(name, _)| name == "following"));
     }
 
     #[tokio::test]

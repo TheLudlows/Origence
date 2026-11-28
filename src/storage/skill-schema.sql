@@ -11,7 +11,7 @@ CREATE TABLE oc_skill_revisions (
 CREATE TABLE oc_skill_reviews (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
     candidate_id BLOB NOT NULL, revision INTEGER NOT NULL,
-    reviewer_id BLOB NOT NULL, packet TEXT NOT NULL, digest TEXT NOT NULL,
+    packet TEXT NOT NULL, digest TEXT NOT NULL,
     decision TEXT NOT NULL DEFAULT 'pending' CHECK(decision IN ('pending','approved','rejected')),
     decided_at INTEGER, created_at INTEGER NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,id)

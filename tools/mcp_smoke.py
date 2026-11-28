@@ -556,7 +556,7 @@ def exercise_global_knowledge(host, mcp, admin):
         host.token = owner
 
 
-def exercise_private_archive(mcp, other_mcp, reader_mcp, turn):
+def exercise_private_archive(mcp, other_mcp, turn):
     writer_session = mcp.tool("context_session", {})["session_id"]
     other_session = other_mcp.tool("context_session", {})["session_id"]
     require(uuid.UUID(writer_session) != uuid.UUID(other_session),
@@ -570,7 +570,6 @@ def exercise_private_archive(mcp, other_mcp, reader_mcp, turn):
             "explicit archive could not be read by its owner")
     other_mcp.error("context_turn_get", {"turn_id": turn["turn_id"]},
                     -32600, "NOT_FOUND: resource not found")
-    reader_mcp.error("context_turn_archive", args, -32600, "FORBIDDEN: permission denied")
     mcp.invalid_arguments("context_turn_get", {"turn_id": turn["turn_id"], "session_id": other_session})
     return writer_session
 
@@ -651,11 +650,12 @@ def main():
     with fixture_directory("oc-mcp-smoke-") as directory:
         env = isolated_env(str(directory))
         forbidden = [str(directory), OLD_CONTENT, CONTENT, BAD_INPUT]
-        workspace = seed_workspace(env, "mcp-smoke")
+        workspace = seed_workspace(env, "mcp-smoke", single_key=True)
+        other = seed_workspace(env, "mcp-smoke isolated workspace", workspace["workspace_id"], single_key=True)
         token, workspace_id = workspace["token"], workspace["workspace_id"]
         admin = admin_env(env)
         bad_token = "oc_invalid_smoke_" + uuid.uuid4().hex
-        forbidden.extend([token, admin, bad_token])
+        forbidden.extend([token, other["token"], admin, bad_token])
         env["OC_API_KEY"] = token
         turn = {"turn_id": str(uuid.uuid4()), "question": "What changed here?",
                 "answer": "This archive is private.", "used_evidence": []}
@@ -664,30 +664,26 @@ def main():
         with Host(binary, env, token, forbidden, serve_args=serve_args) as host:
             asset_id = host.publish(OLD_CONTENT)
             require(host.publish(CONTENT) == asset_id, "fixture update created a second asset")
-            reader = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "reader"})
-            other_writer = host.request("/admin/keys", {"workspace_id": workspace_id, "role": "writer"})
-            forbidden.extend([reader["token"], other_writer["token"]])
-            protocols(host.base, reader["token"], forbidden)
+            protocols(host.base, token, forbidden)
             init = {"protocolVersion": "2025-11-25", "capabilities": {},
                     "clientInfo": {"name": "unauthenticated fixture", "version": "1"}}
             for rejected_token in (None, bad_token):
                 Mcp(host.base, rejected_token, forbidden).unauthorized("initialize", init)
-            mcp = Mcp(host.base, reader["token"], forbidden)
-            mcp.initialize("2025-11-25", "2025-11-25")
+            mcp = Mcp(host.base, token, forbidden)
+            other_mcp = Mcp(host.base, other["token"], forbidden)
+            for peer in (mcp, other_mcp):
+                peer.initialize("2025-11-25", "2025-11-25")
             exercise(mcp, asset_id, workspace_id)
             exercise_global_knowledge(host, mcp, admin)
-            mcp.error("context_bundle", {"query": QUERY, "routes": [{"route": "session"}]},
-                      -32600, "FORBIDDEN: permission denied")
-            writer_mcp = Mcp(host.base, token, forbidden)
-            other_mcp = Mcp(host.base, other_writer["token"], forbidden)
-            for peer in (writer_mcp, other_mcp):
-                peer.initialize("2025-11-25", "2025-11-25")
-            writer_session = exercise_private_archive(writer_mcp, other_mcp, mcp, turn)
-            revoked = host.request("/admin/keys/" + reader["key_id"], method="DELETE")
-            require(revoked.get("revoked") is True, "MCP reader key revocation failed")
+            writer_session = exercise_private_archive(mcp, other_mcp, turn)
+            host.token = admin
+            token = host.request(f"/admin/deployment/workspaces/{workspace_id}/keys/rotate", {})["token"]
+            forbidden.append(token)
             for name in TOOL_FIELDS:
                 mcp.unauthorized("tools/call", {"name": name, "arguments": {}})
             mcp.unauthorized("initialize", init)
+            require(other_mcp.tool("context_session", {})["workspace_id"] == other["workspace_id"],
+                    "Rotation affected another workspace")
             host.check_stderr()
         with Host(binary, env, token, forbidden, serve_args=serve_args) as host:
             mcp = Mcp(host.base, token, forbidden)

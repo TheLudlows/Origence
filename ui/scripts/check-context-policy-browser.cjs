@@ -9,7 +9,7 @@ const { join } = require("node:path");
 const { setTimeout: sleep } = require("node:timers/promises");
 const { chromium } = require("playwright");
 const { seedWorkspace } = require("./browser-fixture-workspaces.cjs");
-const { fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
+const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 
 const bin = process.env.ORIGENCE_BIN ?? join(__dirname, "../../target/debug/origence");
 const predicate = "travel.hotel_cap";
@@ -101,9 +101,9 @@ async function preview(page, origin, role, date) {
     const futureId = await retain(futureSource, "future");
 
     const { createUiServer } = await import("../dist/server.js");
-    const accounts = await fixtureAccounts(writer.workspace_id, [writer.token, reader.token]);
+    const accounts = fixtureAccounts(writer.workspace_id, [writer.token, reader.token]);
     [accounts[0].username, accounts[1].username] = ["fixture-writer", "fixture-reader"];
-    relay = createUiServer({ apiBaseUrl: apiOrigin, accounts });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: apiOrigin, accounts });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const writerPage = await browser.newPage();
@@ -129,7 +129,7 @@ async function preview(page, origin, role, date) {
 
     assert.ok((await api(`/v1/events/${futureId}`, null, "withdraw-future", "DELETE")).ok);
     await openOriginal.click();
-    await future.getByRole("status").filter({ hasText: "原始来源读取失败" }).waitFor();
+    await future.getByRole("status").filter({ hasText: "来源已删除或不可访问。" }).waitFor();
     assert.equal(await future.locator("mark").count(), 0);
     await verifyExcerpt.click();
     await readerCitation.getByRole("status").filter({ hasText: "无法核验引文" }).waitFor();

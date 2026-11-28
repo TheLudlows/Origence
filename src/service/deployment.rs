@@ -2,6 +2,26 @@
 use super::*;
 
 impl Service {
+    /// Resolve an administrator and the explicitly selected workspace for the
+    /// usual business transactions. Each transaction checks the live identity.
+    pub async fn authorize_deployment_workspace(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> Result<AuthContext> {
+        let auth = self
+            .engine
+            .relational()
+            .authorize_deployment_workspace(token, workspace)
+            .await?;
+        Ok(AuthContext {
+            id: auth.principal_id,
+            tenant_id: auth.scope.tenant_id,
+            workspace_id: auth.scope.workspace_id,
+            role: auth.role,
+        })
+    }
+
     pub async fn provision_deployment_workspace(
         &self,
         token: &str,
@@ -15,17 +35,25 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn administer_deployment_keys(
+    pub async fn deployment_workspace_key(&self, token: &str, workspace: Uuid) -> Result<Value> {
+        self.engine
+            .relational()
+            .deployment_workspace_key(token, workspace)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn rotate_deployment_workspace_key(
         &self,
         token: &str,
         workspace: Uuid,
-        operation: crate::storage::sqlite::DeploymentKeyOperation,
     ) -> Result<Value> {
-        self.engine
+        let key = self
+            .engine
             .relational()
-            .administer_deployment_keys(token, workspace, operation)
-            .await
-            .map_err(Into::into)
+            .rotate_deployment_workspace_key(token, workspace)
+            .await?;
+        Ok(json!(key))
     }
 
     pub async fn authenticate_deployment_admin(&self, token: &str) -> Result<()> {
@@ -137,5 +165,36 @@ impl Service {
     ) -> Result<Value> {
         self.read_asset(ReadAccess::Deployment { token, workspace }, asset, version)
             .await
+    }
+
+    pub async fn inspect_content_source(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        source: Uuid,
+    ) -> Result<Value> {
+        let auth = self
+            .authorize_deployment_workspace(token, workspace)
+            .await?;
+        let mut tx = self.read(&auth, Permission::Write).await?;
+        let event = tx.event_view(source).await?;
+        if event["kind"] == "session_turn" {
+            return Err(AppError::Forbidden);
+        }
+        tx.commit().await?;
+        Ok(event)
+    }
+
+    pub async fn retract_deployment_source(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        key: &str,
+        source: Uuid,
+    ) -> Result<Value> {
+        let auth = self
+            .authorize_deployment_workspace(token, workspace)
+            .await?;
+        self.delete_target(&auth, key, source, "event", false).await
     }
 }

@@ -36,7 +36,7 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 | [Trace / Run](contracts/runs.zh-CN.md) | 私有轨迹、上下文准备记录、客户端报告与采集缺口 |
 | [Run 外部核验](contracts/run-verification.zh-CN.md) | 对精确 Run 前缀的外部评估记录与撤回 |
 | [存储不变量](contracts/storage.md) | 身份占位、发布账本、原始证据与同版本恢复 |
-| [所属 workspace 与消息批次](API.md#通用所属-workspace-与消息批次库接口) | 通用库接口、派生授权和批次发布状态 |
+| [消息批次](API.md#消息批次-rust-库接口) | 通用库接口、幂等和批次发布状态 |
 
 [效果评估标准](Origence_%E6%95%88%E6%9E%9C%E8%AF%84%E4%BC%B0%E4%B8%8E%E5%AF%B9%E6%AF%94%E6%A0%87%E5%87%86.md)定义评估方法；可运行入口见
 [evals](../evals/README.md)。它们不代表企业试点或竞品对照已经完成。

@@ -29,19 +29,10 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
         .route("/v1/workspaces", get(workspaces))
-        .route("/v1/workspaces/owned", get(list_owned_workspaces))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
-        .route("/admin/keys", get(list_keys).post(issue_key))
+        .route("/admin/keys", post(issue_key))
         .route("/admin/keys/{id}", axum::routing::delete(revoke_key))
-        .route(
-            "/admin/workspace-key-grants",
-            get(list_workspace_key_grants),
-        )
-        .route(
-            "/admin/workspace-key-grants/{logical_key_id}",
-            axum::routing::put(set_workspace_key_grant).delete(revoke_workspace_key_grant),
-        )
         .route("/admin/memory-properties", post(register_memory_property))
         .route("/v1/memory-properties/{predicate}", get(memory_property))
         .route("/v1/memories", post(memory))
@@ -120,7 +111,7 @@ pub(super) fn token(h: &HeaderMap) -> Result<&str> {
         .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or(AppError::Unauthorized)
 }
-fn key(h: &HeaderMap) -> Result<&str> {
+pub(super) fn key(h: &HeaderMap) -> Result<&str> {
     h.get("Idempotency-Key")
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| AppError::Invalid("Idempotency-Key is required for mutations".into()))
@@ -146,22 +137,7 @@ pub(super) async fn auth(s: &Service, h: &HeaderMap) -> Result<AuthContext> {
             "X-Origence-Workspace must occur once".into(),
         ));
     }
-    let explicit = s.auth_workspace(token, workspace).await;
-    let (Some(target), Err(AppError::Forbidden)) = (workspace, &explicit) else {
-        return explicit;
-    };
-    // The console can additionally use a live root key with owned-workspace
-    // capability. The lookup checks that the target is its direct child.
-    let root = match s.auth(token).await {
-        Ok(root) => root,
-        Err(AppError::Invalid(_)) => return explicit,
-        Err(error) => return Err(error),
-    };
-    match s.lookup_owned_workspace(&root, target).await {
-        Ok(Some(scoped)) => Ok(scoped),
-        Ok(None) | Err(AppError::Conflict(_)) => Err(AppError::NotFound),
-        Err(error) => Err(error),
-    }
+    s.auth_workspace(token, workspace).await
 }
 async fn ready(State(s): State<Service>) -> impl IntoResponse {
     if s.ready().await {
@@ -451,9 +427,9 @@ async fn job_action(
     ))
 }
 #[derive(Deserialize)]
-struct Upload {
-    name: String,
-    format: String,
+pub(super) struct Upload {
+    pub(super) name: String,
+    pub(super) format: String,
 }
 async fn upload(
     State(s): State<Service>,
@@ -493,93 +469,9 @@ async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WorkspacePage {
-    after: Option<Uuid>,
-    limit: Option<u32>,
-}
-
-async fn list_owned_workspaces(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Query(page): Query<WorkspacePage>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.list_managed_workspaces(
-            &auth(&s, &h).await?,
-            page.after.unwrap_or_default(),
-            page.limit.unwrap_or(50),
-        )
-        .await?,
-    ))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WorkspaceGrantInput {
-    role: String,
-}
-
-async fn set_workspace_key_grant(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-    Json(input): Json<WorkspaceGrantInput>,
-) -> Result<Json<Value>> {
-    let a = auth(&s, &h).await?;
-    s.set_workspace_key_grant(&a, id, Some(&input.role)).await?;
-    Ok(Json(
-        json!({"workspace_id":a.workspace_id,"logical_key_id":id,"role":input.role}),
-    ))
-}
-
-async fn revoke_workspace_key_grant(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Value>> {
-    let a = auth(&s, &h).await?;
-    s.set_workspace_key_grant(&a, id, None).await?;
-    Ok(Json(
-        json!({"workspace_id":a.workspace_id,"logical_key_id":id,"revoked":true}),
-    ))
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct KeyInput {
     workspace_id: Uuid,
     role: String,
-    #[serde(default)]
-    allow_owned_workspaces: bool,
-}
-
-async fn list_keys(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Query(page): Query<WorkspacePage>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.list_issued_keys(
-            &auth(&s, &h).await?,
-            page.after.unwrap_or_default(),
-            page.limit.unwrap_or(50),
-        )
-        .await?,
-    ))
-}
-
-async fn list_workspace_key_grants(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Query(page): Query<WorkspacePage>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.list_workspace_key_grants(
-            &auth(&s, &h).await?,
-            page.after.unwrap_or_default(),
-            page.limit.unwrap_or(50),
-        )
-        .await?,
-    ))
 }
 
 async fn issue_key(
@@ -593,16 +485,7 @@ async fn issue_key(
     }
     Ok((
         [(header::CACHE_CONTROL, "no-store")],
-        Json(
-            s.issue_key_with_capabilities(
-                &a,
-                &input.role,
-                crate::storage::KeyCapabilities {
-                    allow_owned_workspaces: input.allow_owned_workspaces,
-                },
-            )
-            .await?,
-        ),
+        Json(s.issue_key(&a, &input.role).await?),
     ))
 }
 async fn revoke_key(

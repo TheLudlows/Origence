@@ -185,12 +185,6 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
         .create_workspace(adjacent.tenant_id, adjacent.workspace_id, "other workspace")
         .await
         .unwrap();
-    let adjacent_admin = store.issue_key(adjacent, "admin").await.unwrap();
-    let adjacent_auth = service.auth(&adjacent_admin.token).await.unwrap();
-    service
-        .set_workspace_key_grant(&adjacent_auth, owner.key_id, Some("writer"))
-        .await
-        .unwrap();
 
     let wire = Arc::new(Wire::default());
     let app = origence::api::router(service.clone())

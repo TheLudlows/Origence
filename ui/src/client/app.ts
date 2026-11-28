@@ -19,7 +19,6 @@ import {
   type ViewContext,
 } from "./components.js";
 import { contextPage } from "./context.js";
-import { keysPage } from "./keys.js";
 import { overview, runsPage } from "./runs.js";
 import type { ConsoleSession, ConsoleSessionResponse, ConsoleWorkspace } from "./types.js";
 
@@ -32,11 +31,9 @@ const pages = [
   ["global-knowledge", "全局知识"],
   ["contexts", "上下文工作台"],
   ["sessions", "会话"],
-  ["keys", "API Key"],
   ["agents", "Agent 连接"],
 ] as const;
 const sessionPath = "/console/session";
-const workspaceStorageKey = "origence.selectedWorkspace";
 let session: ConsoleSession | null = null;
 let user: ConsoleWorkspace | undefined;
 let route = new AbortController();
@@ -74,7 +71,6 @@ async function logout() {
   clearView();
   try {
     const result = await api.request<ConsoleSessionResponse>(sessionPath, { method: "DELETE" });
-    sessionStorage.removeItem(workspaceStorageKey);
     login(result.setupRequired);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
@@ -82,18 +78,6 @@ async function logout() {
     mount.replaceChildren(panel("暂时无法退出", detail, button("重试退出", logout)));
     message(detail, error);
   }
-}
-
-function chooseWorkspace(workspace: ConsoleWorkspace, changing = false) {
-  if (!session) return;
-  api.setWorkspace(workspace.workspace_id, session.binding);
-  sessionStorage.setItem(workspaceStorageKey, workspace.workspace_id);
-  user = workspace;
-  if (changing) {
-    route.abort();
-    mount.replaceChildren();
-    navigate("overview");
-  } else void render();
 }
 
 function showSession(result: ConsoleSessionResponse) {
@@ -110,11 +94,11 @@ function showSession(result: ConsoleSessionResponse) {
     deploymentConsole(mount, route.signal, logout);
     return;
   }
-  const previous = sessionStorage.getItem(workspaceStorageKey);
-  const selected = session.workspaces.find((workspace) => workspace.workspace_id === previous);
-  const workspace = selected ?? session.workspaces[0];
+  const workspace = session.workspaces[0];
   if (workspace) {
-    chooseWorkspace(workspace, !!previous && !selected);
+    api.setWorkspace(workspace.workspace_id, session.binding);
+    user = workspace;
+    void render();
     return;
   }
   mount.replaceChildren(panel(
@@ -147,7 +131,7 @@ function login(setupRequired?: true) {
   mount.replaceChildren(el("main", "login", el("div", "login-layout", brand(), card)));
 
   function showForm(useKey: boolean, focus = false) {
-    const secret = input(useKey ? "输入工作空间或部署管理员 Key" : "", "", "password");
+    const secret = input(useKey ? "输入工作空间 Key" : "", "", "password");
     secret.required = true;
     secret.autocomplete = useKey ? "off" : "current-password";
     const error = el("div");
@@ -164,7 +148,7 @@ function login(setupRequired?: true) {
       try {
         const key = useKey ? secret.value.trim() : "";
         const payload = useKey
-          ? key.startsWith("oc_admin_") ? { deployment_key: key } : { workspace_key: key }
+          ? { workspace_key: key }
           : { username: username.value.trim(), password: secret.value };
         const result = await api.post<ConsoleSessionResponse>(sessionPath, payload);
         secret.value = "";
@@ -224,7 +208,6 @@ async function render() {
   nav.setAttribute("aria-label", "主导航");
   for (const [key, label] of pages) {
     if (key === "sessions" && user.role === "reader") continue;
-    if (key === "keys" && user.role !== "admin") continue;
     if (key === "agents" && !canInspectAgents(user.role)) continue;
     const link = button(label, () => navigate(key), "nav-item");
     if (key === page) link.setAttribute("aria-current", "page");
@@ -248,13 +231,7 @@ async function render() {
   const workspaceList = el("ul", "workspace-list");
   workspaceList.setAttribute("role", "list");
   workspaceList.setAttribute("aria-labelledby", workspaceHeading.id);
-  for (const workspace of session.workspaces) {
-    const item = button(workspace.name, () => {
-      if (workspace.workspace_id !== user?.workspace_id) chooseWorkspace(workspace, true);
-    }, "workspace-item");
-    if (workspace.workspace_id === user.workspace_id) item.setAttribute("aria-current", "true");
-    workspaceList.append(el("li", "", item));
-  }
+  workspaceList.append(el("li", "", el("span", "", user.name)));
   const content = el("main", "content");
   const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
   const activeWorkspace = user;
@@ -318,7 +295,6 @@ async function render() {
       await globalKnowledgePage(content, ctx, id);
     else if (page === "contexts") contextPage(content, ctx);
     else if (page === "sessions") await sessionsPage(content, ctx);
-    else if (page === "keys") keysPage(content, ctx, activeWorkspace);
     else if (page === "agents") agentsPage(content, ctx, activeWorkspace.workspace_id);
     else if (page === "asset" && id)
       await assetDetail(content, id, version, ctx);

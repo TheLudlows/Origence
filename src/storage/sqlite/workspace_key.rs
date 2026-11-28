@@ -12,22 +12,35 @@ pub(super) async fn has_workspace_key(conn: &mut Connection, scope: Scope) -> St
     .map_err(sqlite_err)
 }
 
+/// Jobs submitted with a single workspace key finish under its current
+/// credential. Member keys keep their original authority during transition.
 #[cfg(feature = "host")]
-pub(super) async fn active_workspace_key(
+pub(super) async fn job_execution_key(
     conn: &mut Connection,
     scope: Scope,
     original: Uuid,
+    archive_extraction: bool,
 ) -> StorageResult<Uuid> {
-    let logical: Uuid = sqlite_db::query_scalar(
-        "SELECT logical_key_id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND role='workspace'",
+    let submitted: Option<(Uuid, bool)> = sqlite_db::query_as(
+        "SELECT logical_key_id,revoked FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND role='workspace'",
     )
     .bind(scope.tenant_id)
     .bind(scope.workspace_id)
     .bind(original)
     .fetch_optional(&mut *conn)
     .await
-    .map_err(sqlite_err)?
-    .ok_or(StorageError::Forbidden)?;
+    .map_err(sqlite_err)?;
+    let Some((logical, revoked)) = submitted else {
+        // Only a workspace credential can submit automatic archive extraction.
+        return if archive_extraction {
+            Err(StorageError::Forbidden)
+        } else {
+            Ok(original)
+        };
+    };
+    if !revoked {
+        return Ok(original);
+    }
     sqlite_db::query_scalar(
         "SELECT id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND logical_key_id=? AND role='workspace' AND NOT revoked",
     )
@@ -65,13 +78,14 @@ async fn insert_workspace_key(
 
 impl SqliteStore {
     #[cfg(feature = "host")]
-    pub(crate) async fn archive_worker_key(
+    pub(crate) async fn job_execution_key(
         &self,
         scope: Scope,
         creator: Uuid,
+        archive_extraction: bool,
     ) -> StorageResult<Uuid> {
         let mut tx = self.pool.begin().await.map_err(sqlite_err)?;
-        let current = active_workspace_key(&mut tx, scope, creator).await?;
+        let current = job_execution_key(&mut tx, scope, creator, archive_extraction).await?;
         tx.commit().await.map_err(sqlite_err)?;
         Ok(current)
     }

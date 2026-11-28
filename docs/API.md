@@ -6,7 +6,7 @@
 
 按需阅读：[库接口](#rust-库接口) · [接口表](#接口) · [任务与可见性](#任务与读取可见性) · [检索](#检索) · [显式身份](#显式记忆身份)。
 
-所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。业务请求可以附带 `X-Origence-Workspace: <UUID>`，由服务端校验该逻辑 key 在目标 workspace 的角色。省略时使用 key 签发时的默认 workspace。显式选择未获授权时返回 403，缺少可用默认项或请求头无效时返回 422。使用 `GET /v1/workspaces` 查询当前 key 的有效授权。
+所有 `/v1/*` 请求需 `Authorization: Bearer TOKEN`。每把 Key 属于签发时的工作区。可用 `X-Origence-Workspace: <UUID>` 核对工作区，传入其他工作区返回 403，格式错误返回 422。`GET /v1/workspaces` 返回该 Key 所属的工作区。
 
 原有命令式修改接口需 1–200 个 ASCII 字符的 `Idempotency-Key`；Run/Skill 使用下文的稳定 ID、修订号与摘要；幂等范围为 workspace + key 主体 + 操作/目标 + 幂等键。同请求复用结果，同键不同内容返回 409。幂等响应只包含标识/状态，删除后重放不会再次写入或返回已删正文。
 
@@ -14,9 +14,9 @@
 
 `GET /v1/session` 返回 `{workspace_id,key_id,session_id}`，均从认证推导，首次可创建会话绑定。已有
 `/v1/sessions/{session_id}/turns`、反馈和 Improve 接口只接受当前 key 的归档，
-并保留 writer 权限。同一个逻辑 key 在各 workspace 对应独立会话。发布后的 Learning 正文和条件可被同 workspace 召回，但归档、
+并保留 writer 权限。会话绑定当前工作区与逻辑 Key。发布后的 Learning 正文和条件可被同 workspace 召回，但归档、
 Improve 和支持记录的私有指针仅返回给原逻辑 key。管理员可以在凭据签发的 workspace 调用
-`POST /admin/keys/{id}/rotate`。轮换其他 key 还须在该 key 获授权的所有额外 workspace 拥有 admin 权限。新凭据延续原逻辑 key 和工作区授权，并撤销旧凭据；响应中的新 token
+`POST /admin/keys/{id}/rotate`。新凭据延续原逻辑 Key 和工作区归属，并撤销旧凭据；响应中的新 token
 应安全保存。独立签发的新 key 不能读取原归档。客户端通过
 [`context_session` / `context_turn_archive` / `context_turn_get`](CLIENTS.md) 使用同一边界。
 
@@ -40,10 +40,9 @@ Run 所有者可针对精确前缀通过 HTTP 登记外部记录号，或转录�
 | --- | --- |
 | `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`；0 创建，修改产生新修订。`candidate` 接受 `SkillCandidateInput` 或[选定经历输入](SKILL-CANDIDATE-CLI.zh-CN.md#使用-cli-选择依据并编辑)，后者须明确确认披露。 |
 | `GET /v1/skill-candidates/{id}` | 仅创建者读取候选、私有备注和精确依据 |
-| `POST /v1/skill-candidates/{id}/reviews/{review}` | 选定审阅者、修订、发布目标和脱敏依据 |
-| `GET /v1/skill-reviews/{review}` | 选定审阅包与决定，不扩展到原会话或 Run |
-| `POST /v1/skill-reviews/{review}/decision` | 指定审阅者使用 `{digest,approve}` 批准或驳回精确内容 |
-| `POST /v1/skill-reviews/{review}/publish` | writer 或 admin 按 `{digest}` 发布已批准的不可变版本 |
+| `POST /v1/skill-candidates/{id}/reviews/{review}` | 向管理员提交修订、目标和脱敏依据。 |
+| `GET /v1/skill-reviews/{review}` | 选定审阅包、决定和 `published` 状态 |
+| `POST /v1/skill-reviews/{review}/publish` | 候选所有者用 `{digest}` 发布获管理员批准的包。 |
 | `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
 | `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续包下载 |
 
@@ -93,7 +92,7 @@ HTTP Run 准备和 MCP `context_run_prepare` 在认证与归属检查后拒绝 `
 
 每个 workspace 的全文、向量和一跳图候选使用同一 AnySeek collection。适配器将 Origence 预分词
 编码为固定 SHA-256 词项并保留 AND 语义；向量由 Origence 生成，模型 profile 与维度
-由目录绑定固定。AnySeek 保存发布后的分块正文和摘要，SQLite 保存权限、发布版本、来源和内容哈希，Blob 保存原始文件。返回前，Origence 核验正文、权限、版本与来源。
+由目录绑定固定。AnySeek 保存发布后的分块正文和摘要，SQLite 保存权限、内容版本记录、来源和内容哈希，Blob 保存原始文件。返回前，Origence 核验正文、权限、版本与来源。
 
 发布在外部 IO 前保存原 operation epoch。每个不可变发布至多 64 个 chunk Record，编码后请求至多 2 MiB；
 图元数据附在其中一个确定的 chunk 上，不新增 Record。同一发布通过一个组提交，新业务版本使用独立组。网络结果未知时检查完整组，
@@ -152,14 +151,28 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `/admin/deployment/workspaces/{id}/sessions` | 所选工作空间的会话 ID |
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | 原始问答及引用，按会话序号分页 |
 | `/admin/deployment/workspaces/{id}/runs` 和 `/admin/deployment/workspaces/{id}/runs/{run}` | Run 列表与事件 |
+| `/admin/deployment/workspaces/{id}/skill-reviews` | 提交给管理员的 Skill 审核列表，按 ID 分页 |
+| `/admin/deployment/workspaces/{id}/skill-reviews/{review}` | 选定审阅包、决定和发布状态 |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
-| `/admin/deployment/workspaces/{id}/keys` | 当前空间签发的 Key 元数据，包含 `single_key` |
+| `/admin/deployment/workspaces/{id}/keys` | 当前工作区 Key 的 `key_id` 与 `created_at_ms`，放在 `key` 字段 |
 
 部署管理员用 `PUT /admin/deployment/workspaces/{id}` 提交 `{name}` 创建平级单 Key 工作空间，同一事务签发首把 Key。回执只在首次成功时返回 `key:{key_id,token}`，同 ID 同名重试返回 `created:false`。响应禁止缓存，未收到首次 Key 时可用 `POST /admin/deployment/workspaces/{id}/keys/rotate` 补发并撤销旧 Key，保留逻辑身份与会话。
 
-成员授权工作空间在 `/admin/deployment/workspaces/{id}` 下提供 `/keys` 和 `/workspace-key-grants`，方法与下面的工作区 Key 接口相同。部署管理员可以签发、轮换、撤销和调整授权。会话、Run 和内容查看仍为只读。
+管理员控制台在选定工作区后提供单 Key 轮换。旧成员凭据仍可通过[工作区 Key 接口](#身份与密钥管理)直接使用和维护。
 
-分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员读取原始问答无需持有工作空间 Key，普通工作空间 API 的写入授权继续独立执行。
+以下路径相对于 `/admin/deployment/workspaces/{id}`。目标工作区由路径中的 `{id}` 决定。内容和任务写入使用 `Idempotency-Key`，Skill 使用审核 ID 和包摘要重试。审计记录管理员凭据对应的内部标识，该标识在管理员凭据轮换时更新。
+
+| 方法与路径 | 操作 |
+| --- | --- |
+| `POST /memories/identified`、`POST /memories/semantic` | 创建或更新有明确身份的记忆 |
+| `POST /files`、`POST /knowledge` | 上传知识文件，创建知识或提交新版 |
+| `DELETE /assets/{asset}` | 删除本区的记忆或知识条目 |
+| `POST /assets/{asset}/restore` | 将来源仍有效的历史版本恢复为新版本，提交目标版本、预期当前版本和恢复原因 |
+| `GET /events/{event}`、`DELETE /events/{event}` | 查看和撤回内容来源。依赖被撤回来源的版本和引用停止读取，源记录保留 |
+| `GET /jobs/{job}`、`POST /jobs/{job}/{action}` | 查看本区任务，按现有任务规则执行 `retry` 或 `cancel` |
+| `POST /skill-reviews/{review}/decision`、`POST /skill-reviews/{review}/publish` | 用 `{digest,approve}` 记录决定，用 `{digest}` 单独发布获准包 |
+
+恢复和撤回复用工作区的版本与来源规则。语义记忆通过显式语义写入更新。分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员可在选定工作区读取 Run 和已保存的原始问答。原始问答沿用会话保留规则。普通工作区接口继续使用工作区 Key。
 
 ### 全局知识
 
@@ -184,7 +197,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 `X-Origence-Workspace` 解析。返回 `workspace_id`、`window_seconds`（300）、
 `capacity_reached` 和 `items`。每项有当前 `role` 及 `observation`，包含
 `credential_id`、`last_seen_at_ms`、`active_requests` 和 `client_kinds`。
-撤销凭据、轮换旧凭据或移除工作区授权后，旧观测不会出现在新列表中。
+撤销凭据、轮换旧凭据后，旧观测不会出现在新列表中。
 
 同一工作区中共用凭据的 MCP 客户端显示为一组。活跃请求数与最近活动来自
 服务处理的握手、ping、工具列表和已分派到工具的请求。握手声明映射为
@@ -283,25 +296,20 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | 方法和路径 | 语义 |
 | --- | --- |
 | `GET /v1/whoami` | 返回已认证凭据的 id、tenant_id、选中的 workspace_id 和有效 role |
-| `GET /v1/workspaces` | 列出本 key 当前显式获授权的工作区，每项含 workspace_id、name、role 和 is_default |
-| `GET /admin/keys` | 管理员列出所选工作区签发的未撤销凭据。只返回凭据 ID、逻辑 Key ID、权限、默认访问状态、子工作区能力和创建时间 |
+| `GET /v1/workspaces` | 返回本 Key 所属的工作区，每项含 workspace_id、name、role 和 is_default |
 | `POST /admin/keys` | admin 提交 `{workspace_id,role}`；workspace 必须是请求选中的 workspace，成为新 key 的默认项。返回 `{key_id,token}` |
-| `POST /admin/keys/{id}/rotate` | 签发工作区管理员轮换当前凭据 ID。按额外授权复核管理员权限，保留逻辑 Key ID，返回新 `{key_id,token}` |
-| `GET /admin/workspace-key-grants` | 管理员列出所选工作区的显式额外授权，每项含逻辑 Key ID、权限及凭据是否仍有效 |
-| `PUT /admin/workspace-key-grants/{logical_key_id}` | 目标 workspace 的 admin 通过 `{role}` 更新同租户逻辑 key 在此工作区的授权 |
-| `DELETE /admin/workspace-key-grants/{logical_key_id}` | 目标 workspace 的 admin 只撤销此工作区的授权 |
+| `POST /admin/keys/{id}/rotate` | 签发工作区管理员轮换当前凭据 ID。保留逻辑 Key ID，返回新 `{key_id,token}` |
 | `DELETE /admin/keys/{id}` | 签发 workspace 的 admin 撤销整个凭据，后续所有工作区调用都会拒绝 |
 
-工作区授权接口使用 `GET /v1/session` 返回的稳定 `key_id`。受信服务的所属 workspace 能力仍通过专用库接口使用。
-两个管理员列表支持 `limit`（1–100，默认 50）和 UUID `after`，返回 `{items,next_after}`。
-
-`/admin/keys` 同样要求 Bearer token，但不使用业务幂等缓存，避免保存明文 token。发行结果只返回一次，重复 POST 会创建不同 key；若响应丢失，需要离线管理核对数据库中的 key ID 并撤销多余凭据。离线 workspace/key 管理通过 `--offline` 和操作系统目录权限授权，宿主运行时拒绝打开。
+新工作区由管理员创建，Key 通过[管理员工作区接口](#部署管理员)查询和轮换。上表中 `/admin/keys` 的写入路径属于待移除的旧凭据接口。
 
 ## 版本冲突
 
 更新受理时记录内容条目当前版本，Worker 提交前复核；期间发生其他发布则任务为 superseded，不覆盖先发布的版本，应重新读取后再提交。发布计划/账本保证重放不重复发布。显式身份入口还支持[调用方版本前置条件](#显式写入的调用方版本前置条件)。
 
 ## 任务与读取可见性
+
+单 Key 工作区轮换凭据后，已受理的任务使用该工作区当前有效的 Key 执行或重试，保留任务原提交者。处理中遇到轮换导致的授权失败时，Worker 按任务重试规则重新领取。
 
 `pending → processing → completed/failed/superseded`；短暂存储故障为 `processing → retry_wait → processing`；取消为 `cancelled`。只有 completed + outcome=published 表示该次版本及索引已原子提交；capture 抽取的 result.memories 列出每条事实的 `asset_id` 和 `version`。之后仍可能被更新、删除或来源撤回。
 
@@ -388,25 +396,16 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
 
-## 既有所属工作区查询
-
-`GET /v1/workspaces/owned?limit=50&after=<UUID>` 为成员授权账号列出已存在且可访问的所属工作区，返回 `items` 和 `next_after`。每项包含 `workspace_id`、`name` 和有效 `role`。创建工作区由[部署管理员](#部署管理员)通过平级入口完成。
-
-## 通用所属 workspace 与消息批次库接口
+## 消息批次 Rust 库接口
 
 以下能力通过公开 Rust Service API 使用。
 
-- `issue_key_with_capabilities(auth, role, KeyCapabilities { allow_owned_workspaces: true })`：只有目标 root 的当前 admin 可签发；既有 `issue_key` 默认 false，admin 或同 root 新 key 不自动继承。直接绑定 child 的 key 不可获得继续派生能力。
-- `ensure_owned_workspace(auth, target_id, name)`：当前有显式能力的 root writer 及以上，在同一事务创建或检查一层所属 workspace。目标 tenant/owner 不匹配返回冲突；不改绑或随机改 ID。返回的 AuthContext 保留原 key，只提供 reader/writer 权限。
-- `lookup_owned_workspace(auth, target_id)`：先核对 root 的当前身份、能力与 read 权限；合法但未知目标返回 None，不创建。普通 key 的原权限不扩大。
 - `submit_message_batch(auth, key, MessageBatch, AcceptedMessageSpec)`：接收外部 batch_id、session_id 和有序 SourceMessage 数组，原子保存 source、asset、job 和 `oc_commands` 回执。每批固定使用 workspace 范围的 `message_batch.ingest` 幂等；普通命令仍使用 principal 范围。key 为 1–200 ASCII 字节，调用方不能自选去重域。
 - MessageBatch 的 batch_id/session_id 为 1–4096 UTF-8 字节、无 NUL；每批 1–256 条消息，正文合计不超过 1,000,000 UTF-8 字节，正文遵守通用文本校验。role 是 1–64 UTF-8 字节、非空白且无控制字符的原样标签，例如 system/tool；它不代表权限。timestamp 是可选有符号 i64 Unix 毫秒，缺省/null 不补当前时间，不据此重排消息。
 - `AcceptedMessageSpec::raw_only(profile)` 固定 `message-batch-ranges-v1`、parser_version=1、chunking_version=1、raw_only=true 及 embedding profile；接受事务把完整规格写入原 job payload。完整批次和规格参与请求 hash，重复键的内容/session/顺序/角色/时间/parser/profile/mode 变化返回冲突，不另建任务。恢复和显式 retry 使用原规格；运行模型 profile 不匹配时拒绝处理。
 - `IngestReceipt` 保存原 asset/source/job/目标版本和规格，不保存永久 success。`message_batch_status` / `wait_message_batch` 重新授权并观察这一批次，区分 Pending、Retrievable、Failed、CancelledOrSuperseded、Invisible。只有确切目标版本、有效来源、全部目标 profile 的原分块索引和账本 generation 一致，才是 Retrievable。
-- 同一 workspace 的合法新 key 可命中同一回执，但 job.created_by 不变。原 key 撤销/降权/关闭能力后，新 key 不接管原消息发布任务；Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。正常轮换先排空旧任务，再撤销旧 key。原有 cleanup 是特权回收任务：仍允许当前 admin 在原 creator 撤销后显式重试清理，但不转移 created_by，也不发布数据。
+- 同一 workspace 的合法新 key 可命中同一回执，`job.created_by` 保留原提交者。单 Key 轮换后的执行授权见[任务与读取可见性](#任务与读取可见性)。成员 Key 撤销或降权后，另一把 Key 无法接管原任务。Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。cleanup 是特权回收任务，当前 admin 可在原提交者撤销后显式重试清理。
 - 原文来源 JSON 保留完整 batch/session/role/timestamp 和输入顺序；分块定位包含 source_event_id、external_batch_id、message_index、source_path、消息内 UTF-8 byte_start/end 及 parser 规格。同 session 的多批次不会仅由局部 message_index 区分。原始批次不伪造 SessionTurn/Feedback。
-
-派生能力 root key 是受信服务端凭据，可以访问 root 下全部所属 workspace。调用方负责核对终端用户身份并选择获授权的目标 workspace。root key 仅供受信服务使用。
 
 ## 显式记忆语义
 

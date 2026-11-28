@@ -356,51 +356,18 @@ impl SqliteTx {
     }
 
     pub async fn issue_scoped_key(&mut self, role: &str) -> StorageResult<IssuedKey> {
-        self.issue_scoped_key_with_capabilities(role, KeyCapabilities::default())
-            .await
-    }
-    pub async fn issue_scoped_key_with_capabilities(
-        &mut self,
-        role: &str,
-        capabilities: KeyCapabilities,
-    ) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::WorkspaceAdmin).await?;
-        self.issue_scoped_key_inner(role, capabilities).await
-    }
-
-    pub(super) async fn issue_scoped_key_inner(
-        &mut self,
-        role: &str,
-        capabilities: KeyCapabilities,
-    ) -> StorageResult<IssuedKey> {
         if role == "workspace" || !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict("invalid role".into()));
         }
         if super::workspace_key::has_workspace_key(&mut self.tx, self.scope).await? {
             return Err(StorageError::Forbidden);
         }
-        if capabilities.allow_owned_workspaces {
-            let root: bool = sqlite_db::query_scalar(
-                "SELECT owner_workspace_id IS NULL FROM oc_workspaces WHERE tenant_id=? AND id=?",
-            )
-            .bind(self.scope.tenant_id)
-            .bind(self.scope.workspace_id)
-            .fetch_one(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
-            if !root {
-                return Err(StorageError::Forbidden);
-            }
-        }
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,allow_owned_workspaces,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(key_id).bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(capabilities.allow_owned_workspaces).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        self.audit(
-            "key.issue",
-            key_id,
-            json!({"role":role,"allow_owned_workspaces":capabilities.allow_owned_workspaces}),
-        )
-        .await?;
+        sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,?,?)").bind(key_id).bind(key_id).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.audit("key.issue", key_id, json!({"role":role}))
+            .await?;
         Ok(IssuedKey { key_id, token })
     }
     pub async fn revoke_scoped_key(&mut self, id: Uuid) -> StorageResult<()> {

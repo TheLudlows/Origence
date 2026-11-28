@@ -45,7 +45,6 @@ pub(super) fn routes() -> Router<Service> {
             post(submit_skill_review),
         )
         .route("/v1/skill-reviews/{id}", get(skill_review))
-        .route("/v1/skill-reviews/{id}/decision", post(decide_skill_review))
         .route("/v1/skill-reviews/{id}/publish", post(publish_skill))
         .route(
             "/v1/skills/{id}/versions/{version}/package",
@@ -258,27 +257,15 @@ async fn skill_review(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ReviewDecision {
-    digest: String,
-    approve: bool,
-}
-
-async fn decide_skill_review(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-    Json(i): Json<ReviewDecision>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.decide_skill_review(&auth(&s, &h).await?, id, &i.digest, i.approve)
-            .await?,
-    ))
+pub(super) struct ReviewDecision {
+    pub(super) digest: String,
+    pub(super) approve: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PublishInput {
-    digest: String,
+pub(super) struct PublishInput {
+    pub(super) digest: String,
 }
 
 async fn publish_skill(

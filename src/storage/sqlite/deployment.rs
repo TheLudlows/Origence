@@ -1,45 +1,58 @@
 //! Explicit deployment-wide inspection and moderation authority.
 use super::*;
 
-#[cfg(feature = "host")]
-#[derive(Debug)]
-pub enum DeploymentKeyOperation {
-    List {
-        after: Uuid,
-        limit: u32,
-    },
-    ListGrants {
-        after: Uuid,
-        limit: u32,
-    },
-    Issue {
-        role: String,
-    },
-    Rotate(Uuid),
-    RotateSingle,
-    Revoke(Uuid),
-    SetGrant {
-        logical_id: Uuid,
-        role: Option<String>,
-    },
+fn admin_actor_id(token_hash: &str) -> Uuid {
+    // Administrator receipts use a distinct UUID version from workspace keys.
+    // Derive the actor from the verified fingerprint without storing the token.
+    use sha2::{Digest, Sha256};
+    let mut digest = Sha256::new();
+    digest.update(b"origence:administrator:v1:");
+    digest.update(token_hash);
+    let mut bytes = [0; 16];
+    bytes.copy_from_slice(&digest.finalize()[..16]);
+    uuid::Builder::from_custom_bytes(bytes).into_uuid()
 }
 
-#[cfg(feature = "host")]
-pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<()> {
+pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<Uuid> {
     if token.len() != 73 || !token.starts_with("oc_admin_") {
         return Err(StorageError::Unauthorized);
     }
+    let fingerprint = hash(token);
     let exists: bool = sqlite_db::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1 AND token_hash=?)",
     )
-    .bind(hash(token))
+    .bind(&fingerprint)
     .fetch_one(conn)
     .await
     .map_err(sqlite_err)?;
     if !exists {
         return Err(StorageError::Unauthorized);
     }
-    Ok(())
+    Ok(admin_actor_id(&fingerprint))
+}
+
+pub(super) async fn live_admin_in_scope(
+    conn: &mut Connection,
+    actor: Uuid,
+    scope: Scope,
+) -> StorageResult<bool> {
+    if actor.get_version_num() != 8 {
+        return Ok(false);
+    }
+    let fingerprint: Option<String> =
+        sqlite_db::query_scalar("SELECT token_hash FROM oc_deployment_admin WHERE singleton=1")
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(sqlite_err)?;
+    if !fingerprint.is_some_and(|hash| admin_actor_id(&hash) == actor) {
+        return Ok(false);
+    }
+    sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_workspaces WHERE tenant_id=? AND id=?)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .fetch_one(conn)
+        .await
+        .map_err(sqlite_err)
 }
 
 impl SqliteStore {
@@ -87,7 +100,7 @@ impl SqliteStore {
     #[cfg(feature = "host")]
     pub(crate) async fn authenticate_deployment_admin(&self, token: &str) -> StorageResult<()> {
         let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
-        require_admin(&mut conn, token).await
+        require_admin(&mut conn, token).await.map(|_| ())
     }
 
     #[cfg(feature = "host")]
@@ -120,8 +133,7 @@ impl SqliteStore {
         Ok(json!({"items":items,"next_after":next_after}))
     }
 
-    /// Internal inspection context. The nil principal has no regular write or ownership rights.
-    #[cfg(feature = "host")]
+    /// Begin a read transaction for the selected workspace.
     pub(crate) async fn begin_deployment_inspection(
         &self,
         token: &str,
@@ -130,7 +142,22 @@ impl SqliteStore {
         self.deployment_workspace_tx(token, workspace, false).await
     }
 
-    #[cfg(feature = "host")]
+    /// Authenticate the instance administrator for the selected workspace.
+    pub async fn authorize_deployment_workspace(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> StorageResult<AuthorizedScope> {
+        let tx = self.begin_deployment_inspection(token, workspace).await?;
+        let auth = AuthorizedScope {
+            scope: tx.scope,
+            principal_id: tx.principal_id,
+            role: "admin".into(),
+        };
+        tx.commit().await?;
+        Ok(auth)
+    }
+
     async fn deployment_workspace_tx(
         &self,
         token: &str,
@@ -142,7 +169,7 @@ impl SqliteStore {
             .begin_with(if write { "BEGIN IMMEDIATE" } else { "BEGIN" })
             .await
             .map_err(sqlite_err)?;
-        require_admin(&mut tx, token).await?;
+        let actor = require_admin(&mut tx, token).await?;
         let tenant = sqlite_db::query_scalar("SELECT tenant_id FROM oc_workspaces WHERE id=?")
             .bind(workspace)
             .fetch_optional(&mut *tx)
@@ -155,7 +182,7 @@ impl SqliteStore {
                 tenant_id: tenant,
                 workspace_id: workspace,
             },
-            principal_id: Uuid::nil(),
+            principal_id: actor,
             required: Vec::new(),
             command: None,
         })
@@ -173,16 +200,15 @@ impl SqliteStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(sqlite_err)?;
-        require_admin(&mut tx, token).await?;
-        let previous: Option<(Uuid, String, Option<Uuid>)> = sqlite_db::query_as(
-            "SELECT tenant_id,name,owner_workspace_id FROM oc_workspaces WHERE id=?",
-        )
-        .bind(workspace)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(sqlite_err)?;
-        if let Some((tenant, saved_name, parent)) = previous {
-            if tenant != workspace || parent.is_some() || saved_name != name.trim() {
+        let actor = require_admin(&mut tx, token).await?;
+        let previous: Option<(Uuid, String)> =
+            sqlite_db::query_as("SELECT tenant_id,name FROM oc_workspaces WHERE id=?")
+                .bind(workspace)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(sqlite_err)?;
+        if let Some((tenant, saved_name)) = previous {
+            if tenant != workspace || saved_name != name.trim() {
                 return Err(StorageError::Conflict("workspace ID already exists".into()));
             }
             tx.commit().await.map_err(sqlite_err)?;
@@ -196,7 +222,7 @@ impl SqliteStore {
         let mut scoped = SqliteTx {
             tx,
             scope,
-            principal_id: Uuid::nil(),
+            principal_id: actor,
             required: Vec::new(),
             command: None,
         };
@@ -212,55 +238,39 @@ impl SqliteStore {
     }
 
     #[cfg(feature = "host")]
-    pub(crate) async fn administer_deployment_keys(
+    pub(crate) async fn deployment_workspace_key(
         &self,
         token: &str,
         workspace: Uuid,
-        operation: DeploymentKeyOperation,
     ) -> StorageResult<Value> {
-        use DeploymentKeyOperation::*;
-        let write = !matches!(operation, List { .. } | ListGrants { .. });
-        let mut tx = self
-            .deployment_workspace_tx(token, workspace, write)
-            .await?;
-        let scope = tx.scope;
-        let single_key = super::workspace_key::has_workspace_key(&mut tx.tx, scope).await?;
-        if single_key && !matches!(operation, List { .. } | RotateSingle) {
-            return Err(StorageError::Conflict(
-                "this workspace uses a single key".into(),
-            ));
-        }
-        let result = match operation {
-            List { after, limit } => {
-                let mut page = tx.list_issued_keys_inner(after, limit).await?;
-                page["single_key"] = json!(single_key);
-                page
-            }
-            ListGrants { after, limit } => tx.list_workspace_key_grants_inner(after, limit).await?,
-            Issue { role } => json!(
-                tx.issue_scoped_key_inner(&role, KeyCapabilities::default())
-                    .await?
-            ),
-            Rotate(id) => json!(tx.rotate_scoped_key_inner(id, false).await?),
-            RotateSingle => {
-                let key =
-                    super::workspace_key::rotate_single_workspace_key(&mut tx.tx, scope).await?;
-                tx.audit("deployment.workspace.key.rotate", key.key_id, json!({}))
-                    .await?;
-                json!(key)
-            }
-            Revoke(id) => {
-                tx.revoke_scoped_key_inner(id).await?;
-                json!({"key_id":id,"revoked":true})
-            }
-            SetGrant { logical_id, role } => {
-                tx.set_workspace_key_grant_inner(logical_id, role.as_deref())
-                    .await?;
-                json!({"workspace_id":workspace,"logical_key_id":logical_id,"role":role})
-            }
-        };
+        let mut tx = self.begin_deployment_inspection(token, workspace).await?;
+        let row: Option<(Uuid, i64)> = sqlite_db::query_as(
+            "SELECT id,created_at FROM oc_api_keys
+             WHERE tenant_id=? AND workspace_id=? AND role='workspace' AND NOT revoked",
+        )
+        .bind(tx.scope.tenant_id)
+        .bind(tx.scope.workspace_id)
+        .fetch_optional(&mut *tx.tx)
+        .await
+        .map_err(sqlite_err)?;
         tx.commit().await?;
-        Ok(result)
+        let key = row
+            .map(|(key_id, created_at_ms)| json!({"key_id":key_id,"created_at_ms":created_at_ms}));
+        Ok(json!({"key":key}))
+    }
+
+    #[cfg(feature = "host")]
+    pub(crate) async fn rotate_deployment_workspace_key(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> StorageResult<IssuedKey> {
+        let mut tx = self.deployment_workspace_tx(token, workspace, true).await?;
+        let key = super::workspace_key::rotate_single_workspace_key(&mut tx.tx, tx.scope).await?;
+        tx.audit("deployment.workspace.key.rotate", key.key_id, json!({}))
+            .await?;
+        tx.commit().await?;
+        Ok(key)
     }
 }
 

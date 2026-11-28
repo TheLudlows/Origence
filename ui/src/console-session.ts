@@ -1,48 +1,31 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
-  deploymentKeyPattern,
   passwordMatches,
   validPasswordInput,
   workspaceIdPattern,
   type ConsoleAccount,
-  type ConsoleGrant,
 } from "./console-accounts.js";
-import type { ConsoleSession, ConsoleSessionResponse, ConsoleWorkspace, User } from "./client/types.js";
+import type { ConsoleSessionResponse, User } from "./client/types.js";
 import { HttpError } from "./http-error.js";
 
 export const consoleSessionPath = "/api/console/session";
 const sessionSeconds = 8 * 60 * 60;
 const loginWindowMs = 10 * 60 * 1000;
 const cookieIdPattern = /^[A-Za-z0-9_-]{43}$/;
-const roleNames = new Set(["reader", "writer", "admin", "workspace"]);
 const workspaceKeyPattern = /^oc_[a-f0-9]{64}$/;
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-interface Session {
-  kind: "account" | "workspace" | "deployment";
-  deploymentAuthorization?: string;
+type Access =
+  | { kind: "deployment"; authorization: string }
+  | { kind: "workspace"; authorization: string; workspaceId: string };
+
+type Session = Access & {
   account: string;
   binding: string;
-  grants: readonly ConsoleGrant[];
-  routes: Map<string, WorkspaceRoute>;
   origin: string;
   expiresAt: number;
-}
-
-interface WorkspaceRoute {
-  authorization: string;
-  workspaceId: string;
-  principalId: string;
-  role: string;
-  scopedWorkspace?: string;
-}
-
-export interface OwnedWorkspace {
-  workspace_id: string;
-  name: string;
-  role: string;
-}
+};
 
 function cookieName(origin: URL) {
   const prefix = origin.protocol === "https:" ? "__Secure-" : "";
@@ -98,7 +81,6 @@ export class ConsoleSessions {
   constructor(
     accounts: readonly ConsoleAccount[],
     private readonly identify: (authorization: string, signal: AbortSignal) => Promise<User | null>,
-    private readonly listOwned: (authorization: string, signal: AbortSignal) => Promise<OwnedWorkspace[] | null>,
     private readonly identifyDeployment: (authorization: string, signal: AbortSignal) => Promise<boolean>,
   ) {
     this.accounts = new Map(accounts.map((account) => [account.username, account]));
@@ -131,17 +113,16 @@ export class ConsoleSessions {
   }
 
   deploymentAuthorization(req: IncomingMessage, origin: URL) {
-    const authorization = this.boundSession(req, origin).deploymentAuthorization;
-    if (!authorization) throw new HttpError(403, "此入口需要部署管理员 Key");
-    return authorization;
+    const session = this.boundSession(req, origin);
+    if (session.kind !== "deployment") throw new HttpError(403, "此入口需要管理员权限");
+    return session.authorization;
   }
 
   authorization(req: IncomingMessage, origin: URL) {
     const session = this.boundSession(req, origin);
-    const workspace = req.headers["x-origence-workspace"];
-    const grant = typeof workspace === "string" ? session.routes.get(workspace) : undefined;
-    if (!grant) throw new HttpError(403, "工作区未授权");
-    return grant;
+    if (session.kind !== "workspace" || session.workspaceId !== req.headers["x-origence-workspace"])
+      throw new HttpError(403, "工作区与凭据不匹配");
+    return session;
   }
 
   async handle(
@@ -154,19 +135,17 @@ export class ConsoleSessions {
     const existingId = cookieId(req, origin);
     if (req.method === "GET") {
       if (!current) return this.signedOut();
-      if (current.deploymentAuthorization && !await this.identifyDeployment(current.deploymentAuthorization, signal)) {
-        this.sessions.delete(existingId);
-        setCookie(res, origin, "", 0);
-        return this.signedOut();
-      }
-      const session = await this.profile(current, signal);
+      const user = current.kind === "workspace" ? await this.identify(current.authorization, signal) : null;
+      const valid = current.kind === "workspace"
+        ? user?.role === "workspace" && user.workspace_id === current.workspaceId
+        : await this.identifyDeployment(current.authorization, signal);
       if (this.current(req, origin) !== current) return this.signedOut();
-      if (current.kind === "workspace" && !session.workspaces.length) {
+      if (!valid) {
         this.sessions.delete(existingId);
         setCookie(res, origin, "", 0);
         return this.signedOut();
       }
-      return { mode: current.kind, session };
+      return this.response(current, user);
     }
     if (req.method !== "POST" && req.method !== "DELETE")
       throw new HttpError(405, "方法不被允许");
@@ -180,10 +159,9 @@ export class ConsoleSessions {
     if (origin.protocol !== "https:" && !loopbackHosts.has(origin.hostname))
       throw new HttpError(403, "远程控制台登录需要 HTTPS");
     const payload = await loginPayload(req);
-    const { session, identity } = Object.hasOwn(payload, "workspace_key") || Object.hasOwn(payload, "deployment_key")
+    const [session, identity] = Object.hasOwn(payload, "workspace_key")
       ? await this.keySession(payload, origin, signal)
-      : { session: await this.accountSession(payload, origin, signal), identity: undefined };
-    const profile = await this.profile(session, signal, identity);
+      : [await this.accountSession(payload, origin, signal), null] as const;
     signal.throwIfAborted();
     const now = Date.now();
     for (const [id, entry] of this.sessions) {
@@ -195,47 +173,23 @@ export class ConsoleSessions {
     const id = randomBytes(32).toString("base64url");
     this.sessions.set(id, session);
     setCookie(res, origin, id, sessionSeconds);
-    return { mode: session.kind, session: profile };
+    return this.response(session, identity);
   }
 
-  private async profile(session: Session, signal: AbortSignal, identity?: User): Promise<ConsoleSession> {
-    const workspaces: ConsoleWorkspace[] = [];
-    const routes = new Map<string, WorkspaceRoute>();
-    const directIds = new Set(session.grants.map((grant) => grant.workspaceId));
-    for (const grant of session.grants) {
-      const user = identity ?? await this.identify(grant.authorization, signal);
-      if (!user) continue;
-      if (session.kind === "workspace" && user.role !== "workspace") continue;
-      if (user.workspace_id !== grant.workspaceId)
-        throw new HttpError(502, "控制台配置的工作区与上游身份不匹配");
-      const workspace: ConsoleWorkspace = { ...user, name: grant.name };
-      const route: WorkspaceRoute = {
-        authorization: grant.authorization, workspaceId: user.workspace_id, principalId: user.id, role: user.role,
-      };
-      workspaces.push(workspace);
-      routes.set(user.workspace_id, route);
-      if (user.role !== "admin") continue;
-      const owned = await this.listOwned(grant.authorization, signal);
-      if (owned === null) continue;
-      for (const child of owned) {
-        if (directIds.has(child.workspace_id) || routes.has(child.workspace_id)) continue;
-        workspaces.push({ ...child, id: user.id });
-        routes.set(child.workspace_id, {
-          authorization: grant.authorization,
-          workspaceId: child.workspace_id,
-          principalId: user.id,
-          role: child.role,
-          scopedWorkspace: child.workspace_id,
-        });
-      }
-    }
-    session.routes = routes;
-    return { account: session.account, binding: session.binding, workspaces };
+  private response(session: Session, user: User | null): ConsoleSessionResponse {
+    return {
+      mode: session.kind,
+      session: {
+        account: session.account,
+        binding: session.binding,
+        workspaces: user ? [{ ...user, name: user.workspace_id }] : [],
+      },
+    };
   }
 
   private async accountSession(payload: Record<string, unknown>, origin: URL, signal: AbortSignal): Promise<Session> {
     const { username, password } = payload;
-    if (typeof username !== "string" || username.length > 64 || !validPasswordInput(password))
+    if (Object.keys(payload).length !== 2 || typeof username !== "string" || username.length > 64 || !validPasswordInput(password))
       throw new HttpError(400, "无效的登录请求");
     if (!this.accounts.size)
       throw new HttpError(503, "控制台尚未创建账号，请联系管理员");
@@ -256,63 +210,41 @@ export class ConsoleSessions {
         throw new HttpError(401, "账号或密码错误");
       this.attempts.delete(bucket);
       const authorization = account.deploymentAuthorization;
-      if (authorization) {
-        if (!await this.identifyDeployment(authorization, signal))
-          throw new HttpError(401, "部署管理员凭据已失效");
-        const session = this.session(account.username, [], origin, "deployment");
-        session.deploymentAuthorization = authorization;
-        return session;
-      }
-      return this.session(account.username, account.grants, origin);
+      if (!await this.identifyDeployment(authorization, signal))
+        throw new HttpError(401, "管理员凭据已失效");
+      return this.session(account.username, origin, { kind: "deployment", authorization });
     } finally {
       this.verifying--;
     }
   }
 
   private async keySession(payload: Record<string, unknown>, origin: URL, signal: AbortSignal) {
-    const deploying = Object.hasOwn(payload, "deployment_key");
-    const key = deploying ? payload.deployment_key : payload.workspace_key;
-    const pattern = deploying ? deploymentKeyPattern : workspaceKeyPattern;
-    if (Object.keys(payload).length !== 1 || typeof key !== "string" || !pattern.test(key))
+    const key = payload.workspace_key;
+    if (Object.keys(payload).length !== 1 || typeof key !== "string" || !workspaceKeyPattern.test(key))
       throw new HttpError(400, "无效的 Key 登录请求");
     if (this.verifying >= 4)
       throw new HttpError(429, "登录尝试过多，请稍后重试");
     this.verifying++;
     try {
       const authorization = `Bearer ${key}`;
-      if (deploying) {
-        if (!await this.identifyDeployment(authorization, signal)) throw new HttpError(401, "部署管理员 Key 无效");
-        const session = this.session("部署管理员", [], origin, "deployment");
-        session.deploymentAuthorization = authorization;
-        return { session, identity: undefined };
-      }
       const identity = await this.identify(authorization, signal);
       if (identity?.role !== "workspace") throw new HttpError(401, "工作空间 Key 无效");
-      const { workspace_id: workspaceId } = identity;
-      return {
-        session: this.session("工作空间 Key", [{ authorization, workspaceId, name: workspaceId }], origin, "workspace"),
-        identity,
-      };
+      const session = this.session("工作空间 Key", origin, { kind: "workspace", authorization, workspaceId: identity.workspace_id });
+      return [session, identity] as const;
     } finally {
       this.verifying--;
     }
   }
 
-  private session(account: string, grants: readonly ConsoleGrant[], origin: URL, kind: Session["kind"] = "account"): Session {
+  private session(account: string, origin: URL, access: Access): Session {
     return {
-      kind,
+      ...access,
       account,
       binding: randomBytes(16).toString("base64url"),
-      grants,
-      routes: new Map(),
       origin: origin.origin,
       expiresAt: Date.now() + sessionSeconds * 1000,
     };
   }
-}
-
-export function isConsoleRole(value: unknown): value is string {
-  return typeof value === "string" && roleNames.has(value);
 }
 
 export function checkedConsoleIdentity(value: unknown): User {
@@ -322,7 +254,7 @@ export function checkedConsoleIdentity(value: unknown): User {
   if (
     typeof id !== "string" || !workspaceIdPattern.test(id) ||
     typeof workspace_id !== "string" || !workspaceIdPattern.test(workspace_id) ||
-    !isConsoleRole(role)
+    typeof role !== "string"
   )
     throw new HttpError(502, "无法读取工作区身份");
   return {
