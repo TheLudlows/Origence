@@ -3,13 +3,16 @@ use super::*;
 use crate::{
     storage::{
         ChunkPayload, FullTextEntry, FullTextQuery, SourceVersion,
-        anyseek::operation_epoch,
+        anyseek::{MAX_GROUP, operation_epoch},
         sqlite::global_knowledge::{GlobalChunkRef, GlobalRelease, release_value},
     },
     types::SearchHit,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+
+// Rank bounded groups of approved IDs using one collection’s lexical scores.
+const GLOBAL_QUERY_BATCH: usize = 4 * MAX_GROUP;
 
 pub(crate) const GLOBAL_SCOPE: Scope = Scope {
     tenant_id: Uuid::nil(),
@@ -169,10 +172,11 @@ impl Service {
         headers: Vec<GlobalRelease>,
         terms: &str,
         limit: usize,
-    ) -> Result<Vec<(GlobalRelease, SearchHit)>> {
+    ) -> Result<Vec<(Arc<GlobalRelease>, SearchHit)>> {
         if terms.trim().is_empty() || limit == 0 {
             return Ok(Vec::new());
         }
+        let headers = headers.into_iter().map(Arc::new).collect::<Vec<_>>();
         let mut approved = HashMap::new();
         for (index, header) in headers.iter().enumerate() {
             for chunk in header.chunks()? {
@@ -196,20 +200,31 @@ impl Service {
                 )
             })
             .collect::<HashMap<_, _>>();
-        let hits = self
-            .engine
-            .vector()
-            .search_full_text_authorized(
-                FullTextQuery {
-                    scope: GLOBAL_SCOPE,
-                    artifact_ids: Some(sources.keys().copied().collect()),
-                    generation: 1,
-                    search_terms: terms.to_owned(),
-                    limit: limit.min(100),
-                },
-                &sources,
-            )
-            .await?;
+        let limit = limit.min(100);
+        let mut ids = sources.keys().copied().collect::<Vec<_>>();
+        ids.sort_unstable();
+        let mut hits = Vec::new();
+        for batch in ids.chunks(GLOBAL_QUERY_BATCH) {
+            hits.extend(
+                self.engine
+                    .vector()
+                    .search_full_text_authorized(
+                        FullTextQuery {
+                            scope: GLOBAL_SCOPE,
+                            artifact_ids: Some(batch.to_vec()),
+                            generation: 1,
+                            search_terms: terms.to_owned(),
+                            limit,
+                        },
+                        &sources,
+                    )
+                    .await?,
+            );
+            // All batches query the same index. Keep only the merged top-k,
+            // preserving native order among equal scores in each batch.
+            hits.sort_by(|left, right| right.score.total_cmp(&left.score));
+            hits.truncate(limit);
+        }
         let mut payloads = self
             .engine
             .vector()

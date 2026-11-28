@@ -242,7 +242,7 @@ impl Service {
         {
             let mut shared = Vec::new();
             for (header, hit) in global {
-                if tx.global_header(header.id).await? == header {
+                if tx.global_header(header.id).await? == *header {
                     shared.push(hit);
                 }
             }

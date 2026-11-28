@@ -282,10 +282,27 @@ async fn global_publication_is_pinned_moderated_and_recalled_across_tenants() {
     backend.mutate_payload(chunk, |payload| {
         *payload = native_chunk["document"]["payload"].clone()
     });
+    let gate = backend.pause_next_content_read();
+    let concurrent = tokio::spawn({
+        let service = service.clone();
+        let reader = reader.clone();
+        let search = search.clone();
+        async move { service.search(&reader, search).await }
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(10), gate.entered.notified())
+        .await
+        .expect("global body read did not start");
     service
         .review_global_knowledge(&admin, publication, GlobalKnowledgeDecision::Withdraw)
         .await
         .unwrap();
+    gate.resume.notify_one();
+    let returned = concurrent.await.unwrap().unwrap();
+    assert_eq!(returned["hits"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        id(&returned["hits"][0], "asset_id"),
+        id(&memory, "asset_id")
+    );
     assert!(matches!(
         service.global_knowledge(&reader, publication).await,
         Err(AppError::NotFound)
@@ -310,5 +327,91 @@ async fn global_publication_is_pinned_moderated_and_recalled_across_tenants() {
     );
     assert!(!trace.to_string().contains(text));
     host.abort();
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn global_search_merges_top_hits_across_candidate_batches() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let workspace = |name| async move {
+        let issued = store
+            .create_key_workspace(
+                Scope {
+                    tenant_id: Uuid::new_v4(),
+                    workspace_id: Uuid::new_v4(),
+                },
+                name,
+            )
+            .await
+            .unwrap();
+        issued.token
+    };
+    let writer = service.auth(&workspace("writer").await).await.unwrap();
+    let reader = service.auth(&workspace("reader").await).await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
+    let mut matching = Vec::new();
+    // Four 64-chunk versions and one more chunk cross the native query batch
+    // boundary. Both matching chunks compete for the same response limit.
+    for n in 0..5 {
+        let content = match n {
+            0 => {
+                let first = format!("{:<2400}", "reviewboundary filler filler filler");
+                first + &format!("{:<2400}", "filler").repeat(63)
+            }
+            4 => "reviewboundary reviewboundary".into(),
+            _ => format!("{:<2400}", "filler").repeat(64),
+        };
+        let accepted = service
+            .knowledge(
+                &writer,
+                &format!("batch-{n}"),
+                serde_json::from_value(json!({
+                    "title":format!("Bulk {n}"), "format":"text", "content":content
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(origence::worker::process_next(&service).await.unwrap());
+        let release = service
+            .submit_global_knowledge(&writer, id(&accepted, "asset_id"), 1)
+            .await
+            .unwrap();
+        let publication = id(&release, "publication_id");
+        service
+            .review_global_knowledge(&admin, publication, GlobalKnowledgeDecision::Approve)
+            .await
+            .unwrap();
+        if n == 0 || n == 4 {
+            matching.push(publication);
+        }
+    }
+    let peer = crate::support::fixture(dir.path(), None);
+    peer.clear_queries();
+    let hits = service
+        .search(
+            &reader,
+            serde_json::from_value(json!({
+                "query":"reviewboundary", "mode":"keyword", "limit":2
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits["hits"].as_array().unwrap().len(), 2);
+    assert_eq!(id(&hits["hits"][0], "asset_id"), matching[1]);
+    assert_eq!(id(&hits["hits"][1], "asset_id"), matching[0]);
+    let keyword_queries = peer
+        .queries()
+        .into_iter()
+        .filter(|query| {
+            query["query"]
+                .as_str()
+                .is_some_and(|terms| !terms.is_empty())
+        })
+        .count();
+    assert_eq!(keyword_queries, 2);
     service.engine.shutdown().await.unwrap();
 }

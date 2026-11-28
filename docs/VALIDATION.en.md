@@ -4,6 +4,13 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Global knowledge retrieval review
+
+Based on `14278f4`, using Linux and Rust 1.98.0. The HTTP protocol fixture verified
+merged ranking across batches containing 257 approved chunks. Withdrawal during a
+global body read left only the still-visible workspace hit in the final result. Existing
+lost-response, pinned version, source deletion, and withdrawn Run replay checks also passed.
+
 ## 2026-11-28 · Move global knowledge content to AnySeek
 
 Based on main `340aa50`, using Linux and Rust 1.98.0. Passed 232 library and 225 local

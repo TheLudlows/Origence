@@ -434,7 +434,7 @@ impl Service {
         let relations = live_relations;
         let mut visible_shared = Vec::new();
         for (header, hit) in shared {
-            if verify.global_header(header.id).await? == header {
+            if verify.global_header(header.id).await? == *header {
                 visible_shared.push(hit);
             }
         }
