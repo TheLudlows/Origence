@@ -639,14 +639,14 @@ impl SqliteTx {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) struct LearningRouteMembership {
     pub catalog_present: bool,
     pub is_learning: HashSet<Uuid>,
     pub published_sources: HashMap<Uuid, Uuid>,
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteTx {
     /// Classification only: no root activity, support closure or currentness.
     /// Catalog loss and retraction do not turn historical Learning into Knowledge.

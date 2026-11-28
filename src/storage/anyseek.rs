@@ -23,7 +23,7 @@ use uuid::Uuid;
 mod graph;
 #[cfg(feature = "embedded-anyseek")]
 mod local;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) mod private_archive;
 pub use graph::{GraphEdgeCandidate, GraphEntityCandidate, GraphPublication};
 
@@ -70,7 +70,7 @@ impl AnySeekConfig {
         }
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) fn binding_identity(&self) -> Value {
         let endpoint = match &self.endpoint {
             Endpoint::Http { base, .. } => base.as_str(),
@@ -201,9 +201,9 @@ pub struct AnySeekFullTextStore {
     embedding: Option<(String, usize)>,
     checked_config: OnceLock<crate::retrieval_diagnostics::CheckedConfig>,
     checked_scopes: tokio::sync::Mutex<HashSet<(Uuid, Uuid)>>,
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     native_archive_provisioning: tokio::sync::Mutex<()>,
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     binding: Option<super::retrieval_store::binding::Binding>,
 }
 
@@ -410,9 +410,9 @@ impl AnySeekFullTextStore {
             embedding,
             checked_config: OnceLock::new(),
             checked_scopes: tokio::sync::Mutex::new(HashSet::new()),
-            #[cfg(feature = "local-storage")]
+            #[cfg(feature = "host")]
             native_archive_provisioning: tokio::sync::Mutex::new(()),
-            #[cfg(feature = "local-storage")]
+            #[cfg(feature = "host")]
             binding: None,
         }
     }
@@ -446,7 +446,7 @@ impl AnySeekFullTextStore {
         }
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn shutdown(&self) -> StorageResult<()> {
         #[cfg(feature = "embedded-anyseek")]
         if let Backend::Embedded(engine) = &self.backend {
@@ -455,7 +455,7 @@ impl AnySeekFullTextStore {
         Ok(())
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) fn with_binding(
         mut self,
         binding: super::retrieval_store::binding::Binding,
@@ -811,7 +811,7 @@ impl AnySeekFullTextStore {
             max_candidates: info["limits"]["max_candidates"].as_u64().unwrap(),
             max_records: max_records.and_then(Value::as_u64),
         };
-        #[cfg(feature = "local-storage")]
+        #[cfg(feature = "host")]
         if let Some(binding) = &self.binding {
             binding
                 .check_analysis(&checked.analysis_fingerprint)
@@ -1103,7 +1103,7 @@ impl AnySeekFullTextStore {
         self.search_field(query, expected, "terms").await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn search_summaries(
         &self,
         query: FullTextQuery,
@@ -1438,7 +1438,7 @@ mod unified_tests {
                 .with_embedding(String::new(), 2)
                 .is_err()
         );
-        #[cfg(feature = "local-storage")]
+        #[cfg(feature = "host")]
         assert_eq!(
             AnySeekConfig::new("http://127.0.0.1:1", "test")
                 .unwrap()
@@ -1559,7 +1559,7 @@ mod unified_tests {
         store.shutdown().await.unwrap();
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     #[test]
     fn binding_pins_workspace_routing_and_allows_service_credential_rotation() {
         let make = |key| {

@@ -8,7 +8,7 @@ use std::{
 };
 use uuid::Uuid;
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 use std::future::Future;
 
 const LIMIT: usize = 128;
@@ -17,7 +17,7 @@ tokio::task_local! { static OBSERVATIONS: Arc<Mutex<Collector>>; static ROUTE: E
 struct Collector {
     requests: VecDeque<QueryObservation>,
     omitted: usize,
-    #[cfg(any(feature = "local-storage", test))]
+    #[cfg(any(feature = "host", test))]
     context_query_embedding: Option<ContextQueryEmbedding>,
 }
 
@@ -90,7 +90,7 @@ pub struct RetrievalDiagnostics {
     pub context_query_embedding: Option<ContextQueryEmbedding>,
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 pub(crate) async fn capture<F: Future>(future: F) -> (F::Output, RetrievalDiagnostics) {
     let collector = Arc::new(Mutex::new(Collector::default()));
     let result = OBSERVATIONS.scope(collector.clone(), future).await;
@@ -103,12 +103,12 @@ pub(crate) async fn capture<F: Future>(future: F) -> (F::Output, RetrievalDiagno
     (result, trace)
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 pub(crate) async fn in_route<F: Future>(route: EvidenceRoute, future: F) -> F::Output {
     ROUTE.scope(route, future).await
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) fn record_context_query_embedding(entry: ContextQueryEmbedding) {
     let _ = OBSERVATIONS.try_with(|collector| {
         let mut data = collector.lock().unwrap_or_else(|p| p.into_inner());

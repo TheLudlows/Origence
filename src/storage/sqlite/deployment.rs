@@ -1,7 +1,7 @@
 //! Explicit deployment-wide inspection and moderation authority.
 use super::*;
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[derive(Debug)]
 pub enum DeploymentKeyOperation {
     List {
@@ -24,7 +24,7 @@ pub enum DeploymentKeyOperation {
     },
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<()> {
     if token.len() != 73 || !token.starts_with("oc_admin_") {
         return Err(StorageError::Unauthorized);
@@ -61,13 +61,13 @@ impl SqliteStore {
         Ok(token)
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn authenticate_deployment_admin(&self, token: &str) -> StorageResult<()> {
         let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
         require_admin(&mut conn, token).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn deployment_workspaces(
         &self,
         token: &str,
@@ -98,7 +98,7 @@ impl SqliteStore {
     }
 
     /// Internal inspection context. The nil principal has no regular write or ownership rights.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn begin_deployment_inspection(
         &self,
         token: &str,
@@ -107,7 +107,7 @@ impl SqliteStore {
         self.deployment_workspace_tx(token, workspace, false).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     async fn deployment_workspace_tx(
         &self,
         token: &str,
@@ -138,7 +138,7 @@ impl SqliteStore {
         })
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn provision_deployment_workspace(
         &self,
         token: &str,
@@ -188,7 +188,7 @@ impl SqliteStore {
         Ok(json!({"workspace_id":workspace,"name":name.trim(),"created":true,"key":key}))
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn administer_deployment_keys(
         &self,
         token: &str,
@@ -241,7 +241,7 @@ impl SqliteStore {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteTx {
     pub(crate) async fn inspection_sessions(
         &mut self,

@@ -175,7 +175,7 @@ pub struct DirectExperienceInput {
 }
 
 impl DirectExperienceInput {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
         validate_conditions(&self.conditions)?;
         if self.statement.contains('\0')

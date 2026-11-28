@@ -12,7 +12,7 @@ pub(super) async fn has_workspace_key(conn: &mut Connection, scope: Scope) -> St
     .map_err(sqlite_err)
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn active_workspace_key(
     conn: &mut Connection,
     scope: Scope,
@@ -64,7 +64,7 @@ async fn insert_workspace_key(
 }
 
 impl SqliteStore {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn archive_worker_key(
         &self,
         scope: Scope,

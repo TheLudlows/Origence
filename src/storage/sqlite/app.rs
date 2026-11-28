@@ -36,7 +36,7 @@ impl SqliteStore {
         self.begin_scoped(auth, false, None).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn begin_read_checked(
         &self,
         auth: AuthorizedScope,
@@ -45,7 +45,7 @@ impl SqliteStore {
         self.begin_scoped(auth, false, Some(permission)).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn begin_checked(
         &self,
         auth: AuthorizedScope,
@@ -178,7 +178,7 @@ impl SqliteTx {
         sqlite_db::query("UPDATE oc_jobs SET payload=json_set(payload,'$.publication',json(?)),updated_at=? WHERE tenant_id=? AND workspace_id=? AND id=?").bind(plan.to_string()).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(job).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(())
     }
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn save_lexical_publication(
         &mut self,
         job: Uuid,
@@ -252,7 +252,7 @@ impl SqliteTx {
     }
 
     /// Exact publication checks across native generations, loaded as one batch.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn vector_hits_exact(
         &mut self,
         keys: &[read_model::NativeHitKey],
@@ -262,7 +262,7 @@ impl SqliteTx {
         self.vector_hits(keys, profile, Some(dimension)).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn vector_hit_exact(
         &mut self,
         id: Uuid,
@@ -286,7 +286,7 @@ impl SqliteTx {
         self.graph_evidence_matching(artifact, None).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn graph_evidence_for_publication(
         &mut self,
         artifact: Uuid,

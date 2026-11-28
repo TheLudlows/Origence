@@ -499,7 +499,7 @@ impl SqliteTx {
         Ok(())
     }
 
-    #[cfg(any(feature = "local-storage", test))]
+    #[cfg(any(feature = "host", test))]
     pub(crate) async fn prepare_native_archive_evidence(
         &mut self,
         references: &[UsedEvidence],

@@ -1,5 +1,5 @@
 //! Local HTTP protocol tests plus opt-in separately provisioned real AnySeek contracts.
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod support;
 use origence::storage::{
     FullTextEntry, FullTextQuery, Scope, SourceVersion,
@@ -54,7 +54,7 @@ fn query(
     )
 }
 
-#[cfg(all(feature = "local-storage", not(feature = "embedded-anyseek")))]
+#[cfg(all(feature = "host", not(feature = "embedded-anyseek")))]
 #[test]
 fn cloud_host_requires_remote_configuration_and_rejects_local_mode() {
     let dir = tempfile::tempdir().unwrap();
@@ -351,7 +351,7 @@ async fn real_anyseek_rejects_missing_duplicate_and_changed_publication_identiti
         .unwrap();
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod service_contract {
     use super::*;
     use origence::{models::Models, service::Service, storage::RelationalStore, worker};
@@ -608,7 +608,7 @@ mod service_contract {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[tokio::test]
 async fn combined_projection_replay_vector_scope_cleanup_and_unavailability() {
     use origence::storage::{VectorEntry, VectorQuery};
@@ -738,7 +738,7 @@ async fn combined_projection_replay_vector_scope_cleanup_and_unavailability() {
     assert!(store.search_vector(q, &expected).await.is_err());
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[tokio::test]
 async fn record_count_limit_is_optional_and_present_limits_are_positive() {
     use serde_json::json;
@@ -766,7 +766,7 @@ async fn record_count_limit_is_optional_and_present_limits_are_positive() {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[tokio::test]
 async fn unified_collection_configuration_is_exact_and_credentials_are_not_persisted() {
     let peer = support::AnySeekFixture::start(Some(2));
@@ -1086,7 +1086,7 @@ async fn real_anyseek_graph_string_sets_direction_scope_and_replacement() {
         .unwrap();
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 #[tokio::test]
 async fn workspace_collections_are_automatic_isolated_and_never_repaired_after_loss() {
     let peer = support::AnySeekFixture::start(None);

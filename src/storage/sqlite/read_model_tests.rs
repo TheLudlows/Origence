@@ -1,7 +1,7 @@
 //! Native-engine regression fixtures for the batched authority read model.
 //! These call internal reads directly; public authentication is covered by the
 //! existing domain tests. No previous multi-table SQL is used as an oracle.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 
 use super::read_model::{NativeHitKey, current_chunks, rows_by_ids};
 use super::*;
