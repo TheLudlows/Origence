@@ -4,7 +4,7 @@
 
 Claude Code and Codex use Origence's Streamable HTTP MCP endpoint for retrieval. Register it directly or install the plugin with an automatic Run hook.
 
-Use [`origence-setup`](INSTALLER.en.md#connect-an-agent) to configure the Claude Code or Codex plugin and Run hook environment. Use `origence-deploy` to run the API and console locally.
+Use [`origence-setup`](INSTALLER.en.md#connect-an-agent) to configure the Claude Code or Codex plugin, Run hook, and per-project private turn archiving. Use `origence-deploy` to run the API and console locally.
 
 ## Direct HTTP MCP
 
@@ -120,19 +120,20 @@ skipped if identity cannot be verified before enqueueing. Queues live in client 
 On Windows, directory permissions are managed by the client and user environment. With the local binary
 installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
 
-### Opt in to incremental private turn archiving
+### Incremental private turn archiving
 
-Archiving is off by default. With the local Origence plugin for Codex or Claude Code, set
-`OC_TURN_SYNC_PROJECT` to the absolute project root, use a writer `OC_API_KEY`, and reuse the
-MCP settings for `OC_SERVER_URL` and `OC_WORKSPACE_ID`. Git subdirectories are supported.
-This setting is independent of `OC_PLUGIN_RUN_HOOK`.
+`origence-setup install` sets `OC_TURN_SYNC_PROJECT` to the current project root by default with a writable key. For a
+manual plugin installation, set it to the absolute project root in the client's launch environment.
+Use a writable `OC_API_KEY` and reuse the MCP settings for `OC_SERVER_URL` and `OC_WORKSPACE_ID`.
+Git subdirectories are supported. This setting is independent of `OC_PLUGIN_RUN_HOOK`.
 
 The plugin removes private spans, the current Origence credential, and common credential forms locally.
-It stages paired main-session questions and answers observed after opt-in. Transcripts, tool arguments,
+It stages paired main-session questions and answers observed after archiving is enabled. Transcripts, tool arguments,
 and output stay out of collection. Initial staging requires a confirmed host identity. Later turns can
 queue offline and retry with the same project, server, workspace, and credential. Windows uses the plugin
-data directory’s inherited ACL. Unset the project variable and restart to pause delivery. Staged turns
-can retry if the same configuration is enabled again.
+data directory’s inherited ACL. To pause an installer-managed configuration, run `origence-setup install --no-turn-sync`
+with the original `--agent` selection, then restart the terminal and client. With a manual installation,
+clear the variable and restart the client. Staged turns can retry if the same configuration is enabled again.
 
 Use the private `session` route of `context_bundle` from the same workspace and logical key to recall
 synced turns. They carry unknown evidence use. See the [archive contract](API.en.md#session-archiving-and-idempotent-feedback).

@@ -29,6 +29,8 @@
 
 接入脚本核对 API、Key 所属工作区和 MCP 工具，再安装 Agent 插件，保存客户端与 Hook 所需的用户环境和 PATH。Codex 非默认地址通过官方 CLI 配置，已有冲突的 MCP 配置会报错并要求用户处理。接入脚本只使用已有 API，不需要控制台端口。
 
+使用可写 Key 接入时，`origence-setup` 默认启用[私有问答归档](CLIENTS.md#按项目开启私有问答增量归档)。首次安装默认选择所在 Git 项目的根目录，非 Git 项目使用当前目录。优先沿用安装器保存的选择，其次使用已有的 `OC_TURN_SYNC_PROJECT`。可用 `--turn-sync-project <目录>` 指定、更换或恢复归档项目，用 `--no-turn-sync` 暂停。两个客户端共用设置，只归档启用后所选项目的新问答。
+
 完成后重开终端和客户端，运行 `/mcp` 检查连接，调用 `context_session` 核对工作区。在 Codex 的 `/hooks` 按客户端提示审阅和信任已安装的 Hook。已有 Agent 共用一组地址和 Key，更换时用 `--force` 并选择所有已接入的 Agent。
 
 卸载可在重开的终端运行 `origence-setup uninstall`，或从仓库中运行对应平台的入口加 `uninstall`。它撤销本次添加的插件、MCP 覆盖和用户环境修改。服务与控制台由部署入口管理。

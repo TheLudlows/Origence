@@ -18,7 +18,7 @@ WINDOWS = os.name == "nt"
 PLUGIN = "origence@origence-tools"
 SETUP = REPO / "bin" / ("origence-setup.cmd" if WINDOWS else "origence-setup")
 DEPLOY = REPO / "bin" / ("origence-deploy.cmd" if WINDOWS else "origence-deploy")
-VARIABLES = ("OC_API_KEY", "OC_SERVER_URL", "OC_WORKSPACE_ID", "Path")
+VARIABLES = ("OC_API_KEY", "OC_SERVER_URL", "OC_WORKSPACE_ID", "OC_TURN_SYNC_PROJECT", "Path")
 
 
 def port(preferred=0):
@@ -97,7 +97,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
             for item in [json.loads(line)]}
 
 
-def check_hook(binary, project, env, credentials):
+def check_hook(binary, project, env, credentials, archive_project):
     ui = credentials["ui"]
     profile, session = request(ui + "/api/console/session", headers={"Origin": ui}, payload={
         "workspace_key": credentials["token"],
@@ -108,15 +108,17 @@ def check_hook(binary, project, env, credentials):
     headers = {"Cookie": session["Set-Cookie"].split(";")[0], "X-Origence-Workspace": workspace,
                "X-Origence-Session": profile["session"]["binding"]}
     before, _ = request(ui + "/api/v1/runs", headers=headers)
-    project.mkdir()
     hook_env = dict(env, OC_API_KEY=credentials["token"], OC_SERVER_URL=credentials["endpoint"],
-                    OC_WORKSPACE_ID=workspace, CLAUDE_PLUGIN_DATA=str(project.parent / "plugin data"))
-    child = subprocess.run([str(binary), "plugin-hook", "--client", "claude-code"], cwd=project,
-                           env=hook_env, input=json.dumps({"session_id": str(uuid.uuid4()),
-                           "prompt_id": str(uuid.uuid4()), "cwd": str(project),
-                           "hook_event_name": "UserPromptSubmit"}),
-                           text=True, capture_output=True, timeout=20, check=True)
-    sanitized(child.stdout + child.stderr, [credentials["token"], credentials["deployment_admin_key"]])
+                    OC_WORKSPACE_ID=workspace, OC_TURN_SYNC_PROJECT=archive_project,
+                    CLAUDE_PLUGIN_DATA=str(Path(archive_project).parent / "plugin data"))
+    event = {"session_id": str(uuid.uuid4()), "prompt_id": str(uuid.uuid4()), "cwd": str(project)}
+    question, answer = "Installer synthetic question", "Installer synthetic answer"
+    for payload in (dict(event, hook_event_name="UserPromptSubmit", prompt=question),
+                    dict(event, hook_event_name="Stop", last_assistant_message=answer)):
+        child = subprocess.run([str(binary), "plugin-hook", "--client", "claude-code"], cwd=project,
+                               env=hook_env, input=json.dumps(payload), text=True, capture_output=True,
+                               timeout=20, check=True)
+        sanitized(child.stdout + child.stderr, [credentials["token"], credentials["deployment_admin_key"]])
     after, _ = request(ui + "/api/v1/runs", headers=headers)
     ids = {entry["run_id"] for entry in before["items"]}
     added = [entry for entry in after["items"] if entry["run_id"] not in ids]
@@ -125,6 +127,13 @@ def check_hook(binary, project, env, credentials):
     require(any(item["report"].get("event", {}).get("component") == "claude_code_hook" for item in detail["events"]),
             "The UI response did not contain the recorded Claude hook event")
     request(ui + "/api/console/session", headers=dict(headers, Origin=ui), method="DELETE")
+    api = credentials["endpoint"]
+    auth = {"Authorization": "Bearer " + credentials["token"], "X-Origence-Workspace": workspace}
+    session, _ = request(api + "/v1/session", headers=auth)
+    page, _ = request(api + "/v1/sessions/" + session["session_id"] + "/turns", headers=auth)
+    require(len(page["turns"]) == 1, "Setup must archive a completed private turn inside the configured project")
+    turn = page["turns"][0]
+    require(turn["question"] == question and turn["answer"] == answer, "The archived turn did not round-trip")
     return added[0]["run_id"]
 
 
@@ -177,6 +186,11 @@ def smoke(binary, claude, codex, root, browser):
     setup_args = ["--agent", "both", "--origence", str(binary), "--claude", str(claude), "--codex", str(codex)]
     deploy_cmd = [str(DEPLOY)]
     setup_cmd = [str(SETUP)]
+    project = root / "Claude synthetic project"
+    (project / ".git").mkdir(parents=True)
+    (project / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    subdir = project / "subdir"
+    subdir.mkdir()
     forbidden = []
     try:
         alone = installer(env, ["uninstall"], [], entry=setup_cmd, cwd=root)
@@ -222,14 +236,17 @@ def smoke(binary, claude, codex, root, browser):
 
         # The console is already listening. Agent setup only needs the API.
         claude_only = installer(env_key, ["install", "--from-env", "--agent", "claude", "--origence", str(binary),
-                                         "--claude", str(claude)], forbidden, entry=setup_cmd, cwd=root)
+                                         "--claude", str(claude)], forbidden, entry=setup_cmd, cwd=subdir)
         require("claude-code" in claude_only and "codex" not in claude_only,
                 "Selecting Claude must leave Codex untouched")
+        require(claude_only["installation"]["detail"]["private_turn_sync"] is True,
+                "Setup with a writable Key must enable project archiving")
         split = json.loads(state.read_text(encoding="utf-8"))
         legacy = {"version": 1, **split["deploy"],
                   **{name: split["agent"][name] for name in ("claude", "shell", "registry") if name in split["agent"]}}
         state.write_text(json.dumps(legacy), encoding="utf-8")
-        connected = installer(env_key, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        connected = installer(env_key, ["install", "--from-env", *setup_args, "--turn-sync-project", str(subdir)],
+                              forbidden, entry=setup_cmd, cwd=root)
         require(connected["http-mcp"]["status"] == "success" and connected["claude-code"]["status"] == "success"
                 and connected["codex"]["status"] == "success" and "ui" not in connected and "api" not in connected,
                 "Agent setup must connect both clients without starting a UI or an API")
@@ -242,15 +259,19 @@ def smoke(binary, claude, codex, root, browser):
         actual = None
         if not WINDOWS:
             check = ('test "$OC_API_KEY" = "$EXPECTED" && test "$OC_WORKSPACE_ID" = "$WORKSPACE"'
-                     ' && origence --version && origence-setup --help && origence-deploy --help')
-            shell_env = dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"])
-            subprocess.run(["bash", "--noprofile", "--rcfile", str(rc), "-ic", check], cwd=root,
-                           env=shell_env, capture_output=True, timeout=15, check=True)
+                     ' && test "$OC_TURN_SYNC_PROJECT" = "$PROJECT"'
+                     ' && { origence --version && origence-setup --help && origence-deploy --help; } >/dev/null'
+                     ' && printf "%s" "$OC_TURN_SYNC_PROJECT"')
+            shell_env = dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"],
+                             PROJECT=str(project.resolve()))
+            inherited = subprocess.run(["bash", "--noprofile", "--rcfile", str(rc), "-ic", check], cwd=root,
+                                       env=shell_env, capture_output=True, timeout=15, check=True, encoding="utf-8").stdout
             if shutil.which("zsh"):
                 subprocess.run(["zsh", "-ic", check], cwd=root, env=shell_env,
                                capture_output=True, timeout=15, check=True)
         else:
             actual = fresh_windows_environment()
+            inherited = actual["OC_TURN_SYNC_PROJECT"]
             require(actual["OC_API_KEY"] == credentials["token"] and actual["OC_SERVER_URL"] == endpoint and
                     actual["OC_WORKSPACE_ID"] == credentials["workspace_id"], "New Windows sessions must receive settings")
             origence = shutil.which("origence.exe", path=actual["PATH"])
@@ -259,8 +280,9 @@ def smoke(binary, claude, codex, root, browser):
                 found = shutil.which(launch.name, path=actual["PATH"])
                 require(found is not None and Path(found).resolve() == launch, "Windows PATH is missing " + launch.name)
         scoped = dict(env_key, OC_WORKSPACE_ID=credentials["workspace_id"])
+        require(Path(inherited).resolve() == project.resolve(), "New sessions must inherit the setup project's Git root")
         check_codex(codex, root / "Codex synthetic project", scoped, credentials, forbidden)
-        hook_run = check_hook(binary, root / "Claude synthetic project", env, credentials)
+        hook_run = check_hook(binary, subdir, env, credentials, inherited)
         if browser:
             check_browser(env, credentials, hook_run, forbidden)
 
@@ -306,7 +328,10 @@ def smoke(binary, claude, codex, root, browser):
         forbidden.append(config["token"])
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
-        installer(new_env, ["install", "--from-env", *setup_args], forbidden, entry=setup_cmd, cwd=root)
+        paused = installer(new_env, ["install", "--from-env", *setup_args, "--no-turn-sync"],
+                           forbidden, entry=setup_cmd, cwd=root)
+        require(paused["installation"]["detail"]["private_turn_sync"] is False,
+                "Setup must allow private turn archiving to be paused")
         session, _ = request(endpoint + "/v1/session", headers={"Authorization": "Bearer " + config["token"]})
         agent = json.loads(state.read_text(encoding="utf-8"))["agent"]
         installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
@@ -341,7 +366,7 @@ def smoke(binary, claude, codex, root, browser):
         require(json.loads(inventory.stdout)["transport"]["url"] == user_url,
                 "Agent uninstall removed a user-edited Codex entry")
         require(not state.exists(), "Both uninstalls left an active journal")
-        print("PASS split deployment and Agent setup, native Claude/Codex MCP, Hook Run, backups, and isolated rollback")
+        print("PASS split deployment and Agent setup, native Claude/Codex MCP, Hook Run, private turn archive, backups, and isolated rollback")
     finally:
         if state.exists():
             installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)

@@ -4,7 +4,7 @@
 
 Claude Code 和 Codex 通过 Origence 服务端的 Streamable HTTP MCP 检索。可直接注册端点，或安装带自动 Run Hook 的插件。
 
-用 [`origence-setup`](INSTALLER.md#接入-agent) 配置 Claude Code 或 Codex 的插件和 Run Hook 环境。部署本地 API 和控制台使用 `origence-deploy`。
+用 [`origence-setup`](INSTALLER.md#接入-agent) 配置 Claude Code 或 Codex 的插件、Run Hook 和项目私有问答归档。部署本地 API 和控制台使用 `origence-deploy`。
 
 ## 直连 HTTP MCP
 
@@ -115,14 +115,15 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 
 ### 按项目开启私有问答增量归档
 
-功能默认关闭。用本机 Origence 插件运行 Codex 或 Claude Code 时，将 `OC_TURN_SYNC_PROJECT` 设为项目根目录的绝对路径，
-提供有写权限的 `OC_API_KEY`，并沿用 MCP 的 `OC_SERVER_URL` 和 `OC_WORKSPACE_ID`。
-Git 项目可从仓库子目录启动。此开关独立于 `OC_PLUGIN_RUN_HOOK`。
+`origence-setup install` 使用可写 Key 时，默认将 `OC_TURN_SYNC_PROJECT` 设为安装时所在项目的根目录。
+手工安装插件时，在客户端的启动环境将它设为项目根目录的绝对路径。提供可写的 `OC_API_KEY`，并沿用 MCP 的
+`OC_SERVER_URL` 和 `OC_WORKSPACE_ID`。Git 项目可从仓库子目录启动。此开关独立于 `OC_PLUGIN_RUN_HOOK`。
 
 插件在本地过滤 `<private>…</private>`、当前 Origence 凭据和常见凭据，只暂存启用后能配对的主会话问答。
 原始会话文件、工具参数和输出不采集。首次暂存前需在线确认归档归属，后续可离线排队。
 重试限于同一项目、服务、工作区和凭据，Windows 使用插件数据目录继承的 ACL。
-移除变量并重启可暂停，已暂存的问答会在同一配置再次启用时重试。
+安装器配置可用 `origence-setup install --no-turn-sync` 暂停（传入原来的 `--agent` 选项），然后重启终端和客户端。
+手工配置可清空变量并重启客户端。已暂存的问答会在同一配置再次启用时重试。
 
 同一工作区和逻辑 key 可通过 `context_bundle` 的私有 `session` 路线召回。
 同步问答的证据使用状态为 `unknown`。见[归档契约](API.md#会话归档与幂等反馈)。

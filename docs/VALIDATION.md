@@ -2,10 +2,18 @@
 
 **简体中文** · [English](VALIDATION.en.md)
 
-最近一次本地核验为 2026-11-27，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
+最近一次本地核验为 2026-11-28，代码基线按各节所列提交。2026-11-17 的验证记录已同步至 main
 [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a)。
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
+
+## 2026-11-28 · 安装器默认启用项目私有问答归档
+
+基于 main `493e38b` 的独立工作树，使用 Windows、Rust 1.98.0、Node 24.15.0 及新建测试库。
+`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets -- -D warnings`、
+`node --check tools/install.mjs`、安装冒烟脚本的 Python 语法解析及 `git diff --check` 通过。
+`cargo test --locked --test local -- turn_sync::` 通过 1 项，覆盖双客户端 Hook、空配置暂停、项目隔离和轮次重试。
+`cargo test --locked --test local -- client_hooks::` 通过 6 项。
 
 ## 2026-11-27 · 单 Key 部署与全局知识清理
 

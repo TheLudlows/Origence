@@ -30,7 +30,9 @@ pub async fn capture_plugin_event(
     origin: &str,
 ) -> anyhow::Result<PluginHookReport> {
     let run_enabled = std::env::var_os("OC_PLUGIN_RUN_HOOK").is_none_or(|value| value != "0");
-    let archive = std::env::var_os("OC_TURN_SYNC_PROJECT").map(PathBuf::from);
+    let archive = std::env::var_os("OC_TURN_SYNC_PROJECT")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
     if !run_enabled && archive.is_none() {
         return Ok(PluginHookReport::default());
     }
