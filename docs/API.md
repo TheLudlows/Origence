@@ -40,10 +40,10 @@ Run 所有者可针对精确前缀通过 HTTP 登记外部记录号，或转录�
 | --- | --- |
 | `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`；0 创建，修改产生新修订。`candidate` 接受 `SkillCandidateInput` 或[选定经历输入](SKILL-CANDIDATE-CLI.zh-CN.md#使用-cli-选择依据并编辑)，后者须明确确认披露。 |
 | `GET /v1/skill-candidates/{id}` | 仅创建者读取候选、私有备注和精确依据 |
-| `POST /v1/skill-candidates/{id}/reviews/{review}` | 选定审阅者、修订、发布目标和脱敏依据 |
-| `GET /v1/skill-reviews/{review}` | 选定审阅包与决定，不扩展到原会话或 Run |
-| `POST /v1/skill-reviews/{review}/decision` | 指定审阅者使用 `{digest,approve}` 批准或驳回精确内容 |
-| `POST /v1/skill-reviews/{review}/publish` | writer 或 admin 按 `{digest}` 发布已批准的不可变版本 |
+| `POST /v1/skill-candidates/{id}/reviews/{review}` | 提交修订、目标和脱敏依据。单 Key 工作区省略 `reviewer_id`，提交给管理员。旧工作区可指定审阅者凭据。 |
+| `GET /v1/skill-reviews/{review}` | 选定审阅包、决定和 `published` 状态 |
+| `POST /v1/skill-reviews/{review}/decision` | 旧工作区的指定审阅者使用 `{digest,approve}` 记录决定。管理员审核使用工作区管理接口。 |
+| `POST /v1/skill-reviews/{review}/publish` | 候选所有者用 `{digest}` 发布获管理员批准的包。旧工作区凭据审核沿用原发布权限。 |
 | `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
 | `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续在线导出 |
 
@@ -152,6 +152,8 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `/admin/deployment/workspaces/{id}/sessions` | 所选工作空间的会话 ID |
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | 原始问答及引用，按会话序号分页 |
 | `/admin/deployment/workspaces/{id}/runs` 和 `/admin/deployment/workspaces/{id}/runs/{run}` | Run 列表与事件 |
+| `/admin/deployment/workspaces/{id}/skill-reviews` | 提交给管理员的 Skill 审核列表，按 ID 分页 |
+| `/admin/deployment/workspaces/{id}/skill-reviews/{review}` | 选定审阅包、决定和发布状态 |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
 | `/admin/deployment/workspaces/{id}/keys` | 当前有效的单 Key 元数据，包含 `single_key`。旧凭据工作区返回 `single_key:false` 和空列表 |
 
@@ -159,7 +161,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 管理员控制台在选定工作区后提供单 Key 轮换。旧成员凭据仍可通过[工作区 Key 接口](#身份与密钥管理)直接使用和维护。
 
-以下路径相对于 `/admin/deployment/workspaces/{id}`。写入请求使用 `Idempotency-Key`，请求体与对应 `/v1` 接口一致。目标工作区由路径中的 `{id}` 决定。审计记录管理员凭据对应的内部标识，该标识在管理员凭据轮换时更新。
+以下路径相对于 `/admin/deployment/workspaces/{id}`。目标工作区由路径中的 `{id}` 决定。内容和任务写入使用 `Idempotency-Key`，Skill 使用审核 ID 和包摘要重试。审计记录管理员凭据对应的内部标识，该标识在管理员凭据轮换时更新。
 
 | 方法与路径 | 操作 |
 | --- | --- |
@@ -169,6 +171,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `POST /assets/{asset}/restore` | 将来源仍有效的历史版本恢复为新版本，提交目标版本、预期当前版本和恢复原因 |
 | `GET /events/{event}`、`DELETE /events/{event}` | 查看和撤回内容来源。依赖被撤回来源的版本和引用停止读取，源记录保留 |
 | `GET /jobs/{job}`、`POST /jobs/{job}/{action}` | 查看本区任务，按现有任务规则执行 `retry` 或 `cancel` |
+| `POST /skill-reviews/{review}/decision`、`POST /skill-reviews/{review}/publish` | 用 `{digest,approve}` 记录决定，用 `{digest}` 单独发布获准包 |
 
 恢复和撤回复用工作区的版本与来源规则。语义记忆通过显式语义写入更新。分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员可在选定工作区读取 Run 和已保存的原始问答。原始问答沿用会话保留规则。普通工作区接口继续使用工作区 Key。
 

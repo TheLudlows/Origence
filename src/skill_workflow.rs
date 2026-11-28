@@ -42,14 +42,15 @@ enum Command {
     },
     /// Owner-only editable candidate, including private notes. Keep output private.
     Candidate { candidate_id: Uuid },
-    /// Submit only the revision-bound disclosed basis and generated package to one reviewer.
+    /// Submit the disclosed basis and package for review by the administrator.
     Submit {
         candidate_id: Uuid,
         review_id: Uuid,
         #[arg(long)]
         revision: u32,
+        /// Explicit reviewer credential for a legacy multi-key workspace.
         #[arg(long)]
-        reviewer_id: Uuid,
+        reviewer_id: Option<Uuid>,
         #[arg(long)]
         tenant_id: Uuid,
         #[arg(long)]
@@ -170,7 +171,7 @@ impl SkillCli {
                 let basis = selected_basis(&candidate)?.ok_or_else(|| AppError::Invalid("candidate has no confirmed selected basis; save an explicit selection first".into()))?;
                 let input = SkillReviewInput {
                     revision,
-                    reviewer_id,
+                    reviewer_id: reviewer_id.unwrap_or_default(),
                     target: SkillTarget {
                         tenant_id,
                         workspace_id,

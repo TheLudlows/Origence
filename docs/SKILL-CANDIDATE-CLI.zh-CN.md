@@ -2,13 +2,13 @@
 
 **简体中文** · [English](SKILL-CANDIDATE-CLI.md)
 
-`origence-skill` 是基于现有认证 HTTP API 的独立入口。起草不会打开数据库、调用模型、挖掘 Run、提交审阅或自动发布。宿主须已运行。使用所有者的 `OC_API_KEY` 与 `OC_SERVER_URL`，需要指定审阅者时显式切换凭据。选定输入文件和仅所有者可读的候选输出须保密。默认二进制仍为常规 `origence` CLI。
+`origence-skill` 是基于认证 HTTP API 的独立入口。起草不会打开数据库、调用模型、挖掘 Run、提交审阅或自动发布。宿主须已运行。使用所有者的 `OC_API_KEY` 与 `OC_SERVER_URL`。选定输入文件和仅所有者可读的候选输出须保密。默认二进制仍为常规 `origence` CLI。
 
 ## 在控制台从 Run 起草
 
-使用 Run 所有者的工作区账号登录，打开「调用链路」中的 Run。选中截止事件，再点「选取依据并起草」。草稿绑定截至该事件的固定前缀。可切换时间线事件继续核对，草稿的前缀保持固定。
+使用 Run 所属工作区的 Key 登录，打开「调用链路」中的 Run。选中截止事件，再点「选取依据并起草」。草稿绑定截至该事件的固定前缀。可切换时间线事件继续核对，草稿的前缀保持固定。
 
-手填方法和可披露的脱敏依据，确认两者的披露权限后保存。记录候选 ID，可在同一 Run 的「Skill 候选」区重新打开。保存修改会追加修订，并使旧批准失效。填写指定审阅者的 **writer 或 admin 凭据 ID**、目标 Skill ID 和版本，再提交已保存的修订。审阅者可用自己的凭据从 `GET /v1/whoami` 取得 `id`，并通过下文的 `origence-skill review` 查看审阅包。批准、显式发布和在线下载使用下文的命令。
+手填方法和可披露的脱敏依据，确认两者的披露权限后保存。记录候选 ID，可在同一 Run 的「Skill 候选」区重新打开。保存修改会追加修订，并使旧批准失效。填写目标 Skill ID 和版本，再提交已保存的修订。管理员用账号登录，选中该工作区，打开「Skill 审核」。查看选定依据与包文件后，可以批准或拒绝。批准后可单独点「发布 Skill」。
 
 ## 使用 CLI 选择依据并编辑
 
@@ -54,18 +54,18 @@ origence-skill save CANDIDATE_UUID --expected-revision 1 --input selection.json
 
 ## 审阅、批准和显式发布
 
-将精确的已保存修订和发布目标提交给指定的有效审阅者凭据。
+在单 Key 工作区，将精确的已保存修订和发布目标提交给管理员审核。
 
 ```sh
 origence-skill submit CANDIDATE_UUID REVIEW_UUID --revision 2 \
-  --reviewer-id REVIEWER_CREDENTIAL_UUID --tenant-id TENANT_UUID \
+  --tenant-id TENANT_UUID \
   --workspace-id WORKSPACE_UUID --skill-id SKILL_UUID --version 1
-# Appointed reviewer, using their own credential:
 origence-skill review REVIEW_UUID
-origence-skill decide REVIEW_UUID EXACT_PACKET_DIGEST --approve
-# Or --reject; decisions are immutable. A revised decision needs a new review ID.
+# 管理员批准后，候选所有者也可以发布。
 origence-skill publish REVIEW_UUID EXACT_PACKET_DIGEST
 ```
+
+尚在使用多 Key 的旧工作区可在提交时指定 `--reviewer-id REVIEWER_CREDENTIAL_UUID`。获指定的有效审阅者使用自己的凭据运行 `origence-skill review REVIEW_UUID`，再运行 `origence-skill decide REVIEW_UUID EXACT_PACKET_DIGEST --approve` 或 `--reject`。决定不可变，改变决定须新建审核 ID。
 
 提交时，服务端在读取后再次检查当前修订。并发编辑会阻止提交。审阅包只包含生成的包、选定依据以及审阅和目标标识。审阅不授予访问原始归档的权限。发布是独立步骤，再次检查当前修订、凭据、来源与摘要权威。已审阅方法在显式发布前仍是提议，其指令不授予工具执行权限，也不能证明自报结果真实。
 

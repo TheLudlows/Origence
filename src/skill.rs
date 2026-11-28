@@ -75,6 +75,8 @@ pub struct SkillPackage {
 #[serde(deny_unknown_fields)]
 pub struct SkillReviewInput {
     pub revision: u32,
+    /// Omit to submit to the administrator of the selected workspace.
+    #[serde(default, skip_serializing_if = "Uuid::is_nil")]
     pub reviewer_id: Uuid,
     pub target: SkillTarget,
     /// Explicitly selected, redacted explanation; not the original private sources.
@@ -285,7 +287,7 @@ impl SkillReviewPacket {
         input: &SkillReviewInput,
         package: SkillPackage,
     ) -> StorageResult<Self> {
-        if input.reviewer_id.is_nil() || !text(&input.basis, MAX_TEXT) {
+        if !text(&input.basis, MAX_TEXT) {
             return Err(StorageError::InvalidArgument(
                 "invalid selected Skill review basis",
             ));

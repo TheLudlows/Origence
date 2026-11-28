@@ -32,10 +32,10 @@ Trace reads include the text recorded in the Run. Original private archives, int
 | --- | --- |
 | `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`. Use 0 to create. Changes generate a new revision. `candidate` accepts `SkillCandidateInput` or [selected-experience input](SKILL-CANDIDATE-CLI.md#select-and-edit-with-the-cli) with explicit consent to disclose. |
 | `GET /v1/skill-candidates/{id}` | Only the creator can read the candidate, private notes, and exact basis. |
-| `POST /v1/skill-candidates/{id}/reviews/{review}` | Select reviewer, revision, publishing target, and redacted basis. |
-| `GET /v1/skill-reviews/{review}` | Selected review package and decision, without access to original sessions or Runs. |
-| `POST /v1/skill-reviews/{review}/decision` | The designated reviewer uses `{digest,approve}` to approve or reject the exact contents. |
-| `POST /v1/skill-reviews/{review}/publish` | A writer or admin publishes the approved immutable version using `{digest}`. |
+| `POST /v1/skill-candidates/{id}/reviews/{review}` | Submit the revision, target, and redacted basis. Omit `reviewer_id` in a single-key workspace to send it to the administrator. Legacy workspaces may designate a reviewer credential. |
+| `GET /v1/skill-reviews/{review}` | Selected review packet, decision, and `published` state. |
+| `POST /v1/skill-reviews/{review}/decision` | The designated reviewer in a legacy workspace records a decision using `{digest,approve}`. For administrator review, use the workspace management routes. |
+| `POST /v1/skill-reviews/{review}/publish` | The candidate owner publishes an administrator-approved package using `{digest}`. Legacy credential review retains its existing publication rules. |
 | `GET /v1/skills/{id}/versions/{version}/package` | Verifies scope, version, and source and returns a package containing only approved artifacts. |
 | `DELETE /v1/skills/{id}/versions/{version}` | A writer or admin withdraws the published Skill version and blocks later online export. |
 
@@ -108,6 +108,8 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 | `/admin/deployment/workspaces/{id}/sessions` | Session IDs in the selected workspace |
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | Original Q&A and references, paginated by session sequence |
 | `/admin/deployment/workspaces/{id}/runs` and `/admin/deployment/workspaces/{id}/runs/{run}` | Run directory and recorded events |
+| `/admin/deployment/workspaces/{id}/skill-reviews` | Skill reviews submitted to the administrator, paginated by ID |
+| `/admin/deployment/workspaces/{id}/skill-reviews/{review}` | Selected review packet, decision, and publication state |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` and `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | Published content directory and versioned body |
 | `/admin/deployment/workspaces/{id}/keys` | Active single-key metadata, including `single_key`. A legacy workspace returns `single_key:false` and an empty list. |
 
@@ -115,7 +117,7 @@ Use `PUT /admin/deployment/workspaces/{id}` with `{name}` to create a peer singl
 
 The administrator console rotates the single key of the selected workspace. Existing member credentials can still be used and maintained through the [direct workspace key endpoints](#identity-and-credential-management).
 
-The following paths are relative to `/admin/deployment/workspaces/{id}`. Mutations use `Idempotency-Key` and the corresponding `/v1` request bodies. The `{id}` in the path selects the workspace. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
+The following paths are relative to `/admin/deployment/workspaces/{id}`. The `{id}` in the path selects the workspace. Content and job writes use `Idempotency-Key`. Skill retries use the review ID and packet digest. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
 
 | Method and path | Operation |
 | --- | --- |
@@ -125,6 +127,7 @@ The following paths are relative to `/admin/deployment/workspaces/{id}`. Mutatio
 | `POST /assets/{asset}/restore` | Create a new version from an earlier version with a valid source. Supply the target version, expected current version, and reason. |
 | `GET /events/{event}`, `DELETE /events/{event}` | Read or withdraw a content source. Dependent versions and references become unreadable, and the original record is retained. |
 | `GET /jobs/{job}`, `POST /jobs/{job}/{action}` | Read a workspace job or apply `retry` or `cancel` under its existing state rules |
+| `POST /skill-reviews/{review}/decision`, `POST /skill-reviews/{review}/publish` | Record a decision using `{digest,approve}` and publish the approved package in a separate request using `{digest}` |
 
 Restore and withdrawal follow the workspace's version and source rules. Semantic memories are updated through explicit semantic writes. Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read Runs and saved original turns in the selected workspace. Original turns follow the existing session retention rules. Regular workspace endpoints use workspace keys.
 

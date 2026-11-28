@@ -1,4 +1,5 @@
 //! HTTP endpoints for deployment administrators.
+use super::foundation::{PublishInput, ReviewDecision};
 use super::http::{CursorPage, Upload, key, token, uncached_json};
 use crate::{
     error::Result,
@@ -40,6 +41,22 @@ pub(super) fn routes() -> Router<Service> {
         .route(
             "/admin/deployment/workspaces/{workspace}/runs/{run}",
             get(run),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/skill-reviews",
+            get(skill_reviews),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/skill-reviews/{review}",
+            get(skill_review),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/skill-reviews/{review}/decision",
+            post(skill_decision),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/skill-reviews/{review}/publish",
+            post(skill_publish),
         )
         .route(
             "/admin/deployment/workspaces/{workspace}/assets",
@@ -235,6 +252,67 @@ async fn runs(
             )
             .await?,
     ))
+}
+
+async fn skill_reviews(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path(workspace): Path<Uuid>,
+    Query(page): Query<CursorPage>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .deployment_skill_reviews(
+                &auth,
+                page.after.unwrap_or_default(),
+                page.limit.unwrap_or(50),
+            )
+            .await?,
+    ))
+}
+
+async fn skill_review(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, review)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(service.skill_review(&auth, review).await?))
+}
+
+async fn skill_decision(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, review)): Path<(Uuid, Uuid)>,
+    Json(input): Json<ReviewDecision>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service
+            .decide_skill_review(&auth, review, &input.digest, input.approve)
+            .await?,
+    ))
+}
+
+async fn skill_publish(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, review)): Path<(Uuid, Uuid)>,
+    Json(input): Json<PublishInput>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(json!(
+        service.publish_skill(&auth, review, &input.digest).await?
+    )))
 }
 
 async fn run(

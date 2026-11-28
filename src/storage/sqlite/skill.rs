@@ -123,8 +123,7 @@ impl SqliteTx {
         self.check_skill_sources(owner, &input.sources).await?;
         Ok(json!({"candidate_id":id,"revision":revision,"input":input}))
     }
-    /// Owner explicitly discloses only the package and selected basis to one
-    /// credential-scoped reviewer. Rotation requires a new review appointment.
+    /// Owner explicitly discloses only the package and selected basis.
     pub async fn submit_skill_review(
         &mut self,
         candidate: Uuid,
@@ -140,7 +139,25 @@ impl SqliteTx {
         if current != input.revision {
             return Err(StorageError::Conflict("Skill revision changed".into()));
         }
-        if review.is_nil()
+        if review.is_nil() {
+            return Err(StorageError::Forbidden);
+        }
+        if input.reviewer_id.is_nil() {
+            #[cfg(feature = "local-storage")]
+            {
+                let configured: bool = sqlite_db::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1)",
+                )
+                .fetch_one(&mut *self.tx)
+                .await
+                .map_err(sqlite_err)?;
+                if !configured {
+                    return Err(StorageError::Forbidden);
+                }
+            }
+            #[cfg(not(feature = "local-storage"))]
+            return Err(StorageError::Forbidden);
+        } else if super::workspace_key::has_workspace_key(&mut self.tx, self.scope).await?
             || !Permission::Write
                 .granted_by(&self.live_role_for_principal(input.reviewer_id).await?)
         {
@@ -183,13 +200,57 @@ impl SqliteTx {
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)
     }
+    async fn matches_skill_reviewer(&mut self, reviewer: Uuid) -> StorageResult<bool> {
+        if !reviewer.is_nil() {
+            return Ok(self.principal_id == reviewer);
+        }
+        #[cfg(feature = "local-storage")]
+        return super::deployment::live_admin_in_scope(&mut self.tx, self.principal_id, self.scope)
+            .await;
+        #[cfg(not(feature = "local-storage"))]
+        Ok(false)
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn deployment_skill_reviews(
+        &mut self,
+        after: Uuid,
+        limit: usize,
+    ) -> StorageResult<Value> {
+        if !self.matches_skill_reviewer(Uuid::nil()).await? {
+            return Err(StorageError::Forbidden);
+        }
+        if !(1..=100).contains(&limit) {
+            return Err(StorageError::InvalidArgument("invalid Skill review page"));
+        }
+        let mut rows: Vec<(Uuid, u32, String)> = sqlite_db::query_as(
+            "SELECT id,revision,decision FROM oc_skill_reviews
+             WHERE tenant_id=? AND workspace_id=? AND reviewer_id=? AND id>? ORDER BY id LIMIT ?",
+        )
+        .bind(self.scope.tenant_id)
+        .bind(self.scope.workspace_id)
+        .bind(Uuid::nil())
+        .bind(after)
+        .bind((limit + 1) as i64)
+        .fetch_all(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        let more = rows.len() > limit;
+        rows.truncate(limit);
+        let next_after = rows.last().filter(|_| more).map(|row| row.0);
+        let items: Vec<_> = rows
+            .into_iter()
+            .map(|(id, revision, decision)| json!({"review_id":id,"revision":revision,"decision":decision}))
+            .collect();
+        Ok(json!({"items":items,"next_after":next_after}))
+    }
     /// Selected packet only; publication roles do not grant access to the archive.
     pub async fn skill_review(&mut self, review: Uuid) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
         let (candidate, revision, reviewer, packet, _, decision) =
             self.skill_review_row(review).await?;
         let (owner, current) = self.skill_head(candidate).await?;
-        if self.principal_id != reviewer && self.private_key_id().await? != owner {
+        if !self.matches_skill_reviewer(reviewer).await? && self.private_key_id().await? != owner {
             return Err(StorageError::NotFound);
         }
         if current != revision {
@@ -197,7 +258,14 @@ impl SqliteTx {
         }
         let content = self.skill_revision(candidate, revision).await?;
         self.check_skill_sources(owner, &content.sources).await?;
-        Ok(json!({"packet":decode::<SkillReviewPacket>(&packet)?,"decision":decision}))
+        let published: bool = sqlite_db::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND review_id=? AND NOT withdrawn)",
+        )
+        .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
+        .fetch_one(&mut *self.tx).await.map_err(sqlite_err)?;
+        Ok(
+            json!({"packet":decode::<SkillReviewPacket>(&packet)?,"decision":decision,"published":published}),
+        )
     }
     /// Explicit user decision over exactly the packet displayed for review.
     pub async fn decide_skill_review(
@@ -209,7 +277,7 @@ impl SqliteTx {
         self.check_permission(Permission::Write).await?;
         let (candidate, revision, reviewer, _, stored, decision) =
             self.skill_review_row(review).await?;
-        if self.principal_id != reviewer {
+        if !self.matches_skill_reviewer(reviewer).await? {
             return Err(StorageError::Forbidden);
         }
         if stored != digest {
@@ -233,6 +301,12 @@ impl SqliteTx {
         sqlite_db::query("UPDATE oc_skill_reviews SET decision=?,decided_at=? WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(next).bind(now_ms()).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
             .execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        let action = if approve {
+            "skill.review.approved"
+        } else {
+            "skill.review.rejected"
+        };
+        self.audit(action, review, json!({"digest":stored})).await?;
         Ok(())
     }
     /// Publication is separate from approval, with fresh permissions, source and
@@ -245,15 +319,21 @@ impl SqliteTx {
         self.check_permission(Permission::Write).await?;
         let (candidate, revision, reviewer, packet, stored, decision) =
             self.skill_review_row(review).await?;
+        let (owner, current) = self.skill_head(candidate).await?;
+        if reviewer.is_nil() {
+            if !self.matches_skill_reviewer(reviewer).await?
+                && self.private_key_id().await? != owner
+            {
+                return Err(StorageError::NotFound);
+            }
+        } else if !Permission::Write.granted_by(&self.live_role_for_principal(reviewer).await?) {
+            return Err(StorageError::Forbidden);
+        }
         if decision != "approved" || stored != digest {
             return Err(StorageError::Conflict(
                 "exact Skill approval required".into(),
             ));
         }
-        if !Permission::Write.granted_by(&self.live_role_for_principal(reviewer).await?) {
-            return Err(StorageError::Forbidden);
-        }
-        let (owner, current) = self.skill_head(candidate).await?;
         if revision != current {
             return Err(StorageError::Conflict("Skill revision changed".into()));
         }
@@ -284,6 +364,12 @@ impl SqliteTx {
         sqlite_db::query("INSERT INTO oc_skill_packages(tenant_id,workspace_id,skill_id,version,review_id,owner_key_id,sources,package_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(target.skill_id).bind(i64::from(target.version)).bind(review).bind(owner)
             .bind(encode(&content.sources)?).bind(&package.digest).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+        self.audit(
+            "skill.published",
+            target.skill_id,
+            json!({"version":target.version,"review_id":review,"digest":package.digest}),
+        )
+        .await?;
         Ok(package)
     }
     /// Live-authorized distribution; no private provenance or review basis returned.

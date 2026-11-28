@@ -4,6 +4,7 @@ import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
 import { editor } from "./asset-editor.js";
 import { assetDetail } from "./assets.js";
+import { skillReviewPage } from "./skill-review.js";
 
 const prefix = "/admin/deployment/workspaces";
 type Workspace = { workspace_id: string; name: string };
@@ -177,6 +178,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     content.replaceChildren(heading(workspace.name, workspace.workspace_id), el("nav", "actions",
       button("会话", sessions), button("运行", runs),
       button("记忆", () => assets("memory")), button("知识", () => assets("knowledge")),
+      button("Skill 审核", () => show("Skill 审核", (target, viewSignal) => skillReviewPage(target, `${base}/skill-reviews`, viewSignal))),
       button("API Key", keys)), view);
     sessions();
   }

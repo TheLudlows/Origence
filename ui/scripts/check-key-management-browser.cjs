@@ -1,5 +1,6 @@
 // Real Chromium and Origence, with disposable loopback workspaces and tokens.
 const assert = require("node:assert/strict");
+const { randomUUID } = require("node:crypto");
 const { execFileSync, spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { mkdtemp, rm } = require("node:fs/promises");
@@ -48,6 +49,11 @@ async function run(binary) {
     const whoami = (token, workspace) => fetch(`${upstream}/v1/whoami`, {
       headers: { Authorization: `Bearer ${token}`, ...(workspace ? { "X-Origence-Workspace": workspace } : {}) },
     });
+    const call = (path, token, body) => fetch(`${upstream}${path}`, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${token}`, ...(body && { "Content-Type": "application/json" }) },
+      body: body && JSON.stringify(body),
+    });
     const passwordHash = await hashConsolePassword(password);
     ui = createUiServer({ apiBaseUrl: upstream, accounts: [
       { username: "deployment", passwordHash, deploymentAuthorization: `Bearer ${deploymentKey}` },
@@ -73,11 +79,49 @@ async function run(binary) {
       return response.status;
     }, b.workspace_id);
     assert.equal(denied, 403);
+    const runId = randomUUID();
+    assert.equal((await call("/v1/runs", a.token, { run_id: runId, summary: "Private synthetic Run" })).status, 200);
+    assert.equal((await call(`/v1/runs/${runId}/events`, a.token, {
+      event_id: randomUUID(), reporter: "test", observed_at_ms: 0,
+      event: { kind: "result_reported", outcome: "unknown", summary: "Synthetic result" },
+    })).status, 200);
+    await nav.getByRole("button", { name: "调用链路", exact: true }).click();
+    await page.getByLabel("Run ID", { exact: true }).fill(runId);
+    await page.getByRole("button", { name: "查看链路", exact: true }).click();
+    await page.getByRole("button", { name: "选取依据并起草", exact: true }).click();
+    await page.getByLabel("Skill 名称", { exact: true }).fill("verify-synthetic-output");
+    await page.getByLabel("描述", { exact: true }).fill("Check an output");
+    await page.getByLabel("方法步骤", { exact: true }).fill("Verify the reported output independently.");
+    await page.getByLabel("选定依据（审阅者可见）", { exact: true }).fill("Browser fixture disclosed basis");
+    await page.getByLabel("私有备注（可选）", { exact: true }).fill("Browser fixture private notes");
+    await page.getByLabel("我确认可向管理员披露方法和选定依据").check();
+    await page.getByRole("button", { name: "保存候选", exact: true }).click();
+    await page.getByText("已保存修订 1。", { exact: true }).waitFor();
+    const skillId = await page.getByLabel("目标 Skill ID", { exact: true }).inputValue();
+    const packagePath = `/v1/skills/${skillId}/versions/1/package`;
+    assert.equal(await page.getByLabel("审阅者凭据 ID", { exact: true }).count(), 0);
+    await page.getByRole("button", { name: "提交审阅", exact: true }).click();
+    await page.getByText("修订 1 已提交审阅。", { exact: true }).waitFor();
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await login(page, "deployment");
     await page.getByRole("heading", { name: "管理员", exact: true }).waitFor();
     await page.getByRole("button", { name: "研发", exact: true }).waitFor();
     await page.getByRole("button", { name: "运营", exact: true }).waitFor();
+    await page.getByRole("button", { name: "运营", exact: true }).click();
+    await page.getByRole("button", { name: "Skill 审核", exact: true }).click();
+    await page.getByText("暂无记录", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "研发", exact: true }).click();
+    await page.getByRole("button", { name: "Skill 审核", exact: true }).click();
+    await page.getByRole("button", { name: /修订 1 · 待审核/ }).click();
+    await page.getByText("Browser fixture disclosed basis", { exact: true }).waitFor();
+    assert.equal(await page.getByText("Browser fixture private notes", { exact: true }).count(), 0);
+    await page.getByRole("button", { name: "批准", exact: true }).click();
+    await page.getByText("已批准", { exact: true }).waitFor();
+    assert.equal((await call(packagePath, a.token)).status, 404);
+    await page.getByRole("button", { name: "发布 Skill", exact: true }).click();
+    await page.getByText("已发布", { exact: true }).waitFor();
+    assert.equal((await call(packagePath, a.token)).status, 200);
+    assert.equal((await call(packagePath, b.token)).status, 404);
     await page.getByRole("button", { name: "旧凭据工作区", exact: true }).click();
     await page.getByRole("button", { name: "API Key", exact: true }).click();
     await page.getByText("此工作区尚未使用单 Key。", { exact: true }).waitFor();
@@ -145,7 +189,7 @@ async function run(binary) {
     await page.getByRole("button", { name: "全局知识审核", exact: true }).click();
     await page.getByRole("heading", { name: "全局知识审核", exact: true }).waitFor();
     assert.ok(secrets.every((value) => !stderr.includes(value)));
-    console.log("PASS Chromium and Origence: scoped key management, deployment sign-in, workspace creation and rotation, scoped knowledge create/update/restore and source withdrawal, global review");
+    console.log("PASS Chromium and Origence: workspace creation and key rotation, scoped Skill review and publication, knowledge create/update/restore and source withdrawal, global review");
   } finally {
     await browser?.close();
     if (ui) { ui.closeAllConnections(); ui.close(); }

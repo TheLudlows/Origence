@@ -11,16 +11,20 @@ prefixes. No operation auto-publishes.
 
 - `save_skill_candidate(id, expected_revision, input)` creates or appends immutable
   revisions under the caller's stable logical key. Private notes and source
-  references remain owner-only, even from workspace administrators.
-- The owner submits an explicit review ID, exact revision, named reviewer credential,
-  workspace/Skill/version target, and selected redacted basis. Only that reviewer
-  and the owner can read this packet. A reviewer gets no implicit raw archive access.
-- `decide_skill_review(review, packet_digest, approve)` requires the appointed
-  credential to have live writer or admin access. A decision is immutable. A new review ID is needed to change
-  the decision. Credential rotation requires a new reviewer appointment; candidate
-  ownership survives an authorized logical-key rotation.
-- `publish_skill(review, packet_digest)` is a distinct explicit operation. It
-  rechecks current write access, the approving credential, current candidate
+  references remain owner-only through the candidate interface.
+- The owner submits an explicit review ID, exact revision, workspace/Skill/version
+  target, and selected redacted basis. In a single-key workspace, omit `reviewer_id`.
+  The account administrator opens selected review packets in that workspace. The
+  workspace key can submit and read its packet. Legacy workspaces retain explicit
+  credential appointments. The packet contains only the selected disclosure.
+- `decide_skill_review(review, packet_digest, approve)` requires the current
+  administrator for these submissions. The decision is immutable and records the
+  deciding actor in the same transaction. Changing the decision requires a new
+  review ID. An administrator decision survives key rotation. An explicit legacy
+  appointment continues to require the live appointed credential.
+- `publish_skill(review, packet_digest)` is a distinct explicit operation. For an
+  administrator review, the current administrator or candidate owner can publish.
+  Publication rechecks current write access, the approved packet, current candidate
   revision, supporting source authority, and exact generated package. Any candidate
   edit invalidates prior approval, including a source or private-note edit.
 - Publication stores provenance, the approved review reference, and the package

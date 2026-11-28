@@ -258,9 +258,9 @@ async fn skill_review(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ReviewDecision {
-    digest: String,
-    approve: bool,
+pub(super) struct ReviewDecision {
+    pub(super) digest: String,
+    pub(super) approve: bool,
 }
 
 async fn decide_skill_review(
@@ -277,8 +277,8 @@ async fn decide_skill_review(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PublishInput {
-    digest: String,
+pub(super) struct PublishInput {
+    pub(super) digest: String,
 }
 
 async fn publish_skill(
