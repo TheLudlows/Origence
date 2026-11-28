@@ -20,6 +20,11 @@ Chromium 156.0.8078.79 通过 `check-key-management-browser.cjs`。浏览器用�
 切换管理员账号，验证所选工作区的审核和发布，并确认发布前后的下载权限。33 项 UI 测试、类型检查
 以及实际 Origence 进程的 HTTP MCP 冒烟通过。本轮使用合成数据。原生 Windows、真实客户端及 GitHub CI 待验收。
 
+同步宿主特性变更后，在 `faaeb1494138e154a515acaeb80939476a02e8a7` 复测，main 基线为
+`c716e0c4ed55f5fcae87fb5a54a466eee2fc64f4`。默认 Rust 测试通过 478 项，忽略 11 项。
+仅启用 `host` 时两项 Skill CLI 回归也通过。Chromium 和 HTTP MCP 冒烟在重新构建的默认二进制上复测通过。
+全特性、仅 `host`、仅 `sqlite` 的全目标严格 Clippy 及格式检查通过。
+
 ## 2026-11-28 · 工作区凭据隔离与管理员账号
 
 验证提交 `4cbdc4960b07f5ce674afa599a31a424b1a3f381`，main 基线
@@ -82,6 +87,7 @@ HTTP 测试覆盖已移除的管理员多 Key 操作和子工作区列表、保�
 `npm --prefix ui run check` 与 34 项 UI 测试通过。Chromium 156.0.8078.79 通过
 `check-console-session-browser.cjs` 和 `check-key-management-browser.cjs`，覆盖新管理员名称、登录、
 平级工作区创建、密钥轮换和全局知识审核。浏览器使用回环服务和合成数据。原生 Windows 待运行。
+
 ## 2026-11-28 · 宿主构建特性简化
 
 基于 main `496960f`，Linux 和 Rust 1.98.0。默认构建、仅 `host` 和仅 `sqlite` 三种构建的

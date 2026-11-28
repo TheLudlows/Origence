@@ -20,6 +20,12 @@ administrator account review in the selected workspace, separate publication, an
 All 33 UI tests, type checking, and the live-process HTTP MCP smoke passed. The checks used synthetic data. Windows,
 native product clients, and GitHub CI remain unverified for this change.
 
+After integrating the host feature changes, `faaeb1494138e154a515acaeb80939476a02e8a7` was verified
+on main base `c716e0c4ed55f5fcae87fb5a54a466eee2fc64f4`. The default Rust suite passed 478 tests
+with 11 ignored. Both Skill CLI tests also passed with only `host`. Chromium and HTTP MCP smoke checks
+passed again against the rebuilt default binary.
+Formatting and strict all-target Clippy passed with all features, `host` only, and `sqlite` only.
+
 ## 2026-11-28 · Workspace credential isolation and administrator accounts
 
 Verified `4cbdc4960b07f5ce674afa599a31a424b1a3f381` on main base
