@@ -7,6 +7,14 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 删除旧的 `api` 启动命令
+
+基于 main `c716e0c` 与 #187 的客户端模块清理提交 `4877b20`。Linux、Rust 1.98.0，使用合成测试材料。
+
+- `cargo fmt --all -- --check` 与 `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` 通过。严格 Clippy 同时通过 `--no-default-features --features host` 和 `--no-default-features --features sqlite`。
+- `cargo test --offline --locked --test local -j 3 local_app::` 通过 12 项。旧命令返回参数错误，`serve` 重开后仍能通过 HTTP 查询。实际 Node Hook 和双端私有归档的两项定向回归同样通过。- `cargo test --offline --locked --no-default-features --features host --test anyseek -j 3` 通过 7 项，需真实 AnySeek 的 8 项保持忽略。用 `tools/plugin_smoke.py --bind 127.0.0.1:0` 在客户端 PATH 无 Origence 二进制时验证 Codex 0.171.0 和 Claude Code 2.1.330，两端均通过。Windows 未在本地运行。
+
+
 ## 2026-11-28 · 移除 Rust 客户端模块
 
 基于 Origence main `496960f` 与 #187 的共享 Hook 提交 `f314875`。环境为 Linux、Rust 1.98.0、Node.js 24.22.1。客户端输入和模型响应均为合成材料。

@@ -24,7 +24,7 @@ identity reservations, and publication plans.
 
 Lock file names and database paths follow the configured startup implementation. Never edit business records directly in either database. Vector and graph indexes are not authoritative for source state. Grant data directory access only to the host OS identity. API keys cannot restrict users who already have local file access.
 
-`origence serve` (compatibility alias `api`) runs HTTP and a single Worker. Ctrl+C requests graceful shutdown. HTTP stops accepting requests, and storage closes after the Worker finishes its current job. After a forced exit, the OS releases the lock automatically. The next startup advances the run_token and replays unfinished jobs. Do not remove lock files to bypass a running host.
+`origence serve` runs HTTP and a single Worker. Ctrl+C requests graceful shutdown. HTTP stops accepting requests, and storage closes after the Worker finishes its current job. After a forced exit, the OS releases the lock automatically. The next startup advances the run_token and replays unfinished jobs. Do not remove lock files to bypass a running host.
 
 `/health/live` indicates process liveness. `/health/ready` requires a running Worker and successful storage checks. Model services do not affect readiness. Individual model failures appear in job state. Business endpoints stay closed if startup reconciliation or storage checks fail.
 

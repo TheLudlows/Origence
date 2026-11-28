@@ -48,6 +48,7 @@ fn cli_exposes_only_serve() {
     assert_eq!(commands, ["serve", "help"]);
     for args in [
         ["--offline", "serve"],
+        ["api", "--help"],
         ["plugin-hook", "--help"],
         ["search", "example"],
         ["workspace-create", "example"],
@@ -2212,7 +2213,7 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
 }
 
 #[tokio::test]
-async fn host_search_crosses_authority_batch_boundaries_reopened_via_api_alias() {
+async fn host_search_crosses_authority_batch_boundaries_after_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let service = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -2322,7 +2323,7 @@ async fn host_search_crosses_authority_batch_boundaries_reopened_via_api_alias()
     let mut server = command(dir.path());
     crate::support::command_env(&mut server, dir.path(), None);
     server
-        .args(["api", "--bind", "127.0.0.1:0"])
+        .args(["serve", "--bind", "127.0.0.1:0"])
         .stdout(Stdio::piped());
     let (mut child, base) = start_host(server).await;
     let response = post(

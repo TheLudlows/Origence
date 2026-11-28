@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Remove the old `api` startup command
+
+Based on main `c716e0c` and #187's client module removal `4877b20`. Linux, Rust 1.98.0, synthetic test data.
+
+- `cargo fmt --all -- --check` and `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` passed. Strict Clippy also passed with `--no-default-features --features host` and `--no-default-features --features sqlite`.
+- `cargo test --offline --locked --test local -j 3 local_app::` passed all 12 tests. The old command returns an argument error, and `serve` handles HTTP search after reopening storage. Two targeted tests of the installed Node hook and private archives for both clients also passed.- `cargo test --offline --locked --no-default-features --features host --test anyseek -j 3` passed 7 tests. Eight tests requiring real AnySeek remained ignored. `tools/plugin_smoke.py --bind 127.0.0.1:0` passed for Codex 0.171.0 and Claude Code 2.1.330 with no Origence binary on the client PATH. Windows was outside local verification.
+
+
 ## 2026-11-28 · Rust client module removal
 
 Based on Origence main `496960f` and #187's shared Hook commit `f314875`. Linux with Rust 1.98.0 and Node.js 24.22.1. All client inputs and model responses were synthetic.

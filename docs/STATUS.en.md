@@ -44,7 +44,7 @@ The default build includes the full host and embedded SDK. The cloud image disab
 
 `origence serve --local` opens the AnySeek Catalog at `OC_DATA_DIR/anyseek` in the same process through the Rust SDK. The host handles startup recovery, verification of published collections, and graceful shutdown. The Windows development script uses this entry point and optionally starts the Node UI. The cloud image runs `origence serve` against standalone AnySeek. The deployment environment provides the address and credential. [Operations guide](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
-`origence` exposes `serve` (with alias `api`). First startup registers a deployment administrator. The administrator creates workspaces in the console or through HTTP. `origence-deploy` manages the local API and console, and `origence-setup` connects an Agent with an existing workspace key. Each installer rolls back its own changes and preserves data. [Installation guide](INSTALLER.en.md)
+`origence` exposes `serve`. First startup registers a deployment administrator. The administrator creates workspaces in the console or through HTTP. `origence-deploy` manages the local API and console, and `origence-setup` connects an Agent with an existing workspace key. Each installer rolls back its own changes and preserves data. [Installation guide](INSTALLER.en.md)
 
 ## Streamable HTTP MCP
 

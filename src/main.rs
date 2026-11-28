@@ -14,7 +14,6 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Run the HTTP API and its single durable worker.
-    #[command(alias = "api")]
     Serve {
         #[arg(long, env = "OC_BIND", default_value = "127.0.0.1:8080")]
         bind: String,
