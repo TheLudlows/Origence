@@ -124,14 +124,15 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
       role: "admin", signal,
       navigate: (page, id) => { if (page === "asset" && id) openAsset(kind, id); },
     });
-    const openAsset = (kind: Asset["kind"], assetId: string) => show(label(kind), (target, viewSignal) => {
+    const openAsset = (kind: Asset["kind"], assetId: string, version?: number) => show(label(kind), (target, viewSignal) => {
       const path = `${base}/assets/${encodeURIComponent(assetId)}`;
-      void api.get<Asset>(path, viewSignal).then((value) => {
+      const detail = version === undefined ? path : `${path}?version=${version}`;
+      void api.get<Asset>(detail, viewSignal).then((value) => {
         if (viewSignal.aborted) return;
         const feedback = el("div");
         const key = crypto.randomUUID();
         const remove = button(`删除${label(kind)}`, async () => {
-          if (remove.disabled || !window.confirm(`删除工作区「${workspace.name}」中的「${value.title}」？`)) return;
+          if (remove.disabled || !window.confirm(`删除工作区「${workspace.name}」中的「${value.title}」？删除后无法读取该条目的所有版本。`)) return;
           remove.disabled = true;
           feedback.replaceChildren();
           try {
@@ -157,7 +158,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const assets = (kind: Asset["kind"]) => show(label(kind), (target, viewSignal) => {
       target.append(button(`新建${label(kind)}`, () => editor(kind, editContext(kind, viewSignal), undefined, base)));
       paged<Asset, string>(target, viewSignal, (after) => api.get<Page<Asset>>(cursor(`${base}/assets?kind=${kind}`, after), viewSignal),
-        (asset) => button(asset.title, () => openAsset(kind, asset.asset_id), "link"));
+        (asset) => button(asset.title, () => openAsset(kind, asset.asset_id, asset.version), "link"));
     });
     const keys = () => show("API Key", (target, viewSignal) => {
       const result = el("div");
