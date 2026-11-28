@@ -4,7 +4,7 @@
 
 Claude Code 和 Codex 通过 Origence 服务端的 Streamable HTTP MCP 检索。可直接注册端点，或安装带自动 Run Hook 的插件。
 
-用 [`origence-setup`](INSTALLER.md#接入-agent) 配置 Claude Code 或 Codex 的插件、Run Hook 和项目私有问答归档。部署本地 API 和控制台使用 `origence-deploy`。
+用 [`origence-setup`](INSTALLER.md#接入-agent) 配置 Claude Code 或 Codex 的插件和 Run Hook，并按项目自动归档会话。部署本地 API 和控制台使用 `origence-deploy`。
 
 ## 直连 HTTP MCP
 
@@ -113,7 +113,7 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 已安装本机二进制时，可在启动前设置 `OC_PLUGIN_RUN_HOOK=0` 停止上报。
 继续使用原有项目配置时，关闭插件 Hook 并沿用下文的独立发送器。
 
-### 按项目开启私有问答增量归档
+### 按项目自动归档会话
 
 `origence-setup install` 使用可写 Key 时，默认将 `OC_TURN_SYNC_PROJECT` 设为安装时所在项目的根目录。
 手工安装插件时，在客户端的启动环境将它设为项目根目录的绝对路径。提供可写的 `OC_API_KEY`，并沿用 MCP 的
@@ -125,7 +125,7 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 安装器配置可用 `origence-setup install --no-turn-sync` 暂停（传入原来的 `--agent` 选项），然后重启终端和客户端。
 手工配置可清空变量并重启客户端。已暂存的问答会在同一配置再次启用时重试。
 
-同一工作区和逻辑 key 可通过 `context_bundle` 的私有 `session` 路线召回。
+已保存的问答可在控制台的「会话」中查看。同一工作区和逻辑 Key 可通过 `context_bundle` 的私有 `session` 路线召回。
 同步问答的证据使用状态为 `unknown`。见[归档契约](API.md#会话归档与幂等反馈)。
 
 ## 手工 MCP 接入
@@ -145,8 +145,8 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 
 显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用
-`context_session` 会得到同一个平台归档，再用 `context_turn_get` 按 turn UUID
-读取（需 writer 权限）。给两个客户端分别签发独立 key 时，它们的归档互不可见。手工 MCP 接入只处理
+`context_session` 会得到同一个 Origence 会话，再用 `context_turn_get` 按 turn UUID
+读取（需 writer 权限）。给两个客户端分别签发独立 Key 时，它们的会话记录互不可见。手工 MCP 接入只处理
 调用方提交的轮次，客户端的工作现场由各自宿主维护。
 检索内容是外部证据，不是可直接执行的指令。
 

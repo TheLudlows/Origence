@@ -241,12 +241,13 @@ async function run() {
     assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["另一个账号的工作区"]);
     assert.equal(await workspace("另一个账号的工作区").getAttribute("aria-current"), "true");
     await page.getByRole("button", { name: "退出", exact: true }).click();
-    await page.goto(base + "/#archive");
+    await page.goto(base + "/#sessions");
     await switchToKey.tap();
     assert.equal(await alternateKeyField.inputValue(), "");
     await alternateKeyField.fill(workspaceKey);
     await page.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
     await page.getByText("归档原文", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "会话", exact: true }).waitFor();
     console.log("PASS single-form account/Key switch, keyboard focus, credential reset, and Key sign-in with accounts configured (synthetic HTTP, Chromium)");
 
     keyUi = createUiServer({ apiBaseUrl });
@@ -259,15 +260,17 @@ async function run() {
     assert.equal(await keyPage.getByLabel("账号", { exact: true }).count(), 0);
     assert.equal(await keyPage.getByRole("button", { name: "用账号密码登录", exact: true }).count(), 0);
     await keyPage.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
+    await keyPage.waitForURL("**/#sessions");
+    await keyPage.getByRole("heading", { name: "会话", exact: true }).waitFor();
     await keyPage.getByText("归档原文", { exact: true }).waitFor();
     assert.deepEqual(await keyPage.getByRole("list", { name: "工作区", exact: true }).getByRole("button").allTextContents(), [singleWorkspace]);
-    assert.equal(await keyPage.getByRole("button", { name: /删除这一轮|清空归档历史|API Key/ }).count(), 0);
+    assert.equal(await keyPage.getByRole("button", { name: /删除这一轮|清空会话记录|API Key/ }).count(), 0);
     await keyPage.reload();
     await keyPage.getByText("归档原文", { exact: true }).waitFor();
     assert.equal(await keyPage.evaluate(() => localStorage.length), 0);
     await keyPage.getByRole("button", { name: "Agent 连接", exact: true }).click();
     await keyPage.getByRole("cell", { name: "Codex", exact: true }).waitFor();
-    console.log("PASS workspace Key sign-in and archive read-only controls without a console account (synthetic HTTP, Chromium)");
+    console.log("PASS workspace Key sign-in, legacy bookmark redirect, and read-only session controls (synthetic HTTP, Chromium)");
     await keyPage.goto(`${keyBase}/#asset/${alpha}?version=1`);
     await keyPage.getByRole("button", { name: "提交到全局知识审核" }).click();
     await keyPage.getByText("全局知识 v1 · 待审核", { exact: true }).waitFor();
@@ -279,6 +282,7 @@ async function run() {
     await keyPage.getByRole("heading", { name: "部署管理", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "Beta space", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: "Alpha space", exact: true }).click();
+    await keyPage.getByRole("heading", { name: "会话", exact: true }).waitFor();
     await keyPage.getByRole("button", { name: /^会话 55555555/ }).click();
     await keyPage.getByText("管理员查看原始会话", { exact: true }).waitFor();
     assert.equal(await keyPage.getByRole("button", { name: /删除|清空|新建/ }).count(), 0);
@@ -318,7 +322,7 @@ async function run() {
     await keyPage.getByRole("button", { name: "下架", exact: true }).click();
     await keyPage.getByText(/v1 · 已下架/).waitFor();
     console.log("PASS global knowledge submission, deployment review, browsing, and withdrawal (synthetic HTTP, Chromium)");
-    console.log("PASS deployment administrator sign-in, workspace browsing, and read-only archive, Run and memory views (synthetic HTTP, Chromium)");
+    console.log("PASS deployment administrator sign-in, workspace browsing, and read-only session, Run and memory views (synthetic HTTP, Chromium)");
     console.log("PASS console login, visible workspace lists with account isolation, scoped creation and retry, keyboard and mobile switching, reload, and sign-out (synthetic HTTP, Chromium)");
   } finally {
     await browser?.close();

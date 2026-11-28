@@ -51,7 +51,7 @@ export async function globalKnowledgePage(root: HTMLElement, ctx: ViewContext, i
   if (ctx.signal.aborted) return;
   root.replaceChildren(
     heading(item.title, `全局知识 · v${item.version}`, button("返回全局知识", () => ctx.navigate("global-knowledge"))),
-    panel("正文", el("p", "archive-answer", item.content ?? "")),
+    panel("正文", el("p", "plain-text", item.content ?? "")),
   );
 }
 
@@ -98,7 +98,7 @@ export function globalReviewPage(root: HTMLElement, signal: AbortSignal) {
       if (item.state === "approved") actions.append(decide("withdraw", "下架", "danger"));
       view.append(panel(item.title,
         badge(publicationStatus[item.state]), el("p", "muted", `工作空间 ${item.workspace_id} · v${item.version}`),
-        el("p", "archive-answer", item.content ?? ""), actions,
+        el("p", "plain-text", item.content ?? ""), actions,
       ));
     } catch (error) {
       if (!readSignal.aborted) message(feedback, error);

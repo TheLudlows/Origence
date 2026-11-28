@@ -80,7 +80,7 @@ administrator rights in that key's additional workspaces.
 - **Memory** displays the visible asset catalog and supports pagination, filtering, search, explicit and semantic writes, text extraction, provenance, and fixed-version comparison.
 - **Knowledge** supports Text/Markdown/PDF uploads, asynchronous publication, updates, job lookup, retry and cancellation, and authorized restore or withdrawal.
 - **Context workbench** displays new query previews, source details, budgets, and omission counts. Budgets are always in UTF-8 bytes.
-- **Private archive** lets an owning writer view turns, delete one turn, or clear a fixed range. Unconfirmed deletions can be retried with the same range.
+- **Sessions** shows the questions and answers saved in the active workspace. In membership-based workspaces, an owning writer can delete a turn or clear session history, and retry unconfirmed deletions over the same range. Single-key workspaces provide read access to saved turns.
 
 The catalog shows only currently published assets visible to normal reads. It does not list withdrawn or unpublished material. Search preview displays the relevant asset type from the workspace hybrid hits. It does not perform in-document search or represent the complete catalog. Historical views request an explicit version. After source withdrawal the server blocks access, and frontend caches cannot restore the content. Update semantic memory with a new semantic write. Generic restore does not apply. Reading original sources, files, and jobs requires writer or above. Asset deletion and source withdrawal also require admin.
 

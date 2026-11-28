@@ -67,7 +67,7 @@ cargo test --no-default-features
 
 [产品目标与路线图](docs/ROADMAP.md) · [文档入口](docs/README.md) · [API 与库接口](docs/API.md) · [运维](docs/OPERATIONS.md) · [项目进度](docs/STATUS.md)
 
-私有归档、Run 轨迹和未发布候选归属逻辑 API Key。已发布的记忆、知识和 Skill 归属工作空间，由获授权成员访问。见[架构](docs/design/agent-data-foundation.md)。
+会话记录、Run 轨迹和未发布候选归属逻辑 API Key。已发布的记忆、知识和 Skill 归属工作空间，由获授权成员访问。见[架构](docs/design/agent-data-foundation.md)。
 
 选定经验 CLI 将拟定的 Skill 方法绑定到一个精确来源，例如 Run 前缀或已发布的 Learning 版本。真实客户端试点验收尚未完成。见 [CLI 指南](docs/SKILL-CANDIDATE-CLI.zh-CN.md)、[客户端配置](docs/CLIENTS.md)和[试点验收议题](https://github.com/TheLudlows/Origence/issues/91)。
 
