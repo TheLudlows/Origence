@@ -133,13 +133,10 @@ async fn provision(service: &Service, tenant_id: Uuid) -> (AuthContext, String) 
         .await
         .unwrap();
     let key = store
-        .issue_key(
-            Scope {
-                tenant_id,
-                workspace_id,
-            },
-            "admin",
-        )
+        .seed_workspace_key(Scope {
+            tenant_id,
+            workspace_id,
+        })
         .await
         .unwrap();
     (service.auth(&key.token).await.unwrap(), key.token)
@@ -267,19 +264,6 @@ async fn publish_explicit_policy(fixture: &Fixture, identity: MemoryIdentity, am
 async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together() {
     let fixture = setup().await;
     let (base, _api) = serve(origence::api::router(fixture.service.clone())).await;
-    let reader = fixture
-        .service
-        .engine
-        .relational()
-        .issue_key(
-            Scope {
-                tenant_id: fixture.auth.tenant_id,
-                workspace_id: fixture.auth.workspace_id,
-            },
-            "reader",
-        )
-        .await
-        .unwrap();
     let (_, other_key) = provision(&fixture.service, fixture.auth.tenant_id).await;
     let client = reqwest::Client::new();
     let args = |as_of_ms, budget| {
@@ -309,7 +293,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     let mcp_ask = |time, budget| {
         let request = client
             .post(format!("{base}/mcp"))
-            .bearer_auth(&reader.token)
+            .bearer_auth(&fixture.token)
             .header("Accept", "application/json, text/event-stream")
             .header("MCP-Protocol-Version", "2025-11-25")
             .json(
@@ -331,11 +315,11 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
                 .unwrap()
         }
     };
-    let nothing = ask(&reader.token, DECEMBER_START, 4000).await;
+    let nothing = ask(&fixture.token, DECEMBER_START, 4000).await;
     assert_eq!(nothing["items"], json!([]));
 
     publish_explicit_policy(&fixture, identity("境内"), "160元").await;
-    let standalone = ask(&reader.token, DECEMBER_START, 4000).await;
+    let standalone = ask(&fixture.token, DECEMBER_START, 4000).await;
     assert_eq!(standalone["items"][0]["semantic_status"], "confirmed");
     assert_eq!(standalone["items"][0]["semantic_value"], "160元");
     let legacy_bytes = standalone["used_bytes"].as_u64().unwrap() as usize;
@@ -358,9 +342,9 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
         Some("2026-12-01"),
     )
     .await;
-    let missing = ask(&reader.token, 0, 4000).await;
-    let before = ask(&reader.token, END_OF_NOVEMBER, 4000).await;
-    let after = ask(&reader.token, DECEMBER_START, 4000).await;
+    let missing = ask(&fixture.token, 0, 4000).await;
+    let before = ask(&fixture.token, END_OF_NOVEMBER, 4000).await;
+    let after = ask(&fixture.token, DECEMBER_START, 4000).await;
     let item = &before["items"][0];
     let pinned = &item["provenance"];
     assert_eq!(before["items"].as_array().unwrap().len(), 1);
@@ -411,7 +395,6 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
             source["content"].as_str().unwrap().get(start..end).unwrap(),
             statement["quote"]
         );
-        assert_eq!(get(&reader.token).send().await.unwrap().status(), 403);
         assert_eq!(get(&other_key).send().await.unwrap().status(), 404);
     }
 
@@ -468,7 +451,16 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
         assert_eq!(items.len(), 2);
         assert_current(&items[0]["provenance"], expected);
         assert_eq!(items[1]["provenance"]["turn_id"], json!(turn_id));
-        assert_eq!(ask(&reader.token).send().await.unwrap().status(), 403);
+        let isolated: Value = ask(&other_key)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(isolated["items"], json!([]));
     }
 
     let dispute = "通知：云舟境内酒店限额自2026-12-01起为每晚120 元。";
@@ -481,7 +473,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
         Some("2026-12-01"),
     )
     .await;
-    let conflicting = ask(&reader.token, DECEMBER_START, 4000).await;
+    let conflicting = ask(&fixture.token, DECEMBER_START, 4000).await;
     let conflict = &conflicting["items"][0]["provenance"];
     assert_eq!(conflict["state"], json!({"status":"conflicting"}));
     assert_eq!(conflicting["items"].as_array().unwrap().len(), 1);
@@ -511,7 +503,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     let bytes = conflicting["rendered_context"].as_str().unwrap().len();
     assert_eq!(conflicting["used_bytes"], bytes);
     assert!(legacy_bytes < bytes);
-    let omitted = ask(&reader.token, DECEMBER_START, legacy_bytes).await;
+    let omitted = ask(&fixture.token, DECEMBER_START, legacy_bytes).await;
     assert_eq!(omitted["items"], json!([]));
     assert_eq!(omitted["rendered_context"], "");
     assert_eq!(omitted["conflicts"], json!([]));
@@ -521,7 +513,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     assert_eq!(mcp_omitted["omitted_conflict_groups"], 1);
 
     // The future conflict is present in the timeline, outside this request's date.
-    let earlier = ask(&reader.token, END_OF_NOVEMBER, 4000).await;
+    let earlier = ask(&fixture.token, END_OF_NOVEMBER, 4000).await;
     assert_current(&earlier["items"][0]["provenance"], "100 元");
     assert_eq!(
         earlier["items"][0]["provenance"]["timeline"][1]["state"]["status"],
@@ -529,7 +521,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     );
     assert_eq!(earlier["conflicts"], json!([]));
     for date in [0, END_OF_NOVEMBER] {
-        let omitted = ask(&reader.token, date, legacy_bytes).await;
+        let omitted = ask(&fixture.token, date, legacy_bytes).await;
         assert_eq!(omitted["items"], json!([]));
         assert_eq!(omitted["omitted_conflict_groups"], 0);
         assert_eq!(omitted["routes"][0]["omitted_for_budget"], 1);
@@ -538,7 +530,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
     let mut distinct = identity("境内");
     distinct.context.insert("traveler".into(), "实习生".into());
     publish_explicit_policy(&fixture, distinct.clone(), "180元").await;
-    let mixed = ask(&reader.token, DECEMBER_START, 4000).await;
+    let mixed = ask(&fixture.token, DECEMBER_START, 4000).await;
     let mixed = mixed["items"].as_array().unwrap();
     assert_eq!(mixed.len(), 2);
     let scoped = mixed
@@ -557,7 +549,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
         .await
         .unwrap();
     assert!(withdrawn.status().is_success());
-    let revised = ask(&reader.token, DECEMBER_START, 4000).await;
+    let revised = ask(&fixture.token, DECEMBER_START, 4000).await;
     let current = &revised["items"][0]["provenance"];
     assert_current(current, "80 元");
     assert_eq!(current["memory_id"], conflict["memory_id"]);
@@ -569,7 +561,7 @@ async fn ordinary_context_recall_keeps_dated_conclusions_and_citations_together(
             id(conflict, "memory_id"),
             conflict["version"]
         ))
-        .bearer_auth(&reader.token)
+        .bearer_auth(&fixture.token)
         .send()
         .await
         .unwrap();
@@ -617,27 +609,6 @@ async fn retain_replays_and_materializes_a_dated_policy_through_http() {
             .unwrap()
             .status(),
         409
-    );
-    let reader = fixture
-        .service
-        .engine
-        .relational()
-        .issue_key(
-            Scope {
-                tenant_id: fixture.auth.tenant_id,
-                workspace_id: fixture.auth.workspace_id,
-            },
-            "reader",
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        post_retain(baseline, &reader.token)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        403
     );
     assert_eq!(fixture.stub.calls.load(Ordering::SeqCst), 0);
     assert!(matches!(
@@ -709,7 +680,7 @@ async fn retain_replays_and_materializes_a_dated_policy_through_http() {
             "{base}/v1/memories/long-term/{}?version=1&as_of_ms={DECEMBER_START}",
             id(&after, "memory_id")
         ))
-        .bearer_auth(&reader.token)
+        .bearer_auth(&fixture.token)
         .send()
         .await
         .unwrap();
@@ -1058,24 +1029,18 @@ async fn retry_after_model_failure_keeps_the_original_source_and_receipt() {
 #[tokio::test]
 async fn write_authority_is_rechecked_before_pending_evidence_can_publish() {
     let fixture = setup().await;
-    let writer = fixture
+    let store = fixture.service.engine.relational();
+    let token = store.rotate_deployment_admin().await.unwrap();
+    let admin = fixture
         .service
-        .engine
-        .relational()
-        .issue_key(
-            Scope {
-                tenant_id: fixture.auth.tenant_id,
-                workspace_id: fixture.auth.workspace_id,
-            },
-            "writer",
-        )
+        .authorize_deployment_workspace(&token, fixture.auth.workspace_id)
         .await
         .unwrap();
-    let auth = fixture.service.auth(&writer.token).await.unwrap();
+    let auth = &fixture.auth;
     let receipt = fixture
         .service
         .retain_memory(
-            &auth,
+            auth,
             "accepted-before-revoke",
             CaptureInput {
                 content: ORIGINAL.into(),
@@ -1090,18 +1055,22 @@ async fn write_authority_is_rechecked_before_pending_evidence_can_publish() {
         .service
         .engine
         .relational()
-        .revoke_key(writer.key_id)
+        .revoke_key(auth.id)
         .await
         .unwrap();
-    assert_eq!(settle(&fixture, &receipt).await["state"], "failed");
+    assert!(worker::process_next(&fixture.service).await.unwrap());
+    assert_eq!(
+        fixture
+            .service
+            .job(&admin, id(&receipt, "job_id"))
+            .await
+            .unwrap()["state"],
+        "failed"
+    );
     assert_eq!(fixture.stub.calls.load(Ordering::SeqCst), 0);
-    assert!(matches!(
-        fixture.recall("境内", None, DECEMBER_START).await,
-        Err(AppError::NotFound)
-    ));
     let retained = fixture
         .service
-        .source_event(&fixture.auth, id(&receipt, "source_event_id"))
+        .source_event(&admin, id(&receipt, "source_event_id"))
         .await
         .unwrap();
     assert_eq!(retained["content"], ORIGINAL);

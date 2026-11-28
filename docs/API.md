@@ -25,7 +25,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 | `POST /v1/runs` | 使用工作区 Key 提交稳定的 `run_id` 与脱敏 `summary`，绑定当前归档 |
 | `POST /v1/runs/{id}/events` | 稳定 `event_id`、时间、报告方与具名事件；相同重试返回原序号 |
 | `POST /v1/runs/{id}/context` | `event_id` 和 `context`（EvidenceBundle 请求）；返回 bundle 和服务端准备回执 |
-| `GET /v1/runs/{id}?after=0&limit=50` | 所属 Key 或本工作区管理员读取分页链路。`is_owner` 标明当前 Key 的归属。 |
+| `GET /v1/runs/{id}?after=0&limit=50` | 所属工作区 Key 读取分页链路。`is_owner` 标明当前 Key 的归属。 |
 | `GET /v1/runs/{id}/prefix?through_sequence=N` | 当前 key 的不可变前缀摘要，可作为 Skill 依据 |
 
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
@@ -42,7 +42,7 @@ Run 所有者可针对精确前缀通过 HTTP 登记外部记录号，或转录�
 | `GET /v1/skill-reviews/{review}` | 选定审阅包、决定和 `published` 状态 |
 | `POST /v1/skill-reviews/{review}/publish` | 候选所有者用 `{digest}` 发布获管理员批准的包。 |
 | `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
-| `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续包下载 |
+| `DELETE /v1/skills/{id}/versions/{version}` | 使用工作区 Key 撤回已发布 Skill 版本，阻断后续包下载 |
 
 候选修订、审阅包内容或发布目标变化需要新的批准。原始会话和审阅依据不随包分发。
 调用方提交候选，也可用选定经历 CLI 将手工填写的方法绑定到一个精确依据。包格式和边界见
@@ -118,11 +118,11 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 - `SqliteStore::check_memory_identity(path)` 对已有路径执行只读、独占锁下的完整同版本
   schema 检查，不创建或修复表。
 - 命令幂等、作业执行和 artifact owner/index/ledger 各有独立职责，见[存储不变量](contracts/storage.md)。
-- 所属 workspace 与消息批次接口见下文；外部协议字段不能进入通用存储或授权判断。
+- 消息批次接口见下文；外部协议字段不能进入通用存储或授权判断。
 
 ## 角色
 
-每个工作区使用一把有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在所属工作区读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档。用工作区 Key 删除轮次、清空会话或通过来源接口删除会话均返回 403。
+每个工作区使用一把有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在所属工作区读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档。服务保留归档原文。通过内容来源接口撤回归档原文会被拒绝。
 
 管理员可创建工作区、轮换 Key，以及在明确选定的工作区内管理业务内容。发布任务提交时重新核验权限与来源。
 
@@ -148,9 +148,11 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 部署管理员用 `PUT /admin/deployment/workspaces/{id}` 提交 `{name}` 创建平级单 Key 工作空间，同一事务签发首把 Key。回执只在首次成功时返回 `key:{key_id,token}`，同 ID 同名重试返回 `created:false`。响应禁止缓存，未收到首次 Key 时可用 `POST /admin/deployment/workspaces/{id}/keys/rotate` 补发并撤销旧 Key，保留逻辑身份与会话。
 
-管理员控制台在选定工作区后提供单 Key 轮换。旧成员凭据仍可通过[工作区 Key 接口](#身份与密钥管理)直接使用和维护。
+管理员控制台在选定工作区后提供单 Key 轮换。
 
 以下路径相对于 `/admin/deployment/workspaces/{id}`。目标工作区由路径中的 `{id}` 决定。内容和任务写入使用 `Idempotency-Key`，Skill 使用审核 ID 和包摘要重试。审计记录管理员凭据对应的内部标识，该标识在管理员凭据轮换时更新。
+
+管理员凭据轮换后，已受理的作业仍在原工作区执行，原提交者记录保留。旧凭据无法发起新请求。作业取消、来源撤回和版本复核继续生效。
 
 | 方法与路径 | 操作 |
 | --- | --- |
@@ -183,7 +185,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ### Agent 连接
 
-`GET /admin/agents` 允许工作空间 Key 或成员授权工作区的管理员读取本空间的连接。工作区按 Bearer 凭据和可选
+`GET /admin/agents` 允许工作区 Key读取本空间的连接。工作区按 Bearer 凭据和可选
 `X-Origence-Workspace` 解析。返回 `workspace_id`、`window_seconds`（300）、
 `capacity_reached` 和 `items`。每项有当前 `role` 及 `observation`，包含
 `credential_id`、`last_seen_at_ms`、`active_requests` 和 `client_kinds`。
@@ -201,11 +203,11 @@ Origence 使用无状态 Streamable HTTP。列表显示当前进程正在处理�
 
 ### 管理界面只读目录
 
-- `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`：reader 以上，
+- `GET /v1/assets?kind=memory|knowledge&limit=25&after=<UUID>`：使用工作区 Key，
   workspace 来自认证；按 `asset_id` 升序扫描当前已发布、未删除的候选，逐条复用
   读取单条内容时采用的完整来源、语义和可见性检查。返回 `{items,next_after}`，items 仅为
   内容条目元数据，不包含正文或语义 quote。来源失效的候选被排除，其他存储错误明确失败。
-- `GET /v1/runs?limit=25&after=<UUID>`：当前工作区的 `admin` 可查看该工作区的全部 Run，响应为 `scope:"workspace"`。其他角色查看当前逻辑 Key 的 Run，响应为 `scope:"current_logical_key"`。每项含 `run_id`、`owner_key_id`、`is_owner`、`can_read_trace`、`created_at_ms`、`status` 和 `summary`。`can_read_trace` 表示当前角色与归属允许打开链路，详情请求仍复核来源。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。目录中的其他 Key 的 `summary` 为 `null`。管理员可打开详情读取摘要和事件。获授权的凭据轮换延续逻辑身份。
+- `GET /v1/runs?limit=25&after=<UUID>`：工作区 Key 查看当前逻辑 Key 的 Run，响应为 `scope:"current_logical_key"`。管理员在选定工作区的管理接口查看 Run。每项含 `run_id`、`owner_key_id`、`is_owner`、`can_read_trace`、`created_at_ms`、`status` 和 `summary`。`can_read_trace` 表示当前角色与归属允许打开链路，详情请求仍复核来源。状态按最新 `result_reported` 事件归为 `reported_success`、`reported_failure` 或 `unknown`，表示上报状态。目录中的其他 Key 的 `summary` 为 `null`。管理员可打开详情读取摘要和事件。获授权的凭据轮换延续逻辑身份。
 
 两个接口默认 limit=50、范围 1–100；省略 after 从头开始，未知查询字段拒绝。
 按 UUID 而非创建时间排序；`next_after` 是本页最后扫描的候选标识，不是总数。
@@ -252,7 +254,7 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `GET /health/ready` | 单 Worker 正在运行且本地存储检查通过；不是外部模型健康检查 |
 | `POST /v1/memories` | `{fact_key,content}`（`publish_if_authorized` 已废弃，兼容接受但无作用）→ `asset_id` / `source_event_id` / `job_id` 标识，`state:"accepted"`，`conflict` 表示追加已有事实 |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`；同 scope 下相同身份复用内容条目；`conflict` 表示已有版本 |
-| `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，reader 可读；返回与 `GET /v1/assets/{id}` 相同的当前已发布视图；不需要 Idempotency-Key，不创建内容条目 |
+| `POST /v1/memories/lookup` | 请求体为完整 `{subject,predicate,context:{}}`，工作区 Key 可读；返回与 `GET /v1/assets/{id}` 相同的当前已发布视图；不需要 Idempotency-Key，不创建内容条目 |
 | `POST /v1/memories/retain` | 提交事实原文、指定反馈，或直接提交经验及人工确认或固定文档版本，返回作业回执。[长期记忆契约](contracts/memory-consolidation.md) |
 | `POST /v1/memories/long-term/recall` | 按查询词一起召回事实和经验。 |
 | `POST /v1/memories/long-term/lookup` | 按完整身份读取事实详情。 |
@@ -266,16 +268,16 @@ Node.js UI 只通过这些及下表既有 HTTP 接口访问服务；不直接打
 | `GET /v1/assets/{id}?version=N` | 已发布当前/历史版本，含 content/hash/title/source/restored_from |
 | `POST /v1/assets/{id}/restore` | `{target_version,expected_version,reason}` → 恢复 job；完成后新增版本 |
 | `DELETE /v1/assets/{id}` | 永久逻辑墓碑，阻断包括历史版本在内的读取 |
-| `GET /v1/events/{id}` | writer 及以上读取有效来源原文 `{event_id,kind,content,file_id,created_at}`；reader 403，跨 scope/已撤回/文件已删除 404 |
+| `GET /v1/events/{id}` | 工作区 Key 读取有效来源原文 `{event_id,kind,content,file_id,created_at}`；跨工作区/已撤回/文件已删除 404 |
 | `DELETE /v1/events/{id}` | 撤回来源，阻断所有引用该来源的版本，不自动回退到旧版本 |
 | `DELETE /v1/files/{id}` | 阻断原文件，撤回所有引用该文件的事件 |
 | `GET /v1/jobs/{id}` | 操作/状态/生成/结果/错误代码 |
 | `POST /v1/jobs/{id}/cancel` | 标记 cancelled，增加 generation/run_token，旧执行不能提交；已完成任务不能取消，cleanup 不能取消 |
 | `POST /v1/jobs/{id}/retry` | 仅 failed/cancelled 且来源、内容条目仍有效；新 generation 原子入队；cleanup 重试需 admin |
-| `POST /v1/sessions/{session_id}/turns` | `{turn_id,question,answer,used_evidence:[]}` → 同步归档标识；writer 及以上，详见会话归档节 |
-| `GET /v1/sessions/{session_id}/turns/{turn_id}` | writer 及以上读取完整有效问答、归档引用与反馈 |
+| `POST /v1/sessions/{session_id}/turns` | `{turn_id,question,answer,used_evidence:[]}` → 同步归档标识；使用工作区 Key，详见会话归档节 |
+| `GET /v1/sessions/{session_id}/turns/{turn_id}` | 工作区 Key 读取完整有效问答、归档引用与反馈 |
 | `POST /v1/sessions/{session_id}/turns/{turn_id}/feedback` | `{feedback_id,target,rating,comment?}` → 同步记录标识；不调权、不触发模型 |
-| `GET /v1/sessions/{session_id}/turns/{turn_id}/feedback` | writer 及以上读取该有效轮次的反馈列表 |
+| `GET /v1/sessions/{session_id}/turns/{turn_id}/feedback` | 工作区 Key 读取该有效轮次的反馈列表 |
 | `POST /v1/search` | `{query,limit:10,mode:"keyword",allow_partial:false}`；mode 支持 keyword/vector/hybrid |
 | `POST /v1/resolve` | `{query,budget_tokens:2000,mode:"keyword",allow_partial:false}` → rendered_context 和 sources |
 
@@ -347,7 +349,7 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 
 内容条目读取增加 `identity` 字段；旧记忆/知识为 null。记忆条目的身份绑定不可修改，删除后同身份不能重建。旧 fact_key/capture 写入不能修改已绑定身份的内容条目，返回 409；旧事实键若恰好与新身份编码碰撞，新入口返回 409，不自动转换。
 
-lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何内容条目/来源/任务。缺失身份表不是合法的未命中或空结果。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
+lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何内容条目/来源/任务。缺失身份表不是合法的未命中或空结果。返回 version 不是后续写入锁，最终以 job 的版本检查为准。
 
 新建库始终包含完整身份 schema；启动拒绝缺表或不兼容库，不提供缺表时仅开放旧接口的降级模式，也不自动安装或升级。只读检查步骤见 [OPERATIONS](OPERATIONS.md#记忆身份检查)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索。
 
@@ -363,7 +365,7 @@ lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精�
 
 `GET /v1/assets/{id}` 返回 normalization_status：记忆有显式身份绑定时为 explicit_identity；独立证据为 unnormalized，包括冲突、否定、提议、歧义及旧提取入口另存的证据；旧 fact_key 记忆为 legacy_unidentified；知识条目为 not_applicable。该状态只描述身份绑定方式，不代表事实可信度或模型语义验证；历史版本沿用同一内容条目身份。旧记忆不会因该字段被自动归一化。
 
-writer 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。原文可能包含未发布内容，因此 reader 无权访问。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。记忆语义 已提供未归一化记忆的独立状态；自动身份归并尚未实现。
+工作区 Key 可以用来源标识访问 GET /v1/events/{id}，将 search locator 的字节区间与原始输入对照；这也支持核验失败或零结果 capture 的来源。接口不返回撤回来源、已删文件来源或其他 workspace 内容；逻辑删除仍保留底层原文，不提供物理擦除。记忆语义 已提供未归一化记忆的独立状态；自动身份归并尚未实现。
 
 ## 检索与上下文身份标注
 
@@ -391,7 +393,7 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 - MessageBatch 的 batch_id/session_id 为 1–4096 UTF-8 字节、无 NUL；每批 1–256 条消息，正文合计不超过 1,000,000 UTF-8 字节，正文遵守通用文本校验。role 是 1–64 UTF-8 字节、非空白且无控制字符的原样标签，例如 system/tool；它不代表权限。timestamp 是可选有符号 i64 Unix 毫秒，缺省/null 不补当前时间，不据此重排消息。
 - `AcceptedMessageSpec::raw_only(profile)` 固定 `message-batch-ranges-v1`、parser_version=1、chunking_version=1、raw_only=true 及 embedding profile；接受事务把完整规格写入原 job payload。完整批次和规格参与请求 hash，重复键的内容/session/顺序/角色/时间/parser/profile/mode 变化返回冲突，不另建任务。恢复和显式 retry 使用原规格；运行模型 profile 不匹配时拒绝处理。
 - `IngestReceipt` 保存原 asset/source/job/目标版本和规格，不保存永久 success。`message_batch_status` / `wait_message_batch` 重新授权并观察这一批次，区分 Pending、Retrievable、Failed、CancelledOrSuperseded、Invisible。只有确切目标版本、有效来源、全部目标 profile 的原分块索引和账本 generation 一致，才是 Retrievable。
-- 同一 workspace 的合法新 key 可命中同一回执，`job.created_by` 保留原提交者。单 Key 轮换后的执行授权见[任务与读取可见性](#任务与读取可见性)。成员 Key 撤销或降权后，另一把 Key 无法接管原任务。Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。cleanup 是特权回收任务，当前 admin 可在原提交者撤销后显式重试清理。
+- 同一 workspace 的合法新 key 可命中同一回执，`job.created_by` 保留原提交者。单 Key 轮换后的执行授权见[任务与读取可见性](#任务与读取可见性)。Worker、重试、最终发布及 I/O 后读取都重新验证实时权限。cleanup 是特权回收任务，当前 admin 可在原提交者撤销后显式重试清理。
 - 原文来源 JSON 保留完整 batch/session/role/timestamp 和输入顺序；分块定位包含 source_event_id、external_batch_id、message_index、source_path、消息内 UTF-8 byte_start/end 及 parser 规格。同 session 的多批次不会仅由局部 message_index 区分。原始批次不伪造 SessionTurn/Feedback。
 
 ## 显式记忆语义
@@ -399,8 +401,8 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 新数据库提供以下入口；旧数据库不自动安装记忆语义表。所有 scope 来自认证，写操作需要 Idempotency-Key。
 
 - POST /admin/memory-properties：仅 admin，注册不可变属性，例如 {"predicate":"database.engine","cardinality":"single","required_context":["env"]}。cardinality 为 single 或 multi；required_context 最多 32 个合法条件名。相同定义可重放；改变定义或接管已有显式身份的属性返回 409。
-- GET /v1/memory-properties/{predicate}：reader 可读取本 workspace 的已登记定义，未登记返回 404。
-- POST /v1/memories/semantic：writer 及以上；重复事实同步返回 `{state:"duplicate",asset_id,version,source_event_id}`，保存本次来源但不新建版本或任务，不含 job_id。需要发布时返回 `{state:"accepted",asset_id,source_event_id,job_id,semantic_status,normalization_status}`，由现有单 Worker 发布，只有任务 completed 后才能宣称新版本已发布。已登记属性不能经 /identified 或 /captures/identified 写入（409）。未登记的旧显式身份入口和旧 fact_key 语义保持原样。
+- GET /v1/memory-properties/{predicate}：工作区 Key 可读取本 workspace 的已登记定义，未登记返回 404。
+- POST /v1/memories/semantic：工作区 Key；重复事实同步返回 `{state:"duplicate",asset_id,version,source_event_id}`，保存本次来源但不新建版本或任务，不含 job_id。需要发布时返回 `{state:"accepted",asset_id,source_event_id,job_id,semantic_status,normalization_status}`，由现有单 Worker 发布，只有任务 completed 后才能宣称新版本已发布。已登记属性不能经 /identified 或 /captures/identified 写入（409）。未登记的旧显式身份入口和旧 fact_key 语义保持原样。
 
 语义请求示例：
 
@@ -435,7 +437,7 @@ content 是不可变原始来源；quote 必须逐字匹配 UTF-8 字节半开�
 
 ## 对话语义捕获
 
-新库可调用 `POST /v1/captures/semantic`，或公开库 `Service::semantic_capture`。writer 及以上权限，必须配置 extraction model；只进行显式请求驱动的捕获，不后台监听会话。调用方提供保留说话人和适用条件的原始文本，以及允许匹配的完整身份列表；稳定主体 ID、属性目录和授权不能由原文或模型创建。
+新库可调用 `POST /v1/captures/semantic`，或公开库 `Service::semantic_capture`。使用工作区 Key，必须配置 extraction model；只进行显式请求驱动的捕获，不后台监听会话。调用方提供保留说话人和适用条件的原始文本，以及允许匹配的完整身份列表；稳定主体 ID、属性目录和授权不能由原文或模型创建。
 
 ```json
 {
@@ -468,7 +470,7 @@ locator 沿用记忆语义原始来源与字节范围，自动提取的新成员
 
 SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"` 分别表示归档和反馈已提交。经验可[直接提交](contracts/memory-consolidation.md#写入)，也可显式调用 [Improve](#显式-improve--learning) 从归档和反馈中提炼。
 
-归档轮次和反馈的读写均要求 writer 或更高权限，并且 `session_id` 必须是认证逻辑 key 的绑定会话。tenant、workspace 与逻辑 key 均来自认证，读写和重试都检查凭据是否仍然有效。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil。POST 要求 `Idempotency-Key`。未知字段、缺少必要字段、未知枚举均拒绝。
+归档轮次和反馈的读写均要求有效工作区 Key，并且 `session_id` 必须是认证逻辑 key 的绑定会话。tenant、workspace 与逻辑 key 均来自认证，读写和重试都检查凭据是否仍然有效。session_id、turn_id、feedback_id 与证据 UUID 必须非 nil。POST 要求 `Idempotency-Key`。未知字段、缺少必要字段、未知枚举均拒绝。
 
 `POST /v1/sessions/{session_id}/turns` 示例：
 
@@ -514,20 +516,10 @@ SessionTurn 由调用方显式提交。`state:"archived"` 和 `state:"recorded"`
 
 rating 只接受 helpful/unhelpful/neutral，表示调用方判断，不推断事实真伪。comment 可省略或 null，最多 4096 UTF-8 字节。引用目标必须属于路径中的已归档轮次，不能反馈未使用的检索命中、其他轮次或其他 scope。每轮最多 256 条不可变反馈；已达到上限时新记录返回 409，完全相同的重放仍可成功，不静默截断。领域唯一键为 tenant/workspace/principal/feedback_id；同键同语义请求复用结果，改变轮次/目标/评分/评论返回 409。反馈不覆盖、修订或删除已有评分，也不直接影响排序与权重。POST 返回 `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`，GET 返回 `{session_id,turn_id,feedback:[...]}`；反馈元素包含原请求及 created_by/created_at，轮次 GET 同样含 feedback。
 
-原逻辑 key 的 writer 用 `DELETE /v1/sessions/{session_id}/turns/{turn_id}` 删除单轮。
-清空历史使用分页读取返回的字符串 `through_sequence` 固定上界，再调用
-`DELETE /v1/sessions/{session_id}?through_sequence=<上界>&after=0`。响应的字符串
-`next_after` 为下一批游标，值为 `null` 时完成。失败重试相同上界和游标，已删除的轮次
-可以再次确认。高于上界的新轮次保留，同一个逻辑 key 可继续归档。
-Admin 也可通过 `DELETE /v1/events/{source_event_id}` 删除自己会话的归档来源，重试沿用幂等键。
+已归档的原始问答支持追加和读取。工作区与管理员接口都不提供删除原始问答的操作。
+[备份与恢复](OPERATIONS.md#私有问答归档与配套恢复)
 
-服务端在 AnySeek 确认后才返回删除成功。组版本阻断迟到写入。
-若轮次曾被 Run 或经验作为依据，沿用普通来源撤回规则，在发出删除前让该来源证明停止使用。
-AnySeek 失败或响应丢失时，引用保持不可用，控制台显示删除未确认并支持重试。
-Run 的历史列表保留原事件位置，受影响的上下文事件只返回摘要及 `private_sources_unavailable` 数量。
-[清理与备份](OPERATIONS.md#私有问答归档与配套恢复)
-
-私有会话召回默认关闭。启用 session 路由要求实时 writer 权限，未通过时在模型调用前返回 403。
+私有会话召回默认关闭。启用 session 路由需要有效工作区 Key。
 `session_id` / `exclude_session_id` 仅在启用时可用。关键词、向量及混合检索仅查询
 该 workspace 和逻辑 key 的私有集合，按 turn ID 去重并在交付前复核当前权限和撤回状态。
 `scanned` 计入最终复核前的目录候选。关键词覆盖完整问答。向量只表示问题和回答各自开头
@@ -538,8 +530,8 @@ embedding 不可用时，`allow_partial` 允许退回关键词。
 
 仅新建数据库；现有 extraction model 配置提供提议与独立核验，不增加 provider、自动触发、排序改权或身份覆盖。调用方显式发起：
 
-- `POST /v1/sessions/{session_id}/improve`（writer+，Idempotency-Key）：`{improve_id,conditions:["仅在 staging 发布时"],max_feedback:32}`。improve_id 非 nil 且正文不可变；conditions 必填，1–8 个互异非空项，每项最多 256 UTF-8 字节；max_feedback 默认 32，范围 1–32。
-- `GET /v1/improvements/{improve_id}`（writer+）：返回状态、父任务、冻结水位、数量、提议/核验保存状态、Learning 子任务及安全错误码，不返回冻结问答或模型原始响应。依赖撤回后仍可读取这些管理信息。
+- `POST /v1/sessions/{session_id}/improve`（工作区 Key，Idempotency-Key）：`{improve_id,conditions:["仅在 staging 发布时"],max_feedback:32}`。improve_id 非 nil 且正文不可变；conditions 必填，1–8 个互异非空项，每项最多 256 UTF-8 字节；max_feedback 默认 32，范围 1–32。
+- `GET /v1/improvements/{improve_id}`（工作区 Key）：返回状态、父任务、冻结水位、数量、提议/核验保存状态、Learning 子任务及安全错误码，不返回冻结问答或模型原始响应。依赖撤回后仍可读取这些管理信息。
 - `GET /v1/learnings/{learning_id}`（仅原逻辑 key）：返回仍有效的已发布 Learning 详情，包含公开声明、条件及私有支持指针，不含原始问答 quote。普通 workspace 成员通过 Search/Bundle 复用公开正文与条件。
 
 反馈使用 workspace 内事务分配的单调 feedback_sequence，身份仍是 tenant/workspace/principal/feedback_id。时间戳相同或回退不影响批次。每次冻结最多 32 条反馈、128 KiB JSON 输入；首条过大报错，不消费水位。提议与核验的每次完整序列化模型输入也限制为 128 KiB；核验加入候选后若超界，在发出请求前失败且不消费水位，可取消后缩小批次重试。冻结时已失效的轮次只保存跳过标识，不保留隐藏正文。同一 session 最多一个 accepted/publishing run；重放相同命令或 improve_id 复用领域结果，改变请求返回 409。
@@ -573,7 +565,7 @@ resolve 合约不变。最小输入为 `{"query":"Atlas"}`。
 字符串。Learning 的每个条件与其逐字精确匹配才标记 `caller_context_exact_match`，
 否则保留并标记 `unverified`；两者都不代表系统验证了真实适用性。
 
-memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_of_ms":1796083200000}` 召回已归纳主题。`as_of_ms` 指定事实的业务时点（Unix 毫秒，默认当前时间）。`long_term_memory` 来源包含该时点的 `state`、带版本的时间线和原文 UTF-8 引文区间。状态为 `conflicting` 或 `unknown` 时没有选定值。控制台 writer 可打开原文，reader 可核验已发布的引文。[字段及预算细节](contracts/evidence-bundle.zh-CN.md#类型化来源与适用性)
+memory 路由可用 `{"query":"云舟境内酒店报销上限是多少？","as_of_ms":1796083200000}` 召回已归纳主题。`as_of_ms` 指定事实的业务时点（Unix 毫秒，默认当前时间）。`long_term_memory` 来源包含该时点的 `state`、带版本的时间线和原文 UTF-8 引文区间。状态为 `conflicting` 或 `unknown` 时没有选定值。控制台可打开原文并核验已发布的引文。[字段及预算细节](contracts/evidence-bundle.zh-CN.md#类型化来源与适用性)
 
 会话路由详见 [会话归档与召回访问规则](#会话归档与幂等反馈)。
 
@@ -596,7 +588,7 @@ version_root_source_event_id。`session_turn` 保留真实会话、轮次、归�
 
 **归档限制**。基于 chunk 的记忆、知识和 Learning 条目可转换为原有 chunk used_evidence。
 `SessionTurn.used_evidence` 接受 chunk/entity/relation。不支持的引用带 `unsupported_session_turn_reference`
-或 `unsupported_long_term_memory_reference` 标记。Learning 发布给 reader 的引用只有支持标识/范围，
+或 `unsupported_long_term_memory_reference` 标记。Learning 中非归属者可见的引用只有支持标识/范围，
 不返回支撑轮次的原始问答或 quote。
 
 详见 [EvidenceBundle 契约](contracts/evidence-bundle.zh-CN.md)。真实 Agent

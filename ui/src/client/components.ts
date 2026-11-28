@@ -185,5 +185,4 @@ export function labelControl<T extends HTMLElement>(
 export interface ViewContext {
   signal: AbortSignal;
   navigate: (page: string, id?: string, version?: number) => void;
-  role: string;
 }

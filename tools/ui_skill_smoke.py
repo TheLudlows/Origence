@@ -21,8 +21,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="origence-run-skill-") as temporary:
         root = Path(temporary)
         env = isolated_env(temporary)
-        workspace = seed_workspace(env, "Synthetic Skill workspace", single_key=True)
-        unrelated = seed_workspace(env, "Unrelated Skill workspace", single_key=True)
+        workspace = seed_workspace(env, "Synthetic Skill workspace")
+        unrelated = seed_workspace(env, "Unrelated Skill workspace")
         admin = admin_env(env)
         forbidden = [admin, workspace["token"], unrelated["token"]]
         with Host(str(binary), env, workspace["token"], forbidden, serve_args=("--local",)) as host:

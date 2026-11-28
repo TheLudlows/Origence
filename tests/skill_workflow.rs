@@ -552,13 +552,6 @@ async fn single_workspace_key_submits_and_only_administrator_decides() {
         .await
         .unwrap();
     assert_eq!(displayed["published"], true);
-    let next_owner = service.auth(&next_key.token).await.unwrap();
-    assert!(matches!(
-        service
-            .withdraw_session_archive(&next_owner, session, turn)
-            .await,
-        Err(origence::error::AppError::Forbidden)
-    ));
     assert_eq!(
         cli(&base, &next_key.token, &["package", &skill, "1"], true).await,
         exported

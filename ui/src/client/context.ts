@@ -36,45 +36,14 @@ function memoryState(state: LongTermMemoryState) {
 }
 
 function memoryCitation(
-  ref: LongTermMemoryProvenance,
   entry: LongTermMemoryCitation,
   ctx: ViewContext,
 ) {
   const preview = sourcePreviewTarget();
   const { byte_start, byte_end, quote } = entry.statement;
-  const open = button(ctx.role === "reader" ? "核验引文" : "打开原文", async () => {
-    if (ctx.role !== "reader") {
-      await sourcePreview(
-        preview, entry.source_event_id, { byte_start, byte_end, byte_basis: "source_utf8" }, ctx, quote,
-      );
-      return;
-    }
-    open.disabled = true;
-    preview.result.replaceChildren();
-    preview.announcement.textContent = "正在核验引文…";
-    try {
-      const query = new URLSearchParams({ version: String(ref.version), as_of_ms: String(ref.as_of_ms) });
-      const fixed = await api.get<{ evidence: LongTermMemoryCitation[] }>(
-        `/v1/memories/long-term/${ref.memory_id}?${query}`, ctx.signal,
-      );
-      if (ctx.signal.aborted || !preview.root.isConnected) return;
-      const original = fixed.evidence.find((candidate) =>
-        candidate.source_event_id === entry.source_event_id &&
-        candidate.statement.byte_start === byte_start &&
-        candidate.statement.byte_end === byte_end &&
-        candidate.statement.quote === quote,
-      );
-      if (!original) throw new Error("固定版本中找不到此引文");
-      preview.result.append(el("pre", "code", el("mark", "", original.statement.quote)));
-      preview.announcement.textContent = "已核验固定版本的引文。";
-    } catch (e) {
-      if (ctx.signal.aborted || !preview.root.isConnected) return;
-      preview.announcement.textContent = "无法核验引文。";
-      message(preview.result, e);
-    } finally {
-      open.disabled = false;
-    }
-  });
+  const open = button("打开原文", () => sourcePreview(
+    preview, entry.source_event_id, { byte_start, byte_end, byte_basis: "source_utf8" }, ctx, quote,
+  ));
   const date = entry.effective_at_ms === null ? "无日期基线" : businessDate(entry.effective_at_ms);
   return el(
     "div", "citation",
@@ -93,7 +62,7 @@ function datedMemory(ref: LongTermMemoryProvenance, unverified: boolean, ctx: Vi
       effective_from_ms === null ? "无日期基线" : businessDate(effective_from_ms),
       memoryState(state),
     ])),
-    ...ref.citations.map((entry) => memoryCitation(ref, entry, ctx)),
+    ...ref.citations.map((entry) => memoryCitation(entry, ctx)),
   );
 }
 
@@ -235,7 +204,7 @@ export function contextPage(root: HTMLElement, ctx: ViewContext) {
       field("总预算（UTF-8 字节）", budget),
       field("记忆业务日期（UTC）", asOf),
     ),
-    ctx.role !== "reader" ? field("包含当前 key 的私有会话", session) : null,
+    field("包含当前 key 的私有会话", session),
     el(
       "div",
       "actions",

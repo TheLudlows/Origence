@@ -178,8 +178,20 @@ mod tests {
         .unwrap();
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
-        for id in [owner, other] {
-            sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,'admin',0)")
+        let foreign = Scope {
+            workspace_id: Uuid::new_v4(),
+            ..scope
+        };
+        sqlite_db::query(
+            "INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(?,?,'other',0)",
+        )
+        .bind(foreign.tenant_id)
+        .bind(foreign.workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        for (id, scope) in [(owner, scope), (other, foreign)] {
+            sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,created_at) VALUES(?,?,?,?,?,0)")
                 .bind(id).bind(id).bind(scope.tenant_id).bind(scope.workspace_id).bind(id.to_string()).execute(&pool).await.unwrap();
         }
         let run = Uuid::new_v4();
@@ -288,7 +300,7 @@ mod tests {
             Err(StorageError::Conflict(_))
         ));
         t.commit().await.unwrap();
-        let mut t = tx(&pool, scope, other).await;
+        let mut t = tx(&pool, foreign, other).await;
         assert!(matches!(
             t.run_verifications(run, Uuid::nil(), 25).await,
             Err(StorageError::NotFound)

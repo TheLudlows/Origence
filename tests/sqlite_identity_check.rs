@@ -20,8 +20,7 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
         .create_workspace(scope.tenant_id, scope.workspace_id, "current format")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
-    let reader_key = store.issue_key(scope, "reader").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     let mut tx = store.begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
@@ -45,18 +44,8 @@ async fn identity_inspection_preserves_current_versions_permissions_and_sources(
     }
     let store = SqliteStore::open(&path).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
-    let reader = store.authenticate(&reader_key.token).await.unwrap();
     assert_eq!(auth.scope, scope);
-    assert_eq!(auth.role, "admin");
-    assert_eq!(reader.scope, scope);
-    assert_eq!(reader.role, "reader");
-    let mut tx = store.begin_read(reader).await.unwrap();
-    tx.check_permission(Permission::Read).await.unwrap();
-    assert!(matches!(
-        tx.check_permission(Permission::Write).await,
-        Err(StorageError::Forbidden)
-    ));
-    tx.rollback().await.unwrap();
+    assert_eq!(auth.role, "workspace");
     let mut tx = store.begin(auth).await.unwrap();
     tx.check_permission(Permission::Write).await.unwrap();
     let view = tx.asset_view(asset, Some(1)).await.unwrap();
@@ -267,7 +256,7 @@ WHERE kind = 'memory';
         .create_workspace(scope.tenant_id, scope.workspace_id, "preserved workspace")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     let mut tx = store.begin(auth).await.unwrap();
     let source = tx
@@ -339,14 +328,14 @@ WHERE kind = 'memory';
             .await
             .unwrap();
     assert_eq!(binding, asset);
-    let role: String =
-        db::query_scalar("SELECT role FROM oc_api_keys WHERE tenant_id=? AND workspace_id=?")
+    let retained: bool =
+        db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND NOT revoked)")
             .bind(scope.tenant_id)
             .bind(scope.workspace_id)
             .fetch_one(&raw)
             .await
             .unwrap();
-    assert_eq!(role, "admin");
+    assert!(retained);
     raw.close().await;
 }
 

@@ -298,9 +298,30 @@ fn pdf() -> Vec<u8> {
 #[tokio::test]
 async fn local_host_http_mcp_models_and_recovery() {
     let dir = tempfile::tempdir().unwrap();
-    let bootstrap = crate::support::seed_key_workspace(dir.path(), "local tests").await;
-    let token = bootstrap["token"].as_str().unwrap();
-    let other = crate::support::seed_key_workspace(dir.path(), "other scope").await;
+    let store = SqliteStore::open(dir.path().join("context.db"))
+        .await
+        .unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let workspace_key = store
+        .create_key_workspace(scope, "local tests")
+        .await
+        .unwrap();
+    let token = workspace_key.token.as_str();
+    let other_key = store
+        .create_key_workspace(
+            Scope {
+                tenant_id: Uuid::new_v4(),
+                workspace_id: Uuid::new_v4(),
+            },
+            "other scope",
+        )
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
     let slow = Arc::new(AtomicBool::new(false));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let model = format!("http://{}", listener.local_addr().unwrap());
@@ -342,7 +363,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     let isolated = post(
         &http,
         &base,
-        other["token"].as_str().unwrap(),
+        other_key.token.as_str(),
         "/v1/search",
         json!({"query":"approval","mode":"hybrid"}),
     )
@@ -353,7 +374,7 @@ async fn local_host_http_mcp_models_and_recovery() {
             "{base}/v1/assets/{}",
             published["asset_id"].as_str().unwrap()
         ))
-        .bearer_auth(other["token"].as_str().unwrap())
+        .bearer_auth(other_key.token.as_str())
         .send()
         .await
         .unwrap()
@@ -547,7 +568,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     assert_eq!(source["content"], "CAPTURECONFLICT");
     assert_eq!(
         http.get(format!("{base}{source_path}"))
-            .bearer_auth(other["token"].as_str().unwrap())
+            .bearer_auth(other_key.token.as_str())
             .send()
             .await
             .unwrap()
@@ -618,7 +639,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     );
     assert_eq!(
         http.post(format!("{base}/v1/memories/lookup"))
-            .bearer_auth(other["token"].as_str().unwrap())
+            .bearer_auth(other_key.token.as_str())
             .json(&identity)
             .send()
             .await
@@ -1132,7 +1153,7 @@ async fn local_host_http_mcp_models_and_recovery() {
             .contains("Release approval required")
     );
     let administrator = std::fs::read_to_string(dir.path().join("deployment-admin.key")).unwrap();
-    let workspace = bootstrap["workspace_id"].as_str().unwrap();
+    let workspace = scope.workspace_id;
     let replacement = post(
         &http,
         &base,
@@ -1179,9 +1200,8 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "candidate-filter")
         .await
         .unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
-    let reader_auth = service.auth(&reader.token).await.unwrap();
+    let admin = store.seed_workspace_key(scope).await.unwrap();
+    let reader_auth = service.auth(&admin.token).await.unwrap();
     let identity: origence::memory_identity::MemoryIdentity = serde_json::from_value(json!({
         "subject": {"kind": "service", "stable_id": "target"},
         "predicate": "release.approval",
@@ -1385,7 +1405,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .create_workspace(other_scope.tenant_id, other_scope.workspace_id, "other")
         .await
         .unwrap();
-    let other_key = store.issue_key(other_scope, "reader").await.unwrap();
+    let other_key = store.seed_workspace_key(other_scope).await.unwrap();
     let other_auth = service.auth(&other_key.token).await.unwrap();
     assert_eq!(
         service
@@ -1426,11 +1446,10 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "local")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
 
-    let writer_key = store.issue_key(scope, "writer").await.unwrap();
-    let writer = s.auth(&writer_key.token).await.unwrap();
+    let writer = a.clone();
     let proposal = s
         .memory(
             &writer,
@@ -1445,7 +1464,16 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .unwrap();
     assert!(proposal["job_id"].is_string());
     assert_eq!(proposal["state"], "accepted");
-    let reader_key = store.issue_key(scope, "reader").await.unwrap();
+    let reader_key = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Isolated jobs",
+        )
+        .await
+        .unwrap();
     let reader = s.auth(&reader_key.token).await.unwrap();
     // Job state can expose unpublished input, so it stays behind write permission.
     assert!(s.job(&reader, id(&proposal, "job_id")).await.is_err());
@@ -1522,11 +1550,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
     );
-    let restore_key = crate::support::seed_member_key(&s, &a, "writer").await;
-    let restore_writer = s
-        .auth(restore_key["token"].as_str().unwrap())
-        .await
-        .unwrap();
+    let restore_writer = a.clone();
     let restored = s
         .restore(
             &restore_writer,
@@ -1591,7 +1615,7 @@ async fn racing_expected_versions_supersede_the_loser() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "local")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "writer").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
     let input = MemoryInput {
         fact_key: "racer".into(),
@@ -1661,7 +1685,7 @@ async fn malformed_durable_jobs_settle_and_leave_the_worker_available() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "malformed jobs")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
     let cases = [
         (
@@ -1781,7 +1805,7 @@ async fn saved_publication_checks_generation_before_decoding() {
         )
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
     for (case, publication, state) in [
         (
@@ -1863,7 +1887,7 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     let a = s.auth(&key.token).await.unwrap();
@@ -2176,8 +2200,7 @@ async fn host_search_crosses_authority_batch_boundaries_after_reopen() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "offline-batch")
         .await
         .unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let admin = store.seed_workspace_key(scope).await.unwrap();
     // Initialize the workspace through the public publication path before
     // injecting the large authority fixture; this also pins the analysis binding.
     let auth = service.auth(&admin.token).await.unwrap();
@@ -2278,7 +2301,7 @@ async fn host_search_crosses_authority_batch_boundaries_after_reopen() {
     let response = post(
         &reqwest::Client::new(),
         &base,
-        &reader.token,
+        &admin.token,
         "/v1/search",
         json!({"query":"approval","mode":"keyword","limit":100}),
     )

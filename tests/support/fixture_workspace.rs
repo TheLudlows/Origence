@@ -1,4 +1,3 @@
-use crate::fixture_keys::FixtureKeys;
 use origence::storage::{Lifecycle, Scope, SqliteStore};
 use std::path::Path;
 use uuid::Uuid;
@@ -8,7 +7,6 @@ pub async fn seed_workspace(
     dir: &Path,
     name: &str,
     same_tenant_as: Option<Uuid>,
-    single_key: bool,
 ) -> anyhow::Result<serde_json::Value> {
     let store = SqliteStore::open(dir.join("context.db")).await?;
     let scope = Scope {
@@ -18,14 +16,7 @@ pub async fn seed_workspace(
         },
         workspace_id: Uuid::new_v4(),
     };
-    let key = if single_key {
-        store.create_key_workspace(scope, name).await?
-    } else {
-        store
-            .create_workspace(scope.tenant_id, scope.workspace_id, name)
-            .await?;
-        store.issue_key(scope, "admin").await?
-    };
+    let key = store.create_key_workspace(scope, name).await?;
     store.shutdown().await?;
     Ok(
         serde_json::json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token}),

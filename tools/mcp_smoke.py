@@ -650,8 +650,8 @@ def main():
     with fixture_directory("oc-mcp-smoke-") as directory:
         env = isolated_env(str(directory))
         forbidden = [str(directory), OLD_CONTENT, CONTENT, BAD_INPUT]
-        workspace = seed_workspace(env, "mcp-smoke", single_key=True)
-        other = seed_workspace(env, "mcp-smoke isolated workspace", workspace["workspace_id"], single_key=True)
+        workspace = seed_workspace(env, "mcp-smoke")
+        other = seed_workspace(env, "mcp-smoke isolated workspace", workspace["workspace_id"])
         token, workspace_id = workspace["token"], workspace["workspace_id"]
         admin = admin_env(env)
         bad_token = "oc_invalid_smoke_" + uuid.uuid4().hex

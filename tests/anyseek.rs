@@ -370,7 +370,7 @@ mod service_contract {
         let key = service
             .engine
             .relational()
-            .issue_key(scope, "admin")
+            .seed_workspace_key(scope)
             .await
             .unwrap();
         let auth = service.auth(&key.token).await.unwrap();

@@ -18,7 +18,7 @@ async fn provision(store: &SqliteStore) -> (AuthorizedScope, Scope) {
         .create_workspace(scope.tenant_id, scope.workspace_id, "identity")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     (store.authenticate(&key.token).await.unwrap(), scope)
 }
 
@@ -105,9 +105,9 @@ async fn tombstone_blocks_identity_recreation() {
 async fn lookup_is_exact_scoped_and_reads_current_version() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let (auth, scope) = provision(&store).await;
+    let (auth, _) = provision(&store).await;
     let i = identity();
-    let mut tx = store.begin(auth).await.unwrap();
+    let mut tx = store.begin(auth.clone()).await.unwrap();
     let (asset, _) = tx.identity_slot(&i).await.unwrap();
     let source = tx.create_event("identified", "source", None).await.unwrap();
     for version in [1, 2] {
@@ -117,9 +117,7 @@ async fn lookup_is_exact_scoped_and_reads_current_version() {
         tx.update_asset_version(asset, version, None).await.unwrap();
     }
     tx.commit().await.unwrap();
-    let key = store.issue_key(scope, "reader").await.unwrap();
-    let reader = store.authenticate(&key.token).await.unwrap();
-    let mut tx = store.begin(reader).await.unwrap();
+    let mut tx = store.begin(auth).await.unwrap();
     tx.check_permission(origence::storage::Permission::Read)
         .await
         .unwrap();
@@ -327,12 +325,13 @@ async fn incomplete_database_is_rejected_without_implicit_repair() {
         .await
         .unwrap();
     assert_eq!(fact_key, "legacy.fact");
-    let role: String = db::query_scalar("SELECT role FROM oc_api_keys WHERE id=?")
-        .bind(principal_id)
-        .fetch_one(&raw_pool)
-        .await
-        .unwrap();
-    assert_eq!(role, "admin");
+    let retained: bool =
+        db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_api_keys WHERE id=? AND NOT revoked)")
+            .bind(principal_id)
+            .fetch_one(&raw_pool)
+            .await
+            .unwrap();
+    assert!(retained);
     raw_pool.close().await;
 }
 

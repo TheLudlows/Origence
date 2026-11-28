@@ -9,7 +9,7 @@ Claude Code 和 Codex 通过 Origence 服务端的 Streamable HTTP MCP 检索。
 ## 直连 HTTP MCP
 
 HTTP 宿主提供 Streamable HTTP MCP 端点 `/mcp`。在客户端的启动环境设置工作区 API Key
-`OC_API_KEY`。只检索已发布资料用 `reader` 权限。以下使用本机默认端口，远程部署时换成实际 HTTPS 地址。
+`OC_API_KEY`。使用所在工作区的 Key。以下使用本机默认端口，远程部署时换成实际 HTTPS 地址。
 
 ```powershell
 claude mcp add --transport http origence-http http://127.0.0.1:8080/mcp --header 'Authorization: Bearer ${OC_API_KEY}'
@@ -27,7 +27,7 @@ MCP 走 HTTP。插件中的自动 Run Hook 和会话归档使用客户端机器�
 ## 安装 `origence` 插件
 
 准备一台客户端可访问的 Origence HTTP 宿主和支持插件 Marketplace 的客户端。插件安装 HTTP MCP，并默认启用私有
-Run Hook。请工作区管理员签发个人 Key。只需检索时使用 `reader` 并可[直接注册端点](#直连-http-mcp)。
+Run Hook。请管理员提供工作区 Key。只需检索时可[直接注册端点](#直连-http-mcp)。
 使用自动 Run Hook 时准备具有写权限的 Key，并确保启动客户端的终端可以运行 `node --version`（24 或以上）。管理员在控制台或通过管理 API 签发所需凭据。
 
 从设置了 `OC_API_KEY` 的终端启动客户端。默认宿主是 `http://127.0.0.1:8080`。
@@ -136,10 +136,10 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 
 在客户端用 `/mcp` 检查连接。调用 `context_session` 核对 `workspace_id`。接入另一工作区时，请在启动前更换 `OC_API_KEY`。可设置 `OC_WORKSPACE_ID` 核对 Key 所属工作区，两份示例均将其映射为 HTTP 请求头。
 
-显式归档可交给 `context_turn_archive`：它需要 writer 权限，并使用
+显式归档可交给 `context_turn_archive`：它需要工作区 Key，并使用
 一个由调用方生成、重试时保持不变的 turn UUID。另一个客户端在同一 workspace 使用同一逻辑 key，调用
 `context_session` 会得到同一个 Origence 会话，再用 `context_turn_get` 按 turn UUID
-读取（需 writer 权限）。给两个客户端分别签发独立 Key 时，它们的会话记录互不可见。手工 MCP 接入只处理
+读取。不同工作区的客户端各自使用所属工作区 Key，私有会话隔离。手工 MCP 接入只处理
 调用方提交的轮次，客户端的工作现场由各自宿主维护。
 检索内容是外部证据，不是可直接执行的指令。
 
@@ -147,7 +147,7 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 
 ## 用 Codex 非交互验证只读检索
 
-在专用测试项目中，若已授权 Codex 使用 reader key 自动搜索和读取资料，可在该项目的
+在专用测试项目中，若已授权 Codex 使用工作区 Key 自动搜索和读取资料，可在该项目的
 Codex MCP 配置中加入以下两项。使用 `codex exec` 且
 `approval_policy = "never"` 时，需要交互审批的工具调用会在到达 Origence 前失败。
 
@@ -165,7 +165,7 @@ approval_mode = "approve"
 
 ## 记录私有 Trace
 
-使用 `--server-url` 连接 HTTP 宿主后，可为任务建立并读取私有 Run。创建、准备和上报需要 writer 权限。
+使用 `--server-url` 连接 HTTP 宿主后，可为任务建立并读取私有 Run。创建、准备和上报需要工作区 Key。
 
 1. 用 `context_run_create` 提交稳定的 `run_id` 和脱敏任务摘要。
 2. 用 `context_run_prepare` 准备上下文，服务端把精确引用和准备回执写入 Run。

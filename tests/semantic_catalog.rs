@@ -18,7 +18,7 @@ async fn auth(store: &SqliteStore) -> AuthorizedScope {
         .create_workspace(scope.tenant_id, scope.workspace_id, "catalog")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     store.authenticate(&key.token).await.unwrap()
 }
 fn property() -> MemoryProperty {
@@ -28,7 +28,7 @@ fn property() -> MemoryProperty {
     .unwrap()
 }
 #[tokio::test]
-async fn catalog_is_scoped_immutable_and_admin_only() {
+async fn catalog_is_scoped_and_immutable() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("test.db")).await.unwrap();
     let a = auth(&store).await;
@@ -51,16 +51,6 @@ async fn catalog_is_scoped_immutable_and_admin_only() {
     assert!(matches!(
         tx.register_memory_property(&changed).await,
         Err(StorageError::Conflict(_))
-    ));
-    tx.rollback().await.unwrap();
-    let key = store.issue_key(a.scope, "writer").await.unwrap();
-    let mut tx = store
-        .begin(store.authenticate(&key.token).await.unwrap())
-        .await
-        .unwrap();
-    assert!(matches!(
-        tx.register_memory_property(&property()).await,
-        Err(StorageError::Forbidden)
     ));
     tx.rollback().await.unwrap();
 }

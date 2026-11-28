@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Window } from "happy-dom";
 import { sessionsPage } from "../dist/client/sessions.js";
 
-test("clearing session history resumes the failed page with the original cutoff", async (t) => {
+test("session history remains read-only and retries the same page", async (t) => {
   const window = new Window();
   const saved = new Map(["window", "document", "Node", "fetch"].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)],
@@ -16,57 +16,39 @@ test("clearing session history resumes the failed page with the original cutoff"
     await window.happyDOM.close();
   });
   Object.assign(globalThis, { window, document: window.document, Node: window.Node });
-  let confirmation;
-  window.confirm = (message) => { confirmation = message; return true; };
-  const sessionPath = "/api/v1/sessions/private-session";
-  const deletes = [];
-  let refreshed = false;
+  const pages = [];
   globalThis.fetch = async (path, request) => {
+    assert.equal(request.method, "GET");
     if (path === "/api/v1/session") return Response.json({ session_id: "private-session" });
-    if (request.method === "DELETE") {
-      deletes.push(path);
-      if (deletes.length === 1) return Response.json({ next_after: "16" });
-      if (deletes.length === 2) {
-        return Response.json({ error: { message: "AnySeek unavailable" } }, { status: 503 });
-      }
-      refreshed = true;
-      return Response.json({ next_after: null });
-    }
-    assert.match(path, /\/turns\?/);
-    return Response.json({
-      next_after: null,
-      through_sequence: refreshed ? "21" : "20",
-      turns: [refreshed
-        ? { turn_id: "new", question: "保留的问答", answer: "新问题" }
-        : { turn_id: "old", question: "待清空问答", answer: "历史内容" }],
+    pages.push(path);
+    if (pages.length === 2) return Response.json({ error: { message: "Unavailable" } }, { status: 503 });
+    if (pages.length === 1) return Response.json({
+      next_after: 16,
+      turns: [{ question: "第一轮", answer: "第一条答复" }],
     });
+    return Response.json({ next_after: null, turns: [{ question: "第二轮", answer: "第二条答复" }] });
   };
   const root = document.body;
-  await sessionsPage(root, { role: "writer", signal: new AbortController().signal, navigate() {} });
+  await sessionsPage(root, { signal: new AbortController().signal, navigate() {} });
   const click = (name) => {
     const button = [...root.querySelectorAll("button")].find((control) => control.textContent === name);
     assert.ok(button, name);
     button.click();
   };
-  async function waitFor(status) {
+  async function waitFor(text) {
     for (let attempt = 0; attempt < 50; attempt++) {
-      if (root.textContent.includes(status)) return;
+      if (root.textContent.includes(text)) return;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    assert.fail("Missing text: " + status);
+    assert.fail("Missing text: " + text);
   }
-  click("清空会话记录");
-  await waitFor("删除未确认");
-  assert.match(confirmation, /新提交的问答会保留/);
-  assert.match(root.textContent, /待清空问答/);
-  assert.doesNotMatch(root.textContent, /删除完成/);
-  click("重试删除");
-  await waitFor("删除完成");
-  assert.deepEqual(deletes, [
-    sessionPath + "?through_sequence=20",
-    sessionPath + "?through_sequence=20&after=16",
-    sessionPath + "?through_sequence=20&after=16",
-  ]);
-  assert.match(root.textContent, /保留的问答/);
-  assert.doesNotMatch(root.textContent, /待清空问答/);
+  assert.match(root.textContent, /第一条答复/);
+  click("加载更多");
+  await waitFor("重试读取");
+  click("重试读取");
+  await waitFor("第二条答复");
+  const endpoint = "/api/v1/sessions/private-session/turns?after=";
+  assert.deepEqual(pages, [endpoint + "0", endpoint + "16", endpoint + "16"]);
+  assert.match(root.textContent, /第一条答复/);
+  assert.doesNotMatch(root.textContent, /清空会话记录|删除这一轮/);
 });

@@ -9,7 +9,7 @@ Use [`origence-setup`](INSTALLER.en.md#connect-an-agent) to configure the Claude
 ## Direct HTTP MCP
 
 The Origence HTTP host serves Streamable HTTP MCP at `/mcp`. Set `OC_API_KEY` in the environment
-that launches the client. A `reader` key suffices for retrieval. The following commands use the local
+that launches the client. Use the Key of the intended workspace. The following commands use the local
 default port. For a remote host use its HTTPS endpoint.
 
 ```powershell
@@ -28,8 +28,8 @@ MCP uses HTTP. The bundled Run hook and session archiving use Node.js 24 on the 
 ## Install the `origence` plugin
 
 Prepare a reachable Origence HTTP host and a client that supports plugin marketplaces. The plugin installs HTTP
-MCP and enables the private Run hook by default. Ask the workspace administrator for a personal API key.
-Use a `reader` key for retrieval or a writable key to report Runs. Check `node --version` in the client launch environment to confirm Node.js 24 or later. An administrator issues the required credential from the console or administration API.
+MCP and enables the private Run hook by default. Ask the administrator for the Workspace Key.
+Check `node --version` in the client launch environment to confirm Node.js 24 or later. An administrator issues the required credential from the console or administration API.
 For retrieval alone, you can [register the endpoint directly](#direct-http-mcp).
 
 Launch the client from the terminal that sets `OC_API_KEY`. The default API origin is
@@ -144,13 +144,13 @@ evidence use. See the [session API](API.en.md#session-archiving-and-idempotent-f
 Use the client's `/mcp` screen to check the connection and call `context_session` to confirm its `workspace_id`.
 To select another authorized workspace, set `OC_WORKSPACE_ID` before launching. Both examples map it to the HTTP selection header.
 
-Explicitly archive with `context_turn_archive`, which requires writer permissions and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (writer required). Independent keys on two clients cannot see each other's archives. Manual MCP only processes submitted turns. Each client manages its local work environment. Retrieved content is external evidence and has no authority to issue instructions.
+Explicitly archive with `context_turn_archive`, which requires a Workspace Key and a caller-generated turn UUID that stays stable on retry. Another client with the same logical key in the same workspace can use `context_session` to find the same platform archive, then fetch that turn with `context_turn_get` by UUID (with the same Workspace Key). Clients using different workspaces have separate archives. Manual MCP only processes submitted turns. Each client manages its local work environment. Retrieved content is external evidence and has no authority to issue instructions.
 
 See [P0 acceptance #91](https://github.com/TheLudlows/Origence/issues/91) for real-task validation progress on both clients.
 
 ## Verify read-only retrieval using Codex noninteractively
 
-In a dedicated test project, if Codex is authorized to search and read automatically using a reader key, add the two entries below to that project's Codex MCP configuration. With `codex exec` and `approval_policy = "never"`, tools requiring interactive approval fail before reaching Origence.
+In a dedicated test project, if Codex is authorized to search and read automatically using a Workspace Key, add the two entries below to that project's Codex MCP configuration. With `codex exec` and `approval_policy = "never"`, tools requiring interactive approval fail before reaching Origence.
 
 ```toml
 [mcp_servers.origence.tools.context_search]
@@ -164,7 +164,7 @@ Have Codex search published material and read the body using the hit's `asset_id
 
 ## Record a private Trace
 
-Connect to the HTTP host using `--server-url` to create and read private Runs for tasks. Creating, preparing, and reporting require writer permissions.
+Connect to the HTTP host using `--server-url` to create and read private Runs for tasks. Creating, preparing, and reporting require a Workspace Key.
 
 1. Use `context_run_create` with a stable `run_id` and a redacted task summary.
 2. Use `context_run_prepare` to prepare context. The server writes exact references and a preparation receipt to the Run.

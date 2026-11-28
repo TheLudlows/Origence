@@ -247,8 +247,8 @@ def main():
                 root = Path(folder)
                 env = isolated_env(folder)
                 require("OC_ANYSEEK_API_KEY" in env, "run under tools/anyseek_smoke.py --run")
-                writer = seed_workspace(env, "synthetic-archive", single_key=True)
-                outsider = seed_workspace(env, "isolated archive", writer["workspace_id"], single_key=True)
+                writer = seed_workspace(env, "synthetic-archive")
+                outsider = seed_workspace(env, "isolated archive", writer["workspace_id"])
                 admin = admin_env(env)
                 forbidden = [admin, writer["token"], outsider["token"], env["OC_ANYSEEK_API_KEY"]]
                 with Host(args.binary, env, writer["token"], forbidden) as host:

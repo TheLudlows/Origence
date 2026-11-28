@@ -18,17 +18,7 @@ async fn root(store: &SqliteStore, tenant_id: Uuid) -> (AuthorizedScope, String)
         .create_workspace(tenant_id, scope.workspace_id, "Root")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
-    let auth = store.authenticate(&key.token).await.unwrap();
-    (auth, key.token)
-}
-
-async fn issue(
-    store: &SqliteStore,
-    admin: &AuthorizedScope,
-    role: &str,
-) -> (AuthorizedScope, String) {
-    let key = store.issue_key(admin.scope, role).await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     (auth, key.token)
 }
@@ -39,9 +29,7 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
     let store = SqliteStore::open(dir.path().join("dedup.db"))
         .await
         .unwrap();
-    let (admin, _) = root(&store, Uuid::new_v4()).await;
-    let (first, _) = issue(&store, &admin, "writer").await;
-    let (second, _) = issue(&store, &admin, "writer").await;
+    let (first, _) = root(&store, Uuid::new_v4()).await;
     let job_id = Uuid::new_v4();
     let receipt = json!({"job_id":job_id});
     let mut tx = store.begin(first.clone()).await.unwrap();
@@ -62,8 +50,9 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
     .unwrap();
     tx.finish_command(receipt.clone()).await.unwrap();
     tx.commit().await.unwrap();
-    store.revoke_key(first.principal_id).await.unwrap();
-    let mut tx = store.begin(second.clone()).await.unwrap();
+    let key = store.rotate_workspace_key(first.scope).await.unwrap();
+    let second = store.authenticate(&key.token).await.unwrap();
+    let mut tx = store.begin(second).await.unwrap();
     assert_eq!(
         tx.begin_command("message_batch.ingest", "same-key", "same-input")
             .await
@@ -93,7 +82,7 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
             .begin(AuthorizedScope {
                 scope: claim.scope,
                 principal_id: claim.created_by,
-                role: "admin".into()
+                role: "deployment_admin".into()
             })
             .await,
         Err(StorageError::Forbidden)
@@ -108,13 +97,17 @@ async fn workspace_command_replay_preserves_original_creator_after_revocation() 
 }
 
 #[tokio::test]
-async fn ordinary_commands_keep_principal_isolation_and_receipts_require_writer() {
+async fn ordinary_commands_keep_principal_isolation() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("commands.db"))
         .await
         .unwrap();
     let (admin, _) = root(&store, Uuid::new_v4()).await;
-    let (other, _) = issue(&store, &admin, "writer").await;
+    let administrator = store.rotate_deployment_admin().await.unwrap();
+    let other = store
+        .authorize_deployment_workspace(&administrator, admin.scope.workspace_id)
+        .await
+        .unwrap();
     for auth in [&admin, &other] {
         let mut tx = store.begin(auth.clone()).await.unwrap();
         assert!(
@@ -137,14 +130,6 @@ async fn ordinary_commands_keep_principal_isolation_and_receipts_require_writer(
     for (principal, domain) in rows {
         assert_eq!(domain, format!("principal:{principal}"));
     }
-    let (reader, _) = issue(&store, &admin, "reader").await;
-    let mut tx = store.begin(reader).await.unwrap();
-    assert!(matches!(
-        tx.begin_command("message_batch.ingest", "same-key", "same-input")
-            .await,
-        Err(StorageError::Forbidden)
-    ));
-    tx.rollback().await.unwrap();
 }
 
 #[cfg(feature = "host")]
@@ -164,17 +149,19 @@ mod retry_tests {
     }
 
     #[tokio::test]
-    async fn live_creator_allows_another_writer_to_retry_without_transferring_identity() {
+    async fn administrator_can_retry_without_transferring_job_identity() {
         let dir = tempfile::tempdir().unwrap();
         let service = crate::support::open_service(dir.path(), Models::disabled())
             .await
             .unwrap();
         let store = service.engine.relational();
-        let (admin, _) = root(store, Uuid::new_v4()).await;
-        let (writer, writer_token) = issue(store, &admin, "writer").await;
-        let (_, other_writer_token) = issue(store, &admin, "writer").await;
+        let (writer, writer_token) = root(store, Uuid::new_v4()).await;
+        let token = store.rotate_deployment_admin().await.unwrap();
         let writer_auth = service.auth(&writer_token).await.unwrap();
-        let other_writer = service.auth(&other_writer_token).await.unwrap();
+        let other_writer = service
+            .authorize_deployment_workspace(&token, writer.scope.workspace_id)
+            .await
+            .unwrap();
         let accepted = service
             .knowledge(&writer_auth, "accept", input())
             .await
@@ -212,10 +199,13 @@ mod retry_tests {
             .unwrap();
         let store = service.engine.relational();
         let (creator, creator_token) = root(store, Uuid::new_v4()).await;
-        let (_, admin_token) = issue(store, &creator, "admin").await;
-        let (_, other_writer_token) = issue(store, &creator, "writer").await;
+        let admin_token = store.rotate_deployment_admin().await.unwrap();
+        let (_, other_writer_token) = root(store, creator.scope.tenant_id).await;
         let original = service.auth(&creator_token).await.unwrap();
-        let admin = service.auth(&admin_token).await.unwrap();
+        let admin = service
+            .authorize_deployment_workspace(&admin_token, creator.scope.workspace_id)
+            .await
+            .unwrap();
         let other_writer = service.auth(&other_writer_token).await.unwrap();
         let accepted = service
             .knowledge(&original, "accept", input())
@@ -245,7 +235,7 @@ mod retry_tests {
             service
                 .job_action(&other_writer, "retry", job, "retry")
                 .await,
-            Err(AppError::Forbidden)
+            Err(AppError::NotFound)
         ));
         assert!(matches!(
             service.job_action(&admin, "cancel", job, "cancel").await,

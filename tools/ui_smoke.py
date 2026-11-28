@@ -23,9 +23,9 @@ def main():
     binary, entry = str(Path(args.binary).resolve()), str(Path(args.ui_entry).resolve())
     with tempfile.TemporaryDirectory(prefix="origence-ui-smoke-") as directory:
         env = isolated_env(directory)
-        workspace = seed_workspace(env, "UI smoke", single_key=True)
+        workspace = seed_workspace(env, "UI smoke")
         token = workspace["token"]
-        other = seed_workspace(env, "UI smoke isolated workspace", workspace["workspace_id"], single_key=True)
+        other = seed_workspace(env, "UI smoke isolated workspace", workspace["workspace_id"])
         with Host(binary, env, token, [token, other["token"]]) as host, tempfile.TemporaryFile() as log:
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))

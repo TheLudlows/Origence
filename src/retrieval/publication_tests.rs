@@ -30,7 +30,7 @@ impl Fixture {
             .create_workspace(scope.tenant_id, scope.workspace_id, "final publication")
             .await
             .unwrap();
-        let key = store.issue_key(scope, "admin").await.unwrap();
+        let key = store.seed_workspace_key(scope).await.unwrap();
         let auth = store.authenticate(&key.token).await.unwrap();
         let mut tx = store.begin(auth.clone()).await.unwrap();
         tx.check_permission(Permission::Write).await.unwrap();
@@ -220,7 +220,7 @@ async fn public_retrieval_future_sizes_have_bounded_stack_footprints() {
         id: Uuid::new_v4(),
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
-        role: "reader".into(),
+        role: "workspace".into(),
     };
     let search_input =
         || serde_json::from_value(json!({"query":"fixture","mode":"hybrid"})).unwrap();
@@ -485,7 +485,7 @@ async fn keyword_empty_corpus_uses_three_authority_snapshots_and_no_index_schema
         .create_workspace(scope.tenant_id, scope.workspace_id, "minimal reads")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = service.auth(&key.token).await.unwrap();
     // No index work exists. Optional vector index entries are not dependencies
     // of this request; the complete schema remains mandatory on open/check.

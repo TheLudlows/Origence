@@ -25,7 +25,7 @@ Run the appropriate launcher from the checkout root.
 
 Use `--agent both` to connect both clients with one endpoint and key. Claude Code is the default. Setup reuses each available client CLI or installs its pinned version through npm. Use `--claude` or `--codex` for an executable outside PATH. [Client integration](CLIENTS.en.md)
 
-Enter the API URL and workspace key when prompted. The key is hidden while typing. The default URL is `http://127.0.0.1:8080`. Use HTTPS for remote APIs and omit the `/mcp` suffix. Automation can supply `OC_SERVER_URL` and `OC_API_KEY` with `--from-env`. To keep keys out of command history, use the prompt or the environment. A reader key supports retrieval. Run hook reporting needs write access and uses the plugin’s Node.js implementation.
+Enter the API URL and workspace key when prompted. The key is hidden while typing. The default URL is `http://127.0.0.1:8080`. Use HTTPS for remote APIs and omit the `/mcp` suffix. Automation can supply `OC_SERVER_URL` and `OC_API_KEY` with `--from-env`. To keep keys out of command history, use the prompt or the environment. MCP retrieval and Run hook reporting use the Workspace Key. The hook uses the plugin’s Node.js implementation.
 
 Setup verifies the workspace and tools served over HTTP MCP, installs the plugin, and saves the user environment and PATH for the clients and hooks. It checks the registered entry in Codex and uses the vendor CLI for non-default URLs. Conflicting existing MCP entries are reported for the user to resolve. Agent setup uses a running API and makes Node.js available to the client.
 

@@ -102,8 +102,7 @@ async function install(state, args) {
 
   const who = await identity(endpoint, token);
   check(!windows || !old?.key || old.key === who.id || changeAllowed, changeMessage);
-  const turnSync = project ? turnSyncProject(project) : "";
-  const archiveProject = ["writer", "admin", "workspace"].includes(who.role) ? turnSync : "";
+  const archiveProject = project ? turnSyncProject(project) : "";
   status("whoami", "success", { workspace_id: who.workspace_id, role: who.role });
   const mcp = await connectMcp(endpoint, token, who.workspace_id);
   status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });

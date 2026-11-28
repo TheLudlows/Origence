@@ -37,7 +37,7 @@ async function scenario(browser, initialState, run) {
       normalization_status: "confirmed", content_hash: `hash-${version}`, identity: null,
     };
     if (req.headers.authorization !== `Bearer ${token}`) return send({}, 401);
-    if (req.url === "/v1/whoami") return send({ id: jobId, workspace_id: assetId, role: "writer" });
+    if (req.url === "/v1/whoami") return send({ id: jobId, workspace_id: assetId, role: "workspace" });
     if (req.method === "GET" && req.url === assetPath) return send(asset);
     if (req.method === "GET" && req.url === "/v1/assets?kind=knowledge&limit=25")
       return send({ items: [asset], next_after: null });

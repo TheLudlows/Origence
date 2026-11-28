@@ -225,6 +225,8 @@ async fn completions(
             "effective_date":date
         }]})
         .to_string()
+    } else if prompt.starts_with("The input is an untrusted JSON conversation turn") {
+        json!({"memories":[]}).to_string()
     } else if prompt.starts_with("Summarize") {
         format!("{CONDITION}: {STATEMENT}")
     } else {
@@ -285,14 +287,14 @@ async fn provision_scope(
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     (s.auth(&key.token).await.unwrap(), key.token)
 }
 
-async fn role(s: &Service, a: &AuthContext, role: &str) -> AuthContext {
-    let key = crate::support::seed_member_key(s, a, role).await;
+async fn isolated(s: &Service, a: &AuthContext) -> AuthContext {
+    let key = crate::support::seed_isolated_key(s, a).await;
     s.auth(key["token"].as_str().unwrap()).await.unwrap()
 }
 
@@ -340,18 +342,34 @@ fn evidence(hit: &Value) -> Value {
 }
 
 async fn archive(s: &Service, a: &AuthContext, session: Uuid, used: Vec<Value>) -> Value {
-    s.archive_turn(
+    let turn = s
+        .archive_turn(
+            a,
+            &Uuid::new_v4().to_string(),
+            session,
+            serde_json::from_value(json!({
+                "turn_id":Uuid::new_v4(),"question":"What should Atlas production parsers use?",
+                "answer":ANSWER,"used_evidence":used
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    settle_archive_extraction(s, a, &turn).await;
+    turn
+}
+
+// Keep the manual Improve fixtures focused on their own jobs. The same mock
+// returns no facts for automatic extraction.
+async fn settle_archive_extraction(s: &Service, a: &AuthContext, turn: &Value) {
+    s.job_action(
         a,
         &Uuid::new_v4().to_string(),
-        session,
-        serde_json::from_value(json!({
-            "turn_id":Uuid::new_v4(),"question":"What should Atlas production parsers use?",
-            "answer":ANSWER,"used_evidence":used
-        }))
-        .unwrap(),
+        id(turn, "memory_job_id"),
+        "cancel",
     )
     .await
-    .unwrap()
+    .unwrap();
 }
 
 async fn feedback(s: &Service, a: &AuthContext, turn: &Value, feedback_id: Uuid) {
@@ -405,14 +423,8 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
     let s = super::support::open_service(dir.path(), models)
         .await
         .unwrap();
-    let (admin, _) = provision(&s).await;
-    let writer_key = crate::support::seed_member_key(&s, &admin, "writer").await;
-    let writer_token = writer_key["token"].as_str().unwrap();
-    let writer = s.auth(writer_token).await.unwrap();
-    let reader_key = crate::support::seed_member_key(&s, &admin, "reader").await;
-    let reader_token = reader_key["token"].as_str().unwrap();
-    let reader = s.auth(reader_token).await.unwrap();
-    let (other, _) = provision_scope(&s, admin.tenant_id, Uuid::new_v4()).await;
+    let (writer, writer_token) = provision(&s).await;
+    let (other, other_token) = provision_scope(&s, writer.tenant_id, Uuid::new_v4()).await;
     let doc = s
         .knowledge(
             &writer,
@@ -426,7 +438,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
         .await
         .unwrap();
     drain(&s).await;
-    let pinned = s.get(&reader, id(&doc, "asset_id"), Some(1)).await.unwrap();
+    let pinned = s.get(&writer, id(&doc, "asset_id"), Some(1)).await.unwrap();
     let basis = json!({"kind":"asset_version","asset_id":doc["asset_id"],"version":1,
         "content_sha256":pinned["content_hash"]});
     let request = json!({"experience":{"statement":"Atlas parsers must bound input.",
@@ -454,10 +466,10 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
             .json(&request)
     };
     assert_eq!(
-        post(reader_token).send().await.unwrap().status(),
-        StatusCode::FORBIDDEN
+        post(&other_token).send().await.unwrap().status(),
+        StatusCode::NOT_FOUND
     );
-    let accepted: Value = post(writer_token)
+    let accepted: Value = post(&writer_token)
         .send()
         .await
         .unwrap()
@@ -478,7 +490,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
     let mut tool = request.clone();
     tool["idempotency_key"] = json!("direct-document");
     assert_eq!(
-        peer.call(writer_token, None, "context_memory_retain", tool)
+        peer.call(&writer_token, None, "context_memory_retain", tool)
             .await
             .unwrap(),
         accepted
@@ -520,7 +532,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
         )
     );
     let published = s
-        .get(&reader, id(&accepted, "asset_id"), Some(1))
+        .get(&writer, id(&accepted, "asset_id"), Some(1))
         .await
         .unwrap();
     assert_eq!(published["content"], source["content"]);
@@ -537,7 +549,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
     let recall = async || {
         serde_json::to_value(
             s.recall_long_term_memories(
-                &reader,
+                &writer,
                 serde_json::from_value(
                     json!({"query":"Atlas parsers","applicability_context":[CONDITION]}),
                 )
@@ -559,7 +571,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
     assert_eq!(referenced["publication"]["recorded_by"], json!(writer.id));
     assert_eq!(referenced["applicability"], "caller_context_exact_match");
     let detail = s
-        .learning(&reader, id(&affirmed, "learning_id"))
+        .learning(&writer, id(&affirmed, "learning_id"))
         .await
         .unwrap();
     assert_eq!(detail["publication"]["basis"]["kind"], "human_confirmation");
@@ -567,7 +579,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
     assert!(detail.get("session_id").is_none());
     let context = s
         .evidence_bundle(
-            &reader,
+            &writer,
             serde_json::from_value(json!({
                 "query":"Atlas parsers", "routes":[{"route":"learning"}]
             }))
@@ -592,7 +604,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
         .await
         .unwrap();
     s.delete(
-        &admin,
+        &writer,
         "withdraw-basis",
         id(&doc, "source_event_id"),
         "event",
@@ -600,7 +612,7 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
     .await
     .unwrap();
     assert!(matches!(
-        s.learning(&reader, id(&accepted, "learning_id")).await,
+        s.learning(&writer, id(&accepted, "learning_id")).await,
         Err(AppError::NotFound)
     ));
     assert!(matches!(
@@ -629,8 +641,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         .await
         .unwrap();
     let (owner, token) = provision(&s).await;
-    let reader = role(&s, &owner, "reader").await;
-    let other_writer = role(&s, &owner, "writer").await;
+    let other_writer = isolated(&s, &owner).await;
     let (other_workspace, _) = provision_scope(&s, owner.tenant_id, Uuid::new_v4()).await;
     let session = id(&s.private_session(&owner).await.unwrap(), "session_id");
 
@@ -657,11 +668,6 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         s.retain_long_term_memory(&other_writer, "foreign-session", parse_retain(&experience))
             .await,
         Err(AppError::NotFound)
-    ));
-    assert!(matches!(
-        s.retain_long_term_memory(&reader, "reader-retain", parse_retain(&experience))
-            .await,
-        Err(AppError::Forbidden)
     ));
     let mut both = experience.clone();
     both["content"] = json!(FACT_BASELINE);
@@ -746,7 +752,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         let input = serde_json::from_value(request.clone()).unwrap();
         serde_json::to_value(s.recall_long_term_memories(auth, input).await.unwrap()).unwrap()
     };
-    let recalled = recall(&reader).await;
+    let recalled = recall(&owner).await;
     assert_eq!(recalled["memories"].as_array().unwrap().len(), 2);
     let fact = &recalled["memories"][0];
     assert_eq!(fact["kind"], "fact");
@@ -768,7 +774,7 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     );
     let indexed = s
         .search(
-            &reader,
+            &owner,
             serde_json::from_value(json!({"query":"parsers","limit":100})).unwrap(),
         )
         .await
@@ -792,20 +798,17 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
         .await
         .unwrap();
     assert_eq!(tool_recall, recalled);
-    let downstream_session = id(
-        &s.private_session(&other_writer).await.unwrap(),
-        "session_id",
-    );
+    let downstream_session = id(&s.private_session(&owner).await.unwrap(), "session_id");
     let downstream = archive(
         &s,
-        &other_writer,
+        &owner,
         downstream_session,
         vec![lesson["citation"].clone()],
     )
     .await;
     let downstream_id = id(&downstream, "turn_id");
     let archived = s
-        .session_turn(&other_writer, downstream_session, downstream_id)
+        .session_turn(&owner, downstream_session, downstream_id)
         .await
         .unwrap();
     assert_eq!(
@@ -854,22 +857,15 @@ async fn unified_long_term_memory_reuses_evidence_permissions_and_recall() {
     )
     .await
     .unwrap();
-    let remaining = recall(&reader).await;
+    let remaining = recall(&owner).await;
     assert_eq!(remaining["memories"][0]["state"]["value"], "1 reviewer");
     assert_eq!(remaining["memories"][1], *lesson);
-    s.delete(
-        &owner,
-        "withdraw-private-basis",
-        id(&turn, "source_event_id"),
-        "event",
-    )
-    .await
-    .unwrap();
-    let remaining = recall(&reader).await;
+    crate::support::invalidate_archive_proof(&s, &owner, id(&turn, "source_event_id")).await;
+    let remaining = recall(&owner).await;
     assert_eq!(remaining["memories"].as_array().unwrap().len(), 1);
     assert_eq!(remaining["memories"][0]["kind"], "fact");
     let history = s
-        .session_turn(&other_writer, downstream_session, downstream_id)
+        .session_turn(&owner, downstream_session, downstream_id)
         .await
         .unwrap();
     assert_eq!(history["answer"], ANSWER);
@@ -900,11 +896,7 @@ async fn assert_hidden(s: &Service, a: &AuthContext, learning: &Value) {
         Err(AppError::NotFound)
     ));
     let source = s.source_event(a, id(learning, "source_event_id")).await;
-    if a.role == "reader" {
-        assert!(matches!(source, Err(AppError::Forbidden)));
-    } else {
-        assert!(matches!(source, Err(AppError::NotFound)));
-    }
+    assert!(matches!(source, Err(AppError::NotFound)));
     for version in [None, Some(1)] {
         assert!(matches!(
             s.get(a, asset, version).await,
@@ -950,7 +942,7 @@ async fn assert_hidden(s: &Service, a: &AuthContext, learning: &Value) {
 }
 
 #[tokio::test]
-async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session() {
+async fn learning_http_end_to_end_uses_ingest_and_reuses_published_citations() {
     let (models, fixture, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), models)
@@ -1048,7 +1040,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
         1,
         "Ingest must never recursively Improve"
     );
-    let reader = role(&s, &a, "reader").await;
+    let reader = isolated(&s, &a).await;
     // Published Learning validation may inspect its support internally, but
     // must not grant its reader access to the supporting raw archive.
     for raw in [
@@ -1057,7 +1049,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
             .await,
         s.source_event(&reader, id(&turn, "source_event_id")).await,
     ] {
-        assert!(matches!(raw, Err(AppError::Forbidden)), "{raw:?}");
+        assert!(matches!(raw, Err(AppError::NotFound)), "{raw:?}");
     }
     assert!(matches!(
         s.learning(&reader, id(&learning, "learning_id")).await,
@@ -1066,7 +1058,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
     // Published search projections remain workspace assets; private learning
     // detail (including source archive identity) is not a shared read API.
     for mode in ["keyword", "vector", "hybrid"] {
-        let found = search(&s, &reader, mode).await;
+        let found = search(&s, &a, mode).await;
         assert_eq!(found["effective_mode"], mode);
         let hit = found["hits"]
             .as_array()
@@ -1087,7 +1079,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
         assert!(hit["content"].as_str().unwrap().contains(CONDITION));
         let resolved = s
             .resolve(
-                &reader,
+                &a,
                 serde_json::from_value(json!({"query":"Rust","mode":mode,"budget_tokens":32000}))
                     .unwrap(),
             )
@@ -1105,15 +1097,9 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
         assert!(rendered.contains(source["citation"].as_str().unwrap()));
         assert!(rendered.contains(CONDITION));
         if mode == "keyword" {
-            let other = role(&s, &a, "writer").await;
-            let other_session = id(&s.private_session(&other).await.unwrap(), "session_id");
-            assert!(matches!(
-                s.session_turn(&other, session, id(&turn, "turn_id")).await,
-                Err(AppError::NotFound)
-            ));
-            let reused = archive(&s, &other, other_session, vec![evidence(hit)]).await;
+            let reused = archive(&s, &a, session, vec![evidence(hit)]).await;
             let view = s
-                .session_turn(&other, other_session, id(&reused, "turn_id"))
+                .session_turn(&a, session, id(&reused, "turn_id"))
                 .await
                 .unwrap();
             assert_eq!(
@@ -1157,15 +1143,23 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
         .await
         .unwrap();
     let (a, _) = provision(&s).await;
-    let original = role(&s, &a, "writer").await;
+    let original = a.clone();
     let session = id(&s.private_session(&original).await.unwrap(), "session_id");
     let first = archive(&s, &original, session, vec![]).await;
     let second = archive(&s, &original, session, vec![]).await;
     let shared_id = Uuid::new_v4();
     feedback(&s, &original, &first, shared_id).await;
     // Authorized rotation changes principal ID, not private-session ownership.
-    let rotated = crate::support::rotate_fixture_key(&s, &a, original.id).await;
-    let writer = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
+    let rotated = s
+        .engine
+        .relational()
+        .rotate_workspace_key(Scope {
+            tenant_id: original.tenant_id,
+            workspace_id: original.workspace_id,
+        })
+        .await
+        .unwrap();
+    let writer = s.auth(&rotated.token).await.unwrap();
     assert_eq!(
         id(&s.private_session(&writer).await.unwrap(), "session_id"),
         session
@@ -1247,7 +1241,7 @@ async fn learning_helpful_feedback_is_not_proof_of_an_unsupported_claim() {
     assert_eq!(count(&s, "oc_assets").await, 0);
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 1);
     assert_eq!(fixture.verifications.load(Ordering::SeqCst), 1);
-    assert_eq!(count(&s, "oc_jobs").await, 1);
+    assert_eq!(count(&s, "oc_jobs").await, 2);
 }
 
 #[tokio::test]
@@ -1553,7 +1547,7 @@ async fn learning_partial_publication_cancel_preserves_published_children_and_re
 }
 
 #[tokio::test]
-async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publications() {
+async fn learning_identical_statements_are_independent_across_workspaces() {
     let (models, _, _model) = models().await;
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), models)
@@ -1561,7 +1555,7 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
         .unwrap();
     let (a, _) = provision(&s).await;
     let first_session = id(&s.private_session(&a).await.unwrap(), "session_id");
-    let other = role(&s, &a, "writer").await;
+    let other = isolated(&s, &a).await;
     let second_session = id(&s.private_session(&other).await.unwrap(), "session_id");
     for (actor, session) in [(&a, first_session), (&other, second_session)] {
         let turn = archive(&s, actor, session, vec![]).await;
@@ -1581,44 +1575,17 @@ async fn learning_cross_session_queued_duplicates_cannot_create_two_pending_publ
     }
     assert!(worker::process_next(&s).await.unwrap());
     assert!(worker::process_next(&s).await.unwrap());
-    assert_eq!(
-        s.job(&other, id(&second, "job_id")).await.unwrap()["state"],
-        "superseded"
-    );
-    let conflicted = s
-        .improvement(&other, id(&second, "improve_id"))
-        .await
-        .unwrap();
-    assert_eq!(conflicted["learnings"], json!([]));
-    assert_eq!(conflicted["verification_saved"], true);
-    assert_eq!(count(&s, "oc_assets").await, 1);
-    assert_eq!(count(&s, "oc_learnings").await, 1);
-    let cursor: i64 =
-        db::query_scalar("SELECT feedback_sequence FROM oc_improve_cursors WHERE session_id=?")
-            .bind(second_session)
-            .fetch_one(s.engine.relational().pool())
+    drain(&s).await;
+    for (actor, receipt) in [(&a, first), (&other, second)] {
+        let run = s
+            .improvement(actor, id(&receipt, "improve_id"))
             .await
             .unwrap();
-    assert_eq!(cursor, 0);
-    s.job_action(&other, "cancel-duplicate", id(&second, "job_id"), "cancel")
-        .await
-        .unwrap();
-    drain(&s).await;
-    assert_eq!(
-        s.improvement(&a, id(&first, "improve_id")).await.unwrap()["status"],
-        "completed"
-    );
-    let retried = improve(&s, &other, second_session).await;
-    assert_eq!(retried["feedback_count"], 1);
-    drain(&s).await;
-    let finished = s
-        .improvement(&other, id(&retried, "improve_id"))
-        .await
-        .unwrap();
-    assert_eq!(finished["status"], "completed");
-    assert_eq!(finished["duplicate_count"], 1);
-    assert_eq!(finished["learnings"], json!([]));
-    assert_eq!(count(&s, "oc_assets").await, 1);
+        assert_eq!(run["status"], "completed");
+        assert_eq!(run["learnings"].as_array().unwrap().len(), 1);
+    }
+    assert_eq!(count(&s, "oc_assets").await, 2);
+    assert_eq!(count(&s, "oc_learnings").await, 2);
 }
 
 #[tokio::test]
@@ -1727,17 +1694,17 @@ async fn learning_source_archive_or_asset_withdrawal_hides_every_read_before_cle
             "learning_asset" => (id(&learning, "asset_id"), "asset"),
             _ => (id(&original, "source_event_id"), "event"),
         };
-        let deleted = s.delete(&a, "withdraw", target_id, kind).await.unwrap();
         if target == "archive" {
-            assert_eq!(deleted["blocked"], true);
+            crate::support::invalidate_archive_proof(&s, &a, target_id).await;
         } else {
+            let deleted = s.delete(&a, "withdraw", target_id, kind).await.unwrap();
             assert_eq!(
                 s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
                 "pending"
             );
         }
         assert_hidden(&s, &a, &learning).await;
-        let reader = role(&s, &a, "reader").await;
+        let reader = isolated(&s, &a).await;
         assert_hidden(&s, &reader, &learning).await;
         drain(&s).await;
         assert_hidden(&s, &a, &learning).await;
@@ -1840,17 +1807,11 @@ async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_sn
         )
         .await
         .unwrap();
+    settle_archive_extraction(&s, &a, &unknown).await;
     feedback(&s, &a, &unknown, Uuid::new_v4()).await;
     let visible = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &visible, Uuid::new_v4()).await;
-    s.delete(
-        &a,
-        "hide-before-freeze",
-        id(&hidden, "source_event_id"),
-        "event",
-    )
-    .await
-    .unwrap();
+    crate::support::invalidate_archive_proof(&s, &a, id(&hidden, "source_event_id")).await;
     drain(&s).await;
     let receipt = improve(&s, &a, session).await;
     assert_eq!(receipt["skipped_count"], 2);
@@ -1862,14 +1823,7 @@ async fn learning_skips_hidden_feedback_but_cannot_publish_a_withdrawn_frozen_sn
     assert_eq!(frozen["skipped"][1]["turn_id"], unknown["turn_id"]);
     assert_eq!(frozen["skipped"][1]["reason"], "evidence_use_unknown");
     assert!(!frozen.to_string().contains("Private answer"));
-    s.delete(
-        &a,
-        "hide-after-freeze",
-        id(&visible, "source_event_id"),
-        "event",
-    )
-    .await
-    .unwrap();
+    crate::support::invalidate_archive_proof(&s, &a, id(&visible, "source_event_id")).await;
     drain(&s).await;
     assert_eq!(count(&s, "oc_assets").await, 0);
     assert_eq!(fixture.proposals.load(Ordering::SeqCst), 0);
@@ -1890,8 +1844,6 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
     let (a, _) = provision(&s).await;
     let (foreign, _) = provision(&s).await;
     let (sibling, _) = provision_scope(&s, a.tenant_id, Uuid::new_v4()).await;
-    let reader = role(&s, &a, "reader").await;
-    let writer = role(&s, &a, "writer").await;
     let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     let turn = archive(&s, &a, session, vec![]).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
@@ -1917,16 +1869,6 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
     let injected =
         json!({"improve_id":Uuid::new_v4(),"conditions":[CONDITION],"principal_id":a.id});
     assert!(serde_json::from_value::<ImproveInput>(injected).is_err());
-    assert!(matches!(
-        s.improve(
-            &reader,
-            "forbidden",
-            session,
-            improve_input(Uuid::new_v4(), 32)
-        )
-        .await,
-        Err(AppError::Forbidden)
-    ));
     for other in [&foreign, &sibling] {
         assert!(matches!(
             s.improve(
@@ -1960,17 +1902,16 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
         ));
         assert_eq!(search(&s, other, "keyword").await["hits"], json!([]));
     }
+    s.engine
+        .relational()
+        .rotate_workspace_key(Scope {
+            tenant_id: a.tenant_id,
+            workspace_id: a.workspace_id,
+        })
+        .await
+        .unwrap();
     assert!(matches!(
-        s.improvement(&reader, id(&learned, "improve_id")).await,
-        Err(AppError::Forbidden)
-    ));
-    assert!(matches!(
-        s.learning(&writer, id(&learned, "learning_id")).await,
-        Err(AppError::NotFound)
-    ));
-    s.engine.relational().revoke_key(writer.id).await.unwrap();
-    assert!(matches!(
-        s.learning(&writer, id(&learned, "learning_id")).await,
+        s.learning(&a, id(&learned, "learning_id")).await,
         Err(AppError::Forbidden)
     ));
 }
@@ -2546,16 +2487,7 @@ async fn learning_hidden_candidates_do_not_exhaust_keyword_or_vector_result_budg
         .await
         .unwrap();
     assert_eq!(before["hits"][0]["asset_id"], hidden["asset_id"]);
-    let deleted = s
-        .delete(
-            &a,
-            "withdraw-candidate-support",
-            id(&turns[0], "source_event_id"),
-            "event",
-        )
-        .await
-        .unwrap();
-    assert_eq!(deleted["blocked"], true);
+    crate::support::invalidate_archive_proof(&s, &a, id(&turns[0], "source_event_id")).await;
     // Native records still fill the old unfiltered budget. Only the fresh
     // transitive Learning guard may remove them before each branch's top-k.
     assert_native_budget(&s, &budget).await;
@@ -2614,6 +2546,7 @@ async fn learning_oversized_first_snapshot_rolls_back_without_consuming_feedback
         )
         .await
         .unwrap();
+    settle_archive_extraction(&s, &a, &turn).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let tables = [
         "oc_jobs",
@@ -2670,6 +2603,7 @@ async fn learning_combined_verification_budget_is_checked_before_provider_io() {
         )
         .await
         .unwrap();
+    settle_archive_extraction(&s, &a, &turn).await;
     feedback(&s, &a, &turn, Uuid::new_v4()).await;
     let receipt = improve(&s, &a, session).await;
     assert!(worker::process_next(&s).await.unwrap());
@@ -2705,7 +2639,7 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     let feedback_id = Uuid::new_v4();
     feedback(&s, &a, &first_turn, feedback_id).await;
     let first_learning = learn(&s, &a, first_session).await;
-    let reader = role(&s, &a, "reader").await;
+    let other = isolated(&s, &a).await;
     let input = json!({
         "query":"Rust","budget":32000,
         "routes":[
@@ -2797,34 +2731,12 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
                 .unwrap();
             assert!(omitted.items.is_empty());
             assert!(omitted.rendered_context.is_empty());
-            let shared = s
-                .evidence_bundle(&reader, serde_json::from_value(request).unwrap())
+            let isolated = s
+                .evidence_bundle(&other, serde_json::from_value(request).unwrap())
                 .await
                 .unwrap();
-            assert_eq!(shared.items.len(), 1);
-            let shared_item = &shared.items[0];
-            let shared_learning = shared_item.learning.as_ref().unwrap();
-            assert_eq!(shared_learning.learning_id, metadata.learning_id);
-            assert_eq!(shared_item.applicability, item.applicability);
-            assert!(shared_learning.session_id.is_none());
-            assert!(shared_learning.improve_id.is_none());
-            assert!(shared_learning.supports.is_empty());
-            assert!(!shared.rendered_context.contains(&first_session.to_string()));
-            assert!(
-                !shared
-                    .rendered_context
-                    .contains(&support.turn_id.to_string())
-            );
-            assert!(
-                !shared
-                    .rendered_context
-                    .contains(&support.feedback_id.to_string())
-            );
-            assert!(
-                !shared
-                    .rendered_context
-                    .contains(&support.principal_id.to_string())
-            );
+            assert!(isolated.items.is_empty());
+            assert!(isolated.rendered_context.is_empty());
         }
     }
     // A later private turn can archive exactly the returned chunk and Learn from
@@ -2839,7 +2751,7 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
         second_learning["learning_id"]
     );
     let before = s
-        .evidence_bundle(&reader, serde_json::from_value(input.clone()).unwrap())
+        .evidence_bundle(&a, serde_json::from_value(input.clone()).unwrap())
         .await
         .unwrap();
     let ids: std::collections::BTreeSet<_> = before
@@ -2875,7 +2787,7 @@ async fn learning_evidence_bundle_roundtrip_preserves_conditions_and_transitive_
     .unwrap();
     for mode in ["keyword", "vector", "hybrid"] {
         for (auth, mut request, expected_count) in
-            [(&reader, input.clone(), 0), (&a, all_routes.clone(), 2)]
+            [(&a, input.clone(), 0), (&a, all_routes.clone(), 2)]
         {
             request["mode"] = json!(mode);
             let hidden = s
@@ -2932,14 +2844,15 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     let turn = archive(&s, &owner, session, vec![evidence(&hits["hits"][0])]).await;
     feedback(&s, &owner, &turn, Uuid::new_v4()).await;
     let learning = learn(&s, &owner, session).await;
-    let writer = crate::support::seed_member_key(&s, &owner, "writer").await;
+    let writer = crate::support::seed_isolated_key(&s, &owner).await;
     let administrator = s
         .engine
         .relational()
         .rotate_deployment_admin()
         .await
         .unwrap();
-    let writer_token = writer["token"].as_str().unwrap();
+    let writer_token = owner_token.as_str();
+    let foreign_token = writer["token"].as_str().unwrap();
     let (base, _api) = serve(origence::api::router(s.clone())).await;
     let http = reqwest::Client::new();
     let asset = id(&learning, "asset_id").to_string();
@@ -2968,7 +2881,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
         ] {
             let response = http
                 .get(format!("{base}{path}"))
-                .bearer_auth(writer_token)
+                .bearer_auth(foreign_token)
                 .send()
                 .await
                 .unwrap();
@@ -3075,17 +2988,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
         true,
     )
     .await;
-    // Withdraw the original private archive supporting Learning, not the Skill itself.
-    let withdrawn = http
-        .delete(format!("{base}/v1/events/{}", id(&turn, "source_event_id")))
-        .bearer_auth(&owner_token)
-        .header("Idempotency-Key", "withdraw-learning-support")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(withdrawn.status(), StatusCode::OK);
-    let receipt: Value = withdrawn.json().await.unwrap();
-    assert_eq!(receipt["blocked"], true);
+    crate::support::invalidate_archive_proof(&s, &owner, id(&turn, "source_event_id")).await;
     let (pending_review, _, pending_digest) = &approved[1];
     cli(
         &base,

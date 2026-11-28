@@ -13,7 +13,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn commit_rechecks_permission_and_rolls_back_after_live_role_changes() {
+async fn commit_rechecks_permission_and_rolls_back_after_revocation() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("contract.db"))
         .await
@@ -26,16 +26,16 @@ async fn commit_rechecks_permission_and_rolls_back_after_live_role_changes() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "contract")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "writer").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
 
     // External revocation serializes behind BEGIN IMMEDIATE (covered in
     // sqlite_store). This test-only trigger changes the actual authority row
     // inside the write transaction, isolating commit's permission recheck.
     db::raw_sql(
-        "CREATE TRIGGER contract_downgrade_key AFTER INSERT ON oc_audit \
-         WHEN NEW.action = 'contract.downgrade' BEGIN \
-         UPDATE oc_api_keys SET role = 'reader' \
+        "CREATE TRIGGER contract_revoke_key AFTER INSERT ON oc_audit \
+         WHEN NEW.action = 'contract.revoke' BEGIN \
+         UPDATE oc_api_keys SET revoked = 1 \
          WHERE id = NEW.actor AND tenant_id = NEW.tenant_id AND workspace_id = NEW.workspace_id; \
          END;",
     )
@@ -58,13 +58,11 @@ async fn commit_rechecks_permission_and_rolls_back_after_live_role_changes() {
     })
     .await
     .unwrap();
-    tx.audit("contract.downgrade", asset, json!({}))
-        .await
-        .unwrap();
+    tx.audit("contract.revoke", asset, json!({})).await.unwrap();
     tx.finish_command(json!({"asset_id": asset})).await.unwrap();
     assert!(matches!(tx.commit().await, Err(StorageError::Forbidden)));
 
-    // A denied commit must roll back all writes, including the role change.
+    // A denied commit must roll back all writes, including the revocation.
     assert_eq!(store.authenticate(&key.token).await.unwrap(), auth);
     assert!(store.claim_next().await.unwrap().is_none());
     let assets: i64 = db::query_scalar("SELECT count(*) FROM oc_assets")

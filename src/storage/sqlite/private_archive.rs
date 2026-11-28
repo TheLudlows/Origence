@@ -159,12 +159,6 @@ mod host {
                 .then_some((source, digest)))
         }
 
-        pub(crate) async fn event_exists(&mut self, source: Uuid) -> StorageResult<bool> {
-            sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?)")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(source)
-                .fetch_one(&mut *self.tx).await.map_err(sqlite_err)
-        }
-
         pub(crate) async fn archive_turn_sequence(
             &mut self,
             session: Uuid,
@@ -181,31 +175,6 @@ mod host {
                 .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(session)
                 .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
             Ok(sequence.unwrap_or(0))
-        }
-
-        pub(crate) async fn archive_delete_page(
-            &mut self,
-            session: Uuid,
-            after: i64,
-            through: i64,
-        ) -> StorageResult<Vec<(i64, String)>> {
-            sqlite_db::query_as("SELECT DISTINCT json_extract(response,'$.sequence') AS sequence,json_extract(response,'$.turn_id') FROM oc_commands WHERE tenant_id=? AND workspace_id=? AND operation='session.turn.archive' AND json_extract(response,'$.session_id')=? AND sequence>? AND sequence<=? ORDER BY sequence LIMIT 16")
-                .bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-                .bind(session.to_string()).bind(after).bind(through)
-                .fetch_all(&mut *self.tx).await.map_err(sqlite_err)
-        }
-
-        // The existing source state protects SQLite-only evidence consumers.
-        // Plain archived turns never acquire a relational source row.
-        pub(crate) async fn retract_archive_support(
-            &mut self,
-            session: Uuid,
-            turn: Uuid,
-        ) -> StorageResult<()> {
-            if let Some((source, _)) = self.native_archive_proof_digest(session, turn).await? {
-                self.retract_event_inner(source).await?;
-            }
-            Ok(())
         }
 
         /// Preserve the integer paging cursor without storing a row for each turn.
@@ -295,7 +264,7 @@ async fn native_archive_authority_keeps_only_used_proof() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "workspace")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let session = tx.private_session_id().await.unwrap();
@@ -353,12 +322,9 @@ async fn native_archive_authority_keeps_only_used_proof() {
             .as_deref(),
         Some("")
     );
-    tx.retract_event(record.source).await.unwrap();
-    tx.commit().await.unwrap();
-    let mut tx = store.begin(auth).await.unwrap();
     assert!(matches!(
-        tx.require_turn_visible(session, turn).await,
-        Err(StorageError::NotFound)
+        tx.retract_event(record.source).await,
+        Err(StorageError::Forbidden)
     ));
     tx.commit().await.unwrap();
 }

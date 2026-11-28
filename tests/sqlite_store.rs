@@ -27,7 +27,7 @@ async fn provision(store: &SqliteStore, name: &str) -> Provisioned {
         tenant_id: tenant,
         workspace_id: workspace,
     };
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     Provisioned { scope, key, auth }
 }
@@ -41,6 +41,8 @@ async fn workspace_key_roundtrip_and_rotation() {
         workspace_id: Uuid::new_v4(),
     };
     let key = store.create_key_workspace(scope, "acme").await.unwrap();
+    // The database fences a second live key in the same workspace.
+    assert!(store.seed_workspace_key(scope).await.is_err());
     let auth = store.authenticate(&key.token).await.unwrap();
     assert_eq!(auth.scope, scope);
     assert_eq!(auth.role, "workspace");

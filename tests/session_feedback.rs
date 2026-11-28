@@ -39,14 +39,14 @@ async fn provision_scope(
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     (s.auth(&key.token).await.unwrap(), key.token)
 }
 
-async fn role(s: &Service, a: &AuthContext, name: &str) -> AuthContext {
-    let key = crate::support::seed_member_key(s, a, name).await;
+async fn isolated(s: &Service, a: &AuthContext) -> AuthContext {
+    let key = crate::support::seed_isolated_key(s, a).await;
     s.auth(key["token"].as_str().unwrap()).await.unwrap()
 }
 
@@ -183,7 +183,7 @@ fn rejected(result: Result<Value>) {
 }
 
 #[tokio::test]
-async fn session_empty_evidence_is_explicit_and_archive_needs_no_models_or_worker() {
+async fn session_empty_evidence_is_explicit_before_archive_extraction() {
     let dir = tempfile::tempdir().unwrap();
     let s = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -224,10 +224,13 @@ async fn session_empty_evidence_is_explicit_and_archive_needs_no_models_or_worke
     assert_eq!(content["question"], input["question"]);
     assert_eq!(content["answer"], input["answer"]);
     assert!(content.get("used_evidence").is_none());
-    assert_eq!(count(&s, "oc_jobs").await, 0);
+    assert_eq!(count(&s, "oc_jobs").await, 1);
+    assert_eq!(
+        s.job(&a, id(&receipt, "memory_job_id")).await.unwrap()["state"],
+        "pending"
+    );
     assert_eq!(count(&s, "oc_assets").await, 0);
     assert_eq!(count(&s, "oc_chunks").await, 0);
-    assert!(!worker::process_next(&s).await.unwrap());
 }
 
 #[tokio::test]
@@ -285,7 +288,7 @@ async fn session_archives_only_used_subset_with_server_resolved_historical_prove
             .to_string()
             .contains(unused["asset_id"].as_str().unwrap())
     );
-    assert_eq!(count(&s, "oc_jobs").await, jobs);
+    assert_eq!(count(&s, "oc_jobs").await, jobs + 1);
 }
 
 #[tokio::test]
@@ -525,7 +528,7 @@ async fn session_feedback_target_is_bound_to_archived_turn_and_principal() {
         Err(AppError::Conflict(_))
     ));
     // A new key has its own private archive, even with a write role.
-    let writer = role(&s, &a, "writer").await;
+    let writer = isolated(&s, &a).await;
     assert!(matches!(
         record(
             &s,
@@ -585,8 +588,7 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
         .await
         .unwrap();
     let (a, _) = provision(&s).await;
-    let writer = role(&s, &a, "writer").await;
-    let reader = role(&s, &a, "reader").await;
+    let writer = isolated(&s, &a).await;
     let (same_tenant, _) = provision_scope(&s, a.tenant_id, Uuid::new_v4()).await;
     let (other_tenant, _) = provision(&s).await;
     let session = id(&s.private_session(&writer).await.unwrap(), "session_id");
@@ -606,7 +608,7 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
     )
     .await
     .unwrap();
-    // Workspace administration does not grant access to another logical key.
+    // Another workspace cannot use this session binding.
     let before = counts(&s, true).await;
     assert!(matches!(
         archive(&s, &a, "private-turn", session, input.clone()).await,
@@ -652,51 +654,14 @@ async fn session_scope_live_permissions_and_revoked_principals_gate_all_surfaces
             receipt["source_event_id"]
         );
     }
-    for result in [
-        s.session_turn(&reader, session, turn_id).await,
-        s.session_feedback(&reader, session, turn_id).await,
-        s.source_event(&reader, id(&receipt, "source_event_id"))
-            .await,
-        archive(&s, &reader, "reader-archive", session, input.clone()).await,
-        record(
-            &s,
-            &reader,
-            "reader-feedback",
-            session,
-            turn_id,
-            feedback.clone(),
-        )
-        .await,
-    ] {
-        assert!(matches!(result, Err(AppError::Forbidden)), "{result:?}");
-    }
-    // A cached AuthContext must not turn stale permission into standing access.
-    db::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
-        .bind(writer.id)
-        .execute(s.engine.relational().pool())
+    s.engine
+        .relational()
+        .rotate_workspace_key(Scope {
+            tenant_id: writer.tenant_id,
+            workspace_id: writer.workspace_id,
+        })
         .await
         .unwrap();
-    assert!(matches!(
-        s.session_turn(&writer, session, turn_id).await,
-        Err(AppError::Forbidden)
-    ));
-    assert!(matches!(
-        archive(&s, &writer, "private-turn", session, input.clone()).await,
-        Err(AppError::Forbidden)
-    ));
-    assert!(matches!(
-        record(
-            &s,
-            &writer,
-            "private-feedback",
-            session,
-            turn_id,
-            feedback.clone()
-        )
-        .await,
-        Err(AppError::Forbidden)
-    ));
-    s.engine.relational().revoke_key(writer.id).await.unwrap();
     for result in [
         s.session_turn(&writer, session, turn_id).await,
         s.session_feedback(&writer, session, turn_id).await,
@@ -729,9 +694,9 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
     );
     let receipt = left.unwrap();
     assert_eq!(right.unwrap(), receipt);
-    assert_eq!(count(&s, "oc_session_turns").await, 0);
-    assert_eq!(count(&s, "oc_session_turn_evidence").await, 0);
-    assert_eq!(count(&s, "oc_events").await, before_events);
+    assert_eq!(count(&s, "oc_session_turns").await, 1);
+    assert_eq!(count(&s, "oc_session_turn_evidence").await, 1);
+    assert_eq!(count(&s, "oc_events").await, before_events + 1);
     let saved = s.session_turn(&a, session, turn_id).await.unwrap();
     let feedback = feedback(
         Uuid::new_v4(),
@@ -763,7 +728,7 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
     assert_eq!(count(&s, "oc_session_turn_evidence").await, 1);
     assert_eq!(count(&s, "oc_events").await, before_events + 1);
     assert_eq!(count(&s, "oc_feedback").await, 1);
-    assert_eq!(count(&s, "oc_jobs").await, before_jobs);
+    assert_eq!(count(&s, "oc_jobs").await, before_jobs + 1);
     let saved = s.session_turn(&a, session, turn_id).await.unwrap();
     let before = counts(&s, true).await;
     s.engine.relational().pool().close().await;
@@ -786,6 +751,9 @@ async fn session_concurrent_repeats_and_reopen_keep_one_turn_and_one_feedback() 
         feedback_receipt
     );
     assert_eq!(counts(&s, true).await, before);
+    let job = id(&receipt, "memory_job_id");
+    assert_eq!(s.job(&a, job).await.unwrap()["state"], "pending");
+    assert!(worker::process_next(&s).await.unwrap());
     assert!(!worker::process_next(&s).await.unwrap());
 }
 
@@ -811,31 +779,25 @@ async fn session_transaction_failure_rolls_back_mid_proof_and_feedback_audit() {
             .collect(),
     );
     assert_eq!(input["used_evidence"].as_array().unwrap().len(), 2);
-    archive(&s, &a, "atomic-archive", session, input)
-        .await
-        .unwrap();
-    let original = s.session_turn(&a, session, turn_id).await.unwrap();
-    assert_eq!(count(&s, "oc_session_turn_evidence").await, 0);
-    let input = feedback(Uuid::new_v4(), json!({"type":"turn"}));
-
-    // A feedback consumer's proof must commit together with its feedback.
+    // Admission attaches the archive proof and queues extraction together.
     db::raw_sql("CREATE TRIGGER fail_second_session_reference BEFORE INSERT ON oc_session_turn_evidence WHEN NEW.ordinal=1 BEGIN SELECT RAISE(ABORT,'fixture reference failure'); END;")
         .execute(s.engine.relational().pool()).await.unwrap();
-    let before = counts(&s, true).await;
+    let jobs = count(&s, "oc_jobs").await;
     assert!(
-        record(&s, &a, "atomic-feedback", session, turn_id, input.clone())
+        archive(&s, &a, "atomic-archive", session, input.clone())
             .await
             .is_err()
     );
-    assert_eq!(counts(&s, true).await, before);
-    assert_eq!(
-        s.session_turn(&a, session, turn_id).await.unwrap(),
-        original
-    );
+    assert_eq!(count(&s, "oc_jobs").await, jobs);
+    assert_eq!(count(&s, "oc_session_turn_evidence").await, 0);
     db::raw_sql("DROP TRIGGER fail_second_session_reference;")
         .execute(s.engine.relational().pool())
         .await
         .unwrap();
+    archive(&s, &a, "atomic-archive", session, input)
+        .await
+        .unwrap();
+    let input = feedback(Uuid::new_v4(), json!({"type":"turn"}));
 
     // An audit failure must also roll back the feedback and command reservation.
     db::raw_sql("CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON oc_audit BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;")
@@ -860,57 +822,6 @@ async fn session_transaction_failure_rolls_back_mid_proof_and_feedback_audit() {
         .unwrap();
     assert_eq!(count(&s, "oc_session_turn_evidence").await, 2);
     assert_eq!(count(&s, "oc_feedback").await, 1);
-}
-
-async fn assert_hidden(
-    s: &Service,
-    a: &AuthContext,
-    session: Uuid,
-    input: &Value,
-    receipt: &Value,
-    feedback: &Value,
-) {
-    let turn_id = id(input, "turn_id");
-    assert!(matches!(
-        s.session_turn(a, session, turn_id).await,
-        Err(AppError::NotFound)
-    ));
-    assert!(matches!(
-        s.session_feedback(a, session, turn_id).await,
-        Err(AppError::NotFound)
-    ));
-    assert!(matches!(
-        s.source_event(a, id(receipt, "source_event_id")).await,
-        Err(AppError::NotFound)
-    ));
-    let before = counts(s, true).await;
-    let archive_key = format!("withdrawn-archive-{session}-{turn_id}");
-    for key in [archive_key.as_str(), "new-command-withdrawn-archive"] {
-        assert!(matches!(
-            archive(s, a, key, session, input.clone()).await,
-            Err(AppError::NotFound)
-        ));
-    }
-    let feedback_key = format!("withdrawn-feedback-{session}-{turn_id}");
-    for key in [feedback_key.as_str(), "new-command-withdrawn-feedback"] {
-        assert!(matches!(
-            record(s, a, key, session, turn_id, feedback.clone()).await,
-            Err(AppError::NotFound)
-        ));
-    }
-    assert!(matches!(
-        record(
-            s,
-            a,
-            "new-feedback-after-withdrawal",
-            session,
-            turn_id,
-            self::feedback(Uuid::new_v4(), json!({"type":"turn"}))
-        )
-        .await,
-        Err(AppError::NotFound)
-    ));
-    assert_eq!(counts(s, true).await, before);
 }
 
 async fn assert_history_survives_dependency_withdrawal(
@@ -1020,14 +931,20 @@ async fn session_withdrawal_and_dependency_withdrawal_have_distinct_effects() {
             "asset" => (id(&first, "asset_id"), "asset"),
             _ => (id(&first, "source_event_id"), "event"),
         };
-        let deleted = s
-            .delete(&a, "withdraw-dependency", target_id, kind)
-            .await
-            .unwrap();
         if target == "archive" {
-            assert_eq!(deleted["blocked"], true);
-            assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+            assert!(matches!(
+                s.delete(&a, "withdraw-dependency", target_id, kind).await,
+                Err(AppError::Forbidden)
+            ));
+            assert_eq!(
+                s.session_turn(&a, session, turn_id).await.unwrap()["source_event_id"],
+                receipt["source_event_id"]
+            );
         } else {
+            let deleted = s
+                .delete(&a, "withdraw-dependency", target_id, kind)
+                .await
+                .unwrap();
             assert_eq!(
                 s.job(&a, id(&deleted, "cleanup_job_id")).await.unwrap()["state"],
                 "pending"
@@ -1055,7 +972,10 @@ async fn session_withdrawal_and_dependency_withdrawal_have_distinct_effects() {
         // Physical cleanup must not change the established logical result.
         while worker::process_next(&s).await.unwrap() {}
         if target == "archive" {
-            assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+            assert_eq!(
+                s.session_turn(&a, session, turn_id).await.unwrap()["source_event_id"],
+                receipt["source_event_id"]
+            );
         } else {
             assert_history_survives_dependency_withdrawal(
                 &s, &a, session, &input, &receipt, &feedback,
@@ -1078,7 +998,10 @@ async fn session_withdrawal_and_dependency_withdrawal_have_distinct_effects() {
             .unwrap();
         let a = s.auth(&token).await.unwrap();
         if target == "archive" {
-            assert_hidden(&s, &a, session, &input, &receipt, &feedback).await;
+            assert_eq!(
+                s.session_turn(&a, session, turn_id).await.unwrap()["source_event_id"],
+                receipt["source_event_id"]
+            );
         } else {
             assert_history_survives_dependency_withdrawal(
                 &s, &a, session, &input, &receipt, &feedback,
@@ -1519,9 +1442,9 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
                 .unwrap()["answer"],
             input["answer"]
         );
-        let other = role(&s, &a, "writer").await;
+        let other = isolated(&s, &a).await;
         let statement = if drop_all {
-            "DROP TABLE oc_feedback; DROP TABLE oc_session_turn_evidence; DROP TABLE oc_session_turns;"
+            "DROP TABLE oc_feedback; DROP TABLE oc_session_turn_evidence;"
         } else {
             "DROP TABLE oc_feedback;"
         };
@@ -1554,9 +1477,10 @@ async fn session_missing_schema_is_rejected_without_erasing_saved_sources() {
             .fetch_optional(&mut *conn)
             .await
             .unwrap();
-        assert!(
-            source.is_none(),
-            "plain archives do not create a SQLite event"
+        assert_eq!(
+            source.as_deref(),
+            Some(""),
+            "SQLite preserves only the archive proof"
         );
         let repaired: bool =
             db::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='oc_feedback')")
@@ -1624,7 +1548,7 @@ async fn session_feedback_capacity_blocks_new_records_but_preserves_replays() {
         receipt
     );
     assert_eq!(counts(&s, false).await, before);
-    let writer = role(&s, &a, "writer").await;
+    let writer = isolated(&s, &a).await;
     assert!(matches!(
         s.session_feedback(&writer, session, turn_id).await,
         Err(AppError::NotFound)
@@ -1701,7 +1625,7 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
         .unwrap();
     let (a, token) = provision(&s).await;
     let (_, other_token) = provision(&s).await;
-    let reader = crate::support::seed_member_key(&s, &a, "reader").await;
+    let reader = crate::support::seed_isolated_key(&s, &a).await;
     let reader_token = reader["token"].as_str().unwrap();
     let (base, _server) = serve(s.clone()).await;
     let http = reqwest::Client::builder()
@@ -1747,12 +1671,12 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
     let response = http
         .post(&turns_url)
         .bearer_auth(reader_token)
-        .header("Idempotency-Key", "reader-turn")
+        .header("Idempotency-Key", "foreign-turn")
         .json(&input)
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), 403);
+    assert_eq!(response.status(), 404);
     assert_eq!(counts(&s, true).await, before);
     let response = http
         .post(&turns_url)
@@ -1801,12 +1725,12 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
     let response = http
         .post(&feedback_url)
         .bearer_auth(reader_token)
-        .header("Idempotency-Key", "reader-feedback")
+        .header("Idempotency-Key", "foreign-feedback")
         .json(&body)
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), 403);
+    assert_eq!(response.status(), 404);
     let response = http
         .post(&feedback_url)
         .bearer_auth(&token)
@@ -1825,7 +1749,7 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
                 .await
                 .unwrap()
                 .status(),
-            403
+            404
         );
         assert_eq!(
             http.get(url)
@@ -1850,49 +1774,46 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
             .await
             .unwrap()
             .status(),
+        404
+    );
+    assert_eq!(
+        http.delete(&raw_url)
+            .bearer_auth(&token)
+            .header("Idempotency-Key", "http-withdraw")
+            .send()
+            .await
+            .unwrap()
+            .status(),
         403
     );
-    let deleted = s
-        .delete(
-            &a,
-            "http-withdraw",
-            id(&receipt, "source_event_id"),
-            "event",
-        )
+    let scope = Scope {
+        tenant_id: a.tenant_id,
+        workspace_id: a.workspace_id,
+    };
+    let replacement = s
+        .engine
+        .relational()
+        .rotate_workspace_key(scope)
         .await
         .unwrap();
-    assert_eq!(deleted["blocked"], true);
     for url in [&turn_url, &feedback_url, &raw_url] {
-        let response = http.get(url).bearer_auth(&token).send().await.unwrap();
-        assert_eq!(response.status(), 404);
-        let value: Value = response.json().await.unwrap();
-        assert_eq!(value["error"]["code"], "NOT_FOUND");
-        assert!(
-            !value
-                .to_string()
-                .contains(input["answer"].as_str().unwrap())
+        assert_eq!(
+            http.get(url)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            http.get(url)
+                .bearer_auth(&replacement.token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
         );
     }
-    assert_eq!(
-        http.post(&turns_url)
-            .bearer_auth(&token)
-            .header("Idempotency-Key", "http-turn")
-            .json(&input)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        404
-    );
-    assert_eq!(
-        http.post(&feedback_url)
-            .bearer_auth(&token)
-            .header("Idempotency-Key", "http-feedback")
-            .json(&body)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        404
-    );
 }

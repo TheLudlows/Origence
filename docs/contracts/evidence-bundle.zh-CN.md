@@ -26,9 +26,9 @@
 
 `as_of_ms` 指定业务时点（Unix 毫秒，默认当前时间）。`long_term_memory` 来源包含 `memory_id`、`version`、`as_of_ms`、`effective_from_ms`、该时点的 `state`、记录结论变化的 `timeline` 和 `citations`。每条引用含 `source_event_id`、事实生效时点 `effective_at_ms`，以及含原文引文与 UTF-8 半开字节区间的 `statement`。无日期基线和 `unknown` 的 `effective_from_ms` 为 `null`。`current` 提供单值，`conflicting` 和 `unknown` 无选定值。无可见匹配主题时不返回归纳条目。词项命中标为 `unverified`，调用方提供精确身份时标为 `caller_identity_exact_match`。
 
-控制台用 writer 以上权限重新读取来源事件，核对原文引文与字节区间后高亮。Reader 可按固定记忆版本重新核验已发布的引文。每次打开均检查当前来源权限与可见性。
+控制台用工作区 Key 重新读取来源事件，核对原文引文与字节区间后高亮。每次打开均检查当前来源权限与可见性。
 
-Reader 只可读取 Learning 已发布的 statement/why、精确条件及脱敏支持标识与区间。原始问答和引用原文要求 writer 权限及该私有会话逻辑 key 的所有权。条件同时保留于正文、条目元数据和引用来源。按调用方上下文精确匹配每个字符串条件，`caller_context_exact_match` 只代表调用方提供了这些字符串。否则适用性明确为 `unverified`。模型不解释、扩大或推断适用条件。
+已发布的 Learning 提供结论、理由和精确适用条件。原始问答和私有支持记录只对所属逻辑 Key 开放。条件同时保留于正文、条目元数据和引用来源。按调用方上下文精确匹配每个字符串条件，`caller_context_exact_match` 只代表调用方提供了这些字符串。否则适用性明确为 `unverified`。模型不解释、扩大或推断适用条件。
 
 当前归档 API 的 `used_evidence` 只接受 chunk/entity/relation。内容引用可映射为精确分块引用，会话轮次引用无法原样写回。响应、保留会话块和 API 文档明确披露此限制。调用方不能伪造分块 ID 或声称归档覆盖完整。
 归纳事实引用带 `unsupported_long_term_memory_reference` 标记。服务端 Run 准备在记录快照或失败事件前拒绝 `as_of_ms`。带日期的记忆查询使用独立上下文入口。

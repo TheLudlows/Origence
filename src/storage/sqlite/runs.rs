@@ -196,23 +196,8 @@ impl SqliteTx {
         after: i64,
         limit: usize,
     ) -> StorageResult<Value> {
-        self.read_run_trace(run, after, limit, false).await
-    }
-
-    pub async fn run_trace(&mut self, run: Uuid, after: i64, limit: usize) -> StorageResult<Value> {
-        self.read_run_trace(run, after, limit, true).await
-    }
-
-    async fn read_run_trace(
-        &mut self,
-        run: Uuid,
-        after: i64,
-        limit: usize,
-        allow_admin: bool,
-    ) -> StorageResult<Value> {
         let key = self.private_key_id().await?;
-        let workspace_wide = allow_admin && self.live_role().await? == "admin";
-        self.run_trace_in_scope(run, after, limit, Some(key), workspace_wide)
+        self.run_trace_in_scope(run, after, limit, Some(key), false)
             .await
     }
 
@@ -718,8 +703,20 @@ mod tests {
         .unwrap();
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
-        for id in [owner, other] {
-            sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,'admin',0)").bind(id).bind(id).bind(scope.tenant_id).bind(scope.workspace_id).bind(id.to_string()).execute(&pool).await.unwrap();
+        let foreign = Scope {
+            workspace_id: Uuid::new_v4(),
+            ..scope
+        };
+        sqlite_db::query(
+            "INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(?,?,'other',0)",
+        )
+        .bind(foreign.tenant_id)
+        .bind(foreign.workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        for (id, scope) in [(owner, scope), (other, foreign)] {
+            sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,created_at) VALUES(?,?,?,?,?,0)").bind(id).bind(id).bind(scope.tenant_id).bind(scope.workspace_id).bind(id.to_string()).execute(&pool).await.unwrap();
         }
         let input = RunInput {
             run_id: Uuid::new_v4(),
@@ -877,7 +874,7 @@ mod tests {
             1
         );
         t.commit().await.unwrap();
-        let mut t = tx(&pool, scope, other).await;
+        let mut t = tx(&pool, foreign, other).await;
         assert!(matches!(
             t.private_run_trace(input.run_id, 0, 10).await,
             Err(StorageError::NotFound)
@@ -886,10 +883,8 @@ mod tests {
             t.append_private_run_event(input.run_id, &event).await,
             Err(StorageError::NotFound)
         ));
-        assert!(matches!(
-            t.create_private_run(&input).await,
-            Err(StorageError::NotFound)
-        ));
+        // Run IDs are qualified by workspace.
+        assert!(t.create_private_run(&input).await.is_ok());
         t.commit().await.unwrap();
         sqlite_db::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
             .bind(owner)

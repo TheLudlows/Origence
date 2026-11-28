@@ -16,7 +16,7 @@ test("Codex uses the exact thread and turn, sends only allowlisted fields, and r
     for await (const part of req) parts.push(part);
     const body = Buffer.concat(parts).toString();
     calls.push([req.method, req.url, req.headers["x-origence-workspace"], req.headers.authorization]);
-    if (req.url === "/v1/whoami") return res.end(JSON.stringify({ workspace_id: workspaceId, role: "writer" }));
+    if (req.url === "/v1/whoami") return res.end(JSON.stringify({ workspace_id: workspaceId, role: "workspace" }));
     if (req.url.endsWith("/prefix?through_sequence=0")) return res.end("{}");
     posted.push(body);
     res.statusCode = posted.length === 1 ? 503 : 200;

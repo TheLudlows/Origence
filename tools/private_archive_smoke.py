@@ -223,9 +223,9 @@ def run_contract(binary, root, model, anyseek):
             proxy.release = threading.Event()
             env.update(OC_ANYSEEK_URL=proxy_url, OC_ANYSEEK_API_KEY=key)
             forbidden.append(key)
-        owner = seed_workspace(env, "private fixture", single_key=True)
+        owner = seed_workspace(env, "private fixture")
         administrator = admin_env(env)
-        foreign = seed_workspace(env, "second workspace", owner["workspace_id"], single_key=True)
+        foreign = seed_workspace(env, "second workspace", owner["workspace_id"])
         token = owner["token"]
         forbidden.extend([token, administrator, foreign["token"]])
         turn = new_turn(MARKER + " Café question")
@@ -398,7 +398,7 @@ def run_contract(binary, root, model, anyseek):
             expect(request(host.base, route + "/" + turn["turn_id"], token=token), 401)
             rotated = expect(request(host.base, route + "/" + turn["turn_id"], token=replacement), 200)
             assert rotated["source_event_id"] == saved[0]["source_event_id"]
-            expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 403)
+            expect(request(host.base, route + "/" + control["turn_id"], "DELETE", replacement), 405)
             expect(request(host.base, route + "/" + control["turn_id"], token=replacement), 200)
 
 
@@ -445,7 +445,7 @@ def run_contract(binary, root, model, anyseek):
             assert host.request("/v1/search", {"query": MARKER})["hits"] == []
             history = host.request(route)
             clear = f"/v1/sessions/{session}?through_sequence={history['through_sequence']}"
-            expect(request(host.base, clear, "DELETE", token), 403)
+            expect(request(host.base, clear, "DELETE", token), 404)
             assert host.request(route) == history
             assert host.request(prepare, run_request) == prepared
 

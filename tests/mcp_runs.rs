@@ -483,7 +483,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
 }
 
 #[tokio::test]
-async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
+async fn run_using_native_archive_preserves_cited_turn_provenance() {
     use origence::{error::AppError, evidence::EvidenceInput, storage::sqlite_db};
 
     let dir = tempfile::tempdir().unwrap();
@@ -497,9 +497,12 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic Run proof")
         .await
         .unwrap();
-    let admin_key = store.issue_key(scope, "admin").await.unwrap();
-    let admin = service.auth(&admin_key.token).await.unwrap();
-    let key = store.issue_key(scope, "writer").await.unwrap();
+    let administrator = store.rotate_deployment_admin().await.unwrap();
+    let admin = service
+        .authorize_deployment_workspace(&administrator, scope.workspace_id)
+        .await
+        .unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let owner = service.auth(&key.token).await.unwrap();
     let session = service.private_session(&owner).await.unwrap();
     let session = serde_json::from_value(session["session_id"].clone()).unwrap();
@@ -527,7 +530,7 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     .fetch_one(store.pool())
     .await
     .unwrap();
-    assert_eq!(rows, 0, "ordinary private saves must avoid the proof table");
+    assert_eq!(rows, 1, "archive extraction shares the existing proof");
 
     let run = Uuid::new_v4();
     service
@@ -590,7 +593,10 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     .unwrap();
     assert!(proof.is_empty());
     let owner_trace = service.run_trace(&owner, run, 0, 1).await.unwrap();
-    let admin_trace = service.run_trace(&admin, run, 0, 1).await.unwrap();
+    let admin_trace = service
+        .inspect_run(&administrator, scope.workspace_id, run, 0, 1)
+        .await
+        .unwrap();
     assert_eq!(admin_trace["is_owner"], false);
     assert_eq!(admin_trace["events"], owner_trace["events"]);
     assert_eq!(
@@ -605,7 +611,7 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     );
     assert!(matches!(
         service.source_event(&admin, source).await,
-        Err(AppError::NotFound)
+        Err(AppError::Forbidden)
     ));
     service.run_prefix(&owner, run, 1).await.unwrap();
 
@@ -680,12 +686,14 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     .fetch_one(store.pool())
     .await
     .unwrap();
-    assert_eq!(uncited_proofs, 0, "the losing bundle must not add a proof");
+    assert_eq!(
+        uncited_proofs, 1,
+        "the concurrent replay must not duplicate the existing extraction proof"
+    );
 
-    service
-        .withdraw_session_archive(&owner, session, turn)
-        .await
-        .unwrap();
+    // Simulate a missing live proof independently of a public archive-delete route.
+    sqlite_db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND kind='session_turn'")
+        .bind(scope.tenant_id).bind(scope.workspace_id).execute(store.pool()).await.unwrap();
     let trace = service.run_trace(&owner, run, 0, 10).await.unwrap();
     assert_eq!(
         trace["events"][0]["report"]["private_sources_unavailable"],
@@ -693,7 +701,10 @@ async fn run_using_native_archive_keeps_only_the_cited_turn_proof() {
     );
     assert_eq!(trace["events"][0]["references"], json!([]));
     assert_eq!(
-        service.run_trace(&admin, run, 0, 10).await.unwrap()["events"],
+        service
+            .inspect_run(&administrator, scope.workspace_id, run, 0, 10)
+            .await
+            .unwrap()["events"],
         trace["events"]
     );
     assert!(matches!(

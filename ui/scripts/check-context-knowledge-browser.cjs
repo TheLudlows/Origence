@@ -28,12 +28,11 @@ const upstream = createServer((request, response) => {
   request.resume();
   const path = request.url;
   requests.push(path);
-  const role = request.headers.authorization === "Bearer synthetic-reader" ? "reader" : "writer";
   const send = (value, status = 200) => {
     response.writeHead(status, { "Content-Type": "application/json" });
     response.end(JSON.stringify(value));
   };
-  if (path === "/v1/whoami") return send({ id: asset, workspace_id: file, role });
+  if (path === "/v1/whoami") return send({ id: asset, workspace_id: file, role: "workspace" });
   if (path === "/v1/context" && request.method === "POST") return send({
     budget: 4000, used_bytes: 120, effective_mode: "keyword", warnings: [], routes: [], rendered_context: quote,
     items: [
@@ -52,7 +51,6 @@ const upstream = createServer((request, response) => {
     });
   }
   if (path.startsWith("/v1/events/") || path.startsWith("/v1/files/")) {
-    if (role === "reader") return send({ error: { message: "无权访问原文" } }, 403);
     if (path === `/v1/events/${source}`) {
       if (nextInlineSource) {
         const held = nextInlineSource;
@@ -77,9 +75,9 @@ async function listen(server) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-async function openEvidence(page, origin, role) {
+async function openEvidence(page, origin) {
   await page.goto(`${origin}/#contexts`);
-  await fixtureSignIn(page, `synthetic-${role}`, "mouse");
+  await fixtureSignIn(page, "synthetic-workspace", "mouse");
   await page.getByLabel("任务与查询").fill("合成发布手册");
   await page.getByRole("button", { name: "预览上下文" }).click();
   const details = (title) => page.locator("details").filter({ hasText: title });
@@ -164,12 +162,12 @@ async function checkPinnedVersion(page, detail) {
   const { createUiServer } = await import("../dist/server.js");
   let browser, relay;
   try {
-    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(file, ["synthetic-reader", "synthetic-writer"]) });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(file, ["synthetic-workspace"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const writer = await browser.newPage({ viewport: { width: 375, height: 768 } });
     writer.setDefaultTimeout(5000);
-    const details = await openEvidence(writer, origin, "writer");
+    const details = await openEvidence(writer, origin);
     await checkSourceAnnouncements(writer, details("历史内联文档"));
     assert.equal(requests.includes(`/v1/files/${file}`), false);
     await details("上传来源").locator("summary").click();
@@ -195,15 +193,8 @@ async function checkPinnedVersion(page, detail) {
     }
     await checkPinnedVersion(writer, details("历史内联文档"));
 
-    const requestCount = requests.length;
-    const reader = await browser.newPage({ viewport: { width: 736, height: 768 } });
-    reader.setDefaultTimeout(5000);
-    const readerDetails = await openEvidence(reader, origin, "reader");
-    assert.equal(await reader.getByRole("button", { name: "核验原始引用" }).count(), 0);
-    await checkPinnedVersion(reader, readerDetails("历史内联文档"));
-    assert.equal(requests.slice(requestCount).some((path) => /^\/v1\/(events|files)\//.test(path)), false);
-    assert.deepEqual(requests.filter((path) => path.startsWith(assetPath)), Array(2).fill(`${assetPath}?version=1`));
-    console.log("PASS: AX source announcements and focus, exact v1 links, UTF-8 spans, unverified ranges, reader access");
+    assert.deepEqual(requests.filter((path) => path.startsWith(assetPath)), [`${assetPath}?version=1`]);
+    console.log("PASS: AX source announcements and focus, exact v1 links, UTF-8 spans, unverified ranges");
   } finally {
     await browser?.close();
     relay?.closeAllConnections();

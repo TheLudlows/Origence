@@ -1,8 +1,8 @@
 //! Provisioning for workspaces with one credential and one stable identity.
 use super::*;
 
-/// Jobs submitted with a single workspace key finish under its current
-/// credential. Member keys keep their original authority during transition.
+/// Resolve execution authority from a job's persisted creator or the worker's
+/// current actor on retry. Never use request-supplied actor IDs here.
 #[cfg(feature = "host")]
 pub(super) async fn job_execution_key(
     conn: &mut Connection,
@@ -10,8 +10,15 @@ pub(super) async fn job_execution_key(
     original: Uuid,
     archive_extraction: bool,
 ) -> StorageResult<Uuid> {
+    if !archive_extraction && super::deployment::is_admin_actor(original) {
+        // This UUID namespace is reserved for verified deployment admins at
+        // admission. Keep the job's scope and recorded submitter across rotation.
+        return super::deployment::current_admin_actor(conn)
+            .await?
+            .ok_or(StorageError::Forbidden);
+    }
     let submitted: Option<(Uuid, bool)> = sqlite_db::query_as(
-        "SELECT logical_key_id,revoked FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND role='workspace'",
+        "SELECT logical_key_id,revoked FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=?",
     )
     .bind(scope.tenant_id)
     .bind(scope.workspace_id)
@@ -20,18 +27,13 @@ pub(super) async fn job_execution_key(
     .await
     .map_err(sqlite_err)?;
     let Some((logical, revoked)) = submitted else {
-        // Only a workspace credential can submit automatic archive extraction.
-        return if archive_extraction {
-            Err(StorageError::Forbidden)
-        } else {
-            Ok(original)
-        };
+        return Err(StorageError::Forbidden);
     };
     if !revoked {
         return Ok(original);
     }
     sqlite_db::query_scalar(
-        "SELECT id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND logical_key_id=? AND role='workspace' AND NOT revoked",
+        "SELECT id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND logical_key_id=? AND NOT revoked",
     )
     .bind(scope.tenant_id)
     .bind(scope.workspace_id)
@@ -50,8 +52,8 @@ async fn insert_workspace_key(
 ) -> StorageResult<IssuedKey> {
     let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
     sqlite_db::query(
-        "INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at)
-         VALUES(?,?,?,?,?,'workspace',?)",
+        "INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,created_at)
+         VALUES(?,?,?,?,?,?)",
     )
     .bind(key_id)
     .bind(logical_id)
@@ -138,23 +140,23 @@ pub(super) async fn rotate_single_workspace_key(
     scope: Scope,
 ) -> StorageResult<IssuedKey> {
     let logical_id: Uuid = sqlite_db::query_scalar(
-            "SELECT logical_key_id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND role='workspace'
+        "SELECT logical_key_id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=?
              ORDER BY created_at DESC,id DESC LIMIT 1",
-        )
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(sqlite_err)?
-        .ok_or(StorageError::NotFound)?;
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(sqlite_err)?
+    .ok_or(StorageError::NotFound)?;
     sqlite_db::query(
-            "UPDATE oc_api_keys SET revoked=1 WHERE tenant_id=? AND workspace_id=? AND role='workspace' AND NOT revoked",
-        )
-        .bind(scope.tenant_id)
-        .bind(scope.workspace_id)
-        .execute(&mut *conn)
-        .await
-        .map_err(sqlite_err)?;
+        "UPDATE oc_api_keys SET revoked=1 WHERE tenant_id=? AND workspace_id=? AND NOT revoked",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(sqlite_err)?;
     let key = insert_workspace_key(conn, scope, logical_id, Uuid::new_v4()).await?;
     Ok(key)
 }

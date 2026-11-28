@@ -49,20 +49,20 @@ impl SqliteTx {
         principal_id: Uuid,
         scope: Scope,
     ) -> StorageResult<String> {
-        let role: Option<String> = sqlite_db::query_scalar(
-            "SELECT role FROM oc_api_keys WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked",
+        let key_exists: bool = sqlite_db::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_api_keys WHERE id=? AND tenant_id=? AND workspace_id=? AND NOT revoked)",
         )
         .bind(principal_id)
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
-        .fetch_optional(&mut *self.tx)
+        .fetch_one(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        if let Some(role) = role {
-            return Ok(role);
+        if key_exists {
+            return Ok("workspace".into());
         }
         if super::deployment::live_admin_in_scope(&mut self.tx, principal_id, scope).await? {
-            return Ok("admin".into());
+            return Ok("deployment_admin".into());
         }
         Err(StorageError::Forbidden)
     }

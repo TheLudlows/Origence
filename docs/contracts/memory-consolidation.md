@@ -11,7 +11,7 @@
 
 ## 写入
 
-工作区 writer 使用 1–200 个 ASCII 字符作为 HTTP `Idempotency-Key` 或 MCP `idempotency_key`。以下请求体任选一项。同键同请求复用原作业，修改请求返回冲突。
+调用方使用工作区 Key，并提供 1–200 个 ASCII 字符作为 HTTP `Idempotency-Key` 或 MCP `idempotency_key`。以下请求体任选一项。同键同请求复用原作业，修改请求返回冲突。
 
 - `{content}` 提交事实原文，最大 64 KiB。原文、归纳作业和 `{state:"accepted",source_event_id,job_id}` 回执在同一事务保存。
 - `{experience:{statement,why,conditions,basis}}` 直接提交已选定的做法、理由和适用条件。依据可为 `{kind:"asset_version",asset_id,version,content_sha256}`，固定本工作区已发布的知识版本和摘要，也可为 `{kind:"human_confirmation"}`，由提交者声明人工确认。系统记录提交凭据身份及时间。直接提交经过既有知识入库作业，无需私有会话或归档问答。回执含 `learning_id`、`asset_id`、`source_event_id`、`job_id` 和 `status:"accepted"`。作业发布后才进入召回。
@@ -25,7 +25,7 @@
 
 ## 统一召回
 
-工作区 reader 提交 `{query,identity?,as_of_ms?,limit?,applicability_context?}`。`as_of_ms` 指定事实的生效时点（Unix 毫秒，默认当前时间）。经验使用当前可见的发布版本。每类默认最多返回 10 条，`limit` 可设为 1–20。
+调用方使用工作区 Key 提交 `{query,identity?,as_of_ms?,limit?,applicability_context?}`。`as_of_ms` 指定事实的生效时点（Unix 毫秒，默认当前时间）。经验使用当前可见的发布版本。每类默认最多返回 10 条，`limit` 可设为 1–20。
 
 - `fact` 使用最多 32 个查询词项匹配按主题 ID 和证据版本排列的最多 512 条有效证据。还有证据未扫描时，`fact_scan_exhausted` 为 `true`。指定完整 `identity` 可跳过扫描。词项命中标为 `unverified`，精确身份命中标为 `caller_identity_exact_match`。结果包含事实版本和所用来源的字节区间。
 - `experience` 使用已发布内容的全文索引，每条经验返回结论、解释、适用条件和一个发布分块引用。直接提交的经验还返回 `publication`，包含选定依据和提交记录。它记录发布者声明和知识版本的有效性。调用方传入的 `applicability_context` 逐字匹配全部原始条件时标为 `caller_context_exact_match`，否则标为 `unverified`。

@@ -18,7 +18,7 @@ async fn provision(s: &Service) -> (AuthContext, String) {
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     (s.auth(&key.token).await.unwrap(), key.token)
@@ -445,33 +445,9 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
         .unwrap();
     let (a, token) = provision(&s).await;
     let (other, other_token) = provision(&s).await;
-    let reader = s
-        .engine
-        .relational()
-        .issue_key(
-            Scope {
-                tenant_id: a.tenant_id,
-                workspace_id: a.workspace_id,
-            },
-            "reader",
-        )
-        .await
-        .unwrap();
     let (base, _server) = serve(origence::api::router(s.clone())).await;
     let prop =
         json!({"predicate":"database.engine","cardinality":"single","required_context":["env"]});
-    assert_eq!(
-        http(
-            &base,
-            &reader.token,
-            "/admin/memory-properties",
-            "reader",
-            prop.clone()
-        )
-        .await
-        .0,
-        403
-    );
     assert_eq!(
         http(
             &base,
@@ -497,18 +473,6 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
         200
     );
     let body = input("database.engine", "needle", "assert", 0);
-    assert_eq!(
-        http(
-            &base,
-            &reader.token,
-            "/v1/memories/semantic",
-            "reader",
-            body.clone()
-        )
-        .await
-        .0,
-        403
-    );
     let (code, r) = http(
         &base,
         &token,
@@ -577,13 +541,10 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     let key = s
         .engine
         .relational()
-        .issue_key(
-            Scope {
-                tenant_id: a.tenant_id,
-                workspace_id: workspace,
-            },
-            "admin",
-        )
+        .seed_workspace_key(Scope {
+            tenant_id: a.tenant_id,
+            workspace_id: workspace,
+        })
         .await
         .unwrap();
     assert_eq!(
@@ -645,7 +606,7 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     for mode in ["keyword", "vector", "hybrid"] {
         let (status, result) = http(
             &base,
-            &reader.token,
+            &token,
             "/v1/search",
             "search",
             json!({"query":"needle","mode":mode,"memory_identity":identity("database.engine")}),
@@ -669,7 +630,7 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     }
     let (status, resolved) = http(
         &base,
-        &reader.token,
+        &token,
         "/v1/resolve",
         "resolve",
         json!({"query":"needle","mode":"vector","budget_tokens":2000}),
@@ -695,7 +656,7 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     assert_evidence_matrix(&s, &a, &uncertain, "needle", true).await;
     let result = http(
         &base,
-        &reader.token,
+        &token,
         "/v1/search",
         "search",
         json!({"query":"needle","mode":"vector","memory_identity":identity("database.engine")}),
@@ -726,15 +687,9 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     finish(&s, &a, &second).await;
     let query =
         json!({"query":"needle","mode":"vector","memory_identity":identity("service.languages")});
-    let before = http(
-        &base,
-        &reader.token,
-        "/v1/search",
-        "multi-search",
-        query.clone(),
-    )
-    .await
-    .1;
+    let before = http(&base, &token, "/v1/search", "multi-search", query.clone())
+        .await
+        .1;
     assert_eq!(before["hits"].as_array().unwrap().len(), 2);
     let retained = before["hits"]
         .as_array()
@@ -761,15 +716,9 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
         "pending"
     );
     assert_evidence_matrix(&s, &a, &set, "Python", false).await;
-    let hidden = http(
-        &base,
-        &reader.token,
-        "/v1/search",
-        "multi-search",
-        query.clone(),
-    )
-    .await
-    .1;
+    let hidden = http(&base, &token, "/v1/search", "multi-search", query.clone())
+        .await
+        .1;
     assert!(hidden["hits"].as_array().unwrap().is_empty());
     while worker::process_next(&s).await.unwrap() {}
     let rebuild = http(
@@ -782,7 +731,7 @@ async fn semantic_http_vector_permissions_isolation_and_model_retry() {
     .await
     .1;
     finish(&s, &a, &rebuild).await;
-    let after = http(&base, &reader.token, "/v1/search", "multi-search", query)
+    let after = http(&base, &token, "/v1/search", "multi-search", query)
         .await
         .1;
     assert_eq!(after["hits"].as_array().unwrap().len(), 1);

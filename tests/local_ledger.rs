@@ -33,7 +33,7 @@ async fn pending_write_confirms_and_reconcile_is_idempotent() {
         tenant_id: tenant,
         workspace_id: workspace,
     };
-    let key = sqlite.issue_key(scope, "admin").await.unwrap();
+    let key = sqlite.seed_workspace_key(scope).await.unwrap();
     let auth = sqlite.authenticate(&key.token).await.unwrap();
 
     let source = SourceVersion {

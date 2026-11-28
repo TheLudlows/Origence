@@ -1,12 +1,11 @@
 use crate::fixture_keys::FixtureKeys;
 use origence::storage::{
-    AuthorizedScope, DomainTx, Permission, RelationalStore, Scope, StorageError,
-    sqlite::SqliteStore,
+    AuthorizedScope, DomainTx, RelationalStore, Scope, StorageError, sqlite::SqliteStore,
 };
 use serde_json::json;
 use uuid::Uuid;
 
-async fn provision(store: &SqliteStore, role: &str) -> AuthorizedScope {
+async fn provision(store: &SqliteStore) -> AuthorizedScope {
     let scope = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
@@ -15,7 +14,7 @@ async fn provision(store: &SqliteStore, role: &str) -> AuthorizedScope {
         .create_workspace(scope.tenant_id, scope.workspace_id, "evidence")
         .await
         .unwrap();
-    let key = store.issue_key(scope, role).await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     store.authenticate(&key.token).await.unwrap()
 }
 
@@ -23,7 +22,7 @@ async fn provision(store: &SqliteStore, role: &str) -> AuthorizedScope {
 async fn source_visibility_is_scoped_and_retraction_blocks_reads() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let auth = provision(&store, "admin").await;
+    let auth = provision(&store).await;
     let mut tx = store.begin(auth.clone()).await.unwrap();
     let source = tx
         .create_event("capture", "original source", None)
@@ -34,7 +33,7 @@ async fn source_visibility_is_scoped_and_retraction_blocks_reads() {
         "original source"
     );
     tx.commit().await.unwrap();
-    let other = provision(&store, "admin").await;
+    let other = provision(&store).await;
     let mut tx = store.begin(other).await.unwrap();
     assert!(matches!(
         tx.event_view(source).await,
@@ -48,20 +47,13 @@ async fn source_visibility_is_scoped_and_retraction_blocks_reads() {
         Err(StorageError::NotFound)
     ));
     tx.commit().await.unwrap();
-    let reader = provision(&store, "reader").await;
-    let mut tx = store.begin(reader).await.unwrap();
-    assert!(matches!(
-        tx.check_permission(Permission::Write).await,
-        Err(StorageError::Forbidden)
-    ));
-    tx.rollback().await.unwrap();
 }
 
 #[tokio::test]
 async fn deleted_source_file_blocks_original_event_view() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let auth = provision(&store, "admin").await;
+    let auth = provision(&store).await;
     let mut tx = store.begin(auth).await.unwrap();
     let file = tx
         .insert_file("source.txt", "text/plain", "hash", 4)
@@ -87,7 +79,7 @@ async fn deleted_source_file_blocks_original_event_view() {
 async fn normalization_status_does_not_claim_semantic_truth() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let auth = provision(&store, "admin").await;
+    let auth = provision(&store).await;
     let mut tx = store.begin(auth).await.unwrap();
     let legacy = tx.slot("legacy").await.unwrap().0;
     let identity = serde_json::from_value(json!({"subject":{"kind":"service","stable_id":"billing"},"predicate":"release.approval","context":{}})).unwrap();
@@ -115,7 +107,7 @@ async fn normalization_status_does_not_claim_semantic_truth() {
 async fn historical_event_file_retains_content_after_source_and_file_withdrawal() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
-    let auth = provision(&store, "admin").await;
+    let auth = provision(&store).await;
     let mut tx = store.begin(auth).await.unwrap();
     let bare = tx
         .create_event("knowledge", "bare source", None)

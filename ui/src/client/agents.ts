@@ -22,15 +22,7 @@ interface AgentsResponse {
   }[];
 }
 
-export function canInspectAgents(role: string) {
-  return role === "workspace" || role === "admin";
-}
-
 export function agentsPage(root: HTMLElement, ctx: ViewContext, workspaceId: string) {
-  if (!canInspectAgents(ctx.role)) {
-    root.append(heading("Agent 连接", "当前凭据无权查看本工作区的 Agent 连接。"));
-    return;
-  }
   const description = el("p", "muted");
   const status = el("p", "muted", "正在读取 Agent 连接…");
   status.setAttribute("role", "status");

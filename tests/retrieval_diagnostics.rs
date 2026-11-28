@@ -70,14 +70,14 @@ async fn context_query_embedding_usage_is_scoped_and_replayed() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "query embedding usage")
         .await
         .unwrap();
-    let owner = store.issue_key(scope, "writer").await.unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let owner = store.seed_workspace_key(scope).await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service);
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let client = HostClient::new(&base, owner.token).unwrap();
-    let admin = HostClient::new(&base, admin.token).unwrap();
+    let admin = HostClient::new(&base, admin).unwrap();
     let run = Uuid::new_v4();
     let run_path = format!("/v1/runs/{run}");
     let context_path = format!("{run_path}/context");
@@ -211,7 +211,15 @@ async fn context_query_embedding_usage_is_scoped_and_replayed() {
     assert_eq!(failed["report"]["kind"], "context_preparation_failed");
     assert_eq!(observation(&failed["report"]), expected(json!(4)));
     let admin_trace = admin
-        .call(Method::GET, &run_path, None, None)
+        .call(
+            Method::GET,
+            &format!(
+                "/admin/deployment/workspaces/{}/runs/{run}",
+                scope.workspace_id
+            ),
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(admin_trace["is_owner"], false);
@@ -243,8 +251,17 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "diagnostics")
         .await
         .unwrap();
-    let owner = authority.issue_key(scope, "writer").await.unwrap();
-    let other = authority.issue_key(scope, "writer").await.unwrap();
+    let owner = authority.seed_workspace_key(scope).await.unwrap();
+    let other = authority
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Isolated diagnostics",
+        )
+        .await
+        .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());
@@ -458,17 +475,10 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
             .unwrap()
     );
     assert!(remote.queries().is_empty());
-    let admin = reopened
-        .engine
-        .relational()
-        .issue_key(scope, "admin")
-        .await
-        .unwrap();
-    let admin = HostClient::new(&base, admin.token).unwrap();
     let asset_id = first["bundle"]["items"][0]["provenance"]["asset_id"]
         .as_str()
         .unwrap();
-    admin
+    client
         .call(
             Method::DELETE,
             &format!("/v1/assets/{asset_id}"),
@@ -598,7 +608,7 @@ async fn configuration_checks_reject_wrong_embedding_space_and_persist_analysis_
     let key = service
         .engine
         .relational()
-        .issue_key(scope, "writer")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     let auth = service.auth(&key.token).await.unwrap();

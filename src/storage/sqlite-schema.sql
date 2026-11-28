@@ -25,7 +25,6 @@ CREATE TABLE oc_api_keys (
     tenant_id BLOB NOT NULL,
     workspace_id BLOB NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL CHECK (role IN ('reader','writer','admin','workspace')),
     revoked INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     UNIQUE (tenant_id, id),
@@ -34,7 +33,7 @@ CREATE TABLE oc_api_keys (
 
 CREATE INDEX oc_api_keys_logical ON oc_api_keys(tenant_id, logical_key_id);
 CREATE UNIQUE INDEX oc_one_active_workspace_key ON oc_api_keys(tenant_id, workspace_id)
-WHERE role = 'workspace' AND NOT revoked;
+WHERE NOT revoked;
 
 CREATE TABLE oc_deployment_admin (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),

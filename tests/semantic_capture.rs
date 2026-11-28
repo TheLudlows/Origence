@@ -100,7 +100,7 @@ async fn provision(s: &Service, tenant: Option<Uuid>) -> (AuthContext, String) {
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     (s.auth(&key.token).await.unwrap(), key.token)
@@ -199,19 +199,6 @@ async fn semantic_capture_http_preserves_conflicts_and_requires_explicit_updates
         ],
     );
     let (base, _api) = serve(origence::api::router(s.clone())).await;
-    let reader = s
-        .engine
-        .relational()
-        .issue_key(
-            Scope {
-                tenant_id: a.tenant_id,
-                workspace_id: a.workspace_id,
-            },
-            "reader",
-        )
-        .await
-        .unwrap();
-    assert_eq!(http(&base, &reader.token, "no", req.clone()).await.0, 403);
     let (status, r) = http(&base, &token, "capture", req.clone()).await;
     assert_eq!(status, 200);
     assert_eq!(http(&base, &token, "capture", req.clone()).await.1, r);
@@ -242,22 +229,14 @@ async fn semantic_capture_http_preserves_conflicts_and_requires_explicit_updates
     );
     let event = s.source_event(&a, id(&r, "source_event_id")).await.unwrap();
     assert_eq!(event["content"], text);
-    // Independent caller in a second session uses the persisted workspace memory.
+    let admin = s
+        .engine
+        .relational()
+        .rotate_deployment_admin()
+        .await
+        .unwrap();
     let second = s
-        .auth(
-            &s.engine
-                .relational()
-                .issue_key(
-                    Scope {
-                        tenant_id: a.tenant_id,
-                        workspace_id: a.workspace_id,
-                    },
-                    "reader",
-                )
-                .await
-                .unwrap()
-                .token,
-        )
+        .authorize_deployment_workspace(&admin, a.workspace_id)
         .await
         .unwrap();
     for mode in ["keyword", "vector", "hybrid"] {
@@ -736,19 +715,17 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     let retried = finish(&s, &a, &cancelled).await;
     assert_eq!(retried["memories"][0]["semantic_status"], "ambiguous");
     assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
-    let writer = s
+    let admin = s
         .engine
         .relational()
-        .issue_key(
-            Scope {
-                tenant_id: a.tenant_id,
-                workspace_id: a.workspace_id,
-            },
-            "writer",
-        )
+        .rotate_deployment_admin()
         .await
         .unwrap();
-    let wa = s.auth(&writer.token).await.unwrap();
+    let wa = a.clone();
+    let reviewer = s
+        .authorize_deployment_workspace(&admin, a.workspace_id)
+        .await
+        .unwrap();
     let revoked = submit(&s, &wa, request("Go", vec![target("database.engine", 1)])).await;
     stub.hold_embedding.store(true, Ordering::SeqCst);
     let worker_service = s.clone();
@@ -760,10 +737,10 @@ async fn semantic_capture_races_cancel_and_live_revocation_cannot_publish() {
     stub.release.notify_one();
     running.await.unwrap();
     assert_eq!(
-        s.job(&a, id(&revoked, "job_id")).await.unwrap()["state"],
+        s.job(&reviewer, id(&revoked, "job_id")).await.unwrap()["state"],
         "failed"
     );
-    assert_eq!(lookup(&s, &a, "database.engine").await["version"], 1);
+    assert_eq!(lookup(&s, &reviewer, "database.engine").await["version"], 1);
 }
 
 #[tokio::test]

@@ -52,7 +52,7 @@ def wait_ready(process, base, key):
 
 def mcp_contract(binary, env, directory):
     env = dict(env, OC_DATA_DIR=str(Path(directory) / "origence"), OC_ENABLE_MODELS="false")
-    workspace = seed_workspace(env, "AnySeek smoke", single_key=True)
+    workspace = seed_workspace(env, "AnySeek smoke")
     administrator = admin_env(env)
     token = workspace["token"]
     env["OC_API_KEY"] = token

@@ -27,8 +27,6 @@ import { editor, capture } from "./asset-editor.js";
 import { trackJob } from "./jobs.js";
 import { publicationStatus, type GlobalKnowledge } from "./global-knowledge.js";
 
-const canWrite = (role: string) =>
-  ["writer", "admin", "workspace"].includes(role);
 
 export async function assetsPage(
   root: HTMLElement,
@@ -86,7 +84,7 @@ export async function assetsPage(
           );
         for (const item of matches) {
           const global = item.scope === "global";
-          const source = !global && canWrite(ctx.role) ? sourcePreviewTarget() : null;
+          const source = !global ? sourcePreviewTarget() : null;
           hits.append(
             panel(
               item.title || short(item.asset_id),
@@ -254,16 +252,14 @@ export async function assetsPage(
       kind === "memory"
         ? "管理可复用的事实、偏好、决策与经验。"
         : "管理文档、来源及异步入库生命周期。",
-      canWrite(ctx.role) && kind === "memory"
+      kind === "memory"
         ? button("从文本提取", () => capture(ctx))
         : null,
-      canWrite(ctx.role)
-        ? button(
-            kind === "memory" ? "＋ 新建记忆" : "＋ 新建 / 上传",
-            () => editor(kind, ctx),
-            "primary",
-          )
-        : null,
+      button(
+        kind === "memory" ? "＋ 新建记忆" : "＋ 新建 / 上传",
+        () => editor(kind, ctx),
+        "primary",
+      ),
     ),
     catalog,
     el(
@@ -276,19 +272,17 @@ export async function assetsPage(
           field("内容 ID", direct),
           submit("打开内容"),
         ),
-        canWrite(ctx.role)
-          ? form(
-              async () => {
-                try {
-                  await trackJob({ job_id: jobId.value.trim() }, error, ctx);
-                } catch (e) {
-                  message(error, e);
-                }
-              },
-              field("任务 ID", jobId),
-              submit("查看入库任务"),
-            )
-          : null,
+        form(
+          async () => {
+            try {
+              await trackJob({ job_id: jobId.value.trim() }, error, ctx);
+            } catch (e) {
+              message(error, e);
+            }
+          },
+          field("任务 ID", jobId),
+          submit("查看入库任务"),
+        ),
       ),
     ),
     error,
@@ -298,7 +292,6 @@ export async function assetsPage(
 
 function assetContent(asset: Asset, ctx: ViewContext, base: string) {
   const body = el("pre", "asset-prose", asset.content);
-  if (!canWrite(ctx.role)) return panel("正文", body);
 
   const source = el("div");
   let sourceRequest: AbortController | undefined;
@@ -569,8 +562,8 @@ export async function assetDetail(
       asset.title || `${kindLabel}详情`,
       evidence ? `${kindLabel} · ${id}` : `${kindLabel} · v${asset.version} · ${id}`,
       button("返回列表", () => ctx.navigate(asset.kind)),
-      !evidence && canWrite(ctx.role) ? button("更新内容", update, "primary") : null,
-      !workspaceName && asset.kind === "knowledge" && canWrite(ctx.role) ? share : null,
+      !evidence ? button("更新内容", update, "primary") : null,
+      !workspaceName && asset.kind === "knowledge" ? share : null,
     ),
     publicationFeedback,
     panel(
@@ -613,23 +606,11 @@ export async function assetDetail(
       el(
         "div",
         "actions",
-        !evidence && canWrite(ctx.role) && !asset.semantic_status
+        !evidence && !asset.semantic_status
           ? button("恢复此版本", restore)
           : null,
-        (ctx.role === "admin" || ctx.role === "workspace")
-          ? button(
-              "撤回来源",
-              () => remove(`${base}/events/${asset.source_event_id}`),
-              "danger",
-            )
-          : null,
-        (ctx.role === "admin" || ctx.role === "workspace")
-          ? button(
-              `删除${kindLabel}`,
-              () => remove(path),
-              "danger",
-            )
-          : null,
+        button("撤回来源", () => remove(`${base}/events/${asset.source_event_id}`), "danger"),
+        button(`删除${kindLabel}`, () => remove(path), "danger"),
       ),
     ),
   );

@@ -704,78 +704,6 @@ impl AnySeekFullTextStore {
         }
         Ok((count, out))
     }
-
-    /// A replaced group retains its CAS version even with no members. An
-    /// explicit marker distinguishes a fenced late first write from corruption.
-    pub(crate) async fn native_archive_delete(
-        &self,
-        domain: ArchiveDomain,
-        session: Uuid,
-        turn: Uuid,
-    ) -> StorageResult<()> {
-        let collection = native_collection(domain);
-        let group = archive_group(session, turn);
-        for _ in 0..3 {
-            let version = self
-                .native_version(domain, &collection, &group)
-                .await?
-                .unwrap_or(0);
-            if version == 2 {
-                return Ok(());
-            }
-            if version > 2 {
-                return Err(invalid_archive());
-            }
-            let records = if version == 0 {
-                vec![
-                    json!({"record_id":group,"document":{"archive":group,"kind":"withdrawn","session":session,"turn":turn}}),
-                ]
-            } else {
-                Vec::new()
-            };
-            if self
-                .replace_withdrawn_archive(domain, &collection, &group, version, records)
-                .await?
-            {
-                return Ok(());
-            }
-        }
-        Err(transient())
-    }
-
-    // False means the group changed between inspection and the CAS.
-    async fn replace_withdrawn_archive(
-        &self,
-        domain: ArchiveDomain,
-        collection: &str,
-        group: &str,
-        version: u64,
-        records: Vec<Value>,
-    ) -> StorageResult<bool> {
-        let next = version.checked_add(1).ok_or_else(invalid_archive)?;
-        let count = records.len();
-        let epoch = operation_epoch()?;
-        let nonce = format!("private-delete:{group}:{version}");
-        let (status, value) = self
-            .archive_request(
-                domain,
-                collection,
-                Request::ReplaceGroup(json!({
-                    "operation_id":{"epoch":epoch,"nonce":nonce},"group_id":group,
-                    "expected_group_version":version,"records":records
-                })),
-            )
-            .await?;
-        if status == StatusCode::CONFLICT {
-            return Ok(false);
-        }
-        if status.is_success()
-            && receipt_sequence(&value, group, epoch, &nonce, next, count).is_some()
-        {
-            return Ok(true);
-        }
-        Err(transient())
-    }
 }
 
 fn native_identity(record: &Value) -> StorageResult<(Uuid, Uuid)> {
@@ -836,7 +764,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn native_archive_orders_recovers_and_fences_groups() {
+    async fn native_archive_orders_and_recovers_groups() {
         let directory = tempfile::tempdir().unwrap();
         let store = AnySeekFullTextStore::open_configured(
             AnySeekConfig::embedded(),
@@ -934,30 +862,6 @@ mod tests {
             .unwrap();
         assert_eq!(hits[0].0, second.turn);
 
-        store
-            .native_archive_delete(domain, session, first.turn)
-            .await
-            .unwrap();
-        assert!(
-            store
-                .native_archive_read_candidate(domain, session, first.turn)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        let late = turn(session, Uuid::new_v4(), 13, "late");
-        store
-            .native_archive_delete(domain, session, late.turn)
-            .await
-            .unwrap();
-        for archive in [&first, &late] {
-            assert!(matches!(
-                store
-                    .native_archive_write(domain, archive, archive.body.question.clone(), None)
-                    .await,
-                Err(StorageError::NotFound)
-            ));
-        }
         store.shutdown().await.unwrap();
     }
 }
